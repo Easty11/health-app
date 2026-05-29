@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import Base, engine
@@ -9,14 +10,17 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Health & Performance API")
 
-# For Railway deployment, add the production frontend URL to this list,
-# e.g. "https://health-app.up.railway.app"
+# FRONTEND_URL is set in Railway to the deployed frontend URL,
+# e.g. https://health-app-frontend.up.railway.app
+origins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    os.getenv("FRONTEND_URL", ""),
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-    ],
+    allow_origins=[o for o in origins if o],  # filter empty string when unset
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
