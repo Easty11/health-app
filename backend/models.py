@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
-from sqlalchemy import DateTime, String, func
+from datetime import datetime
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
@@ -14,4 +14,21 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
+    )
+
+
+class UserIntegration(Base):
+    __tablename__ = "user_integrations"
+    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_user_provider"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Fernet-encrypted API key stored as base64 token
+    api_key_encrypted: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
     )
