@@ -42,6 +42,10 @@ pnpm-debug.log*
 *.swp
 *.swo
 
+# SQLite databases
+*.db
+*.sqlite3
+
 # OS
 .DS_Store
 Thumbs.db
