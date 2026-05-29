@@ -62,3 +62,62 @@ class HevyClient:
         async with httpx.AsyncClient(headers=self._headers) as client:
             r = await client.get(f"{HEVY_BASE}/exercise_templates/{template_id}/history")
             return self._check(r).json()
+
+    async def create_routine(
+        self,
+        title: str,
+        exercises: list[dict[str, Any]],
+        folder_id: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Create a routine in Hevy.
+
+        Each exercise in `exercises` should be a dict with keys:
+            exercise_template_id  str      required  — uppercase hex ID, e.g. "0222DB42"
+            notes                 str      optional
+            rest_seconds          int      optional  — default 90
+            superset_id           int|None optional
+            sets                  list     required  — list of set dicts:
+                type              str      required  — "normal"|"warmup"|"dropset"|"failure"
+                weight_kg         float|None
+                reps              int|None
+                distance_meters   int|None
+                duration_seconds  int|None
+                custom_metric     any|None
+
+        index fields on exercises and sets are assigned automatically (0-based).
+        """
+        built_exercises = []
+        for ex_idx, ex in enumerate(exercises):
+            built_sets = []
+            for set_idx, s in enumerate(ex.get("sets", [])):
+                built_sets.append({
+                    "index": set_idx,
+                    "type": s.get("type", "normal"),
+                    "weight_kg": s.get("weight_kg"),
+                    "reps": s.get("reps"),
+                    "distance_meters": s.get("distance_meters"),
+                    "duration_seconds": s.get("duration_seconds"),
+                    "custom_metric": s.get("custom_metric"),
+                })
+
+            built_exercises.append({
+                "index": ex_idx,
+                "exercise_template_id": ex["exercise_template_id"],
+                "superset_id": ex.get("superset_id"),
+                "notes": ex.get("notes", ""),
+                "rest_seconds": ex.get("rest_seconds", 90),
+                "sets": built_sets,
+            })
+
+        payload = {
+            "routine": {
+                "title": title,
+                "folder_id": folder_id,
+                "exercises": built_exercises,
+            }
+        }
+
+        async with httpx.AsyncClient(headers=self._headers) as client:
+            r = await client.post(f"{HEVY_BASE}/routines", json=payload)
+            return self._check(r).json()

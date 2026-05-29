@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from typing import Any
 from sqlalchemy.orm import Session
 
 import models
@@ -20,6 +21,29 @@ class HevyKeyIn(BaseModel):
 class IntegrationOut(BaseModel):
     provider: str
     connected: bool
+
+
+class RoutineSetIn(BaseModel):
+    type: str = "normal"          # normal | warmup | dropset | failure
+    weight_kg: float | None = None
+    reps: int | None = None
+    distance_meters: int | None = None
+    duration_seconds: int | None = None
+    custom_metric: Any = None
+
+
+class RoutineExerciseIn(BaseModel):
+    exercise_template_id: str     # uppercase hex ID, e.g. "0222DB42"
+    notes: str = ""
+    rest_seconds: int = 90
+    superset_id: int | None = None
+    sets: list[RoutineSetIn]
+
+
+class RoutineCreateIn(BaseModel):
+    title: str
+    folder_id: int | None = None
+    exercises: list[RoutineExerciseIn]
 
 
 # ---------- helpers ----------
@@ -119,5 +143,37 @@ async def hevy_workouts(
     client = _hevy_client(current_user, db)
     try:
         return await client.get_workouts(page=page, page_size=page_size)
+    except (HevyAuthError, HevyForbiddenError) as exc:
+        raise _hevy_error_to_http(exc)
+
+
+@router.get("/hevy/routines")
+async def hevy_get_routines(
+    page: int = 1,
+    page_size: int = 10,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    client = _hevy_client(current_user, db)
+    try:
+        return await client.get_routines(page=page, page_size=page_size)
+    except (HevyAuthError, HevyForbiddenError) as exc:
+        raise _hevy_error_to_http(exc)
+
+
+@router.post("/hevy/routines", status_code=status.HTTP_201_CREATED)
+async def hevy_create_routine(
+    body: RoutineCreateIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    client = _hevy_client(current_user, db)
+    exercises = [ex.model_dump() for ex in body.exercises]
+    try:
+        return await client.create_routine(
+            title=body.title,
+            exercises=exercises,
+            folder_id=body.folder_id,
+        )
     except (HevyAuthError, HevyForbiddenError) as exc:
         raise _hevy_error_to_http(exc)
