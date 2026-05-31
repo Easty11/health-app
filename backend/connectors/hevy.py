@@ -1,5 +1,8 @@
 import httpx
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 HEVY_BASE = "https://api.hevyapp.com/v1"
 
@@ -96,7 +99,7 @@ class HevyClient:
         for ex_idx, ex in enumerate(exercises):
             built_sets = []
             for set_idx, s in enumerate(ex.get("sets", [])):
-                built_sets.append({
+                set_data = {
                     "index": set_idx,
                     "type": s.get("type", "normal"),
                     "weight_kg": s.get("weight_kg"),
@@ -104,7 +107,8 @@ class HevyClient:
                     "distance_meters": s.get("distance_meters"),
                     "duration_seconds": s.get("duration_seconds"),
                     "custom_metric": s.get("custom_metric"),
-                })
+                }
+                built_sets.append(set_data)
 
             built_exercises.append({
                 "index": ex_idx,
@@ -122,6 +126,8 @@ class HevyClient:
                 "exercises": built_exercises,
             }
         }
+
+        logger.info("Hevy create_routine payload: %s", payload)
 
         async with httpx.AsyncClient(headers=self._headers) as client:
             r = await client.post(f"{HEVY_BASE}/routines", json=payload)
