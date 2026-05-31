@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Any
 from sqlalchemy.orm import Session
+import httpx
 
 import models
 from auth import get_current_user
@@ -76,6 +77,8 @@ def _hevy_error_to_http(exc: Exception) -> HTTPException:
         return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     if isinstance(exc, HevyForbiddenError):
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    if isinstance(exc, httpx.HTTPStatusError):
+        return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Hevy API error")
 
 
@@ -175,5 +178,5 @@ async def hevy_create_routine(
             exercises=exercises,
             folder_id=body.folder_id,
         )
-    except (HevyAuthError, HevyForbiddenError) as exc:
+    except (HevyAuthError, HevyForbiddenError, httpx.HTTPStatusError) as exc:
         raise _hevy_error_to_http(exc)

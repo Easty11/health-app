@@ -21,7 +21,12 @@ class HevyClient:
             raise HevyAuthError("Invalid Hevy API key")
         if response.status_code == 403:
             raise HevyForbiddenError("Access forbidden — check Hevy plan or permissions")
-        response.raise_for_status()
+        if response.is_error:
+            raise httpx.HTTPStatusError(
+                f"Hevy API error {response.status_code}: {response.text}",
+                request=response.request,
+                response=response,
+            )
         return response
 
     async def get_workout_count(self) -> dict[str, Any]:
