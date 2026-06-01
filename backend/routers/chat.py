@@ -28,6 +28,12 @@ _ROUTINE_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 
+# Regex to find <knowledge_update>...</knowledge_update> blocks
+_KNOWLEDGE_BLOCK_RE = re.compile(
+    r"<knowledge_update>\s*(.*?)\s*</knowledge_update>",
+    re.DOTALL,
+)
+
 
 # ---------- schemas ----------
 
@@ -119,6 +125,76 @@ async def _process_routine_actions(
     return cleaned.strip(), actions_taken
 
 
+# ---------- knowledge update parsing ----------
+
+def _process_knowledge_updates(
+    reply: str,
+    user_id: int,
+    db: Session,
+) -> tuple[str, list[str]]:
+    """
+    Scan `reply` for <knowledge_update> blocks.
+    For each one found:
+      - Parse the JSON payload {category, content}
+      - If an entry with that category already exists, append to it
+      - Otherwise create a new entry
+      - Strip the block from the visible response
+      - Record a confirmation in actions_taken
+
+    Returns (cleaned_reply, actions_taken).
+    """
+    actions_taken: list[str] = []
+    matches = list(_KNOWLEDGE_BLOCK_RE.finditer(reply))
+
+    if not matches:
+        return reply, actions_taken
+
+    cleaned = reply
+    for match in matches:
+        raw_json = match.group(1)
+        try:
+            data = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            actions_taken.append(f"⚠️ Could not parse knowledge update: {exc}")
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
+
+        category = data.get("category", "Other").strip()
+        new_content = data.get("content", "").strip()
+
+        if not new_content:
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
+
+        try:
+            existing = (
+                db.query(models.UserKnowledge)
+                .filter_by(user_id=user_id, category=category)
+                .order_by(models.UserKnowledge.created_at)
+                .first()
+            )
+            if existing:
+                # Append new content on a new line rather than overwrite
+                existing.content = existing.content.rstrip() + "\n" + new_content
+                db.commit()
+                actions_taken.append(f"✓ Knowledge updated: {category}")
+            else:
+                entry = models.UserKnowledge(
+                    user_id=user_id,
+                    category=category,
+                    content=new_content,
+                )
+                db.add(entry)
+                db.commit()
+                actions_taken.append(f"✓ Knowledge saved: {category}")
+        except Exception as exc:
+            actions_taken.append(f"⚠️ Failed to save knowledge ({category}): {exc}")
+
+        cleaned = cleaned.replace(match.group(0), "")
+
+    return cleaned.strip(), actions_taken
+
+
 # ---------- endpoint ----------
 
 @router.post("", response_model=ChatResponse)
@@ -176,12 +252,14 @@ async def chat(
 
     reply = response.content[0].text
 
-    # Parse and execute any routine creation blocks embedded in the reply
-    reply, actions_taken = await _process_routine_actions(reply, hevy_client)
+    # Parse and execute any embedded action blocks
+    reply, routine_actions = await _process_routine_actions(reply, hevy_client)
+    reply, knowledge_actions = _process_knowledge_updates(reply, current_user.id, db)
+
+    all_actions = routine_actions + knowledge_actions
 
     # Append confirmation messages inline so they appear in the chat bubble
-    if actions_taken:
-        action_text = "\n\n" + "\n".join(actions_taken)
-        reply = reply + action_text
+    if all_actions:
+        reply = reply + "\n\n" + "\n".join(all_actions)
 
-    return ChatResponse(response=reply, actions_taken=actions_taken)
+    return ChatResponse(response=reply, actions_taken=all_actions)

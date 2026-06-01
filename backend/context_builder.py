@@ -211,6 +211,32 @@ Rules for routine creation:
   with a confirmation message once the routine is created."""
 
 
+def _section_knowledge_update() -> str:
+    return """## Updating the Knowledge Base
+
+You can save new information about the user to their knowledge base by embedding
+a JSON block anywhere in your response:
+
+<knowledge_update>
+{"category": "Injury History", "content": "new detail to save"}
+</knowledge_update>
+
+Valid categories: Injury History, Training Background, Goals, Constraints,
+Nutrition, Recovery, Other.
+
+Use this proactively — whenever the user mentions something new about their
+training, body, or preferences, save it without being asked. Examples:
+- They mention a niggling pain → save to "Injury History"
+- They share a new goal or target → save to "Goals"
+- They discover an exercise they can't do → save to "Constraints"
+- They describe what works well for recovery → save to "Recovery"
+
+If an entry for that category already exists, the new content will be appended.
+The block will be removed from your visible response and replaced with a
+confirmation line. You do not need to ask permission to save — just do it and
+mention what you saved in your reply."""
+
+
 # ---------- add future sections here ----------
 # async def _section_mfp(nutrition_data) -> str: ...
 # async def _section_polar(activity_data) -> str: ...
@@ -253,6 +279,8 @@ def build_system_prompt(
         "Never fabricate workout details that are not in the context.",
         "",
         _section_routine_creation(connected_integrations),
+        "",
+        _section_knowledge_update(),
     ]
 
     return "\n".join(sections)
