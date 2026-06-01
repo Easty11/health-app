@@ -4,3 +4,4 @@ buildCommand = "npm run build"
 
 [deploy]
 startCommand = "npx serve dist -p $PORT"
+healthcheckPath = "/"
