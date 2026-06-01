@@ -2,22 +2,28 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import api from '../api'
 
+// higherIsBetter: green right / red left
+// lowerIsBetter:  green left / red right
 const SLIDERS = [
   {
     key: 'sleep_quality', label: 'Sleep Quality', min: 1, max: 10,
-    lowLabel: 'Poor', highLabel: 'Great', source: 'manual',
+    lowLabel: 'Poor', highLabel: 'Excellent', higherIsBetter: true,
+    contextLabel: (v) => v <= 3 ? 'Poor' : v <= 5 ? 'Fair' : v <= 7 ? 'Good' : 'Excellent',
   },
   {
     key: 'fatigue', label: 'Fatigue', min: 1, max: 10,
-    lowLabel: 'Fresh', highLabel: 'Exhausted', source: 'manual',
+    lowLabel: 'Fresh', highLabel: 'Exhausted', higherIsBetter: false,
+    contextLabel: (v) => v <= 3 ? 'Fresh' : v <= 6 ? 'Moderate' : 'Exhausted',
   },
   {
     key: 'shoulder_pain', label: 'Shoulder Pain', min: 0, max: 10,
-    lowLabel: 'None', highLabel: 'Severe', source: 'manual', isPain: true,
+    lowLabel: 'No pain', highLabel: 'Severe', higherIsBetter: false,
+    contextLabel: (v) => v === 0 ? 'No pain' : v <= 3 ? 'Mild' : v <= 6 ? 'Moderate' : 'Severe',
   },
   {
     key: 'motivation', label: 'Motivation', min: 1, max: 10,
-    lowLabel: 'Low', highLabel: 'High', source: 'manual',
+    lowLabel: 'None', highLabel: 'High', higherIsBetter: true,
+    contextLabel: (v) => v <= 3 ? 'None' : v <= 6 ? 'Moderate' : 'High',
   },
 ]
 
@@ -43,30 +49,58 @@ function scoreLabel(n) {
 }
 
 // ─── Slider ──────────────────────────────────────────────────────────────────
+const GREEN = '#16a34a'   // green-600
+const ORANGE = '#ea580c'  // orange-600
+const RED = '#dc2626'     // red-600
+const TRACK_EMPTY = '#e5e7eb' // gray-200
+
+function sliderColour(value, higherIsBetter) {
+  if (higherIsBetter) {
+    if (value >= 7) return { text: 'text-green-600', hex: GREEN }
+    if (value >= 5) return { text: 'text-orange-500', hex: ORANGE }
+    return { text: 'text-red-600', hex: RED }
+  } else {
+    // lower is better — invert
+    if (value <= 3) return { text: 'text-green-600', hex: GREEN }
+    if (value <= 6) return { text: 'text-orange-500', hex: ORANGE }
+    return { text: 'text-red-600', hex: RED }
+  }
+}
+
 function ScoreSlider({ field, value, onChange }) {
   const pct = ((value - field.min) / (field.max - field.min)) * 100
-  const isPain = field.isPain
-  const colour = isPain
-    ? value >= 7 ? 'text-red-600' : value >= 4 ? 'text-orange-500' : 'text-green-600'
-    : value >= 7 ? 'text-green-600' : value >= 4 ? 'text-orange-500' : 'text-red-500'
+  const { text: textColour, hex: fillHex } = sliderColour(value, field.higherIsBetter)
+
+  // Gradient direction: higher-is-better → fill grows left-to-right (good = right)
+  // lower-is-better → fill grows right-to-left (good = left)
+  const gradient = field.higherIsBetter
+    ? `linear-gradient(to right, ${fillHex} ${pct}%, ${TRACK_EMPTY} ${pct}%)`
+    : `linear-gradient(to left, ${fillHex} ${100 - pct}%, ${TRACK_EMPTY} ${100 - pct}%)`
+
+  const contextText = field.contextLabel(value)
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
           <label className="text-sm font-medium text-gray-800">{field.label}</label>
-          <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">manual</span>
+          <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5 shrink-0">manual</span>
         </div>
-        <span className={`text-2xl font-bold tabular-nums ${colour}`}>{value}</span>
+        <div className="text-right shrink-0">
+          <span className={`text-2xl font-bold tabular-nums ${textColour}`}>{value}</span>
+          <span className="text-xs text-gray-400">/10</span>
+        </div>
       </div>
       <input
         type="range" min={field.min} max={field.max} value={value}
         onChange={(e) => onChange(field.key, Number(e.target.value))}
         className="w-full h-3 rounded-lg appearance-none cursor-pointer"
-        style={{ background: `linear-gradient(to right, #4f46e5 ${pct}%, #e5e7eb ${pct}%)` }}
+        style={{ background: gradient }}
       />
-      <div className="flex justify-between text-xs text-gray-400">
-        <span>{field.lowLabel}</span><span>{field.highLabel}</span>
+      <div className="flex justify-between items-center text-xs">
+        <span className="text-gray-400">{field.lowLabel}</span>
+        <span className={`font-medium ${textColour}`}>{contextText}</span>
+        <span className="text-gray-400">{field.highLabel}</span>
       </div>
     </div>
   )
