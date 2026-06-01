@@ -57,6 +57,45 @@ def _section_hevy(workout_count: int, recent_workouts: list[dict[str, Any]]) -> 
     return "\n".join(lines)
 
 
+def _section_routine_creation(connected: list[str]) -> str:
+    if "hevy" not in connected:
+        return ""
+    return """## Creating Hevy Routines
+
+You can create a routine directly in the user's Hevy account by embedding a
+JSON block in your response using this exact format:
+
+<hevy_create_routine>
+{
+  "title": "Routine Name",
+  "exercises": [
+    {
+      "exercise_template_id": "XXXXXXXX",
+      "notes": "optional notes",
+      "rest_seconds": 90,
+      "sets": [
+        {"type": "normal", "weight_kg": 60, "reps": 8}
+      ]
+    }
+  ]
+}
+</hevy_create_routine>
+
+Rules for routine creation:
+- ALWAYS confirm with the user before creating a routine. Ask them to confirm
+  the exercises, sets, and weights first. Only include the <hevy_create_routine>
+  block after the user explicitly says yes or asks you to go ahead.
+- Use real exercise_template_ids from the user's workout history where possible
+  (they appear as uppercase hex IDs in the workout data above, e.g. "0222DB42").
+- If you don't know the template ID for an exercise, say so — never guess an ID.
+- set type must be one of: "normal", "warmup", "dropset", "failure".
+- weight_kg, reps, distance_meters, duration_seconds are all optional — omit or
+  set to null if not applicable for the exercise type.
+- rest_seconds sits on the exercise, not the set.
+- The block will be automatically removed from your visible response and replaced
+  with a confirmation message once the routine is created."""
+
+
 # ---------- add future sections here ----------
 # async def _section_mfp(nutrition_data) -> str: ...
 # async def _section_polar(activity_data) -> str: ...
@@ -90,6 +129,8 @@ def build_system_prompt(
         "When the user asks about their training, reference the data above directly. "
         "If data is missing or incomplete, say so and suggest what they could connect. "
         "Never fabricate workout details that are not in the context.",
+        "",
+        _section_routine_creation(connected_integrations),
     ]
 
     return "\n".join(sections)
