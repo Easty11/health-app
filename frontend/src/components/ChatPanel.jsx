@@ -22,11 +22,20 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const bottomRef = useRef(null)
+
+  // Ref on the scroll container div itself, not a sentinel inside it.
+  // We scroll the container's scrollTop directly to avoid triggering
+  // page-level scrolling that scrollIntoView can cause.
+  const scrollContainerRef = useRef(null)
   const textareaRef = useRef(null)
 
+  function scrollToBottom() {
+    const el = scrollContainerRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    scrollToBottom()
   }, [messages, loading])
 
   async function send() {
@@ -37,6 +46,10 @@ export default function ChatPanel() {
     const nextMessages = [...messages, userMsg]
     setMessages(nextMessages)
     setInput('')
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
     setLoading(true)
 
     try {
@@ -64,14 +77,21 @@ export default function ChatPanel() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-gray-200 bg-white">
+    // On mobile: 60vh so the workout panel stays visible below.
+    // On md+: h-full fills the flex column from the dashboard layout.
+    <div className="flex flex-col h-[60vh] md:h-full">
+
+      {/* Header */}
+      <div className="flex-none px-4 py-3 border-b border-gray-200 bg-white">
         <h2 className="text-sm font-semibold text-gray-800">AI Assistant</h2>
         <p className="text-xs text-gray-400 mt-0.5">Ask anything about your training</p>
       </div>
 
-      {/* Message history */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+      {/* Scroll container — this div scrolls, not the page */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-1 min-h-0"
+      >
         {messages.length === 0 && (
           <div className="text-center text-gray-400 text-sm mt-8">
             <p className="text-2xl mb-2">💬</p>
@@ -90,11 +110,10 @@ export default function ChatPanel() {
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* Input area */}
-      <div className="px-4 py-3 border-t border-gray-200 bg-white">
+      <div className="flex-none px-4 py-3 border-t border-gray-200 bg-white">
         <div className="flex gap-2 items-end">
           <textarea
             ref={textareaRef}
