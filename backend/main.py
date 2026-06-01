@@ -6,6 +6,7 @@ from routers import auth as auth_router
 from routers import integrations as integrations_router
 from routers import chat as chat_router
 from routers import password_reset as password_reset_router
+from routers import knowledge as knowledge_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -31,6 +32,7 @@ app.add_middleware(
 app.include_router(auth_router.router)
 app.include_router(password_reset_router.router)
 app.include_router(integrations_router.router)
+app.include_router(knowledge_router.router)
 app.include_router(chat_router.router)
 
 

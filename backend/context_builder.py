@@ -155,6 +155,23 @@ def _section_hevy(
     return "\n".join(lines)
 
 
+def _section_knowledge(entries: list[Any]) -> str:
+    if not entries:
+        return ""
+    lines = ["## Athlete Knowledge Base"]
+    # Group by category
+    grouped: dict[str, list[str]] = {}
+    for e in entries:
+        cat = e.category if hasattr(e, "category") else e.get("category", "Other")
+        content = e.content if hasattr(e, "content") else e.get("content", "")
+        grouped.setdefault(cat, []).append(content)
+    for category, items in grouped.items():
+        lines.append(f"\n### {category}")
+        for item in items:
+            lines.append(f"- {item}")
+    return "\n".join(lines)
+
+
 def _section_routine_creation(connected: list[str]) -> str:
     if "hevy" not in connected:
         return ""
@@ -206,6 +223,7 @@ def build_system_prompt(
     user: models.User,
     connected_integrations: list[str],
     hevy_data: dict[str, Any] | None = None,
+    knowledge_entries: list[Any] | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
@@ -219,6 +237,9 @@ def build_system_prompt(
         _section_identity(user, now),
         _section_integrations(connected_integrations),
     ]
+
+    if knowledge_entries:
+        sections.append(_section_knowledge(knowledge_entries))
 
     if hevy_data is not None:
         count = hevy_data.get("workout_count", 0)

@@ -145,10 +145,18 @@ async def chat(
         hevy_data = await _gather_hevy_context(raw_key)
         hevy_client = HevyClient(raw_key)
 
+    knowledge_entries = (
+        db.query(models.UserKnowledge)
+        .filter_by(user_id=current_user.id)
+        .order_by(models.UserKnowledge.category, models.UserKnowledge.created_at)
+        .all()
+    )
+
     system_prompt = build_system_prompt(
         user=current_user,
         connected_integrations=list(connected.keys()),
         hevy_data=hevy_data,
+        knowledge_entries=knowledge_entries,
     )
 
     # Build messages list: history + current user message
