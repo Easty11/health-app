@@ -110,7 +110,6 @@ class HevyClient:
                 built_sets.append(set_data)
 
             built_exercises.append({
-                "index": ex_idx,
                 "exercise_template_id": ex["exercise_template_id"],
                 "superset_id": ex.get("superset_id"),
                 "notes": ex.get("notes", ""),
