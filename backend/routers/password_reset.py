@@ -16,7 +16,7 @@ load_dotenv()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-RESET_LINK_BASE = "https://health-app-backend-production-760e.up.railway.app/reset-password"
+RESET_LINK_BASE = os.getenv("FRONTEND_URL", "https://health-app-production-e0ff.up.railway.app") + "/reset-password"
 TOKEN_EXPIRY_HOURS = 1
 
 

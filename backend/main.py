@@ -16,6 +16,7 @@ app = FastAPI(title="Health & Performance API")
 origins = [
     "http://localhost:5173",
     "http://localhost:5174",
+    "https://health-app-production-e0ff.up.railway.app",
     os.getenv("FRONTEND_URL", ""),
 ]
 
