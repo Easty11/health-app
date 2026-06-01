@@ -52,7 +52,7 @@ async def _gather_hevy_context(api_key: str) -> dict[str, Any]:
     client = HevyClient(api_key)
     try:
         count_data = await client.get_workout_count()
-        workouts_data = await client.get_workouts(page=1, page_size=5)
+        workouts_data = await client.get_workouts(page=1, page_size=10)
         return {
             "workout_count": count_data.get("workout_count", 0),
             "recent_workouts": workouts_data.get("workouts", []),

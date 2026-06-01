@@ -67,6 +67,39 @@ def _section_integrations(connected: list[str]) -> str:
     return f"The user has the following integrations connected: {joined}."
 
 
+def _format_set(s: dict[str, Any], idx: int) -> str:
+    """Format a single set into a compact readable string."""
+    parts: list[str] = []
+
+    weight = s.get("weight_kg")
+    reps = s.get("reps")
+    duration = s.get("duration_seconds")
+    distance = s.get("distance_meters")
+    rpe = s.get("rpe")
+    set_type = s.get("type", "normal")
+
+    if weight is not None and reps is not None:
+        parts.append(f"{weight}kg × {reps}")
+    elif weight is not None:
+        parts.append(f"{weight}kg")
+    elif reps is not None:
+        parts.append(f"{reps} reps")
+
+    if duration is not None:
+        mins, secs = divmod(int(duration), 60)
+        parts.append(f"{mins}m {secs:02d}s" if mins else f"{secs}s")
+
+    if distance is not None:
+        parts.append(f"{distance}m")
+
+    if rpe is not None:
+        parts.append(f"RPE {rpe}")
+
+    type_tag = f" [{set_type}]" if set_type != "normal" else ""
+    body = " — ".join(parts) if parts else "no data"
+    return f"       Set {idx + 1}{type_tag}: {body}"
+
+
 def _section_hevy(
     workout_count: int,
     recent_workouts: list[dict[str, Any]],
@@ -78,25 +111,46 @@ def _section_hevy(
         lines.append("No recent workouts found.")
         return "\n".join(lines)
 
-    lines.append(f"\nThe {len(recent_workouts)} most recent workouts:")
+    lines.append(f"\nThe {len(recent_workouts)} most recent workouts:\n")
+
     for w in recent_workouts:
         title = w.get("title") or w.get("name") or "Untitled"
         start = w.get("start_time") or w.get("created_at") or ""
+        end = w.get("end_time") or ""
         date_label = _days_ago_label(start, now)
+        date_short = start[:10] if start else "unknown"
 
-        exercise_names: list[str] = []
-        for ex in w.get("exercises", []):
-            ex_title = ex.get("title") or ex.get("exercise_template_id") or ""
-            if ex_title and ex_title not in exercise_names:
-                exercise_names.append(ex_title)
+        # Duration
+        duration_str = ""
+        if start and end:
+            try:
+                s_dt = datetime.fromisoformat(start[:19])
+                e_dt = datetime.fromisoformat(end[:19])
+                mins = int((e_dt - s_dt).total_seconds() // 60)
+                duration_str = f"\n   Duration: {mins} minutes"
+            except (ValueError, AttributeError):
+                pass
 
-        sets_summary = ""
-        if exercise_names:
-            sets_summary = f" — {', '.join(exercise_names[:6])}"
-            if len(exercise_names) > 6:
-                sets_summary += f" (+{len(exercise_names) - 6} more)"
+        lines.append(f"WORKOUT: {title} — {date_label} ({date_short}){duration_str}")
+        lines.append("   Exercises:")
 
-        lines.append(f"  • {date_label}: {title}{sets_summary}")
+        exercises = w.get("exercises", [])  # all exercises, no truncation
+        for ex_idx, ex in enumerate(exercises):
+            ex_title = ex.get("title") or ex.get("exercise_template_id") or "Unknown exercise"
+            notes = ex.get("notes", "").strip()
+            rest = ex.get("rest_seconds")
+            template_id = ex.get("exercise_template_id", "")
+
+            notes_str = f" — {notes}" if notes else ""
+            rest_str = f" (rest {rest}s)" if rest else ""
+            id_str = f" [ID: {template_id}]" if template_id else ""
+            lines.append(f"   {ex_idx + 1}. {ex_title}{id_str}{notes_str}{rest_str}")
+
+            sets = ex.get("sets", [])
+            for set_idx, s in enumerate(sets):
+                lines.append(_format_set(s, set_idx))
+
+        lines.append("")  # blank line between workouts
 
     return "\n".join(lines)
 
