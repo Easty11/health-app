@@ -73,4 +73,5 @@ class DailyCheckIn(Base):
     motivation: Mapped[int] = mapped_column(Integer, nullable=False)          # 1-10
     rugby_session_yesterday: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
+    readiness_score: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

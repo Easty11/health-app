@@ -221,23 +221,40 @@ def _section_checkin(checkin: Any | None, now: datetime) -> str:
         )
 
     date_str = now.strftime("%A %d %B %Y")
-    rugby = "Yes" if (checkin.rugby_session_yesterday if hasattr(checkin, "rugby_session_yesterday") else checkin.get("rugby_session_yesterday")) else "No"
 
     def _val(field: str) -> Any:
         return getattr(checkin, field) if hasattr(checkin, field) else checkin.get(field)
 
+    score = _val("readiness_score") or 5
+    rugby = "Yes" if _val("rugby_session_yesterday") else "No"
     notes = _val("notes") or ""
     notes_line = f"\nNotes: {notes}" if notes else ""
 
+    # Coaching load guidance based on readiness
+    if score >= 8:
+        guidance = "Full prescribed loads — no restrictions."
+    elif score >= 6:
+        guidance = "Reduce loads 10-20%, RPE cap 7."
+    elif score >= 4:
+        guidance = "Reduce loads 20-30%, RPE cap 6. Consider a recovery session."
+    else:
+        guidance = "Recovery only — no strength work today."
+
     return (
-        f"## Today's Readiness\n"
+        f"## Today's Readiness Score: {score}/10\n"
         f"Date: {date_str}\n"
         f"Sleep quality: {_val('sleep_quality')}/10\n"
         f"Fatigue: {_val('fatigue')}/10\n"
         f"Shoulder pain: {_val('shoulder_pain')}/10\n"
         f"Motivation: {_val('motivation')}/10\n"
         f"Rugby session yesterday: {rugby}"
-        f"{notes_line}"
+        f"{notes_line}\n"
+        f"\nLoad guidance: {guidance}\n"
+        f"\nCoaching rules based on readiness:\n"
+        f"- Score 8-10: full prescribed loads\n"
+        f"- Score 6-7: reduce loads 10-20%, RPE cap 7\n"
+        f"- Score 4-5: reduce loads 20-30%, RPE cap 6, consider recovery session\n"
+        f"- Score 1-3: recovery only, no strength work"
     )
 
 
