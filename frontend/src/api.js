@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://health-app-backend-production-760e.up.railway.app'
 
 const api = axios.create({ baseURL: BASE_URL })
 
