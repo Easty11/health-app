@@ -228,11 +228,21 @@ async def chat(
         .all()
     )
 
+    import pytz
+    from datetime import datetime as _dt
+    today_aest = _dt.now(pytz.timezone("Australia/Brisbane")).date()
+    today_checkin = (
+        db.query(models.DailyCheckIn)
+        .filter_by(user_id=current_user.id, date=today_aest)
+        .first()
+    )
+
     system_prompt = build_system_prompt(
         user=current_user,
         connected_integrations=list(connected.keys()),
         hevy_data=hevy_data,
         knowledge_entries=knowledge_entries,
+        today_checkin=today_checkin,
     )
 
     # Build messages list: history + current user message

@@ -211,6 +211,36 @@ Rules for routine creation:
   with a confirmation message once the routine is created."""
 
 
+def _section_checkin(checkin: Any | None, now: datetime) -> str:
+    if checkin is None:
+        return (
+            "## Today's Readiness\n"
+            "The user has NOT completed their morning check-in today. "
+            "If they ask about training or programming a session, gently remind them "
+            "to complete their check-in first so you can factor in their readiness."
+        )
+
+    date_str = now.strftime("%A %d %B %Y")
+    rugby = "Yes" if (checkin.rugby_session_yesterday if hasattr(checkin, "rugby_session_yesterday") else checkin.get("rugby_session_yesterday")) else "No"
+
+    def _val(field: str) -> Any:
+        return getattr(checkin, field) if hasattr(checkin, field) else checkin.get(field)
+
+    notes = _val("notes") or ""
+    notes_line = f"\nNotes: {notes}" if notes else ""
+
+    return (
+        f"## Today's Readiness\n"
+        f"Date: {date_str}\n"
+        f"Sleep quality: {_val('sleep_quality')}/10\n"
+        f"Fatigue: {_val('fatigue')}/10\n"
+        f"Shoulder pain: {_val('shoulder_pain')}/10\n"
+        f"Motivation: {_val('motivation')}/10\n"
+        f"Rugby session yesterday: {rugby}"
+        f"{notes_line}"
+    )
+
+
 def _section_knowledge_update() -> str:
     return """## Updating the Knowledge Base
 
@@ -250,6 +280,7 @@ def build_system_prompt(
     connected_integrations: list[str],
     hevy_data: dict[str, Any] | None = None,
     knowledge_entries: list[Any] | None = None,
+    today_checkin: Any | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
@@ -261,6 +292,7 @@ def build_system_prompt(
         "generic fitness advice when you have real numbers to work with.",
         "",
         _section_identity(user, now),
+        _section_checkin(today_checkin, now),
         _section_integrations(connected_integrations),
     ]
 
