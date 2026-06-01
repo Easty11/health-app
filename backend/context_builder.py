@@ -6,17 +6,58 @@ GameTraka, etc.) write a new async `_section_<name>` function that returns a
 string block, then call it inside `build_system_prompt`.
 """
 
-from datetime import date
+from datetime import datetime, timezone
 from typing import Any
 
+import pytz
+
 import models
+
+AEST = pytz.timezone("Australia/Brisbane")
+
+
+def _now_aest() -> datetime:
+    return datetime.now(AEST)
+
+
+def _days_ago_label(start_str: str, today: datetime) -> str:
+    """Return a human label like 'today', 'yesterday', '3 days ago' etc."""
+    if not start_str:
+        return "unknown date"
+    try:
+        # Parse ISO timestamp — may be naive or offset-aware
+        raw = start_str[:19]  # strip sub-seconds and tz suffix for parsing
+        workout_dt = datetime.fromisoformat(raw)
+        if workout_dt.tzinfo is None:
+            workout_dt = workout_dt.replace(tzinfo=timezone.utc)
+        workout_date = workout_dt.astimezone(AEST).date()
+        today_date = today.date()
+        delta = (today_date - workout_date).days
+        if delta == 0:
+            return f"{workout_date.strftime('%d %b')} (today)"
+        elif delta == 1:
+            return f"{workout_date.strftime('%d %b')} (yesterday)"
+        elif delta < 7:
+            return f"{workout_date.strftime('%d %b')} ({delta} days ago)"
+        elif delta < 14:
+            return f"{workout_date.strftime('%d %b')} (last week)"
+        else:
+            weeks = delta // 7
+            return f"{workout_date.strftime('%d %b')} ({weeks} weeks ago)"
+    except (ValueError, AttributeError):
+        return start_str[:10] if len(start_str) >= 10 else start_str
 
 
 # ---------- individual context sections ----------
 
-def _section_identity(user: models.User) -> str:
+def _section_identity(user: models.User, now: datetime) -> str:
     name = user.full_name or user.email
-    return f"The user's name is {name}. Today's date is {date.today().isoformat()}."
+    current_date = now.strftime("%A, %d %B %Y")
+    current_time = now.strftime("%I:%M %p")
+    return (
+        f"The user's name is {name}. "
+        f"Today is {current_date}. Current time is {current_time} AEST."
+    )
 
 
 def _section_integrations(connected: list[str]) -> str:
@@ -26,8 +67,12 @@ def _section_integrations(connected: list[str]) -> str:
     return f"The user has the following integrations connected: {joined}."
 
 
-def _section_hevy(workout_count: int, recent_workouts: list[dict[str, Any]]) -> str:
-    lines = [f"## Hevy (strength training)", f"Total workouts logged: {workout_count}"]
+def _section_hevy(
+    workout_count: int,
+    recent_workouts: list[dict[str, Any]],
+    now: datetime,
+) -> str:
+    lines = ["## Hevy (strength training)", f"Total workouts logged: {workout_count}"]
 
     if not recent_workouts:
         lines.append("No recent workouts found.")
@@ -37,8 +82,7 @@ def _section_hevy(workout_count: int, recent_workouts: list[dict[str, Any]]) -> 
     for w in recent_workouts:
         title = w.get("title") or w.get("name") or "Untitled"
         start = w.get("start_time") or w.get("created_at") or ""
-        # Trim to date portion if ISO timestamp
-        start_short = start[:10] if start else "unknown date"
+        date_label = _days_ago_label(start, now)
 
         exercise_names: list[str] = []
         for ex in w.get("exercises", []):
@@ -52,7 +96,7 @@ def _section_hevy(workout_count: int, recent_workouts: list[dict[str, Any]]) -> 
             if len(exercise_names) > 6:
                 sets_summary += f" (+{len(exercise_names) - 6} more)"
 
-        lines.append(f"  • {start_short}: {title}{sets_summary}")
+        lines.append(f"  • {date_label}: {title}{sets_summary}")
 
     return "\n".join(lines)
 
@@ -109,20 +153,23 @@ def build_system_prompt(
     connected_integrations: list[str],
     hevy_data: dict[str, Any] | None = None,
 ) -> str:
+    # Capture time once per request so all sections share the same "now"
+    now = _now_aest()
+
     sections: list[str] = [
         "You are a personal health and performance assistant. Your job is to help the "
         "user understand their training, spot patterns, and give specific, actionable "
         "recommendations grounded in their actual data. Be direct and practical — avoid "
         "generic fitness advice when you have real numbers to work with.",
         "",
-        _section_identity(user),
+        _section_identity(user, now),
         _section_integrations(connected_integrations),
     ]
 
     if hevy_data is not None:
         count = hevy_data.get("workout_count", 0)
         workouts = hevy_data.get("recent_workouts", [])
-        sections.append(_section_hevy(count, workouts))
+        sections.append(_section_hevy(count, workouts, now))
 
     sections += [
         "",
