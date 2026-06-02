@@ -76,7 +76,8 @@ def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)):
     # Always return the same message — never reveal whether email exists
     generic_response = {"message": "If that email exists you'll receive a reset link"}
 
-    user = db.query(models.User).filter(models.User.email == body.email).first()
+    email = body.email.lower().strip()
+    user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
         return generic_response
 

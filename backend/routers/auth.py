@@ -12,12 +12,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
-    existing = db.query(models.User).filter(models.User.email == user_in.email).first()
+    email = user_in.email.lower().strip()
+
+    existing = db.query(models.User).filter(models.User.email == email).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     user = models.User(
-        email=user_in.email,
+        email=email,
         hashed_password=auth_utils.hash_password(user_in.password),
         full_name=user_in.full_name,
     )
@@ -29,7 +31,9 @@ def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=schemas.Token)
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == form.username).first()
+    email = form.username.lower().strip()
+
+    user = db.query(models.User).filter(models.User.email == email).first()
     if not user or not auth_utils.verify_password(form.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
