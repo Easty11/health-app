@@ -1,6 +1,9 @@
 """
 Receives Health Connect data from the companion Android app and stores
 it in health_connect_syncs — one row per user per date (upsert).
+
+Schemas are intentionally flexible to accept both the raw library shapes
+and any field names used by the JS mapping layer.
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
@@ -20,10 +23,38 @@ SLEEP_STAGE_REM   = 5
 SLEEP_STAGE_LIGHT = 2
 
 
-# ---------- incoming payload schemas ----------
+# ---------- flexible incoming schemas ----------
+
+class HeartRateRecord(BaseModel):
+    time: str
+    beatsPerMinute: Optional[int] = None   # raw library field
+    bpm: Optional[int] = None               # mapped field
+
+    def get_bpm(self) -> Optional[int]:
+        return self.bpm or self.beatsPerMinute
+
+
+class StepsRecord(BaseModel):
+    startTime: Optional[str] = None
+    endTime: Optional[str] = None
+    date: Optional[str] = None              # mapped field (date: r.startTime)
+    count: int
+
+    def get_start(self) -> Optional[str]:
+        return self.startTime or self.date
+
+
+class HRVRecord(BaseModel):
+    time: str
+    heartRateVariabilityMillis: Optional[float] = None  # raw library field
+    rmssd: Optional[float] = None                        # mapped field
+
+    def get_rmssd(self) -> Optional[float]:
+        return self.rmssd or self.heartRateVariabilityMillis
+
 
 class SleepStage(BaseModel):
-    stage: int          # Health Connect SleepStageType int
+    stage: int
     startTime: str
     endTime: str
 
@@ -31,43 +62,84 @@ class SleepStage(BaseModel):
 class SleepSession(BaseModel):
     startTime: str
     endTime: str
-    durationMinutes: int
+    durationMinutes: Optional[int] = None
     stages: list[SleepStage] = []
 
-
-class HRVReading(BaseModel):
-    time: str
-    hrv: float
-
-
-class HeartRateReading(BaseModel):
-    time: str
-    bpm: Optional[int] = None
-
-
-class StepsRecord(BaseModel):
-    startTime: str
-    endTime: str
-    count: int
+    def duration(self) -> int:
+        if self.durationMinutes is not None:
+            return self.durationMinutes
+        try:
+            return int((
+                datetime.fromisoformat(self.endTime[:19]) -
+                datetime.fromisoformat(self.startTime[:19])
+            ).total_seconds() // 60)
+        except (ValueError, AttributeError):
+            return 0
 
 
-class WorkoutRecord(BaseModel):
+class ExerciseRecord(BaseModel):
     startTime: str
     endTime: str
     exerciseType: Optional[int] = None
+    type: Optional[Any] = None              # mapped field (type: r.exerciseType)
     title: Optional[str] = None
-    durationMinutes: int
+    durationMinutes: Optional[int] = None
+
+
+class OxygenSaturationRecord(BaseModel):
+    time: str
+    percentage: Optional[float] = None
+
+
+class RespiratoryRateRecord(BaseModel):
+    time: str
+    rate: Optional[float] = None
+
+
+class WeightRecord(BaseModel):
+    time: str
+    weight: Optional[dict] = None
+    inKilograms: Optional[float] = None
+
+    def get_kg(self) -> Optional[float]:
+        if self.inKilograms is not None:
+            return self.inKilograms
+        if isinstance(self.weight, dict):
+            return self.weight.get("inKilograms")
+        return None
+
+
+class DistanceRecord(BaseModel):
+    startTime: str
+    endTime: str
+    distance: Optional[dict] = None
+    inMeters: Optional[float] = None
+
+    def get_meters(self) -> Optional[float]:
+        if self.inMeters is not None:
+            return self.inMeters
+        if isinstance(self.distance, dict):
+            return self.distance.get("inMeters")
+        return None
 
 
 class SyncPayload(BaseModel):
-    syncedAt: str
+    syncedAt: Optional[str] = None
     periodDays: int = 7
     sleep: list[SleepSession] = []
-    hrv: list[HRVReading] = []
-    heartRate: list[HeartRateReading] = []
+    hrv: list[HRVRecord] = []
+    heartRate: list[HeartRateRecord] = []
     steps: list[StepsRecord] = []
-    workouts: list[WorkoutRecord] = []
+    workouts: list[ExerciseRecord] = []     # old field name
+    exercise: list[ExerciseRecord] = []     # new field name
+    oxygenSaturation: list[OxygenSaturationRecord] = []
+    respiratoryRate: list[RespiratoryRateRecord] = []
+    weight: list[WeightRecord] = []
+    distance: list[DistanceRecord] = []
     errors: list[str] = []
+
+    def all_exercises(self) -> list[ExerciseRecord]:
+        return self.workouts + self.exercise
 
 
 # ---------- output schemas ----------
@@ -112,54 +184,69 @@ def _stage_minutes(stages: list[SleepStage], stage_type: int) -> int:
 
 
 def _sleep_score(deep: int, rem: int, total: int) -> Optional[int]:
-    """Simple 1-10 sleep score based on deep+REM proportion."""
     if total <= 0:
         return None
     quality_pct = (deep + rem) / total
-    # Target: ≥35% deep+REM = 10, 0% = 1
     score = 1 + round(quality_pct / 0.35 * 9)
     return max(1, min(10, score))
 
 
-def _aggregate_day(
-    day: date,
-    payload: SyncPayload,
-) -> dict[str, Any]:
-    """Aggregate all payload records for a given calendar date."""
+def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
     row: dict[str, Any] = {"date": day}
 
-    # Steps — sum all records on this date
-    day_steps = [r for r in payload.steps if _parse_date(r.startTime) == day]
+    # Steps — sum all records on this date (accept both startTime and date fields)
+    day_steps = [
+        r for r in payload.steps
+        if r.get_start() and _parse_date(r.get_start()) == day
+    ]
     if day_steps:
         row["steps"] = sum(r.count for r in day_steps)
 
     # Heart rate — median bpm for the day
-    day_hr = [r for r in payload.heartRate if _parse_date(r.time) == day and r.bpm]
+    day_hr = [
+        r for r in payload.heartRate
+        if r.get_bpm() is not None and _parse_date(r.time) == day
+    ]
     if day_hr:
-        bpms = sorted(r.bpm for r in day_hr)
+        bpms = sorted(r.get_bpm() for r in day_hr)
         row["resting_heart_rate"] = float(bpms[len(bpms) // 2])
 
-    # HRV — average for the day
-    day_hrv = [r for r in payload.hrv if _parse_date(r.time) == day]
+    # HRV — average rmssd for the day
+    day_hrv = [r for r in payload.hrv if _parse_date(r.time) == day and r.get_rmssd() is not None]
     if day_hrv:
-        row["hrv_rmssd"] = round(sum(r.hrv for r in day_hrv) / len(day_hrv), 1)
+        row["hrv_rmssd"] = round(sum(r.get_rmssd() for r in day_hrv) / len(day_hrv), 1)
 
-    # Sleep — longest session ending on this date (night before)
+    # Sleep — longest session overlapping this date
     day_sleep = [
         s for s in payload.sleep
         if _parse_date(s.endTime) == day or _parse_date(s.startTime) == day
     ]
     if day_sleep:
-        best = max(day_sleep, key=lambda s: s.durationMinutes)
+        best = max(day_sleep, key=lambda s: s.duration())
         deep = _stage_minutes(best.stages, SLEEP_STAGE_DEEP)
         rem = _stage_minutes(best.stages, SLEEP_STAGE_REM)
         light = _stage_minutes(best.stages, SLEEP_STAGE_LIGHT)
-        total = best.durationMinutes
+        total = best.duration()
         row["sleep_duration_minutes"] = total
         row["deep_sleep_minutes"] = deep
         row["rem_sleep_minutes"] = rem
         row["light_sleep_minutes"] = light
         row["sleep_score"] = _sleep_score(deep, rem, total)
+
+    # Oxygen saturation — average for the day
+    day_spo2 = [r for r in payload.oxygenSaturation if r.percentage and _parse_date(r.time) == day]
+    if day_spo2:
+        row["oxygen_saturation"] = round(sum(r.percentage for r in day_spo2) / len(day_spo2), 1)
+
+    # Respiratory rate — average for the day
+    day_rr = [r for r in payload.respiratoryRate if r.rate and _parse_date(r.time) == day]
+    if day_rr:
+        row["respiratory_rate"] = round(sum(r.rate for r in day_rr) / len(day_rr), 1)
+
+    # Distance — sum for the day
+    day_dist = [r for r in payload.distance if r.get_meters() and _parse_date(r.startTime) == day]
+    if day_dist:
+        row["distance_meters"] = int(sum(r.get_meters() for r in day_dist))
 
     return row
 
@@ -176,16 +263,26 @@ def sync(
     today = datetime.now(timezone.utc).date()
     since = today - timedelta(days=payload.periodDays)
 
-    # Collect all unique dates in the payload
+    # Collect all unique dates across all record types
     dates: set[date] = set()
-    for r in payload.steps:    dates.add(_parse_date(r.startTime))
-    for r in payload.heartRate: dates.add(_parse_date(r.time))
-    for r in payload.hrv:       dates.add(_parse_date(r.time))
+    for r in payload.steps:
+        s = r.get_start()
+        if s:
+            dates.add(_parse_date(s))
+    for r in payload.heartRate:
+        dates.add(_parse_date(r.time))
+    for r in payload.hrv:
+        dates.add(_parse_date(r.time))
     for r in payload.sleep:
         dates.add(_parse_date(r.endTime))
         dates.add(_parse_date(r.startTime))
+    for r in payload.oxygenSaturation:
+        dates.add(_parse_date(r.time))
+    for r in payload.respiratoryRate:
+        dates.add(_parse_date(r.time))
+    for r in payload.distance:
+        dates.add(_parse_date(r.startTime))
 
-    # Only persist dates within the reported period
     valid_dates = {d for d in dates if since <= d <= today}
 
     synced_dates = []
