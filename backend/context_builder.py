@@ -284,6 +284,75 @@ confirmation line. You do not need to ask permission to save — just do it and
 mention what you saved in your reply."""
 
 
+def _section_health_connect(records: list[Any], now: datetime) -> str:
+    """Inject today's or yesterday's Health Connect data into the system prompt."""
+    if not records:
+        return ""
+
+    today = now.date()
+    yesterday = today - __import__("datetime").timedelta(days=1)
+
+    # Prefer today, fall back to yesterday
+    record = None
+    for r in records:
+        rec_date = r.date if hasattr(r, "date") else r.get("date")
+        if rec_date == today:
+            record = r
+            break
+        if rec_date == yesterday and record is None:
+            record = r
+
+    if record is None:
+        return ""
+
+    def _v(field: str) -> Any:
+        return getattr(record, field) if hasattr(record, field) else record.get(field)
+
+    rec_date = _v("date")
+    date_label = "Today" if rec_date == today else "Yesterday"
+    lines = [f"## Health Connect Data ({date_label} — {rec_date})"]
+
+    if _v("steps") is not None:
+        lines.append(f"Steps: {_v('steps'):,}")
+    if _v("resting_heart_rate") is not None:
+        lines.append(f"Resting HR: {round(_v('resting_heart_rate'))} bpm")
+    if _v("hrv_rmssd") is not None:
+        lines.append(f"HRV (RMSSD): {_v('hrv_rmssd')} ms")
+
+    if _v("sleep_duration_minutes") is not None:
+        total = _v("sleep_duration_minutes")
+        h, m = divmod(total, 60)
+        deep = _v("deep_sleep_minutes") or 0
+        rem = _v("rem_sleep_minutes") or 0
+        light = _v("light_sleep_minutes") or 0
+        dh, dm = divmod(deep, 60)
+        rh, rm = divmod(rem, 60)
+        lh, lm = divmod(light, 60)
+        lines.append(
+            f"Sleep: {h}h {m}m total"
+            + (f" (Deep: {dh}h {dm}m, REM: {rh}h {rm}m, Light: {lh}h {lm}m)" if deep or rem else "")
+        )
+        if _v("sleep_score") is not None:
+            lines.append(f"Sleep score: {_v('sleep_score')}/10")
+
+    if _v("active_calories") is not None:
+        lines.append(f"Active calories: {_v('active_calories'):,}")
+    if _v("oxygen_saturation") is not None:
+        lines.append(f"SpO2: {_v('oxygen_saturation'):.1f}%")
+    if _v("respiratory_rate") is not None:
+        lines.append(f"Respiratory rate: {_v('respiratory_rate'):.1f} breaths/min")
+
+    lines += [
+        "",
+        "Use this data to inform readiness assessment and session programming:",
+        "- High HRV (>60ms) + good sleep (>7h, sleep score ≥7) → athlete is well recovered",
+        "- Low HRV (<40ms) or poor sleep (<6h or score ≤4) → treat as lower readiness",
+        "- Apply coaching load rules from the readiness score section above.",
+    ]
+
+    return "\n".join(lines)
+
+
 # ---------- add future sections here ----------
 # async def _section_mfp(nutrition_data) -> str: ...
 # async def _section_polar(activity_data) -> str: ...
@@ -298,6 +367,7 @@ def build_system_prompt(
     hevy_data: dict[str, Any] | None = None,
     knowledge_entries: list[Any] | None = None,
     today_checkin: Any | None = None,
+    health_connect_records: list[Any] | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
@@ -315,6 +385,11 @@ def build_system_prompt(
 
     if knowledge_entries:
         sections.append(_section_knowledge(knowledge_entries))
+
+    if health_connect_records:
+        hc_section = _section_health_connect(health_connect_records, now)
+        if hc_section:
+            sections.append(hc_section)
 
     if hevy_data is not None:
         count = hevy_data.get("workout_count", 0)

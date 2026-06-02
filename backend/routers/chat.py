@@ -237,12 +237,25 @@ async def chat(
         .first()
     )
 
+    from datetime import timedelta as _td
+    hc_since = today_aest - _td(days=2)  # today + yesterday
+    health_connect_records = (
+        db.query(models.HealthConnectSync)
+        .filter(
+            models.HealthConnectSync.user_id == current_user.id,
+            models.HealthConnectSync.date >= hc_since,
+        )
+        .order_by(models.HealthConnectSync.date.desc())
+        .all()
+    )
+
     system_prompt = build_system_prompt(
         user=current_user,
         connected_integrations=list(connected.keys()),
         hevy_data=hevy_data,
         knowledge_entries=knowledge_entries,
         today_checkin=today_checkin,
+        health_connect_records=health_connect_records,
     )
 
     # Build messages list: history + current user message

@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
@@ -75,3 +75,28 @@ class DailyCheckIn(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     readiness_score: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class HealthConnectSync(Base):
+    __tablename__ = "health_connect_syncs"
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_hc_user_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    steps: Mapped[int | None] = mapped_column(Integer)
+    resting_heart_rate: Mapped[float | None] = mapped_column(Float)
+    hrv_rmssd: Mapped[float | None] = mapped_column(Float)
+
+    sleep_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    sleep_score: Mapped[int | None] = mapped_column(Integer)
+    deep_sleep_minutes: Mapped[int | None] = mapped_column(Integer)
+    rem_sleep_minutes: Mapped[int | None] = mapped_column(Integer)
+    light_sleep_minutes: Mapped[int | None] = mapped_column(Integer)
+
+    active_calories: Mapped[int | None] = mapped_column(Integer)
+    distance_meters: Mapped[int | None] = mapped_column(Integer)
+    oxygen_saturation: Mapped[float | None] = mapped_column(Float)
+    respiratory_rate: Mapped[float | None] = mapped_column(Float)
