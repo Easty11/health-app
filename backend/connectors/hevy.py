@@ -100,6 +100,7 @@ class HevyClient:
             built_sets = []
             for set_idx, s in enumerate(ex.get("sets", [])):
                 set_data = {
+                    "index": set_idx,
                     "type": s.get("type", "normal"),
                     "weight_kg": s.get("weight_kg"),
                     "reps": s.get("reps"),
@@ -110,6 +111,7 @@ class HevyClient:
                 built_sets.append(set_data)
 
             built_exercises.append({
+                "index": ex_idx,
                 "exercise_template_id": ex["exercise_template_id"],
                 "superset_id": ex.get("superset_id"),
                 "notes": ex.get("notes", ""),
