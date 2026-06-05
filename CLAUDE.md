@@ -25,6 +25,9 @@ Mobile: Expo React Native (health-connect-app repo)
 Backend: https://health-app-backend-production-760e.up.railway.app
 Frontend: https://health-app-production-e0ff.up.railway.app
 
+## Known limitations
+- Samsung Galaxy Ring HRV data is NOT available via Health Connect — Samsung Health does not expose HeartRateVariabilityRmssd to Health Connect. hrv_rmssd will always be null for Samsung Ring users. Only accessible via Samsung Health SDK (proprietary).
+
 ## Known quirks (do not change without reason)
 - bcrypt pinned to 4.0.1 — passlib 1.7.4 incompatible with 5.x
 - POST /auth/login uses OAuth2PasswordRequestForm (form data, NOT JSON)
