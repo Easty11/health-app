@@ -39,6 +39,6 @@ Frontend: https://health-app-production-e0ff.up.railway.app
 - Commit and push after each meaningful change
 
 ## Open issues
-1. Health Connect companion app permissions — record types 38, 35, 11, 37
+1. ~~Health Connect companion app permissions — fixed: switched handleGrantPermissions to use requestPermission() API (PermissionController contract) instead of wrong native intent~~
 2. ~~create_routine 400 error — fixed: missing index fields on exercises/sets in connectors/hevy.py~~
 3. ~~Conversation history clears on refresh — fixed: localStorage keyed by user email from JWT~~
