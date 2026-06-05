@@ -1,6 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
 import api from '../api'
 
+function getStorageKey() {
+  const token = localStorage.getItem('token')
+  if (!token) return 'chat_history'
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return `chat_history_${payload.sub}`
+  } catch {
+    return 'chat_history'
+  }
+}
+
 function Message({ role, content }) {
   const isUser = role === 'user'
   return (
@@ -19,7 +30,14 @@ function Message({ role, content }) {
 }
 
 export default function ChatPanel() {
-  const [messages, setMessages] = useState([])
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem(getStorageKey())
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -33,6 +51,10 @@ export default function ChatPanel() {
     const el = scrollContainerRef.current
     if (el) el.scrollTop = el.scrollHeight
   }
+
+  useEffect(() => {
+    try { localStorage.setItem(getStorageKey(), JSON.stringify(messages)) } catch {}
+  }, [messages])
 
   useEffect(() => {
     scrollToBottom()
