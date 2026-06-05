@@ -79,7 +79,7 @@ def _hevy_error_to_http(exc: Exception) -> HTTPException:
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     if isinstance(exc, httpx.HTTPStatusError):
         return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
-    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Hevy API error")
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Hevy API error: {exc}")
 
 
 # ---------- endpoints ----------

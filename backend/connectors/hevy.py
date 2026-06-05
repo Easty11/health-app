@@ -21,9 +21,9 @@ class HevyClient:
 
     def _check(self, response: httpx.Response) -> httpx.Response:
         if response.status_code == 401:
-            raise HevyAuthError("Invalid Hevy API key")
+            raise HevyAuthError(f"Invalid Hevy API key: {response.text}")
         if response.status_code == 403:
-            raise HevyForbiddenError("Access forbidden — check Hevy plan or permissions")
+            raise HevyForbiddenError(f"Access forbidden — check Hevy plan or permissions: {response.text}")
         if response.is_error:
             raise httpx.HTTPStatusError(
                 f"Hevy API error {response.status_code}: {response.text}",
