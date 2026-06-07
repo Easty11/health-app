@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
@@ -100,3 +100,35 @@ class HealthConnectSync(Base):
     distance_meters: Mapped[int | None] = mapped_column(Integer)
     oxygen_saturation: Mapped[float | None] = mapped_column(Float)
     respiratory_rate: Mapped[float | None] = mapped_column(Float)
+
+
+class SamsungHRVReading(Base):
+    __tablename__ = "samsung_hrv_readings"
+    __table_args__ = (UniqueConstraint("user_id", "captured_at", name="uq_samsung_hrv_user_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    captured_at: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    hrv_ms: Mapped[float | None] = mapped_column(Float)
+    sleep_hr_bpm: Mapped[int | None] = mapped_column(Integer)
+    respiratory_rate: Mapped[float | None] = mapped_column(Float)
+    sleep_efficiency_pct: Mapped[int | None] = mapped_column(Integer)
+    actual_sleep_time_minutes: Mapped[int | None] = mapped_column(Integer)
+    sleep_duration_home_tile: Mapped[str | None] = mapped_column(String(20))
+    bedtime: Mapped[str | None] = mapped_column(String(10))
+    wake_time: Mapped[str | None] = mapped_column(String(10))
+    awake_minutes: Mapped[int | None] = mapped_column(Integer)
+    rem_minutes: Mapped[int | None] = mapped_column(Integer)
+    light_minutes: Mapped[int | None] = mapped_column(Integer)
+    deep_minutes: Mapped[int | None] = mapped_column(Integer)
+    awake_pct: Mapped[int | None] = mapped_column(Integer)
+    rem_pct: Mapped[int | None] = mapped_column(Integer)
+    light_pct: Mapped[int | None] = mapped_column(Integer)
+    deep_pct: Mapped[int | None] = mapped_column(Integer)
+    total_sleep_time_minutes: Mapped[int | None] = mapped_column(Integer)
+    spo2_average_pct: Mapped[float | None] = mapped_column(Float)
+    extraction_method: Mapped[str] = mapped_column(String(50), server_default=text("'accessibility'"))
