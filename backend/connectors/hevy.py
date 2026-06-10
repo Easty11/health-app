@@ -100,7 +100,6 @@ class HevyClient:
             built_sets = []
             for set_idx, s in enumerate(ex.get("sets", [])):
                 set_data: dict[str, Any] = {
-                    "index": set_idx,
                     "type": s.get("type", "normal"),
                 }
                 for field in ("weight_kg", "reps", "distance_meters", "duration_seconds", "rpe", "custom_metric"):
