@@ -99,15 +99,14 @@ class HevyClient:
         for ex_idx, ex in enumerate(exercises):
             built_sets = []
             for set_idx, s in enumerate(ex.get("sets", [])):
-                set_data = {
+                set_data: dict[str, Any] = {
                     "index": set_idx,
                     "type": s.get("type", "normal"),
-                    "weight_kg": s.get("weight_kg"),
-                    "reps": s.get("reps"),
-                    "distance_meters": s.get("distance_meters"),
-                    "duration_seconds": s.get("duration_seconds"),
-                    "custom_metric": s.get("custom_metric"),
                 }
+                for field in ("weight_kg", "reps", "distance_meters", "duration_seconds", "rpe", "custom_metric"):
+                    val = s.get(field)
+                    if val is not None:
+                        set_data[field] = val
                 built_sets.append(set_data)
 
             built_exercises.append({

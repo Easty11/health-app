@@ -1,6 +1,8 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-from typing import Any
+from pydantic import BaseModel, field_validator, model_validator
+from typing import Any, Literal
 from sqlalchemy.orm import Session
 import httpx
 
@@ -24,21 +26,65 @@ class IntegrationOut(BaseModel):
     connected: bool
 
 
+# Matches 8-char uppercase hex (built-in) or full UUID (custom) exercise template IDs.
+_TEMPLATE_ID_RE = re.compile(
+    r"^(?:[0-9A-F]{8}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+)
+
+# Valid (weight_kg, reps, distance_meters, duration_seconds) non-null combinations per exercise type.
+_VALID_SET_COMBOS = {
+    (False, True,  False, False),  # bodyweight_reps
+    (True,  True,  False, False),  # weight_reps / bodyweight_weighted
+    (False, False, False, True),   # duration
+    (True,  False, True,  False),  # weight_distance
+    (False, False, True,  True),   # distance_duration
+}
+
+
 class RoutineSetIn(BaseModel):
-    type: str = "normal"          # normal | warmup | dropset | failure
+    type: Literal["normal", "warmup", "dropset", "failure"] = "normal"
     weight_kg: float | None = None
     reps: int | None = None
     distance_meters: int | None = None
     duration_seconds: int | None = None
+    rpe: float | None = None
     custom_metric: Any = None
+
+    @model_validator(mode="after")
+    def check_field_combination(self) -> "RoutineSetIn":
+        combo = (
+            self.weight_kg is not None,
+            self.reps is not None,
+            self.distance_meters is not None,
+            self.duration_seconds is not None,
+        )
+        if combo not in _VALID_SET_COMBOS:
+            raise ValueError(
+                "set fields don't match any valid exercise type; "
+                "valid combinations: reps; weight_kg+reps; duration_seconds; "
+                "weight_kg+distance_meters; distance_meters+duration_seconds"
+            )
+        if self.rpe is not None and self.reps is None:
+            raise ValueError("rpe is only valid for reps-based exercise types")
+        return self
 
 
 class RoutineExerciseIn(BaseModel):
-    exercise_template_id: str     # uppercase hex ID, e.g. "0222DB42"
+    exercise_template_id: str
     notes: str = ""
     rest_seconds: int = 90
     superset_id: int | None = None
     sets: list[RoutineSetIn]
+
+    @field_validator("exercise_template_id")
+    @classmethod
+    def validate_template_id(cls, v: str) -> str:
+        if not _TEMPLATE_ID_RE.match(v):
+            raise ValueError(
+                "exercise_template_id must be an 8-char uppercase hex (e.g. C6C9B8A0) "
+                "or a full UUID (e.g. a4f88801-6440-40b3-b862-728a3d2b1636)"
+            )
+        return v
 
 
 class RoutineCreateIn(BaseModel):
