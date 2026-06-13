@@ -6,7 +6,7 @@ GameTraka, etc.) write a new async `_section_<name>` function that returns a
 string block, then call it inside `build_system_prompt`.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytz
@@ -63,7 +63,70 @@ def _section_user_profile() -> str:
         "  - Right shoulder — caution with horizontal adduction and overhead work\n"
         "  - Left hamstring — provoked by striding/sprinting\n"
         "- Readiness algorithm: RMSSD vs the 7-day baseline is the PRIMARY gate; "
-        "sleep quality is secondary."
+        "sleep quality is secondary.\n"
+        "\n"
+        "---\n"
+        "## SCHEDULE INTELLIGENCE\n"
+        "\n"
+        "When the user mentions anything implying a schedule change, new commitment, "
+        "recovery activity, or injury management:\n"
+        "\n"
+        "STEP 1 — ASK BEFORE WRITING\n"
+        "Do not write a knowledge entry until clarified. Ask targeted questions to establish:\n"
+        "- Specific days (or is it flexible?)\n"
+        "- Time of day and whether same-day training is affected\n"
+        "- Whether it replaces existing sessions or adds to them\n"
+        "- Duration: ongoing / fixed weeks / unknown\n"
+        "- Hard (fixed time) or soft (preference)\n"
+        "\n"
+        "Keep questions brief — max 3-4, conversational, not a form. Ask them together in one message.\n"
+        "\n"
+        "STEP 2 — WRITE STRUCTURED ENTRY\n"
+        "Once clarified, emit a knowledge update block:\n"
+        "\n"
+        "<knowledge_update>\n"
+        "{\n"
+        '  "type": "schedule_item",\n'
+        '  "key": "[activity_yearmonth]",\n'
+        '  "value": {\n'
+        '    "activity": "[name]",\n'
+        '    "days": ["monday", "thursday"],\n'
+        '    "hard": true,\n'
+        '    "time_of_day": "morning",\n'
+        '    "same_day_training": false,\n'
+        '    "duration_weeks": null\n'
+        "  },\n"
+        '  "source": "chat",\n'
+        '  "expires_at": null,\n'
+        '  "notes": "[raw text from user]"\n'
+        "}\n"
+        "</knowledge_update>\n"
+        "\n"
+        "STEP 3 — SYNTHESISE IMPACT\n"
+        "After writing, immediately state:\n"
+        "- Which existing schedule items are affected\n"
+        "- Which training days change as a result\n"
+        "- Any conflicts created\n"
+        "- Any load distribution changes\n"
+        "- Propose adjustments if needed, ask for confirmation\n"
+        "\n"
+        "TRIGGER PHRASES (not exhaustive):\n"
+        "physio, rehab, coach has me, starting X, adding X,\n"
+        "cutting back, taking X off, match moved, game on,\n"
+        "tournament, appointment, session added, twice a week\n"
+        "\n"
+        "TEMPORAL EVENTS — capture without asking questions:\n"
+        '"big weekend", "didn\'t sleep", "feeling off",\n'
+        '"heavy session", "travelled", "sick", "stressful week"\n'
+        '→ type: "load_context", expires_at: 2-3 days from today\n'
+        "→ Just acknowledge and log — no clarifying questions\n"
+        "\n"
+        "CONTRADICTION HANDLING:\n"
+        "If the user says something that contradicts an existing active schedule entry "
+        '(e.g. "physio is done"):\n'
+        '- Emit knowledge_update with active: false for that key\n'
+        "- Confirm the removal and re-synthesise the week\n"
+        "---"
     )
 
 
@@ -452,6 +515,114 @@ def _section_samsung_hrv(readings: list[Any], now: datetime) -> str:
     return "\n".join(lines)
 
 
+_DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def _section_schedule(entries: list[Any], now: datetime) -> str:
+    """Build a synthesised weekly schedule view from structured knowledge entries."""
+    if not entries:
+        return ""
+
+    today = now.date()
+    next_7 = today + timedelta(days=7)
+    today_weekday = today.strftime("%A").lower()
+
+    schedule_items = [e for e in entries if (
+        (getattr(e, "type", None) or e.get("type")) == "schedule_item"
+    )]
+    load_contexts = [e for e in entries if (
+        (getattr(e, "type", None) or e.get("type")) == "load_context"
+    )]
+    injuries = [e for e in entries if (
+        (getattr(e, "type", None) or e.get("type")) == "injury"
+    )]
+
+    def _v(entry: Any, field: str) -> Any:
+        return getattr(entry, field) if hasattr(entry, field) else entry.get(field)
+
+    lines = ["## Weekly Schedule"]
+
+    # Build day → list of (activity, hard, source) mapping
+    day_map: dict[str, list[str]] = {d: [] for d in _DAY_ORDER}
+    hard_days: set[str] = set()
+
+    for e in schedule_items:
+        val = _v(e, "value") or {}
+        activity = val.get("activity", "?")
+        days = val.get("days", [])
+        hard = val.get("hard", False)
+        source = _v(e, "source") or "system"
+        notes = _v(e, "notes") or ""
+        tag = "hard" if hard else "soft"
+        source_note = f" [{notes[:40]}]" if source == "chat" and notes else ""
+        for d in days:
+            d_lower = d.lower()
+            if d_lower in day_map:
+                day_map[d_lower].append(f"{activity} ({tag}){source_note}")
+                if hard:
+                    hard_days.add(d_lower)
+
+    for day in _DAY_ORDER:
+        items = day_map[day]
+        marker = " ◀ today" if day == today_weekday else ""
+        if items:
+            lines.append(f"{day.capitalize()}: {', '.join(items)}{marker}")
+        else:
+            lines.append(f"{day.capitalize()}: rest{marker}")
+
+    # THIS WEEK FLAGS
+    flags: list[str] = []
+
+    # Hard commitments in next 7 days
+    for e in schedule_items:
+        val = _v(e, "value") or {}
+        if not val.get("hard"):
+            continue
+        activity = val.get("activity", "?")
+        days = val.get("days", [])
+        for d in days:
+            # Map weekday name to next occurrence date
+            try:
+                target_idx = _DAY_ORDER.index(d.lower())
+                today_idx = _DAY_ORDER.index(today_weekday)
+                delta = (target_idx - today_idx) % 7
+                occurrence = today + timedelta(days=delta)
+                if today <= occurrence <= next_7:
+                    flags.append(f"Hard commitment: {activity} on {occurrence.strftime('%A %d %b')}")
+                    # Pre-event shadow: day before
+                    shadow = occurrence - timedelta(days=1)
+                    if shadow >= today:
+                        flags.append(
+                            f"Pre-event shadow: reduced load recommended on "
+                            f"{shadow.strftime('%A %d %b')} (day before {activity})"
+                        )
+            except (ValueError, IndexError):
+                pass
+
+    # Active load_context entries
+    for e in load_contexts:
+        val = _v(e, "value") or {}
+        desc = val.get("description", _v(e, "notes") or "load context")
+        expires = _v(e, "expires_at")
+        expires_str = f" — expires {expires}" if expires else ""
+        flags.append(f"Load context: {desc}{expires_str}")
+
+    # Active injury summary
+    for e in injuries:
+        val = _v(e, "value") or {}
+        body_part = val.get("body_part", "unknown")
+        restrictions = val.get("restrictions", [])
+        r_str = f" (avoid: {', '.join(restrictions)})" if restrictions else ""
+        flags.append(f"Injury: {body_part}{r_str}")
+
+    if flags:
+        lines.append("\nTHIS WEEK FLAGS")
+        for f in flags:
+            lines.append(f"- {f}")
+
+    return "\n".join(lines)
+
+
 # ---------- add future sections here ----------
 # async def _section_mfp(nutrition_data) -> str: ...
 # async def _section_polar(activity_data) -> str: ...
@@ -468,6 +639,7 @@ def build_system_prompt(
     today_checkin: Any | None = None,
     health_connect_records: list[Any] | None = None,
     samsung_hrv: Any | None = None,
+    structured_entries: list[Any] | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
@@ -487,6 +659,11 @@ def build_system_prompt(
 
     if knowledge_entries:
         sections.append(_section_knowledge(knowledge_entries))
+
+    if structured_entries:
+        schedule_section = _section_schedule(structured_entries, now)
+        if schedule_section:
+            sections.append(schedule_section)
 
     if health_connect_records:
         hc_section = _section_health_connect(health_connect_records, now)

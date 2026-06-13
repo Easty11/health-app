@@ -15,6 +15,7 @@ from connectors.hevy import HevyAuthError, HevyClient
 from context_builder import build_system_prompt
 from database import get_db
 from encryption import decrypt
+from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
 
 load_dotenv()
 
@@ -134,12 +135,12 @@ def _process_knowledge_updates(
 ) -> tuple[str, list[str]]:
     """
     Scan `reply` for <knowledge_update> blocks.
-    For each one found:
-      - Parse the JSON payload {category, content}
-      - If an entry with that category already exists, append to it
-      - Otherwise create a new entry
-      - Strip the block from the visible response
-      - Record a confirmation in actions_taken
+
+    Handles two payload formats:
+    - Legacy: {category, content} → writes to UserKnowledge (free-text KB)
+    - Structured: {type, key, value, ...} → writes to UserKnowledgeEntry
+      - If active=false is present, deactivates the existing entry for that key
+        without creating a new one.
 
     Returns (cleaned_reply, actions_taken).
     """
@@ -159,36 +160,76 @@ def _process_knowledge_updates(
             cleaned = cleaned.replace(match.group(0), "")
             continue
 
-        category = data.get("category", "Other").strip()
-        new_content = data.get("content", "").strip()
-
-        if not new_content:
-            cleaned = cleaned.replace(match.group(0), "")
-            continue
-
         try:
-            existing = (
-                db.query(models.UserKnowledge)
-                .filter_by(user_id=user_id, category=category)
-                .order_by(models.UserKnowledge.created_at)
-                .first()
-            )
-            if existing:
-                # Append new content on a new line rather than overwrite
-                existing.content = existing.content.rstrip() + "\n" + new_content
-                db.commit()
-                actions_taken.append(f"✓ Knowledge updated: {category}")
+            if "type" in data and "key" in data:
+                # Structured format → UserKnowledgeEntry
+                key = data["key"]
+
+                # Deactivation: active=false means remove existing entry, no new one
+                if data.get("active") is False:
+                    existing = (
+                        db.query(models.UserKnowledgeEntry)
+                        .filter_by(user_id=user_id, key=key, active=True)
+                        .first()
+                    )
+                    if existing:
+                        existing.active = False
+                        db.commit()
+                        actions_taken.append(f"✓ Schedule entry removed: {key}")
+                    else:
+                        actions_taken.append(f"ℹ️ No active entry found for key: {key}")
+                else:
+                    from datetime import date as _date
+                    expires_raw = data.get("expires_at")
+                    expires_at = None
+                    if expires_raw:
+                        try:
+                            expires_at = _date.fromisoformat(str(expires_raw))
+                        except ValueError:
+                            pass
+
+                    entry_in = KnowledgeEntryIn(
+                        type=data.get("type", "schedule_item"),
+                        key=key,
+                        value=data.get("value", {}),
+                        source=data.get("source", "chat"),
+                        expires_at=expires_at,
+                        notes=data.get("notes"),
+                    )
+                    upsert_knowledge_entry(user_id, entry_in, db)
+                    actions_taken.append(f"✓ Schedule entry saved: {key}")
+
             else:
-                entry = models.UserKnowledge(
-                    user_id=user_id,
-                    category=category,
-                    content=new_content,
+                # Legacy format → UserKnowledge (free-text categories)
+                category = data.get("category", "Other").strip()
+                new_content = data.get("content", "").strip()
+
+                if not new_content:
+                    cleaned = cleaned.replace(match.group(0), "")
+                    continue
+
+                existing = (
+                    db.query(models.UserKnowledge)
+                    .filter_by(user_id=user_id, category=category)
+                    .order_by(models.UserKnowledge.created_at)
+                    .first()
                 )
-                db.add(entry)
-                db.commit()
-                actions_taken.append(f"✓ Knowledge saved: {category}")
+                if existing:
+                    existing.content = existing.content.rstrip() + "\n" + new_content
+                    db.commit()
+                    actions_taken.append(f"✓ Knowledge updated: {category}")
+                else:
+                    entry = models.UserKnowledge(
+                        user_id=user_id,
+                        category=category,
+                        content=new_content,
+                    )
+                    db.add(entry)
+                    db.commit()
+                    actions_taken.append(f"✓ Knowledge saved: {category}")
+
         except Exception as exc:
-            actions_taken.append(f"⚠️ Failed to save knowledge ({category}): {exc}")
+            actions_taken.append(f"⚠️ Failed to save knowledge: {exc}")
 
         cleaned = cleaned.replace(match.group(0), "")
 
@@ -209,6 +250,9 @@ async def chat(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="ANTHROPIC_API_KEY is not configured",
         )
+
+    # Expire stale knowledge entries (piggyback on chat request, no separate cron needed)
+    expire_stale_entries(current_user.id, db)
 
     # Discover which integrations the user has connected
     integrations = db.query(models.UserIntegration).filter_by(user_id=current_user.id).all()
@@ -262,6 +306,14 @@ async def chat(
         .all()
     )
 
+    # All active structured knowledge entries (schedule_item, load_context, injury, etc.)
+    structured_entries = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=current_user.id, active=True)
+        .order_by(models.UserKnowledgeEntry.added_at.desc())
+        .all()
+    )
+
     system_prompt = build_system_prompt(
         user=current_user,
         connected_integrations=list(connected.keys()),
@@ -270,6 +322,7 @@ async def chat(
         today_checkin=today_checkin,
         health_connect_records=health_connect_records,
         samsung_hrv=samsung_readings,
+        structured_entries=structured_entries,
     )
 
     # Build messages list: history + current user message

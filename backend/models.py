@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
@@ -58,6 +58,30 @@ class UserKnowledge(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+class UserKnowledgeEntry(Base):
+    __tablename__ = "user_knowledge_entries"
+    __table_args__ = (
+        Index("ix_uke_user_type_active", "user_id", "type", "active"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # schedule_item | load_context | event | injury | preference
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # unique identifier within type+user, e.g. "physio_2026_06", "weekly_split"
+    key: Mapped[str] = mapped_column(String(255), nullable=False)
+    value: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # onboarding | chat | system
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    added_at: Mapped[date] = mapped_column(Date, nullable=False, server_default=text("CURRENT_DATE"))
+    expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    superseded_by: Mapped[int | None] = mapped_column(
+        ForeignKey("user_knowledge_entries.id"), nullable=True
+    )
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"), default=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class DailyCheckIn(Base):
