@@ -370,15 +370,16 @@ def _section_health_connect(records: list[Any], now: datetime) -> str:
     return "\n".join(lines)
 
 
-def _section_samsung_hrv(reading: Any, now: datetime) -> str:
-    """Inject the latest Samsung Galaxy Ring scraper reading (HRV, sleep, SpO2)."""
-    if reading is None:
+def _section_samsung_hrv(readings: list[Any], now: datetime) -> str:
+    """Inject the latest Galaxy Ring reading plus a rolling 7-day HRV baseline."""
+    if not readings:
         return ""
 
-    def _v(field: str) -> Any:
+    def _v(reading: Any, field: str) -> Any:
         return getattr(reading, field) if hasattr(reading, field) else reading.get(field)
 
-    rec_date = _v("captured_at")
+    latest = readings[0]  # readings are ordered captured_at DESC
+    rec_date = _v(latest, "captured_at")
     today = now.date()
     yesterday = today - __import__("datetime").timedelta(days=1)
     if rec_date == today:
@@ -390,36 +391,56 @@ def _section_samsung_hrv(reading: Any, now: datetime) -> str:
 
     lines = [f"## Samsung Galaxy Ring (accessibility scraper — {date_label})"]
 
-    if _v("hrv_ms") is not None:
-        lines.append(f"HRV (RMSSD): {_v('hrv_ms')} ms")
-    if _v("sleep_hr_bpm") is not None:
-        lines.append(f"Sleep HR: {_v('sleep_hr_bpm')} bpm")
-    if _v("respiratory_rate") is not None:
-        lines.append(f"Respiratory rate: {_v('respiratory_rate'):.1f} breaths/min")
-    if _v("spo2_average_pct") is not None:
-        lines.append(f"SpO2 (avg): {_v('spo2_average_pct'):.1f}%")
-    if _v("sleep_efficiency_pct") is not None:
-        lines.append(f"Sleep efficiency: {_v('sleep_efficiency_pct')}%")
+    if _v(latest, "hrv_ms") is not None:
+        lines.append(f"HRV (RMSSD): {_v(latest, 'hrv_ms')} ms")
+    if _v(latest, "sleep_hr_bpm") is not None:
+        lines.append(f"Sleep HR: {_v(latest, 'sleep_hr_bpm')} bpm")
+    if _v(latest, "respiratory_rate") is not None:
+        lines.append(f"Respiratory rate: {_v(latest, 'respiratory_rate'):.1f} breaths/min")
+    if _v(latest, "spo2_average_pct") is not None:
+        lines.append(f"SpO2 (avg): {_v(latest, 'spo2_average_pct'):.1f}%")
+    if _v(latest, "sleep_efficiency_pct") is not None:
+        lines.append(f"Sleep efficiency: {_v(latest, 'sleep_efficiency_pct')}%")
 
-    duration = _v("total_sleep_time_minutes") or _v("actual_sleep_time_minutes")
+    duration = _v(latest, "total_sleep_time_minutes") or _v(latest, "actual_sleep_time_minutes")
     if duration is not None:
         h, m = divmod(duration, 60)
         lines.append(f"Sleep duration: {h}h {m}m")
 
     stages: list[str] = []
-    if _v("deep_minutes") is not None:
-        stages.append(f"Deep {_v('deep_minutes')}m")
-    if _v("rem_minutes") is not None:
-        stages.append(f"REM {_v('rem_minutes')}m")
-    if _v("light_minutes") is not None:
-        stages.append(f"Light {_v('light_minutes')}m")
-    if _v("awake_minutes") is not None:
-        stages.append(f"Awake {_v('awake_minutes')}m")
+    if _v(latest, "deep_minutes") is not None:
+        stages.append(f"Deep {_v(latest, 'deep_minutes')}m")
+    if _v(latest, "rem_minutes") is not None:
+        stages.append(f"REM {_v(latest, 'rem_minutes')}m")
+    if _v(latest, "light_minutes") is not None:
+        stages.append(f"Light {_v(latest, 'light_minutes')}m")
+    if _v(latest, "awake_minutes") is not None:
+        stages.append(f"Awake {_v(latest, 'awake_minutes')}m")
     if stages:
         lines.append("Sleep stages: " + ", ".join(stages))
 
-    if _v("bedtime") or _v("wake_time"):
-        lines.append(f"Bedtime: {_v('bedtime') or '—'}, Wake: {_v('wake_time') or '—'}")
+    if _v(latest, "bedtime") or _v(latest, "wake_time"):
+        lines.append(f"Bedtime: {_v(latest, 'bedtime') or '—'}, Wake: {_v(latest, 'wake_time') or '—'}")
+
+    # ----- rolling 7-day HRV baseline -----
+    rmssd_values = [_v(r, "hrv_ms") for r in readings if _v(r, "hrv_ms") is not None]
+    if rmssd_values:
+        baseline = sum(rmssd_values) / len(rmssd_values)
+        lines.append("")
+        lines.append(f"7-day HRV baseline: {baseline:.0f} ms ({len(rmssd_values)} readings)")
+        today_rmssd = _v(latest, "hrv_ms")
+        if today_rmssd is not None:
+            diff = today_rmssd - baseline
+            direction = "above" if diff >= 0 else "below"
+            lines.append(f"Today vs baseline: {abs(diff):.0f}ms {direction} mean")
+
+    # ----- last 7 readings -----
+    lines.append("")
+    lines.append("Last 7 readings (RMSSD):")
+    for r in readings[:7]:
+        d = _v(r, "captured_at")
+        v = _v(r, "hrv_ms")
+        lines.append(f"- {d}: {v} ms" if v is not None else f"- {d}: — ms")
 
     lines += [
         "",
@@ -472,7 +493,7 @@ def build_system_prompt(
         if hc_section:
             sections.append(hc_section)
 
-    if samsung_hrv is not None:
+    if samsung_hrv:
         ring_section = _section_samsung_hrv(samsung_hrv, now)
         if ring_section:
             sections.append(ring_section)
