@@ -249,6 +249,14 @@ async def chat(
         .all()
     )
 
+    # Latest Samsung Galaxy Ring scraper reading (HRV/sleep extracted on-device).
+    samsung_hrv = (
+        db.query(models.SamsungHRVReading)
+        .filter_by(user_id=current_user.id)
+        .order_by(models.SamsungHRVReading.captured_at.desc())
+        .first()
+    )
+
     system_prompt = build_system_prompt(
         user=current_user,
         connected_integrations=list(connected.keys()),
@@ -256,6 +264,7 @@ async def chat(
         knowledge_entries=knowledge_entries,
         today_checkin=today_checkin,
         health_connect_records=health_connect_records,
+        samsung_hrv=samsung_hrv,
     )
 
     # Build messages list: history + current user message

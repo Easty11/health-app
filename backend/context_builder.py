@@ -50,6 +50,23 @@ def _days_ago_label(start_str: str, today: datetime) -> str:
 
 # ---------- individual context sections ----------
 
+def _section_user_profile() -> str:
+    """Static athlete profile, prepended to every system prompt."""
+    return (
+        "## About the user\n"
+        "- The user is Luke (\"Easty\"). Primary device is a Samsung Galaxy Ring.\n"
+        "- HRV is captured from the Ring via an accessibility scraper, NOT Health Connect.\n"
+        "- Strength training is logged in Hevy.\n"
+        "- Aerobic sessions use a Polar H10 chest strap.\n"
+        "- Active injuries:\n"
+        "  - Left little finger\n"
+        "  - Right shoulder — caution with horizontal adduction and overhead work\n"
+        "  - Left hamstring — provoked by striding/sprinting\n"
+        "- Readiness algorithm: RMSSD vs the 7-day baseline is the PRIMARY gate; "
+        "sleep quality is secondary."
+    )
+
+
 def _section_identity(user: models.User, now: datetime) -> str:
     name = user.full_name or user.email
     current_date = now.strftime("%A, %d %B %Y")
@@ -353,6 +370,67 @@ def _section_health_connect(records: list[Any], now: datetime) -> str:
     return "\n".join(lines)
 
 
+def _section_samsung_hrv(reading: Any, now: datetime) -> str:
+    """Inject the latest Samsung Galaxy Ring scraper reading (HRV, sleep, SpO2)."""
+    if reading is None:
+        return ""
+
+    def _v(field: str) -> Any:
+        return getattr(reading, field) if hasattr(reading, field) else reading.get(field)
+
+    rec_date = _v("captured_at")
+    today = now.date()
+    yesterday = today - __import__("datetime").timedelta(days=1)
+    if rec_date == today:
+        date_label = f"Today — {rec_date}"
+    elif rec_date == yesterday:
+        date_label = f"Yesterday — {rec_date}"
+    else:
+        date_label = str(rec_date)
+
+    lines = [f"## Samsung Galaxy Ring (accessibility scraper — {date_label})"]
+
+    if _v("hrv_ms") is not None:
+        lines.append(f"HRV (RMSSD): {_v('hrv_ms')} ms")
+    if _v("sleep_hr_bpm") is not None:
+        lines.append(f"Sleep HR: {_v('sleep_hr_bpm')} bpm")
+    if _v("respiratory_rate") is not None:
+        lines.append(f"Respiratory rate: {_v('respiratory_rate'):.1f} breaths/min")
+    if _v("spo2_average_pct") is not None:
+        lines.append(f"SpO2 (avg): {_v('spo2_average_pct'):.1f}%")
+    if _v("sleep_efficiency_pct") is not None:
+        lines.append(f"Sleep efficiency: {_v('sleep_efficiency_pct')}%")
+
+    duration = _v("total_sleep_time_minutes") or _v("actual_sleep_time_minutes")
+    if duration is not None:
+        h, m = divmod(duration, 60)
+        lines.append(f"Sleep duration: {h}h {m}m")
+
+    stages: list[str] = []
+    if _v("deep_minutes") is not None:
+        stages.append(f"Deep {_v('deep_minutes')}m")
+    if _v("rem_minutes") is not None:
+        stages.append(f"REM {_v('rem_minutes')}m")
+    if _v("light_minutes") is not None:
+        stages.append(f"Light {_v('light_minutes')}m")
+    if _v("awake_minutes") is not None:
+        stages.append(f"Awake {_v('awake_minutes')}m")
+    if stages:
+        lines.append("Sleep stages: " + ", ".join(stages))
+
+    if _v("bedtime") or _v("wake_time"):
+        lines.append(f"Bedtime: {_v('bedtime') or '—'}, Wake: {_v('wake_time') or '—'}")
+
+    lines += [
+        "",
+        "This Ring HRV is the PRIMARY readiness signal (the Galaxy Ring does not expose "
+        "HRV through Health Connect, hence the scraper). Compare RMSSD against the 7-day "
+        "baseline first; treat sleep quality as the secondary input.",
+    ]
+
+    return "\n".join(lines)
+
+
 # ---------- add future sections here ----------
 # async def _section_mfp(nutrition_data) -> str: ...
 # async def _section_polar(activity_data) -> str: ...
@@ -368,11 +446,14 @@ def build_system_prompt(
     knowledge_entries: list[Any] | None = None,
     today_checkin: Any | None = None,
     health_connect_records: list[Any] | None = None,
+    samsung_hrv: Any | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
 
     sections: list[str] = [
+        _section_user_profile(),
+        "",
         "You are a personal health and performance assistant. Your job is to help the "
         "user understand their training, spot patterns, and give specific, actionable "
         "recommendations grounded in their actual data. Be direct and practical — avoid "
@@ -390,6 +471,11 @@ def build_system_prompt(
         hc_section = _section_health_connect(health_connect_records, now)
         if hc_section:
             sections.append(hc_section)
+
+    if samsung_hrv is not None:
+        ring_section = _section_samsung_hrv(samsung_hrv, now)
+        if ring_section:
+            sections.append(ring_section)
 
     if hevy_data is not None:
         count = hevy_data.get("workout_count", 0)
