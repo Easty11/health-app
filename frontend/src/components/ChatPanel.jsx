@@ -109,10 +109,12 @@ export default function ChatPanel() {
         <p className="text-xs text-gray-400 mt-0.5">Ask anything about your training</p>
       </div>
 
-      {/* Scroll container — this div scrolls, not the page */}
+      {/* Scroll container — this div scrolls independently, not the page.
+          flex-col + mt-auto on the inner wrapper anchors messages to the
+          bottom (few messages sit at the bottom; many scroll up). */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-1 min-h-0"
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col"
       >
         {messages.length === 0 && (
           <div className="text-center text-gray-400 text-sm mt-8">
@@ -120,22 +122,25 @@ export default function ChatPanel() {
             <p>Ask about your workouts, progress, or get recommendations.</p>
           </div>
         )}
-        {messages.map((msg, i) => (
-          <Message key={i} role={msg.role} content={msg.content} />
-        ))}
-        {loading && (
-          <div className="flex justify-start mb-3">
-            <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1">
-              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+        <div className="mt-auto space-y-1">
+          {messages.map((msg, i) => (
+            <Message key={i} role={msg.role} content={msg.content} />
+          ))}
+          {loading && (
+            <div className="flex justify-start mb-3">
+              <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1">
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Input area */}
-      <div className="flex-none px-4 py-3 border-t border-gray-200 bg-white">
+      {/* Input area — kept outside the scroll container and pinned to the
+          bottom so it is always visible (flex-none + sticky bottom-0). */}
+      <div className="flex-none sticky bottom-0 z-10 px-4 py-3 border-t border-gray-200 bg-white">
         <div className="flex gap-2 items-end">
           <textarea
             ref={textareaRef}
