@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column('added_at', sa.Date(), nullable=False, server_default=sa.text('CURRENT_DATE')),
         sa.Column('expires_at', sa.Date(), nullable=True),
         sa.Column('superseded_by', sa.Integer(), nullable=True),
-        sa.Column('active', sa.Boolean(), nullable=False, server_default=sa.text('1')),
+        sa.Column('active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
         sa.Column('notes', sa.String(1000), nullable=True),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['superseded_by'], ['user_knowledge_entries.id']),
