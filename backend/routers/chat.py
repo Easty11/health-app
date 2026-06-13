@@ -18,7 +18,7 @@ from encryption import decrypt
 
 load_dotenv()
 
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-4-6"
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -277,7 +277,7 @@ async def chat(
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
         model=MODEL,
-        max_tokens=2048,
+        max_tokens=4096,
         system=system_prompt,
         messages=messages,
     )
