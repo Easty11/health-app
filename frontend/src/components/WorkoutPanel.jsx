@@ -167,8 +167,53 @@ function WorkoutDetail({ workout, onBack, onFeedback }) {
         </p>
       </div>
 
+      {/* Volume summary + analysis + button — pinned above the fold */}
+      <div className="flex-none px-4 pt-3 pb-2 space-y-2 border-b border-gray-100">
+        <div className="bg-indigo-50 rounded-xl p-3 grid grid-cols-3 gap-2 text-center">
+          <div>
+            <p className="text-base font-bold text-indigo-700">{totalSets}</p>
+            <p className="text-xs text-indigo-400">Working sets</p>
+          </div>
+          <div>
+            <p className="text-base font-bold text-indigo-700">{Math.round(totalVolume)}kg</p>
+            <p className="text-xs text-indigo-400">Volume</p>
+          </div>
+          <div>
+            <p className="text-base font-bold text-indigo-700">{duration ?? '—'}</p>
+            <p className="text-xs text-indigo-400">Duration</p>
+          </div>
+        </div>
+
+        {analysis && (
+          <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-1">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Session Analysis</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-600">
+              <span>Volume {analysis.total_volume_kg}kg</span>
+              {analysis.readiness_context?.hrv_ms != null && (
+                <span>HRV at session: {analysis.readiness_context.hrv_ms}ms</span>
+              )}
+            </div>
+            {analysis.top_1rm && Object.keys(analysis.top_1rm).length > 0 && (
+              <div className="text-xs text-gray-500 mt-1">
+                {Object.entries(analysis.top_1rm).slice(0, 3).map(([ex, rm]) => (
+                  <span key={ex} className="mr-3">{ex} {rm}kg 1RM</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={handleFeedback}
+          disabled={analysing}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl py-2.5 transition-colors"
+        >
+          {analysing ? 'Analysing…' : 'Get AI Feedback'}
+        </button>
+      </div>
+
+      {/* Exercises — scrollable reference section */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-        {/* Exercises */}
         {(workout.exercises || []).map((ex, ei) => {
           const exTitle = ex.title || ex.exercise_template_id || 'Unknown'
           return (
@@ -193,51 +238,6 @@ function WorkoutDetail({ workout, onBack, onFeedback }) {
             </div>
           )
         })}
-
-        {/* Volume summary */}
-        <div className="bg-indigo-50 rounded-xl p-3 grid grid-cols-3 gap-2 text-center">
-          <div>
-            <p className="text-base font-bold text-indigo-700">{totalSets}</p>
-            <p className="text-xs text-indigo-400">Working sets</p>
-          </div>
-          <div>
-            <p className="text-base font-bold text-indigo-700">{Math.round(totalVolume)}kg</p>
-            <p className="text-xs text-indigo-400">Volume</p>
-          </div>
-          <div>
-            <p className="text-base font-bold text-indigo-700">{duration ?? '—'}</p>
-            <p className="text-xs text-indigo-400">Duration</p>
-          </div>
-        </div>
-
-        {/* Session analysis card */}
-        {analysis && (
-          <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-1">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Session Analysis</p>
-            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-600">
-              <span>Volume {analysis.total_volume_kg}kg</span>
-              {analysis.readiness_context?.hrv_ms != null && (
-                <span>HRV at session: {analysis.readiness_context.hrv_ms}ms</span>
-              )}
-            </div>
-            {analysis.top_1rm && Object.keys(analysis.top_1rm).length > 0 && (
-              <div className="text-xs text-gray-500 mt-1">
-                {Object.entries(analysis.top_1rm).slice(0, 3).map(([ex, rm]) => (
-                  <span key={ex} className="mr-3">{ex} {rm}kg 1RM</span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* AI feedback button */}
-        <button
-          onClick={handleFeedback}
-          disabled={analysing}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl py-2.5 transition-colors"
-        >
-          {analysing ? 'Analysing…' : 'Get AI Feedback'}
-        </button>
       </div>
     </div>
   )
