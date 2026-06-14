@@ -29,7 +29,7 @@ function Message({ role, content }) {
   )
 }
 
-export default function ChatPanel() {
+export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
   const [messages, setMessages] = useState(() => {
     try {
       const saved = localStorage.getItem(getStorageKey())
@@ -60,15 +60,14 @@ export default function ChatPanel() {
     scrollToBottom()
   }, [messages, loading])
 
-  async function send() {
-    const text = input.trim()
+  async function sendMessage(text, currentMessages) {
     if (!text || loading) return
 
+    const base = currentMessages ?? messages
     const userMsg = { role: 'user', content: text }
-    const nextMessages = [...messages, userMsg]
+    const nextMessages = [...base, userMsg]
     setMessages(nextMessages)
     setInput('')
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
@@ -91,10 +90,19 @@ export default function ChatPanel() {
     }
   }
 
+  // Auto-send when a feedback message is injected from WorkoutPanel
+  useEffect(() => {
+    if (pendingFeedback) {
+      sendMessage(pendingFeedback, messages)
+      onFeedbackSent?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFeedback])
+
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      send()
+      sendMessage(input.trim())
     }
   }
 
@@ -157,7 +165,7 @@ export default function ChatPanel() {
             style={{ minHeight: '42px' }}
           />
           <button
-            onClick={send}
+            onClick={() => sendMessage(input.trim())}
             disabled={loading || !input.trim()}
             className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors shrink-0"
           >

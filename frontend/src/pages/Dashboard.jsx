@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import ChatPanel from '../components/ChatPanel'
 import WorkoutPanel from '../components/WorkoutPanel'
+import HealthPanel from '../components/HealthPanel'
 import api from '../api'
 
 function CheckInButton() {
@@ -32,10 +33,19 @@ function CheckInButton() {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [pendingFeedback, setPendingFeedback] = useState(null)
 
   function logout() {
     localStorage.removeItem('token')
     navigate('/login')
+  }
+
+  function handleFeedback(message) {
+    setPendingFeedback(message)
+  }
+
+  function handleFeedbackSent() {
+    setPendingFeedback(null)
   }
 
   return (
@@ -62,13 +72,20 @@ export default function Dashboard() {
         {/* LEFT — Chat */}
         <div className="flex flex-col md:w-1/2 md:border-r border-gray-200 bg-white"
           style={{ minHeight: '60vh' }}>
-          <ChatPanel />
+          <ChatPanel
+            pendingFeedback={pendingFeedback}
+            onFeedbackSent={handleFeedbackSent}
+          />
         </div>
 
-        {/* RIGHT — Data */}
-        <div className="flex flex-col md:w-1/2 bg-white border-t md:border-t-0 border-gray-200"
-          style={{ minHeight: '40vh' }}>
-          <WorkoutPanel />
+        {/* RIGHT — Recovery + Training stacked */}
+        <div className="md:w-1/2 flex flex-col overflow-hidden h-full border-t md:border-t-0 border-gray-200">
+          <div className="flex-1 min-h-0 overflow-hidden border-b border-gray-200">
+            <HealthPanel />
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <WorkoutPanel onFeedback={handleFeedback} />
+          </div>
         </div>
       </div>
     </div>
