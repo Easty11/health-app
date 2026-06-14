@@ -84,6 +84,52 @@ class UserKnowledgeEntry(Base):
     notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
+class DailyRecord(Base):
+    """
+    New two-moment daily record (AM check-in + nightly close-out).
+    Replaces DailyCheckIn as the primary capture surface.
+    DailyCheckIn is retained for backward-compat with existing routes.
+
+    Append-only: once am_timestamp or pm_timestamp is set, those fields
+    are never overwritten. naive_baseline and passive_* are stored at AM
+    capture time and must never be recomputed later.
+    """
+    __tablename__ = "daily_records"
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_daily_record_user_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # ── AM check-in ────────────────────────────────────────────────────────────
+    am_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    morning_readiness: Mapped[int | None] = mapped_column(Integer, nullable=True)   # 1–5, primary OUTCOME
+    sleep_quality: Mapped[int | None] = mapped_column(Integer, nullable=True)       # 1–5
+    fatigue: Mapped[int | None] = mapped_column(Integer, nullable=True)             # 0–10 (kept for baseline)
+    soreness: Mapped[dict | None] = mapped_column(JSON, nullable=True)              # {"shoulder":2, "hamstring":1}
+    motivation: Mapped[int | None] = mapped_column(Integer, nullable=True)          # 0–10 (kept for baseline)
+    life_load: Mapped[int | None] = mapped_column(Integer, nullable=True)           # 1–5
+    alcohol_units: Mapped[int | None] = mapped_column(Integer, nullable=True)       # conditional
+    alcohol_finish_time: Mapped[str | None] = mapped_column(String(5), nullable=True)  # "22:30"
+
+    # ── Nightly close-out ──────────────────────────────────────────────────────
+    pm_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    today_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)        # 1–5, OUTCOME (all days)
+    session_quality: Mapped[int | None] = mapped_column(Integer, nullable=True)     # 1–5, conditional (training days)
+    session_rpe: Mapped[float | None] = mapped_column(Float, nullable=True)         # 0–10, training days
+    mindfulness_occurred: Mapped[bool | None] = mapped_column(Boolean, nullable=True)   # read from HC
+    mindfulness_duration_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # ── Computed at AM capture time — NEVER recomputed ─────────────────────────
+    naive_baseline: Mapped[float | None] = mapped_column(Float, nullable=True)      # old formula frozen
+    model_forecast: Mapped[float | None] = mapped_column(Float, nullable=True)      # what model showed
+    model_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)    # n_valid_channels / maturity
+
+    # ── Passive refs snapshotted at AM capture time ────────────────────────────
+    passive_hrv_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    passive_sleep_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class DailyCheckIn(Base):
     __tablename__ = "daily_check_ins"
     __table_args__ = (UniqueConstraint("user_id", "date", name="uq_user_checkin_date"),)
