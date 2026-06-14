@@ -243,6 +243,97 @@ function WorkoutDetail({ workout, onBack, onFeedback }) {
   )
 }
 
+// ---------- Polar aerobic sessions ----------
+
+const SPORT_COLOURS = {
+  RUNNING: 'border-green-400 bg-green-50',
+  CYCLING: 'border-blue-400 bg-blue-50',
+  SWIMMING: 'border-cyan-400 bg-cyan-50',
+  TRIATHLON: 'border-purple-400 bg-purple-50',
+}
+
+function fmtSeconds(secs) {
+  if (!secs) return null
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+function fmtDistance(m) {
+  if (m == null) return null
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`
+}
+
+function PolarSessionCard({ session }) {
+  const sport = (session.sport || 'OTHER').toUpperCase()
+  const colour = SPORT_COLOURS[sport] || 'border-gray-300 bg-gray-50'
+  const date = session.start_time ? session.start_time.slice(0, 10) : '—'
+
+  return (
+    <div className={`border-l-4 rounded-xl p-3 ${colour}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-gray-800 capitalize">{sport.toLowerCase()}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{date}</p>
+        </div>
+        <div className="text-right text-xs text-gray-500 shrink-0 space-y-0.5">
+          {session.duration_seconds != null && <p>{fmtSeconds(session.duration_seconds)}</p>}
+          {session.distance_meters != null && <p>{fmtDistance(session.distance_meters)}</p>}
+        </div>
+      </div>
+      {(session.avg_hr || session.max_hr) && (
+        <div className="flex gap-3 mt-2 text-xs text-gray-500">
+          {session.avg_hr && <span>Avg HR {session.avg_hr} bpm</span>}
+          {session.max_hr && <span>Max {session.max_hr} bpm</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PolarSessions() {
+  const [sessions, setSessions] = useState(null)
+  const [syncing, setSyncing] = useState(false)
+
+  function load() {
+    api.get('/integrations/polar/sessions')
+      .then(({ data }) => setSessions(data))
+      .catch(() => setSessions([]))
+  }
+
+  useEffect(load, [])
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      await api.post('/integrations/polar/sync')
+      load()
+    } catch { /* ignore */ }
+    finally { setSyncing(false) }
+  }
+
+  // Don't render anything until loaded; hide section if no sessions
+  if (sessions === null || sessions.length === 0) return null
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Polar Sessions</p>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40 transition-colors"
+        >
+          {syncing ? 'Syncing…' : 'Sync'}
+        </button>
+      </div>
+      <div className="space-y-2">
+        {sessions.map((s) => <PolarSessionCard key={s.id} session={s} />)}
+      </div>
+    </div>
+  )
+}
+
 // ---------- Main export ----------
 
 export default function WorkoutPanel({ onFeedback }) {
@@ -371,6 +462,8 @@ export default function WorkoutPanel({ onFeedback }) {
             </div>
           </div>
         )}
+
+        <PolarSessions />
       </div>
     </div>
   )

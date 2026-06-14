@@ -12,7 +12,7 @@ const CATEGORIES = [
   'Other',
 ]
 
-// ─── Integration row ──────────────────────────────────────────────────────────
+// ─── Integration row (API key) ────────────────────────────────────────────────
 
 function IntegrationRow({ label, description, connected, onConnect, onDisconnect, connecting, disconnecting }) {
   const [key, setKey] = useState('')
@@ -44,6 +44,36 @@ function IntegrationRow({ label, description, connected, onConnect, onDisconnect
             {connecting ? 'Saving…' : 'Connect'}
           </button>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Integration row (OAuth) ──────────────────────────────────────────────────
+
+function OAuthIntegrationRow({ label, description, connected, onOAuthConnect, onDisconnect, connecting, disconnecting }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl p-4">
+      <div className="flex items-center gap-3 mb-3">
+        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${connected ? 'bg-green-500' : 'bg-gray-300'}`} />
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-gray-900">{label}</p>
+          <p className="text-xs text-gray-400">{description}</p>
+        </div>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${connected ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          {connected ? 'Connected' : 'Not connected'}
+        </span>
+      </div>
+      {connected ? (
+        <button onClick={onDisconnect} disabled={disconnecting}
+          className="w-full text-xs text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 rounded-lg py-2 transition-colors disabled:opacity-40">
+          {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+        </button>
+      ) : (
+        <button onClick={onOAuthConnect} disabled={connecting}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-medium rounded-lg py-2 transition-colors">
+          {connecting ? 'Redirecting…' : 'Connect with Polar'}
+        </button>
       )}
     </div>
   )
@@ -148,7 +178,16 @@ export default function Settings() {
     } catch { /* ignore */ } finally { setKnLoading(false) }
   }
 
-  useEffect(() => { loadIntegrations(); loadKnowledge() }, [])
+  useEffect(() => {
+    loadIntegrations()
+    loadKnowledge()
+    // Show success toast when returning from Polar OAuth
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('polar') === 'connected') {
+      showToast('Polar connected!')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -160,6 +199,18 @@ export default function Settings() {
       await loadIntegrations()
     } catch (err) { showToast(err.response?.data?.detail || 'Failed to connect') }
     finally { setBusy((b) => ({ ...b, [provider]: null })) }
+  }
+
+  async function connectPolar() {
+    setBusy((b) => ({ ...b, polar: 'connecting' }))
+    try {
+      const { data } = await api.get('/integrations/polar/auth-url')
+      window.location.href = data.url
+      // page navigates away — no finally cleanup needed
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to start Polar connect')
+      setBusy((b) => ({ ...b, polar: null }))
+    }
   }
 
   async function disconnect(provider) {
@@ -232,7 +283,16 @@ export default function Settings() {
                 connecting={busy.hevy === 'connecting'} disconnecting={busy.hevy === 'disconnecting'}
                 onConnect={(key) => connect('hevy', key)} onDisconnect={() => disconnect('hevy')}
               />
-              {['MyFitnessPal', 'Polar', 'GameTraka'].map((name) => (
+              <OAuthIntegrationRow
+                label="Polar"
+                description="Aerobic sessions via Polar Accesslink — H10, Vantage, Ignite"
+                connected={isConnected('polar')}
+                connecting={busy.polar === 'connecting'}
+                disconnecting={busy.polar === 'disconnecting'}
+                onOAuthConnect={connectPolar}
+                onDisconnect={() => disconnect('polar')}
+              />
+              {['MyFitnessPal', 'GameTraka'].map((name) => (
                 <div key={name} className="bg-white border border-gray-100 rounded-2xl p-4 opacity-50">
                   <div className="flex items-center gap-3">
                     <span className="w-2.5 h-2.5 rounded-full bg-gray-200 shrink-0" />

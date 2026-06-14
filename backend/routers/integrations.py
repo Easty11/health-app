@@ -137,7 +137,10 @@ def list_integrations(
 ):
     rows = db.query(models.UserIntegration).filter_by(user_id=current_user.id).all()
     connected = {r.provider for r in rows}
-    return [IntegrationOut(provider="hevy", connected="hevy" in connected)]
+    return [
+        IntegrationOut(provider="hevy", connected="hevy" in connected),
+        IntegrationOut(provider="polar", connected="polar" in connected),
+    ]
 
 
 @router.post("/hevy", status_code=status.HTTP_201_CREATED)
