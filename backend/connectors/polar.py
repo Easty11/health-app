@@ -28,7 +28,7 @@ POLAR_REDIRECT_URI = (
 )
 ACCESSLINK_BASE = "https://www.polaraccesslink.com/v3"
 AUTHORIZE_URL = "https://flow.polar.com/oauth2/authorization"
-TOKEN_URL = f"{ACCESSLINK_BASE}/oauth2/token"
+TOKEN_URL = "https://polarremote.com/v2/oauth2/token"
 
 
 def _basic_auth_header() -> str:
