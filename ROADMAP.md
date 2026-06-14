@@ -1,0 +1,61 @@
+# ROADMAP
+
+Last updated: June 2026
+
+---
+
+## NOW — active sprint
+
+| Item | Notes |
+|------|-------|
+| Samsung Health Data SDK live read | Agreed next action. Run positive control (sleep or SpO2) + HRV query. If HRV returns real values → scraper scope shrinks. If null while control succeeds → scraper confirmed as permanent HRV path. Record result as "how you know" artifact in Decisions Log. |
+| Fix Health Connect permissions | Companion app returning errors for record types 38, 35, 11, 37. Partially resolved via adb pm grant; proper in-app dialog fix still needed. |
+| Samsung Health package name correction | Re-run Health Connect diagnostic with `com.sec.android.app.shealth` filter (not `com.samsung.health`). Verify via Railway Postgres query, not on-device UI. |
+| Morning check-in screen | Hooper Index pattern (fatigue, sleep quality, stress, soreness). Primary daily touchpoint. Mutable post-submission with audit trail. See Ideas file for DOMS/soreness split design. |
+| Persistent conversation history | Currently clears on browser refresh. Needs backend storage + frontend state management. |
+| Session cards not clickable | UI bug — session cards in workout view not responding to click |
+| Dual-panel scroll layout issue | UI bug — scroll behaviour broken in dual-panel view |
+
+---
+
+## NEXT — queued
+
+| Item | Notes |
+|------|-------|
+| Scraper canary + honest score degradation | Detect null/stale/implausible scraper output. Surface degraded state to user when HRV unavailable — never silently score without it. |
+| Basic readiness score | Formally suppressed until HRV data path is confirmed end-to-end with 7+ days of readings. Once confirmed: rule-based composite using RMSSD baseline deviation, sleep architecture, RHR trend, ACWR. |
+| Manual cardio entry | Unconnected sessions (Rogue Echo bike, gym machines) must be loggable to prevent ACWR silently under-reading load. |
+| CLAUDE.md files for both repos | Deferred to laptop. Backend repo and health-connect-app repo both need CLAUDE.md. Drafts exist from June 2026 session. |
+| Deploy companion app to wife's phone | Garmin → Health Connect path. Verify data flowing before deploy. |
+
+---
+
+## LATER — planned
+
+| Item | Notes |
+|------|-------|
+| Injury object schema in project files | Schema and extraction method drafted in Ideas. Formalise into Decisions Log and API contracts once morning check-in screen is built. |
+| Preset readiness models by sport/goal | Rugby vs endurance vs strength — different metric weighting presets |
+| User-adjustable metric weighting | Let users tune what matters to their readiness score |
+| AI-personalised model | After ~6 weeks of data per user; Claude infers pattern from history |
+| GameTraka connector | Rugby performance data for Luke |
+| Apple Health (son) | iOS path; requires either Expo iOS build or separate native integration |
+
+---
+
+## User rollout sequence
+
+1. **Luke (Easty)** — primary dev user; Samsung scraper working; Health Connect partial
+2. **Wife** — Samsung Galaxy + Garmin; needs companion app deployed and data flow verified
+3. **Son** — iOS; future phase
+
+---
+
+## Dependencies and blockers
+
+| Blocker | Blocks |
+|---------|--------|
+| HRV data path confirmation (scraper or SDK) | Composite readiness score |
+| Health Connect permissions fix | Polar and Garmin session data |
+| Conversation history persistence | AI coaching continuity across sessions |
+| Wife companion app deploy | Wife onboarding |

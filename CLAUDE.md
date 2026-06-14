@@ -41,6 +41,12 @@ Frontend: https://health-app-production-e0ff.up.railway.app
 - VITE_API_URL in frontend/.env controls API target (.env is gitignored)
 - Commit and push after each meaningful change
 
+## Project knowledge files
+
+- [STACK.md](STACK.md) — tech stack, data source status, users, working conventions
+- [ROADMAP.md](ROADMAP.md) — NOW / NEXT / LATER + blockers
+- [DECISIONS_LOG.md](DECISIONS_LOG.md) — architectural decisions, rationale, status
+
 ## Open issues
 1. ~~Health Connect companion app permissions — fixed: switched handleGrantPermissions to use requestPermission() API (PermissionController contract) instead of wrong native intent~~
 2. ~~create_routine 400 error — fixed: missing index fields on exercises/sets in connectors/hevy.py~~
