@@ -94,8 +94,9 @@ def exchange_code_for_token(code: str) -> dict[str, Any]:
 
 
 class PolarClient:
-    def __init__(self, access_token: str):
+    def __init__(self, access_token: str, polar_user_id: str | int | None = None):
         self.access_token = access_token
+        self.polar_user_id = str(polar_user_id) if polar_user_id else None
         self.headers = {
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/json",
@@ -113,13 +114,11 @@ class PolarClient:
             if resp.status_code == 409:
                 return {"already_registered": True}
             resp.raise_for_status()
-            return resp.json()
-
-    def get_polar_user_id(self) -> str | None:
-        with httpx.Client() as client:
-            resp = client.get(f"{ACCESSLINK_BASE}/users/me", headers=self.headers)
-            resp.raise_for_status()
-            return resp.json().get("polar-user-id")
+            data = resp.json()
+            # Capture the polar-user-id returned on first registration
+            if not self.polar_user_id and data.get("polar-user-id"):
+                self.polar_user_id = str(data["polar-user-id"])
+            return data
 
     def pull_exercise_sessions(self) -> list[dict[str, Any]]:
         """
@@ -127,10 +126,13 @@ class PolarClient:
         Must commit the transaction to mark sessions as retrieved — uncommitted
         sessions re-appear on next call.
         """
+        if not self.polar_user_id:
+            raise ValueError("polar_user_id required for exercise transactions")
+
         with httpx.Client() as client:
             # Step 1: create transaction
             txn_resp = client.post(
-                f"{ACCESSLINK_BASE}/exercises/transactions",
+                f"{ACCESSLINK_BASE}/users/{self.polar_user_id}/exercise-transactions",
                 headers=self.headers,
             )
             if txn_resp.status_code == 204:
@@ -157,7 +159,7 @@ class PolarClient:
 
             # Step 4: commit transaction — marks all sessions as retrieved
             commit_resp = client.put(
-                f"{ACCESSLINK_BASE}/exercises/transactions/{txn_id}",
+                f"{ACCESSLINK_BASE}/users/{self.polar_user_id}/exercise-transactions/{txn_id}",
                 headers=self.headers,
             )
             commit_resp.raise_for_status()

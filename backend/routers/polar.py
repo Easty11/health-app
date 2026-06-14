@@ -174,7 +174,7 @@ def polar_debug(
     """Return raw registration + user info from Polar for troubleshooting."""
     import json as _json
     tokens = _require_polar(current_user.id, db)
-    client = PolarClient(tokens["access_token"])
+    client = PolarClient(tokens["access_token"], polar_user_id=tokens.get("polar_user_id"))
     result = {"stored_polar_user_id": tokens.get("polar_user_id")}
     try:
         result["users_me"] = client.get_polar_user_id()
@@ -195,7 +195,7 @@ def sync_polar_sessions(
 ):
     """Pull new exercise sessions from Polar Accesslink transaction endpoint."""
     tokens = _require_polar(current_user.id, db)
-    client = PolarClient(tokens["access_token"])
+    client = PolarClient(tokens["access_token"], polar_user_id=tokens.get("polar_user_id"))
 
     # Ensure user is registered — safe to call again (409 = already registered)
     try:
