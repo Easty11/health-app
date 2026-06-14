@@ -6,6 +6,8 @@ import Settings from './pages/Settings'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import CheckIn from './pages/CheckIn'
+import CheckInAM from './pages/CheckInAM'
+import NightlyCloseOut from './pages/NightlyCloseOut'
 
 function RequireAuth({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />
@@ -20,6 +22,8 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/checkin" element={<RequireAuth><CheckIn /></RequireAuth>} />
+        <Route path="/checkin-am" element={<RequireAuth><CheckInAM /></RequireAuth>} />
+        <Route path="/nightly" element={<RequireAuth><NightlyCloseOut /></RequireAuth>} />
         <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

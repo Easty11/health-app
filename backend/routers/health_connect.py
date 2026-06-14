@@ -123,6 +123,23 @@ class DistanceRecord(BaseModel):
         return None
 
 
+class MindfulnessRecord(BaseModel):
+    startTime: str
+    endTime: str
+    durationMinutes: Optional[int] = None
+
+    def duration(self) -> int:
+        if self.durationMinutes is not None:
+            return self.durationMinutes
+        try:
+            return int((
+                datetime.fromisoformat(self.endTime[:19]) -
+                datetime.fromisoformat(self.startTime[:19])
+            ).total_seconds() // 60)
+        except (ValueError, AttributeError):
+            return 0
+
+
 class SyncPayload(BaseModel):
     syncedAt: Optional[str] = None
     periodDays: int = 7
@@ -136,6 +153,7 @@ class SyncPayload(BaseModel):
     respiratoryRate: list[RespiratoryRateRecord] = []
     weight: list[WeightRecord] = []
     distance: list[DistanceRecord] = []
+    mindfulness: list[MindfulnessRecord] = []
     errors: list[str] = []
 
     def all_exercises(self) -> list[ExerciseRecord]:
@@ -306,6 +324,27 @@ def sync(
                 **agg,
             ))
         synced_dates.append(str(day))
+
+    # Backfill DailyRecord.mindfulness_occurred from MindfulnessSession records.
+    # Only updates rows that already exist (AM check-in must precede mindfulness write).
+    if payload.mindfulness:
+        mindfulness_by_date: dict[date, list[MindfulnessRecord]] = {}
+        for m in payload.mindfulness:
+            try:
+                d = _parse_date(m.startTime)
+                mindfulness_by_date.setdefault(d, []).append(m)
+            except Exception:
+                pass
+        for m_date, sessions in mindfulness_by_date.items():
+            if since <= m_date <= today:
+                daily_rec = (
+                    db.query(models.DailyRecord)
+                    .filter_by(user_id=current_user.id, date=m_date)
+                    .first()
+                )
+                if daily_rec:
+                    daily_rec.mindfulness_occurred = True
+                    daily_rec.mindfulness_duration_min = sum(s.duration() for s in sessions)
 
     db.commit()
     return {"synced": len(synced_dates), "dates": synced_dates}

@@ -5,29 +5,45 @@ import WorkoutPanel from '../components/WorkoutPanel'
 import HealthPanel from '../components/HealthPanel'
 import api from '../api'
 
-function CheckInButton() {
-  const [done, setDone] = useState(null) // null=loading, true=done, false=not done
+function CheckInButtons() {
+  const [record, setRecord] = useState(undefined) // undefined=loading
 
   useEffect(() => {
-    api.get('/checkin/today')
-      .then(({ data }) => setDone(!!data))
-      .catch(() => setDone(false))
+    api.get('/checkin-v2/today')
+      .then(({ data }) => setRecord(data))
+      .catch(() => setRecord(null))
   }, [])
 
-  if (done === null) return null
+  if (record === undefined) return null
+
+  const amDone = !!record?.am_timestamp
+  const pmDone = !!record?.pm_timestamp
 
   return (
-    <Link
-      to="/checkin"
-      className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
-        done
-          ? 'bg-green-100 text-green-700 hover:bg-green-200'
-          : 'bg-orange-100 text-orange-700 hover:bg-orange-200 animate-pulse'
-      }`}
-    >
-      <span>{done ? '✅' : '⚡'}</span>
-      <span>{done ? 'Checked in' : 'Check in'}</span>
-    </Link>
+    <div className="flex items-center gap-2">
+      <Link
+        to="/checkin-am"
+        className={`flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-full transition-colors ${
+          amDone
+            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+            : 'bg-orange-100 text-orange-700 hover:bg-orange-200 animate-pulse'
+        }`}
+      >
+        <span>{amDone ? '✓' : '☀'}</span>
+        <span>AM</span>
+      </Link>
+      <Link
+        to="/nightly"
+        className={`flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-full transition-colors ${
+          pmDone
+            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+        }`}
+      >
+        <span>{pmDone ? '✓' : '🌙'}</span>
+        <span>PM</span>
+      </Link>
+    </div>
   )
 }
 
@@ -54,7 +70,7 @@ export default function Dashboard() {
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <span className="text-sm font-bold text-gray-900">Health &amp; Performance</span>
         <div className="flex items-center gap-3">
-          <CheckInButton />
+          <CheckInButtons />
           <Link to="/settings" className="text-xs text-gray-500 hover:text-gray-800 transition-colors">
             Settings
           </Link>

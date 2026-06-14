@@ -291,6 +291,100 @@ Rules for routine creation:
   with a confirmation message once the routine is created."""
 
 
+def _section_daily_record(record: Any) -> str:
+    """
+    Descriptive section for the new two-moment daily record.
+    MUST NOT contain prescriptive load instructions — descriptive only.
+    """
+    def _v(field: str) -> Any:
+        return getattr(record, field) if hasattr(record, field) else record.get(field)
+
+    has_am = _v("am_timestamp") is not None
+    has_pm = _v("pm_timestamp") is not None
+
+    if not has_am and not has_pm:
+        return (
+            "## Today's Daily Record\n"
+            "Morning check-in: not yet submitted today."
+        )
+
+    lines = ["## Today's Daily Record"]
+
+    if has_am:
+        lines.append("\n### Morning Check-in")
+        mr = _v("morning_readiness")
+        if mr is not None:
+            lines.append(f"Morning readiness: {mr}/5 (subjective felt state)")
+        sq = _v("sleep_quality")
+        if sq is not None:
+            lines.append(f"Sleep quality: {sq}/5")
+        fatigue = _v("fatigue")
+        if fatigue is not None:
+            lines.append(f"Fatigue: {fatigue}/10")
+        soreness = _v("soreness") or {}
+        if soreness:
+            sore_str = ", ".join(f"{k} {val}/5" for k, val in soreness.items())
+            lines.append(f"Soreness: {sore_str}")
+        motivation = _v("motivation")
+        if motivation is not None:
+            lines.append(f"Motivation: {motivation}/10")
+        life_load = _v("life_load")
+        if life_load is not None:
+            lines.append(f"Life load (yesterday): {life_load}/5")
+        alcohol_units = _v("alcohol_units")
+        if alcohol_units is not None:
+            finish = _v("alcohol_finish_time") or "unknown"
+            lines.append(f"Alcohol last night: {alcohol_units} units, finished {finish}")
+
+        hrv = _v("passive_hrv_ms")
+        sleep_min = _v("passive_sleep_min")
+        if hrv is not None or sleep_min is not None:
+            lines.append("")
+            if hrv is not None:
+                lines.append(f"Ring HRV at capture: {hrv} ms")
+            if sleep_min is not None:
+                h, m = divmod(sleep_min, 60)
+                lines.append(f"Sleep at capture: {h}h {m}m")
+
+        nb = _v("naive_baseline")
+        if nb is not None:
+            lines.append(f"\nNaive baseline (frozen formula): {nb:.1f}/10")
+        mf = _v("model_forecast")
+        if mf is not None:
+            lines.append(f"Model forecast [LOW-CONFIDENCE]: {mf:.1f}/10")
+        else:
+            lines.append("Model forecast: building baseline — insufficient history")
+
+        lines += [
+            "",
+            "DESCRIPTIVE-ONLY GUARDRAIL: Reference trends and observations only.",
+            "Do not issue prescriptive load instructions or present the score as",
+            "authoritative. The model forecast remains low-confidence until it",
+            "demonstrably beats the naive baseline on this user's data.",
+        ]
+    else:
+        lines.append("Morning check-in: not yet submitted today.")
+
+    if has_pm:
+        lines.append("\n### Nightly Close-out")
+        tr = _v("today_rating")
+        if tr is not None:
+            lines.append(f"Today rating: {tr}/5")
+        sq_pm = _v("session_quality")
+        if sq_pm is not None:
+            lines.append(f"Session quality: {sq_pm}/5")
+        rpe = _v("session_rpe")
+        if rpe is not None:
+            lines.append(f"Session RPE: {rpe}/10")
+        mo = _v("mindfulness_occurred")
+        if mo is not None:
+            md = _v("mindfulness_duration_min")
+            suffix = f" ({md} min)" if md else ""
+            lines.append(f"Wind-down (mindfulness): {'Yes' if mo else 'No'}{suffix}")
+
+    return "\n".join(lines)
+
+
 def _section_checkin(checkin: Any | None, now: datetime) -> str:
     if checkin is None:
         return (
@@ -640,9 +734,17 @@ def build_system_prompt(
     health_connect_records: list[Any] | None = None,
     samsung_hrv: Any | None = None,
     structured_entries: list[Any] | None = None,
+    daily_record: Any | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
+
+    # Use new DailyRecord section when available; fall back to legacy check-in
+    readiness_section = (
+        _section_daily_record(daily_record)
+        if daily_record is not None
+        else _section_checkin(today_checkin, now)
+    )
 
     sections: list[str] = [
         _section_user_profile(),
@@ -653,7 +755,7 @@ def build_system_prompt(
         "generic fitness advice when you have real numbers to work with.",
         "",
         _section_identity(user, now),
-        _section_checkin(today_checkin, now),
+        readiness_section,
         _section_integrations(connected_integrations),
     ]
 

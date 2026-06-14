@@ -280,6 +280,11 @@ async def chat(
         .filter_by(user_id=current_user.id, date=today_aest)
         .first()
     )
+    daily_record = (
+        db.query(models.DailyRecord)
+        .filter_by(user_id=current_user.id, date=today_aest)
+        .first()
+    )
 
     from datetime import timedelta as _td
     hc_since = today_aest - _td(days=2)  # today + yesterday
@@ -323,6 +328,7 @@ async def chat(
         health_connect_records=health_connect_records,
         samsung_hrv=samsung_readings,
         structured_entries=structured_entries,
+        daily_record=daily_record,
     )
 
     # Build messages list: history + current user message
