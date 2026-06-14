@@ -312,8 +312,7 @@ function PolarSessions() {
     finally { setSyncing(false) }
   }
 
-  // Don't render anything until loaded; hide section if no sessions
-  if (sessions === null || sessions.length === 0) return null
+  if (sessions === null) return null
 
   return (
     <div className="mt-4">
@@ -327,9 +326,10 @@ function PolarSessions() {
           {syncing ? 'Syncing…' : 'Sync'}
         </button>
       </div>
-      <div className="space-y-2">
-        {sessions.map((s) => <PolarSessionCard key={s.id} session={s} />)}
-      </div>
+      {sessions.length === 0
+        ? <p className="text-xs text-gray-400">No sessions yet — tap Sync to pull from Polar.</p>
+        : <div className="space-y-2">{sessions.map((s) => <PolarSessionCard key={s.id} session={s} />)}</div>
+      }
     </div>
   )
 }
