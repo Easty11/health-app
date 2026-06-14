@@ -166,6 +166,28 @@ def disconnect_polar(
 
 # ── data sync ──────────────────────────────────────────────────────────────────
 
+@router.get("/debug")
+def polar_debug(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return raw registration + user info from Polar for troubleshooting."""
+    import json as _json
+    tokens = _require_polar(current_user.id, db)
+    client = PolarClient(tokens["access_token"])
+    result = {"stored_polar_user_id": tokens.get("polar_user_id")}
+    try:
+        result["users_me"] = client.get_polar_user_id()
+    except Exception as exc:
+        result["users_me_error"] = str(exc)
+    try:
+        reg = client.register_user(current_user.id)
+        result["register"] = reg
+    except Exception as exc:
+        result["register_error"] = str(exc)
+    return result
+
+
 @router.post("/sync")
 def sync_polar_sessions(
     current_user: models.User = Depends(get_current_user),
@@ -174,6 +196,12 @@ def sync_polar_sessions(
     """Pull new exercise sessions from Polar Accesslink transaction endpoint."""
     tokens = _require_polar(current_user.id, db)
     client = PolarClient(tokens["access_token"])
+
+    # Ensure user is registered — safe to call again (409 = already registered)
+    try:
+        client.register_user(current_user.id)
+    except Exception:
+        pass
 
     try:
         sessions = client.pull_exercise_sessions()
