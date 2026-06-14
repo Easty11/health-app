@@ -74,10 +74,8 @@ def _require_polar(user_id: int, db: Session) -> dict:
 def get_auth_url(current_user: models.User = Depends(get_current_user)):
     """Return the Polar OAuth URL. Frontend fetches this (with bearer token) then
     does window.location.href = url."""
-    if not PolarClient.__module__:  # guard against missing env vars at startup
-        pass
-    from connectors.polar import POLAR_CLIENT_ID
-    if not POLAR_CLIENT_ID:
+    import os
+    if not os.getenv("POLAR_CLIENT_ID"):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="POLAR_CLIENT_ID not configured on server",

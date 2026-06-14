@@ -22,8 +22,6 @@ from typing import Any
 
 import httpx
 
-POLAR_CLIENT_ID = os.getenv("POLAR_CLIENT_ID", "")
-POLAR_CLIENT_SECRET = os.getenv("POLAR_CLIENT_SECRET", "")
 POLAR_REDIRECT_URI = (
     "https://health-app-backend-production-760e.up.railway.app"
     "/integrations/polar/callback"
@@ -34,7 +32,9 @@ TOKEN_URL = f"{ACCESSLINK_BASE}/oauth2/token"
 
 
 def _basic_auth_header() -> str:
-    creds = f"{POLAR_CLIENT_ID}:{POLAR_CLIENT_SECRET}"
+    client_id = os.getenv("POLAR_CLIENT_ID", "")
+    client_secret = os.getenv("POLAR_CLIENT_SECRET", "")
+    creds = f"{client_id}:{client_secret}"
     return "Basic " + base64.b64encode(creds.encode()).decode()
 
 
@@ -65,10 +65,11 @@ def _parse_polar_dt(s: str | None) -> datetime | None:
 
 
 def build_auth_url(user_id: int) -> str:
+    client_id = os.getenv("POLAR_CLIENT_ID", "")
     return (
         f"{AUTHORIZE_URL}"
         f"?response_type=code"
-        f"&client_id={POLAR_CLIENT_ID}"
+        f"&client_id={client_id}"
         f"&redirect_uri={POLAR_REDIRECT_URI}"
         f"&state={user_id}"
     )
