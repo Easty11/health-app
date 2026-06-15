@@ -49,8 +49,20 @@ app.include_router(polar_router.router)
 app.include_router(chat_router.router)
 
 
+from fastapi.responses import JSONResponse
 from mcp_server import mcp
 app.mount("/mcp", mcp.streamable_http_app())
+
+
+# OAuth protected-resource metadata must be discoverable at the domain root.
+# WWW-Authenticate points here; the actual metadata lives in the /mcp sub-app.
+@app.get("/.well-known/oauth-protected-resource/mcp", include_in_schema=False)
+async def oauth_protected_resource():
+    return JSONResponse({
+        "resource": "https://health-app-backend-production-760e.up.railway.app/mcp",
+        "authorization_servers": ["https://health-app-backend-production-760e.up.railway.app/mcp"],
+        "bearer_methods_supported": ["header"],
+    })
 
 
 @app.get("/health")
