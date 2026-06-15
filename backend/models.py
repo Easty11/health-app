@@ -195,6 +195,37 @@ class HealthConnectSync(Base):
     respiratory_rate: Mapped[float | None] = mapped_column(Float)
 
 
+class AerobicSession(Base):
+    """Aerobic sessions for ACWR load tracking — seeded from Polar Flow export, future HC."""
+    __tablename__ = "aerobic_sessions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "source", "source_session_id", name="uq_aerobic_session_source"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)                # 'polar_flow_export', 'health_connect'
+    source_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)   # original ID from source system
+    session_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stop_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sport_id: Mapped[str | None] = mapped_column(String(100), nullable=True)       # source system sport ID
+    sport_name: Mapped[str | None] = mapped_column(String(100), nullable=True)     # decoded sport name
+    duration_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hr_avg: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hr_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    calories: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cardio_load: Mapped[float | None] = mapped_column(Float, nullable=True)        # Polar cardio load (ACWR proxy)
+    muscle_load: Mapped[float | None] = mapped_column(Float, nullable=True)
+    recovery_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    z1_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    z2_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    z3_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    z4_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    z5_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SamsungHRVReading(Base):
     __tablename__ = "samsung_hrv_readings"
     __table_args__ = (UniqueConstraint("user_id", "captured_at", name="uq_samsung_hrv_user_date"),)

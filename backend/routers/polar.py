@@ -2,16 +2,17 @@
 Polar Accesslink integration router.
 
 Connect flow:
-  GET /integrations/polar/auth-url   → returns {url} for frontend to redirect to
-  GET /integrations/polar/callback   → OAuth callback (no auth — Polar posts back here)
-  GET /integrations/polar/status     → {connected: bool}
-  DELETE /integrations/polar         → disconnect
+  GET /integrations/polar/auth-url        → returns {url} for frontend to redirect to
+  GET /integrations/polar/callback        → OAuth callback (no auth — Polar posts back here)
+  GET /integrations/polar/status          → {connected: bool}
+  DELETE /integrations/polar              → disconnect
 
 Data:
-  POST /integrations/polar/sync      → pull new sessions from Accesslink
-  GET  /integrations/polar/sessions  → return stored sessions
+  POST /integrations/polar/sync           → pull new sessions from Accesslink
+  GET  /integrations/polar/sessions       → return ExerciseSession records (Accesslink)
+  GET  /integrations/polar/aerobic-sessions → return AerobicSession records (ZIP import)
 """
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -255,3 +256,49 @@ def get_polar_sessions(
         .limit(limit)
         .all()
     )
+
+
+# ── aerobic sessions (ZIP import) ──────────────────────────────────────────────
+
+class AerobicSessionOut(BaseModel):
+    id: int
+    source: str
+    source_session_id: Optional[str] = None
+    session_date: date
+    start_time: Optional[datetime] = None
+    stop_time: Optional[datetime] = None
+    sport_id: Optional[str] = None
+    sport_name: Optional[str] = None
+    duration_minutes: Optional[float] = None
+    hr_avg: Optional[int] = None
+    hr_max: Optional[int] = None
+    calories: Optional[int] = None
+    cardio_load: Optional[float] = None
+    muscle_load: Optional[float] = None
+    recovery_hours: Optional[float] = None
+    z1_seconds: Optional[int] = None
+    z2_seconds: Optional[int] = None
+    z3_seconds: Optional[int] = None
+    z4_seconds: Optional[int] = None
+    z5_seconds: Optional[int] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/aerobic-sessions", response_model=list[AerobicSessionOut])
+def get_aerobic_sessions(
+    limit: int = 100,
+    since: Optional[date] = None,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return aerobic sessions seeded from the Polar Flow ZIP export."""
+    q = (
+        db.query(models.AerobicSession)
+        .filter(models.AerobicSession.user_id == current_user.id)
+        .order_by(models.AerobicSession.session_date.desc())
+    )
+    if since:
+        q = q.filter(models.AerobicSession.session_date >= since)
+    return q.limit(limit).all()
