@@ -50,7 +50,7 @@ app.include_router(chat_router.router)
 
 
 from mcp_server import mcp
-app.mount("/mcp", mcp.sse_app())
+app.mount("/mcp", mcp.streamable_http_app())
 
 
 @app.get("/health")
