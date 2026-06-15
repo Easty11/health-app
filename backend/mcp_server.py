@@ -1,14 +1,28 @@
 from datetime import datetime, timezone, timedelta
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from sqlalchemy import text
 
 from database import engine, SessionLocal
 from connectors.hevy import HevyClient
 from encryption import decrypt
+from oauth_provider import PersonalOAuthProvider
 import models
 
-mcp = FastMCP("Health Intelligence")
+_SERVER_URL = "https://health-app-backend-production-760e.up.railway.app/mcp"
+
+mcp = FastMCP(
+    "Health Intelligence",
+    auth_server_provider=PersonalOAuthProvider(),
+    auth=AuthSettings(
+        issuer_url=_SERVER_URL,
+        service_documentation_url=None,
+        client_registration_options=ClientRegistrationOptions(enabled=True),
+        resource_server_url=_SERVER_URL,
+    ),
+    streamable_http_path="/",
+)
 
 
 def _db_rows(sql: str, params: dict) -> list[dict]:
