@@ -71,6 +71,7 @@ def build_auth_url(user_id: int) -> str:
         f"?response_type=code"
         f"&client_id={client_id}"
         f"&redirect_uri={POLAR_REDIRECT_URI}"
+        f"&scope=accesslink.read_all"
         f"&state={user_id}"
     )
 
