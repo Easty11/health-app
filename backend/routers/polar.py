@@ -230,10 +230,10 @@ def sync_polar_sessions(
     for s in sessions:
         exists = (
             db.query(models.ExerciseSession)
-            .filter_by(
-                user_id=current_user.id,
-                external_id=s["external_id"],
-                source="polar",
+            .filter(
+                models.ExerciseSession.user_id == current_user.id,
+                models.ExerciseSession.external_id == s["external_id"],
+                models.ExerciseSession.source.in_(["polar", "polar_flow_export"]),
             )
             .first()
         )
@@ -268,7 +268,10 @@ def get_polar_sessions(
 ):
     return (
         db.query(models.ExerciseSession)
-        .filter_by(user_id=current_user.id, source="polar")
+        .filter(
+            models.ExerciseSession.user_id == current_user.id,
+            models.ExerciseSession.source.in_(["polar", "polar_flow_export"]),
+        )
         .order_by(models.ExerciseSession.start_time.desc())
         .limit(limit)
         .all()
