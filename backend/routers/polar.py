@@ -127,6 +127,8 @@ def polar_callback(code: str, state: str, db: Session = Depends(get_db)):
     payload = json.dumps({
         "access_token": access_token,
         "polar_user_id": polar_user_id,
+        "scope": token_data.get("scope"),
+        "token_type": token_data.get("token_type"),
     })
 
     row = _get_polar_row(user_id, db)
@@ -176,7 +178,12 @@ def polar_debug(
     import json as _json
     tokens = _require_polar(current_user.id, db)
     client = PolarClient(tokens["access_token"], polar_user_id=tokens.get("polar_user_id"))
-    result = {"stored_polar_user_id": tokens.get("polar_user_id")}
+    result = {
+        "stored_polar_user_id": tokens.get("polar_user_id"),
+        "token_keys": list(tokens.keys()),
+        "token_scope": tokens.get("scope"),
+        "token_type": tokens.get("token_type"),
+    }
     try:
         reg = client.register_user(current_user.id)
         result["register"] = reg
