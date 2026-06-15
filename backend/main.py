@@ -1,6 +1,9 @@
+import logging
 import os
-from fastapi import FastAPI
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from database import Base, engine
 from routers import auth as auth_router
 from routers import integrations as integrations_router
@@ -13,6 +16,8 @@ from routers import samsung_hrv as samsung_hrv_router
 from routers.health import router as health_router
 from routers import checkin_v2 as checkin_v2_router
 from routers import polar as polar_router
+
+logger = logging.getLogger("mcp.oauth")
 
 Base.metadata.create_all(bind=engine)
 
@@ -49,7 +54,30 @@ app.include_router(polar_router.router)
 app.include_router(chat_router.router)
 
 
-from fastapi.responses import JSONResponse
+# ---------------------------------------------------------------------------
+# Override FastMCP's hardcoded OAuth metadata to add "none" as a supported
+# token_endpoint_auth_method. FastMCP advertises only client_secret_post and
+# client_secret_basic; claude.ai requires "none" (PKCE public client) to be
+# listed before it will attempt dynamic client registration.
+#
+# This route must be added to app.routes BEFORE app.mount("/mcp", ...) so
+# that Starlette's router checks it first (first-match wins on prefix paths).
+# ---------------------------------------------------------------------------
+@app.get("/mcp/.well-known/oauth-authorization-server", include_in_schema=False)
+async def mcp_oauth_metadata(request: Request):
+    logger.info("OAuth metadata request from %s", request.headers.get("user-agent", "unknown"))
+    return JSONResponse({
+        "issuer": "https://health-app-backend-production-760e.up.railway.app/mcp",
+        "authorization_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/authorize",
+        "token_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/token",
+        "registration_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/register",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+        "code_challenge_methods_supported": ["S256"],
+    })
+
+
 from mcp_server import mcp
 app.mount("/mcp", mcp.streamable_http_app())
 
