@@ -24,6 +24,7 @@ origins = [
     "http://localhost:5173",
     "http://localhost:5174",
     "https://health-app-production-e0ff.up.railway.app",
+    "https://claude.ai",
     os.getenv("FRONTEND_URL", ""),
 ]
 
@@ -46,6 +47,10 @@ app.include_router(health_router, prefix="/health", tags=["health"])
 app.include_router(checkin_v2_router.router)
 app.include_router(polar_router.router)
 app.include_router(chat_router.router)
+
+
+from mcp_server import mcp
+app.mount("/mcp", mcp.sse_app())
 
 
 @app.get("/health")

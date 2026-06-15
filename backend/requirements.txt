@@ -17,3 +17,4 @@ python-multipart==0.0.29
 sqlalchemy==2.0.50
 starlette==1.2.0
 uvicorn[standard]==0.48.0
+mcp[cli]>=1.0.0
