@@ -10,18 +10,22 @@ from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
 import models
 
-_SERVER_URL = "https://health-app-backend-production-760e.up.railway.app/mcp"
+_SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
+_MCP_URL = f"{_SERVER_ROOT}/mcp"
 
 mcp = FastMCP(
     "Health Intelligence",
     auth_server_provider=PersonalOAuthProvider(),
     auth=AuthSettings(
-        issuer_url=_SERVER_URL,
-        service_documentation_url=None,
+        # issuer_url at server root → auth endpoints at /authorize /token /register
+        # and metadata at /.well-known/oauth-authorization-server (no path suffix)
+        issuer_url=_SERVER_ROOT,
         client_registration_options=ClientRegistrationOptions(enabled=True),
-        resource_server_url=_SERVER_URL,
+        # resource_server_url is the MCP endpoint itself
+        resource_server_url=_MCP_URL,
     ),
-    streamable_http_path="/",
+    # streamable_http_path='/mcp' (default) → sub-app serves MCP at /mcp
+    # mounted at '/' in FastAPI so POST /mcp hits it directly, no trailing-slash redirect
 )
 
 
