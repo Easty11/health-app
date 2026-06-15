@@ -63,19 +63,29 @@ app.include_router(chat_router.router)
 # This route must be added to app.routes BEFORE app.mount("/mcp", ...) so
 # that Starlette's router checks it first (first-match wins on prefix paths).
 # ---------------------------------------------------------------------------
+_OAUTH_METADATA = {
+    "issuer": "https://health-app-backend-production-760e.up.railway.app/mcp",
+    "authorization_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/authorize",
+    "token_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/token",
+    "registration_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/register",
+    "response_types_supported": ["code"],
+    "grant_types_supported": ["authorization_code", "refresh_token"],
+    "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+    "code_challenge_methods_supported": ["S256"],
+}
+
+# RFC 8414: issuer "https://server/mcp" → metadata at /.well-known/oauth-authorization-server/mcp
+# This is what claude.ai fetches. FastMCP wrongly serves it at /mcp/.well-known/... instead.
+@app.get("/.well-known/oauth-authorization-server/mcp", include_in_schema=False)
+async def mcp_oauth_metadata_root(request: Request):
+    logger.info("OAuth AS metadata (root) from %s", request.headers.get("user-agent", "unknown"))
+    return JSONResponse(_OAUTH_METADATA)
+
+# Also serve at the path FastMCP uses internally, in case other clients follow that convention.
 @app.get("/mcp/.well-known/oauth-authorization-server", include_in_schema=False)
-async def mcp_oauth_metadata(request: Request):
-    logger.info("OAuth metadata request from %s", request.headers.get("user-agent", "unknown"))
-    return JSONResponse({
-        "issuer": "https://health-app-backend-production-760e.up.railway.app/mcp",
-        "authorization_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/authorize",
-        "token_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/token",
-        "registration_endpoint": "https://health-app-backend-production-760e.up.railway.app/mcp/register",
-        "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code", "refresh_token"],
-        "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
-        "code_challenge_methods_supported": ["S256"],
-    })
+async def mcp_oauth_metadata_subpath(request: Request):
+    logger.info("OAuth AS metadata (subpath) from %s", request.headers.get("user-agent", "unknown"))
+    return JSONResponse(_OAUTH_METADATA)
 
 
 from mcp_server import mcp
