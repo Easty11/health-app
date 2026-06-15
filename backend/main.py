@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +18,20 @@ from routers import polar as polar_router
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Health & Performance API")
+from mcp_server import mcp
+
+_mcp_app = mcp.streamable_http_app()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Run the MCP sub-app's lifespan so its StreamableHTTPSessionManager
+    # initialises its task group before the first request arrives.
+    async with _mcp_app.router.lifespan_context(_mcp_app):
+        yield
+
+
+app = FastAPI(title="Health & Performance API", lifespan=lifespan)
 
 # FRONTEND_URL is set in Railway to the deployed frontend URL,
 # e.g. https://health-app-frontend.up.railway.app
@@ -55,19 +69,4 @@ def health_check():
     return {"status": "ok"}
 
 
-# MCP sub-app mounted at "/" as a catch-all AFTER all FastAPI routes.
-# Starlette checks routes in order — specific routes above win; unmatched
-# requests fall through to this mount.
-#
-# Sub-app serves (all from server root):
-#   POST /mcp                                   — MCP Streamable HTTP endpoint
-#   GET  /.well-known/oauth-authorization-server — OAuth AS metadata (issuer = server root)
-#   GET  /.well-known/oauth-protected-resource/mcp — protected resource metadata
-#   POST /register                              — dynamic client registration
-#   GET  /authorize                             — OAuth authorization (auto-approves)
-#   POST /token                                 — token exchange
-#
-# claude.ai strips trailing slashes from connector URLs, so it POSTs to /mcp
-# (not /mcp/). Mounting at root means that hits the sub-app directly.
-from mcp_server import mcp
-app.mount("/", mcp.streamable_http_app())
+app.mount("/", _mcp_app)
