@@ -178,14 +178,24 @@ def polar_debug(
     client = PolarClient(tokens["access_token"], polar_user_id=tokens.get("polar_user_id"))
     result = {"stored_polar_user_id": tokens.get("polar_user_id")}
     try:
-        result["users_me"] = client.get_polar_user_id()
-    except Exception as exc:
-        result["users_me_error"] = str(exc)
-    try:
         reg = client.register_user(current_user.id)
         result["register"] = reg
     except Exception as exc:
         result["register_error"] = str(exc)
+
+    # Try creating an exercise transaction and report raw response
+    import httpx as _httpx
+    try:
+        with _httpx.Client() as hc:
+            txn_resp = hc.post(
+                f"https://www.polaraccesslink.com/v3/users/{tokens.get('polar_user_id')}/exercise-transactions",
+                headers=client.headers,
+            )
+            result["txn_status"] = txn_resp.status_code
+            result["txn_body"] = txn_resp.text[:500] if txn_resp.text else None
+    except Exception as exc:
+        result["txn_error"] = str(exc)
+
     return result
 
 
