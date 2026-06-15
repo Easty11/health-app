@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
+from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy import text
 
 from database import engine, SessionLocal
@@ -17,15 +18,17 @@ mcp = FastMCP(
     "Health Intelligence",
     auth_server_provider=PersonalOAuthProvider(),
     auth=AuthSettings(
-        # issuer_url at server root → auth endpoints at /authorize /token /register
-        # and metadata at /.well-known/oauth-authorization-server (no path suffix)
         issuer_url=_SERVER_ROOT,
         client_registration_options=ClientRegistrationOptions(enabled=True),
-        # resource_server_url is the MCP endpoint itself
         resource_server_url=_MCP_URL,
     ),
-    # streamable_http_path='/mcp' (default) → sub-app serves MCP at /mcp
-    # mounted at '/' in FastAPI so POST /mcp hits it directly, no trailing-slash redirect
+    # Disable DNS-rebinding protection: deployed behind Railway's reverse proxy,
+    # Host header is the public domain — not localhost — so the auto-enabled
+    # protection (triggered when host defaults to 127.0.0.1) would reject every
+    # request with 421. Setting transport_security explicitly disables it.
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
 )
 
 
