@@ -148,13 +148,14 @@ class PolarV4Client:
             "Accept": "application/json",
         }
 
-    def list_training_sessions(
-        self, from_date: str, to_date: str, features: list[str] | None = None
-    ) -> list[dict[str, Any]]:
-        """GET /training-sessions/list. from inclusive, to exclusive (ISO dates)."""
-        params: dict[str, Any] = {"from": from_date, "to": to_date}
-        if features:
-            params["features"] = features
+    # v4 rejects date windows beyond ~a quarter (108d → 400; 90d ok).
+    MAX_WINDOW_DAYS = 90
+
+    def list_training_sessions(self, from_dt: str, to_dt: str) -> list[dict[str, Any]]:
+        """GET /training-sessions/list for a single window. `from`/`to` are ISO
+        *datetimes without a timezone* (e.g. 2026-06-01T00:00:00); a trailing 'Z'
+        is rejected (400). Returns the list under the 'trainingSessions' key."""
+        params = {"from": from_dt, "to": to_dt}
         with httpx.Client(timeout=60) as client:
             resp = client.get(
                 f"{DATA_BASE}/training-sessions/list", headers=self.headers, params=params
@@ -163,81 +164,40 @@ class PolarV4Client:
                 return []
             resp.raise_for_status()
             data = resp.json()
-        # response may be a bare list or wrapped — handle both
         if isinstance(data, dict):
-            for key in ("data", "trainingSessions", "training_sessions", "items", "sessions"):
-                if isinstance(data.get(key), list):
-                    return data[key]
-            return [data]
+            return data.get("trainingSessions") or []
         return data if isinstance(data, list) else []
 
-    @staticmethod
-    def parse_session(raw: dict[str, Any]) -> dict[str, Any]:
-        """Map a v4 training session to aerobic_sessions fields. Defensive about
-        nested key names — the public v4 docs don't fully enumerate the schema,
-        so each value tries several plausible paths."""
-        start = _parse_dt(_dig(raw, "startTime", "start_time", "start"))
-        dur_s = parse_iso_duration(_dig(raw, "duration"))
-        if dur_s is None:
-            dur_ms = _dig(raw, "durationMillis", "duration_millis")
-            dur_s = int(dur_ms / 1000) if dur_ms else None
-        stop = None
-        if start and dur_s:
-            stop = start + timedelta(seconds=dur_s)
-
-        hr_avg = _dig(raw, "statistics.heartRate.average", "statistics.heartRate.avg",
-                      "heartRate.average", "hrAvg", "statistics.avgHeartRate")
-        hr_max = _dig(raw, "statistics.heartRate.maximum", "statistics.heartRate.max",
-                      "heartRate.maximum", "hrMax", "statistics.maxHeartRate")
-        calories = _dig(raw, "statistics.calories", "kiloCalories", "calories")
-        cardio_load = _dig(raw, "trainingLoadData.cardioLoad", "trainingLoad.cardioLoad",
-                           "cardioLoad")
-        muscle_load = _dig(raw, "trainingLoadData.muscleLoad", "trainingLoad.muscleLoad",
-                           "muscleLoad")
-        recovery_h = None
-        rec_ms = _dig(raw, "recoveryTimeMillis", "recoveryTime")
-        if rec_ms:
-            try:
-                recovery_h = round(float(rec_ms) / 3_600_000, 1)
-            except (TypeError, ValueError):
-                recovery_h = None
-
-        sport_name = _dig(raw, "sport.name", "sportName", "sport.translatedName")
-        sport_id = _dig(raw, "sport.id", "sportId", "sport")
-        if isinstance(sport_id, dict):
-            sport_id = sport_id.get("id")
-
-        zones = PolarV4Client._parse_zones(raw)
-
-        return {
-            "external_id": str(_dig(raw, "id", "identifier.id") or "") or None,
-            "session_date": start.date() if start else None,
-            "start_time": start,
-            "stop_time": stop,
-            "sport_id": str(sport_id) if sport_id is not None else None,
-            "sport_name": sport_name or (str(sport_id) if sport_id is not None else None),
-            "duration_minutes": round(dur_s / 60, 2) if dur_s else None,
-            "hr_avg": int(hr_avg) if hr_avg is not None else None,
-            "hr_max": int(hr_max) if hr_max is not None else None,
-            "calories": int(calories) if calories is not None else None,
-            "cardio_load": float(cardio_load) if cardio_load is not None else None,
-            "muscle_load": float(muscle_load) if muscle_load is not None and muscle_load >= 0 else None,
-            "recovery_hours": recovery_h,
-            **zones,
-        }
-
-    @staticmethod
-    def _parse_zones(raw: dict[str, Any]) -> dict[str, int]:
-        out = {f"z{i}_seconds": 0 for i in range(1, 6)}
-        zones = _dig(raw, "zones.heartRate", "heartRateZones", "zones")
-        if not isinstance(zones, list):
-            return out
-        for idx, z in enumerate(zones[:5], start=1):
-            if not isinstance(z, dict):
-                continue
-            secs = parse_iso_duration(_dig(z, "inZone", "duration", "time"))
-            if secs is None:
-                ms = _dig(z, "inZoneMillis", "durationMillis")
-                secs = int(ms / 1000) if ms else 0
-            out[f"z{idx}_seconds"] = secs or 0
+    def list_training_sessions_chunked(self, start, end) -> list[dict[str, Any]]:
+        """List sessions across an arbitrary range by splitting into windows the
+        API will accept. `start`/`end` are date objects."""
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        cur = start
+        while cur < end:
+            window_end = min(cur + timedelta(days=self.MAX_WINDOW_DAYS), end)
+            for s in self.list_training_sessions(f"{cur}T00:00:00", f"{window_end}T00:00:00"):
+                sid = (s.get("identifier") or {}).get("id")
+                if sid and sid in seen:
+                    continue
+                if sid:
+                    seen.add(sid)
+                out.append(s)
+            cur = window_end
         return out
+
+    @staticmethod
+    def parse_session(raw: dict[str, Any]) -> dict[str, Any] | None:
+        """Map a v4 training session to aerobic_sessions fields.
+
+        The v4 session schema is identical to the Polar Flow ZIP-export session
+        JSON, so we reuse import_polar._parse_session for byte-for-byte parity
+        between live-sync and ZIP-import data. The only difference is source.
+        (The v4 *list* endpoint omits trainingLoadReport/zones, so cardio_load,
+        muscle_load and z*_seconds come back null — those remain ZIP-only.)"""
+        from import_polar import _parse_session
+        fields = _parse_session(raw)
+        if fields is None:
+            return None
+        fields["source"] = "polar_v4"
+        return fields

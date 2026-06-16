@@ -170,50 +170,34 @@ def sync_polar_sessions(
     """Pull v4 training sessions over the last `days` and upsert into aerobic_sessions."""
     client = _valid_client(current_user.id, db)
     today = datetime.now(timezone.utc).date()
-    from_date = (today - timedelta(days=days)).isoformat()
-    to_date = (today + timedelta(days=1)).isoformat()
+    start = today - timedelta(days=days)
+    end = today + timedelta(days=1)
 
     try:
-        raw_sessions = client.list_training_sessions(from_date, to_date)
+        raw_sessions = client.list_training_sessions_chunked(start, end)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Polar v4 API error: {exc}")
 
     stored = 0
     for raw in raw_sessions:
-        s = PolarV4Client.parse_session(raw)
-        if not s["external_id"]:
+        fields = PolarV4Client.parse_session(raw)
+        if not fields or not fields.get("source_session_id"):
             continue
+        # Dedup across sources: a session already imported from the ZIP
+        # (polar_flow_export, which carries cardio_load + zones) takes precedence,
+        # so v4 only adds sessions not already present.
         exists = (
             db.query(models.AerobicSession)
             .filter(
                 models.AerobicSession.user_id == current_user.id,
-                models.AerobicSession.source == "polar_v4",
-                models.AerobicSession.source_session_id == s["external_id"],
+                models.AerobicSession.source_session_id == fields["source_session_id"],
+                models.AerobicSession.source.in_(["polar_flow_export", "polar_v4"]),
             )
             .first()
         )
         if exists:
             continue
-        db.add(models.AerobicSession(
-            user_id=current_user.id,
-            source="polar_v4",
-            source_session_id=s["external_id"],
-            session_date=s["session_date"],
-            start_time=s["start_time"],
-            stop_time=s["stop_time"],
-            sport_id=s["sport_id"],
-            sport_name=s["sport_name"],
-            duration_minutes=s["duration_minutes"],
-            hr_avg=s["hr_avg"],
-            hr_max=s["hr_max"],
-            calories=s["calories"],
-            cardio_load=s["cardio_load"],
-            muscle_load=s["muscle_load"],
-            recovery_hours=s["recovery_hours"],
-            z1_seconds=s["z1_seconds"], z2_seconds=s["z2_seconds"],
-            z3_seconds=s["z3_seconds"], z4_seconds=s["z4_seconds"],
-            z5_seconds=s["z5_seconds"],
-        ))
+        db.add(models.AerobicSession(user_id=current_user.id, **fields))
         stored += 1
 
     db.commit()
@@ -230,10 +214,10 @@ def polar_v4_raw(
     and confirm the field mapping. Safe to remove once mapping is validated."""
     client = _valid_client(current_user.id, db)
     today = datetime.now(timezone.utc).date()
-    from_date = (today - timedelta(days=days)).isoformat()
-    to_date = (today + timedelta(days=1)).isoformat()
+    from_dt = f"{(today - timedelta(days=days)).isoformat()}T00:00:00"
+    to_dt = f"{(today + timedelta(days=1)).isoformat()}T00:00:00"
     try:
-        raw = client.list_training_sessions(from_date, to_date)
+        raw = client.list_training_sessions(from_dt, to_dt)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Polar v4 API error: {exc}")
     return {"count": len(raw), "first": raw[0] if raw else None}
