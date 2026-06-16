@@ -1,34 +1,42 @@
 """
-Polar Accesslink v3 connector.
+Polar AccessLink Dynamic API v4 connector.
 
-OAuth flow:
-  1. Frontend fetches GET /integrations/polar/auth-url (with bearer token) → gets redirect URL
-  2. User authorises at Polar
+Why v4 (not v3): the v3 exercise-transactions pipeline only exposes sessions
+recorded *on a Polar device*. Sessions recorded with the Polar Flow phone app
+(product.modelName = "Polar Flow app") — which is how this user records H10
+sessions — are silently excluded (transactions return 204). v4's
+training-sessions/list is date-range based and returns app-recorded sessions.
+
+OAuth flow (authorization_code):
+  1. Frontend GET /integrations/polar/auth-url (bearer) → {url}
+  2. User authorises at https://auth.polar.com/oauth/authorize
   3. Polar redirects to /integrations/polar/callback?code=...&state=user_id
-  4. Backend exchanges code, registers user, stores token
+  4. Backend exchanges code at https://auth.polar.com/oauth/token (Basic auth)
+     → access_token (12h), refresh_token, expires_in
+  5. No user registration step in v4 — call data endpoints directly with the token.
 
-Data pull:
-  pull_exercise_sessions() uses the Accesslink transaction model:
-    - POST /exercises/transactions  (204 = no new data)
-    - GET each session URL
-    - GET each session's heart-rate-zones
-    - PUT /exercises/transactions/{id}  (commit — marks as retrieved)
+Data:
+  GET https://www.polaraccesslink.com/v4/data/training-sessions/list?from=&to=
 """
 import os
 import base64
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
+
+AUTHORIZE_URL = "https://auth.polar.com/oauth/authorize"
+TOKEN_URL = "https://auth.polar.com/oauth/token"
+DATA_BASE = "https://www.polaraccesslink.com/v4/data"
 
 POLAR_REDIRECT_URI = (
     "https://health-app-backend-production-760e.up.railway.app"
     "/integrations/polar/callback"
 )
-ACCESSLINK_BASE = "https://www.polaraccesslink.com/v3"
-AUTHORIZE_URL = "https://flow.polar.com/oauth2/authorization"
-TOKEN_URL = "https://polarremote.com/v2/oauth2/token"
+
+# Requested at authorization. Space-delimited per v4 spec.
+SCOPES = "training_sessions:read ppi_data:read nightly_recharge:read sleep:read"
 
 
 def _basic_auth_header() -> str:
@@ -39,7 +47,7 @@ def _basic_auth_header() -> str:
 
 
 def parse_iso_duration(s: str | None) -> int | None:
-    """Convert ISO 8601 duration string (PT1H30M45S) to total seconds."""
+    """ISO 8601 duration (PT1H30M45S) → total seconds."""
     if not s:
         return None
     m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?", s)
@@ -51,33 +59,52 @@ def parse_iso_duration(s: str | None) -> int | None:
     return int(h * 3600 + mins * 60 + secs)
 
 
-def _parse_polar_dt(s: str | None) -> datetime | None:
-    """Parse Polar datetime string to UTC-aware datetime. Polar returns local time
-    without tz offset in Accesslink v3; treat as UTC to avoid ambiguity."""
+def _parse_dt(s: str | None) -> datetime | None:
+    """Parse an ISO datetime; attach UTC if naive."""
     if not s:
         return None
     try:
-        raw = s[:19]  # strip sub-seconds and any trailing chars
+        raw = s.replace("Z", "+00:00")
         dt = datetime.fromisoformat(raw)
         return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
     except (ValueError, AttributeError):
         return None
 
 
+def _dig(obj: Any, *paths: str) -> Any:
+    """Return the first present value among dotted paths. Defensive against the
+    v4 schema's exact nesting, which the public docs don't fully enumerate."""
+    for path in paths:
+        cur = obj
+        ok = True
+        for key in path.split("."):
+            if isinstance(cur, dict) and key in cur and cur[key] is not None:
+                cur = cur[key]
+            else:
+                ok = False
+                break
+        if ok:
+            return cur
+    return None
+
+
+# ── OAuth ────────────────────────────────────────────────────────────────────
+
 def build_auth_url(user_id: int) -> str:
-    client_id = os.getenv("POLAR_CLIENT_ID", "")
-    return (
-        f"{AUTHORIZE_URL}"
-        f"?response_type=code"
-        f"&client_id={client_id}"
-        f"&redirect_uri={POLAR_REDIRECT_URI}"
-        f"&scope=accesslink.read_all"
-        f"&state={user_id}"
-    )
+    from urllib.parse import quote, urlencode
+    params = {
+        "response_type": "code",
+        "client_id": os.getenv("POLAR_CLIENT_ID", ""),
+        "redirect_uri": POLAR_REDIRECT_URI,
+        "scope": SCOPES,
+        "state": str(user_id),
+    }
+    # quote_via=quote so spaces in scope become %20 (not +) and colons survive
+    return f"{AUTHORIZE_URL}?{urlencode(params, quote_via=quote)}"
 
 
 def exchange_code_for_token(code: str) -> dict[str, Any]:
-    with httpx.Client() as client:
+    with httpx.Client(timeout=30) as client:
         resp = client.post(
             TOKEN_URL,
             headers={
@@ -94,90 +121,123 @@ def exchange_code_for_token(code: str) -> dict[str, Any]:
         return resp.json()
 
 
-class PolarClient:
-    def __init__(self, access_token: str, polar_user_id: str | int | None = None):
+def refresh_access_token(refresh_token: str) -> dict[str, Any]:
+    with httpx.Client(timeout=30) as client:
+        resp = client.post(
+            TOKEN_URL,
+            headers={
+                "Authorization": _basic_auth_header(),
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+# ── data client ──────────────────────────────────────────────────────────────
+
+class PolarV4Client:
+    def __init__(self, access_token: str):
         self.access_token = access_token
-        self.polar_user_id = str(polar_user_id) if polar_user_id else None
         self.headers = {
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/json",
-            "Content-Type": "application/json",
         }
 
-    def register_user(self, member_id: int) -> dict[str, Any]:
-        """Must be called once after first OAuth. 409 = already registered (fine)."""
-        with httpx.Client() as client:
-            resp = client.post(
-                f"{ACCESSLINK_BASE}/users",
-                headers=self.headers,
-                json={"member-id": str(member_id)},
+    def list_training_sessions(
+        self, from_date: str, to_date: str, features: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """GET /training-sessions/list. from inclusive, to exclusive (ISO dates)."""
+        params: dict[str, Any] = {"from": from_date, "to": to_date}
+        if features:
+            params["features"] = features
+        with httpx.Client(timeout=60) as client:
+            resp = client.get(
+                f"{DATA_BASE}/training-sessions/list", headers=self.headers, params=params
             )
-            if resp.status_code == 409:
-                return {"already_registered": True}
+            if resp.status_code == 204:
+                return []
             resp.raise_for_status()
             data = resp.json()
-            # Capture the polar-user-id returned on first registration
-            if not self.polar_user_id and data.get("polar-user-id"):
-                self.polar_user_id = str(data["polar-user-id"])
-            return data
+        # response may be a bare list or wrapped — handle both
+        if isinstance(data, dict):
+            for key in ("data", "trainingSessions", "training_sessions", "items", "sessions"):
+                if isinstance(data.get(key), list):
+                    return data[key]
+            return [data]
+        return data if isinstance(data, list) else []
 
-    def pull_exercise_sessions(self) -> list[dict[str, Any]]:
-        """
-        Full Accesslink transaction flow. Returns [] when no new sessions.
-        Must commit the transaction to mark sessions as retrieved — uncommitted
-        sessions re-appear on next call.
-        """
-        if not self.polar_user_id:
-            raise ValueError("polar_user_id required for exercise transactions")
+    @staticmethod
+    def parse_session(raw: dict[str, Any]) -> dict[str, Any]:
+        """Map a v4 training session to aerobic_sessions fields. Defensive about
+        nested key names — the public v4 docs don't fully enumerate the schema,
+        so each value tries several plausible paths."""
+        start = _parse_dt(_dig(raw, "startTime", "start_time", "start"))
+        dur_s = parse_iso_duration(_dig(raw, "duration"))
+        if dur_s is None:
+            dur_ms = _dig(raw, "durationMillis", "duration_millis")
+            dur_s = int(dur_ms / 1000) if dur_ms else None
+        stop = None
+        if start and dur_s:
+            stop = start + timedelta(seconds=dur_s)
 
-        with httpx.Client() as client:
-            # Step 1: create transaction
-            txn_resp = client.post(
-                f"{ACCESSLINK_BASE}/users/{self.polar_user_id}/exercise-transactions",
-                headers=self.headers,
-            )
-            if txn_resp.status_code == 204:
-                return []  # no new data
-            txn_resp.raise_for_status()
-            txn = txn_resp.json()
-            txn_id = txn["transaction-id"]
-            session_urls: list[str] = txn.get("exercises", [])
+        hr_avg = _dig(raw, "statistics.heartRate.average", "statistics.heartRate.avg",
+                      "heartRate.average", "hrAvg", "statistics.avgHeartRate")
+        hr_max = _dig(raw, "statistics.heartRate.maximum", "statistics.heartRate.max",
+                      "heartRate.maximum", "hrMax", "statistics.maxHeartRate")
+        calories = _dig(raw, "statistics.calories", "kiloCalories", "calories")
+        cardio_load = _dig(raw, "trainingLoadData.cardioLoad", "trainingLoad.cardioLoad",
+                           "cardioLoad")
+        muscle_load = _dig(raw, "trainingLoadData.muscleLoad", "trainingLoad.muscleLoad",
+                           "muscleLoad")
+        recovery_h = None
+        rec_ms = _dig(raw, "recoveryTimeMillis", "recoveryTime")
+        if rec_ms:
+            try:
+                recovery_h = round(float(rec_ms) / 3_600_000, 1)
+            except (TypeError, ValueError):
+                recovery_h = None
 
-            sessions: list[dict[str, Any]] = []
-            for url in session_urls:
-                # Step 2: fetch session detail
-                s_resp = client.get(url, headers=self.headers)
-                s_resp.raise_for_status()
-                raw = s_resp.json()
+        sport_name = _dig(raw, "sport.name", "sportName", "sport.translatedName")
+        sport_id = _dig(raw, "sport.id", "sportId", "sport")
+        if isinstance(sport_id, dict):
+            sport_id = sport_id.get("id")
 
-                # Step 3: fetch HR zones (optional — 404/no content is fine)
-                zones = None
-                z_resp = client.get(f"{url}/heart-rate-zones", headers=self.headers)
-                if z_resp.status_code == 200:
-                    zones = z_resp.json()
+        zones = PolarV4Client._parse_zones(raw)
 
-                sessions.append(self._parse_session(raw, zones))
-
-            # Step 4: commit transaction — marks all sessions as retrieved
-            commit_resp = client.put(
-                f"{ACCESSLINK_BASE}/users/{self.polar_user_id}/exercise-transactions/{txn_id}",
-                headers=self.headers,
-            )
-            commit_resp.raise_for_status()
-
-            return sessions
-
-    def _parse_session(self, raw: dict[str, Any], zones: dict | None) -> dict[str, Any]:
-        hr = raw.get("heart-rate") or {}
         return {
-            "external_id": str(raw["id"]) if raw.get("id") is not None else None,
-            "sport": raw.get("sport"),
-            "start_time": _parse_polar_dt(raw.get("start-time")),
-            "end_time": _parse_polar_dt(raw.get("stop-time")),
-            "duration_seconds": parse_iso_duration(raw.get("exercise-duration")),
-            "avg_hr": hr.get("average"),
-            "max_hr": hr.get("maximum"),
-            "distance_meters": raw.get("distance"),
-            "calories": raw.get("calories"),
-            "hr_zones": zones,
+            "external_id": str(_dig(raw, "id", "identifier.id") or "") or None,
+            "session_date": start.date() if start else None,
+            "start_time": start,
+            "stop_time": stop,
+            "sport_id": str(sport_id) if sport_id is not None else None,
+            "sport_name": sport_name or (str(sport_id) if sport_id is not None else None),
+            "duration_minutes": round(dur_s / 60, 2) if dur_s else None,
+            "hr_avg": int(hr_avg) if hr_avg is not None else None,
+            "hr_max": int(hr_max) if hr_max is not None else None,
+            "calories": int(calories) if calories is not None else None,
+            "cardio_load": float(cardio_load) if cardio_load is not None else None,
+            "muscle_load": float(muscle_load) if muscle_load is not None and muscle_load >= 0 else None,
+            "recovery_hours": recovery_h,
+            **zones,
         }
+
+    @staticmethod
+    def _parse_zones(raw: dict[str, Any]) -> dict[str, int]:
+        out = {f"z{i}_seconds": 0 for i in range(1, 6)}
+        zones = _dig(raw, "zones.heartRate", "heartRateZones", "zones")
+        if not isinstance(zones, list):
+            return out
+        for idx, z in enumerate(zones[:5], start=1):
+            if not isinstance(z, dict):
+                continue
+            secs = parse_iso_duration(_dig(z, "inZone", "duration", "time"))
+            if secs is None:
+                ms = _dig(z, "inZoneMillis", "durationMillis")
+                secs = int(ms / 1000) if ms else 0
+            out[f"z{idx}_seconds"] = secs or 0
+        return out
