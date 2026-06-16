@@ -73,6 +73,25 @@ function formatHevyMessage(workout) {
   ].join('\n')
 }
 
+// aerobic_sessions schema → shape the Polar card/detail components consume
+function normalizePolar(s) {
+  return {
+    id: s.id,
+    sport: s.sport_name || 'Session',
+    start_time: s.start_time || s.session_date,
+    duration_seconds: s.duration_minutes != null ? Math.round(s.duration_minutes * 60) : null,
+    avg_hr: s.hr_avg,
+    max_hr: s.hr_max,
+    calories: s.calories,
+    cardio_load: s.cardio_load,
+    recovery_hours: s.recovery_hours,
+    hr_zones: {
+      z1_seconds: s.z1_seconds, z2_seconds: s.z2_seconds, z3_seconds: s.z3_seconds,
+      z4_seconds: s.z4_seconds, z5_seconds: s.z5_seconds,
+    },
+  }
+}
+
 function formatPolarMessage(session) {
   const sport = session.sport || 'Session'
   const date = fmtDate(session.start_time)
@@ -85,6 +104,8 @@ function formatPolarMessage(session) {
   if (session.avg_hr) parts.push(`Avg HR: ${session.avg_hr} bpm`)
   if (session.max_hr) parts.push(`Max HR: ${session.max_hr} bpm`)
   if (session.calories) parts.push(`Calories: ${session.calories}`)
+  if (session.cardio_load != null) parts.push(`Cardio load: ${Math.round(session.cardio_load)}`)
+  if (session.recovery_hours != null) parts.push(`Recovery: ${Math.round(session.recovery_hours)}h`)
   const z = session.hr_zones || {}
   const zones = ['z1_seconds','z2_seconds','z3_seconds','z4_seconds','z5_seconds']
     .map((k, i) => z[k] ? `Z${i+1}: ${fmtSeconds(z[k])}` : null).filter(Boolean)
@@ -315,6 +336,23 @@ function PolarDetail({ session, onBack, onFeedback }) {
           </div>
         </div>
 
+        {(session.cardio_load != null || session.recovery_hours != null) && (
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="bg-indigo-50 rounded-xl p-3">
+              <p className="text-base font-bold text-indigo-700">
+                {session.cardio_load != null ? Math.round(session.cardio_load) : '—'}
+              </p>
+              <p className="text-xs text-indigo-400">Cardio load</p>
+            </div>
+            <div className="bg-emerald-50 rounded-xl p-3">
+              <p className="text-base font-bold text-emerald-700">
+                {session.recovery_hours != null ? `${Math.round(session.recovery_hours)}h` : '—'}
+              </p>
+              <p className="text-xs text-emerald-400">Recovery</p>
+            </div>
+          </div>
+        )}
+
         {Object.values(zones).some(v => v > 0) && (
           <div className="bg-gray-50 rounded-xl p-3 space-y-2">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">HR Zones</p>
@@ -359,11 +397,11 @@ export default function WorkoutPanel({ onFeedback }) {
       const [countRes, workoutsRes, polarRes] = await Promise.all([
         api.get('/integrations/hevy/workout-count'),
         api.get('/integrations/hevy/workouts?page=1&page_size=1'),
-        api.get('/integrations/polar/sessions?limit=1').catch(() => ({ data: [] })),
+        api.get('/integrations/polar/aerobic-sessions?limit=1').catch(() => ({ data: [] })),
       ])
       setHevyCount(countRes.data.workout_count ?? countRes.data.count ?? 0)
       setLatestHevy((workoutsRes.data.workouts || [])[0] || null)
-      setLatestPolar(polarRes.data[0] || null)
+      setLatestPolar(polarRes.data[0] ? normalizePolar(polarRes.data[0]) : null)
       setNotConnected(false)
     } catch (err) {
       if (err.response?.status === 404) setNotConnected(true)
@@ -402,8 +440,8 @@ export default function WorkoutPanel({ onFeedback }) {
 
   async function openPolarHistory() {
     if (polarSessions.length === 0) {
-      const res = await api.get('/integrations/polar/sessions?limit=50').catch(() => ({ data: [] }))
-      setPolarSessions(res.data)
+      const res = await api.get('/integrations/polar/aerobic-sessions?limit=200').catch(() => ({ data: [] }))
+      setPolarSessions(res.data.map(normalizePolar))
     }
     setView('polar-history')
   }
@@ -412,9 +450,10 @@ export default function WorkoutPanel({ onFeedback }) {
     setPolarSyncing(true)
     try {
       await api.post('/integrations/polar/sync')
-      const res = await api.get('/integrations/polar/sessions?limit=50').catch(() => ({ data: [] }))
-      setPolarSessions(res.data)
-      if (res.data.length) setLatestPolar(res.data[0])
+      const res = await api.get('/integrations/polar/aerobic-sessions?limit=200').catch(() => ({ data: [] }))
+      const norm = res.data.map(normalizePolar)
+      setPolarSessions(norm)
+      if (norm.length) setLatestPolar(norm[0])
     } catch { /* ignore */ }
     finally { setPolarSyncing(false) }
   }

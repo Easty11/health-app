@@ -7,10 +7,12 @@ Connect flow:
   GET /integrations/polar/status          → {connected: bool}
   DELETE /integrations/polar              → disconnect
 
-Data:
-  POST /integrations/polar/sync           → pull new sessions from Accesslink
-  GET  /integrations/polar/sessions       → return ExerciseSession records (Accesslink)
-  GET  /integrations/polar/aerobic-sessions → return AerobicSession records (ZIP import)
+Data (single canonical table: aerobic_sessions):
+  POST /integrations/polar/sync             → pull new Accesslink exercises → AerobicSession (source='polar_accesslink')
+  GET  /integrations/polar/aerobic-sessions → return all AerobicSession records (ZIP + live sync)
+
+ZIP-export history is loaded via import_polar.py (source='polar_flow_export').
+Both sources share the aerobic_sessions table.
 """
 from datetime import date, datetime
 from typing import Optional
@@ -22,33 +24,18 @@ from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
-from connectors.polar import PolarClient, build_auth_url, exchange_code_for_token
+from connectors.polar import (
+    PolarClient,
+    build_auth_url,
+    exchange_code_for_token,
+    parse_iso_duration,
+)
 from database import get_db
 from encryption import decrypt, encrypt
 
 router = APIRouter(prefix="/integrations/polar", tags=["polar"])
 
 FRONTEND_URL = "https://health-app-production-e0ff.up.railway.app"
-
-
-# ── response schema ────────────────────────────────────────────────────────────
-
-class ExerciseSessionOut(BaseModel):
-    id: int
-    source: str
-    external_id: Optional[str] = None
-    sport: Optional[str] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    duration_seconds: Optional[int] = None
-    avg_hr: Optional[int] = None
-    max_hr: Optional[int] = None
-    distance_meters: Optional[float] = None
-    calories: Optional[int] = None
-    hr_zones: Optional[dict] = None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -206,12 +193,30 @@ def polar_debug(
     return result
 
 
+def _hr_zone_seconds(hr_zones) -> dict[str, int]:
+    """Extract per-zone seconds from an Accesslink heart-rate-zones payload."""
+    out = {f"z{i}_seconds": 0 for i in range(1, 6)}
+    if not hr_zones:
+        return out
+    zones = hr_zones.get("zone") if isinstance(hr_zones, dict) else hr_zones
+    if not isinstance(zones, list):
+        return out
+    for idx, z in enumerate(zones[:5], start=1):
+        secs = parse_iso_duration(z.get("in-zone")) if isinstance(z, dict) else None
+        out[f"z{idx}_seconds"] = secs or 0
+    return out
+
+
 @router.post("/sync")
 def sync_polar_sessions(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Pull new exercise sessions from Polar Accesslink transaction endpoint."""
+    """Pull new exercise sessions from Polar Accesslink and store as AerobicSession.
+
+    Live increments land in the same aerobic_sessions table as the ZIP-export
+    history, tagged source='polar_accesslink'.
+    """
     tokens = _require_polar(current_user.id, db)
     client = PolarClient(tokens["access_token"], polar_user_id=tokens.get("polar_user_id"))
 
@@ -229,53 +234,38 @@ def sync_polar_sessions(
     stored = 0
     for s in sessions:
         exists = (
-            db.query(models.ExerciseSession)
+            db.query(models.AerobicSession)
             .filter(
-                models.ExerciseSession.user_id == current_user.id,
-                models.ExerciseSession.external_id == s["external_id"],
-                models.ExerciseSession.source.in_(["polar", "polar_flow_export"]),
+                models.AerobicSession.user_id == current_user.id,
+                models.AerobicSession.source == "polar_accesslink",
+                models.AerobicSession.source_session_id == s["external_id"],
             )
             .first()
         )
         if exists:
             continue
 
-        db.add(models.ExerciseSession(
+        start = s["start_time"]
+        dur_s = s["duration_seconds"]
+        zones = _hr_zone_seconds(s["hr_zones"])
+        db.add(models.AerobicSession(
             user_id=current_user.id,
-            source="polar",
-            external_id=s["external_id"],
-            sport=s["sport"],
-            start_time=s["start_time"],
-            end_time=s["end_time"],
-            duration_seconds=s["duration_seconds"],
-            avg_hr=s["avg_hr"],
-            max_hr=s["max_hr"],
-            distance_meters=s["distance_meters"],
+            source="polar_accesslink",
+            source_session_id=s["external_id"],
+            session_date=start.date() if start else None,
+            start_time=start,
+            stop_time=s["end_time"],
+            sport_name=s["sport"],
+            duration_minutes=round(dur_s / 60, 2) if dur_s else None,
+            hr_avg=s["avg_hr"],
+            hr_max=s["max_hr"],
             calories=s["calories"],
-            hr_zones=s["hr_zones"],
+            **zones,
         ))
         stored += 1
 
     db.commit()
     return {"synced": stored, "available": len(sessions)}
-
-
-@router.get("/sessions", response_model=list[ExerciseSessionOut])
-def get_polar_sessions(
-    limit: int = 20,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return (
-        db.query(models.ExerciseSession)
-        .filter(
-            models.ExerciseSession.user_id == current_user.id,
-            models.ExerciseSession.source.in_(["polar", "polar_flow_export"]),
-        )
-        .order_by(models.ExerciseSession.start_time.desc())
-        .limit(limit)
-        .all()
-    )
 
 
 # ── aerobic sessions (ZIP import) ──────────────────────────────────────────────
