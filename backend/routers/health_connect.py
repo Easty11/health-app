@@ -18,9 +18,14 @@ from database import get_db
 
 router = APIRouter(prefix="/health-connect", tags=["health-connect"])
 
-SLEEP_STAGE_DEEP  = 4   # Health Connect SleepStageType constants
-SLEEP_STAGE_REM   = 5
-SLEEP_STAGE_LIGHT = 2
+# Health Connect SleepSessionRecord.StageType — official enum, confirmed on-device
+# 2026-06-22 (SM-S921B); Samsung Health writes 1/4/5/6. See DECISIONS_LOG #20.
+# Previously DEEP=4/REM=5/LIGHT=2, which mislabelled LIGHT as deep, DEEP as REM,
+# dropped REM, and left light always 0 (stage 2 is never emitted).
+SLEEP_STAGE_AWAKE = 1
+SLEEP_STAGE_LIGHT = 4
+SLEEP_STAGE_DEEP  = 5
+SLEEP_STAGE_REM   = 6
 
 
 # ---------- flexible incoming schemas ----------
