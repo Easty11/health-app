@@ -84,7 +84,7 @@ Format: Decision · Rationale · Status · Do not revisit unless…
 
 **Rationale:** The SDK is an official channel with lower fragility than UI scraping. Developer mode (tap Samsung Health version number 10 times) allows reads without formal partnership approval — sufficient for personal/family use. Formal Samsung partnership only required for commercial distribution.
 
-**Status:** Active. Immediate next action: live SDK read with a known-populated metric as positive control + HRV query. Record result as a "how you know" artifact.
+**Status:** Active (non-HRV metrics only). HRV via scraper confirmed as permanent path — SDK HRV investigation closed. Remaining scope: SDK migration for sleep stages, SpO2, skin temperature when priority warrants.
 
 **Do not revisit unless:** Samsung removes developer mode access.
 
@@ -98,7 +98,7 @@ Format: Decision · Rationale · Status · Do not revisit unless…
 
 **In the interim:** Surface training load (Hevy ACWR), sleep duration, and subjective check-in as separate indicators — not aggregated into a composite score.
 
-**Status:** Active constraint until HRV path confirmed end-to-end.
+**Status:** Active constraint. Scraper path confirmed working; pending 7+ consecutive days of readings before composite score is unblocked.
 
 ---
 
@@ -206,6 +206,37 @@ Format: Decision · Rationale · Status · Do not revisit unless…
 **Status:** Working in production. Sync is manual (button); a scheduled v4 sync is the agreed automation path (NOT scheduled ZIP download — Polar has no export API and download links expire).
 
 **Do not revisit unless:** Polar exposes cardio_load/zones via a v4 endpoint (flagged follow-up — find the `features` syntax or per-session sub-resource), or the user starts recording on a Polar *watch* (which would also make v3-style data available).
+
+---
+
+### 18. Readiness algorithm: ACWR rejected — Banister fitness-fatigue model adopted
+
+**Decision:** The readiness algorithm uses the Banister fitness-fatigue impulse-response model (Form = Fitness − Fatigue). ACWR (Acute:Chronic Workload Ratio) is explicitly rejected.
+
+**Rationale:** ACWR has documented statistical limitations: mathematical coupling between numerator and denominator, sensitivity to arbitrary time-window boundaries, and no representation of physiological adaptation. The Banister model applies dual EWMAs to a daily training load signal with separate time constants, producing a Fitness term (long-term adaptation, τ ≈ 42 days) and a Fatigue term (short-term stress, τ ≈ 7 days). Form = Fitness − Fatigue represents readiness — positive Form means more adapted than fatigued.
+
+**Architecture:**
+- Daily Training Load = session RPE × duration for cardio + volume-load proxy for strength
+- Fitness = EWMA(TL, τ ≈ 42 days)
+- Fatigue = EWMA(TL, τ ≈ 7 days)
+- Form = Fitness − Fatigue
+- Form integrated with RMSSD baseline deviation, sleep architecture score, and RHR trend into composite readiness score
+
+**Status:** Architecture decided. Not yet implemented. Composite score remains suppressed pending 7+ days of confirmed HRV readings (see Decision 8).
+
+**Do not revisit unless:** Calibration data over ≥6 weeks shows consistent divergence between model-predicted Form and user-reported readiness — in which case time constants are the first tuning lever before reconsidering the model family.
+
+---
+
+### 19. exercise_sessions table retained as future ingestion surface; ORM model removed
+
+**Decision:** The `exercise_sessions` DB table is kept (not dropped). The `ExerciseSession` SQLAlchemy model is removed from `models.py` because nothing currently writes to this table. All live aerobic data (Polar v4, ZIP import) lands in `aerobic_sessions`. `exercise_sessions` is reserved for future non-Polar sources (Garmin direct API, manual entry) where a simpler schema without cardio_load/HR-zone columns is sufficient. All four MCP tool queries that previously targeted `exercise_sessions` are re-pointed at `aerobic_sessions` with column remapping (`sport_name`, `stop_time`, `duration_minutes*60`, `hr_avg`, `hr_max`, `z1–z5_seconds` for HR zones).
+
+**Rationale:** Dropping the table would require a migration and leaves no obvious home for future Garmin data. The simpler `exercise_sessions` schema (duration_seconds, avg_hr — no Polar-specific cardio_load or zone columns) is a better fit for devices that report only summary metrics. ORM model deleted because no writer exists; re-add when the first non-Polar ingestion path is implemented.
+
+**Status:** Active. Table exists, empty, no ORM model.
+
+**Do not revisit unless:** A second aerobic source (Garmin, manual) is ready to ingest — at that point evaluate whether to populate `exercise_sessions` or extend `aerobic_sessions` with a nullable source-type discriminator.
 
 ---
 

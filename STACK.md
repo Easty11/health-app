@@ -125,9 +125,9 @@ carries cardio_load + HR zones). v4 and ZIP dedup by shared `identifier.id`.
 | Source | Status | Notes |
 |--------|--------|-------|
 | Hevy | ✅ Working | Direct API. Routine creation via XML block pattern. create_workout pattern also works and is preferred for custom exercises. |
-| Samsung Health Accessibility Scraper | ✅ Working | Confirmed full overnight extraction: HRV (RMSSD), sleep stages, respiratory rate, sleep efficiency, SpO2. Primary HRV path. Fragility risk — requires canary + honest score degradation on failure. |
+| Samsung Health Accessibility Scraper | ✅ Working | Confirmed full overnight extraction: HRV (RMSSD), sleep stages, respiratory rate, sleep efficiency, SpO2. Confirmed permanent HRV path — SDK HRV investigation closed. Fragility risk: canary + honest score degradation required before considered production-hardened. |
 | Health Connect (Android) | 🔧 Partial | Steps and sleep duration confirmed. Samsung Health confirmed NOT writing HRV, RHR, sleep stages, or respiratory rate to Health Connect. Permission issues (record types 38, 35, 11, 37) partially resolved via adb pm grant. |
-| Samsung Health Data SDK | 📋 Planned | Migration target for metrics it can serve reliably (sleep stages, SpO2, skin temperature). Live SDK read with positive control is the agreed next action. If HRV returns real values, scraper scope shrinks. |
+| Samsung Health Data SDK | 📋 Planned | Migration target for non-HRV metrics (sleep stages, SpO2, skin temperature). HRV via scraper confirmed as permanent path — SDK HRV angle closed. |
 | Polar H10 (aerobic sessions) | ✅ Working | **Direct Polar AccessLink v4 Dynamic API** (`auth.polar.com` OAuth, `GET /v4/data/training-sessions/list`). NOT via Health Connect. v3 was abandoned — its exercise-transactions silently exclude Polar-Flow-app-recorded sessions (which is how this user records H10 via phone), returning 204. v4's date-range endpoint returns them. Stored in `aerobic_sessions` (source=`polar_v4`). v4 list omits cardio_load/HR-zones (those come only from ZIP export, source=`polar_flow_export`). Session-only; no resting HRV from H10. See Decision 17. |
 | Garmin (wife) | ⏳ Pending | Garmin Connect → Health Connect. Not verified on-device. |
 | GameTraka | 📋 Planned | Rugby performance data (GPS, player load, collisions) |

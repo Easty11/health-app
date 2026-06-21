@@ -187,9 +187,19 @@ def get_training_sessions(user_id: int = 1, days: int = 28) -> str:
 
     rows = _db_rows(
         """
-        SELECT source, sport, start_time, end_time, duration_seconds,
-               avg_hr, max_hr, distance_meters, calories, hr_zones
-        FROM exercise_sessions
+        SELECT source, sport_name AS sport, start_time, stop_time AS end_time,
+               (duration_minutes * 60)::int AS duration_seconds,
+               hr_avg AS avg_hr, hr_max AS max_hr,
+               NULL::float AS distance_meters, calories,
+               CASE WHEN z1_seconds IS NOT NULL
+                    THEN jsonb_build_object(
+                        '1', ROUND(COALESCE(z1_seconds, 0) / 60.0),
+                        '2', ROUND(COALESCE(z2_seconds, 0) / 60.0),
+                        '3', ROUND(COALESCE(z3_seconds, 0) / 60.0),
+                        '4', ROUND(COALESCE(z4_seconds, 0) / 60.0),
+                        '5', ROUND(COALESCE(z5_seconds, 0) / 60.0))
+                    ELSE NULL END AS hr_zones
+        FROM aerobic_sessions
         WHERE user_id = :user_id
           AND start_time >= CURRENT_DATE - :days
         ORDER BY start_time DESC
@@ -353,8 +363,8 @@ def get_readiness_snapshot(user_id: int = 1) -> str:
     session_stats = _db_rows(
         """
         SELECT COUNT(*) AS session_count,
-               SUM(duration_seconds) AS total_seconds
-        FROM exercise_sessions
+               SUM((duration_minutes * 60)::int) AS total_seconds
+        FROM aerobic_sessions
         WHERE user_id = :user_id
           AND start_time >= CURRENT_DATE - 7
         """,
@@ -426,8 +436,8 @@ def get_training_load(user_id: int = 1) -> str:
 
     rows = _db_rows(
         """
-        SELECT start_time, duration_seconds, avg_hr
-        FROM exercise_sessions
+        SELECT start_time, (duration_minutes * 60)::int AS duration_seconds, hr_avg AS avg_hr
+        FROM aerobic_sessions
         WHERE user_id = :user_id
           AND start_time >= CURRENT_DATE - 28
         ORDER BY start_time DESC
@@ -438,7 +448,7 @@ def get_training_load(user_id: int = 1) -> str:
     first_row = _db_rows(
         """
         SELECT MIN(start_time) AS first_session
-        FROM exercise_sessions
+        FROM aerobic_sessions
         WHERE user_id = :user_id
         """,
         {"user_id": user_id},
@@ -496,7 +506,7 @@ def get_training_load(user_id: int = 1) -> str:
         f"Interpretation:         {interpretation}",
         f"\nLoad metric: TRIMP proxy (duration_min × avg_hr) where HR available; duration_min otherwise.",
         f"Data from: {data_from}",
-        f"Note: Hevy volume load is NOT yet integrated into this calculation (exercise_sessions only).",
+        f"Note: Hevy volume load is NOT yet integrated into this calculation (aerobic_sessions only).",
     ]
 
     return "\n".join(lines)

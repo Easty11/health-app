@@ -8,7 +8,6 @@ Last updated: June 2026
 
 | Item | Notes |
 |------|-------|
-| Samsung Health Data SDK live read | Agreed next action. Run positive control (sleep or SpO2) + HRV query. If HRV returns real values → scraper scope shrinks. If null while control succeeds → scraper confirmed as permanent HRV path. Record result as "how you know" artifact in Decisions Log. |
 | Fix Health Connect permissions | Companion app returning errors for record types 38, 35, 11, 37. Partially resolved via adb pm grant; proper in-app dialog fix still needed. |
 | Samsung Health package name correction | Re-run Health Connect diagnostic with `com.sec.android.app.shealth` filter (not `com.samsung.health`). Verify via Railway Postgres query, not on-device UI. |
 | Morning check-in screen | Hooper Index pattern (fatigue, sleep quality, stress, soreness). Primary daily touchpoint. Mutable post-submission with audit trail. See Ideas file for DOMS/soreness split design. |
@@ -23,7 +22,7 @@ Last updated: June 2026
 | Item | Notes |
 |------|-------|
 | Scraper canary + honest score degradation | Detect null/stale/implausible scraper output. Surface degraded state to user when HRV unavailable — never silently score without it. |
-| Basic readiness score | Formally suppressed until HRV data path is confirmed end-to-end with 7+ days of readings. Once confirmed: rule-based composite using RMSSD baseline deviation, sleep architecture, RHR trend, ACWR. |
+| Basic readiness score | Formally suppressed until HRV data path is confirmed end-to-end with 7+ days of readings (scraper path confirmed; pending 7-day sample). Once confirmed: Banister fitness-fatigue model (Form = Fitness − Fatigue, dual EWMA) integrated with RMSSD baseline deviation, sleep architecture, and RHR trend. ACWR rejected — see Decisions Log. |
 | Manual cardio entry | Unconnected sessions (Rogue Echo bike, gym machines) must be loggable to prevent ACWR silently under-reading load. |
 | CLAUDE.md files for both repos | Deferred to laptop. Backend repo and health-connect-app repo both need CLAUDE.md. Drafts exist from June 2026 session. |
 | Deploy companion app to wife's phone | Garmin → Health Connect path. Verify data flowing before deploy. |
@@ -55,7 +54,6 @@ Last updated: June 2026
 
 | Blocker | Blocks |
 |---------|--------|
-| HRV data path confirmation (scraper or SDK) | Composite readiness score |
 | Health Connect permissions fix | Polar and Garmin session data |
 | Conversation history persistence | AI coaching continuity across sessions |
 | Wife companion app deploy | Wife onboarding |
