@@ -16,7 +16,11 @@ in a single backfill at 2026-06-21 19:04Z; live sleep stages currently come from
 scraper). Also re-verify the HC `sleep_score` derivation and the `_section_health_connect`
 AI-prompt block, which both consume the mislabelled values.
 
-**Status:** open
+**Status:** resolved → #20. Fix deployed to Railway (PR #2) and all 31 HC rows
+re-synced from device on 2026-06-22 (30-day backfill, range 05-22→06-21). Verified
+against Railway Postgres: `light_sleep_minutes` now populated (was 0 on every row),
+deep/REM no longer swapped, slivers no longer truncated; corrected values track the
+scraper. Surfaced a new date-attribution bug — see Q4.
 
 ---
 
@@ -40,6 +44,22 @@ by duplicate HR timestamps from the same record-doubling as Q2. The artifact fla
 on real HR density during sleep, so this must be re-measured after HR is de-duped. Gate 3 is
 INCONCLUSIVE — do **not** calibrate `DELTA_ARTIFACT` / `SPREAD_SPIKE` / `SHORT_MS` or wire
 `runDeepConfidence` into readiness/Banister until resolved.
+
+**Status:** open
+
+---
+
+## Q4. HC dates each night one day earlier than the scraper
+
+After the Q1 backfill, corrected HC stage minutes match the scraper but under a consistent
+one-day shift: `health_connect_syncs[date] ≈ samsung_hrv_readings[date+1]` (3 nights match
+all three stages exactly, the rest within 1–2 min; 0 same-date matches). `_aggregate_day`
+attributes a session by its bed-date while the scraper keys on the wake-date. This
+pre-existed the Q1 fix — it was invisible while the HC values were garbage. It matters
+because `_section_health_connect` selects "today/yesterday" and the dashboard joins by
+date, so HC and scraper rows for the *same physical night* land on different days. Decide a
+single canonical sleep-date convention (likely wake-date, to match the scraper) and align
+`_aggregate_day`.
 
 **Status:** open
 
