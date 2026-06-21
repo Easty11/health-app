@@ -85,28 +85,6 @@ class UserKnowledgeEntry(Base):
     notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
-class ExerciseSession(Base):
-    """Aerobic/cardio sessions from Polar, Garmin, or manual entry."""
-    __tablename__ = "exercise_sessions"
-    __table_args__ = (
-        UniqueConstraint("user_id", "external_id", "source", name="uq_exercise_session"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    source: Mapped[str] = mapped_column(String(50), nullable=False)          # 'polar', 'garmin', 'manual'
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)   # Polar exercise ID
-    sport: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    avg_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
-    calories: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    hr_zones: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
 
 class DailyRecord(Base):
     """

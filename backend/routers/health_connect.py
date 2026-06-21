@@ -18,9 +18,14 @@ from database import get_db
 
 router = APIRouter(prefix="/health-connect", tags=["health-connect"])
 
-SLEEP_STAGE_DEEP  = 4   # Health Connect SleepStageType constants
-SLEEP_STAGE_REM   = 5
-SLEEP_STAGE_LIGHT = 2
+# Health Connect SleepSessionRecord.StageType — official enum, confirmed on-device
+# 2026-06-22 (SM-S921B); Samsung Health writes 1/4/5/6. See DECISIONS_LOG #20.
+# Previously DEEP=4/REM=5/LIGHT=2, which mislabelled LIGHT as deep, DEEP as REM,
+# dropped REM, and left light always 0 (stage 2 is never emitted).
+SLEEP_STAGE_AWAKE = 1
+SLEEP_STAGE_LIGHT = 4
+SLEEP_STAGE_DEEP  = 5
+SLEEP_STAGE_REM   = 6
 
 
 # ---------- flexible incoming schemas ----------
@@ -189,16 +194,20 @@ def _parse_date(iso: str) -> date:
 
 
 def _stage_minutes(stages: list[SleepStage], stage_type: int) -> int:
-    total = 0
+    # Sum total seconds across matching segments, then floor once. The previous
+    # per-segment int() floor zeroed every sub-minute sliver — and deep sleep is
+    # mostly slivers (gate showed ~26 of 30 deep segments <3 min). See
+    # DECISIONS_LOG #20 / OPEN_QUESTIONS Q1.
+    total_seconds = 0.0
     for s in stages:
         if s.stage == stage_type:
             try:
                 start = datetime.fromisoformat(s.startTime[:19])
                 end = datetime.fromisoformat(s.endTime[:19])
-                total += int((end - start).total_seconds() // 60)
+                total_seconds += (end - start).total_seconds()
             except (ValueError, AttributeError):
                 pass
-    return total
+    return int(total_seconds // 60)
 
 
 def _sleep_score(deep: int, rem: int, total: int) -> Optional[int]:
