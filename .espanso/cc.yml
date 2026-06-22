@@ -1,0 +1,28 @@
+# Canonical source for the `;cc` chat close-out snippet.
+# SHARED LOOP RULE — edit here in health-app, propagate verbatim to every repo.
+# The body MUST match the pending-commit-queue payload defined in CLAUDE.md
+# ("Session rituals"). Do not let this snippet and CLAUDE.md drift.
+#
+# Install (Windows): copy this file into your espanso match dir
+#   %APPDATA%\espanso\match\cc.yml
+# then run:  espanso restart
+# Verify path with:  espanso path
+
+matches:
+  - trigger: ";cc"
+    replace: |
+      Chat close-out. Emit the PENDING-COMMIT QUEUE for this session and nothing else.
+
+      For everything decided this session, output canonical-format entries — ready to
+      paste, or to file as a GitHub issue for @claude, with zero reformatting:
+
+      DECISIONS_LOG.md entries — format: Decision · Rationale · Status · How you know · Do not revisit unless.
+      Every code-gating decision MUST carry a "How you know" artifact: a confirmed test, a
+      verified query, or official documentation. "The API has a field for it" is insufficient.
+      Number new entries from the current highest. To change a locked decision, add a new
+      entry that supersedes it by number — never edit the old text.
+
+      OPEN_QUESTIONS.md entries — one status each: open / verifying / resolved -> #.
+
+      Flag every entry PENDING. Write NOTHING to project knowledge. Chat proposes; Code is
+      the only writer; this queue stays provisional until a commit lands it.
