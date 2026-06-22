@@ -65,6 +65,22 @@ single canonical sleep-date convention (likely wake-date, to match the scraper) 
 
 ---
 
+## Q5. Backend `/health-connect/sync` dual-field acceptance — collapse after confirming what mobile posts
+
+`routers/health_connect.py` accepts both the raw Health Connect library field names and the
+mapped JS names for the same value — `HeartRateRecord.beatsPerMinute`/`bpm` (`.get_bpm()`),
+`HRVRecord.heartRateVariabilityMillis`/`rmssd` (`.get_rmssd()`), `StepsRecord.startTime`/`date`
+(`.get_start()`) — the "intentionally flexible" tolerance that exists only because the contract
+was not single-sourced. With the sleep-stage enum now single-sourced (DECISIONS_LOG #24), the
+same can be done here: capture one real on-device sync, confirm exactly which field names
+`health-connect-app` actually posts, pick the canonical name, then collapse the dual acceptance
+and delete the `.get_*()` reconcilers (this is "Phase 2" of the contract work). Which name to
+keep is unverified until an actual payload is captured.
+
+**Status:** open
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
