@@ -51,6 +51,7 @@ def _serialize_reading(r: models.SamsungHRVReading) -> dict[str, Any]:
         "total_sleep_time_minutes": r.total_sleep_time_minutes,
         "spo2_average_pct": r.spo2_average_pct,
         "extraction_method": r.extraction_method,
+        "context": r.context,
     }
 
 
@@ -95,7 +96,10 @@ def get_health_summary(
 ):
     readings = (
         db.query(models.SamsungHRVReading)
-        .filter_by(user_id=current_user.id)
+        .filter(
+            models.SamsungHRVReading.user_id == current_user.id,
+            models.SamsungHRVReading.context != 'session',
+        )
         .order_by(models.SamsungHRVReading.captured_at.desc())
         .limit(7)
         .all()
@@ -141,7 +145,11 @@ def analyse_session(
         try:
             hrv_row = (
                 db.query(models.SamsungHRVReading)
-                .filter_by(user_id=current_user.id, captured_at=date.fromisoformat(workout_date))
+                .filter(
+                    models.SamsungHRVReading.user_id == current_user.id,
+                    models.SamsungHRVReading.captured_at == date.fromisoformat(workout_date),
+                    models.SamsungHRVReading.context != 'session',
+                )
                 .first()
             )
             if hrv_row:

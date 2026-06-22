@@ -359,6 +359,7 @@ async def chat(
         .filter(
             models.SamsungHRVReading.user_id == current_user.id,
             models.SamsungHRVReading.captured_at >= samsung_window_start,
+            models.SamsungHRVReading.context != 'session',
         )
         .order_by(models.SamsungHRVReading.captured_at.desc())
         .all()

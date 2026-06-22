@@ -38,6 +38,7 @@ def get_summary(
         .filter(
             models.SamsungHRVReading.user_id == current_user.id,
             models.SamsungHRVReading.captured_at >= week_start,
+            models.SamsungHRVReading.context != 'session',
         )
         .order_by(models.SamsungHRVReading.captured_at.desc())
         .all()
@@ -45,7 +46,10 @@ def get_summary(
     # Fall back to the most recent reading even if it's older than 7 days.
     latest = readings[0] if readings else (
         db.query(models.SamsungHRVReading)
-        .filter_by(user_id=current_user.id)
+        .filter(
+            models.SamsungHRVReading.user_id == current_user.id,
+            models.SamsungHRVReading.context != 'session',
+        )
         .order_by(models.SamsungHRVReading.captured_at.desc())
         .first()
     )

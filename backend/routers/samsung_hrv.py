@@ -5,7 +5,7 @@ service on the companion Android app.
 Upserts on (user_id, captured_at) — a re-run on the same day overwrites.
 """
 from datetime import date
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -17,6 +17,8 @@ from auth import get_current_user
 from database import get_db
 
 router = APIRouter(prefix="/samsung-hrv", tags=["samsung-hrv"])
+
+HRVContext = Literal["passive_overnight", "calibration", "session"]
 
 
 class HRVReadingIn(BaseModel):
@@ -40,6 +42,7 @@ class HRVReadingIn(BaseModel):
     total_sleep_time_minutes: Optional[int] = None
     spo2_average_pct: Optional[float] = None
     extraction_method: str = "accessibility"
+    context: HRVContext = "passive_overnight"
 
 
 class SyncRequest(BaseModel):
@@ -58,7 +61,7 @@ def sync_readings(
             insert(models.SamsungHRVReading)
             .values(**values)
             .on_conflict_do_update(
-                constraint="uq_samsung_hrv_user_date",
+                constraint="uq_samsung_hrv_user_date_context",
                 set_={
                     k: v for k, v in values.items()
                     if k not in ("user_id", "captured_at")

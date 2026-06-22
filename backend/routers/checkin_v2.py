@@ -63,6 +63,7 @@ def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, An
         .filter(
             models.SamsungHRVReading.user_id == user_id,
             models.SamsungHRVReading.captured_at <= for_date,
+            models.SamsungHRVReading.context != 'session',
         )
         .order_by(models.SamsungHRVReading.captured_at.desc())
         .first()
@@ -172,6 +173,7 @@ def get_prefill(
         .filter(
             models.SamsungHRVReading.user_id == current_user.id,
             models.SamsungHRVReading.captured_at <= today,
+            models.SamsungHRVReading.context != 'session',
         )
         .order_by(models.SamsungHRVReading.captured_at.desc())
         .limit(7)

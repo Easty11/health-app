@@ -235,6 +235,8 @@ class SamsungHRVReading(Base):
     total_sleep_time_minutes: Mapped[int | None] = mapped_column(Integer)
     spo2_average_pct: Mapped[float | None] = mapped_column(Float)
     extraction_method: Mapped[str] = mapped_column(String(50), server_default=text("'accessibility'"))
+    # passive_overnight | calibration | session
+    context: Mapped[str] = mapped_column(String(30), nullable=False, server_default=text("'passive_overnight'"))
 
 
 class CapabilityState(Base):
