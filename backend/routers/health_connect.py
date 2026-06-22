@@ -8,6 +8,8 @@ and any field names used by the JS mapping layer.
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
+from enum import IntEnum
+
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -18,14 +20,24 @@ from database import get_db
 
 router = APIRouter(prefix="/health-connect", tags=["health-connect"])
 
-# Health Connect SleepSessionRecord.StageType — official enum, confirmed on-device
-# 2026-06-22 (SM-S921B); Samsung Health writes 1/4/5/6. See DECISIONS_LOG #20.
-# Previously DEEP=4/REM=5/LIGHT=2, which mislabelled LIGHT as deep, DEEP as REM,
-# dropped REM, and left light always 0 (stage 2 is never emitted).
-SLEEP_STAGE_AWAKE = 1
-SLEEP_STAGE_LIGHT = 4
-SLEEP_STAGE_DEEP  = 5
-SLEEP_STAGE_REM   = 6
+# Health Connect SleepSessionRecord.StageType — complete official enum.
+# Samsung Health writes 1/4/5/6; other devices may emit 0/2/3/7.
+# Defining all 8 values prevents 422 rejections on valid-but-uncommon stages.
+# See DECISIONS_LOG #20 for the earlier mapping correction (DEEP/REM/LIGHT mislabelling).
+class SleepStageType(IntEnum):
+    UNKNOWN     = 0
+    AWAKE       = 1
+    SLEEPING    = 2
+    OUT_OF_BED  = 3
+    LIGHT       = 4
+    DEEP        = 5
+    REM         = 6
+    AWAKE_IN_BED = 7
+
+SLEEP_STAGE_AWAKE = SleepStageType.AWAKE
+SLEEP_STAGE_LIGHT = SleepStageType.LIGHT
+SLEEP_STAGE_DEEP  = SleepStageType.DEEP
+SLEEP_STAGE_REM   = SleepStageType.REM
 
 
 # ---------- flexible incoming schemas ----------
@@ -59,7 +71,7 @@ class HRVRecord(BaseModel):
 
 
 class SleepStage(BaseModel):
-    stage: int
+    stage: SleepStageType
     startTime: str
     endTime: str
 
