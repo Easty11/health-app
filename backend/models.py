@@ -235,3 +235,76 @@ class SamsungHRVReading(Base):
     total_sleep_time_minutes: Mapped[int | None] = mapped_column(Integer)
     spo2_average_pct: Mapped[float | None] = mapped_column(Float)
     extraction_method: Mapped[str] = mapped_column(String(50), server_default=text("'accessibility'"))
+
+
+class CapabilityState(Base):
+    """
+    Adaptive Exposure Engine — "map contents" (spec §3, v2.1 split).
+
+    The axis list (engine/taxonomy.py) says which capability regions exist; this
+    table says where THIS user stands on each one. The map self-builds one probe
+    per session (§2.1): a row is written/updated only when the adaptation loop
+    tags a logged session (engine/adaptation.py), so a missing row == untested.
+
+    Readable per-side (§F symmetry layer): one row per (region, side), where side
+    is 'bilateral' for non-lateralised regions or 'left' / 'right' otherwise.
+
+    source/confidence-tagged per the device-agnostic schema rule (CLAUDE.md).
+    Standalone table for now; folds into `health_events` when that schema lands
+    (DECISIONS_LOG — Adaptive Exposure Engine entry). Capability state is
+    self-reported through the education idiom (spec §12), never a wearable metric.
+    """
+    __tablename__ = "capability_state"
+    __table_args__ = (
+        UniqueConstraint("user_id", "region_key", "side", name="uq_capability_user_region_side"),
+        Index("ix_capability_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    region_key: Mapped[str] = mapped_column(String(100), nullable=False)   # matches taxonomy Region.key
+    side: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'bilateral'"))
+    # untested | pass | deficient | fortifying
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'untested'"))
+    # probe | fortify | history | manual — how this row's status was established
+    source: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # last response tag, revealed-signal text, stand-down flags, free notes
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    last_probed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    taxonomy_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class FortificationProfile(Base):
+    """
+    Adaptive Exposure Engine — fortification-target profile (spec §9).
+
+    Structured, per-user object that replaces the hardcoded injury string in
+    context_builder. One row per user, so multi-user scale falls out for free.
+    `probe_queue` is COMPUTED at request time (spec §4), never stored.
+    """
+    __tablename__ = "fortification_profiles"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_fortification_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    floor: Mapped[dict | None] = mapped_column(JSON, nullable=True)          # {demonstrated, tag: clean|managed}
+    ceiling: Mapped[str | None] = mapped_column(String(20), nullable=True)   # breadth | peak
+    horizon: Mapped[str | None] = mapped_column(String(30), nullable=True)   # life | event-dated
+    horizon_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    primary_target: Mapped[str | None] = mapped_column(String(100), nullable=True)   # region key or descriptor
+    primary_target_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    live_signals: Mapped[list | None] = mapped_column(JSON, nullable=True)   # [{signal, side, branch_param, status}]
+    hard_stops: Mapped[list | None] = mapped_column(JSON, nullable=True)     # [{region_key|pattern, side, reason}]
+    vehicle_bias: Mapped[list | None] = mapped_column(JSON, nullable=True)   # ranked vehicle keys for the target
+    # standing Probe allocation — never drops to zero (spec §2)
+    probe_budget: Mapped[float] = mapped_column(Float, nullable=False, server_default=text("0.25"))
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
