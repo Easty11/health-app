@@ -34,12 +34,6 @@ class SleepStageType(IntEnum):
     REM         = 6
     AWAKE_IN_BED = 7
 
-    @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema, handler):
-        json_schema = handler(core_schema)
-        json_schema["x-enum-varnames"] = [m.name for m in cls]
-        return json_schema
-
 SLEEP_STAGE_AWAKE = SleepStageType.AWAKE
 SLEEP_STAGE_LIGHT = SleepStageType.LIGHT
 SLEEP_STAGE_DEEP  = SleepStageType.DEEP
