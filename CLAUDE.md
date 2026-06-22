@@ -122,9 +122,15 @@ must match it.
 
 _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 
-- [ ] First reconciliation: bring `DECISIONS_LOG.md` current — supersede #3 (Polar is not
-      session-only; Accesslink live, SDK R-R is the highest-fidelity HRV path), add the
-      v3→v4, repo-canonical, GitHub-inbound, and espanso-ritual decisions.
+- [x] First reconciliation — `DECISIONS_LOG.md` brought current: v3→v4 (#17),
+      repo-canonical (#25), GitHub-inbound (#26), espanso-ritual (#27) logged; loop
+      rituals committed (`11c82f1`).
+- [ ] **Supersede #3** — the one reconciliation entry still owed: Polar not session-only,
+      AccessLink live, SDK R-R as highest-fidelity HRV path. Blocked on a *How you know*
+      artifact (Polar R-R verification).
+- [ ] **Next engineering action — fix Q2:** de-duplicate `validateNight()` SleepSession
+      records (companion) before `runDeepConfidence`; unblocks Q3, then readiness/Banister
+      wiring. Q4 (date attribution) runs in parallel.
 
 ---
 

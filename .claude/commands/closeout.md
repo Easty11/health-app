@@ -28,10 +28,19 @@ Execute these steps in order:
    with zero chat history: current sprint (from the `CLAUDE.md` sprint block / `ROADMAP.md`),
    open questions grouped by status, and the single clearest **next action**.
 
-5. **Overwrite `closeout.md`** (single file, lowercase) with exactly three sections: real
+5. **Update the CLAUDE.md "Current sprint" block** to reflect what landed this session and
+   the current `ROADMAP.md` / `ptb-tasks` state. Code maintains this block per the contract —
+   do not leave completed reconciliation items showing as open.
+
+6. **Overwrite `closeout.md`** (single file, lowercase) with exactly three sections: real
    commits this session · pending-queue reconciliation · cold-resume handoff. **Never
    append**, never narrate the act of writing the close-out, never write a "suggested
    commits" list.
+
+7. **Commit the close-out.** Stage `closeout.md` plus any store / CLAUDE.md updates from
+   this ritual and commit (`chore: session close-out`). The commit is the only sync point —
+   an uncommitted `closeout.md` never reaches the repo→chat mirror and stays provisional.
+   If the tree has unrelated uncommitted work, commit only the close-out artifacts.
 
 Hard rules (from `CLAUDE.md`):
 - Code is the only writer — this command may commit.
