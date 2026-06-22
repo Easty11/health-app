@@ -66,33 +66,19 @@ app.include_router(engine_router.router)
 app.include_router(chat_router.router)
 
 
-_openapi_cache: dict | None = None
-
-
-def custom_openapi():
-    global _openapi_cache
-    if _openapi_cache:
-        return _openapi_cache
-    from fastapi.openapi.utils import get_openapi
-    schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        routes=app.routes,
-    )
-    sleep_stage = schema.get("components", {}).get("schemas", {}).get("SleepStageType")
-    if sleep_stage is not None:
-        from routers.health_connect import SleepStageType
-        sleep_stage["x-enum-varnames"] = [m.name for m in SleepStageType]
-    _openapi_cache = schema
-    return schema
-
-
-app.openapi = custom_openapi
-
-
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
 
 app.mount("/", _mcp_app)
+
+# Inject x-enum-varnames into SleepStageType so orval/openapi-generator emits
+# named enum members instead of bare integers. Must run after all routers are
+# included so app.openapi() sees the complete route list.
+from routers.health_connect import SleepStageType as _SleepStageType
+_schema = app.openapi()
+_st = _schema.get("components", {}).get("schemas", {}).get("SleepStageType")
+if _st is not None:
+    _st["x-enum-varnames"] = [m.name for m in _SleepStageType]
+app.openapi_schema = _schema
