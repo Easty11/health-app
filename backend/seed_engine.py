@@ -1,0 +1,107 @@
+"""
+Seed the Adaptive Exposure Engine first instance — Luke / back-resilience (spec §10).
+
+Idempotent. Run once locally / after deploy:
+
+    python seed_engine.py [user_email]
+
+Writes, for the target user:
+  1. The fortification-target profile (engine.profile.LUKE_PROFILE_SEED).
+  2. Capability-state seed — the demonstrated sagittal-strength floor (pass) and
+     the active fortify target (fortifying). Everything else stays untested so the
+     map self-builds via Probe (§2.1).
+  3. The three known injuries into the structured ledger (UserKnowledgeEntry
+     type='injury'), so they surface in the schedule section AND drive the engine's
+     §8 contraindication filters — replacing the hardcoded injury string honestly.
+"""
+from __future__ import annotations
+
+import sys
+
+import models
+from database import SessionLocal
+from engine import profile as profile_mod
+
+DEFAULT_EMAIL = "Luke.eastlake@outlook.com"
+
+# Real injuries, structured for both surfacing and §8 contraindication logic.
+_INJURY_SEED = [
+    {
+        "key": "injury_finger_left",
+        "value": {
+            "body_part": "finger",
+            "side": "left",
+            "signal_type": "mechanical",
+            "restrictions": ["heavy gripping"],
+            "detail": "Left little finger",
+        },
+    },
+    {
+        "key": "injury_shoulder_right",
+        "value": {
+            "body_part": "shoulder",
+            "side": "right",
+            "signal_type": "mechanical",
+            "restrictions": ["horizontal adduction", "overhead work"],
+            "detail": "Right shoulder — caution with horizontal adduction and overhead work",
+        },
+    },
+    {
+        "key": "injury_hamstring_left",
+        "value": {
+            "body_part": "hamstring",
+            "side": "left",
+            "signal_type": "mechanical",
+            "restrictions": ["striding", "sprinting"],
+            "detail": "Left hamstring — provoked by striding/sprinting",
+        },
+    },
+]
+
+
+def _seed_injuries(db, user_id: int) -> int:
+    written = 0
+    for inj in _INJURY_SEED:
+        existing = (
+            db.query(models.UserKnowledgeEntry)
+            .filter_by(user_id=user_id, key=inj["key"], active=True)
+            .first()
+        )
+        if existing is not None:
+            continue
+        db.add(models.UserKnowledgeEntry(
+            user_id=user_id, type="injury", key=inj["key"],
+            value=inj["value"], source="system", active=True,
+            notes=inj["value"].get("detail"),
+        ))
+        written += 1
+    db.commit()
+    return written
+
+
+def main(email: str) -> None:
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.email.ilike(email)).first()
+        if user is None:
+            user = db.query(models.User).order_by(models.User.id).first()
+            if user is None:
+                print("No users in the database — nothing to seed.")
+                return
+            print(f"No user '{email}'; falling back to first user: {user.email}")
+
+        profile = profile_mod.upsert_profile(db, user.id, profile_mod.LUKE_PROFILE_SEED)
+        cap_rows = profile_mod.seed_capability_state(db, user.id)
+        inj_rows = _seed_injuries(db, user.id)
+
+        print(f"Seeded engine for user {user.id} ({user.email}):")
+        print(f"  fortification profile: target={profile.primary_target}, "
+              f"probe_budget={profile.probe_budget}")
+        print(f"  capability_state rows written: {cap_rows}")
+        print(f"  injury ledger rows written:    {inj_rows}")
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_EMAIL)

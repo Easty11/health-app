@@ -50,18 +50,32 @@ def _days_ago_label(start_str: str, today: datetime) -> str:
 
 # ---------- individual context sections ----------
 
-def _section_user_profile() -> str:
-    """Static athlete profile, prepended to every system prompt."""
+def _section_user_profile(has_structured_profile: bool = False) -> str:
+    """Static athlete profile, prepended to every system prompt.
+
+    When a structured fortification-target profile is present (spec §9), the
+    hardcoded injury list yields to it — injuries are carried in the structured
+    ledger/fortification sections below, not as a frozen string here.
+    """
+    if has_structured_profile:
+        injuries_block = (
+            "- Active injuries and targeting are carried in the structured "
+            "Fortification Target and Weekly Schedule sections below — not hardcoded here.\n"
+        )
+    else:
+        injuries_block = (
+            "- Active injuries:\n"
+            "  - Left little finger\n"
+            "  - Right shoulder — caution with horizontal adduction and overhead work\n"
+            "  - Left hamstring — provoked by striding/sprinting\n"
+        )
     return (
         "## About the user\n"
         "- The user is Luke (\"Easty\"). Primary device is a Samsung Galaxy Ring.\n"
         "- HRV is captured from the Ring via an accessibility scraper, NOT Health Connect.\n"
         "- Strength training is logged in Hevy.\n"
         "- Aerobic sessions use a Polar H10 chest strap.\n"
-        "- Active injuries:\n"
-        "  - Left little finger\n"
-        "  - Right shoulder — caution with horizontal adduction and overhead work\n"
-        "  - Left hamstring — provoked by striding/sprinting\n"
+        f"{injuries_block}"
         "- Readiness algorithm: RMSSD vs the 7-day baseline is the PRIMARY gate; "
         "sleep quality is secondary.\n"
         "\n"
@@ -717,6 +731,126 @@ def _section_schedule(entries: list[Any], now: datetime) -> str:
     return "\n".join(lines)
 
 
+# ---------- Adaptive Exposure Engine sections (Decision Support) ----------
+
+def _section_fortification(profile: dict[str, Any] | None) -> str:
+    """Render the structured fortification-target profile (spec §9) — the object
+    that replaces the hardcoded injury string. Lever, not directive."""
+    if not profile:
+        return ""
+    lines = ["## Fortification Target (Adaptive Exposure Engine)"]
+
+    floor = profile.get("floor") or {}
+    if floor:
+        tag = floor.get("tag")
+        dem = floor.get("demonstrated")
+        floor_str = " / ".join(x for x in (dem, f"tag: {tag}" if tag else None) if x)
+        lines.append(f"- Floor (what you already survive, not Phase 1): {floor_str}")
+    if profile.get("ceiling"):
+        lines.append(f"- Ceiling: {profile['ceiling']}")
+    if profile.get("horizon"):
+        hd = profile.get("horizon_date")
+        lines.append(f"- Horizon: {profile['horizon']}" + (f" ({hd})" if hd else ""))
+    if profile.get("primary_target"):
+        note = profile.get("primary_target_note")
+        lines.append(f"- Primary target (Fortify bias): {profile['primary_target']}")
+        if note:
+            lines.append(f"  - {note}")
+
+    for sig in profile.get("live_signals") or []:
+        bits = [sig.get("signal", "signal")]
+        if sig.get("side"):
+            bits.append(f"{sig['side']}-side")
+        if sig.get("status"):
+            bits.append(sig["status"])
+        line = f"- Live signal: {', '.join(bits)}"
+        if sig.get("self_triage"):
+            line += f" — self-triage: {sig['self_triage']}"
+        lines.append(line)
+
+    for hs in profile.get("hard_stops") or []:
+        what = hs.get("region_key") or hs.get("pattern") or "pattern"
+        side = hs.get("side")
+        reason = hs.get("reason") or ""
+        lines.append(f"- Hard stop: {what}" + (f" ({side})" if side else "") + (f" — {reason}" if reason else ""))
+
+    if profile.get("vehicle_bias"):
+        lines.append(f"- Vehicle bias (ranked): {', '.join(profile['vehicle_bias'])}")
+
+    lines += [
+        "",
+        "This is a lever, not a directive. Interpretation of any formal screen is the "
+        "practitioner's line — the engine probes and surfaces, it does not diagnose.",
+    ]
+    return "\n".join(lines)
+
+
+def _section_probe(selection: dict[str, Any] | None) -> str:
+    """Surface this session's one Probe suggestion + the Fortify recommendation
+    (spec §2, §2.1). Education idiom; never presented as a verdict."""
+    if not selection:
+        return ""
+    lines = ["## This Session — Engine Suggestion"]
+    mode = selection.get("mode_recommended")
+    budget = selection.get("budget") or {}
+    if mode:
+        lines.append(
+            f"- Recommended mode: {mode.upper()} "
+            f"(probe budget {budget.get('probe')}, never zero)"
+        )
+
+    fort = selection.get("fortify") or {}
+    if fort.get("target"):
+        lines.append(f"- FORTIFY (exploit) → {fort.get('target_label') or fort['target']}")
+        vehicles = fort.get("vehicles") or []
+        if vehicles:
+            lines.append("  - Vehicles: " + "; ".join(v.get("label", v.get("key", "")) for v in vehicles[:4]))
+        dosing = fort.get("dosing") or {}
+        if dosing.get("windows"):
+            lines.append(f"  - Load windows: {', '.join(dosing['windows'])}")
+
+    probe = selection.get("probe")
+    if probe:
+        side = probe.get("side")
+        side_str = f" ({side})" if side and side != "bilateral" else ""
+        lines.append(f"- PROBE (explore) → {probe.get('label')}{side_str} [{probe.get('plane')}/{probe.get('capacity')}]")
+        if probe.get("probing_test"):
+            lines.append(f"  - Probing test: {probe['probing_test']}")
+        if probe.get("expectation"):
+            lines.append(f"  - Reference expectation (a flag, not a verdict): {probe['expectation']}")
+        if probe.get("gated_note"):
+            lines.append(f"  - {probe['gated_note']}")
+        lines.append(
+            "  - One probe this session only (clean attribution, §2.1). Enter at "
+            "exploratory load. The user logs whether it felt unstable / asymmetric / "
+            "hard — that report is the result. Pain = stop + refer."
+        )
+    else:
+        lines.append("- PROBE: queue empty under current filters (well-sampled or hard-stopped).")
+
+    for n in selection.get("notes") or []:
+        lines.append(f"- Note: {n}")
+
+    lines += [
+        "",
+        "### Logging a probe/fortify result (adaptation loop, §7)",
+        "When the user reports how a probed or fortified pattern felt, record it by "
+        "embedding ONE block per region. It is stripped from your visible reply:",
+        "",
+        "<capability_update>",
+        '{"region_key": "single_leg_hop", "side": "right", "tag": "capability_revealed", '
+        '"probe_result": "deficient", "signal_text": "felt unstable landing on the right"}',
+        "</capability_update>",
+        "",
+        "- region_key must be one from the engine taxonomy (the PROBE/FORTIFY lines above).",
+        "- tag ∈ absorbed_clean | symptom_carryover | flare | capability_revealed.",
+        "- capability_revealed requires probe_result ∈ pass | deficient.",
+        "- side ∈ left | right | bilateral.",
+        "- Only log what the user actually reports. Pain = stop + refer, do not score.",
+    ]
+    return "\n".join(lines)
+
+
 # ---------- add future sections here ----------
 # async def _section_mfp(nutrition_data) -> str: ...
 # async def _section_polar(activity_data) -> str: ...
@@ -735,6 +869,8 @@ def build_system_prompt(
     samsung_hrv: Any | None = None,
     structured_entries: list[Any] | None = None,
     daily_record: Any | None = None,
+    fortification_profile: dict[str, Any] | None = None,
+    engine_selection: dict[str, Any] | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
@@ -747,7 +883,7 @@ def build_system_prompt(
     )
 
     sections: list[str] = [
-        _section_user_profile(),
+        _section_user_profile(has_structured_profile=fortification_profile is not None),
         "",
         "You are a personal health and performance assistant. Your job is to help the "
         "user understand their training, spot patterns, and give specific, actionable "
@@ -758,6 +894,16 @@ def build_system_prompt(
         readiness_section,
         _section_integrations(connected_integrations),
     ]
+
+    if fortification_profile is not None:
+        fort_section = _section_fortification(fortification_profile)
+        if fort_section:
+            sections.append(fort_section)
+
+    if engine_selection is not None:
+        probe_section = _section_probe(engine_selection)
+        if probe_section:
+            sections.append(probe_section)
 
     if knowledge_entries:
         sections.append(_section_knowledge(knowledge_entries))

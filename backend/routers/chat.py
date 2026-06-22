@@ -15,6 +15,7 @@ from connectors.hevy import HevyAuthError, HevyClient
 from context_builder import build_system_prompt
 from database import get_db
 from encryption import decrypt
+from engine import adaptation, profile as profile_mod, selection
 from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
 
 load_dotenv()
@@ -32,6 +33,14 @@ _ROUTINE_BLOCK_RE = re.compile(
 # Regex to find <knowledge_update>...</knowledge_update> blocks
 _KNOWLEDGE_BLOCK_RE = re.compile(
     r"<knowledge_update>\s*(.*?)\s*</knowledge_update>",
+    re.DOTALL,
+)
+
+# Regex to find <capability_update>...</capability_update> blocks — the adaptation
+# loop's education-idiom capture (spec §7). The user reports how a probe/fortify
+# felt; Claude records the response tag against the taxonomy region.
+_CAPABILITY_BLOCK_RE = re.compile(
+    r"<capability_update>\s*(.*?)\s*</capability_update>",
     re.DOTALL,
 )
 
@@ -236,6 +245,50 @@ def _process_knowledge_updates(
     return cleaned.strip(), actions_taken
 
 
+# ---------- capability update parsing (adaptation loop, §7) ----------
+
+def _process_capability_updates(
+    reply: str,
+    user_id: int,
+    db: Session,
+) -> tuple[str, list[str]]:
+    """
+    Scan `reply` for <capability_update> blocks and apply each as a §7 response
+    tag against the capability map. Payload:
+        {region_key, side?, tag, probe_result?, signal_text?}
+    where tag is one of absorbed_clean | symptom_carryover | flare | capability_revealed.
+    """
+    actions_taken: list[str] = []
+    matches = list(_CAPABILITY_BLOCK_RE.finditer(reply))
+    if not matches:
+        return reply, actions_taken
+
+    cleaned = reply
+    for match in matches:
+        try:
+            data = json.loads(match.group(1))
+        except json.JSONDecodeError as exc:
+            actions_taken.append(f"⚠️ Could not parse capability update: {exc}")
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
+        try:
+            row = adaptation.apply_response(
+                db, user_id,
+                region_key=data["region_key"],
+                side=data.get("side", "bilateral"),
+                tag=data["tag"],
+                probe_result=data.get("probe_result"),
+                signal_text=data.get("signal_text"),
+                source=data.get("source", "probe"),
+            )
+            actions_taken.append(f"✓ Capability logged: {row.region_key}/{row.side} → {row.status}")
+        except (KeyError, ValueError) as exc:
+            actions_taken.append(f"⚠️ Could not log capability: {exc}")
+        cleaned = cleaned.replace(match.group(0), "")
+
+    return cleaned.strip(), actions_taken
+
+
 # ---------- endpoint ----------
 
 @router.post("", response_model=ChatResponse)
@@ -319,6 +372,31 @@ async def chat(
         .all()
     )
 
+    # ---- Adaptive Exposure Engine: fortification profile + session selection ----
+    # Avoidance signal (§4) reads from what the user loads in Hevy; the rest of the
+    # taxonomy is the candidate deficiency set. Readiness only re-ranks vehicles,
+    # never gates (DECISIONS_LOG #8).
+    fort_profile = profile_mod.get_profile(db, current_user.id)
+    fort_profile_dict = profile_mod.profile_to_dict(fort_profile)
+    engine_selection = None
+    if fort_profile is not None:
+        loaded_regions = selection.infer_loaded_regions(
+            (hevy_data or {}).get("recent_workouts", [])
+        )
+        probe_queue = selection.compute_probe_queue(
+            db, current_user.id, profile=fort_profile, loaded_region_keys=loaded_regions,
+        )
+        if daily_record is not None and daily_record.morning_readiness is not None:
+            readiness_hint = int(daily_record.morning_readiness) * 2  # 1–5 → 1–10
+        elif today_checkin is not None and today_checkin.readiness_score is not None:
+            readiness_hint = int(today_checkin.readiness_score)
+        else:
+            readiness_hint = None
+        engine_selection = selection.select_next(
+            db, current_user.id, profile=fort_profile,
+            probe_queue=probe_queue, readiness_hint=readiness_hint,
+        )
+
     system_prompt = build_system_prompt(
         user=current_user,
         connected_integrations=list(connected.keys()),
@@ -329,6 +407,8 @@ async def chat(
         samsung_hrv=samsung_readings,
         structured_entries=structured_entries,
         daily_record=daily_record,
+        fortification_profile=fort_profile_dict,
+        engine_selection=engine_selection,
     )
 
     # Build messages list: history + current user message
@@ -351,8 +431,9 @@ async def chat(
     # Parse and execute any embedded action blocks
     reply, routine_actions = await _process_routine_actions(reply, hevy_client)
     reply, knowledge_actions = _process_knowledge_updates(reply, current_user.id, db)
+    reply, capability_actions = _process_capability_updates(reply, current_user.id, db)
 
-    all_actions = routine_actions + knowledge_actions
+    all_actions = routine_actions + knowledge_actions + capability_actions
 
     # Append confirmation messages inline so they appear in the chat bubble
     if all_actions:
