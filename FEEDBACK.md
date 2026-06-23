@@ -2,7 +2,7 @@
 
 *Extracted from full project conversation history. Load this at session start.*
 *Repo-canonical (health-app). The Claude.ai project-knowledge copy is a refreshed mirror, not the master.*
-*Last updated: 20 June 2026*
+*Last updated: 24 June 2026*
 
 ---
 
@@ -79,6 +79,17 @@ These are moments where Claude got something wrong and Easty corrected it. Never
 **Correction:** Samsung Health does not write HRV, resting heart rate, respiratory rate, or sleep stages to Health Connect. The entire algorithm design was built on an unverified assumption. A five-minute web search would have found Samsung community threads confirming this before the design work began.
 
 **Standing rule:** Before any metric enters algorithm design, record *how you know it works* — a confirmed test, verified search result, or official documentation. "The API has a field for it" is not sufficient. This is a project founding principle now.
+
+---
+
+### 1.9 Evidence rule — never reason or write from a summary of available bytes (24 June 2026)
+**What kept happening (chat-side):** Reconstructing state from partial pastes, or accepting a paraphrase of bytes that were in hand and reasoning onward — twice produced or nearly produced canonical fabrications (DECISIONS_LOG #10/#11).
+
+**Two-ended rule:**
+- **Chat:** for any claim written to canonical or gating an action, hold the raw bytes first. If absent, emit `;raw <exact command>` and wait — never reconstruct, never reason from a summary.
+- **Code:** honour `;raw <command>` verbatim — run exactly that command and paste its output with no summary, paraphrase, or commentary. Absent the token, summarise normally.
+
+**Where it lives:** The `;raw` protocol is defined in `~/.claude/CLAUDE.md` and logged as DECISIONS_LOG #30. This is the behavioural half of the same rule.
 
 ---
 
