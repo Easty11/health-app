@@ -81,6 +81,20 @@ keep is unverified until an actual payload is captured.
 
 ---
 
+## Q6. Strength volume-load not yet ingested into daily training load
+
+Decision 28 routes strength volume-load → the Mechanical + Neuromuscular windows as a
+named, non-optional daily-TL input. The decision is settled, but it is unverified at the
+machine: no Postgres query has confirmed Hevy strength volume actually populating the
+per-window `load_metrics` rows. Verify a real query shows strength volume landing in the
+load path before the four-window engine — or even Tier 0 with a strength term — can be
+trusted. Was tracked as "B2" in an out-of-project session's scheme that never entered the
+repo; recorded here under the canonical Q-series.
+
+**Status:** open, resolves → #28 on Postgres verify.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
