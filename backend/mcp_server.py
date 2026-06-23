@@ -64,7 +64,7 @@ def get_recovery_metrics(user_id: int = 1, days: int = 7) -> str:
         FROM samsung_hrv_readings
         WHERE user_id = :user_id
           AND captured_at >= CURRENT_DATE - :days
-          AND context != 'session'
+          AND context = 'passive_overnight'
         ORDER BY captured_at DESC
         """,
         {"user_id": user_id, "days": days},
@@ -342,7 +342,7 @@ def get_readiness_snapshot(user_id: int = 1) -> str:
                spo2_average_pct, respiratory_rate, sleep_hr_bpm
         FROM samsung_hrv_readings
         WHERE user_id = :user_id
-          AND context != 'session'
+          AND context = 'passive_overnight'
         ORDER BY captured_at DESC
         LIMIT 1
         """,
@@ -379,7 +379,7 @@ def get_readiness_snapshot(user_id: int = 1) -> str:
         FROM samsung_hrv_readings
         WHERE user_id = :user_id
           AND captured_at >= CURRENT_DATE - 6
-          AND context != 'session'
+          AND context = 'passive_overnight'
         """,
         {"user_id": user_id},
     )
