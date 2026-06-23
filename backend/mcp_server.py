@@ -378,7 +378,7 @@ def get_readiness_snapshot(user_id: int = 1) -> str:
         SELECT COUNT(*) AS reading_count
         FROM samsung_hrv_readings
         WHERE user_id = :user_id
-          AND captured_at >= CURRENT_DATE - 7
+          AND captured_at >= CURRENT_DATE - 6
           AND context != 'session'
         """,
         {"user_id": user_id},
