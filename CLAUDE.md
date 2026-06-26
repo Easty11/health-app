@@ -76,6 +76,9 @@ Preserve the existing entry format:
 The trigger is not the payload. The payload is defined here; the snippet/command bodies
 must match it.
 
+- **Session open** — at session start, before acting on any brief, Code reports the current
+  `DECISIONS_LOG.md` max decision number (matching the file's actual `###` heading format).
+  Chat re-aims any brief against it, so a stale project copy never masquerades as canon.
 - **Chat close-out (`;cc`)** emits the **pending-commit queue**: canonical-format
   `DECISIONS_LOG` / `OPEN_QUESTIONS` entries for everything decided that session, each
   flagged `PENDING`, ready to paste or file as an issue with zero reformatting. Writes
@@ -89,6 +92,10 @@ must match it.
   4. Regenerates the cold-resume handoff view from the stores.
   5. Overwrites a single `closeout.md`. Never appends narrative; never describes the act
      of writing the close-out.
+  6. Emits the full current text of every governance store touched this session
+     (`DECISIONS_LOG` / `OPEN_QUESTIONS` / `ROADMAP` / `FEEDBACK` / `Ideas`) for wholesale
+     project-copy replacement — not a prose summary. Chat replaces the project copies
+     wholesale and never regenerates these stores from memory.
 - `/compact` is mid-session context compression, **not** a close-out. Do not conflate.
 
 ### Project-wide standing rules

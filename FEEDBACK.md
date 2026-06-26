@@ -2,7 +2,7 @@
 
 *Extracted from full project conversation history. Load this at session start.*
 *Repo-canonical (health-app). The Claude.ai project-knowledge copy is a refreshed mirror, not the master.*
-*Last updated: 24 June 2026*
+*Last updated: 26 June 2026*
 
 ---
 
@@ -175,6 +175,15 @@ How Easty explicitly wants things done. Apply these without being asked.
 
 ### 2.11 Nutrition layer — recommend Cronometer, don't build it
 **Preference:** Nutrition logging is not built into the platform at MVP. Recommend Cronometer to users. Accept Health Connect daily totals as low-resolution supporting signal. Do not build a competing nutrition logging interface.
+
+---
+
+### 2.12 Session lifecycle — repo is the sole source for governance stores
+**Preference:** Two session-lifecycle rituals keep the repo, not chat memory, as the source for governance stores:
+1. **At session open**, Code reports the current `DECISIONS_LOG.md` max decision number; chat re-aims any brief against it before acting.
+2. **At closeout**, Code emits the full current text of every governance store touched that session (`DECISIONS_LOG`, `ROADMAP`, `FEEDBACK`, `OPEN_QUESTIONS`, `Ideas`) for wholesale project-copy replacement. Chat consumes the stores as orientation and never regenerates them from memory.
+
+**Reason:** A stale project copy (`DECISIONS_LOG` #18 vs repo #31) cost a round-trip and risked fabricated entries, 26 June 2026. Truth lives in the repo; chat-memory must not masquerade as canon.
 
 ---
 
