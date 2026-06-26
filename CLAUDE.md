@@ -132,10 +132,11 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 - [x] First reconciliation — `DECISIONS_LOG.md` brought current: v3→v4 (#17),
       repo-canonical (#25), GitHub-inbound (#26), espanso-ritual (#27) logged; loop
       rituals committed (`11c82f1`).
-- [x] **Samsung HRV scalar misdate reconciled (#31)** — Phase 2 of the scraper-defect arc.
-      `samsung_hrv_readings` 24–26 Jun fixed against Samsung retained history: 06-25 scalars
-      `83/57/13.3`→`62/65/13.9`, 06-24 inserted; production write guarded + readback-verified.
-      Branch `fix/samsung-hrv-backend-reconcile`, commit `7cf9edd`, PR #5 (open, unmerged).
+- [x] **master converged #30 → #33 this session** — three branches landed linear via
+      `--ff-only` (PR #6 / #7 rebased onto master first), pushed `059f869..acb994c`:
+      - #5 (#31) Samsung HRV scalar misdate reconcile — `fix/samsung-hrv-backend-reconcile` → `b54fdd0`.
+      - #6 (#32, #33) four-window Banister canon + ΔLoad primitive — `docs/readiness-banister-canon` → `5b80d5e`.
+      - #7 governance session-lifecycle (FEEDBACK 2.12, closeout emit-stores, session-open report) — `chore/governance-session-lifecycle` → `acb994c`.
 - [ ] **Supersede #3** — the one reconciliation entry still owed: Polar not session-only,
       AccessLink live, SDK R-R as highest-fidelity HRV path. Blocked on a *How you know*
       artifact (Polar R-R verification).
