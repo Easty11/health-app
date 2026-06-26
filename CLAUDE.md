@@ -125,6 +125,10 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 - [x] First reconciliation — `DECISIONS_LOG.md` brought current: v3→v4 (#17),
       repo-canonical (#25), GitHub-inbound (#26), espanso-ritual (#27) logged; loop
       rituals committed (`11c82f1`).
+- [x] **Samsung HRV scalar misdate reconciled (#31)** — Phase 2 of the scraper-defect arc.
+      `samsung_hrv_readings` 24–26 Jun fixed against Samsung retained history: 06-25 scalars
+      `83/57/13.3`→`62/65/13.9`, 06-24 inserted; production write guarded + readback-verified.
+      Branch `fix/samsung-hrv-backend-reconcile`, commit `7cf9edd`, PR #5 (open, unmerged).
 - [ ] **Supersede #3** — the one reconciliation entry still owed: Polar not session-only,
       AccessLink live, SDK R-R as highest-fidelity HRV path. Blocked on a *How you know*
       artifact (Polar R-R verification).
