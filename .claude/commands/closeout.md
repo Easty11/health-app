@@ -42,6 +42,14 @@ Execute these steps in order:
    an uncommitted `closeout.md` never reaches the repo→chat mirror and stays provisional.
    If the tree has unrelated uncommitted work, commit only the close-out artifacts.
 
+8. **Emit touched governance stores for wholesale project-copy replacement.** For every
+   governance store changed this session — `git diff --name-only master...HEAD` intersected
+   with {`DECISIONS_LOG.md`, `ROADMAP.md`, `FEEDBACK.md`, `OPEN_QUESTIONS.md`, `Ideas.md`} —
+   output its **full current file text** (post-commit, so it reflects what landed), fenced
+   and labelled `project-copy replacement: <filename>`. **Not** a prose summary. If none
+   changed, say so explicitly. The repo is the sole source for these stores: chat replaces
+   the project copies wholesale and **never regenerates them from memory**.
+
 Hard rules (from `CLAUDE.md`):
 - Code is the only writer — this command may commit.
 - Real `git log` output only, not aspirational messages.
