@@ -1,103 +1,77 @@
-# Close-out — 2026-06-27
+# Session close-out — health-app
+
+Session-open ref: `7e252a4` (prior close-out). Branch: `master`. Single-repo session.
 
 ---
 
-## Real commits this session
+## 1. Real commits this session
 
-Session-open ref: `059f869` (master HEAD at open — DECISIONS_LOG #30). This was an
-**integration session**: the four commits below were authored on feature branches in prior
-sessions and *landed on `master` this session* via `--ff-only` convergence. No new content
-commits were authored here — the session's work was the merges + push, plus this close-out.
-
-`git log --oneline 059f869..HEAD`:
+`git log --oneline 7e252a4..HEAD`:
 
 ```
-acb994c  chore(governance): session-lifecycle — repo as sole source for governance stores
-5b80d5e  docs(decisions): four-window Banister canon + ΔLoad primitive (#32, #33)
-b54fdd0  chore: session close-out — #31 Samsung HRV reconciliation landed; sprint refreshed
-7cf9edd  fix: reconcile Samsung HRV scalar misdate (24-26 Jun) — DECISIONS_LOG #31
+61c6697 docs(decisions): #34 withdraw #31 fabricated companion-repo citation
 ```
 
-Convergence operations actually performed this session:
+One commit. Files changed: `DECISIONS_LOG.md` only (+14 lines, **0 deletions** —
+verified `git show 61c6697 -- DECISIONS_LOG.md | grep '^-' | grep -v '^---'` returns
+nothing, so #31's locked body is byte-for-byte intact). Pushed: `7e252a4..61c6697` →
+`origin/master` (in sync).
 
-- **#5** `fix/samsung-hrv-backend-reconcile` → `git merge --ff-only` (clean ff). master → `b54fdd0`, LOG #31.
-- **#6** `docs/readiness-banister-canon` → `git rebase master` (no-op, already based on tip) then `--ff-only`. master → `5b80d5e`, LOG #33.
-- **#7** `chore/governance-session-lifecycle` → **required a rebase** (was based on old #30 master `059f869`, so `--ff-only` first refused as diverging). Rebased its single commit `6dc470e` → `acb994c` (clean, no conflicts), then `--ff-only`. master → `acb994c`.
-- `git push origin master` → `059f869..acb994c`. Confirmed `master...origin/master` in sync.
-
-History is linear — `--ff-only` on every merge, zero merge commits. **Deviation from the
-brief:** Step 3 scripted a bare `--ff-only` for #7, but #7 sat on old master and would not
-fast-forward; the same rebase technique the brief blessed for #6 was applied. It landed
-clean — had it conflicted, the rule was STOP and adjudicate in chat.
-
-This close-out adds one further commit (`chore: session close-out`) carrying `closeout.md`
-and the CLAUDE.md sprint-block update.
+Note: first attempt committed as `9671250` with a stray `@` in the message (PowerShell
+here-string syntax used in the Bash tool); amended to `61c6697` with a clean message
+before push. No `9671250` ever reached origin.
 
 ---
 
-## Pending-queue reconciliation
+## 2. Pending-queue reconciliation
 
-No `;cc` paste this session. The inbound payload was the **ANCHOR merge brief** (converge
-master #30 → #33). Reconciled against its gates:
+The session brief was an ANCHOR/OBJECTIVE to land **DECISIONS_LOG #34** (no `;cc`
+multi-item queue). Single PENDING item:
 
-- **G1 (#5 ff-only)** — succeeded; LOG → #31. ✅ `b54fdd0`
-- **G2 (#6 rebase must land clean; only `5b80d5e` ahead)** — the flagged risk. Rebase was a
-  clean no-op (branch already based on post-#31 tip); acceptance met (only `5b80d5e`); ff-only
-  succeeded; LOG → #33. ✅ `5b80d5e`
-- **G3 (#7 ff-only)** — ff-only initially refused (diverging from old master); resolved by
-  rebase (clean) per the #6 technique, then ff-only. Governance lifecycle + FEEDBACK 2.12 +
-  closeout emit-stores now on master. ✅ `acb994c`
-- **G4 (final: #31/#32/#33 + ΔLoad present; tip = #7 commit)** — verified by `git grep`; tip
-  `acb994c`. ✅
-- **Step 4 push** — `git push origin master` → `059f869..acb994c`. ✅
+| PENDING item | Landed? | Where |
+|---|---|---|
+| #34 — withdraw #31's fabricated companion-repo citation (`health-connect-app` "#16" / `findByIdValidBounds`), affirm #31 data reconciliation stands; supersede-by-reference, append-only, governance-only | ✅ Yes | `61c6697` |
 
-Nothing left provisional. All four PRs are landed on `master` and pushed.
+Session-open ritual was honoured: reported DECISIONS_LOG max = **#33** before writing, so
+#34 was the correct next number (no renumber). Supersede target #31 confirmed present
+exactly once (line 393) and not edited. Nothing provisional — the single decision is
+committed and pushed.
 
 ---
 
-## Cold-resume handoff
+## 3. Cold-resume handoff
 
-### What is this repo
+**State:** `master` @ `61c6697`, clean and pushed. DECISIONS_LOG max = **#34**.
+Untracked working-dir artifacts only (`20260627 snapshot Health_app.zip`,
+`ha_master.zip`) — not part of the repo, safe to ignore or delete.
 
-FastAPI backend + React/Vite frontend, deployed on Railway. Health intelligence platform
-(Fitness / Medical Protocol / Decision Support). Companion Android app is a separate repo
-(`health-connect-app`, Expo React Native) — not in this tree.
+**Current sprint (from CLAUDE.md / ROADMAP.md):**
 
-### Decisions ledger
+- [x] #34 landed — #31's fabricated cross-repo citation withdrawn; #31 data stands.
+- [x] master converged #30 → #33 (prior session).
+- [ ] **Supersede #3** — reconciliation entry still owed: Polar not session-only,
+      AccessLink live, SDK R-R as highest-fidelity HRV path. Blocked on a *How you know*
+      artifact (Polar R-R verification).
+- [ ] **Next engineering action — fix Q2** (see below).
 
-`DECISIONS_LOG.md` current through **#33**. Recent: #31 Samsung HRV scalar misdate (backend
-reconciliation), #32 four-window Banister implementation canon (independent per-window τ;
-recovery ordering; provenance-labelled), #33 ΔLoad spike detector as required primitive (the
-surviving function of ACWR). Prior: #30 global `~/.claude/CLAUDE.md` + single-repo scope +
-`;raw`; #28 four-window load; #29 check-in schema.
+**Open questions by status:**
 
-### Active sprint
+- `resolved → #20`: **Q1** — backend HC stage-constant fix + 30-day backfill (done,
+  surfaced Q4).
+- `open`: **Q2** — companion `validateNight()` returns doubled/overlapping SleepSession
+  records; de-dup before `runDeepConfidence` or it double-counts.
+- `open`: **Q3** — sleep HR cadence unconfirmed (`hrMedianGapSec = 0`), caused by the same
+  Q2 record-doubling; Gate 3 INCONCLUSIVE until HR is de-duped.
+- `open`: **Q4** — HC sleep-date one day earlier than scraper (`_aggregate_day` keys
+  bed-date, scraper keys wake-date); pick one canonical convention (likely wake-date).
+- `open`: **Q5** — backend `/health-connect/sync` dual-field acceptance; collapse after
+  capturing one real on-device payload to confirm which field names mobile posts.
+- `open, resolves → #28 on Postgres verify`: **Q6** — strength volume-load not yet
+  confirmed landing in per-window `load_metrics` rows.
 
-| Item | State |
-|------|-------|
-| master convergence #30 → #33 (PRs #5/#6/#7) | **Done this session** — all three landed linear via `--ff-only`, pushed `acb994c` |
-| Supersede #3 (Polar not session-only; v4/SDK R-R as highest-fidelity HRV) | Owed — blocked on a *How you know* artifact (Polar R-R verification) |
-| HC permissions — record types 38, 35, 11, 37 | Partially resolved (adb workaround); in-app dialog fix still needed |
-| Samsung Health package name (`com.sec.android.app.shealth`) | Unverified; confirm via Railway Postgres query, not on-device UI |
-| Morning check-in screen (Hooper Index #29 schema) | Not started |
-| Persistent conversation history | Not started |
-| Session cards not clickable / dual-panel scroll | Open UI bugs |
-
-### Open questions (`OPEN_QUESTIONS.md`)
-
-| # | Status | Item |
-|---|--------|------|
-| Q2 | **open** | Companion `validateNight()` returns 4 overlapping SleepSession records; `runDeepConfidence` double-counts. De-dup (longest session per night / union by time) before `trustedDeepMin` is meaningful. |
-| Q3 | **open** | `hrMedianGapSec = 0` over 802 samples — artifact of Q2 doubling. Gate 3 INCONCLUSIVE; do NOT calibrate artifact thresholds or wire `runDeepConfidence` into readiness/Banister until Q2 resolved. |
-| Q4 | **open** | HC dates one day earlier than scraper — `_aggregate_day` keys on bed-date, scraper on wake-date. Align to wake-date. (Distinct mechanism from #31's scalar-tile misdate.) |
-| Q5 | **open** | Backend `/health-connect/sync` dual-field acceptance — Phase 2 collapse blocked on capturing a real on-device payload. |
-| Q6 | open → #28 on verify | Strength volume-load not yet confirmed populating per-window `load_metrics` rows (Railway Postgres verify owed). |
-| Q1 | resolved → #20 | HC sleep-stage enum fix + backfill — done, verified. |
-
-### Next action (single clearest)
-
-master is converged and pushed; the integration track is clear. Resume the engineering
-track: **fix Q2** — de-duplicate companion `validateNight()` SleepSession records before
-`runDeepConfidence` (mirror `health_connect.py:_aggregate_day`, pick longest session per
-night, or union by time range). Unblocks Q3, then readiness/Banister wiring (now spec'd by
-#32/#33). Q4 (date attribution) runs in parallel; target `routers/health_connect.py:_aggregate_day`.
+**Single clearest next action:** Fix **Q2** — de-duplicate `validateNight()` SleepSession
+records (companion `health-connect-app`) before `runDeepConfidence`/`flagDeepSegments`
+`flatMap` them. It is the keystone: it unblocks Q3 (HR cadence re-measure), which gates
+calibrating `runDeepConfidence` into readiness/Banister. Q4 (date attribution) can run in
+parallel. This is the long-standing engineering blocker; #34 cleared the governance debt
+that was sitting in front of it.
