@@ -132,11 +132,24 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 - [x] First reconciliation — `DECISIONS_LOG.md` brought current: v3→v4 (#17),
       repo-canonical (#25), GitHub-inbound (#26), espanso-ritual (#27) logged; loop
       rituals committed (`11c82f1`).
-- [x] **#34 landed this session** — withdrew #31's fabricated companion-repo citation
-      (`health-connect-app` DECISIONS_LOG "#16" / `findByIdValidBounds`, both phantom);
-      supersede-by-reference, #31 body untouched (zero deletions verified via diff), #31's
-      independently-verified Postgres reconciliation stands. Committed `61c6697`, pushed
-      `7e252a4..61c6697`.
+- [x] **#35 + F2 landed this session** — HC ingest source-of-truth filter. Governance and
+      feature concern-split across two `--ff-only` merges, pushed `4352258..6b2ca40`:
+      - **#35** (`33a1d54`, governance-only) ratifies the source-priority filter as TARGET
+        architecture; backend enforcement **BLOCKED** — fork gate verified ABSENT (the
+        `/health-connect/sync` payload carries no `dataOrigin.packageName`). Basis is the
+        CLAUDE.md device-agnostic standing rule (the v1 draft's `#18` cite was wrong — #18
+        is Banister/ACWR — and was corrected before append).
+      - **F2** (`6b2ca40`, feature) — `_reject_pre2020` drops inbound HC records with a
+        pre-2020 (epoch-zero) timestamp before aggregation; count logged + returned as
+        `rejected_pre_2020`. Verified live against the real `SyncPayload`.
+      - **F1 dropped** (re-routes to HCA), **F3b → HCA** (119% efficiency lives in the
+        scraper, not this repo), **#20 enum** confirmed already shipped (`c61dfbc`; Q1 closed).
+      - **F3a deferred (gate = RAW):** the set `_aggregate_day` sees is raw multi-app, so
+        set-summing would double-count Samsung+Withings duplicate nights — the inflation
+        blocked-F1 was to kill. Unblocks only with the upstream HCA dedup (= open Q2).
+- [x] **#34 landed (prior session)** — withdrew #31's fabricated companion-repo citation
+      (phantom `health-connect-app` "#16" / `findByIdValidBounds`); supersede-by-reference,
+      #31 body untouched, its Postgres reconciliation stands. `61c6697`, `7e252a4..61c6697`.
 - [x] **master converged #30 → #33** (prior session) — three branches landed linear via
       `--ff-only` (PR #6 / #7 rebased onto master first), pushed `059f869..acb994c`:
       - #5 (#31) Samsung HRV scalar misdate reconcile — `fix/samsung-hrv-backend-reconcile` → `b54fdd0`.
@@ -145,9 +158,12 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 - [ ] **Supersede #3** — the one reconciliation entry still owed: Polar not session-only,
       AccessLink live, SDK R-R as highest-fidelity HRV path. Blocked on a *How you know*
       artifact (Polar R-R verification).
-- [ ] **Next engineering action — fix Q2:** de-duplicate `validateNight()` SleepSession
-      records (companion) before `runDeepConfidence`; unblocks Q3, then readiness/Banister
-      wiring. Q4 (date attribution) runs in parallel.
+- [ ] **Next engineering action — fix Q2 (HCA session):** de-duplicate `validateNight()`
+      SleepSession records (companion) on **cross-app source priority**, not time-overlap
+      (#35 scope correction). This single piece of work now unblocks three things: Q3, the
+      backend **F3a** frozen-session-set aggregation (deferred this session pending it), and
+      — once `dataOrigin.packageName` is forwarded HCA→backend — backend **F1** enforcement.
+      Q4 (date attribution) runs in parallel.
 
 ---
 
