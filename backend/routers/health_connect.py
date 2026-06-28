@@ -45,7 +45,33 @@ SLEEP_STAGE_REM   = SleepStageType.REM
 
 # ---------- flexible incoming schemas ----------
 
-class HeartRateRecord(BaseModel):
+class DataOrigin(BaseModel):
+    """Health Connect Record.metadata.dataOrigin — the writing app's identity."""
+    packageName: Optional[str] = None
+
+
+class WriterIdentity(BaseModel):
+    """Per-record writer identity, mixed into every HC record model.
+
+    Dual-field per the #24 house pattern (raw library field + mapped alias):
+      dataOrigin.packageName — raw Health Connect shape (#36 wire contract)
+      sourcePackage          — flattened alias the JS mapping layer may emit
+
+    Optional/nullable everywhere: current HCA builds send no dataOrigin, so a
+    required field would 422 every live sync (#36). Capture only — no filtering.
+    """
+    dataOrigin: Optional[DataOrigin] = None   # raw library field
+    sourcePackage: Optional[str] = None        # mapped field
+
+    def get_source_package(self) -> Optional[str]:
+        if self.sourcePackage:
+            return self.sourcePackage
+        if self.dataOrigin:
+            return self.dataOrigin.packageName
+        return None
+
+
+class HeartRateRecord(WriterIdentity):
     time: str
     beatsPerMinute: Optional[int] = None   # raw library field
     bpm: Optional[int] = None               # mapped field
@@ -54,7 +80,7 @@ class HeartRateRecord(BaseModel):
         return self.bpm or self.beatsPerMinute
 
 
-class StepsRecord(BaseModel):
+class StepsRecord(WriterIdentity):
     startTime: Optional[str] = None
     endTime: Optional[str] = None
     date: Optional[str] = None              # mapped field (date: r.startTime)
@@ -64,7 +90,7 @@ class StepsRecord(BaseModel):
         return self.startTime or self.date
 
 
-class HRVRecord(BaseModel):
+class HRVRecord(WriterIdentity):
     time: str
     heartRateVariabilityMillis: Optional[float] = None  # raw library field
     rmssd: Optional[float] = None                        # mapped field
@@ -79,7 +105,7 @@ class SleepStage(BaseModel):
     endTime: str
 
 
-class SleepSession(BaseModel):
+class SleepSession(WriterIdentity):
     startTime: str
     endTime: str
     durationMinutes: Optional[int] = None
@@ -97,7 +123,7 @@ class SleepSession(BaseModel):
             return 0
 
 
-class ExerciseRecord(BaseModel):
+class ExerciseRecord(WriterIdentity):
     startTime: str
     endTime: str
     exerciseType: Optional[int] = None
@@ -106,17 +132,17 @@ class ExerciseRecord(BaseModel):
     durationMinutes: Optional[int] = None
 
 
-class OxygenSaturationRecord(BaseModel):
+class OxygenSaturationRecord(WriterIdentity):
     time: str
     percentage: Optional[float] = None
 
 
-class RespiratoryRateRecord(BaseModel):
+class RespiratoryRateRecord(WriterIdentity):
     time: str
     rate: Optional[float] = None
 
 
-class WeightRecord(BaseModel):
+class WeightRecord(WriterIdentity):
     time: str
     weight: Optional[dict] = None
     inKilograms: Optional[float] = None
@@ -129,7 +155,7 @@ class WeightRecord(BaseModel):
         return None
 
 
-class DistanceRecord(BaseModel):
+class DistanceRecord(WriterIdentity):
     startTime: str
     endTime: str
     distance: Optional[dict] = None
@@ -143,7 +169,7 @@ class DistanceRecord(BaseModel):
         return None
 
 
-class MindfulnessRecord(BaseModel):
+class MindfulnessRecord(WriterIdentity):
     startTime: str
     endTime: str
     durationMinutes: Optional[int] = None
@@ -254,6 +280,73 @@ def _reject_pre2020(payload: SyncPayload) -> int:
     return total
 
 
+def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> int:
+    """Persist per-record writer identity BEFORE _aggregate_day collapses the night.
+
+    Captures one (record_type, record_start, source_package) per inbound record
+    into health_connect_record_sources. Idempotent across re-syncs via the
+    uq_hc_record_source natural key: a record already seen has its source_package
+    refreshed rather than duplicated. Capture only — no filtering, and the
+    aggregated row is untouched (#36/#37).
+
+    Records with no primary timestamp are skipped (they carry no usable key and
+    aggregation already ignores them). Returns the number of NEW rows inserted.
+    """
+    captured: list[tuple[str, str, Optional[str]]] = []
+
+    def _add(items, rtype: str, ts) -> None:
+        for r in items:
+            t = ts(r)
+            if t:
+                captured.append((rtype, t, r.get_source_package()))
+
+    _add(payload.sleep, "sleep", lambda r: r.startTime)
+    _add(payload.hrv, "hrv", lambda r: r.time)
+    _add(payload.heartRate, "heart_rate", lambda r: r.time)
+    _add(payload.steps, "steps", lambda r: r.get_start())
+    _add(payload.workouts, "exercise", lambda r: r.startTime)
+    _add(payload.exercise, "exercise", lambda r: r.startTime)
+    _add(payload.oxygenSaturation, "oxygen_saturation", lambda r: r.time)
+    _add(payload.respiratoryRate, "respiratory_rate", lambda r: r.time)
+    _add(payload.weight, "weight", lambda r: r.time)
+    _add(payload.distance, "distance", lambda r: r.startTime)
+    _add(payload.mindfulness, "mindfulness", lambda r: r.startTime)
+
+    if not captured:
+        return 0
+
+    # One query for this user's existing keys; upsert in memory (dialect-agnostic —
+    # local is SQLite, prod Postgres). At personal/family scale this table is small.
+    existing = {
+        (o.record_type, o.record_start): o
+        for o in db.query(models.HealthConnectRecordSource)
+                   .filter_by(user_id=user_id)
+                   .all()
+    }
+    now = datetime.now(timezone.utc)
+    inserted = 0
+    seen: set[tuple[str, str]] = set()
+    for rtype, rstart, pkg in captured:
+        key = (rtype, rstart)
+        if key in seen:
+            continue                       # collapse intra-payload key collisions
+        seen.add(key)
+        obj = existing.get(key)
+        if obj:
+            obj.source_package = pkg
+            obj.synced_at = now
+        else:
+            db.add(models.HealthConnectRecordSource(
+                user_id=user_id,
+                record_type=rtype,
+                record_start=rstart,
+                source_package=pkg,
+                synced_at=now,
+            ))
+            inserted += 1
+    return inserted
+
+
 def _stage_minutes(stages: list[SleepStage], stage_type: int) -> int:
     # Sum total seconds across matching segments, then floor once. The previous
     # per-segment int() floor zeroed every sub-minute sliver — and deep sleep is
@@ -359,6 +452,10 @@ def sync(
             current_user.id, rejected_pre_2020,
         )
 
+    # Capture per-record writer identity before _aggregate_day collapses the
+    # night — the backend enabler for source-priority dedup (#36/#37).
+    sources_captured = _capture_record_sources(payload, current_user.id, db)
+
     # Collect all unique dates across all record types
     dates: set[date] = set()
     for r in payload.steps:
@@ -429,6 +526,7 @@ def sync(
         "synced": len(synced_dates),
         "dates": synced_dates,
         "rejected_pre_2020": rejected_pre_2020,
+        "sources_captured": sources_captured,
     }
 
 

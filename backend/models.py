@@ -174,6 +174,32 @@ class HealthConnectSync(Base):
     respiratory_rate: Mapped[float | None] = mapped_column(Float)
 
 
+class HealthConnectRecordSource(Base):
+    """Per-record writer identity captured from /health-connect/sync BEFORE the
+    night is collapsed by _aggregate_day. One row per inbound HC record.
+
+    Exists because health_connect_syncs is one aggregated row per (user, date):
+    a single night spans multiple writers (DECISIONS_LOG #35 — 286 sleep
+    dup-groups span 2+ apps), so source identity has to be preserved at record
+    granularity to survive aggregation. This is the backend enabler for
+    source-priority dedup (F1, #35/#36); it does not itself filter.
+
+    source_package is nullable: current HCA builds send no dataOrigin, so a
+    required column would 422 every live sync (#36).
+    """
+    __tablename__ = "health_connect_record_sources"
+    __table_args__ = (
+        UniqueConstraint("user_id", "record_type", "record_start", name="uq_hc_record_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    record_type: Mapped[str] = mapped_column(String(40), nullable=False)   # 'sleep','hrv','heart_rate',...
+    record_start: Mapped[str] = mapped_column(String(40), nullable=False)  # record's primary timestamp (ISO)
+    source_package: Mapped[str | None] = mapped_column(String(255))        # dataOrigin.packageName, nullable
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class AerobicSession(Base):
     """Aerobic sessions for ACWR load tracking — seeded from Polar Flow export, future HC."""
     __tablename__ = "aerobic_sessions"
