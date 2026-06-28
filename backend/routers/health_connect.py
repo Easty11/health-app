@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 from enum import IntEnum
+import logging
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
@@ -19,6 +20,8 @@ from auth import get_current_user
 from database import get_db
 
 router = APIRouter(prefix="/health-connect", tags=["health-connect"])
+
+logger = logging.getLogger(__name__)
 
 # Health Connect SleepSessionRecord.StageType — complete official enum.
 # Samsung Health writes 1/4/5/6; other devices may emit 0/2/3/7.
@@ -205,6 +208,52 @@ def _parse_date(iso: str) -> date:
     return datetime.fromisoformat(iso[:10]).date()
 
 
+# F2 — pre-2020 timestamp reject (DECISIONS_LOG #35).
+# Epoch-zero starts (1970 in Polar RHR, 1969 in cbti diary) were observed in the
+# 28 Jun HC export. A record with a 1970 startTime and a valid endTime would
+# otherwise be picked by the longest-session selector and corrupt the computed
+# sleep duration (a decades-long span). The record is unrecoverable, so it is
+# dropped — not repaired — and the dropped count is surfaced per sync.
+_MIN_VALID_DATE = date(2020, 1, 1)
+
+
+def _is_pre2020(iso: Optional[str]) -> bool:
+    """True if a timestamp predates 2020-01-01, or is present-but-unparseable.
+    A missing (None) optional timestamp is NOT rejected here — existing
+    aggregation already skips records with no usable date."""
+    if not iso:
+        return False
+    try:
+        return datetime.fromisoformat(iso[:10]).date() < _MIN_VALID_DATE
+    except (ValueError, AttributeError):
+        return True
+
+
+def _reject_pre2020(payload: SyncPayload) -> int:
+    """Drop every record whose primary timestamp predates 2020-01-01, in place.
+    Returns the total number of records dropped across all record types."""
+    total = 0
+
+    def _filter(items, ts):
+        nonlocal total
+        kept = [r for r in items if not _is_pre2020(ts(r))]
+        total += len(items) - len(kept)
+        return kept
+
+    payload.sleep = _filter(payload.sleep, lambda r: r.startTime)
+    payload.hrv = _filter(payload.hrv, lambda r: r.time)
+    payload.heartRate = _filter(payload.heartRate, lambda r: r.time)
+    payload.steps = _filter(payload.steps, lambda r: r.get_start())
+    payload.workouts = _filter(payload.workouts, lambda r: r.startTime)
+    payload.exercise = _filter(payload.exercise, lambda r: r.startTime)
+    payload.oxygenSaturation = _filter(payload.oxygenSaturation, lambda r: r.time)
+    payload.respiratoryRate = _filter(payload.respiratoryRate, lambda r: r.time)
+    payload.weight = _filter(payload.weight, lambda r: r.time)
+    payload.distance = _filter(payload.distance, lambda r: r.startTime)
+    payload.mindfulness = _filter(payload.mindfulness, lambda r: r.startTime)
+    return total
+
+
 def _stage_minutes(stages: list[SleepStage], stage_type: int) -> int:
     # Sum total seconds across matching segments, then floor once. The previous
     # per-segment int() floor zeroed every sub-minute sliver — and deep sleep is
@@ -302,6 +351,14 @@ def sync(
     today = datetime.now(timezone.utc).date()
     since = today - timedelta(days=payload.periodDays)
 
+    # F2 — reject pre-2020 (epoch-zero) records before any aggregation (#35).
+    rejected_pre_2020 = _reject_pre2020(payload)
+    if rejected_pre_2020:
+        logger.info(
+            "HC sync user=%s dropped %d pre-2020 record(s)",
+            current_user.id, rejected_pre_2020,
+        )
+
     # Collect all unique dates across all record types
     dates: set[date] = set()
     for r in payload.steps:
@@ -368,7 +425,11 @@ def sync(
                     daily_rec.mindfulness_duration_min = sum(s.duration() for s in sessions)
 
     db.commit()
-    return {"synced": len(synced_dates), "dates": synced_dates}
+    return {
+        "synced": len(synced_dates),
+        "dates": synced_dates,
+        "rejected_pre_2020": rejected_pre_2020,
+    }
 
 
 @router.get("/latest", response_model=list[HCSyncOut])
