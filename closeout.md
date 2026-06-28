@@ -1,88 +1,93 @@
-# Session close-out — health-app
+# Code session close-out
 
-Session-open ref: `4352258` (prior close-out). Branch: `master`. Single-repo session.
+Branch: `feat/sync-writer-identity` (cut from master, pushed to origin, upstream set).
+Session-open ref: `master` (81fb925). DECISIONS_LOG max at open: #35 → now #37.
 
 ---
 
 ## 1. Real commits this session
 
-`git log --oneline 4352258..HEAD`:
+`git log --oneline master..HEAD`:
 
 ```
-6b2ca40 feat(hc-ingest): F2 reject pre-2020 records before aggregation (#35)
-33a1d54 docs(decisions): #35 HC ingest source-of-truth filter — TARGET architecture, backend enforcement blocked (fork gate ABSENT)
+ddfd8c7 docs(decisions): #36 source-priority is backend; #37 per-record writer-identity capture structure
+417c1bd feat(hc-ingest): capture per-record writer identity on /health-connect/sync (#36/#37)
 ```
 
-Two commits, concern-split, both merged `--ff-only`:
+Full hashes:
+- `417c1bd568d38435d66ad96125599e784e5c4c61` — feature (Steps 3–6): `WriterIdentity` mixin +
+  optional `dataOrigin.packageName`/`sourcePackage` on all 10 HC record models;
+  `_capture_record_sources()` persists per-record writer identity to new
+  `health_connect_record_sources` table before `_aggregate_day`; Alembic migration
+  `c9b8a7d6e5f4`. Files: `backend/models.py`, `backend/routers/health_connect.py`,
+  `backend/migrations/versions/c9b8a7d6e5f4_add_health_connect_record_sources.py`.
+- `ddfd8c77923577220b232f67db914b9c5f43c538` — governance: DECISIONS_LOG #36 (verbatim from
+  chat) + #37 (authored from the verified build).
 
-- `33a1d54` — **governance only** (`DECISIONS_LOG.md`, +49, no code). Appends Decision
-  **#35**: HC ingest source-priority filter ratified as TARGET architecture; backend
-  enforcement BLOCKED (fork gate ABSENT — payload carries no `dataOrigin.packageName`).
-  Basis is the CLAUDE.md device-agnostic standing rule. The v1 draft's `#18` cross-ref was
-  wrong (#18 is Banister/ACWR) and was corrected before append — no phantom citation entered
-  canon (the #34 lesson held).
-- `6b2ca40` — **feature only** (`backend/routers/health_connect.py`, +62/−1, no governance
-  edit). F2: `_reject_pre2020` drops inbound HC records with a pre-2020 (epoch-zero)
-  timestamp before aggregation; per-sync dropped count logged and returned as
-  `rejected_pre_2020`. Verified live against the real `SyncPayload` (epoch-zero sleep start +
-  valid end dropped; valid records survive; `None` not over-rejected; unparseable rejected).
-
-This close-out commit additionally carries the CLAUDE.md sprint-block update and this file.
-
-Pushed: `4352258..6b2ca40` → `origin/master` (in sync, 0 ahead).
+Concern-split (#27) honoured: feature and governance in separate commits.
+Not merged to master; not deployed to Railway. Migration unapplied on Postgres.
 
 ---
 
 ## 2. Pending-queue reconciliation
 
-The session ran from a build brief (v2), not a `;cc` PENDING queue. Reconciling brief items:
+The session brief carried three PENDING items. All landed:
 
-- **GOVERNANCE — append #35** → **LANDED** `33a1d54`. Decision number assigned on append (#35).
-- **F1 (source-priority filter)** → **NOT BUILT, by gate.** Fork gate verified ABSENT (no
-  writer identity on the `/health-connect/sync` payload). Re-routes to HCA. Recorded in #35
-  Status as TARGET/blocked — a verified fact in canon, not provisional.
-- **F2 (pre-2020 reject)** → **LANDED** `6b2ca40`.
-- **F3a (frozen-session-set aggregation)** → **DEFERRED, by gate (RAW).** The set
-  `_aggregate_day` sees is raw multi-app; summing would double-count Samsung+Withings
-  duplicate nights (the inflation blocked-F1 was to kill). No partial sum built. Deferral +
-  reason recorded in #35 Status and the `6b2ca40` commit body. Unblocks with the HCA dedup (Q2).
-- **F3b (119% efficiency)** → **OUT OF SCOPE (HCA).** `sleep_efficiency_pct` is stored
-  verbatim from the payload by `samsung_hrv.py`; the arithmetic lives in the companion
-  scraper. Carried to HCA.
-- **#20 enum fix (optional step 7)** → **ALREADY SHIPPED** `c61dfbc` (pre-session). Current
-  constants are the official enum (AWAKE=1, LIGHT=4, DEEP=5, REM=6). No-op. OPEN_QUESTIONS Q1
-  already `resolved → #20` (31-row Postgres-verified backfill). No action taken.
+- **#36 (source-priority is backend; HCA forwards writer identity)** — provided verbatim by
+  chat. Landed in `ddfd8c7`, appended to DECISIONS_LOG after #35.
+- **#37 (per-record capture structure)** — chat deferred authoring to Code post-Step-1
+  ("won't write a capture-structure decision blind"). Authored after the ingest read
+  confirmed Case (b); ratified the user's chosen granularity (per-record table, all types).
+  Landed in `ddfd8c7`.
+- **Feature: capture + store + publish (Steps 3–6)** — landed in `417c1bd`. All six gates
+  passed: model shape + ABSENT identity confirmed (1); Case (b) + migration drafted (2);
+  field added, #24 naming matched (3); migration up→down→up clean in isolation (4);
+  `dataOrigin`/`sourcePackage` present in `/openapi.json` (5); with-field→stored /
+  without-field→null, both 200, plus idempotency `sources_captured: 0` on re-POST (6).
 
-Watch-items logged:
-- **active_calories** has one live reader — `context_builder.py:526` emits it to AI context.
-  Health Sync (primary writer) removed 28 Jun → field will degrade stale/null. Not yet handled.
-- **No test harness** exists in the repo; F2 was verified live via the venv, not unit-pinned.
+Out-of-scope items correctly NOT touched: F1 filter, `_aggregate_day` change (F3a), HCA
+forwarding (separate repo), override table/policy.
+
+Nothing decided-but-uncommitted. No provisional items.
 
 ---
 
 ## 3. Cold-resume handoff
 
-**State:** `master` @ `6b2ca40`, clean (only untracked snapshot zips), synced to origin.
-DECISIONS_LOG max = **#35**.
+**What this session did:** Landed the backend half of the writer-identity wire contract.
+`/health-connect/sync` now accepts and persists optional per-record `dataOrigin.packageName`
+(nullable, non-breaking, published in OpenAPI), captured before aggregation into
+`health_connect_record_sources`. This is the enabler that unblocks backend F1 (#35) under
+#36 (source-priority is backend, not device).
 
-**What landed:** #35 (governance, source-of-truth filter as TARGET/blocked) + F2 (pre-2020
-reject). F1 blocked, F3a deferred, F3b→HCA, #20 confirmed shipped.
+**Single clearest next action:** **HCA forwards writer identity** — in `health-connect-app`
+(separate repo, single-repo-scoped session), forward `dataOrigin.packageName` (+ HC
+`health_data_category_priority_table` snapshot) in the `/health-connect/sync` payload. This
+is the producer half of the wire contract; its consumer half landed this session. Per #36,
+HCA's `validateNight()` loses source dedup and becomes a faithful relay — the old "fix Q2 in
+HCA via cross-app source priority" framing is superseded.
 
-**Open questions by status:**
-- `resolved → #20` — **Q1** (HC stage-constant fix + 31-row backfill, deployed PR #2).
-- `open, resolves → #28 on verify` — **Q6** (strength volume-load into daily training load).
-- `open` — **Q2** (companion `validateNight` returns overlapping/duplicate SleepSession;
-  names `_aggregate_day`), **Q3** (HR sampling cadence in sleep, `hrMedianGapSec=0`),
-  **Q4** (HC dates one day earlier than scraper — date-attribution convention), **Q5**
-  (backend `/sync` dual-field acceptance — collapse once mobile post shape confirmed).
+**Then (gated on the above):** backend **F1** filter — source-priority dedup over the new
+`health_connect_record_sources` table (separate backend session). Unblocks **F3a** once F1
+lands.
 
-**Current sprint (NOW):** HC permissions fix (types 38/35/11/37), Samsung package-name
-correction, morning check-in screen, persistent conversation history, two UI bugs (session
-cards not clickable, dual-panel scroll).
+**Deploy owed:** apply migration `c9b8a7d6e5f4` to Railway/Postgres when
+`feat/sync-writer-identity` merges to master.
 
-**Single clearest next action:** **Fix Q2 in the HCA session** — de-duplicate
-`validateNight()` SleepSession records on **cross-app source priority** (not time-overlap;
-#35 scope correction). This one piece of work unblocks Q3, the backend **F3a** aggregation
-(deferred here pending it), and — once `dataOrigin.packageName` is forwarded HCA→backend —
-backend **F1** enforcement. Q4 (date attribution) can run in parallel. Still owed separately:
-**supersede #3** (Polar AccessLink / SDK R-R), blocked on a Polar R-R *How you know* artifact.
+**Current sprint (from CLAUDE.md sprint block):**
+- This session: #36 + #37 + backend writer-identity capture (`feat/sync-writer-identity`).
+- Prior: #35 + F2 (HC source-of-truth filter, pre-2020 reject); #34 (withdraw #31 phantom
+  cite); master converged #30→#33.
+- Open: Supersede #3 (Polar not session-only; AccessLink live; SDK R-R highest-fidelity) —
+  blocked on a Polar R-R *How you know* artifact.
+- Chain: HCA forwarding → backend F1 → F3a.
+
+**Open questions (OPEN_QUESTIONS.md), by status:**
+- `open`: Q2 (HCA `validateNight` duplicate SleepSessions — note #36 moves the *source*
+  dedup backend; HCA's remaining dedup is quality/time-overlap, not source); Q3 (HR sampling
+  cadence, blocked on Q2); Q4 (HC sleep-date one day earlier than scraper — pick wake-date
+  convention, align `_aggregate_day`); Q5 (collapse `/health-connect/sync` dual-field
+  acceptance once a real payload confirms field names — note this session *added* a dual-field
+  pair, `dataOrigin`/`sourcePackage`, deliberately deferring collapse); Q6 (strength
+  volume-load into daily TL, resolves → #28 on Postgres verify).
+- `resolved`: Q1 → #20.

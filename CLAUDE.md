@@ -132,7 +132,22 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 - [x] First reconciliation — `DECISIONS_LOG.md` brought current: v3→v4 (#17),
       repo-canonical (#25), GitHub-inbound (#26), espanso-ritual (#27) logged; loop
       rituals committed (`11c82f1`).
-- [x] **#35 + F2 landed this session** — HC ingest source-of-truth filter. Governance and
+- [x] **#36 + #37 landed this session** — backend per-record writer-identity capture on
+      `/health-connect/sync`, the wire-contract enabler for backend F1. Branch
+      `feat/sync-writer-identity`, pushed; concern-split per #27:
+      - **#37** (`417c1bd`, feature) — ingest read confirmed **Case (b)** (`_aggregate_day`
+        collapses to one daily row; writer identity verified ABSENT). New per-record table
+        `health_connect_record_sources` captures `(record_type, record_start, source_package)`
+        BEFORE aggregation via `_capture_record_sources()`; optional `dataOrigin.packageName`
+        (raw) + `sourcePackage` (alias) on every record model via a `WriterIdentity` mixin
+        (#24 dual-field). Nullable end-to-end (no 422 for current HCA builds); idempotent via
+        `uq_hc_record_source`. Migration `c9b8a7d6e5f4` up→down→up clean in isolation (#21).
+        OpenAPI publish + round-trip (with→stored, without→null, both 200) + idempotency all
+        verified. `health_connect_syncs` untouched. **Not yet applied to Railway/Postgres.**
+      - **#36** (`ddfd8c7`, governance) — source-priority dedup is **backend**, not on-device;
+        HCA reduced to a faithful relay forwarding `dataOrigin.packageName`. Resolves #35's
+        open F1 fork; supersedes its "or filters read-side" horn as a false fork.
+- [x] **#35 + F2 landed (prior session)** — HC ingest source-of-truth filter. Governance and
       feature concern-split across two `--ff-only` merges, pushed `4352258..6b2ca40`:
       - **#35** (`33a1d54`, governance-only) ratifies the source-priority filter as TARGET
         architecture; backend enforcement **BLOCKED** — fork gate verified ABSENT (the
@@ -158,12 +173,20 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 - [ ] **Supersede #3** — the one reconciliation entry still owed: Polar not session-only,
       AccessLink live, SDK R-R as highest-fidelity HRV path. Blocked on a *How you know*
       artifact (Polar R-R verification).
-- [ ] **Next engineering action — fix Q2 (HCA session):** de-duplicate `validateNight()`
-      SleepSession records (companion) on **cross-app source priority**, not time-overlap
-      (#35 scope correction). This single piece of work now unblocks three things: Q3, the
-      backend **F3a** frozen-session-set aggregation (deferred this session pending it), and
-      — once `dataOrigin.packageName` is forwarded HCA→backend — backend **F1** enforcement.
-      Q4 (date attribution) runs in parallel.
+- [ ] **Next engineering action — HCA forwards writer identity (HCA session):** in
+      `health-connect-app`, forward `dataOrigin.packageName` (+ an HC
+      `health_data_category_priority_table` snapshot as policy input) in the
+      `/health-connect/sync` payload. **Keystone reframed by #36:** source dedup is now
+      backend, so HCA's `validateNight()` *loses* source dedup and is reduced to a faithful
+      relay (the old "fix Q2 via cross-app source priority in HCA" framing is superseded —
+      that arbitration moved backend). HCA forwarding is the producer half of the wire
+      contract whose consumer half (per-record capture) landed this session.
+- [ ] **Then — backend F1 filter (backend session):** apply source-priority dedup over the
+      `health_connect_record_sources` table built this session. **Gated on** HCA actually
+      forwarding the field (the above). Also unblocks **F3a** (frozen-session-set
+      aggregation) once F1 lands. Q3 (HR cadence) and Q4 (date attribution) run in parallel.
+- [ ] **Deploy** — apply migration `c9b8a7d6e5f4` to Railway/Postgres when
+      `feat/sync-writer-identity` merges to master.
 
 ---
 
