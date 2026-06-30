@@ -184,19 +184,26 @@ class HealthConnectRecordSource(Base):
     granularity to survive aggregation. This is the backend enabler for
     source-priority dedup (F1, #35/#36); it does not itself filter.
 
-    source_package is nullable: current HCA builds send no dataOrigin, so a
-    required column would 422 every live sync (#36).
+    source_package stays column-nullable (the inbound request field is optional —
+    current HCA builds send no dataOrigin), but _capture_record_sources coalesces
+    a missing identity to the literal 'unknown' before insert, so a value always
+    flows. It is part of the unique key: two apps writing the same
+    (type, timestamp) persist as two rows rather than one overwriting the other —
+    the multi-writer signal F1 needs (supersedes #37's "natural key collapses
+    them" caveat). The 'unknown' sentinel also keeps re-syncs idempotent: a real
+    NULL is UNIQUE-distinct on both SQLite and Postgres, so identity-less records
+    would otherwise duplicate every sync.
     """
     __tablename__ = "health_connect_record_sources"
     __table_args__ = (
-        UniqueConstraint("user_id", "record_type", "record_start", name="uq_hc_record_source"),
+        UniqueConstraint("user_id", "record_type", "record_start", "source_package", name="uq_hc_record_source"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     record_type: Mapped[str] = mapped_column(String(40), nullable=False)   # 'sleep','hrv','heart_rate',...
     record_start: Mapped[str] = mapped_column(String(40), nullable=False)  # record's primary timestamp (ISO)
-    source_package: Mapped[str | None] = mapped_column(String(255))        # dataOrigin.packageName, nullable
+    source_package: Mapped[str | None] = mapped_column(String(255))        # coalesced to 'unknown' at capture; nullable column
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 

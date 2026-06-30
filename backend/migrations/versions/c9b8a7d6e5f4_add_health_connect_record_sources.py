@@ -8,9 +8,20 @@ Adds health_connect_record_sources — per-record writer identity captured from
 /health-connect/sync BEFORE _aggregate_day collapses the night.
 
 Backend enabler for source-priority dedup (DECISIONS_LOG #35 F1 / #36 / #37).
-source_package is nullable: current HCA builds send no dataOrigin, so a required
-column would 422 every live sync. The aggregated health_connect_syncs table is
-unchanged. uq_hc_record_source makes re-syncs idempotent.
+source_package stays column-nullable (the inbound request field is optional —
+current HCA builds send no dataOrigin), but _capture_record_sources coalesces a
+missing identity to the literal 'unknown' before insert, so a value always flows.
+The aggregated health_connect_syncs table is unchanged.
+
+uq_hc_record_source spans (user_id, record_type, record_start, source_package):
+two apps writing the same (type, timestamp) now persist as two rows instead of
+one overwriting the other — the multi-writer signal F1 needs (supersedes #37's
+"natural key collapses them" caveat). The 'unknown' sentinel keeps re-syncs
+idempotent on both dialects: a NULL would be UNIQUE-distinct (SQLite and
+Postgres alike), so identity-less records would duplicate on every sync.
+
+This migration is unreleased (master has not run it); edited in place rather
+than stacked per the no-new-migration directive.
 """
 from typing import Sequence, Union
 
@@ -32,10 +43,10 @@ def upgrade() -> None:
         sa.Column('record_type', sa.String(40), nullable=False),
         sa.Column('record_start', sa.String(40), nullable=False),
         sa.Column('source_package', sa.String(255), nullable=True),
-        sa.Column('synced_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column('synced_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('user_id', 'record_type', 'record_start', name='uq_hc_record_source'),
+        sa.UniqueConstraint('user_id', 'record_type', 'record_start', 'source_package', name='uq_hc_record_source'),
     )
     op.create_index('ix_health_connect_record_sources_id', 'health_connect_record_sources', ['id'])
     op.create_index('ix_health_connect_record_sources_user_id', 'health_connect_record_sources', ['user_id'])
