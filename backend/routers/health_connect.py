@@ -284,21 +284,26 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     """Persist per-record writer identity BEFORE _aggregate_day collapses the night.
 
     Captures one (record_type, record_start, source_package) per inbound record
-    into health_connect_record_sources. Idempotent across re-syncs via the
-    uq_hc_record_source natural key: a record already seen has its source_package
-    refreshed rather than duplicated. Capture only — no filtering, and the
-    aggregated row is untouched (#36/#37).
+    into health_connect_record_sources. A missing identity is coalesced to the
+    literal 'unknown' so the value is never NULL — source_package is part of the
+    uq_hc_record_source key, and a NULL there is UNIQUE-distinct on both SQLite
+    and Postgres, which would defeat both dedup and re-sync idempotency.
+
+    Two apps writing the same (type, timestamp) now persist as two distinct rows
+    (the multi-writer signal F1 needs); re-syncing the same (type, timestamp,
+    package) refreshes synced_at rather than duplicating. Capture only — no
+    filtering, and the aggregated row is untouched (#36/#37).
 
     Records with no primary timestamp are skipped (they carry no usable key and
     aggregation already ignores them). Returns the number of NEW rows inserted.
     """
-    captured: list[tuple[str, str, Optional[str]]] = []
+    captured: list[tuple[str, str, str]] = []
 
     def _add(items, rtype: str, ts) -> None:
         for r in items:
             t = ts(r)
             if t:
-                captured.append((rtype, t, r.get_source_package()))
+                captured.append((rtype, t, r.get_source_package() or "unknown"))
 
     _add(payload.sleep, "sleep", lambda r: r.startTime)
     _add(payload.hrv, "hrv", lambda r: r.time)
@@ -318,23 +323,22 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     # One query for this user's existing keys; upsert in memory (dialect-agnostic —
     # local is SQLite, prod Postgres). At personal/family scale this table is small.
     existing = {
-        (o.record_type, o.record_start): o
+        (o.record_type, o.record_start, o.source_package): o
         for o in db.query(models.HealthConnectRecordSource)
                    .filter_by(user_id=user_id)
                    .all()
     }
     now = datetime.now(timezone.utc)
     inserted = 0
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     for rtype, rstart, pkg in captured:
-        key = (rtype, rstart)
+        key = (rtype, rstart, pkg)
         if key in seen:
             continue                       # collapse intra-payload key collisions
         seen.add(key)
         obj = existing.get(key)
         if obj:
-            obj.source_package = pkg
-            obj.synced_at = now
+            obj.synced_at = now            # same writer re-synced — refresh only
         else:
             db.add(models.HealthConnectRecordSource(
                 user_id=user_id,

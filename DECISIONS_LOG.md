@@ -546,6 +546,7 @@ Authoritative source per category (28 Jun 2026 export):
 | 8 | Samsung Health package name filter incorrect | Companion app diagnostic | Use `com.sec.android.app.shealth` not `com.samsung.health` |
 | 9 | Scraper canary mechanism not implemented | health-connect-app | Required before scraper is considered production-hardened |
 | 13 | "Training Data → See all" control is dead (no destination/handler) | Frontend | Open — inspect the element first (div/span ⇒ missing handler; empty Link/anchor ⇒ no destination), then wire it. |
+| 14 | `_capture_record_sources` upsert is non-atomic (check-then-insert) | `backend/routers/health_connect.py` | Tech-debt. Reads existing keys into memory, then inserts — two concurrent `/health-connect/sync` calls for one user could both miss a key and double-insert, hitting `uq_hc_record_source` on commit. Harmless at single-user/family scale (syncs are serial). Replace with an atomic upsert (Postgres `ON CONFLICT DO UPDATE`) **before multi-tenant**. (Finding 5, `feat/sync-writer-identity` review.) |
 
 ---
 
