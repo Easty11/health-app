@@ -557,6 +557,20 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
+### 40. Branch & session lifecycle protocol adopted
+
+**Decision:** Branches and sessions reach an enforced terminal state, killing the merged-but-uncleaned sprawl. Five rules: (1) single merge path per repo + delete-on-merge — already live via GitHub repo settings (both repos, 2 Jul 2026); (2) merge/pending disposition by patch-id (`git cherry`), never SHA ancestry — `merge-base`/`rev-list` lie under rebase/squash; standing aliases `stale`/`land`; (3) terminal-state gate in `/closeout` + a `BRANCHES.md` ledger — no branch ends a session in undefined limbo; (4) DECISIONS_LOG numbers are `#NEXT` on-branch, claimed at merge — eliminates the #N collision and the renumber-on-`--ff` dance (#38 incurred exactly this); (5) concern-named branches, one per concern, reused across sessions — `claude/<session-hash>` auto-names banned for in-flight work (they spawned the `b9k5qf`/`yg1xx6` twins).
+
+**Rationale:** Root cause addressed: `/closeout` previously proved a session documented, not a branch terminal. A session could end with its stores reconciled and its close-out committed while the branch it worked on sat merged-but-undeleted or unmerged-and-unlisted — invisible to the next session, which then re-cut a duplicate. The five rules close that loop at its enforcement points: disposition must be decidable under rebase/squash history (patch-id, not ancestry), the decision must be forced at session end (the `/closeout` gate), parked work must be legible (the ledger), and the two branch-spawned governance failures already incurred — the #N number collision and the auto-name twins — get structural fixes rather than vigilance.
+
+**Status:** SHARED block + `.claude/commands/closeout.md` + `BRANCHES.md` on `chore/branch-lifecycle-protocol` (health-app). Mirror owed to health-connect-app: SHARED block verbatim + its own `/closeout` command gate + `BRANCHES.md` + its own DECISIONS_LOG claim (next canon = #16, since #34 voided the phantom #16). Rule 1 live via settings; Rules 2–5 land here.
+
+**How you know:** Rule 2 exercised live in the adopting session: `git cherry origin/master <b>` on the four stale remotes showed zero `+` lines (three empty = ancestry-merged; `chore/closeout-emit-retire` two `-` lines = patch-upstream under a rebase merge, exactly the case ancestry checks get wrong), all four then deleted; `git ls-remote --heads origin` shows master only. The `/closeout` gate landed as step 4 with steps renumbered 1→9, verified free of duplicate/missing numbers and with internal cross-references updated. Rule 4's cost is documented precedent, not conjecture: #38's Status field records the yield-on-number / renumber-at-merge dance this rule retires.
+
+**Do not revisit unless:** patch-id disposition yields a false "merged" in practice (a real multi-commit squash shows `+` = pending, so `git cherry` errs toward keeping work — a false "pending" is the safe failure); the `BRANCHES.md` ledger rots into stale entries the close-out gate fails to keep honest; or GitHub delete-on-merge (Rule 1) is switched off and manual pruning silently returns.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
