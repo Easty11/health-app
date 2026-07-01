@@ -543,6 +543,20 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
+### 39. Close-out governance-store emission retired — #38's named exception reversed
+
+**Decision:** The **named exception** in Decision 38 — step 8's emission of each touched governance store's full current text to stdout for wholesale project-copy replacement — is **retired**. `/closeout` stdout is now **pointer-only, with no exception**: the `closeout.md` path, current branch, single clearest next action, and the **filenames** of governance stores changed this session (names only, never their contents). Pre-merge copy-back is done by `cat`/opening the named store file on disk and replacing the project copy wholesale from it. **#38's file/pointer core stands** (body written verbatim to `closeout.md`; stdout reduced to a terse pointer); this entry supersedes **only** #38's named-exception clause. Propagated in lockstep to `.claude/commands/closeout.md` step 8, the CLAUDE.md SHARED-block `/closeout` ritual step 6, and FEEDBACK §2.12 item 2 — the last two of which #38 had deliberately left untouched.
+
+**Rationale:** #38 kept the emission as a packaged copy-back bridge for the **branch-blind** claude.ai connector (master-only; cannot read a feature branch pre-merge). But a changed store file on disk *is* the exact wholesale-replacement text, so `cat`/open of that file is an equivalent, screen-clean pre-merge copy-back that needs no bespoke stdout emission. One rule (pointer-only; names, not contents) is simpler than a rule-plus-exception and removes the last raw-text dump from close-out stdout — the "go broad" direction. #38's own revisit clause anticipated this retirement and named the three files to change in lockstep.
+
+**Status:** Active. Command + SHARED CLAUDE.md ritual step 6 + FEEDBACK §2.12 item 2 edited on `chore/closeout-emit-retire`, cut from master after #38 landed (`0a8a779`). Concern-split per #27: command/SHARED/FEEDBACK in the feature commit, this entry in the governance commit. The identical emission retirement is owed to `health-connect-app` in a separate single-repo session — a **two-file** mirror (its `/closeout` command **and** the SHARED CLAUDE.md loop block, since this change touches the shared ritual, not just the command; broader than #38's command-only mirror note).
+
+**How you know:** `.claude/commands/closeout.md` step 8 now states copy-back is `cat`/open on disk with no store-text emission, and step 6's pointer lists changed-store filenames; the CLAUDE.md SHARED ritual step 6 and FEEDBACK §2.12 item 2 match — all committed this branch. #38's step-6 file/pointer core is unchanged, confirming the supersede is scoped to the named-exception clause only.
+
+**Do not revisit unless:** `cat`/open copy-back from disk proves unreliable — e.g. the connector genuinely cannot reach a changed store even for a human paste — in which case a packaged stdout block returns (restore emission at step 8 + CLAUDE.md SHARED ritual step 6 + FEEDBACK §2.12 in lockstep and re-mirror to HCA).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
