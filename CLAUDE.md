@@ -70,6 +70,10 @@ Preserve the existing entry format:
 - Every decision that gates code carries a **How you know** artifact: a confirmed test, a
   verified search result, or official documentation. "The API has a field for it" is
   insufficient. Founding rule, earned from the HRV pipeline failure.
+- **Number-at-merge.** On a branch, a new entry is headed `### #NEXT`. The integer is
+  claimed only when the governance commit fast-forwards to master (next sequential at that
+  instant). Eliminates the two-branches-both-claim-#N collision and the
+  renumber-on-`--ff` dance.
 
 ### Session rituals (the contract the close-outs conform to)
 
@@ -89,10 +93,13 @@ must match it.
      suggested commit messages.
   3. **Reconciles the pending-commit queue**: confirms each `PENDING` item landed in a
      commit, or states why not.
-  4. Regenerates the cold-resume handoff view from the stores.
-  5. Overwrites a single `closeout.md`. Never appends narrative; never describes the act
+  4. **Branch terminal-state gate** — every branch touched this session ends
+     merged+deleted or listed in `BRANCHES.md`; none in undefined limbo. If any touched
+     branch is neither, the close-out HALTS until resolved.
+  5. Regenerates the cold-resume handoff view from the stores.
+  6. Overwrites a single `closeout.md`. Never appends narrative; never describes the act
      of writing the close-out.
-  6. Writes the close-out body verbatim to `closeout.md` and prints only a terse pointer to
+  7. Writes the close-out body verbatim to `closeout.md` and prints only a terse pointer to
      stdout — path, branch, single next action, and the filenames of governance stores
      changed this session (`DECISIONS_LOG` / `OPEN_QUESTIONS` / `ROADMAP` / `FEEDBACK` /
      `Ideas`; names only, never contents). It does not emit store text; pre-merge copy-back
@@ -110,6 +117,17 @@ must match it.
   `confidence`-tagged schema before any algorithm or AI layer. The intelligence layer
   never references device-specific schemas.
 - **Data verification = Postgres query against Railway**, not on-device UI.
+- **Branch disposition (patch-id, never SHA).** Merged-vs-pending is decided by
+  `git cherry origin/master <branch>` (`-` = patch-upstream, delete; `+` = real work),
+  never `merge-base`/`rev-list` — rebase/squash merges rewrite SHAs and make ancestry lie.
+  Every branch not master lives in `BRANCHES.md` (repo root) until merged+deleted.
+  Install once (git `!` aliases run in git's own sh; the invocation is single-line
+  PowerShell-safe):
+  `git config --global alias.stale '!f() { git fetch origin -q; git cherry origin/master "${1:-HEAD}"; }; f'`
+  `git config --global alias.land '!f() { b="${1:-$(git branch --show-current)}"; git checkout master && git merge --ff-only "$b" && git push origin master && git branch -d "$b" && git push origin --delete "$b"; }; f'`
+- **Branch naming & reuse.** One branch per concern, concern-named
+  (`fix/validatenight-dedup`), reused across sessions until merged. Claude Code
+  `claude/<session-hash>` auto-names are banned for in-flight work — they spawn duplicates.
 - Full behavioural corrections live in `FEEDBACK.md`. Full decision history lives in
   `DECISIONS_LOG.md`. This file points at them; it does not duplicate them.
 
@@ -131,6 +149,19 @@ must match it.
 
 _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 
+- [x] **#40 branch & session lifecycle protocol (this session,
+      `chore/branch-lifecycle-protocol`)** — Rules 2–5 landed (Rule 1 delete-on-merge
+      already live via GitHub settings, both repos, 2 Jul 2026): patch-id disposition
+      (`git cherry`, never SHA ancestry) + `stale`/`land` aliases; `BRANCHES.md` ledger +
+      branch terminal-state gate as `/closeout` step 4 (steps renumbered 1→9);
+      number-at-merge (`### #NEXT` on-branch, integer claimed at `--ff`); concern-named
+      branches, `claude/<session-hash>` auto-names banned for in-flight work. Four stale
+      remotes pruned after zero-`+` `git cherry` verification
+      (`chore/governance-session-lifecycle`, `docs/readiness-banister-canon`,
+      `fix/samsung-hrv-backend-reconcile`, `chore/closeout-emit-retire`) — health-app is
+      master-only; `BRANCHES.md` starts empty. **Mirror owed to `health-connect-app`**
+      (separate session): SHARED block verbatim + its own `/closeout` gate + `BRANCHES.md`
+      + its own DECISIONS_LOG claim (next canon = #16, since #34 voided the phantom #16).
 - [x] First reconciliation — `DECISIONS_LOG.md` brought current: v3→v4 (#17),
       repo-canonical (#25), GitHub-inbound (#26), espanso-ritual (#27) logged; loop
       rituals committed (`11c82f1`).
@@ -211,10 +242,12 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
       `alembic upgrade head` (`backend/Procfile` / `backend/railway.toml`). No manual step
       owed; confirm the deploy log shows `upgrade head` succeeds and the container is healthy
       (not verifiable from this session — no prod DB access).
-- [ ] **Remote branch cleanup (Easty, terminal)** — this session's git proxy 403-blocked ref
-      *deletes* (updates were fine). Stale merged remotes to drop: `chore/closeout-routing`,
-      `chore/governance-session-lifecycle`, `docs/readiness-banister-canon`,
-      `fix/samsung-hrv-backend-reconcile`.
+- [x] **Remote branch cleanup — DONE this session.** The prior session's git-proxy 403 on
+      ref deletes did not recur; `chore/governance-session-lifecycle`,
+      `docs/readiness-banister-canon`, `fix/samsung-hrv-backend-reconcile`, and
+      `chore/closeout-emit-retire` deleted after zero-`+` `git cherry` verification
+      (`chore/closeout-routing` already absent from origin — verified via `git ls-remote`).
+      Post-prune, `git ls-remote --heads origin` shows master only.
 
 ---
 
