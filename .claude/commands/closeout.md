@@ -37,25 +37,25 @@ Execute these steps in order:
    **full body verbatim to the file** — no paraphrase, no summary; the file is the sole
    sink for the body. **Never append**, never narrate the act of writing the close-out,
    never write a "suggested commits" list. **Do not echo the body to stdout.** After
-   writing, print **only a terse pointer**: the `closeout.md` path, the current branch, and
-   the single clearest next action. Copy-back, when needed, comes from terminal scrollback
-   (expand the write line) — not a screen dump.
+   writing, print **only a terse pointer**: the `closeout.md` path, the current branch, the
+   single clearest next action, and the **filenames** of governance stores changed this
+   session (names only — never their contents). Copy-back, when needed, is `cat`/open of the
+   store file on disk (step 8) — not a screen dump.
 
 7. **Commit the close-out.** Stage `closeout.md` plus any store / CLAUDE.md updates from
    this ritual and commit (`chore: session close-out`). The commit is the only sync point —
    an uncommitted `closeout.md` never reaches the repo→chat mirror and stays provisional.
    If the tree has unrelated uncommitted work, commit only the close-out artifacts.
 
-8. **Emit touched governance stores for wholesale project-copy replacement.** *(The one
-   named exception to step 6's pointer-only stdout rule — these fenced, per-file-labelled
-   blocks are the pre-merge copy-back bridge for the branch-blind connector, a packaged
-   selection, not a raw file dump of the whole session.)* For every
-   governance store changed this session — `git diff --name-only master...HEAD` intersected
-   with {`DECISIONS_LOG.md`, `ROADMAP.md`, `FEEDBACK.md`, `OPEN_QUESTIONS.md`, `Ideas.md`} —
-   output its **full current file text** (post-commit, so it reflects what landed), fenced
-   and labelled `project-copy replacement: <filename>`. **Not** a prose summary. If none
-   changed, say so explicitly. The repo is the sole source for these stores: chat replaces
-   the project copies wholesale and **never regenerates them from memory**.
+8. **Copy-back is from the store files on disk — no store text to stdout.** The prior
+   convention of emitting each touched governance store's **full current file text** for
+   wholesale project-copy replacement (kept in #38 as a named exception) is **retired
+   (#39)**. Step 6's pointer already names which stores changed this session
+   (`git diff --name-only master...HEAD` intersected with {`DECISIONS_LOG.md`, `ROADMAP.md`,
+   `FEEDBACK.md`, `OPEN_QUESTIONS.md`, `Ideas.md`}; if none changed, the pointer says so).
+   Pre-merge copy-back is done by `cat`/opening the named store file on disk and replacing
+   the project copy wholesale from it — the repo file is the sole source; chat **never
+   regenerates these stores from memory**. Never dump store contents to stdout.
 
 Hard rules (from `CLAUDE.md`):
 - Code is the only writer — this command may commit.
