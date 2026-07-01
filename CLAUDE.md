@@ -132,21 +132,40 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 - [x] First reconciliation — `DECISIONS_LOG.md` brought current: v3→v4 (#17),
       repo-canonical (#25), GitHub-inbound (#26), espanso-ritual (#27) logged; loop
       rituals committed (`11c82f1`).
-- [x] **#36 + #37 landed this session** — backend per-record writer-identity capture on
-      `/health-connect/sync`, the wire-contract enabler for backend F1. Branch
-      `feat/sync-writer-identity`, pushed; concern-split per #27:
-      - **#37** (`417c1bd`, feature) — ingest read confirmed **Case (b)** (`_aggregate_day`
-        collapses to one daily row; writer identity verified ABSENT). New per-record table
-        `health_connect_record_sources` captures `(record_type, record_start, source_package)`
-        BEFORE aggregation via `_capture_record_sources()`; optional `dataOrigin.packageName`
-        (raw) + `sourcePackage` (alias) on every record model via a `WriterIdentity` mixin
-        (#24 dual-field). Nullable end-to-end (no 422 for current HCA builds); idempotent via
-        `uq_hc_record_source`. Migration `c9b8a7d6e5f4` up→down→up clean in isolation (#21).
-        OpenAPI publish + round-trip (with→stored, without→null, both 200) + idempotency all
-        verified. `health_connect_syncs` untouched. **Not yet applied to Railway/Postgres.**
-      - **#36** (`ddfd8c7`, governance) — source-priority dedup is **backend**, not on-device;
-        HCA reduced to a faithful relay forwarding `dataOrigin.packageName`. Resolves #35's
-        open F1 fork; supersedes its "or filters read-side" horn as a false fork.
+- [x] **#36 + #37 MERGED to master this session (PR #8, rebase → linear)** — backend
+      per-record writer-identity capture on `/health-connect/sync`, the wire-contract enabler
+      for backend F1. Authored prior session on `feat/sync-writer-identity`; landed on master
+      this session at `194ecd8` (#37 feature), `91e4d6a` (#36 governance), `44250cf` (branch
+      close-out):
+      - **#37** — new per-record table `health_connect_record_sources` captures
+        `(record_type, record_start, source_package)` BEFORE `_aggregate_day` via
+        `_capture_record_sources()`; `dataOrigin.packageName` (raw) + `sourcePackage` (alias)
+        on every record model via a `WriterIdentity` mixin (#24 dual-field). Migration
+        `c9b8a7d6e5f4`. `health_connect_syncs` untouched.
+      - **#36** — source-priority dedup is **backend**, not on-device; HCA reduced to a
+        faithful relay forwarding `dataOrigin.packageName`. Resolves #35's open F1 fork.
+- [x] **Writer-identity key hardening (`4985ff3`, PR #8 review fix — this session)** — a review
+      of the branch surfaced 3 findings; fixed 1 + 3, logged 5:
+      - **Finding 1** — `uq_hc_record_source` now spans
+        `(user_id, record_type, record_start, source_package)` so two apps at the same
+        `(type, timestamp)` persist as two rows (the multi-writer signal F1 needs). Missing
+        identity coalesces to sentinel `'unknown'` (a real NULL is UNIQUE-distinct on
+        SQLite + Postgres, which would break re-sync idempotency). **Supersedes #37's
+        "natural key collapses them" caveat — no new decision minted (Easty signed off at
+        merge).** Migration edited in place (unreleased). `NULLS NOT DISTINCT` rejected:
+        needs PG15+ and is unsupported on the SQLite test path.
+      - **Finding 3** — `synced_at` migration column aligned to `NOT NULL` + `server_default`,
+        matching the model.
+      - **Finding 5** — non-atomic check-then-insert upsert logged as tech-debt (Known-open
+        issue #14): swap to atomic `ON CONFLICT` before multi-tenant. Findings 2/4 left by design.
+      - Re-verified on isolated SQLite: migration up/down clean, two-writers→two-rows,
+        idempotent re-sync (0 new), `compare_metadata` zero drift.
+- [x] **#38 close-out routing MERGED (PR #9, rebase → linear — this session)** — `/closeout`
+      writes its body verbatim to `closeout.md` with pointer-only stdout; step 8
+      governance-store emission kept as the one named exception. Luke's `chore/closeout-routing`
+      (forked pre-#8, conflicted on `DECISIONS_LOG.md`) was rebased onto master and the conflict
+      resolved (#36/#37 kept, #38 appended after — no renumber), landing at `aef8a6b` (command
+      edit), `679b03c` (#38 entry).
 - [x] **#35 + F2 landed (prior session)** — HC ingest source-of-truth filter. Governance and
       feature concern-split across two `--ff-only` merges, pushed `4352258..6b2ca40`:
       - **#35** (`33a1d54`, governance-only) ratifies the source-priority filter as TARGET
@@ -185,8 +204,15 @@ _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
       `health_connect_record_sources` table built this session. **Gated on** HCA actually
       forwarding the field (the above). Also unblocks **F3a** (frozen-session-set
       aggregation) once F1 lands. Q3 (HR cadence) and Q4 (date attribution) run in parallel.
-- [ ] **Deploy** — apply migration `c9b8a7d6e5f4` to Railway/Postgres when
-      `feat/sync-writer-identity` merges to master.
+- [x] **Deploy — auto-applies.** `feat/sync-writer-identity` merged to master (PR #8), so
+      migration `c9b8a7d6e5f4` applies on the next Railway deploy — the start command runs
+      `alembic upgrade head` (`backend/Procfile` / `backend/railway.toml`). No manual step
+      owed; confirm the deploy log shows `upgrade head` succeeds and the container is healthy
+      (not verifiable from this session — no prod DB access).
+- [ ] **Remote branch cleanup (Easty, terminal)** — this session's git proxy 403-blocked ref
+      *deletes* (updates were fine). Stale merged remotes to drop: `chore/closeout-routing`,
+      `chore/governance-session-lifecycle`, `docs/readiness-banister-canon`,
+      `fix/samsung-hrv-backend-reconcile`.
 
 ---
 
