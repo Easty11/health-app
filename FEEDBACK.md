@@ -181,7 +181,7 @@ How Easty explicitly wants things done. Apply these without being asked.
 ### 2.12 Session lifecycle — repo is the sole source for governance stores
 **Preference:** Two session-lifecycle rituals keep the repo, not chat memory, as the source for governance stores:
 1. **At session open**, Code reports the current `DECISIONS_LOG.md` max decision number; chat re-aims any brief against it before acting.
-2. **At closeout**, Code emits the full current text of every governance store touched that session (`DECISIONS_LOG`, `ROADMAP`, `FEEDBACK`, `OPEN_QUESTIONS`, `Ideas`) for wholesale project-copy replacement. Chat consumes the stores as orientation and never regenerates them from memory.
+2. **At closeout**, Code writes the close-out body verbatim to `closeout.md` and prints only a terse pointer to stdout — path, branch, next action, and the filenames of governance stores changed that session (`DECISIONS_LOG`, `ROADMAP`, `FEEDBACK`, `OPEN_QUESTIONS`, `Ideas`; names only, never contents). It does not emit store text; pre-merge copy-back is `cat`/open of the changed store file on disk. Chat consumes those files as orientation, replaces the project copies wholesale, and never regenerates them from memory.
 
 **Reason:** A stale project copy (`DECISIONS_LOG` #18 vs repo #31) cost a round-trip and risked fabricated entries, 26 June 2026. Truth lives in the repo; chat-memory must not masquerade as canon.
 

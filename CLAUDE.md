@@ -92,10 +92,12 @@ must match it.
   4. Regenerates the cold-resume handoff view from the stores.
   5. Overwrites a single `closeout.md`. Never appends narrative; never describes the act
      of writing the close-out.
-  6. Emits the full current text of every governance store touched this session
-     (`DECISIONS_LOG` / `OPEN_QUESTIONS` / `ROADMAP` / `FEEDBACK` / `Ideas`) for wholesale
-     project-copy replacement — not a prose summary. Chat replaces the project copies
-     wholesale and never regenerates these stores from memory.
+  6. Writes the close-out body verbatim to `closeout.md` and prints only a terse pointer to
+     stdout — path, branch, single next action, and the filenames of governance stores
+     changed this session (`DECISIONS_LOG` / `OPEN_QUESTIONS` / `ROADMAP` / `FEEDBACK` /
+     `Ideas`; names only, never contents). It does not emit store text; pre-merge copy-back
+     is `cat`/open of the changed store file on disk. Chat replaces the project copies
+     wholesale from those files and never regenerates these stores from memory.
 - `/compact` is mid-session context compression, **not** a close-out. Do not conflate.
 
 ### Project-wide standing rules
