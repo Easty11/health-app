@@ -583,7 +583,7 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
-### #NEXT. Per-user context isolation: `user_knowledge_entries` is the canonical structured-profile store; MCP tokens bind to a real user
+### 42. Per-user context isolation: `user_knowledge_entries` is the canonical structured-profile store; MCP tokens bind to a real user
 
 **Decision:** Two multi-user leaks fixed, both landing as concern-split branches on top of master #41: (1) `context_builder._section_user_profile` no longer hardcodes Luke's identity/devices/injuries into every user's system prompt — it now reads a `type="preference", key="device_profile"` entry from `user_knowledge_entries`, falling back to a neutral line when absent; empty-profile users get a new onboarding-interview section that elicits scope then profile facts via the *existing* `knowledge_update` mechanism, the same write path ongoing chat updates already use (`fix/chat-context-per-user`). (2) `oauth_provider.PersonalOAuthProvider.authorize()` no longer auto-approves — it parks the request behind a ticket and redirects to a new `/mcp/login` form that re-checks email/password against the same `users` table `backend/auth.py` authenticates against; only then is an `AuthorizationCode` minted and bound to that `user_id`, carried through to the access/refresh token. Every `mcp_server.py` tool had its `user_id: int = 1` default removed entirely — no override param — and now resolves the caller via `_current_user_id()`, which reads the bearer token FastMCP already populates (`AuthContextMiddleware`, confirmed pre-wired by the installed SDK — no new middleware needed) and raises rather than falling back to any default (`fix/mcp-oauth-identity`).
 
