@@ -94,8 +94,11 @@ must match it.
   3. **Reconciles the pending-commit queue**: confirms each `PENDING` item landed in a
      commit, or states why not.
   4. **Branch terminal-state gate** — every branch touched this session ends
-     merged+deleted or listed in `BRANCHES.md`; none in undefined limbo. If any touched
-     branch is neither, the close-out HALTS until resolved.
+     merged+deleted or listed in `BRANCHES.md`; none in undefined limbo. The gate
+     enumerates local branches (`git branch`) as well as `refs/remotes/origin`; a local
+     branch with `+` commits vs `origin/master` must be pushed, parked in `BRANCHES.md`,
+     or discarded before close. If any touched branch is neither, the close-out HALTS
+     until resolved.
   5. Regenerates the cold-resume handoff view from the stores.
   6. Overwrites a single `closeout.md`. Never appends narrative; never describes the act
      of writing the close-out.
@@ -149,7 +152,25 @@ must match it.
 
 _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 
-- [x] **#40 branch & session lifecycle protocol (this session,
+- [x] **#41 governance consolidation (this session, `chore/governance-consolidation`)** —
+      three remaining governance debts cleared in one concern-split branch (Rule 5 note:
+      two commit-groups, store-currency + gate, consolidated by explicit decision):
+      - **Store-currency:** OPEN_QUESTIONS Q2 flipped open → resolved — fixed in HCA
+        `36df9a2` (`collapseSleepSessions()` de-dups overlapping SleepSessions, 9/9
+        behavioral verification, patch-present on HCA master). DECISIONS_LOG
+        "Things tried and abandoned" Polar line ("Flow → HC bridge is sufficient")
+        annotated superseded-by-#17 in place — mutable appendix, no numbered entry
+        touched, no new number minted (#17 controls).
+      - **#41 gate extension:** #40's terminal-state gate + `stale`/`land` keyed on
+        `refs/remotes/origin` only; local-only unpushed branches escaped the disposition
+        net (HCA `fix/scraper-sh-relayout` carried 3 unpushed `+` commits invisible to
+        every remote-based check). SHARED-block close-out bullet + `/closeout` step 4 now
+        enumerate local branches (`git branch`) alongside remotes — a local branch with
+        `+` vs `origin/master` must be pushed, parked in `BRANCHES.md`, or discarded
+        before close. **Verbatim SHARED-block re-mirror owed to `health-connect-app`**
+        (separate 2-min session — a copy, not a hand-merge, per HCA #16's block
+        establishment).
+- [x] **#40 branch & session lifecycle protocol (prior session,
       `chore/branch-lifecycle-protocol`)** — Rules 2–5 landed (Rule 1 delete-on-merge
       already live via GitHub settings, both repos, 2 Jul 2026): patch-id disposition
       (`git cherry`, never SHA ancestry) + `stale`/`land` aliases; `BRANCHES.md` ledger +

@@ -26,10 +26,13 @@ Execute these steps in order:
 
 4. **Branch terminal-state gate.** For every branch touched this session, resolve to a
    terminal state: either merged + remote-deleted, or present in `BRANCHES.md` with
-   purpose / why-parked / unblocks-on. Use `git cherry origin/master <branch>` to confirm
-   merge status. If any touched branch is neither merged+deleted nor in `BRANCHES.md`,
-   HALT the close-out and report the offending branch(es) — do not write `closeout.md`
-   until resolved.
+   purpose / why-parked / unblocks-on. The gate iterates local + remote, not remotes-only:
+   the gate enumerates local branches (`git branch`) as well as `refs/remotes/origin`; a
+   local branch with `+` commits vs `origin/master` must be pushed, parked in
+   `BRANCHES.md`, or discarded before close. Use `git cherry origin/master <branch>` to
+   confirm merge status. If any touched branch is neither merged+deleted nor in
+   `BRANCHES.md`, HALT the close-out and report the offending branch(es) — do not write
+   `closeout.md` until resolved.
 
 5. **Regenerate the cold-resume handoff** from the stores so a cold session can resume
    with zero chat history: current sprint (from the `CLAUDE.md` sprint block / `ROADMAP.md`),
