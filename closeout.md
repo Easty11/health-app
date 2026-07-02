@@ -1,98 +1,79 @@
-# Close-out — health-app
-
-_Session close-out. Branch: `master`. Session-open ref: `e62f89f`._
-
----
+# closeout.md — session close-out (governance consolidation, 2 Jul 2026)
 
 ## 1. Real commits this session
 
-`git log --oneline e62f89f..HEAD` (what landed on `master` this session):
+Session-open ref: `83e0cb2` (origin/master at open, #40 max). `git log --oneline 83e0cb2..HEAD`:
 
 ```
-679b03c docs(decisions): #38 close-out body to file, pointer-only stdout; step 8 emit kept as named exception
-aef8a6b chore(closeout): route body to file + pointer-only stdout; keep step 8 emit as named exception
-4985ff3 fix(hc-ingest): add source_package to writer-identity unique key; align synced_at
-44250cf chore: session close-out - #36/#37 backend writer-identity capture landed
-91e4d6a docs(decisions): #36 source-priority is backend; #37 per-record writer-identity capture structure
-194ecd8 feat(hc-ingest): capture per-record writer identity on /health-connect/sync (#36/#37)
+ca74338 docs(decisions): #41 terminal-state gate extended to local branches — supersedes #40's gate-scope clause only
+14b554c chore(lifecycle): terminal-state gate extended to local branches — SHARED bullet + /closeout step 4 in lockstep; sprint block updated
+baf2146 chore(stores): store-currency corrections — Q2 resolved via HCA 36df9a2; Polar appendix line annotated superseded-by-#17
 ```
 
-Provenance (this session was integration + review, so authored-vs-landed differ):
-
-- `194ecd8`, `91e4d6a`, `44250cf` — **authored a prior session** on `feat/sync-writer-identity`
-  (orig. `417c1bd` / `ddfd8c7` / `5d71950`); **rebased onto master and landed this session**
-  via **PR #8** merge (rebase → linear).
-- `4985ff3` — **authored + landed this session.** The review fix (orig. `2cf6cca`): finding 1
-  (source_package added to `uq_hc_record_source` + `'unknown'` sentinel), finding 3
-  (`synced_at` NOT NULL alignment), finding 5 logged as Known-open issue #14. Landed via PR #8.
-- `aef8a6b`, `679b03c` — **authored by Easty a prior session** on `chore/closeout-routing`
-  (orig. `7441196` / `711c241`); **rebased onto master by Code this session** (one
-  `DECISIONS_LOG.md` conflict resolved: #36/#37 kept, #38 appended, no renumber) and landed
-  via **PR #9** merge (rebase → linear).
-
-Plus **this close-out commit** (`chore: session close-out`) staging `closeout.md` + the
-CLAUDE.md sprint-block update.
-
-Both PRs are **merged and the session unsubscribed** from each. Local `master` == `origin/master`
-(0 ahead / 0 behind), working tree clean.
-
----
+All three landed to master via `git land chore/governance-consolidation` (`--ff-only`),
+pushed `83e0cb2..ca74338`. Plus this close-out commit (`chore: session close-out`, hash in
+`git log` after this file lands).
 
 ## 2. Pending-queue reconciliation
 
-**No `;cc` pending-commit queue was carried into this session.** This was a Code-driven
-integration/review session (land the writer-identity branch, review it, land the close-out
-branch), not a chat-handoff. Nothing was left provisional.
+The session brief (ANCHOR) carried three debts; all landed:
 
-One decision-shaped item did land and is reconciled here:
+- **Store-currency (Concern A)** → `baf2146`:
+  - OPEN_QUESTIONS Q2 flipped open → resolved — fixed in HCA `36df9a2`
+    (`collapseSleepSessions()`, 9/9 behavioral verification, patch-present on HCA master).
+  - DECISIONS_LOG "Things tried and abandoned" Polar line annotated superseded-by-#17 in
+    place. Gate held: mutable appendix only, zero numbered `### N.` entries touched, no
+    new number minted (#17 controls).
+- **Gate extension, operative (Concern B)** → `14b554c`: SHARED-block close-out bullet 4
+  and `.claude/commands/closeout.md` step 4 both extended to enumerate local branches
+  (`git branch`) alongside `refs/remotes/origin`; operative sentence verified
+  verbatim-identical in both (lockstep held). Sprint block updated in the same commit.
+- **#41 append (Concern B, governance)** → `ca74338`: number-at-merge honoured — re-fetch
+  at claim showed origin/master still `83e0cb2`, max `### 40.`; claimed `### 41.`
+  immediately before the `--ff` land.
 
-- **Finding-1 natural-key change supersedes the assumption behind #37** ("natural key collapses
-  same-`(type, timestamp)` writes"). Per Easty's directive **no new decision number was minted**;
-  the rationale lives in the PR #8 body and Easty **signed it off at merge**. It is committed in
-  `4985ff3` — not provisional.
+Nothing decided this session remains uncommitted.
 
----
+## 3. Branch terminal-state gate (local + remote, per #41)
 
-## 3. Cold-resume handoff
+- **Touched:** `chore/governance-consolidation` — merged `--ff-only` to master, local
+  branch deleted. Never pushed to origin, so no remote ref existed to delete (the `land`
+  alias's final remote-delete step errored benignly on "remote ref does not exist").
+- **Stale locals (first sweep under the #41 rule):** eight pre-existing local branches
+  found and discarded after patch-id verification — seven zero-`+`
+  (`chore/governance-session-lifecycle`, `docs/hc-q1-resolved`, `docs/hc-sleep-stage-enum`,
+  `docs/readiness-banister-canon`, `feat/sync-writer-identity`,
+  `fix/hc-sleep-stage-constants`, `fix/samsung-hrv-backend-reconcile`);
+  `chore/closeout-routing` showed 2 `+` of 5, inspected and confirmed a false pending —
+  the two commits are the pre-rebase #38 work whose content is on master via `679b03c`
+  (#38) + `59a5e9b`/`15def8d` (#39); patch-ids differ only from the conflicted-rebase edit
+  (#40's documented safe-failure mode).
+- **End state:** `git branch` = master only; `git ls-remote --heads origin` = master only;
+  `BRANCHES.md` empty (honest). Gate PASSES.
 
-### Current sprint (what landed / what's next)
+## 4. Cold-resume handoff
 
-- **[x] Writer-identity capture on master** — `health_connect_record_sources` + `WriterIdentity`
-  mixin + `_capture_record_sources()` + migration `c9b8a7d6e5f4`, hardened so two writers at one
-  `(type, timestamp)` persist as two rows (`source_package` in the unique key; `'unknown'`
-  sentinel). Capture only — does not yet filter. (#36/#37 + review fix, PR #8.)
-- **[x] #38 close-out routing on master** — body → `closeout.md`, pointer-only stdout, step 8
-  the named exception. (PR #9.)
-- **[x] Deploy is automatic** — Railway start command runs `alembic upgrade head`, so
-  `c9b8a7d6e5f4` applies on the next `master` deploy. No manual step; confirm the deploy log
-  (not verifiable from this session — no prod DB access).
-- **[ ] Supersede #3** — Polar not session-only / AccessLink live / SDK R-R highest-fidelity HRV.
-  Blocked on a *How you know* artifact (Polar R-R verification).
-- **[ ] HCA forwards writer identity (HCA session)** — the producer half of the wire contract.
-- **[ ] Backend F1 filter (backend session)** — source-priority dedup over the new table; gated
-  on HCA forwarding the field; also unblocks F3a.
-- **[ ] Remote branch cleanup (Easty, terminal)** — proxy 403-blocked ref deletes this session:
-  `chore/closeout-routing`, `chore/governance-session-lifecycle`, `docs/readiness-banister-canon`,
-  `fix/samsung-hrv-backend-reconcile`.
+**Master:** `ca74338` + close-out commit. DECISIONS_LOG max = **#41**. Local and remote
+are both master-only. Working tree clean.
 
-### Open questions by status
+**Landed this session:** #41 (terminal-state gate extended to local branches — supersedes
+#40's gate-scope clause only); Q2 resolved; Polar appendix line superseded-by-#17.
 
-- **resolved →** Q1 → #20 (HC stage-constant fix + backfill; verified against Railway).
-- **open:**
-  - **Q2** — companion `validateNight()` returns overlapping/duplicate SleepSession records;
-    dedupe before `trustedDeepMin` is meaningful.
-  - **Q3** — HR sampling cadence during sleep unconfirmed (`hrMedianGapSec = 0`, artifact of
-    Q2 doubling); Gate 3 INCONCLUSIVE until HR de-duped.
-  - **Q4** — HC dates one day earlier than the scraper (`_aggregate_day` bed-date vs scraper
-    wake-date); pick one canonical sleep-date convention.
-  - **Q5** — collapse `/health-connect/sync` dual-field acceptance once a real payload confirms
-    which field names mobile actually posts.
-  - **Q6** — strength volume-load not yet verified landing in per-window `load_metrics`
-    (resolves → #28 on a Postgres verify).
+**Open questions by status:**
+- resolved: Q1 (→ #20), Q2 (→ HCA `36df9a2`)
+- open: Q3 (HR cadence during sleep — re-measure now Q2's dedup exists), Q4 (HC bed-date
+  vs scraper wake-date attribution), Q5 (dual-field acceptance collapse — needs one real
+  captured payload), Q6 (strength volume-load → Postgres verify, resolves → #28)
 
-### Single clearest next action
+**Single clearest next action:** **HCA session — two owed items in one visit:**
+(1) re-mirror the SHARED block verbatim into `health-connect-app/CLAUDE.md` (now includes
+the #41 local+remote gate; a copy, not a hand-merge) + extend its own `/closeout` step 4
+identically; (2) forward `dataOrigin.packageName` (+ HC priority-table snapshot) in the
+`/health-connect/sync` payload — the producer half of the wire contract whose consumer
+half (#36/#37 per-record capture) is live on master.
 
-**In `health-connect-app` (HCA session): forward `dataOrigin.packageName` (+ an HC
-`health_data_category_priority_table` snapshot) in the `/health-connect/sync` payload.** The
-consumer half — per-record writer-identity capture — is now on master; HCA forwarding is the
-producer half of the wire contract and the gate that unblocks the backend F1 dedup filter.
+**Then (backend session):** F1 source-priority dedup over
+`health_connect_record_sources` — gated on HCA forwarding; unblocks F3a. Q3/Q4 run in
+parallel. Still owed with no date: supersede #3 (blocked on a Polar R-R *How you know*
+artifact); confirm next Railway deploy log runs `alembic upgrade head` clean (migration
+`c9b8a7d6e5f4`).
