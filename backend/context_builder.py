@@ -50,34 +50,31 @@ def _days_ago_label(start_str: str, today: datetime) -> str:
 
 # ---------- individual context sections ----------
 
-def _section_user_profile(has_structured_profile: bool = False) -> str:
-    """Static athlete profile, prepended to every system prompt.
+def _section_user_profile(structured_entries: list[Any] | None = None) -> str:
+    """Device/method preferences, prepended to every system prompt.
 
-    When a structured fortification-target profile is present (spec §9), the
-    hardcoded injury list yields to it — injuries are carried in the structured
-    ledger/fortification sections below, not as a frozen string here.
+    Identity is rendered dynamically by `_section_identity`. Injuries are
+    rendered per-user by `_section_schedule` from `type="injury"` structured
+    entries. The only per-user fact carried here is a `type="preference",
+    key="device_profile"` entry — which device/tool the user logs each signal
+    with. Absent that entry, this renders a neutral line; nothing is assumed.
     """
-    if has_structured_profile:
-        injuries_block = (
-            "- Active injuries and targeting are carried in the structured "
-            "Fortification Target and Weekly Schedule sections below — not hardcoded here.\n"
-        )
+    device_profile = None
+    for e in structured_entries or []:
+        e_type = getattr(e, "type", None) if hasattr(e, "type") else e.get("type")
+        e_key = getattr(e, "key", None) if hasattr(e, "key") else e.get("key")
+        if e_type == "preference" and e_key == "device_profile":
+            device_profile = getattr(e, "value", None) if hasattr(e, "value") else e.get("value")
+            break
+
+    if device_profile:
+        profile_lines = "".join(f"- {k}: {v}\n" for k, v in device_profile.items())
     else:
-        injuries_block = (
-            "- Active injuries:\n"
-            "  - Left little finger\n"
-            "  - Right shoulder — caution with horizontal adduction and overhead work\n"
-            "  - Left hamstring — provoked by striding/sprinting\n"
-        )
+        profile_lines = "- No device/method preferences recorded yet.\n"
+
     return (
         "## About the user\n"
-        "- The user is Luke (\"Easty\"). Primary device is a Samsung Galaxy Ring.\n"
-        "- HRV is captured from the Ring via an accessibility scraper, NOT Health Connect.\n"
-        "- Strength training is logged in Hevy.\n"
-        "- Aerobic sessions use a Polar H10 chest strap.\n"
-        f"{injuries_block}"
-        "- Readiness algorithm: RMSSD vs the 7-day baseline is the PRIMARY gate; "
-        "sleep quality is secondary.\n"
+        f"{profile_lines}"
         "\n"
         "---\n"
         "## SCHEDULE INTELLIGENCE\n"
@@ -444,6 +441,33 @@ def _section_checkin(checkin: Any | None, now: datetime) -> str:
         f"- Score 4-5: reduce loads 20-30%, RPE cap 6, consider recovery session\n"
         f"- Score 1-3: recovery only, no strength work"
     )
+
+
+def _section_onboarding_interview() -> str:
+    return """## ONBOARDING INTERVIEW — this user has no structured profile yet
+
+Before giving any training/health advice, run a short adaptive interview:
+
+1. Ask what they want to use this assistant for (strength training, recovery/HRV
+   tracking, general health, or a mix) — establish scope before eliciting anything
+   else. Do not assume a domain.
+2. Based on their answer, ask only about that domain's profile — devices/tools
+   they log with, any current injuries or constraints, weekly schedule. Keep
+   questions brief and conversational (a few at a time), same tone as SCHEDULE
+   INTELLIGENCE below — do not turn this into a form.
+3. As facts are confirmed, emit `<knowledge_update>` blocks using the structured
+   schema documented in SCHEDULE INTELLIGENCE below (`type` one of
+   `schedule_item | load_context | injury | preference`). Use `type="preference",
+   key="device_profile"` for which device/tool they use for which signal (e.g.
+   `{"hrv_source": "...", "strength_log_tool": "...", "aerobic_hr_source": "...",
+   "readiness_primary_gate": "..."}` — include only what they actually tell you).
+   Use `type="injury"` per injury (`value: {"body_part": ..., "restrictions": [...]}`).
+4. Stay education-scoped throughout — this is not a clinical-advice path. Do not
+   diagnose or prescribe treatment; if something sounds medical, suggest they see
+   a professional and log it as context, not a directive.
+
+Once basic scope + device profile are captured, proceed with the conversation
+normally — you don't need every field before being useful."""
 
 
 def _section_knowledge_update() -> str:
@@ -883,7 +907,7 @@ def build_system_prompt(
     )
 
     sections: list[str] = [
-        _section_user_profile(has_structured_profile=fortification_profile is not None),
+        _section_user_profile(structured_entries),
         "",
         "You are a personal health and performance assistant. Your job is to help the "
         "user understand their training, spot patterns, and give specific, actionable "
@@ -894,6 +918,9 @@ def build_system_prompt(
         readiness_section,
         _section_integrations(connected_integrations),
     ]
+
+    if not structured_entries:
+        sections.append(_section_onboarding_interview())
 
     if fortification_profile is not None:
         fort_section = _section_fortification(fortification_profile)

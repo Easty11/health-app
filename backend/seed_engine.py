@@ -79,6 +79,33 @@ def _seed_injuries(db, user_id: int) -> int:
     return written
 
 
+# Device/method mapping — the last per-user fact still hardcoded in
+# context_builder before this seed, now the structured ledger source for
+# _section_user_profile's `type="preference", key="device_profile"` lookup.
+_DEVICE_PROFILE_SEED = {
+    "hrv_source": "Samsung Galaxy Ring (accessibility scraper, not Health Connect)",
+    "strength_log_tool": "Hevy",
+    "aerobic_hr_source": "Polar H10 chest strap",
+    "readiness_primary_gate": "RMSSD vs 7-day baseline; sleep quality secondary",
+}
+
+
+def _seed_device_profile(db, user_id: int) -> int:
+    existing = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=user_id, key="device_profile", active=True)
+        .first()
+    )
+    if existing is not None:
+        return 0
+    db.add(models.UserKnowledgeEntry(
+        user_id=user_id, type="preference", key="device_profile",
+        value=_DEVICE_PROFILE_SEED, source="system", active=True,
+    ))
+    db.commit()
+    return 1
+
+
 def main(email: str) -> None:
     db = SessionLocal()
     try:
@@ -93,12 +120,14 @@ def main(email: str) -> None:
         profile = profile_mod.upsert_profile(db, user.id, profile_mod.LUKE_PROFILE_SEED)
         cap_rows = profile_mod.seed_capability_state(db, user.id)
         inj_rows = _seed_injuries(db, user.id)
+        dev_rows = _seed_device_profile(db, user.id)
 
         print(f"Seeded engine for user {user.id} ({user.email}):")
         print(f"  fortification profile: target={profile.primary_target}, "
               f"probe_budget={profile.probe_budget}")
         print(f"  capability_state rows written: {cap_rows}")
         print(f"  injury ledger rows written:    {inj_rows}")
+        print(f"  device profile rows written:   {dev_rows}")
     finally:
         db.close()
 
