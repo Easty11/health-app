@@ -97,6 +97,26 @@ repo; recorded here under the canonical Q-series.
 
 ---
 
+## Q7. Structured injury ledger (`user_knowledge_entries`) is missing the right proximal semimembranosus tear
+
+DECISIONS_LOG #42 migrated Luke's device/method facts and three injuries (left little
+finger, right shoulder, left hamstring) into `user_knowledge_entries` — but reused
+`seed_engine.py`'s existing `_INJURY_SEED` verbatim rather than authoring new injury data.
+`FEEDBACK.md` §5 ("Easty's Current Injury State") documents a **fourth**, distinct injury —
+right proximal semimembranosus, full-thickness partial-width rupture, confirmed ultrasound
+Aug 2025 — explicitly called out there as DISTINCT from the left hamstring issue. It has
+never been in the structured ledger (`seed_engine.py`'s `_INJURY_SEED` predates this
+session and also only carried three). `_section_schedule`'s "THIS WEEK FLAGS" injury
+render and `mcp_server.get_readiness_snapshot`'s injury query (both now sourced from
+`user_knowledge_entries` as of #42) are therefore both missing this injury today. Also
+missing: the richer three-valued provocative/clear/untested detail per injury that
+`FEEDBACK.md` §5 carries but the current `_INJURY_SEED` schema (`body_part`, `side`,
+`restrictions`, `detail`) does not have a field for.
+
+**Status:** open
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._

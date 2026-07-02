@@ -152,7 +152,37 @@ must match it.
 
 _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 
-- [x] **#41 governance consolidation (this session, `chore/governance-consolidation`)** —
+- [x] **#42 per-user context isolation (this session, `fix/chat-context-per-user` +
+      `fix/mcp-oauth-identity` + `docs/decisions-per-user-context`)** — the multi-user gap
+      (any new user got Luke's identity/injuries/data) closed on both surfaces it lived on:
+      - **Chat context (P1):** `_section_user_profile` no longer hardcodes Luke — identity
+        was already dynamic (`_section_identity`), injuries already rendered per-user
+        (`_section_schedule` from `type="injury"` entries); only the device/method mapping
+        was truly orphaned, now a `type="preference", key="device_profile"` entry in
+        `user_knowledge_entries`. Empty-profile users get a new onboarding-interview
+        section that elicits scope then profile facts via the *existing* `knowledge_update`
+        write path — no second store. `seed_engine.py` extended (not duplicated) to seed
+        the device profile alongside its existing injury seeding.
+      - **MCP identity (P2):** `oauth_provider.authorize()` no longer auto-approves —
+        gated through a new `/mcp/login` form re-checking against the real `users` table;
+        every issued token now binds to that `user_id`. All six `mcp_server.py` tools had
+        `user_id: int = 1` removed entirely (no override param). Also fixed a second
+        Luke-leak found in passing: `get_readiness_snapshot`'s hardcoded injury text, now a
+        live per-user query.
+      - Verify-first (standing rule) found the original brief's premise wrong before any
+        code was written: `has_structured_profile` gated off `fortification_profiles`
+        while `knowledge_update` writes landed in `user_knowledge_entries` — disjoint
+        stores, resolved via `user_knowledge_entries` as canonical (user decision, this
+        session). DECISIONS_LOG #42 carries the full "How you know" — all four gates
+        (G1–G4) exercised against real code paths on local SQLite, not mocked/asserted.
+      - **Owed:** `seed_engine.py` has not been run against Railway Postgres yet (no
+        Railway credentials in this session) — Luke's device/injury facts are seeded
+        locally only; production still reads an empty structured profile until this runs
+        (ROADMAP NOW). Also found and logged but left untouched (out of scope):
+        `mcp_server.get_hevy_workouts` references an unimported `Session` type (ROADMAP
+        NOW); a fourth injury (right proximal semimembranosus) documented in `FEEDBACK.md`
+        §5 was never in the seed data this session reused verbatim (OPEN_QUESTIONS Q7).
+- [x] **#41 governance consolidation (prior session, `chore/governance-consolidation`)** —
       three remaining governance debts cleared in one concern-split branch (Rule 5 note:
       two commit-groups, store-currency + gate, consolidated by explicit decision):
       - **Store-currency:** OPEN_QUESTIONS Q2 flipped open → resolved — fixed in HCA

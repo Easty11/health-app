@@ -1,79 +1,88 @@
-# closeout.md — session close-out (governance consolidation, 2 Jul 2026)
+# closeout.md — session close-out (per-user context isolation, #42, 2 Jul 2026)
 
 ## 1. Real commits this session
 
-Session-open ref: `83e0cb2` (origin/master at open, #40 max). `git log --oneline 83e0cb2..HEAD`:
+Session-open ref: `504e5e5` (origin/master at open, #41 max). `git log --oneline 504e5e5..HEAD`:
 
 ```
-ca74338 docs(decisions): #41 terminal-state gate extended to local branches — supersedes #40's gate-scope clause only
-14b554c chore(lifecycle): terminal-state gate extended to local branches — SHARED bullet + /closeout step 4 in lockstep; sprint block updated
-baf2146 chore(stores): store-currency corrections — Q2 resolved via HCA 36df9a2; Polar appendix line annotated superseded-by-#17
+0e5fb66 fix(context): remove hardcoded Luke identity/injuries from every user's prompt
+6b4aa1b fix(mcp): bind MCP tokens to a real user, remove the user_id=1 default
+d946f30 docs(decisions): #NEXT per-user context isolation — user_knowledge_entries canonical, MCP tokens bind to real user
+408579b docs(decisions): claim #42 at merge for per-user context isolation entry
 ```
 
-All three landed to master via `git land chore/governance-consolidation` (`--ff-only`),
-pushed `83e0cb2..ca74338`. Plus this close-out commit (`chore: session close-out`, hash in
-`git log` after this file lands).
+All four landed to master concern-split: `fix/chat-context-per-user` (P1) →
+`git land`'d directly (`0e5fb66`, ff); `fix/mcp-oauth-identity` (P2) rebased onto the new
+master then `git land`'d (`6b4aa1b`, ff); `docs/decisions-per-user-context` rebased then
+`git land`'d in two commits (`d946f30` the entry, `408579b` renaming `#NEXT` → `#42` at
+merge per #40's number-at-merge rule). All pushed — `origin/master` confirmed at `408579b`.
+Plus this close-out commit (`chore: session close-out`, hash in `git log` after this file
+lands).
 
 ## 2. Pending-queue reconciliation
 
-The session brief (ANCHOR) carried three debts; all landed:
-
-- **Store-currency (Concern A)** → `baf2146`:
-  - OPEN_QUESTIONS Q2 flipped open → resolved — fixed in HCA `36df9a2`
-    (`collapseSleepSessions()`, 9/9 behavioral verification, patch-present on HCA master).
-  - DECISIONS_LOG "Things tried and abandoned" Polar line annotated superseded-by-#17 in
-    place. Gate held: mutable appendix only, zero numbered `### N.` entries touched, no
-    new number minted (#17 controls).
-- **Gate extension, operative (Concern B)** → `14b554c`: SHARED-block close-out bullet 4
-  and `.claude/commands/closeout.md` step 4 both extended to enumerate local branches
-  (`git branch`) alongside `refs/remotes/origin`; operative sentence verified
-  verbatim-identical in both (lockstep held). Sprint block updated in the same commit.
-- **#41 append (Concern B, governance)** → `ca74338`: number-at-merge honoured — re-fetch
-  at claim showed origin/master still `83e0cb2`, max `### 40.`; claimed `### 41.`
-  immediately before the `--ff` land.
-
-Nothing decided this session remains uncommitted.
+No pending-commit queue was carried into this session — it opened from a direct
+engineering brief (ANCHOR/OBJECTIVE/STEPS/GATES/LOG/GUARD), not a `;cc` chat close-out
+paste. There was nothing flagged `PENDING` to reconcile. Nothing decided this session is
+uncommitted: the one governance decision made (DECISIONS_LOG #42) landed at
+`d946f30`/`408579b`, both on master.
 
 ## 3. Branch terminal-state gate (local + remote, per #41)
 
-- **Touched:** `chore/governance-consolidation` — merged `--ff-only` to master, local
-  branch deleted. Never pushed to origin, so no remote ref existed to delete (the `land`
-  alias's final remote-delete step errored benignly on "remote ref does not exist").
-- **Stale locals (first sweep under the #41 rule):** eight pre-existing local branches
-  found and discarded after patch-id verification — seven zero-`+`
-  (`chore/governance-session-lifecycle`, `docs/hc-q1-resolved`, `docs/hc-sleep-stage-enum`,
-  `docs/readiness-banister-canon`, `feat/sync-writer-identity`,
-  `fix/hc-sleep-stage-constants`, `fix/samsung-hrv-backend-reconcile`);
-  `chore/closeout-routing` showed 2 `+` of 5, inspected and confirmed a false pending —
-  the two commits are the pre-rebase #38 work whose content is on master via `679b03c`
-  (#38) + `59a5e9b`/`15def8d` (#39); patch-ids differ only from the conflicted-rebase edit
-  (#40's documented safe-failure mode).
-- **End state:** `git branch` = master only; `git ls-remote --heads origin` = master only;
-  `BRANCHES.md` empty (honest). Gate PASSES.
+- **Touched:** `fix/chat-context-per-user`, `fix/mcp-oauth-identity`,
+  `docs/decisions-per-user-context` — all three merged `--ff-only` to master (two required
+  a rebase first, since P1 landed before P2/governance were cut) and locally deleted by
+  the `land` alias. None had ever been pushed as their own remote refs, so the alias's
+  final remote-delete step errored benignly ("remote ref does not exist") on all three —
+  not a real failure, confirmed by `git ls-remote --heads origin` showing master only both
+  before and after.
+- **End state:** `git branch` = master only; `git ls-remote --heads origin` = master only
+  (`408579b`); `BRANCHES.md` empty (honest, nothing parked). Gate PASSES.
 
 ## 4. Cold-resume handoff
 
-**Master:** `ca74338` + close-out commit. DECISIONS_LOG max = **#41**. Local and remote
-are both master-only. Working tree clean.
+**Master:** `408579b` + close-out commit. DECISIONS_LOG max = **#42**. Local and remote
+are both master-only. Working tree clean pre-close-out-commit.
 
-**Landed this session:** #41 (terminal-state gate extended to local branches — supersedes
-#40's gate-scope clause only); Q2 resolved; Polar appendix line superseded-by-#17.
+**Landed this session — #42 per-user context isolation:**
+- Chat context (P1): `_section_user_profile` (backend/context_builder.py) no longer
+  hardcodes Luke's identity/devices/injuries. Identity was already dynamic
+  (`_section_identity`); injuries already rendered per-user (`_section_schedule` from
+  `type="injury"` entries) — only the device/method mapping was orphaned, now a
+  `type="preference", key="device_profile"` entry in `user_knowledge_entries`.
+  Empty-profile users get a new onboarding-interview prompt section, seeded via the
+  *existing* `knowledge_update` mechanism — no second store. `seed_engine.py` extended
+  (not duplicated) to seed the device profile.
+- MCP identity (P2): `oauth_provider.authorize()` no longer auto-approves — gated through
+  a new `/mcp/login` form re-checking against `users`; every token binds to a real
+  `user_id`. All six `mcp_server.py` tools had `user_id: int = 1` removed, no override
+  param. Also fixed `get_readiness_snapshot`'s hardcoded injury text (found in passing).
+- Verify-first (before any code) found the brief's premise wrong: `has_structured_profile`
+  and `knowledge_update` writes targeted disjoint tables (`fortification_profiles` vs
+  `user_knowledge_entries`) — user resolved `user_knowledge_entries` as canonical before
+  design proceeded. Full "How you know" in DECISIONS_LOG #42; all four gates (G1–G4)
+  exercised against real code paths on local SQLite, not mocked.
+
+**Owed / not yet done (all logged to canonical stores this close-out):**
+1. **Run `seed_engine.py` against Railway Postgres** (ROADMAP NOW) — this session only had
+   local SQLite; Luke's device/injury facts are seeded locally, not in production yet.
+2. **`mcp_server.get_hevy_workouts` references an unimported `Session` type** (ROADMAP
+   NOW) — pre-existing bug, found not introduced this session; will `NameError` at call
+   time; left untouched (Hevy endpoints out of scope for #42).
+3. **OPEN_QUESTIONS Q7 (new, open)** — structured injury ledger is missing a fourth injury
+   (right proximal semimembranosus) that `FEEDBACK.md` §5 documents as distinct from the
+   left hamstring entry; this session's migration reused `seed_engine.py`'s existing
+   three-injury seed verbatim.
 
 **Open questions by status:**
-- resolved: Q1 (→ #20), Q2 (→ HCA `36df9a2`)
-- open: Q3 (HR cadence during sleep — re-measure now Q2's dedup exists), Q4 (HC bed-date
-  vs scraper wake-date attribution), Q5 (dual-field acceptance collapse — needs one real
-  captured payload), Q6 (strength volume-load → Postgres verify, resolves → #28)
+- open: Q3 (HR sampling cadence during sleep, blocks `runDeepConfidence` calibration), Q4
+  (HC date-attribution one-day shift vs scraper), Q5 (backend dual-field acceptance —
+  collapse after confirming what mobile actually posts), Q6 (strength volume-load
+  unverified in load path, resolves → #28 on Postgres verify), **Q7 (new — 4th injury
+  missing from structured ledger)**.
+- resolved: Q1 → #20, Q2 → HCA `36df9a2`.
 
-**Single clearest next action:** **HCA session — two owed items in one visit:**
-(1) re-mirror the SHARED block verbatim into `health-connect-app/CLAUDE.md` (now includes
-the #41 local+remote gate; a copy, not a hand-merge) + extend its own `/closeout` step 4
-identically; (2) forward `dataOrigin.packageName` (+ HC priority-table snapshot) in the
-`/health-connect/sync` payload — the producer half of the wire contract whose consumer
-half (#36/#37 per-record capture) is live on master.
-
-**Then (backend session):** F1 source-priority dedup over
-`health_connect_record_sources` — gated on HCA forwarding; unblocks F3a. Q3/Q4 run in
-parallel. Still owed with no date: supersede #3 (blocked on a Polar R-R *How you know*
-artifact); confirm next Railway deploy log runs `alembic upgrade head` clean (migration
-`c9b8a7d6e5f4`).
+**Single clearest next action:** Run `python seed_engine.py luke.eastlake@outlook.com`
+against Railway Postgres, then verify via a direct Postgres query (not on-device UI) that
+`user_knowledge_entries` now carries Luke's `device_profile` and three injury rows —
+closes the loop on #42 in production.
