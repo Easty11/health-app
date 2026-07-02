@@ -571,6 +571,18 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
+### 41. Terminal-state gate extended to local branches
+
+**Decision:** #40's terminal-state gate, `stale`, and `land` key on `refs/remotes/origin`; local-only branches with unpushed commits escape the disposition net — undefined limbo one layer beneath where #40 looks. Discovered live: HCA `fix/scraper-sh-relayout` carried 3 unpushed local `+` commits invisible to every remote-based check. The `/closeout` terminal-state gate now enumerates local branches (`git branch`) alongside remotes: a local branch with `+` vs `origin/master` must be pushed, parked in `BRANCHES.md`, or discarded before close. #40's remote handling, patch-id rule, number-at-merge, and naming rules are unchanged.
+
+**Supersedes:** #40's gate-scope clause only (remotes-only → remotes + local). #40 otherwise stands.
+
+**Status:** SHARED block + `.claude/commands/closeout.md` on health-app. Verbatim gate re-mirror owed to `health-connect-app` — now a copy, not a hand-merge (per HCA #16's block establishment). Rule 5 note: `chore/governance-consolidation` carries two concern-split commit-groups (store-currency + gate) in one branch by explicit consolidation.
+
+**How you know:** gate text in SHARED block and command confirmed lockstep-identical on local+remote enumeration; #NEXT claimed #41 at merge with master max verified #40 at that instant.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
