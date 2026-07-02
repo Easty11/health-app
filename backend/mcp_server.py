@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
 
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.fastmcp import FastMCP
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.transport_security import TransportSecuritySettings
@@ -14,9 +15,13 @@ import models
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
 
+# Held at module level (not anonymous) so routers/mcp_auth.py's login form
+# can call complete_login()/get_user_id() on the same instance FastMCP uses.
+_oauth_provider = PersonalOAuthProvider()
+
 mcp = FastMCP(
     "Health Intelligence",
-    auth_server_provider=PersonalOAuthProvider(),
+    auth_server_provider=_oauth_provider,
     auth=AuthSettings(
         issuer_url=_SERVER_ROOT,
         client_registration_options=ClientRegistrationOptions(enabled=True),
@@ -30,6 +35,19 @@ mcp = FastMCP(
         enable_dns_rebinding_protection=False,
     ),
 )
+
+
+def _current_user_id() -> int:
+    """Resolve the caller's user_id from their MCP bearer token. Raises
+    rather than falling back to any default — every tool call must be bound
+    to a real, logged-in user (see oauth_provider.PersonalOAuthProvider)."""
+    token = get_access_token()
+    if token is None:
+        raise ValueError("No authenticated MCP session — sign in via /mcp/login first")
+    user_id = _oauth_provider.get_user_id(token.token)
+    if user_id is None:
+        raise ValueError("MCP token is not bound to a user")
+    return user_id
 
 
 def _db_rows(sql: str, params: dict) -> list[dict]:
@@ -50,10 +68,11 @@ def _epley_1rm(weight_kg: float, reps: int) -> float:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_recovery_metrics(user_id: int = 1, days: int = 7) -> str:
+def get_recovery_metrics(days: int = 7) -> str:
     """Get recent recovery biometrics from Samsung Ring.
     Returns HRV (ms), sleep architecture (deep/REM/light/awake minutes),
     SpO2, respiratory rate, sleep efficiency for the last N days."""
+    user_id = _current_user_id()
 
     rows = _db_rows(
         """
@@ -122,10 +141,11 @@ def get_recovery_metrics(user_id: int = 1, days: int = 7) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_checkin_history(user_id: int = 1, days: int = 30) -> str:
+def get_checkin_history(days: int = 30) -> str:
     """Get morning check-in history. Unions legacy and new tables for
     continuous history. Returns sleep quality, fatigue, soreness, life load,
     alcohol context, session RPE, and readiness scores."""
+    user_id = _current_user_id()
 
     rows = _db_rows(
         """
@@ -182,9 +202,10 @@ def get_checkin_history(user_id: int = 1, days: int = 30) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_training_sessions(user_id: int = 1, days: int = 28) -> str:
+def get_training_sessions(days: int = 28) -> str:
     """Get aerobic/cardio sessions from all connected sources (Polar, etc).
     Returns sport type, duration, average/max HR, distance, calories, HR zones."""
+    user_id = _current_user_id()
 
     rows = _db_rows(
         """
@@ -248,9 +269,10 @@ def get_training_sessions(user_id: int = 1, days: int = 28) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def get_hevy_workouts(user_id: int = 1, days: int = 14) -> str:
+async def get_hevy_workouts(days: int = 14) -> str:
     """Get strength training workouts from Hevy. Returns exercises, sets,
     weights, reps, and estimated 1RM (Epley formula) per movement."""
+    user_id = _current_user_id()
 
     db: Session = SessionLocal()
     try:
@@ -331,9 +353,10 @@ async def get_hevy_workouts(user_id: int = 1, days: int = 14) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_readiness_snapshot(user_id: int = 1) -> str:
+def get_readiness_snapshot() -> str:
     """Today's readiness snapshot. Latest biometrics, most recent check-in,
     7-day training summary, and current injury constraints."""
+    user_id = _current_user_id()
 
     hrv_rows = _db_rows(
         """
@@ -416,13 +439,26 @@ def get_readiness_snapshot(user_id: int = 1) -> str:
         total_min = (s["total_seconds"] or 0) / 60
         lines.append(f"Aerobic sessions (last 7 days): {count} sessions, {total_min:.0f} total minutes\n")
 
+    injury_rows = _db_rows(
+        """
+        SELECT value FROM user_knowledge_entries
+        WHERE user_id = :user_id AND type = 'injury' AND active = true
+        ORDER BY added_at DESC
+        """,
+        {"user_id": user_id},
+    )
+
     lines.append("---")
-    lines.append("Active injury constraints (as of June 2026):")
-    lines.append("- Left little finger: provocative — wrenched, bruising. No load progression until cleared.")
-    lines.append("- Right shoulder: horizontal adduction provocative unloaded; load amplifies.")
-    lines.append("  Overhead: caution. Pressing: untested.")
-    lines.append("- Left hamstring: clear below jogging pace. Provoked by striding/sprinting.")
-    lines.append("  Velocity is the gate.")
+    if injury_rows:
+        lines.append("Active injury constraints:")
+        for r in injury_rows:
+            val = r["value"] or {}
+            body_part = val.get("body_part", "unknown")
+            restrictions = val.get("restrictions", [])
+            r_str = f" (avoid: {', '.join(restrictions)})" if restrictions else ""
+            lines.append(f"- {body_part}{r_str}")
+    else:
+        lines.append("Active injury constraints: none recorded.")
 
     return "\n".join(lines)
 
@@ -432,10 +468,11 @@ def get_readiness_snapshot(user_id: int = 1) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_training_load(user_id: int = 1) -> str:
+def get_training_load() -> str:
     """Calculate acute:chronic workload ratio (ACWR) from 28 days of sessions.
     Acute = last 7 days. Chronic = 28-day rolling daily average.
     ACWR sweet spot: 0.8–1.3. Above 1.5 = elevated injury risk."""
+    user_id = _current_user_id()
 
     rows = _db_rows(
         """
