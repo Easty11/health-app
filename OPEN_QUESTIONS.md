@@ -33,7 +33,9 @@ double-count. Must de-duplicate before `trustedDeepMin` is meaningful — e.g. p
 longest session per night (as `health_connect.py:_aggregate_day` does), or union by time
 range. Until then `runDeepConfidence` output is not trustworthy.
 
-**Status:** open
+**Status:** resolved — fixed in `health-connect-app` `36df9a2` (confirmed patch-present
+on HCA master): `collapseSleepSessions()` de-duplicates the overlapping SleepSession
+records before downstream consumers, behaviorally verified 9/9.
 
 ---
 

@@ -595,7 +595,7 @@ Authoritative source per category (28 Jun 2026 export):
 ## Things tried and abandoned / not yet attempted
 
 - **Samsung Health → Health Connect for Ring HRV:** Confirmed not possible. Samsung does not write HRV, RHR, sleep stages, or respiratory rate to Health Connect. Closed.
-- **Direct Polar API integration:** Not pursued. Polar Flow → Health Connect bridge is sufficient for current use case.
+- **Direct Polar API integration:** Not pursued. Polar Flow → Health Connect bridge is sufficient for current use case. **Superseded by #17** — direct Polar AccessLink v4 adopted; Health Connect is no longer the Polar transport. This line predates that decision and no longer reflects the stack.
 - **Direct Samsung Ring API:** Does not exist. No third-party API for Ring data.
 - **Garmin Body Battery:** Explicitly closed — no API access available regardless of method.
 - **Native Kotlin companion app:** Superseded by Expo for cross-platform reasons.
