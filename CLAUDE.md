@@ -160,9 +160,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#45** — `Current sprint` block retired for capped `Recent landings`; still-open action items moved to ROADMAP NOW/NEXT. See DECISIONS_LOG #45.
 - **#44** — legacy `user_knowledge` retained alongside `user_knowledge_entries`; consolidation parked at Q9. See DECISIONS_LOG #44.
 - **#43** — event-spine fork (Q8) resolved to organic + overlay; `current_state` read model built. See DECISIONS_LOG #43.
-- **PLATFORM canon reconciliation** — shadow-store content reconciled into canonical repo homes (standing rules, ROADMAP, OPEN_QUESTIONS Q8). See closeout.md history for that session.
 
 ---
 
