@@ -1,6 +1,6 @@
 # ROADMAP
 
-Last updated: June 2026
+Last updated: July 2026
 
 ---
 
@@ -30,8 +30,7 @@ Last updated: June 2026
 | Deploy companion app to wife's phone | Garmin → Health Connect path. Verify data flowing before deploy. |
 | Lab upload pipeline | PDF/photo → Vision extraction → confirmation screen with outlier flagging → stored. First stage of the medical spine. Consumer hero-feature dependency. |
 | Interpretation layer build | Design complete, build pending. Consumes stored labs → evidence-ranked levers. Education pathway (explain mechanisms, list/filter levers), NOT clinical advice — regulatory boundary. |
-| Appointment brief | Hero consumer feature — "Never waste a medical appointment again." Pre-appointment synthesis across modules. Depends on lab pipeline + interpretation layer. |
-| current_state read model | Reusable current-state read over active user_knowledge_entries + fortification_profiles + capability_state + computed-on-read baselines (v1: 7-day HRV). context_builder consumes it (formatter-only). Unblocks Decision Support + appointment brief. Q8 resolved → overlay (#43); no new schema; baseline persistence + health_events projection deferred to lab pipeline. |
+| Appointment brief | Hero consumer feature — "Never waste a medical appointment again." Pre-appointment synthesis across modules. Depends on lab pipeline + interpretation layer. Can now query `current_state` directly instead of re-deriving it. |
 
 ---
 

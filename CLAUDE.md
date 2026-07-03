@@ -158,6 +158,37 @@ must match it.
 
 _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 
+- [x] **#43 event-spine fork (Q8) resolved + `current_state` read model built (this
+      session, `chore/resolve-q8-event-spine` + `feat/current-state-read-model`, merged to
+      master `3360ed5` + `bda4327`)** — Q8 resolves to organic + overlay, and the
+      `current_state` read model it gated is built and landed in the same session:
+      - **Governance (#43):** `user_health_state` is not a new materialised object — a
+        compute-on-read `current_state` read model over existing stores (active
+        `user_knowledge_entries`, `fortification_profiles`, `capability_state`, plus
+        computed-on-read baselines). `health_events` deferred and narrowed to a future
+        additive projection scoped to the medical timeline, call timed to the lab-upload
+        pipeline — never adopted as a primary-store spine. OPEN_QUESTIONS Q8 flipped
+        `open` → `resolved → #43`; ROADMAP's `user_health_state materialised view` NEXT
+        row replaced, then removed entirely once Phase B landed the same session (folded
+        into the appointment-brief row's note instead).
+      - **Feature:** `backend/current_state.py` (new) unions active
+        `user_knowledge_entries` (dispatched by type), `fortification_profiles`,
+        `capability_state`, and a computed-on-read 7-day HRV rolling baseline — no new
+        schema. `context_builder.py` refactored to consume it as a pure formatter (the
+        inline device-profile lookup and HRV baseline math both moved into
+        `current_state`); `routers/chat.py` now calls `current_state()` once instead of
+        querying `user_knowledge_entries` and `fortification_profiles` separately —
+        collapses the exact disjoint-store shape #42 flagged, this time on the read side.
+      - **Tests:** first pytest infrastructure in the repo (`backend/conftest.py`,
+        isolated in-memory SQLite per test; `pytest==9.1.1` added to `requirements.txt`).
+        Four tests: active-only declared state, supersede semantics honoured, empty-profile
+        user returns a well-formed empty object, and a parity test loading master's
+        pre-refactor `context_builder.py` via `git show` to prove byte-identical prompt
+        output — formatter-only, no behavioural drift. All four green.
+      - Verify-first (standing rule) found the framing stale before any code was written:
+        master already had a working current-state layer, assembled inline into prompt
+        text by `context_builder` but unqueryable by any other consumer — the actual gap
+        was reusability, not a missing spine.
 - [x] **PLATFORM canon reconciliation (this session, `chore/platform-canon-reconciliation`,
       `38061d1` + `0becd43`)** — shadow-store content from the PLATFORM chat/project-knowledge
       session reconciled into canonical repo homes so PLATFORM can collapse to stable
