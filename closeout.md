@@ -1,88 +1,89 @@
-# closeout.md — session close-out (per-user context isolation, #42, 2 Jul 2026)
+# closeout.md — session close-out (PLATFORM canon reconciliation, 3 Jul 2026)
 
 ## 1. Real commits this session
 
-Session-open ref: `504e5e5` (origin/master at open, #41 max). `git log --oneline 504e5e5..HEAD`:
+Session-open ref: `ea823e2` (master HEAD at open, DECISIONS_LOG max #42).
+`git log --oneline ea823e2..HEAD`:
 
 ```
-0e5fb66 fix(context): remove hardcoded Luke identity/injuries from every user's prompt
-6b4aa1b fix(mcp): bind MCP tokens to a real user, remove the user_id=1 default
-d946f30 docs(decisions): #NEXT per-user context isolation — user_knowledge_entries canonical, MCP tokens bind to real user
-408579b docs(decisions): claim #42 at merge for per-user context isolation entry
+0becd43 govern: land medical-spine roadmap + event-spine fork into canon
+38061d1 govern: add empirical-specificity + prior-art standing rules
 ```
 
-All four landed to master concern-split: `fix/chat-context-per-user` (P1) →
-`git land`'d directly (`0e5fb66`, ff); `fix/mcp-oauth-identity` (P2) rebased onto the new
-master then `git land`'d (`6b4aa1b`, ff); `docs/decisions-per-user-context` rebased then
-`git land`'d in two commits (`d946f30` the entry, `408579b` renaming `#NEXT` → `#42` at
-merge per #40's number-at-merge rule). All pushed — `origin/master` confirmed at `408579b`.
-Plus this close-out commit (`chore: session close-out`, hash in `git log` after this file
-lands).
+Both landed on `chore/platform-canon-reconciliation`, cut from master at open, then
+fast-forward-merged straight back to master (`git merge --ff-only`) — no rebase needed,
+master hadn't advanced. Branch deleted locally post-merge. Plus this close-out commit
+(`chore: session close-out`, hash in `git log` after this file lands).
 
 ## 2. Pending-queue reconciliation
 
-No pending-commit queue was carried into this session — it opened from a direct
-engineering brief (ANCHOR/OBJECTIVE/STEPS/GATES/LOG/GUARD), not a `;cc` chat close-out
-paste. There was nothing flagged `PENDING` to reconcile. Nothing decided this session is
-uncommitted: the one governance decision made (DECISIONS_LOG #42) landed at
-`d946f30`/`408579b`, both on master.
+The session opened from a direct engineering brief (ANCHOR/OBJECTIVE/STEPS/GATES/LOG/GUARD),
+not a `;cc` chat close-out paste — but the brief's Steps 2–3 functioned as an equivalent
+pending-commit queue once the user supplied the actual content (the brief itself initially
+named four content items — Empirical Specificity bullet, Prior Art rule, four ROADMAP rows,
+one OPEN_QUESTIONS item — without their text; Code halted and asked before staging
+anything, rather than fabricate governance wording). All four landed:
+
+1. **Empirical Specificity bullet** (CLAUDE.md, shared block) → `38061d1`.
+2. **Prior Art standing rule** (FEEDBACK.md §2.13) → `38061d1`.
+3. **Four ROADMAP NEXT rows** (lab upload pipeline, interpretation layer build,
+   appointment brief, `user_health_state` materialised view) → `0becd43`.
+4. **OPEN_QUESTIONS Q8** (event-spine schema fork) → `0becd43`.
+
+Nothing decided this session is uncommitted. Per the brief's own LOG assessment (concurred):
+no DECISIONS_LOG entry — this is documentation reconciliation of already-decided/already-open
+items, not a new architecture decision.
 
 ## 3. Branch terminal-state gate (local + remote, per #41)
 
-- **Touched:** `fix/chat-context-per-user`, `fix/mcp-oauth-identity`,
-  `docs/decisions-per-user-context` — all three merged `--ff-only` to master (two required
-  a rebase first, since P1 landed before P2/governance were cut) and locally deleted by
-  the `land` alias. None had ever been pushed as their own remote refs, so the alias's
-  final remote-delete step errored benignly ("remote ref does not exist") on all three —
-  not a real failure, confirmed by `git ls-remote --heads origin` showing master only both
-  before and after.
-- **End state:** `git branch` = master only; `git ls-remote --heads origin` = master only
-  (`408579b`); `BRANCHES.md` empty (honest, nothing parked). Gate PASSES.
+- **Touched:** `chore/platform-canon-reconciliation` only — merged `--ff-only` to master,
+  locally deleted. Never pushed as its own remote ref, so no remote branch existed to clean
+  up. `git branch` = master only; `git ls-remote --heads origin` (pre-existing, unchanged
+  this session) = master only. Gate PASSES for the touched branch.
+- **Flag — master itself is unpushed.** `git rev-list --left-right --count origin/master...master`
+  = `0  2`: local master carries both this session's commits, 2 ahead of `origin/master`
+  (still at `ea823e2`). This is a push action (visible to others / affects shared state) —
+  not auto-pushed this session; owed as the first action of the next session, or push now
+  if the user confirms.
 
 ## 4. Cold-resume handoff
 
-**Master:** `408579b` + close-out commit. DECISIONS_LOG max = **#42**. Local and remote
-are both master-only. Working tree clean pre-close-out-commit.
+**Master (local):** `0becd43` + this close-out commit. **Master (origin): still `ea823e2`
+— 2 commits behind local, push owed.** DECISIONS_LOG max unchanged at **#42** (no new
+decision this session). Working tree clean pre-close-out-commit.
 
-**Landed this session — #42 per-user context isolation:**
-- Chat context (P1): `_section_user_profile` (backend/context_builder.py) no longer
-  hardcodes Luke's identity/devices/injuries. Identity was already dynamic
-  (`_section_identity`); injuries already rendered per-user (`_section_schedule` from
-  `type="injury"` entries) — only the device/method mapping was orphaned, now a
-  `type="preference", key="device_profile"` entry in `user_knowledge_entries`.
-  Empty-profile users get a new onboarding-interview prompt section, seeded via the
-  *existing* `knowledge_update` mechanism — no second store. `seed_engine.py` extended
-  (not duplicated) to seed the device profile.
-- MCP identity (P2): `oauth_provider.authorize()` no longer auto-approves — gated through
-  a new `/mcp/login` form re-checking against `users`; every token binds to a real
-  `user_id`. All six `mcp_server.py` tools had `user_id: int = 1` removed, no override
-  param. Also fixed `get_readiness_snapshot`'s hardcoded injury text (found in passing).
-- Verify-first (before any code) found the brief's premise wrong: `has_structured_profile`
-  and `knowledge_update` writes targeted disjoint tables (`fortification_profiles` vs
-  `user_knowledge_entries`) — user resolved `user_knowledge_entries` as canonical before
-  design proceeded. Full "How you know" in DECISIONS_LOG #42; all four gates (G1–G4)
-  exercised against real code paths on local SQLite, not mocked.
+**Landed this session — PLATFORM canon reconciliation (no feature code):**
+- CLAUDE.md shared block: Empirical Specificity standing rule (test results must state
+  exact pathway/payload, never generalise a negative beyond its recorded scope).
+- FEEDBACK.md §2.13: Prior Art standing rule (search developer forums/prior art before
+  building third-party integrations; "can't be done" findings bankable provisionally,
+  "works" findings need re-verification against current platform state; excludes own
+  domain logic).
+- ROADMAP.md NEXT — queued: 4 rows for the medical-spine build (lab upload pipeline,
+  interpretation layer build, appointment brief, `user_health_state` materialised view).
+- OPEN_QUESTIONS.md Q8 (open): event-spine schema fork — `health_events` +
+  `user_health_state` canonical spine vs. organic schema + overlay. Gates the
+  `user_health_state` ROADMAP row above (intentional coupling, not circular — confirmed
+  by the brief).
+- CLAUDE.md "Current sprint" block updated to reflect this session's work.
 
-**Owed / not yet done (all logged to canonical stores this close-out):**
-1. **Run `seed_engine.py` against Railway Postgres** (ROADMAP NOW) — this session only had
-   local SQLite; Luke's device/injury facts are seeded locally, not in production yet.
-2. **`mcp_server.get_hevy_workouts` references an unimported `Session` type** (ROADMAP
-   NOW) — pre-existing bug, found not introduced this session; will `NameError` at call
-   time; left untouched (Hevy endpoints out of scope for #42).
-3. **OPEN_QUESTIONS Q7 (new, open)** — structured injury ledger is missing a fourth injury
-   (right proximal semimembranosus) that `FEEDBACK.md` §5 documents as distinct from the
-   left hamstring entry; this session's migration reused `seed_engine.py`'s existing
-   three-injury seed verbatim.
+**Owed / not yet done:**
+1. **Push local master to origin** — 2 commits ahead, unpushed (flagged above).
+2. **HCA propagation of the Empirical Specificity bullet** — shared-block change,
+   mandatory verbatim copy into `health-connect-app/CLAUDE.md`, separate single-repo HCA
+   session (out of scope here per this session's single-repo-scope rule). Shared block is
+   out of sync with HCA until that lands.
+3. Everything already owed from #42 (unchanged this session — not touched): run
+   `seed_engine.py` against Railway Postgres (ROADMAP NOW); `mcp_server.get_hevy_workouts`
+   unimported `Session` type (ROADMAP NOW); OPEN_QUESTIONS Q7 (4th injury missing from
+   structured ledger).
 
 **Open questions by status:**
-- open: Q3 (HR sampling cadence during sleep, blocks `runDeepConfidence` calibration), Q4
-  (HC date-attribution one-day shift vs scraper), Q5 (backend dual-field acceptance —
-  collapse after confirming what mobile actually posts), Q6 (strength volume-load
-  unverified in load path, resolves → #28 on Postgres verify), **Q7 (new — 4th injury
-  missing from structured ledger)**.
+- open: Q3 (HR sampling cadence), Q4 (HC date-attribution shift), Q5 (dual-field
+  acceptance collapse), Q6 (strength volume-load unverified, resolves → #28), Q7 (4th
+  injury missing from structured ledger), **Q8 (new — event-spine schema fork)**.
 - resolved: Q1 → #20, Q2 → HCA `36df9a2`.
 
-**Single clearest next action:** Run `python seed_engine.py luke.eastlake@outlook.com`
-against Railway Postgres, then verify via a direct Postgres query (not on-device UI) that
-`user_knowledge_entries` now carries Luke's `device_profile` and three injury rows —
-closes the loop on #42 in production.
+**Single clearest next action:** Push local master to `origin/master` (2 commits,
+`38061d1` + `0becd43`, currently local-only), then run the HCA session to propagate the
+Empirical Specificity bullet into `health-connect-app/CLAUDE.md`'s shared block.

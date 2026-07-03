@@ -158,6 +158,26 @@ must match it.
 
 _Code updates this block at each close-out from `ROADMAP.md` / `ptb-tasks`._
 
+- [x] **PLATFORM canon reconciliation (this session, `chore/platform-canon-reconciliation`,
+      `38061d1` + `0becd43`)** — shadow-store content from the PLATFORM chat/project-knowledge
+      session reconciled into canonical repo homes so PLATFORM can collapse to stable
+      orientation without data loss (CLAUDE.md kill-rule enforcement, no feature code):
+      - **Standing rules** — Empirical Specificity bullet appended to CLAUDE.md's shared
+        "Project-wide standing rules" (immediately after "Verify before design.") — a
+        recorded test result must state the exact pathway/payload, never the generalised
+        conclusion. Prior Art standing rule appended to FEEDBACK.md §2.13 — search
+        developer forums/prior art before building third-party integrations, weighted
+        asymmetrically ("can't be done" bankable provisionally; "works" needs
+        re-verification against current platform state).
+      - **Canon state** — four ROADMAP NEXT rows landed for the medical-spine build (lab
+        upload pipeline, interpretation layer, appointment brief, `user_health_state`
+        materialised view); OPEN_QUESTIONS Q8 filed `open` for the event-spine schema fork
+        (`health_events`+`user_health_state` spine vs organic schema + overlay), which the
+        `user_health_state` roadmap row is gated on.
+      - **Owed:** the Empirical Specificity bullet is a shared-block change — verbatim
+        propagation to `health-connect-app/CLAUDE.md` is a mandatory separate HCA session
+        (not done here, single-repo scope). Also owed: pushing local `master` to
+        `origin/master` — 2 commits ahead, not yet pushed this session.
 - [x] **#42 per-user context isolation (this session, `fix/chat-context-per-user` +
       `fix/mcp-oauth-identity` + `docs/decisions-per-user-context`)** — the multi-user gap
       (any new user got Luke's identity/injuries/data) closed on both surfaces it lived on:
