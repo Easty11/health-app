@@ -12,6 +12,7 @@ from typing import Any
 import pytz
 
 import models
+from current_state import CurrentState, HRVBaseline
 
 AEST = pytz.timezone("Australia/Brisbane")
 
@@ -50,23 +51,15 @@ def _days_ago_label(start_str: str, today: datetime) -> str:
 
 # ---------- individual context sections ----------
 
-def _section_user_profile(structured_entries: list[Any] | None = None) -> str:
+def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
     """Device/method preferences, prepended to every system prompt.
 
     Identity is rendered dynamically by `_section_identity`. Injuries are
     rendered per-user by `_section_schedule` from `type="injury"` structured
-    entries. The only per-user fact carried here is a `type="preference",
-    key="device_profile"` entry — which device/tool the user logs each signal
-    with. Absent that entry, this renders a neutral line; nothing is assumed.
+    entries. The only per-user fact carried here is `current_state`'s
+    `device_profile` — which device/tool the user logs each signal with.
+    Absent that entry, this renders a neutral line; nothing is assumed.
     """
-    device_profile = None
-    for e in structured_entries or []:
-        e_type = getattr(e, "type", None) if hasattr(e, "type") else e.get("type")
-        e_key = getattr(e, "key", None) if hasattr(e, "key") else e.get("key")
-        if e_type == "preference" and e_key == "device_profile":
-            device_profile = getattr(e, "value", None) if hasattr(e, "value") else e.get("value")
-            break
-
     if device_profile:
         profile_lines = "".join(f"- {k}: {v}\n" for k, v in device_profile.items())
     else:
@@ -565,8 +558,12 @@ def _section_health_connect(records: list[Any], now: datetime) -> str:
     return "\n".join(lines)
 
 
-def _section_samsung_hrv(readings: list[Any], now: datetime) -> str:
-    """Inject the latest Galaxy Ring reading plus a rolling 7-day HRV baseline."""
+def _section_samsung_hrv(readings: list[Any], now: datetime, baseline: HRVBaseline | None) -> str:
+    """Inject the latest Galaxy Ring reading plus a rolling 7-day HRV baseline.
+
+    `baseline` is computed-on-read by `current_state` (single source for the
+    number); this section only formats it.
+    """
     if not readings:
         return ""
 
@@ -617,17 +614,13 @@ def _section_samsung_hrv(readings: list[Any], now: datetime) -> str:
     if _v(latest, "bedtime") or _v(latest, "wake_time"):
         lines.append(f"Bedtime: {_v(latest, 'bedtime') or '—'}, Wake: {_v(latest, 'wake_time') or '—'}")
 
-    # ----- rolling 7-day HRV baseline -----
-    rmssd_values = [_v(r, "hrv_ms") for r in readings if _v(r, "hrv_ms") is not None]
-    if rmssd_values:
-        baseline = sum(rmssd_values) / len(rmssd_values)
+    # ----- rolling 7-day HRV baseline (computed by current_state) -----
+    if baseline is not None:
         lines.append("")
-        lines.append(f"7-day HRV baseline: {baseline:.0f} ms ({len(rmssd_values)} readings)")
-        today_rmssd = _v(latest, "hrv_ms")
-        if today_rmssd is not None:
-            diff = today_rmssd - baseline
-            direction = "above" if diff >= 0 else "below"
-            lines.append(f"Today vs baseline: {abs(diff):.0f}ms {direction} mean")
+        lines.append(f"7-day HRV baseline: {baseline.mean_ms:.0f} ms ({baseline.n} readings)")
+        if baseline.diff_from_mean_ms is not None:
+            direction = "above" if baseline.diff_from_mean_ms >= 0 else "below"
+            lines.append(f"Today vs baseline: {abs(baseline.diff_from_mean_ms):.0f}ms {direction} mean")
 
     # ----- last 7 readings -----
     lines.append("")
@@ -886,14 +879,13 @@ def _section_probe(selection: dict[str, Any] | None) -> str:
 def build_system_prompt(
     user: models.User,
     connected_integrations: list[str],
+    state: CurrentState,
     hevy_data: dict[str, Any] | None = None,
     knowledge_entries: list[Any] | None = None,
     today_checkin: Any | None = None,
     health_connect_records: list[Any] | None = None,
     samsung_hrv: Any | None = None,
-    structured_entries: list[Any] | None = None,
     daily_record: Any | None = None,
-    fortification_profile: dict[str, Any] | None = None,
     engine_selection: dict[str, Any] | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
@@ -907,7 +899,7 @@ def build_system_prompt(
     )
 
     sections: list[str] = [
-        _section_user_profile(structured_entries),
+        _section_user_profile(state.device_profile),
         "",
         "You are a personal health and performance assistant. Your job is to help the "
         "user understand their training, spot patterns, and give specific, actionable "
@@ -919,11 +911,11 @@ def build_system_prompt(
         _section_integrations(connected_integrations),
     ]
 
-    if not structured_entries:
+    if not state.knowledge_entries:
         sections.append(_section_onboarding_interview())
 
-    if fortification_profile is not None:
-        fort_section = _section_fortification(fortification_profile)
+    if state.fortification_profile is not None:
+        fort_section = _section_fortification(state.fortification_profile)
         if fort_section:
             sections.append(fort_section)
 
@@ -935,8 +927,8 @@ def build_system_prompt(
     if knowledge_entries:
         sections.append(_section_knowledge(knowledge_entries))
 
-    if structured_entries:
-        schedule_section = _section_schedule(structured_entries, now)
+    if state.knowledge_entries:
+        schedule_section = _section_schedule(state.knowledge_entries, now)
         if schedule_section:
             sections.append(schedule_section)
 
@@ -946,7 +938,7 @@ def build_system_prompt(
             sections.append(hc_section)
 
     if samsung_hrv:
-        ring_section = _section_samsung_hrv(samsung_hrv, now)
+        ring_section = _section_samsung_hrv(samsung_hrv, now, state.hrv_baseline_7d)
         if ring_section:
             sections.append(ring_section)
 

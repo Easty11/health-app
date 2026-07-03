@@ -13,9 +13,10 @@ import models
 from auth import get_current_user
 from connectors.hevy import HevyAuthError, HevyClient
 from context_builder import build_system_prompt
+from current_state import current_state as compute_current_state
 from database import get_db
 from encryption import decrypt
-from engine import adaptation, profile as profile_mod, selection
+from engine import adaptation, selection
 from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
 
 load_dotenv()
@@ -365,20 +366,15 @@ async def chat(
         .all()
     )
 
-    # All active structured knowledge entries (schedule_item, load_context, injury, etc.)
-    structured_entries = (
-        db.query(models.UserKnowledgeEntry)
-        .filter_by(user_id=current_user.id, active=True)
-        .order_by(models.UserKnowledgeEntry.added_at.desc())
-        .all()
-    )
+    # Compute-on-read current-state (DECISIONS_LOG #43): active structured
+    # knowledge entries, fortification profile, capability state, HRV baseline.
+    state = compute_current_state(current_user.id, db, today=today_aest)
 
     # ---- Adaptive Exposure Engine: fortification profile + session selection ----
     # Avoidance signal (§4) reads from what the user loads in Hevy; the rest of the
     # taxonomy is the candidate deficiency set. Readiness only re-ranks vehicles,
     # never gates (DECISIONS_LOG #8).
-    fort_profile = profile_mod.get_profile(db, current_user.id)
-    fort_profile_dict = profile_mod.profile_to_dict(fort_profile)
+    fort_profile = state.fortification_profile_orm
     engine_selection = None
     if fort_profile is not None:
         loaded_regions = selection.infer_loaded_regions(
@@ -401,14 +397,13 @@ async def chat(
     system_prompt = build_system_prompt(
         user=current_user,
         connected_integrations=list(connected.keys()),
+        state=state,
         hevy_data=hevy_data,
         knowledge_entries=knowledge_entries,
         today_checkin=today_checkin,
         health_connect_records=health_connect_records,
         samsung_hrv=samsung_readings,
-        structured_entries=structured_entries,
         daily_record=daily_record,
-        fortification_profile=fort_profile_dict,
         engine_selection=engine_selection,
     )
 
