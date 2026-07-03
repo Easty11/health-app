@@ -28,6 +28,10 @@ Last updated: June 2026
 | Manual cardio entry | Unconnected sessions (Rogue Echo bike, gym machines) must be loggable to prevent ACWR silently under-reading load. |
 | CLAUDE.md files for both repos | Deferred to laptop. Backend repo and health-connect-app repo both need CLAUDE.md. Drafts exist from June 2026 session. |
 | Deploy companion app to wife's phone | Garmin → Health Connect path. Verify data flowing before deploy. |
+| Lab upload pipeline | PDF/photo → Vision extraction → confirmation screen with outlier flagging → stored. First stage of the medical spine. Consumer hero-feature dependency. |
+| Interpretation layer build | Design complete, build pending. Consumes stored labs → evidence-ranked levers. Education pathway (explain mechanisms, list/filter levers), NOT clinical advice — regulatory boundary. |
+| Appointment brief | Hero consumer feature — "Never waste a medical appointment again." Pre-appointment synthesis across modules. Depends on lab pipeline + interpretation layer. |
+| user_health_state materialised view | Protocol + injury + flags + baselines as queryable current state, updated on event write. Blocks Decision Support layer + chat context injection. Gated on the event-spine fork (OPEN_QUESTIONS). |
 
 ---
 

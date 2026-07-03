@@ -117,6 +117,17 @@ missing: the richer three-valued provocative/clear/untested detail per injury th
 
 ---
 
+## Q8. Event-spine schema fork
+
+Adopt `health_events` + `user_health_state` as the canonical spine, OR keep the organic
+schema (`aerobic_sessions`, `daily_records`, `daily_check_ins`, `samsung_hrv_readings`)
+with `user_health_state` as an overlay view on top? Design-stage; not in master. Blocks
+the `user_health_state` build and the Decision Support layer.
+
+**Status:** open
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
