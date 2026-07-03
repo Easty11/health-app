@@ -187,6 +187,11 @@ How Easty explicitly wants things done. Apply these without being asked.
 
 ---
 
+### 2.13 Prior Art — search before build, weight asymmetrically
+**Preference:** For third-party integrations — external APIs, connectors, device SDKs, data sources — search developer forums, GitHub issues, and existing libraries for proven paths and documented limitations before proposing a build or branching to an alternate route. Weight findings asymmetrically: a community "this can't be done" is a strong lead worth banking provisionally (prevents dead-end effort; cross-checks our own tests); a community "this works" is a hypothesis to re-verify against current platform state, because positive prior art rots under vendor rewrites. Tag every finding with platform version/date. Not canon — a decision input and an independent check on our own implementation results. Excludes our own domain logic (readiness model, four-window scoring, exposure engine), where first-principles governs.
+
+---
+
 ## 3. Things Claude Should Do Differently
 
 Pattern-level lessons from session observations.

@@ -116,6 +116,12 @@ must match it.
   continuation. Single-line, or PowerShell backtick continuation.
 - **Verify before design.** Verify data paths end-to-end before designing against them.
   Standing rule after the HRV pipeline failure.
+- **Empirical specificity.** A recorded test result must state the exact pathway
+  exercised and the payload returned — never the generalised conclusion. "X is not
+  available via AccessLink" is an assertion; "the exercise summary JSON returned no
+  per-second field" is a fact. A negative is only as broad as its recorded scope — do
+  not widen it to the whole route/API/device. Mirror of the rule above: as "the API has
+  a field" doesn't prove capability, "a test failed" doesn't prove absence.
 - **Device-agnostic schema.** All health data is normalised to a `source`- and
   `confidence`-tagged schema before any algorithm or AI layer. The intelligence layer
   never references device-specific schemas.
