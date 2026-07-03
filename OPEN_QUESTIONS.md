@@ -133,6 +133,19 @@ lab pipeline.
 
 ---
 
+## Q9. Consolidate legacy free-text `user_knowledge` into `user_knowledge_entries`?
+
+Legacy `user_knowledge` (free-text category/content) coexists with structured
+`user_knowledge_entries` per #44. Fold the legacy KB in as a `type="note"` entry and
+retire `routers/knowledge.py`'s legacy write path + `context_builder`'s parallel
+`knowledge_entries` param — making `context_builder` a true single-source formatter over
+`current_state` — or keep them permanently distinct (free-text notes vs typed declared
+state)? Deferred by #44; not urgent.
+
+**Status:** open
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._

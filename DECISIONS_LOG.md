@@ -609,6 +609,16 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
+### 44. Legacy `user_knowledge` retained alongside `user_knowledge_entries` — #43's "one read layer" scoped to structured declared state
+
+**Decision:** The legacy `user_knowledge` table (free-text `category`/`content`, its own router `routers/knowledge.py`, written at `chat.py:232` and `knowledge.py:156`, read at `chat.py:322` into `build_system_prompt`'s `knowledge_entries` param) is **retained as a distinct store**, coexisting deliberately with the structured `user_knowledge_entries` that `current_state` (#43) owns. #43's "declared state has one read layer, not two" is hereby **scoped to structured declared state** — the typed protocol/injury/preference/schedule/load_context/fortification/capability set. The free-text KB is intentionally outside `current_state` and reaches `context_builder` via the parallel `knowledge_entries` param. This entry records intent; no code changes.
+
+**Rationale:** Post-#43 verification against master found `user_knowledge` still live — read, written, and served by its own API router — fed to `context_builder` outside `current_state`. Free-text category/content is a different shape from typed key/value declared state; folding it in now is premature and likely a worse fit. The hazard was never the coexistence but its silence: #43's canonical wording reads as if consolidation is complete, ambushing a future reader with the live parallel store. Documenting the coexistence as deliberate removes that drift-seed; the consolidation question is parked (Q9), not answered.
+
+**Do not revisit unless:** the consolidation review (Q9) is undertaken — fold `user_knowledge` into `user_knowledge_entries` as a note type, retire `routers/knowledge.py`'s legacy write path and `context_builder`'s `knowledge_entries` param, making `context_builder` a true single-source formatter over `current_state` — or a *third* knowledge/declared-state store appears (the #42 disjoint-store failure mode).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
