@@ -599,6 +599,16 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
+### 43. Event-spine fork (Q8) resolved — overlay wins for Decision Support; `health_events` narrowed to a deferred projection
+
+**Decision:** Q8 resolves to organic + overlay, not the `health_events` primary-store spine. `user_health_state` is not a new materialised object — it is a compute-on-read `current_state` read model over existing stores: active `user_knowledge_entries` (declared protocol/injury/preference/schedule/load_context; the canonical structured-profile store per #42), `fortification_profiles`, and `capability_state`, plus baselines computed on read (v1: the 7-day HRV rolling baseline already computed inline in `context_builder`). `context_builder` is refactored to consume this read model as a formatter, so declared state has one read layer, not two. `health_events` is deferred; if later adopted it is adopted **only as an additive projection** (a denormalised read-index over the typed systems-of-record) scoped to the medical timeline — labs/imaging/appointments/protocol-change chronology — never as the SCHEMA.md primary store the organic tables collapse into. The projection call is timed to the lab-upload pipeline, its first consumer whose primitive is chronology rather than current state. `capability_state`'s existing fold-in clause (#21) is unchanged.
+
+**Rationale:** Verify-first against master this session found the fork's framing stale. Master already contains a working current-state layer (`user_knowledge_entries` typed/`active`-flagged/`superseded_by`/source-tagged, plus `fortification_profiles` and `capability_state`), and `context_builder` already assembles all of it into the chat prompt including a rolling HRV baseline — so `user_health_state`'s function is largely built. What is missing is not a spine but a *reusable* read model (the state exists only as prompt text, unqueryable by Decision Support or the appointment brief) and, later, baseline persistence. The AEE decision already ratified "don't block on `health_events`; build a dedicated typed table now, fold in if it lands"; overlay continues that stance rather than opening a new bet. A primary-store spine now would duplicate the declared-state semantics `user_knowledge_entries` already carries and lossy-collapse the typed signal tables into JSON. The one force pulling toward a spine — the appointment brief's cross-domain "what changed since last visit" chronology — is served by a projection (every relevant row is already timestamped in the typed tables), not by making `health_events` primary, and that need has real design inputs only at the lab pipeline.
+
+**Do not revisit unless:** the lab-upload pipeline is specced (make the projection call then, with the brief's chronology requirements in hand); a second declared-state store is introduced without unification (the #42 disjoint-store failure mode); or a non-chat consumer needs current-state at a latency compute-on-read can't meet (then materialise the read model or its baselines — without reopening the spine).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

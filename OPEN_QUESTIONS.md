@@ -124,7 +124,12 @@ schema (`aerobic_sessions`, `daily_records`, `daily_check_ins`, `samsung_hrv_rea
 with `user_health_state` as an overlay view on top? Design-stage; not in master. Blocks
 the `user_health_state` build and the Decision Support layer.
 
-**Status:** open
+Resolution: overlay adopted; `user_health_state` is a compute-on-read `current_state`
+read model over existing stores, not a `health_events` spine. `health_events` deferred
+and narrowed to an additive projection scoped to the medical timeline; call timed to the
+lab pipeline.
+
+**Status:** resolved → #43
 
 ---
 
