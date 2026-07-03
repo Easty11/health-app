@@ -31,6 +31,9 @@ Last updated: July 2026
 | Lab upload pipeline | PDF/photo → Vision extraction → confirmation screen with outlier flagging → stored. First stage of the medical spine. Consumer hero-feature dependency. |
 | Interpretation layer build | Design complete, build pending. Consumes stored labs → evidence-ranked levers. Education pathway (explain mechanisms, list/filter levers), NOT clinical advice — regulatory boundary. |
 | Appointment brief | Hero consumer feature — "Never waste a medical appointment again." Pre-appointment synthesis across modules. Depends on lab pipeline + interpretation layer. Can now query `current_state` directly instead of re-deriving it. |
+| Supersede DECISIONS_LOG #3 | Polar not session-only, AccessLink live, SDK R-R as highest-fidelity HRV path. Blocked on a *How you know* artifact (Polar R-R verification). |
+| HCA forwards writer identity (HCA session) | Forward `dataOrigin.packageName` + an HC `health_data_category_priority_table` snapshot in the `/health-connect/sync` payload. Producer half of the #36/#37 wire contract; source dedup arbitration now lives backend-side, so `validateNight()` becomes a faithful relay. |
+| Backend F1 filter (backend session) | Apply source-priority dedup over `health_connect_record_sources` (built in #37). Gated on HCA forwarding the field (row above). Also unblocks F3a (frozen-session-set aggregation) once landed. |
 
 ---
 

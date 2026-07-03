@@ -619,6 +619,16 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
+### 45. `### Current sprint` block retired for a capped, pointer-only `### Recent landings`
+
+**Decision:** CLAUDE.md's repo-specific `### Current sprint` block — a per-close-out-accreting detailed changelog (decision sub-bullets, commit SHAs, test detail) — is retired and replaced by `### Recent landings`: pointer-only, capped at the 3 most recent landings, one line each, referencing the canonical home (`#N` DECISIONS_LOG, `closeout.md`) and never re-narrating decision or feature content. "Current sprint" is freed to mean unambiguously ROADMAP `## NOW` per the store-index, removing the two-directional name collision (a forward sprint table and a backward changelog both titled "Current sprint"). The `/closeout` step that wrote the old block is amended to the pointer-only cap; verified against CLAUDE.md's own SHARED "Session rituals" text and HCA's CLAUDE.md/closeout.md, both the block and the step are repo-specific to health-app only — no HCA propagation required.
+
+**Rationale:** The old block was a derived label over an independently-authored artifact — longer and more detailed than the ROADMAP/ptb-tasks it claimed to derive from — re-narrating DECISIONS_LOG content that won't track supersession (supersede #43 and the block keeps asserting the old conclusion, unreferenced). It fattened every close-out (+31 lines in one session), trending toward a second decisions-log inside the rules file: the same volatile-content-in-a-stable-file failure mode as the PLATFORM drift. A capped pointer preserves cold-open orientation while removing the drift surface — the detail already lives canonically in DECISIONS_LOG (history) and closeout.md (latest handoff). The block's 3 still-open action items (Supersede #3, HCA writer-identity forwarding, backend F1 filter) were not landings and were migrated to `ROADMAP.md` NOW/NEXT rather than dropped.
+
+**Do not revisit unless:** the pointer-only cap proves too thin for cold-resume (then improve closeout.md, don't re-fatten the block); or close-out maintenance drifts back toward re-narration (tighten the `/closeout` step, don't relocate the block).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

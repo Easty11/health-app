@@ -38,9 +38,12 @@ Execute these steps in order:
    with zero chat history: current sprint (from the `CLAUDE.md` sprint block / `ROADMAP.md`),
    open questions grouped by status, and the single clearest **next action**.
 
-6. **Update the CLAUDE.md "Current sprint" block** to reflect what landed this session and
-   the current `ROADMAP.md` / `ptb-tasks` state. Code maintains this block per the contract —
-   do not leave completed reconciliation items showing as open.
+6. **Update the CLAUDE.md "Recent landings" block.** Prepend one pointer-only line for
+   what landed this session — canonical home only (`#N` in `DECISIONS_LOG.md`, or
+   `closeout.md`), no SHAs, no test counts, no decision sub-bullets — then trim to the 3
+   most recent lines. Never re-narrate decision or feature content here; that lives in
+   `DECISIONS_LOG.md` (history) and `closeout.md` (latest handoff). Forward-looking / still-open
+   items belong in `ROADMAP.md` NOW/NEXT, not this block.
 
 7. **Overwrite `closeout.md`** (single file, lowercase) with exactly three sections: real
    commits this session · pending-queue reconciliation · cold-resume handoff. Write the
