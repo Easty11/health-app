@@ -192,6 +192,15 @@ How Easty explicitly wants things done. Apply these without being asked.
 
 ---
 
+### 2.14 Prior art finding — Polar AccessLink per-second exercise HR (per 2.13)
+**Finding:** Polar exposes two distinct HR surfaces, not one. (1) Per-session **exercise-samples** — the v3 REST endpoint and the TCX/CSV/FIT session export — carry a per-sample-type `recording-rate`; where it equals 1 (or the export's native second-by-second granularity), HR is 1Hz. (2) The **v4 REST `training-sessions/list`** endpoint (the current production transport, DECISIONS_LOG #17) returns summary only — no per-second series, by design. (3) Separately, Polar's **continuous 24/7 samples** (`TRIGGER_TIMED_247`) are a background/all-day stream, coarse relative to session recording, and not the same surface as an exercise session.
+
+**Methodology (bounded search, tagged per 2.13):** official Polar AccessLink v4 API docs (endpoint/scope surfaces, June 2026 platform state); validated open-source v3 client `StuMason/polar-flow` (`models/exercise.py` → `ExerciseSample.recording_rate` field, confirms the per-sample-type rate exists and is queryable); Polar's own export documentation (TCX/CSV second-by-second HR, RR in FIT/.txt); corroborating aggregators (Terra, Open Wearables, vitalera) cross-checking the v3-vs-v4 surface split. This is a **bounded** search — official docs + one validated client + three aggregators, not an exhaustive forum sweep — and carries the standard positive-prior-art discount from 2.13 (re-verify before build).
+
+**Caveat:** v3 REST is Polar's older surface; deprecation risk is unassessed this session (flagged, not resolved). PSL (chest-strap direct upload) remains the primary, higher-fidelity capture path for solo/gym sessions (1Hz HR + per-beat RR + 203Hz ACC + 130Hz ECG) — this finding does not change that. No ingest built from this finding. See DECISIONS_LOG #46.
+
+---
+
 ## 3. Things Claude Should Do Differently
 
 Pattern-level lessons from session observations.

@@ -629,6 +629,24 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
+### 46. Polar AccessLink per-second exercise-HR pathway — precise scope + citation
+
+**Decision:** Per-second exercise HR is available via (a) the v3 REST exercise-samples endpoint (per-sample-type `recording-rate`; =1 → 1Hz), and (b) TCX/CSV/FIT export (second-by-second HR; RR in the .txt/FIT). It is NOT available via v4 REST `training-sessions/list` (summary only, per #17) or v4 continuous-samples (24/7 `TRIGGER_TIMED_247`, coarse). For the direct solo/gym upload lane, PSL remains primary and higher-fidelity (1Hz HR + per-beat RR + 203Hz ACC + 130Hz ECG); AccessLink is redundant there. No AccessLink ingest is built in this session.
+
+**Refines:** #35 — adds endpoint precision and methodology to its previously uncited claim ("per-second... available only via AccessLink v4 / ZIP path"). Corrects "v4 / ZIP" to the specific surfaces above; the surface is v3-REST or TCX-export, not v4-REST. #35's HC-lane dependency stands.
+
+**Consistent with:** #17 (v4 REST list = summary; zone/load via ZIP export).
+
+**Out of scope** (separate, still-open decision, motivated by #35): whether to build AccessLink per-second ingest for the Metabolic-load window in the HC/companion lane. Not decided here.
+
+**Inputs/methodology:** official Polar v4 API doc (endpoint surfaces + scopes); validated v3 client `StuMason/polar-flow` (`models/exercise.py` → `ExerciseSample.recording_rate`); Polar export docs (CSV "second by second... heart rate"); corroborating aggregators (Terra, Open Wearables, vitalera).
+
+**Confidence:** pathway existence/scoping — Certain; v3 longevity — Guessing (deprecation risk); applicability to Luke's specific sessions (device recording rate; cloud-sync collision with "never save the Polar session") — Likely.
+
+**Status:** Recorded as a decision input / prior-art finding. No ingest built; no supersede — this refines #35's uncited passing claim with methodology and precise scoping.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
