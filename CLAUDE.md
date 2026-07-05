@@ -160,9 +160,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#47–#51** — Medical-module design decisions (regulatory framing, lab input UX, interpretation layer, marker canonicalisation, lever dictionary) backfilled; closes a chat↔repo drift. See DECISIONS_LOG #47–#51.
 - **Q10** — HC-lane AccessLink per-second ingest filed PARKED, low priority; refines #35/#46. See OPEN_QUESTIONS.md Q10.
 - **#46** — Polar AccessLink per-second exercise-HR pathway precisely scoped and cited; refines #35. See DECISIONS_LOG #46.
-- **#45** — `Current sprint` block retired for capped `Recent landings`; still-open action items moved to ROADMAP NOW/NEXT. See DECISIONS_LOG #45.
 
 ---
 
