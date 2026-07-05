@@ -1,0 +1,167 @@
+{
+  "version": "0.1",
+  "entries": [
+    {
+      "marker_name_raw": "Sodium",
+      "marker_canonical": "sodium",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Potassium",
+      "marker_canonical": "potassium",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Chloride",
+      "marker_canonical": "chloride",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Bicarbonate",
+      "marker_canonical": "bicarbonate",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Anion Gap",
+      "marker_canonical": "anion_gap",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Calcium (Corrected)",
+      "marker_canonical": "calcium_corrected",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Phosphate",
+      "marker_canonical": "phosphate",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Urea",
+      "marker_canonical": "urea",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Urate",
+      "marker_canonical": "urate",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Creatinine",
+      "marker_canonical": "creatinine",
+      "unit_established": "umol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "eGFR",
+      "marker_canonical": "egfr",
+      "unit_established": null,
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Glucose fasting",
+      "marker_canonical": "glucose_fasting",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Total Protein",
+      "marker_canonical": "protein_total",
+      "unit_established": "g/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Albumin",
+      "marker_canonical": "albumin",
+      "unit_established": "g/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Globulin",
+      "marker_canonical": "globulin",
+      "unit_established": "g/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Bilirubin",
+      "marker_canonical": "bilirubin_total",
+      "unit_established": "umol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "ALP",
+      "marker_canonical": "alp",
+      "unit_established": "U/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "AST",
+      "marker_canonical": "ast",
+      "unit_established": "U/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "ALT",
+      "marker_canonical": "alt",
+      "unit_established": "U/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "GGT",
+      "marker_canonical": "ggt",
+      "unit_established": "U/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "LD",
+      "marker_canonical": "ld",
+      "unit_established": "U/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Cholesterol",
+      "marker_canonical": "cholesterol_total",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Triglyceride",
+      "marker_canonical": "triglyceride",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Haemolysis Index",
+      "marker_canonical": "haemolysis_index",
+      "unit_established": null,
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "25-OH Vitamin D",
+      "marker_canonical": "vitamin_d_25oh",
+      "unit_established": "nmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "FSH",
+      "marker_canonical": "fsh",
+      "unit_established": "IU/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "LH",
+      "marker_canonical": "lh",
+      "unit_established": "IU/L",
+      "loinc": null
+    }
+  ]
+}
