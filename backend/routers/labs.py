@@ -320,7 +320,9 @@ async def extract_lab_report(
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
         model=MODEL,
-        max_tokens=4096,
+        # Dense panels (20+ markers, each with a per-field confidence object)
+        # can exceed 4096 output tokens and get cut off mid-JSON.
+        max_tokens=8192,
         system=EXTRACTION_SYSTEM_PROMPT,
         messages=[
             {
