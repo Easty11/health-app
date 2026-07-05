@@ -17,6 +17,7 @@ from routers import checkin_v2 as checkin_v2_router
 from routers import polar as polar_router
 from routers import engine as engine_router
 from routers import mcp_auth as mcp_auth_router
+from routers import labs as labs_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -66,6 +67,7 @@ app.include_router(polar_router.router)
 app.include_router(engine_router.router)
 app.include_router(chat_router.router)
 app.include_router(mcp_auth_router.router)
+app.include_router(labs_router.router)
 
 
 @app.get("/health")
