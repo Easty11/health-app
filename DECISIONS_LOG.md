@@ -647,6 +647,119 @@ Authoritative source per category (28 Jun 2026 export):
 
 ---
 
+### 47. Regulatory framing — education, not clinical decision support
+
+**Decision:** The platform provides health education, never clinical decision support. It explains
+mechanisms, lists evidence-ranked levers, and filters for relevance; it never connects a lever to a
+personalised recommended action. Line: "levers that influence oestradiol" = education; "given your
+dose, adjust X" = prescription; evidence-ranked lists = education; filtering already-addressed levers
+= curation; personalised prioritisation to the individual = prescription.
+
+**Rationale:** Keeps the product outside TGA Software-as-a-Medical-Device classification; the user is
+always the decision-maker. Enforced at the prompt layer AND structurally — no interpretation-output
+field expresses a personalised action.
+
+**Consistent with:** #21 — the Adaptive Exposure Engine already drew this same education/practitioner
+line for capability state ("engine probes and surfaces; interpreting a formal screen stays the
+practitioner's line"). #47 generalises that precedent into a named, repo-wide constraint rather than
+an incidental phrase local to one module.
+
+**Status:** Locked. Non-negotiable constraint on the AI output layer.
+
+**Provenance:** Originally decided 2026-06-15 (chat); recorded here to close a chat↔repo drift —
+absent from this log until now.
+
+**Do not revisit unless:** regulatory advice changes the classification analysis.
+
+---
+
+### 48. Lab input UX — file-first, no forms, chat for edge cases
+
+**Decision:** Primary lab input is file attach (PDF/photo) → AI extraction → confirmation screen
+(outlier flagging) → stored. No manual-entry forms. Chat handles single verbal metrics → inline
+confirmation → stored `source: verbal`. Metrics screen has one action: attach file.
+
+**Rationale:** Forms require health literacy; file upload requires none. Chat absorbs the verbal edge
+case without new UI. Source-tagged for confidence tracking.
+
+**Status:** Locked.
+
+**Provenance:** Originally 2026-06-15 (chat); backfilled to close drift.
+
+**Do not revisit unless:** extraction proves unreliable enough to need a structured-entry fallback.
+
+---
+
+### 49. Interpretation layer design — delta-first, three sections, filtered levers
+
+**Decision:** Lab interpretation is delta-first (trend is the story, absolute is supporting),
+mechanism-based, protocol-aware. Three sections: What Moved (delta vs prior panel + mechanism in
+protocol context); Stable (explicit nothing-to-flag — chronically-flagged-but-flat markers belong
+here, not in What Moved); Mechanisms Worth Understanding (filtered lever list per moving marker).
+Levers already addressed are shown transparently as "already in play," never silently dropped. Each
+lever taps into a chat pre-seeded with marker + mechanism + why-surfaced. Consumes `current_state`
+(#43) directly. Emitted shape lives in the interpretation output contract (knowledge-file, orientation).
+
+**Rationale:** Delta-first suppresses noise (a persistent Gilbert's-pattern H is not news);
+protocol-awareness makes mechanisms correct in stack context; transparent filtering stays curation,
+not prescription (#47).
+
+**Status:** Locked (design). Build pending — depends on the lab store (OPEN) and the lever dictionary (#51).
+
+**Provenance:** Originally 2026-06-15 (chat); backfilled — this is the entry ROADMAP called "design
+complete" while it was absent here.
+
+**Do not revisit unless:** the three-section model fails a real panel.
+
+---
+
+### 50. Marker canonicalisation — internal dict, confirmation-populated, unit-guarded, dormant LOINC
+
+**Decision:** Canonical marker identity uses an internal dictionary — confirmation-populated (exact
+known name auto-maps; novel name → null → surfaces once for manual bind/declare; no fuzzy
+auto-guessing) and unit-guarded (keyed on name+unit; write-time guard flags a mapped result whose unit
+differs from its series' established unit). Each entry carries a dormant nullable `loinc`, deferred to B2B.
+
+**Rationale:** The dangerous failure is over-collapse (two analytes silently merged — total-T nmol/L
+vs free-T pmol/L both "Testosterone"). Confirmation-population + unit-guard make silent over-collapse
+structurally hard. LOINC-from-day-one front-loads interop not needed in proof phase; the internal dict
+is its substrate.
+
+**Status:** Locked (drafted PENDING in LAB_EXTRACTION_SCHEMA §7). Not implemented.
+
+**Provenance:** Drafted in chat, marked "carry to Code," never landed. Folded into this pass as
+adjacent drift — logged here rather than separately since both surfaced in the same drift review.
+
+**Do not revisit unless:** LOINC is brought forward, or a categorical/qualitative result forces the schema.
+
+---
+
+### 51. Lever dictionary — GRADE tiering, in-repo direct-read asset, per-(marker,lever) grading
+
+**Decision:** The marker→lever reference asset (Section 3 of the interpretation contract) is built,
+not bought (no ingestable source; Examine is a paywalled analogue + B2B licensing candidate only). It
+is a versioned, direct-read, in-code asset mirroring `engine/taxonomy.py` — never seeded to a table;
+only user data is tabled. Evidence certainty uses GRADE (high/moderate/low/very_low), graded per
+(marker, lever) pair by a mechanical rubric (start-level by study design → downgrade/upgrade by named
+GRADE domains). GRADE over Examine-style A–F because A–F leaks a recommendation verdict; GRADE states
+evidence certainty only — consistent with #47. `ai_draft` entries are excluded from user-facing
+Section 3 until `human_verified`; a marker ships Section 3 only when its lever set is complete.
+Authoring via the connected evidence tools (Consensus/PubMed/Scholar Gateway/Scite).
+
+**Rationale:** In-repo direct-read matches the taxonomy precedent (git diff is the audit trail; no
+seed/migration to expand). GRADE keeps grades defensible as education, not product scores. Per-pair
+because the same lever grades differently for different markers.
+
+**Status:** Decided, not implemented. Consequence: the interpretation output contract needs a v0.2
+(tier enum → GRADE; evidence_rank derived-not-stored; add grade_rationale/evidence_refs +
+lever_dictionary_version) — a knowledge-file/UI edit, not this pass.
+
+**Provenance:** Decided this session (2026-07-05, chat).
+
+**Do not revisit unless:** a curated evidence source becomes licensable, or GRADE proves too coarse.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
