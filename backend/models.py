@@ -313,6 +313,69 @@ class CapabilityState(Base):
     )
 
 
+class LabReport(Base):
+    """Collection-event envelope for observed labs (DECISIONS_LOG #52). One row per
+    draw/report; `LabResult` rows hang off it per marker. Not `user_knowledge_entries`
+    (declared facts only) and not the deferred `health_events` spine (#43) — a
+    concrete domain table for a concrete observational series.
+    """
+    __tablename__ = "lab_reports"
+    __table_args__ = (
+        Index("ix_lab_report_user_collected", "user_id", "collected_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    lab_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    lab_provider_group: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    panel_name_raw: Mapped[str] = mapped_column(String(255), nullable=False)
+    accreditation_no: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    referrer_name_raw: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    referrer_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    collected_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    received_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reported_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    document_created_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    requested_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    report_comments: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # sonic_dx_extract | full_report | unknown | verbal
+    source_completeness: Mapped[str] = mapped_column(String(50), nullable=False)
+    # file_extraction | verbal
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_doc_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    overall_confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LabResult(Base):
+    """One row per marker per `LabReport` (DECISIONS_LOG #52). `current_state` reads
+    the latest row per (user, marker) via join to `LabReport.collected_date` —
+    compute-on-read, no supersede column here.
+    """
+    __tablename__ = "lab_results"
+    __table_args__ = (
+        UniqueConstraint("lab_report_id", "marker", name="uq_lab_result_report_marker"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lab_report_id: Mapped[int] = mapped_column(ForeignKey("lab_reports.id", ondelete="CASCADE"), nullable=False, index=True)
+    marker: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # canonical id, #50
+    value_num: Mapped[float | None] = mapped_column(Float, nullable=True)
+    value_operator: Mapped[str | None] = mapped_column(String(1), nullable=True)  # '<' | '>'
+    value_qualitative: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    unit_canonical: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ref_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ref_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ref_low_exclusive: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"), default=False)
+    ref_high_exclusive: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"), default=False)
+    lab_flag: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    computed_flag: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class FortificationProfile(Base):
     """
     Adaptive Exposure Engine — fortification-target profile (spec §9).
