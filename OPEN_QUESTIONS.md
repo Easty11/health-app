@@ -146,6 +146,19 @@ state)? Deferred by #44; not urgent.
 
 ---
 
+## Q10. Build AccessLink per-second ingest for the Metabolic-load window (HC/companion lane)?
+
+#35 established the dependency: HC carries no per-second R-R/HR-zone; only AccessLink
+(v3 REST exercise-samples / TCX export) does. #46 specified the exact pathway but it is
+not built. PSL covers Luke's direct solo/gym capture, so the need only bites if the
+HC/companion lane carries a Polar user requiring per-second — currently none (Deb's
+wearable integration deferred, Cooper has no wearable).
+
+**Status:** PARKED, low priority. Revisit when the Metabolic-load channel is wired to
+Polar-in-HC data for a real consumer.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
