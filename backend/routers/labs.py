@@ -274,6 +274,17 @@ fences, no commentary — the response body must be valid JSON and nothing else.
 """
 
 
+# ---------- GET /labs/canonical-map ----------
+
+@router.get("/canonical-map")
+def get_canonical_map(
+    current_user: models.User = Depends(get_current_user),
+):
+    """Read-only lookup so the confirmation screen can flag unmapped markers
+    client-side, before /labs/confirm does the authoritative resolution."""
+    return _CANONICAL_MAP
+
+
 # ---------- POST /labs/extract ----------
 
 @router.post("/extract")
