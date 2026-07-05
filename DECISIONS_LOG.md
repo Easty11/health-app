@@ -758,6 +758,78 @@ lever_dictionary_version) — a knowledge-file/UI edit, not this pass.
 
 **Do not revisit unless:** a curated evidence source becomes licensable, or GRADE proves too coarse.
 
+### 52. Lab store — `lab_report` + `lab_result` table pair (Q-store resolved)
+
+**Decision:** Observed labs live in a concrete two-table pair — not
+`user_knowledge_entries type="lab"`, not the deferred generic `health_events` spine.
+- `lab_report` (envelope, one row per collection event): `user_id` (FK, index),
+  `lab_name`, `lab_provider_group?`, `panel_name_raw`, `accreditation_no?`,
+  `referrer_name_raw?`/`referrer_ref?`, `collected_date` (index — timeline anchor),
+  `received_at?`/`reported_at?`/`document_created_at?`/`requested_date?`,
+  `report_comments?` (JSON), `source_completeness`
+  ('sonic_dx_extract'|'full_report'|'unknown'|'verbal'), `source`
+  ('file_extraction'|'verbal'), `source_doc_filename?`/`page_count?`,
+  `overall_confidence` (float), `extracted_at?`, `created_at`.
+  Index(user_id, collected_date).
+- `lab_result` (one row per marker): `lab_report_id` (FK, index), `marker`
+  (canonical id from #50, index), `value_num?` (float), `value_operator?`
+  ('<'|'>'), `value_qualitative?`, `unit_canonical?`, `ref_low?`/`ref_high?`,
+  `ref_*_exclusive` (bool), `lab_flag?`/`computed_flag?`, `confidence` (float),
+  `created_at`. Unique(lab_report_id, marker); Index(marker).
+`current_state` reads latest `lab_result` per marker via join to `lab_report`
+(compute-on-read, #43 overlay).
+
+**Rationale:** (a) repo grain — every observational series here is a typed table;
+`user_knowledge_entries` holds declared facts only. (b) #51's line "only user data
+is tabled" puts labs on the table side. (c) the report envelope is real provenance
+the extractor emits (LAB_EXTRACTION_SCHEMA §2); a `report_ref` string has nowhere to
+store it — a parent table does. (d) source/confidence house rule → typed columns.
+(e) modeling honesty — one row = one observation true at its draw date, not a
+supersede. (f) delta-first (#49) reads newest+prior per marker via Index(marker) +
+join. Not a reopen of #43/Q8: `lab_report` is a concrete domain table, not the
+generic `health_events` spine #43 deferred — #43 timed this projection's call to the
+lab pipeline; this is it.
+
+**How you know:** master `backend/models.py` tablename enumeration this turn (13
+tables, none `lab*`/`health_event*`) = greenfield; `backend/main.py:21` =
+`Base.metadata.create_all(bind=engine)` → new model classes auto-create on deploy,
+no migration authored (`alembic.ini` exists but boot uses `create_all`).
+
+**Status:** Decided, not implemented. Unblocks the #49 build + #48 write path.
+
+**Provenance:** Q-store raised prior chat, never filed (see Q11); resolved
+2026-07-05. Report-envelope gap caught while reconciling LAB_EXTRACTION_SCHEMA §1/§2.
+
+**Do not revisit unless:** a qualitative-heavy panel breaks the numeric `value_num`
+assumption, or multi-tenant scale changes the shape.
+
+### 53. Per-marker minimum meaningful delta — reference asset, not a table column (Q-threshold resolved)
+
+**Decision:** `min_meaningful_delta` is a per-marker static-reference attribute in an
+in-repo direct-read asset of the #51 family (versioned, git-diff audit trail, never
+tabled), keyed on the #50 canonical id. NOT a field on #50's confirmation-populated
+identity dict; NOT a `lab_result` column; never global. The #49 delta-gate suppresses
+a marker from "What Moved" when `|value(current) − value(prior)| < min_meaningful_delta`.
+
+**Rationale:** #51's dividing line — authored reference data lives in-repo, not a
+table. It is static (a fixed property of the analyte), so it does not belong on #50,
+which is confirmation-*populated* runtime identity state; mixing static reference into
+runtime bindings is the smell #50/#51 already separate. Per-marker not global because
+a 2-unit move is noise for one analyte and signal for another.
+
+**How you know:** #50 read this turn — its dict is "confirmation-populated" and
+"unit-guarded (keyed on name+unit)," i.e. identity state, not a value store; #51
+establishes the in-repo direct-read reference asset this attribute joins.
+
+**Status:** Decided (placement). Threshold values are content-authoring alongside the
+#51 lever dictionary, not a fork.
+
+**Provenance:** Q-threshold raised prior chat, never filed (see Q12); resolved this
+session. Placement corrected after reading #50.
+
+**Do not revisit unless:** a marker needs a context-dependent (e.g. protocol-phase)
+delta rather than a single static one.
+
 ---
 
 ## Known open issues (as of June 2026)

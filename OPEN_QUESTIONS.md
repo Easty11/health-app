@@ -159,6 +159,23 @@ Polar-in-HC data for a real consumer.
 
 ---
 
+## Q11. Lab store — where per-marker observed results live
+
+Fork: `lab_result` typed table vs `user_knowledge_entries type="lab"` vs `health_events`.
+Blocked the #49 build, the #48 write path, and lever-dictionary wiring alike.
+
+**Status:** resolved → #52 (`lab_report` + `lab_result` table pair).
+
+---
+
+## Q12. Per-marker minimum meaningful delta
+
+Where the #49 delta-gate threshold lives; global vs per-marker.
+
+**Status:** resolved → #53 (per-marker `min_meaningful_delta`, in-repo #51-family reference asset).
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
