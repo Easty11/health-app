@@ -2,83 +2,61 @@
 
 ## 1. Real commits this session
 
-Session-open ref: `62a60cd` (tip of `master` at session start — session opened on `master`,
-not a pre-existing branch).
+Session-open ref: `7c45e5d` (tip of `master` at session start, also the tip of pre-existing
+branch `chore/polar-accesslink-oq-resolution` — session opened already checked out on that
+branch per the ANCHOR brief).
 
 ```
-9f69f82 govern: cite Polar AccessLink per-second exercise-HR pathway, refine #35 (#46)
-442f0ca chore: park chore/polar-accesslink-oq-resolution in BRANCHES.md ledger
+27cda57 docs(governance): file Q10 - HC-lane AccessLink per-second ingest [PARKED]
 ```
 
-Both on new branch `chore/polar-accesslink-oq-resolution`, cut from `master` at `62a60cd`,
-pushed to `origin/chore/polar-accesslink-oq-resolution`. Not yet merged to `master`.
+- **`27cda57`** — files `OPEN_QUESTIONS.md` Q10 (HC-lane AccessLink per-second ingest for
+  the Metabolic-load window). Verified Q1–Q9 unchanged and Q10 was the correct next number
+  before writing. Single-file diff, governance-only.
+- Branch was then **fast-forward merged** to `master` (`62a60cd..27cda57`, no merge commit)
+  and `master` pushed to `origin`. This carries `27cda57` plus the branch's two prior
+  commits (`9f69f82` #46, `442f0ca` BRANCHES.md parking — both already reported in the
+  prior session's close-out) onto `master` for the first time.
+- Branch `chore/polar-accesslink-oq-resolution` confirmed fully merged
+  (`git cherry origin/master` → no unique patches) and deleted, both locally and on
+  `origin`.
+- A second commit lands this close-out itself (`chore: session close-out`) — updates
+  `BRANCHES.md` (clears the now-landed entry) and `CLAUDE.md` (`Recent landings` prepends
+  Q10, drops #44 off the cap).
 
-- **`9f69f82`** — the governance decision itself: appends `DECISIONS_LOG` #46 (Polar
-  AccessLink per-second exercise-HR pathway — v3 REST exercise-samples `recording-rate` +
-  TCX/CSV/FIT export, vs v4 REST `training-sessions/list` summary-only and v4
-  continuous-samples) and `FEEDBACK.md` §2.14 (the underlying prior-art finding +
-  methodology). Refines #35's previously uncited claim; does not supersede it. No
-  `OPEN_QUESTIONS.md` edit — Q1–Q9 reviewed, none maps to this topic, confirmed and
-  reported mid-session; that store is untouched.
-- **`442f0ca`** — parks the branch in `BRANCHES.md` per the terminal-state gate, since it
-  is pushed but not merged at session end.
-- A third commit lands this close-out itself (see step 8 below) — will also update
-  `CLAUDE.md`'s `Recent landings` block (prepends #46, trims #43 off the cap).
-
-**Branch terminal-state gate:** `git branch` shows `master` and
-`chore/polar-accesslink-oq-resolution`; the latter is the only branch touched this
-session. `git cherry origin/master chore/polar-accesslink-oq-resolution` returns both
-commits marked `+` (real work, unmerged) — not yet mergeable-and-clean, but pushed and
-**parked in `BRANCHES.md`** with purpose / why-parked / unblocks-on, satisfying the gate's
-"merged+deleted OR listed in BRANCHES.md" condition. Not a HALT.
-
-Note: this session opened as a continuation of a prior turn in the same conversation that
-had already verified leaf=`health-app` and cut this branch — no separate re-verification
-was needed at close-out.
+**Branch terminal-state gate:** `git branch` / `git branch -a` show only `master` (local)
+plus `origin/master`, `origin/HEAD` (remote) — the touched branch
+(`chore/polar-accesslink-oq-resolution`) no longer exists in either location, i.e.
+**merged+deleted**. Gate satisfied, no HALT.
 
 ## 2. Pending-commit queue reconciliation
 
-No `;cc` chat close-out preceded this session — work was scoped directly from a pasted
-ANCHOR/OBJECTIVE/STEPS/GATES/LOG/GUARD brief (in two parts: an initial brief that
-correctly self-halted at its own Step 2 gate when no matching "tested, negative" entry
-existed in canon, then a revised brief reframing the work as "refine #35," not
-"supersede"). Reconciling against the revised brief's steps:
+No `;cc` chat close-out preceded this session. Work was scoped directly from a pasted
+ANCHOR/OBJECTIVE/STEPS/GATES/LOG/GUARD brief whose own LOG section stated there was no
+pending-commit queue to reconcile — the brief's single deliverable *was* the queue: file
+Q10, then land it with #46 together.
 
-- **Step 1** (verify OQ mapping) — Q1–Q9 read in full; none concerns Polar per-second HR.
-  Reported "none maps" mid-session per the gate. `OPEN_QUESTIONS.md` correctly received no
-  edit.
-- **Step 2** (FEEDBACK prior-art finding) — landed at `9f69f82`, §2.14.
-- **Step 3** (DECISIONS_LOG #46) — landed at `9f69f82`. Confirmed `46` against
-  `origin/master`'s actual max (`45`) immediately before writing, not hardcoded.
-- **Step 4** (OPEN_QUESTIONS resolve) — skipped per Step 1 finding no match, as the gate
-  allowed.
-- **Step 5** (commit, single governance concern) — done at `9f69f82`. `BRANCHES.md`
-  parking was a separate, second commit (`442f0ca`) — branch-lifecycle bookkeeping, not
-  the Polar decision content, kept split rather than folded into the governance commit.
+- **Q10 entry** → committed at `27cda57`. Byte-level format matched to the store's
+  existing prose-paragraph convention (the brief's draft used bullets; converted to
+  prose to match Q1–Q9).
+- **#46** (`DECISIONS_LOG`, already committed on-branch as `9f69f82` in the prior session)
+  → landed on `master` for the first time this session via the ff-merge. Was provisional
+  per the prior close-out; is now canon.
+- **Branch disposition** → merged, deleted local + remote, `BRANCHES.md` entry cleared.
 
-Everything specified in the brief is committed to the branch and pushed. Nothing decided
-this session is uncommitted — but the branch itself is **not yet on `master`**: the
-DECISIONS_LOG #46 / FEEDBACK §2.14 content is real and pushed, but per the loop model
-("truth changes only at a commit [to master]") it remains provisional-to-canon until this
-branch lands.
+Everything specified in the brief is committed and on `master`. Nothing decided this
+session is uncommitted.
 
 ## 3. Cold-resume handoff
 
-**Current sprint** (from `CLAUDE.md`'s `Recent landings` / `ROADMAP.md`):
-- This session's work (pushed, unmerged): `DECISIONS_LOG` #46 — Polar AccessLink
-  per-second exercise-HR pathway precisely scoped (v3 REST exercise-samples + TCX/CSV/FIT
-  export; not v4 REST list, not v4 continuous-samples), refining #35's uncited claim. No
-  ingest built. `FEEDBACK.md` §2.14 carries the underlying prior-art methodology.
-- Outstanding from prior sessions, still open in `ROADMAP.md` NOW: Health Connect
-  permissions fix, Samsung Health package name correction, morning check-in screen,
-  persistent conversation history, two frontend UI bugs (session cards not clickable,
-  dual-panel scroll), running `seed_engine.py` against Railway Postgres (owed since #42),
-  the unimported `Session` type in `mcp_server.get_hevy_workouts`.
-- `ROADMAP.md` NEXT unchanged this session: superseding `DECISIONS_LOG` #3 (Polar R-R
-  verification — a different surface, the on-device BLE SDK, not touched by #46), HCA
-  forwarding writer identity, backend F1 source-priority filter.
+**Current sprint** (`ROADMAP.md` NOW — unchanged this session, pure governance touch, no
+code): Health Connect permissions fix, Samsung Health package name correction (verify via
+Railway Postgres), morning check-in screen, persistent conversation history, two frontend
+UI bugs (session cards not clickable, dual-panel scroll layout), running `seed_engine.py`
+against Railway Postgres (owed since #42), unimported `Session` type in
+`mcp_server.get_hevy_workouts` (pre-existing `NameError` bug, one-line import fix).
 
-**Open questions** (`OPEN_QUESTIONS.md`), by status — unchanged this session:
+**Open questions** (`OPEN_QUESTIONS.md`), by status:
 - `resolved → #20`: Q1 (HC stage-constant fix + backfill)
 - `resolved` (HCA `36df9a2`): Q2 (duplicate SleepSession records)
 - `resolved → #43`: Q8 (event-spine fork)
@@ -87,15 +65,15 @@ branch lands.
   into daily TL, resolves → #28 on Postgres verify), Q7 (structured injury ledger missing
   the right proximal semimembranosus tear + three-valued detail field), Q9 (consolidate
   legacy `user_knowledge` into `user_knowledge_entries`, deferred by #44, not urgent)
+- `PARKED, low priority` (new this session): Q10 (HC-lane AccessLink per-second ingest —
+  revisit when the Metabolic-load channel is wired to Polar-in-HC data for a real
+  consumer; currently no such consumer exists)
 
-**Single clearest next action:** Merge `chore/polar-accesslink-oq-resolution` to `master`
-(`git land chore/polar-accesslink-oq-resolution`, or `--ff-only` manually) — it is pushed,
-single-concern, and has no conflicts with `master` (`origin/master` unchanged since the
-branch was cut). Until it lands, DECISIONS_LOG #46 and FEEDBACK §2.14 are provisional, not
-canon. After that, the standing owed item is still running `seed_engine.py` against
-Railway Postgres (owed since #42).
+**Single clearest next action:** the unimported `Session` type in
+`mcp_server.get_hevy_workouts` — a one-line import fix, pre-existing, unblocked (unlike
+the Postgres-dependent items, which need Railway credentials in-session).
 
-**Governance stores changed this session:** `DECISIONS_LOG.md`, `FEEDBACK.md`.
-`OPEN_QUESTIONS.md`, `ROADMAP.md`, `Ideas.md` unchanged. Also changed (non-store, part of
-this session's close-out artifacts): `BRANCHES.md` (branch parked), `CLAUDE.md` (`Recent
-landings` updated to lead with #46).
+**Governance stores changed this session:** `OPEN_QUESTIONS.md`. `DECISIONS_LOG.md`,
+`ROADMAP.md`, `FEEDBACK.md`, `Ideas.md` unchanged. Also changed (non-store, session
+close-out artifacts): `BRANCHES.md` (landed branch's entry cleared), `CLAUDE.md` (`Recent
+landings` updated to lead with Q10).
