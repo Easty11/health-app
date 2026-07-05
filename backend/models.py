@@ -81,7 +81,7 @@ class UserKnowledgeEntry(Base):
     superseded_by: Mapped[int | None] = mapped_column(
         ForeignKey("user_knowledge_entries.id"), nullable=True
     )
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"), default=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"), default=True)
     notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
