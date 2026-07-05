@@ -830,6 +830,50 @@ session. Placement corrected after reading #50.
 **Do not revisit unless:** a marker needs a context-dependent (e.g. protocol-phase)
 delta rather than a single static one.
 
+### 54. Correction to #52's "How you know" — real boot mechanism is `alembic upgrade head`, not `create_all`; Postgres boolean defaults need `text('true')`/`text('false')`
+
+**Decision:** #52's "How you know" line asserted new model classes auto-create on
+deploy via `Base.metadata.create_all` (`backend/main.py:21`), with no migration
+authored. That is wrong: `backend/railway.toml` / `backend/Procfile` set
+`startCommand = "alembic upgrade head && uvicorn ..."` — Alembic, not `create_all`,
+is what actually runs against Railway Postgres on every deploy (`main.py`'s
+`create_all` call is dead code for that path; it only matters for
+`conftest.py`'s SQLite test fixture). Landing `LabReport`/`LabResult` for real
+required authoring migration `8e5c0954c4b5` the same way as the repo's other 17
+migrations. Separately, that migration's first version
+(`ref_low_exclusive`/`ref_high_exclusive` `server_default=text("0")`) failed twice
+in deploy (`sqlalchemy.exc.ProgrammingError: DatatypeMismatch — column is of type
+boolean but default expression is of type integer`) — `sa.text()` emits its
+argument as literal, untranslated SQL; Postgres DDL does not accept a bare
+integer literal as a `BOOLEAN` column's `DEFAULT`. Migration `f4e9d2c1b3a7`
+already established the working convention (`server_default=sa.text('true')`);
+`text('0')`/`text('1')` — as `UserKnowledgeEntry.active` still uses in
+`models.py:84` — is latent-broken should its table ever need a fresh migration.
+
+**Rationale:** Both errors are "assumed, not verified" — the founding failure mode
+this repo's rules exist to catch (CLAUDE.md "Verify before design";
+DECISIONS_LOG discipline's "How you know" requirement). Logging the correction
+rather than silently editing #52 in place keeps the append-only history honest
+about what was actually checked when, per CLAUDE.md's DECISIONS_LOG discipline.
+
+**How you know:** `backend/railway.toml`/`backend/Procfile` startCommand read this
+session; two live Railway deploy failures (`9e92709a`, `39c503db`) with full
+tracebacks via `railway logs --deployment <id>`; migration `8e5c0954c4b5` applied
+directly against Railway Postgres after the `text('false')` fix, confirmed via
+`psql \d lab_reports`/`\d lab_results` and a clean third deploy (`d0eeed98`,
+`SUCCESS`) whose `alembic upgrade head` no-opped against the already-applied
+revision.
+
+**Status:** Decided and applied. `lab_reports`/`lab_results` live on Railway
+Postgres, both empty, `alembic_version` at `8e5c0954c4b5`.
+
+**Provenance:** Corrected this session (2026-07-05) while landing #52/#53.
+
+**Do not revisit unless:** the deploy pipeline's startCommand changes, or
+`UserKnowledgeEntry.active`'s latent `text("1")` default is ever exercised by a
+fresh migration (fix to `text('true')` at that point, not before — no functional
+bug today since its table already exists with that default already applied).
+
 ---
 
 ## Known open issues (as of June 2026)
