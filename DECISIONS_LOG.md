@@ -876,6 +876,24 @@ bug today since its table already exists with that default already applied).
 
 ---
 
+### 55. Boolean server_default convention — standing rule
+
+**Decision:** All Boolean columns in SQLAlchemy models use
+`server_default=text('true')` or `server_default=text('false')`.
+Never integer literals (`text("1")`, `text("0")`) — these are
+invalid Postgres BOOLEAN DDL and silently fail at migration time.
+
+**Rationale:** `text("1")` cost two failed Railway deploys during #52.
+The convention already exists implicitly in migrations f4e9d2c1b3a7
+and 8e5c0954c4b5; this files it as an explicit referenceable rule.
+
+**Status:** Standing convention.
+
+**Do not revisit unless:** SQLAlchemy ORM changes its DDL generation
+in a way that makes this form obsolete.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
