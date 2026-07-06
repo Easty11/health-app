@@ -979,6 +979,77 @@ this decision exists to prevent.
 
 ---
 
+### 58. Option B: split raw marker name from canonical id; add is_derived
+
+**Decision:** `lab_results` stores `marker_name_raw` (String(100), NOT NULL) and
+`marker_canonical` (String(100), nullable) as distinct columns; the per-report
+unique key repoints to `(lab_report_id, marker_name_raw)`. Canonicalisation is
+the result of mapping `marker_name_raw` against `marker_canonical.json`
+(#50/#57), not a value forced into a single NOT NULL column. Adds `is_derived`
+(Boolean, NOT NULL, `server_default` false) recording the extraction observation
+that a report labelled a value derived/Calculated. `derived_from` is
+deliberately NOT a column: it is a type-level canonical dependency edge
+(eGFR←creatinine), which belongs in `marker_groups.json`, not duplicated
+per-row.
+
+**Rationale:** The prior single NOT NULL `marker` column forced a raw-name
+placeholder for unmapped markers — a canonical id that was silently a raw
+string, an over-collapse risk #50 exists to prevent. Splitting the columns
+removes the placeholder and makes canonical nullable (unmapped = null, visible
+as an interpretation-layer skip). `is_derived` on the row is observable even
+for unmapped markers; `derived_from` is not (no canonical id to name a source),
+and putting it on the row would duplicate a `marker_groups` edge — two sources
+of truth, drift-prone.
+
+**Migration:** `backend/migrations/versions/217dce22fbc5_option_b_marker_split_plus_is_derived.py`,
+chained onto head `8e5c0954c4b5`. `op.batch_alter_table` throughout for SQLite
+portability, split into four sequential batches rather than one — combining the
+column rename (`marker` → `marker_canonical`) with index drop/create in a single
+batch tripped an Alembic SQLite batch-mode bug in index carry-forward across
+renames (`KeyError: 'marker_canonical'` in `_gather_indexes_from_both_tables`);
+isolating the rename into its own batch avoided it. `marker_name_raw` backfilled
+= old `marker` (raw was never historically stored — lossy but the only
+recoverable value; safe on the 24 local rows and empty-of-labs Railway).
+Downgrade coalesces `marker := coalesce(marker_canonical, marker_name_raw)`
+before restoring NOT NULL. `is_derived` server_default is `text('false')`,
+matching the `ref_low_exclusive`/`ref_high_exclusive` convention (#55) — never
+`text("1")`/`text("0")`.
+
+**Consumer fix (same commit):** `routers/labs.py`'s `confirm_lab_report` write
+path constructed `LabResult(marker=canonical or r.marker_name_raw, ...)` — the
+exact placeholder pattern this decision removes, and a direct break the moment
+`marker` stopped existing as a kwarg. Updated to
+`marker_name_raw=r.marker_name_raw, marker_canonical=canonical` (no fallback;
+`unmapped` in the response remains the actual "needs a human bind" signal, not
+column nullness).
+
+**Status:** Decided and applied this session. `alembic upgrade head` /
+`downgrade -1` / re-`upgrade head` all verified on local SQLite: single head
+(`217dce22fbc5`) after, post-migration schema matches spec exactly (`marker_canonical`
+nullable, `marker_name_raw` NOT NULL + indexed, `is_derived` present with correct
+boolean default, `uq_lab_result_report_marker_raw` live, old constraint/index
+gone), all 24 local rows survived with `marker_name_raw` backfilled = old
+`marker`, zero NOT NULL violations, downgrade round-trip restored the original
+schema and data faithfully.
+
+**How you know:** Pre-state verified against live `master`
+(`backend/models.py` + the `8e5c0954c4b5` migration file + a direct SQLite
+schema read) — `marker` NOT NULL, `uq_lab_result_report_marker` on
+`(lab_report_id, marker)`, no `marker_name_raw`/`marker_canonical`/`is_derived`;
+24 rows. `alembic heads` returned exactly one revision before and after. Local
+dev DB's `alembic_version` was found stamped stale (`b7c3e1a9f2d4`) against an
+already-at-head actual schema (pre-existing drift, unrelated to this session) —
+corrected via `alembic stamp 8e5c0954c4b5` (stamp only, no DDL) before testing,
+so the reported upgrade/downgrade results are against a verified-accurate
+baseline.
+
+**Provenance:** Cross-lane coordination review, 2026-07-06 (chat).
+
+**Do not revisit unless:** raw-name provenance beyond the single stored raw
+string is required, or `derived_from`'s home changes.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

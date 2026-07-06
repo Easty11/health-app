@@ -431,11 +431,11 @@ def confirm_lab_report(
         confidence = min(confidences) if confidences else 1.0
         db.add(models.LabResult(
             lab_report_id=lab_report.id,
-            # lab_results.marker is NOT NULL (#52). An unmapped marker has no
-            # canonical id yet, so the raw name is stored as a placeholder —
-            # `unmapped` in the response is the actual signal for "needs a
-            # human bind/declare", not nullness of this column.
-            marker=canonical or r.marker_name_raw,
+            marker_name_raw=r.marker_name_raw,
+            # marker_canonical is nullable (#58) — an unmapped marker stores no
+            # placeholder; `unmapped` in the response is the actual signal for
+            # "needs a human bind/declare".
+            marker_canonical=canonical,
             value_num=r.value_num,
             value_operator=r.value_operator,
             value_qualitative=r.value_qualitative,

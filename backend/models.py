@@ -351,17 +351,21 @@ class LabReport(Base):
 
 class LabResult(Base):
     """One row per marker per `LabReport` (DECISIONS_LOG #52). `current_state` reads
-    the latest row per (user, marker) via join to `LabReport.collected_date` —
-    compute-on-read, no supersede column here.
+    the latest row per (user, marker_canonical) via join to `LabReport.collected_date`
+    — compute-on-read, no supersede column here. `marker_canonical` is nullable:
+    unmapped raw names surface as an interpretation-layer skip, not a placeholder
+    canonical id (DECISIONS_LOG #58).
     """
     __tablename__ = "lab_results"
     __table_args__ = (
-        UniqueConstraint("lab_report_id", "marker", name="uq_lab_result_report_marker"),
+        UniqueConstraint("lab_report_id", "marker_name_raw", name="uq_lab_result_report_marker_raw"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     lab_report_id: Mapped[int] = mapped_column(ForeignKey("lab_reports.id", ondelete="CASCADE"), nullable=False, index=True)
-    marker: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # canonical id, #50
+    marker_name_raw: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # as extracted, #58
+    marker_canonical: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)  # mapped id, #50/#58
+    is_derived: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)  # #58
     value_num: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_operator: Mapped[str | None] = mapped_column(String(1), nullable=True)  # '<' | '>'
     value_qualitative: Mapped[str | None] = mapped_column(String(100), nullable=True)
