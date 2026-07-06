@@ -1,5 +1,5 @@
 {
-  "version": "0.1",
+  "version": "0.2",
   "entries": [
     {
       "marker_name_raw": "Sodium",
@@ -161,6 +161,30 @@
       "marker_name_raw": "LH",
       "marker_canonical": "lh",
       "unit_established": "IU/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Testosterone",
+      "marker_canonical": "testosterone_total",
+      "unit_established": "nmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "SHBG",
+      "marker_canonical": "shbg",
+      "unit_established": "nmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Calculated Free Testosterone",
+      "marker_canonical": "testosterone_free_calculated",
+      "unit_established": "pmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Oestradiol",
+      "marker_canonical": "oestradiol",
+      "unit_established": "pmol/L",
       "loinc": null
     }
   ]

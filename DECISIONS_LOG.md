@@ -943,6 +943,42 @@ default.
 
 ---
 
+### 57. Canonical marker vocabulary is single-source; interpretation assets bind to it
+
+**Decision:** `marker_canonical.json` is the single source of canonical marker
+ids. `lever_dictionary.json` (#51) and `marker_groups.json` bind to its ids;
+they do not mint their own. Reconciliation is bidirectional — asset ids conform
+down to marker_canonical's strings, and marker_canonical expands up to cover
+every markered/levered analyte or the binding dangles. This pass adds the four
+hormone-axis markers (`testosterone_total`, `shbg`, `testosterone_free_calculated`,
+`oestradiol`) required by the HPG lever/group work; broader expansion (CBC, iron,
+lipid sub-markers, homocysteine, PSA, HbA1c, ACR) is deferred. CK is not
+pre-added — it populates on first appearance per #50.
+
+**Rationale:** Three assets keying on canonical id (identity #50, levers #51,
+relations) were being evolved in isolation across two build lanes; divergence
+means levers don't bind and relations don't resolve. Single-source + bidirectional
+reconciliation kills the drift.
+
+**Status:** Decided and applied this session.
+
+**How you know:** `backend/reference/marker_canonical.json` read and confirmed
+prior state (27 entries, version 0.1, schema `{marker_name_raw, marker_canonical,
+unit_established, loinc}`); `backend/routers/labs.py:33` confirmed the loader
+keys on `marker_name_raw`, and the over-collapse unit-guard at line 398. `git
+branch -a` confirmed no parallel branch mid-edit on this file (master only,
+local and remote). Four entries added, version bumped to 0.2; reloaded and
+verified programmatically: 31 entries, no duplicate raw names or canonicals,
+`testosterone_total` (nmol/L) and `testosterone_free_calculated` (pmol/L)
+resolve to distinct canonicals with distinct units — the #50 over-collapse case
+this decision exists to prevent.
+
+**Provenance:** Cross-lane coordination review, 2026-07-06 (chat).
+
+**Do not revisit unless:** a second canonicalisation authority is introduced.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
