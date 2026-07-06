@@ -14,7 +14,6 @@ Last updated: July 2026
 | Persistent conversation history | Currently clears on browser refresh. Needs backend storage + frontend state management. |
 | Session cards not clickable | UI bug — session cards in workout view not responding to click |
 | Dual-panel scroll layout issue | UI bug — scroll behaviour broken in dual-panel view |
-| Run `seed_engine.py` against Railway Postgres | DECISIONS_LOG #42's device/injury migration only ran against local SQLite this session (no Railway credentials in-session). Luke's chat/MCP context is still hardcode-free but reading empty structured entries in production until this runs. Verify via Postgres query, not on-device UI. |
 | `mcp_server.get_hevy_workouts` references unimported `Session` type | Pre-existing bug, found (not introduced) during #42's MCP work — `db: Session = SessionLocal()` with no `Session` import; will raise `NameError` at call time. Out of scope for #42 (Hevy endpoints explicitly not touched); needs a one-line import fix. |
 
 ---

@@ -894,6 +894,55 @@ in a way that makes this form obsolete.
 
 ---
 
+### 56. `railway run` on a local machine cannot resolve Railway's internal `DATABASE_URL` — public proxy override required
+
+**Decision:** When running a local script against Railway production Postgres
+via `railway run`, the injected `DATABASE_URL` uses the private-network hostname
+(`postgres-28pk.railway.internal`), which only resolves inside Railway's own
+network — not from a laptop. `railway run` also takes precedence over any
+locally pre-exported `DATABASE_URL`, so the override must happen inside the
+same invocation, downstream of Railway's injection (e.g.
+`railway run bash -c 'DATABASE_URL="<DATABASE_PUBLIC_URL value>" venv-python script.py'`),
+using the Postgres service's own `DATABASE_PUBLIC_URL` value (`railway variables
+--service <postgres-service>`) as the override target. The backend service's own
+variable set does not expose `DATABASE_PUBLIC_URL` — it must be read from the
+Postgres service directly. Separately, the local backend venv
+(`backend/.venv`) — not the system Python on `PATH` — is what has
+`sqlalchemy`/`psycopg2` installed; `railway run python ...` alone resolves to
+the system interpreter and fails with `ModuleNotFoundError`.
+
+**Rationale:** This is the concrete mechanism behind #42's "no Railway
+credentials in-session" gap — `railway run` alone is necessary but not
+sufficient for a Postgres-hitting local script; without the public-proxy
+override it fails closed (connection error), not silently (unlike the SQLite
+fallback #42 originally guarded against), but it still blocks the intended
+verification-only task from completing with the literal one-line command.
+Recording this so the next local-script-against-production run doesn't
+re-discover it from scratch.
+
+**How you know:** `railway run python backend/seed_engine.py` failed with
+`ModuleNotFoundError: No module named 'sqlalchemy'` (system Python). Re-run with
+the venv Python failed with `psycopg2.OperationalError: could not translate
+host name "postgres-28pk.railway.internal"`. Confirmed precedence empirically —
+a locally-exported `DATABASE_URL` was silently overwritten back to the internal
+hostname by `railway run`. Retrieved `DATABASE_PUBLIC_URL` via `railway
+variables --service health-app-DB --kv`; overriding inline inside the `railway
+run bash -c '...'` invocation connected successfully and `seed_engine.py` ran
+to completion against production, confirmed via direct `psql` query against
+`zephyr.proxy.rlwy.net:57857/railway` (users, fortification_profiles,
+capability_state, user_knowledge_entries all returned expected rows for
+user 1).
+
+**Status:** Decided and applied this session (2026-07-06). `seed_engine.py`
+run against Railway production Postgres; ROADMAP.md's corresponding NOW-list
+line removed.
+
+**Do not revisit unless:** Railway changes `railway run`'s variable-injection
+precedence, or exposes public-proxy variables to dependent services by
+default.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
