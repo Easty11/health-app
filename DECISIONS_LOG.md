@@ -1050,7 +1050,7 @@ string is required, or `derived_from`'s home changes.
 
 ---
 
-### #NEXT. Lab reads cut against final #58 schema; context_builder feeds the general chat lab GENERALITY only — value relays on-ask, interpretation gates to #49
+### 59. Lab reads cut against final #58 schema; context_builder feeds the general chat lab GENERALITY only — value relays on-ask, interpretation gates to #49
 
 **Decision:** Two lab reads share one query helper
 (`backend/reads/labs_reads.py::latest_lab_results`), a `ROW_NUMBER() OVER
