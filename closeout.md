@@ -6,11 +6,25 @@ Session-open ref: `54bd3cc` (tip of `master` at session start).
 
 ```
 005c1a6 feat: split lab_results.marker into raw/canonical + add is_derived (DECISIONS_LOG #58)
+2ba0b89 chore: session close-out
 ```
 
-- Work was scoped directly from a pasted ANCHOR/OBJECTIVE/STEPS/GATES/LOG/GUARD brief
-  ("Option B" / `#58`) and executed on `master` directly, per this repo's observed
-  convention. **`005c1a6`** — new migration
+Plus, from a parallel Code session sharing this same working tree (not authored by this
+session, reconciled here for an accurate cold-resume picture):
+
+```
+923f284 feat: lab reads cut with #60 render-policy gate (DECISIONS_LOG #NEXT)
+5703db6 docs: claim DECISIONS_LOG #59 for lab-reads entry (was #NEXT)
+```
+
+`origin/master` and local `master` are identical at `5703db6`. Working tree clean except
+two pre-existing untracked files that predate both sessions and aren't part of either:
+`.claude/launch.json`, `backend/gate_test.py`.
+
+### This session's own work
+
+- Scoped from a pasted ANCHOR/OBJECTIVE/STEPS/GATES/LOG/GUARD brief ("Option B" / `#58`),
+  executed on `master` directly. **`005c1a6`** — new migration
   `backend/migrations/versions/217dce22fbc5_option_b_marker_split_plus_is_derived.py`
   (chained onto head `8e5c0954c4b5`): `lab_results.marker` (NOT NULL) split into
   `marker_name_raw` (NOT NULL) and `marker_canonical` (nullable); unique key repointed
@@ -27,53 +41,65 @@ Session-open ref: `54bd3cc` (tip of `master` at session start).
   isolating the rename into its own batch, split across four sequential batches instead
   of one (mirrored in `downgrade()`).
 - Gates run and passed on local SQLite: `alembic upgrade head` → `downgrade -1` →
-  re-`upgrade head`, all clean; single head (`217dce22fbc5`) throughout; schema exactly
-  matches spec; all 24 pre-existing local rows survived with `marker_name_raw` backfilled
-  = old `marker`, zero NOT NULL violations. (Local dev DB's `alembic_version` was found
-  stamped stale — `b7c3e1a9f2d4` against an already-at-head actual schema, pre-existing
-  drift unrelated to this session — corrected via `alembic stamp 8e5c0954c4b5`, stamp
-  only, no DDL, before testing.)
+  re-`upgrade head`, all clean; single head throughout; schema exactly matches spec; all
+  24 pre-existing local rows survived with `marker_name_raw` backfilled = old `marker`,
+  zero NOT NULL violations. (Local dev DB's `alembic_version` was found stamped stale —
+  `b7c3e1a9f2d4` against an already-at-head actual schema, pre-existing drift unrelated
+  to this session — corrected via `alembic stamp`, stamp only, no DDL, before testing.)
 - **Deploy verified live on Railway production, per the brief's explicit gate:**
-  `origin/master` was found already at `005c1a6` this session (see anomaly note below) —
-  deployment `88f52792` (`SUCCESS`, 2026-07-07 07:22:55 +10:00) is the current live
-  deploy; service `health-app-backend` Online, health check passed. Queried Railway
-  Postgres directly (public-proxy override, `#56` pattern):
-  `information_schema.columns` confirms `marker_canonical` nullable, `marker_name_raw`
-  NOT NULL, `is_derived` NOT NULL with `column_default='false'`; `pg_constraint` confirms
-  `uq_lab_result_report_marker_raw` live and the old `uq_lab_result_report_marker` gone;
-  `alembic_version` on Railway reads `217dce22fbc5` (head); `lab_results` has 0 rows in
-  production (no lab report confirmed yet). The deploy is genuinely green, not just
-  reported green by Railway's own status — confirmed against the actual schema.
-- A further commit lands this close-out itself (`chore: session close-out`) — updates
-  `CLAUDE.md` (`Recent landings` prepends `#58`, drops `Q10` off the cap).
+  deployment `88f52792` (`SUCCESS`, 2026-07-07 07:22:55 +10:00), service Online, health
+  check passed. Queried Railway Postgres directly (public-proxy override, `#56` pattern):
+  `information_schema.columns` confirmed `marker_canonical` nullable, `marker_name_raw`
+  NOT NULL, `is_derived` NOT NULL with `column_default='false'`; `pg_constraint` confirmed
+  `uq_lab_result_report_marker_raw` live and the old constraint gone; `alembic_version` on
+  Railway read `217dce22fbc5`; `lab_results` had 0 rows in production. Genuinely green,
+  confirmed against the actual schema, not just Railway's own status.
+- `2ba0b89` — this session's own close-out commit (`CLAUDE.md` `Recent landings`
+  prepends `#58`, drops `Q10` off the cap).
 
-**Anomaly — push happened without this session's explicit action.** After committing
-`005c1a6`, the user was asked whether to push and chose **"Hold — don't push yet."** No
-`git push` was run in this session after that point. A subsequent `git fetch` found
-`origin/master` already at `005c1a6` regardless. Root cause: this repo's main working
-tree is currently shared with a second, parallel Code session — discovered mid-close-out
-via uncommitted changes to `DECISIONS_LOG.md`, `backend/context_builder.py`, and
-`backend/current_state.py`, plus new untracked files
-(`backend/reads/labs_reads.py`-family work: `backend/backfill_marker_canonical.py`,
-`backend/reads/`, `backend/tests/test_labs_reads.py`) and a linked worktree at
-`.claude/worktrees/hopeful-raman-df98df` (branch `claude/hopeful-raman-df98df`). That
-parallel session's in-progress work is a "lab reads" build authored directly against this
-session's `#58` schema (references `marker_canonical`/`marker_name_raw`/`is_derived` by
-name) and drafts its own `DECISIONS_LOG.md` entry headed `### #NEXT` (this repo's
-documented number-at-merge convention). It most likely ran its own `git push
-origin master`, carrying this session's already-local `005c1a6` to `origin` as a
-side-effect, independent of the "hold" instruction given in *this* conversation. Net
-effect on outcome: benign — the migration is sound and independently verified live on
-Railway above — but the push did not happen through this session's own gate, and this is
-recorded so it isn't mistaken for a violated "hold."
+### Cross-session reconciliation (same working tree, parallel Code session)
 
-**Branch terminal-state gate:** `master` — the only branch this session touched — is
-merged (trivially, being worked directly on `master`) and in sync with `origin/master`
-(`005c1a6` both places, confirmed post-fetch). The parallel session's branch
-(`claude/hopeful-raman-df98df`, linked worktree) was **not touched by this session** —
-its uncommitted work was explicitly left untouched per user direction (see below), so it
-is that other session's responsibility to bring to a terminal state, not this
-close-out's gate to enforce.
+A second Code session was found mid-flight in this same main working tree, building a
+"lab reads" layer directly on top of `#58`'s schema — discovered via uncommitted changes
+and a linked worktree (`.claude/worktrees/hopeful-raman-df98df`) partway through this
+session's own close-out. Both sessions cross-shared a handoff summary and reconciled by
+hand rather than racing separate close-outs. Final outcome, confirmed independently by
+this session via `git fetch` + log/diff inspection (not just taken on the other session's
+word):
+
+- **`923f284`** — the other session's lab-reads work landed: shared query helper
+  `backend/reads/labs_reads.py::latest_lab_results`, `current_state.CurrentState.labs`, a
+  `context_builder._section_labs` render-policy gate (standing chat context gets marker +
+  lab-asserted flag + availability only — an initial over-render of numeric values into
+  standing context was caught and fixed *before* this commit, not guardrailed after),
+  `find_marker()`/`render_asked_lab_value()` wired into `chat.py` for explicit-ask-only
+  value relay (request-scoped, never persisted to later turns), `backfill_marker_canonical.py`
+  generalised to read `marker_canonical.json` directly (a real standing rider for future
+  vocab bumps, not hardcoded to `#57`'s four), and a fix for a pre-existing unrelated test
+  (`test_context_builder_output_unchanged_pre_post_refactor`, repinned to the correct
+  parent SHA). 15/15 tests green. Added no migration — head correctly stayed at
+  `217dce22fbc5`, single head, confirmed by that session and re-confirmed here.
+- **`5703db6`** — that session's own DECISIONS_LOG entry, initially committed still
+  headed `### #NEXT` in `923f284` (a residual oversight — the commit *message* even still
+  says "(DECISIONS_LOG #NEXT)", left as-is since amending a commit already on shared
+  `origin/master` would force-push and rewrite fetched history), was corrected to `### 59.`
+  in this immediate follow-up commit. Confirmed by direct grep: no stray `#NEXT` or
+  `#60` references remain in the entry itself (the two other `#NEXT` hits in the file are
+  inside entry `#40`, describing the number-at-merge convention itself, not a stray ref).
+- **Push-anomaly closure:** this session's `005c1a6` reached `origin/master` before this
+  session ever pushed it, and the same was momentarily true of `2ba0b89`. Root cause
+  confirmed by the other session: their own `git push origin master` (run for their own
+  reasons, independent of this session's "hold" instruction) carried both of this
+  session's already-local commits up as ancestors of their `923f284`. No divergence, no
+  force-push, no lost work — `2ba0b89` sits cleanly as `923f284`'s parent.
+
+**Branch terminal-state gate:** only `master` was touched, by either session, on the
+shared main working tree — no feature branch. `master` and `origin/master` are identical
+at `5703db6`. The parallel session's linked worktree (`.claude/worktrees/hopeful-raman-df98df`,
+branch `claude/hopeful-raman-df98df`) is no longer tracked by git (branch deleted/cleaned
+up per that session's own report) — its one loose end is a filesystem-level leftover, not
+a repo-state one: the physical folder wouldn't delete (permission denied, likely a
+lingering process holding a handle) and needs manual cleanup outside git.
 
 ## 2. Pending-commit queue reconciliation
 
@@ -85,12 +111,12 @@ pending-commit queue, gated on the brief's own VERIFY steps before any write.
   pre-state matched exactly (not already applied), then committed — with the migration
   body restructured past the brief's draft to route around the Alembic batch-mode bug,
   and `How you know` expanded to cite local round-trip + live Railway verification — at
-  `005c1a6`. Not provisional; deploy confirmed green on production, not just committed.
+  `005c1a6`. Not provisional; deploy confirmed green on production.
 
-Everything specified in the brief is committed, deployed, and verified. Nothing decided
-this session is uncommitted **on this session's own account** — the separate parallel
-session's uncommitted lab-reads work is real but is that session's own pending queue to
-reconcile at its own close-out, not this one's.
+Everything specified in this session's own brief is committed, deployed, and verified.
+The parallel session's `#59` work (lab reads) is now also committed and pushed
+(`923f284`/`5703db6`), confirmed via direct `git log`/`git diff` inspection — not
+provisional either, though it was not this session's own queue to close.
 
 ## 3. Cold-resume handoff
 
@@ -118,33 +144,26 @@ the unblocked quick win).
 - `PARKED, low priority`: Q10 (HC-lane AccessLink per-second ingest — revisit when the
   Metabolic-load channel is wired to Polar-in-HC data for a real consumer)
 
-**This session's landing:** DECISIONS_LOG #58 split `lab_results.marker` into
-`marker_name_raw` (raw extraction, NOT NULL) and `marker_canonical` (mapped id,
-nullable), repointed the unique key to `(lab_report_id, marker_name_raw)`, and added
-`is_derived`. Removes the placeholder-canonical pattern flagged as an over-collapse risk
-in `#50`. Deployed to Railway and independently verified against production Postgres
-(schema + `alembic_version` both confirmed), not just reported green by Railway's deploy
-status.
+**This session's landing, plus the reconciled parallel landing:** DECISIONS_LOG `#58`
+split `lab_results.marker` into `marker_name_raw` (raw extraction, NOT NULL) and
+`marker_canonical` (mapped id, nullable), repointed the unique key to
+`(lab_report_id, marker_name_raw)`, and added `is_derived` — removing the
+placeholder-canonical pattern flagged as an over-collapse risk in `#50`. `#59` (parallel
+session) then cut the read side against that schema: a shared latest-per-marker query
+helper, a `context_builder._section_labs` render-policy gate that keeps the standing chat
+feed to lab generality only (marker + lab-asserted flag + availability — no value/unit/ref
+leak into persisted context), and an on-explicit-ask path for numeric values. Both are
+committed, deployed, and independently verified live on Railway (schema + `alembic_version`
+confirmed directly against Postgres, not just Railway's own deploy status).
 
-**Uncommitted, not this session's — for awareness only:** a parallel Code session (linked
-worktree `.claude/worktrees/hopeful-raman-df98df`, branch `claude/hopeful-raman-df98df`)
-has in-progress, uncommitted work in the *main* working tree building lab reads directly
-on this session's `#58` schema: a shared `backend/reads/labs_reads.py::latest_lab_results`
-query helper, `current_state.CurrentState.labs`, a new `context_builder._section_labs`
-render-policy gate (withholds `computed_flag`/deltas/axis-verdicts, per `#49`'s lane), a
-one-shot `backend/backfill_marker_canonical.py` data-backfill script (dry-run against
-Railway found 0 rows — correct no-op today), and `backend/tests/test_labs_reads.py`. It
-drafts its own `DECISIONS_LOG.md` entry headed `### #NEXT` (correct convention — not yet
-numbered). This close-out did not stage, commit, or modify any of it — left exactly as
-found, for that session to commit on its own account. Flagging here only so a cold-resume
-session isn't surprised by dirty working-tree state on next open.
+**Single clearest next action:** neither this session's `#58` scope nor the reconciled
+`#59` work leaves anything pending — both are done, deployed, and verified. Two loose
+ends remain, both outside repo-state: (1) manually delete the orphaned
+`.claude/worktrees/hopeful-raman-df98df` folder (git no longer tracks it; a lingering
+process likely holds a file handle there, blocking delete), and (2) the standing
+carried-over quick win, `mcp_server.get_hevy_workouts`'s unimported `Session` type
+(one-line import fix, pre-existing `NameError` bug, untouched this session).
 
-**Single clearest next action:** none from this session's own scope — `#58` is
-committed, deployed, and verified live. The parallel session's lab-reads work (above) is
-the natural next dependent layer once it commits; otherwise the carried-over
-`mcp_server.get_hevy_workouts` one-line import fix remains the standing quick win.
-
-**Governance stores changed this session:** `DECISIONS_LOG.md`, `CLAUDE.md`.
-`ROADMAP.md`, `OPEN_QUESTIONS.md`, `FEEDBACK.md` unchanged **by this session** — note
-`DECISIONS_LOG.md` also carries the parallel session's uncommitted `#NEXT` draft in the
-working tree (not part of this close-out's commit; see above).
+**Governance stores changed this session:** `DECISIONS_LOG.md` (`#58` by this session,
+`#59` by the reconciled parallel session), `CLAUDE.md` (`Recent landings`, this session).
+`ROADMAP.md`, `OPEN_QUESTIONS.md`, `FEEDBACK.md` unchanged by either session.
