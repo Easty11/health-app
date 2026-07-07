@@ -750,6 +750,99 @@ def _section_schedule(entries: list[Any], now: datetime) -> str:
 
 # ---------- Adaptive Exposure Engine sections (Decision Support) ----------
 
+# TEMPORARY (DECISIONS_LOG #60): #49's dedicated lab-interpretation view has not
+# been built yet — "Metrics" (/metrics) is the closest existing screen, and today
+# it only does attach/extract/confirm, not a persisted read-back. This constant
+# is a stand-in pointer, not a real destination; swap it for the real interpretation
+# view's name the moment #49 ships a UI, and drop this comment.
+_LAB_INTERPRETATION_VIEW_LABEL = "Metrics page"
+
+
+def _section_labs(labs: list[Any]) -> str:
+    """Render latest-per-marker lab GENERALITY — render-policy FIREWALL (#60).
+
+    Standing feed = generality only: marker + lab-asserted flag + availability.
+    `value_num`, `unit_canonical`, `ref_low`/`ref_high`, `computed_flag`, deltas,
+    and axis-verdicts are ALL withheld from this standing render — a value sitting
+    in the standing prompt is reasoning substrate whether or not it was asked for,
+    so the boundary here is structural (absent unless requested), not a
+    behavioural "don't mention it" instruction over data that's already present.
+    The numeric value relays only via `render_asked_lab_value`, request-scoped,
+    triggered by an explicit single-marker ask (see chat.py). Unmapped markers
+    (no canonical binding yet) get an availability line only. A derived marker
+    older than the latest panel's collection date is tagged stale, since it was
+    carried forward rather than freshly observed.
+    """
+    if not labs:
+        return ""
+
+    lines = ["## Lab Results (availability — generality only, no values here)"]
+
+    latest_panel_date = max((l.collected_date for l in labs), default=None)
+
+    for l in labs:
+        if l.marker_canonical is None:
+            lines.append(f"- {l.marker_name_raw}: available, unmapped (no canonical binding yet)")
+            continue
+
+        flag_str = f" [{l.lab_flag}, lab-asserted]" if l.lab_flag else ""
+
+        stale_str = ""
+        if l.is_derived and latest_panel_date is not None and l.collected_date < latest_panel_date:
+            stale_str = " (stale — derived, carried from an earlier panel)"
+
+        lines.append(f"- {l.marker_canonical}: measured{flag_str} — collected {l.collected_date}{stale_str}")
+
+    lines += [
+        "",
+        "Do NOT state a numeric value or reference range for any marker above — you do "
+        "not have them. If the user explicitly asks for a specific marker's number, that "
+        "value (if available) will be supplied to you separately for that reply only; "
+        "relay only what's explicitly given to you, never estimate or recall a number "
+        f"from earlier in the conversation. Never interpret a lab result, compare it "
+        f"across time, name a mechanism, or suggest an action — direct the user to the "
+        f"{_LAB_INTERPRETATION_VIEW_LABEL} for that.",
+    ]
+
+    return "\n".join(lines)
+
+
+def render_asked_lab_value(row: Any) -> str:
+    """Request-scoped ONLY — appended to the system prompt for a single turn when
+    the user explicitly named a marker they have on file (see
+    `reads.labs_reads.find_marker` + chat.py's wiring). Never part of the standing
+    `_section_labs` render and never persisted into a later turn's prompt; the
+    value re-triggers only if the user asks again.
+
+    Still withholds `computed_flag`, deltas, axis-verdicts, and levers (#60) —
+    the value is a relay, not an interpretation.
+    """
+    if row.value_num is not None:
+        value_str = f"{row.value_operator or ''}{row.value_num}"
+    elif row.value_qualitative:
+        value_str = row.value_qualitative
+    else:
+        value_str = "not recorded"
+
+    unit_str = f" {row.unit_canonical}" if row.unit_canonical else ""
+
+    ref_str = ""
+    if row.ref_low is not None or row.ref_high is not None:
+        lo = f"{'>' if row.ref_low_exclusive else '≥'}{row.ref_low}" if row.ref_low is not None else None
+        hi = f"{'<' if row.ref_high_exclusive else '≤'}{row.ref_high}" if row.ref_high is not None else None
+        bounds = "–".join(x for x in (lo, hi) if x)
+        ref_str = f" (lab reference {bounds})"
+
+    return (
+        f"## Requested Lab Value — {row.marker_canonical or row.marker_name_raw}\n"
+        "The user explicitly asked for this marker's number. You may relay it plainly:\n"
+        f"{value_str}{unit_str}{ref_str} — collected {row.collected_date}.\n"
+        "State only this value and reference range. Do not interpret it, compare it "
+        "across time, name a mechanism, or suggest an action from it — direct the user "
+        f"to the {_LAB_INTERPRETATION_VIEW_LABEL} for that."
+    )
+
+
 def _section_fortification(profile: dict[str, Any] | None) -> str:
     """Render the structured fortification-target profile (spec §9) — the object
     that replaces the hardcoded injury string. Lever, not directive."""
@@ -931,6 +1024,11 @@ def build_system_prompt(
         schedule_section = _section_schedule(state.knowledge_entries, now)
         if schedule_section:
             sections.append(schedule_section)
+
+    if state.labs:
+        labs_section = _section_labs(state.labs)
+        if labs_section:
+            sections.append(labs_section)
 
     if health_connect_records:
         hc_section = _section_health_connect(health_connect_records, now)

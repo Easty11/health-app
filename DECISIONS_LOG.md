@@ -1050,6 +1050,119 @@ string is required, or `derived_from`'s home changes.
 
 ---
 
+### #NEXT. Lab reads cut against final #58 schema; context_builder feeds the general chat lab GENERALITY only — value relays on-ask, interpretation gates to #49
+
+**Decision:** Two lab reads share one query helper
+(`backend/reads/labs_reads.py::latest_lab_results`), a `ROW_NUMBER() OVER
+(PARTITION BY COALESCE(marker_canonical, marker_name_raw) ORDER BY
+collected_date DESC, id DESC)` joined through `lab_reports` and filtered on
+`lab_reports.user_id` — one row per real-world marker, latest report wins.
+`current_state.CurrentState.labs` (Read 1) consumes it. Read 2
+(`GET /labs/results`) was scoped in the brief but not built — checked
+`frontend/src/pages/Metrics.jsx` and found no consumer for a results-GET yet
+(only `/labs/canonical-map`, `/labs/extract`, `/labs/confirm`); building it now
+would be unused code, deferred until a consumer exists. The read intentionally
+never re-resolves raw→canonical itself (would duplicate canonicalisation and
+drift from stored state) — canonicalisation is fixed at `/labs/confirm` write
+time (#58) plus the backfill rider below.
+
+**Render-policy gate (revised after first-pass review):** `context_builder`'s
+`_section_labs` feeds the general-chat standing prompt lab GENERALITY only, per
+measured marker: `marker_canonical` + `lab_flag` (the lab's own H/L/critical
+assertion, labelled lab-asserted) + availability metadata (collected-date,
+derived-staleness tag) + a route pointer. It does NOT feed `value_num`,
+`ref_low`/`ref_high`, `unit_canonical`, `computed_flag`, deltas, axis-verdicts,
+mechanisms, or levers into standing context. Unmapped markers
+(`marker_canonical IS NULL`) render as availability-only.
+
+An initial pass over-rendered `value`/`unit`/ref bounds directly into the
+standing feed — caught in review before commit. Corrected: the numeric value +
+reference bounds relay only on an EXPLICIT single-marker ask, via
+`reads.labs_reads.find_marker` (word-boundary match against the report's raw
+name or canonical id, over the already-fetched `state.labs` — no second query)
+wired in `chat.py`, and `context_builder.render_asked_lab_value`, which appends
+a request-scoped block to the system prompt for that turn only (never merged
+into the standing render, never persisted to a later turn). The rationale for
+making this structural rather than behavioural: a value sitting in the standing
+prompt is reasoning substrate whether or not it was asked for, so the control
+is "value absent from standing context, fetched on demand" — not a "don't
+mention it" instruction laid over data that's already present, which leaks
+under long context or clever prompting. Even the on-ask value response ends in
+the route pointer — the number answers the literal question; the route is
+where meaning lives, per #49.
+
+**Route pointer is a temporary placeholder, not a real destination.** #49's
+dedicated lab-interpretation view has not been built in the frontend yet — the
+only route in `App.jsx` is `/metrics`, and `Metrics.jsx` currently only does
+attach→extract→confirm, no persisted read-back. Both render functions point at
+`"Metrics page"` via a single `_LAB_INTERPRETATION_VIEW_LABEL` constant in
+`context_builder.py`, flagged in a code comment as a stand-in to be swapped the
+moment #49 ships a real UI. Recorded here so it isn't mistaken for a permanent
+architectural choice.
+
+**Backfill rider — generalised, not hardcoded to #57's four.** First pass
+hardcoded `backend/backfill_marker_canonical.py` to the four raw names #57
+added (`Testosterone`, `SHBG`, `Calculated Free Testosterone`, `Oestradiol`),
+but flagged in review as unable to serve the next vocab bump (a pending 7-id
+addition) without a code change — the coalesce-partition would silently
+double-count those newly-mapped markers too. Corrected: the script now reads
+`marker_canonical.json` directly and backfills every raw→canonical mapping in
+it wherever `marker_canonical IS NULL`, so it's a genuine standing rider, not a
+one-off. Dry-run (default) prints counts; `--apply` writes and commits. Run
+dry-run against Railway production twice this session (once per version) via
+the #56 public-proxy pattern: `lab_results` has **0 rows** in production
+(Metrics page landed this cycle but no report has been confirmed yet), so the
+backfill is a correct no-op today — nothing to apply, but the script is now the
+actual standing remedy for every future vocab dict expansion, not just #57's.
+
+**Standing rule:** A canonical-dict expansion (`marker_canonical.json` version
+bump) requires running this backfill on `lab_results`, else the
+`COALESCE(marker_canonical, marker_name_raw)` partition double-counts the
+newly-mapped marker as two series. Sibling to #55's boolean-default rule —
+filed here so the next dict expansion doesn't rediscover it from scratch.
+
+**Status:** Decided and applied this session. `backend/reads/labs_reads.py`
+(`latest_lab_results`, `find_marker`), `current_state.py` (`labs` field),
+`context_builder.py` (`_section_labs`, `render_asked_lab_value`), `chat.py`
+(on-ask wiring), and `backend/backfill_marker_canonical.py` (generalised) all
+landed. Tests: `backend/tests/test_labs_reads.py` (15 cases — coalesced-key
+partition, cross-user isolation, derived-staleness flag both ways, standing
+render withholds `computed_flag`/value/unit/ref entirely, unmapped shows
+availability-only, the double-count failure mode with its backfill fix
+demonstrated directly, `find_marker` matching, and the on-ask relay withholding
+interpretation). Full suite: 15/15 passed, including
+`test_context_builder_output_unchanged_pre_post_refactor` — this was found
+failing pre-existing (confirmed via `git stash` against clean `master`, unrelated
+to this work) and separately fixed this session: the test compared against
+`master:backend/context_builder.py` for a "pre-refactor" snapshot, but `master`
+had moved past the refactor commit (`bda4327`) itself, making old-vs-new
+actually old-vs-old. Repinned to `PRE_REFACTOR_SHA = "3360ed5"` (`bda4327`'s
+parent, verified via `git rev-parse bda4327^`).
+
+**Concurrent-session note:** the test fix above was drafted in a separate
+background worktree session (`claude/hopeful-raman-df98df`) spawned mid-session
+from this one. Reconciled by hand into this working tree before commit — diff
+verified identical, worktree deregistered (`git worktree remove`) and its
+branch deleted (`git branch -d`, no unique commits once merged) so this lands
+as a single commit rather than two divergent ones.
+
+**How you know:** Migration head confirmed unchanged
+(`alembic heads` → `217dce22fbc5`, single head) — these reads add no schema.
+`grep` over `_section_labs` and `render_asked_lab_value` confirms zero
+`computed_flag`/delta/axis text reaches rendered output (only docstring hits
+describing what's withheld). Dry-run backfill executed against Railway
+production Postgres via the #56 public-proxy override, both before and after
+generalising; connection verified live (not a silent SQLite fallback) by a
+direct `SELECT COUNT(*) FROM lab_results` returning `0` both times (31 known
+mappings checked post-generalisation, up from the 4 hardcoded originally).
+
+**Do not revisit unless:** a `derived_from` source-link column is added to
+`lab_results` (removes the recency-flag's role as a staleness proxy), Read 2
+gets a real frontend consumer, or #49's interpretation view ships (swap
+`_LAB_INTERPRETATION_VIEW_LABEL` for the real route/label at that point).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

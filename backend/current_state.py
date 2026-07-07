@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 import models
 from engine import profile as profile_mod
+from reads.labs_reads import LabRow, latest_lab_results
 
 
 @dataclass
@@ -39,6 +40,7 @@ class CurrentState:
     fortification_profile_orm: models.FortificationProfile | None = None
     capability_state: list[models.CapabilityState] = field(default_factory=list)
     hrv_baseline_7d: HRVBaseline | None = None
+    labs: list[LabRow] = field(default_factory=list)
 
 
 def current_state(user_id: int, db: Session, today: date) -> CurrentState:
@@ -82,6 +84,8 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
             diff_from_mean_ms=(latest_ms - mean) if latest_ms is not None else None,
         )
 
+    labs = latest_lab_results(user_id, db)
+
     return CurrentState(
         knowledge_entries=entries,
         device_profile=device_profile,
@@ -89,4 +93,5 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         fortification_profile_orm=fort_profile_orm,
         capability_state=capability_rows,
         hrv_baseline_7d=hrv_baseline,
+        labs=labs,
     )

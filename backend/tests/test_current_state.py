@@ -5,8 +5,8 @@ Tests for the current_state read model (DECISIONS_LOG #43 / OPEN_QUESTIONS Q8).
 (b) supersede semantics honoured (superseded entry absent)
 (c) empty-profile user returns a well-formed empty object, not an error
 (d) context_builder output is unchanged pre/post refactor (formatter-only,
-    no behavioural drift) — compared against master's pre-refactor
-    context_builder.py loaded via `git show`.
+    no behavioural drift) — compared against the pre-refactor
+    context_builder.py at PRE_REFACTOR_SHA, loaded via `git show`.
 """
 import os
 import subprocess
@@ -115,20 +115,28 @@ def test_current_state_empty_profile_user_returns_well_formed_empty_object(db_se
 
 # ---------- (d) context_builder is formatter-only (no behavioural drift) ----------
 
-def _load_master_context_builder():
-    """Load master's pre-refactor context_builder.py as an isolated module."""
+# Parent of bda4327 ("feat: extract current_state read model from
+# context_builder (#43)") — the last commit before that refactor, i.e. the
+# actual pre-refactor context_builder.py this test guards against drifting
+# from. Must stay pinned to this SHA, not "master": master moves past the
+# refactor commit itself, which would make this comparison old-vs-old.
+PRE_REFACTOR_SHA = "3360ed5"
+
+
+def _load_pre_refactor_context_builder():
+    """Load the pre-refactor context_builder.py (PRE_REFACTOR_SHA) as an isolated module."""
     src = subprocess.check_output(
-        ["git", "show", "master:backend/context_builder.py"],
+        ["git", "show", f"{PRE_REFACTOR_SHA}:backend/context_builder.py"],
         cwd=os.path.dirname(__file__),
         encoding="utf-8",
     )
-    module = types.ModuleType("context_builder_master")
-    exec(compile(src, "context_builder_master.py", "exec"), module.__dict__)
+    module = types.ModuleType("context_builder_pre_refactor")
+    exec(compile(src, "context_builder_pre_refactor.py", "exec"), module.__dict__)
     return module
 
 
 def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypatch):
-    old_context_builder = _load_master_context_builder()
+    old_context_builder = _load_pre_refactor_context_builder()
 
     user = _make_user(db_session, email="parity@example.com")
 

@@ -12,11 +12,12 @@ from sqlalchemy.orm import Session
 import models
 from auth import get_current_user
 from connectors.hevy import HevyAuthError, HevyClient
-from context_builder import build_system_prompt
+from context_builder import build_system_prompt, render_asked_lab_value
 from current_state import current_state as compute_current_state
 from database import get_db
 from encryption import decrypt
 from engine import adaptation, selection
+from reads.labs_reads import find_marker
 from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
 
 load_dotenv()
@@ -406,6 +407,14 @@ async def chat(
         daily_record=daily_record,
         engine_selection=engine_selection,
     )
+
+    # On-ask lab value relay (#60): standing feed above is generality-only.
+    # If the user's current message explicitly names a marker they have on
+    # file, append the one value for THIS turn only — never merged into the
+    # standing render, and it re-triggers per-message rather than persisting.
+    asked_marker = find_marker(state.labs, body.message)
+    if asked_marker is not None:
+        system_prompt += "\n\n" + render_asked_lab_value(asked_marker)
 
     # Build messages list: history + current user message
     messages = [
