@@ -160,9 +160,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#58** — `lab_results.marker` split into `marker_name_raw`/`marker_canonical`, `is_derived` added; deployed to Railway, verified live. See DECISIONS_LOG #58.
 - **#57** — Canonical marker vocabulary expanded (hormone-axis markers); single-source binding rule for interpretation assets established. See DECISIONS_LOG #57.
 - **#47–#51** — Medical-module design decisions (regulatory framing, lab input UX, interpretation layer, marker canonicalisation, lever dictionary) backfilled; closes a chat↔repo drift. See DECISIONS_LOG #47–#51.
-- **Q10** — HC-lane AccessLink per-second ingest filed PARKED, low priority; refines #35/#46. See OPEN_QUESTIONS.md Q10.
 
 ---
 
