@@ -1163,6 +1163,83 @@ gets a real frontend consumer, or #49's interpretation view ships (swap
 
 ---
 
+### 60. Hevy exercise-template resolver: default wins on title collision
+
+**Decision:** `resolve_exercise(db, title, user_id)` (in
+`backend/hevy_templates.py`) resolves a canonical exercise title to a Hevy
+`exercise_template_id` against the synced store (#61), exact-title match only.
+When a title exists as both a Hevy default and a user custom, the resolver
+returns the default id (`ORDER BY is_custom ASC LIMIT 1`, filtered to
+`is_custom = false OR owner_user_id = :user_id`). Otherwise the requesting
+user's own custom; never another user's custom.
+
+**Rationale:** Default ids are global/stable; custom ids are account-scoped.
+Default-preference yields a portable, account-independent exercise vocabulary
+suited to multi-tenant (B2B) use. Trade-off accepted: `exercise_history` may
+split across ids for any title trained under a shadowing custom — surfaced by
+the sync collision report (report-only, `_collision_report`), handled
+case-by-case, not by the resolver. Fuzzy/normalised matching is an explicit
+non-goal; loose-name provisioning is a separate decision if it ever arises.
+
+**Status:** Landed on `feat/hevy-exercise-template-resolver`. Wired into the
+`chat.py` `<hevy_create_routine>` path as an OPT-IN fallback: only exercises
+missing a non-empty id but carrying a `title` are resolved; id-bearing
+exercises pass through untouched (the path already receives ids). Activating
+the AI to emit titles (a `context_builder` prompt change) is deliberately
+deferred — it trips the context-builder byte-parity guard and is the separate
+loose-name decision above.
+
+**How you know:** Live recon against `GET /v1/exercise_templates` confirmed
+default ids are 8-char UPPERCASE hex and custom ids are lowercase UUIDs, no id
+reuse across the two spaces (493 templates, 451 default / 42 custom for the
+recon account). 4 resolver unit tests green (collision→default, custom-only→
+custom, other-user-custom→None, unknown→None) + 3 end-to-end provisioning tests
+(title→id, id-passthrough, unresolvable-skip). Full suite 22 passed.
+
+**Do not revisit unless:** Hevy changes id allocation such that a default and a
+custom can share an id, or product decides shadowing customs (not defaults)
+should win — in which case flip the `ORDER BY` and record why.
+
+---
+
+### 61. Hevy exercise templates persisted in a synced table (`hevy_exercise_templates`)
+
+**Decision:** Exercise templates (defaults + per-user customs) are persisted in
+a new `hevy_exercise_templates` table (migration `3497ab483935`, down_revision
+`217dce22fbc5`) so the provisioning path never sources ids live. Keyed on the
+Hevy `id` alone (`String(64)` — absorbs 8-hex defaults and UUID customs, no
+composite key needed since ids don't reuse across the two spaces).
+`owner_user_id` = app `users.id` (NULL for defaults); the Hevy template object
+carries no owner field (confirmed live), so ownership is assigned at sync time
+from the key's user for `is_custom` rows. Sync
+(`sync_exercise_templates`) is per-user by stored Hevy key, upsert-only, keyed
+on id; no delete reconciliation (the Hevy API cannot delete templates). Supersedes
+the chat proposal that stored the Hevy account id as owner.
+
+**Rationale:** A local store makes resolution (#60) deterministic and
+offline-of-Hevy, decoupling provisioning from live API availability/rate limits.
+`owner_user_id` on the app user (not the Hevy account id) is the identity the
+resolver and multi-tenant model actually key on.
+
+**Status:** Landed. Schema commit isolated from the sync/resolver feature
+commits. NOTE: not yet applied to Railway — the migration was verified on a
+SQLite copy stamped at the prior head; the prod-stamp check (Railway alembic
+head == `217dce22fbc5`) must pass before this migration is pushed/deployed
+(local-vs-Railway drift hazard; autogenerate surfaced unrelated drift that was
+stripped from the migration).
+
+**How you know:** `alembic upgrade`/`downgrade` clean on a DB copy at the prior
+head; table schema verified (PK, FK CASCADE, both indexes). One full live sync
+run: 493 rows written (451 default / 42 custom), owner assignment correct
+(0 misassigned either direction), re-run idempotent (distinct rows stayed 493).
+
+**Do not revisit unless:** Hevy adds a template-delete capability (then a
+reconciliation/soft-delete pass is needed), or the store needs fields beyond
+the synced set (`equipment` is available on the API object but intentionally
+not stored yet).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
