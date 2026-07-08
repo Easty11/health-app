@@ -87,6 +87,27 @@ def _collision_report(db: Session) -> list[str]:
     return collisions
 
 
+def resolve_exercise(db: Session, title: str, user_id: int) -> str | None:
+    """Resolve a canonical exercise title to a Hevy id for `user_id`.
+
+    Default wins on title collision (#60): a title present as both a global
+    default and the user's own custom returns the default id. Otherwise the
+    user's own custom; never another user's custom. Exact canonical-title match
+    only — fuzzy/normalised matching is an explicit non-goal (note: Hevy custom
+    titles can carry U+2011 non-breaking hyphens, so callers must pass the
+    canonical byte-exact title). Returns None if nothing matches.
+    """
+    Template = models.HevyExerciseTemplate
+    stmt = (
+        select(Template.id)
+        .where(Template.title == title)
+        .where((Template.is_custom.is_(False)) | (Template.owner_user_id == user_id))
+        .order_by(Template.is_custom.asc())  # default (False) sorts first -> default wins
+        .limit(1)
+    )
+    return db.scalars(stmt).first()
+
+
 async def sync_exercise_templates(db: Session) -> dict:
     """Sync every keyed user's Hevy exercise templates into the local store.
 
