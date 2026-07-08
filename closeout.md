@@ -1,90 +1,63 @@
-# Close-out — feat/hevy-exercise-template-resolver
+# Close-out — land feat/hevy-exercise-template-resolver → master
 
-## Real commits this session
+## Real commits this session (land operation)
 
-Session-open ref: `df03a8a` (master tip at open). `git log --oneline df03a8a..HEAD`:
+Land-session open ref: `41a8998` (feature tip). Operation: `--ff-only` merge of
+`feat/hevy-exercise-template-resolver` into `master`, then governance state update.
 
-```
-7eab562 docs: park feat/hevy-exercise-template-resolver in BRANCHES.md
-f63efe6 docs: DECISIONS_LOG #60 (title→id resolver) + #61 (synced template table)
-2a7cba4 feat: wire resolve_exercise into routine provisioning as opt-in fallback (#NEXT)
-0e11bff feat: resolve_exercise default-wins title resolver (DECISIONS_LOG #NEXT)
-532e03c feat: Hevy exercise-template sync (per-user, upsert-only, DECISIONS_LOG #NEXT)
-55eebc6 feat: add hevy_exercise_templates table (schema only, DECISIONS_LOG #NEXT)
-```
+- **ff-merge** (no new commit): `master` fast-forwarded `df03a8a..41a8998` and pushed.
+- `845d413` — `docs: mark feat/hevy-exercise-template-resolver LANDED in BRANCHES.md` (pushed).
+- `<this>` — `chore: session close-out`.
 
-Branch is **local only, not pushed, not merged** — 6 commits ahead of `origin/master`,
-all real work (`git cherry` all `+`). Parked in `BRANCHES.md`.
+`origin/master` now at `845d413` (was `df03a8a` at build-session start). Feature branch
+**merged + deleted** (local; never existed on remote).
+
+The 7 build/session commits now on master: `55eebc6` (schema), `532e03c` (sync),
+`0e11bff` (resolver), `2a7cba4` (provisioning), `f63efe6` (DECISIONS_LOG #60/#61),
+`7eab562` (park), `41a8998` (build-session close-out).
 
 ## Pending-queue reconciliation
 
-Source was a direct BRIEF (Hevy exercise-template store + resolver), not a `;cc`
-pending-commit queue paste. The brief's proposed LOG block carried two entries for Code to
-number against the store head (#59 at open):
+No new decisions this session — this was a pure land operation (brief: "LOG None").
+DECISIONS_LOG #60/#61 were committed in the build session (`f63efe6`) and are now on
+master. The `BRANCHES.md` change is state, not a decision (committed `845d413`).
 
-- **Default-wins resolver** (brief `#N`) → **landed as DECISIONS_LOG #60**, commit `f63efe6`.
-- **Templates persisted in synced table; supersedes chat proposal storing Hevy account id
-  as owner** (brief `#N+1`) → **landed as DECISIONS_LOG #61**, commit `f63efe6`.
-
-Numbers assigned concretely (#60/#61) per the brief's "assign real numbers": session-open
-confirmed max #59, no competing in-flight branch claims #60 (a prior `#60` mention in git
-history was reclaimed to #59 for lab-reads). Final claim is at the `--ff-only` merge; if
-another branch claims #60 before this lands, renumber then.
-
-All five gated steps completed and their gates reported green in-session:
-
-- **GATE 1** (id-format + envelope + is_custom, live) — cleared: envelope `exercise_templates`,
-  `is_custom` on all rows, no owner field, defaults=8-hex / customs=lowercase-UUID, pageSize 100.
-- **GATE 2** (`alembic up`/`down` clean; head verified) — cleared: migration `3497ab483935`,
-  down_revision `217dce22fbc5`.
-- **GATE 3** (one full sync run) — cleared: 493 rows (451 default / 42 custom), owner
-  assignment correct, 0 collisions, idempotent re-run. **Prod-stamp sub-check DEFERRED** —
-  see next action.
-- **GATE 4** (3 resolver unit tests) — cleared: 4 tests green.
-- **GATE 5** (one provisioning call title→id end-to-end) — cleared: 3 provisioning tests green.
-- Full backend suite: **22 passed**.
-
-Nothing provisional/uncommitted remains except the branch land itself (blocked, below).
+Gates this session:
+- **GATE 1** (green before land) — 22 passed on the feature tip (re-proven, not carried).
+- **GATE 2** (merge safety) — `origin/master` strict ancestor (exit 0); delta exactly the 7.
+- **GATE 3** (land) — `origin/master` == feature tip `41a8998` post-push.
+- **GATE 4** (governance) — `BRANCHES.md` shows LANDED; commit `845d413` pushed.
+- **GATE 5** (Luke's, closes the loop) — **OPEN**: Railway post-apply stamp must read
+  `3497ab483935`. Until then the land is code-complete but prod is not migrated.
 
 ## Cold-resume handoff
 
-**State:** All code for the Hevy exercise-template store + resolver is written, tested
-(22/22), and committed on `feat/hevy-exercise-template-resolver`. The branch is **not
-landed** — landing is blocked on one external verification.
+**State:** `feat/hevy-exercise-template-resolver` is landed on `master` (`origin/master` =
+`845d413`) and the branch is deleted. The Hevy exercise-template store + resolver + dormant
+provisioning plumbing are now on master. No behavioural change ships (AI-prompt activation
+was intentionally deferred — see DECISIONS_LOG #60).
 
-**What shipped (behind the branch):**
-- `hevy_exercise_templates` table + `models.HevyExerciseTemplate` (migration `3497ab483935`,
-  down_revision `217dce22fbc5`). Schema commit isolated; autogenerated local-vs-Railway
-  drift stripped.
-- `backend/hevy_templates.py`: `sync_exercise_templates(db)` (per-user, upsert-only, 429
-  backoff, report-only collision guard) + `resolve_exercise(db, title, user_id)` (exact
-  match, default-wins) + re-runnable `__main__`.
-- `chat.py` `<hevy_create_routine>` path: opt-in title→id fallback (id-bearing exercises
-  untouched; unresolvable title skips the routine with a notice). AI-prompt activation
-  (telling the model to emit titles) deliberately NOT done — trips the context_builder
-  byte-parity guard; it is the separate loose-name-provisioning decision (#60).
+**SINGLE NEXT ACTION (Luke — Railway, outside Code's reach):** migrate Railway to head and
+verify the stamp.
+- If auto-migrate-on-deploy: the master push already triggered it → go straight to verify.
+- Else: `alembic upgrade head` against the Railway URL.
+- Verify (`railway connect health-app-DB`):
+  ```sql
+  SELECT version_num FROM alembic_version;   -- must read 3497ab483935
+  ```
+Precondition already satisfied: prod stamp was `217dce22fbc5` = the migration's
+`down_revision`. Until the read-back shows `3497ab483935`, the task is **not done**.
 
-**SINGLE NEXT ACTION:** Verify Railway's alembic head == `217dce22fbc5` (the migration's
-down_revision), then land + deploy:
+**Also Luke's manual UI step (outside Code's lane):** sync PLATFORM.md / SCHEMA.md project
+copies from the now-landed master artifacts.
 
-```powershell
-# with DATABASE_URL pointed at Railway (public-proxy override per #56):
-python -m alembic current          # must show 217dce22fbc5
-git land feat/hevy-exercise-template-resolver   # --ff-only to master, push, delete branch
-python -m alembic upgrade head     # apply 3497ab483935 on Railway
-```
+**Follow-ups (not blocking):**
+- Activate the AI title→id fallback (context_builder prompt + re-baseline the byte-parity
+  guard) — the deferred loose-name decision under #60.
+- `equipment` available on the Hevy template object but intentionally unstored (#61).
 
-Do NOT push the migration before the `current` check — local-SQLite-vs-Railway drift is a
-confirmed deploy hazard (#56). Once landed, remove the branch row from `BRANCHES.md`.
+**Sprint context (unchanged):** ROADMAP NOW still centres on Health Connect permissions,
+Samsung package-name correction, morning check-in, persistent conversation history, and
+known UI bugs. This Hevy work was a standalone brief.
 
-**Follow-ups (not blocking the land):**
-- Decide whether to activate the AI title fallback (context_builder prompt + re-baseline the
-  parity guard) — deferred loose-name decision under #60.
-- `equipment` is available on the Hevy template object but intentionally unstored (#61) —
-  add only if a consumer needs it.
-
-**Sprint context (unchanged this session):** ROADMAP NOW still centres on Health Connect
-permissions, Samsung package-name correction, morning check-in, persistent conversation
-history, and known UI bugs. This Hevy work was a standalone brief, not a NOW/NEXT item.
-
-**Open questions:** none opened or resolved this session; OPEN_QUESTIONS untouched.
+**Open questions:** none opened or resolved; OPEN_QUESTIONS untouched.
