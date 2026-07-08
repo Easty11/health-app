@@ -2,4 +2,4 @@
 
 | Branch | Purpose | Status | Why parked | Unblocks on |
 |--------|---------|--------|-----------|-------------|
-| `feat/hevy-exercise-template-resolver` | Hevy exercise-template synced store + title→id resolver (DECISIONS_LOG #60/#61) | Local only, 5 commits ahead of `origin/master`, all real work; unmerged, not pushed | GATE 3 prod-stamp check unmet: could not verify Railway alembic head == `217dce22fbc5` from this session, and the brief forbids pushing migration `3497ab483935` before that (local-SQLite-vs-Railway drift hazard, #56). Not landed to avoid a broken auto-deploy. | Verify Railway alembic head == `217dce22fbc5`, then `git land feat/hevy-exercise-template-resolver` (`--ff-only`) + `alembic upgrade head` on Railway. |
+| `feat/hevy-exercise-template-resolver` | Hevy exercise-template synced store + title→id resolver (DECISIONS_LOG #60/#61) | **LANDED 2026-07-08** — ff-merged to `master` at `41a8998`, pushed; local branch deleted | — (prod-stamp precondition `217dce22fbc5` confirmed before land) | Code side complete. Loop closes on Luke's Railway post-apply stamp reading `3497ab483935` (`SELECT version_num FROM alembic_version`). |
