@@ -166,9 +166,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **#61** — Hevy exercise templates persisted in a synced table (`hevy_exercise_templates`); per-user upsert-only sync keyed on Hevy id. Not yet applied to Railway. See DECISIONS_LOG #61.
+- **#62** — `SCHEMA.md` promoted to repo-canonical (root, auto-mirrored via Projects sync); SCHEMA ⇄ migrations lockstep convention added. PLATFORM.md skipped. See DECISIONS_LOG #62.
+- **#61** — Hevy exercise templates persisted in a synced table (`hevy_exercise_templates`); per-user upsert-only sync keyed on Hevy id. See DECISIONS_LOG #61.
 - **#60** — Hevy title→id resolver, default-wins on collision; wired into routine provisioning as an opt-in fallback. See DECISIONS_LOG #60.
-- **#59** — Lab reads cut against `#58` schema; `context_builder` render-policy gate keeps standing chat context to lab generality only, values relay on explicit ask. See DECISIONS_LOG #59.
 
 ---
 

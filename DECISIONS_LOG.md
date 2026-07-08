@@ -1240,7 +1240,7 @@ not stored yet).
 
 ---
 
-### #NEXT. SCHEMA.md promoted to repo-canonical; manual project-knowledge copy retired
+### 62. SCHEMA.md promoted to repo-canonical; manual project-knowledge copy retired
 
 **Decision:** `SCHEMA.md` is promoted to repo-canonical at the health-app root;
 the manual project-knowledge copy is retired. `PLATFORM.md` was gated on public
