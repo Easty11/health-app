@@ -154,6 +154,12 @@ must match it.
   custom exercise UUIDs do not resolve via the routine endpoint (confirmed API
   limitation). See `Hevy_Pattern` for the field/type matrix.
 
+- **SCHEMA.md is repo-canonical** (root), the human/AI-readable mirror of
+  `backend/migrations/`. Code updates it in the same commit — or an immediately
+  paired governance commit — as any migration that changes the schema. It must
+  never lag master; a canonical-but-stale schema doc is worse than a stale
+  project-knowledge copy.
+
 ### Recent landings
 
 _Pointer-only. Capped at the 3 most recent — one line each, canonical home only, no SHAs /
