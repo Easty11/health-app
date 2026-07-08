@@ -1240,6 +1240,33 @@ not stored yet).
 
 ---
 
+### #NEXT. SCHEMA.md promoted to repo-canonical; manual project-knowledge copy retired
+
+**Decision:** `SCHEMA.md` is promoted to repo-canonical at the health-app root;
+the manual project-knowledge copy is retired. `PLATFORM.md` was gated on public
+commercial positioning and is **skipped this round** — it stays project-knowledge
+only, and the prior non-mirrored-refresh rule applies to it alone (its ~8-line
+stability makes manual refresh negligible).
+
+**Rationale:** Repo-derived orientation that fell stale silently and couldn't be
+edited in place, forcing manual download/swap. As a repo file it auto-mirrors into
+project knowledge via Projects sync; Code maintains it at the point of change.
+SCHEMA is kept in lockstep with `backend/migrations/` — the CLAUDE.md convention
+(Repo-specific → Conventions) records the same-commit-or-immediately-paired rule.
+
+**Status:** Landed at merge. `PLATFORM.md` deferred (not created).
+
+**How you know:** `SCHEMA.md` present at master root; CLAUDE.md convention bullet
+records the lockstep and sits below `END SHARED LOOP RULES` (shared-block diff vs
+origin/master empty, so no cross-repo propagation); the manual project-knowledge
+copy is deleted with no duplicate surfacing (Luke's step 6 — closes the loop).
+
+**Do not revisit unless:** Projects sync stops auto-mirroring repo files, a doc must
+diverge between repo and project knowledge, or PLATFORM.md's public-exposure gate
+later clears (promote it then under its own entry).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
