@@ -380,6 +380,43 @@ class LabResult(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class HevyExerciseTemplate(Base):
+    """Synced Hevy exercise templates — defaults + per-user customs (DECISIONS_LOG #61).
+
+    Persisted so the provisioning path never sources exercise-template ids live.
+    Keyed on the Hevy `id` alone: defaults are 8-char UPPERCASE hex global
+    singletons, customs are lowercase UUIDs (globally unique) — no id reuse across
+    the two spaces (confirmed live, GET /v1/exercise_templates), so no composite key
+    is needed. `String(64)` absorbs both id shapes (max observed len 36).
+
+    Upsert-only: the Hevy API cannot delete templates, so there is nothing to
+    reconcile. `owner_user_id` is app `users.id` (NULL for defaults) — the template
+    object itself carries no owner field (confirmed live), so ownership is assigned
+    at sync time from the key's user for `is_custom` rows. Resolution is
+    default-wins on title collision (DECISIONS_LOG #60).
+    """
+    __tablename__ = "hevy_exercise_templates"
+    __table_args__ = (
+        Index("ix_hevy_exercise_templates_title", "title"),
+        Index("ix_hevy_exercise_templates_owner_user_id", "owner_user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # Hevy id — hex (default) or UUID (custom)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_custom: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
+    owner_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    primary_muscle_group: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    secondary_muscle_groups: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class FortificationProfile(Base):
     """
     Adaptive Exposure Engine — fortification-target profile (spec §9).
