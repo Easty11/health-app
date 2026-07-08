@@ -1,63 +1,65 @@
-# Close-out — land feat/hevy-exercise-template-resolver → master
+# Close-out — promote orientation docs to repo-canonical (SCHEMA.md)
 
-## Real commits this session (land operation)
+## Real commits this session
 
-Land-session open ref: `41a8998` (feature tip). Operation: `--ff-only` merge of
-`feat/hevy-exercise-template-resolver` into `master`, then governance state update.
+Session-open ref: `d5163ac` (master tip at open). Branch
+`chore/orientation-docs-into-repo` built then ff-landed to master. `git log --oneline d5163ac..HEAD`:
 
-- **ff-merge** (no new commit): `master` fast-forwarded `df03a8a..41a8998` and pushed.
-- `845d413` — `docs: mark feat/hevy-exercise-template-resolver LANDED in BRANCHES.md` (pushed).
-- `<this>` — `chore: session close-out`.
+```
+<closeout> chore: session close-out
+79169dd docs: claim DECISIONS_LOG #62 (was #NEXT) + recent-landings
+2bf5653 docs: DECISIONS_LOG #NEXT — SCHEMA.md promoted to repo-canonical
+a34747a docs: add SCHEMA.md-repo-canonical convention (repo-specific)
+e7fdb3b docs: add SCHEMA.md as repo-canonical database reference
+```
 
-`origin/master` now at `845d413` (was `df03a8a` at build-session start). Feature branch
-**merged + deleted** (local; never existed on remote).
-
-The 7 build/session commits now on master: `55eebc6` (schema), `532e03c` (sync),
-`0e11bff` (resolver), `2a7cba4` (provisioning), `f63efe6` (DECISIONS_LOG #60/#61),
-`7eab562` (park), `41a8998` (build-session close-out).
+Landed `--ff-only`: `origin/master` d5163ac..79169dd; feature branch merged + deleted
+(local; never on remote). `origin/master` == `79169dd`.
 
 ## Pending-queue reconciliation
 
-No new decisions this session — this was a pure land operation (brief: "LOG None").
-DECISIONS_LOG #60/#61 were committed in the build session (`f63efe6`) and are now on
-master. The `BRANCHES.md` change is state, not a decision (committed `845d413`).
+Direct BRIEF (promote orientation docs), not a `;cc` queue. Concern-split as specified:
 
-Gates this session:
-- **GATE 1** (green before land) — 22 passed on the feature tip (re-proven, not carried).
-- **GATE 2** (merge safety) — `origin/master` strict ancestor (exit 0); delta exactly the 7.
-- **GATE 3** (land) — `origin/master` == feature tip `41a8998` post-push.
-- **GATE 4** (governance) — `BRANCHES.md` shows LANDED; commit `845d413` pushed.
-- **GATE 5** (Luke's, closes the loop) — **OPEN**: Railway post-apply stamp must read
-  `3497ab483935`. Until then the land is code-complete but prod is not migrated.
+- **Step 1** SCHEMA.md at root — `e7fdb3b`. GATE 1 met (content = the pasted chat-authored
+  file; markdown code fences/headings flattened by chat→paste transport were restored, no
+  content altered; table 015 matches landed migration `3497ab483935`).
+- **Step 2** PLATFORM.md — **SKIPPED** by Luke's decision (public-exposure gate not cleared).
+  Stays project-knowledge; non-mirrored-refresh rule applies to it alone. GATE 2 resolved.
+- **Step 3** CLAUDE.md convention — `a34747a`. GATE 3 met: bullet under Repo-specific →
+  Conventions, below `END SHARED LOOP RULES`; shared-block diff vs origin/master empty
+  (verified by slice-diff), so no cross-repo propagation.
+- **Step 4** DECISIONS_LOG — `2bf5653` (`### #NEXT`) then claimed **#62** at merge in
+  `79169dd` (origin/master max was #61, no competing branch). GATE 4 met.
+- **Step 5** Land — done (`--ff-only`, pushed, branch deleted). GATE 3 (SHA equality) met.
+
+No decisions provisional. One SCHEMA-vs-source note: SCHEMA.md uses a logical 001–015
+migration-sequence abstraction (documentation ordering by FK dependency), not the repo's
+alembic hash filenames — as authored in chat; not a discrepancy to fix.
 
 ## Cold-resume handoff
 
-**State:** `feat/hevy-exercise-template-resolver` is landed on `master` (`origin/master` =
-`845d413`) and the branch is deleted. The Hevy exercise-template store + resolver + dormant
-provisioning plumbing are now on master. No behavioural change ships (AI-prompt activation
-was intentionally deferred — see DECISIONS_LOG #60).
+**State:** `SCHEMA.md` is live at master root (`origin/master` = `79169dd`) and is now the
+repo-canonical database reference, auto-mirrored into project knowledge via Projects sync.
+CLAUDE.md records the SCHEMA ⇄ `backend/migrations/` lockstep (update SCHEMA in the same or
+an immediately-paired commit as any schema migration). DECISIONS_LOG #62 records the
+promotion. PLATFORM.md was deliberately not promoted.
 
-**SINGLE NEXT ACTION (Luke — Railway, outside Code's reach):** migrate Railway to head and
-verify the stamp.
-- If auto-migrate-on-deploy: the master push already triggered it → go straight to verify.
-- Else: `alembic upgrade head` against the Railway URL.
-- Verify (`railway connect health-app-DB`):
-  ```sql
-  SELECT version_num FROM alembic_version;   -- must read 3497ab483935
-  ```
-Precondition already satisfied: prod stamp was `217dce22fbc5` = the migration's
-`down_revision`. Until the read-back shows `3497ab483935`, the task is **not done**.
+**SINGLE NEXT ACTION (Luke — project knowledge, outside Code's reach):** after confirming the
+connector surfaces the repo `SCHEMA.md`, **delete the manual project-knowledge upload of
+SCHEMA.md**. Until deleted, dual-master persists (repo copy + stale manual copy) — the task
+is not done. (PLATFORM.md stays as-is in project knowledge — it was not moved.)
 
-**Also Luke's manual UI step (outside Code's lane):** sync PLATFORM.md / SCHEMA.md project
-copies from the now-landed master artifacts.
+**Standing rule now in force:** any migration that changes the schema must update `SCHEMA.md`
+in the same commit or an immediately-paired governance commit — it must never lag master.
 
 **Follow-ups (not blocking):**
-- Activate the AI title→id fallback (context_builder prompt + re-baseline the byte-parity
-  guard) — the deferred loose-name decision under #60.
-- `equipment` available on the Hevy template object but intentionally unstored (#61).
+- If PLATFORM.md's public-exposure gate later clears, promote it under its own DECISIONS_LOG
+  entry (same pattern).
+- Hevy resolver activation (context_builder prompt + byte-parity re-baseline) remains the
+  deferred #60 loose-name decision. Prior Railway migration for #61 (`3497ab483935`) — confirm
+  its post-apply stamp if not already done.
 
-**Sprint context (unchanged):** ROADMAP NOW still centres on Health Connect permissions,
-Samsung package-name correction, morning check-in, persistent conversation history, and
-known UI bugs. This Hevy work was a standalone brief.
+**Sprint context (unchanged):** ROADMAP NOW unchanged — Health Connect permissions, Samsung
+package-name correction, morning check-in, persistent conversation history, known UI bugs.
 
 **Open questions:** none opened or resolved; OPEN_QUESTIONS untouched.
