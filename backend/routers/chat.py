@@ -16,6 +16,7 @@ from context_builder import build_system_prompt, render_asked_lab_value
 from current_state import current_state as compute_current_state
 from database import get_db
 from encryption import decrypt
+from hevy_templates import resolve_exercise
 from engine import adaptation, selection
 from reads.labs_reads import find_marker
 from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
@@ -81,14 +82,48 @@ async def _gather_hevy_context(api_key: str) -> dict[str, Any]:
 
 # ---------- routine action parsing ----------
 
+def _resolve_missing_ids(
+    exercises: list[dict],
+    user_id: int,
+    db: Session,
+) -> tuple[list[dict], list[str]]:
+    """Opt-in title->id resolution (DECISIONS_LOG #60).
+
+    The provisioning block already carries `exercise_template_id`s, so this is a
+    fallback, not a mandatory hop: only exercises MISSING a non-empty id but
+    carrying a `title` are resolved (exact canonical-title match, default-wins).
+    Exercises that already have an id are passed through untouched. Returns the
+    exercises with ids filled where possible, plus a list of titles that could
+    not be resolved (caller decides what to do).
+    """
+    unresolved: list[str] = []
+    for ex in exercises:
+        if ex.get("exercise_template_id"):
+            continue
+        title = ex.get("title") or ex.get("exercise_name")
+        if not title:
+            continue
+        resolved = resolve_exercise(db, title, user_id)
+        if resolved:
+            ex["exercise_template_id"] = resolved
+            ex.pop("title", None)
+            ex.pop("exercise_name", None)
+        else:
+            unresolved.append(title)
+    return exercises, unresolved
+
+
 async def _process_routine_actions(
     reply: str,
     hevy_client: HevyClient | None,
+    user_id: int,
+    db: Session,
 ) -> tuple[str, list[str]]:
     """
     Scan `reply` for <hevy_create_routine> blocks.
     For each one found:
       - Parse the JSON payload
+      - Resolve any title-only exercises to ids (opt-in fallback, #60)
       - Call hevy_client.create_routine()
       - Strip the raw block from the displayed text
       - Record a confirmation message in actions_taken
@@ -120,6 +155,17 @@ async def _process_routine_actions(
         title = data.get("title", "Untitled Routine")
         exercises = data.get("exercises", [])
         folder_id = data.get("folder_id")
+
+        # Opt-in fallback: fill ids for any title-only exercises. Blocks that
+        # already carry ids are untouched (#60).
+        exercises, unresolved = _resolve_missing_ids(exercises, user_id, db)
+        if unresolved:
+            actions_taken.append(
+                f"⚠️ Routine '{title}' not created — could not resolve exercise(s): "
+                + ", ".join(repr(t) for t in unresolved)
+            )
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
 
         try:
             await hevy_client.create_routine(
@@ -434,7 +480,7 @@ async def chat(
     reply = response.content[0].text
 
     # Parse and execute any embedded action blocks
-    reply, routine_actions = await _process_routine_actions(reply, hevy_client)
+    reply, routine_actions = await _process_routine_actions(reply, hevy_client, current_user.id, db)
     reply, knowledge_actions = _process_knowledge_updates(reply, current_user.id, db)
     reply, capability_actions = _process_capability_updates(reply, current_user.id, db)
 
