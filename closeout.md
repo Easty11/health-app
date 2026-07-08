@@ -1,65 +1,81 @@
-# Close-out — promote orientation docs to repo-canonical (SCHEMA.md)
+# Close-out — health-app
 
-## Real commits this session
+Branch: `master` · Session-open ref: `0014a75` · Governance stores changed: `DECISIONS_LOG.md`
 
-Session-open ref: `d5163ac` (master tip at open). Branch
-`chore/orientation-docs-into-repo` built then ff-landed to master. `git log --oneline d5163ac..HEAD`:
+---
+
+## 1. Real commits this session
 
 ```
-<closeout> chore: session close-out
-79169dd docs: claim DECISIONS_LOG #62 (was #NEXT) + recent-landings
-2bf5653 docs: DECISIONS_LOG #NEXT — SCHEMA.md promoted to repo-canonical
-a34747a docs: add SCHEMA.md-repo-canonical convention (repo-specific)
-e7fdb3b docs: add SCHEMA.md as repo-canonical database reference
+ad51a37 feat: interpretation reference assets (lever_dictionary + marker_groups, ai_draft)
+499c902 gov: #63 interpretation contract v0.4 (group-primary, two-gate safety)
 ```
 
-Landed `--ff-only`: `origin/master` d5163ac..79169dd; feature branch merged + deleted
-(local; never on remote). `origin/master` == `79169dd`.
+Both fast-forwarded onto `master` from `feat/interpretation-base` and pushed to
+`origin/master` (`0014a75..ad51a37`). Branch merged + deleted (local; never pushed as a
+remote branch) — terminal state, not in `BRANCHES.md`. This close-out commit follows.
 
-## Pending-queue reconciliation
+No migration in this landing (JSON + doc only); Railway `alembic upgrade head` on deploy
+is a no-op here.
 
-Direct BRIEF (promote orientation docs), not a `;cc` queue. Concern-split as specified:
+---
 
-- **Step 1** SCHEMA.md at root — `e7fdb3b`. GATE 1 met (content = the pasted chat-authored
-  file; markdown code fences/headings flattened by chat→paste transport were restored, no
-  content altered; table 015 matches landed migration `3497ab483935`).
-- **Step 2** PLATFORM.md — **SKIPPED** by Luke's decision (public-exposure gate not cleared).
-  Stays project-knowledge; non-mirrored-refresh rule applies to it alone. GATE 2 resolved.
-- **Step 3** CLAUDE.md convention — `a34747a`. GATE 3 met: bullet under Repo-specific →
-  Conventions, below `END SHARED LOOP RULES`; shared-block diff vs origin/master empty
-  (verified by slice-diff), so no cross-repo propagation.
-- **Step 4** DECISIONS_LOG — `2bf5653` (`### #NEXT`) then claimed **#62** at merge in
-  `79169dd` (origin/master max was #61, no competing branch). GATE 4 met.
-- **Step 5** Land — done (`--ff-only`, pushed, branch deleted). GATE 3 (SHA equality) met.
+## 2. Pending-commit queue reconciliation
 
-No decisions provisional. One SCHEMA-vs-source note: SCHEMA.md uses a logical 001–015
-migration-sequence abstraction (documentation ordering by FK dependency), not the repo's
-alembic hash filenames — as authored in chat; not a discrepancy to fix.
+Carried in from the chat close-out (`;cc` ANCHOR — "Land the interpretation base"):
 
-## Cold-resume handoff
+| PENDING item | Owner | Landed? |
+|---|---|---|
+| `#63` governance entry (interpretation contract v0.4, group-primary, two-gate safety) | Code | ✅ `499c902` — `DECISIONS_LOG.md` `### 63.` |
+| `lever_dictionary.json` (GRADE lever nodes + per-marker read-constants, `ai_draft`) | Code | ✅ `ad51a37` — `backend/reference/lever_dictionary.json` |
+| `marker_groups.json` (membership/roles, five relation kinds, `group_levers`, `derived_from`, `ai_draft`) | Code | ✅ `ad51a37` — `backend/reference/marker_groups.json` |
+| Replace `INTERPRETATION_OUTPUT_CONTRACT.md` with delivered v0.4 (refs `#63`) | **UI / chat** | ⏳ **Provisional** — not Code's to write (contract is a UI knowledge-file; "Code never writes it"). Not verifiable from the repo. Confirm UI-side. |
 
-**State:** `SCHEMA.md` is live at master root (`origin/master` = `79169dd`) and is now the
-repo-canonical database reference, auto-mirrored into project knowledge via Projects sync.
-CLAUDE.md records the SCHEMA ⇄ `backend/migrations/` lockstep (update SCHEMA in the same or
-an immediately-paired commit as any schema migration). DECISIONS_LOG #62 records the
-promotion. PLATFORM.md was deliberately not promoted.
+Gate evidence (verified this session):
+- Both JSONs parse (`python -m json.tool`).
+- Bindings gate green — 70 live marker refs all resolve to `marker_canonical` v0.2 (31 ids);
+  `bilirubin_total` (not bare `bilirubin`); all 4 orphans (`calcium`, `ck`, `hdl_cholesterol`,
+  `non_hdl`) confined to `_deferred`; every `group_lever` has a node in `lever_dictionary.levers`.
+- I1 green — all 5 live levers carry non-empty `evidence_refs`.
+- No `#59`/`#60` remnants in either asset; both cite `#63`.
+- Pre: DECISIONS max 62, both JSONs 404. Post: DECISIONS max 63, both JSONs **HTTP 200**
+  via GitHub contents API (`ref=master`, authoritative — not CDN). `git status` carries no
+  landing residue (only pre-existing untracked `.claude/launch.json`, `backend/gate_test.py`).
 
-**SINGLE NEXT ACTION (Luke — project knowledge, outside Code's reach):** after confirming the
-connector surfaces the repo `SCHEMA.md`, **delete the manual project-knowledge upload of
-SCHEMA.md**. Until deleted, dual-master persists (repo copy + stale manual copy) — the task
-is not done. (PLATFORM.md stays as-is in project knowledge — it was not moved.)
+---
 
-**Standing rule now in force:** any migration that changes the schema must update `SCHEMA.md`
-in the same commit or an immediately-paired governance commit — it must never lag master.
+## 3. Cold-resume handoff
 
-**Follow-ups (not blocking):**
-- If PLATFORM.md's public-exposure gate later clears, promote it under its own DECISIONS_LOG
-  entry (same pattern).
-- Hevy resolver activation (context_builder prompt + byte-parity re-baseline) remains the
-  deferred #60 loose-name decision. Prior Railway migration for #61 (`3497ab483935`) — confirm
-  its post-apply stamp if not already done.
+**Where things stand.** #63 landed the interpretation *base* — the emitted-shape contract
+(group-primary, two-gate safety) as governance, plus the two composed reference assets
+(`lever_dictionary.json` + `marker_groups.json`) under `backend/reference/` as `ai_draft`,
+bound to `marker_canonical.json` v0.2. The interpretation *module build* itself is still
+pending (ROADMAP NEXT — "Interpretation layer build", #49/#51 family). Assets are AI-drafted,
+not clinically reviewed.
 
-**Sprint context (unchanged):** ROADMAP NOW unchanged — Health Connect permissions, Samsung
-package-name correction, morning check-in, persistent conversation history, known UI bugs.
+**Single clearest next action.** UI-side: replace `INTERPRETATION_OUTPUT_CONTRACT.md` with
+the delivered v0.4 (refs `#63`; worked example = the `vitamin_d_25oh` group-of-one). This is
+the one open item from this session's queue and is not Code's to write.
 
-**Open questions:** none opened or resolved; OPEN_QUESTIONS untouched.
+**Queued follow-ons (not started):**
+- **7-id vocabulary bump** `marker_canonical.json` v0.2 → v0.3 — unblocks the parked
+  `marker_groups._deferred` groups/relations/edges (`calcium`, `ck`, `hdl_cholesterol`,
+  `non_hdl`, and the erythroid group / `trt_erythrocytosis_watch` cross-axis showcase).
+  Separate landing; do **not** touch `marker_canonical.json` in the interpretation lane.
+- **#64** — expectation gating & frame integrity (spec drafted in chat as
+  `SPEC_64_expectation_gating_and_frame_integrity.md`, not yet in repo). `#64`-adjacent
+  work (vocab bump, `harmonised` flag) is a separate landing.
+- **#49 interpretation view / module build** — the emitted shape now has a contract to build
+  against; depends on the lab store (#52) + lever dictionary (#51/#63).
+
+**Open questions (unchanged this session):**
+- `open`: Q3 (HR cadence during sleep), Q4 (HC one-day date shift), Q5 (`/health-connect/sync`
+  dual-field collapse), Q6 (strength volume-load into daily TL — resolves→#28 on Postgres
+  verify), Q7 (semimembranosus injury missing from structured ledger), Q9 (legacy
+  `user_knowledge` consolidation).
+- `parked`: Q10 (AccessLink per-second ingest — low priority).
+- `resolved`: Q1→#20, Q2, Q8→#43, Q11→#52, Q12→#53.
+
+**Active sprint (ROADMAP NOW):** Health Connect permissions fix; Samsung Health package-name
+correction; morning check-in screen (Hooper Index); persistent conversation history; session-card
+click bug; dual-panel scroll bug; `mcp_server.get_hevy_workouts` missing `Session` import.
