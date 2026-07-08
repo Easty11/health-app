@@ -1267,6 +1267,61 @@ later clears (promote it then under its own entry).
 
 ---
 
+### 63. Interpretation Output Contract v0.4 (group-primary) + two reference assets land as `ai_draft`
+
+**Decision:** The interpretation layer's emitted shape is promoted to **group-primary**
+(supersedes the marker-primary v0.3 shape). The interpretation unit is the **axis/group**;
+a lone marker is a **group-of-one**. `#49` iterates groups. Flat top-level
+`moved[]`/`stable[]` is replaced by `groups[]`, each carrying an **axis-verdict**, member
+markers with per-member gates, group-level **relations** rendered on member lines
+(author-group / present-marker), and **shared levers** with per-member effects.
+
+The **two-gate safety model** is adopted as the structural `#47` resolution for
+interpretation output: **gate 1 (is-this-news)** is delta-based and may consult
+relations + axis-verdict; **gate 2 (is-this-out-of-range)** is absolute and
+**non-suppressible** — no relation, axis-verdict, or phase-precondition may hide a breach,
+at most annotate it as expected-by-phase or benign (`stable_rationale`). No directive
+field anywhere; every lever carries `grade` + `grade_rationale` + non-empty `evidence_refs`.
+
+Two composed reference assets land under `backend/reference/`, flagged `ai_draft`:
+- `lever_dictionary.json` — GRADE-tiered lever **nodes** (group-agnostic) + per-marker
+  read-constants (`min_meaningful_delta` with a `mode` amendment to `#53`).
+- `marker_groups.json` — purely **relational**: membership/roles, the five relation kinds
+  (ratio, co_movement, discriminator, feedback, context), `group_levers` with
+  `member_effects`, and structural `derived_from` edges.
+
+Both bind to `marker_canonical.json` v0.2 (`#57`, 31 ids). Markers not yet canonical
+(`calcium`, `ck`, `hdl_cholesterol`, `non_hdl`) are parked under `_deferred` with their
+exact blocking ids — nothing dangles — pending the 7-id vocab bump (0.2 → 0.3, separate
+landing). The contract remains a **UI knowledge-file (orientation)**, not repo-canonical;
+the canonical record is this entry and, when built, the code.
+
+**Rationale:** `#49` fixed the conceptual design (delta-first, three sections, lever
+filtering/tap); this fixes the emitted *shape* and closes the group-primary-vs-marker-primary
+fork in favour of group-primary — a member line is self-explanatory (relations/lever
+effects rendered against each marker) without the reader holding the whole axis in their
+head, while relations and levers are authored once at group level. The two-gate split is
+what stops the group model from becoming a channel that reasons a breach away: coherence
+reads and range surfacing are orthogonal. Landing the assets as `ai_draft` unblocks the
+interpretation module build while keeping the clinical-review gate explicit.
+
+**Status:** Landed at merge (`feat/interpretation-base`, ff to master). Assets are
+`ai_draft` — not clinically reviewed. `_deferred` groups/relations/edges stay parked on
+the vocab bump. Contract v0.4 replaced UI-side (refs `#63`); Code never writes it.
+
+**How you know:** Both JSONs parse (`python -m json.tool`); bindings gate green — 70 live
+marker refs all resolve to the canonical 31, `bilirubin_total` (not bare `bilirubin`), all
+4 orphans confined to `_deferred`, every `group_lever` has a node in `lever_dictionary.levers`;
+I1 gate green — all 5 live levers carry non-empty `evidence_refs`. Pre: DECISIONS max 62,
+both assets 404. Post: `backend/reference/{lever_dictionary,marker_groups}.json` present on
+master, DECISIONS max 63. No migration in this landing (JSON + doc only).
+
+**Do not revisit unless:** the marker-primary shape is reinstated, the `#47` education
+boundary changes, the two-gate model needs a third gate, or the vocab bump promotes a
+`_deferred` group/relation/edge (each under its own entry, keyed to the new canonical id).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
