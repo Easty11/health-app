@@ -1,0 +1,219 @@
+{
+  "_meta": {
+    "version": "v0",
+    "status": "ai_draft",
+    "binds_to": "marker_canonical.json v0.2 (#57)",
+    "contract": "INTERPRETATION_OUTPUT_CONTRACT v0.4 (#63)",
+    "authored": "2026-07-06",
+    "provenance": "chat-drafted; NOT master-canonical.",
+    "asset_split": "purely relational \u2014 membership/roles, relations, group_levers with member_effects, derived_from edges. Lever nodes and per-marker read-constants live in lever_dictionary.json.",
+    "binding_note": "Every marker_canonical / operand / member key is a marker_canonical.json v0.2 id. Anything that could not bind is under _deferred with its exact blocking id \u2014 nothing dangles."
+  },
+
+  "relation_kinds": {
+    "ratio": "Interpretive signal is the ratio of two members (T:E2, De Ritis).",
+    "co_movement": "Members expected to move together; divergence is the signal.",
+    "discriminator": "One member's value localises/attributes another's movement.",
+    "feedback": "One member drives/suppresses another via a physiological loop; phase-gated.",
+    "context": "A member reframes another as watch/expected without fixed arithmetic; often cross-axis."
+  },
+
+  "groups": [
+    {
+      "group_key": "hpg_axis",
+      "display_name": "Hypothalamic\u2013Pituitary\u2013Gonadal axis",
+      "is_group_of_one": false,
+      "members": [
+        { "marker_canonical": "testosterone_total",           "role": "substrate" },
+        { "marker_canonical": "testosterone_free_calculated",  "role": "substrate_derived", "is_derived": true },
+        { "marker_canonical": "shbg",                          "role": "binding_modulator" },
+        { "marker_canonical": "oestradiol",                    "role": "product" },
+        { "marker_canonical": "lh",                            "role": "feedback_signal" },
+        { "marker_canonical": "fsh",                           "role": "feedback_signal" }
+      ],
+      "relations": [
+        {
+          "relation_key": "hpg_t_e2_ratio",
+          "kind": "ratio",
+          "operands": ["testosterone_total", "oestradiol"],
+          "render_on": ["testosterone_total", "oestradiol"],
+          "reads": "T:E2 proportionality \u2014 E2 tracking substrate vs disproportionate aromatisation."
+        },
+        {
+          "relation_key": "hpg_substrate_co_movement",
+          "kind": "co_movement",
+          "operands": ["testosterone_total", "testosterone_free_calculated", "oestradiol"],
+          "render_on": ["testosterone_total", "testosterone_free_calculated", "oestradiol"],
+          "reads": "On stable dosing these track the substrate pool together; divergence is the signal."
+        },
+        {
+          "relation_key": "hpg_gonadotropin_suppression",
+          "kind": "feedback",
+          "driver": "testosterone_total",
+          "operands": ["lh", "fsh"],
+          "render_on": ["lh", "fsh"],
+          "precondition_phase": "on_trt",
+          "reads": "Exogenous androgen closes the hypothalamic\u2013pituitary loop \u2192 LH/FSH suppressed. Expected on_trt; off-TRT the same suppression is news."
+        },
+        {
+          "relation_key": "shbg_free_fraction",
+          "kind": "context",
+          "operands": ["testosterone_free_calculated", "shbg"],
+          "render_on": ["testosterone_free_calculated"],
+          "reads": "SHBG sets the bound fraction \u2014 a high SHBG lowers free-T at a given total, so read free-T against SHBG, not total alone."
+        }
+      ],
+      "group_levers": [
+        {
+          "lever_key": "testosterone_substrate_load",
+          "member_effects": [
+            { "marker_canonical": "testosterone_total",          "direction": "raises", "grade": "high" },
+            { "marker_canonical": "testosterone_free_calculated", "direction": "raises", "grade": "high" },
+            { "marker_canonical": "oestradiol",                  "direction": "raises", "grade": "high" }
+          ]
+        },
+        {
+          "lever_key": "aromatase_inhibition",
+          "member_effects": [
+            { "marker_canonical": "oestradiol", "direction": "lowers", "grade": "high" }
+          ]
+        },
+        {
+          "lever_key": "aromatase_adiposity",
+          "member_effects": [
+            { "marker_canonical": "oestradiol", "direction": "raises", "grade": "low" }
+          ]
+        },
+        {
+          "lever_key": "alcohol",
+          "member_effects": [
+            { "marker_canonical": "oestradiol", "direction": "raises", "grade": "very_low" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "group_key": "hepatocellular",
+      "display_name": "Hepatobiliary enzymes + bilirubin",
+      "is_group_of_one": false,
+      "members": [
+        { "marker_canonical": "ast",             "role": "transaminase" },
+        { "marker_canonical": "alt",             "role": "transaminase" },
+        { "marker_canonical": "ggt",             "role": "biliary_discriminator" },
+        { "marker_canonical": "alp",             "role": "biliary" },
+        { "marker_canonical": "bilirubin_total", "role": "excretory" }
+      ],
+      "relations": [
+        {
+          "relation_key": "de_ritis_ratio",
+          "kind": "ratio",
+          "operands": ["ast", "alt"],
+          "render_on": ["ast", "alt"],
+          "reads": "AST:ALT \u2014 \u22481 chronic muscle, >2 alcoholic injury, <1 common in steatosis."
+        },
+        {
+          "relation_key": "ggt_hepatobiliary_discriminator",
+          "kind": "discriminator",
+          "discriminator": "ggt",
+          "operands": ["ast", "alt"],
+          "render_on": ["ast", "alt", "ggt"],
+          "reads": "Normal GGT \u2192 transaminase rise is not hepatobiliary (points to muscle/exercise)."
+        },
+        {
+          "relation_key": "cholestatic_co_movement",
+          "kind": "co_movement",
+          "operands": ["alp", "ggt"],
+          "render_on": ["alp", "ggt"],
+          "reads": "ALP and GGT rise together in cholestasis; isolated ALP (normal GGT) points to bone, not liver."
+        },
+        {
+          "relation_key": "bilirubin_isolation",
+          "kind": "discriminator",
+          "discriminator": "bilirubin_total",
+          "operands": ["ggt", "alp", "haemolysis_index", "ld"],
+          "render_on": ["bilirubin_total"],
+          "reads": "Bilirubin\u2191 with normal GGT/ALP and normal haemolysis_index/LD = isolated unconjugated \u2192 constitutional (Gilbert's), not cholestatic or haemolytic."
+        }
+      ],
+      "group_levers": [
+        {
+          "lever_key": "exercise_muscle",
+          "member_effects": [
+            { "marker_canonical": "ast", "direction": "raises", "grade": "high" },
+            { "marker_canonical": "alt", "direction": "raises", "grade": "high" }
+          ]
+        },
+        {
+          "lever_key": "alcohol",
+          "member_effects": [
+            { "marker_canonical": "ggt", "direction": "raises", "grade": "low" },
+            { "marker_canonical": "ast", "direction": "raises", "grade": "low" }
+          ],
+          "de_select_hint": "Runtime: de-select when ggt is normal (ggt_hepatobiliary_discriminator fires)."
+        }
+      ]
+    }
+  ],
+
+  "derived_from": [
+    {
+      "marker_canonical": "egfr",
+      "operands": ["creatinine"],
+      "note": "eGFR is computed from creatinine (+age/sex). Movement is attributed to creatinine, not surfaced as independent news (contract I6)."
+    },
+    {
+      "marker_canonical": "testosterone_free_calculated",
+      "operands": ["testosterone_total", "shbg", "albumin"],
+      "note": "Vermeulen-type calc. Also a free extraction-QA gate: re-derive and compare to the reported value at confirm time."
+    },
+    {
+      "marker_canonical": "anion_gap",
+      "operands": ["sodium", "potassium", "chloride", "bicarbonate"],
+      "note": "AG = (Na + K) \u2212 (Cl + HCO3). Re-derivation is a consistency check on the electrolyte extraction."
+    }
+  ],
+
+  "_deferred": {
+    "note": "Blocked purely on canonical-vocabulary gaps. Each entry names the exact missing marker_canonical id(s). Promote once the vocab expands.",
+    "groups": {
+      "erythroid": {
+        "intended_members": ["haemoglobin", "haematocrit", "rbc"],
+        "blocked_on": ["haemoglobin", "haematocrit", "rbc"],
+        "carries": "the cross-axis context relation below \u2014 the contract's showcase cross-axis instance is unbuildable until these are canonical."
+      }
+    },
+    "relations": {
+      "trt_erythrocytosis_watch": {
+        "kind": "context",
+        "intended_render_on": "haematocrit",
+        "references": ["hpg_axis", "protocol_factor:trt"],
+        "precondition_phase": "on_trt",
+        "reads": "On TRT, watch Hct for erythrocytosis \u2014 a protocol-driven context, not a breach of the erythroid axis itself.",
+        "blocked_on": ["haematocrit"]
+      },
+      "ck_muscle_discriminator": {
+        "kind": "discriminator",
+        "intended_group": "hepatocellular",
+        "discriminator": "ck",
+        "operands": ["ast"],
+        "reads": "High CK with high AST \u2192 muscle origin \u2014 complements the GGT discriminator.",
+        "blocked_on": ["ck"]
+      }
+    },
+    "derived_from": [
+      {
+        "marker_canonical": "calcium_corrected",
+        "operands": ["calcium", "albumin"],
+        "blocked_on": ["calcium"],
+        "note": "Only calcium_corrected and albumin are canonical; raw calcium is missing."
+      },
+      {
+        "marker_canonical": "non_hdl",
+        "operands": ["cholesterol_total", "hdl_cholesterol"],
+        "blocked_on": ["non_hdl", "hdl_cholesterol"],
+        "note": "cholesterol_total is canonical; non_hdl and hdl_cholesterol are not. non_hdl = cholesterol_total \u2212 hdl_cholesterol is also a free QA gate once both exist."
+      }
+    ]
+  }
+}

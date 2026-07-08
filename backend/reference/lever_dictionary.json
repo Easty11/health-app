@@ -1,0 +1,120 @@
+{
+  "_meta": {
+    "version": "v0",
+    "status": "ai_draft",
+    "binds_to": "marker_canonical.json v0.2 (#57)",
+    "contract": "INTERPRETATION_OUTPUT_CONTRACT v0.4 (#63)",
+    "authored": "2026-07-06",
+    "provenance": "chat-drafted; NOT master-canonical. Every DOI is real; every entry is ai_draft pending human review.",
+    "asset_split": "lever nodes (group-agnostic) + per-marker read-constants. Relational wiring (which lever attaches to which group, member_effects) lives in marker_groups.json.",
+    "invariant_note": "I1: every surfaced lever needs non-empty evidence_refs. Nodes with evidence_refs:[] are draft-only and MUST NOT surface until cited (see _deferred_levers)."
+  },
+
+  "levers": {
+    "testosterone_substrate_load": {
+      "label": "Testosterone substrate load",
+      "mechanism_summary": "The exogenous testosterone dose sets the substrate pool the HPG axis operates on; oestradiol tracks the aromatised fraction of that pool.",
+      "grade": "high",
+      "grade_rationale": "Direct interventional dose\u2192T\u2192E2 evidence.",
+      "evidence_refs": ["10.1016/j.jacc.2018.12.062", "10.1210/jcem.86.6.7520", "10.1210/jcem.78.4.8157711"],
+      "actor": "physician",
+      "channel": "pharmacologic",
+      "draft_status": "ai_draft"
+    },
+    "aromatase_inhibition": {
+      "label": "Aromatase inhibition",
+      "mechanism_summary": "Pharmacologic aromatase inhibition lowers the T\u2192E2 conversion rate, reducing serum oestradiol at a given substrate load.",
+      "grade": "high",
+      "grade_rationale": "RCT/interventional evidence for AI effect on male serum E2.",
+      "evidence_refs": ["10.1111/j.1365-2265.2008.03327.x", "10.1111/andr.12126"],
+      "actor": "physician",
+      "channel": "pharmacologic",
+      "draft_status": "ai_draft"
+    },
+    "aromatase_adiposity": {
+      "label": "Adiposity / aromatase activity",
+      "mechanism_summary": "Adipose tissue is a primary aromatase site; body-fat change shifts peripheral T\u2192E2 conversion.",
+      "grade": "low",
+      "grade_rationale": "Observational + weight-loss evidence; downgraded for indirectness (populations differ) and imprecision.",
+      "evidence_refs": ["10.1210/clinem/dgaf038", "10.1055/a-0658-7712", "10.1111/cen.13723"],
+      "actor": "self",
+      "channel": "behavioural",
+      "draft_status": "ai_draft"
+    },
+    "alcohol": {
+      "label": "Alcohol intake",
+      "mechanism_summary": "Alcohol modulates hepatic oestrogen handling and (in the liver panel) raises GGT/AST; effect on male serum E2 is small and inconsistent.",
+      "grade": "very_low",
+      "grade_rationale": "Small, inconsistent observational effect on male serum E2; downgraded for imprecision and inconsistency.",
+      "evidence_refs": ["10.1136/bmjopen-2014-005462"],
+      "actor": "self",
+      "channel": "behavioural",
+      "draft_status": "ai_draft"
+    },
+    "exercise_muscle": {
+      "label": "Exercise / skeletal-muscle turnover",
+      "mechanism_summary": "Training raises transaminases of skeletal-muscle origin; chronic pattern gives AST:ALT \u2248 1 and correlates with CK, distinguishing muscle from hepatocellular source.",
+      "grade": "high",
+      "grade_rationale": "Consistent cohort evidence (chronic muscle \u2192 De Ritis \u2248 1) plus mechanistic CK correlation.",
+      "evidence_refs": ["10.1002/hep.20548", "10.1177/1941738118764870"],
+      "actor": "self",
+      "channel": "behavioural",
+      "draft_status": "ai_draft"
+    }
+  },
+
+  "marker_interpretation": {
+    "oestradiol": {
+      "min_meaningful_delta": {
+        "mode": "relative",
+        "value": 0.42,
+        "note": "CVi \u2248 14% (R\u00f8ys 2022). Assay-pin caveat: on immunoassay widen to ~0.50. Ahokoski 1998 gives \u00b138% consistent range.",
+        "evidence_refs": ["10.1093/clinchem/hvac175"]
+      },
+      "stable_rationale": null
+    },
+    "bilirubin_total": {
+      "min_meaningful_delta": {
+        "mode": "relative",
+        "value": 0.58,
+        "note": "EuBIVAS population RCV. Gilbert's inflates within-subject variance, so this is a FLOOR for a Gilbert's carrier, not a ceiling (#53 context case).",
+        "evidence_refs": ["10.1373/clinchem.2018.288415"]
+      },
+      "stable_rationale": "Constitutional/benign (Gilbert's pattern): unconjugated, isolated, normal GGT, normal haemolysis_index/LD (no haemolysis). Persistent H flag is annotated, never treated as news."
+    },
+    "alt": {
+      "min_meaningful_delta": {
+        "mode": "relative",
+        "value": 0.45,
+        "note": "CVi \u2248 15%. Citation pending \u2014 CVi source not yet pinned to a DOI.",
+        "evidence_refs": []
+      },
+      "stable_rationale": null
+    },
+    "ast": {
+      "min_meaningful_delta": {
+        "mode": "relative",
+        "value": null,
+        "note": "AST CVi unverified \u2014 no authored delta. Module falls back to default until pinned.",
+        "evidence_refs": []
+      },
+      "stable_rationale": null
+    }
+  },
+
+  "_defaults": {
+    "min_meaningful_delta_fallback": {
+      "mode": "relative",
+      "value": 0.30,
+      "note": "Applied to any canonical marker with no authored min_meaningful_delta. Conservative placeholder \u2014 a crossed reference bound still triggers news regardless (contract gate 2)."
+    }
+  },
+
+  "_deferred_levers": {
+    "hepatic_steatosis": {
+      "reason": "Competing lever for ALT (hepatic origin). Held out of live nodes: no real DOI to hand \u2014 I1 forbids surfacing an uncited lever. Add citation to promote.",
+      "target_markers": ["alt", "ast"],
+      "provisional_grade": "moderate"
+    }
+  }
+}
