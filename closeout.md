@@ -1,81 +1,84 @@
-# Close-out — health-app
-
-Branch: `master` · Session-open ref: `0014a75` · Governance stores changed: `DECISIONS_LOG.md`
-
----
+# Close-out — 2026-07-09
 
 ## 1. Real commits this session
 
+Session-open ref: `d73684e` (`chore: session close-out`). `git log --oneline d73684e..HEAD`:
+
 ```
-ad51a37 feat: interpretation reference assets (lever_dictionary + marker_groups, ai_draft)
-499c902 gov: #63 interpretation contract v0.4 (group-primary, two-gate safety)
+560ea80 gov: OPEN_QUESTIONS Q13 — HRV is scraper-only; HC hrv_rmssd structurally empty
+e25ba64 docs: METRICS.md — per-page metric catalogue (drift baseline)
+4d6a381 gov: Q4 resolved in code — HC sleep on local wake-date (#64)
+0a45e6d fix: HC sleep attributed to local wake-date (Q4)
 ```
 
-Both fast-forwarded onto `master` from `feat/interpretation-base` and pushed to
-`origin/master` (`0014a75..ad51a37`). Branch merged + deleted (local; never pushed as a
-remote branch) — terminal state, not in `BRANCHES.md`. This close-out commit follows.
+All four are on `master`, pushed. `HEAD == origin/master == 560ea80`.
 
-No migration in this landing (JSON + doc only); Railway `alembic upgrade head` on deploy
-is a no-op here.
-
----
+Concern-split as designed:
+- `0a45e6d` (feature) — `_wake_date` helper (tz-aware AEST), `_aggregate_day` sleep
+  filter → wake-date-only, date-collection loop → wake-date-only, `/sync` window upper
+  bound widened to AEST-today, backfill migration `f4e1a2b3c6d7` (nulls the five sleep
+  columns), and 7 new unit tests. Full suite 29/29 green.
+- `4d6a381` (governance) — DECISIONS_LOG #64; OPEN_QUESTIONS Q4 → `verifying`.
+- `e25ba64` (docs) — `METRICS.md` at repo root: per-page metric catalogue at
+  display-label → code-field → endpoint → column depth. Not repo-canonical; no lockstep
+  rule.
+- `560ea80` (governance) — OPEN_QUESTIONS Q13 (HRV scraper-only / HC `hrv_rmssd`
+  structurally empty / single point of failure pending scraper canary #9).
 
 ## 2. Pending-commit queue reconciliation
 
-Carried in from the chat close-out (`;cc` ANCHOR — "Land the interpretation base"):
+No chat `;cc` pending-commit queue was carried into this session. Work originated from
+the Q4 ANCHOR/OBJECTIVE brief plus three in-session requests (METRICS.md, Q13 log,
+scraper-canary brief). Every committable item landed (hashes above). Explicitly
+**provisional / not committed by design**:
 
-| PENDING item | Owner | Landed? |
-|---|---|---|
-| `#63` governance entry (interpretation contract v0.4, group-primary, two-gate safety) | Code | ✅ `499c902` — `DECISIONS_LOG.md` `### 63.` |
-| `lever_dictionary.json` (GRADE lever nodes + per-marker read-constants, `ai_draft`) | Code | ✅ `ad51a37` — `backend/reference/lever_dictionary.json` |
-| `marker_groups.json` (membership/roles, five relation kinds, `group_levers`, `derived_from`, `ai_draft`) | Code | ✅ `ad51a37` — `backend/reference/marker_groups.json` |
-| Replace `INTERPRETATION_OUTPUT_CONTRACT.md` with delivered v0.4 (refs `#63`) | **UI / chat** | ⏳ **Provisional** — not Code's to write (contract is a UI knowledge-file; "Code never writes it"). Not verifiable from the repo. Confirm UI-side. |
-
-Gate evidence (verified this session):
-- Both JSONs parse (`python -m json.tool`).
-- Bindings gate green — 70 live marker refs all resolve to `marker_canonical` v0.2 (31 ids);
-  `bilirubin_total` (not bare `bilirubin`); all 4 orphans (`calcium`, `ck`, `hdl_cholesterol`,
-  `non_hdl`) confined to `_deferred`; every `group_lever` has a node in `lever_dictionary.levers`.
-- I1 green — all 5 live levers carry non-empty `evidence_refs`.
-- No `#59`/`#60` remnants in either asset; both cite `#63`.
-- Pre: DECISIONS max 62, both JSONs 404. Post: DECISIONS max 63, both JSONs **HTTP 200**
-  via GitHub contents API (`ref=master`, authoritative — not CDN). `git status` carries no
-  landing residue (only pre-existing untracked `.claude/launch.json`, `backend/gate_test.py`).
-
----
+- **Q4 G4 verification** — same-date `health_connect_syncs[date]` ⇄ `samsung_hrv_readings[date]`
+  check. Requires the post-deploy operational re-sync on live Railway (unreachable this
+  session). Q4 stays `verifying` until G4 passes; then flip to `resolved → #64`.
+- **Q13 payload verification** — absent-vs-unmapped (`payload.hrv` empty vs posted under an
+  unmapped field name, Q5 territory). Handed to **chat-side** verification per Luke.
+- **Scraper canary + Samsung-screen catalogue** — scoped brief prepared, not executed
+  (cross-repo, `health-connect-app`). Brief lives in this session's scratchpad
+  (`hca-scraper-canary-brief.md`), carried by paste; nothing committed to `health-app`.
 
 ## 3. Cold-resume handoff
 
-**Where things stand.** #63 landed the interpretation *base* — the emitted-shape contract
-(group-primary, two-gate safety) as governance, plus the two composed reference assets
-(`lever_dictionary.json` + `marker_groups.json`) under `backend/reference/` as `ai_draft`,
-bound to `marker_canonical.json` v0.2. The interpretation *module build* itself is still
-pending (ROADMAP NEXT — "Interpretation layer build", #49/#51 family). Assets are AI-drafted,
-not clinically reviewed.
+### State
+`master` @ `560ea80`, clean and in sync with `origin/master`. No branches in limbo (all
+three feature branches ff-merged + deleted). Untracked, unrelated to this session, left
+alone: `.claude/launch.json`, `backend/gate_test.py`.
 
-**Single clearest next action.** UI-side: replace `INTERPRETATION_OUTPUT_CONTRACT.md` with
-the delivered v0.4 (refs `#63`; worked example = the `vitamin_d_25oh` group-of-one). This is
-the one open item from this session's queue and is not Code's to write.
+DECISIONS_LOG max: **#64**. OPEN_QUESTIONS max: **Q13**.
 
-**Queued follow-ons (not started):**
-- **7-id vocabulary bump** `marker_canonical.json` v0.2 → v0.3 — unblocks the parked
-  `marker_groups._deferred` groups/relations/edges (`calcium`, `ck`, `hdl_cholesterol`,
-  `non_hdl`, and the erythroid group / `trt_erythrocytosis_watch` cross-axis showcase).
-  Separate landing; do **not** touch `marker_canonical.json` in the interpretation lane.
-- **#64** — expectation gating & frame integrity (spec drafted in chat as
-  `SPEC_64_expectation_gating_and_frame_integrity.md`, not yet in repo). `#64`-adjacent
-  work (vocab bump, `harmonised` flag) is a separate landing.
-- **#49 interpretation view / module build** — the emitted shape now has a contract to build
-  against; depends on the lab store (#52) + lever dictionary (#51/#63).
+### Single clearest next action
+**Confirm the Railway backend deploy is live** (shows commit ≥ `4d6a381`, `/health` green
+— the start command runs `alembic upgrade head`, applying migration `f4e1a2b3c6d7`), then
+**fire an HCA re-sync** and run **Q4 G4**: verify `health_connect_syncs[date]` sleep stages
+match `samsung_hrv_readings[date]` same-date (not date+1). A re-sync against the *old* code
+just repopulates the bug — order matters.
 
-**Open questions (unchanged this session):**
-- `open`: Q3 (HR cadence during sleep), Q4 (HC one-day date shift), Q5 (`/health-connect/sync`
-  dual-field collapse), Q6 (strength volume-load into daily TL — resolves→#28 on Postgres
-  verify), Q7 (semimembranosus injury missing from structured ledger), Q9 (legacy
-  `user_knowledge` consolidation).
-- `parked`: Q10 (AccessLink per-second ingest — low priority).
-- `resolved`: Q1→#20, Q2, Q8→#43, Q11→#52, Q12→#53.
+### Open questions by status
+- **verifying:** Q4 (HC sleep wake-date — code+migration landed #64; G4 pending live re-sync).
+- **open:** Q3 (HR cadence during sleep — INCONCLUSIVE, gated on Q2 de-dup), Q5 (HC
+  dual-field acceptance — needs a captured payload), Q6 (strength volume-load into daily TL
+  — Postgres verify → #28), Q7 (injury ledger missing right proximal semimembranosus), Q9
+  (consolidate legacy `user_knowledge`), Q13 (HRV scraper-only SPOF — payload verify
+  chat-side; residual tracked to canary #9).
+- **parked:** Q10 (AccessLink per-second ingest — revisit when Metabolic-load channel wired).
+- **resolved:** Q1→#20, Q2 (HCA `36df9a2`), Q8→#43, Q11→#52, Q12→#53.
 
-**Active sprint (ROADMAP NOW):** Health Connect permissions fix; Samsung Health package-name
-correction; morning check-in screen (Hooper Index); persistent conversation history; session-card
-click bug; dual-panel scroll bug; `mcp_server.get_hevy_workouts` missing `Session` import.
+### Sprint (ROADMAP)
+- **NOW:** HC permission errors (types 38/35/11/37); Samsung package-name correction
+  (`com.sec.android.app.shealth`, verify via Railway); morning check-in screen; persistent
+  conversation history; two UI bugs (session cards not clickable, dual-panel scroll);
+  one-line `mcp_server.get_hevy_workouts` `Session` import fix.
+- **NEXT:** **Scraper canary + honest score degradation** (aligns with Q13/#9 — brief
+  prepared this session); basic readiness score (suppressed until HRV path confirmed
+  end-to-end, 7+ days); manual cardio entry; CLAUDE.md for both repos; deploy companion to
+  wife's phone; lab upload pipeline; interpretation layer build; appointment brief;
+  supersede #3 (Polar R-R); HCA forwards writer identity; backend F1 source-priority filter.
+
+### Related non-repo artifact
+`health-connect-app` scraper-canary + Samsung-screen catalogue brief — in this session's
+scratchpad as `hca-scraper-canary-brief.md`. Execute in a `health-connect-app`-rooted
+session with the device attached.
