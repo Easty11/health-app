@@ -63,7 +63,14 @@ date, so HC and scraper rows for the *same physical night* land on different day
 single canonical sleep-date convention (likely wake-date, to match the scraper) and align
 `_aggregate_day`.
 
-**Status:** open
+**Status:** verifying — resolved in code at DECISIONS_LOG #64
+(`fix/hc-sleep-wake-date-attribution`): canonical sleep-date = **local (AEST) wake-date**
+(`endTime`), aligning to the scraper; `_aggregate_day` filter + date-collection loop switched
+to wake-date-only via a tz-aware `_wake_date`, and existing sleep values cleared by migration
+`f4e1a2b3c6d7` for a post-deploy HCA re-sync. G4 (confirm `health_connect_syncs[date]` sleep
+stages match `samsung_hrv_readings[date]` **same-date**, not date+1) is pending the
+operational re-sync against live Railway data — this session could not reach Railway. Move to
+`resolved → #64` once G4 passes.
 
 ---
 

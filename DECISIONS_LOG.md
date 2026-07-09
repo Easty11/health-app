@@ -1322,6 +1322,53 @@ boundary changes, the two-gate model needs a third gate, or the vocab bump promo
 
 ---
 
+### 64. Q4 resolved — canonical HC sleep-date is the LOCAL wake-date (`endTime`), aligning to the scraper
+
+**Decision:** A Health Connect sleep session is attributed to the **local
+(AEST / Australia/Brisbane) calendar date of its `endTime`** — the wake-date — and to that
+day only. This matches the scraper (`samsung_hrv_readings`), which already keys the
+wake-date; the scraper is unchanged. `_aggregate_day`'s former filter (`endTime==day OR
+startTime==day`, longest-overlap) becomes a wake-date-only filter; the date-collection loop
+enumerates the wake-date only; the `/sync` window upper bound is widened to AEST-today so
+last night is not dropped as "future". Existing sleep values are nulled across all
+`health_connect_syncs` rows by a data migration and repopulated by a post-deploy HCA
+re-sync.
+
+**Rationale:** The same physical night landed one calendar day earlier than the scraper —
+`health_connect_syncs[date] ≈ samsung_hrv_readings[date+1]`, 0 same-date matches (Q4). Root
+cause: bed-date attribution, compounded under UTC timestamps where a naive `[:10]` slice
+collapses the whole night onto the day before the local wake. The fix converts to
+Australia/Brisbane before taking the date via a new `_wake_date()` — correct whether the
+`endTime` string is UTC-`Z`, UTC-naive, offset-aware, or local-naive (mirrors the
+normalisation `context_builder` already applies), so it settles Q4's tz fork regardless of
+the payload's actual shape. The `/sync` upsert only writes non-null values and so can never
+clear the stale date-1 rows itself; the migration clears them. Blast radius = sleep only;
+no other `_aggregate_day` field or upsert semantic touched. Backend-only.
+
+**Status:** Landed at merge (`fix/hc-sleep-wake-date-attribution`, ff to master). Backfill
+migration `f4e1a2b3c6d7` co-lands and auto-applies on Railway deploy; the operational
+re-sync (Luke, post-deploy) repopulates correct wake-dates. G4 (same-date sleep⇄scraper
+verification) is **deferred to the live re-sync** — Railway was unreachable this session, so
+Q4 is marked `verifying`, not `resolved`, until G4 passes on live data.
+
+**How you know:** 7 new unit tests green (`tests/test_health_connect_sleep.py`) — a
+midnight-spanning UTC night attributes to the wake-date and NOT the bed-date; a same-day nap
+does not displace the main night; `_wake_date` returns the correct AEST date for UTC-`Z`,
+UTC-naive, offset-aware, nanosecond-fraction, and local-naive strings. Full backend suite
+29/29 green. Migration upgrades + downgrades (no-op) cleanly on a DB copy; alembic reports a
+single head (`f4e1a2b3c6d7`). Pre: DECISIONS max 63. Gate-0 (UTC-vs-local) was **not**
+settled by a live Railway query — no creds this session, local sqlite holds no sleep rows —
+so the fix is deliberately made tz-shape-agnostic to be correct under either fork; the Q4
+signature (consistent, exceptionless date-1 shift, 0 same-date) and the dual-write code
+collapsing to a single date-1 row both point to UTC timestamps.
+
+**Do not revisit unless:** the scraper's date convention changes, HCA begins sending a
+timestamp tz shape the AEST conversion mis-dates (re-check with a real payload), the
+platform serves a non-AEST user (`Australia/Brisbane` is hard-coded, matching
+`context_builder`), or the G4 post-re-sync check still shows a date offset.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
