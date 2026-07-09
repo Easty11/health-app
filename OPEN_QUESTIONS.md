@@ -183,6 +183,33 @@ Where the #49 delta-gate threshold lives; global vs per-marker.
 
 ---
 
+## Q13. HRV is scraper-only — Health Connect `hrv_rmssd` structurally empty; single point of failure pending scraper canary (#9)
+
+Both HRV surfaces in the app — the Recovery card and the v2 AM check-in passive tile — read
+`samsung_hrv_readings.hrv_ms` (the Samsung Health accessibility-scrape). The parallel Health
+Connect column `health_connect_syncs.hrv_rmssd` comes back **always NULL**. The ingest does
+attempt to fill it: `_aggregate_day` averages `payload.hrv` via `get_rmssd()` (which accepts
+both `rmssd` and `heartRateVariabilityMillis`), so an empty node means the inbound payload
+carries **no HRV records at all**. Root cause is the confirmed, closed platform finding —
+*Samsung does not write Ring HRV (nor RHR, sleep stages, respiratory rate) to Health Connect*
+(DECISIONS_LOG "things tried and abandoned"). HRV therefore has exactly one delivery path (the
+scraper); there is no HC fallback and no HC-side ingest change can recover it. That makes the
+scraper a **single point of failure for HRV**, fragile to any Samsung Health UI change — the
+motivation for the scraper canary (issue #9) and a per-Samsung-screen metric catalogue
+(`health-connect-app` work; distinct from the frontend-page catalogue in `METRICS.md`).
+
+Not-yet-verified-at-machine: "empty because HRV is absent from the payload" is **inferred**
+from the closed finding + ingest logic, not re-confirmed against a live captured sync. The
+competing (less likely) explanation is that HCA posts HRV under a field name neither
+`get_rmssd()` branch maps — the open **Q5** territory. One captured real payload's `hrv[]`
+(or a Railway sync/`health_connect_record_sources` check) disambiguates absent-vs-unmapped.
+
+**Status:** open — verify a captured payload shows `payload.hrv` empty (absent, not unmapped
+per Q5); if absent-confirmed, the residual is the HRV single-point-of-failure risk, tracked to
+issue #9 (`health-connect-app` scraper canary). Cross-refs Q5, issue #9.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
