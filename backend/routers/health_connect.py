@@ -10,6 +10,9 @@ from typing import Any, Optional
 
 from enum import IntEnum
 import logging
+import re
+
+import pytz
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
@@ -234,6 +237,34 @@ def _parse_date(iso: str) -> date:
     return datetime.fromisoformat(iso[:10]).date()
 
 
+# Sleep is attributed to its LOCAL wake-date, matching the scraper's convention
+# (samsung_hrv_readings keys the wake-date). HC timestamps are UTC (naive ones
+# are treated as UTC — the same normalisation context_builder applies to health
+# timestamps); a naive `[:10]` slice mis-dates the night by one calendar day
+# under UTC, which is the whole of OPEN_QUESTIONS Q4. Converting to
+# Australia/Brisbane (UTC+10, no DST) before taking the date is correct whether
+# the string is UTC-with-Z, UTC-naive, offset-aware, or local-naive — so it
+# settles Q4's tz fork regardless of which shape the payload actually carries.
+_AEST = pytz.timezone("Australia/Brisbane")
+
+# Android/Health Connect emits nanosecond fractional seconds that
+# datetime.fromisoformat cannot parse; strip the fraction but PRESERVE any
+# trailing 'Z'/offset so an offset-aware timestamp keeps its zone.
+_FRAC_SECONDS = re.compile(r"\.\d+")
+
+
+def _wake_date(iso: str) -> date:
+    """Local (AEST) calendar date of a sleep session's endTime."""
+    dt = datetime.fromisoformat(_FRAC_SECONDS.sub("", iso).replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_AEST).date()
+
+
+def _now_aest_date() -> date:
+    return datetime.now(_AEST).date()
+
+
 # F2 — pre-2020 timestamp reject (DECISIONS_LOG #35).
 # Epoch-zero starts (1970 in Polar RHR, 1969 in cbti diary) were observed in the
 # 28 Jun HC export. A record with a 1970 startTime and a valid endTime would
@@ -401,10 +432,13 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
     if day_hrv:
         row["hrv_rmssd"] = round(sum(r.get_rmssd() for r in day_hrv) / len(day_hrv), 1)
 
-    # Sleep — longest session overlapping this date
+    # Sleep — longest session whose LOCAL wake-date (endTime) is this day.
+    # Wake-date only (Q4): the former startTime/bed-date clause split one
+    # physical night across two rows. A same-day nap cannot displace the main
+    # night because the max() tiebreak below still picks the longest session.
     day_sleep = [
         s for s in payload.sleep
-        if _parse_date(s.endTime) == day or _parse_date(s.startTime) == day
+        if _wake_date(s.endTime) == day
     ]
     if day_sleep:
         best = max(day_sleep, key=lambda s: s.duration())
@@ -447,6 +481,10 @@ def sync(
     """Upsert one HealthConnectSync row per calendar date in the payload."""
     today = datetime.now(timezone.utc).date()
     since = today - timedelta(days=payload.periodDays)
+    # Sleep wake-dates are AEST-local (see _wake_date) and can be one day ahead
+    # of UTC `today`; use an AEST upper bound so last night is not dropped as
+    # "future". Lower bound stays UTC-wide so no backfill day is narrowed.
+    today_local = _now_aest_date()
 
     # F2 — reject pre-2020 (epoch-zero) records before any aggregation (#35).
     rejected_pre_2020 = _reject_pre2020(payload)
@@ -471,8 +509,7 @@ def sync(
     for r in payload.hrv:
         dates.add(_parse_date(r.time))
     for r in payload.sleep:
-        dates.add(_parse_date(r.endTime))
-        dates.add(_parse_date(r.startTime))
+        dates.add(_wake_date(r.endTime))
     for r in payload.oxygenSaturation:
         dates.add(_parse_date(r.time))
     for r in payload.respiratoryRate:
@@ -480,7 +517,7 @@ def sync(
     for r in payload.distance:
         dates.add(_parse_date(r.startTime))
 
-    valid_dates = {d for d in dates if since <= d <= today}
+    valid_dates = {d for d in dates if since <= d <= max(today, today_local)}
 
     synced_dates = []
     for day in sorted(valid_dates):
