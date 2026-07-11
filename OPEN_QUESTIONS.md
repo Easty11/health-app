@@ -210,6 +210,40 @@ issue #9 (`health-connect-app` scraper canary). Cross-refs Q5, issue #9.
 
 ---
 
+## QNEXT. Hevy create-loop id contract
+
+Does `POST /v1/exercise_templates` return the canonical string id (UUID/hex) or a bare
+integer (the spec example shows an int)? This decides the create loop's shape:
+create→single-row-upsert (if the create response carries the canonical id) vs
+create→list-back (if it does not). Resolve empirically: one throwaway live create + a
+list-match against `get_exercise_templates`. **How-you-know** artifact required before
+any build.
+
+**Status:** open
+
+---
+
+## QNEXT. `3497ab483935` prod-drift reconciliation
+
+Autogenerate surfaced (and Code stripped) three divergences between local and prod at
+revision `3497ab483935`: an `exercise_sessions` drop, `samsung_hrv_readings.context`, and
+`api_key_encrypted` `VARCHAR`→`TEXT`. Confirm each is an intended local/prod difference or
+a real un-migrated delta. Resolve against Railway Postgres, not local.
+
+**Status:** open
+
+---
+
+## QNEXT. `hevy.py` `get_exercise_history` path
+
+The connector calls `/exercise_templates/{id}/history`; community docs show
+`/exercise_history/{id}`. Verify against the live API and fix the connector path if it is
+wrong.
+
+**Status:** open
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
