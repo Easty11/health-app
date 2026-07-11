@@ -1369,6 +1369,52 @@ platform serves a non-AEST user (`Australia/Brisbane` is hard-coded, matching
 
 ---
 
+### #NEXT — Hevy create-loop resolves app-originated customs via list-back-always
+
+**Decision:** App-originated custom-exercise creation resolves the new template's
+canonical id by re-pull-and-match (list-back) — create → sync → resolve within the
+custom subset — never by trusting the POST /v1/exercise_templates response body. The
+create response's id representation (int vs UUID, Q14) does not gate the build; it is
+at most a deferred micro-optimisation (skip the re-pull) and is out of scope here.
+
+**Rationale:** hevy_exercise_templates already keys rows on the canonical Hevy id and
+is kept fresh by a full-catalogue sync (#61); a create-loop is therefore create → sync
+→ resolve, and the re-pull that reads the canonical id from GET happens regardless of
+what POST returns, because the store is refreshed anyway. That makes Q14's int-vs-UUID
+fork moot for the build. List-back must match within the custom subset (is_custom=True
+AND owner_user_id=user_id): a bare-title match against a same-named default would return
+the default's id under #60 default-wins, not the new custom's — the one representational
+hazard that survives. No schema change; existing HevyExerciseTemplate columns suffice.
+
+**Status:** Landed at merge (`feat/hevy-create-loop`, ff to master). Resolves Q14 →
+this entry (list-back-always; POST-response representation deferred, not a How-you-know
+blocker). No migration; SCHEMA.md untouched. Q14's empirical fork is settled from the
+live OpenAPI spec, not a throwaway live create: the spec types the POST response
+`{"id": <integer>}` while GET/ExerciseTemplate types `id` as a string UUID — so POST
+cannot carry the canonical id, and the re-pull is load-bearing, not optional.
+
+**How you know:** Request-body shape read from the live spec's
+`CreateCustomExerciseRequestBody` (inlined `swaggerDoc`, `api.hevyapp.com/docs`): the
+body is WRAPPED — `{"exercise": {title, exercise_type, equipment_category, muscle_group,
+other_muscles[]}}` — NOT the flat fields the brief assumed; the connector was adjusted to
+wrap before landing. Unit tests (`tests/test_hevy_create_loop.py`, faked client, no live
+API): a pre-existing default and the user's own custom each short-circuit create
+(default-wins pre-check); an absent title round-trips create→sync→resolve to the new
+custom's canonical UUID; list-back stays within the custom subset and does NOT resolve to
+a same-titled default (`SLEDDEF1` vs the new UUID, with bare `resolve_exercise` proven to
+return the default); 403 exceeds-custom-exercise-limit and 400 surface as typed
+`HevyCustomExerciseLimitError` / `HevyBadRequestError`; a bounded retry (3 attempts,
+exp backoff) covers a first-GET-miss-then-hit; created-but-unresolved raises
+`HevyCreateUnresolvedError`, never returns None. Full backend suite 38/38 green. Pre:
+DECISIONS max 64.
+
+**Do not revisit unless:** Hevy adds a title filter to GET (targeted re-pull replaces
+full sync), exposes a delete endpoint (reconciliation becomes possible), or the POST
+response is later confirmed to carry the canonical UUID and the re-pull is optimised
+away (the deferred Q14 micro-opt).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
