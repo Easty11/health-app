@@ -13,6 +13,7 @@ import pytz
 
 import models
 from current_state import CurrentState, HRVBaseline
+from hevy_format import format_set
 
 AEST = pytz.timezone("Australia/Brisbane")
 
@@ -151,39 +152,6 @@ def _section_integrations(connected: list[str]) -> str:
     return f"The user has the following integrations connected: {joined}."
 
 
-def _format_set(s: dict[str, Any], idx: int) -> str:
-    """Format a single set into a compact readable string."""
-    parts: list[str] = []
-
-    weight = s.get("weight_kg")
-    reps = s.get("reps")
-    duration = s.get("duration_seconds")
-    distance = s.get("distance_meters")
-    rpe = s.get("rpe")
-    set_type = s.get("type", "normal")
-
-    if weight is not None and reps is not None:
-        parts.append(f"{weight}kg × {reps}")
-    elif weight is not None:
-        parts.append(f"{weight}kg")
-    elif reps is not None:
-        parts.append(f"{reps} reps")
-
-    if duration is not None:
-        mins, secs = divmod(int(duration), 60)
-        parts.append(f"{mins}m {secs:02d}s" if mins else f"{secs}s")
-
-    if distance is not None:
-        parts.append(f"{distance}m")
-
-    if rpe is not None:
-        parts.append(f"RPE {rpe}")
-
-    type_tag = f" [{set_type}]" if set_type != "normal" else ""
-    body = " — ".join(parts) if parts else "no data"
-    return f"       Set {idx + 1}{type_tag}: {body}"
-
-
 def _section_hevy(
     workout_count: int,
     recent_workouts: list[dict[str, Any]],
@@ -216,6 +184,11 @@ def _section_hevy(
                 pass
 
         lines.append(f"WORKOUT: {title} — {date_label} ({date_short}){duration_str}")
+
+        description = (w.get("description") or "").strip()
+        if description:
+            lines.append(f"   Note: {description}")
+
         lines.append("   Exercises:")
 
         exercises = w.get("exercises", [])  # all exercises, no truncation
@@ -232,7 +205,7 @@ def _section_hevy(
 
             sets = ex.get("sets", [])
             for set_idx, s in enumerate(sets):
-                lines.append(_format_set(s, set_idx))
+                lines.append(format_set(s, set_idx))
 
         lines.append("")  # blank line between workouts
 

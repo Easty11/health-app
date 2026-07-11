@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from database import engine, SessionLocal
 from connectors.hevy import HevyClient
+from hevy_format import format_set
 from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
 import models
@@ -321,28 +322,41 @@ async def get_hevy_workouts(days: int = 14) -> str:
 
     for w in all_workouts:
         lines.append(f"## {w.get('title', 'Workout')} — {w['start_time'][:10]}")
+
+        description = (w.get("description") or "").strip()
+        if description:
+            lines.append(f"   Description: {description}")
+
         for ex in w.get("exercises", []):
             title = ex.get("title", "Unknown exercise")
-            normal_sets = [s for s in ex.get("sets", []) if s.get("set_type") != "warmup"]
-            if not normal_sets:
-                continue
+            lines.append(f"  {title}")
 
-            set_strs = []
+            # Exercise notes carry the L/R tags and injury flags — preserve line
+            # breaks (tag on line 1, observation on line 2).
+            notes = (ex.get("notes") or "").strip()
+            if notes:
+                for note_line in notes.split("\n"):
+                    note_line = note_line.strip()
+                    if note_line:
+                        lines.append(f"     note: {note_line}")
+
+            sets = ex.get("sets", [])
             best_1rm = 0.0
-            for s in normal_sets:
-                wkg = s.get("weight_kg")
-                reps = s.get("reps")
-                if wkg is not None and reps is not None:
-                    set_strs.append(f"{wkg}kg x {reps}")
-                    est = _epley_1rm(wkg, reps)
-                    if est > best_1rm:
-                        best_1rm = est
-                elif reps is not None:
-                    set_strs.append(f"BW x {reps}")
+            for set_idx, s in enumerate(sets):
+                # Render every set (warmups included, labelled by format_set) so
+                # activation / all-warmup movements no longer vanish.
+                lines.append(format_set(s, set_idx))
+                # e1RM from non-warmup sets only.
+                if s.get("type") != "warmup":
+                    wkg = s.get("weight_kg")
+                    reps = s.get("reps")
+                    if wkg is not None and reps is not None:
+                        est = _epley_1rm(wkg, reps)
+                        if est > best_1rm:
+                            best_1rm = est
 
-            sets_summary = f"{len(normal_sets)} sets: " + ", ".join(set_strs)
-            orm_line = f" | e1RM≈{best_1rm:.1f}kg" if best_1rm > 0 else ""
-            lines.append(f"  {title}: {sets_summary}{orm_line}")
+            if best_1rm > 0:
+                lines.append(f"       e1RM≈{best_1rm:.1f}kg")
         lines.append("")
 
     return "\n".join(lines)

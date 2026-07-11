@@ -1489,6 +1489,43 @@ heavy at scale (add server-side caching or lazy UI paging).
 
 ---
 
+### 68. Hevy summary parity — `get_hevy_workouts` restored to the signal context_builder already carries; set-type field bug fixed
+
+**Status:** Landed on `feat/hevy-summary-enrichment`. `get_hevy_workouts` (`mcp_server.py`) now
+reads the set-type field as `type` (was `set_type`, a dead no-op that never filtered warmups),
+renders warmup sets labelled, and surfaces per-set RPE, multi-line exercise notes, workout
+description, and duration/distance-only sets — reaching parity with `context_builder`. e1RM
+computed from non-warmup sets only. Set formatting was **extracted to a shared `backend/hevy_format.py`**
+(`format_set`/`format_duration`) consumed by both `context_builder._section_hevy` and
+`get_hevy_workouts`, so the two can no longer drift on field reading (that duplication is what bred
+the `set_type` bug). Per Luke's fork calls: shared-module extraction (not in-place), the discovered
+extras included (description + duration/distance sets, not just RPE/notes/warmups), and
+`get_hevy_workouts` adopts `context_builder`'s verbose per-set layout (one line per set, not the old
+compact one-line-per-exercise). `context_builder._section_hevy` also gained the workout-level
+`description` for symmetry (Step 3 top-up). `health.py` unchanged (already correct).
+
+**How you know:** The impoverished summary was traced to `get_hevy_workouts` reading `set_type`
+while `context_builder._format_set` and `health.py:71` read `type`. Gate 0 ran a **live raw
+`HevyClient.get_workouts()` pull** (snake_case payload) that confirmed the set-type field is `type`
+and that `rpe`/`notes`/`duration_seconds`/`distance_meters`/`description` are all present in the raw
+object — so the summary was walking past fields sitting in the payload, not fields the API withholds.
+(The app-stored Hevy key was invalid/expired, so the raw pull used a throwaway key supplied for the
+gate; the `hevy:*` MCP was NOT used to pin names because it renames fields, e.g. `weight_kg`→`weight`.)
+The 10 Jul workout made the stakes concrete: right/left RPE+load asymmetry (right Bulgarian Split
+Squat hit RPE 10 at 35kg, rep fell to 9, dropped to 30kg while left held 35kg at RPE 8) and three
+injury-watch notes (left-knee click, right SL-RDL discomfort, right step-up valgus) lived entirely in
+the dropped fields — a live before/after render confirmed all now surface and three whole movements
+(Air Bike, Suitcase Carry, Copenhagen Plank) that rendered blank now appear. Faked-payload tests
+(`tests/test_hevy_summary_enrichment.py`, 9 tests) cover warmup labelling + e1RM exclusion (heavier
+warmup proves the filter), half-point RPE, multi-line notes, duration/distance sets, all-warmup
+exercise retention, and description present/absent. Full backend suite 65 green. Pre: DECISIONS max 67.
+
+**Do not revisit unless:** Hevy changes its GET /workouts set-object field names, or the two
+summarizers need to diverge in field-reading again (they should not — that divergence is what
+this entry closes).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
