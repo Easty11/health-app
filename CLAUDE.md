@@ -160,6 +160,13 @@ must match it.
   never lag master; a canonical-but-stale schema doc is worse than a stale
   project-knowledge copy.
 
+- **Chat→Code file transport.** When a project-knowledge doc must cross to Code, chat
+  grabs it from the project mount (byte-faithful read) and emits it as a raw fenced
+  block — never copied from the rendered project view, which flattens markdown (bold,
+  inline code, numbered lists, horizontal rules). The human carries the paste; Code
+  diffs the written file against the intended source before landing. Repo-canonical
+  docs are edited in place and never cross this transport.
+
 ### Recent landings
 
 _Pointer-only. Capped at the 3 most recent — one line each, canonical home only, no SHAs /
