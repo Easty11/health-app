@@ -210,7 +210,7 @@ issue #9 (`health-connect-app` scraper canary). Cross-refs Q5, issue #9.
 
 ---
 
-## QNEXT. Hevy create-loop id contract
+## Q14. Hevy create-loop id contract
 
 Does `POST /v1/exercise_templates` return the canonical string id (UUID/hex) or a bare
 integer (the spec example shows an int)? This decides the create loop's shape:
@@ -223,7 +223,7 @@ any build.
 
 ---
 
-## QNEXT. `3497ab483935` prod-drift reconciliation
+## Q15. `3497ab483935` prod-drift reconciliation
 
 Autogenerate surfaced (and Code stripped) three divergences between local and prod at
 revision `3497ab483935`: an `exercise_sessions` drop, `samsung_hrv_readings.context`, and
@@ -234,7 +234,7 @@ a real un-migrated delta. Resolve against Railway Postgres, not local.
 
 ---
 
-## QNEXT. `hevy.py` `get_exercise_history` path
+## Q16. `hevy.py` `get_exercise_history` path
 
 The connector calls `/exercise_templates/{id}/history`; community docs show
 `/exercise_history/{id}`. Verify against the live API and fix the connector path if it is
