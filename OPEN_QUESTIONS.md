@@ -219,7 +219,7 @@ create→list-back (if it does not). Resolve empirically: one throwaway live cre
 list-match against `get_exercise_templates`. **How-you-know** artifact required before
 any build.
 
-**Status:** resolved → #NEXT — the live OpenAPI spec types the `POST
+**Status:** resolved → #65 — the live OpenAPI spec types the `POST
 /v1/exercise_templates` response as `{"id": <integer>}`, distinct from the canonical
 string UUID `GET` returns; the create loop adopts create→list-back (create → sync →
 resolve within the custom subset), so the POST-response representation never gates the

@@ -1369,7 +1369,7 @@ platform serves a non-AEST user (`Australia/Brisbane` is hard-coded, matching
 
 ---
 
-### #NEXT — Hevy create-loop resolves app-originated customs via list-back-always
+### 65. Hevy create-loop resolves app-originated customs via list-back-always
 
 **Decision:** App-originated custom-exercise creation resolves the new template's
 canonical id by re-pull-and-match (list-back) — create → sync → resolve within the
