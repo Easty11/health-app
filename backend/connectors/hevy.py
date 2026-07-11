@@ -15,6 +15,16 @@ class HevyForbiddenError(Exception):
     pass
 
 
+class HevyCustomExerciseLimitError(Exception):
+    """403 exceeds-custom-exercise-limit on POST /v1/exercise_templates."""
+    pass
+
+
+class HevyBadRequestError(Exception):
+    """400 Invalid request body on POST /v1/exercise_templates."""
+    pass
+
+
 class HevyClient:
     def __init__(self, api_key: str) -> None:
         self._headers = {"api-key": api_key}
@@ -129,3 +139,57 @@ class HevyClient:
         async with httpx.AsyncClient(headers=self._headers) as client:
             r = await client.post(f"{HEVY_BASE}/routines", json=payload)
             return self._check(r).json()
+
+    async def create_exercise_template(
+        self,
+        title: str,
+        exercise_type: str,
+        equipment_category: str,
+        muscle_group: str,
+        other_muscles: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create a custom exercise template in Hevy.
+
+        POST /v1/exercise_templates. Body is WRAPPED: {"exercise": {...}} —
+        confirmed against the live OpenAPI spec's CreateCustomExerciseRequestBody
+        (mirrors create_routine's {"routine": {...}}, NOT flat fields). Fields:
+            title               str        required
+            exercise_type       str        CustomExerciseType enum
+                                           (weight_reps, reps_only, bodyweight_reps, …)
+            equipment_category  str        EquipmentCategory enum (barbell, dumbbell, …)
+            muscle_group        str        MuscleGroup enum — the PRIMARY muscle
+            other_muscles       list[str]  optional — secondary MuscleGroup enums
+
+        Returns the raw response, e.g. {"id": 123}. The spec types this `id` as an
+        INTEGER, distinct from the canonical string-UUID returned by GET — callers
+        must not trust it as the store key; resolve by list-back instead (#NEXT).
+
+        Raises HevyCustomExerciseLimitError on 403 (exceeds-custom-exercise-limit)
+        and HevyBadRequestError on 400 (invalid body), so callers see typed errors
+        rather than a raw httpx.HTTPStatusError.
+        """
+        exercise: dict[str, Any] = {
+            "title": title,
+            "exercise_type": exercise_type,
+            "equipment_category": equipment_category,
+            "muscle_group": muscle_group,
+        }
+        if other_muscles is not None:
+            exercise["other_muscles"] = other_muscles
+        payload = {"exercise": exercise}
+
+        logger.info("Hevy create_exercise_template payload: %s", payload)
+
+        async with httpx.AsyncClient(headers=self._headers) as client:
+            r = await client.post(f"{HEVY_BASE}/exercise_templates", json=payload)
+        # Map the endpoint-specific statuses before the generic _check, which
+        # would mis-label this 403 as a plan/permission error.
+        if r.status_code == 403:
+            raise HevyCustomExerciseLimitError(
+                f"Hevy custom-exercise limit reached: {r.text}"
+            )
+        if r.status_code == 400:
+            raise HevyBadRequestError(
+                f"Hevy rejected the exercise-template body: {r.text}"
+            )
+        return self._check(r).json()

@@ -29,6 +29,21 @@ _PAGE_SIZE = 100          # confirmed max pageSize (GET /v1/exercise_templates)
 _INTER_PAGE_DELAY = 0.2   # seconds — gentle on Hevy rate limits (prior art)
 _MAX_429_RETRIES = 5
 _BACKOFF_BASE = 1.0       # seconds; exponential per retry
+_CREATE_RESOLVE_ATTEMPTS = 3  # sync+resolve tries after a create (create-visibility latency)
+
+
+class HevyKeyMissingError(Exception):
+    """No stored Hevy integration key for the user — cannot create a template."""
+    pass
+
+
+class HevyCreateUnresolvedError(Exception):
+    """A custom template POST succeeded but the new id never surfaced via sync.
+
+    Raised after the bounded sync+resolve retry exhausts without the title
+    appearing in the user's custom subset — never return None silently.
+    """
+    pass
 
 
 def users_with_hevy_key(db: Session) -> list[tuple[int, str]]:
@@ -39,6 +54,13 @@ def users_with_hevy_key(db: Session) -> list[tuple[int, str]]:
     """
     rows = db.query(models.UserIntegration).filter_by(provider="hevy").all()
     return [(r.user_id, decrypt(r.api_key_encrypted)) for r in rows]
+
+
+def user_hevy_key(db: Session, user_id: int) -> str | None:
+    """Decrypted Hevy key for one user, or None. Same accessor/decrypt path as
+    `users_with_hevy_key`, scoped to a single user (the create-loop needs one)."""
+    row = db.query(models.UserIntegration).filter_by(provider="hevy", user_id=user_id).first()
+    return decrypt(row.api_key_encrypted) if row is not None else None
 
 
 async def _fetch_page_with_backoff(client: HevyClient, page: int) -> dict:
@@ -103,6 +125,25 @@ def resolve_exercise(db: Session, title: str, user_id: int) -> str | None:
         .where(Template.title == title)
         .where((Template.is_custom.is_(False)) | (Template.owner_user_id == user_id))
         .order_by(Template.is_custom.asc())  # default (False) sorts first -> default wins
+        .limit(1)
+    )
+    return db.scalars(stmt).first()
+
+
+def resolve_custom_exercise(db: Session, title: str, user_id: int) -> str | None:
+    """Resolve a title to the user's OWN custom id — custom subset only.
+
+    Unlike `resolve_exercise` (default-wins, #60), this restricts to
+    is_custom=True AND owner_user_id=user_id, so a same-titled global default can
+    never mask the user's freshly minted custom UUID. The create-loop resolves
+    here after sync; never via the bare-title default-wins path.
+    """
+    Template = models.HevyExerciseTemplate
+    stmt = (
+        select(Template.id)
+        .where(Template.title == title)
+        .where(Template.is_custom.is_(True))
+        .where(Template.owner_user_id == user_id)
         .limit(1)
     )
     return db.scalars(stmt).first()
@@ -178,6 +219,75 @@ async def sync_exercise_templates(db: Session) -> dict:
     }
     logger.info("Hevy template sync complete: %s", summary)
     return summary
+
+
+async def create_and_resolve(
+    db: Session,
+    user_id: int,
+    title: str,
+    exercise_type: str,
+    equipment_category: str,
+    muscle_group: str,
+    other_muscles: list[str] | None = None,
+) -> str:
+    """Create an app-originated custom exercise on Hevy and return its canonical id.
+
+    The canonical id is read by list-back (create -> sync -> resolve within the
+    user's custom subset), never trusted from the POST response body — the create
+    response carries an integer id, distinct from the canonical string UUID the
+    store keys on (#NEXT / resolves Q14).
+
+    Order is load-bearing:
+      1. Idempotency pre-check (`resolve_exercise`, default-wins): a same-titled
+         default (#60) or the user's own existing custom short-circuits — no create.
+      2. Decrypt the user's stored Hevy key.
+      3. POST the custom template.
+      4-5. Refresh the store (`sync_one_user`) and resolve within the custom
+         subset only (`resolve_custom_exercise`) — bounded retry over 4-5 to
+         absorb create-visibility latency (assumed eventual consistency).
+
+    Raises HevyKeyMissingError if the user has no key, HevyCreateUnresolvedError
+    if the new template never surfaces after the last retry, and surfaces the
+    connector's HevyCustomExerciseLimitError (403) / HevyBadRequestError (400).
+    """
+    # 1. Idempotency pre-check — default-wins path. Only mint when genuinely absent.
+    existing = resolve_exercise(db, title, user_id)
+    if existing is not None:
+        return existing
+
+    # 2. Decrypted key (reuse the shared accessor/decrypt path).
+    api_key = user_hevy_key(db, user_id)
+    if api_key is None:
+        raise HevyKeyMissingError(f"No Hevy key for user {user_id}; cannot create {title!r}")
+
+    # 3. Create once (outside the retry — the POST is not idempotent).
+    client = HevyClient(api_key)
+    await client.create_exercise_template(
+        title=title,
+        exercise_type=exercise_type,
+        equipment_category=equipment_category,
+        muscle_group=muscle_group,
+        other_muscles=other_muscles,
+    )
+
+    # 4-5. Sync + resolve within the custom subset, bounded retry for visibility latency.
+    for attempt in range(_CREATE_RESOLVE_ATTEMPTS):
+        await sync_one_user(db, user_id, api_key)
+        resolved = resolve_custom_exercise(db, title, user_id)
+        if resolved is not None:
+            return resolved
+        if attempt < _CREATE_RESOLVE_ATTEMPTS - 1:
+            delay = _BACKOFF_BASE * (2 ** attempt)
+            logger.warning(
+                "Created %r for user %d but unresolved after sync — retrying in %.1fs (attempt %d/%d)",
+                title, user_id, delay, attempt + 1, _CREATE_RESOLVE_ATTEMPTS,
+            )
+            await asyncio.sleep(delay)
+
+    raise HevyCreateUnresolvedError(
+        f"Created {title!r} for user {user_id} but it never surfaced in the custom "
+        f"subset after {_CREATE_RESOLVE_ATTEMPTS} sync attempts"
+    )
 
 
 if __name__ == "__main__":
