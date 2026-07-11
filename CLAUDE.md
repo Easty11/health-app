@@ -173,9 +173,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Audit-remediation capture** — chat→Code file-transport convention added to `CLAUDE.md` Conventions; three chat-stranded forks captured as OPEN_QUESTIONS Q14–Q16; ROADMAP NEXT gains Hevy resolver activation. No decision. See `closeout.md`.
 - **#64** — Q4 resolved in code: canonical HC sleep-date = local (AEST) wake-date (`endTime`), aligning to the scraper; wake-date-only attribution + backfill migration. See DECISIONS_LOG #64.
 - **#63** — Interpretation Output Contract v0.4 (group-primary, two-gate safety); two reference assets (`lever_dictionary.json` + `marker_groups.json`) land under `backend/reference/` as `ai_draft`, bound to `marker_canonical.json` v0.2. See DECISIONS_LOG #63.
-- **#62** — `SCHEMA.md` promoted to repo-canonical (root, auto-mirrored via Projects sync); SCHEMA ⇄ migrations lockstep convention added. PLATFORM.md skipped. See DECISIONS_LOG #62.
 
 ---
 
