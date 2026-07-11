@@ -1,73 +1,90 @@
-# Close-out — 2026-07-11
+# Close-out — Hevy create-loop (`create_and_resolve`)
+
+_Session date: 2026-07-11 · Branch at close: `master` (feature branch merged + deleted)_
+
+---
 
 ## 1. Real commits this session
 
-Session-open ref: `0395184` (`chore: session close-out`, the prior 07-09 handoff).
-Branch `gov/audit-remediation-capture` cut off master, four gov commits, ff-merged to
-master and pushed, branch deleted. `git log --oneline 0395184..HEAD` (master):
+Session-open ref: `b219aa4` (`chore: session close-out`). `git log --oneline b219aa4..HEAD`:
 
 ```
-1eb5c39 gov: claim OPEN_QUESTIONS Q14-Q16 (was QNEXT) at merge
-2b71264 gov: ROADMAP NEXT — Hevy resolver activation (forward-work capture)
-99a110c gov: OPEN_QUESTIONS — 3 QNEXT forks (Hevy id contract, prod-drift, get_exercise_history path)
-667d9ea gov: CLAUDE.md — chat→Code file-transport convention (audit-capture)
+1dcce25 gov: BRANCHES.md — feat/hevy-create-loop LANDED at e13e3a2
+e13e3a2 gov: claim DECISIONS_LOG #65 at merge (was #NEXT); Q14 -> resolved #65
+a029a0b gov: DECISIONS_LOG #NEXT (Hevy create-loop, list-back-always); Q14 resolved
+9d5487e feat(hevy): create_and_resolve — app-originated customs via list-back
+d5aadc8 refactor(hevy): extract sync_one_user from sync_exercise_templates
 ```
 
-Plus this close-out commit (`chore: session close-out`), which also carries the
-CLAUDE.md "Recent landings" refresh.
+(A sixth commit, `chore: session close-out`, lands this file.)
+
+`feat/hevy-create-loop` was ff-merged to `master` at `e13e3a2` and pushed
+(`b219aa4..1dcce25 master -> master`); local branch deleted. The feature branch was
+never pushed to the remote (master carried it forward by fast-forward), so there is no
+remote ref to delete.
+
+**Concern-split, as briefed:**
+- `d5aadc8` — S2 pure refactor: `sync_one_user(db, user_id, api_key)` lifted out of
+  `sync_exercise_templates`' per-user loop. Behaviour-preserving; `test_hevy_templates.py`
+  green with zero test changes (4 passed).
+- `9d5487e` — S1 connector method + S3 `create_and_resolve` + tests
+  (`test_hevy_create_loop.py`, 9 new). Full backend suite 38/38 green.
+- `a029a0b` / `e13e3a2` — governance (DECISIONS_LOG #65, Q14 flip, BRANCHES ledger),
+  number claimed at ff-merge.
+- `1dcce25` — BRANCHES.md marked LANDED.
 
 ## 2. Pending-queue reconciliation
 
-No formal `;cc` queue was pasted; the session BRIEF was the payload — five chat-stranded
-items to capture, plus a closeout-leak diagnosis. All five landed:
+No chat `;cc` pending-commit queue was carried into this session — the input was a
+build brief (ANCHOR/OBJECTIVE/STEPS/GATES/LOG/GUARD), not a `PENDING` queue. Reconciling
+against the brief's own deliverables instead:
 
-| Item | Landed in | Status |
-|------|-----------|--------|
-| Chat→Code file-transport convention → CLAUDE.md | `667d9ea` | ✓ landed, on origin/master |
-| Fork: Hevy create-loop id contract → Q14 | `99a110c` + claim `1eb5c39` | ✓ landed |
-| Fork: `3497ab483935` prod-drift reconciliation → Q15 | `99a110c` + claim `1eb5c39` | ✓ landed |
-| Fork: `hevy.py` `get_exercise_history` path → Q16 | `99a110c` + claim `1eb5c39` | ✓ landed |
-| Forward-work: Hevy resolver activation → ROADMAP NEXT | `2b71264` | ✓ landed |
+| Brief item | Landed? |
+|------------|---------|
+| S1 `create_exercise_template` connector (typed 403/400) | ✅ `9d5487e` |
+| S1 VERIFY — request-body shape cited from live spec | ✅ **wrapper** `{"exercise": {...}}`, not flat — corrected before landing; cited in `9d5487e` message + DECISIONS_LOG #65 How-you-know |
+| S2 `sync_one_user` extraction (own refactor commit) | ✅ `d5aadc8`, 4/4 green, zero test changes |
+| S3 `create_and_resolve` (list-back, custom-subset, bounded retry) | ✅ `9d5487e` |
+| S3 tests (a)–(e) + extras | ✅ 9 tests; full suite 38/38 |
+| DECISIONS_LOG `#NEXT` entry, integer claimed at merge | ✅ claimed **#65** (`e13e3a2`) |
+| Q14 → `resolved → #65` (same governance as LOG) | ✅ `a029a0b`/`e13e3a2` |
+| BRANCHES.md carries branch until ff-merge+delete | ✅ `1dcce25` (LANDED) |
+| Out-of-scope: resolver-activation wiring | ✅ untouched — `create_and_resolve` calls `resolve_exercise` as a library function only |
 
-**Step 1 diagnosis (the closeout leak).** Cause is **none of (a) missing-closeout /
-(b) unpushed-commit / (c) overwrite-revert**. `closeout.md` was NOT actually lagging:
-the 07-09 file was dated 2026-07-09, committed at the then-HEAD `0395184`, and present
-identical on `origin/master` — it correctly reflected the last Code session (#64/Q4).
-The brief's premise was inverted: #62 (SCHEMA promotion) landed 2026-07-08
-(`2bf5653`/`79169dd`), which is *before* the 07-09 closeout, not after; every recent
-session boundary carries a `chore: session close-out` commit. The real leak is at the
-**chat→Code transport boundary** — the five items were decided in chat and never carried
-into any Code session's pending-commit queue, so no closeout ever had them to reconcile.
-The durable fix is therefore the transport convention (`667d9ea`), not a change to the
-closeout mechanism, which is sound and already pushes correctly. This close-out is itself
-pushed to `origin/master` to close the loop the brief opened.
+Nothing provisional: every briefed deliverable is in a landed commit on `master`.
 
 ## 3. Cold-resume handoff
 
-**Repo:** `health-app` — FastAPI backend + React/Vite frontend, Railway. Part of a
-three-module health-intelligence platform (Fitness · Medical Protocol · Decision Support)
-on a shared event timeline. Companion app `health-connect-app` is a separate repo.
+**What landed:** DECISIONS_LOG **#65** — the Hevy create-loop. `create_and_resolve`
+(backend, `hevy_templates.py`) mints an app-originated custom exercise on Hevy and returns
+its **canonical** id by list-back (create → `sync_one_user` → `resolve_custom_exercise`
+within `is_custom=True AND owner_user_id`), never trusting the POST body. The live spec
+confirmed POST returns `{"id": <integer>}` while GET returns a string UUID — so the re-pull
+is load-bearing, and this **resolves Q14**. Idempotency pre-check short-circuits an existing
+default (#60 default-wins) or the user's own custom; 403/400 map to typed connector errors;
+created-but-unresolved raises `HevyCreateUnresolvedError` (never silent None). No schema
+change; SCHEMA.md untouched; no migration.
 
-**Branch:** `master` (clean; no in-flight branches — `BRANCHES.md` holds only the LANDED
-`feat/hevy-exercise-template-resolver`, awaiting Luke's Railway post-apply stamp).
-
-**DECISIONS_LOG max:** #64. **OPEN_QUESTIONS max:** Q16.
-
-**Current sprint (ROADMAP NOW):**
-- Fix Health Connect permissions (companion app errors on record types 38/35/11/37).
-- Samsung Health package-name correction (`com.sec.android.app.shealth`; verify via Railway Postgres).
-- Morning check-in screen (Hooper Index; primary daily touchpoint; mutable + audit trail).
-- Persistent conversation history (clears on refresh; needs backend store + FE state).
-- UI bugs: session cards not clickable; dual-panel scroll layout.
-- `mcp_server.get_hevy_workouts` unimported `Session` type — one-line import fix.
+**Current sprint (ROADMAP NOW):** HC permissions fix (record types 38/35/11/37); Samsung
+Health package-name correction (`com.sec.android.app.shealth`, verify via Railway Postgres);
+morning check-in screen (Hooper Index); persistent conversation history; UI bugs (session
+cards not clickable, dual-panel scroll); `mcp_server.get_hevy_workouts` unimported `Session`
+one-line fix.
 
 **Open questions by status:**
-- **open:** Q3 (HR cadence during sleep, `hrMedianGapSec=0`), Q5 (dual-field acceptance collapse), Q6 (strength volume-load into daily TL — resolves→#28 on Postgres verify), Q7 (injury ledger missing R proximal semimembranosus tear), Q9 (consolidate legacy `user_knowledge`), Q13 (HRV scraper-only single-point-of-failure), **Q14 (Hevy create-loop id contract — How-you-know required before build), Q15 (`3497ab483935` prod-drift: exercise_sessions drop / samsung_hrv_readings.context / api_key_encrypted VARCHAR→TEXT), Q16 (`hevy.py` get_exercise_history path vs community docs)**.
-- **verifying:** Q4 (HC wake-date attribution — resolved in code at #64; G4 same-date match pending live Railway re-sync, unreachable this session).
-- **parked:** Q10 (AccessLink per-second ingest — revisit when Metabolic-load channel wired).
-- **resolved:** Q1→#20, Q2 (HCA `36df9a2`), Q8→#43, Q11→#52, Q12→#53.
+- `resolved → #65`: **Q14** (Hevy create-loop id contract — POST returns int, list-back
+  adopted).
+- `open`: **Q15** (`3497ab483935` prod-drift reconciliation — resolve against Railway
+  Postgres, not local); **Q16** (`hevy.py` `get_exercise_history` path).
+- `verifying`: **Q4** (HC sleep⇄scraper same-date — deferred to live re-sync / G4 on Railway,
+  per #64).
 
-**Next action (single clearest):** Run the Q4 **G4** verification against live Railway
-Postgres — confirm `health_connect_syncs[date]` sleep stages match `samsung_hrv_readings[date]`
-**same-date** (not date+1) after an HCA re-sync, then move Q4 `verifying → resolved → #64`.
-This is the one open item blocked only on machine access that was already reachable in code.
+**Single clearest next action:** **Hevy resolver activation** (ROADMAP NEXT) — wire
+`context_builder` to emit exercise titles so the landed #60/#61 resolver (and now the #65
+create-loop) actually fire in the provisioning path; requires the byte-parity guard
+re-baseline and a title-match policy decision (exact-canonical vs fuzzy). This ships the
+currently-dormant capability that #65 depends on for real use.
+
+**Governance stores changed this session:** `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`
+(+ `BRANCHES.md` ledger, `CLAUDE.md` Recent-landings). Pre-merge copy-back = `cat`/open of
+each file on disk; chat never regenerates from memory.
