@@ -173,9 +173,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#69** — Hevy exercise-history path fix: `get_exercise_history` now calls `/v1/exercise_history/{id}` (template id unchanged) instead of the since-ship-404ing `/exercise_templates/{id}/history`; method was unwired (zero call sites) so no downstream shift. Resolves Q16. See DECISIONS_LOG #69.
 - **#68** — Hevy summary parity: `get_hevy_workouts` reads the set-type field as `type` (killing the `set_type` no-op), renders warmups labelled + per-set RPE + multi-line notes + description + duration/distance sets; set formatting extracted to shared `backend/hevy_format.py` consumed by both summarizers. See DECISIONS_LOG #68.
 - **#66 / #67** — Connector failures decouple from session auth: downstream 401→424, read handlers route Hevy HTTP errors → 502, global 500 CORS guard; "See all" ships genuine pagination via `/integrations/hevy/workouts/all`. See DECISIONS_LOG #66–#67.
-- **#65** — Hevy create-loop: `create_and_resolve` mints an app-originated custom exercise and reads its canonical id by list-back (create→sync→resolve within the custom subset), never trusting the POST body; resolves Q14. See DECISIONS_LOG #65.
 
 ---
 
