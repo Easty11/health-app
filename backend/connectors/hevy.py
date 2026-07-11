@@ -98,8 +98,13 @@ class HevyClient:
             return self._check(r).json()
 
     async def get_exercise_history(self, template_id: str) -> dict[str, Any]:
+        # Canonical Hevy path is /v1/exercise_history/{id}, where {id} is the
+        # exercise TEMPLATE id (not a separate history id). The old
+        # /exercise_templates/{id}/history shape 404'd since ship. Verified against
+        # official docs + 3 independent current clients (hevy-api-wrapper 1.0.0,
+        # chrisdoc/hevy-mcp, OpenClaw enumeration). See DECISIONS_LOG Q16.
         async with httpx.AsyncClient(headers=self._headers) as client:
-            r = await client.get(f"{HEVY_BASE}/exercise_templates/{template_id}/history")
+            r = await client.get(f"{HEVY_BASE}/exercise_history/{template_id}")
             return self._check(r).json()
 
     async def create_routine(

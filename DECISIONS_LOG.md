@@ -1526,6 +1526,33 @@ this entry closes).
 
 ---
 
+### 69. Q16 resolved — Hevy exercise-history path is `/v1/exercise_history/{id}`, not `/exercise_templates/{id}/history`
+
+**Status:** Landed on `fix/hevy-exercise-history-path`. `HevyClient.get_exercise_history`
+(`backend/connectors/hevy.py`) now calls `GET /v1/exercise_history/{template_id}`. The `{id}`
+segment is still the exercise **template** id — no caller signature change. The prior shape
+`/exercise_templates/{id}/history` 404'd since ship. Resolves Q16.
+
+**Rationale:** Canonical Hevy path. The path is the only change; the request stays a plain
+authenticated GET keyed by template id, so the fix is a pure endpoint correction with no
+payload or signature churn. The `/v1` prefix comes from the `HEVY_BASE` join
+(`https://api.hevyapp.com/v1` + `/exercise_history/{id}`) — present once, not doubled, not dropped.
+
+**How you know:** Verified chat-side against official Hevy docs plus **3 independent current
+clients** that all use `/exercise_history/{id}`: hevy-api-wrapper 1.0.0, chrisdoc/hevy-mcp, and
+an OpenClaw endpoint enumeration. **Pre-merge caller audit:** `git grep '\.get_exercise_history('`
+returned **zero call sites** — the method is currently unwired, so correcting a silent-404 into
+real history introduces no downstream silent-behaviour-shift (the risk the audit existed to catch).
+Full backend suite 65 green post-fix (no test exercises this path — none exists; doc-evidence is
+the basis). Live `exercise_history` corroboration was blocked this session (local Hevy MCP hung);
+flagged as optional belt-and-braces later, not gating. Pre: DECISIONS max 68.
+
+**Do not revisit unless:** Hevy relocates the exercise-history resource again, or a live pull
+against `/v1/exercise_history/{id}` returns non-200 for a valid template id (would reopen Q16 with
+an empirical negative, superseding the doc-evidence basis).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

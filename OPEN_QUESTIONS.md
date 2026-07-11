@@ -245,7 +245,9 @@ The connector calls `/exercise_templates/{id}/history`; community docs show
 `/exercise_history/{id}`. Verify against the live API and fix the connector path if it is
 wrong.
 
-**Status:** open
+**Status:** resolved → #69. Path corrected to `/v1/exercise_history/{id}` (template id unchanged)
+on `fix/hevy-exercise-history-path`; basis is official docs + 3 independent current clients.
+Live corroboration remains optional belt-and-braces (local Hevy MCP hung this session).
 
 ---
 
