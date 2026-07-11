@@ -55,6 +55,27 @@ class HevyClient:
             )
             return self._check(r).json()
 
+    async def get_all_workouts(self, page_size: int = 10) -> dict[str, Any]:
+        """Loop every /workouts page and concatenate — genuine "all workouts".
+
+        Hevy caps /workouts pageSize at 10, so a single call can never return the
+        full history; this walks page 1..page_count. Terminates on page_count and,
+        defensively, on an empty batch (so a missing/short page_count can't hang it).
+        Returns the same envelope shape as get_workouts: {"workouts": [...], "page_count": N}.
+        """
+        all_workouts: list[dict[str, Any]] = []
+        page = 1
+        page_count = 1
+        while True:
+            data = await self.get_workouts(page=page, page_size=page_size)
+            batch = data.get("workouts", [])
+            all_workouts.extend(batch)
+            page_count = data.get("page_count", page)
+            if page >= page_count or not batch:
+                break
+            page += 1
+        return {"workouts": all_workouts, "page_count": page_count}
+
     async def get_routines(self, page: int = 1, page_size: int = 10) -> dict[str, Any]:
         async with httpx.AsyncClient(headers=self._headers) as client:
             r = await client.get(

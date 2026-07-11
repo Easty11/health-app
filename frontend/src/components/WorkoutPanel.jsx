@@ -432,7 +432,9 @@ export default function WorkoutPanel({ onFeedback }) {
 
   async function openHevyHistory() {
     if (hevyWorkouts.length === 0) {
-      const res = await api.get('/integrations/hevy/workouts?page=1&page_size=20')
+      // "See all" = genuinely all workouts. The backend loops every Hevy /workouts
+      // page (pageSize caps at 10) and returns the full history in one response.
+      const res = await api.get('/integrations/hevy/workouts/all')
       setHevyWorkouts(res.data.workouts || [])
     }
     setView('hevy-history')

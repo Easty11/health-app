@@ -120,7 +120,9 @@ def _hevy_client(user: models.User, db: Session) -> HevyClient:
 
 def _hevy_error_to_http(exc: Exception) -> HTTPException:
     if isinstance(exc, HevyAuthError):
-        return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+        # Connector-auth failure (revoked/invalid Hevy key) is NOT a session-auth
+        # failure — return 424 so the frontend interceptor never logs the user out.
+        return HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(exc))
     if isinstance(exc, HevyForbiddenError):
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     if isinstance(exc, httpx.HTTPStatusError):
@@ -181,7 +183,7 @@ async def hevy_workout_count(
     client = _hevy_client(current_user, db)
     try:
         return await client.get_workout_count()
-    except (HevyAuthError, HevyForbiddenError) as exc:
+    except (HevyAuthError, HevyForbiddenError, httpx.HTTPStatusError) as exc:
         raise _hevy_error_to_http(exc)
 
 
@@ -195,7 +197,25 @@ async def hevy_workouts(
     client = _hevy_client(current_user, db)
     try:
         return await client.get_workouts(page=page, page_size=page_size)
-    except (HevyAuthError, HevyForbiddenError) as exc:
+    except (HevyAuthError, HevyForbiddenError, httpx.HTTPStatusError) as exc:
+        raise _hevy_error_to_http(exc)
+
+
+@router.get("/hevy/workouts/all")
+async def hevy_workouts_all(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every workout, aggregated across Hevy's paginated /workouts endpoint.
+
+    Backs the "See all" control — Hevy caps a single /workouts page at 10, so true
+    "all" requires this server-side page loop. Errors route through the same choke
+    point as the other read handlers (connector-auth -> 424, Hevy HTTP -> 502).
+    """
+    client = _hevy_client(current_user, db)
+    try:
+        return await client.get_all_workouts()
+    except (HevyAuthError, HevyForbiddenError, httpx.HTTPStatusError) as exc:
         raise _hevy_error_to_http(exc)
 
 
@@ -209,7 +229,7 @@ async def hevy_get_routines(
     client = _hevy_client(current_user, db)
     try:
         return await client.get_routines(page=page, page_size=page_size)
-    except (HevyAuthError, HevyForbiddenError) as exc:
+    except (HevyAuthError, HevyForbiddenError, httpx.HTTPStatusError) as exc:
         raise _hevy_error_to_http(exc)
 
 

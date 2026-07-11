@@ -1415,6 +1415,80 @@ away (the deferred Q14 micro-opt).
 
 ---
 
+### 66. Connector failures decouple from session auth — downstream 401→424, read handlers never leak raw exceptions
+
+**Decision:** A connector (Hevy/Polar) failure must never surface as a session-auth 401 or
+an unhandled 500. `_hevy_error_to_http` remaps `HevyAuthError` 401→424;
+`hevy_workout_count`/`hevy_workouts`/`hevy_workouts_all`/`hevy_get_routines` now catch
+`httpx.HTTPStatusError` → helper (502); `polar.py` token-refresh failure 401→424. A global
+`Exception` handler (`cors_errors.add_cors_error_handler`) guarantees any residual 500 still
+carries CORS headers. Frontend `api.js` interceptor unchanged — correct by construction once
+no connector path emits 401. Step 4 global 500 CORS guard: **LANDED** on this branch (verified
+not fiddly).
+
+**Rationale:** Two symptoms traced to one leak — (a) a revoked Hevy key returned 401 →
+`api.js:16` "any 401 → clear token → /login" logged the user out; (b) `page_size=20` exceeded
+Hevy's `/workouts` pageSize ceiling → Hevy 400 → `_check` raised `httpx.HTTPStatusError` →
+uncaught in the read handler → FastAPI 500 → response bypassed CORSMiddleware → browser reported
+"No Access-Control-Allow-Origin". Both are the same leak: a connector failure escaping as a
+session/transport error. Fixing at the backend choke point makes the untouched frontend
+interceptor correct by construction. The global handler closes the residual-500 class for any
+future endpoint, since Starlette's `ServerErrorMiddleware` sits outside `CORSMiddleware`.
+
+**Status:** Landed on `feat/connector-error-policy`. No schema change; SCHEMA.md untouched.
+
+**How you know:** Backend tests (faked client, no live API — `tests/test_connector_error_policy.py`)
+assert 424 on `HevyAuthError` and 502 (not an unhandled 500) on `httpx.HTTPStatusError` across
+all read handlers including the new `/workouts/all` aggregator; 403 (`HevyForbiddenError`)
+unchanged; Polar token-refresh failure returns 424; and a forced unhandled exception returns 500
+*carrying* `Access-Control-Allow-Origin` for an allowed origin (none echoed for a disallowed
+origin) — proven by unit test and empirically against the real `main.app` via a temporary
+raising route inserted ahead of the `/` mount. Session-origin 401s confirmed by grep to live only
+in `auth.py`/`routers/auth.py` (`get_current_user`/login) — `connectors/hevy.py:33` is the raw
+401→`HevyAuthError` conversion, not an HTTP status — so the remap cannot weaken session auth.
+Full backend suite 56 green. Pre: DECISIONS max 65.
+
+**Do not revisit unless:** a connector failure legitimately needs to force session re-auth (then
+424 is wrong for that path specifically), or Hevy/Polar change their error-status semantics.
+
+---
+
+### 67. "See all" = genuinely all workouts via a server-side page-loop aggregator
+
+**Decision:** "See all" in Training Data means the full workout history, not one page. New
+endpoint `GET /integrations/hevy/workouts/all` (`HevyClient.get_all_workouts`) walks every Hevy
+`/workouts` page and concatenates; frontend `openHevyHistory` (`WorkoutPanel.jsx`) calls it
+instead of the old single-page request. The briefed top-10 stopgap (`page_size` 20→10) was NOT
+taken — the product call (Luke) was true pagination.
+
+**Rationale:** Hevy caps `/workouts` `pageSize` at 10, so the old `page_size=20` request exceeded
+the ceiling and produced the fake-CORS 500 of #66; a single page can never be "all". Genuine "all"
+requires a server-side loop. The aggregator terminates on `page_count` and, defensively, on an
+empty batch, so a missing/short `page_count` cannot hang it.
+
+**Status:** Landed on `feat/connector-error-policy` (same branch as #66). Endpoint registered;
+frontend rewired. Open issue #13 updated — the control fires and now returns the full history; the
+"dead handler" description is superseded (the handler was wired; the live bug was the pageSize
+ceiling masquerading as CORS).
+
+**How you know:** Hevy `/workouts` pageSize ceiling = 10, confirmed authoritatively from the
+connected Hevy MCP tool schema (`get-workouts` constrains `pageSize` `maximum: 10`), so
+`page_size=20` is over the ceiling. Aggregator unit tests (faked, no live API —
+`tests/test_hevy_workouts_aggregator.py`): concatenates a 3-page catalogue in order; a single page
+makes exactly one call; an empty batch terminates the loop even when `page_count` over-promises;
+no-workouts returns an empty list. The `/workouts/all` handler's error routing (424/502) is covered
+with the other read handlers. Frontend `npm run build` green; route registration confirmed. NOT
+verified: live end-to-end "See all" against a real Hevy account — the connected Hevy key is
+invalid/expired (the exact revoked-key case #66 addresses), so the raw live 400 body could not be
+captured this session; the ceiling proof rests on the tool schema, not a live 400. Full backend
+suite 56 green. Pre: DECISIONS max 65.
+
+**Do not revisit unless:** Hevy raises the `/workouts` pageSize ceiling (single-call path becomes
+viable) or moves to cursor pagination (replace the page loop), or full-history fetch grows too
+heavy at scale (add server-side caching or lazy UI paging).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
@@ -1431,7 +1505,7 @@ away (the deferred Q14 micro-opt).
 | 7 | Dual-panel scroll layout issue | Frontend | Open |
 | 8 | Samsung Health package name filter incorrect | Companion app diagnostic | Use `com.sec.android.app.shealth` not `com.samsung.health` |
 | 9 | Scraper canary mechanism not implemented | health-connect-app | Required before scraper is considered production-hardened |
-| 13 | "Training Data → See all" control is dead (no destination/handler) | Frontend | Open — inspect the element first (div/span ⇒ missing handler; empty Link/anchor ⇒ no destination), then wire it. |
+| 13 | "Training Data → See all" | Frontend + `backend/routers/integrations.py` | **Fixed (#67).** The control was never a dead handler — `openHevyHistory` was wired; the live bug was `page_size=20` over Hevy's `/workouts` pageSize ceiling (10) → Hevy 400 → uncaught → 500 that stripped CORS (fake "No Access-Control-Allow-Origin"). Now fires and returns the full history via `/integrations/hevy/workouts/all` (server-side page loop). |
 | 14 | `_capture_record_sources` upsert is non-atomic (check-then-insert) | `backend/routers/health_connect.py` | Tech-debt. Reads existing keys into memory, then inserts — two concurrent `/health-connect/sync` calls for one user could both miss a key and double-insert, hitting `uq_hc_record_source` on commit. Harmless at single-user/family scale (syncs are serial). Replace with an atomic upsert (Postgres `ON CONFLICT DO UPDATE`) **before multi-tenant**. (Finding 5, `feat/sync-writer-identity` review.) |
 
 ---

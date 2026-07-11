@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from cors_errors import add_cors_error_handler
 from database import Base, engine
 from routers import auth as auth_router
 from routers import integrations as integrations_router
@@ -46,13 +47,18 @@ origins = [
     os.getenv("FRONTEND_URL", ""),
 ]
 
+_allowed_origins = [o for o in origins if o]  # filter empty string when unset
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o for o in origins if o],  # filter empty string when unset
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global 500 guard that carries CORS headers (see cors_errors / #66).
+add_cors_error_handler(app, _allowed_origins)
 
 app.include_router(auth_router.router)
 app.include_router(password_reset_router.router)

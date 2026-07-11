@@ -101,7 +101,9 @@ def _valid_client(user_id: int, db: Session) -> PolarV4Client:
             _store_tokens(user_id, new_tokens, db)
             tokens = _load_tokens(user_id, db)
         except Exception as exc:
-            raise HTTPException(status_code=401, detail=f"Polar token refresh failed: {exc}")
+            # Token-refresh failure is a connector failure, not session death — 424,
+            # not 401, so the frontend interceptor never logs the user out.
+            raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=f"Polar token refresh failed: {exc}")
 
     return PolarV4Client(tokens["access_token"])
 
