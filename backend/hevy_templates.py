@@ -108,6 +108,48 @@ def resolve_exercise(db: Session, title: str, user_id: int) -> str | None:
     return db.scalars(stmt).first()
 
 
+async def sync_one_user(db: Session, user_id: int, api_key: str) -> dict:
+    """Sync one user's Hevy exercise templates into the local store.
+
+    Pages the full catalogue (defaults + this user's customs) with 429 backoff,
+    upserting each row. `is_custom` rows are owned by `user_id`; defaults carry
+    NULL owner. Returns per-user counts. Commits per page (unchanged behaviour).
+    """
+    client = HevyClient(api_key)
+    rows_processed = 0
+    defaults_seen = 0
+    customs_seen = 0
+    page = 1
+    while True:
+        resp = await _fetch_page_with_backoff(client, page)
+        rows = resp.get("exercise_templates", [])
+        if not rows:
+            break
+        now = datetime.now(timezone.utc)
+        for t in rows:
+            is_custom = bool(t.get("is_custom"))
+            owner = user_id if is_custom else None
+            _upsert_template(db, t, owner, now)
+            rows_processed += 1
+            if is_custom:
+                customs_seen += 1
+            else:
+                defaults_seen += 1
+        db.commit()
+
+        page_count = resp.get("page_count")
+        if page_count is not None and page >= page_count:
+            break
+        page += 1
+        await asyncio.sleep(_INTER_PAGE_DELAY)
+
+    return {
+        "rows_processed": rows_processed,
+        "defaults_seen": defaults_seen,
+        "customs_seen": customs_seen,
+    }
+
+
 async def sync_exercise_templates(db: Session) -> dict:
     """Sync every keyed user's Hevy exercise templates into the local store.
 
@@ -120,30 +162,10 @@ async def sync_exercise_templates(db: Session) -> dict:
     customs_seen = 0
 
     for user_id, api_key in users:
-        client = HevyClient(api_key)
-        page = 1
-        while True:
-            resp = await _fetch_page_with_backoff(client, page)
-            rows = resp.get("exercise_templates", [])
-            if not rows:
-                break
-            now = datetime.now(timezone.utc)
-            for t in rows:
-                is_custom = bool(t.get("is_custom"))
-                owner = user_id if is_custom else None
-                _upsert_template(db, t, owner, now)
-                rows_processed += 1
-                if is_custom:
-                    customs_seen += 1
-                else:
-                    defaults_seen += 1
-            db.commit()
-
-            page_count = resp.get("page_count")
-            if page_count is not None and page >= page_count:
-                break
-            page += 1
-            await asyncio.sleep(_INTER_PAGE_DELAY)
+        counts = await sync_one_user(db, user_id, api_key)
+        rows_processed += counts["rows_processed"]
+        defaults_seen += counts["defaults_seen"]
+        customs_seen += counts["customs_seen"]
 
     collisions = _collision_report(db)
     summary = {
