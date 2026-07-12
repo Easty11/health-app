@@ -121,6 +121,7 @@ def get_recovery_metrics(days: int = 7) -> str:
     for r in rows:
         date = str(r["captured_at"])[:10]
         hrv = f"{r['hrv_ms']:.0f} ms" if r["hrv_ms"] is not None else "—"
+        rhr = f"{r['sleep_hr_bpm']:.0f} bpm" if r["sleep_hr_bpm"] is not None else "—"
         spo2 = f"{r['spo2_average_pct']:.1f}%" if r["spo2_average_pct"] is not None else "—"
         rr = f"{r['respiratory_rate']:.1f} br/min" if r["respiratory_rate"] is not None else "—"
         eff = f"{r['sleep_efficiency_pct']:.0f}%" if r["sleep_efficiency_pct"] is not None else "—"
@@ -130,7 +131,7 @@ def get_recovery_metrics(days: int = 7) -> str:
         light = f"{r['light_minutes']:.0f}" if r.get("light_minutes") is not None else "—"
         awake = f"{r['awake_minutes']:.0f}" if r.get("awake_minutes") is not None else "—"
         lines.append(
-            f"{date}: HRV={hrv} SpO2={spo2} RR={rr} Eff={eff} "
+            f"{date}: HRV={hrv} RHR={rhr} SpO2={spo2} RR={rr} Eff={eff} "
             f"TST={tst} Deep={deep}m REM={rem}m Light={light}m Awake={awake}m"
         )
 
