@@ -1,64 +1,74 @@
-# Close-out — 2026-07-12 — Hevy exercise-history path (#69)
+# Close-out — HRV & Sleep Data Integrity brief
 
 ## Real commits this session
 
-Session-open master: `d6fbf5d` (chore: session close-out).
+Session-open ref: `4bd645b` (prior `chore: session close-out`).
 
-| Hash | Message |
-|------|---------|
-| `2fc21e2` | fix(hevy): exercise_history path -> /v1/exercise_history/{id} (#69) |
+```
+e116a88 chore(branches): record fix/hrv-sleep-integrity landed (#70,#71) + feat/recovery-metrics-rhr parked (Task 2)
+dccca41 fix(biometrics): ingest bounds guard + deep-sleep excluded from daily readiness
+```
 
-`2fc21e2` is master's current tip (ff-merged from `fix/hevy-exercise-history-path`,
-now deleted). A `chore: session close-out` commit follows this file, carrying
-`BRANCHES.md` + `CLAUDE.md` + `closeout.md`.
+Plus this close-out commit (`chore: session close-out`).
+
+Held on branch `feat/recovery-metrics-rhr` (local-only, not on master):
+```
+a4e1887 feat(recovery): expose RHR as a series in get_recovery_metrics (Task 2, held)
+```
+
+Landed to `master` and pushed (`origin/master` @ `e116a88`):
+- **DECISIONS_LOG #70** — Task 3: `samsung_hrv` ingest bounds guard. `model_validator` over a
+  `_BOUNDS` table (whole numeric schema); out-of-range values nulled-and-logged, not clamped;
+  per-field so one bad value never drops the night. Trigger: `2026-06-28 Eff=119%`.
+- **DECISIONS_LOG #71** — Task 4: deep-sleep excluded from daily readiness. `context_builder`
+  both sleep sections now report combined `Deep+Light` (robust; the deep/light confusion is
+  internal to the pair) instead of standalone deep. Deep alone stays a long-run trend series in
+  `get_recovery_metrics`, never a daily term.
+- Backend suite 74 green (+7 bounds `test_samsung_hrv_bounds.py`, +2 readiness `test_readiness_sleep_stages.py`).
 
 ## Pending-queue reconciliation
 
-No chat `;cc` pending-commit queue was carried into this session — the work came in
-as a direct Code brief (fix the Hevy exercise-history path, resolve Q16). Every brief
-item landed:
+No chat `;cc` pending-commit queue was carried into this session — the work came from the pasted
+**HRV & Sleep Data Integrity** work brief, not a chat close-out. Brief-task disposition:
 
-- **FIX** — `get_exercise_history` path swapped `/exercise_templates/{id}/history` →
-  `/v1/exercise_history/{id}`, template id unchanged, no caller signature change.
-  Landed in `2fc21e2`.
-- **PRE-MERGE caller audit** — `git grep '\.get_exercise_history('` returned **zero
-  call sites**. The method is currently unwired, so correcting a silent-404 into real
-  history carries no downstream silent-behaviour-shift. Recorded in DECISIONS_LOG #69.
-- **VERIFY** — full backend suite **65 passed** (`.venv/Scripts/python.exe -m pytest -q`,
-  one pre-existing Starlette deprecation warning, unrelated). No test exercises this
-  path — none exists; doc-evidence is the basis. Live `exercise_history` corroboration
-  was blocked (local Hevy MCP hung) and is flagged optional belt-and-braces, not gating.
-- **LAND** — ff-merge → `BRANCHES.md` LANDED row (`2fc21e2`) → DECISIONS_LOG #69
-  (Q16-resolved, number claimed at ff-merge; origin max was #68) → OPEN_QUESTIONS Q16
-  `resolved → #69` → branch deleted. All landed.
-
-Nothing provisional. `/v1` prefix confirmed single (from the `HEVY_BASE` join), not
-doubled, not dropped.
+- **Task 1 (node dump)** — NOT actionable here. `HRVAccessibilityService` lives in
+  `health-connect-app` (separate repo, outside this tree); needs a session rooted there.
+  Provisional / unstarted. Tracked: OPEN_QUESTIONS **Q17**.
+- **Task 2 (RHR series)** — DONE in code, **held** (not landed) on `feat/recovery-metrics-rhr`
+  per Luke's "(b)" call — bundled with the HRV investigation because the primary-source RHR is
+  the scraper's `sleep_hr_bpm`, not the independent Health Connect path. Provisional until it
+  lands with Task 1's resolution. Tracked: `BRANCHES.md`, OPEN_QUESTIONS Q17.
+- **Task 3 (bounds guard)** — LANDED `dccca41` / #70. History **sweep still owed** (local DB is
+  dev SQLite; run against Railway). Tracked: OPEN_QUESTIONS **Q18**.
+- **Task 4 (deep-sleep exclusion)** — LANDED `dccca41` / #71.
+- **Historical row reconciliation** — correctly NOT run; gated behind Task 1's (A)/(B) decision.
 
 ## Cold-resume handoff
 
-**Repo state:** on `master` at `2fc21e2` (+ the following close-out commit). master was
-in sync with `origin/master` at session open; push master after close-out. No open
-branches — `BRANCHES.md` is all LANDED rows.
+**Where things stand.** Two data-integrity fixes (#70 bounds guard, #71 deep-sleep excluded from
+daily readiness) are on `master` and pushed. The HRV step-change *diagnosis* is unresolved and
+cross-repo.
 
-**Landed this session:** DECISIONS_LOG **#69** — Hevy exercise-history path corrected;
-Q16 resolved. Method is unwired (zero call sites), so it ships dormant: real history
-will only flow once a caller is added.
+**Branches.**
+- `master` @ `e116a88` — clean, pushed.
+- `feat/recovery-metrics-rhr` @ `a4e1887` — PARKED (local-only). Task 2 RHR series. Unblocks on
+  Task 1. DECISIONS entry numbered at merge.
+- (`fix/hrv-sleep-integrity` landed+deleted; empty stray `fix/desktop-column-scroll` deleted.)
 
-**Active sprint (ROADMAP NOW):** Health Connect permissions fix (record types 38/35/11/37);
-Samsung Health package-name correction (`com.sec.android.app.shealth`, verify via Railway
-Postgres); Morning check-in screen (Hooper Index); persistent conversation history;
-session-card click bug; dual-panel scroll bug; `mcp_server.get_hevy_workouts` unimported
-`Session` type (one-line import fix).
+**Open questions (new/relevant).**
+- **Q17** (open, blocked) — HRV step-change (A) instrumentation vs (B) physiology. Decision gate is
+  the Task 1 node dump in `health-connect-app`. Historical reconciliation must NOT run until the
+  gate resolves.
+- **Q18** (open, verify-at-machine) — `samsung_hrv_readings` historical out-of-range sweep against
+  Railway Postgres; guard #70 only protects new writes.
+- Prior open items unchanged: Q3, Q5, Q6, Q7, Q9, Q13, Q15.
 
-**Open questions by status:**
-- _resolved this session:_ **Q16** → #69 (Hevy exercise-history path).
-- _still open:_ broader open forks live in `OPEN_QUESTIONS.md` (e.g. Polar zone retrieval,
-  HRV gates Q3) — unchanged this session.
+**Sprint (ROADMAP NOW):** unchanged — HC permissions, Samsung package-name diagnostic, morning
+check-in screen, conversation persistence, two UI bugs, `get_hevy_workouts` `Session` import bug.
 
-**Single clearest next action:** Push `master` to `origin` (`git push origin master`) to
-sync the #69 fix + close-out. Optional follow-up: live-corroborate `/v1/exercise_history/{id}`
-against a valid Hevy key when the local Hevy MCP is healthy (belt-and-braces on #69).
+**Single clearest next action:** In a **`health-connect-app`**-rooted session, run Task 1 — dump the
+`HRVAccessibilityService` node tree (branch `feat/hrv-node-dump`) and resolve Q17's (A)/(B) gate.
+That unblocks both the Task 2 RHR land and the historical HRV reconciliation. (Independently, from
+anywhere with Railway access: run the Q18 sweep SQL.)
 
-**Stores changed this session:** `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md` (+ `BRANCHES.md`,
-`CLAUDE.md` in the close-out commit).
+**DECISIONS_LOG max: #71.**

@@ -251,6 +251,48 @@ Live corroboration remains optional belt-and-braces (local Hevy MCP hung this se
 
 ---
 
+## Q17. HRV step-change from 6 Jul — (A) instrumentation vs (B) physiology
+
+`get_recovery_metrics(days=30)` surfaced a step (not ramp) in scraper HRV: pre-6-Jul (13 Jun–4 Jul,
+22 nights) mean ≈57 ms, range 24–88, high variance; post-6-Jul (7 nights) mean ≈96 ms, range 83–117,
+variance collapsed. No row exists for 5 Jul — the discontinuity sits in that gap. The 57 ms pre-period
+mean matches the established operative baseline exactly, so old data was valid and the break is new.
+Two hypotheses, possibly both true: **(A) instrumentation** — the phantom-node fix changed which node
+the scraper binds, now reading a different metric (RMSSD→SDNN ≈ the observed 1.7× ratio); **(B)
+physiology** — tirzepatide ceased 2+ weeks ago (~3 half-lives), GLP-1/GIP washout produces a genuine
+HRV rebound, corroborated by respiratory rate drifting ~14.0→~13.5 br/min over the same window via a
+*different sensor path* (a scraper bug cannot move RR). The 68% rise exceeds published GLP-1 HRV
+effects alone.
+
+**Decision gate = Task 1 node dump** (branch `feat/hrv-node-dump` in **`health-connect-app`**, a
+separate repo — not reachable from a health-app-rooted session). Dump the `HRVAccessibilityService`
+node tree; identify the bound node's field/metric identity and whether a sibling node carries the
+pre-6-Jul metric. Different node/metric → (A): correct the binding, then reconcile. Same node/metric →
+(B): rebound is real. **Historical row reconciliation must NOT run until this gate resolves** —
+reconciling against a moving metric definition bakes the error in permanently. Confirmatory input held
+ready: `feat/recovery-metrics-rhr` (Task 2, RHR series in `get_recovery_metrics`) — but note the primary
+`samsung_hrv_readings` RHR is the scraper's `sleep_hr_bpm`, same device family as HRV; the truly
+independent discriminator is Health Connect `resting_heart_rate` (query `health_connect_syncs` directly).
+
+**Status:** open — blocked on Task 1 node dump (`health-connect-app`). Cross-refs Q13, issue #9,
+`BRANCHES.md` `feat/recovery-metrics-rhr`.
+
+---
+
+## Q18. `samsung_hrv_readings` historical out-of-range sweep
+
+DECISIONS_LOG #70 added an ingest bounds guard that nulls-and-logs out-of-range biometrics going
+forward (trigger: `2026-06-28 Eff=119%`), but **existing rows are unswept** — the sweep could not run
+this session because the local `DATABASE_URL` is dev SQLite with zero production rows. Run the
+full-schema `NOT BETWEEN` sweep (mirrors `_BOUNDS` in `routers/samsung_hrv.py`) against **Railway
+Postgres**; for any historical violator, null/clamp the offending field (the guard only protects new
+writes). If efficiency was unbounded, assume other fields were too — the sweep covers the whole
+numeric schema, not just efficiency.
+
+**Status:** open — verify-at-machine (Railway Postgres). Independent of Q17.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._

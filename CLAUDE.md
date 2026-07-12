@@ -173,9 +173,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#70 / #71** — HRV & sleep data integrity: samsung-hrv ingest bounds guard (out-of-range biometrics nulled-and-logged, whole numeric schema) + deep-sleep excluded from daily readiness (context_builder reports combined Deep+Light; deep alone is trend-only). See DECISIONS_LOG #70–#71. (Task 2 RHR-series parked on `feat/recovery-metrics-rhr`; Task 1 node dump blocked in `health-connect-app` — see OPEN_QUESTIONS Q17/Q18.)
 - **#69** — Hevy exercise-history path fix: `get_exercise_history` now calls `/v1/exercise_history/{id}` (template id unchanged) instead of the since-ship-404ing `/exercise_templates/{id}/history`; method was unwired (zero call sites) so no downstream shift. Resolves Q16. See DECISIONS_LOG #69.
 - **#68** — Hevy summary parity: `get_hevy_workouts` reads the set-type field as `type` (killing the `set_type` no-op), renders warmups labelled + per-set RPE + multi-line notes + description + duration/distance sets; set formatting extracted to shared `backend/hevy_format.py` consumed by both summarizers. See DECISIONS_LOG #68.
-- **#66 / #67** — Connector failures decouple from session auth: downstream 401→424, read handlers route Hevy HTTP errors → 502, global 500 CORS guard; "See all" ships genuine pagination via `/integrations/hevy/workouts/all`. See DECISIONS_LOG #66–#67.
 
 ---
 
