@@ -1553,6 +1553,66 @@ an empirical negative, superseding the doc-evidence basis).
 
 ---
 
+### 70. Ingest bounds guard for `samsung_hrv_readings` — out-of-range biometrics nulled-and-logged
+
+**Status:** Landed on `fix/hrv-sleep-integrity` (HRV & Sleep Data Integrity brief, Task 3).
+`routers/samsung_hrv.py` gained a `model_validator` over a `_BOUNDS` table covering every numeric
+field (percentages 0–100, minutes 0–1440, plus HRV / sleep-HR / RR / SpO2 physiological ranges). An
+out-of-range value is **nulled and logged** (`logger.warning` with field/value/bounds/date), not
+clamped — clamping fabricates a plausible number, nulling is honest that the datum is unusable.
+Per-field, so one bad field never drops the night's valid data.
+
+**Rationale:** The canonical trigger was `2026-06-28: Eff=119%` — a hard impossibility that the
+pipeline ingested faithfully because nothing bounded it. The brief's "if efficiency is unbounded,
+assume other fields are too" is satisfied by bounding the whole schema in one guard rather than
+patching efficiency alone. Null-over-clamp chosen because 119%→100% would assert "perfect efficiency"
+(itself wrong — the source calc is broken), whereas null says "not trustworthy," consistent with the
+source/confidence-tagged schema philosophy.
+
+**How you know:** 7 targeted tests (`tests/test_samsung_hrv_bounds.py`) cover efficiency>100 nulled,
+boundary 100 valid, valid value survives, out-of-range field does not drop valid siblings (HRV/RHR
+kept), all five percentage fields bounded, negative minutes nulled, absurd HRV/RR nulled. Full backend
+suite 74 green (was 65; +7 bounds, +2 readiness). **History sweep NOT run from this session** — the
+local `DATABASE_URL` is SQLite (dev), with zero production rows; the sweep must run against Railway
+Postgres (SQL supplied in the session report). Pre: DECISIONS max 69.
+
+**Do not revisit unless:** a legitimate reading is found to fall outside a `_BOUNDS` range (widen that
+bound, don't drop the guard), or the schema gains a `confidence` column making low-confidence retention
+preferable to nulling.
+
+---
+
+### 71. Deep-sleep minutes excluded from daily readiness — Samsung Ring deep/light discrimination is not fit for a daily term
+
+**Status:** Landed on `fix/hrv-sleep-integrity` (HRV & Sleep Data Integrity brief, Task 4). The daily
+readiness input to the coaching model is the sleep architecture rendered in `context_builder.py`
+(nothing gates on an automated composite — DECISIONS #8). Both sleep sections
+(`_section_samsung_hrv`, `_section_health_connect`) now report **combined `Deep+Light`** instead of
+standalone Deep and Light. REM, awake, sleep efficiency, total sleep time, and SpO2 are retained
+unchanged. Deep alone remains queryable as a long-run trend series via `get_recovery_metrics`
+(untouched) — never as a daily term.
+
+**Rationale:** Observed split Deep 3% / Light 70% (typical 15–20% / 50–55%) with the ~15 missing deep
+points appearing as the ~15 surplus light points — a **complementary two-class confusion signature**,
+not physiology. Deep appears as sub-5-minute spikes dispersed across the night with nothing in the
+first cycle, the opposite of homeostatically front-loaded slow-wave sleep. The deep/light *boundary*
+is unreliable but their *sum* is robust (the confusion is internal to the pair), so `Deep+Light` is
+retained as the trustworthy aggregate.
+
+**How you know:** Physiological confounders excluded at source: OSA fully controlled on CPAP at AHI 0.4
+(threshold <5) — below 1 event/hr there is no arousal load to suppress SWS; and active CBT-I sleep
+restriction should *elevate* SWS, so the observed flattening is the opposite of what the protocol
+predicts. Pipeline faithfulness confirmed independently: MCP reported 16m deep / 91m REM vs the Samsung
+app's 16m / 1h31m — exact match, so the number is ingested correctly and simply wrong at source. 2 targeted tests
+(`tests/test_readiness_sleep_stages.py`) assert both sections render combined `Deep+Light` with REM/awake
+retained and no standalone deep/light term. Full backend suite 74 green. Pre: DECISIONS max 69.
+
+**Do not revisit unless:** Samsung ships a deep/light classifier fix (verify against a night with a
+normal 15–20% deep fraction and first-cycle SWS concentration before restoring deep as a daily term),
+or the ring is replaced by a device whose stage discrimination is validated.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

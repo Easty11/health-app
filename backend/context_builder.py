@@ -503,12 +503,14 @@ def _section_health_connect(records: list[Any], now: datetime) -> str:
         deep = _v("deep_sleep_minutes") or 0
         rem = _v("rem_sleep_minutes") or 0
         light = _v("light_sleep_minutes") or 0
-        dh, dm = divmod(deep, 60)
+        # Deep alone is never a daily readiness term (unreliable deep/light
+        # boundary); report combined deep+light, which is robust. REM unaffected.
+        # See DECISIONS_LOG — HRV & Sleep Data Integrity brief, Task 4.
+        dlh, dlm = divmod(deep + light, 60)
         rh, rm = divmod(rem, 60)
-        lh, lm = divmod(light, 60)
         lines.append(
             f"Sleep: {h}h {m}m total"
-            + (f" (Deep: {dh}h {dm}m, REM: {rh}h {rm}m, Light: {lh}h {lm}m)" if deep or rem else "")
+            + (f" (Deep+Light: {dlh}h {dlm}m, REM: {rh}h {rm}m)" if deep or light or rem else "")
         )
         if _v("sleep_score") is not None:
             lines.append(f"Sleep score: {_v('sleep_score')}/10")
@@ -573,12 +575,19 @@ def _section_samsung_hrv(readings: list[Any], now: datetime, baseline: HRVBaseli
         lines.append(f"Sleep duration: {h}h {m}m")
 
     stages: list[str] = []
-    if _v(latest, "deep_minutes") is not None:
-        stages.append(f"Deep {_v(latest, 'deep_minutes')}m")
+    # Samsung Ring's deep/light boundary is not fit for daily use: the two classes
+    # are mutually confused (observed deep ~3% / light ~70% vs typical 15-20% /
+    # 50-55%, a complementary two-class confusion signature). Deep alone is never a
+    # daily readiness term — but their SUM is robust because the confusion is
+    # internal to the pair, so report combined deep+light. REM and awake are
+    # unaffected. Deep alone is a long-run trend only (see get_recovery_metrics).
+    # See DECISIONS_LOG — HRV & Sleep Data Integrity brief, Task 4.
+    deep = _v(latest, "deep_minutes")
+    light = _v(latest, "light_minutes")
+    if deep is not None or light is not None:
+        stages.append(f"Deep+Light {(deep or 0) + (light or 0)}m")
     if _v(latest, "rem_minutes") is not None:
         stages.append(f"REM {_v(latest, 'rem_minutes')}m")
-    if _v(latest, "light_minutes") is not None:
-        stages.append(f"Light {_v(latest, 'light_minutes')}m")
     if _v(latest, "awake_minutes") is not None:
         stages.append(f"Awake {_v(latest, 'awake_minutes')}m")
     if stages:
