@@ -82,6 +82,25 @@ _INJURY_SEED = [
             ),
         },
     },
+    {
+        # Current, active irritation. signal_type "mechanical"; body_part "pes anserine"
+        # matches no _ACUTE_TISSUE_BLOCKS key, so no engine hard-stop — the restrictions
+        # (adductor tension / deep-flexion) are surfaced, not gated (no matching taxonomy
+        # region). Expiry is symptom-gated on point tenderness — carried in `detail` until
+        # the trajectory/review schema (Step 3) formalises it.
+        "key": "injury_pes_anserine_left",
+        "value": {
+            "body_part": "pes anserine",
+            "side": "left",
+            "signal_type": "mechanical",
+            "restrictions": ["adductor tension (Copenhagens)", "deep-flexion unilateral"],
+            "detail": (
+                "Left pes anserine insertional irritation. Return path: short-lever "
+                "Copenhagens, progress one notch. Review symptom-gated on point tenderness "
+                "(not date-gated)."
+            ),
+        },
+    },
 ]
 
 
