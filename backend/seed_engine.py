@@ -80,6 +80,14 @@ _INJURY_SEED = [
                 "Loaded hinge (SL-RDL 28–32kg @ 7.5–8 RPE) is tolerated and WANTED — it is "
                 "the desensitisation lane. Aggravator is passive end-range tension, not load."
             ),
+            # Not "settling": the neural limiter is gated on the lumbar source; nothing
+            # in the current plan predicts it clearing on its own, so "settling" would
+            # generate a false divergence flag. "stable" is the honest expectation — a
+            # sustained move in either direction is a legitimate surprise to surface.
+            "trajectory": {
+                "shape": "stable",
+                "declared_on": "2026-07-13",
+            },
         },
     },
     {
@@ -99,6 +107,16 @@ _INJURY_SEED = [
                 "Copenhagens, progress one notch. Review symptom-gated on point tenderness "
                 "(not date-gated)."
             ),
+            # The injury that motivated the mechanism. Expected to settle (1-2 wks).
+            # review_when fires the symptom-gated review once point tenderness (soreness)
+            # sits at 1 (=None) for 3 sustained days — "looks resolved, revisit the plan".
+            "trajectory": {
+                "shape": "settling",
+                "declared_on": "2026-07-13",
+                "review_when": {
+                    "metric": "soreness", "op": "<=", "threshold": 1, "sustained_days": 3,
+                },
+            },
         },
     },
 ]
