@@ -1,74 +1,105 @@
-# Close-out — HRV & Sleep Data Integrity brief
+# closeout — health-app
 
-## Real commits this session
+Branch: `feat/constraint-consumption` (8 commits, local-only, parked in `BRANCHES.md`, **not merged**).
+Session brief: constraint-consumption (`;build`) — make injury constraints a consumed input, not decorative.
 
-Session-open ref: `4bd645b` (prior `chore: session close-out`).
+---
+
+## 1. Real commits this session
+
+Session-open ref: `2f1309e` (master tip). `git log --oneline master..HEAD`:
 
 ```
-e116a88 chore(branches): record fix/hrv-sleep-integrity landed (#70,#71) + feat/recovery-metrics-rhr parked (Task 2)
-dccca41 fix(biometrics): ingest bounds guard + deep-sleep excluded from daily readiness
+2ba3e75 gov(branches): park feat/constraint-consumption (code-complete, ready to land)
+a6bee90 gov: constraint-consumption — 2 decisions, Q20/Q21, FEEDBACK 1.10/1.11/2.6
+785e349 fix(readiness): naive_baseline soreness term = max across all reported sites
+d11d96e feat(injury): trajectory divergence + symptom-gated review (surfacing only)
+0c235eb data(injury): declare trajectories for pes anserine + right hamstring
+42879b4 feat(checkin): derive AM soreness items from active injuries (FEEDBACK 2.6)
+5584666 data(injury): seed injury_pes_anserine_left (active irritation)
+de8f8d3 data(injury): seed injury_hamstring_right (semimembranosus, neural limiter)
 ```
 
-Plus this close-out commit (`chore: session close-out`).
+Concern-split honoured: data (`de8f8d3`, `5584666`, `0c235eb`) · capture (`42879b4`) · mechanism
+(`d11d96e`) · scoring (`785e349`) · governance (`a6bee90`, `2ba3e75`) each separate.
 
-Held on branch `feat/recovery-metrics-rhr` (local-only, not on master):
-```
-a4e1887 feat(recovery): expose RHR as a series in get_recovery_metrics (Task 2, held)
-```
+What landed on the branch, by brief step:
+- **Step 1 (data):** two distinct right-side injuries seeded into `_INJURY_SEED` — right hamstring
+  (structural proximal semimembranosus) and left pes anserine. Right hamstring recorded
+  `signal_type:"mechanical"` (NOT neural) after the VERIFY gate proved `neural` fires a signal-wide
+  radicular block (hinge/rotation/carry/gait) that would kill the wanted SL-RDL lane; the neural finding
+  rides in `detail`. Left hamstring untouched (distinct injury).
+- **Step 2 (capture):** AM check-in soreness items derive from the active injury ledger
+  (`checkin_v2.derive_soreness_items`), keyed `{body_part}` / `{body_part}_{side}` so the two hamstrings
+  don't collide. Frontend `CheckInAM.jsx` renders whatever keys arrive; no migration (soreness is JSON).
+- **Step 3 (mechanism, JSON-only — no migration):** injury `trajectory` in `value`;
+  `injury_trajectory.evaluate()` surfaces divergence + symptom-gated review in `get_readiness_snapshot`.
+  Surfacing only — never alters `restrictions[]` or gates selection.
+- **Step 4 (scoring):** `calc_naive_baseline` soreness term generalised to max across reported sites
+  (was shoulder-only). Discontinuity accept-and-annotate, NOT backfilled (frozen-at-capture).
 
-Landed to `master` and pushed (`origin/master` @ `e116a88`):
-- **DECISIONS_LOG #70** — Task 3: `samsung_hrv` ingest bounds guard. `model_validator` over a
-  `_BOUNDS` table (whole numeric schema); out-of-range values nulled-and-logged, not clamped;
-  per-field so one bad value never drops the night. Trigger: `2026-06-28 Eff=119%`.
-- **DECISIONS_LOG #71** — Task 4: deep-sleep excluded from daily readiness. `context_builder`
-  both sleep sections now report combined `Deep+Light` (robust; the deep/light confusion is
-  internal to the pair) instead of standalone deep. Deep alone stays a long-run trend series in
-  `get_recovery_metrics`, never a daily term.
-- Backend suite 74 green (+7 bounds `test_samsung_hrv_bounds.py`, +2 readiness `test_readiness_sleep_stages.py`).
+Verification: full backend suite **74 green**. Divergence + review proven to fire against the real seed
+trajectory (isolated in-memory sqlite). `neural`-exclusion probe run over all 30 taxonomy regions.
 
-## Pending-queue reconciliation
+---
 
-No chat `;cc` pending-commit queue was carried into this session — the work came from the pasted
-**HRV & Sleep Data Integrity** work brief, not a chat close-out. Brief-task disposition:
+## 2. Pending-queue reconciliation
 
-- **Task 1 (node dump)** — NOT actionable here. `HRVAccessibilityService` lives in
-  `health-connect-app` (separate repo, outside this tree); needs a session rooted there.
-  Provisional / unstarted. Tracked: OPEN_QUESTIONS **Q17**.
-- **Task 2 (RHR series)** — DONE in code, **held** (not landed) on `feat/recovery-metrics-rhr`
-  per Luke's "(b)" call — bundled with the HRV investigation because the primary-source RHR is
-  the scraper's `sleep_hr_bpm`, not the independent Health Connect path. Provisional until it
-  lands with Task 1's resolution. Tracked: `BRANCHES.md`, OPEN_QUESTIONS Q17.
-- **Task 3 (bounds guard)** — LANDED `dccca41` / #70. History **sweep still owed** (local DB is
-  dev SQLite; run against Railway). Tracked: OPEN_QUESTIONS **Q18**.
-- **Task 4 (deep-sleep exclusion)** — LANDED `dccca41` / #71.
-- **Historical row reconciliation** — correctly NOT run; gated behind Task 1's (A)/(B) decision.
+**No `;cc` pending-commit queue was carried into this session.** It ran from a direct `;build` brief,
+not a chat close-out handoff. The two DECISIONS_LOG entries were minted by Code this session, headed
+`### #NEXT` (integers claimed at merge per CLAUDE.md number-at-merge; DECISIONS max at open was 71).
+Both are committed (`a6bee90`) and therefore synced, not provisional — but **unnumbered until the branch
+fast-forwards to master**.
 
-## Cold-resume handoff
+Governance written this session, all committed:
+- DECISIONS_LOG `#NEXT×2` (restrictions-set-at-onset / check-in-monitors; soreness-scoring-max) +
+  withdrawn-draft note (additive-checklist regulatory scope — void, fabricated premise).
+- OPEN_QUESTIONS Q20 (findings-vs-restrictions schema gap, open) · Q21 (lab #63/SPEC_64 contract rhymes
+  but shares no code, resolved).
+- FEEDBACK 1.10 (scoring blind to all injuries but shoulder) · 1.11 (chat context not cross-device) ·
+  2.6 dated confirmation (pes anserine uncapturable ~3 days).
 
-**Where things stand.** Two data-integrity fixes (#70 bounds guard, #71 deep-sleep excluded from
-daily readiness) are on `master` and pushed. The HRV step-change *diagnosis* is unresolved and
-cross-repo.
+**OWED (committed in-repo, but unproven against prod):** live Railway seed of the two new injury entries
++ trajectories, then `get_readiness_snapshot` read-back. Verified only on local sqlite this session — the
+MCP connector was invalidated (needs reconnect). #42 precedent makes local-verify acceptable to commit,
+but the seed→prod path is unproven. Recorded in `BRANCHES.md`.
 
-**Branches.**
-- `master` @ `e116a88` — clean, pushed.
-- `feat/recovery-metrics-rhr` @ `a4e1887` — PARKED (local-only). Task 2 RHR series. Unblocks on
-  Task 1. DECISIONS entry numbered at merge.
-- (`fix/hrv-sleep-integrity` landed+deleted; empty stray `fix/desktop-column-scroll` deleted.)
+CLAUDE.md "Recent landings" intentionally **not** updated — that block tracks work merged to master;
+this branch is parked, not landed. It is tracked in `BRANCHES.md` instead.
 
-**Open questions (new/relevant).**
-- **Q17** (open, blocked) — HRV step-change (A) instrumentation vs (B) physiology. Decision gate is
-  the Task 1 node dump in `health-connect-app`. Historical reconciliation must NOT run until the
-  gate resolves.
-- **Q18** (open, verify-at-machine) — `samsung_hrv_readings` historical out-of-range sweep against
-  Railway Postgres; guard #70 only protects new writes.
-- Prior open items unchanged: Q3, Q5, Q6, Q7, Q9, Q13, Q15.
+---
 
-**Sprint (ROADMAP NOW):** unchanged — HC permissions, Samsung package-name diagnostic, morning
-check-in screen, conversation persistence, two UI bugs, `get_hevy_workouts` `Session` import bug.
+## 3. Cold-resume handoff
 
-**Single clearest next action:** In a **`health-connect-app`**-rooted session, run Task 1 — dump the
-`HRVAccessibilityService` node tree (branch `feat/hrv-node-dump`) and resolve Q17's (A)/(B) gate.
-That unblocks both the Task 2 RHR land and the historical HRV reconciliation. (Independently, from
-anywhere with Railway access: run the Q18 sweep SQL.)
+### Single clearest next action
+**Land the branch and close the OWED prod gap.** With sign-off: `git land feat/constraint-consumption`
+(ff-only merge + push + delete). Then run `seed_engine` against **Railway Postgres** so
+`injury_hamstring_right` + `injury_pes_anserine_left` (with trajectories) exist in prod, and confirm via
+`get_readiness_snapshot` that both hamstrings + pes anserine render and the "Plan review flags" section
+behaves. Note: `_seed_injuries` is add-only — the two new keys don't exist in prod yet so the first seed
+includes their trajectory; the 3 pre-existing injuries stay unchanged (no trajectory, by design). If any
+target injury already exists in prod, trajectory will NOT backfill — it needs an update path.
 
-**DECISIONS_LOG max: #71.**
+### Current sprint (ROADMAP NOW)
+- Morning check-in screen (Hooper Index) — **this session advanced its soreness-capture surface**; items
+  now injury-derived.
+- Fix Health Connect permissions (companion app, record types 38/35/11/37).
+- Samsung Health package-name correction (`com.sec.android.app.shealth`; verify via Railway query).
+- Persistent conversation history; session cards not clickable; dual-panel scroll (UI bugs).
+- `mcp_server.get_hevy_workouts` unimported `Session` type — pre-existing one-line import fix.
+
+### Open questions by status
+- **open:** Q7 (injury ledger missing right semimembranosus — **partially closed this session**: the
+  structured entry now exists; the findings-vs-restrictions modelling remains) · Q20 (findings vs
+  restrictions schema gap, Q7 territory) · Q17/Q18 (HRV step-change instrumentation-vs-physiology;
+  historical out-of-range sweep) · Q19 (desktop workout-detail scroller layout).
+- **resolved this session:** Q21 (lab #63/SPEC_64 expectation contract rhymes with injury trajectory but
+  shares no code — kept as separate mechanisms).
+
+### Branches
+- `feat/constraint-consumption` — CODE-COMPLETE, parked, ready to ff-land (this session).
+- `feat/recovery-metrics-rhr` — PARKED (prior session; not touched here), held on the HRV Task-1 node
+  dump in `health-connect-app`.
+
+### Untracked, left alone (not mine)
+`.claude/launch.json`, `backend/gate_test.py`.
