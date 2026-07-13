@@ -56,6 +56,32 @@ _INJURY_SEED = [
             "detail": "Left hamstring — provoked by striding/sprinting",
         },
     },
+    {
+        # Distinct from the left hamstring (functional, velocity-gated). This is the
+        # imaged, structural right injury. signal_type stays "mechanical" (not
+        # "neural") by decision: "neural" fires selection.py's signal-wide radicular
+        # block (hinge/rotation/carry/gait), which would kill the SL-RDL — the very
+        # neural-desensitisation lane that is tolerated and wanted. The neural finding
+        # is carried in `detail` (surfaced), not encoded as an engine hard-stop; the
+        # actual aggravator (static end-range stretching) is not a taxonomy region and
+        # cannot be gated regardless. See DECISIONS_LOG (restrictions set at onset;
+        # check-in monitors, does not gate).
+        "key": "injury_hamstring_right",
+        "value": {
+            "body_part": "hamstring",
+            "side": "right",
+            "signal_type": "mechanical",
+            "restrictions": ["striding", "sprinting", "static end-range hamstring stretching"],
+            "detail": (
+                "Right proximal semimembranosus — full-thickness partial-width rupture "
+                "(US Aug 2025, 3.3×1.6cm, retracted fibres). Current limiter is NEURAL, "
+                "not the tear: positive right slump w/ cervical differentiation, S1-pattern "
+                "referral behind-knee→calf, central L5-S1. Symptoms distal; tear proximal. "
+                "Loaded hinge (SL-RDL 28–32kg @ 7.5–8 RPE) is tolerated and WANTED — it is "
+                "the desensitisation lane. Aggravator is passive end-range tension, not load."
+            ),
+        },
+    },
 ]
 
 
