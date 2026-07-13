@@ -330,6 +330,33 @@ half-column, which the repro did not stage.
 
 ---
 
+## Q20. Clinical findings vs restrictions — `user_knowledge_entries.value` conflates them
+
+Restrictions are structured (`restrictions[]`, enforced by `selection.py`); **findings are not**.
+Positive right slump, S1-pattern referral, frontal-plane deficit have no first-class home in the injury
+`value` JSON — they ride as `signal_type` + free-text `detail`. The constraint-consumption brief added a
+`trajectory` key to `value` but deliberately did **not** model findings. Note the split surfaces
+elsewhere too: FEEDBACK §5 documents these findings clinically, but the structured ledger the engine and
+snapshot read does not carry them. Q7 territory.
+
+**Status:** open — flagged out of scope for the constraint-consumption brief. Resolve alongside Q7 (the
+injury-ledger completeness question), not piecemeal.
+
+---
+
+## Q21. Does the lab-side expectation contract (#63 / SPEC_64) generalise to injury trajectories?
+
+**Status:** resolved (this session) — they **rhyme, they do not share code.** Both follow declare
+expectation → surface divergence → never suppress (lab gate-2 "annotate, don't hide" ≡ injury "surface,
+don't gate"). But the lab contract is bound to marker/delta semantics (`marker_groups.json`,
+`min_meaningful_delta`, two-gate axis-verdicts) while injury trajectory is a soreness series vs a
+declared shape (`injury_trajectory.py`). Kept as separate mechanisms deliberately — forcing a shared
+abstraction over two things that merely share a shape is how you get a bad one. Logged per the
+constraint-consumption brief; no further action unless a third expectation-gated surface appears and the
+rhyme becomes a rule worth abstracting.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._

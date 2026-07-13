@@ -1613,6 +1613,79 @@ or the ring is replaced by a device whose stage discrimination is validated.
 
 ---
 
+### #NEXT. Restrictions are set at injury onset; the check-in monitors, it does not gate
+
+**Status:** Landed on `feat/constraint-consumption` (constraint-consumption brief, Steps 1–4). AM
+check-in soreness items now derive from the active injury ledger (`checkin_v2.derive_soreness_items`),
+injury entries may carry a `trajectory` in their JSON `value` (no schema change), and
+`injury_trajectory.evaluate()` surfaces two flags in `get_readiness_snapshot` — **divergence**
+(observation contradicts the declared shape) and **symptom-gated review** (soreness reaches the exit
+condition). `is_contraindicated` is unchanged and stays boolean.
+
+**Rationale:** Rejected mapping daily soreness severity to graded restrictions (a severity→restriction
+table, thresholds, or a non-boolean `is_contraindicated`). That would re-derive every morning a
+decision already made once — with a mechanism and a plan — at injury onset. The restriction belongs to
+the injury entry (`restrictions[]`, enforced by `selection.py`); soreness does not renegotiate it. The
+check-in's job is narrower: contradiction detection (observation diverges from the plan's expected
+trajectory → surface for revision) and status appraisal against the exit gate (symptom-gated review).
+Both surface; neither gates. Consequence: injury entries must carry an expected trajectory — without it
+there is nothing to contradict. Step-1 encoding adjudication folded in: the right hamstring is recorded
+`signal_type:"mechanical"`, **not** `"neural"` — a `neural` signal fires `selection.py`'s signal-wide
+radicular block (hinge/rotation/carry/gait), which would contraindicate the wanted SL-RDL
+desensitisation lane, while the actual aggravator (static end-range stretching) is not a taxonomy
+region and cannot be engine-gated regardless; the neural finding is surfaced via `detail`. Two distinct
+hamstrings confirmed (functional left; structural right proximal semimembranosus) — recorded as
+separate entries, not a side-amendment of the left.
+
+**How you know:** Empirical exclusion-set probe over all 30 taxonomy regions — `neural` blocks 9 regions
+including `hinge` (reason "radicular sign — provoking pattern"), body-part-agnostic; the `mechanical`
+right hamstring blocks only the acute-tissue set and leaves `hinge` open both sides (SL-RDL preserved).
+Step-3 evaluator verified against the **real seed trajectory** (not a fixture): review fires at soreness
+≤1 sustained 3d, settling-divergence on a rising series, stable-divergence on a +2 move, quiet case
+silent (no false positives). 74 backend tests green. Local sqlite read-back only — **live Railway seed +
+`get_readiness_snapshot` read-back OWED** (MCP connector invalidated this session; #42 precedent). Pre:
+DECISIONS max 71.
+
+**Do not revisit unless:** a graded/continuous contraindication is genuinely needed (a non-boolean
+`is_contraindicated` with a severity→restriction mapping) — at which point re-open the "restrictions set
+at onset" premise deliberately, not by letting daily soreness quietly re-derive it.
+
+**Withdrawn (never committed):** the prior in-chat draft on additive-checklist regulatory scope is void.
+It answered a question that existed only because the app was believed to have prompted contraindicated
+hamstring stretching; grep refutes (no such string in the tree) and no user-facing checklist module
+exists in this repo. Fabricated premise, no decision required — recorded so the withdrawn draft does not
+resurface.
+
+---
+
+### #NEXT. Soreness scoring generalises across body parts; max, not shoulder-only
+
+**Status:** Landed on `feat/constraint-consumption`. `calc_naive_baseline`'s soreness term is now **MAX
+across all reported soreness items** (was `soreness["shoulder"]` only), retaining the single 0.20 term,
+the (v−1)×2.5 scale, and the 1–10 clamp. Default 3 (neutral) when nothing is reported.
+
+**Rationale:** The readiness baseline was structurally blind to both of the user's active injuries —
+hamstring soreness was captured and never scored. Max over mean: mean dilutes (a severe single site
+averaged against quiet sites under-reads). The scalar answers "how beat up overall"; movement-specificity
+is `restrictions[]`'s job, not the score's. Known limitation: multi-site cumulative load is invisible
+(max, not sum).
+
+**How you know:** knee soreness now moves the baseline (7.9 at knee=1 → 5.9 at knee=5; previously zero
+effect). Discontinuity characterised old-vs-new on fixed sleep/fatigue/motivation: hamstring 5 / shoulder
+1 → **−1.00** (the "captured, never scored" bug fixed), derived-default keys → **+1.00** (old
+absent-shoulder default-3 penalty removed), legacy `{shoulder:2,hamstring:1}` and empty `{}` → 0. 74
+tests green.
+
+**Discontinuity disposition:** accept-and-annotate, **NOT backfilled** — `naive_baseline` is
+frozen-at-capture (recomputing corrupts the `model_forecast`-vs-baseline reference the field exists for);
+no backfill without sign-off per the brief. Historical shoulder-only values stand; the changeover is
+annotated in code and here.
+
+**Do not revisit unless:** multi-site cumulative load proves to matter (move from max to a saturating
+sum), or the frozen-baseline comparison is retired.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

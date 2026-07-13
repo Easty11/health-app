@@ -93,6 +93,20 @@ These are moments where Claude got something wrong and Easty corrected it. Never
 
 ---
 
+### 1.10 Readiness scoring was silently blind to every injury but shoulder (13 July 2026)
+**What Claude/the code did:** `calc_naive_baseline` read `soreness["shoulder"]` only. The readiness scalar ignored every other active injury — the user's hamstring soreness was captured on the check-in and never scored. Not previously logged.
+
+**Rule going forward:** Scoring that consumes the injury/soreness ledger must range over the whole ledger, not a hardcoded subject. A single-body-part constant in a per-user health score is a bug, not a simplification. Fixed 2026-07-13 — soreness term is now max across all reported items (DECISIONS_LOG, constraint-consumption brief).
+
+---
+
+### 1.11 Chat context does not persist across devices (mobile ↔ desktop web)
+**Constraint:** Conversation state started on one surface (mobile app) is not present on another (desktop web), and vice-versa. A decision "made in chat" on one device is invisible on the other until it lands in the repo.
+
+**Rule going forward:** Rely on the repo governance stores (2.8 / 2.12), never chat memory, for anything that must survive a device switch. This is the concrete failure the repo-as-single-source-of-truth model exists to absorb — treat an uncommitted cross-device decision as lost, not pending.
+
+---
+
 ## 2. Stated Preferences
 
 How Easty explicitly wants things done. Apply these without being asked.
@@ -140,6 +154,8 @@ How Easty explicitly wants things done. Apply these without being asked.
 **Preference:** Injury flags must be indexed by movement pattern and condition, not body part. Provocation status is three-valued: provocative / clear / untested. Conditions can stack (range gate + load modifier simultaneously, not a single knob).
 
 **Extraction method:** Plain-language interview → Claude translates to structured object → confirm every inference before committing.
+
+**Confirmed live-impacting (13 July 2026):** an active injury (left pes anserine) was uncapturable on the AM check-in for ~3 days — soreness items were hardcoded `{shoulder, hamstring}`, so a real injury outside that pair had nowhere to be recorded. Check-in soreness items now derive from the active `type='injury'` ledger (constraint-consumption brief, Step 2), closing the capture gap this preference names.
 
 ---
 
