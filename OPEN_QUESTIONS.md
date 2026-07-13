@@ -357,6 +357,75 @@ rhyme becomes a rule worth abstracting.
 
 ---
 
+## Q22. Promote exercise-region tags to a source-agnostic canonical exercise layer
+
+Tags are currently keyed on the **Hevy** template id (`exercise_region_tags.hevy_exercise_template_id`),
+in tension with the device-agnostic-from-day-one principle. The labs module already solved the analogous
+problem (`marker_canonical`). Deferred deliberately for the tagging brief — 493 rows are cheap to re-key,
+and movement-identity-across-sources is a real design exercise that should not be rushed inside a tagging
+task.
+
+**Status:** open — deferred, not abandoned (DECISIONS_LOG #74). Revisit when a second exercise source
+appears or the canonical-exercise layer is designed.
+
+---
+
+## Q23. Do `_RADICULAR_BLOCKS` / `_RA_FLARE_BLOCKS` need revision now that region attribution is accurate?
+
+Correctly tagging Pallof as `anti_rotation`-only (and Shoulder Rotation as NOT `rotation`) is what makes
+the radicular rotation-block behave correctly for this user. Other blocks in `selection.py` may have been
+tuned against wrong keyword inputs and never noticed — the block sets and the (now-fixed) loaded-region
+inference were never independently validated.
+
+**Status:** open — audit the block sets against corrected region attribution once the active-window tags
+are human-confirmed and seeded.
+
+---
+
+## Q24. Does anything besides reconciliation consume `laterality`? Is there a `capability_state.side` join that should exist?
+
+`capability_state` already carries a `side` column (left / right / bilateral). `hevy_exercise_templates.laterality`
+now records whether a movement is unilateral. A unilateral logged exercise plausibly should feed a per-side
+`capability_state` row, but no such join exists today. `laterality` is currently written and consumed only
+by (future) plan↔log reconciliation.
+
+**Status:** open — resolve alongside step 3 (reconciliation). Not built in the tagging brief.
+
+---
+
+## Q25. (cross-repo, health-connect-app) Disposition of remote branch `claude/hevy-api-workout-query-teulc2`
+
+Remote branch `claude/hevy-api-workout-query-teulc2` (`4dfccbe`) is on `origin` for **health-connect-app**,
+unmerged, and is NOT in that repo's `BRANCHES.md` — whose own header states "every branch not master lives
+here until merged+deleted." The store is violating its own rule. Needs a disposition: govern it (add to
+BRANCHES.md) or kill it. Not this repo's / this brief's job — logged only.
+
+**Status:** open — belongs to a `health-connect-app`-rooted session (single-repo scope rule). Carry across.
+
+---
+
+## Q26. Taxonomy has no home for isolation / adductor-abductor work — G2 "zero fallback" vs benign empties
+
+`Capability_Taxonomy_v0` is a movement-PATTERN + capacity vocabulary. A large share of the user's logged
+work has no clean region: **Hip Adduction / Hip Abduction (Machine)** (frontal-hip strength — pes-anserine-
+relevant, the injury the tagging brief itself cares about), knee isolations (leg extension / leg curl), and
+arm/shoulder isolations (curls, raises, delt flies, triceps). These are left UNTAGGED in the v0 proposal —
+the keyword fallback returns `[]` for all of them (benign: no wrong region, just a logged coverage-gap hit).
+This puts G2 ("100% of active-window templates tagged, fallback hit-count 0") in tension with reality:
+forcing a tag would pollute the region signal.
+
+Three resolutions for Luke: (a) accept benign empties and redefine the coverage metric as "zero *wrong*
+tags" rather than "zero fallback"; (b) add an accessory/no-pattern sentinel so isolations are "tagged" (bypass
+the keyword path) but contribute no region — needs a mechanism, since region_key validates fail-closed
+against the taxonomy; (c) extend the taxonomy (e.g. a frontal-hip adductor/abductor strength region) — a
+`TAXONOMY_VERSION` bump. The adductor gap is the load-bearing one given the active pes anserine injury.
+
+**Status:** open — decision required before the active-window seed can claim "100% coverage". Recommend (a)
+short-term + (c) for the adductor gap specifically. See `backend/reference/exercise_region_tags_v0.json`
+`_untagged_taxonomy_gap`.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._

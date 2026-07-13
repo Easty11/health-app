@@ -323,3 +323,31 @@ These emerged organically from corrections and should be treated as first-class 
 - In-app self-serve: Per-night AHI and mask seal, 30-day window
 - Samsung Health snoring detection: CPAP airflow artefact — always discard
 - SpO2 nadir: The relevant clinical signal; nadir below 94% warrants attention
+
+---
+
+## 7. Engine — `_LOADED_KEYWORDS` is a fallback, not truth (DECISIONS_LOG #74)
+
+**What was wrong:** `infer_loaded_regions` inferred which taxonomy regions the user had loaded from Hevy
+titles using `_LOADED_KEYWORDS` — ~30 lowercase substring rules in a loop with NO break on match. On the
+user's live last-90d history it produced simultaneous false positives and false negatives, materially
+corrupting the engine's model of what the user has loaded (which in turn corrupts probe queueing — a
+falsely-loaded region is never probed — and interacts with `_RADICULAR_BLOCKS`):
+
+- **Copenhagen Plank (Short Lever)** (×9) matched `plank` → `trunk_stability_sagittal`. It is frontal-plane
+  / adductor work. The engine was blind to the frontal work the user is actively doing — the exact stimulus
+  behind an active injury (left pes anserine) — and to `frontal_single_leg_stability`, one of his fortifying
+  regions.
+- **Shoulder External / Internal Rotation** (×22, the highest-frequency titles) matched the substring
+  `rotation` → loaded `rotation`, a `_RADICULAR_BLOCKS` region. Rotator-cuff isometrics masqueraded as
+  loaded trunk rotation, so the engine stopped probing rotation — the very region the user's positive slump
+  / S1 pattern should keep it cautious about.
+- **Cable Twist** (×6) matched nothing (`twist` is not a needle) — genuine loaded rotation entirely unseen.
+- **Single Leg RDL** (×2) matched `romanian`/`deadlift` → `hinge`, laterality lost — the whole right-side
+  deficit story invisible.
+- ~41% of distinct titles fell through to the empty fallback.
+
+**Rule going forward:** The authoritative exercise→region source is the `exercise_region_tags` join, not
+the keyword matcher. `_LOADED_KEYWORDS` survives ONLY as a fallback for untagged templates, and every
+fall-through is counted and logged — the fallback hit-rate IS the tagging-coverage metric (target: zero on
+the active window). Do not add rules to `_LOADED_KEYWORDS`; tag the template instead.

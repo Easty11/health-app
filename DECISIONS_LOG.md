@@ -1686,6 +1686,63 @@ sum), or the frozen-baseline comparison is retired.
 
 ---
 
+### 74. Exercise movement-taxonomy is app-owned annotation, stored separately from the Hevy-synced catalogue
+
+**Status:** On branch `feat/exercise-catalogue-taxonomy` (pending land; number claimed from max 73 — no
+competing branch carries a pending DECISIONS entry). New table `exercise_region_tags` (keyed on the Hevy
+template id, FK CASCADE, many-to-many with explicit `role`, validated against `engine/taxonomy.py`,
+versioned to `TAXONOMY_VERSION`) + a `hevy_exercise_templates.laterality` column. `infer_loaded_regions`
+rewritten from a substring matcher to a table join; the keyword map is demoted to an INSTRUMENTED
+fallback for untagged templates only. Migration `b2f1c9a4d7e8`.
+
+**Rationale:** The system's only exercise→region map was `_LOADED_KEYWORDS` (~30 substring rules, no
+break on match, no laterality) and it is materially wrong on live data (see FEEDBACK §7). Tags live in a
+SEPARATE table because `hevy_exercise_templates` is upsert-from-Hevy-sync (`_upsert_template`) and
+clobber-exposed on every resync — separation also splits Hevy-owned data from app-owned annotation.
+Many-to-many is deliberate (Suitcase Carry = carry + anti_lateral_flexion); `role` makes primacy explicit
+(the bug was *unintentional* multi-match with no primacy, e.g. Pallof firing both anti_rotation AND
+rotation). Plane/capacity are NOT duplicated — `Region` already carries them and region_key derives both.
+`laterality` is an exercise-level property NOT derivable from the taxonomy and load-bearing for plan↔log
+reconciliation (a unilateral movement logs as two sided Hevy entries). Validation is fail-closed: an
+orphan region_key is refused, never stored.
+
+**How you know:** GUARD-1 premise reproduced EMPIRICALLY against the user's last-90d Hevy history (20
+workouts, 2026-05-26..07-13): Copenhagen Plank (Short Lever)×9 → `trunk_stability_sagittal` (frontal work
+mistagged sagittal); Cable Twist×6 → `[]` (loaded rotation unseen); Single Leg RDL×2 → `hinge` (laterality
+lost); and stronger than the brief — Shoulder External/Internal Rotation×22 → false `rotation` (a
+`_RADICULAR_BLOCKS` region), and ~41% of distinct titles hit the empty fallback. 12 new tests pin the four
+documented failures + the Shoulder-Rotation neutralisation + back-compat + fallback instrumentation +
+orphan fail-closed; G5 clobber test proves tags + laterality survive a full `_upsert_template` resync.
+Full backend suite green (74 → 86 tests). Signature deviation: a table lookup needs a Session, so
+`infer_loaded_regions` gained an optional `db=None` keyword — return type (`set[str]`) and positional
+contract unchanged; both call sites (`chat.py`, `engine.py`) already had a Session in scope. Migration
+applies clean on a fresh DB; local SQLite chain is pre-broken by an older `ALTER` migration (Postgres-only,
+unrelated). **Owed:** Railway `alembic upgrade head` + human-confirmed seed of the active-window tags +
+live-resync clobber confirmation.
+
+**Do not revisit unless:** the tags are promoted to a source-agnostic canonical exercise layer (OPEN_QUESTIONS
+Q22) or the taxonomy vocabulary changes (bump `TAXONOMY_VERSION`, re-tag).
+
+---
+
+### 75. The Plan layer WRAPS the Adaptive Exposure Engine; it does not supersede it
+
+**Status:** Ratified by Luke in chat this session. Logged, NOT built — this is the governing frame for the
+Plan schema work (steps 2–4 of the exercise-catalogue sequence), constraining all of it. Number claimed
+from max 73.
+
+**Rationale:** `capability_state` and `fortification_profiles` survive intact, demoted from
+session-composer to slot-filler and template-shaper. The Plan owns cycle / slots / cardinality; the engine
+still supplies probe/fortify region selection *within* slots. This must be minted before any Plan schema
+work so that work does not accidentally re-architect the engine it is meant to wrap.
+
+**How you know:** design decision ratified in chat; no code artifact this session (this brief deliberately
+does not build to it — it only records the frame).
+
+**Do not revisit unless:** Plan schema work begins and the wrap boundary proves wrong in practice.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
