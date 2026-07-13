@@ -5,9 +5,9 @@ DailyCheckIn is retained for backward-compat with existing routes.
 
 naive_baseline is the old formula frozen at AM capture time:
   sleep_quality (1-5) → ×2 → 2-10
-  shoulder soreness (1-5) → (v-1)×2.5 → 0-10
+  soreness = MAX across reported items (1-5) → (v-1)×2.5 → 0-10
   fatigue (0-10) and motivation (0-10) pass through unchanged.
-  formula: sleep×0.3 + (10-fatigue)×0.3 + (10-shoulder)×0.2 + motivation×0.2
+  formula: sleep×0.3 + (10-fatigue)×0.3 + (10-soreness)×0.2 + motivation×0.2
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
@@ -43,13 +43,22 @@ def calc_naive_baseline(
     soreness: dict[str, Any] | None,
     motivation: int,
 ) -> float:
+    # Soreness term generalised from shoulder-only to MAX across all reported
+    # soreness items — the score was structurally blind to every injury but
+    # shoulder (hamstring etc. were captured and never scored). Max, not mean:
+    # mean dilutes (a severe single site averaged against quiet sites under-reads);
+    # the scalar answers "how beat up overall", movement-specificity lives in
+    # restrictions[]. Default 3 (neutral) when nothing is reported preserves prior
+    # behaviour. Introduces a discontinuity vs frozen historical (shoulder-only)
+    # naive_baseline values — those are NOT recomputed (frozen at capture).
     sleep_s = sleep_quality * 2                          # 1-5 → 2-10
-    shoulder_raw = (soreness or {}).get("shoulder", 3)
-    shoulder_s = (shoulder_raw - 1) * 2.5               # 1-5 → 0-10
+    vals = [v for v in (soreness or {}).values() if isinstance(v, (int, float))]
+    soreness_raw = max(vals) if vals else 3              # 1-5
+    soreness_s = (soreness_raw - 1) * 2.5               # 1-5 → 0-10
     raw = (
         sleep_s * 0.30
         + (10 - fatigue) * 0.30
-        + (10 - shoulder_s) * 0.20
+        + (10 - soreness_s) * 0.20
         + motivation * 0.20
     )
     return round(max(1.0, min(10.0, raw)), 2)
