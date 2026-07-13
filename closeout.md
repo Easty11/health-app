@@ -1,6 +1,7 @@
 # closeout — health-app
 
-Branch: `feat/constraint-consumption` (8 commits, local-only, parked in `BRANCHES.md`, **not merged**).
+Branch: `feat/constraint-consumption` — **LANDED** to `master` at `e70437b` (ff-merged, pushed, local
+branch deleted). DECISIONS_LOG entries claimed #72/#73 at merge.
 Session brief: constraint-consumption (`;build`) — make injury constraints a consumed input, not decorative.
 
 ---
@@ -47,9 +48,8 @@ trajectory (isolated in-memory sqlite). `neural`-exclusion probe run over all 30
 
 **No `;cc` pending-commit queue was carried into this session.** It ran from a direct `;build` brief,
 not a chat close-out handoff. The two DECISIONS_LOG entries were minted by Code this session, headed
-`### #NEXT` (integers claimed at merge per CLAUDE.md number-at-merge; DECISIONS max at open was 71).
-Both are committed (`a6bee90`) and therefore synced, not provisional — but **unnumbered until the branch
-fast-forwards to master**.
+`### #NEXT`, and **claimed #72 and #73 at merge** (number-at-merge; DECISIONS max at open was 71).
+Committed and synced to master.
 
 Governance written this session, all committed:
 - DECISIONS_LOG `#NEXT×2` (restrictions-set-at-onset / check-in-monitors; soreness-scoring-max) +
@@ -59,22 +59,21 @@ Governance written this session, all committed:
 - FEEDBACK 1.10 (scoring blind to all injuries but shoulder) · 1.11 (chat context not cross-device) ·
   2.6 dated confirmation (pes anserine uncapturable ~3 days).
 
-**OWED (committed in-repo, but unproven against prod):** live Railway seed of the two new injury entries
+**OWED (landed in-repo, but unproven against prod):** live Railway seed of the two new injury entries
 + trajectories, then `get_readiness_snapshot` read-back. Verified only on local sqlite this session — the
-MCP connector was invalidated (needs reconnect). #42 precedent makes local-verify acceptable to commit,
+MCP connector was invalidated (needs reconnect). #42 precedent makes local-verify acceptable to land,
 but the seed→prod path is unproven. Recorded in `BRANCHES.md`.
 
-CLAUDE.md "Recent landings" intentionally **not** updated — that block tracks work merged to master;
-this branch is parked, not landed. It is tracked in `BRANCHES.md` instead.
+CLAUDE.md "Recent landings" updated with #72/#73 at merge.
 
 ---
 
 ## 3. Cold-resume handoff
 
 ### Single clearest next action
-**Land the branch and close the OWED prod gap.** With sign-off: `git land feat/constraint-consumption`
-(ff-only merge + push + delete). Then run `seed_engine` against **Railway Postgres** so
-`injury_hamstring_right` + `injury_pes_anserine_left` (with trajectories) exist in prod, and confirm via
+**Close the OWED prod gap** (branch is landed at `e70437b`). Run `seed_engine` against **Railway
+Postgres** so `injury_hamstring_right` + `injury_pes_anserine_left` (with trajectories) exist in prod,
+and confirm via
 `get_readiness_snapshot` that both hamstrings + pes anserine render and the "Plan review flags" section
 behaves. Note: `_seed_injuries` is add-only — the two new keys don't exist in prod yet so the first seed
 includes their trajectory; the 3 pre-existing injuries stay unchanged (no trajectory, by design). If any
@@ -97,7 +96,7 @@ target injury already exists in prod, trajectory will NOT backfill — it needs 
   shares no code — kept as separate mechanisms).
 
 ### Branches
-- `feat/constraint-consumption` — CODE-COMPLETE, parked, ready to ff-land (this session).
+- `feat/constraint-consumption` — LANDED to master at `e70437b`, pushed, deleted (this session).
 - `feat/recovery-metrics-rhr` — PARKED (prior session; not touched here), held on the HRV Task-1 node
   dump in `health-connect-app`.
 
