@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 import models
 from auth import get_current_user
 from database import get_db
+from injury_trajectory import injury_soreness_key
 
 router = APIRouter(prefix="/checkin-v2", tags=["checkin-v2"])
 
@@ -55,18 +56,6 @@ def calc_naive_baseline(
 
 
 # ── soreness items ← active injuries (FEEDBACK 2.6) ─────────────────────────────
-
-def injury_soreness_key(value: dict[str, Any]) -> str:
-    """Stable soreness key for an injury entry. `body_part` alone collides when the
-    same part is injured on both sides (left + right hamstring), so sided injuries
-    carry the side. Maps back to the injury entry via (body_part, side); never
-    free-floats."""
-    body_part = str(value.get("body_part", "injury")).strip().lower().replace(" ", "_")
-    side = str(value.get("side", "")).strip().lower()
-    if side in ("", "bilateral", "both"):
-        return body_part
-    return f"{body_part}_{side}"
-
 
 def derive_soreness_items(user_id: int, db: Session) -> dict[str, int]:
     """AM soreness items derived from the active injury ledger — one item per active

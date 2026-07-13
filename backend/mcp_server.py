@@ -7,6 +7,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy import text
 
 from database import engine, SessionLocal
+from injury_trajectory import evaluate as evaluate_injury_trajectories
 from connectors.hevy import HevyClient
 from hevy_format import format_set
 from encryption import decrypt
@@ -473,6 +474,18 @@ def get_readiness_snapshot() -> str:
             lines.append(f"- {body_part}{r_str}")
     else:
         lines.append("Active injury constraints: none recorded.")
+
+    # Plan-review flags — trajectory divergence + symptom-gated review (Step 3).
+    # Surfacing only: these never alter restrictions or gate selection.
+    with SessionLocal() as sess:
+        flags = evaluate_injury_trajectories(user_id, sess)
+    if flags["divergences"] or flags["reviews"]:
+        lines.append("")
+        lines.append("Plan review flags:")
+        for f in flags["divergences"]:
+            lines.append(f"- [DIVERGENCE] {f['label']}: {f['message']}")
+        for f in flags["reviews"]:
+            lines.append(f"- [REVIEW] {f['label']}: {f['message']}")
 
     return "\n".join(lines)
 
