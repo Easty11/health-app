@@ -1,0 +1,68 @@
+{
+  "_meta": {
+    "taxonomy_version": "v0",
+    "source": "llm_proposed",
+    "provenance": "Proposed by Code from the user's last-90d Hevy history (2026-05-26..07-13, 51 distinct titles). LLM-proposed; every entry is PENDING human confirmation (DECISIONS_LOG #NEXT). Flip `source` to 'human_confirmed' per row at confirm-time — the seeder stamps confirmed_at then.",
+    "how_to_use": "Keyed by exact Hevy title (byte-exact — note U+2011/U+2013 in some titles). seed_exercise_region_tags.py resolves title -> hevy_exercise_templates.id (default-wins) and upserts. region_key is validated fail-closed against engine/taxonomy.py.",
+    "review_flags": "Entries carrying a `note` are genuine judgment calls — confirm the region choice before seeding."
+  },
+
+  "tags": [
+    {"title": "Goblet Squat", "laterality": "bilateral", "regions": [{"key": "squat", "role": "primary"}]},
+    {"title": "Leg Press (Machine)", "laterality": "bilateral", "regions": [{"key": "squat", "role": "primary"}]},
+    {"title": "Bulgarian Split Squat", "laterality": "unilateral", "regions": [{"key": "lunge_single_leg", "role": "primary"}], "note": "keyword also fired `squat` — dropped; this is single-leg, not a bilateral squat"},
+    {"title": "Dumbbell Step Up", "laterality": "unilateral", "regions": [{"key": "lunge_single_leg", "role": "primary"}]},
+    {"title": "Lunge (Dumbbell)", "laterality": "unilateral", "regions": [{"key": "lunge_single_leg", "role": "primary"}]},
+    {"title": "Landmine Squat and Press", "laterality": "bilateral", "regions": [{"key": "squat", "role": "primary"}, {"key": "vertical_push", "role": "secondary"}]},
+
+    {"title": "Deadlift (Trap bar)", "laterality": "bilateral", "regions": [{"key": "hinge", "role": "primary"}]},
+    {"title": "Trap Bar Deadlift – Technical", "laterality": "bilateral", "regions": [{"key": "hinge", "role": "primary"}], "note": "title carries U+2013 en-dash"},
+    {"title": "Rack Pull", "laterality": "bilateral", "regions": [{"key": "hinge", "role": "primary"}], "note": "keyword matched NOTHING (false negative) — genuine loaded hinge was unseen"},
+    {"title": "Hip Thrust (Barbell)", "laterality": "bilateral", "regions": [{"key": "hinge", "role": "primary"}]},
+    {"title": "Hip Thrust (Machine)", "laterality": "bilateral", "regions": [{"key": "hinge", "role": "primary"}]},
+    {"title": "Single Leg Romanian Deadlift (Dumbbell)", "laterality": "unilateral", "regions": [{"key": "hinge", "role": "primary"}]},
+    {"title": "B‑Stance RDL", "laterality": "unilateral", "regions": [{"key": "hinge", "role": "primary"}], "note": "title carries U+2011 non-breaking hyphen; b-stance = staggered/quasi-unilateral"},
+
+    {"title": "Chest Press (Machine)", "laterality": "bilateral", "regions": [{"key": "horizontal_push", "role": "primary"}]},
+    {"title": "Push Up", "laterality": "bilateral", "regions": [{"key": "horizontal_push", "role": "primary"}]},
+    {"title": "Seated Shoulder Press (Machine)", "laterality": "bilateral", "regions": [{"key": "vertical_push", "role": "primary"}]},
+    {"title": "Shoulder Press (Dumbbell)", "laterality": "bilateral", "regions": [{"key": "vertical_push", "role": "primary"}]},
+
+    {"title": "Bent Over Row (Barbell)", "laterality": "bilateral", "regions": [{"key": "horizontal_pull", "role": "primary"}]},
+    {"title": "Dumbbell Row", "laterality": "unilateral", "regions": [{"key": "horizontal_pull", "role": "primary"}]},
+    {"title": "Landmine Row", "laterality": "unilateral", "regions": [{"key": "horizontal_pull", "role": "primary"}]},
+    {"title": "Seated Row (Machine)", "laterality": "bilateral", "regions": [{"key": "horizontal_pull", "role": "primary"}]},
+    {"title": "Single Arm Cable Row", "laterality": "unilateral", "regions": [{"key": "horizontal_pull", "role": "primary"}]},
+    {"title": "Face Pull", "laterality": "bilateral", "regions": [{"key": "horizontal_pull", "role": "primary"}], "note": "scapular/rear-delt; horizontal_pull is the closest pattern — confirm"},
+    {"title": "Lat Pulldown (Machine)", "laterality": "bilateral", "regions": [{"key": "vertical_pull", "role": "primary"}]},
+    {"title": "Single Arm Lat Pulldown", "laterality": "unilateral", "regions": [{"key": "vertical_pull", "role": "primary"}]},
+    {"title": "Straight Arm Lat Pulldown (Cable)", "laterality": "bilateral", "regions": [{"key": "vertical_pull", "role": "secondary"}], "note": "lat isolation, not a true vertical pull — secondary; confirm"},
+
+    {"title": "Suitcase Carry", "laterality": "unilateral", "regions": [{"key": "carry", "role": "primary"}, {"key": "anti_lateral_flexion", "role": "secondary"}]},
+
+    {"title": "Cable Core Pallof Press", "laterality": "unilateral", "regions": [{"key": "anti_rotation", "role": "primary"}]},
+    {"title": "Cable Twist (Down to up)", "laterality": "unilateral", "regions": [{"key": "rotation", "role": "primary"}], "note": "keyword matched NOTHING (false negative) — genuine loaded rotation was unseen"},
+    {"title": "Cable Twist (Up to down)", "laterality": "unilateral", "regions": [{"key": "rotation", "role": "primary"}], "note": "keyword matched NOTHING (false negative)"},
+
+    {"title": "Copenhagen Plank (Short Lever)", "laterality": "unilateral", "regions": [{"key": "frontal_single_leg_stability", "role": "primary"}, {"key": "anti_lateral_flexion", "role": "secondary"}], "note": "CORRECTION: keyword tagged trunk_stability_sagittal; this is frontal-plane adductor/anti-lateral-flexion work. Primary region is a human-confirm call (frontal_single_leg_stability vs anti_lateral_flexion)."},
+    {"title": "Plank", "laterality": "bilateral", "regions": [{"key": "trunk_stability_sagittal", "role": "primary"}], "note": "user has logged side-planks under this title too (see workout notes) — confirm this instance is a front plank"},
+    {"title": "Side Plank", "laterality": "unilateral", "regions": [{"key": "anti_lateral_flexion", "role": "primary"}], "note": "CORRECTION: keyword tagged trunk_stability_sagittal; side plank is frontal anti-lateral-flexion"},
+    {"title": "Weighted Dead Bug", "laterality": "bilateral", "regions": [{"key": "trunk_stability_sagittal", "role": "primary"}], "note": "anti-extension core; closest sagittal-trunk region"},
+    {"title": "Cable Crunch", "laterality": "bilateral", "regions": [{"key": "trunk_stability_sagittal", "role": "secondary"}], "note": "spinal flexion, not anti-movement stability — secondary; confirm or leave untagged"},
+
+    {"title": "Shoulder External Rotation", "laterality": "unilateral", "regions": [{"key": "shoulder_mobility", "role": "secondary"}], "note": "CORRECTION: keyword tagged `rotation` (a _RADICULAR_BLOCKS region) via substring — this is rotator-cuff isometric work, NOT loaded trunk rotation. Taxonomy has no cuff region; shoulder_mobility(secondary) neutralises the false positive. Confirm or leave to a future taxonomy revision."},
+    {"title": "Shoulder Internal Rotation", "laterality": "unilateral", "regions": [{"key": "shoulder_mobility", "role": "secondary"}], "note": "CORRECTION: same false-`rotation` neutralisation as external rotation"},
+
+    {"title": "Calf Extension (Machine)", "laterality": "bilateral", "regions": [{"key": "ankle_df", "role": "secondary"}], "note": "plantarflexion strength; taxonomy has only ankle_df (dorsiflexion mobility). Matches the legacy keyword convention (calf->ankle_df) — imperfect; confirm"},
+    {"title": "Standing Calf Raise (Machine)", "laterality": "bilateral", "regions": [{"key": "ankle_df", "role": "secondary"}], "note": "as Calf Extension — plantarflexion has no clean region"},
+
+    {"title": "Air Bike", "laterality": "bilateral", "regions": [{"key": "aerobic_base", "role": "primary"}], "note": "conditioning; aerobic_base is currently GUESSING/needs_norm"}
+  ],
+
+  "_untagged_taxonomy_gap": {
+    "reason": "These logged movements have NO clean region in Capability_Taxonomy_v0, which is a movement-PATTERN + capacity vocabulary, not an accessory/isolation one. Left UNTAGGED deliberately — the keyword fallback returns [] for all of them (benign: no wrong region, just a logged coverage-gap hit). Forcing a tag would pollute the region signal. This is the OPEN_QUESTION for Luke (see OPEN_QUESTIONS): accept benign empties, add an accessory sentinel, or extend the taxonomy — the adductor/abductor gap is pes-anserine-relevant.",
+    "frontal_hip_strength_NO_REGION": ["Hip Adduction (Machine)", "Hip Abduction (Machine)"],
+    "knee_isolation_NO_REGION": ["Leg Extension (Machine)", "Lying Leg Curl (Machine)", "Seated Leg Curl (Machine)"],
+    "arm_shoulder_isolation_NO_REGION": ["Bicep Curl (Dumbbell)", "Hammer Curl (Dumbbell)", "Preacher Curl (Barbell)", "Triceps Rope Pushdown", "Lateral Raise (Dumbbell)", "Single Arm Lateral Raise (Cable)", "Rear Delt Reverse Fly (Cable)", "Rear Delt Reverse Fly (Dumbbell)", "Single Arm Rear Delt Cable Fly", "Band Pullaparts", "Pullover (Dumbbell)"]
+  }
+}

@@ -20,6 +20,7 @@ re-ranks the vehicle bias toward recovery vehicles — "switch window, not skip"
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Iterable
 
 from sqlalchemy.orm import Session
@@ -28,6 +29,8 @@ import models
 from . import taxonomy
 from .taxonomy import Region, SIDE_BILATERAL
 
+logger = logging.getLogger(__name__)
+
 
 # --------------------------------------------------------------------------- #
 # Avoidance signal — infer which regions the user actually LOADS (so the rest  #
@@ -35,9 +38,15 @@ from .taxonomy import Region, SIDE_BILATERAL
 # --------------------------------------------------------------------------- #
 
 # Hevy exercise titles → taxonomy region keys. Keyword-matched, lowercase.
-# Deliberately conservative: a miss just means a region looks "avoided" and may
-# surface as a probe — the one-probe-per-session cadence bounds the cost of a
-# false positive, and a real probe response corrects it.
+#
+# DEMOTED to a FALLBACK for untagged templates only (DECISIONS_LOG #NEXT). It is
+# wrong on live user data — it produces simultaneous false positives and false
+# negatives within a single logged session (substring match, no break on hit,
+# no laterality): "Copenhagen Plank" -> trunk_stability_sagittal (it is frontal);
+# "Shoulder External Rotation" -> rotation (a radicular-blocked region);
+# "Cable Twist" -> nothing. The authoritative path is the `exercise_region_tags`
+# join. Every fall-through here is COUNTED and LOGGED — the fallback hit-rate is
+# the tagging-coverage metric (target: zero on the active window).
 _LOADED_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("deadlift", "hinge"), ("rdl", "hinge"), ("romanian", "hinge"),
     ("hip thrust", "hinge"), ("good morning", "hinge"), ("trap bar", "hinge"),
@@ -60,17 +69,91 @@ _LOADED_KEYWORDS: tuple[tuple[str, str], ...] = (
 )
 
 
-def infer_loaded_regions(workouts: Iterable[dict[str, Any]]) -> set[str]:
-    """Region keys the user has demonstrably loaded in recent Hevy history."""
+def _keyword_regions(title: str) -> set[str]:
+    """The legacy substring matcher — FALLBACK for untagged templates only."""
+    tl = (title or "").lower()
+    if not tl:
+        return set()
+    return {rk for needle, rk in _LOADED_KEYWORDS if needle in tl}
+
+
+def _tags_by_template(db: Session, template_ids: set[str]) -> dict[str, set[str]]:
+    """template_id -> {region_key} from the app-owned annotation (DECISIONS_LOG
+    #NEXT). Both `primary` and `secondary` roles count as loaded — the region IS
+    loaded regardless of primacy; role governs review/reconciliation, not
+    presence. Orphan keys (no matching taxonomy Region) are skipped + warned:
+    validation is fail-closed at write, this is defence in depth on read."""
+    if not template_ids:
+        return {}
+    rows = (
+        db.query(models.ExerciseRegionTag)
+        .filter(models.ExerciseRegionTag.hevy_exercise_template_id.in_(template_ids))
+        .all()
+    )
+    out: dict[str, set[str]] = {}
+    for r in rows:
+        if taxonomy.by_key(r.region_key) is None:
+            logger.warning(
+                "exercise_region_tags: orphan region_key %r on template %s — skipping",
+                r.region_key, r.hevy_exercise_template_id,
+            )
+            continue
+        out.setdefault(r.hevy_exercise_template_id, set()).add(r.region_key)
+    return out
+
+
+def infer_loaded_regions(
+    workouts: Iterable[dict[str, Any]],
+    *,
+    db: Session | None = None,
+) -> set[str]:
+    """Region keys the user has demonstrably loaded in recent Hevy history.
+
+    Authoritative path (DECISIONS_LOG #NEXT): join each logged exercise's
+    `exercise_template_id` against `exercise_region_tags`. A template with no
+    tags is UNTAGGED and falls back to the legacy `_LOADED_KEYWORDS` substring
+    matcher — every such fall-through is counted and logged, because the
+    fallback hit-rate is the tagging-coverage metric (target zero on the active
+    window).
+
+    `db` is an optional keyword: when provided (both known call sites have a
+    Session in scope), the table join runs; when absent, the function degrades
+    to the pure keyword path — preserving the original contract for any caller
+    that cannot supply a session. The return type (`set[str]`) is unchanged.
+    """
+    exercises: list[dict[str, Any]] = [
+        ex
+        for w in (workouts or [])
+        for ex in (w.get("exercises", []) or [])
+    ]
+
+    tag_map: dict[str, set[str]] = {}
+    if db is not None:
+        template_ids = {
+            tid for ex in exercises if (tid := ex.get("exercise_template_id"))
+        }
+        tag_map = _tags_by_template(db, template_ids)
+
     loaded: set[str] = set()
-    for w in workouts or []:
-        for ex in w.get("exercises", []) or []:
-            title = (ex.get("title") or "").lower()
-            if not title:
-                continue
-            for needle, region_key in _LOADED_KEYWORDS:
-                if needle in title:
-                    loaded.add(region_key)
+    fallback_titles: list[str] = []
+    for ex in exercises:
+        tid = ex.get("exercise_template_id")
+        title = ex.get("title") or ""
+        if tid and tid in tag_map:              # tagged — authoritative
+            loaded |= tag_map[tid]
+            continue
+        # Untagged (or no db): legacy keyword fallback, instrumented.
+        kw = _keyword_regions(title)
+        loaded |= kw
+        if title or tid:
+            fallback_titles.append(title or f"<template {tid}>")
+
+    if fallback_titles:
+        logger.info(
+            "infer_loaded_regions: %d/%d logged exercises hit the keyword fallback "
+            "(untagged templates) — coverage gap: %s",
+            len(fallback_titles), len(exercises), sorted(set(fallback_titles)),
+        )
     return loaded
 
 

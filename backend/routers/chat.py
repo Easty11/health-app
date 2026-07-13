@@ -425,7 +425,7 @@ async def chat(
     engine_selection = None
     if fort_profile is not None:
         loaded_regions = selection.infer_loaded_regions(
-            (hevy_data or {}).get("recent_workouts", [])
+            (hevy_data or {}).get("recent_workouts", []), db=db
         )
         probe_queue = selection.compute_probe_queue(
             db, current_user.id, profile=fort_profile, loaded_region_keys=loaded_regions,

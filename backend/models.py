@@ -415,6 +415,55 @@ class HevyExerciseTemplate(Base):
     synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # App-owned annotation (DECISIONS_LOG #NEXT): exercise-level laterality, NOT
+    # derivable from the region taxonomy and load-bearing for plan↔log
+    # reconciliation (a unilateral movement is logged as two sided Hevy entries).
+    # bilateral | unilateral | alternating | NULL(untagged). Deliberately NOT
+    # assigned by `_upsert_template`, so a Hevy resync preserves it (the whole
+    # reason tags live off the synced columns).
+    laterality: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+
+class ExerciseRegionTag(Base):
+    """App-owned exercise→taxonomy-region annotation (DECISIONS_LOG #NEXT).
+
+    Deliberately a SEPARATE table from `hevy_exercise_templates`, which is
+    upsert-from-Hevy-sync (`_upsert_template`) and clobber-exposed on every
+    resync. Keeping tags here cleanly splits Hevy-owned data from app-owned
+    annotation, and a resync can never touch a row it does not write.
+
+    Many-to-many by design: some movements legitimately load more than one
+    region (Suitcase Carry = carry + anti_lateral_flexion). `role` makes the
+    primacy explicit and reviewable — the current keyword matcher's bug is
+    UNINTENTIONAL multi-match with no primacy, not multi-match per se.
+
+    `region_key` is validated against `engine/taxonomy.py` at write time
+    (fail-closed — an orphan key is refused, never stored). Plane and capacity
+    are NOT stored: `Region` already carries them and region_key derives both;
+    duplicating them would create a drift surface for no gain.
+    """
+    __tablename__ = "exercise_region_tags"
+    __table_args__ = (
+        Index("ix_exercise_region_tags_region_key", "region_key"),
+    )
+
+    hevy_exercise_template_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("hevy_exercise_templates.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    region_key: Mapped[str] = mapped_column(String(100), primary_key=True)  # validated vs taxonomy Region.key
+    # primary | secondary — explicit primacy for deliberate multi-region tags
+    role: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'primary'"))
+    # mirrors engine.taxonomy.TAXONOMY_VERSION (currently 'v0')
+    taxonomy_version: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'v0'"))
+    # llm_proposed | human_confirmed — the labs-style extract→confirm provenance
+    source: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'llm_proposed'"))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class FortificationProfile(Base):

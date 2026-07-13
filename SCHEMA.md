@@ -26,6 +26,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 013 — daily_metric_summaries  materialized view — last
 014 — user_health_state       PLACEHOLDER — design after first data flowing
 015 — hevy_exercise_templates FK to users (owner_user_id, nullable) — otherwise standalone
+016 — exercise_region_tags    FK to hevy_exercise_templates (CASCADE) — app-owned annotation
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -741,7 +742,8 @@ CREATE TABLE hevy_exercise_templates (
     owner_user_id            INT REFERENCES users(id) ON DELETE CASCADE,  -- NULL = Hevy default; set = account custom
     primary_muscle_group     VARCHAR(100),
     secondary_muscle_groups  JSON,                      -- landed as JSON (file convention elsewhere is JSONB)
-    synced_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    synced_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    laterality               VARCHAR(20)                -- bilateral|unilateral|alternating|NULL — app-owned; _upsert_template never assigns it
 );
 
 CREATE INDEX ix_hevy_exercise_templates_owner_user_id
@@ -749,6 +751,27 @@ CREATE INDEX ix_hevy_exercise_templates_owner_user_id
 
 CREATE INDEX ix_hevy_exercise_templates_title
     ON hevy_exercise_templates (title);
+```
+
+### 016 — exercise_region_tags
+
+App-owned exercise→taxonomy-region annotation (DECISIONS_LOG #NEXT). A SEPARATE table from `hevy_exercise_templates` — that table is upsert-from-Hevy-sync (`_upsert_template`) and clobber-exposed on every resync; keeping tags here means a resync can never touch a row it does not write. Many-to-many by design (Suitcase Carry = carry + anti_lateral_flexion); `role` makes primacy explicit and reviewable. `region_key` is validated against `engine/taxonomy.py` at write time — fail-closed, an orphan key is refused. Plane/capacity are NOT stored (Region already carries them; region_key derives both). `source` follows the labs extract→confirm provenance model: `llm_proposed` then `human_confirmed` (with `confirmed_at`).
+
+```sql
+CREATE TABLE exercise_region_tags (
+    hevy_exercise_template_id  VARCHAR(64) NOT NULL REFERENCES hevy_exercise_templates(id) ON DELETE CASCADE,
+    region_key                 VARCHAR(100) NOT NULL,   -- validated vs engine/taxonomy.py Region.key
+    role                       VARCHAR(20) NOT NULL DEFAULT 'primary',        -- primary | secondary
+    taxonomy_version           VARCHAR(20) NOT NULL DEFAULT 'v0',             -- mirrors TAXONOMY_VERSION
+    source                     VARCHAR(20) NOT NULL DEFAULT 'llm_proposed',   -- llm_proposed | human_confirmed
+    confirmed_at               TIMESTAMPTZ,
+    created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (hevy_exercise_template_id, region_key)
+);
+
+CREATE INDEX ix_exercise_region_tags_region_key
+    ON exercise_region_tags (region_key);
 ```
 
 ## Canonical Metric Type Whitelist

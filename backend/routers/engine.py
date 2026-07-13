@@ -78,7 +78,7 @@ async def _loaded_regions(db: Session, user_id: int) -> set[str]:
         data = await client.get_workouts(page=1, page_size=10)
     except (HevyAuthError, Exception):
         return set()
-    return selection.infer_loaded_regions(data.get("workouts", []))
+    return selection.infer_loaded_regions(data.get("workouts", []), db=db)
 
 
 def _readiness_hint(db: Session, user_id: int) -> int | None:
