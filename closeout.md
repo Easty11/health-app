@@ -1,16 +1,20 @@
 # closeout — health-app
 
-Branch: `feat/constraint-consumption` — **LANDED** to `master` at `e70437b` (ff-merged, pushed, local
-branch deleted). DECISIONS_LOG entries claimed #72/#73 at merge.
+Branch: **master** (feat/constraint-consumption LANDED at `e70437b`, pushed, deleted).
 Session brief: constraint-consumption (`;build`) — make injury constraints a consumed input, not decorative.
+Status: **complete + landed + prod-seeded.**
 
 ---
 
 ## 1. Real commits this session
 
-Session-open ref: `2f1309e` (master tip). `git log --oneline master..HEAD`:
+Session-open ref: `2f1309e`. `git log --oneline 2f1309e..HEAD` (all now on master):
 
 ```
+2b66890 gov: Railway seed done — 2 injury rows in prod (health-app-DB)
+2782633 gov(branches): feat/constraint-consumption LANDED at e70437b
+e70437b gov: number-at-merge — claim DECISIONS_LOG #72/#73 + Recent landings
+d93ef01 chore: session close-out
 2ba3e75 gov(branches): park feat/constraint-consumption (code-complete, ready to land)
 a6bee90 gov: constraint-consumption — 2 decisions, Q20/Q21, FEEDBACK 1.10/1.11/2.6
 785e349 fix(readiness): naive_baseline soreness term = max across all reported sites
@@ -21,82 +25,73 @@ d11d96e feat(injury): trajectory divergence + symptom-gated review (surfacing on
 de8f8d3 data(injury): seed injury_hamstring_right (semimembranosus, neural limiter)
 ```
 
-Concern-split honoured: data (`de8f8d3`, `5584666`, `0c235eb`) · capture (`42879b4`) · mechanism
-(`d11d96e`) · scoring (`785e349`) · governance (`a6bee90`, `2ba3e75`) each separate.
+Feature/data (concern-split): `de8f8d3` `5584666` `0c235eb` (data) · `42879b4` (capture) · `d11d96e`
+(mechanism) · `785e349` (scoring). Governance: `a6bee90` (stores) · `2ba3e75`/`e70437b`/`2782633`/
+`2b66890` (park → number-at-merge → land → seed-done). `d93ef01` was the first close-out (pre-land).
 
-What landed on the branch, by brief step:
-- **Step 1 (data):** two distinct right-side injuries seeded into `_INJURY_SEED` — right hamstring
-  (structural proximal semimembranosus) and left pes anserine. Right hamstring recorded
-  `signal_type:"mechanical"` (NOT neural) after the VERIFY gate proved `neural` fires a signal-wide
-  radicular block (hinge/rotation/carry/gait) that would kill the wanted SL-RDL lane; the neural finding
-  rides in `detail`. Left hamstring untouched (distinct injury).
-- **Step 2 (capture):** AM check-in soreness items derive from the active injury ledger
-  (`checkin_v2.derive_soreness_items`), keyed `{body_part}` / `{body_part}_{side}` so the two hamstrings
-  don't collide. Frontend `CheckInAM.jsx` renders whatever keys arrive; no migration (soreness is JSON).
-- **Step 3 (mechanism, JSON-only — no migration):** injury `trajectory` in `value`;
-  `injury_trajectory.evaluate()` surfaces divergence + symptom-gated review in `get_readiness_snapshot`.
-  Surfacing only — never alters `restrictions[]` or gates selection.
-- **Step 4 (scoring):** `calc_naive_baseline` soreness term generalised to max across reported sites
-  (was shoulder-only). Discontinuity accept-and-annotate, NOT backfilled (frozen-at-capture).
+What shipped, by brief step:
+- **Step 1 (data):** two distinct right-side injuries seeded — right hamstring (structural proximal
+  semimembranosus) `signal_type:"mechanical"` NOT neural (the VERIFY gate proved `neural` fires a
+  signal-wide radicular block that would kill the wanted SL-RDL; neural finding rides in `detail`), and
+  left pes anserine. Left hamstring untouched (distinct injury).
+- **Step 2 (capture):** AM soreness items derive from the active injury ledger
+  (`checkin_v2.derive_soreness_items`), keyed `{body_part}`/`{body_part}_{side}` (no hamstring collision);
+  `CheckInAM.jsx` renders derived keys. No migration (soreness is JSON).
+- **Step 3 (mechanism, JSON-only):** injury `trajectory` in `value`; `injury_trajectory.evaluate()`
+  surfaces divergence + symptom-gated review in `get_readiness_snapshot`. Surfacing only — never gates.
+- **Step 4 (scoring):** `calc_naive_baseline` soreness term = max across reported sites (was
+  shoulder-only). Discontinuity accept-and-annotate, not backfilled (frozen-at-capture).
 
-Verification: full backend suite **74 green**. Divergence + review proven to fire against the real seed
-trajectory (isolated in-memory sqlite). `neural`-exclusion probe run over all 30 taxonomy regions.
+Verification: 74 backend tests green; divergence + review fire against the real seed trajectory; neural
+exclusion-set probed over all 30 regions. **Prod seed done** — `seed_engine` against `health-app-DB` via
+`DATABASE_PUBLIC_URL`, `injury ledger rows written: 2`.
 
 ---
 
 ## 2. Pending-queue reconciliation
 
-**No `;cc` pending-commit queue was carried into this session.** It ran from a direct `;build` brief,
-not a chat close-out handoff. The two DECISIONS_LOG entries were minted by Code this session, headed
-`### #NEXT`, and **claimed #72 and #73 at merge** (number-at-merge; DECISIONS max at open was 71).
-Committed and synced to master.
+**No `;cc` pending-commit queue was carried into this session** — it ran from a direct `;build` brief.
+The two DECISIONS_LOG entries were minted by Code, headed `### #NEXT`, and **claimed #72 and #73 at merge**
+(number-at-merge; DECISIONS max at open was 71). Everything committed, landed to master, and pushed —
+nothing provisional.
 
-Governance written this session, all committed:
-- DECISIONS_LOG `#NEXT×2` (restrictions-set-at-onset / check-in-monitors; soreness-scoring-max) +
-  withdrawn-draft note (additive-checklist regulatory scope — void, fabricated premise).
-- OPEN_QUESTIONS Q20 (findings-vs-restrictions schema gap, open) · Q21 (lab #63/SPEC_64 contract rhymes
-  but shares no code, resolved).
-- FEEDBACK 1.10 (scoring blind to all injuries but shoulder) · 1.11 (chat context not cross-device) ·
-  2.6 dated confirmation (pes anserine uncapturable ~3 days).
+Governance landed: DECISIONS_LOG #72 (restrictions set at onset; check-in monitors, does not gate) +
+#73 (soreness scoring max) + withdrawn-draft note · OPEN_QUESTIONS Q20 (findings-vs-restrictions gap,
+open) / Q21 (lab #63/SPEC_64 contract rhymes, no shared code, resolved) · FEEDBACK 1.10 / 1.11 / 2.6.
 
-**Railway seed DONE (2026-07-13):** `seed_engine` run against prod Postgres (service `health-app-DB`)
-via `DATABASE_PUBLIC_URL` — `injury ledger rows written: 2` (right hamstring + pes anserine, each with
-trajectory). The seed→prod path is now proven. Remaining (organic, not a code gap): the trajectory
-divergence/review flags surface in `get_readiness_snapshot` only once the backend redeploys with the
-Step-3 code AND an AM check-in records soreness under the derived keys. Caveat: the MCP
-`get_readiness_snapshot` appears to read a non-prod DB (it showed the new injuries before any prod seed
-succeeded) — verify prod state with a direct Postgres query, not the tool.
-
-CLAUDE.md "Recent landings" updated with #72/#73 at merge.
+**Prod state:** injury data seeded (2 rows, with trajectories). The seed→prod path is proven. Not yet
+observed live: the trajectory flags in `get_readiness_snapshot` — they need (a) the backend redeployed
+with the Step-3 code and (b) an AM check-in recording soreness under the derived keys. Neither is a code
+gap; both are organic.
 
 ---
 
 ## 3. Cold-resume handoff
 
 ### Single clearest next action
-**Prod seed is done** (branch landed at `e70437b`; `injury ledger rows written: 2` against
-`health-app-DB`). Next is organic: confirm the backend redeployed with the Step-3 code, then let one AM
-check-in record soreness under the derived keys so the divergence/review flags can fire. Historical
-reference — run `seed_engine` against **Railway Postgres** so `injury_hamstring_right` +
-`injury_pes_anserine_left` (with trajectories) exist in prod, and confirm via
-`get_readiness_snapshot` that both hamstrings + pes anserine render and the "Plan review flags" section
-behaves. Note: `_seed_injuries` is add-only — the two new keys don't exist in prod yet so the first seed
-includes their trajectory; the 3 pre-existing injuries stay unchanged (no trajectory, by design). If any
-target injury already exists in prod, trajectory will NOT backfill — it needs an update path.
+constraint-consumption is **done and in prod**. The one open loop is watching the trajectory flags fire
+once live: confirm `health-app-backend` redeployed from master (`e70437b`+), then the first AM check-in
+that records soreness under the derived keys (`pes_anserine_left` / `hamstring_right`) makes the
+divergence/review series exist — a `get_readiness_snapshot` (read against **prod**, see caveat) should
+then show a "Plan review flags" line. After that, pick up the ROADMAP NOW items.
+
+### Known caveat to resolve
+`get_readiness_snapshot` via the MCP connector **appears to read a non-prod DB** — it showed the two new
+injuries before any prod seed had succeeded, so it is likely pointed at local sqlite. Verify prod state
+with a direct Postgres query (`railway`-injected `DATABASE_PUBLIC_URL`, service `health-app-DB`), not the
+MCP tool, until the connector's target is confirmed.
 
 ### Current sprint (ROADMAP NOW)
-- Morning check-in screen (Hooper Index) — **this session advanced its soreness-capture surface**; items
-  now injury-derived.
+- Morning check-in screen (Hooper Index) — **advanced this session**; soreness items now injury-derived.
 - Fix Health Connect permissions (companion app, record types 38/35/11/37).
 - Samsung Health package-name correction (`com.sec.android.app.shealth`; verify via Railway query).
 - Persistent conversation history; session cards not clickable; dual-panel scroll (UI bugs).
 - `mcp_server.get_hevy_workouts` unimported `Session` type — pre-existing one-line import fix.
 
 ### Open questions by status
-- **open:** Q7 (injury ledger missing right semimembranosus — **partially closed this session**: the
-  structured entry now exists; the findings-vs-restrictions modelling remains) · Q20 (findings vs
-  restrictions schema gap, Q7 territory) · Q17/Q18 (HRV step-change instrumentation-vs-physiology;
-  historical out-of-range sweep) · Q19 (desktop workout-detail scroller layout).
+- **open:** Q7 (injury ledger missing right semimembranosus — **structured entry now exists in code +
+  prod**; the findings-vs-restrictions modelling remains) · Q20 (findings vs restrictions schema gap,
+  Q7 territory) · Q17/Q18 (HRV step-change; historical out-of-range sweep) · Q19 (desktop scroller).
 - **resolved this session:** Q21 (lab #63/SPEC_64 expectation contract rhymes with injury trajectory but
   shares no code — kept as separate mechanisms).
 
