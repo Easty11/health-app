@@ -1613,7 +1613,7 @@ or the ring is replaced by a device whose stage discrimination is validated.
 
 ---
 
-### #NEXT. Restrictions are set at injury onset; the check-in monitors, it does not gate
+### 72. Restrictions are set at injury onset; the check-in monitors, it does not gate
 
 **Status:** Landed on `feat/constraint-consumption` (constraint-consumption brief, Steps 1–4). AM
 check-in soreness items now derive from the active injury ledger (`checkin_v2.derive_soreness_items`),
@@ -1658,7 +1658,7 @@ resurface.
 
 ---
 
-### #NEXT. Soreness scoring generalises across body parts; max, not shoulder-only
+### 73. Soreness scoring generalises across body parts; max, not shoulder-only
 
 **Status:** Landed on `feat/constraint-consumption`. `calc_naive_baseline`'s soreness term is now **MAX
 across all reported soreness items** (was `soreness["shoulder"]` only), retaining the single 0.20 term,
