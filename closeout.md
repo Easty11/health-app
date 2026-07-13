@@ -59,10 +59,13 @@ Governance written this session, all committed:
 - FEEDBACK 1.10 (scoring blind to all injuries but shoulder) · 1.11 (chat context not cross-device) ·
   2.6 dated confirmation (pes anserine uncapturable ~3 days).
 
-**OWED (landed in-repo, but unproven against prod):** live Railway seed of the two new injury entries
-+ trajectories, then `get_readiness_snapshot` read-back. Verified only on local sqlite this session — the
-MCP connector was invalidated (needs reconnect). #42 precedent makes local-verify acceptable to land,
-but the seed→prod path is unproven. Recorded in `BRANCHES.md`.
+**Railway seed DONE (2026-07-13):** `seed_engine` run against prod Postgres (service `health-app-DB`)
+via `DATABASE_PUBLIC_URL` — `injury ledger rows written: 2` (right hamstring + pes anserine, each with
+trajectory). The seed→prod path is now proven. Remaining (organic, not a code gap): the trajectory
+divergence/review flags surface in `get_readiness_snapshot` only once the backend redeploys with the
+Step-3 code AND an AM check-in records soreness under the derived keys. Caveat: the MCP
+`get_readiness_snapshot` appears to read a non-prod DB (it showed the new injuries before any prod seed
+succeeded) — verify prod state with a direct Postgres query, not the tool.
 
 CLAUDE.md "Recent landings" updated with #72/#73 at merge.
 
@@ -71,9 +74,11 @@ CLAUDE.md "Recent landings" updated with #72/#73 at merge.
 ## 3. Cold-resume handoff
 
 ### Single clearest next action
-**Close the OWED prod gap** (branch is landed at `e70437b`). Run `seed_engine` against **Railway
-Postgres** so `injury_hamstring_right` + `injury_pes_anserine_left` (with trajectories) exist in prod,
-and confirm via
+**Prod seed is done** (branch landed at `e70437b`; `injury ledger rows written: 2` against
+`health-app-DB`). Next is organic: confirm the backend redeployed with the Step-3 code, then let one AM
+check-in record soreness under the derived keys so the divergence/review flags can fire. Historical
+reference — run `seed_engine` against **Railway Postgres** so `injury_hamstring_right` +
+`injury_pes_anserine_left` (with trajectories) exist in prod, and confirm via
 `get_readiness_snapshot` that both hamstrings + pes anserine render and the "Plan review flags" section
 behaves. Note: `_seed_injuries` is add-only — the two new keys don't exist in prod yet so the first seed
 includes their trajectory; the 3 pre-existing injuries stay unchanged (no trajectory, by design). If any
