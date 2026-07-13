@@ -293,6 +293,43 @@ numeric schema, not just efficiency.
 
 ---
 
+## Q19. Desktop workout-detail exercise scroller starved to ~36px — right-column space allocation
+
+Desktop full-width, a workout opened in `WorkoutDetail` (`frontend/src/components/WorkoutPanel.jsx`
+lines 190–244): reported symptom, verbatim — "no scroll ability for the full column, only the
+exercise section, which is small." Live DevTools measurement on the authenticated app (Chromium,
+~779 px-tall viewport) confirms the exercise list at `WorkoutPanel.jsx:224`
+(`flex-1 overflow-y-auto px-4 py-4 space-y-5`) computes `clientHeight 36` / `scrollHeight 1977`,
+`overflow-y: auto` — scrollable, but squeezed to a 36 px window. **Nothing is stranded/unreachable**;
+the fixed chrome above simply consumes the panel. Cause is **space allocation, not a
+min-height/overflow CSS defect**: the right column (727 px) splits 50/50 between HealthPanel and
+WorkoutPanel (both `flex-1 min-h-0`, `Dashboard.jsx:99/102`), so WorkoutPanel gets ~363 px; the two
+`flex-none` blocks above the list — header (`:192`) and the stats-grid + session-analysis + "Get AI
+Feedback" button block (`:197–223`) — consume ~327 px, leaving the `flex-1` exercise list ~36 px.
+
+Falsified prior hypothesis: the `md:min-h-0`-on-four-scrollers fix (drafted as "#70", **withdrawn** —
+the real #70/#71 are the HRV work) was disproven by measurement; all four targets are self
+scroll-containers whose flexbox automatic-minimum is already 0, so `min-h-0` is inert (pre-fix sim
+scrolled identically, 274 vs 3144). The Dashboard column chain is measurement-confirmed bounded
+(LEFT/Chat scroller 573→112029 and HealthPanel 363→511 both scroll correctly); the LEFT-column prime
+suspect was exonerated (clientH == scrollH == 727).
+
+Fork (undecided): (a) let the whole detail view scroll as one unit — move the scroll boundary to the
+panel root so the stats/analysis chrome scrolls with the exercise list rather than being pinned;
+(b) rebalance the right-column 50/50 split so the expanded/active panel gets priority, or size to
+content; (c) cap the chrome height so the list keeps a usable minimum. Frontend-only; no connector,
+contract, or schema impact.
+
+Not-yet-characterised: measured only at ~779 px viewport height — taller viewports give WorkoutPanel
+more room and may not exhibit it. A faithful isolated repro (real compiled CSS, verbatim classes) did
+**not** reproduce it; the trigger is specifically the detail-view chrome height vs the ~363 px
+half-column, which the repro did not stage.
+
+**Status:** open — frontend layout fork. Branch `fix/desktop-column-scroll` was cut then discarded
+(carried zero commits; deleted). No DECISIONS_LOG entry. Decide fix direction, then implement.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
