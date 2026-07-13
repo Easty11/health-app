@@ -95,7 +95,7 @@ export default function CheckInAM() {
   const [fatigue, setFatigue] = useState(5)
   const [motivation, setMotivation] = useState(5)
   const [lifeLoad, setLifeLoad] = useState(3)
-  const [soreness, setSoreness] = useState({ shoulder: 2, hamstring: 1 })
+  const [soreness, setSoreness] = useState({})   // derived from active injuries via /prefill
   const [drankLastNight, setDrankLastNight] = useState(false)
   const [alcoholUnits, setAlcoholUnits] = useState(2)
   const [alcoholFinishTime, setAlcoholFinishTime] = useState('22:00')
@@ -113,7 +113,7 @@ export default function CheckInAM() {
           setFatigue(data.fatigue ?? 5)
           setMotivation(data.motivation ?? 5)
           setLifeLoad(data.life_load ?? 3)
-          if (data.soreness) setSoreness({ ...soreness, ...data.soreness })
+          if (data.soreness) setSoreness(data.soreness)
         }
       })
       .catch(() => {})
@@ -241,10 +241,13 @@ export default function CheckInAM() {
           {/* Soreness */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-gray-700">Soreness</label>
+            {Object.entries(soreness).length === 0 && (
+              <p className="text-xs text-gray-400">No active injuries to track.</p>
+            )}
             {Object.entries(soreness).map(([region, val]) => (
               <div key={region} className="space-y-1">
                 <div className="flex justify-between text-xs text-gray-500">
-                  <span className="capitalize">{region}</span>
+                  <span className="capitalize">{region.replace(/_/g, ' ')}</span>
                   <span className="font-medium text-gray-700">{SORENESS_LABELS[val - 1]}</span>
                 </div>
                 <TapSelect value={val} onChange={v => setSorenessRegion(region, v)} />

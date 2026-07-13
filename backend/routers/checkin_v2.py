@@ -54,6 +54,36 @@ def calc_naive_baseline(
     return round(max(1.0, min(10.0, raw)), 2)
 
 
+# ── soreness items ← active injuries (FEEDBACK 2.6) ─────────────────────────────
+
+def injury_soreness_key(value: dict[str, Any]) -> str:
+    """Stable soreness key for an injury entry. `body_part` alone collides when the
+    same part is injured on both sides (left + right hamstring), so sided injuries
+    carry the side. Maps back to the injury entry via (body_part, side); never
+    free-floats."""
+    body_part = str(value.get("body_part", "injury")).strip().lower().replace(" ", "_")
+    side = str(value.get("side", "")).strip().lower()
+    if side in ("", "bilateral", "both"):
+        return body_part
+    return f"{body_part}_{side}"
+
+
+def derive_soreness_items(user_id: int, db: Session) -> dict[str, int]:
+    """AM soreness items derived from the active injury ledger — one item per active
+    `type='injury'` entry, defaulted to 1 (=None on the 1-5 scale). Replaces the
+    hardcoded {shoulder, hamstring}. Empty when no active injuries."""
+    rows = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=user_id, type="injury", active=True)
+        .order_by(models.UserKnowledgeEntry.added_at.desc())
+        .all()
+    )
+    items: dict[str, int] = {}
+    for r in rows:
+        items[injury_soreness_key(r.value or {})] = 1
+    return items
+
+
 # ── passive snapshot ──────────────────────────────────────────────────────────
 
 def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, Any]:
@@ -138,7 +168,7 @@ class AMPrefillOut(BaseModel):
     morning_readiness: int = 3
     sleep_quality: int = 3
     fatigue: int = 5
-    soreness: dict = Field(default_factory=lambda: {"shoulder": 2, "hamstring": 1})
+    soreness: dict = Field(default_factory=dict)   # derived from active injuries at request time
     motivation: int = 5
     life_load: int = 3
     # Today's record if it already exists (allows re-entry pre-PM)
@@ -187,6 +217,7 @@ def get_prefill(
         hrv_ms=hrv_ms,
         hrv_vs_baseline=vs_baseline,
         sleep_min=passive["passive_sleep_min"],
+        soreness=derive_soreness_items(current_user.id, db),
         existing=existing,
     )
 
