@@ -1853,6 +1853,39 @@ information native vision would have kept, at which point the fallback becomes t
 
 ---
 
+### 79. Exercise-tag reference titles are keyed to the CURRENT catalogue, never to logged workout titles
+
+**Decision:** `reference/exercise_region_tags_v0.json` is keyed on the title as it exists in the live Hevy
+CATALOGUE (`hevy_exercise_templates.title`), never on the title a workout was logged under. Corollary: tag
+coverage is measured on `exercise_template_id`, never on title — hence the new read-only
+`backend/audit_exercise_tag_coverage.py`. No migration, no schema change.
+
+**Rationale:** the reference is keyed on exercise TITLE, and `resolve_exercise` is an EXACT byte-match against
+`hevy_exercise_templates.title` (fuzzy matching is an explicit non-goal, #60). But a Hevy WORKOUT carries a
+snapshot of the title as it was when logged, and Hevy renames its default templates. The two title spaces
+therefore drift. The reference must track the CATALOGUE, not the workout log. A title-keyed audit would report
+coverage that the id-keyed join in `infer_loaded_regions` does not actually deliver, in either direction.
+The first prod seed proved the DATA is present; it did not prove the keyword fallback stopped firing — those
+are different claims, and only the second is what coverage means.
+
+**How you know:** first prod seed (2026-07-14, user 1, 494-row substrate, alembic head `c3a2d8e5f109`) resolved
+55/56 titles; the sole miss was `Bulgarian Split Squat`. The live catalogue holds NO template with that bare
+title — only `Bulgarian Split Squat (Barbell)`, `Bulgarian Split Squat (Dumbbell)` (id `B5D3A742`, default,
+`length(title)=32`, byte-verified), and `Split Squat (Dumbbell)`. Yet the user's Hevy history logs the movement
+as bare `Bulgarian Split Squat` — i.e. the reference had been authored against the WORKOUT title, which matched
+nothing in the catalogue. Every other one of the 55 titles byte-matched the catalogue, so the drift is
+per-template, not systemic. A title-keyed coverage pass over the 28-day window scored 38/38 — but that number is
+unsound precisely because of this drift, which is why the audit shipped here is ID-keyed. The audit's
+classification is `selection.classify_coverage`, extracted so the read path and the measurement cannot drift
+apart; a fixture pins the BSS case (catalogue `Bulgarian Split Squat (Dumbbell)`, logged `Bulgarian Split
+Squat`) resolving as TAGGED with the drift surfaced. 105 backend tests green.
+
+**Do not revisit unless:** the resolver adopts normalised/fuzzy title matching (currently an explicit non-goal,
+#60), or Hevy exposes a stable template-id-keyed export that removes the need to key reference data on title at
+all.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
