@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 import models
 from connectors.hevy import HevyClient
 from engine import selection
-from hevy_templates import user_hevy_key
+from hevy_templates import catalogue_titles_by_id, user_hevy_key
 
 logger = logging.getLogger(__name__)
 
@@ -90,17 +90,6 @@ def logged_titles_by_template(workouts: list[dict[str, Any]]) -> dict[str, set[s
     return out
 
 
-def _catalogue_titles(db: Session, template_ids: set[str]) -> dict[str, str]:
-    if not template_ids:
-        return {}
-    rows = (
-        db.query(models.HevyExerciseTemplate.id, models.HevyExerciseTemplate.title)
-        .filter(models.HevyExerciseTemplate.id.in_(template_ids))
-        .all()
-    )
-    return {r[0]: r[1] for r in rows}
-
-
 def audit_coverage(db: Session, workouts: list[dict[str, Any]]) -> dict[str, Any]:
     """Classify every distinct template in `workouts` against the three-state
     coverage rule. Read-only.
@@ -112,7 +101,7 @@ def audit_coverage(db: Session, workouts: list[dict[str, Any]]) -> dict[str, Any
     logged = logged_titles_by_template(workouts)
     template_ids = set(logged)
     _, classes = selection.classify_coverage(db, template_ids)
-    catalogue = _catalogue_titles(db, template_ids)
+    catalogue = catalogue_titles_by_id(db, template_ids)
 
     movements: dict[str, list[dict[str, Any]]] = {
         selection.COVERAGE_TAGGED: [],

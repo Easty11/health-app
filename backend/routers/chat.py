@@ -1,5 +1,6 @@
 from typing import Any
 import json
+import logging
 import os
 import re
 
@@ -16,12 +17,14 @@ from context_builder import build_system_prompt, render_asked_lab_value
 from current_state import current_state as compute_current_state
 from database import get_db
 from encryption import decrypt
-from hevy_templates import resolve_exercise
+from hevy_templates import catalogue_titles_by_id, resolve_exercise
 from engine import adaptation, selection
 from reads.labs_reads import find_marker
 from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 MODEL = "claude-sonnet-4-6"
 
@@ -78,6 +81,51 @@ async def _gather_hevy_context(api_key: str) -> dict[str, Any]:
         }
     except HevyAuthError:
         return {"workout_count": 0, "recent_workouts": [], "error": "invalid_key"}
+
+
+def _annotate_canonical_titles(hevy_data: dict[str, Any], db: Session) -> dict[str, Any]:
+    """Annotate each logged exercise with its CURRENT catalogue title (#81).
+
+    Done HERE, upstream, and not in `context_builder`: the context builder is a
+    pure formatter (the invariant the #43 parity guard exists to protect), so it
+    gets no Session and performs no queries. It renders `canonical_title` if we
+    put one there.
+
+    Hevy's logged `title` is a snapshot from when the workout was logged, and
+    Hevy renames its default templates, so the two title-spaces drift (#79).
+    Handing the model a logged title while telling it to emit titles that
+    `resolve_exercise` byte-matches against the CATALOGUE would guarantee a miss
+    on exactly the drifted movements. Ids with no catalogue row are left
+    un-annotated — the renderer marks them rather than passing a logged title off
+    as canonical.
+
+    Mutates in place and returns `hevy_data` for convenience.
+    """
+    workouts = hevy_data.get("recent_workouts") or []
+    exercises = [ex for w in workouts for ex in (w.get("exercises") or [])]
+    template_ids = {tid for ex in exercises if (tid := ex.get("exercise_template_id"))}
+    if not template_ids:
+        return hevy_data
+
+    titles = catalogue_titles_by_id(db, template_ids)
+    drifted = 0
+    for ex in exercises:
+        tid = ex.get("exercise_template_id")
+        canonical = titles.get(tid) if tid else None
+        if not canonical:
+            continue
+        ex["canonical_title"] = canonical
+        if ex.get("title") and ex["title"] != canonical:
+            drifted += 1
+
+    missing = len(template_ids - set(titles))
+    if drifted or missing:
+        logger.info(
+            "chat context: %d logged exercise(s) renamed to the catalogue title, "
+            "%d template id(s) absent from the catalogue (rendered as logged, marked)",
+            drifted, missing,
+        )
+    return hevy_data
 
 
 # ---------- routine action parsing ----------
@@ -364,6 +412,7 @@ async def chat(
     if "hevy" in connected:
         raw_key = decrypt(connected["hevy"].api_key_encrypted)
         hevy_data = await _gather_hevy_context(raw_key)
+        _annotate_canonical_titles(hevy_data, db)
         hevy_client = HevyClient(raw_key)
 
     knowledge_entries = (

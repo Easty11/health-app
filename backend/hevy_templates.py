@@ -130,6 +130,28 @@ def resolve_exercise(db: Session, title: str, user_id: int) -> str | None:
     return db.scalars(stmt).first()
 
 
+def catalogue_titles_by_id(db: Session, template_ids: set[str]) -> dict[str, str]:
+    """template_id -> its CURRENT catalogue title. The inverse of `resolve_exercise`.
+
+    A Hevy WORKOUT carries a snapshot of the title as it was WHEN LOGGED, and Hevy
+    renames its default templates, so logged titles drift from catalogue titles
+    (DECISIONS_LOG #79/#81). Anything that must round-trip back through
+    `resolve_exercise` — which matches EXACTLY against `title` — has to speak the
+    catalogue's title-space, not the log's. This is the join that translates.
+
+    Ids absent from the local catalogue are simply missing from the result: the
+    caller decides how to mark them (never silently substitute a logged title as
+    though it were canonical).
+    """
+    if not template_ids:
+        return {}
+    Template = models.HevyExerciseTemplate
+    rows = db.execute(
+        select(Template.id, Template.title).where(Template.id.in_(template_ids))
+    ).all()
+    return {r[0]: r[1] for r in rows}
+
+
 def resolve_custom_exercise(db: Session, title: str, user_id: int) -> str | None:
     """Resolve a title to the user's OWN custom id — custom subset only.
 
