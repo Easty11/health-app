@@ -743,7 +743,8 @@ CREATE TABLE hevy_exercise_templates (
     primary_muscle_group     VARCHAR(100),
     secondary_muscle_groups  JSON,                      -- landed as JSON (file convention elsewhere is JSONB)
     synced_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    laterality               VARCHAR(20)                -- bilateral|unilateral|alternating|NULL — app-owned; _upsert_template never assigns it
+    laterality               VARCHAR(20),               -- bilateral|unilateral|alternating|NULL — app-owned; _upsert_template never assigns it
+    adjudicated_at           TIMESTAMPTZ                -- three-state coverage (#76): NULL=unlooked; NOT NULL + tags=tagged; NOT NULL + 0 tags=no-pattern. App-owned; _upsert_template never assigns it
 );
 
 CREATE INDEX ix_hevy_exercise_templates_owner_user_id

@@ -102,6 +102,24 @@ def _tags_by_template(db: Session, template_ids: set[str]) -> dict[str, set[str]
     return out
 
 
+def _adjudicated_templates(db: Session, template_ids: set[str]) -> set[str]:
+    """Template ids that have been human-confirmed adjudicated (adjudicated_at
+    NOT NULL), DECISIONS_LOG #76. An adjudicated template with zero tag rows is a
+    deliberate NO-PATTERN verdict — it contributes no region and is NOT a
+    coverage gap (distinct from an untagged template nobody has looked at)."""
+    if not template_ids:
+        return set()
+    rows = (
+        db.query(models.HevyExerciseTemplate.id)
+        .filter(
+            models.HevyExerciseTemplate.id.in_(template_ids),
+            models.HevyExerciseTemplate.adjudicated_at.isnot(None),
+        )
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
 def infer_loaded_regions(
     workouts: Iterable[dict[str, Any]],
     *,
@@ -109,12 +127,19 @@ def infer_loaded_regions(
 ) -> set[str]:
     """Region keys the user has demonstrably loaded in recent Hevy history.
 
-    Authoritative path (DECISIONS_LOG #NEXT): join each logged exercise's
-    `exercise_template_id` against `exercise_region_tags`. A template with no
-    tags is UNTAGGED and falls back to the legacy `_LOADED_KEYWORDS` substring
-    matcher — every such fall-through is counted and logged, because the
-    fallback hit-rate is the tagging-coverage metric (target zero on the active
-    window).
+    Authoritative path (DECISIONS_LOG #74/#76): join each logged exercise's
+    `exercise_template_id` against `exercise_region_tags`. Coverage is
+    THREE-STATE, keyed on `hevy_exercise_templates.adjudicated_at`:
+
+      • TAGGED               — has ≥1 tag row → those regions load.
+      • ADJUDICATED NO-PATTERN — adjudicated_at set, zero tag rows → contributes
+        nothing DELIBERATELY (the movement demonstrates no screenable region,
+        e.g. an isolation or a joint-level strength lift v0 has no axis for). NOT
+        a coverage gap.
+      • UNTAGGED             — never adjudicated → legacy `_LOADED_KEYWORDS`
+        fallback, counted and logged. The fallback hit-rate is the coverage
+        metric (target zero on the active window). "We looked and it maps to
+        nothing" and "we never looked" are kept epistemically distinct.
 
     `db` is an optional keyword: when provided (both known call sites have a
     Session in scope), the table join runs; when absent, the function degrades
@@ -128,11 +153,13 @@ def infer_loaded_regions(
     ]
 
     tag_map: dict[str, set[str]] = {}
+    adjudicated: set[str] = set()
     if db is not None:
         template_ids = {
             tid for ex in exercises if (tid := ex.get("exercise_template_id"))
         }
         tag_map = _tags_by_template(db, template_ids)
+        adjudicated = _adjudicated_templates(db, template_ids)
 
     loaded: set[str] = set()
     fallback_titles: list[str] = []
@@ -141,6 +168,8 @@ def infer_loaded_regions(
         title = ex.get("title") or ""
         if tid and tid in tag_map:              # tagged — authoritative
             loaded |= tag_map[tid]
+            continue
+        if tid and tid in adjudicated:          # adjudicated no-pattern — covered, silent
             continue
         # Untagged (or no db): legacy keyword fallback, instrumented.
         kw = _keyword_regions(title)
@@ -151,7 +180,7 @@ def infer_loaded_regions(
     if fallback_titles:
         logger.info(
             "infer_loaded_regions: %d/%d logged exercises hit the keyword fallback "
-            "(untagged templates) — coverage gap: %s",
+            "(untagged, never-adjudicated templates) — coverage gap: %s",
             len(fallback_titles), len(exercises), sorted(set(fallback_titles)),
         )
     return loaded

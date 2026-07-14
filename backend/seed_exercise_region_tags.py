@@ -69,9 +69,23 @@ def seed_tags(
     default_source = proposal.get("_meta", {}).get("source", "llm_proposed")
     now = datetime.now(timezone.utc)
 
-    resolved = written = unresolved = 0
+    resolved = written = unresolved = no_pattern = 0
     unresolved_titles: list[str] = []
 
+    def _apply_template_meta(tid: str, laterality) -> None:
+        """Laterality + three-state adjudication live on the template — never
+        assigned by `_upsert_template`, so a resync preserves them. adjudicated_at
+        is stamped ONLY on --confirm: adjudicated_at NOT NULL ⟺ human-confirmed
+        adjudication (DECISIONS_LOG #76)."""
+        tmpl = db.get(models.HevyExerciseTemplate, tid)
+        if tmpl is None:
+            return
+        if laterality is not None:
+            tmpl.laterality = laterality
+        if confirm:
+            tmpl.adjudicated_at = now
+
+    # Tagged entries: write region rows + stamp template meta.
     for entry in proposal.get("tags", []):
         title = entry["title"]
         tid = resolve_exercise(db, title, user_id)
@@ -80,12 +94,7 @@ def seed_tags(
             unresolved_titles.append(title)
             continue
         resolved += 1
-
-        # Laterality lives on the template (never assigned by _upsert_template).
-        if entry.get("laterality") is not None:
-            tmpl = db.get(models.HevyExerciseTemplate, tid)
-            if tmpl is not None:
-                tmpl.laterality = entry["laterality"]
+        _apply_template_meta(tid, entry.get("laterality"))
 
         for r in entry.get("regions", []):
             row = db.get(models.ExerciseRegionTag, (tid, r["key"]))
@@ -100,12 +109,28 @@ def seed_tags(
             row.confirmed_at = now if confirm else None
             written += 1
 
+    # No-pattern entries: adjudicated with ZERO region rows (the movement
+    # demonstrates no screenable taxonomy region). Only meaningful once
+    # human-confirmed, so they persist only on --confirm.
+    for entry in proposal.get("no_pattern", []):
+        title = entry["title"]
+        tid = resolve_exercise(db, title, user_id)
+        if tid is None:
+            unresolved += 1
+            unresolved_titles.append(title)
+            continue
+        resolved += 1
+        if confirm:
+            _apply_template_meta(tid, entry.get("laterality"))
+            no_pattern += 1
+
     db.commit()
     summary = {
         "user_id": user_id,
         "titles_resolved": resolved,
         "titles_unresolved": unresolved,
         "tags_written": written,
+        "no_pattern_adjudicated": no_pattern,
         "confirmed": confirm,
         "unresolved_titles": unresolved_titles,
     }

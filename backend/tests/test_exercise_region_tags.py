@@ -12,14 +12,14 @@ import pytest
 
 import models
 from engine import selection, taxonomy
-from engine.taxonomy import Plane
 import hevy_templates
 
 
-def _seed_template(db, tid, title, laterality=None, is_custom=True):
+def _seed_template(db, tid, title, laterality=None, is_custom=True, adjudicated=False):
     db.add(models.HevyExerciseTemplate(
         id=tid, title=title, is_custom=is_custom,
         owner_user_id=None, laterality=laterality,
+        adjudicated_at=datetime.now(timezone.utc) if adjudicated else None,
     ))
 
 
@@ -39,20 +39,19 @@ def _workout(*exercises):
 # The four documented failures + the live Shoulder-Rotation false positive.   #
 # --------------------------------------------------------------------------- #
 
-def test_copenhagen_plank_is_frontal_not_sagittal(db_session):
+def test_copenhagen_plank_no_pattern_not_sagittal(db_session):
     """Copenhagen Plank matched 'plank' -> trunk_stability_sagittal (a sagittal
-    region) when it is frontal-plane / adductor work. Tagged, it resolves to a
-    frontal region and NOT trunk_stability_sagittal."""
-    _seed_template(db_session, "cop1", "Copenhagen Plank (Short Lever)")
-    _tag(db_session, "cop1", "frontal_single_leg_stability")
+    region) when it is frontal-plane adductor STRENGTH — a region v0 has no axis
+    for (Q27). Adjudicated no-pattern (interim): contributes nothing, and
+    critically is NOT the sagittal region the keyword map falsely produced."""
+    _seed_template(db_session, "cop1", "Copenhagen Plank (Short Lever)", adjudicated=True)
     db_session.commit()
 
     got = selection.infer_loaded_regions(
         _workout(("cop1", "Copenhagen Plank (Short Lever)")), db=db_session
     )
     assert "trunk_stability_sagittal" not in got
-    assert got, "expected a tagged region"
-    assert all(taxonomy.by_key(rk).plane == Plane.FRONTAL for rk in got)
+    assert got == set(), "no-pattern adjudication contributes no region"
 
 
 def test_pallof_is_anti_rotation_only(db_session):
@@ -100,14 +99,15 @@ def test_single_leg_rdl_is_hinge_and_unilateral(db_session):
 
 def test_shoulder_rotation_does_not_load_trunk_rotation(db_session):
     """The empirically strongest live false positive: 'Shoulder External/Internal
-    Rotation' contains the substring 'rotation' and the keyword map tagged them
-    as loaded `rotation` (a radicular-blocked region) — 22 logged sets of
-    rotator-cuff isometrics masquerading as trunk rotation. Once tagged, the
-    keyword path is bypassed entirely and the false positive is gone."""
-    _seed_template(db_session, "ser1", "Shoulder External Rotation")
-    _seed_template(db_session, "sir1", "Shoulder Internal Rotation")
-    _tag(db_session, "ser1", "shoulder_mobility", role="secondary")
-    _tag(db_session, "sir1", "shoulder_mobility", role="secondary")
+    Rotation' (×22, the highest-frequency titles) contains the substring
+    'rotation' and the keyword map tagged them as loaded `rotation` (a
+    _RADICULAR_BLOCKS region) — rotator-cuff STRENGTH masquerading as trunk
+    rotation. shoulder_mobility was REJECTED (wrong capacity). Adjudicated
+    no-pattern (interim, blocked on the ER:IR ratio axis, Q27) bypasses the
+    keyword path and kills the false positive — wrong→empty is a strict
+    improvement."""
+    _seed_template(db_session, "ser1", "Shoulder External Rotation", adjudicated=True)
+    _seed_template(db_session, "sir1", "Shoulder Internal Rotation", adjudicated=True)
     db_session.commit()
 
     got = selection.infer_loaded_regions(
@@ -116,6 +116,7 @@ def test_shoulder_rotation_does_not_load_trunk_rotation(db_session):
         db=db_session,
     )
     assert "rotation" not in got
+    assert got == set()
 
 
 # --------------------------------------------------------------------------- #
@@ -146,6 +147,28 @@ def test_untagged_template_hits_instrumented_fallback(db_session, caplog):
         )
     assert got == {"horizontal_push"}  # legacy keyword still fires for untagged
     assert any("keyword fallback" in r.getMessage() for r in caplog.records)
+
+
+def test_adjudicated_no_pattern_is_covered_not_a_fallback_hit(db_session, caplog):
+    """The three-state distinction (DECISIONS_LOG #76): an ADJUDICATED no-pattern
+    template (adjudicated_at set, zero tags) contributes nothing AND is silent —
+    it is NOT a coverage gap. An UNTAGGED template (adjudicated_at NULL) still
+    hits the counted, logged fallback. 'We looked and it maps to nothing' and 'we
+    never looked' stay epistemically distinct."""
+    _seed_template(db_session, "hipadd1", "Hip Adduction (Machine)", adjudicated=True)  # no-pattern
+    _seed_template(db_session, "legext1", "Leg Extension (Machine)")  # untagged, never adjudicated
+    db_session.commit()
+
+    with caplog.at_level(logging.INFO, logger="engine.selection"):
+        got = selection.infer_loaded_regions(
+            _workout(("hipadd1", "Hip Adduction (Machine)"),
+                     ("legext1", "Leg Extension (Machine)")),
+            db=db_session,
+        )
+    assert got == set()  # neither contributes a region
+    gap_logs = " ".join(r.getMessage() for r in caplog.records if "coverage gap" in r.getMessage())
+    assert "Leg Extension (Machine)" in gap_logs      # untagged → counted
+    assert "Hip Adduction (Machine)" not in gap_logs  # adjudicated → silent
 
 
 def test_orphan_region_key_skipped_on_read(db_session):
@@ -183,13 +206,13 @@ def test_resync_preserves_tags_and_laterality(db_session):
     `_upsert_template`: a full resync must not lose a single tag or laterality
     value."""
     _seed_template(db_session, "slrdl1", "Single Leg Romanian Deadlift (Dumbbell)",
-                   laterality="unilateral")
+                   laterality="unilateral", adjudicated=True)
     _tag(db_session, "slrdl1", "hinge")
     db_session.commit()
 
     # A fresh Hevy payload for the SAME template id — exactly what a resync feeds
-    # `_upsert_template`. Note it carries no laterality and no tags (Hevy-owned
-    # data only).
+    # `_upsert_template`. Note it carries no laterality, no adjudicated_at and no
+    # tags (Hevy-owned data only).
     payload = {
         "id": "slrdl1",
         "title": "Single Leg Romanian Deadlift (Dumbbell)",
@@ -204,6 +227,7 @@ def test_resync_preserves_tags_and_laterality(db_session):
 
     tmpl = db_session.get(models.HevyExerciseTemplate, "slrdl1")
     assert tmpl.laterality == "unilateral", "resync clobbered laterality"
+    assert tmpl.adjudicated_at is not None, "resync clobbered adjudicated_at"
     assert tmpl.primary_muscle_group == "hamstrings"  # Hevy field did update
     tags = db_session.query(models.ExerciseRegionTag).filter_by(
         hevy_exercise_template_id="slrdl1"
@@ -232,18 +256,26 @@ def test_proposal_reference_validates_fail_closed(db_session):
 
 def test_seed_is_idempotent_and_confirm_stamps_provenance(db_session):
     proposal = seeder.load_proposal()
-    for i, entry in enumerate(proposal["tags"]):
+    # Seed a template for every title in BOTH lists so all resolve.
+    all_titles = ([e["title"] for e in proposal["tags"]]
+                  + [e["title"] for e in proposal["no_pattern"]])
+    for i, title in enumerate(all_titles):
         db_session.add(models.HevyExerciseTemplate(
-            id=f"T{i:03d}", title=entry["title"], is_custom=False, owner_user_id=None,
+            id=f"T{i:03d}", title=title, is_custom=False, owner_user_id=None,
         ))
     db_session.commit()
 
+    # A plain (non-confirm) run writes llm-proposed tags but stamps NO
+    # adjudication — coverage is not claimed until human confirmation.
     r1 = seeder.seed_tags(db_session, user_id=1, proposal=proposal)
     n1 = db_session.query(models.ExerciseRegionTag).count()
     r2 = seeder.seed_tags(db_session, user_id=1, proposal=proposal)  # idempotent
     n2 = db_session.query(models.ExerciseRegionTag).count()
     assert r1["titles_unresolved"] == 0
     assert n1 == n2 == r1["tags_written"], "re-seed duplicated rows"
+    assert r1["no_pattern_adjudicated"] == 0, "no_pattern must not persist without --confirm"
+    assert db_session.query(models.HevyExerciseTemplate).filter(
+        models.HevyExerciseTemplate.adjudicated_at.isnot(None)).count() == 0
 
     # laterality landed on the templates (not clobber-exposed)
     slrdl = next(e for e in proposal["tags"] if "Single Leg Romanian" in e["title"])
@@ -251,7 +283,22 @@ def test_seed_is_idempotent_and_confirm_stamps_provenance(db_session):
                if t.title == slrdl["title"])
     assert db_session.get(models.HevyExerciseTemplate, tid).laterality == "unilateral"
 
-    seeder.seed_tags(db_session, user_id=1, proposal=proposal, confirm=True)
+    # --confirm: tag rows become human_confirmed AND every processed template
+    # (tagged + no_pattern) is stamped adjudicated_at; no_pattern carries zero tags.
+    r3 = seeder.seed_tags(db_session, user_id=1, proposal=proposal, confirm=True)
     row = db_session.query(models.ExerciseRegionTag).first()
     assert row.source == "human_confirmed" and row.confirmed_at is not None
     assert row.taxonomy_version == taxonomy.TAXONOMY_VERSION
+    assert r3["no_pattern_adjudicated"] == len(proposal["no_pattern"])
+
+    adjudicated = db_session.query(models.HevyExerciseTemplate).filter(
+        models.HevyExerciseTemplate.adjudicated_at.isnot(None)).count()
+    assert adjudicated == len(all_titles), "every processed template adjudicated on --confirm"
+
+    # A no_pattern template: adjudicated, zero tag rows.
+    calf_title = "Calf Extension (Machine)"
+    calf_tid = next(t.id for t in db_session.query(models.HevyExerciseTemplate)
+                    if t.title == calf_title)
+    assert db_session.get(models.HevyExerciseTemplate, calf_tid).adjudicated_at is not None
+    assert db_session.query(models.ExerciseRegionTag).filter_by(
+        hevy_exercise_template_id=calf_tid).count() == 0

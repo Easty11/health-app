@@ -422,6 +422,14 @@ class HevyExerciseTemplate(Base):
     # assigned by `_upsert_template`, so a Hevy resync preserves it (the whole
     # reason tags live off the synced columns).
     laterality: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Three-state tag coverage (DECISIONS_LOG #76). NULL = never adjudicated
+    # (untagged → keyword fallback); NOT NULL = human-confirmed adjudication:
+    # with ≥1 exercise_region_tags row → TAGGED, with zero rows → deliberate
+    # NO-PATTERN (the movement demonstrates no screenable taxonomy region, e.g.
+    # an isolation or a joint-level strength lift v0 has no axis for). Set only
+    # by the --confirm seed. Like `laterality`, never assigned by
+    # `_upsert_template`, so a resync preserves it.
+    adjudicated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ExerciseRegionTag(Base):
