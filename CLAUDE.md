@@ -207,9 +207,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#79 – #84** — Hevy resolver activated end-to-end: exercise-tag reference keyed to the catalogue + ID-keyed coverage audit, history rendered with catalogue titles, provisioning accepts a canonical title (matching stays exact), unresolved titles return ranked candidates, the #43 context-builder parity guard narrowed, and model-facing contracts verified by an operator probe. See DECISIONS_LOG #79–#84.
 - **#72 / #73** — Injury constraints consumed, not decorative: AM soreness items derive from the active injury ledger, injury `trajectory` (JSON) drives divergence + symptom-gated review surfaced in `get_readiness_snapshot`, and `naive_baseline` soreness is scored across all reported sites (not shoulder-only). See DECISIONS_LOG #72–#73. (Railway seed of the two new injury entries + live read-back owed — see `closeout.md`.)
 - **#70 / #71** — HRV & sleep data integrity: samsung-hrv ingest bounds guard (out-of-range biometrics nulled-and-logged, whole numeric schema) + deep-sleep excluded from daily readiness (context_builder reports combined Deep+Light; deep alone is trend-only). See DECISIONS_LOG #70–#71. (Task 2 RHR-series parked on `feat/recovery-metrics-rhr`; Task 1 node dump blocked in `health-connect-app` — see OPEN_QUESTIONS Q17/Q18.)
-- **#69** — Hevy exercise-history path fix: `get_exercise_history` now calls `/v1/exercise_history/{id}` (template id unchanged) instead of the since-ship-404ing `/exercise_templates/{id}/history`; method was unwired (zero call sites) so no downstream shift. Resolves Q16. See DECISIONS_LOG #69.
 
 ---
 

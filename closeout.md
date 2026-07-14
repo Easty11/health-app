@@ -1,104 +1,155 @@
 # closeout — health-app
 
-Branch: **master** (feat/constraint-consumption LANDED at `e70437b`, pushed, deleted).
-Session brief: constraint-consumption (`;build`) — make injury constraints a consumed input, not decorative.
-Status: **complete + landed + prod-seeded.**
+Branch: **master**, in sync with `origin/master` (0 ahead / 0 behind).
+Session: five sequential chat implementation briefs — exercise-tag coverage → Hevy resolver activation
+→ resolver candidate suggestions → probe-harness fidelity.
+Status: **complete + landed + prod-verified.**
 
 ---
 
 ## 1. Real commits this session
 
-Session-open ref: `2f1309e`. `git log --oneline 2f1309e..HEAD` (all now on master):
+Session-open ref: `87ddd0c`. `git log --oneline 87ddd0c..HEAD` — 20 commits, all on master, all pushed:
 
 ```
-2b66890 gov: Railway seed done — 2 injury rows in prod (health-app-DB)
-2782633 gov(branches): feat/constraint-consumption LANDED at e70437b
-e70437b gov: number-at-merge — claim DECISIONS_LOG #72/#73 + Recent landings
-d93ef01 chore: session close-out
-2ba3e75 gov(branches): park feat/constraint-consumption (code-complete, ready to land)
-a6bee90 gov: constraint-consumption — 2 decisions, Q20/Q21, FEEDBACK 1.10/1.11/2.6
-785e349 fix(readiness): naive_baseline soreness term = max across all reported sites
-d11d96e feat(injury): trajectory divergence + symptom-gated review (surfacing only)
-0c235eb data(injury): declare trajectories for pes anserine + right hamstring
-42879b4 feat(checkin): derive AM soreness items from active injuries (FEEDBACK 2.6)
-5584666 data(injury): seed injury_pes_anserine_left (active irritation)
-de8f8d3 data(injury): seed injury_hamstring_right (semimembranosus, neural limiter)
+3feaa44 gov: #83 ratio tier EXERCISED live — floor admits noise, ranking carries it
+7330030 gov(branches): fix/probe-harness-fidelity LANDED at adb67e8
+adb67e8 gov(branches): fix/probe-harness-fidelity row
+5c5b43f fix(probe): fail loudly when a probe never reaches its subject
+40c8b0d gov: #83 verified at 494 rows (quality yes, threshold unexercised) + FEEDBACK 11
+bc5f4f7 gov: DECISIONS_LOG 83/84 + BRANCHES
+62bf248 feat(probe): land the resolver probe harness as a repo instrument
+b21ce7f feat(chat): name candidates in the unresolved-title warning
+35f4d1c feat(hevy): suggest_candidates — ranked candidates for an unresolved title
+d19b0b4 gov(branches): feat/hevy-resolver-activation LANDED at 9193453
+9193453 gov: DECISIONS_LOG 80/81/82 + BRANCHES + strike ROADMAP resolver row
+320eedf test(chat): pin id+title provisioning path — B3 needed no code change
+8ca6108 feat(chat): permit canonical TITLE emission; narrow the #43 parity guard
+bc81911 feat(chat): render workout history with CATALOGUE titles, not logged snapshots
+e626e54 gov: record G5 confirmed in prod + FEEDBACK 10 (false-green instruments)
+fee7f3e gov(branches): fix/exercise-tag-coverage loop CLOSED — prod fallback hit-rate 0
+d01603c gov(branches): fix/exercise-tag-coverage LANDED at 8a29b1f
+8a29b1f gov: DECISIONS_LOG #79 (reference titles key to the catalogue) + BRANCHES
+727adb3 feat(exercise-tags): ID-keyed coverage audit + extract the three-state rule
+68e3c9e fix(exercise-tags): key BSS reference title to the catalogue, not the workout log
 ```
 
-Feature/data (concern-split): `de8f8d3` `5584666` `0c235eb` (data) · `42879b4` (capture) · `d11d96e`
-(mechanism) · `785e349` (scoring). Governance: `a6bee90` (stores) · `2ba3e75`/`e70437b`/`2782633`/
-`2b66890` (park → number-at-merge → land → seed-done). `d93ef01` was the first close-out (pre-land).
+Decisions minted: **#79 – #84** (each claimed only after re-checking master's max at commit time; all
+uncontested). FEEDBACK gained **§10** (false-green instruments) and **§11** (a probe that presumes its
+own answer). ROADMAP's "Hevy resolver activation" NEXT row struck at `9193453` — it shipped.
 
-What shipped, by brief step:
-- **Step 1 (data):** two distinct right-side injuries seeded — right hamstring (structural proximal
-  semimembranosus) `signal_type:"mechanical"` NOT neural (the VERIFY gate proved `neural` fires a
-  signal-wide radicular block that would kill the wanted SL-RDL; neural finding rides in `detail`), and
-  left pes anserine. Left hamstring untouched (distinct injury).
-- **Step 2 (capture):** AM soreness items derive from the active injury ledger
-  (`checkin_v2.derive_soreness_items`), keyed `{body_part}`/`{body_part}_{side}` (no hamstring collision);
-  `CheckInAM.jsx` renders derived keys. No migration (soreness is JSON).
-- **Step 3 (mechanism, JSON-only):** injury `trajectory` in `value`; `injury_trajectory.evaluate()`
-  surfaces divergence + symptom-gated review in `get_readiness_snapshot`. Surfacing only — never gates.
-- **Step 4 (scoring):** `calc_naive_baseline` soreness term = max across reported sites (was
-  shoulder-only). Discontinuity accept-and-annotate, not backfilled (frozen-at-capture).
-
-Verification: 74 backend tests green; divergence + review fire against the real seed trajectory; neural
-exclusion-set probed over all 30 regions. **Prod seed done** — `seed_engine` against `health-app-DB` via
-`DATABASE_PUBLIC_URL`, `injury ledger rows written: 2`.
+Test suite: **137 passed** at close (94 at open). No migration, no schema change, all session.
 
 ---
 
 ## 2. Pending-queue reconciliation
 
-**No `;cc` pending-commit queue was carried into this session** — it ran from a direct `;build` brief.
-The two DECISIONS_LOG entries were minted by Code, headed `### #NEXT`, and **claimed #72 and #73 at merge**
-(number-at-merge; DECISIONS max at open was 71). Everything committed, landed to master, and pushed —
-nothing provisional.
+**No `;cc` pending-commit queue was carried in** — the session ran from five direct chat briefs, each
+reconciled at its own gate. Every brief item landed:
 
-Governance landed: DECISIONS_LOG #72 (restrictions set at onset; check-in monitors, does not gate) +
-#73 (soreness scoring max) + withdrawn-draft note · OPEN_QUESTIONS Q20 (findings-vs-restrictions gap,
-open) / Q21 (lab #63/SPEC_64 contract rhymes, no shared code, resolved) · FEEDBACK 1.10 / 1.11 / 2.6.
+| Brief item | Landed |
+|---|---|
+| BSS reference title → catalogue-keyed | `68e3c9e` |
+| ID-keyed coverage audit + `classify_coverage` extraction | `727adb3` |
+| G5 prod-clobber recorded + FEEDBACK §10 | `e626e54` |
+| History renders catalogue titles (#81) | `bc81911` |
+| Title emission + parity-guard narrowing (#80/#82) | `8ca6108` |
+| `suggest_candidates` + candidates in the warning (#83) | `35f4d1c`, `b21ce7f` |
+| Probe harness as a repo instrument (#84) | `62bf248` |
+| Probe fails loudly when it never reaches its subject | `5c5b43f` |
 
-**Prod state:** injury data seeded (2 rows, with trajectories). The seed→prod path is proven. Not yet
-observed live: the trajectory flags in `get_readiness_snapshot` — they need (a) the backend redeployed
-with the Step-3 code and (b) an AM check-in recording soreness under the derived keys. Neither is a code
-gap; both are organic.
+**Brief premises that did not survive contact with the tree** (reported, not improvised across):
+
+- **Bulgarian test reconciliation** — no such reference existed. `tests/test_exercise_region_tags.py`
+  never pinned the bare title; the seeder test derives fixtures from the proposal, so a rename is
+  invisible to it by construction. No commit.
+- **`unresolved` discarded in `_process_routine_actions`** — false. It already surfaced the titles and
+  skipped `create_routine` (fail-closed, whole-routine), pinned since #60 by
+  `test_unresolvable_title_skips_routine`. **No code shipped**; `320eedf` pins the id+title path that
+  #82 newly opened instead.
+- **Threading `db` into `context_builder`** — rejected. It would have broken the formatter-only
+  invariant the #43 guard protects, then hidden the breach behind an optional-default parameter. The
+  join runs upstream in `routers/chat.py` (`bc81911`); the guard is untouched structurally.
+- **The "byte-parity guard" not found by grep** — it exists:
+  `test_context_builder_output_unchanged_pre_post_refactor` (`tests/test_current_state.py:138`), a
+  full-string assertion against pinned SHA `3360ed5`, **unre-baselineable** (the SHA cannot move without
+  going old-vs-old, per the test's own comment). Forced #80's narrowing: measured before accepting —
+  5055/6398 chars (79%) stay under the assertion, and 1338 of the 1343 dropped chars ARE the excised
+  section.
+- **Guard re-baseline had no decision entry** — ROADMAP:36 named it decision-grade and the brief dropped
+  it. Minted as **#80**; the brief's #80/#81 shifted to #81/#82.
+
+**Provisional / uncommitted:** nothing. Every decision landed in a commit.
 
 ---
 
 ## 3. Cold-resume handoff
 
-### Single clearest next action
-constraint-consumption is **done and in prod**. The one open loop is watching the trajectory flags fire
-once live: confirm `health-app-backend` redeployed from master (`e70437b`+), then the first AM check-in
-that records soreness under the derived keys (`pes_anserine_left` / `hamstring_right`) makes the
-divergence/review series exist — a `get_readiness_snapshot` (read against **prod**, see caveat) should
-then show a "Plan review flags" line. After that, pick up the ROADMAP NOW items.
+### What shipped
 
-### Known caveat to resolve
-`get_readiness_snapshot` via the MCP connector **appears to read a non-prod DB** — it showed the two new
-injuries before any prod seed had succeeded, so it is likely pointed at local sqlite. Verify prod state
-with a direct Postgres query (`railway`-injected `DATABASE_PUBLIC_URL`, service `health-app-DB`), not the
-MCP tool, until the connector's target is confirmed.
+The #60/#61 title→id resolver is **live in prod and verified end-to-end**, having been dormant since it
+landed. The chain: tag reference keyed to the catalogue (#79) · history rendered to the model with
+catalogue titles via an upstream `canonical_title` join (#81) · provisioning accepts a canonical title,
+matching still EXACT (#82) · unresolved titles return ranked candidates instead of a dead end (#83) ·
+the #43 parity guard narrowed rather than retired (#80) · model-facing contracts verified by an
+operator-run probe (#84).
 
-### Current sprint (ROADMAP NOW)
-- Morning check-in screen (Hooper Index) — **advanced this session**; soreness items now injury-derived.
-- Fix Health Connect permissions (companion app, record types 38/35/11/37).
-- Samsung Health package-name correction (`com.sec.android.app.shealth`; verify via Railway query).
-- Persistent conversation history; session cards not clickable; dual-panel scroll (UI bugs).
-- `mcp_server.get_hevy_workouts` unimported `Session` type — pre-existing one-line import fix.
+**Prod verification (2026-07-15, live 494-row catalogue, real model):** fallback hit-rate **0** over 38
+distinct movements (25 tagged / 13 adjudicated no-pattern / 0 untagged). A bare `Calf Raise` misses and
+returns 5 genuine candidates; fail-closed holds until the user disambiguates, then the routine
+provisions. `B5D3A742` resolves as `Bulgarian Split Squat (Dumbbell)` while still logged as bare
+`Bulgarian Split Squat` — #79's drift, confirmed in prod.
+
+### Open items owed on this work
+
+1. **`Pullover` is not constraint-neutral** — `probe_resolver.py` labels it so, but the live model
+   flagged it against the active **shoulder injury** (horizontal adduction / overhead). It proceeded
+   after confirmation so the measurement survived, but the subject choice is luckier than it reads and
+   will break if the shoulder flag tightens. Subject swap in `_RESOLVER_PROBE.turns`. Not yet briefed.
+2. **`_SUGGEST_MIN_RATIO = 0.5` — closed, do not re-open naively.** The ratio tier fired live
+   (`Preacher Curl` → `Rope Cable Curl` 0.643 / `Drag Curl` 0.636; `Pullover` → `Pull Up` 0.533). The
+   floor admits noise; containment-first **ranking** carries the feature. #83 records explicitly: **do
+   not raise the floor** — 0.512 (a real candidate) sits below 0.533 (noise), so ratio does not separate
+   signal from noise in either direction at this scale.
+3. **G5 live-resync clobber** — confirmed in prod 2026-07-14 (operator run), but the fingerprints are
+   **pre-BSS (36 tags / 55 adjudicated)** and prod is now 37/56: a dated, superseded baseline, not a
+   reproducible check. The result stands (the mechanism is row-count-indifferent).
+4. **Q27** — the 13 adjudicated no-pattern movements (rotator-cuff / isolation families) park behind the
+   v1 strength-ratio axis. Separate design pass, not a gap.
 
 ### Open questions by status
-- **open:** Q7 (injury ledger missing right semimembranosus — **structured entry now exists in code +
-  prod**; the findings-vs-restrictions modelling remains) · Q20 (findings vs restrictions schema gap,
-  Q7 territory) · Q17/Q18 (HRV step-change; historical out-of-range sweep) · Q19 (desktop scroller).
-- **resolved this session:** Q21 (lab #63/SPEC_64 expectation contract rhymes with injury trajectory but
-  shares no code — kept as separate mechanisms).
+
+**Untouched this session — none opened, none resolved, `OPEN_QUESTIONS.md` not edited.**
+- **open:** Q5 (Polar `hrv[]` payload) · Q7 / Q20 (findings-vs-restrictions schema gap) · Q13 ·
+  Q17 (HRV instrumentation-vs-physiology, blocked on the `health-connect-app` node dump) ·
+  Q18 (Railway historical sweep, independent of Q17) · Q19 (desktop scroller) · Q27 (v1 strength-ratio
+  axis) · the `health-connect-app`-rooted items (carry across; single-repo scope rule).
+- **verifying:** the #64 G4 item.
+
+### Current sprint (ROADMAP NOW)
+
+Health Connect permissions (record types 38/35/11/37) · Samsung Health package-name correction
+(`com.sec.android.app.shealth`; verify via Railway query) · morning check-in screen (Hooper Index) ·
+persistent conversation history · session cards not clickable · dual-panel scroll ·
+`mcp_server.get_hevy_workouts` unimported `Session` (pre-existing one-line import fix).
 
 ### Branches
-- `feat/constraint-consumption` — LANDED to master at `e70437b`, pushed, deleted (this session).
-- `feat/recovery-metrics-rhr` — PARKED (prior session; not touched here), held on the HRV Task-1 node
-  dump in `health-connect-app`.
+
+- Landed + deleted this session (none ever pushed to origin): `fix/exercise-tag-coverage` ·
+  `chore/g5-record` · `feat/hevy-resolver-activation` · `feat/resolver-candidate-suggestions` ·
+  `chore/resolver-loop-close` · `fix/probe-harness-fidelity` · `chore/ratio-tier-exercised`.
+- `feat/recovery-metrics-rhr` — **PARKED** (prior session, not touched here; `git cherry` → `+ a4e1887`,
+  real unmerged work). Held on the HRV Task-1 node dump in `health-connect-app`.
+- Gate: **PASS** — no branch in undefined limbo.
+
+### Single clearest next action
+
+**Swap `Pullover` out of `_RESOLVER_PROBE` in `backend/probe_resolver.py`** for a genuinely
+constraint-neutral out-of-history movement, then re-run `/opt/venv/bin/python probe_resolver.py 1` in
+the Railway container. It is the only item this session leaves that can silently rot: the probe
+currently passes for a reason it does not state, which is the exact shape FEEDBACK §11 was written
+about. After that, pick up the ROADMAP NOW items.
 
 ### Untracked, left alone (not mine)
+
 `.claude/launch.json`, `backend/gate_test.py`.
