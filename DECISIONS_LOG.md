@@ -1786,6 +1786,39 @@ regions, or a genuine accessory-sentinel need emerges that the timestamp cannot 
 
 ---
 
+### 77. Hevy template sync is activated at the OPERATOR (CLI) layer only
+
+**Status:** On branch `fix/hevy-template-sync-activation` (pending land; number claimed from max 76). New
+operator CLI `backend/sync_hevy_templates.py` (asyncio wrapper, `--user-id` safety valve, non-zero exit on
+empty/partial). `sync_exercise_templates` gains per-user error isolation + a loud empty-user-list signal.
+`seed_exercise_region_tags.py` gains an empty-substrate precondition gate. NO HTTP endpoint — the
+request-layer wiring stays dormant, unchanged from #60/#61.
+
+**Rationale:** The whole template subsystem (resolver #60/#61, `create_and_resolve` #65, catalogue tagging
+#74/#75/#76) sits on `hevy_exercise_templates`, which is populated ONLY by `sync_exercise_templates` — and
+that function had ZERO wired call sites. Verified against the tree: no router reference, no `main.py`
+lifespan hook (lifespan only runs the MCP sub-app), no scheduler/APScheduler, no Railway cron (Procfile and
+`railway.toml` startCommand = `alembic upgrade head && uvicorn` only); the sole runner was the module's own
+bare `__main__`. Prod `hevy_exercise_templates` has zero rows, so three landed-green features are
+structurally inert and the seeder would resolve 40/40 titles to None and exit 0. Sync must therefore be an
+explicit, observable, NON-ZERO-EXITING operator operation, not an implicit request side-effect. Per-user
+isolation: a single dead key (`_check` raises `HevyAuthError` on 401 — not swallowed, not returned as `[]`)
+previously aborted the whole multi-user loop, and with `sync_one_user`'s per-page commit that left a
+partial, committed store and no summary (the exception ate it).
+
+**How you know:** 7 tests in `test_hevy_sync_activation.py` — one-key-raises isolation (users_failed=1, error
+captured, loop continues, no exception escapes), empty-list WARNING + `users_synced=0` + CLI exit 1, seeder
+refuses on an empty store and writes nothing, `--user-id` syncs exactly one user (no other user's sync runs),
+and the exit-code matrix (empty/partial → 1, clean → 0). Full backend suite green (87 → 94). CLI `--help`
+verified. GUARDs confirmed: `_check` raises `HevyAuthError` on 401 (does not return `[]`); `_upsert_template`
+is field-by-field idempotent; `HevyExerciseTemplate.synced_at` has no downstream consumer so its per-sync
+refresh is harmless.
+
+**Do not revisit unless:** a scheduled/automated sync is wanted (a separate request-layer / job decision), or
+the request-layer dormancy is deliberately lifted.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

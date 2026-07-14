@@ -367,3 +367,31 @@ no-pattern** (`adjudicated_at` set, zero tag rows), never the nearest-body-part 
 real and evidence-grounded (e.g. the joint-level strength-ratio family — Q27), that is a versioned taxonomy
 design pass, not a tag-file bolt-on. The taxonomy is external-authority precisely so its breadth does not
 inherit the user's logging habits.
+
+---
+
+## 8. LANDED ≠ LIVE — local-green is not prod-live (DECISIONS_LOG #77)
+
+**What happened:** three features — the Hevy template resolver (#60/#61), `create_and_resolve` (#65), and the
+whole exercise-catalogue taxonomy tagging effort (#74/#75/#76) — landed on `master`, all green across 87 local
+tests, and were **structurally inert in prod**. Their substrate, `hevy_exercise_templates`, had zero rows,
+because `sync_exercise_templates` had never been wired to any call site (no endpoint, no job, no cron) and had
+never run. The catalogue seed would have resolved 40/40 titles to None and exited 0 — a green no-op reading as
+success. The catalogue work is simply the first feature whose payoff was actually *collected*, which is the
+only reason the gap surfaced.
+
+**The disease, not the instance:** no gate in this project has ever asserted a PROD PRECONDITION. Every gate
+tests behaviour against a seeded local/test DB, so "local-green" is silently read as "done/live." Same signal
+appeared earlier and was noted-not-fixed: `feat/constraint-consumption` (BRANCHES.md) flagged that
+`get_readiness_snapshot` via the MCP connector "appears to read a non-prod DB." Data-verification-against-a-
+seeded-DB is not data-verification-against-prod.
+
+**Rule going forward:** a feature that depends on a populated table is NOT done when its tests pass — it is done
+when that table is populated in prod and the payoff is observed there. State the prod precondition explicitly
+(which table, expected non-zero state) and verify it before calling the feature live. Where a subsystem can be
+inert, make its no-op LOUD (a warning + a non-zero exit), never a silent success — as #77 does for the sync and
+the seeder.
+
+**Proposed for a future brief (NOT yet built):** a prod-state assertion in `/closeout` — every feature that
+depends on a populated table names that table and its expected non-zero state, so a landed-but-not-live feature
+cannot close silently.
