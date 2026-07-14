@@ -1981,6 +1981,81 @@ candidates → resolve to None, never guess), at which point #60's non-goal is w
 
 ---
 
+### 83. Unresolved titles return ranked CANDIDATES; resolution stays exact, and a unique candidate is still not auto-resolved
+
+**Decision:** on a title that does not resolve, `hevy_templates.suggest_candidates` returns ranked catalogue
+candidates and the existing fail-closed warning names them. Resolution stays EXACT and nothing is auto-adopted —
+not even a sole candidate. Fail-closed is unchanged: still no `create_routine`, still whole-routine. No migration.
+
+**Rationale:** #82 let the model emit a title where it has no id — its entire purpose being movements OUTSIDE
+recent history, which is precisely where #81 cannot hand it a canonical title. So the feature's primary use case is
+the one where the model must guess a string it has never seen, against an exact matcher, with whole-routine failure
+on a miss. Measured at 25%. Candidates convert a dead end into a one-turn correction while resolution stays exact:
+the model is handed the catalogue slice it needs, when it needs it, instead of the whole catalogue on every request.
+Injecting all 494 titles into every system prompt was REJECTED — it would drive accuracy to ~100% with no fuzzy code
+at all, but pays ~2.5k tokens on every chat request to serve a path most conversations never take.
+**Auto-resolving a unique candidate is explicitly REJECTED.** It is tempting — it would have rescued 2 of the 3
+probe misses — but candidate cardinality is an artifact of catalogue SIZE, not of genuine unambiguity. `Leg Curl
+(Machine)` has one candidate in a 10-row fixture and at least two in prod's 494 (`Lying Leg Curl (Machine)`,
+`Seated Leg Curl (Machine)`). A rule firing on uniqueness would silently resolve wrong the moment the catalogue
+grew — a silent-wrong failure replacing a loud-miss one. Loud is the design.
+
+**How you know:** live probes against a real model (2026-07-14, `backend/probe_resolver.py`, fake Hevy client,
+nothing written). BEFORE: out-of-history titles resolved 1 of 4. Emitted `Bulgarian Split Squat` (catalogue:
+`… (Dumbbell)`) — MISS; `Leg Curl (Machine)` (catalogue: `Lying Leg Curl (Machine)`) — MISS; `Single Leg Romanian
+Deadlift` (catalogue: `… (Dumbbell)`) — MISS; `Leg Extension (Machine)` — RESOLVED. The model demonstrably KNOWS
+Hevy's `(Equipment)` convention (it emitted `(Machine)` twice unprompted); it cannot know whether the catalogue says
+`Leg Curl` or `Lying Leg Curl`. That is unguessable, not a prompting deficiency — which is why the fix supplies
+information rather than instruction. Failure compounds per-routine, not per-exercise: at 25%, a three-title routine
+resolves ~1.6% of the time, and one probe lost a perfectly valid exercise to two near-misses. #82's contract itself
+was followed to the letter — ids for in-history movements, a title for the one outside, never both — so the defect
+was purely the string.
+AFTER, both behaviours confirmed live and they differ correctly by ambiguity: (a) three out-of-history movements
+went 1/3 → **3/3 resolved and the routine provisioned** on the turn after the candidate warning; (b) `Bulgarian
+Split Squat`, which has THREE candidates, was NOT guessed — the model asked the user *"Which variation … Barbell /
+Dumbbell / (Or Split Squat (Dumbbell) …)"*. Refusing to guess under genuine ambiguity while recovering under a clear
+one is exactly the intended split, and it is the auto-resolve rejection vindicated in behaviour: a uniqueness rule
+would have picked for the user here. The loop closes because actions are appended to the reply (`chat.py:540`),
+returned as `ChatResponse.response`, stored as the assistant message (`ChatPanel.jsx:82`) and echoed back as
+`conversation_history` (`ChatPanel.jsx:77-80`) — verified by reading the path, not assumed.
+`_SUGGEST_MIN_RATIO = 0.5` is measured: `Split Squat (Dumbbell)` scores 0.512 against `Bulgarian Split Squat` while
+the best NONSENSE match scores 0.341; the model then used that 0.512 candidate as a genuine alternative offer, which
+a 0.6 floor would have silently withheld. 137 backend tests green.
+
+**Do not revisit unless:** full-catalogue injection becomes cheap enough that paying ~2.5k tokens on every request
+beats a one-turn correction on the rare miss.
+
+---
+
+### 84. Model-facing contracts are verified by a paid, non-deterministic OPERATOR probe — never by CI
+
+**Decision:** `backend/probe_resolver.py` is a first-class repo instrument: operator-run, excluded from CI, calling
+the real Anthropic API with a fake Hevy client. It measures contracts stated in English in the system prompt and
+honoured (or not) by a model at runtime. No migration.
+
+**Rationale:** #82 shipped green across 123 tests and was practically dead on arrival — every test faked the model,
+and the model was the failing component. A prompt is a contract with no compiler and no type system; the only way to
+know whether it holds is to ask a real model and look. But such a test can never gate CI: it costs money per run and
+is non-deterministic, so a red run means "the model chose differently today", not "the code broke" — wiring it into
+CI would produce exactly the flaky-gate-that-gets-ignored this repo has no use for. The honest shape is a
+measurement instrument an operator runs deliberately, whose output is read, not asserted. It is the FEEDBACK §8
+(LANDED ≠ LIVE) lesson applied to the model layer: local-green over a faked model is not live.
+
+**How you know:** the instrument found what the suite could not, twice in one session. It produced #83's entire
+evidence base — the 25% hit-rate, the emitted strings, the recovery, and the ambiguity split — none of which any
+deterministic test could have surfaced, because all of it is model behaviour. It also caught its own fidelity bugs
+under use: the first version appended the RAW reply rather than reply+actions, so the model never saw its own
+warning and a "recovered" verdict would have been fiction; and the synthetic user lacked a knowledge entry, firing
+`_section_onboarding_interview` so the model spent its turns on profile questions instead of the contract under
+test. Both are recorded in the harness itself. Safety is structural, not procedural: `FakeHevyClient` cannot write
+a routine, `--synthetic` builds a throwaway in-memory catalogue, an empty catalogue is a loud precondition failure
+(mirroring #77), and the API key is presence-checked and never materialised into output.
+
+**Do not revisit unless:** a deterministic replay harness (recorded model responses) can carry the same contracts,
+at which point the recorded half belongs in CI and only genuinely new probes stay operator-run.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
