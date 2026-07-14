@@ -191,6 +191,13 @@ must match it.
     specific table's *structure* is load-bearing, or a scanned/garbled source, **fall back
     to native Claude vision** on that page. `az-doc-intel` (Azure Document Intelligence) is
     the table-aware upgrade path if ever needed — not wired.
+  - **Loud vs silent failure (trust calibration, refines DECISIONS_LOG #78).** The three failure modes are
+    NOT equally dangerous. `(cid:NN)` garbage is **loud** — obviously broken on sight, so you
+    won't act on it. Table **flattening** (plausible prose, column pairing gone) and
+    **spurious fake-tables** (valid-looking GFM built from shattered prose) are **silent** —
+    they read as correct. So the risk isn't the garbled scan you'll catch; it's the clean-
+    looking table you'll trust. When a table's structure carries meaning, verify against the
+    source or use vision — don't trust MarkItDown's table shape on faith.
   - Machine-local: the MCP registration and CLI install do not replicate across machines —
     re-run the setup on any new machine. See DECISIONS_LOG for the adoption decision.
 

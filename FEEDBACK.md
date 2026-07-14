@@ -395,3 +395,23 @@ the seeder.
 **Proposed for a future brief (NOT yet built):** a prod-state assertion in `/closeout` — every feature that
 depends on a populated table names that table and its expected non-zero state, so a landed-but-not-live feature
 cannot close silently.
+
+---
+
+## 9. The Bash tool is Git Bash (POSIX sh) — never PowerShell here-strings in it
+
+**What happened:** the first commit of DECISIONS_LOG #78 was written with `git commit -m @'...'@` — PowerShell
+here-string syntax — run through the **Bash** tool. Git Bash is POSIX sh, not PowerShell: it parsed the argument
+as a literal `@`, then a single-quoted string, then a trailing `@`, leaking a stray `@` onto its own line at the
+top of the commit subject. Caught on read-back and fixed by amending the unpushed commit.
+
+**Why it's wrong:** the two shells in this environment take *opposite* multi-line-string syntax, and the mistake
+is using one shell's idiom in the other's tool. PowerShell here-strings are `@'...'@` (and the closing `'@` must
+be at column 0). POSIX/Git-Bash heredocs are `<<'EOF' ... EOF`. `@'...'@` means nothing to bash; `<<'EOF'` means
+nothing to PowerShell. The `@` is not a comment or string marker in sh, so it survives into the payload.
+
+**Rule going forward:** pick the string syntax by the TOOL you're invoking, not by habit. In the **Bash tool**
+(commit messages, file bodies, any multi-line literal) use a quoted heredoc — `git commit -F - <<'EOF' … EOF` —
+the single-quoted delimiter keeps `$`/backticks literal. In the **PowerShell tool**, use `@'…'@`. Never cross
+them. (Mirror of the standing "Windows / PowerShell only" rule, one layer down: knowing you're in PowerShell for
+`.command` doesn't help when the Bash *tool* is the one running the string.)
