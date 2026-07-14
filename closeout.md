@@ -102,10 +102,12 @@ provisions. `B5D3A742` resolves as `Bulgarian Split Squat (Dumbbell)` while stil
 
 ### Open items owed on this work
 
-1. **`Pullover` is not constraint-neutral** — `probe_resolver.py` labels it so, but the live model
-   flagged it against the active **shoulder injury** (horizontal adduction / overhead). It proceeded
-   after confirmation so the measurement survived, but the subject choice is luckier than it reads and
-   will break if the shoulder flag tightens. Subject swap in `_RESOLVER_PROBE.turns`. Not yet briefed.
+1. **`Pullover` is not constraint-neutral → OPEN_QUESTIONS Q28.** `probe_resolver.py` labels it so, but
+   the live model flagged it against the active **shoulder injury** (horizontal adduction / overhead).
+   It proceeded after confirmation so the measurement survived — the probe passes for a reason it does
+   not state. Q28 records that the obvious replacements each fail one of the two required constraints
+   (Reverse Fly is in the 28-day window → no title forced; Cable Crossover is horizontal adduction), and
+   that dropping `Pullover` outright probably suffices.
 2. **`_SUGGEST_MIN_RATIO = 0.5` — closed, do not re-open naively.** The ratio tier fired live
    (`Preacher Curl` → `Rope Cable Curl` 0.643 / `Drag Curl` 0.636; `Pullover` → `Pull Up` 0.533). The
    floor admits noise; containment-first **ranking** carries the feature. #83 records explicitly: **do
@@ -119,8 +121,9 @@ provisions. `B5D3A742` resolves as `Bulgarian Split Squat (Dumbbell)` while stil
 
 ### Open questions by status
 
-**Untouched this session — none opened, none resolved, `OPEN_QUESTIONS.md` not edited.**
-- **open:** Q5 (Polar `hrv[]` payload) · Q7 / Q20 (findings-vs-restrictions schema gap) · Q13 ·
+**Opened this session: Q28** (`Pullover` is not a constraint-neutral probe subject — the resolver probe
+passes by luck). None resolved. No other OPEN_QUESTIONS entry edited.
+- **open:** **Q28 (new)** · Q5 (Polar `hrv[]` payload) · Q7 / Q20 (findings-vs-restrictions schema gap) · Q13 ·
   Q17 (HRV instrumentation-vs-physiology, blocked on the `health-connect-app` node dump) ·
   Q18 (Railway historical sweep, independent of Q17) · Q19 (desktop scroller) · Q27 (v1 strength-ratio
   axis) · the `health-connect-app`-rooted items (carry across; single-repo scope rule).
@@ -144,11 +147,12 @@ persistent conversation history · session cards not clickable · dual-panel scr
 
 ### Single clearest next action
 
-**Swap `Pullover` out of `_RESOLVER_PROBE` in `backend/probe_resolver.py`** for a genuinely
-constraint-neutral out-of-history movement, then re-run `/opt/venv/bin/python probe_resolver.py 1` in
-the Railway container. It is the only item this session leaves that can silently rot: the probe
-currently passes for a reason it does not state, which is the exact shape FEEDBACK §11 was written
-about. After that, pick up the ROADMAP NOW items.
+**Resolve OPEN_QUESTIONS Q28** — drop `Pullover` from `_RESOLVER_PROBE` in `backend/probe_resolver.py`
+(keeping `Calf Raise` + `Preacher Curl`, both prod-confirmed to force a title), then re-run
+`/opt/venv/bin/python probe_resolver.py 1` in the Railway container. It is the only item this session
+leaves that can silently rot: the probe currently passes for a reason it does not state, which is the
+exact shape FEEDBACK §11 was written about. **The backing is Q28, not this file** — `closeout.md` is
+session-local and the next close-out overwrites it. After that, pick up the ROADMAP NOW items.
 
 ### Untracked, left alone (not mine)
 

@@ -459,6 +459,40 @@ spots — #76). Unblocks the interim no-pattern verdicts on the four families ab
 
 ---
 
+## Q28. `Pullover` is not a constraint-neutral probe subject — the resolver probe passes by luck
+
+`backend/probe_resolver.py` `_RESOLVER_PROBE` labels its subjects "out-of-history AND constraint-neutral",
+which is what stops an injury refusal from silently suppressing the resolver measurement (the whole reason
+B3 swapped the subjects off BSS / single-leg RDL). `Calf Raise` and `Preacher Curl` hold. **`Pullover` does
+not.**
+
+**How you know:** the live container run (2026-07-15, 494-row catalogue, real model) opened with the model
+flagging it unprompted — *"Pullovers involve shoulder movement… You've got an active shoulder injury with a
+flag on horizontal adduction and overhead work. Pullovers can load the shoulder in a similar pattern."* It
+proceeded after confirmation, so the probe still reached its subject and reported `[OK]`. That is the
+problem: **the probe currently passes for a reason it does not state**, and it will stop passing if the
+shoulder flag tightens or the model gets more conservative — a false-green waiting on someone else's
+check-in (FEEDBACK §11).
+
+**The fix is one line, but the candidate set is narrower than it looks.** A replacement must satisfy BOTH
+constraints simultaneously, and the two suggested in passing each fail one:
+- **Reverse Fly** — fails *out-of-history*. `Rear Delt Reverse Fly (Cable)` / `(Dumbbell)` / `Single Arm
+  Rear Delt Cable Fly` are all in the user's 28-day window (they appear in the 2026-07-15 ID-keyed audit's
+  ADJUDICATED NO-PATTERN list), so the model has ids for them and would never emit a title — the probe would
+  measure nothing and, post-`5c5b43f`, correctly fail loudly. [Certain — from the audit output]
+- **Cable Crossover** — likely fails *constraint-neutral*: horizontal adduction is the exact pattern the
+  shoulder flag names. [Reasoning, not measured]
+
+**Simplest resolution — probably no replacement at all:** drop `Pullover` and keep `Calf Raise` +
+`Preacher Curl`. Both are prod-confirmed to force a guessed title and return genuine candidates, and two
+subjects already exercise the ratio tier (`Preacher Curl` → `Rope Cable Curl` 0.643 / `Drag Curl` 0.636).
+The third subject adds coverage, not capability.
+
+**Status:** open — deferred to the next harness-open, not a branch. Test-instrument only; no production
+code path is involved. Ref: live probe run 2026-07-15; DECISIONS_LOG #83/#84; FEEDBACK §11.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
