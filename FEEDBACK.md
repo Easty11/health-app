@@ -415,3 +415,29 @@ nothing to PowerShell. The `@` is not a comment or string marker in sh, so it su
 the single-quoted delimiter keeps `$`/backticks literal. In the **PowerShell tool**, use `@'…'@`. Never cross
 them. (Mirror of the standing "Windows / PowerShell only" rule, one layer down: knowing you're in PowerShell for
 `.command` doesn't help when the Bash *tool* is the one running the string.)
+
+---
+
+## 10. False-green instruments — an unsound measurement reporting zero (mirror of §8)
+
+**What happened:** a title-keyed tag-coverage pass over the 28-day window scored 38/38 — fallback hit-rate 0,
+apparently perfect coverage. It was wrong. At that moment `Bulgarian Split Squat` had no `exercise_region_tags`
+row and no `adjudicated_at`, and had been trained on 10 Jul — inside the window. Its true fallback hit-rate was
+1/38. The pass counted the movement as covered because the reference file matched the stale LOGGED title, while
+`infer_loaded_regions` joins on `exercise_template_id` against the CURRENT catalogue, where the bare title does
+not exist. The instrument committed, inside itself, the exact title-space drift it existed to detect
+(DECISIONS_LOG #79).
+
+**The disease, not the instance:** §8 is inert code reporting *done*. This is its mirror — an unsound instrument
+reporting *zero*. Both are green readings that mean nothing, and both are more dangerous than a red one, because
+a zero is what you were hoping for and so nobody interrogates it. The tell is shared: the measurement and the
+behaviour it claims to measure were keyed differently, so the number described a system that does not exist. A
+coverage metric keyed on anything other than what the code joins on is not a weaker measurement — it is a
+different measurement wearing the same name.
+
+**Rule going forward:** measure on the key the system actually joins on (`exercise_template_id`), never the key
+that is convenient to read (`title`). Before trusting any instrument's green, state which key it keys on and which
+key the code under test keys on; if they differ, the instrument is unsound regardless of what it reports. Where a
+measurement and its subject can drift apart, derive both from one definition rather than restating the rule —
+as #79 does by extracting `selection.classify_coverage` and having the audit and the read path share it. A second
+statement of a rule is a second rule.
