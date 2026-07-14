@@ -4,6 +4,8 @@ Exercises the chat routine-action path (routers.chat._process_routine_actions):
 (a) title-only exercise resolves to the correct id and reaches create_routine
 (b) a block that already carries an id is passed through untouched (opt-in, not forced)
 (c) an unresolvable title skips the routine with a notice (no KeyError)
+(d) id+title together — the prompt forbids it (#82), so this pins what happens
+    when the model does it anyway. Only reachable since #82 permitted titles.
 """
 import asyncio
 
@@ -79,3 +81,28 @@ def test_unresolvable_title_skips_routine(db_session):
 
     assert client.calls == []                          # create_routine never called
     assert any("could not resolve" in a.lower() for a in actions)
+
+
+# ---------- (d) id + title together — id wins, title is inert ----------
+def test_id_and_title_together_uses_id_and_ignores_title(db_session):
+    """#82 tells the model to emit id XOR title, never both. Models err, and this
+    path only became reachable once titles were permitted at all. The id must win
+    (the resolver skips any exercise already carrying one) and the stray title
+    must not reach Hevy — create_routine builds its payload from an allowlist, so
+    it is dropped by construction rather than by a guard that could rot.
+    """
+    _tmpl(db_session, "0222DB42", "Bench Press (Barbell)", is_custom=False)
+    client = FakeHevyClient()
+    reply = _block(
+        '{"exercise_template_id":"0222DB42","title":"Some Other Lift",'
+        '"sets":[{"type":"normal","reps":8}]}'
+    )
+
+    _cleaned, actions = asyncio.run(
+        chat_mod._process_routine_actions(reply, client, USER, db_session)
+    )
+
+    assert len(client.calls) == 1
+    ex = client.calls[0]["exercises"][0]
+    assert ex["exercise_template_id"] == "0222DB42"   # the id the model gave, not a re-resolve
+    assert any("created" in a.lower() for a in actions)
