@@ -33,6 +33,13 @@ class OrphanRegionKeyError(Exception):
     """A proposed region_key does not resolve to a taxonomy Region — fail closed."""
 
 
+class EmptyTemplateStoreError(Exception):
+    """`hevy_exercise_templates` is empty — a PRECONDITION failure, not a data
+    problem (DECISIONS_LOG #77). Every title would resolve to None and the seed
+    would report "N unresolved" and exit 0, masking an unpopulated substrate.
+    Run `sync_hevy_templates.py` first."""
+
+
 def load_proposal(path: Path = _PROPOSAL_PATH) -> dict:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
@@ -66,6 +73,16 @@ def seed_tags(
     """
     proposal = proposal or load_proposal()
     _validate_fail_closed(proposal)
+
+    # Prod-precondition gate (#77): refuse loudly on an empty substrate rather
+    # than reporting "N unresolved" and exiting 0 — that reads like a data
+    # problem when it is an unpopulated-table precondition failure.
+    if db.query(models.HevyExerciseTemplate).count() == 0:
+        raise EmptyTemplateStoreError(
+            "hevy_exercise_templates is EMPTY — run `python backend/sync_hevy_templates.py` "
+            "first, verify a non-zero row count, THEN seed. Refusing to seed."
+        )
+
     default_source = proposal.get("_meta", {}).get("source", "llm_proposed")
     now = datetime.now(timezone.utc)
 
@@ -151,5 +168,8 @@ if __name__ == "__main__":
     _db = SessionLocal()
     try:
         print(seed_tags(_db, uid, confirm=do_confirm))
+    except (EmptyTemplateStoreError, OrphanRegionKeyError) as exc:
+        logging.error("%s", exc)
+        raise SystemExit(1)
     finally:
         _db.close()

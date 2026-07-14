@@ -191,33 +191,90 @@ async def sync_one_user(db: Session, user_id: int, api_key: str) -> dict:
     }
 
 
-async def sync_exercise_templates(db: Session) -> dict:
-    """Sync every keyed user's Hevy exercise templates into the local store.
+async def sync_exercise_templates(
+    db: Session, *, only_user_id: int | None = None
+) -> dict:
+    """Sync keyed users' Hevy exercise templates into the local store
+    (DECISIONS_LOG #77).
 
-    Returns a summary: users synced, rows processed (defaults re-counted per
-    user), and the collision report.
+    PER-USER ISOLATION: each user's sync is wrapped independently. A dead or
+    invalid key (`_check` raises `HevyAuthError` on 401, which is NOT an
+    `httpx.HTTPStatusError` and so propagates straight up) fails that user only —
+    the loop records the failure and CONTINUES. A partial success is reportable,
+    never an escaped exception. On failure the pending transaction is rolled
+    back so the next user and the collision report start from a clean session
+    (already-committed pages from `sync_one_user`'s per-page commit stay — a
+    partial store, faithfully reported).
+
+    `only_user_id` restricts the run to a single user (the operator safety valve
+    — sync yourself without exposure to a stale family key). An unknown/keyless
+    id yields the same empty-list failure signal as no keyed users at all.
+
+    Summary keys: users_attempted / users_succeeded / users_failed, and
+    `users_synced` == users_succeeded (so 0 is a first-class failure signal —
+    empty list OR every user failed). `per_user` carries one row each:
+    {user_id, status, rows_processed, error}.
     """
     users = users_with_hevy_key(db)
-    rows_processed = 0
-    defaults_seen = 0
-    customs_seen = 0
+    if only_user_id is not None:
+        users = [(uid, key) for uid, key in users if uid == only_user_id]
+
+    if not users:
+        scope = f" for user_id={only_user_id}" if only_user_id is not None else ""
+        logger.warning(
+            "Hevy template sync: NO users with a stored Hevy key%s — nothing to "
+            "sync. The template store stays EMPTY (this is the substrate-unpopulated "
+            "signal, not a benign no-op).", scope,
+        )
+        return {
+            "users_synced": 0, "users_attempted": 0,
+            "users_succeeded": 0, "users_failed": 0,
+            "rows_processed": 0, "defaults_seen": 0, "customs_seen": 0,
+            "collision_count": 0, "collisions": [], "per_user": [],
+        }
+
+    rows_processed = defaults_seen = customs_seen = 0
+    succeeded = failed = 0
+    per_user: list[dict] = []
 
     for user_id, api_key in users:
-        counts = await sync_one_user(db, user_id, api_key)
-        rows_processed += counts["rows_processed"]
-        defaults_seen += counts["defaults_seen"]
-        customs_seen += counts["customs_seen"]
+        try:
+            counts = await sync_one_user(db, user_id, api_key)
+            rows_processed += counts["rows_processed"]
+            defaults_seen += counts["defaults_seen"]
+            customs_seen += counts["customs_seen"]
+            succeeded += 1
+            per_user.append({
+                "user_id": user_id, "status": "ok",
+                "rows_processed": counts["rows_processed"], "error": None,
+            })
+        except Exception as exc:  # noqa: BLE001 — isolation is the whole point
+            db.rollback()  # discard this user's uncommitted partial page
+            failed += 1
+            err = f"{type(exc).__name__}: {exc}"
+            logger.warning("Hevy template sync FAILED for user %d — %s", user_id, err)
+            per_user.append({
+                "user_id": user_id, "status": "failed",
+                "rows_processed": 0, "error": err,
+            })
 
     collisions = _collision_report(db)
     summary = {
-        "users_synced": len(users),
+        "users_synced": succeeded,        # == users_succeeded; 0 is the failure signal
+        "users_attempted": len(users),
+        "users_succeeded": succeeded,
+        "users_failed": failed,
         "rows_processed": rows_processed,
         "defaults_seen": defaults_seen,
         "customs_seen": customs_seen,
         "collision_count": len(collisions),
         "collisions": collisions,
+        "per_user": per_user,
     }
-    logger.info("Hevy template sync complete: %s", summary)
+    logger.info(
+        "Hevy template sync complete: %s",
+        {k: v for k, v in summary.items() if k != "per_user"},
+    )
     return summary
 
 
