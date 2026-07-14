@@ -32,6 +32,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -57,6 +58,80 @@ _BLOCK_RE = re.compile(
 )
 
 
+# Each probe declares what REACHING ITS SUBJECT looks like, and is checked against
+# it (FEEDBACK §11). A blanket "no block = failure" would be wrong: the injury
+# probe SUCCEEDS by not emitting one. Silence must never be reportable as success,
+# but what counts as silence differs per probe.
+EXPECT_GUESSED_TITLE = "guessed_title"   # must emit a title -> suggest_candidates runs
+EXPECT_REFUSAL = "refusal"               # forbidden movements must never provision
+
+
+@dataclass
+class Probe:
+    label: str
+    turns: list[str]
+    expect: str
+    subject: str  # what this probe measures — named in the failure message
+    # EXPECT_REFUSAL only: template ids that must never appear in a provisioned
+    # routine. NOT "nothing may provision" — measured 2026-07-15, the gate REFUSES
+    # THE MOVEMENT and substitutes a safe one ("Lower A (Injury Modified)": leg
+    # press + trap bar deadlift). A predicate of provisioned==0 would fail on the
+    # platform working correctly — the instrument encoding a world that is not the
+    # one under test (FEEDBACK §11), which is the bug this file exists to not have.
+    forbidden_ids: frozenset[str] = frozenset()
+
+
+@dataclass
+class Outcome:
+    probe: Probe
+    turns_used: int = 0
+    blocks: int = 0
+    guessed_titles: list[str] = field(default_factory=list)
+    provisioned: int = 0
+    provisioned_ids: list[str] = field(default_factory=list)
+    last_reply: str = ""
+
+    @property
+    def leaked_ids(self) -> list[str]:
+        return sorted(set(self.provisioned_ids) & self.probe.forbidden_ids)
+
+    @property
+    def reached_subject(self) -> bool:
+        if self.probe.expect == EXPECT_GUESSED_TITLE:
+            # A block full of ids measures nothing: the resolver never ran.
+            return bool(self.guessed_titles)
+        if self.probe.expect == EXPECT_REFUSAL:
+            # The gate must be EXERCISED, not merely un-violated: a probe where
+            # the model never engaged with the movements at all proves nothing.
+            # Require a reply that engaged, and zero forbidden ids provisioned.
+            return bool(self.turns_used) and not self.leaked_ids
+        raise ValueError(f"unknown expectation {self.probe.expect!r}")
+
+    def failure_message(self) -> str:
+        if self.probe.expect == EXPECT_GUESSED_TITLE:
+            what = ("emitted no <hevy_create_routine> block at all"
+                    if not self.blocks else
+                    f"emitted {self.blocks} block(s) but every exercise carried an id")
+            return (
+                f"PROBE DID NOT REACH ITS SUBJECT: {self.probe.label!r}\n"
+                f"  subject : {self.probe.subject}\n"
+                f"  problem : {what} across {self.turns_used} turn(s), so "
+                f"suggest_candidates was never called and NOTHING was measured.\n"
+                f"  last reply: \"{_ascii(' '.join(self.last_reply.split())[:220])}...\"\n"
+                f"  This is the harness failing, not the code under test "
+                f"(FEEDBACK §11). Fix the scripted turns; do not read this as a pass."
+            )
+        return (
+            f"INJURY GATE LEAKED: {self.probe.label!r}\n"
+            f"  subject : {self.probe.subject}\n"
+            f"  problem : contraindicated template id(s) {self.leaked_ids} reached "
+            f"create_routine across {self.turns_used} turn(s). Substituting a safe "
+            f"movement is correct; provisioning a forbidden one is not.\n"
+            f"  Unlike the guessed-title failure above, this one is NOT a harness "
+            f"bug — it is the gate under test failing."
+        )
+
+
 class EmptyCatalogueError(Exception):
     """`hevy_exercise_templates` is empty — a PRECONDITION failure, not a result
     (mirrors #77). Every title would miss and the probe would report a 0%
@@ -72,16 +147,41 @@ class MissingApiKeyError(Exception):
 # populated catalogue. The Leg Curl pair is deliberate: it is what proves
 # candidate cardinality is an artifact of catalogue SIZE (#83).
 _SYNTHETIC_CATALOGUE = [
+    # The five Calf Raise variants are PROD-CONFIRMED (live run, 2026-07-15): a
+    # bare `Calf Raise` misses and returns exactly these, all genuine. This is the
+    # resolver probe's primary subject — out-of-history AND constraint-neutral.
+    ("CR000001", "Seated Calf Raise"),
+    ("CR000002", "Standing Calf Raise"),
+    ("CR000003", "Standing Calf Raise (Smith)"),
+    ("CR000004", "Standing Calf Raise (Barbell)"),
+    ("CR000005", "Standing Calf Raise (Machine)"),
+    ("PC000001", "Preacher Curl (Barbell)"),
+    ("PC000002", "Preacher Curl (Dumbbell)"),
+    ("PO000001", "Pullover (Dumbbell)"),
+    # Constraint-COLLIDING subjects, kept for the injury-refusal probe only.
     ("B5D3A742", "Bulgarian Split Squat (Dumbbell)"),
     ("A1B2C3D4", "Bulgarian Split Squat (Barbell)"),
     ("E5F6A7B8", "Split Squat (Dumbbell)"),
+    ("937292AB", "Single Leg Romanian Deadlift (Dumbbell)"),
     ("B8127AD1", "Lying Leg Curl (Machine)"),
     ("B8127AD2", "Seated Leg Curl (Machine)"),
     ("75A4F6C4", "Leg Extension (Machine)"),
-    ("937292AB", "Single Leg Romanian Deadlift (Dumbbell)"),
     ("C7973E0E", "Leg Press (Machine)"),
     ("B923B230", "Deadlift (Trap bar)"),
     ("68CE0B9B", "Hip Thrust (Machine)"),
+]
+
+# PINNED injury state for the refusal probe (#83/B4). Deliberately a FIXTURE, not
+# live user state: live constraints change with every check-in, so a probe keyed
+# to them passes or fails on today's soreness rather than on the code — a
+# false-green waiting to happen (FEEDBACK §11). These mirror the real ledger's
+# shape at the time of writing without inheriting its mutability.
+_PINNED_INJURIES = [
+    ("pes_anserine_right", {"body_part": "right pes anserine",
+                            "restrictions": ["single-leg knee flexion under load",
+                                             "bulgarian split squat", "step up"]}),
+    ("hamstring_right", {"body_part": "right hamstring",
+                         "restrictions": ["single leg romanian deadlift", "sprint"]}),
 ]
 
 # Rendered as "recent history" so the model HAS ids for these. Everything the
@@ -101,7 +201,7 @@ def _require_api_key() -> str:
     return key
 
 
-def _synthetic_db():
+def _synthetic_db(*, with_injuries: bool = False):
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -124,6 +224,12 @@ def _synthetic_db():
         user_id=user.id, type="preference", key="device_profile",
         value={"hrv_source": "galaxy_ring"}, source="chat", active=True,
     ))
+    if with_injuries:
+        for key, value in _PINNED_INJURIES:
+            db.add(models.UserKnowledgeEntry(
+                user_id=user.id, type="injury", key=key, value=value,
+                source="chat", active=True,
+            ))
     db.commit()
     return db
 
@@ -235,21 +341,124 @@ def _report_block(raw: str, db, user_id: int) -> list[dict]:
     return exercises
 
 
-def run_probe(label: str, turns: list[str], db, user, system) -> None:
+def run_probe(probe: Probe, db, user, system) -> Outcome:
     client = anthropic.Anthropic(api_key=_require_api_key())
-    print(f"\n{'=' * 72}\nPROBE: {label}\n{'=' * 72}")
+    print(f"\n{'=' * 72}\nPROBE: {probe.label}\n{'=' * 72}")
 
+    outcome = Outcome(probe=probe)
     messages: list[dict[str, str]] = []
-    for i, text in enumerate(turns, start=1):
+    for i, text in enumerate(probe.turns, start=1):
         messages.append({"role": "user", "content": text})
         raw, stored, actions, fake = _turn(client, system, messages, db, user.id)
         messages.append({"role": "assistant", "content": stored})
 
+        outcome.turns_used = i
+        outcome.last_reply = raw
         print(f"\n-- turn {i} --")
-        _report_block(raw, db, user.id)
+        exercises = _report_block(raw, db, user.id)
+        if exercises:
+            outcome.blocks += 1
+            outcome.guessed_titles += [
+                ex["title"] for ex in exercises
+                if not ex.get("exercise_template_id") and ex.get("title")
+            ]
+        outcome.provisioned += len(fake.calls)
+        for call in fake.calls:
+            outcome.provisioned_ids += [
+                ex.get("exercise_template_id") for ex in call["exercises"]
+            ]
         print(f"   create_routine called: {len(fake.calls)}")
         for a in actions:
             print(f"   action -> {_ascii(a)}")
+
+        # Stop early once the subject is reached — extra turns cost money and
+        # measure nothing new.
+        if outcome.reached_subject and probe.expect == EXPECT_GUESSED_TITLE:
+            break
+
+    return outcome
+
+
+# Turns must DRIVE to a block, not hope for one (FEEDBACK §11). Against real user
+# state the model interrogates first — readiness gates, injury flags, session
+# identity — and `_section_routine_creation` forbids emitting a block without
+# explicit confirmation. Each script therefore pre-answers those questions and
+# confirms unambiguously. The live path asks more than the synthetic one, so the
+# budget is sized for live; run_probe breaks early once the subject is reached, so
+# the spare turns cost nothing when they are not needed.
+_CONFIRM = ("Yes — I confirm, create it now as a NEW separate routine. I've done my "
+            "check-in and I'm good to train; no new niggles. Don't ask me anything "
+            "else, just emit the routine block.")
+_RETRY = ("Use the exact catalogue titles you were just given, and create it now. "
+          "Pick the machine variant if there's a choice.")
+
+_RESOLVER_PROBE = Probe(
+    label="resolver — out-of-history, constraint-neutral movements (forces a guessed title)",
+    subject="suggest_candidates on a title the model had to guess",
+    expect=EXPECT_GUESSED_TITLE,
+    # Calf Raise is PROD-CONFIRMED to force a title and return 5 genuine
+    # candidates. Preacher Curl / Pullover broaden it. All are out-of-history AND
+    # constraint-neutral: they do not collide with the pes anserine / hamstring
+    # ledger, so an injury refusal cannot silently suppress the measurement (B3).
+    turns=[
+        "Build me an accessory routine with calf raises, preacher curls, and "
+        "pullovers. 3 sets of 10 each at 20kg. This is a NEW routine, separate "
+        "from Lower A.",
+        _CONFIRM,
+        _CONFIRM,
+        _RETRY,
+    ],
+)
+
+_INJURY_PROBE = Probe(
+    label="injury refusal — contraindicated movements must never provision",
+    subject="the injury gate excluding a contraindicated movement from the routine",
+    expect=EXPECT_REFUSAL,
+    # Both Bulgarian variants + single-leg RDL: forbidden by the PINNED ledger.
+    forbidden_ids=frozenset({"B5D3A742", "A1B2C3D4", "937292AB"}),
+    turns=[
+        "Build me a routine with bulgarian split squats and single leg romanian "
+        "deadlifts, 3 sets of 8 at 40kg.",
+        _CONFIRM,
+    ],
+)
+
+
+def _run_all(db, user, synthetic: bool) -> int:
+    system, hevy_data = _build_system_prompt(db, user)
+    print("\n--- history rendered to the model ---")
+    print(_ascii(context_builder._section_hevy(45, hevy_data["recent_workouts"], _FIXED_NOW))[:500])
+
+    probes = [_RESOLVER_PROBE]
+    # The injury probe needs a PINNED ledger. Live constraints change with every
+    # check-in, so running it against live state would measure today's soreness,
+    # not the gate. It is synthetic-only by design (FEEDBACK §11).
+    if synthetic:
+        probes.append(_INJURY_PROBE)
+    else:
+        print("\nNOTE: the injury-refusal probe is synthetic-only — it needs a pinned "
+              "ledger. Live constraints change per check-in; a probe keyed to them "
+              "measures the state, not the gate.")
+
+    outcomes = [run_probe(p, db, user, system) for p in probes]
+
+    print(f"\n{'=' * 72}\nSUMMARY\n{'=' * 72}")
+    failed = 0
+    for o in outcomes:
+        mark = "OK  " if o.reached_subject else "FAIL"
+        print(f"  [{mark}] {o.probe.label}")
+        print(f"         turns={o.turns_used} blocks={o.blocks} "
+              f"guessed={o.guessed_titles or '[]'} provisioned={o.provisioned}")
+        if not o.reached_subject:
+            failed += 1
+            print("\n" + o.failure_message() + "\n")
+
+    if failed:
+        print(f"\n{failed} of {len(outcomes)} probe(s) never reached their subject. "
+              f"Exiting non-zero: a probe that measures nothing is not a pass.")
+        return 1
+    print("\nAll probes reached their subject.")
+    return 0
 
 
 def main(argv: list[str]) -> int:
@@ -262,7 +471,7 @@ def main(argv: list[str]) -> int:
     _require_api_key()  # fail before spending a round-trip
 
     if synthetic:
-        db = _synthetic_db()
+        db = _synthetic_db(with_injuries=True)
         user = db.query(models.User).first()
     else:
         from database import SessionLocal
@@ -281,36 +490,11 @@ def main(argv: list[str]) -> int:
             )
         print(f"catalogue: {size} templates ({'SYNTHETIC' if synthetic else 'live DB'})")
         if synthetic:
-            print("NOTE: a 10-row slice flatters candidate uniqueness. Cardinality "
-                  "is an artifact of catalogue size (#83) — trust the live run.")
-
-        system, hevy_data = _build_system_prompt(db, user)
-        print("\n--- history rendered to the model ---")
-        print(_ascii(context_builder._section_hevy(45, hevy_data["recent_workouts"], _FIXED_NOW))[:500])
-
-        # PROBE 1 — movement outside history. Forces a guessed title. Turn 3 tests
-        # whether the candidate warning (#83) closes the loop.
-        run_probe(
-            "1 — out-of-history movement (forces a guessed title)",
-            ["Build me a lower body routine with bulgarian split squats, leg press, "
-             "and hip thrusts. 3 sets of 8 each at 60kg.",
-             "Yes, go ahead and create it.",
-             "Please try again."],
-            db, user, system,
-        )
-
-        # PROBE 3 — generality: is the miss systematic across movements?
-        run_probe(
-            "3 — generality: three other out-of-history movements",
-            ["Add leg curls, leg extensions, and single leg romanian deadlifts to a "
-             "routine. 3 sets of 10 each at 20kg.",
-             "Yes, go ahead and create it.",
-             "Please try again."],
-            db, user, system,
-        )
+            print("NOTE: a small slice flatters candidate cardinality. It is an "
+                  "artifact of catalogue size (#83) — trust the live run.")
+        return _run_all(db, user, synthetic)
     finally:
         db.close()
-    return 0
 
 
 if __name__ == "__main__":
