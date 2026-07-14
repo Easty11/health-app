@@ -2038,6 +2038,31 @@ real vs 0.341 noise) recorded above. A live miss that resembles the catalogue wi
 typo or a genuinely different phrasing — is what would exercise it, and none has been observed. Absence of a
 failure the run could not have produced is not evidence of correctness (FEEDBACK §10).
 
+**How you know — RATIO TIER NOW EXERCISED (2026-07-15, later run; closes the item the addendum above left owed):**
+the repaired probe (`probe_resolver.py`, FEEDBACK §11 fixes) reached its subject against the live 494-row catalogue
+and forced three guessed titles at once — `Calf Raise`, `Preacher Curl`, `Pullover`. All three missed exact match;
+`Preacher Curl` and `Pullover` produced the first non-containment candidates ever observed, so the 0.5 floor
+finally decided something:
+
+| miss | candidate | tier |
+|---|---|---|
+| `Preacher Curl` | `Preacher Curl (Barbell)` / `(Machine)` / `(Dumbbell)` | containment |
+| `Preacher Curl` | `Rope Cable Curl` | **ratio 0.643** |
+| `Preacher Curl` | `Drag Curl` | **ratio 0.636** |
+| `Pullover` | `Pullover (Machine)` / `(Dumbbell)` | containment |
+| `Pullover` | `Pull Up` | **ratio 0.533** |
+
+**Verdict: the floor admits noise, and the RANKING — not the threshold — is what makes the feature work.** `Rope
+Cable Curl`, `Drag Curl` and `Pull Up` are different exercises, not variants; they are the tail of a list whose head
+is correct. Containment-first ordering put every genuine candidate above every ratio-tier one in all three cases, and
+`limit=5` bounds the tail. So the reasoning this entry recorded as "reasoning, not measurement" is now measured, and
+it held — but the honest reading is that 0.5 is doing no useful work and is tolerable only because ranking dominates
+it. `Calf Raise` (5 candidates, all containment, zero noise) is the shape when the tier never fires.
+**Do NOT raise the floor on this evidence:** 0.512 (`Split Squat (Dumbbell)`, a real alternative the model used as a
+genuine offer) sits BELOW 0.533 (`Pull Up`, noise). Ratio does not separate signal from noise at this scale in
+either direction — a floor high enough to exclude `Pull Up` would also exclude a real candidate. Ranking is the
+mechanism; the floor is only a cheap bound on list length.
+
 **Do not revisit unless:** full-catalogue injection becomes cheap enough that paying ~2.5k tokens on every request
 beats a one-turn correction on the rare miss.
 
