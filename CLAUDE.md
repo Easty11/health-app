@@ -167,6 +167,33 @@ must match it.
   diffs the written file against the intended source before landing. Repo-canonical
   docs are edited in place and never cross this transport.
 
+### Tooling
+
+- **MarkItDown — the document→markdown ingestion path.** Microsoft MarkItDown converts
+  PDFs and Office documents (TGA guidance, AS/NZS standards, council specs, clinical
+  papers) to markdown deterministically, replacing native Claude ingestion of structured
+  documents — which costs vision tokens and extracts tables non-deterministically. Two
+  invocation paths:
+  - **MCP (one-shot, in-context).** `markitdown` registered at **user scope**
+    (`uvx markitdown-mcp`, machine-local `~/.claude.json`), for converting a single
+    document straight into the conversation. Not a repo dependency.
+  - **CLI (large documents, to disk).** For anything past the threshold, convert to a
+    file and read it selectively rather than dumping it into context. Invoke
+    `python -m markitdown <in> -o <out>.md` (the `markitdown.exe` shim is not on PATH;
+    `python -m` is PATH-independent). Installed as `markitdown[pdf,docx,pptx,xlsx,xls]`
+    (`[all]` is unsatisfiable on Python 3.14 — its `onnxruntime<=1.20.1` pin, audio-only,
+    has no 3.14 wheel; the document extras carry every PDF/Office converter regardless).
+  - **Threshold:** **>~30 pages → CLI-to-disk**; smaller → MCP is fine.
+  - **Limits (verified at adoption).** The PDF path is pdfminer *text* extraction — it has
+    no table-structure detection: genuine tables **flatten to linear text** (column pairing
+    lost), and scanned / broken-font PDFs (no ToUnicode CMap) extract as `(cid:NN)` garbage.
+    Output is deterministic and clean on born-digital prose, but for a document where a
+    specific table's *structure* is load-bearing, or a scanned/garbled source, **fall back
+    to native Claude vision** on that page. `az-doc-intel` (Azure Document Intelligence) is
+    the table-aware upgrade path if ever needed — not wired.
+  - Machine-local: the MCP registration and CLI install do not replicate across machines —
+    re-run the setup on any new machine. See DECISIONS_LOG for the adoption decision.
+
 ### Recent landings
 
 _Pointer-only. Capped at the 3 most recent — one line each, canonical home only, no SHAs /

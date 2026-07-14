@@ -1819,6 +1819,40 @@ the request-layer dormancy is deliberately lifted.
 
 ---
 
+### 78. MarkItDown adopted as the document→markdown ingestion path — deterministic, with recorded table-structure limits
+
+**Status:** On branch `chore/markitdown-mcp` (pending land; number claimed from max 77). Machine-local tooling only —
+no repo code, no migration. `markitdown` MCP registered at **user scope** (`uvx markitdown-mcp` → `~/.claude.json`,
+outside the repo); CLI installed as `markitdown[pdf,docx,pptx,xlsx,xls]==0.1.6` (`python -m markitdown`, shim not on
+PATH). Claude Desktop `claude_desktop_config.json` entry attempted but **the running Desktop app rewrites that file
+from its own in-memory model and drops out-of-band edits** — durable registration there requires the Desktop
+Settings → Developer → Edit Config UI + restart (operator step, not landed here). CLAUDE.md repo-canonical Tooling
+section documents the two paths, the >~30pp→CLI-to-disk threshold, and the limits below.
+
+**Rationale:** PDFs/Office documents (TGA guidance, AS/NZS standards, council specs, clinical papers) processed
+natively by Claude incur vision-token cost and extract tables non-deterministically. MarkItDown converts them to
+markdown *deterministically* (two paths verified byte-identical modulo line-endings) at a fraction of the cost —
+a 79pp born-digital TGA guidance PDF = 35,545 tokens as clean text (`tiktoken cl100k`). Two paths so the >~30pp
+case converts to disk and is read selectively rather than dumped into context. User scope, not project `.mcp.json`:
+the tool is cross-project, not a health-app dependency. `[all]` extra rejected — unsatisfiable on Python 3.14 (its
+`onnxruntime<=1.20.1` pin, audio-only, has no 3.14 wheel); the document extras carry every PDF/Office converter.
+
+**How you know:** Step-6 gate ran BOTH paths on three real PDFs. (1) 79pp TGA guidance (the target class): `cid=0`,
+both paths identical, clean readable text — BUT genuine tables **flatten to linear text**: "Table 1. Prominence of
+active ingredients" (2-column Permitted/Not-permitted matrix) rendered as a flat cell list with the column pairing
+lost. MarkItDown's PDF path is pdfminer *text* extraction — no table-structure detection. (2) OEM operators manual:
+clean text but pdfminer over-segmented prose into spurious multi-column GFM tables (1782 fake rows). (3) OEM parts
+manual: broken font encoding (no ToUnicode CMap) → ~118 lines of `(cid:NN)` garbage; text-extraction cannot OCR
+what native vision could. Verdict: deterministic + clean + cheap on born-digital prose; NOT faithful on structured
+tables or scanned/garbled sources. Adopted as the DEFAULT ingestion path WITH those limits recorded, native-vision
+fallback for structure-critical tables and scanned/broken-font PDFs.
+
+**Do not revisit unless:** a table-aware backend is wanted (`az-doc-intel` — Azure Document Intelligence — is the
+upgrade path, needs an Azure endpoint/key), or a target-corpus document is found where the flattening loses
+information native vision would have kept, at which point the fallback becomes the rule for that class.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
