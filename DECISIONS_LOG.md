@@ -1886,6 +1886,101 @@ all.
 
 ---
 
+### 80. The context-builder pre-refactor parity guard is NARROWED, not retired — the routine-creation section leaves its scope permanently
+
+**Decision:** `test_context_builder_output_unchanged_pre_post_refactor` keeps its full-string old-vs-new assertion
+for every prompt section EXCEPT routine-creation, which is excised from its fixture (`connected_integrations=[]`)
+and pinned instead by its own explicit contract test. Test-only change to `tests/test_current_state.py` +
+new `tests/test_routine_creation_prompt.py`. No migration.
+
+**Rationale:** the guard asserts full-string equality between the system prompt rendered by `context_builder.py`
+at pinned SHA `3360ed5` (the parent of the #43 refactor) and by current HEAD. Its question — "did #43 introduce
+behavioural drift?" — is only answerable while the prompt is UNCHANGED by intent. #82 changes the routine-creation
+section deliberately, so for that section the question dies: `old == new` can never hold again, and there is no
+re-baseline that preserves it. Bumping the SHA is explicitly forbidden by the test's own comment (a later pin makes
+the comparison old-vs-old and vacuous). Retiring the whole guard would throw away a live regression net over
+identity/readiness/HRV/labs to solve a problem in one section. A golden-file snapshot was REJECTED: "parity vs
+approved" re-blesses whatever is current on each update, degrading to a change-detector that ratifies drift — a
+false-green instrument of exactly the class named in FEEDBACK §10, and not one to ship in the session that named it.
+Graceful decay, not amputation.
+
+**How you know:** the guard is live, not dormant — it passes in isolation at `e626e54` and the pinned SHA is
+reachable (`git cat-file -t 3360ed5` → commit). `_section_routine_creation` is appended unconditionally
+(`context_builder.py:1036`) and renders whenever `"hevy"` is in `connected_integrations`; the fixture passes exactly
+`["hevy"]`, and the "never guess an ID" line rewritten by #82 sits inside it — so #82 breaks equality with
+certainty, confirmed empirically (the guard failed at `test_current_state.py:203` on the #82 edit before narrowing).
+The narrowing was measured before it was accepted, not assumed: it keeps **5055 of 6398 chars (79%)** of the
+rendered prompt under the old-vs-new assertion, and of the 1343 chars dropped, **1338 are the excised section
+itself**. Known and accepted cost: `_section_integrations`' `["hevy"]` branch (56 chars) leaves parity scope,
+replaced by its empty-list branch (51 chars). #81 does NOT trip the guard: the join runs upstream in
+`routers/chat.py` and `context_builder` stays formatter-only — the invariant the guard protects is preserved, not
+circumvented. 123 backend tests green.
+
+**Do not revisit unless:** the surviving assertion is found to be thin (a large share of the remaining prompt turns
+out to be integration-gated and vanishes with an empty list), in which case the guard's value is already spent and
+retiring it — citing history — becomes the honest call. The 79% measurement above is the check; re-run it if the
+prompt's shape changes materially.
+
+---
+
+### 81. Workout history is rendered to the model with CATALOGUE titles, not Hevy's logged snapshot titles
+
+**Decision:** each logged exercise is annotated UPSTREAM (`routers/chat._annotate_canonical_titles`, where a
+Session is already in scope) with `canonical_title`, joined `exercise_template_id` → `hevy_exercise_templates.title`
+via the new `hevy_templates.catalogue_titles_by_id`. `context_builder` renders that title and stays a pure
+formatter. Ids absent from the catalogue are rendered as the logged title, marked `[UNCATALOGUED]`. No migration.
+
+**Rationale:** Hevy stores a snapshot of the exercise title as it was when the workout was logged, and renames its
+default templates over time. The context builder rendered that snapshot. The resolver (#60) matches EXACTLY against
+the current catalogue. So the model was being shown titles from a title-space the resolver cannot resolve — a
+guaranteed miss on any drifted movement, sourced from data we supplied. Rendering the catalogue title collapses the
+two title-spaces into one and makes #82's title emission safe by construction. The join is deliberately NOT done
+inside `context_builder`: that would have required threading a Session into it, breaking the formatter-only
+invariant the #43 parity guard exists to protect — and then hiding the breach from the guard behind an
+optional-default parameter. Fixing the guard's fixture to tolerate a violated invariant is not the same as not
+violating it. Upstream annotation keeps `context_builder` pure and leaves the guard untouched structurally, not by
+the accident of `hevy_data=None` in one fixture.
+
+**How you know:** `Bulgarian Split Squat (Dumbbell)` (id `B5D3A742`, default) is logged in the user's own Hevy
+history as bare `Bulgarian Split Squat` — a title present in NO template across the 494-row prod catalogue
+(2026-07-14). Confirmed by the id-keyed coverage audit (#79), which reports the movement as TAGGED via the id join
+while printing the divergent logged title alongside it. That prod-confirmed pair is the test fixture. The
+formatter-only claim is pinned by a test that renders an annotated payload with no DB in sight, and the parity
+guard (#80) passes unmodified by this change.
+
+**Do not revisit unless:** Hevy begins returning the current template title on workout reads, making the join
+redundant.
+
+---
+
+### 82. Routine provisioning accepts a canonical TITLE where no verified id exists; matching stays EXACT
+
+**Decision:** the provisioning contract now instructs the model to emit `exercise_template_id` when the exercise
+appears in the rendered history, otherwise a `title` spelled exactly as shown — never both, never an invented id.
+Activates the dormant #60/#61 resolver at `routers/chat.py`. Matching remains EXACT. No migration.
+
+**Rationale:** the contract told the model to emit `exercise_template_id` or else "say so — never guess an ID".
+Correct as a hallucination guard, but it meant the model went SILENT rather than naming the movement, so the landed
+title→id resolver had no live call path: it fires only for exercises missing an id but carrying a title, and nothing
+ever emitted a title. Permitting title emission — against catalogue titles (#81) — ships the capability. Fuzzy/
+normalised matching remains the explicit non-goal of #60. Unresolved titles are surfaced, not dropped: the model
+naming a movement we cannot resolve is a finding, not a silent omission from the routine.
+
+**How you know:** fuzzy matching would have "helpfully" resolved bare `Bulgarian Split Squat` to one of three real
+candidates — `(Barbell)`, `(Dumbbell)`, or `Split Squat (Dumbbell)` — and picked wrong ~2/3 of the time, silently,
+on a movement the user actually trains. Exact-match instead returned None, which is what made the drift visible at
+all. The BSS case is the argument for exact-only, made in prod. The surfacing half needed no code:
+`_process_routine_actions` already appends a warning naming the unresolvable titles and skips `create_routine`
+entirely (fail-closed at whole-routine granularity), pinned since #60 by `test_unresolvable_title_skips_routine`
+(`assert client.calls == []`) — verified, not assumed. The one path #82 newly opens (model emits id AND title) is
+pinned: the id wins and the stray title never reaches Hevy, dropped by `create_routine`'s field allowlist.
+123 backend tests green.
+
+**Do not revisit unless:** a title-normalisation layer is built with an explicit ambiguity-refusal rule (multiple
+candidates → resolve to None, never guess), at which point #60's non-goal is what is being revisited, not this.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
