@@ -420,9 +420,42 @@ the keyword path) but contribute no region — needs a mechanism, since region_k
 against the taxonomy; (c) extend the taxonomy (e.g. a frontal-hip adductor/abductor strength region) — a
 `TAXONOMY_VERSION` bump. The adductor gap is the load-bearing one given the active pes anserine injury.
 
-**Status:** open — decision required before the active-window seed can claim "100% coverage". Recommend (a)
-short-term + (c) for the adductor gap specifically. See `backend/reference/exercise_region_tags_v0.json`
-`_untagged_taxonomy_gap`.
+**Status:** resolved → **DECISIONS_LOG #76**, option **(b)** with a correction. Not two states but THREE —
+`tagged` / `adjudicated no-pattern` / `untagged` — via a `hevy_exercise_templates.adjudicated_at` timestamp,
+NOT a sentinel region_key (which would weaken fail-closed validation). G2 stands UNSOFTENED (option (a) was
+rejected: redefining coverage as "zero wrong tags" forfeits the ability to detect a real gap later). Option
+(c) — the taxonomy bump — is deliberately NOT done inside a tag confirmation (the log must not shape the
+screen); it is spun out to Q27 as a grounded v1 design pass. Interim: calf / shoulder ER-IR / Copenhagen /
+hip add-abd are adjudicated no-pattern.
+
+---
+
+## Q27. Capability_Taxonomy v0 has no axis-type for joint-level STRENGTH RATIOS — grounded v1 family
+
+Four independent instances in one user's last-90d log point at one structural hole: v0 is a movement-PATTERN
+and screening vocabulary with no axis-type for **joint-level strength / strength-ratio** reads.
+
+| Movement | v0 offers | Why it fails |
+|----------|-----------|--------------|
+| Copenhagen Plank | nothing | Adductor strength; `frontal_single_leg_stability` is closed-chain balance, `anti_lateral_flexion` is trunk — a side-lying adduction load demonstrates neither |
+| Shoulder ER / IR | `shoulder_mobility` | Cable ER at load is STRENGTH; shoulder_mobility is a mobility screen — wrong capacity |
+| Hip Add / Abd (machine) | nothing | Open-chain frontal-hip strength; not `frontal_single_leg_stability` (closed-chain stability) |
+| Calf raise | `ankle_df` — REJECT | Plantarflexion STRENGTH ≠ dorsiflexion MOBILITY (category error, #76) |
+
+This is a family, externally grounded, carrying some of the best-evidenced return-to-sport metrics there are:
+**adductor:abductor** and the adductor squeeze (groin injury in field sport, HAGOS), **shoulder ER:IR** ratio
+(overhead athlete / rotator cuff, isokinetic literature), **plantarflexion** strength. Four hits from one log
+is what makes it structural, not anecdotal.
+
+**Live impact:** the user's ER:IR ≈ 6.25 : 11.25 = **0.56** against a ~0.66–0.75 reference — a quantified,
+flagged deficit he is actively fortifying, and the platform currently has no axis to represent it.
+`capability_state` is already per-region-per-side, so ratio reads are natively supported once the vocabulary
+exists — the schema is ready, the vocabulary is not.
+
+**Status:** open — v1 taxonomy bump is its own design pass: externally grounded (HAGOS / adductor squeeze;
+ER:IR isokinetic references; return-to-sport LSI), with adductor:abductor and ER:IR as first-class reads. NOT
+a bolt-on from a tag file (the taxonomy is external-authority so its breadth does not inherit the user's blind
+spots — #76). Unblocks the interim no-pattern verdicts on the four families above.
 
 ---
 

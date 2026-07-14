@@ -1743,6 +1743,49 @@ does not build to it — it only records the frame).
 
 ---
 
+### 76. Tag coverage is three-state (tagged / adjudicated-no-pattern / untagged) via `adjudicated_at`
+
+**Status:** On branch `feat/tag-adjudication-three-state` (pending land; number claimed from max 75).
+Refines #74's coverage model. New nullable column `hevy_exercise_templates.adjudicated_at` (migration
+`c3a2d8e5f109`), set ONLY by the `--confirm` seed. `infer_loaded_regions` gains the third state. Resolves
+OPEN_QUESTIONS Q26 as option (b).
+
+**Rationale:** "We looked and it maps to nothing" and "we never looked" are epistemically different and the
+system must not collapse them — the same untested-vs-normal discipline already ratified on the labs side
+(an untested marker is not a normal marker). Redefining coverage as "zero *wrong* tags" (option (a)) quietly
+forfeits the ability to detect a real coverage gap later. So three states:
+
+- **tagged** — ≥1 `exercise_region_tags` row → those regions load.
+- **adjudicated no-pattern** — `adjudicated_at` set, zero tag rows → contributes nothing DELIBERATELY (an
+  isolation, or a joint-level STRENGTH lift v0 has no axis for).
+- **untagged** — `adjudicated_at` NULL → keyword fallback, counted and logged.
+
+G2 stands UNSOFTENED: 100% of active-window templates adjudicated (tags + no_pattern), fallback hit-count 0.
+Adjudication is a TIMESTAMP on `hevy_exercise_templates`, NOT a sentinel `region_key` — region_key's
+fail-closed validation stays intact (a sentinel would weaken the guard). `adjudicated_at` is stamped only on
+`--confirm`, so `adjudicated_at NOT NULL` ⟺ human-confirmed adjudication — that is G2's "human-confirmed"
+signal for no-pattern templates, which carry no tag-row `source`.
+
+**REJECT calf raise → ankle_df.** Category error: plantarflexion STRENGTH tagged as dorsiflexion MOBILITY
+would mark a live Tier-B screening region as demonstrably loaded on the exact opposite movement AND suppress
+probing of ankle DF (same failure class as Shoulder-Rotation → rotation, less frequent). → no-pattern. Four
+families are adjudicated no-pattern *interim* — calf (plantarflexion), shoulder ER/IR (ER:IR ratio), Copenhagen
+(adductor strength), hip add/abd (adductor:abductor) — all BLOCKED on the v1 strength-ratio axis (Q27), not
+judgment calls. Do NOT bump the taxonomy inside a tag confirmation: it is external-authority and versioned so
+its breadth does not inherit the user's blind spots; adding a region because the user logs a machine is the
+tail wagging the dog. v1 is its own grounded design pass (Q27).
+
+**How you know:** 13 tests in `test_exercise_region_tags.py` — the three-state distinction (adjudicated
+no-pattern is covered + silent; untagged is a counted coverage gap), Copenhagen and Shoulder-Rotation now
+adjudicated no-pattern (wrong → empty; the false `rotation` on a `_RADICULAR_BLOCKS` region killed), and the
+G5 clobber test now also asserts `adjudicated_at` survives a resync. Full backend suite green (86 → 87).
+Migration `c3a2d8e5f109` is head; `_upsert_template` never assigns the column (resync-safe, as with laterality).
+
+**Do not revisit unless:** the v1 strength-ratio axis (Q27) lands and the interim no-pattern templates get real
+regions, or a genuine accessory-sentinel need emerges that the timestamp cannot express.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

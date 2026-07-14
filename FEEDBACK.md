@@ -351,3 +351,19 @@ falsely-loaded region is never probed — and interacts with `_RADICULAR_BLOCKS`
 the keyword matcher. `_LOADED_KEYWORDS` survives ONLY as a fallback for untagged templates, and every
 fall-through is counted and logged — the fallback hit-rate IS the tagging-coverage metric (target: zero on
 the active window). Do not add rules to `_LOADED_KEYWORDS`; tag the template instead.
+
+### 7.1 A tag must match the movement's CAPACITY, not just its body part (DECISIONS_LOG #76)
+
+**What was proposed and rejected:** tagging Calf Raise → `ankle_df`, and Shoulder ER/IR → `shoulder_mobility`.
+
+**Why it's wrong:** both map a STRENGTH movement onto a MOBILITY/screening region of the same body part but
+a different capacity. Calf raise is plantarflexion *strength*; `ankle_df` is dorsiflexion *mobility* — the
+exact opposite movement. Tagging it would mark a live Tier-B screening region as demonstrably loaded and
+suppress the engine from ever probing ankle dorsiflexion. Same failure class as Shoulder-Rotation → rotation,
+just quieter. A wrong tag is worse than an empty, because an empty is honest about the gap.
+
+**Rule going forward:** when a movement has no region of the RIGHT capacity, the answer is **adjudicated
+no-pattern** (`adjudicated_at` set, zero tag rows), never the nearest-body-part region. If the missing axis is
+real and evidence-grounded (e.g. the joint-level strength-ratio family — Q27), that is a versioned taxonomy
+design pass, not a tag-file bolt-on. The taxonomy is external-authority precisely so its breadth does not
+inherit the user's logging habits.
