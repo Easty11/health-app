@@ -7,6 +7,11 @@ Tests for the current_state read model (DECISIONS_LOG #43 / OPEN_QUESTIONS Q8).
 (d) context_builder output is unchanged pre/post refactor (formatter-only,
     no behavioural drift) — compared against the pre-refactor
     context_builder.py at PRE_REFACTOR_SHA, loaded via `git show`.
+    NARROWED by DECISIONS_LOG #80: the routine-creation section is deliberately
+    changed by #82 and has left this guard's scope permanently. It is excluded
+    via `connected_integrations=[]` and pinned by its own explicit test in
+    tests/test_routine_creation_prompt.py. Every other section keeps the
+    original guarantee.
 """
 import os
 import subprocess
@@ -178,9 +183,21 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     monkeypatch.setattr(context_builder, "_now_aest", lambda: fixed_now)
     monkeypatch.setattr(old_context_builder, "_now_aest", lambda: fixed_now)
 
+    # NARROWED (#80): `connected_integrations=[]` makes _section_routine_creation
+    # return "" on BOTH sides, excising it from the comparison. #82 rewrites that
+    # section by intent, so for it the question this guard asks — "did the #43
+    # refactor drift?" — is no longer answerable: old==new can never hold again,
+    # and PRE_REFACTOR_SHA cannot move (see the comment above; a later pin makes
+    # this old-vs-old and vacuous). The section is pinned instead by
+    # tests/test_routine_creation_prompt.py.
+    #
+    # Measured at the time of narrowing: this keeps 5055 of 6398 chars (79%) of
+    # the rendered prompt under the old-vs-new assertion — every other section
+    # survives. Known cost: _section_integrations' `["hevy"]` branch (56 chars)
+    # leaves parity scope, replaced by its empty-list branch (51 chars).
     common_kwargs = dict(
         user=user,
-        connected_integrations=["hevy"],
+        connected_integrations=[],
         hevy_data=None,
         knowledge_entries=None,
         today_checkin=None,

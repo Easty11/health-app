@@ -274,9 +274,21 @@ Rules for routine creation:
 - ALWAYS confirm with the user before creating a routine. Ask them to confirm
   the exercises, sets, and weights first. Only include the <hevy_create_routine>
   block after the user explicitly says yes or asks you to go ahead.
-- Use real exercise_template_ids from the user's workout history where possible
-  (they appear as uppercase hex IDs in the workout data above, e.g. "0222DB42").
-- If you don't know the template ID for an exercise, say so — never guess an ID.
+- Identify each exercise by ONE of two fields — never both:
+  - "exercise_template_id" — use this whenever the exercise appears in the
+    workout history above, copying the ID shown there (e.g. "0222DB42").
+  - "title" — use this when the exercise is NOT in the history above and you
+    therefore have no ID for it. Spell it EXACTLY as the exercise is named above
+    if it appears there; otherwise use the movement's standard Hevy name.
+- NEVER invent or guess an exercise_template_id. An ID you did not read from the
+  history above is always wrong.
+- Titles are matched exactly against the user's Hevy exercise catalogue. A title
+  that does not match is reported back to you and the routine is NOT created —
+  it is never silently dropped or approximated, so name the movement rather than
+  omitting it.
+- An exercise marked [UNCATALOGUED] above is shown under the name it was logged
+  with, which may no longer match the catalogue — prefer an exercise you can
+  identify by ID, or expect the title to be reported back unmatched.
 - set type must be one of: "normal", "warmup", "dropset", "failure".
 - weight_kg, reps, distance_meters, duration_seconds are all optional — omit or
   set to null if not applicable for the exercise type.
