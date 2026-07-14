@@ -441,3 +441,30 @@ key the code under test keys on; if they differ, the instrument is unsound regar
 measurement and its subject can drift apart, derive both from one definition rather than restating the rule —
 as #79 does by extracting `selection.classify_coverage` and having the audit and the read path share it. A second
 statement of a rule is a second rule.
+
+---
+
+## 11. A probe that presumes its own answer — fail loudly when you never reach the subject
+
+**What happened:** `probe_resolver.py` ran against the live 494-row catalogue and measured nothing. Its scripted
+turns were written against a synthetic fixture with no injuries and no profile — a world where the model has
+nothing to ask. Against REAL user state the model interrogates before provisioning (readiness gates, injury flags,
+session identity), and `_section_routine_creation` forbids emitting a routine block without explicit confirmation.
+The scripted turns never gave one. Six turns, zero `<hevy_create_routine>` blocks, `suggest_candidates` never
+called — and the harness printed a clean run and exited 0. The null result had to be reconstructed from the
+transcript, because nothing announced it.
+
+**The disease, not the instance:** same family as §10. There, an unsound instrument reported zero because it was
+keyed differently from the code it measured. Here, an instrument reported nothing-wrong because it never reached
+the code at all — its fixture encoded a world (no constraints, no questions) that was not the world under test, and
+the probe's script silently assumed that world persisted. This is the SECOND fidelity failure in this test class:
+the first (caught before it produced fiction) appended the raw model reply rather than the cleaned reply plus
+actions, so the model never saw its own warning and any "it recovered" verdict would have been invented. A probe of
+a live, stateful system inherits that system's state as a hidden input — and hidden inputs drift.
+
+**Rule going forward:** a probe must fail LOUDLY when it fails to reach the code it exists to measure — non-zero
+exit, naming what it never reached. Silence must never be reportable as success (the behavioural mirror of #77's
+loud no-op: a subsystem that can be inert must say so, never exit 0 quietly). And when a probe drives a system
+whose behaviour depends on live state, either pin the state in a fixture or expect the probe to measure the state
+rather than the code. Ask of any green probe: did this actually execute the thing it claims to have tested? If it
+cannot prove it did, it did not.

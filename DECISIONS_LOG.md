@@ -2022,6 +2022,22 @@ returned as `ChatResponse.response`, stored as the assistant message (`ChatPanel
 the best NONSENSE match scores 0.341; the model then used that 0.512 candidate as a genuine alternative offer, which
 a 0.6 floor would have silently withheld. 137 backend tests green.
 
+**How you know — SCALE ADDENDUM (2026-07-15, appended; supersedes nothing above):** verified against the live
+494-row prod catalogue, real model, real user state. The model emitted `exercise_template_id` for in-history
+movements and a bare title (`Calf Raise`) for the out-of-history one — #82's contract followed exactly. Exact match
+missed, as designed; `suggest_candidates` returned 5 candidates and **all 5 were genuine, with zero noise**:
+`Seated Calf Raise`, `Standing Calf Raise`, `Standing Calf Raise (Smith)`, `Standing Calf Raise (Barbell)`,
+`Standing Calf Raise (Machine)`. Fail-closed held — nothing was written until the user disambiguated ("standing
+machine"), after which the routine provisioned. So candidate QUALITY survives 494 rows: the noise this entry
+predicted (`Leg Press (Machine)` crowding a Leg Curl list on the 10-row slice) did not materialise, and
+containment-first ranking is what carried it.
+**What this run did NOT answer:** `_SUGGEST_MIN_RATIO = 0.5` remains **UNEXERCISED at scale, not validated**. All
+five candidates were token-containment hits, so the ratio tier was never reached — the 0.5 floor decided nothing in
+this run and therefore cannot be said to have held. The threshold's only measurement is still the 10-row gap (0.512
+real vs 0.341 noise) recorded above. A live miss that resembles the catalogue without containing its tokens — a
+typo or a genuinely different phrasing — is what would exercise it, and none has been observed. Absence of a
+failure the run could not have produced is not evidence of correctness (FEEDBACK §10).
+
 **Do not revisit unless:** full-catalogue injection becomes cheap enough that paying ~2.5k tokens on every request
 beats a one-turn correction on the rare miss.
 
