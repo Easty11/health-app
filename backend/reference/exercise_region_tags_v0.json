@@ -11,7 +11,7 @@
   "tags": [
     {"title": "Goblet Squat", "laterality": "bilateral", "regions": [{"key": "squat", "role": "primary"}]},
     {"title": "Leg Press (Machine)", "laterality": "bilateral", "regions": [{"key": "squat", "role": "primary"}]},
-    {"title": "Bulgarian Split Squat", "laterality": "unilateral", "regions": [{"key": "lunge_single_leg", "role": "primary"}], "note": "keyword also fired `squat` — dropped; this is single-leg, not a bilateral squat"},
+    {"title": "Bulgarian Split Squat (Dumbbell)", "laterality": "unilateral", "regions": [{"key": "lunge_single_leg", "role": "primary"}], "note": "keyword also fired `squat` — dropped; this is single-leg, not a bilateral squat"},
     {"title": "Dumbbell Step Up", "laterality": "unilateral", "regions": [{"key": "lunge_single_leg", "role": "primary"}]},
     {"title": "Lunge (Dumbbell)", "laterality": "unilateral", "regions": [{"key": "lunge_single_leg", "role": "primary"}]},
     {"title": "Landmine Squat and Press", "laterality": "bilateral", "regions": [{"key": "squat", "role": "primary"}, {"key": "vertical_push", "role": "secondary"}]},
