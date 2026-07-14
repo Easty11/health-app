@@ -120,6 +120,46 @@ def _adjudicated_templates(db: Session, template_ids: set[str]) -> set[str]:
     return {r[0] for r in rows}
 
 
+# The three coverage states (DECISIONS_LOG #76). Defined ONCE here and consumed
+# by both `infer_loaded_regions` (which acts on them) and
+# `audit_exercise_tag_coverage.py` (which counts them) — a second, parallel
+# statement of this rule would drift from the behaviour it claims to measure.
+COVERAGE_TAGGED = "tagged"
+COVERAGE_ADJUDICATED_NO_PATTERN = "adjudicated_no_pattern"
+COVERAGE_UNTAGGED = "untagged"
+
+
+def classify_coverage(
+    db: Session, template_ids: set[str]
+) -> tuple[dict[str, set[str]], dict[str, str]]:
+    """The single definition of three-state tag coverage, keyed on TEMPLATE ID.
+
+    Returns `(tag_map, classes)` — `tag_map` is template_id -> {region_key} (the
+    caller needs the regions, not just the verdict); `classes` is template_id ->
+    one of COVERAGE_*. Precedence is load-bearing and matches the read path: a
+    template with tag rows is TAGGED even if also adjudicated (adjudication
+    stamps every processed template, tagged ones included — see the seeder's
+    --confirm path); only an adjudicated template with ZERO tags is the
+    deliberate NO-PATTERN verdict.
+
+    Keyed on id, never on title (DECISIONS_LOG #79): a logged workout carries a
+    snapshot of the title as it was when logged, and Hevy renames its default
+    templates — so a title-keyed classification measures a different set than the
+    id-keyed join this function feeds.
+    """
+    tag_map = _tags_by_template(db, template_ids)
+    adjudicated = _adjudicated_templates(db, template_ids)
+    classes: dict[str, str] = {}
+    for tid in template_ids:
+        if tid in tag_map:
+            classes[tid] = COVERAGE_TAGGED
+        elif tid in adjudicated:
+            classes[tid] = COVERAGE_ADJUDICATED_NO_PATTERN
+        else:
+            classes[tid] = COVERAGE_UNTAGGED
+    return tag_map, classes
+
+
 def infer_loaded_regions(
     workouts: Iterable[dict[str, Any]],
     *,
@@ -153,23 +193,23 @@ def infer_loaded_regions(
     ]
 
     tag_map: dict[str, set[str]] = {}
-    adjudicated: set[str] = set()
+    classes: dict[str, str] = {}
     if db is not None:
         template_ids = {
             tid for ex in exercises if (tid := ex.get("exercise_template_id"))
         }
-        tag_map = _tags_by_template(db, template_ids)
-        adjudicated = _adjudicated_templates(db, template_ids)
+        tag_map, classes = classify_coverage(db, template_ids)
 
     loaded: set[str] = set()
     fallback_titles: list[str] = []
     for ex in exercises:
         tid = ex.get("exercise_template_id")
         title = ex.get("title") or ""
-        if tid and tid in tag_map:              # tagged — authoritative
+        cls = classes.get(tid) if tid else None
+        if cls == COVERAGE_TAGGED:              # tagged — authoritative
             loaded |= tag_map[tid]
             continue
-        if tid and tid in adjudicated:          # adjudicated no-pattern — covered, silent
+        if cls == COVERAGE_ADJUDICATED_NO_PATTERN:  # covered, silent
             continue
         # Untagged (or no db): legacy keyword fallback, instrumented.
         kw = _keyword_regions(title)
