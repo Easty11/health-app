@@ -13,7 +13,9 @@ Re-runnable CLI:
 """
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 
 import httpx
 from sqlalchemy import select
@@ -29,6 +31,22 @@ _PAGE_SIZE = 100          # confirmed max pageSize (GET /v1/exercise_templates)
 _INTER_PAGE_DELAY = 0.2   # seconds — gentle on Hevy rate limits (prior art)
 _MAX_429_RETRIES = 5
 _BACKOFF_BASE = 1.0       # seconds; exponential per retry
+
+# Below this SequenceMatcher ratio a non-containment candidate is noise, not a
+# suggestion (#83) — a title resembling nothing returns [] rather than five
+# arbitrary rows.
+#
+# 0.5 is measured, not guessed. Against the probe fixture, `Bulgarian Split
+# Squat` scores 0.512 on `Split Squat (Dumbbell)` — a real alternative the user
+# might have meant — while the best NONSENSE match (`Zercher Moonwalk Press` vs
+# `Leg Press (Machine)`) scores 0.341. 0.5 sits in that gap. Suppressing the
+# 0.512 candidate would mean deciding FOR the user that they didn't mean it,
+# which is the narrowing-by-guess this whole design rejects: suggest widely,
+# resolve exactly, let a human or the model choose.
+#
+# Caveat: measured against a 10-row slice. Against prod's 494 rows more titles
+# may land in 0.5–0.6; containment-first ranking and `limit` bound the tail.
+_SUGGEST_MIN_RATIO = 0.5
 _CREATE_RESOLVE_ATTEMPTS = 3  # sync+resolve tries after a create (create-visibility latency)
 
 
@@ -109,6 +127,19 @@ def _collision_report(db: Session) -> list[str]:
     return collisions
 
 
+def _visible_to(user_id: int):
+    """The catalogue-scope predicate: global defaults OR this user's OWN customs,
+    never another user's.
+
+    Extracted so `resolve_exercise` and `suggest_candidates` cannot drift (#83):
+    a suggestion offered from outside the resolvable scope would name a title the
+    resolver then refuses — the instrument disagreeing with the behaviour it
+    serves. One rule, not two (FEEDBACK §10).
+    """
+    Template = models.HevyExerciseTemplate
+    return (Template.is_custom.is_(False)) | (Template.owner_user_id == user_id)
+
+
 def resolve_exercise(db: Session, title: str, user_id: int) -> str | None:
     """Resolve a canonical exercise title to a Hevy id for `user_id`.
 
@@ -123,11 +154,62 @@ def resolve_exercise(db: Session, title: str, user_id: int) -> str | None:
     stmt = (
         select(Template.id)
         .where(Template.title == title)
-        .where((Template.is_custom.is_(False)) | (Template.owner_user_id == user_id))
+        .where(_visible_to(user_id))
         .order_by(Template.is_custom.asc())  # default (False) sorts first -> default wins
         .limit(1)
     )
     return db.scalars(stmt).first()
+
+
+def _tokens(title: str) -> frozenset[str]:
+    """Lowercased alphanumeric tokens. `Leg Curl (Machine)` -> {leg, curl, machine}."""
+    return frozenset(t for t in re.split(r"[^a-z0-9]+", (title or "").lower()) if t)
+
+
+def suggest_candidates(
+    db: Session, title: str, user_id: int, *, limit: int = 5
+) -> list[tuple[str, str]]:
+    """Ranked catalogue candidates for a title that did NOT resolve (#83).
+
+    SUGGESTS. Resolves nothing — not even when exactly one candidate comes back.
+    Candidate cardinality is an artifact of catalogue SIZE, not of genuine
+    unambiguity: `Leg Curl (Machine)` has one candidate in a 10-row fixture and
+    at least two in prod's 494 (`Lying Leg Curl (Machine)`, `Seated Leg Curl
+    (Machine)`). A uniqueness rule would silently resolve wrong the moment the
+    catalogue grew — trading a loud miss for a silent wrong. Loud is the design.
+
+    Ranking (deterministic):
+      1. TOKEN-CONTAINMENT — the emitted tokens are a subset of the candidate's.
+         This is the observed failure shape: the model omits a qualifier it
+         cannot know (`Bulgarian Split Squat` ⊂ `… (Dumbbell)`; `Leg Curl
+         (Machine)` ⊂ `Lying Leg Curl (Machine)`).
+      2. difflib.SequenceMatcher ratio — secondary, catches typos rather than
+         omissions. Stdlib; no new dependency.
+      3. Title ASC — stable tie-break, so output is reproducible.
+
+    A title resembling nothing (`Zercher Moonwalk Press`) returns [] rather than
+    five arbitrary titles: a suggestion list nobody can act on is noise.
+    Scoped by `_visible_to` — the SAME predicate the resolver uses.
+    """
+    Template = models.HevyExerciseTemplate
+    rows = db.execute(
+        select(Template.id, Template.title).where(_visible_to(user_id))
+    ).all()
+
+    q_tokens = _tokens(title)
+    q_lower = (title or "").lower()
+
+    scored: list[tuple[int, float, str, str]] = []
+    for tid, cat_title in rows:
+        contained = bool(q_tokens) and q_tokens <= _tokens(cat_title)
+        ratio = SequenceMatcher(None, q_lower, (cat_title or "").lower()).ratio()
+        if not contained and ratio < _SUGGEST_MIN_RATIO:
+            continue
+        # containment first (0 < 1), then higher ratio, then title ASC
+        scored.append((0 if contained else 1, -ratio, cat_title or "", tid))
+
+    scored.sort()
+    return [(tid, cat_title) for _, _, cat_title, tid in scored[:limit]]
 
 
 def catalogue_titles_by_id(db: Session, template_ids: set[str]) -> dict[str, str]:
