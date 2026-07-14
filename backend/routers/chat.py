@@ -17,7 +17,7 @@ from context_builder import build_system_prompt, render_asked_lab_value
 from current_state import current_state as compute_current_state
 from database import get_db
 from encryption import decrypt
-from hevy_templates import catalogue_titles_by_id, resolve_exercise
+from hevy_templates import catalogue_titles_by_id, resolve_exercise, suggest_candidates
 from engine import adaptation, selection
 from reads.labs_reads import find_marker
 from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
@@ -134,17 +134,21 @@ def _resolve_missing_ids(
     exercises: list[dict],
     user_id: int,
     db: Session,
-) -> tuple[list[dict], list[str]]:
-    """Opt-in title->id resolution (DECISIONS_LOG #60).
+) -> tuple[list[dict], list[tuple[str, list[tuple[str, str]]]]]:
+    """Opt-in title->id resolution (DECISIONS_LOG #60), with candidates on a miss (#83).
 
     The provisioning block already carries `exercise_template_id`s, so this is a
     fallback, not a mandatory hop: only exercises MISSING a non-empty id but
     carrying a `title` are resolved (exact canonical-title match, default-wins).
-    Exercises that already have an id are passed through untouched. Returns the
-    exercises with ids filled where possible, plus a list of titles that could
-    not be resolved (caller decides what to do).
+    Exercises that already have an id are passed through untouched.
+
+    Returns the exercises with ids filled where possible, plus `unresolved` as
+    (title, candidates) pairs — candidates being ranked catalogue suggestions for
+    that miss, possibly empty. Resolution stays EXACT: a candidate is never
+    silently adopted, not even when it is the only one (#83). The caller decides
+    what to do; it still provisions nothing.
     """
-    unresolved: list[str] = []
+    unresolved: list[tuple[str, list[tuple[str, str]]]] = []
     for ex in exercises:
         if ex.get("exercise_template_id"):
             continue
@@ -157,8 +161,26 @@ def _resolve_missing_ids(
             ex.pop("title", None)
             ex.pop("exercise_name", None)
         else:
-            unresolved.append(title)
+            unresolved.append((title, suggest_candidates(db, title, user_id)))
     return exercises, unresolved
+
+
+def _format_unresolved(unresolved: list[tuple[str, list[tuple[str, str]]]]) -> str:
+    """Render a miss as a correctable message (#83).
+
+    The model sees this on the next turn (the reply, actions appended, is echoed
+    back as conversation history), so it names the exact catalogue titles it must
+    copy. A bare "could not resolve" left it guessing the same wrong string
+    again — measured at a 25% hit-rate on out-of-history titles.
+    """
+    parts = []
+    for title, candidates in unresolved:
+        if candidates:
+            named = ", ".join(f"'{t}'" for _, t in candidates)
+            parts.append(f"'{title}' (did you mean: {named}?)")
+        else:
+            parts.append(f"'{title}' (no similar exercise found in the catalogue)")
+    return ", ".join(parts)
 
 
 async def _process_routine_actions(
@@ -210,7 +232,7 @@ async def _process_routine_actions(
         if unresolved:
             actions_taken.append(
                 f"⚠️ Routine '{title}' not created — could not resolve exercise(s): "
-                + ", ".join(repr(t) for t in unresolved)
+                + _format_unresolved(unresolved)
             )
             cleaned = cleaned.replace(match.group(0), "")
             continue

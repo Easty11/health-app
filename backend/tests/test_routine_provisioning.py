@@ -6,6 +6,8 @@ Exercises the chat routine-action path (routers.chat._process_routine_actions):
 (c) an unresolvable title skips the routine with a notice (no KeyError)
 (d) id+title together — the prompt forbids it (#82), so this pins what happens
     when the model does it anyway. Only reachable since #82 permitted titles.
+(e) an unresolved title's warning names ranked candidates (#83), and still
+    provisions nothing.
 """
 import asyncio
 
@@ -106,3 +108,44 @@ def test_id_and_title_together_uses_id_and_ignores_title(db_session):
     ex = client.calls[0]["exercises"][0]
     assert ex["exercise_template_id"] == "0222DB42"   # the id the model gave, not a re-resolve
     assert any("created" in a.lower() for a in actions)
+
+
+# ---------- (e) unresolved title -> warning names candidates (#83) ----------
+def test_unresolved_title_warning_names_candidates(db_session):
+    """The live-probe miss, end-to-end: the model emits 'Bulgarian Split Squat',
+    the catalogue holds only the qualified variants. Fail-closed is UNCHANGED —
+    the routine is still not created — but the warning now carries the exact
+    titles to copy, and the model sees it next turn (the reply, actions appended,
+    is echoed back as conversation history).
+    """
+    _tmpl(db_session, "B5D3A742", "Bulgarian Split Squat (Dumbbell)", is_custom=False)
+    _tmpl(db_session, "A1B2C3D4", "Bulgarian Split Squat (Barbell)", is_custom=False)
+    client = FakeHevyClient()
+    reply = _block('{"title":"Bulgarian Split Squat","sets":[{"type":"normal","reps":8}]}')
+
+    _cleaned, actions = asyncio.run(
+        chat_mod._process_routine_actions(reply, client, USER, db_session)
+    )
+
+    assert client.calls == []                       # fail-closed, unchanged
+    warning = " ".join(actions)
+    assert "did you mean" in warning.lower()
+    assert "Bulgarian Split Squat (Dumbbell)" in warning
+    assert "Bulgarian Split Squat (Barbell)" in warning
+
+
+def test_unresolved_title_with_no_candidates_says_so(db_session):
+    """A miss resembling nothing must not print an empty 'did you mean:' — it
+    says there is nothing to suggest."""
+    _tmpl(db_session, "C7973E0E", "Leg Press (Machine)", is_custom=False)
+    client = FakeHevyClient()
+    reply = _block('{"title":"Zercher Moonwalk Press","sets":[{"type":"normal","reps":5}]}')
+
+    _cleaned, actions = asyncio.run(
+        chat_mod._process_routine_actions(reply, client, USER, db_session)
+    )
+
+    assert client.calls == []
+    warning = " ".join(actions)
+    assert "no similar exercise found" in warning
+    assert "did you mean" not in warning.lower()
