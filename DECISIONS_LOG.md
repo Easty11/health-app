@@ -2097,6 +2097,102 @@ at which point the recorded half belongs in CI and only genuinely new probes sta
 
 ---
 
+### 85. FEEDBACK.md §12 is an append-only, status-mutable integrity ledger; failures are typed HUMAN / MODEL / COUPLED
+
+**Decision:** analysis-loop failures are recorded as a table in `FEEDBACK.md` §12 — one row per failure, typed
+`HUMAN` / `MODEL` / `COUPLED`. `COUPLED` is first-class: a model gap-fill plus a partial/stale record in the same
+place is ONE failure, not two. §12 is a section of the existing file, not a new store — §1–§11 keep their remit
+(behavioural corrections and standing rules) and the shared canonical-stores row is unchanged, because it still
+describes the file correctly. The ledger is documented in CLAUDE.md's repo-specific section, below
+`END SHARED LOOP RULES`, so the verbatim-propagated block stays identical and true across repos.
+
+**Rationale:** the 15 Jul calf investigation produced 12 model retractions and 3 human input errors in one session.
+A flat two-list ("human errors" / "model errors") misattributed cause: it logged model fabrications as `MODEL` and
+record gaps as ambient system properties ("templates are unreliable" — agentless, passive voice), laundering the
+coupling into two unrelated lists and pointing the fix at the wrong party. The coupling IS the finding. The most
+consequential failure of that session — "the load does not explain the injury, which survived every correction" —
+is `COUPLED`: a premise co-signed by Luke that the model never routed the killing data at. Attributing it to either
+party alone is false.
+
+**How you know:** seeded with 12 rows from the session (ids 1–15, gaps preserved). The `artefact_vs_source` field
+alone accounts for 11 of the 12 model retractions — every one was a record-artefact (drill label, template label,
+session aggregate) read as the thing it describes. The coupling links are **pinned, not measured**, and the
+distinction matters: `5 → 6,15` · `6 → 15` · `7 → 13` · `8 → 13` were pinned directly (correcting row 8, whose
+authored cell read 15 — a transcription error). The remaining edge `15 → 13` is pinned from row 15's authored cell
+read as `caused`, corroborated by the §5 note that the 15 Jul tidbits were unknown-unknowns surfaced BY a wrong
+model claim — i.e. the retractions caused the ad-hoc intake, not the reverse. On those pins the graph is connected
+with id 5 as root: 5 → 6 → 15 → 13, with 7 and 8 also feeding 13. Connectedness is a **consequence of the pins**,
+not independent evidence for them; override the `15 → 13` pin and this sentence must be re-derived.
+
+**Do not revisit unless:** `COUPLED` proves unfalsifiable in practice — i.e. every failure gets typed `COUPLED`
+because a record gap can always be found somewhere — at which point the enum needs a tighter test for "in exactly
+the place the error landed."
+
+---
+
+### 86. Integrity-ledger inclusion test: a row exists only if a procedural change would have prevented the failure
+
+**Decision:** `prevention` is mandatory and non-null. Before any row is written: would a procedural change have
+prevented it? Yes → it belongs, fill `prevention`. No → it is not a failure, do not log it. Unpreventable events
+are explicitly barred: injury, faulty recall, first-use data lag, fumbling the ball.
+
+**Rationale:** an integrity ledger stuffed with unpreventable events becomes a guilt ledger. A guilt ledger is
+abandoned within a fortnight, and then the one document that could catch real coupling is dead. The mandatory
+non-null field is the enforcement mechanism, not a documentation nicety: if you can't name the procedure, there
+was no failure.
+
+**How you know:** applied at seed time and it bit immediately — the authored row 3 carried
+`(verdict correction, not prevention)` in the `prevention` column, which is null under this test. The row survives
+only because a real prevention exists (change the label at substitution time, or log the substitution in the set
+note). Four candidate rows from the session were barred outright by the test.
+
+**Do not revisit unless:** a class of failure appears that is real, recurring, and worth recording but has no
+procedural fix — in which case it needs a home that is not this ledger.
+
+---
+
+### 87. Signed-error rule: an error with a known direction is a BOUND, not a loss
+
+**Decision:** the `signed` field records error direction (`UNSIGNED` / `SIGNED:<direction>`). A dimension is never
+written off as "unrecoverable" without first establishing which way the error points.
+
+**Rationale:** a directional error does not destroy the data — it bounds it. Declaring a dimension lost without
+asking the direction question discards recoverable information and is itself an integrity failure. The field forces
+the question at log time rather than leaving it to whoever reads the row later.
+
+**How you know:** the 15 Jul seated-for-standing mislabel was written off as "gastroc/soleus split UNRECOVERABLE."
+False. The substitution runs one way only — machine occupied, so seated was performed and standing was logged; no
+scenario produces the reverse. Therefore logged gastroc ≥ true gastroc (upper bound) and logged soleus ≤ true
+soleus (lower bound). The data was bounded, in the direction that happened to strengthen the existing read. Ledger
+row 3 `STANDS` with the verdict struck and corrected.
+
+**Do not revisit unless:** a signed error is found whose direction is itself uncertain, requiring a third state
+between `SIGNED` and `UNSIGNED`.
+
+---
+
+### 88. Ledger retraction mechanism: entries are append-only and never deleted; status is mutable
+
+**Decision:** ledger entries are never deleted. Ids are never reused; a struck entry keeps its id. `status` is
+mutable — `STRUCK:<date>:<reason>` when an entry is shown false, or `STANDS` with a dated verdict correction when
+the failure was real but its conclusion was not. A struck entry is retained as evidence the ledger self-audits.
+
+**Rationale:** an un-retractable false positive discredits clean data, and distrust is sticky — once a record is
+marked corrupt, nobody returns to it and everyone reasons from summaries instead, which is the exact behaviour that
+caused every real failure in the seed. A phantom failure entry therefore drives the behaviour that produces real
+failures: it is self-amplifying. Retaining the struck row rather than deleting it is the point — that the ledger
+accumulates false entries and must be audited is itself the most important thing it records.
+
+**How you know:** the prior list contained a phantom — "a left-knee note filed under the right-leg block," asserted
+as data corruption and written into the anti-fabrication section. It did not happen: Luke was doing right-leg BSS,
+his LEFT knee clicked, and he logged it correctly under the block he was in. A Hevy note attaches to a container,
+not a limb; a model inferred corruption from a label mismatch. It is ledger row 4, `STRUCK: phantom`, retained.
+
+**Do not revisit unless:** struck entries accumulate to the point of drowning live ones, at which point they need a
+separate view — not deletion.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

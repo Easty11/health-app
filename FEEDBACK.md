@@ -468,3 +468,132 @@ loud no-op: a subsystem that can be inert must say so, never exit 0 quietly). An
 whose behaviour depends on live state, either pin the state in a fixture or expect the probe to measure the state
 rather than the code. Ask of any green probe: did this actually execute the thing it claims to have tested? If it
 cannot prove it did, it did not.
+
+---
+
+## 12. Integrity ledger — failures in the analysis loop (DECISIONS_LOG #85–#88)
+
+**Scope of this section.** §12 is the structured formalisation of what §1 and §3 already do in prose:
+it records failures in the analysis loop — Luke's, the model's, and the coupling between them — so the
+same failure is not repeated. It does not redefine this file. §1–§11 keep their remit (behavioural
+corrections and standing rules); §12 adds a tabular, append-only, status-mutable record beneath them.
+Where a §12 row has a durable behavioural rule, that rule's home is still §1/§3 — the row carries the
+`prevention`, not the prose.
+
+The job §12 does that a flat two-list cannot: **show that most model failures were downstream of a
+partial, ad-hoc-fed record — not independent.** Splitting them into "human errors" and "model errors"
+misrepresents that. The coupling is the finding.
+
+### 12.1 Schema
+
+One row per failure. Append-only for *entries*; `status` is mutable.
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | int, monotonic | Never reused. A struck entry keeps its id. Gaps are expected and are not errors. |
+| `date` | ISO date | When the failure occurred, not when logged. |
+| `failure` | text | What went wrong, stated flat. No exculpation, no blame. |
+| `source` | enum | `HUMAN` · `MODEL` · `COUPLED`. See 12.2. |
+| `artefact_vs_source` | text / null | If the failure was mistaking a record-artefact for the thing it describes, name both: `"Hevy template label" mistaken for "exercise performed"`. Null if N/A. |
+| `signed` | enum | `UNSIGNED` · `SIGNED:<direction>`. An error with a known direction is a **bound, not a loss**. See 12.3. |
+| `caused` | int[] / null | ids of failures this one caused. Authored directly. |
+| `caused_by` | int[] / null | ids of failures that caused this one. **Derived as the inverse of `caused` — never authored independently.** The coupling link. |
+| `prevention` | text | The procedural change that would have prevented it. **Mandatory, non-null.** If it cannot be filled, the row fails the inclusion test and must not exist. See 12.4. |
+| `status` | enum | `STANDS` · `STRUCK:<date>:<reason>`. See 12.5. |
+
+### 12.2 The `source` enum — why `COUPLED` is not optional
+
+- `HUMAN` — a primary input error. Luke logged, recalled, or programmed something wrong. Bounded set;
+  most of Luke's true failures are here and there are few of them.
+- `MODEL` — the model asserted something unsupported, independent of any record gap. Pure fabrication
+  with no vacuum to blame. Rare.
+- `COUPLED` — **the model filled a gap the record left.** The model erred, AND the record was
+  partial/ad-hoc/stale in exactly the place the error landed. Neither party's failure is complete
+  without the other's.
+
+Logging model fabrications as `MODEL` while treating record gaps as ambient system properties
+("templates are unreliable" — agentless, passive voice) launders the coupling into two unrelated lists
+and points the fix at the wrong party. On 15 Jul the most consequential failure — "the load does not
+explain the injury, which survived every correction" — is `COUPLED`: Luke co-signed a premise; the
+model never routed the data that killed it. Attributing that to either party alone is false.
+
+### 12.3 The `signed` field — a directional error is a bound, not a loss
+
+Discovered 15 Jul: Luke logged *Standing Calf Raise* but performed *seated* (machine occupied). This was
+written off as "gastroc/soleus split UNRECOVERABLE." Wrong. The substitution runs **one way only** — no
+scenario produces the reverse. So:
+
+- logged gastroc volume = **upper bound** on true gastroc volume
+- logged soleus volume = **lower bound** on true soleus volume
+
+The data is not lost. It is **bounded, in the direction that happened to strengthen the existing read.**
+Writing off a dimension as unrecoverable without asking *which way does this error point* is itself an
+integrity failure. `signed` forces the question at log time.
+
+### 12.4 The inclusion test — the constraint that keeps this alive
+
+**Before any row is written: would a procedural change have prevented it?**
+
+- **Yes** → it belongs. Fill `prevention`.
+- **No** → it is not a failure. It is being a person. **Do not log it.**
+
+This is a hard gate, not a guideline. Non-failures, explicitly barred: fumbling the ball; tearing the
+calf; not recalling knee/limb geometry a day later; not having downloaded data from a GPS unit worn for
+the first time, while injured.
+
+An integrity ledger stuffed with unpreventable events becomes a guilt ledger. A guilt ledger is
+abandoned within a fortnight, and then the one document that could catch real coupling is dead. The
+`prevention` field is mandatory and non-null precisely to enforce this: **if you can't name the
+procedure, there was no failure.**
+
+### 12.5 The retraction mechanism — the ledger audits itself
+
+Proven necessary on 15 Jul: the prior list contained a *phantom* — "a left-knee note filed under the
+right-leg block," asserted as data corruption. It was not. Luke was doing right-leg BSS; his **left**
+knee clicked; he logged it correctly under the block he was in. A Hevy note attaches to a **container**,
+not a **limb**. A model inferred corruption from a label mismatch and wrote it into the anti-fabrication
+section.
+
+An un-retractable false positive discredits **clean data**, and distrust is sticky: once a record is
+marked corrupt, nobody returns to it — they reason from summaries, which is the exact behaviour that
+caused every real failure. **A phantom failure entry drives the behaviour that produces real failures.
+It is self-amplifying.**
+
+Therefore: entries are **append-only** (never deleted — the id and the reasoning survive as record), and
+`status` is **mutable** (`STRUCK:<date>:<reason>` when an entry is shown false or its verdict wrong). **A
+struck entry is not erased.** It stands as evidence that the ledger accumulates false entries and must be
+audited — itself the most important thing the ledger records.
+
+Two struck cases are distinct:
+- **Phantom** — the failure did not occur (id 4). `STRUCK: phantom`.
+- **Verdict wrong** — the failure occurred but its conclusion was false (id 3: the mislabel was real, but
+  "UNRECOVERABLE" was false — it was `SIGNED` and therefore bounded). The row `STANDS`; its verdict text
+  is corrected and the correction dated.
+
+### 12.6 The ledger
+
+`caused` is authored; `caused_by` is its inverse and is shown for read convenience only.
+
+| id | date | failure | source | artefact_vs_source | signed | caused | caused_by | prevention | status |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-07-14 | "No dedicated calf training, ever" — fabricated, asserted as CRITICAL FACT | MODEL | narrow statement → whole training history | UNSIGNED | — | — | Tag inference; don't extrapolate a scope from a point claim | STANDS |
+| 2 | 2026-07-14 | "Calf trained once in 45 days" — true, misleading; window ended 1 day before a 2-month calf block | MODEL | 45-day window → training history | UNSIGNED | — | — | State the window; check what falls just outside it | STANDS |
+| 3 | 2026-06/07 | Seated calf raise logged under Standing (machine occupied, label never changed) | HUMAN | template label → exercise performed | SIGNED: logged-gastroc ≥ true-gastroc | — | — | Change the label at substitution time, or log the substitution in the set note | STANDS · verdict "UNRECOVERABLE" struck 2026-07-15: bounded, not lost |
+| 4 | 2026-07-10 | "Left-knee note misfiled under right-leg block" | — | — | — | — | — | — | STRUCK:2026-07-15: phantom — note correctly filed; a note attaches to a block, not a limb |
+| 5 | 2026-07-14 | "Load does not explain injury" promoted to bedrock ("survived every correction") | COUPLED | session aggregate → 300ms tissue event | UNSIGNED | 6, 15 | — | No hypothesis before manifest; route new data at ALL live claims | STANDS · root cause of the model graveyard |
+| 6 | 2026-07-14 | Selective retention: refuting metrics (accels, impacts, ~90au/8min) computed then dropped at summary step | MODEL | — | UNSIGNED | 15 | 5 | Output contract: declare exclusions; preserve derived quantities; carry both readings of a datum | STANDS · **the primary disease** |
+| 7 | ongoing | 43-day resistance-calf gap unnoticed (sole dev + sole user) | HUMAN | — | UNSIGNED | 13 | — | Coverage as generation constraint (STALE detection) | STANDS |
+| 8 | 2026-07-15→ | Model read "team run" / "tempo" / drill names as descriptions of what Luke did | MODEL | drill label → actual exposure | UNSIGNED | 13 | — | Inline source-of-claim tag per claim; drill name ≠ participation | STANDS · **11 of 12 retractions this class** |
+| 9 | 2026-05/07 | Relative-intensity blindness: 45yo in a squad averaging 24; every metric age/cohort-blind | HUMAN | — | UNSIGNED | — | — | Model relative intensity, not just self-referenced load | STANDS · 2 injuries downstream |
+| 10 | 2026-05→ | Hamstring gate ("no velocity") silently detrained gastroc top-end; no system recorded the removed exposure | COUPLED | constraint stored as rule → not as exposure-removal event | UNSIGNED | — | — | GATE_INDUCED coverage class: a gate is a subtraction; log its cost at issue | STANDS |
+| 13 | 2026-07-14/15 | Record fed to the analysis in ad-hoc tidbits across many turns rather than as a manifest | COUPLED | — | UNSIGNED | — | 7, 8, 15 | Manifest before hypothesis (see note) | STANDS |
+| 15 | 2026-07-15 | Model's own session: 12 retracted claims stated as findings (velocity breach, foot laterality, braking plant, "nobody opened the file", etc.) | MODEL | various artefacts → sources | UNSIGNED | 13 | 5, 6 | No hypothesis before manifest; inline source tag; slow down | STANDS |
+
+**Note on id 13 (the intake problem).** The proposed fix was "pause and ask questions up front." Partially
+correct. But the 15 Jul tidbits (team-run-was-a-sprint; 45-in-a-squad-of-24) were **unknown-unknowns to
+Luke** until a wrong model claim jogged them loose — which is why 15 `caused` 13, not the reverse. A
+front-loaded questionnaire would not have extracted them; the wall would have been hit three exchanges
+later regardless. The correct fix is **not "more questions first"** but **"no hypothesis before the
+manifest, and inline source-of-claim tags that surface the gap the moment a claim leans on the wrong
+artefact — then ask the precise question."** This converts N rounds of ad-hoc correction into one targeted
+question when it is earned. Fewer rounds, aimed.

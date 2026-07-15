@@ -459,6 +459,35 @@ spots — #76). Unblocks the interim no-pattern verdicts on the four families ab
 
 ---
 
+## Q28. Where do the four operating rules live — project instructions or CLAUDE.md?
+
+The 15 Jul calf investigation produced four rules that are not yet homed anywhere enforceable:
+
+- **no hypothesis before the manifest**
+- **inline source-of-claim tags** (per claim, naming the artefact it leans on)
+- **artefact ≠ source** (a record-artefact is not the thing it describes)
+- **a gate is a subtraction** (a constraint removes an exposure; log its cost at issue)
+
+These are the `prevention` values of ledger rows 5, 6, 8, 10 and 15 (`FEEDBACK.md` §12.6, DECISIONS_LOG #85–#88).
+The ledger records that the failures happened and what would have prevented them; it does not *enforce* the
+rules. Enforcement needs a home that loads before the analysis starts.
+
+**The fork.** Chat's position (schema proposal §6) is **project instructions** — permanent, enforced every chat,
+model-uneditable, porting the existing EPISTEMIC DISCIPLINE block (which already holds the parent rule) into the
+health lane where it was never applied. The alternative is **CLAUDE.md**, which reaches Code sessions but not
+chat — and these failures happened in chat, not Code. A third option is both, which re-creates the two-master
+drift the loop model exists to kill unless one is unambiguously the master.
+
+**Why it is not decided here:** project instructions are a UI surface, not a repo write — Code cannot write them,
+so this cannot be closed by the ledger's own commit. It is also the item the schema proposal flagged as bearing
+on cross-repo propagation: if the rules land in CLAUDE.md they hit the shared verbatim block and propagate to
+`health-connect-app`; if they land in project instructions they do not.
+
+**Status:** open — blocking nothing in the repo; blocks the rules being enforced anywhere. Decide the surface
+before writing them, not after.
+
+---
+
 ## Q28. `Pullover` is not a constraint-neutral probe subject — the resolver probe passes by luck
 
 `backend/probe_resolver.py` `_RESOLVER_PROBE` labels its subjects "out-of-history AND constraint-neutral",

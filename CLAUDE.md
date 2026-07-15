@@ -150,6 +150,16 @@ must match it.
 
 ### Conventions
 
+- **`FEEDBACK.md` §12 is the integrity ledger** (health-app only — the shared canonical-stores
+  row above is unchanged and still describes the file correctly; §12 is a section of that file,
+  not a new store). It records failures in the analysis loop — `HUMAN` / `MODEL` / `COUPLED` —
+  as a table: append-only for entries, `status` mutable (`STANDS` / `STRUCK`). Two rules bind
+  anyone writing to it: a row exists **only** if a procedural change would have prevented the
+  failure (`prevention` is mandatory and non-null — no prevention, no row), and `caused_by` is
+  **derived** as the inverse of `caused`, never authored independently. Ids are never reused and
+  gaps are expected. §1–§11 keep their own remit; §12 is the structured formalisation of what
+  §1/§3 do in prose, not a redefinition of the file. See DECISIONS_LOG #85–#88.
+
 - **Hevy:** the canonical creation method is `create_workout`, not `create_routine` —
   custom exercise UUIDs do not resolve via the routine endpoint (confirmed API
   limitation). See `Hevy_Pattern` for the field/type matrix.
