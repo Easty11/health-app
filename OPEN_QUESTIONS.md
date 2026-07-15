@@ -493,6 +493,64 @@ code path is involved. Ref: live probe run 2026-07-15; DECISIONS_LOG #83/#84; FE
 
 ---
 
+## Q30. Three parallel readers of the `type='injury'` ledger — consolidate or leave?
+
+Three functions independently query `UserKnowledgeEntry` for `type='injury', active=True`, each normalising
+to its own shape:
+
+| Reader | Returns | Used by |
+|--------|---------|---------|
+| `engine/selection.py:263` `gather_active_injuries` | `{body_part, side, signal_type, ra_flare, restrictions, raw}` | contraindication / selection |
+| `routers/checkin_v2.py:74` `derive_soreness_items` | `{soreness_key: 1}` via `injury_soreness_key` | AM check-in `/prefill` |
+| `injury_trajectory.py:146` `evaluate` | divergence / review messages | `get_readiness_snapshot` |
+
+**Why it's open, not decided:** an implementation brief asserted a "one reader" rule citing FEEDBACK §10 and
+directed `derive_soreness_items` through `gather_active_injuries`. Both halves were wrong and the instruction
+was retracted: §10 is *False-green instruments*, not a reader rule, and no single-reader rule exists in
+FEEDBACK anywhere. The refactor would also not have achieved its stated goal — `selection.py` and
+`injury_trajectory.py` would have remained parallel paths regardless. So the question is genuinely undecided,
+not merely unimplemented.
+
+**The real trade-off:** three readers means three places to change when the ledger shape moves, and three
+chances to drift. But `gather_active_injuries` normalises AWAY the fields the other two need (it drops
+`trajectory`; the soreness key would have to be recovered through its `raw` passthrough), so consolidation is
+not free — it either widens that return shape until it's a union of three concerns, or it establishes a raw
+reader beneath three projections. Neither is obviously right at this scale.
+
+**Not yet examined:** whether the three have already drifted (e.g. `gather_active_injuries` defaults
+`signal_type` to `"mechanical"` while the others don't default it at all) — that drift, if real, is the
+argument for consolidating, and nobody has looked.
+
+**Status:** open — no decision, own concern, own branch when taken. Ref: DECISIONS_LOG #90; the retracted
+citation is recorded here so the refactor is not re-proposed on the same false basis.
+
+---
+
+## Q31. `backend/gate_test.py` — land as an instrument, or delete?
+
+Untracked in the working tree: an ad-hoc script that reads a real lab PDF from `~/OneDrive/Documents/Medical/`,
+sends it to the **paid Anthropic API** via `routers.labs.EXTRACTION_SYSTEM_PROMPT`, and asserts on the extracted
+Bilirubin row (`ref_high == 21.0`, `ref_high_exclusive`, `computed_flag == 'H'`, `flag_agreement`).
+
+**Why it needs a decision rather than a silent leave-alone:** this is the second time this session an ad-hoc
+probe that spends credits has turned up loose in the tree. The first was the resolver harness — it got landed
+properly as a first-class instrument under DECISIONS_LOG #84 (operator-run, CI-excluded, key presence-checked,
+never materialised into output). This one has had none of that adjudication. "Left it alone" is how a loose
+instrument stays loose forever: untracked means it is invisible to review, absent from any suite, and one
+`git clean` from gone.
+
+**The two options:**
+- **Land it** as a peer of `probe_resolver.py` under the #84 pattern — versioned, CI-excluded, key-presence-only,
+  and with the hardcoded personal-medical path parameterised (it currently embeds an absolute path to a real
+  lab report, which is why it cannot land as-is).
+- **Delete it** — it was scaffolding for the labs extraction work and its assertions may already be carried by
+  `tests/test_labs_reads.py`. Nobody has checked whether they are.
+
+**Status:** open — NOT touched on `feat/checkin-injury-probe` (unrelated concern; the file stays untracked and
+uncommitted). Ref: DECISIONS_LOG #84 for the precedent pattern; FEEDBACK §11.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._

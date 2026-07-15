@@ -15,8 +15,7 @@ scoring layer owns inversion; the dual anchors make each item's direction explic
 | Fatigue | Fresh | Exhausted | Replaces the prior "feel right now" item (F2 collapse) |
 | Stress | None | Very high | |
 | Motivation | None | High | |
-| Shoulder soreness | None | Very sore | Hardcoded for now |
-| Hamstring soreness | None | Very sore | Hardcoded for now |
+| Soreness (one item per active injury) | None | Very sore | **Built.** Derived from the active `type='injury'` ledger — not a fixed pair. See Notes. |
 
 ## Alcohol block (conditional, retained)
 
@@ -26,7 +25,21 @@ scoring layer owns inversion; the dual anchors make each item's direction explic
 
 ## Notes
 
-- Soreness items are hardcoded for now. **Future:** drive from the active injury list,
-  movement-pattern indexed (FEEDBACK 2.6).
+- **Soreness items are driven from the active injury ledger — built, live since 13 Jul 2026**
+  (FEEDBACK 2.6; DECISIONS_LOG #72/#73). `checkin_v2.derive_soreness_items` emits one item per
+  active `UserKnowledgeEntry type='injury'` row, keyed by `injury_soreness_key` (sided injuries
+  carry the side, so left/right hamstring do not collide); `/checkin-v2/prefill` serves it and
+  `CheckInAM.jsx` renders one slider per key, with a "No active injuries to track" empty state.
+  Stored as the `daily_records.soreness` JSON dict — not columns.
+  *This line previously read "hardcoded for now — **Future:** drive from the active injury list".
+  It stayed "future" in the doc for two days after the code shipped, and a later brief was written
+  against that stale note and specced work that already existed. The doc is not the tree.*
+- **Injury-TYPE-specific probe questions are NOT complete and are not claimed to be**
+  (`backend/injury_probes.py`, DECISIONS_LOG #90). The scaffold is versioned and provenance-stamped
+  (`PROBE_QUESTIONS_VERSION`, `PROBE_QUESTIONS_PROVENANCE`) and seeded with exactly ONE injury type
+  (gastroc strain). Every other injury type falls back to the generic soreness item above — by
+  design, never a fabricated question set. Adding a type is a deliberate authoring step; the
+  check-in machinery then consumes it. Probe questions are elicitation-only and escalation is
+  referral-only, both enforced by tests, not by this doc (#89).
 - Direction/polarity inversion is the scoring layer's responsibility, not the UI's
   (Decision 10 logic applied to UX — annotate direction, let scoring invert).

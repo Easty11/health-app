@@ -1,4 +1,4 @@
-"""Injury-type-specific probe questions — the probe tier (DECISIONS_LOG #85/#86).
+"""Injury-type-specific probe questions — the probe tier (DECISIONS_LOG #89/#90).
 
 The app's role on return-from-injury is EDUCATE and PROBE, never CLEAR. This module
 is the probe half: it elicits and dates injury-specific markers. It does not

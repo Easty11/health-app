@@ -2097,6 +2097,75 @@ at which point the recorded half belongs in CI and only genuinely new probes sta
 
 ---
 
+### 89. The app's injury-return role is educate / probe / never-clear — and never-clear is enforced in code, not prose
+
+**Decision:** The app may EDUCATE (surface general evidence) and PROBE (elicit and date injury-specific markers),
+but must not INTERPRET those answers into a clearance, a prescription, or a grade. The boundary is structural, not
+prose: probe questions are elicitation-only (tested against prescription verbs and rep/set schemes) and escalation
+is referral-only (tested against grades, clearances, severity, and "safe to X" verdicts). No behavioural clearance
+logic is added; this entry fixes a boundary. No migration.
+
+**Rationale:** Return-from-injury is the archetypal hard-gated decision: error causes re-injury, and the inputs to
+judge readiness (tissue response to progressive load, pain-on-load behaviour over days) cannot be verified by the
+app or by self-report. Critically, the pro-loading evidence base (PEACE & LOVE over RICER) does NOT relax this: its
+"Load" element is titrated against tissue response — exactly the clinical judgment the app lacks inputs for — so
+stronger evidence for early loading SHARPENS the boundary rather than eroding it. Making the boundary structural
+means a future edit cannot quietly cross it in prose.
+
+**How you know:** Same directive-vs-defer test used across this platform — defer only where error harms AND the
+inputs to judge it are unavailable and unverifiable. Return-to-run readiness fails both. A clean single-leg heel
+raise is necessary but not sufficient evidence for clearance; the app records it as data and stops there. The gates
+are proven to bite, not merely present: each carries negative controls, and both were mutation-tested against a
+poisoned source — the elicitation gate fails on a seeded "Do 3x10 heel raises", the referral gate fails on a seeded
+"Grade 2 strain — you are cleared to run in 3 weeks". A gate that cannot fail is a false-green (FEEDBACK §10), so
+"the gate exists" was not accepted as evidence that it works.
+
+**Do not revisit unless:** the app gains a verified, objective load-response input (not self-report) that a
+practitioner would accept as clearance evidence — at which point the gate's premise, not the gate, is what changes.
+
+---
+
+### 90. Injury-type-specific probe questions are a versioned, provenance-stamped, deliberately-incomplete reference
+
+**Decision:** `backend/injury_probes.py` — a versioned (`PROBE_QUESTIONS_VERSION`), provenance-stamped scaffold for
+injury-type-specific probe questions, seeded with exactly ONE worked example (gastroc strain). Unrecognised injury
+types fall back to the existing generic soreness item, never a fabricated question set. Cadence is a property of the
+injury type (acute soft tissue = every 2 days), counted from the entry's set-date. No migration.
+
+**Rationale:** Injury-driven check-in soreness items ALREADY LANDED 13 Jul 2026 (FEEDBACK 2.6):
+`checkin_v2.derive_soreness_items` generates one item per active `UserKnowledgeEntry type='injury'` ledger row,
+`/prefill` serves it, and `CheckInAM.jsx` renders it with a "no active injuries" empty state. This entry does NOT
+re-do that — it adds the layer above it: injury-TYPE-specific PROBE questions (the markers that track a given
+injury's course). Those question sets are a clinical reference with the same provenance obligation as the taxonomy:
+a "complete" bank authored from intuition would be a false-green. So the scaffold is versioned, provenance-stamped,
+and seeded with one worked example only. Completeness is a standing review obligation, not a shipped claim.
+
+**Keying (a finding, not a preference):** probe sets are keyed on an explicit optional `injury_type` field in the
+entry's JSON `value` — alongside `trajectory`, same additive no-migration pattern — and NOT on `body_part`. The
+ledger carries `body_part` + `signal_type` and no injury type at all. Keying on `body_part` would mis-serve probes:
+the live right-hamstring entry refers S1-pattern symptoms *to the calf*, so a "calf" body_part is positive evidence
+of referred neural pain, not of a gastroc strain. A test pins this.
+
+**How you know:** The derivation's prior existence was confirmed against master (`checkin_v2.py:69`,
+`CheckInAM.jsx:247`) before this branch — an earlier draft of this entry wrongly claimed that derivation as new work
+AND mis-stated its mechanism (it does not route through `gather_active_injuries`; it queries the ledger directly).
+Both errors were caught at the STEP 0 tree read. The gastroc seed is the session-specced case — walking-pain trend,
+single-leg heel-raise capability, forefoot-load pain — all elicitation, tested against prescription verbs (#89).
+Incompleteness is explicit in the provenance string, not a shipped completeness claim.
+
+**Scope limits, recorded rather than glossed:** (1) the seed is UNEXERCISED by live data — there is no calf/gastroc
+entry in the injury ledger (`seed_engine.py`), so every currently-active injury takes the fallback path and the
+gastroc set has never fired on a real entry; (2) no ledger entry carries an `injury_type` field yet, so the keying
+is live-inert until one is authored; (3) probe RESPONSES have no storage — `daily_records.soreness` stores soreness,
+not probe answers — so `evaluate_escalation` takes its series as an argument and stays pure. This is LANDED ≠ LIVE
+(FEEDBACK §8) declared up front rather than discovered later.
+
+**Do not revisit unless:** a validated clinical question-bank source replaces the authored seeds (provenance shifts
+from "authored, unvalidated" to the cited source), or the three parallel ledger readers are consolidated (Q30 —
+would change how the scaffold reads injury type).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

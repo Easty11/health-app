@@ -1,4 +1,4 @@
-"""The probe tier's structural boundary (DECISIONS_LOG #85).
+"""The probe tier's structural boundary (DECISIONS_LOG #89).
 
 Two hard gates live here. They are the reason the probe tier is allowed to exist:
 the app may elicit and educate, but must not prescribe or clear. That boundary is
