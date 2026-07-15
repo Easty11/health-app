@@ -488,6 +488,42 @@ before writing them, not after.
 
 ---
 
+## Q29. `BRANCHES.md`'s header describes a convention its own rows contradict
+
+The header reads:
+
+> `# BRANCHES — every branch not master lives here until merged+deleted`
+
+"Until merged+deleted" says a row leaves once its branch lands. **The file does not do this.** 14 rows are
+retained with a `**LANDED <date>**` status (`fix/probe-harness-fidelity`, `feat/hevy-resolver-activation`,
+`chore/markitdown-mcp`, …), and the landing commits say so explicitly — `gov(branches):
+fix/probe-harness-fidelity LANDED at adb67e8`. Practice is retain-and-mark; the header says delete.
+
+**Practice is almost certainly the correct half.** Retained rows carry the `Unblocks on` column, which holds
+owed operator loops that outlive the merge — e.g. `feat/hevy-resolver-activation`'s "loop closes on Luke,
+post-merge + deploy: exercise the live path", and `chore/markitdown-mcp`'s parked Desktop registration.
+Deleting a row on land would destroy the record of what is still owed *because* it landed. The header is
+stale prose; the rows are the convention.
+
+**Why this is logged and not patched.** It is a repo defect with a live cost — it already produced one
+failure. `FEEDBACK.md` §12 row 16 records Code reading this header instead of the rows it governs and
+writing a false instruction (`"Owed on land: delete this row"`) into `BRANCHES.md` at `17ffe60`, corrected
+at `554e448`. That is row 8's class — an artefact read as the thing it describes — and the artefact here is
+a canonical store's own header. Row 16 records the misread; this question records the thing misread. They
+are the two halves of one `COUPLED` failure and neither is complete alone.
+
+**The fork:** (a) rewrite the header to match practice — "every branch not master lives here until landed;
+landed rows are retained and marked `LANDED`" — accepting that the file is an append-only branch history,
+not a live-branch inventory; or (b) rewrite the practice to match the header, deleting landed rows and
+relocating owed operator loops somewhere that survives. (a) is cheap and preserves the `Unblocks on`
+record; (b) costs a new home for owed loops and would discard 14 rows of history.
+
+**Status:** open — not Code's call to silently rewrite a header that 14 rows and the close-out
+terminal-state gate depend on. Blocks nothing; misleads every reader until decided, including the next
+model to read it.
+
+---
+
 ## Q28. `Pullover` is not a constraint-neutral probe subject — the resolver probe passes by luck
 
 `backend/probe_resolver.py` `_RESOLVER_PROBE` labels its subjects "out-of-history AND constraint-neutral",
