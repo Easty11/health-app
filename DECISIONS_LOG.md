@@ -2184,6 +2184,79 @@ draw-specific presence resolution beyond the episodic/continuous/stopped continu
 
 ---
 
+### 86. Interpretation producer FOUNDATION (4a) — deterministic newest+prior gates, is_moved, flat ungrouped
+
+**Number caveat (provisional):** claimed at this branch's merge per number-at-merge. #85 is
+declared-state (reconciled from its unminted `#NEXT` this session — it was already in master
+past #84, so it takes the lowest free number). `feat/feedback-ledger` (#85–88) and
+`feat/checkin-injury-probe` (#89–90) are unmerged hardcodes; unmerged numbers do not bind, so
+they renumber at their own merges. If either lands before this branch is pushed, it takes #86+
+in merge order and this entry renumbers.
+
+**Decision:** The interpretation producer is built foundation-first (4a) as a pure function —
+`interpretation.producer.build_foundation(user_id, db, trigger_panel, prior_panel)` — that
+consumes ONLY (a) newest+prior per marker (new `labs_reads.marker_series`, the existing
+partition widened to `rn<=2`; `latest_lab_results` left byte-unchanged) and (b)
+`marker_groups.json` + `lever_dictionary.marker_interpretation`/`_defaults` (never `levers[]`).
+It emits `{meta, groups[], ungrouped[]}` with the 4a-owned fields populated and every 4b field
+absent. Per member: `current`/`prior`, `delta` (direction/abs/pct/crossed_ref/magnitude/
+censored/min_meaningful_delta), raw `news_gate` (gate-1 delta arm only — `is_news` =
+magnitude-meaningful OR crossed_ref; basis names only delta/crossed arms, no relation demotion),
+`range_gate` (gate 2, driven by `lab_flag`; `computed_flag` withheld, V2). `is_moved` per group
+= any member news OR breach, producer-emitted so the frontend reads it. `magnitude` is
+mode-aware (relative vs |pct|/100); `crossed_ref` computes from per-report bounds — the one
+deliberate asymmetry (the breach is lab-asserted, the transition is bounds-computed, because a
+point-in-time flag cannot express "was out, now in").
+
+UNGROUPED markers are emitted FLAT in `ungrouped[]` (tagged, no `axis_verdict`), NOT synthesised
+into groups-of-one. This is the deliberate correction of the earlier (discarded, never-merged)
+4a design on the same branch, which synthesised a group-of-one per ungrouped marker: authoring
+`marker_groups` content is forbidden (GUARD), and pooling stable+in-range ungrouped rows is a
+downstream render call. `vitamin_d_25oh`, absent from any authored group, lands in `ungrouped[]`.
+
+PHASE-FREE, relation-free, `current_state`-free: no verdict, relations, levers, mechanism,
+phase, `protocol_context_snapshot`, endpoint or frontend.
+
+**Rationale:** Foundation-first splits the mechanical half (gates, series, is_moved — provable
+by re-emitting the §2 fixture from seeded rows) from the interpretive half (4b: verdict,
+relations, levers, phase, relation-based news demotion). The 4a/4b line is drawn where judgment
+enters. The lab_flag-only gate 2 keeps the producer from asserting a breach the lab did not —
+`computed_flag` is withheld per contract V2; a computed breach is 4b's to surface with care.
+
+**Status:** 4a implemented and landed (library only — no endpoint, no frontend, no wiring). The
+prior groups-of-one design on this branch was reset away (superseded, never merged). Sequence:
+4a ✓ → 4b (verdict/relations/levers, phase-aware — now unblocked by #85's declared-state) →
+rephrase → tap → go-live. The `feat/interpretation-view-skeleton` render layer (increment 1,
+still an unmerged local branch) consumes this producer's shape once wired.
+
+**How you know:** 206 backend tests green (184 pre-existing incl. #85's 47, + 22 new). Oracle:
+`build_foundation` re-emits the §2 worked example's 4a-projection from seeded rows —
+hpg_axis(T within_noise/not-news/in-range, E2 marginal/not-news/in-range, FSH censored/not-news/
+**breach L**) is_moved TRUE on the FSH breach alone (nothing news); hepatocellular(AST
+meaningful/crossed into_range/**news**/in-range) is_moved TRUE on AST news alone; vitamin_d_25oh
+in `ungrouped[]`, stable. Each gate proven independently load-bearing. Two divergences from the
+fixture asserted explicitly: (1) vitamin D flat-ungrouped not a group-of-one (asset authors no
+vitamin-D group); (2) testosterone_total min_meaningful_delta 0.30 (asset `_defaults` fallback —
+no `testosterone_total` entry) not the fixture's authored 0.20, verdict within_noise either way,
+no CVi fabricated. Mutation-tested: G5 (range_gate→computed_flag) fails; G6 (is_moved≡True fails
+an all-stable group; mode-blind magnitude fails E2-marginal; crossed_ref ignoring prior fails
+AST into_range). Boundary greps (G1/G2): producer imports neither `current_state` nor
+`declared_state`; reads `marker_interpretation`/`_defaults`/`_meta` only, never `levers[]`. G4:
+`test_labs_reads.py` green, `latest_lab_results` diff purely additive (zero removed lines).
+
+**Oracle provenance caveat:** `INTERPRETATION_OUTPUT_CONTRACT.md` (the corrected §2 object,
+UI-maintained knowledge file per #63) is NOT in the repo. The fixture
+`backend/tests/fixtures/interpretation_s2.json` is the §2 worked example as transcribed onto
+`feat/interpretation-view-skeleton`; its mechanical 4a fields are stable across the 4b
+correction (the brief itself states raw-news == final-news for every member here). If the
+corrected contract file later diverges on a mechanical field, re-sync the fixture.
+
+**Do not revisit unless:** the contract's group-primary shape changes, `is_out_of_range` is
+shown to hide a lab-asserted breach (it cannot — it reads lab_flag unconditionally), or the
+flat-ungrouped decision fails against a real panel once 4b's render layer pools them.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
