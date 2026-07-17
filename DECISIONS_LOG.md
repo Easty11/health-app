@@ -2097,6 +2097,93 @@ at which point the recorded half belongs in CI and only genuinely new probes sta
 
 ---
 
+### #NEXT. Structured declared-state ledger — continuity-aware protocol / supplement / behavioural + phase derivation
+
+**Decision:** The user's active stack is declared as structured, queryable rows in
+user_knowledge_entries under three new types — protocol (pharma), supplement, behavioural —
+sharing one continuity-aware value schema {active, continuity, phase, detail, relevant_date},
+one entry per factor, mirroring the injury ledger (idempotent skip-if-active-key, source=
+"system", notes=detail, no migration — type is a free String(50)). A pure derive_phase()
+maps each entry to a phase as_of a date: continuous→steady/titrating, stopped→washout/stopped,
+episodic→episodic (EXPLICITLY not assumed present at any given lab draw), behavioural→
+re_entering, never/inactive→None. current_state exposes a declared_state structure lifted from
+active entries in-memory (zero new queries), carrying derived phases. context_builder prompt
+rendering is deliberately NOT touched (separate concern).
+
+**Rationale:** 4a surfaced that no structured protocol exists anywhere — the platform's #1
+health-intelligence principle (never read a lab in isolation from the active stack) had no
+data backing; the stack lived only in Clinical_Protocol.md, an orientation doc flagged
+unreliable (HGH wrongly active; peptides mis-described). The continuity field is load-bearing:
+a continuous agent (TRT) is assumable present at every draw, an episodic one (ad-hoc peptides)
+is NOT, a stopped one (tirzepatide) is in dated washout — the one distinction that makes a
+factor's lab-relevance decidable, which a bare active flag flattens. Blocks 4b's phase-aware
+gates (range_gate.expected_by_phase, feedback-relation phase-gating) until it exists.
+
+**Seed provenance — user-confirmed clinical data, not inferred:** corrects Clinical_Protocol.md
+(HGH never sourced; CJC-1295/Ipamorelin + IGF-1 LR3 episodic-not-discontinued; GLOW = BPC-157/
+TB-500/GHK-Cu, not the mis-recorded KPV). Tirzepatide last-shot 2026-06-22 is triangulated
+(HRV step-change date + Monday constraint + recollection), NOT a dosing log — flagged so it is
+not counted twice as evidence for the Q17 washout hypothesis it was partly derived from. The
+seed is captured with lab-confounders tagged per factor — berberine→glycaemic/lipid panel,
+B-complex→B12/active-B12/homocysteine (repletion, not pathology), D3→25-OH vitamin D, the HPG
+cluster (boron/zinc/apigenin production-side + prebiotic fibre estrobolome clearance-side)→
+free-T/SHBG/E2, creatine+leucine-protein→creatinine/urea/eGFR — because that per-factor
+confounder tagging is the specific capability the declaration unlocks for 4b's "already in
+play" lever curation (#49). Supersession history preserved (ultra_muscleze_night inactive,
+superseded by l_theanine_pm); cumulative Mg (~505mg bedtime + AM, 3 sources) and Zn (2 sources)
+totals recorded so a Mg/Zn/Cu read is not misjudged.
+
+**Two senses of "active" — the decision that drove the design (refines the brief):** the brief
+said "one entry per factor" with an `active` field, and separately that the seed writes
+inactive entries. Resolved by SEPARATING the row's `active` column from `value["active"]`. The
+ROW is always active=True — it means "this declaration is current" — while `value["active"]`
+means "the user is currently taking this". "HGH — never used" and "tirzepatide — stopped, in
+washout" are both currently-true declarations. Collapsing the two (writing the row inactive
+when value.active is false, the brief's literal reading) breaks two things at once, both
+mutation-proven: current_state loads active=True rows ONLY, so the four untaken factors
+(tirzepatide/glow/hgh/ultra_muscleze_night) would vanish from declared_state and their phase
+would be underivable — defeating the ledger's whole purpose; and the idempotent skip keys on
+(user_id, key, active=True), which never matches an inactive row, so every re-run duplicates
+those four (the mutation fails `assert 4 == 0`). derive_phase therefore orders by CONTINUITY,
+never by value.active, so a stopped factor still resolves to washout/stopped rather than being
+short-circuited to None.
+
+**Status:** Implemented backend (schema/derivation/wiring/seed). NOT LIVE until the Railway seed
+runs (operator step, #56 public-proxy) — current_state.declared_state reads empty until then
+(§8 precondition named). Sequence: 4a ✓ → this → 4b (verdict/relations/levers, now phase-aware)
+→ rephrase → tap → go-live. Follow-on (separate concern): surface declared_state into the
+context_builder system prompt so the chat is stack-accurate off structured data, not the doc.
+
+**How you know:** 184 backend tests green (137 pre-existing + 47 new: 25 derivation/lift +
+22 seed). The seed writes exactly 23 rows on an unseeded user (6 protocol + 16 supplement +
+1 behavioural, asserted by type-count), and is idempotent — a second and third run add 0, the
+table stays at 23, and each of the four untaken factors is present exactly once. Every derived
+phase was dumped end-to-end through current_state and matches the brief's table:
+trt→steady(assumable), tirzepatide→washout(not assumable), cjc_ipamorelin/igf1_lr3→episodic
+(both active=True yet assumable_present=False — the not-present-by-default semantics carried
+through to the field), glow→stopped (undated, so not washout), hgh→None, cbt_i→re_entering,
+ultra_muscleze_night→None (superseded, active=False on value, active=True on row). The
+derivation is mutation-proven non-vacuous four ways: making derive_phase echo value["phase"]
+fails 6 tests; letting an inactive check preempt continuity (killing tirzepatide's washout)
+fails 5; making assumable_present echo active fails 4; and the collapsed-active-column
+alternative fails idempotency and the current_state-reach tests. Seed tests run against
+_DECLARED_STATE_SEED itself, not a re-typed copy, so a transcription slip fails rather than
+being restated; a cross-check asserts each authored `phase` equals its derived phase.
+Boundary: `git diff --name-only master` is declared_state.py, current_state.py, seed_engine.py,
+the two test modules and governance — no context_builder, no producer/4b code, no frontend, no
+migration.
+
+**Incidental finding (not this branch's work):** `backend/gate_test.py` is an untracked stray
+(operator PDF-extraction probe) that pytest collects by its `*_test.py` name and which fires a
+live paid Anthropic API call at COLLECTION time — it now 400s and breaks a bare `pytest`. The
+suite is clean when scoped to `tests/` (184 in ~7s vs ~65s with the stray firing). Not deleted
+(untracked, not this session's to remove); flagged for cleanup.
+
+**Do not revisit unless:** a fourth declared-state type is needed, or a factor requires a
+draw-specific presence resolution beyond the episodic/continuous/stopped continuity model.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
