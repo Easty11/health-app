@@ -2097,6 +2097,76 @@ at which point the recorded half belongs in CI and only genuinely new probes sta
 
 ---
 
+### #NEXT. Lab interpretation view — three-section render of contract v0.4; hybrid weighted-inline levers; colour-as-fact
+
+**Decision:** The lab-interpretation view renders the contract v0.4 (#63) group-primary
+object as a three-section screen (What Moved → Stable → Mechanisms). Section placement:
+a group is "moved" iff any member is news (gate 1) OR out-of-range (gate 2); moved groups
+render whole (axis-verdict + all members), stable groups collapse to the axis-verdict line.
+Levers render HYBRID WEIGHTED-INLINE — an in-card shared-levers strip per moved group
+(present-marker), plus a thin pooled Mechanisms index at the bottom that is navigation only
+(grade-ordered jump-links back to each in-card strip), so a lever is authored once, rendered
+in context, and still browsable as a reading mode. COLOUR-AS-FACT: a coloured breach
+indicator appears only where range_gate.is_out_of_range (the lab-asserted H/L flag); the
+coherence verdict stays monochrome. An expected-by-phase breach stays coloured with its note
+shown — the colour marks the fact, the note reframes it, the breach is never suppressed
+(#47 gate-2 spine).
+
+**Rationale:** View-first (increment 1 of 5) surfaces contract gaps cheaply before producer
+logic, and is pure frontend that doesn't depend on the empty lab store. Hybrid-inline keeps
+both #63 present-marker (lever legible beside its marker) and #49's distinct "worth
+understanding" reading mode. Colour-as-fact is the #47 boundary made visual: a scannable
+coherence traffic-light would be the personalised all-clear #47 forbids, so colour is
+reserved for facts the lab asserted, neutral on what the platform infers. The fixture IS the
+contract §2 object verbatim, so the view cannot drift from what the future producer emits.
+
+**Status:** Increment 1 (static skeleton against the fixture) implemented. Remaining
+increments: 2 = register + LLM rephrase pass (deterministic core, rephrase-not-claims,
+base canonical / rephrase disposable, simplify-never-reassures — the #47 danger zone);
+3 = lever tap → scoped ephemeral education thread; 4 = producer module emitting real
+contract JSON (D3 cache-on-confirm vs compute-on-read decided there); 5 = go-live (confirm
+one real panel, promote the two ai_draft assets to human_verified). LANDED ≠ LIVE (§8): this
+increment is a fixture render, not a live feature — the AI view-pointer
+(context_builder `_LAB_INTERPRETATION_VIEW_LABEL`) is deliberately left at its placeholder
+until increment 5 renders real data.
+
+**How you know:** `npm run build` green (98 modules, no new lint errors — the 5 reported are
+pre-existing on master in ChatPanel/WorkoutPanel/Settings). Section split exercised against
+the committed fixture through the shipped helper: What Moved = `[hpg_axis, hepatocellular]`,
+Stable = `[vitamin_d_25oh]`. The gate-2 spine is confirmed by the per-member trace, not
+assumed — `hpg_axis` moves on `fsh(news=false, oor=true)` alone, with both other members
+`news=false, oor=false`; `hepatocellular` moves on `ast(news=true, oor=false)`. So each gate
+is independently load-bearing on this fixture: HPG exercises gate 2 with no news, AST
+exercises gate 1 with no breach. Colour-as-fact verified by computed style over EVERY element
+on the rendered page, not by inspection: Tailwind v4 emits `oklch`, whose neutral ramp sits at
+hue 247–265 and chroma ≤ 0.034; the only chromatic elements on the page are five, all inside
+the FSH line — the breach dot (`oklch(0.705 0.213 47.604)`), "Below range" (chroma 0.222),
+"· expected for phase", the note text (chroma 0.195) and its `orange-50` chip (hue 73.684).
+AST — news but in-range — renders entirely on the neutral ramp, and all three axis_verdict
+headers probe monochrome. Present-marker holds: `hpg_t_e2_ratio` renders on BOTH the T line
+(`ratio · oestradiol`) and the E2 line (`ratio · testosterone_total`); the GGT discriminator
+renders on the AST line alongside De Ritis. Levers: `exercise_muscle` renders labelled
+"already in play"; the Mechanisms index lists both `testosterone_substrate_load` and
+`exercise_muscle`, and both jump-links were confirmed to RESOLVE to a real in-card anchor in
+a different section (`resolves: true`, `targetIsInCardStrip: true`) — a dangling href would
+have failed silently. Group-of-one: vitamin D renders in Stable, collapsed to its verdict
+line, with no delta glyph or "first observation" text anywhere in the section. Concern
+boundary held: `git diff --name-only master` returns frontend paths only, and
+`_LAB_INTERPRETATION_VIEW_LABEL` still reads "Metrics page". Zero console errors.
+
+**Not verified:** the view has only ever rendered THIS fixture — one panel, three groups,
+two levers, one breach. No empty-state, no multi-breach group, no `is_news` + `is_out_of_range`
+on the same member, no group with zero levers in What Moved, and no real producer output has
+touched it. The section-placement helper is exercised by a scratch probe, not by a committed
+test — the frontend has no test runner (`package.json` has no test script), so nothing guards
+the split against regression.
+
+**Do not revisit unless:** the contract v0.4 shape changes (#63's own revisit clause), or the
+three-section / hybrid-inline / colour-as-fact model fails against a real panel once the
+producer lands.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
