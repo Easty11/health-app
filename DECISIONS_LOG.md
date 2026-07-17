@@ -2097,7 +2097,7 @@ at which point the recorded half belongs in CI and only genuinely new probes sta
 
 ---
 
-### #NEXT. Structured declared-state ledger — continuity-aware protocol / supplement / behavioural + phase derivation
+### 85. Structured declared-state ledger — continuity-aware protocol / supplement / behavioural + phase derivation
 
 **Decision:** The user's active stack is declared as structured, queryable rows in
 user_knowledge_entries under three new types — protocol (pharma), supplement, behavioural —
