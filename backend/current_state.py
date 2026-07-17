@@ -20,6 +20,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 import models
+from declared_state import lift_declared_state
 from engine import profile as profile_mod
 from reads.labs_reads import LabRow, latest_lab_results
 
@@ -36,6 +37,11 @@ class HRVBaseline:
 class CurrentState:
     knowledge_entries: list[models.UserKnowledgeEntry] = field(default_factory=list)
     device_profile: dict | None = None
+    # The user's declared stack, keyed by type (protocol/supplement/behavioural),
+    # each factor carrying its phase derived as_of today. What 4b's phase-aware
+    # gates and the contract's protocol_context_snapshot consume. Reads empty
+    # until the Railway seed runs (§8 — landed != live).
+    declared_state: dict = field(default_factory=dict)
     fortification_profile: dict | None = None
     fortification_profile_orm: models.FortificationProfile | None = None
     capability_state: list[models.CapabilityState] = field(default_factory=list)
@@ -89,6 +95,7 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
     return CurrentState(
         knowledge_entries=entries,
         device_profile=device_profile,
+        declared_state=lift_declared_state(entries, today),
         fortification_profile=profile_mod.profile_to_dict(fort_profile_orm),
         fortification_profile_orm=fort_profile_orm,
         capability_state=capability_rows,
