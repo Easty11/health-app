@@ -89,6 +89,82 @@ def latest_lab_results(user_id: int, db: Session) -> list[LabRow]:
     ]
 
 
+@dataclass
+class MarkerPair:
+    """Newest + the one before it, for a single marker. `prior` is None on a
+    first-ever observation — the interpretation producer emits `delta: null`
+    there rather than inventing a comparison."""
+    current: LabRow
+    prior: LabRow | None
+
+
+def _to_lab_row(lr, collected_date: date) -> LabRow:
+    return LabRow(
+        marker_name_raw=lr.marker_name_raw,
+        marker_canonical=lr.marker_canonical,
+        value_num=lr.value_num,
+        value_operator=lr.value_operator,
+        value_qualitative=lr.value_qualitative,
+        unit_canonical=lr.unit_canonical,
+        ref_low=lr.ref_low,
+        ref_high=lr.ref_high,
+        ref_low_exclusive=lr.ref_low_exclusive,
+        ref_high_exclusive=lr.ref_high_exclusive,
+        lab_flag=lr.lab_flag,
+        computed_flag=lr.computed_flag,
+        is_derived=lr.is_derived,
+        collected_date=collected_date,
+    )
+
+
+def marker_series(user_id: int, db: Session) -> dict[str, MarkerPair]:
+    """Newest + prior per marker, keyed by COALESCE(marker_canonical,
+    marker_name_raw) — the interpretation producer's read seam.
+
+    Same partition as `latest_lab_results`, widened to `rn <= 2`.
+    `latest_lab_results` is deliberately left untouched: it feeds the
+    context_builder path guarded by the #43/#80 parity assertion, and this
+    read wants two rows where that one wants exactly one. The partition
+    expression is therefore duplicated rather than extracted — if the ordering
+    rule ever changes, BOTH must move together.
+    """
+    marker_key = func.coalesce(models.LabResult.marker_canonical, models.LabResult.marker_name_raw)
+
+    ranked = (
+        db.query(
+            models.LabResult,
+            models.LabReport.collected_date.label("collected_date"),
+            marker_key.label("marker_key"),
+            func.row_number()
+            .over(
+                partition_by=marker_key,
+                order_by=(models.LabReport.collected_date.desc(), models.LabResult.id.desc()),
+            )
+            .label("rn"),
+        )
+        .join(models.LabReport, models.LabReport.id == models.LabResult.lab_report_id)
+        .filter(models.LabReport.user_id == user_id)
+        .subquery()
+    )
+
+    RankedResult = aliased(models.LabResult, ranked)
+    rows = (
+        db.query(RankedResult, ranked.c.collected_date, ranked.c.marker_key, ranked.c.rn)
+        .filter(ranked.c.rn <= 2)
+        .order_by(ranked.c.marker_key, ranked.c.rn)
+        .all()
+    )
+
+    series: dict[str, MarkerPair] = {}
+    for lr, collected_date, key, rn in rows:
+        row = _to_lab_row(lr, collected_date)
+        if rn == 1:
+            series[key] = MarkerPair(current=row, prior=None)
+        elif key in series:
+            series[key].prior = row
+    return series
+
+
 def find_marker(labs: list[LabRow], message: str) -> LabRow | None:
     """Explicit single-marker on-ask detection (#60): does `message` name a
     marker the user already has on file? Operates on an already-fetched `labs`
