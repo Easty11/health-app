@@ -2257,6 +2257,41 @@ flat-ungrouped decision fails against a real panel once 4b's render layer pools 
 
 ---
 
+### 87. Oracle fixture group display_name re-synced — #86's contract-divergence caveat exercised
+
+**Decision:** The §2 fixture's `hepatocellular` group `display_name` is re-synced from
+"Hepatocellular enzymes" to "Hepatobiliary enzymes + bilirubin" — the value in
+`marker_groups.json` (which the producer emits) and in the corrected
+`INTERPRETATION_OUTPUT_CONTRACT.md` §2 (O1(b), line 192). The G3 oracle
+(`test_oracle_readings_match_the_fixture`) now asserts group `display_name` against the fixture
+for both authored groups. Refines #86's oracle-provenance note; does not amend #86.
+
+**Rationale:** Group `display_name` is producer-emitted from an asset but was asserted nowhere,
+so the fixture could diverge from what the producer emits without any test failing — a silent
+oracle gap. #86's caveat ("if the corrected contract file later diverges on a mechanical field,
+re-sync the fixture") named this risk as theoretical; it has now MATERIALISED once, for this
+field, and is resolved by re-sync plus the assertion that closes the gap for good. A field the
+producer emits from an asset must be oracle-covered, or the fixture is not a faithful oracle for
+it. Not a new documented divergence — the re-sync removes the divergence rather than recording
+it (the two standing divergences, vitamin-D-ungrouped and the testosterone_total 0.30 fallback,
+are producer-vs-fixture-by-design and stay).
+
+**Status:** Landed. Test-only + governance; no producer, gates, or asset changed (the asset was
+already correct — the fixture was the stale side). The G4-scoped test diff is exactly two files.
+
+**How you know:** 206 green, no count change (assertion added, not replaced). Mutation-proven:
+reverting the fixture to "Hepatocellular enzymes" turns the new `display_name` assertion red;
+restoring it green. G2 held — the 4b non-vacuity test still passes and `_FIXTURE["groups"][0]`
+still carries `axis_verdict` / `shared_levers` / member `relations_rendered` / `mechanism`.
+Step-1 adjudication against the tree found NO further mechanical drift beyond this one field
+(hpg_axis display_name already matched).
+
+**Do not revisit unless:** the producer starts emitting another asset-sourced field the oracle
+does not cover, or `INTERPRETATION_OUTPUT_CONTRACT.md` diverges from `marker_groups.json` on a
+group name (they must agree — the producer follows the asset).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
