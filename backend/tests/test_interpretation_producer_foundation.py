@@ -144,6 +144,15 @@ def test_oracle_readings_match_the_fixture(db_session):
     user, current, prior = _seed_fixture(db_session, "read@example.com")
     out = _build(db_session, user, current, prior)
 
+    # Group display_name is producer-emitted from marker_groups.json. It was a
+    # silent oracle gap — asserted nowhere — which let the asset's
+    # "Hepatobiliary enzymes + bilirubin" diverge from the fixture unnoticed.
+    # Assert it for BOTH authored groups against the fixture.
+    for group_key in ("hpg_axis", "hepatocellular"):
+        fixture_group = next(g for g in _FIXTURE["groups"] if g["group_key"] == group_key)
+        assert _group(out, group_key)["display_name"] == fixture_group["display_name"], \
+            f"{group_key}.display_name"
+
     for group_key, marker in [("hpg_axis", "testosterone_total"), ("hpg_axis", "oestradiol"),
                               ("hpg_axis", "fsh"), ("hepatocellular", "ast")]:
         fm = _fixture_member(group_key, marker)

@@ -60,7 +60,7 @@
     },
     {
       "group_key": "hepatocellular",
-      "display_name": "Hepatocellular enzymes",
+      "display_name": "Hepatobiliary enzymes + bilirubin",
       "is_group_of_one": false,
       "axis_verdict": { "verdict": "coherent", "protocol_phase": "active_training", "text": "Transaminases fell toward range with GGT normal — the discriminator says muscle/exercise origin, not hepatocellular injury. Movement is favourable and coherent.", "confidence": "Likely" },
       "members": [
