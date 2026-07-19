@@ -520,3 +520,35 @@ superseded contract (completeness), and a brief asserting prod state from its ow
 claim inheriting authority from where it sits rather than from what attests it. Position, completeness and recency
 are not evidence. Only an artifact is.
 
+---
+
+## 14. A vocabulary is not adopted until its predecessor is struck from the rules (DECISIONS_LOG #91)
+
+#88 added the four states while leaving `OPEN_QUESTIONS`' three-value set standing twelve lines away
+in the same file. Both were simultaneously canonical, and a correct executor could not act: whichever
+it picked, the other rule said it was wrong. Superseding a convention *in practice* while leaving its
+definition *in the rules* does not retire it — it forks the rules.
+
+**Rule:** when a convention replaces another, the landing commit must delete the old definition in the
+same edit that adds the new one. And state one definition in one location — a restatement elsewhere
+"for convenience" is a second copy that will drift. The contradiction resolved here began as exactly
+that, and the #91 sweep found a *third* copy in `OPEN_QUESTIONS.md`'s own file header.
+
+**Corollary — an integrity gate must name the surface it measures.** A verification method can inherit
+false authority from looking objective. A raw `md5sum` is maximally mechanical and still returned the
+wrong verdict here, because it measured the working tree while the thing that propagates is the index.
+Every integrity gate must name the surface it measures, not just the comparison it performs — an
+unspecified surface makes the gate's result unfalsifiable, since either answer can be defended after
+the fact. This is #90's defect in a third costume: position, recency, and now apparent objectivity,
+each vouching for an attestation none of them carry.
+
+**Corollary — a distribution must sum to its population.** Chat asserted a store's label distribution
+from a full-text word grep rather than from the status field, producing counts that exceeded the item
+count (42 labels across 29 questions) — an arithmetic impossibility visible without any repo access.
+Before reporting a distribution, verify it sums to the population. A measurement that cannot be wrong
+in a detectable way has not been checked.
+
+**Why it generalises:** all three costumes were worn in a single session, and the third arrived *inside
+an argument about measurement discipline*. Rigour about evidence is not a state you reach and hold; it
+is a check you run per claim, including on the claims you make while insisting on it.
+

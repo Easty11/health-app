@@ -2450,6 +2450,85 @@ adoption-sweep failure, not a vocabulary failure.
 
 ---
 
+### 91. `OPEN_QUESTIONS` adopts the four states — the three-value set could not express BLOCKED, and was not applied consistently
+
+**Decision:** `CLAUDE.md`'s canonical-stores table no longer assigns `OPEN_QUESTIONS.md` its own
+`open` / `verifying` / `resolved → #` vocabulary; that row now points to the **State vocabulary**
+section, which is the sole definition. `health-app/OPEN_QUESTIONS.md` is swept to
+DONE / BLOCKED / OWED / UNSTARTED, with `DONE → #N` preserving the resolving-decision pointer. Two
+clauses are added to the vocabulary itself:
+
+- **BLOCKED** — a trigger for when work becomes *worth* doing is not a blocker on its being
+  *possible*; that is UNSTARTED.
+- **OWED** — widened from "work finished" to "work **or decision** settled", which the four OWED
+  questions require: their decisions are landed and only a named verification is outstanding.
+
+Amends #88's shared block; does not supersede it. **Scope is health-app.** Propagating the block to
+`health-connect-app` and sweeping its stores is Phase 2b of this brief — OWED at this landing, not
+asserted here.
+
+Also corrects **#90**. #90's exit condition — zero rows in either repo carrying a non-four-state
+label — was **not met at close**: `OPEN_QUESTIONS.md` rows remained on `open`/`verifying`/`resolved`
+and `health-connect-app` was untouched. #90 did not misreport this — it scoped `OPEN_QUESTIONS` out
+explicitly, recorded the CLAUDE.md contradiction as open, and logged HCA as OWED — and the deferral
+was *correct*: the rule it would have executed under was self-contradictory, so executing it would
+have picked a winner by accident rather than by decision. But the condition stands unmet until this
+entry and Phase 2b close it. #90's entry is locked and unedited; this entry carries the correction.
+
+**Rationale:** the shared block sanctioned two vocabularies twelve lines apart, both looking
+authoritative — #90's own defect, a claim inheriting authority from where it sits rather than from
+what attests it. The tie-break is empirical, not aesthetic. **The three-value set failed twice over.**
+
+1. **It could not express BLOCKED — and the store visibly reached around the gap.** Q29 carried the
+   label `open` while its own body read "blocked on install-history segmentation (owner: Luke)" plus a
+   hard prohibition on touching the data. The blocker, its owner and its unblock condition were all
+   present — written in prose, because the vocabulary had no state to put them in. Q24 and Q25 are the
+   same shape (Q25 cannot proceed at all outside an HCA-rooted session). Under the old set all three
+   collapse to `open`, indistinguishable from a question nobody has looked at — precisely the
+   ambiguity #88 exists to abolish.
+2. **It was applied inconsistently to the states it did have.** Q6's status read
+   `open, resolves → #28 on Postgres verify` — a settled decision awaiting one verification, i.e. a
+   `verifying` row wearing an `open` label. Q13, Q15 and Q18 are the same. So the `open` bucket was
+   never one category: of 18 `open` rows, **3 were BLOCKED, 4 were OWED, 11 were UNSTARTED**. A
+   vocabulary that is both under-expressive and unevenly applied cannot be repaired by discipline;
+   the bucket has to be split.
+
+Two rows also proved that a stated blocker must hold *now*, not when the row was written: Q3's
+precondition (HR de-duplication) had landed on HCA master at `36df9a2`, and Q23's (tags human-confirmed
+and seeded) completed in prod on 2026-07-14. Carrying their prose forward would have manufactured two
+false BLOCKEDs.
+
+**Status:** Landed. Governance-only — no production path, no schema, no migration.
+
+**How you know:**
+- **Pre-edit shared block, both repos:** 151 lines, LF-normalised 9799 B, md5
+  `9e7959c2c4a17fa95992a80e43dc1538` — **identical**. Raw working-tree md5 differed
+  (health-app 9799 B / HCA 9950 B) by exactly 151 bytes over 151 lines = one CR per line;
+  `git ls-files --eol CLAUDE.md` reports `i/lf` in **both** repos, so the committed content — the only
+  thing that propagates — was already identical. The raw delta is a `core.autocrlf` checkout artifact,
+  not divergence, and is logged as Q30.
+- **Post-edit health-app block:** 153 lines, LF-normalised 10080 B, md5
+  `9436cb223c4b601252152ab4fa6a3547`. Cross-repo byte-identity is Phase 2b's gate, measured on index
+  content.
+- **The split tally:** 18 `open` → 3 BLOCKED (Q24, Q25, Q29 — each naming blocker + owner from its own
+  content) / 4 OWED (Q6, Q13, Q15, Q18) / 11 UNSTARTED. Mechanical: 10 `resolved` → `DONE → #N`,
+  1 `verifying` (Q4) → OWED.
+- **Zero out-of-vocabulary labels** in health-app:
+  `grep -nE "^\*\*Status:\*\*" OPEN_QUESTIONS.md | grep -viE "DONE|BLOCKED|OWED|UNSTARTED"` returns
+  nothing across all 31 questions (10 DONE / 3 BLOCKED / 5 OWED / 13 UNSTARTED); and
+  `grep -oE "\| \*\*(LANDED|IN FLIGHT|PARKED|RETIRED)" BRANCHES.md` returns none.
+- **Test count:** backend suite **206 passed**, unchanged from the merge-base and from #88/#90.
+
+**Do not revisit unless:** a question arises that resists all four states — in which case the failure
+is the vocabulary, not this adoption.
+
+**OWED at landing:** `health-connect-app` has NOT received the block and its stores are NOT swept.
+Phase 2b: propagate the block wholesale, re-fingerprint on index content, enumerate its actual
+branches (local + remote) against `BRANCHES.md`, and sweep its `OPEN_QUESTIONS.md` off `PENDING`.
+Owner: Luke, in an HCA-rooted session.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
