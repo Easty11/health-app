@@ -3,100 +3,138 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`. Interruption ledger: `HANDOFF.md`._
 
-Session: 2026-07-19 — Q17 HRV instrumentation-close. Branch `master` (all work landed).
+Session: 2026-07-19/20 — session closure sweep, Phase 1. Branch `master` @ `a9d8264` (all work landed).
 
 ---
 
 ## 1 · Real commits this session
 
-Open-ref `4a65f4a` (the #88 session close-out, pre-existing at my start) → `HEAD`:
+Open-ref `56eb6b7` (the prior session's close-out, pre-existing at my start) → `HEAD`:
 
 ```
-c271834 gov: mint #NEXT -> #89 at merge — master max was #88; step-5 HCA pointer deferred
-74558ea gov: resolve Q17 on (A) instrumentation — RR corroborator was never independent (#NEXT)
+a9d8264 gov(branches): gov/session-closure-sweep DONE at 05f0282 + Phase 1 handoff
+05f0282 gov: DECISIONS_LOG #90 + FEEDBACK 13 — vocabulary adoption is a sweep
+f836bb8 gov: OPEN_QUESTIONS + ROADMAP swept to valid states
+14a7574 gov(branches): step-5 — every row relabelled to the four states
+613dab6 gov(branches): step-4 loop adjudications — 2 closed on evidence, 2 stay OWED
+ed04c07 gov(branches): document gov/session-closure-sweep as an in-flight OWED row
+e0391e9 gov(branches): dedicated rows for 3 pushed branches + resolver/markitdown adjudications
+e99c09e gov(handoff): session closure sweep receipt — received, not started
 ```
 
-Plus this close-out commit (`chore: session close-out`). All on `master`, pushed to
-`origin/master`. Immutable-dated log (per #88):
+Repo's own dated record — `git log --format="%ad %s" --date=short -10`:
 
 ```
-git log --format="%ad %s" --date=short -6
+2026-07-20 gov(branches): gov/session-closure-sweep DONE at 05f0282 + Phase 1 handoff
+2026-07-20 gov: DECISIONS_LOG #90 + FEEDBACK 13 — vocabulary adoption is a sweep
+2026-07-20 gov: OPEN_QUESTIONS + ROADMAP swept to valid states
+2026-07-20 gov(branches): step-5 — every row relabelled to the four states
+2026-07-19 gov(branches): step-4 loop adjudications — 2 closed on evidence, 2 stay OWED
+2026-07-19 gov(branches): document gov/session-closure-sweep as an in-flight OWED row
+2026-07-19 gov(branches): dedicated rows for 3 pushed branches + resolver/markitdown adjudications
+2026-07-19 gov(handoff): session closure sweep receipt — received, not started
+2026-07-19 chore: session close-out
+2026-07-19 gov: mint #NEXT -> #89 at merge — master max was #88; step-5 HCA pointer deferred
 ```
-Run at copy-back for the dated record; the two SHAs above are this session's substantive work.
 
-**Governance stores changed this session:** `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`,
-`BRANCHES.md`, `HANDOFF.md` (+ `CLAUDE.md` Recent-landings, `closeout.md`).
+All 8 landed on `master` via ff-only merge, pushed to `origin/master`.
+
+**Gate evidence at merge.** Governance-only: `BRANCHES.md`, `DECISIONS_LOG.md`, `FEEDBACK.md`,
+`HANDOFF.md`, `OPEN_QUESTIONS.md`, `ROADMAP.md` — zero `backend/`, `frontend/`, `alembic/`.
+Backend suite **206 passed**, unchanged from #88's 206.
 
 ---
 
 ## 2 · Pending-queue reconciliation
 
-No `;cc` PENDING queue was carried in — the payload was a full brief, not a queue. Reconciled
-against the brief's items:
+| PENDING item (from brief) | Outcome |
+|---|---|
+| `DECISIONS_LOG.md` **#89** — vocabulary adoption is a sweep | **LANDED as #90** in `05f0282`. Renumbered: master max was already **#89** (Q17 / HRV instrumentation), not the #88 the brief assumed. Next free number taken, per the brief's own PRECONDITION. |
+| `FEEDBACK.md` **§13** — a rule proven on two rows is not a rule applied to the store | **LANDED** in `05f0282`, including the corollary that a brief's predicted verdict is a hypothesis with a hint, not a licence. |
 
-- **Q17 resolved on (A)** — LANDED `74558ea`. `OPEN_QUESTIONS.md` Q17 `Status: resolved → #89`;
-  the (B) RR-corroborator clause struck-but-legible (G2). ✔
-- **DECISIONS #89** (brief's draft `#89`, written `### #NEXT`, minted `#89` at merge) — LANDED
-  `74558ea` / `c271834`. Conforms to health-app's Decision/Rationale/Status/How-you-know/
-  Do-not-revisit format. ✔
-- **`feat/recovery-metrics-rhr` BLOCKED→UNSTARTED** + corrected parking rationale — LANDED
-  `74558ea`. ✔
-- **HANDOFF CHAT→CODE receipt + CODE→CHAT close** — LANDED `74558ea` / `c271834`. ✔
-- **Q29 minted** (NOT the brief's "Q5") — LANDED `74558ea`. The brief's "Q5 = historical
-  stale-row reconciliation" was a stale-mirror mis-reference: real health-app Q5 is
-  `/health-connect/sync` dual-field acceptance and was left untouched. Chat approved minting
-  **Q29** as the reconciliation home instead. ✔
+**Two departures from the brief's #90 draft, both committed:**
 
-**Corrections applied to the brief (verified, not assumed):**
-- `1db8833` was **authored 26 Jun** on unmerged `fix/scraper-sh-relayout`; it **reached HCA
-  master 11 Jul** (renumbered #16→#19). The brief's "#19 landed 26 Jun" is imprecise; the
-  entry now states authored-vs-reached. This *strengthens* the Q29 install-segmentation logic
-  (no single commit/merge date is the changepoint).
+- **Scope narrowed to health-app.** The draft asserted the sweep covered "both repos."
+  `health-connect-app` is an unseeable surface from this repo and was never swept, so writing
+  that would have committed the exact defect #90 names. HCA is recorded as OWED inside #90.
+- **Three findings stated once as a shared root**, not three times: a claim inheriting authority
+  from where it sits rather than from what attests it — position
+  (`feat/resolver-candidate-suggestions`), completeness (`feat/interpretation-view-skeleton`),
+  recency (this brief's own scrollback claim).
 
-**PROVISIONAL / OWED — Step 5 (HCA cross-repo pointer): NOT written.** Per chat's decision and
-the single-repo rule, the HCA #19 → health-app Q29 pointer is **deferred to an HCA-rooted
-session**. A ready-to-paste HCA `#20` entry was emitted to chat. Until it lands in
-`health-connect-app`, HCA #19's "separate concern" is unnamed (health-app Q29 already
-cross-refs HCA #19/Q3 one-directionally).
+**Provisional — decided but NOT committed:**
+
+- **Phase 2 (`health-connect-app`) — UNSTARTED.** Its anchor requires the session rooted in
+  `health-connect-app`; this session is rooted in `health-app`, so the single-repo rule forbids
+  it. Recorded OWED in #90, not asserted done.
+- **CLAUDE.md internal contradiction — OPEN, unresolved.** The canonical-stores row
+  (CLAUDE.md:60) assigns `open` / `verifying` / `resolved → #` to `OPEN_QUESTIONS.md`, while
+  #88's state-vocabulary section (CLAUDE.md:72) says the four states apply to it. Left undecided
+  on purpose: that text sits inside the verbatim-propagated shared block, so editing it obligates
+  `health-connect-app`. **This gates Phase 2 step 10**, which assumes four-state on questions.
 
 ---
 
 ## 3 · Cold-resume handoff
 
-**What just landed (#89).** The 6-Jul HRV step (pre mean ≈57 ms / post ≈96 ms) is
-**instrumentation, not physiology**. HCA #19 (`1db8833`) routed three Energy-score reads
-through `findByIdValidBounds` instead of `findById(...).firstOrNull()`, which had been
-returning a negative-width Compose phantom bearing the prior render's value. Same RMSSD node
-throughout — the scraper just stopped binding the stale duplicate. Q17's (B) physiology limb
-is **unevidenced, not disproven**; its RR "corroborator" was void because RR shares the exact
-read path (`vitality_respiratory_rate_average_title`, same screen, same selector, same commit).
+### State at close
 
-**Consequence for readiness (ROADMAP NEXT).** The pre-install HRV baseline ≈57 ms is an
-artifact, not a baseline. Trustworthy HRV history is **short** (post-install only), not long —
-any readiness/trend/protocol attribution built on the 57→96 "rebound" rests on bad rows. The
-"Basic readiness score" NEXT item's 7-day-sample gate should count only post-install nights.
+- `master` @ `a9d8264`, pushed. Tree clean but for untracked `.claude/launch.json`.
+- **BRANCHES.md: 22 rows, all four-state** — 12 DONE / 9 OWED / 1 UNSTARTED. Zero superseded
+  labels in any status column.
+- **OPEN_QUESTIONS.md: 29 questions, all valid** — 18 `open` / 1 `verifying` / 10 `resolved`.
+  (The brief claimed a filtered read showed no unresolved entries; a direct read disproved it.)
 
-**Open questions — HRV cluster:**
-- **Q17** — RESOLVED → #89 (instrumentation limb).
-- **Q29** (NEW) — PENDING. Historical `samsung_hrv_readings` phantom-stale reconciliation.
-  **Prerequisite: segment the series by APK-install history first** (the changepoint is an
-  install event, not a commit — fix authored 26 Jun, on HCA master 11 Jul, data step ~6 Jul,
-  stale APK still emitting phantom 106 on 11 Jul per HCA Q3). **Do NOT reconcile/backfill/
-  delete any row until segmented.**
-- **Q18** — open (verify-at-machine). Out-of-range bounds sweep; distinct from Q29
-  (wrong-magnitude vs stale-but-plausible).
-- **Q13** — open. HRV single-point-of-failure (scraper-only) pending scraper canary (issue #9).
+### Branch terminal-state gate — PASSES
 
-**Single clearest next action.** Carry the ready-to-paste HCA `#20` entry into a
-`health-connect-app`-rooted Code session and land it (append-only; #19 untouched), pointing
-#19's "separate concern" at health-app Q29. Then, separately, Q29's install-history
-segmentation is the gate before any HRV row reconciliation.
+| Branch | `git cherry` | Remote | Terminal state |
+|---|---|---|---|
+| `gov/session-closure-sweep` | merged | never pushed | ff-merged @ `05f0282`, local branch deleted |
+| `feat/feedback-ledger` | `+` (4) | on origin | OWED, dedicated BRANCHES row |
+| `feat/interpretation-view-skeleton` | `+` (3) | on origin | OWED, dedicated BRANCHES row |
+| `feat/checkin-injury-probe` | `+` (2) | on origin | OWED, dedicated BRANCHES row |
+| `feat/recovery-metrics-rhr` | `+` (1) | LOCAL-ONLY | UNSTARTED, parked in BRANCHES row |
 
-**Branch terminal state.**
-- `fix/q17-hrv-instrumentation` — merged (ff) to master + local-deleted (never pushed to
-  origin). ✔
-- Untouched-this-session but flagged: `feat/recovery-metrics-rhr` (1 `+`, in `BRANCHES.md` —
-  now UNSTARTED), `feat/interpretation-view-skeleton` (3 `+`, named in `BRANCHES.md` prose),
-  `feat/feedback-ledger` (4 `+`) and `feat/checkin-injury-probe` (2 `+`) — the last two are
-  referenced only in `BRANCHES.md` numbering prose, not their own rows. Pre-existing; a future
-  session should give them rows or land them. Not this session's to resolve.
+### Loops owed on Luke (named commands, from BRANCHES.md)
+
+1. `fix/probe-harness-fidelity` — `/opt/venv/bin/python probe_resolver.py 1` in the container.
+2. `fix/hrv-sleep-integrity` Task 3 — Railway historical HRV bounds-guard sweep.
+3. `feat/hevy-resolver-activation` — limb 2: a live chat request naming a nonsense movement;
+   confirm the routine is refused **and** the unresolved title is named back.
+4. `feat/connector-error-policy` — live "See all" E2E through the deployed backend against a
+   valid connector key (>1 page of workouts).
+5. `feat/protocol-declaration` — confirm `current_state.declared_state` reads back 23 factors in
+   prod (the seed WRITE is attested; the read-back is not).
+6. `feat/constraint-consumption` — browser-verify `CheckInAM.jsx` renders injury-derived AM
+   soreness items.
+
+### Merge-time debt on the three pushed branches
+
+- `feat/feedback-ledger` — its DECISIONS **#85–#88** collide with master's; renumber at merge,
+  §12 heading ref follows.
+- `feat/checkin-injury-probe` — **#89/#90** collide; the `#89`/`#90` in `injury_probes.py` and
+  `tests/test_injury_probes.py` docstrings must move with them.
+- `feat/interpretation-view-skeleton` — no renumber debt (uses `#NEXT`), but carries a verified
+  **contract drift**: its fixture is `['groups','meta']` against master's
+  `{meta, groups, ungrouped}` (#86). Wiring it as-is silently drops every ungrouped marker.
+
+### Sprint (ROADMAP NOW)
+
+Health Connect permissions fix · Samsung Health package-name correction · Morning check-in screen ·
+Persistent conversation history · Session cards not clickable · Dual-panel scroll layout ·
+`mcp_server.get_hevy_workouts` unimported `Session` type.
+
+### Open questions by status
+
+- **`verifying` (1):** Q4 (HC date offset — resolved in code at #64, awaiting confirmation).
+- **`open` (18):** Q3, Q5, Q6, Q7, Q9, Q10, Q13, Q15, Q18, Q19, Q20, Q22, Q23, Q24, Q25, Q27,
+  Q28, Q29. Cross-repo: Q25 belongs to an HCA-rooted session.
+- **`resolved` (10):** Q1, Q2, Q8, Q11, Q12, Q14, Q16, Q17, Q21, Q26.
+
+### Single clearest next action
+
+**Decide the CLAUDE.md vocabulary contradiction (line 60 vs line 72)** — does `OPEN_QUESTIONS.md`
+keep `open` / `verifying` / `resolved → #`, or adopt the four states? Phase 1 kept the former and
+fixed only the entries invalid under either. The answer determines whether Phase 2 step 10 relabels
+HCA's Q1/Q2/Q4/Q5 to `BLOCKED` or to `open`. Decide it, then open a **`health-connect-app`-rooted**
+session and cut `gov/branches-vocabulary` from its master.
