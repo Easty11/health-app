@@ -492,3 +492,31 @@ surface chat cannot read is an INSTRUCTION TO VERIFY, never a report of fact, re
 Code verifies against the surface (query, ref, run) or STOPS and reports; it never lands on a claim's
 grammar. Recorded here because a rule without its generating incident reads as ceremony and gets deleted;
 this is the incident that earned it.
+
+---
+
+## 13. A rule proven on two rows is not a rule applied to the store (DECISIONS_LOG #90)
+
+#88 demonstrated the four-state vocabulary on `fix/probe-harness-fidelity` and `feat/recovery-metrics-rhr`, and
+treated demonstration as adoption. The other sixteen `BRANCHES.md` rows kept `LANDED` / `IN FLIGHT` / `PARKED` and
+`OPEN_QUESTIONS.md` kept `PENDING` / `PARKED`, so the store a returning session actually reads still spoke the
+superseded dialect.
+
+**Rule:** when a governance change alters a label, format or convention, the landing commit must either sweep every
+existing instance or record the unswept remainder as OWED with the exact scope. Partial adoption is a silent-failure
+mode — nothing goes red, and the store quietly carries two dialects, leaving the reader to guess which one a given
+row is written in.
+
+**Corollary — a brief's predicted verdict is a hypothesis with a hint, not a licence.** Where a brief predicts an
+outcome ("expected: close DONE"), it must name the artifact that would prove it, never the memory that suggests it.
+The #90 sweep's brief predicted three closures. Two held against artifacts on master. The third —
+`feat/connector-error-policy`, "the key was replaced 12 Jul and See-all verified live" — came from chat scrollback,
+was written in the declarative mood, and had no artifact on master or in prod behind it. It stayed OWED. An expected
+closure is a place to look, not a verdict to record.
+
+**Why it generalises:** #90 found the same defect three times in one sweep — a row whose *Unblocks on* column
+vouched for its stale *Status* column (position), a branch that looked complete by merge position while consuming a
+superseded contract (completeness), and a brief asserting prod state from its own recency (recency). One root: a
+claim inheriting authority from where it sits rather than from what attests it. Position, completeness and recency
+are not evidence. Only an artifact is.
+

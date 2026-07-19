@@ -2381,6 +2381,75 @@ than pre-fix (it does not — same RMSSD node, phantom deselected), or Health Co
 
 ---
 
+### 90. Vocabulary adoption is a sweep, not a definition — and position, completeness and recency are not evidence
+
+**Decision:** every `BRANCHES.md` row and `OPEN_QUESTIONS.md` entry **in health-app** is brought to a valid state;
+five outstanding loops adjudicated against artifacts (two closed on evidence, three confirmed genuinely OWED with
+named commands and owners); three previously local-only branches pushed and given dedicated rows. Two standing
+rules follow:
+
+1. **Defining a vocabulary does not adopt it.** A vocabulary change is not landed until every existing row using
+   the superseded labels has been relabelled, in the same session or an immediately following one — or the unswept
+   remainder is recorded as OWED with its exact scope.
+2. **A claim inherits authority from what attests it, never from where it sits.**
+
+Does not amend #88; completes its adoption. **Scope is health-app only** — `health-connect-app`'s stores are an
+unseeable surface from this repo and its sweep is a separate, single-repo session (recorded OWED, below).
+
+**Rationale:** #88 defined the four states and applied them to two `BRANCHES.md` rows as proof of usability, then
+landed. The remaining rows kept `LANDED` / `IN FLIGHT` / `PARKED`, and `OPEN_QUESTIONS.md` kept `PENDING` /
+`PARKED` — so the store a returning session actually reads still spoke the superseded dialect, and `IN FLIGHT` /
+`PARKED` are precisely the "in progress" ambiguity #88 exists to abolish. A vocabulary that coexists with its
+predecessor is worse than either alone: the reader must now decide which dialect a row is written in.
+
+The sweep then surfaced the same defect three times in three disguises. **One root: a claim inheriting authority
+from where it sits rather than from what attests it.**
+
+- **(a) Position.** `feat/resolver-candidate-suggestions` carried `LOOP CLOSED — verified in prod` in its
+  *Unblocks on* column while its *Status* column still read `IN FLIGHT — local-only (never pushed)`. Both were
+  written by the same session about the same work; the row had adopted the new labels partially, so the wrong
+  field vouched for the row. The branch had in fact merged and been deleted — its ref existed nowhere, which is
+  why patch-id (`git cherry`) was unrunnable and adjudication had to go to content on master.
+- **(b) Completeness.** `feat/interpretation-view-skeleton` looks complete by merge position while consuming a
+  superseded contract: its committed fixture's top-level keys are `['groups','meta']` and `ungrouped` appears
+  nowhere in its `frontend/src`, against master's `{meta, groups, ungrouped}` (#86). Merge position vouched for a
+  validity it did not have; wiring the view as-is would silently drop every ungrouped marker.
+- **(c) Recency.** This sweep's own brief asserted a prod verification — "key was replaced 12 Jul and See-all
+  verified live" — drawn from chat scrollback, written in the declarative mood, with no artifact on master or in
+  prod. Recency vouched for attestation. The loop stayed OWED.
+
+Position, completeness and recency are not evidence. Only an artifact is.
+
+**Scoping note — `OPEN_QUESTIONS.md` keeps its own vocabulary.** The four states are for WORK items. A question is
+not a work item: `resolved → #43` carries which decision closed it, information `DONE` cannot express, and `open`
+(undecided) is not `UNSTARTED` (untouched work). `OPEN_QUESTIONS.md` therefore retains `open` / `verifying` /
+`resolved → #` per CLAUDE.md's canonical-stores table, and the sweep fixed only the entries valid under *neither*
+vocabulary (Q10 `PARKED`, Q29 `PENDING`). This exposes a contradiction inside CLAUDE.md itself — the canonical-stores
+row assigns `open`/`verifying`/`resolved` to `OPEN_QUESTIONS.md`, while #88's state-vocabulary section says the four
+states apply to it — which is left OPEN for decision rather than resolved unilaterally, because that text sits in the
+verbatim-propagated shared block and editing it obligates `health-connect-app`.
+
+**Status:** Landed. Governance-only — no production code path, no schema, no migration, no reference asset.
+
+**How you know:** backend suite **206 passed** (`.venv/Scripts/python.exe -m pytest tests/ -q`), unchanged from
+#88's 206 — no non-governance file was touched. `git diff --stat` against the merge-base lists only `BRANCHES.md`,
+`OPEN_QUESTIONS.md`, `ROADMAP.md`, `HANDOFF.md`, `DECISIONS_LOG.md`, `FEEDBACK.md`; zero `backend/`, `frontend/`,
+`alembic/`. Label sweep verified by two greps: status labels —
+`grep -oE "\| \*\*(DONE|OWED|BLOCKED|UNSTARTED)" BRANCHES.md` returns 22 hits over 22 rows (11 DONE / 10 OWED /
+1 UNSTARTED); superseded tokens — `grep -oE "\*\*(LANDED|IN FLIGHT|PARKED|RETIRED)[^*]*\*\*" BRANCHES.md`
+returns none. `grep -nE "^\*\*Status:\*\*" OPEN_QUESTIONS.md | grep -viE "open|verifying|resolved"` returns
+nothing across all 29 questions. One residual `IN FLIGHT` string survives in free prose — a quotation inside the
+(a) audit note recording what was corrected — which is the audit trail, not a row label.
+
+**Do not revisit unless:** a real artifact resists the four states (the `OPEN_QUESTIONS` case above is one, and is
+handled by scope, not by forcing the vocabulary), or a store is found still carrying superseded labels — that is an
+adoption-sweep failure, not a vocabulary failure.
+
+**OWED at landing:** `health-connect-app`'s `BRANCHES.md` (4 rows) and `OPEN_QUESTIONS.md` (Q1/Q2/Q4/Q5 on
+`PENDING`) are NOT swept by this entry and remain on superseded labels. Owner: Luke, in an HCA-rooted session.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
