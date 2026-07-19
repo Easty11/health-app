@@ -2292,7 +2292,7 @@ group name (they must agree — the producer follows the asset).
 
 ---
 
-### #NEXT. Interruption-survival governance — unseeable-surface rule, state vocabulary, HANDOFF ledger, close-out commit-log emission
+### 88. Interruption-survival governance — unseeable-surface rule, state vocabulary, HANDOFF ledger, close-out commit-log emission
 
 **Decision:** Four governance changes under one concern — a session interrupted mid-crossing must be
 resumable from the repo alone, without reconstructing state from chat scrollback. (1) An
