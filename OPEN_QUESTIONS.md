@@ -260,9 +260,12 @@ mean matches the established operative baseline exactly, so old data was valid a
 Two hypotheses, possibly both true: **(A) instrumentation** — the phantom-node fix changed which node
 the scraper binds, now reading a different metric (RMSSD→SDNN ≈ the observed 1.7× ratio); **(B)
 physiology** — tirzepatide ceased 2+ weeks ago (~3 half-lives), GLP-1/GIP washout produces a genuine
-HRV rebound, corroborated by respiratory rate drifting ~14.0→~13.5 br/min over the same window via a
+HRV rebound, ~~corroborated by respiratory rate drifting ~14.0→~13.5 br/min over the same window via a
 *different sensor path* (a scraper bug cannot move RR). The 68% rise exceeds published GLP-1 HRV
-effects alone.
+effects alone.~~ **[struck — resolved → #NEXT on (A): RR is NOT a different sensor path. It is
+`vitality_respiratory_rate_average_title`, read from the same Vitality screen through the same
+phantom-affected selector, fixed in the same HCA commit as HRV (`1db8833`/#19). The RR drift is a
+*prediction* of (A); the "68% rise" is an artifact of stale reads, not a real rebound.]**
 
 **Decision gate = Task 1 node dump** (branch `feat/hrv-node-dump` in **`health-connect-app`**, a
 separate repo — not reachable from a health-app-rooted session). Dump the `HRVAccessibilityService`
@@ -274,8 +277,29 @@ ready: `feat/recovery-metrics-rhr` (Task 2, RHR series in `get_recovery_metrics`
 `samsung_hrv_readings` RHR is the scraper's `sleep_hr_bpm`, same device family as HRV; the truly
 independent discriminator is Health Connect `resting_heart_rate` (query `health_connect_syncs` directly).
 
-**Status:** open — blocked on Task 1 node dump (`health-connect-app`). Cross-refs Q13, issue #9,
-`BRANCHES.md` `feat/recovery-metrics-rhr`.
+**Resolution (→ #NEXT · 2026-07-19).** Closed on **(A) instrumentation**, verified against
+`health-connect-app` master (`1db8833`/#19):
+1. **(A) confirmed — mechanism is stale-phantom *selection*, not a metric change.** #19 routes all
+   three Energy-score reads through `findByIdValidBounds` instead of `findById(...).firstOrNull()`; the
+   phantom is a Compose view-recycling duplicate bearing the *prior* render's value with negative width,
+   which `.firstOrNull()` returned. Same node, same metric (RMSSD) throughout — the scraper simply
+   stopped binding the stale duplicate. (Authored 26 Jun on unmerged `fix/scraper-sh-relayout`; reached
+   HCA master 11 Jul, renumbered #16→#19 — the gate's binary "different node→A / same node→B" missed
+   this third case: same node, but the old reads were the phantom.)
+2. **RMSSD→SDNN withdrawn as surplus.** The 1.7× ratio is coincidence. A stale prior-render value
+   predicts the statistics directly — pre (mean 57, range 24–88, high variance) = scattered stale reads;
+   post (mean 96, range 83–117, variance collapsed) = locked to on-screen truth — with no analyte change
+   required.
+3. **(B)'s corroborator is void — never independent.** RR shares the exact read path (see the struck
+   clause above), so the 14.0→13.5 drift is a *prediction* of (A), not evidence against it.
+
+(B) as *physiology* is **unevidenced, not disproven** — washout may still have moved HRV, but this
+series cannot speak to it. The pre-install baseline ≈57 ms is not a baseline; trustworthy HRV history is
+short, not long. **Historical rows are NOT reconciled here — see Q29** (install-history segmentation is
+the prerequisite; the changepoint is an APK-install event, not a commit).
+
+**Status:** resolved → #NEXT (instrumentation limb; (A) confirmed vs HCA master). Cross-refs Q13, Q18,
+Q29, issue #9, `BRANCHES.md` `feat/recovery-metrics-rhr`, HCA #19 / Q3.
 
 ---
 
@@ -490,6 +514,32 @@ The third subject adds coverage, not capability.
 
 **Status:** open — deferred to the next harness-open, not a branch. Test-instrument only; no production
 code path is involved. Ref: live probe run 2026-07-15; DECISIONS_LOG #83/#84; FEEDBACK §11.
+
+---
+
+## Q29. Historical HRV phantom-stale row reconciliation (`samsung_hrv_readings`)
+
+Spawned by Q17's resolution on **(A)** (→ #NEXT). Pre-fix `samsung_hrv_readings` HRV rows are
+phantom-stale — each carries a *prior render's* value, not the night's, because the scraper's
+`findById(...).firstOrNull()` bound a Compose recycling duplicate (HCA #19). The pre-install baseline
+≈57 ms is an artifact, so any downstream trend / readiness / protocol attribution built on the 57→96
+"rebound" rests on bad rows.
+
+**Why no reconciliation runs yet — the changepoint is an APK-install event, not a commit.** The fix was
+authored 26 Jun (unmerged `fix/scraper-sh-relayout`) and reached HCA master 11 Jul; the data step is
+~6 Jul; HCA Q3 (RESOLVED) records a stale APK (`a5d1643`) still emitting the phantom `106` on 11 Jul. So
+no single commit or merge date partitions the series — phantom-era and valid-era rows interleave by
+*which build was installed when*. **Prerequisite: segment the series by APK-install history first.**
+Reconciling against an unsegmented series bakes the error in permanently.
+
+Distinct from **Q18** (out-of-range bounds sweep — those rows are wrong-*magnitude*; these are
+stale-but-plausible) and from **Q17** (now resolved). The RHR discriminator is likewise contaminated:
+`last_shr`/`sleep_hr_bpm` was phantom-affected too (fixed in the same HCA commit — see `BRANCHES.md`
+`feat/recovery-metrics-rhr`), so Health Connect `resting_heart_rate` (`health_connect_syncs`) is the
+only clean independent path.
+
+**Status:** PENDING — blocked on install-history segmentation. **Do NOT reconcile, backfill, or delete a
+single `samsung_hrv_readings` row until segmented.** Cross-refs Q17, Q18, issue #9, HCA #19 / Q3.
 
 ---
 

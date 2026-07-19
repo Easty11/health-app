@@ -2336,6 +2336,51 @@ ledger is ever proposed (the interleaving problem this closed).
 
 ---
 
+### #NEXT. HRV step-change resolved as instrumentation — Q17 closes on (A); the RR corroborator was never independent
+
+**Decision:** The 6-Jul step in scraper HRV (pre: mean ≈57 ms, range 24–88, high variance; post: mean
+≈96 ms, range 83–117, variance collapsed) is instrumentation, not physiology. Cause is phantom-node
+selection, fixed in `health-connect-app` #19 (`1db8833`): `findById` → `findByIdValidBounds` at three
+call sites — `last_shrv` (HRV), `last_shr` (sleep HR), `vitality_respiratory_rate_average_title` (RR).
+The phantom is a Compose recycling duplicate bearing the PRIOR render's value with negative width;
+`.firstOrNull()` returned it. The fix was **authored 26 Jun** on unmerged `fix/scraper-sh-relayout` and
+**reached HCA master 11 Jul** (renumbered #16→#19) — no single commit or merge date is the changepoint.
+Q17 is resolved on the **(A)** limb.
+
+**Rationale:** *Why stale-value, not metric-change* — Q17 hypothesised RMSSD→SDNN on a ~1.7× ratio;
+withdrawn as surplus. A stale prior-render value predicts the statistics directly (scattered low reads
+before, locked on-screen truth after) without any analyte changing; the ratio match is coincidence.
+*Why (B)'s corroborator was void, not merely outweighed* — Q17 rested (B) on respiratory rate drifting
+14.0→13.5 "via a different sensor path — a scraper bug cannot move RR." RR is read from the same Vitality
+screen through the same defective selector and was fixed in the same commit; the RR drift is a
+*prediction* of (A), not evidence against it. This is the load-bearing correction: an
+assumed-independent corroborator that was never independent.
+
+**Status:** Resolved Q17 → this entry, on (A). Governance-only — no `backend/`, `frontend/`, migration,
+or test touched. **Not decided:** (B) as *physiology* is unevidenced, not disproven — GLP-1/GIP washout
+may still have produced a real HRV change, but the scraper series cannot speak to it. **Consequence:**
+the pre-install HRV baseline ≈57 ms is not a baseline; readiness scoring, trend inference, and protocol
+attribution built on the 57→96 "rebound" rest on an artifact — trustworthy HRV history is short, not
+long. **Historical rows are not reconciled here — Q29** minted for it: the changepoint is an APK-install
+event, not a commit (fix authored 26 Jun, not on HCA master until 11 Jul, data step ~6 Jul, HCA Q3
+records a stale APK re-emitting phantom 106 on 11 Jul), so phantom-era and valid-era rows interleave and
+must be segmented by install history before any correction.
+
+**How you know:** verified against `health-connect-app` master. (1) `1db8833`'s diff shows the three
+`findById`→`findByIdValidBounds` conversions verbatim on `HRVAccessibilityService.kt`. (2) HCA
+`DECISIONS_LOG.md` #19 states all three reads hit the Vitality/Energy-score screen and the phantom bears
+the prior render's value ("a half-landing that fixed only HRV would leave HR/RR reading phantoms").
+(3) No HCA scraper commit exists 2026-07-03…2026-07-10 — the data step has no code change behind it.
+(4) #19 and tracked `nodedump.txt` cite the phantom `'Average: 106 ms'` (width −84) sorting before real
+`'Average: 97 ms'` (width 912), on-screen 97, "Re-confirmed 11 Jul 2026"; HCA Q3 (RESOLVED) independently
+records the stale APK `a5d1643` re-emitting phantom 106 on 11 Jul.
+
+**Do not revisit unless:** a captured node dump shows the post-fix selector binding a *different* metric
+than pre-fix (it does not — same RMSSD node, phantom deselected), or Health Connect `resting_heart_rate`
+(the only uncontaminated path) contradicts the instrumentation reading.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
