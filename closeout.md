@@ -1,159 +1,91 @@
-# closeout — health-app
+# Close-out — 2026-07-19 · #88 interruption-survival governance
 
-Branch: **master**, in sync with `origin/master` (0 ahead / 0 behind).
-Session: five sequential chat implementation briefs — exercise-tag coverage → Hevy resolver activation
-→ resolver candidate suggestions → probe-harness fidelity.
-Status: **complete + landed + prod-verified.**
+Branch: `master` @ `0b24da7` (pushed, origin in sync). Session anchor: `eed3c76` (#87).
 
 ---
 
 ## 1. Real commits this session
 
-Session-open ref: `87ddd0c`. `git log --oneline 87ddd0c..HEAD` — 20 commits, all on master, all pushed:
+`git log --oneline eed3c76..HEAD` (health-app), pre-close-out:
 
 ```
-3feaa44 gov: #83 ratio tier EXERCISED live — floor admits noise, ranking carries it
-7330030 gov(branches): fix/probe-harness-fidelity LANDED at adb67e8
-adb67e8 gov(branches): fix/probe-harness-fidelity row
-5c5b43f fix(probe): fail loudly when a probe never reaches its subject
-40c8b0d gov: #83 verified at 494 rows (quality yes, threshold unexercised) + FEEDBACK 11
-bc5f4f7 gov: DECISIONS_LOG 83/84 + BRANCHES
-62bf248 feat(probe): land the resolver probe harness as a repo instrument
-b21ce7f feat(chat): name candidates in the unresolved-title warning
-35f4d1c feat(hevy): suggest_candidates — ranked candidates for an unresolved title
-d19b0b4 gov(branches): feat/hevy-resolver-activation LANDED at 9193453
-9193453 gov: DECISIONS_LOG 80/81/82 + BRANCHES + strike ROADMAP resolver row
-320eedf test(chat): pin id+title provisioning path — B3 needed no code change
-8ca6108 feat(chat): permit canonical TITLE emission; narrow the #43 parity guard
-bc81911 feat(chat): render workout history with CATALOGUE titles, not logged snapshots
-e626e54 gov: record G5 confirmed in prod + FEEDBACK 10 (false-green instruments)
-fee7f3e gov(branches): fix/exercise-tag-coverage loop CLOSED — prod fallback hit-rate 0
-d01603c gov(branches): fix/exercise-tag-coverage LANDED at 8a29b1f
-8a29b1f gov: DECISIONS_LOG #79 (reference titles key to the catalogue) + BRANCHES
-727adb3 feat(exercise-tags): ID-keyed coverage audit + extract the three-state rule
-68e3c9e fix(exercise-tags): key BSS reference title to the catalogue, not the workout log
+0b24da7 gov: mint #NEXT -> #88 at merge — master max was #87 (eed3c76), no branch merged since
+3cf3d16 gov: #NEXT interruption-survival — unseeable-surface rule, state vocabulary, ledger, close-out git-log
+5243dd6 gov: HANDOFF ledger — CHAT->CODE receipt for interruption-survival brief (#NEXT)
 ```
 
-Decisions minted: **#79 – #84** (each claimed only after re-checking master's max at commit time; all
-uncontested). FEEDBACK gained **§10** (false-green instruments) and **§11** (a probe that presumes its
-own answer). ROADMAP's "Hevy resolver activation" NEXT row struck at `9193453` — it shipped.
+Repo self-record — `git log --format="%ad %s" --date=short -10` (per the #88 close-out rule;
+immutable commit dates, not a self-reported stamp):
 
-Test suite: **137 passed** at close (94 at open). No migration, no schema change, all session.
+```
+2026-07-19 gov: mint #NEXT -> #88 at merge — master max was #87 (eed3c76), no branch merged since
+2026-07-19 gov: #NEXT interruption-survival — unseeable-surface rule, state vocabulary, ledger, close-out git-log
+2026-07-19 gov: HANDOFF ledger — CHAT->CODE receipt for interruption-survival brief (#NEXT)
+2026-07-19 gov: #87 oracle fixture display_name re-sync — #86's contract-divergence caveat exercised
+2026-07-19 test(interpretation): re-sync fixture group display_name + assert it (close silent oracle gap)
+2026-07-18 gov: #86 interpretation producer foundation (4a) — gates, is_moved, flat ungrouped
+2026-07-18 gov: reconcile declared-state number-at-merge debt — mint #NEXT -> #85, BRANCHES row LANDED
+2026-07-18 feat(interpretation): foundation producer (4a) — newest+prior gates, is_moved, flat ungrouped
+2026-07-18 gov: BRANCHES row for feat/protocol-declaration — in flight, local-only
+2026-07-18 gov: #NEXT structured declared-state ledger — continuity-aware types + phase derivation
+```
+
+Cross-repo (health-connect-app, separate repo, pushed `4f36432..63bdc73`):
+
+```
+63bdc73 gov: propagate shared loop-rules block — unseeable-surface rule, state vocabulary, close-out git-log
+```
+
+A `chore: session close-out` commit follows this file on `master`.
 
 ---
 
 ## 2. Pending-queue reconciliation
 
-**No `;cc` pending-commit queue was carried in** — the session ran from five direct chat briefs, each
-reconciled at its own gate. Every brief item landed:
+No chat `;cc` pending-commit queue was carried in — this session ran from a pasted **brief**
+(interruption-survival governance, 4 changes / 5 gates). Reconciling the brief's payload against
+landed commits:
 
-| Brief item | Landed |
-|---|---|
-| BSS reference title → catalogue-keyed | `68e3c9e` |
-| ID-keyed coverage audit + `classify_coverage` extraction | `727adb3` |
-| G5 prod-clobber recorded + FEEDBACK §10 | `e626e54` |
-| History renders catalogue titles (#81) | `bc81911` |
-| Title emission + parity-guard narrowing (#80/#82) | `8ca6108` |
-| `suggest_candidates` + candidates in the warning (#83) | `35f4d1c`, `b21ce7f` |
-| Probe harness as a repo instrument (#84) | `62bf248` |
-| Probe fails loudly when it never reaches its subject | `5c5b43f` |
+| Brief item | Landed | State |
+|---|---|---|
+| 1 · Unseeable-surface rule → CLAUDE.md shared block (both repos) | `3cf3d16` (health-app) + `63bdc73` (HCA) | **DONE** |
+| 2 · State vocabulary (DONE/BLOCKED/OWED/UNSTARTED) → shared block (both repos) | `3cf3d16` + `63bdc73` | **DONE** |
+| 3 · `HANDOFF.md` — append-only ledger, health-app root, receipt-first | `5243dd6` (receipt, pre-work) + `3cf3d16` (landing entry) | **DONE** |
+| 4 · `/closeout` emits `git log --date=short -10` → bound in CLAUDE.md (not session-local `closeout.md`) | `3cf3d16` | **DONE** (exercised in §1) |
+| 5 · FEEDBACK §12 — the #87 declarative-precondition incident | `3cf3d16` | **DONE** |
+| DECISIONS #88 minted at merge | `0b24da7` | **DONE** |
 
-**Brief premises that did not survive contact with the tree** (reported, not improvised across):
+Gate results (verified on landed `master`):
 
-- **Bulgarian test reconciliation** — no such reference existed. `tests/test_exercise_region_tags.py`
-  never pinned the bare title; the seeder test derives fixtures from the proposal, so a rename is
-  invisible to it by construction. No commit.
-- **`unresolved` discarded in `_process_routine_actions`** — false. It already surfaced the titles and
-  skipped `create_routine` (fail-closed, whole-routine), pinned since #60 by
-  `test_unresolvable_title_skips_routine`. **No code shipped**; `320eedf` pins the id+title path that
-  #82 newly opened instead.
-- **Threading `db` into `context_builder`** — rejected. It would have broken the formatter-only
-  invariant the #43 guard protects, then hidden the breach behind an optional-default parameter. The
-  join runs upstream in `routers/chat.py` (`bc81911`); the guard is untouched structurally.
-- **The "byte-parity guard" not found by grep** — it exists:
-  `test_context_builder_output_unchanged_pre_post_refactor` (`tests/test_current_state.py:138`), a
-  full-string assertion against pinned SHA `3360ed5`, **unre-baselineable** (the SHA cannot move without
-  going old-vs-old, per the test's own comment). Forced #80's narrowing: measured before accepting —
-  5055/6398 chars (79%) stay under the assertion, and 1338 of the 1343 dropped chars ARE the excised
-  section.
-- **Guard re-baseline had no decision entry** — ROADMAP:36 named it decision-grade and the brief dropped
-  it. Minted as **#80**; the brief's #80/#81 shifted to #81/#82.
+- **G1** — CLAUDE.md shared blocks byte-identical across both repos: **PASS** (committed diff clean; 147 lines / 9585 bytes each). No pre-existing divergence — the blocks were already identical before edit.
+- **G2** — full suite green, count unchanged from 206: **PASS** (`206 passed`, re-run on landed master).
+- **G3** — `git diff --stat` scoped to `CLAUDE.md` ×2, `HANDOFF.md`, `FEEDBACK.md`, `BRANCHES.md`, `DECISIONS_LOG.md`; no `backend/`/`frontend/`/`alembic/`: **PASS**.
+- **G4** — `HANDOFF.md` non-vacuous (≥ #87 land + this brief's receipt): **PASS** (3 entries).
+- **G5** — vocabulary applied to two live BRANCHES rows: **PASS** — `fix/probe-harness-fidelity` → OWED (names the outstanding container run), `feat/recovery-metrics-rhr` → BLOCKED (names the HCA node-dump blocker + owner Luke). Neither resisted the four states.
 
-**Provisional / uncommitted:** nothing. Every decision landed in a commit.
+Nothing decided-but-uncommitted. All provisional items landed.
 
 ---
 
 ## 3. Cold-resume handoff
 
-### What shipped
-
-The #60/#61 title→id resolver is **live in prod and verified end-to-end**, having been dormant since it
-landed. The chain: tag reference keyed to the catalogue (#79) · history rendered to the model with
-catalogue titles via an upstream `canonical_title` join (#81) · provisioning accepts a canonical title,
-matching still EXACT (#82) · unresolved titles return ranked candidates instead of a dead end (#83) ·
-the #43 parity guard narrowed rather than retired (#80) · model-facing contracts verified by an
-operator-run probe (#84).
-
-**Prod verification (2026-07-15, live 494-row catalogue, real model):** fallback hit-rate **0** over 38
-distinct movements (25 tagged / 13 adjudicated no-pattern / 0 untagged). A bare `Calf Raise` misses and
-returns 5 genuine candidates; fail-closed holds until the user disambiguates, then the routine
-provisions. `B5D3A742` resolves as `Bulgarian Split Squat (Dumbbell)` while still logged as bare
-`Bulgarian Split Squat` — #79's drift, confirmed in prod.
-
-### Open items owed on this work
-
-1. **`Pullover` is not constraint-neutral → OPEN_QUESTIONS Q28.** `probe_resolver.py` labels it so, but
-   the live model flagged it against the active **shoulder injury** (horizontal adduction / overhead).
-   It proceeded after confirmation so the measurement survived — the probe passes for a reason it does
-   not state. Q28 records that the obvious replacements each fail one of the two required constraints
-   (Reverse Fly is in the 28-day window → no title forced; Cable Crossover is horizontal adduction), and
-   that dropping `Pullover` outright probably suffices.
-2. **`_SUGGEST_MIN_RATIO = 0.5` — closed, do not re-open naively.** The ratio tier fired live
-   (`Preacher Curl` → `Rope Cable Curl` 0.643 / `Drag Curl` 0.636; `Pullover` → `Pull Up` 0.533). The
-   floor admits noise; containment-first **ranking** carries the feature. #83 records explicitly: **do
-   not raise the floor** — 0.512 (a real candidate) sits below 0.533 (noise), so ratio does not separate
-   signal from noise in either direction at this scale.
-3. **G5 live-resync clobber** — confirmed in prod 2026-07-14 (operator run), but the fingerprints are
-   **pre-BSS (36 tags / 55 adjudicated)** and prod is now 37/56: a dated, superseded baseline, not a
-   reproducible check. The result stands (the mechanism is row-count-indifferent).
-4. **Q27** — the 13 adjudicated no-pattern movements (rotator-cuff / isolation families) park behind the
-   v1 strength-ratio axis. Separate design pass, not a gap.
-
-### Open questions by status
-
-**Opened this session: Q28** (`Pullover` is not a constraint-neutral probe subject — the resolver probe
-passes by luck). None resolved. No other OPEN_QUESTIONS entry edited.
-- **open:** **Q28 (new)** · Q5 (Polar `hrv[]` payload) · Q7 / Q20 (findings-vs-restrictions schema gap) · Q13 ·
-  Q17 (HRV instrumentation-vs-physiology, blocked on the `health-connect-app` node dump) ·
-  Q18 (Railway historical sweep, independent of Q17) · Q19 (desktop scroller) · Q27 (v1 strength-ratio
-  axis) · the `health-connect-app`-rooted items (carry across; single-repo scope rule).
-- **verifying:** the #64 G4 item.
+### Branch terminal state
+- **Touched this session:** `gov/interruption-survival` — merged (ff to master `0b24da7`) + local branch deleted. Never pushed to origin (ff'd into master, which is pushed). **Resolved.**
+- **Pre-existing branch-gate DEBT (not touched this session, surfaced by the close-out sweep):** three local branches carry real unmerged work but have **no dedicated `BRANCHES.md` row** — only prose mentions inside rows 5/6:
+  - `feat/feedback-ledger` (+4 vs origin/master)
+  - `feat/interpretation-view-skeleton` (+3)
+  - `feat/checkin-injury-probe` (+2)
+  Each needs a proper row (purpose / why-parked / unblocks-on), or push/discard. Not fabricated here — their verified state is not in hand this session. `feat/recovery-metrics-rhr` (+1) does have a row (now **BLOCKED**).
 
 ### Current sprint (ROADMAP NOW)
+Health Connect permissions fix (record types 38/35/11/37); Samsung Health package-name correction (`com.sec.android.app.shealth`, verify via Railway Postgres); morning check-in screen (Hooper Index, primary daily touchpoint); persistent conversation history (clears on refresh); session-cards-not-clickable + dual-panel scroll UI bugs; `mcp_server.get_hevy_workouts` unimported `Session` one-line fix.
 
-Health Connect permissions (record types 38/35/11/37) · Samsung Health package-name correction
-(`com.sec.android.app.shealth`; verify via Railway query) · morning check-in screen (Hooper Index) ·
-persistent conversation history · session cards not clickable · dual-panel scroll ·
-`mcp_server.get_hevy_workouts` unimported `Session` (pre-existing one-line import fix).
+### Open questions (by status)
+- **open:** Q13 (HRV scraper-only single point of failure), Q15 (`3497…` prod-drift reconciliation), Q17 (HRV step-change (A) instrumentation vs (B) physiology — blocked on Task-1 HCA node dump), Q18 (`samsung_hrv_readings` out-of-range historical sweep, verify-at-Railway), Q19 (desktop workout-detail scroller starved), Q20 (clinical findings vs restrictions conflated in `user_knowledge_entries.value`), Q22 (promote exercise-region tags to source-agnostic layer, deferred), Q23 (`_RADICULAR_/_RA_FLARE_` block-set revision), Q24 (`laterality` consumers / `capability_state.side`), Q25 (cross-repo: HCA remote branch `claude/hevy-api-workout-query-teulc2` disposition — HCA-rooted session), Q27 (Capability_Taxonomy v1 strength-ratio axis), Q28 (`Pullover` not a constraint-neutral probe subject — next harness-open).
+- **resolved:** Q21 (lab expectation contract vs injury trajectories — rhyme, no shared code), Q26 (→ #76, three-state coverage).
 
-### Branches
-
-- Landed + deleted this session (none ever pushed to origin): `fix/exercise-tag-coverage` ·
-  `chore/g5-record` · `feat/hevy-resolver-activation` · `feat/resolver-candidate-suggestions` ·
-  `chore/resolver-loop-close` · `fix/probe-harness-fidelity` · `chore/ratio-tier-exercised`.
-- `feat/recovery-metrics-rhr` — **PARKED** (prior session, not touched here; `git cherry` → `+ a4e1887`,
-  real unmerged work). Held on the HRV Task-1 node dump in `health-connect-app`.
-- Gate: **PASS** — no branch in undefined limbo.
+### Lead worth chasing (cross-repo, not consumed here)
+`health-connect-app` has an untracked **`nodedump.txt`** (plus modified `src/healthConnect.js` and untracked `checkin_build_brief.md`, `hevy_routine.json`) — uncommitted WIP left untouched. Given Q17 / `feat/recovery-metrics-rhr` are BLOCKED precisely on "the Task-1 HCA node dump," that filename is a candidate unblocker. Unverified (unpushed local disk — an instruction to verify, not a fact). Investigate from an HCA-rooted single-repo session.
 
 ### Single clearest next action
-
-**Resolve OPEN_QUESTIONS Q28** — drop `Pullover` from `_RESOLVER_PROBE` in `backend/probe_resolver.py`
-(keeping `Calf Raise` + `Preacher Curl`, both prod-confirmed to force a title), then re-run
-`/opt/venv/bin/python probe_resolver.py 1` in the Railway container. It is the only item this session
-leaves that can silently rot: the probe currently passes for a reason it does not state, which is the
-exact shape FEEDBACK §11 was written about. **The backing is Q28, not this file** — `closeout.md` is
-session-local and the next close-out overwrites it. After that, pick up the ROADMAP NOW items.
-
-### Untracked, left alone (not mine)
-
-`.claude/launch.json`, `backend/gate_test.py`.
+Resolve the pre-existing branch-gate debt: give `feat/feedback-ledger`, `feat/interpretation-view-skeleton`, and `feat/checkin-injury-probe` dedicated `BRANCHES.md` rows (or push/discard) so no local branch with real work sits in undefined limbo. (Then, separately: chase the HCA `nodedump.txt` lead above.)
