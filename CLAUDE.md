@@ -74,8 +74,10 @@ Four states, exhaustive, no fifth. Applies to `BRANCHES.md` Status, `OPEN_QUESTI
 
 - **DONE** — landed on master (SHA) or applied to a named UI file. Nothing further required by
   anyone.
-- **BLOCKED** — cannot proceed; names the blocker and its owner.
-- **OWED** — work finished, loop not closed; names the exact command or check outstanding.
+- **BLOCKED** — cannot proceed; names the blocker and its owner. A trigger for when work
+  becomes *worth* doing is not a blocker on its being *possible* — that is UNSTARTED.
+- **OWED** — work or decision settled, loop not closed; names the exact command or check
+  outstanding.
 - **UNSTARTED** — untouched.
 
 No "in progress": half-done work is **BLOCKED** (has a blocker) or **UNSTARTED** (doesn't).
