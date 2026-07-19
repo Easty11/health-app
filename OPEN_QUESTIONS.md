@@ -262,7 +262,7 @@ the scraper binds, now reading a different metric (RMSSD→SDNN ≈ the observed
 physiology** — tirzepatide ceased 2+ weeks ago (~3 half-lives), GLP-1/GIP washout produces a genuine
 HRV rebound, ~~corroborated by respiratory rate drifting ~14.0→~13.5 br/min over the same window via a
 *different sensor path* (a scraper bug cannot move RR). The 68% rise exceeds published GLP-1 HRV
-effects alone.~~ **[struck — resolved → #NEXT on (A): RR is NOT a different sensor path. It is
+effects alone.~~ **[struck — resolved → #89 on (A): RR is NOT a different sensor path. It is
 `vitality_respiratory_rate_average_title`, read from the same Vitality screen through the same
 phantom-affected selector, fixed in the same HCA commit as HRV (`1db8833`/#19). The RR drift is a
 *prediction* of (A); the "68% rise" is an artifact of stale reads, not a real rebound.]**
@@ -277,7 +277,7 @@ ready: `feat/recovery-metrics-rhr` (Task 2, RHR series in `get_recovery_metrics`
 `samsung_hrv_readings` RHR is the scraper's `sleep_hr_bpm`, same device family as HRV; the truly
 independent discriminator is Health Connect `resting_heart_rate` (query `health_connect_syncs` directly).
 
-**Resolution (→ #NEXT · 2026-07-19).** Closed on **(A) instrumentation**, verified against
+**Resolution (→ #89 · 2026-07-19).** Closed on **(A) instrumentation**, verified against
 `health-connect-app` master (`1db8833`/#19):
 1. **(A) confirmed — mechanism is stale-phantom *selection*, not a metric change.** #19 routes all
    three Energy-score reads through `findByIdValidBounds` instead of `findById(...).firstOrNull()`; the
@@ -298,7 +298,7 @@ series cannot speak to it. The pre-install baseline ≈57 ms is not a baseline; 
 short, not long. **Historical rows are NOT reconciled here — see Q29** (install-history segmentation is
 the prerequisite; the changepoint is an APK-install event, not a commit).
 
-**Status:** resolved → #NEXT (instrumentation limb; (A) confirmed vs HCA master). Cross-refs Q13, Q18,
+**Status:** resolved → #89 (instrumentation limb; (A) confirmed vs HCA master). Cross-refs Q13, Q18,
 Q29, issue #9, `BRANCHES.md` `feat/recovery-metrics-rhr`, HCA #19 / Q3.
 
 ---
@@ -519,7 +519,7 @@ code path is involved. Ref: live probe run 2026-07-15; DECISIONS_LOG #83/#84; FE
 
 ## Q29. Historical HRV phantom-stale row reconciliation (`samsung_hrv_readings`)
 
-Spawned by Q17's resolution on **(A)** (→ #NEXT). Pre-fix `samsung_hrv_readings` HRV rows are
+Spawned by Q17's resolution on **(A)** (→ #89). Pre-fix `samsung_hrv_readings` HRV rows are
 phantom-stale — each carries a *prior render's* value, not the night's, because the scraper's
 `findById(...).firstOrNull()` bound a Compose recycling duplicate (HCA #19). The pre-install baseline
 ≈57 ms is an artifact, so any downstream trend / readiness / protocol attribution built on the 57→96

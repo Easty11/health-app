@@ -2336,7 +2336,7 @@ ledger is ever proposed (the interleaving problem this closed).
 
 ---
 
-### #NEXT. HRV step-change resolved as instrumentation — Q17 closes on (A); the RR corroborator was never independent
+### 89. HRV step-change resolved as instrumentation — Q17 closes on (A); the RR corroborator was never independent
 
 **Decision:** The 6-Jul step in scraper HRV (pre: mean ≈57 ms, range 24–88, high variance; post: mean
 ≈96 ms, range 83–117, variance collapsed) is instrumentation, not physiology. Cause is phantom-node
