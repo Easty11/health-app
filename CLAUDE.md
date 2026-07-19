@@ -232,9 +232,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#89** — HRV step-change resolved as **instrumentation**, not physiology: Q17 closes on (A) — the 6-Jul step is phantom-node selection (HCA #19), the RR "corroborator" was never an independent sensor path, and historical `samsung_hrv_readings` reconciliation is deferred to new Q29 (segment by APK-install history first). See DECISIONS_LOG #89.
 - **#88** — Interruption-survival governance: unseeable-surface rule + four-state vocabulary (DONE / BLOCKED / OWED / UNSTARTED) added to the CLAUDE.md shared block (both repos, byte-identical), a new append-only `HANDOFF.md` ledger, and `/closeout` now emitting an immutable-dated `git log`. See DECISIONS_LOG #88.
 - **#85 – #87** — Interpretation build cluster: structured declared-state ledger (continuity-aware types + phase derivation), the deterministic interpretation producer FOUNDATION (4a — newest+prior gates, `is_moved`, flat `ungrouped[]`), and the oracle fixture group `display_name` re-sync now asserted. See DECISIONS_LOG #85–#87.
-- **#79 – #84** — Hevy resolver activated end-to-end: exercise-tag reference keyed to the catalogue + ID-keyed coverage audit, history rendered with catalogue titles, provisioning accepts a canonical title (matching stays exact), unresolved titles return ranked candidates, the #43 context-builder parity guard narrowed, and model-facing contracts verified by an operator probe. See DECISIONS_LOG #79–#84.
 
 ---
 
