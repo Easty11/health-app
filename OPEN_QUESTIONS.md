@@ -161,7 +161,7 @@ not built. PSL covers Luke's direct solo/gym capture, so the need only bites if 
 HC/companion lane carries a Polar user requiring per-second — currently none (Deb's
 wearable integration deferred, Cooper has no wearable).
 
-**Status:** PARKED, low priority. Revisit when the Metabolic-load channel is wired to
+**Status:** open (low priority). Revisit when the Metabolic-load channel is wired to
 Polar-in-HC data for a real consumer.
 
 ---
@@ -538,7 +538,7 @@ stale-but-plausible) and from **Q17** (now resolved). The RHR discriminator is l
 `feat/recovery-metrics-rhr`), so Health Connect `resting_heart_rate` (`health_connect_syncs`) is the
 only clean independent path.
 
-**Status:** PENDING — blocked on install-history segmentation. **Do NOT reconcile, backfill, or delete a
+**Status:** open — blocked on install-history segmentation (owner: Luke). **Do NOT reconcile, backfill, or delete a
 single `samsung_hrv_readings` row until segmented.** Cross-refs Q17, Q18, issue #9, HCA #19 / Q3.
 
 ---
