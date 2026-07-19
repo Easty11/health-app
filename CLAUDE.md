@@ -44,6 +44,14 @@ re-creates the two-master drift this whole model exists to kill.*
   into Claude.ai project knowledge. That is the exact mechanism that produced the drift
   this model exists to kill. Project knowledge holds stable orientation docs only.
 
+### The unseeable-surface rule
+
+Chat can verify only what is on a pushed ref. Any brief statement about a surface chat cannot
+read — UI-maintained knowledge files, unpushed branches, local disk, Railway/prod state, the
+operator container — is an INSTRUCTION TO VERIFY, never a report of fact, regardless of how it
+is phrased. Declarative mood does not make it attested. Verify against the surface or STOP and
+report; never land on it.
+
 ### Canonical stores
 
 | Store | Holds | Discipline |
@@ -58,6 +66,19 @@ re-creates the two-master drift this whole model exists to kill.*
 **Stays in project knowledge, never in the repo** (stable, chat-analysis context):
 `Clinical_Protocol`, `Athlete_Profile`, lab PDFs, `Stack`, `API_CONTRACTS`,
 `Hevy_Pattern`, `Readiness_Algorithm`.
+
+### State vocabulary
+
+Four states, exhaustive, no fifth. Applies to `BRANCHES.md` Status, `OPEN_QUESTIONS.md`,
+`ROADMAP.md`, and close-outs.
+
+- **DONE** — landed on master (SHA) or applied to a named UI file. Nothing further required by
+  anyone.
+- **BLOCKED** — cannot proceed; names the blocker and its owner.
+- **OWED** — work finished, loop not closed; names the exact command or check outstanding.
+- **UNSTARTED** — untouched.
+
+No "in progress": half-done work is **BLOCKED** (has a blocker) or **UNSTARTED** (doesn't).
 
 ### DECISIONS_LOG discipline
 
@@ -90,7 +111,11 @@ must match it.
 - **Code close-out (`/closeout`)**:
   1. Reads the canonical stores.
   2. Reports the **actual commits** made this session (`git log` since open) — not
-     suggested commit messages.
+     suggested commit messages. Additionally emits
+     `git log --format="%ad %s" --date=short -10` so the handoff carries the repo's own
+     record — commit dates are immutable and cannot drift, where a self-reported stamp can.
+     (This binds here, not in `closeout.md`: that file is session-local and overwritten every
+     close-out, so a rule left only there would not survive.)
   3. **Reconciles the pending-commit queue**: confirms each `PENDING` item landed in a
      commit, or states why not.
   4. **Branch terminal-state gate** — every branch touched this session ends

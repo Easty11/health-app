@@ -2292,6 +2292,50 @@ group name (they must agree — the producer follows the asset).
 
 ---
 
+### #NEXT. Interruption-survival governance — unseeable-surface rule, state vocabulary, HANDOFF ledger, close-out commit-log emission
+
+**Decision:** Four governance changes under one concern — a session interrupted mid-crossing must be
+resumable from the repo alone, without reconstructing state from chat scrollback. (1) An
+**unseeable-surface rule** in the CLAUDE.md shared block: any declarative claim about a surface chat
+cannot read (UI-maintained knowledge files, unpushed branches, local disk, Railway/prod state, the
+operator container) is an INSTRUCTION TO VERIFY, never a report of fact. (2) A four-state **vocabulary**
+— DONE / BLOCKED / OWED / UNSTARTED, exhaustive, no "in progress" — applied to `BRANCHES.md` Status,
+`OPEN_QUESTIONS.md`, `ROADMAP.md`, and close-outs. (3) A new append-only `HANDOFF.md` ledger (`health-app`
+root, one ledger, newest-first) whose `CHAT→CODE` receipt is written before work begins. (4) `/closeout`
+additionally emits `git log --format="%ad %s" --date=short -10`, so the handoff carries the repo's own
+immutable commit dates. Concern-split: rules (1, 2) + the generating incident (FEEDBACK §12) are one
+concern; the ledger (3, 4) another. Does not amend #86 or #87.
+
+**Rationale:** #87's brief asserted a precondition in the declarative mood; Code reflected it as
+operator-attested; the attribution chain terminated in chat's own sentence, and three turns went to
+resolving a state nobody had observed (FEEDBACK §12). Generalised: chat can verify only pushed refs, so a
+claim's grammar is not its evidence; "in progress" hides whether work is BLOCKED or merely UNSTARTED; and
+a session's state that lives only in scrollback makes an interrupted crossing unrecoverable. The four
+states are exhaustive by construction (has-a-blocker → BLOCKED; finished-but-loop-open → OWED;
+touched-vs-untouched partitions the rest). One ledger, not two, avoids the interleaving a per-lane split
+reintroduces. The close-out git-log binds in CLAUDE.md, not `closeout.md`, because that file is
+session-local and overwritten each close-out — a rule left only there would not survive.
+
+**Status:** Landed. Governance-only — no backend, frontend, migration, or reference asset touched;
+`latest_lab_results`, the interpretation producer, and every gate are byte-unchanged. The CLAUDE.md shared
+block was edited in both repos and left byte-identical.
+
+**How you know:** 206 tests green (`backend/.venv` pytest), count unchanged from #86/#87 — a moved count
+would prove something non-governance was touched. The two CLAUDE.md shared blocks diff byte-identical
+across both repos (147 lines / 9585 bytes each). `git diff --stat` is scoped to `CLAUDE.md` ×2,
+`HANDOFF.md`, `FEEDBACK.md`, `BRANCHES.md`, `DECISIONS_LOG.md` — no `backend/`, `frontend/`, or `alembic/`.
+The vocabulary was applied to two live `BRANCHES.md` rows as proof it is usable, not aspirational —
+`fix/probe-harness-fidelity` → OWED (names the outstanding container run) and `feat/recovery-metrics-rhr`
+→ BLOCKED (names the HCA node-dump blocker + owner Luke); neither resisted the four states. `HANDOFF.md`
+landed non-vacuous — the #87 land + this brief's receipt — with the receipt committed (`5243dd6`) before
+any substantive work, demonstrating the interruption-survival property it defines.
+
+**Do not revisit unless:** a real artifact resists the four states (a row that is none of
+DONE/BLOCKED/OWED/UNSTARTED — that is a finding about the vocabulary, not the row), or a second handoff
+ledger is ever proposed (the interleaving problem this closed).
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

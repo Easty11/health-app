@@ -468,3 +468,27 @@ loud no-op: a subsystem that can be inert must say so, never exit 0 quietly). An
 whose behaviour depends on live state, either pin the state in a fixture or expect the probe to measure the state
 rather than the code. Ask of any green probe: did this actually execute the thing it claims to have tested? If it
 cannot prove it did, it did not.
+
+---
+
+## 12. A declarative claim about an unseeable surface is an instruction to verify, not a fact (DECISIONS_LOG #88)
+
+**What happened:** #87's brief asserted a precondition in the declarative mood — a statement about a
+surface chat cannot read (the corrected `INTERPRETATION_OUTPUT_CONTRACT.md`, UI-maintained per #63, not
+in the repo). Code reflected the claim back as if it were operator-attested. When the attribution was
+traced, the chain terminated in chat's own sentence: no operator run, no Postgres query, no pushed ref
+ever carried it. Three turns went to resolving the state of something nobody had observed.
+
+**The disease, not the instance:** the loop already forbids "the API has a field for it" (the
+**How-you-know** rule) and "a test passed = done" (§8, §10). This is the same failure one level up — a
+claim's GRAMMAR mistaken for its EVIDENCE. Declarative mood is free: anyone can write "master is at #87"
+or "the seed ran," and the sentence attaches no artifact. Chat can verify only what is on a pushed ref;
+everything it says about local disk, prod/Railway, the operator container, or a UI-maintained file is a
+claim it cannot itself check. Reflecting that claim back as attested manufactures a fact out of a
+sentence — and a state nobody looked at then costs turns to unwind.
+
+**Rule going forward:** the unseeable-surface rule (CLAUDE.md shared block) — any brief statement about a
+surface chat cannot read is an INSTRUCTION TO VERIFY, never a report of fact, regardless of phrasing.
+Code verifies against the surface (query, ref, run) or STOPS and reports; it never lands on a claim's
+grammar. Recorded here because a rule without its generating incident reads as ceremony and gets deleted;
+this is the incident that earned it.

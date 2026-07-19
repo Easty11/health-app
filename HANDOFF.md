@@ -16,5 +16,6 @@ entries may ride the next substantive commit.
 
 ---
 
+2026-07-19 10:01 AEST | CODE→CHAT | #88 governance built on gov/interruption-survival (unseeable-surface rule, state vocabulary, HANDOFF ledger, close-out git-log emission); landing to master. Re-sync CLAUDE.md ×2, FEEDBACK, DECISIONS_LOG, BRANCHES, HANDOFF from disk; master SHA in closeout.
 2026-07-19 09:44 AEST | CHAT→CODE | Interruption-survival governance brief received — 4 changes, one concern (→ #88 at merge). Received, not started.
 2026-07-19 09:02 AEST | CODE | #87 landed (eed3c76) — oracle fixture group display_name re-sync.
