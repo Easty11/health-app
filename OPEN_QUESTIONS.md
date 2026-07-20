@@ -447,10 +447,14 @@ here until merged+deleted." The store is violating its own rule. Needs a disposi
 BRANCHES.md) or kill it. Not this repo's / this brief's job — logged only.
 
 **Status:** DONE → #91 — the branch now carries a dedicated row in `health-connect-app`'s `BRANCHES.md`
-(added 2026-07-20, status OWED, naming `git push origin --delete claude/hevy-api-workout-query-teulc2` as
-Luke's call — remote-ref deletion is not Code's). This question asked whether the branch was **governed or
-killed**; governing it discharges the question. The branch's own disposition remains OWED **in HCA's store**,
-which is where it belongs — tracking it here too would be the duplication defect Q31 records.
+(added at HCA `f15b545`, "row the unrowed branch"). This question asked whether the branch was **governed or
+killed**; governing it discharges the question.
+
+**Both limbs now closed (verified 2026-07-20, #93).** The disposition this entry left OWED in HCA's store has
+since completed: the operator deleted the remote ref, HCA's row reads `DONE → discarded 2026-07-20`, and
+`git ls-remote --heads origin claude/hevy-api-workout-query-teulc2` returns empty — verified from an
+HCA read during the #93 session. Both the omission this question recorded and its subject are gone.
+The row remains HCA's to hold; tracking it here too would be the duplication defect Q31 records.
 
 ---
 
@@ -632,6 +636,34 @@ repo's ritual definition is out of this brief's scope, and doing it unbidden is 
    drifted", which is the same ambiguity the vocabulary sweeps existed to remove.
 
 **Status:** UNSTARTED — no blocker; both questions are answerable at will. Owner: Luke.
+
+---
+
+## Q33. The shared loop-rules block still says `parked` — the definition outlasted every sweep
+
+`CLAUDE.md:128` (health-app) and `CLAUDE.md:116` (health-connect-app) carry the same sentence:
+
+> `branch with `+` commits vs `origin/master` must be pushed, parked in `BRANCHES.md`,`
+
+This is a **generator instruction**, not narration — it tells the next session what to call a branch,
+so it re-emits the struck vocabulary every time it is read. It survives the frame-vs-narration filter
+that correctly exempts `retired` (prose) and the OAuth `parks the request` (different word-sense).
+
+Knowingly deferred at #93, not missed. Two reasons, both structural:
+
+1. It sits inside the **verbatim-propagated shared block**, fingerprint-gated at
+   `4243c91ce78e0331ddfa5178aa3006b8` / 155 lines / 10232 B. Editing it from a health-app-rooted
+   session re-breaches G1 — the exact obligation #92 discharged.
+2. Under the paired-obligation protocol (#92), a shared-block edit creates a **pair**: the editing
+   session records it OWED, the return session discharges it. It therefore needs its own brief and a
+   mirror-first plan, not a drive-by fix at the end of an unrelated sweep.
+
+The two repos are **identical** on this line, so nothing has diverged — the deferral is safe, not
+merely tolerable. What is *not* safe is leaving it untracked: after #93 both rituals say `rowed`
+while the document that defines the vocabulary says `parked`.
+
+**Status:** UNSTARTED — no blocker; needs a shared-block brief with a mirror-first plan and a G1
+re-fingerprint on both sides. Owner: Luke.
 
 ---
 
