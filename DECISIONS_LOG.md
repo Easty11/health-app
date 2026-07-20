@@ -2591,6 +2591,76 @@ sweeping it unbidden is not Code's call.
 
 ---
 
+### 93. Vocabulary adoption completes at the frame, not the values — and sweeps run definition-first
+
+**Decision:** two instances of the superseded vocabulary are struck from this repo:
+`.claude/commands/closeout.md:34` (`parked` as a status verb → `rowed`, mirroring HCA) and
+`BRANCHES.md:3` (the `Why parked | Unblocks on` column pair → `Detail | Blocker / outstanding (owner)`,
+with HCA's four-state preamble ported verbatim above the table). Header and preamble are now
+byte-identical to `health-connect-app` at the same line numbers (both `BRANCHES.md:3–9`, header at `:8`).
+Q25's stale sub-claim is corrected (both limbs closed); `FEEDBACK` §14 gains occurrence 4 and §15 is
+minted. Completes the adoption begun at #88 and swept at #90/#91/#92 and HCA #20/#21.
+
+This entry also **corrects the scoping of #92's brief**, which placed this repo's ritual out of scope as
+"already struck." It was not — `parked` was live at line 34. #92 is locked and unedited; this entry
+carries the correction, per the append-only discipline.
+
+**One instance is knowingly deferred, not missed.** `CLAUDE.md:128` (health-app) and `CLAUDE.md:116`
+(HCA) carry the same `parked` sentence inside the **verbatim-propagated shared block**, fingerprint-gated
+at `4243c91ce78e0331ddfa5178aa3006b8` / 155 lines / 10232 B. It is a generator instruction and it does
+survive the frame-vs-narration filter — but editing it from a health-app-rooted session re-breaches the
+G1 parity that #92 just discharged, and under #92's own paired-obligation protocol a shared-block edit
+needs its own brief with a mirror-first plan. Both repos are identical on that line, so nothing has
+diverged; the deferral is safe rather than merely tolerated. Tracked as **Q33, UNSTARTED** — because
+DECISIONS records what was decided and OPEN_QUESTIONS is what gets actioned, and an obligation living
+only in an append-only entry has nothing pointing at it.
+
+**Rationale:** #92 met its exit condition on values and stopped. But a column header tells the next
+writer what to put in the column, and a ritual instruction tells the next session what to call a branch
+— both regenerate the dialect regardless of how clean the cells are.
+
+The deeper finding is the **ordering**, visible only now that three sessions have stacked: #90/#91 swept
+the values and exposed the ritual; HCA #21 swept the ritual and exposed the header; this session swept
+the header and exposed the shared block — the document that *defines* the vocabulary it violates. The
+layers fell in strict order of increasing authority, each sweep meeting its exit condition honestly and
+each followed by a session finding the dialect one layer up. That is not four failures of thoroughness;
+it is one failure of ordering. **Sweep from the most authoritative surface downward, not the most visible
+upward** — values are visible so they get swept first, definitions are authoritative so they get swept
+last, by which point the definition has re-emitted the dead dialect into every layer beneath it.
+Recorded as `FEEDBACK` §15.
+
+**Status:** Landed. Governance + `.claude/` only.
+
+**How you know:** the two edits at named line numbers; `diff` of `BRANCHES.md:3–9` against HCA returns
+empty (byte-identical, header at `:8` in both); column integrity held at 5 columns × 24 table lines with
+the col4/col5 mapping checked across **all 22 rows**, not sampled, so the rename moved no data; Q25's
+subject verified gone independently (HCA row at `f15b545`, `git ls-remote --heads origin
+claude/hevy-api-workout-query-teulc2` empty); shared block unchanged at `4243c91ce78e0331ddfa5178aa3006b8`
+/ 155 / 10232; backend test count unchanged from merge-base; exit greps by **field** returning zero
+struck labels across the four stores in both repos, plus zero in any column header or ritual instruction,
+with the single shared-block instance named and deferred.
+
+**OWED at landing — paired obligation, HCA-rooted session (owner: Luke).** `health-connect-app`'s
+**Q11** ("health-app's `/closeout` still instructs `parked`; ritual divergence ruled", OWED) names
+precisely the two items this entry lands: (1) strike `parked` at `.claude/commands/closeout.md:34`;
+(2) rename the `BRANCHES.md:3` header pair. **Both are now done** — Q11 should close `DONE → #93`, and
+its clause "HCA is authoritative for the ritual's vocabulary and for the header frame in the interim"
+lapses, the two repos now being byte-identical on the header and preamble. Cannot be written from here
+under the single-repo rule; recorded as OWED per #92's paired-obligation protocol rather than asserted
+done. Unaffected and still open: HCA **Q9 item 1** (`ROADMAP.md`'s work queue carrying
+`RESOLVED` / `parked` / `Blocked on` — inert debt, carried rather than regenerated) and HCA **Q10**
+(the ritual ANCHOR's declarative mood).
+
+Corroboration worth recording: Q11 independently states health-app's status values as
+"12 DONE / 9 OWED / 1 UNSTARTED, zero outside the four states", and this session's by-field count,
+taken before that text was read, returned the same distribution summing to 22 rows. Two extractions,
+two repos, one number.
+
+**Do not revisit unless:** Q33 lands the shared-block strike, at which point the adoption is complete at
+every layer and this entry's deferral is discharged.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
