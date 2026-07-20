@@ -569,10 +569,55 @@ occurrence. It has recurred twice more since, which means it was not yet operati
   ROADMAP has no status field at all — its tables are `| Item | Notes |`, so a label cannot exist
   there to be wrong.
 
+- **Occurrence 4 (chat, 2026-07-20, G1 verification — the dangerous shape).** The G1 shared-block
+  comparison was run as extract-then-compare. The extraction failed silently, yielding two empty
+  results, and the comparison of empty-against-empty returned **PASS** — the expected answer, arrived
+  at by measuring nothing. This is the most dangerous variant in the family: occurrences 1–3 produced
+  numbers that were *wrong* and therefore checkable, but a false PASS is indistinguishable from a true
+  one at the point of reading. It looks like confirmation.
+  **Rule:** assert the input is non-empty and plausibly sized *before* any comparison is allowed to
+  mean anything. An equality test over two nulls is not evidence of equality; it is evidence the
+  extractor ran. Gate the gate.
+
 **What the third occurrence teaches that the first two did not:** the author of the rule nearly broke
 it, in the very commit that records it, while checking someone else's compliance with it. The
 substitution is not carelessness and does not yield to intent — a full-text search for a label *looks
 like* counting the label at the moment you run it. The only reliable defence is structural: extract
 the field by position, then check the total against the population. If a check cannot report *which
 column* it counted, it has not counted a label.
+
+---
+
+## 15. A scope exclusion carries the same evidentiary burden as a scope inclusion (DECISIONS_LOG #93)
+
+#92's brief placed this repo's `/closeout` ritual out of scope with the words "already struck" — a
+declarative about a file the author had not read. It had not been struck; `parked` was still at line 34.
+The exclusion was not a lie, it was an *assumption stated in the indicative*, and that is the failure
+mode: an omission leaves a gap someone eventually trips over, but a false out-of-scope **closes the
+question**. It instructs the next session not to look.
+
+**Rule:** name the artifact that justifies an exclusion, or write it as "not examined" rather than
+"already done." "Out of scope because X was verified at SHA Y" is a scope decision; "out of scope
+because it's already handled" is an unverified claim wearing a scope decision's clothes. This is
+[[§12]]'s unseeable-surface rule applied to the *negative* space of a brief — the same declarative-mood
+problem, but harder to catch, because nobody audits the things a brief told them not to look at.
+
+**Corollary — sweep from the most authoritative surface downward, not the most visible upward.**
+The vocabulary adoption regenerated itself three times, and the layers fell in strict order of
+increasing authority:
+
+| Session | Swept | Exposed next |
+|---------|-------|--------------|
+| #90 / #91 | the **values** (row and question status fields) | the ritual |
+| HCA #21 | the **ritual** (the generator that writes rows) | the header |
+| #93 (this) | the **header** (the frame that teaches the writer) | the shared block |
+| Q33 (deferred) | the **shared block** — the document that *defines* the vocabulary | — |
+
+Each sweep met its exit condition honestly and each was followed by a session finding the dialect one
+layer up. That is not four failures of thoroughness; it is one failure of *ordering*. Values are
+visible, so they get swept first; definitions are authoritative, so they get swept last — by which
+point the definition has re-emitted the dead dialect into every layer beneath it. Sweeping downward
+from the definition would have caught all four in one pass, because nothing below can contradict a
+surface that has already been fixed. Ask "what writes this?" before "what does this say?", and fix the
+writer first.
 
