@@ -446,9 +446,11 @@ unmerged, and is NOT in that repo's `BRANCHES.md` — whose own header states "e
 here until merged+deleted." The store is violating its own rule. Needs a disposition: govern it (add to
 BRANCHES.md) or kill it. Not this repo's / this brief's job — logged only.
 
-**Status:** BLOCKED — blocker: cannot be actioned from a health-app-rooted session; disposing of an HCA
-remote branch requires a `health-connect-app`-rooted session (single-repo scope rule). Owner: Luke.
-Unblocks on: any HCA-rooted session.
+**Status:** DONE → #91 — the branch now carries a dedicated row in `health-connect-app`'s `BRANCHES.md`
+(added 2026-07-20, status OWED, naming `git push origin --delete claude/hevy-api-workout-query-teulc2` as
+Luke's call — remote-ref deletion is not Code's). This question asked whether the branch was **governed or
+killed**; governing it discharges the question. The branch's own disposition remains OWED **in HCA's store**,
+which is where it belongs — tracking it here too would be the duplication defect Q31 records.
 
 ---
 
@@ -606,6 +608,30 @@ before deciding either question; a vocabulary sweep over a duplicated store woul
 duplication rather than expose it.
 
 **Status:** UNSTARTED — no blocker. Owner: Luke.
+
+---
+
+## Q32. The `/closeout` ritual definitions have diverged between repos — 77 vs 132 lines
+
+`health-app/.claude/commands/closeout.md` is **77 lines**; `health-connect-app`'s is **132**. Both
+define the same ritual, and both were carrying the struck `purpose / why-parked / unblocks-on`
+column set (HCA Q9 item 2). health-app's copy is fixed at #92; **HCA's still teaches the dead
+dialect**, and a ritual definition that does so re-emits it every session — the drift regenerates
+itself rather than merely persisting.
+
+Two undecided questions, deliberately left open rather than answered unilaterally (sweeping another
+repo's ritual definition is out of this brief's scope, and doing it unbidden is not Code's call):
+
+1. **Does HCA's copy need the same strike?** Almost certainly yes — HCA Q9 records it as the higher
+   priority of its two items.
+2. **Is the 77-vs-132 divergence intentional?** The shared loop-rules block is propagated verbatim
+   and fingerprint-gated; the ritual definition is neither. If the ritual is meant to be shared, it
+   needs the same treatment (markers + a parity gate). If it is meant to be per-repo — HCA's is a
+   different app with different close-out needs — that should be *stated*, so the divergence stops
+   reading as drift. Right now nothing distinguishes "intentionally different" from "quietly
+   drifted", which is the same ambiguity the vocabulary sweeps existed to remove.
+
+**Status:** UNSTARTED — no blocker; both questions are answerable at will. Owner: Luke.
 
 ---
 
