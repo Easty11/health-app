@@ -2529,6 +2529,68 @@ Owner: Luke, in an HCA-rooted session.
 
 ---
 
+### 92. G1 discharged by return mirror — and a paired obligation is not closed until both repos are
+
+**Decision:** the shared loop-rules block is re-mirrored **health-connect-app → health-app**,
+discharging the G1 parity breach that the vocabulary-parity session opened (HCA Q8). Two rules follow,
+and one scope boundary is fixed.
+
+**1. The paired-obligation protocol (standing rule).** The single-repo rule guarantees that a session
+which edits a shared surface *cannot finish the job* — the other repo is unreachable from it. So a
+cross-repo edit does not create a task, it creates a **pair**: the editing session must record the
+obligation in its own store as OWED, naming the exact action, the repo it must be run from, and the
+fingerprints on both sides; the return session discharges it **first, before any other work**, and
+closes the pair. Mirror first is not stylistic ordering — a deferred mirror is the one obligation that
+*regenerates* drift while it waits, because every subsequent edit in either repo compounds the delta.
+HCA Q8 is the worked example: it recorded both fingerprints, named the action, named the repo, and
+named the owner, so the return trip was mechanical rather than reconstructive.
+
+**2. The Q9 split — a ritual definition is a governed surface; a transient payload is not.** HCA Q9
+found the struck vocabulary surviving in the `/closeout` command definition. It splits:
+
+- **The `BRANCHES.md` column set (`purpose / why-parked / unblocks-on`) IS a violation — struck.** A
+  ritual definition that teaches the dead dialect *re-emits it every session*: unlike a stale row,
+  which merely persists, a stale rule regenerates. `.claude/commands/closeout.md` step 4 now names the
+  four states and what each requires (SHA for DONE, blocker + owner for BLOCKED, the outstanding
+  command or check for OWED).
+- **The `PENDING`-queue reconciliation is NOT a violation — deliberately unchanged.** The four states
+  govern *stored rows*: `BRANCHES.md` Status, `OPEN_QUESTIONS.md`, `ROADMAP.md`, close-outs. The
+  pending-commit queue is defined in the same CLAUDE.md table as "Transient … consumed at the next
+  Code open, then discarded. **Not a stored repo file.**" Its `PENDING` flag marks a payload *in
+  transit*, not the state of a tracked item a future reader must interpret. Striking it would delete a
+  working mechanism to satisfy a rule that does not reach it. Vocabulary scope follows the artifact's
+  persistence, not its wording.
+
+**Status:** Landed. Governance-only.
+
+**How you know:**
+- **G1 before:** health-app `9fa18cc` = 153 lines / 10080 B / md5 `9436cb223c4b601252152ab4fa6a3547`;
+  HCA master = 155 / 10232 / md5 `4243c91ce78e0331ddfa5178aa3006b8` — **diverged**, exactly the two
+  lines of the barrier-vs-trigger tie-break.
+- **G1 after:** both **155 lines / 10232 B / md5 `4243c91ce78e0331ddfa5178aa3006b8`**, measured on
+  **committed content** (`git show <ref>:CLAUDE.md`) in both repos — the surface that propagates, per
+  #91's gate definition. The block was spliced verbatim from HCA's committed blob, never retyped.
+  Working-tree eol differs (`w/mixed` here, `w/crlf` there) and is not a G1 signal — that is Q30.
+- **Exit gate, four files across two repos, measured by FIELD not by word:** health-app
+  `BRANCHES.md` (22 rows) and `OPEN_QUESTIONS.md` (32 questions — 11 DONE / 2 BLOCKED / 5 OWED /
+  14 UNSTARTED) carry zero out-of-vocabulary labels; HCA `BRANCHES.md` status column reads
+  `UNSTARTED` / `BLOCKED` / `DONE → 1db8833` / `DONE → db6f50e` / `OWED`, and its `OPEN_QUESTIONS.md`
+  headings read 1 BLOCKED / 1 DONE / 3 OWED / 4 UNSTARTED. A word-level grep returns false hits in
+  both repos — "Landed" three times in HCA's *notes* column, "pending/blocked/resolved" in health-app's
+  ROADMAP *prose* — none of which are labels. See FEEDBACK §14.
+- **Test count:** backend suite unchanged from merge-base.
+
+**Do not revisit unless:** a shared surface is edited from the non-canonical repo again without the
+paired obligation being recorded — in which case the failure is the protocol not being followed, not
+the protocol.
+
+**OWED at landing:** HCA's own `/closeout` definition still carries the struck column set, and the two
+ritual definitions have diverged (77 vs 132 lines). Logged as Q32, owner Luke, for an HCA-rooted
+session — not swept here, because another repo's ritual definition is outside this brief's fence and
+sweeping it unbidden is not Code's call.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

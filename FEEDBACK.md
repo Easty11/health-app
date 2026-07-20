@@ -552,3 +552,27 @@ in a detectable way has not been checked.
 an argument about measurement discipline*. Rigour about evidence is not a state you reach and hold; it
 is a check you run per claim, including on the claims you make while insisting on it.
 
+### §14 recurrence log — counting the word instead of counting the field
+
+The corollary above ("a distribution must sum to its population") was written after the first
+occurrence. It has recurred twice more since, which means it was not yet operating as a rule.
+
+- **Occurrence 2 (health-connect-app, 2026-07-20).** A brief reported that repo carrying
+  `PENDING ×6`. There were **four** `PENDING` rows; the count swept up the file header's "stays
+  PENDING until" and Q4's body text "Q4 stays PENDING". Recorded in HCA's own FEEDBACK; appended here
+  because the rule lives in this repo and a recurrence logged only at the far end never reaches it.
+- **Occurrence 3 (this session, caught before reporting).** The #92 exit gate was first run as a
+  word-level grep across four files. It returned "Landed" ×3 in health-connect-app's `BRANCHES.md`
+  and `pending` / `blocked` / `resolved` in health-app's `ROADMAP.md`. Both would have been reported
+  as vocabulary violations. Re-running by **field** showed the HCA hits sit in column 4 (prose:
+  "Landed on master via clean `--ff-only` …") while its status column is clean four-state, and that
+  ROADMAP has no status field at all — its tables are `| Item | Notes |`, so a label cannot exist
+  there to be wrong.
+
+**What the third occurrence teaches that the first two did not:** the author of the rule nearly broke
+it, in the very commit that records it, while checking someone else's compliance with it. The
+substitution is not carelessness and does not yield to intent — a full-text search for a label *looks
+like* counting the label at the moment you run it. The only reliable defence is structural: extract
+the field by position, then check the total against the population. If a check cannot report *which
+column* it counted, it has not counted a label.
+
