@@ -25,8 +25,11 @@ Execute these steps in order:
    plainly. The commit is the only sync point.
 
 4. **Branch terminal-state gate.** For every branch touched this session, resolve to a
-   terminal state: either merged + remote-deleted, or present in `BRANCHES.md` with
-   purpose / why-parked / unblocks-on. The gate iterates local + remote, not remotes-only:
+   terminal state: either merged + remote-deleted, or present in `BRANCHES.md` carrying one
+   of the four states — DONE / BLOCKED / OWED / UNSTARTED (see **State vocabulary** in
+   `CLAUDE.md`, which is the sole definition) — with what that state requires: a SHA for
+   DONE, a named blocker and its owner for BLOCKED, the exact outstanding command or check
+   for OWED. The gate iterates local + remote, not remotes-only:
    the gate enumerates local branches (`git branch`) as well as `refs/remotes/origin`; a
    local branch with `+` commits vs `origin/master` must be pushed, parked in
    `BRANCHES.md`, or discarded before close. Use `git cherry origin/master <branch>` to
