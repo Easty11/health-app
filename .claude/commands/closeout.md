@@ -31,7 +31,7 @@ Execute these steps in order:
    DONE, a named blocker and its owner for BLOCKED, the exact outstanding command or check
    for OWED. The gate iterates local + remote, not remotes-only:
    the gate enumerates local branches (`git branch`) as well as `refs/remotes/origin`; a
-   local branch with `+` commits vs `origin/master` must be pushed, parked in
+   local branch with `+` commits vs `origin/master` must be pushed, rowed in
    `BRANCHES.md`, or discarded before close. Use `git cherry origin/master <branch>` to
    confirm merge status. If any touched branch is neither merged+deleted nor in
    `BRANCHES.md`, HALT the close-out and report the offending branch(es) — do not write
