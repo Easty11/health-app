@@ -2661,6 +2661,63 @@ every layer and this entry's deferral is discharged.
 
 ---
 
+### 94. The consolidated governance view is generated, never hand-assembled
+
+**Decision:** `scripts/gen_governance_view.py` emits `CONSOLIDATED_GOVERNANCE_VIEW.md` from both
+repos' four governance stores — `DECISIONS_LOG` / `OPEN_QUESTIONS` / `FEEDBACK` / `ROADMAP` — read at
+**master** via `raw.githubusercontent.com`, with a live provenance block recording each repo's
+resolved SHA, highest decision number, and generation time. Output goes to `build/` and is gitignored:
+derived artifacts are not committed. The hand-assembled predecessor is superseded.
+
+Reading at master rather than the local tree is deliberate on two counts: a working tree may be dirty
+or behind, and fetching over HTTPS sidesteps the single-repo rule — the script reads
+`health-connect-app` and never writes it.
+
+**Emits a digest, not a verbatim copy.** One line per entry — `#N · title · status` for decisions,
+`Qn · title · STATE` for questions, section/date + first line for feedback, section rows for roadmap —
+each carrying a line-anchored GitHub URL to the full entry.
+
+**Rationale:** the manual mirror sat at health-app `#34` / HCA `#15` as of 28 Jun while master carried
+`#93` / `#21` — 65 decisions and three weeks of drift, with nothing to signal it. Chat read that file
+as orientation throughout 2026-07-20 and made repeated assertions master contradicted; the repo-verify
+rule caught them each time, but the mirror was the source of the error. A mirror that can silently
+disagree with its source is worse than no mirror: it reads as current. Generation makes drift
+structurally impossible, and the provenance block makes the read time explicit.
+
+The predecessor was verbatim, which was viable at health-app `#34`. At `#93` the same approach emits
+~350 KB — a second copy of the repos rather than orientation, and a copy large enough that nobody
+reads it, which is how it drifted unnoticed. The view is a digest with anchors: enough to know what
+exists and where, never enough to substitute for master. **Scaling changed the requirement, not the
+intent** — the standing rule already says project knowledge holds orientation only, never canonical
+state.
+
+**The two repos do not share store schemas, and every divergence is a silent-failure surface.** Four
+were found by reading the stores rather than assuming symmetry: decisions are `### 93.` here and
+`### #20 — … · active` there; questions are `## Q33.` here and `### Q11 — … · OWED` there; feedback is
+numbered `## N.` sections here and dated `### YYYY-MM-DD … [tag]` entries there; roadmaps are
+`| Item | Notes |` tables here and bullet lists there, under entirely different section names. Each
+mismatch fails *quietly* — a regex that fits one repo returns zero for the other and renders an empty
+section that reads as "nothing here". So every parser asserts it matched at least one entry and
+raises otherwise, and the roadmap parser emits all sections and both row forms rather than filtering
+to hardcoded names. Two such defects were caught during construction, after passing a first run:
+FEEDBACK reported 52 entries for a 15-section store (a lenient `#{2,3}` swept in `### 1.1`-style
+subsections), and HCA's roadmap reported 4 rows because a table-only parser dropped its entire
+bullet-form work queue.
+
+**Status:** Landed. Governance + `scripts/` only.
+
+**How you know:** the eight resolved URLs, all HTTP 200 at pinned SHAs (`9ec0f2b` / `36a8444`); the
+fetched health-app `DECISIONS_LOG.md` diffs clean against local master once CRLF-normalised; per-store
+entry counts each equal to emitted digest lines, gated in-script (93/33/15/27 and 21/11/12/30); the
+decision-count gap check (highest number == entry count) passing silently for both repos; output 334
+lines / 63223 bytes / zero CR bytes; banner runs exactly 60 `═` with one blank line before and three
+after; eight `─── STORE: ───` separators; test count unchanged; shared block untouched.
+
+**Do not revisit unless:** a store's schema changes, in which case the script fails loudly by design —
+fix the parser, do not relax the assertion.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

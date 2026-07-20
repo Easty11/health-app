@@ -621,3 +621,29 @@ from the definition would have caught all four in one pass, because nothing belo
 surface that has already been fixed. Ask "what writes this?" before "what does this say?", and fix the
 writer first.
 
+---
+
+## 16. A derived artifact with no generator is a fork (DECISIONS_LOG #94)
+
+`CONSOLIDATED_GOVERNANCE_VIEW.md` declared itself read-only and said to regenerate it from a master
+export. No such export existed. It was hand-assembled once and never again, and by 2026-07-20 it sat
+65 decisions and three weeks behind master while still presenting as current.
+
+**Rule:** where a document declares a generation source, that source must exist in a repo, or the
+declaration is a fiction that makes the file look *more* trustworthy than it is. "Generated from X" is
+a claim about a mechanism, and it carries the same evidentiary burden as any other claim — name the
+script, or write "assembled by hand on <date>, verify before use."
+
+**Why it is worse than an ordinary stale file.** A file with no freshness claim gets checked. This one
+carried a read-only banner and a regeneration instruction, both of which read as *machinery* — and
+machinery implies something keeps it true. The banner suppressed exactly the scrutiny that would have
+caught the drift. This is [[§10]]'s false-green instrument in documentation form: the failure is not
+that it was wrong, but that it was wrong in a costume that discouraged checking.
+
+**Corollary — a mirror large enough to substitute for the source will be read instead of it.** The
+predecessor was a verbatim dump because that fit at 34 decisions. Verbatim is not a neutral choice at
+scale: it produces a second copy of the repos, complete enough to answer from and too large to audit,
+which is precisely how it drifted unnoticed. A derived view should be a *digest with pointers* — enough
+to know what exists and where, never enough to answer from. Size is a design constraint on
+trustworthiness, not just on convenience.
+
