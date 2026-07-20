@@ -76,6 +76,8 @@ Four states, exhaustive, no fifth. Applies to `BRANCHES.md` Status, `OPEN_QUESTI
   anyone.
 - **BLOCKED** — cannot proceed; names the blocker and its owner. A trigger for when work
   becomes *worth* doing is not a blocker on its being *possible* — that is UNSTARTED.
+  Where the evidence does not settle whether a dependency is a barrier or a trigger,
+  the row is UNSTARTED: a false BLOCKED tells a reader not to try.
 - **OWED** — work or decision settled, loop not closed; names the exact command or check
   outstanding.
 - **UNSTARTED** — untouched.
