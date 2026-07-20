@@ -175,44 +175,75 @@
   ],
 
   "_deferred": {
-    "note": "Blocked purely on canonical-vocabulary gaps. Each entry names the exact missing marker_canonical id(s). Promote once the vocab expands.",
+    "note": "Deferred entries fall into THREE classes, not one. Only the first is discharged by expanding marker_canonical.json. (1) vocabulary gap \u2014 the marker is on the report but has no canonical id yet; a vocab bump clears it; blocked_on names the exact missing id(s). (2) never ordered \u2014 the marker could be canonical but has never been ordered, so no data arrives until it is; only ordering the test clears it; see _blocked_on_order. (3) lab does not report it \u2014 structurally absent from this provider's output; neither a bump nor an order clears it, so the entry must be re-scoped or retired; see retired. Prior to v0.3 this note claimed all deferrals were class (1). That was true of one of four entries, and made the block read as a single queue awaiting a single event.",
     "groups": {
       "erythroid": {
-        "intended_members": ["haemoglobin", "haematocrit", "rbc"],
-        "blocked_on": ["haemoglobin", "haematocrit", "rbc"],
-        "carries": "the cross-axis context relation below \u2014 the contract's showcase cross-axis instance is unbuildable until these are canonical."
+        "intended_members": [
+          "haemoglobin",
+          "haematocrit",
+          "rbc"
+        ],
+        "blocked_on": [],
+        "carries": "the cross-axis context relation below \u2014 the contract's showcase cross-axis instance is unbuildable until these are canonical.",
+        "status": "ready_to_promote"
       }
     },
     "relations": {
       "trt_erythrocytosis_watch": {
         "kind": "context",
         "intended_render_on": "haematocrit",
-        "references": ["hpg_axis", "protocol_factor:trt"],
+        "references": [
+          "hpg_axis",
+          "protocol_factor:trt"
+        ],
         "precondition_phase": "on_trt",
         "reads": "On TRT, watch Hct for erythrocytosis \u2014 a protocol-driven context, not a breach of the erythroid axis itself.",
-        "blocked_on": ["haematocrit"]
-      },
+        "blocked_on": [],
+        "status": "ready_to_promote"
+      }
+    },
+    "_blocked_on_order": {
       "ck_muscle_discriminator": {
         "kind": "discriminator",
         "intended_group": "hepatocellular",
         "discriminator": "ck",
-        "operands": ["ast"],
+        "operands": [
+          "ast"
+        ],
         "reads": "High CK with high AST \u2192 muscle origin \u2014 complements the GGT discriminator.",
-        "blocked_on": ["ck"]
+        "blocked_on": [
+          "ck \u2014 never ordered"
+        ]
       }
     },
-    "derived_from": [
+    "derived_from": [],
+    "retired": [
       {
         "marker_canonical": "calcium_corrected",
-        "operands": ["calcium", "albumin"],
-        "blocked_on": ["calcium"],
-        "note": "Only calcium_corrected and albumin are canonical; raw calcium is missing."
+        "was": "derived_from(calcium, albumin)",
+        "class": "(3) lab does not report it",
+        "retired_because": "SNP prints only 'Calcium (Corrected)'. Uncorrected calcium is structurally absent from the report, so the correction can never be recomputed \u2014 and never needs to be.",
+        "re_scoped_as": "primitive \u2014 calcium_corrected has been canonical since v0.2 and is read directly off the report."
       },
       {
         "marker_canonical": "non_hdl",
-        "operands": ["cholesterol_total", "hdl_cholesterol"],
-        "blocked_on": ["non_hdl", "hdl_cholesterol"],
-        "note": "cholesterol_total is canonical; non_hdl and hdl_cholesterol are not. non_hdl = cholesterol_total \u2212 hdl_cholesterol is also a free QA gate once both exist."
+        "was": "derived_from(cholesterol_total, hdl_cholesterol)",
+        "class": "none of the three \u2014 mis-filed as derived",
+        "retired_because": "the lab prints 'Non HDLC' directly, so non_hdl is a primitive read. Deriving it would recompute a reported number.",
+        "re_scoped_as": "primitive (canonical as of v0.3), plus the 4b QA identity below."
+      }
+    ],
+    "qa_identities": [
+      {
+        "identity": "non_hdl == cholesterol_total - hdl_cholesterol",
+        "operands": [
+          "cholesterol_total",
+          "hdl_cholesterol"
+        ],
+        "target": "non_hdl",
+        "due": "4b",
+        "kind": "consistency_check",
+        "note": "All three are printed by the lab as of v0.3. A cross-check on extraction fidelity, NOT a derivation \u2014 if it fails the extraction is wrong, not the arithmetic."
       }
     ]
   }

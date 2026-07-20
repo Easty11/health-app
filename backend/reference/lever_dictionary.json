@@ -2,7 +2,7 @@
   "_meta": {
     "version": "v0",
     "status": "ai_draft",
-    "binds_to": "marker_canonical.json v0.2 (#57)",
+    "binds_to": "marker_canonical.json v0.3 (#95)",
     "contract": "INTERPRETATION_OUTPUT_CONTRACT v0.4 (#63)",
     "authored": "2026-07-06",
     "provenance": "chat-drafted; NOT master-canonical. Every DOI is real; every entry is ai_draft pending human review.",

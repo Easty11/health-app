@@ -1,5 +1,5 @@
 {
-  "version": "0.2",
+  "version": "0.3",
   "entries": [
     {
       "marker_name_raw": "Sodium",
@@ -185,6 +185,210 @@
       "marker_name_raw": "Oestradiol",
       "marker_canonical": "oestradiol",
       "unit_established": "pmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Haemoglobin",
+      "marker_canonical": "haemoglobin",
+      "unit_established": "g/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Haematocrit",
+      "marker_canonical": "haematocrit",
+      "unit_established": null,
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Red cell count",
+      "marker_canonical": "rbc",
+      "unit_established": "10^12/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "MCV",
+      "marker_canonical": "mcv",
+      "unit_established": "fL",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "White cell count",
+      "marker_canonical": "wcc",
+      "unit_established": "10^9/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Neutrophils",
+      "marker_canonical": "neutrophils",
+      "unit_established": "10^9/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Lymphocytes",
+      "marker_canonical": "lymphocytes",
+      "unit_established": "10^9/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Monocytes",
+      "marker_canonical": "monocytes",
+      "unit_established": "10^9/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Eosinophils",
+      "marker_canonical": "eosinophils",
+      "unit_established": "10^9/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Basophils",
+      "marker_canonical": "basophils",
+      "unit_established": "10^9/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Platelets",
+      "marker_canonical": "platelets",
+      "unit_established": "10^9/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "ESR",
+      "marker_canonical": "esr",
+      "unit_established": "mm/h",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Iron",
+      "marker_canonical": "iron",
+      "unit_established": "umol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Transferrin",
+      "marker_canonical": "transferrin",
+      "unit_established": "g/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "TIBC",
+      "marker_canonical": "tibc",
+      "unit_established": "umol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Saturation",
+      "marker_canonical": "transferrin_saturation",
+      "unit_established": "%",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Ferritin",
+      "marker_canonical": "ferritin",
+      "unit_established": "ug/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "CRP",
+      "marker_canonical": "crp",
+      "unit_established": "mg/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "HDL",
+      "marker_canonical": "hdl_cholesterol",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "LDL",
+      "marker_canonical": "ldl_cholesterol",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Non HDLC",
+      "marker_canonical": "non_hdl",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Tot Chol/HDL",
+      "marker_canonical": "chol_hdl_ratio",
+      "unit_established": null,
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Magnesium",
+      "marker_canonical": "magnesium",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Zinc-plasma",
+      "marker_canonical": "zinc_plasma",
+      "unit_established": "umol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Vitamin B12",
+      "marker_canonical": "vitamin_b12",
+      "unit_established": "pmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Active B12",
+      "marker_canonical": "active_b12",
+      "unit_established": "pmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Folate (Serum)",
+      "marker_canonical": "folate_serum",
+      "unit_established": "nmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Homocysteine",
+      "marker_canonical": "homocysteine",
+      "unit_established": "umol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "HbA1c (NGSP)",
+      "marker_canonical": "hba1c_ngsp",
+      "unit_established": "%",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "HbA1c (IFCC)",
+      "marker_canonical": "hba1c_ifcc",
+      "unit_established": "mmol/mol",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "TSH",
+      "marker_canonical": "tsh",
+      "unit_established": "mIU/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Prolactin",
+      "marker_canonical": "prolactin",
+      "unit_established": "mIU/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "DHEAS",
+      "marker_canonical": "dheas",
+      "unit_established": "umol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "Glucose random",
+      "marker_canonical": "glucose_random",
+      "unit_established": "mmol/L",
       "loinc": null
     }
   ]
