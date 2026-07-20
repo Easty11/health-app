@@ -236,9 +236,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#92** — G1 discharged by return mirror: the shared block re-mirrored HCA→health-app, plus the paired-obligation protocol (a cross-repo edit creates a *pair*, not a task — the editing session records it OWED, the return session discharges it first) and the Q9 split (the `/closeout` column set struck; the transient `PENDING` queue is not a vocabulary violation). See DECISIONS_LOG #92.
+- **#91** — `OPEN_QUESTIONS` adopts the four states: the three-value set could not express BLOCKED and was not applied consistently, so `CLAUDE.md`'s canonical-stores row now points at the single definition rather than restating a second one. See DECISIONS_LOG #91.
 - **#90** — Vocabulary adoption is a sweep, not a definition: every `BRANCHES.md` row and `OPEN_QUESTIONS.md` entry in health-app brought to a valid state, five outstanding loops adjudicated against artifacts, three local-only branches pushed and documented; standing rule that a claim inherits authority from what attests it, never from where it sits. `health-connect-app`'s sweep remains OWED. See DECISIONS_LOG #90.
-- **#89** — HRV step-change resolved as **instrumentation**, not physiology: Q17 closes on (A) — the 6-Jul step is phantom-node selection (HCA #19), the RR "corroborator" was never an independent sensor path, and historical `samsung_hrv_readings` reconciliation is deferred to new Q29 (segment by APK-install history first). See DECISIONS_LOG #89.
-- **#88** — Interruption-survival governance: unseeable-surface rule + four-state vocabulary (DONE / BLOCKED / OWED / UNSTARTED) added to the CLAUDE.md shared block (both repos, byte-identical), a new append-only `HANDOFF.md` ledger, and `/closeout` now emitting an immutable-dated `git log`. See DECISIONS_LOG #88.
 
 ---
 
