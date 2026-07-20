@@ -3,143 +3,116 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`. Interruption ledger: `HANDOFF.md`._
 
-Session: 2026-07-20 — vocabulary reconciliation (Phase 2a) + return trip. Branch `master` @ `e3586a9`
-(all work landed). Covers two briefs: Phase 2a had no close-out of its own, having held for Phase 2b.
+2026-07-20 · return trip 2 (#93)
 
----
+## 1. Real commits this session
 
-## 1 · Real commits this session
-
-Open-ref `31d5d48` (the previous close-out) → `HEAD`:
+Session-open ref: `ea6efa5`. Landed on `master` at **`6d555f766cf6a60d79d68102b25b2677dd8bc061`**, pushed.
 
 ```
-e3586a9 gov: DECISIONS_LOG #92 + FEEDBACK 14 recurrence log
-4e0dd37 gov: Q25 DONE -> #91 (row landed in HCA); Q32 logs the ritual divergence
-08cc0b4 gov(ritual): closeout branch gate speaks the four states, not the struck column set
-78a5ee6 gov(claude): re-mirror shared block from HCA master — discharges G1
-9fa18cc gov: DECISIONS_LOG #91 + FEEDBACK 14 — OPEN_QUESTIONS adopts the four states
-d06c042 gov(claude): BLOCKED/OWED clauses — worth-doing is not a blocker on possible
-5c7f070 gov: OPEN_QUESTIONS swept to the four states — the open bucket split three ways
-15abd07 gov(claude): OPEN_QUESTIONS row points to State vocabulary, no second definition
-b5ba6a6 gov(handoff): vocabulary reconciliation receipt — received, not started
+6d555f7 gov: DECISIONS_LOG #93 — adoption completes at the frame; sweeps run definition-first
+8bc17ed gov(feedback): §14 occurrence 4 (the false PASS); mint §15
+1514a95 gov(questions): correct Q25's stale limb; mint Q33 for the deferred shared block
+94b65d4 gov(branches): mirror HCA's header frame and four-state preamble
+22dadfb gov(ritual): strike `parked` as a status verb from the closeout gate
+7ea8eb4 gov(handoff): receipt — return trip 2 brief received, not started
 ```
 
-Repo's own dated record — `git log --format="%ad %s" --date=short -10`:
+Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
+2026-07-20 gov: DECISIONS_LOG #93 — adoption completes at the frame; sweeps run definition-first
+2026-07-20 gov(feedback): §14 occurrence 4 (the false PASS); mint §15
+2026-07-20 gov(questions): correct Q25's stale limb; mint Q33 for the deferred shared block
+2026-07-20 gov(branches): mirror HCA's header frame and four-state preamble
+2026-07-20 gov(ritual): strike `parked` as a status verb from the closeout gate
+2026-07-20 gov(handoff): receipt — return trip 2 brief received, not started
+2026-07-20 chore: session close-out
 2026-07-20 gov: DECISIONS_LOG #92 + FEEDBACK 14 recurrence log
 2026-07-20 gov: Q25 DONE -> #91 (row landed in HCA); Q32 logs the ritual divergence
 2026-07-20 gov(ritual): closeout branch gate speaks the four states, not the struck column set
-2026-07-20 gov(claude): re-mirror shared block from HCA master — discharges G1
-2026-07-20 gov: DECISIONS_LOG #91 + FEEDBACK 14 — OPEN_QUESTIONS adopts the four states
-2026-07-20 gov(claude): BLOCKED/OWED clauses — worth-doing is not a blocker on possible
-2026-07-20 gov: OPEN_QUESTIONS swept to the four states — the open bucket split three ways
-2026-07-20 gov(claude): OPEN_QUESTIONS row points to State vocabulary, no second definition
-2026-07-20 gov(handoff): vocabulary reconciliation receipt — received, not started
-2026-07-20 chore: session close-out
 ```
 
-Two ff-only merges to master (`9fa18cc`, `e3586a9`), both pushed; both gov branches deleted.
+Scope fence held: 7 files, all governance / `.claude/`. Zero `backend/`, `frontend/`, `alembic/`.
+Backend suite **206 passed**, unchanged from the `ea6efa5` baseline.
 
-**Gate evidence.** Governance-only — `CLAUDE.md`, `DECISIONS_LOG.md`, `FEEDBACK.md`,
-`OPEN_QUESTIONS.md`, `BRANCHES.md`, `HANDOFF.md`, `.claude/commands/closeout.md`; zero `backend/`,
-`frontend/`, `alembic/`. Backend suite **206 passed**, unchanged from merge-base and from #88/#90/#91.
+## 2. Pending-queue reconciliation
 
----
-
-## 2 · Pending-queue reconciliation
-
-**Phase 2a (vocabulary reconciliation) — all landed:**
-
-| PENDING item | Outcome |
+| Brief item | Outcome |
 |---|---|
-| CLAUDE.md line-60 status clause → pointer | `15abd07` |
-| `OPEN_QUESTIONS` swept to four states | `5c7f070` |
-| BLOCKED/OWED vocabulary clauses | `d06c042` |
-| `DECISIONS_LOG` #91 + `FEEDBACK` §14 | `9fa18cc` |
+| Step 0 — HANDOFF receipt, committed alone | **LANDED** `7ea8eb4` |
+| Step 1 — strike `parked` at `closeout.md:34` | **LANDED** `22dadfb`. Verified as the sole instance in that file before editing |
+| Step 2 — `BRANCHES.md` header pair (amended mid-session to include HCA's preamble) | **LANDED** `94b65d4`. Lines 3–9 byte-identical to HCA, header at `:8` in both |
+| Step 3 — Q25 → `DONE → #91` | **ALREADY DONE at #91.** Not re-closed. What landed instead (`1514a95`) is a correction to its stale body claim |
+| Step 4 — `FEEDBACK` §14 occurrences 3 and 4 | **PARTIALLY LANDED** `8bc17ed`. Only one was new — see divergences |
+| Step 5 — commit split, ff-only, push, delete, `/closeout` | **DONE**. Merge `ea6efa5..6d555f7`, branch deleted |
+| `#93` DECISIONS entry | **LANDED** `6d555f7`, amended per ruling — draft text would have put a false sentence in a locked store |
+| `FEEDBACK` §15 | **LANDED** `8bc17ed`, with the sweep-ordering corollary added |
 
-**Return trip — all landed:**
+### Divergences from the brief as written — all four verified, none assumed
 
-| PENDING item | Outcome |
+1. **"The last two instances" was false.** A by-file, by-line classification found the same `parked`
+   sentence at **`CLAUDE.md:128`** (and HCA `CLAUDE.md:116`) inside the shared block. It is a
+   *generator instruction*, so it survives the frame-vs-narration filter. Not editable from here:
+   G1-fingerprinted, and #92's paired-obligation protocol requires its own mirror-first brief.
+   Deferred knowingly, named in **#93**, tracked as **Q33 UNSTARTED**.
+2. **"Read HCA's `BRANCHES.md:3`"** — HCA's line 3 is prose; its header is at **`:8`**. Brief amended
+   mid-session; both the header *and* the four-state preamble were mirrored.
+3. **Q25 was already `DONE → #91`.** The brief's step 3 was satisfied by the previous session. Its
+   *body* was stale ("disposition remains OWED in HCA's store"); the remote is now deleted and HCA's
+   row reads `DONE → discarded 2026-07-20`. Corrected rather than re-closed.
+4. **§14's "occurrence 3" was already logged as occurrence 2** — same `PENDING ×6` word-grep, same
+   header-plus-Q4-body overcount. Only the G1 false-PASS case was new; it landed as **occurrence 4**.
+
+### Two measurement errors caught in-session by §14's own rule
+
+- The G1 fingerprint first came out **151 / 10018 / `81b2c212`** — heading-to-heading rather than
+  marker-to-marker. Not reported as a pass; the boundary was found (`BEGIN`/`END` comment markers,
+  lines 20–174) and it then reproduced **155 / 10232 / `4243c91c`** exactly.
+- The first exit grep returned **17 struck labels** in `BRANCHES.md` — right *field*, but word-grepped
+  *inside* it, catching prose like "code **landed** + deployed". Re-run on the leading label:
+  12 DONE / 9 OWED / 1 UNSTARTED = 22, sums to population.
+
+## 3. Cold-resume handoff
+
+**Branch:** `master` @ `6d555f7`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
+
+**Exit condition — met, with one named deferral:**
+
+| Check | Result |
 |---|---|
-| Step 1 — re-mirror shared block HCA→health-app | `78a5ee6`, committed alone as instructed |
-| Step 2 — Q25 → `DONE → #91` | `4e0dd37` |
-| Step 3 — `FEEDBACK` §14 count-the-field recurrence | `e3586a9` |
-| Step 4 — `/closeout` column set struck + question logged | `08cc0b4` (ritual) + `4e0dd37` (Q32) |
-| Step 5 — `DECISIONS_LOG` #92 | `e3586a9` |
+| Struck labels as *fields*, four stores, both repos | health-app 12 DONE / 9 OWED / 1 UNSTARTED = 22 rows; 33 questions = 15 UNSTARTED / 11 DONE / 5 OWED / 2 BLOCKED. HCA 5 rows, 11 questions. All sum to population; zero outside the four states |
+| Column headers, both repos | Identical: `\| Branch \| Purpose \| Status \| Detail \| Blocker / outstanding (owner) \|` at `:8` |
+| `parked` in ritual instructions, both repos | **Zero** |
+| Shared block G1 | `4243c91ce78e0331ddfa5178aa3006b8` / 155 lines / 10232 B — identical both repos, **intact** |
+| Deferred instance | Exactly **1 per repo**, shared block only, identical on both sides (Q33) |
+| Backend tests | 206 passed, unchanged |
 
-**Nothing provisional.** No item decided this session remains uncommitted.
+**Branch terminal-state gate — passes.** No branch was touched this session other than
+`gov/return-trip-2` (merged ff-only, deleted; never pushed, so no remote ref). The four pre-existing
+locals all carry `+` commits and all are rowed in `BRANCHES.md`:
 
-**Three departures from the drafts, each to avoid asserting the unverified:**
+```
+feat/checkin-injury-probe          2 +   rowed, pushed
+feat/feedback-ledger               4 +   rowed, pushed
+feat/interpretation-view-skeleton  3 +   rowed, pushed
+feat/recovery-metrics-rhr          1 +   rowed (UNSTARTED), local-only by design
+```
 
-- **#91 was scoped to health-app.** Its draft claimed both repos' stores were swept; at that landing
-  HCA had received nothing. HCA was recorded OWED instead. (Phase 2b subsequently did the work.)
-- **#91's rationale cites health-app's own rows.** The draft grounded the can't-express-BLOCKED
-  argument in HCA's Q4/Q5, unread at the time. Q29 was used instead — it carried the label `open`
-  while its body read "blocked on install-history segmentation (owner: Luke)", the store visibly
-  reaching around the gap in the file being swept.
-- **Renumber-debt attribution corrected.** `feat/checkin-injury-probe` carries DECISIONS ×2 +
-  QUESTIONS ×2 and **no** FEEDBACK debt; the FEEDBACK ×1 belongs to `feat/feedback-ledger`, whose §12
-  collides with master's §12.
+**Open questions by status** — 33 total: 15 UNSTARTED · 11 DONE · 5 OWED · 2 BLOCKED.
+New this session: **Q33** (shared-block `parked`, UNSTARTED).
 
----
+**OWED, cross-repo — the pair this session created.** `health-connect-app` **Q11** names exactly the
+two items landed here and should close **`DONE → #93`** from an HCA-rooted session; its clause "HCA is
+authoritative for the ritual's vocabulary and for the header frame in the interim" lapses, the repos
+now being byte-identical there. Unaffected and still open: HCA **Q9 item 1** (`ROADMAP.md` work queue
+carrying `RESOLVED` / `parked` / `Blocked on`) and HCA **Q10** (ritual ANCHOR's declarative mood).
 
-## 3 · Cold-resume handoff
+**OWED, unchanged, owner Luke** — both blocked on Anthropic API credit, to be run in one pass:
+`probe_resolver.py` container run, and `hevy-resolver-activation` limb 2 (a live chat request naming a
+nonsense movement; confirm the routine is refused and the unresolved title is named back).
 
-### State at close
-
-- `master` @ `e3586a9`, pushed. Tree clean but for untracked `.claude/launch.json`.
-- **G1 DISCHARGED.** Shared loop-rules block identical across both repos on committed content:
-  **155 lines / 10232 B LF-normalised / md5 `4243c91ce78e0331ddfa5178aa3006b8`**. Measured with
-  `git show <ref>:CLAUDE.md` in each repo — the surface that propagates. Working-tree eol differs
-  (`w/mixed` here, `w/crlf` there); that is Q30, not a G1 signal.
-- **Exit condition met — zero out-of-vocabulary labels in four files across two repos**, measured by
-  **field, not word**: health-app `BRANCHES.md` (22 rows) and `OPEN_QUESTIONS.md` (32 questions);
-  HCA `BRANCHES.md` status column (`UNSTARTED` / `BLOCKED` / `DONE → 1db8833` / `DONE → db6f50e` /
-  `OWED`) and its `OPEN_QUESTIONS.md` headings (1 BLOCKED / 1 DONE / 3 OWED / 4 UNSTARTED).
-  A word-level grep returns false hits in both repos — see FEEDBACK §14 recurrence log.
-
-### Branch terminal-state gate — PASSES
-
-| Branch | `git cherry` | Remote | Terminal state |
-|---|---|---|---|
-| `gov/vocabulary-reconciliation` | merged | never pushed | ff-merged @ `9fa18cc`, deleted |
-| `gov/return-trip` | merged | never pushed | ff-merged @ `e3586a9`, deleted |
-| `feat/feedback-ledger` | `+` (4) | on origin | OWED, row carries consolidated renumber debt |
-| `feat/interpretation-view-skeleton` | `+` (3) | on origin | OWED, row carries the #86 contract drift |
-| `feat/checkin-injury-probe` | `+` (2) | on origin | OWED, row carries consolidated renumber debt |
-| `feat/recovery-metrics-rhr` | `+` (1) | LOCAL-ONLY | UNSTARTED, parked in row |
-
-### Loops owed on Luke (named commands, from `BRANCHES.md`)
-
-1. `fix/probe-harness-fidelity` — `/opt/venv/bin/python probe_resolver.py 1` in the container.
-2. `fix/hrv-sleep-integrity` Task 3 — Railway historical HRV bounds-guard sweep (= Q18).
-3. `feat/hevy-resolver-activation` — limb 2: a live chat request naming a nonsense movement; confirm
-   the routine is refused **and** the unresolved title is named back.
-4. `feat/connector-error-policy` — live "See all" E2E through the deployed backend, >1 page.
-5. `feat/protocol-declaration` — confirm `current_state.declared_state` reads back 23 factors in prod.
-6. `feat/constraint-consumption` — browser-verify `CheckInAM.jsx` renders injury-derived soreness items.
-
-### Open questions by state (32 total)
-
-- **BLOCKED (2):** Q24 (reconciliation unbuilt — `laterality`'s only consumer), Q29 (install-history
-  segmentation must precede any HRV row reconciliation).
-- **OWED (5):** Q4, Q6, Q13, Q15, Q18 — each names its outstanding check and owner.
-- **UNSTARTED (14):** Q3, Q5, Q7, Q9, Q10, Q19, Q20, Q22, Q23, Q27, Q28, Q30, Q31, Q32.
-- **DONE (11):** Q1, Q2, Q8, Q11, Q12, Q14, Q16, Q17, Q21, Q25, Q26.
-
-### Sprint (ROADMAP NOW — unchanged this session)
-
-Health Connect permissions fix · Samsung Health package-name correction · Morning check-in screen ·
-Persistent conversation history · Session cards not clickable · Dual-panel scroll layout ·
-`mcp_server.get_hevy_workouts` unimported `Session` type.
-
-### Single clearest next action
-
-**Open a `health-connect-app`-rooted session and strike the struck column set from its
-`.claude/commands/closeout.md`** (Q32 item 1, = HCA Q9 item 2). This is the one remaining surface that
-*regenerates* the defect rather than merely carrying it: a ritual definition teaching the dead dialect
-re-emits it every session. health-app's copy was fixed at #92; HCA's was outside this brief's fence.
-While there, decide Q32 item 2 — whether the 77-vs-132-line divergence between the two `/closeout`
-definitions is intentional (state it) or drift (give the ritual markers and a parity gate, as the
-shared block has).
+**Single clearest next action:** from an **HCA-rooted** session, close HCA **Q11** `DONE → #93` and
+drop its interim-authority clause. That discharges the pair this session opened. Q33 (the shared-block
+strike) needs its own brief with a mirror-first plan and a G1 re-fingerprint on both sides — it is
+deliberately *not* the next action, because doing it unbriefed is the exact failure #92 corrected.
