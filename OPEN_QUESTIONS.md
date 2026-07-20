@@ -667,6 +667,61 @@ re-fingerprint on both sides. Owner: Luke.
 
 ---
 
+## Q34. Is `safety_threshold` a third class of read-constant, alongside delta and stable_rationale?
+
+`lever_dictionary.marker_interpretation[*]` currently carries two kinds of authored constant:
+`min_meaningful_delta` (is this change news?) and `stable_rationale` (is this persistent flag benign?).
+Both answer *interpretive* questions — they shape how a reading is narrated.
+
+Neither answers a **safety** question: is this value dangerous *now*, regardless of whether it moved or
+whether it is constitutionally normal for this person? Haematocrit on TRT is the live case that
+prompted this — `trt_erythrocytosis_watch` (now `ready_to_promote` at #95) is a context relation, and
+context is not a threshold. A rising-but-in-range Hct and an Hct at 0.54 are different claims, and only
+the second is a safety statement.
+
+The open fork: does `safety_threshold` belong as a third key on `marker_interpretation`, or is it a
+distinct asset that should not share a home with interpretive constants — on the grounds that mixing a
+"this is interesting" constant with a "this is dangerous" constant in one dict invites a producer bug
+that treats them interchangeably?
+
+Whatever the shape, extended I1 (#95) applies: a safety threshold with empty `evidence_refs` must not
+gate anything. That is more load-bearing here than for a delta, because the failure direction is
+asymmetric — an uncited delta produces a boring narration, an uncited safety threshold produces a
+false reassurance or a false alarm.
+
+**Status:** UNSTARTED — no blocker; due at **4b** alongside D3/PV1, which is when the constants surface
+in output. Owner: Luke.
+
+---
+
+## Q35. The over-collapse guard is unit-only and cannot see same-unit semantic collapse
+
+`backend/routers/labs.py:394` refuses a write when a raw label maps to a canonical whose
+`unit_established` disagrees with the incoming `unit_canonical`. That catches a collapse where two
+markers differ *dimensionally* — mapping something in `g/L` onto a canonical established in `mmol/L`.
+
+It cannot catch a collapse where both markers share a unit. `glucose_fasting` and `glucose_random` are
+the live example, canonical as of v0.3: both `mmol/L`, both plausibly labelled "Glucose" by a lab that
+varies its wording. If a raw label were ever mapped to the wrong one of the pair, every value would be
+dimensionally valid, the guard would stay silent, and the two series would merge into one — the exact
+double-counting the COALESCE partition rule exists to prevent, arriving through the door the guard does
+not watch. `hba1c_ngsp` (%) and `hba1c_ifcc` (mmol/mol) are safe by contrast: different units, so the
+guard does cover that pair.
+
+Note the guard is also inert wherever `unit_established` is null (`egfr`, `haemolysis_index`,
+`haematocrit`, `chol_hdl_ratio`) — by design, but it means the null-unit markers have no protection of
+either kind.
+
+The fork: is a semantic-collapse guard worth building (e.g. asserting that a raw label maps to exactly
+one canonical across the whole map, plus a same-unit sibling registry), or is exact-match on
+`marker_name_raw` considered sufficient defence given the labels are verbatim from the report? The
+`Saturation` entry is the argument for the former — it is a bare generic label, safe only because no
+other panel has yet printed that word.
+
+**Status:** UNSTARTED — no blocker. Owner: Luke.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._

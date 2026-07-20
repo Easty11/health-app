@@ -2718,6 +2718,74 @@ fix the parser, do not relax the assertion.
 
 ---
 
+### 95. A deferred entry names one of three blockers, not one — and I1 extends to read-constants
+
+**Decision:** `marker_canonical.json` goes to **v0.3** with 34 appended entries (31 → 65), taking the
+CBC, iron studies, lipids, B-vitamins, HbA1c and endocrine markers into the vocabulary so reports map
+on arrival. `lever_dictionary._meta.binds_to` follows to `v0.3 (#95)`. Two structural rulings land with
+it.
+
+**1. `_deferred` blockers are a three-class taxonomy.** The block's note claimed every deferral was
+"blocked purely on canonical-vocabulary gaps". That was true of one of its four entries. The classes:
+
+- **(1) vocabulary gap** — the marker is on the report but has no canonical id. Discharged by a vocab
+  bump. `erythroid` and `trt_erythrocytosis_watch` were genuinely this, and v0.3 discharges both:
+  `blocked_on` cleared, `status: ready_to_promote`.
+- **(2) never ordered** — the marker could be canonical but has never been ordered, so no data will
+  arrive until it is. A vocab bump does nothing. `ck_muscle_discriminator` moves to a new
+  `_blocked_on_order` block, `blocked_on: ["ck — never ordered"]`.
+- **(3) lab does not report it** — structurally absent from this provider's output. Neither a bump nor
+  an order discharges it; the entry must be re-scoped or retired. `calcium_corrected` is this: SNP
+  prints only `Calcium (Corrected)`, so uncorrected calcium never arrives and the correction can never
+  be recomputed — re-scoped as **primitive**.
+
+`non_hdl` was a fourth case and none of the three: the lab prints `Non HDLC` directly, so it is a
+primitive read that had been mis-filed as derived. Deriving it would recompute a reported number. The
+arithmetic is re-filed as a **4b QA identity** — `non_hdl == cholesterol_total − hdl_cholesterol` — a
+check on *extraction fidelity*, not a derivation. If it fails, the extraction is wrong, not the maths.
+
+Retired entries are recorded with their reason in `_deferred.retired`, not deleted. The taxonomy
+matters because a single-class note makes the block read as one queue awaiting one event, so a reader
+expands the vocabulary and expects the whole block to clear.
+
+**2. Invariant I1 extends from levers to read-constants.** I1 today reads: every *surfaced lever*
+needs non-empty `evidence_refs`; nodes with `evidence_refs: []` are draft-only and must not surface.
+The same standard now applies to any `marker_interpretation` constant that influences a gate: it
+requires non-empty `evidence_refs`, or it falls back to `_defaults`. An uncited number that silently
+sets a threshold is the same defect as an uncited lever that silently surfaces — the citation
+requirement was never really about levers, it was about anything that changes an output.
+
+**Status:** Landed as vocabulary + governance. **I1's extension is recorded canon but NOT enforced —
+see How you know.** No migration, no producer change, no ingestion.
+
+**How you know:** version `0.2 → 0.3`, entries `31 → 65`; zero duplicate `marker_name_raw` and zero
+duplicate `marker_canonical` across all 65 (`_CANONICAL_MAP` is a plain dict — a dupe silently wins
+last); `glucose_fasting` and `glucose_random` both present and distinct; all three JSON files parse;
+backend suite **206 passed**, unchanged, and no test asserts entry count or map version;
+`lever_dictionary._meta.version` left at `v0` because fixtures pin it; the over-collapse guard
+(`backend/routers/labs.py:394`) untouched and structurally unable to fire on a null
+`unit_established`, which is what `haematocrit` and `chol_hdl_ratio` carry.
+
+**Two gates this entry does NOT claim.** Recorded rather than glossed:
+
+- **The backfill dry run did not verify what it was meant to.** It returned `0 rows across 65
+  mappings`, but `backend/.env` sets `DATABASE_URL` to local SQLite, not Railway — and that local DB
+  holds 24 `lab_results` rows with **zero** `marker_canonical IS NULL`. With no NULL rows to match, the
+  query cannot return anything but zero, so it is incapable of detecting the raw-label variant it
+  exists to catch. The expected answer, produced by a probe that could not have produced any other.
+  Re-run against Railway before trusting it (`FEEDBACK` §11, §14).
+- **I1's extension has no enforcement and one live violation.**
+  `backend/interpretation/gates.py:39-53` falls back only when the entry is absent or `value is None`;
+  it explicitly projects `evidence_refs` away, its docstring stating they "are NOT part of a delta".
+  Under extended I1, `alt` — `value: 0.45`, `evidence_refs: []`, note "citation pending" — must fall
+  back to `_defaults` (0.30) and currently does not. Landing the invariant without the producer change
+  leaves canon and code disagreeing; the producer change is owed.
+
+**Do not revisit unless:** the lab's printed labels change, in which case `marker_name_raw` is the
+surface that breaks, silently, via exact match.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
