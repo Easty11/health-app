@@ -3169,6 +3169,127 @@ would again mean the category is drawn too narrowly.
 
 ---
 
+### 104. Safety threshold lands as a third gate; the asset itself is withheld under I1
+
+**Decision:** `backend/reference/safety_thresholds.json` is created, and `gates.safety_gate()`
+compares a value to an authored policy constant. **Closes Q34.** The asset carries **no live
+entries**: `_deferred.haematocrit` records the intended shape (0.50 / 0.52 / 0.54, `direction: above`,
+`contested: true`, `value_plausibility` [0.20, 0.70]) blocked on citation capture. Chat identified the
+band values but has no verified DOIs, and landing uncited constants would break the invariant this
+repo asserted at #95, one decision after asserting it.
+
+**A safety threshold is a different comparison class from anything the contract could previously
+express.** `delta` compares a value to its predecessor; `range_gate` compares it to a bound that
+arrived *with the report*. Both answer *has this moved relative to something in the data*. A safety
+threshold compares a value to a number from **outside** the data that does not care what preceded it.
+It fires on a **level, not a transition**; its value is **contested rather than measured**; and it is
+the closest this platform comes to the regulatory line — so it surfaces a band and its sources and
+**never names an action**, enforced by schema test rather than by care.
+
+**The withhold-computed rule (contract V2) is not violated.** That rule exists so the platform never
+second-guesses the lab on *the lab's own interval*. A safety threshold is a different bound from a
+different authority, and never writes to `flag`. **Consequence, stated so it is not read as a bug:**
+output will legitimately carry `range_gate.is_out_of_range: false` alongside
+`safety_gate.status: in_band`. Both are correct, from two authorities. The renderer must show both
+with their sources rather than reconcile them into one verdict.
+
+**Why a separate asset rather than `lever_dictionary.json`.** Its read-constants are *measured*
+quantities — CVI/CVA-derived RCVs that do not expire. These are committee judgement about where a
+level becomes worth surfacing. That difference earns a `review_due`, which measurement constants do
+not carry: guidance is revised, and a threshold that silently outlives its source is worse than none.
+
+**The 4a/4b boundary is enforced negatively, which makes this entry the authorisation.**
+`_FOUR_B_MEMBER_FIELDS` is a **denylist** — the test asserts `field not in member`. `safety_gate` is
+therefore permitted by *omission*, not by assertion, and nothing in the test suite states that
+emitting it is intended. This entry is that statement: `safety_gate` is a 4a field (pure arithmetic,
+no phase, no relation), and any future 4a field is authorised by a decision entry and nothing else.
+
+**Status:** Landed. Asset + schema guard at `436111a`, wiring at `262c9ac`.
+
+**How you know:** four pre-write verifications, each with a positive control — asset absent (control:
+4 files present); `_is_moved` emitted at `producer.py:114` (contract surface, confirmed); the three
+named oracle tests are field-by-field (confirmed by reading them); `_FOUR_B_MEMBER_FIELDS` is a list
+of six 4b fields not containing `safety_gate`. The schema validator **raises** on a synthetic band
+carrying `recommended_action`, shown alongside a positive control accepting the same band without it.
+Asset verified pure ASCII, zero literal em dashes — the #98 guard caught three real em dashes typed
+into the prose. **258 passed** (206 → 222 → 258). `interpretation_s2.json` unchanged;
+`marker_groups.json`, `lever_dictionary.json` and `marker_canonical.json` untouched.
+
+**Correction to the brief's premise, recorded because it changed the implementation:** the risk was
+never the oracle tests. It is **three exact-dict asserts on `news_gate`** (`fsh`, `ast`, `vitamin_d`)
+which pin that return shape whole. They constrain how the second arm may be added — see #105.
+
+**Do not revisit unless:** citations land, at which point `_deferred.haematocrit` promotes and the
+schema test starts validating something.
+
+---
+
+### 105. Gate 1 gains a second arm, and it is not demotable
+
+**Decision:** `news_gate` becomes `news_gate(delta_obj, safety_gate=None)`. The keyword is optional and
+defaults to `None`, so every pre-existing call site and all 206 prior tests behave identically. When a
+`safety_gate` is passed and its `band_change` is non-null, `is_news` is forced true and
+`safety_band_<change>` is **appended to `basis`** — never added as a sibling key. The return shape
+stays exactly `{is_news, basis}` on every path.
+
+`news_gate` was always designed to accept further arms; its own docstring reserved a relation arm for
+4b that "may append and demote". **The safety arm differs in one respect that had to be fixed before
+4b exists: it is not demotable.** A relation may legitimately demote a delta-driven story — "AST rose
+but GGT is normal, so this is muscle" is a good reason not to surface. Nothing may demote a band
+change, because explaining *why* a value rose is a different claim from whether it warrants surfacing,
+and no mechanistic account makes a haematocrit of 0.52 not worth showing. Recorded in the module
+docstring now so demotion logic **inherits** the constraint rather than discovering it.
+
+**Deviation from the brief, deliberate.** The specified resolution table does not enumerate *agreeing
+operator, bound below all bands*. Taken literally, first-match-wins would fall through to the plain
+comparison and report `not_in_band` for `>0.30` against a band at 0.50 — but the true value is
+unbounded above and could sit in any band. That is a **false negative on a safety gate**, the one
+direction never to be wrong in. Resolved to `censored_indeterminate`. The brief's own principle —
+censoring destroys a magnitude, not necessarily a threshold comparison — is preserved in the other
+direction: `>0.55` against a band at 0.54 is decidable whatever the true value is.
+
+**Status:** Landed at `262c9ac`.
+
+**How you know:** 36 new tests, written against a **synthetic** asset because the live one is empty —
+a suite pointed only at the live asset would exercise `no_asset` and nothing else while reporting
+green. The shape guard was verified by **mutation**: reimplementing the arm as a sibling key fails 6
+tests, so the guard fails *today* if the arm is built wrong. The three pre-existing exact-dict asserts
+cannot do that work yet — with no live asset, `band_change` is always null and `basis` is never
+touched, so they are inert with respect to the thing they would protect.
+
+**Do not revisit unless:** 4b's demotion logic is written, at which point this constraint is the thing
+it must not violate.
+
+---
+
+### 106. `is_moved` renamed to `should_surface` — an emitted contract key changes
+
+**Decision:** `_is_moved` becomes `_should_surface`, and the **emitted group key `is_moved` becomes
+`should_surface`**. The predicate gains `or m["safety_gate"]["status"] == "in_band"`.
+
+**Rationale:** once safety status feeds the predicate it is no longer testing movement. A persistently
+elevated value that has not moved at all must still surface — otherwise it hides inside a quiet group,
+which is the exact failure the gate exists to prevent. A key named `is_moved` that reports true for
+something that did not move is precisely the drift this repo punishes elsewhere; renaming it costs two
+tests, and keeping it costs the meaning of the word.
+
+**Cost, paid knowingly:** this is a contract-surface change. **Three** tests moved, not the two the
+brief predicted — the third is `test_all_stable_group_is_not_moved`, the G6 non-vacuity guard that
+proves the predicate is not hardwired true, now `test_all_stable_group_does_not_surface`. O3's already-
+owed re-verify of `feat/interpretation-view-skeleton` now also covers this rename; that branch was cut
+against a pre-#86 shape and already owed a contract reconciliation.
+
+**Status:** Landed at `262c9ac`.
+
+**How you know:** `grep is_moved backend/ --include=*.py` returns 2 hits, both inside the docstring
+that explains the rename; `should_surface` returns 10. The G6 non-vacuity guard still asserts `False`
+for an all-stable group, so the predicate remains falsifiable.
+
+**Do not revisit unless:** the frontend consumes `is_moved` somewhere not yet reconciled — which is
+what O3's re-verify is for.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

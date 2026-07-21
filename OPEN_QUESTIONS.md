@@ -689,8 +689,15 @@ gate anything. That is more load-bearing here than for a delta, because the fail
 asymmetric — an uncited delta produces a boring narration, an uncited safety threshold produces a
 false reassurance or a false alarm.
 
-**Status:** UNSTARTED — no blocker; due at **4b** alongside D3/PV1, which is when the constants surface
-in output. Owner: Luke.
+**Status:** DONE → #104 — `safety_threshold` is a third class, and a third *gate*, not a third
+read-constant. It lives in its own asset (`backend/reference/safety_thresholds.json`) rather than in
+`lever_dictionary.marker_interpretation`, because the two existing constants are **measured**
+(CVI/CVA-derived, non-expiring) while a safety threshold is **policy** — committee judgement carrying a
+`review_due`. `gates.safety_gate()` compares a level to it, and the mechanism is complete and tested.
+
+**The asset is empty and that is the remaining work — tracked as Q41, not here.** The question asked
+what shape the thing should take; that is answered. Whether haematocrit's bands can be cited is a
+different question with a different owner.
 
 ---
 
@@ -863,6 +870,34 @@ asymmetry question is whether a direction-agnostic gate can honestly use a stati
 whether the asymmetric form forces `min_meaningful_delta` to become a pair.
 
 **Status:** UNSTARTED — no blocker. Due **4b**, with Q34, Q36, Q37, Q38 and Q39. Owner: Luke.
+
+---
+
+## Q41. `safety_thresholds.json` citation capture for haematocrit — the last thing before the band
+
+The mechanism landed at #104/#105/#106 and is fully tested. **The asset has no live entries**, so
+`safety_gate` returns `no_asset` for every marker and the 0.50–0.54 band is still dark.
+
+Bands identified but **uncited**: **0.50** from cohort definitions, **0.52** from AUA / Endocrine
+Society guidance, **0.54** from Canadian guidance. Also uncited: the two positions that make
+`contested: true` honest — that cutoffs across guidelines appear arbitrarily chosen, and that the
+evidence for benefit of intervention is thin in *both* directions.
+
+None has a verified DOI. Under I1 as extended at #95, landing them would be exactly the failure #99
+refused for `haemoglobin`: a citation pointing at a source that does not state the number, which makes
+an unsupported value look supported. So `_deferred.haematocrit` holds the shape and nothing is live.
+
+**This is the last item between the repo and the clinical concern that opened the erythroid fork.**
+Everything else on the 4b list — Q36 (discriminator semantics), Q37 (I1 enforcement), Q38
+(interval-banding), Q39 (`effect_locus`), Q40 (asymmetrical RCV) — is correctness. This one is
+coverage: until it lands, a haematocrit of 0.52 produces no safety signal at all.
+
+Note the contested flag is not a hedge to be resolved away. If the cutoffs really are arbitrary, that
+belongs in the output next to the band, which is why `contested` and `contested_note` are asset fields
+rather than commentary.
+
+**Status:** UNSTARTED — no blocker; the capture is the first step of the work, not a precondition on
+someone else. Owner: Luke.
 
 ---
 
