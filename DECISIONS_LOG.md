@@ -2786,6 +2786,94 @@ surface that breaks, silently, via exact match.
 
 ---
 
+### 96. `erythroid` authored as structure only — constants withheld under I1
+
+**Decision:** the `erythroid` group lands in `marker_groups.json` with members, roles and two
+relations. Members: `haemoglobin` and `haematocrit` (role `concentration`), `rbc` (`cell_count`),
+`mcv` (`plasma_independent_control`). Relations: `erythroid_co_movement` across the three
+concentrations, and `haemoconcentration_discriminator`, which uses `albumin` as the plasma-based
+discriminator separating a draw artefact from a true erythron expansion — plasma-based analytes rise
+with plasma contraction while MCV, being per-cell, does not.
+
+`albumin` is an operand without being a member. Precedent verified before relying on it:
+`bilirubin_isolation` already takes `haemolysis_index` and `ld` as operands, neither of which is a
+`hepatocellular` member.
+
+**`group_levers` is empty, deliberately.** The read-constants for `haematocrit` / `haemoglobin`
+(RCV-derived) and the `plasma_volume_status` lever are **withheld**: chat identified sources but could
+not supply DOIs verbatim, and `evidence_refs` in this file is DOI-shaped. #95's I1 extension forbids an
+uncited constant that influences a gate, so fabricating a DOI or landing `evidence_refs: []` would
+break the invariant in the same repo that asserted it, one decision later. Structure needs no
+citations; constants do. `plasma_volume_status` is recorded in `_deferred_levers` using the existing
+three-field shape (`reason` / `target_markers` / `provisional_grade`) — that block carries no
+`blocked_on` field, so none was invented.
+
+**Consequence, recorded rather than papered over:** `erythroid` produces no news beyond the default
+gates until the follow-up lands, and **the TRT→Hct concern remains uninstrumented.**
+
+**Status:** Landed. Reference content only — no migration, no producer change.
+
+**How you know:** `groups` confirmed a list (not a dict) and the authored-group schema confirmed
+against the `hepatocellular` element rather than against the brief; `relation_kinds` still carries
+`co_movement` and `discriminator`; all five referenced ids (`haemoglobin`, `haematocrit`, `rbc`, `mcv`,
+`albumin`, plus `protein_total`) resolve in `marker_canonical.json` v0.3; diff **30 insertions, 0
+deletions**, with every non-`groups` key and both pre-existing groups byte-identical to master; backend
+suite **206 passed**.
+
+**The test gate is weak by construction and is reported as such.** This commit adds content no test
+reads. `producer.py`'s docstring lists `relations_rendered` and `shared_levers` under "Emits NONE of"
+(4b), and greps confirm zero consumption of `relations`, `group_levers`, `precondition_phase` or
+`references` anywhere in `backend/interpretation/` — the producer reads membership, roles and display
+names only. So 206-green means **unchanged, not verified**: the authored relations are 4b-latent and no
+producer output moved, which is the expected result, not evidence of correctness.
+
+**Do not revisit unless:** the follow-up lands captured DOIs, at which point the constants and the
+lever promote and this entry's withholding is discharged.
+
+---
+
+### 97. `trt_erythrocytosis_watch` was not ready to promote — and one of its two blockers was not real
+
+**Decision:** #95 set `blocked_on: []` and `status: "ready_to_promote"` on
+`_deferred.relations.trt_erythrocytosis_watch`. Its vocabulary blocker had genuinely cleared at v0.3,
+but a **contract blocker survived underneath it**. Reclassified:
+
+```
+"blocked_on": ["4b contract: cross-group relation references"],
+"status": "blocked_on_contract"
+```
+
+**One blocker, not two.** The brief proposed a second — `precondition_phase` in a phase-free producer —
+and verification killed it. `hpg_gonadotropin_suppression`, an **authored, live relation inside the
+promoted `hpg_axis` group**, already carries `precondition_phase: "on_trt"`, alongside a `driver` key.
+Authored relations demonstrably hold arbitrary extra keys beyond the base schema, so
+`precondition_phase` is precedented and cannot disqualify promotion. Recorded here as **checked and
+cleared** so the next reader does not re-open it. `references` has no such precedent: zero occurrences
+across the eight authored relations in both groups.
+
+The other half of the proposed rationale — "the 4a producer does not consume it" — was rejected as a
+criterion outright. It is equally true of `group_levers` and of every `relations` block, including the
+`erythroid` content landed at #96. **A criterion that would disqualify the commit you just authorised
+is not a promotion criterion**; 4b-latent content is authored precisely on the understanding that 4a
+ignores it.
+
+**Rationale (the general rule):** clearing a vocabulary blocker does not clear a contract blocker.
+#95's three-class taxonomy applies **per-blocker, not per-entry** — a single `_deferred` entry can hold
+more than one class of block at once, and discharging one says nothing about the others. #95's clearing
+of the vocabulary blocker was correct; only the count of what survived beneath it was wrong.
+
+**Status:** Landed. Corrects #95, which is locked and unedited.
+
+**How you know:** `precondition_phase` found on `hpg_gonadotropin_suppression` in the authored
+`hpg_axis` group; `references` absent from all eight authored relations; zero hits for either construct
+in `backend/interpretation/`; `_deferred` diff confined to the single relation object (4 insertions, 2
+deletions); backend suite **206 passed**, unchanged.
+
+**Do not revisit unless:** 4b defines the contract for cross-group relation `references`, which is the
+one thing still holding this relation.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

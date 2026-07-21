@@ -722,6 +722,66 @@ other panel has yet printed that word.
 
 ---
 
+## Q36. `discriminator` field semantics are inverted between two authored relations
+
+Both authored `discriminator` relations use the field to mean the opposite thing:
+
+- **`ggt_hepatobiliary_discriminator`** — `discriminator: "ggt"` is the **evidence marker**;
+  `operands: ["ast", "alt"]` are the markers being explained.
+- **`bilirubin_isolation`** — `discriminator: "bilirubin_total"` is the **marker being explained**;
+  `operands: ["ggt", "alp", "haemolysis_index", "ld"]` are the evidence.
+
+Both are authored, both read coherently in prose, and 4b's renderer will need exactly one meaning.
+
+**#96 took a side, which is why this is now urgent rather than tidy.**
+`haemoconcentration_discriminator` follows the `ggt` reading — `discriminator: "albumin"` is the
+evidence, `operands` are the red cell markers being explained. That makes it **2-to-1** for
+evidence-in-`discriminator`. A renderer built on the `bilirubin_isolation` reading would render the new
+relation **backwards**: it would announce albumin as the thing being explained by a red cell rise,
+inverting the artefact-vs-expansion call that is the relation's entire purpose. That is the concrete
+cost of leaving the ambiguity open, and it should be settled by decision rather than discovered at 4b.
+
+**Secondary, and unresolved by picking a side:** `discriminator` is a single string, but
+`haemoconcentration_discriminator` genuinely has **two** evidence markers — `albumin` *and*
+`protein_total`. Only `albumin` fits the field. `protein_total` survives in the `reads` prose and in
+`plasma_volume_status.target_markers`, i.e. nowhere a renderer can reach it. Should `discriminator`
+become a list?
+
+**Status:** UNSTARTED — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q37 (I1 enforcement),
+D3 and PV1. Owner: Luke.
+
+---
+
+## Q37. Does `gates.py` carry citation payload into the output? — I1's extension has no enforcement
+
+#95 extended invariant I1 from levers to read-constants: any `marker_interpretation` constant that
+influences a gate requires non-empty `evidence_refs`, or it falls back to `_defaults`. **Nothing
+enforces this, and there is one live violation.**
+
+`backend/interpretation/gates.py:39-53` falls back only when the entry is absent or its `value` is
+`None`. It explicitly projects `evidence_refs` away, the docstring stating they "are asset citation
+payload and are NOT part of a delta". Under extended I1, `alt` — `value: 0.45`, `evidence_refs: []`,
+note "citation pending — CVi source not yet pinned to a DOI" — must fall back to `_defaults` (0.30).
+It does not; it uses 0.45 today.
+
+So canon and code disagree **by design**, each documenting the opposite intent. The fork: does
+`gates.py` start reading citation payload to decide fallback — making `evidence_refs` load-bearing at
+runtime rather than documentation — or does I1's extension get narrowed to something the producer can
+honour without inspecting citations?
+
+**This is the parent question to #96's withholding.** The `haematocrit`/`haemoglobin` read-constants
+and `plasma_volume_status` were held back precisely because I1 forbids uncited constants. If I1's
+extension is narrowed rather than enforced, that withholding was stricter than the invariant actually
+requires — and if it is enforced, `alt` must move at the same time.
+
+Recorded here because it lived only in #95's body and this file is what gets actioned; an obligation
+in an append-only entry has nothing pointing at it. Flagged at #95's close-out and again before #96's
+merge, unminted both times.
+
+**Status:** UNSTARTED — no blocker. Due **4b**, with Q34, Q36, D3 and PV1. Owner: Luke.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
