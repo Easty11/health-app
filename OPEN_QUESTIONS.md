@@ -800,7 +800,25 @@ Options: interval-banded constants; a widening factor derived from `collected_at
 the tighter value and absorb the seasonal false positives, annotating them. The third is the status
 quo by default rather than by decision, which is the thing to fix.
 
-**Status:** UNSTARTED — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q36, Q37 and Q39.
+**Update at #101 — the interval-dependence now has a citable basis, not chat's assertion.** Coşkun et
+al. sampled **weekly over 10 weeks** and state this is **less than one erythrocyte turnover period
+(~4 months)**, offering that as the reason erythrocyte CVI came out lower than for other parameters.
+So the four constants landed at #101 are valid for roughly the interval this repo's recent draws span
+(~10–12 weeks) and **understate variation beyond it**; Thirup's ~15% at 6 months is the widened
+figure. The two sources are not in conflict — they measure different intervals, which is the whole
+point of the question.
+
+Note this reverses the direction of the concern as originally written. Q38 was minted against #99's
+0.12, worrying it was *over*-sensitive for long intervals. At #101's 0.08 the constant is tighter
+still, so the same argument now bites harder: the shortfall at long intervals is larger, not smaller.
+
+**Convention, settled at #101 and recorded here because this is where a reader reasoning about
+constants will look:** constants are derived **two-sided, Z = 1.96**, because the delta gate is
+direction-agnostic. EFLM's calculator defaults to one-sided (Z 1.64); the one-sided statistic belongs
+with `safety_threshold` (Q34), which is directional. Not an open fork — stated so it is not
+re-derived differently next time.
+
+**Status:** UNSTARTED — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q36, Q37, Q39 and Q40.
 Owner: Luke.
 
 ---
@@ -825,6 +843,26 @@ existing lever is correct without edit. The renderer can then refuse to rank a m
 alongside physiology-locus ones, or label it distinctly.
 
 **Status:** UNSTARTED — no blocker. Due **4b**. Owner: Luke.
+
+---
+
+## Q40. RCV is asymmetrical for a rise and a fall, but `min_meaningful_delta` holds one scalar
+
+EFLM's calculator and **Fokkema** (Clin Chem 2006;52:1602–3) give **different RCVs for a rise and for a
+fall** — the log-normal distribution of most analytes means a 30% increase and a 30% decrease are not
+equally improbable. `min_meaningful_delta` holds **one value**, applied to `abs()` of the change.
+
+Symmetric and asymmetric forms **converge below roughly 5–10% CV**, so all four erythroid constants
+landed at #101 are unaffected — CVI runs 0.72–2.82% across them. **`oestradiol` is not**: at 0.42 from
+CVI ≈14%, it sits well inside the divergent region, so the single scalar is meaningfully wrong in one
+direction. Which direction, and by how much, is the thing to determine.
+
+This interacts with Q34 rather than duplicating it. `safety_threshold` is directional *by design* — it
+asks "is this dangerous now", which has a side. The delta gate is direction-agnostic by design. So the
+asymmetry question is whether a direction-agnostic gate can honestly use a statistic that isn't, or
+whether the asymmetric form forces `min_meaningful_delta` to become a pair.
+
+**Status:** UNSTARTED — no blocker. Due **4b**, with Q34, Q36, Q37, Q38 and Q39. Owner: Luke.
 
 ---
 

@@ -23,6 +23,14 @@ is the step-0 breach from the opposite end: the receipt protects work in flight,
 protects an agreement in flight. Write it as a `CHAT→CODE` line when it is agreed, not when it
 is next actioned.
 
+**Widened at #102 — any cross-lane instruction, including a go, is written here or it did not
+happen.** An instruction is not an agreement, and a merge authorisation had no surface: the go for
+`feat/erythroid-constants-and-lever` was given explicitly in chat with the bytes verified, never
+reached Code, and the branch sat unmerged for a session while the next brief was written against a
+master state that assumed it had landed. Third instance of one shape after Q37 and the post-close-out
+agreement — each fix scoped to the exact form that had just failed, each next failure one step outside
+it. Hence the widening to the general category rather than to "goes as well".
+
 ---
 
 2026-07-21 20:53 AEST | CHAT→CODE | Erythroid RCV-constants brief received — four constants from Coşkun et al. (`10.1515/cclm-2017-1155`), superseding #99's haematocrit 0.12. **Received, NOT started — two blocking findings, both verified.** (1) **The brief's base does not exist.** master is `1d49000`, DECISIONS max **#98**, questions max **Q37**. #99/#100/Q38/Q39 never merged; they sit on `feat/erythroid-constants-and-lever`, pushed but unmerged because the previous session held for a go that did not arrive. So there is no haematocrit 0.12 on master to correct, and no `erythroid.group_levers` for step 4 to leave alone. (2) **Step 2's self-check fails on one row:** haemoglobin/rbc/mcv reproduce exactly, haematocrit computes 8.0093 (2 d.p. 8.01) against published 8.00 — consistent with the source rounding its own CVA/CVI inputs rather than transport corruption, and the landed constant is 0.08 either way, but the brief says stop and report rather than reconstruct. Also verified: the asymmetrical-RCV question and two-sided convention did **not** land anywhere (only content hit for `asymmetric` on master is unrelated prose in Q34), so both need folding in as the brief anticipated.

@@ -3025,6 +3025,101 @@ measurement-vs-physiology distinction a real home and make this entry's `channel
 
 ---
 
+### 101. Four erythroid RCV constants from a single published source — supersedes #99's haematocrit 0.12
+
+**Decision:** `haemoglobin` 0.08, `haematocrit` 0.08, `rbc` 0.08 and `mcv` 0.02 land in
+`marker_interpretation`, all cited to **Coşkun et al.** (`10.1515/cclm-2017-1155`, EFLM Working Group
+on Biological Variation) — 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000. The
+source **publishes RCV directly** rather than requiring derivation, which is the point: every CVa
+assumption chat introduced is removed.
+
+**#99's haematocrit 0.12 is superseded, not corrected in place.** That value came from Thirup 2003,
+whose derivation embeds a 2003-era CVA of 3%; this source measures CVA at 0.63%, and that difference
+is the entire gap. **Thirup is retained on `haematocrit` as a second ref**, demoted to the source of
+the long-interval caveat rather than of the number.
+
+**Chat's earlier hand-derivations are withdrawn** — 0.08 for haemoglobin from an assumed desirable-APS
+CVa, and ~0.09 for a re-derived haematocrit. Both happened to land near the published figures, which
+is luck, not method. Chat also mis-targeted Buoro 2018 (`10.1515/cclm-2017-0902`) as the source; that
+is a different paper, cited by this one as ref 23. Recording the near-miss matters more than the miss:
+a derivation that lands close to the right answer by accident is indistinguishable from one that
+worked, and #99 withheld `haemoglobin` precisely to avoid banking on that.
+
+**Convention, stated here rather than left implicit: constants are derived two-sided, Z = 1.96**,
+because the delta gate is direction-agnostic — it asks "did this move meaningfully", not "did it rise".
+EFLM's own calculator defaults to one-sided (Z 1.64); the one-sided statistic belongs with
+`safety_threshold` (Q34), which *is* directional. Coşkun's Methods state Z = 1.96, so these four
+already conform.
+
+**Arithmetic verification note:** three of the four published RCVs reproduce exactly from the source's
+own equation and inputs; `haematocrit` reproduces to 8.01 against a published 8.00. A second
+independent identity from the same table (`B_APS = 0.25·(CVI² + CVG²)^½`) also fails on the haematocrit
+row alone, by a larger margin, and cannot be reconciled with any published CVG for that measurand
+(solving backwards demands ≈4.56 against published 5.46/5.51). The anomaly is confined to one row, is
+immaterial at the resolution of the constant landed — 8.00 and 8.01 both give `0.08` — and **no input
+was reconstructed to force agreement**. Chat worked from a text extraction of the PDF; the artefact may
+originate there rather than in the source.
+
+**Consequences, recorded plainly:**
+
+- **(a)** At 0.08 the August panel needs `haematocrit` ≥ 0.475 to trip the delta gate, against ≥ 0.493
+  at 0.12 — moving it from a gate that could not plausibly fire to one that plausibly will, given 0.47
+  on an increased dose with a new steady state pending.
+- **(b)** `mcv` moves from the 0.30 default to 0.02, a **fifteen-fold tightening**. This is what makes
+  "MCV stays flat" in `haemoconcentration_discriminator` a testable claim rather than a tautology: at
+  0.30 an MCV could move substantially and still read as flat, so the discriminator would have
+  confirmed haemoconcentration almost regardless of the data.
+- **(c)** The **0.50–0.54 band remains uninstrumented.** This is still a delta gate; coverage there
+  waits on `safety_threshold` (Q34).
+
+**Status:** Landed. Reference content only — `marker_groups.json` untouched, no migration, no producer
+change.
+
+**How you know:** the self-check above, run before writing, with a control showing a desirable-APS CVa
+gives 9.09% for haemoglobin against a published 7.76 — so the check discriminates and the source's RCV
+column does use measured CVA; diff confined to `lever_dictionary.json`, 30 insertions / 3 deletions,
+the deletions being only the three superseded haematocrit lines; `_meta.binds_to`, `levers` and
+`_deferred_levers` all unchanged; file verified pure ASCII with zero literal em dashes (#98 guard);
+no test names `haematocrit` or pins `0.12`, verified with a control confirming the grep reaches test
+files; backend suite **206 passed**, zero changed test files against a control of 21 tracked.
+
+**206 green is reported as unchanged, not verified** — `marker_interpretation` is read by
+`gates.min_meaningful_delta`, but no test covers any of these four markers.
+
+**Do not revisit unless:** the interval question (Q38) resolves toward interval-banded constants, which
+would replace all four scalars.
+
+---
+
+### 102. A merge authorisation is a cross-lane instruction and needs a receipt — #98 rule 3 widened
+
+**Decision:** #98 rule 3 currently sends *agreements* to `HANDOFF.md`. Widened by one word: **any
+cross-lane instruction, including a go, is written to `HANDOFF.md` or it did not happen.**
+
+**Rationale:** `feat/erythroid-constants-and-lever` was completed, gated, pushed and held for a go. The
+go was given explicitly in chat, with the bytes verified. It never reached Code, because chat has no
+channel to the repo and the next relay carried a different brief instead — one written against a master
+state that assumed the merge had happened. The branch sat unmerged for a full session, and the
+following brief's supersession premise silently failed.
+
+**This is the third instance of one shape.** Q37 was agreed twice and landed on the third session. The
+post-close-out citation agreement needed #98 rule 3 to exist before it had a home. Now a *go* — which is
+not an agreement but an instruction — had no surface either. Each time the fix was scoped to the exact
+form that had just failed, and each time the next failure arrived in a form one step outside it. The
+widening is deliberately to the general category rather than to "goes as well as agreements", because
+the pattern is that the category keeps being drawn too narrowly.
+
+**Status:** Landed. `HANDOFF.md` header updated.
+
+**How you know:** master sat at `1d49000` with DECISIONS max #98 while `#99`/`#100`/`Q38`/`Q39` existed
+only on the unmerged branch — verified at this session's open, and the reason this brief's ANCHOR had
+to be replaced.
+
+**Do not revisit unless:** a fourth instance appears in a form outside "cross-lane instruction", which
+would mean the category is *still* drawn too narrowly.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
