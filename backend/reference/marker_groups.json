@@ -153,6 +153,36 @@
           "de_select_hint": "Runtime: de-select when ggt is normal (ggt_hepatobiliary_discriminator fires)."
         }
       ]
+    },
+
+    {
+      "group_key": "erythroid",
+      "display_name": "Red cell mass + oxygen carriage",
+      "is_group_of_one": false,
+      "members": [
+        { "marker_canonical": "haemoglobin", "role": "concentration" },
+        { "marker_canonical": "haematocrit", "role": "concentration" },
+        { "marker_canonical": "rbc",         "role": "cell_count" },
+        { "marker_canonical": "mcv",         "role": "plasma_independent_control" }
+      ],
+      "relations": [
+        {
+          "relation_key": "erythroid_co_movement",
+          "kind": "co_movement",
+          "operands": ["haemoglobin", "haematocrit", "rbc"],
+          "render_on": ["haemoglobin", "haematocrit", "rbc"],
+          "reads": "All three are concentrations of the same red cell line and move together; divergence points at a measurement or index change rather than a change in red cell mass."
+        },
+        {
+          "relation_key": "haemoconcentration_discriminator",
+          "kind": "discriminator",
+          "discriminator": "albumin",
+          "operands": ["haemoglobin", "haematocrit", "rbc"],
+          "render_on": ["haemoglobin", "haematocrit", "rbc", "albumin"],
+          "reads": "Albumin and total protein are plasma-based and rise with plasma contraction, so a red cell rise with them rising is haemoconcentration (a draw artefact), while a red cell rise with albumin/protein flat is a true erythron expansion; MCV is per-cell and plasma-independent, so it stays flat in the artefact case."
+        }
+      ],
+      "group_levers": []
     }
   ],
 
