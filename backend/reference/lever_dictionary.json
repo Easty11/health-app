@@ -60,6 +60,16 @@
       "actor": "self",
       "channel": "behavioural",
       "draft_status": "ai_draft"
+    },
+    "plasma_volume_status": {
+      "label": "Plasma volume status",
+      "mechanism_summary": "Haemoglobin, haematocrit and RBC are concentrations, so plasma volume sets the denominator. Contraction from dehydration, heat, recent training or prolonged tourniquet raises all three without any change in red cell mass. Albumin and total protein are plasma constituents and concentrate the same way; MCV is per-cell and does not move. This lever changes the measured value, not the underlying erythron.",
+      "grade": "high",
+      "grade_rationale": "Directly measured, not inferred: Dill and Costill observed Hb and Hct before and after running to a 4% body-weight loss and derived the blood/plasma/red-cell volume relations from them, on the explicit assumption that circulating red cell mass is unchanged. Matomaki et al. revisit the equation, confirm it for plasma and serum biomarkers, and identify where the constant-red-cell-mass assumption breaks (e.g. footstrike haemolysis in running). Albumin half: true hyperalbuminaemia from increased albumin mass is extremely rare; most high measured albumin reflects haemoconcentration.",
+      "evidence_refs": ["10.1152/jappl.1974.37.2.247", "10.14814/phy2.13749", "NBK459198"],
+      "actor": "self",
+      "channel": "behavioural",
+      "draft_status": "ai_draft"
     }
   },
 
@@ -99,6 +109,15 @@
         "evidence_refs": []
       },
       "stable_rationale": null
+    },
+    "haematocrit": {
+      "min_meaningful_delta": {
+        "mode": "relative",
+        "value": 0.12,
+        "note": "CVi 3% and CVa 3% (Thirup 2003, 12 studies / 638 adults) explain a ~12% relative change at the 95% level between successive values 1 day to 1-2 months apart (worked example 0.42 -> 0.47). Interval-dependent: Thirup gives ~15% for intervals up to 6 months, from warm-weather haemodilution (population mean ~3% lower in summer). 0.12 is the tighter of the two and is chosen deliberately; the constant shape cannot hold both - see the interval question logged with this work. Estimate stated to hold for athletes.",
+        "evidence_refs": ["10.2165/00007256-200333030-00005"]
+      },
+      "stable_rationale": null
     }
   },
 
@@ -114,11 +133,6 @@
     "hepatic_steatosis": {
       "reason": "Competing lever for ALT (hepatic origin). Held out of live nodes: no real DOI to hand \u2014 I1 forbids surfacing an uncited lever. Add citation to promote.",
       "target_markers": ["alt", "ast"],
-      "provisional_grade": "moderate"
-    },
-    "plasma_volume_status": {
-      "reason": "Discriminates haemoconcentration (draw artefact) from true erythron expansion \u2014 plasma-based analytes rise with plasma contraction while MCV, being per-cell, does not. Held out of live nodes: sources identified but no DOI captured verbatim \u2014 I1 forbids surfacing an uncited lever. Add citation to promote.",
-      "target_markers": ["haemoglobin", "haematocrit", "rbc", "albumin", "protein_total"],
       "provisional_grade": "moderate"
     }
   }

@@ -182,7 +182,17 @@
           "reads": "Albumin and total protein are plasma-based and rise with plasma contraction, so a red cell rise with them rising is haemoconcentration (a draw artefact), while a red cell rise with albumin/protein flat is a true erythron expansion; MCV is per-cell and plasma-independent, so it stays flat in the artefact case."
         }
       ],
-      "group_levers": []
+      "group_levers": [
+        {
+          "lever_key": "plasma_volume_status",
+          "member_effects": [
+            { "marker_canonical": "haemoglobin", "direction": "raises", "grade": "high" },
+            { "marker_canonical": "haematocrit", "direction": "raises", "grade": "high" },
+            { "marker_canonical": "rbc",         "direction": "raises", "grade": "high" }
+          ],
+          "de_select_hint": "Runtime: de-select when albumin is flat (haemoconcentration_discriminator fires). MCV is omitted from member_effects deliberately - it is the plasma-independent control and does not move."
+        }
+      ]
     }
   ],
 
