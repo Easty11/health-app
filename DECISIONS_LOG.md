@@ -2933,6 +2933,98 @@ rule 1 permits, never narrow it.
 
 ---
 
+### 99. `haematocrit` constant landed at published RCV; `haemoglobin` withheld
+
+**Decision:** `marker_interpretation.haematocrit.min_meaningful_delta` is set to
+`{mode: "relative", value: 0.12}`, cited to **Thirup 2003**
+(`10.2165/00007256-200333030-00005`), which reports CVi 3% and CVa 3% across 12 studies / 638
+adults — giving a ~12% relative change at the 95% level between successive values 1 day to 1–2
+months apart. The estimate is stated to hold for athletes.
+
+**`haemoglobin` is deliberately not authored.** The correct source was identified and its DOI
+verified (**Buoro 2018**, `10.1515/cclm-2017-0902`, PMID 29303771), but its public abstract reports
+only aggregate ranges, not the per-parameter figure. Transferring haematocrit's 0.12 across two
+collinear markers would be **inference laundered as a citation** — the citation would point at a
+paper that does not state the number. It falls back to `_defaults` 0.30 until the value is actually
+read. Withheld under I1.
+
+**Rationale:** this is the citable half of #96's withholding, and only the citable half. The
+distinction being enforced is that a DOI attached to a value the paper does not contain is worse
+than no citation at all: it converts an unsupported number into an apparently supported one, and
+`evidence_refs` is exactly the field a reader trusts to have done that checking.
+
+**Consequence, recorded plainly — this does not instrument the TRT→Hct erythrocytosis watch.** At
+0.12 relative, an observed 0.44 → 0.47 (+6.8%) still produces **no news**, and the range gate does
+not fire until the lab's upper bound at 0.54. **The 0.50–0.54 action band remains uninstrumented**,
+pending `safety_threshold` (Q34). Landing this constant makes the erythroid group *less* silent, not
+adequately instrumented.
+
+**Status:** Landed. Reference content only.
+
+**How you know:** `evidence_refs` string matches the source character-for-character;
+`haemoglobin` confirmed absent from `marker_interpretation`; both reference files verified pure ASCII
+with zero literal em dashes (#98 guard, run against its own session); diff confined to the two
+reference files with deletions limited to the `_deferred_levers` entry and the empty `group_levers`
+line — no reflow; backend suite **206 passed**.
+
+**The test gate is weak by construction, again.** `marker_interpretation` is read by
+`gates.min_meaningful_delta`, but no test covers `haematocrit`, and `group_levers` is not producer-
+consumed at all. **206 green means unchanged, not verified.**
+
+**Do not revisit unless:** the Buoro per-parameter figure is read from the full text, at which point
+`haemoglobin` lands and this entry's withholding is discharged.
+
+---
+
+### 100. `plasma_volume_status` promoted with verified citations — and `evidence_refs` admits non-DOI identifiers
+
+**Decision:** `plasma_volume_status` moves out of `_deferred_levers` into `levers`, grade **high**,
+and `erythroid.group_levers` is populated with it. This discharges the lever half of #96's
+withholding. The grade rests on directly measured evidence rather than inference: **Dill & Costill
+1974** (`10.1152/jappl.1974.37.2.247`) observed Hb and Hct before and after running to a 4%
+body-weight loss and derived the blood/plasma/red-cell volume relations from them, on the explicit
+assumption that circulating red cell mass is unchanged; **Matomäki et al. 2018**
+(`10.14814/phy2.13749`) revisit the equation, confirm it for plasma and serum biomarkers, and
+identify where the constant-red-cell-mass assumption breaks.
+
+`member_effects` carries `haemoglobin`, `haematocrit` and `rbc` as `raises`/high. **MCV is omitted,
+and its absence is the signal** — it is the plasma-independent control and does not move. The
+`direction` enum was enumerated against the file before writing and holds only `raises` and
+`lowers`, so no "no effect" value was invented; the omission mirrors the existing alcohol/`ggt`
+de-select precedent. The `de_select_hint` keys to `haemoconcentration_discriminator`.
+
+**`evidence_refs` now admits stable non-DOI identifiers — a convention extension, flagged before
+staging rather than slipped in.** `NBK459198` is an NCBI Bookshelf ID; no DOI exists for it.
+Verified with a positive control per the paired-control rule: all **13** pre-existing
+`evidence_refs` strings across `levers` and `marker_interpretation` are DOIs, zero non-DOI, with the
+matcher shown to discriminate on the 13 it accepted. So this is genuinely the first.
+
+This is an **extension, not a loosening of I1**. I1's requirement is a *resolvable citation* — a
+reader can reach the source and check the claim. A DOI is the usual instrument for that, not the
+requirement itself. Refusing a stable Bookshelf ID would have forced the alternative of either
+dropping a real source or attaching a DOI that does not exist, and the second is precisely the
+failure #99 refuses for `haemoglobin`.
+
+**`channel` stays two-valued.** `plasma_volume_status` is `behavioural` — correct on the axis
+`channel` actually encodes, which is how the actor acts. That this lever moves the *measurement*
+rather than the *physiology* is a different axis; it is confined to `mechanism_summary` and logged
+as Q39 rather than smuggled in as a third enum value.
+
+**Status:** Landed. Reference content only. `_meta.binds_to` unchanged at v0.3 (#95) — no vocabulary
+change.
+
+**How you know:** all three `evidence_refs` strings match character-for-character;
+`plasma_volume_status` present in `levers` and absent from `_deferred_levers`, with
+`hepatic_steatosis` untouched; `channel` confirmed `behavioural` against a two-valued enum
+enumerated from the file; `erythroid.group_levers` carries three `member_effects` and no MCV entry;
+backend suite **206 passed**, no fixture or oracle moved (0 changed test files, against a control of
+21 tracked test files, proving the check can see them).
+
+**Do not revisit unless:** 4b introduces `effect_locus` (Q39), which would give the
+measurement-vs-physiology distinction a real home and make this entry's `channel` reasoning moot.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

@@ -782,6 +782,52 @@ merge, unminted both times.
 
 ---
 
+## Q38. `min_meaningful_delta` has no interval awareness, but RCV is interval-dependent by construction
+
+Thirup 2003 gives **~12%** for haematocrit between successive values 1 day to 1–2 months apart, and
+**~15%** for intervals up to 6 months — the widening coming from warm-weather haemodilution, with the
+population mean running ~3% lower in summer. Same marker, same paper, two different answers keyed to
+the gap between draws.
+
+`min_meaningful_delta` holds **one scalar**. So whichever value lands is wrong for roughly half of a
+real draw series, and this repo's series are months apart and cross seasons — the condition that
+selects the wider figure is the normal case here, not the edge case. #99 landed **0.12**, the tighter
+of the two, deliberately: it produces false positives (news that is really seasonal drift) rather than
+false negatives (a real change called noise), which is the safer direction to be wrong in for a marker
+whose failure mode is erythrocytosis.
+
+Options: interval-banded constants; a widening factor derived from `collected_at` deltas; or accept
+the tighter value and absorb the seasonal false positives, annotating them. The third is the status
+quo by default rather than by decision, which is the thing to fix.
+
+**Status:** UNSTARTED — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q36, Q37 and Q39.
+Owner: Luke.
+
+---
+
+## Q39. Levers have no `effect_locus` — `plasma_volume_status` moves the reading, not the biology
+
+Every lever authored before #100 changes the underlying physiology: a TRT dose really does raise
+testosterone, alcohol really does raise GGT. `plasma_volume_status` does not. It leaves red cell mass
+untouched and changes the denominator — which is *precisely why* the Dill & Costill derivation works,
+since that equation depends on circulating red cell mass being constant across the two draws.
+
+Surfacing it un-flagged means a UI offering "hydration" and "TRT dose" as comparable handles on
+haematocrit. They are not comparable: one changes what the number *is*, the other changes what the
+number *measures*. Acting on the second as though it were the first means chasing an artefact.
+
+`channel` cannot carry this. It encodes **how the actor acts** — `pharmacologic` | `behavioural` — and
+`plasma_volume_status` is genuinely behavioural on that axis. Adding a third value would conflate two
+orthogonal dimensions in one field, and #100 explicitly declined to do so.
+
+Proposal: an `effect_locus` field, `physiology` | `measurement`, defaulting to `physiology` so every
+existing lever is correct without edit. The renderer can then refuse to rank a measurement-locus lever
+alongside physiology-locus ones, or label it distinctly.
+
+**Status:** UNSTARTED — no blocker. Due **4b**. Owner: Luke.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
