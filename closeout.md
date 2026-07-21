@@ -3,104 +3,103 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`. Interruption ledger: `HANDOFF.md`._
 
-2026-07-21 · erythroid constants, RCV supersession, evidence rules (#99 → #103)
+2026-07-22 · safety-threshold gate (#104 → #106, Q34 closed, Q41 minted)
 
 ## 1. Real commits this session
 
-Session-open ref: `1d49000`. Landed on `master` at **`8065135`**, pushed.
+Session-open ref: `d22eeba`. Landed on `master` at **`caf5204`**, pushed.
 
 ```
-8065135 governance: DECISIONS_LOG #103, FEEDBACK §17 — evidence that looks like evidence
-ed5491d gov(handoff): receipt — control-identity and check-coupling rules received
-c7795c1 governance: DECISIONS_LOG #101/#102, OPEN_QUESTIONS Q40, Q38 append
-b0ccc8b reference: four erythroid RCV constants from Coskun et al.
-fa10b70 gov(handoff): receipt — erythroid RCV-constants brief received, not started
-6bdbb7b governance: DECISIONS_LOG #99/#100, OPEN_QUESTIONS Q38/Q39
-4cf635a reference: haematocrit constant, plasma_volume_status promoted, erythroid levers
-4384c14 gov(handoff): receipt — erythroid constants + lever brief received, not started
+caf5204 gov(handoff): written go for f078f1c; mutation-verification rule receipted
+f078f1c governance: DECISIONS_LOG #104/#105/#106, Q34 closed, Q41 minted
+262c9ac feat(interpretation): safety_gate as gate 3; news_gate gains a non-demotable arm
+436111a reference: safety_thresholds.json schema + guard, no live entries
+95808fe gov(handoff): receipt — safety-threshold gate brief received, not started
 ```
-
-The last three predate this session's brief: they are the **prerequisite merge**, completed here.
-See §2.
 
 Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
+2026-07-22 gov(handoff): written go for f078f1c; mutation-verification rule receipted
+2026-07-22 governance: DECISIONS_LOG #104/#105/#106, Q34 closed, Q41 minted
+2026-07-22 feat(interpretation): safety_gate as gate 3; news_gate gains a non-demotable arm
+2026-07-22 reference: safety_thresholds.json schema + guard, no live entries
+2026-07-22 gov(handoff): receipt — safety-threshold gate brief received, not started
+2026-07-21 chore: session close-out
 2026-07-21 governance: DECISIONS_LOG #103, FEEDBACK §17 — evidence that looks like evidence
 2026-07-21 gov(handoff): receipt — control-identity and check-coupling rules received
 2026-07-21 governance: DECISIONS_LOG #101/#102, OPEN_QUESTIONS Q40, Q38 append
 2026-07-21 reference: four erythroid RCV constants from Coskun et al.
-2026-07-21 gov(handoff): receipt — erythroid RCV-constants brief received, not started
-2026-07-21 governance: DECISIONS_LOG #99/#100, OPEN_QUESTIONS Q38/Q39
-2026-07-21 reference: haematocrit constant, plasma_volume_status promoted, erythroid levers
-2026-07-21 gov(handoff): receipt — erythroid constants + lever brief received, not started
-2026-07-21 gov(handoff): receipt — paired-positive-control rule; O3 unblocked
-2026-07-21 chore: session close-out
 ```
 
-Maxima now: **DECISIONS #103 · questions Q40 · FEEDBACK §17.**
-Backend suite **206 passed**, unchanged. No `interpretation/`, `alembic/`, `tests/`, `routers/` or
-`frontend/` paths touched at any point.
+Maxima now: **DECISIONS #106 · questions Q41 · FEEDBACK §17.**
+Backend suite **258 passed** (206 → 222 → 258). No `alembic/`, `routers/` or `frontend/` touched.
 
 ## 2. Pending-queue reconciliation
 
-**The session opened on a blocking finding.** The incoming brief assumed master carried #99/#100 and
-haematocrit at 0.12. It did not: master was `1d49000` at **#98 / Q37**, and #99/#100/Q38/Q39 existed
-only on `feat/erythroid-constants-and-lever` — complete, gated and pushed, but **unmerged**, because
-the previous session held for a go that was given in chat and never reached Code. So the brief's
-supersession premise had already failed before step 1. Reported; ANCHOR was replaced; the prerequisite
-was merged on a written go, then this branch rebased onto it. That failure is what #102 records.
-
 | Brief item | Outcome |
 |---|---|
-| Step 0 — receipt | **LANDED** `fa10b70`, alone, before work |
-| Prerequisite merge | **LANDED** `6bdbb7b` → master; premises re-verified post-rebase |
-| Step 1 — verify shape / no test pins 0.12 | **VERIFIED** with control |
-| Step 2 — arithmetic self-check | **RUN**; one row anomalous, adjudicated by chat — see below |
-| Step 3 — four constants | **LANDED** `b0ccc8b` |
-| Step 4 — leave `marker_groups.json` alone | **HELD** — untouched |
-| LOG | **LANDED** `c7795c1` (#101/#102, Q40, Q38 append) + `8065135` (#103, §17) |
+| Step 0 — receipt before touching anything | **LANDED** `95808fe`, alone |
+| Step 1 — four verifications with controls | **VERIFIED**; one premise narrowed — see below |
+| Step 2 — `safety_thresholds.json`, no live entries | **LANDED** `436111a` |
+| Step 3 — schema test + negative control | **LANDED** `436111a`, 16 tests |
+| Step 4 — `gates.safety_gate()` | **LANDED** `262c9ac`; one deviation — see below |
+| Step 5 — `news_gate` second arm, non-demotable | **LANDED** `262c9ac` |
+| Step 6 — producer wiring + key rename | **LANDED** `262c9ac`; **three** tests moved, not two |
+| Step 7 — gate tests (+ the added shape guard) | **LANDED** `262c9ac`, 36 tests |
+| LOG | **LANDED** `f078f1c` — #104/#105/#106, Q34 `DONE → #104`, Q41 minted |
+| Written go (#102) | **LANDED** `caf5204` before the merge acted on it |
 
-### The haematocrit arithmetic anomaly, recorded not resolved
+### Three divergences from the brief, all deliberate
 
-Three of four RCVs reproduce exactly from the source's own equation: hb **7.7632**, rbc **7.8930**,
-mcv **2.0572**. `haematocrit` computes **8.0093** against a published **8.00**. Chat adjudicated
-against a second independent identity from the same table (`B_APS`), which fails on that row alone by
-a larger margin and cannot be reconciled with any published CVG for the measurand. Confined to one
-row, immaterial at the resolution landed — 8.00 and 8.01 both give `0.08` — and **no input was
-reconstructed to force agreement**. The artefact may originate in the PDF text extraction rather than
-the source. Control run alongside: substituting a desirable-APS CVa gives 9.09% against a published
-7.76, confirming the RCV column uses measured CVA and that the check discriminates.
+1. **The whole-dict risk was misidentified — and the correction changed the implementation.** The
+   brief gated on the oracle tests being field-by-field; they are. But the live constraint is **three
+   exact-dict asserts on `news_gate`** (`fsh:219`, `ast:227`, `vitamin_d:266`) pinning that return
+   shape whole. They forced the safety arm to be an **append to `basis`**, never a sibling key. Had
+   the arm been added as a key it would have passed today (no live asset → `band_change` always null)
+   and broken the moment an asset landed.
+2. **The resolution table has an unenumerated case that fails in the worst direction.** *Agreeing
+   operator, bound below all bands* — `>0.30` against a band at 0.50. First-match-wins falls through
+   to the plain comparison and reports `not_in_band`, but the true value is unbounded above and could
+   sit in any band: a **false negative on a safety gate**. Resolved to `censored_indeterminate`.
+   The brief's principle is preserved in the other direction — `>0.55` against 0.54 is decidable.
+   Chat confirmed the correction: an agreeing operator is decidable **only when the bound alone
+   settles it**.
+3. **The rename moved three tests, not two.** The third is `test_all_stable_group_is_not_moved` — the
+   G6 non-vacuity guard proving the predicate is not hardwired true. Now
+   `test_all_stable_group_does_not_surface`, still asserting `False`, so the predicate stays
+   falsifiable at exactly the moment it gained a third input.
 
-### Two errors made and caught in-session — both now rules
+### The guard was verified by mutation, not by passing
 
-- **Conflict markers were committed.** Resolving the rebase, an assertion failed — and `git add &&
-  git rebase --continue` sat in the *same command*, so the rebase completed and wrote `<<<<<<< HEAD`
-  into an append-only ledger. Caught on inspection, resolved, amended. **A check whose failure cannot
-  stop what follows is not a check** → `CLAUDE.md` standing line + `FEEDBACK` §17.
-- **Readability was nearly reported on stale bytes.** A push was rejected (rebase → non-fast-forward)
-  while three `curl` probes in the same block returned honest **200**s — against the *pre-rebase*
-  branch still on origin. The positive control passed; the bytes were abandoned. **A control must
-  discriminate on identity, not just function** → same two homes. Re-run SHA-pinned, and the pushed
-  copy asserted to carry `0.08/0.08/0.08/0.02` rather than trusted on status code.
+The added shape test was confirmed by **reimplementing the safety arm as a sibling key** and running
+the suite: **6 tests fail**, including the shape assertion. Restored, and the restoration verified by
+identity — `basis.append(...)` present ×1, mutant form ×0. This matters because the three pre-existing
+exact-dict asserts **cannot do that work yet**: with no live asset, `band_change` is always null and
+`basis` is never touched, so they are inert with respect to the thing they would protect — the §11
+shape. Agreed as a standing rule and receipted at `caf5204`: **a guard is verified by mutation, not by
+passing.** Canonical home is `FEEDBACK` §18 when a brief actions it. **Not yet landed — owed.**
 
 ## 3. Cold-resume handoff
 
-**Branch:** `master` @ `8065135`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
+**Branch:** `master` @ `caf5204`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
 
 | Check | Result |
 |---|---|
-| Four constants | `haemoglobin` 0.08 · `haematocrit` 0.08 · `rbc` 0.08 · `mcv` 0.02, all Coşkun `10.1515/cclm-2017-1155`; Thirup retained on `haematocrit` only, as caveat source |
-| `oestradiol` / `alt` / `ast` / `bilirubin_total` | untouched |
-| `binds_to`, `levers`, `_deferred_levers` | unchanged; `marker_groups.json` untouched |
-| #98 guard | all three reference files `isascii()`, **zero** literal em dashes |
-| Shared block G1 | `4243c91ce78e0331ddfa5178aa3006b8` / 155 / 10232 — untouched all session |
-| Backend tests | **206 passed** — unchanged, not verified (`marker_interpretation` is 4b-latent; no test covers these four markers) |
-| Post-push verification | by **identity**: fetched `FEEDBACK.md` carries 1 × `§17`, `DECISIONS_LOG.md` 1 × `#103`, control `#104` = 0 |
+| Gate 3 | `gates.safety_gate(current, prior, thresholds=None)` — level vs authored policy constant |
+| Gate 1 second arm | `news_gate(delta_obj, safety_gate=None)`; appends `safety_band_<change>` to `basis`, return shape exactly `{is_news, basis}` on every path; **not demotable**, recorded in the module docstring before demotion logic exists |
+| Asset | `thresholds` **empty**; `_deferred.haematocrit` holds 0.50/0.52/0.54 + `contested` + `value_plausibility`, blocked on citation capture |
+| Schema guard | Validator **raises** on `recommended_action`; 16 tests, every rule paired with a positive control |
+| Contract key | `is_moved` → `should_surface`; `grep is_moved backend/ --include=*.py` = 2, both inside the docstring explaining the rename |
+| #98 guard | new asset `isascii()` True, **0** literal em dashes (the guard caught 3 typed into prose) |
+| Shared block G1 | `4243c91ce78e0331ddfa5178aa3006b8` / 155 / 10232 — untouched |
+| `interpretation_s2.json` | **UNCHANGED** |
+| `marker_groups` / `lever_dictionary` / `marker_canonical` | untouched |
+| Backend tests | **258 passed** |
+| Post-push identity check | `producer.py` on the pushed SHA: `safety_gate` ×6, `"is_moved"` ×**0**, `should_surface` ×2; control master README 200 |
 
-**Branch terminal-state gate — passes.** Three branches touched, all merged + deleted local and
-remote: `feat/erythroid-constants-and-lever`, `feat/erythroid-rcv-constants`,
-`gov/control-identity-and-coupling`. The four pre-existing locals are all rowed and all on origin:
+**Branch terminal-state gate — passes.** One branch touched (`feat/safety-threshold-gate`), merged and
+deleted local + remote. The four pre-existing locals are all rowed and all on origin:
 
 ```
 feat/checkin-injury-probe          2 +   rowed, on origin
@@ -109,27 +108,27 @@ feat/interpretation-view-skeleton  3 +   rowed, on origin
 feat/recovery-metrics-rhr          1 +   rowed, on origin
 ```
 
-**Where the fork stands.** `erythroid` is **content-complete and delta-instrumented**: group, members,
-roles, two relations, `plasma_volume_status` with verified citations, and four published constants.
-`haemoconcentration_discriminator` **can now fail** — at the 0.30 default MCV could move ~15× its real
-RCV and still read as flat, so the relation would have confirmed itself against essentially any data;
-at 0.02 it is a real test. The August panel has a gate that can plausibly fire: `haematocrit` ≥ 0.475
-trips at 0.08, against ≥ 0.493 at the superseded 0.12.
+**Where the fork stands — the mechanism for danger exists and is tested; the content is empty.**
+`safety_gate` returns `no_asset` for every marker, so **the 0.50–0.54 band is still dark**. That is
+**Q41**, owner Luke: three band values (0.50 cohort definitions, 0.52 AUA / Endocrine Society, 0.54
+Canadian guidance) and two contested-position claims, none with a verified DOI. A citation-capture
+session of the same shape as the Coşkun work. Landing them uncited would be exactly what #99 refused
+for `haemoglobin` — a citation pointing at a source that does not state the number.
 
-**Still dark: the 0.50–0.54 band.** `min_meaningful_delta` is a *delta* gate; it says nothing about
-whether a value is dangerous now. **Q34 (`safety_threshold`) is the only open item standing between
-the repo and the clinical concern that opened this fork.** Everything else on the 4b list — Q36
-(discriminator semantics), Q37 (I1 enforcement), Q38 (interval-banding), Q39 (`effect_locus`), Q40
-(asymmetrical RCV) — is correctness.
+**OWED, this session:** `FEEDBACK` §18 (mutation rule) is receipted in `HANDOFF.md` but not landed.
 
-**OWED, carried:** `haemoglobin`'s per-parameter figure was never read from Buoro 2018 full text — it
-now has a published constant from Coşkun instead, so #99's withholding is discharged by supersession
-rather than by reading. The backfill dry run still needs a Railway run (`backend/.env` points at local
-SQLite with zero NULL rows, so it cannot return anything but its expected zero). HCA **Q11** should
-close `DONE → #93` from an HCA-rooted session; HCA **Q9 item 1** and **Q10** remain open there.
-**Q33** — the shared block's `parked`, needing its own mirror-first brief. `probe_resolver.py`
-container run and `hevy-resolver-activation` limb 2, both blocked on Anthropic API credit.
+**OWED, carried:** `haemoglobin`'s per-parameter figure unread from Buoro 2018 full text. **Q37** (I1
+has no enforcement; `alt` is a live violation). **Q33** (shared block still says `parked`). HCA **Q11**
+should close `DONE → #93` from an HCA-rooted session; HCA **Q9 item 1** and **Q10** remain open there.
+O3's re-verify of `feat/interpretation-view-skeleton` now also covers the `should_surface` rename.
+`probe_resolver.py` container run and `hevy-resolver-activation` limb 2, both blocked on Anthropic API
+credit.
 
-**Single clearest next action:** **Q34 — `safety_threshold`.** It is the last thing between a
-group that reports movement and one that reports risk, and the 0.50–0.54 band is uninstrumented until
-it exists.
+**4b list, all correctness rather than coverage:** Q36 (discriminator semantics — `#96` took a side,
+making it 2-to-1), Q37 (I1 enforcement), Q38 (interval-banding), Q39 (`effect_locus`), Q40
+(asymmetrical RCV).
+
+**Single clearest next action:** capture DOIs for the three haematocrit band values and the two
+contested-position claims, then promote `_deferred.haematocrit` into `thresholds`. That is the last
+thing between this repo and the 0.50–0.54 band, and the schema test starts validating something the
+moment it lands.
