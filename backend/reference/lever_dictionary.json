@@ -110,12 +110,39 @@
       },
       "stable_rationale": null
     },
+    "haemoglobin": {
+      "min_meaningful_delta": {
+        "mode": "relative",
+        "value": 0.08,
+        "note": "RCV published directly by Co\u015fkun et al. (EFLM Working Group on Biological Variation), 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000, computed as 2^0.5 \u00b7 Z \u00b7 (CVA\u00b2 + CVI\u00b2)^0.5 with Z = 1.96 two-sided. CVA is research-grade (duplicate analysis, single reagent lot, no IQC drift), so this RCV is a floor \u2014 a routine-laboratory CVA widens it. Substituting the desirable CVAPS from the same table gives ~8.5% here. CVI showed no significant sex difference for erythrocyte parameters.",
+        "evidence_refs": ["10.1515/cclm-2017-1155"]
+      },
+      "stable_rationale": null
+    },
     "haematocrit": {
       "min_meaningful_delta": {
         "mode": "relative",
-        "value": 0.12,
-        "note": "CVi 3% and CVa 3% (Thirup 2003, 12 studies / 638 adults) explain a ~12% relative change at the 95% level between successive values 1 day to 1-2 months apart (worked example 0.42 -> 0.47). Interval-dependent: Thirup gives ~15% for intervals up to 6 months, from warm-weather haemodilution (population mean ~3% lower in summer). 0.12 is the tighter of the two and is chosen deliberately; the constant shape cannot hold both - see the interval question logged with this work. Estimate stated to hold for athletes.",
-        "evidence_refs": ["10.2165/00007256-200333030-00005"]
+        "value": 0.08,
+        "note": "RCV published directly by Co\u015fkun et al. (EFLM Working Group on Biological Variation), 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000, computed as 2^0.5 \u00b7 Z \u00b7 (CVA\u00b2 + CVI\u00b2)^0.5 with Z = 1.96 two-sided. CVA is research-grade (duplicate analysis, single reagent lot, no IQC drift), so this RCV is a floor \u2014 a routine-laboratory CVA widens it. Substituting the desirable CVAPS from the same table gives ~8.5% here. CVI showed no significant sex difference for erythrocyte parameters. Interval caveat: the study sampled weekly over 10 weeks, less than one erythrocyte turnover period (~4 months), which the authors note may explain why erythrocyte CVI came out lower than other parameters. For intervals crossing a season or exceeding ~4 months this RCV understates variation; Thirup 2003 gives ~15% relative at up to 6 months, from warm-weather haemodilution.",
+        "evidence_refs": ["10.1515/cclm-2017-1155", "10.2165/00007256-200333030-00005"]
+      },
+      "stable_rationale": null
+    },
+    "rbc": {
+      "min_meaningful_delta": {
+        "mode": "relative",
+        "value": 0.08,
+        "note": "RCV published directly by Co\u015fkun et al. (EFLM Working Group on Biological Variation), 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000, computed as 2^0.5 \u00b7 Z \u00b7 (CVA\u00b2 + CVI\u00b2)^0.5 with Z = 1.96 two-sided. CVA is research-grade (duplicate analysis, single reagent lot, no IQC drift), so this RCV is a floor \u2014 a routine-laboratory CVA widens it. Substituting the desirable CVAPS from the same table gives ~8.5% here. CVI showed no significant sex difference for erythrocyte parameters.",
+        "evidence_refs": ["10.1515/cclm-2017-1155"]
+      },
+      "stable_rationale": null
+    },
+    "mcv": {
+      "min_meaningful_delta": {
+        "mode": "relative",
+        "value": 0.02,
+        "note": "RCV published directly by Co\u015fkun et al. (EFLM Working Group on Biological Variation), 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000, computed as 2^0.5 \u00b7 Z \u00b7 (CVA\u00b2 + CVI\u00b2)^0.5 with Z = 1.96 two-sided. CVA is research-grade (duplicate analysis, single reagent lot, no IQC drift), so this RCV is a floor \u2014 a routine-laboratory CVA widens it. Substituting the desirable CVAPS from the same table gives ~2.4% here. CVI showed no significant sex difference for erythrocyte parameters.",
+        "evidence_refs": ["10.1515/cclm-2017-1155"]
       },
       "stable_rationale": null
     }
