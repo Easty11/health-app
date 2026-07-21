@@ -3,134 +3,133 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`. Interruption ledger: `HANDOFF.md`._
 
-2026-07-21 · erythroid group authoring (#96 / #97 / #98)
+2026-07-21 · erythroid constants, RCV supersession, evidence rules (#99 → #103)
 
 ## 1. Real commits this session
 
-Session-open ref: `fcb7530`. Landed on `master` at **`970224c`**, pushed.
+Session-open ref: `1d49000`. Landed on `master` at **`8065135`**, pushed.
 
 ```
-970224c governance: DECISIONS_LOG #98 — three standing guards replacing care with mechanism
-47c6d68 governance: DECISIONS_LOG #96/#97, OPEN_QUESTIONS Q36/Q37
-9fc2f4e reference: trt_erythrocytosis_watch reclassified; plasma_volume_status deferred
-0cf3212 reference: author the erythroid group as structure only
-cdff7a4 gov(handoff): receipt — erythroid group-authoring brief received, not started
+8065135 governance: DECISIONS_LOG #103, FEEDBACK §17 — evidence that looks like evidence
+ed5491d gov(handoff): receipt — control-identity and check-coupling rules received
+c7795c1 governance: DECISIONS_LOG #101/#102, OPEN_QUESTIONS Q40, Q38 append
+b0ccc8b reference: four erythroid RCV constants from Coskun et al.
+fa10b70 gov(handoff): receipt — erythroid RCV-constants brief received, not started
+6bdbb7b governance: DECISIONS_LOG #99/#100, OPEN_QUESTIONS Q38/Q39
+4cf635a reference: haematocrit constant, plasma_volume_status promoted, erythroid levers
+4384c14 gov(handoff): receipt — erythroid constants + lever brief received, not started
 ```
+
+The last three predate this session's brief: they are the **prerequisite merge**, completed here.
+See §2.
 
 Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
-2026-07-21 governance: DECISIONS_LOG #98 — three standing guards replacing care with mechanism
-2026-07-21 governance: DECISIONS_LOG #96/#97, OPEN_QUESTIONS Q36/Q37
-2026-07-21 reference: trt_erythrocytosis_watch reclassified; plasma_volume_status deferred
-2026-07-21 reference: author the erythroid group as structure only
-2026-07-21 gov(handoff): receipt — erythroid group-authoring brief received, not started
+2026-07-21 governance: DECISIONS_LOG #103, FEEDBACK §17 — evidence that looks like evidence
+2026-07-21 gov(handoff): receipt — control-identity and check-coupling rules received
+2026-07-21 governance: DECISIONS_LOG #101/#102, OPEN_QUESTIONS Q40, Q38 append
+2026-07-21 reference: four erythroid RCV constants from Coskun et al.
+2026-07-21 gov(handoff): receipt — erythroid RCV-constants brief received, not started
+2026-07-21 governance: DECISIONS_LOG #99/#100, OPEN_QUESTIONS Q38/Q39
+2026-07-21 reference: haematocrit constant, plasma_volume_status promoted, erythroid levers
+2026-07-21 gov(handoff): receipt — erythroid constants + lever brief received, not started
+2026-07-21 gov(handoff): receipt — paired-positive-control rule; O3 unblocked
 2026-07-21 chore: session close-out
-2026-07-21 governance: DECISIONS_LOG #95 — three-class blocker taxonomy, I1 extends to read-constants
-2026-07-21 reference: canonical v0.3, binds_to, _deferred restructure
-2026-07-20 chore: session close-out
-2026-07-20 gov: DECISIONS_LOG #94 + FEEDBACK §16 — generated view supersedes the hand-assembled mirror
 ```
 
-Step 0 was honoured this session: the `CHAT→CODE` receipt (`cdff7a4`) was committed alone before
-any work, correcting the previous session's breach. No `backend/interpretation/`, `alembic/`,
-`tests/` or `routers/` touched; no fixture or oracle moved. Backend suite **206 passed**.
+Maxima now: **DECISIONS #103 · questions Q40 · FEEDBACK §17.**
+Backend suite **206 passed**, unchanged. No `interpretation/`, `alembic/`, `tests/`, `routers/` or
+`frontend/` paths touched at any point.
 
 ## 2. Pending-queue reconciliation
 
+**The session opened on a blocking finding.** The incoming brief assumed master carried #99/#100 and
+haematocrit at 0.12. It did not: master was `1d49000` at **#98 / Q37**, and #99/#100/Q38/Q39 existed
+only on `feat/erythroid-constants-and-lever` — complete, gated and pushed, but **unmerged**, because
+the previous session held for a go that was given in chat and never reached Code. So the brief's
+supersession premise had already failed before step 1. Reported; ANCHOR was replaced; the prerequisite
+was merged on a written go, then this branch rebased onto it. That failure is what #102 records.
+
 | Brief item | Outcome |
 |---|---|
-| Step 0 — HANDOFF receipt | **LANDED** `cdff7a4`, alone, before anchor work |
-| Step 1 — verify shape | **VERIFIED** against the file. `groups` is a list; schema matches the `hepatocellular` element; `relation_kinds` retains `co_movement` + `discriminator` |
-| Step 2 — append `erythroid` | **LANDED** `0cf3212`. 30 insertions, 0 deletions |
-| Step 3 — no `group_levers` | **LANDED**, empty array |
-| Step 4 — correct `trt_erythrocytosis_watch` | **LANDED** `9fc2f4e` — **one blocker, not two.** See below |
-| Step 5 — withhold constants | **HELD.** `plasma_volume_status` added to `_deferred_levers` in the existing three-field shape |
-| LOG | **LANDED** `47c6d68` + `970224c` — **#96, #97, #98, Q36, Q37** |
+| Step 0 — receipt | **LANDED** `fa10b70`, alone, before work |
+| Prerequisite merge | **LANDED** `6bdbb7b` → master; premises re-verified post-rebase |
+| Step 1 — verify shape / no test pins 0.12 | **VERIFIED** with control |
+| Step 2 — arithmetic self-check | **RUN**; one row anomalous, adjudicated by chat — see below |
+| Step 3 — four constants | **LANDED** `b0ccc8b` |
+| Step 4 — leave `marker_groups.json` alone | **HELD** — untouched |
+| LOG | **LANDED** `c7795c1` (#101/#102, Q40, Q38 append) + `8065135` (#103, §17) |
 
-Minted from actual maxima verified at open — DECISIONS `#95`, questions `Q35` — not from the
-numbers stated in the brief.
+### The haematocrit arithmetic anomaly, recorded not resolved
 
-### Step 4: one of the two proposed blockers was not real
+Three of four RCVs reproduce exactly from the source's own equation: hb **7.7632**, rbc **7.8930**,
+mcv **2.0572**. `haematocrit` computes **8.0093** against a published **8.00**. Chat adjudicated
+against a second independent identity from the same table (`B_APS`), which fails on that row alone by
+a larger margin and cannot be reconciled with any published CVG for the measurand. Confined to one
+row, immaterial at the resolution landed — 8.00 and 8.01 both give `0.08` — and **no input was
+reconstructed to force agreement**. The artefact may originate in the PDF text extraction rather than
+the source. Control run alongside: substituting a desirable-APS CVa gives 9.09% against a published
+7.76, confirming the RCV column uses measured CVA and that the check discriminates.
 
-The brief proposed `blocked_on: [cross-group references, precondition_phase]`. Verification killed
-the second. `hpg_gonadotropin_suppression` — an **authored, live relation inside the promoted
-`hpg_axis` group** — already carries `precondition_phase: "on_trt"`, *and* a `driver` key. Authored
-relations demonstrably hold arbitrary keys beyond the base schema, so `precondition_phase` is
-precedented and disqualifies nothing. Recorded in #97 as **checked and cleared** so it is not
-re-opened.
+### Two errors made and caught in-session — both now rules
 
-The companion rationale — "the 4a producer does not consume it" — was rejected as a criterion
-outright: it is equally true of `group_levers` and every `relations` block, **including the
-`erythroid` content authored one commit earlier**. A criterion that would disqualify the commit just
-authorised is not a promotion criterion.
-
-Landed as `blocked_on: ["4b contract: cross-group relation references"]`,
-`status: "blocked_on_contract"`. `references` has no precedent: zero across the eight authored
-relations in both groups.
-
-### The test gate is weak by construction — reported as unchanged, not verified
-
-`producer.py`'s docstring lists `relations_rendered` and `shared_levers` under "Emits NONE of"
-(4b), and greps confirm zero consumption of `relations`, `group_levers`, `precondition_phase` or
-`references` anywhere in `backend/interpretation/`. The producer reads membership, roles and display
-names only. **206 green means nothing broke, not that anything works** — this session's content is
-4b-latent by design.
-
-### A premise corrected during the go
-
-The 404 that prompted #98's push-branches rule was on `feat/erythroid-group-authoring`, which was
-genuinely local-only. It was generalised to `feat/interpretation-view-skeleton`, which is **pushed
-and fully readable** — verified: all three raw URL forms (plain, `refs/heads/`, SHA-pinned) return
-**200** for `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md` and both reference JSONs. **O3's re-verify is not
-blocked by branch visibility and can proceed now.** The genuinely unpushed branch was
-`feat/recovery-metrics-rhr` — now pushed under the new rule, and its `BRANCHES.md` row corrected,
-since it read "local-only (never pushed)".
+- **Conflict markers were committed.** Resolving the rebase, an assertion failed — and `git add &&
+  git rebase --continue` sat in the *same command*, so the rebase completed and wrote `<<<<<<< HEAD`
+  into an append-only ledger. Caught on inspection, resolved, amended. **A check whose failure cannot
+  stop what follows is not a check** → `CLAUDE.md` standing line + `FEEDBACK` §17.
+- **Readability was nearly reported on stale bytes.** A push was rejected (rebase → non-fast-forward)
+  while three `curl` probes in the same block returned honest **200**s — against the *pre-rebase*
+  branch still on origin. The positive control passed; the bytes were abandoned. **A control must
+  discriminate on identity, not just function** → same two homes. Re-run SHA-pinned, and the pushed
+  copy asserted to carry `0.08/0.08/0.08/0.02` rather than trusted on status code.
 
 ## 3. Cold-resume handoff
 
-**Branch:** `master` @ `970224c` (+ this close-out), pushed, clean. Untracked stray:
-`.claude/launch.json` (known).
+**Branch:** `master` @ `8065135`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
 
 | Check | Result |
 |---|---|
-| `erythroid` group | members ×4, relations ×2, `group_levers: []`; all six referenced ids resolve in `marker_canonical.json` v0.3 |
-| Diff confinement | `erythroid` 30 insertions / 0 deletions; `_deferred` correction 4 / 2, confined to the one relation object; non-`groups` keys and both pre-existing groups byte-identical to master |
-| Reference-JSON guard (#98) | all three files `isascii() == True`, **zero** literal em dashes |
-| Backend tests | **206 passed**, unchanged |
-| Shared block G1 | `4243c91ce78e0331ddfa5178aa3006b8` / 155 / 10232 — untouched; all three new rules are repo-specific or `HANDOFF`-local, so no G1 breach and no paired obligation |
+| Four constants | `haemoglobin` 0.08 · `haematocrit` 0.08 · `rbc` 0.08 · `mcv` 0.02, all Coşkun `10.1515/cclm-2017-1155`; Thirup retained on `haematocrit` only, as caveat source |
+| `oestradiol` / `alt` / `ast` / `bilirubin_total` | untouched |
+| `binds_to`, `levers`, `_deferred_levers` | unchanged; `marker_groups.json` untouched |
+| #98 guard | all three reference files `isascii()`, **zero** literal em dashes |
+| Shared block G1 | `4243c91ce78e0331ddfa5178aa3006b8` / 155 / 10232 — untouched all session |
+| Backend tests | **206 passed** — unchanged, not verified (`marker_interpretation` is 4b-latent; no test covers these four markers) |
+| Post-push verification | by **identity**: fetched `FEEDBACK.md` carries 1 × `§17`, `DECISIONS_LOG.md` 1 × `#103`, control `#104` = 0 |
 
-**Branch terminal-state gate — passes, and every branch is now on origin.**
-`feat/erythroid-group-authoring` was pushed *before* merge (per #98 rule 2), ff-merged, then deleted
-local + remote.
+**Branch terminal-state gate — passes.** Three branches touched, all merged + deleted local and
+remote: `feat/erythroid-constants-and-lever`, `feat/erythroid-rcv-constants`,
+`gov/control-identity-and-coupling`. The four pre-existing locals are all rowed and all on origin:
 
 ```
 feat/checkin-injury-probe          2 +   rowed, on origin
 feat/feedback-ledger               4 +   rowed, on origin
-feat/interpretation-view-skeleton  3 +   rowed, on origin — readable, verified 200
-feat/recovery-metrics-rhr          1 +   rowed, pushed this session
+feat/interpretation-view-skeleton  3 +   rowed, on origin
+feat/recovery-metrics-rhr          1 +   rowed, on origin
 ```
 
-**Open questions** — 37 total. New this session: **Q36** (`discriminator` field semantics inverted
-between `ggt_hepatobiliary_discriminator` and `bilirubin_isolation`; `haemoconcentration_discriminator`
-took the `ggt` side, making it 2-to-1, so a renderer built on the other reading renders it backwards —
-plus `protein_total` is a second evidence marker with nowhere to live in a single-string field) and
-**Q37** (I1's extension has no enforcement and one live violation, `alt`; parent question to #96's
-withholding). Both due 4b with Q34, D3, PV1.
+**Where the fork stands.** `erythroid` is **content-complete and delta-instrumented**: group, members,
+roles, two relations, `plasma_volume_status` with verified citations, and four published constants.
+`haemoconcentration_discriminator` **can now fail** — at the 0.30 default MCV could move ~15× its real
+RCV and still read as flat, so the relation would have confirmed itself against essentially any data;
+at 0.02 it is a real test. The August panel has a gate that can plausibly fire: `haematocrit` ≥ 0.475
+trips at 0.08, against ≥ 0.493 at the superseded 0.12.
 
-**OWED — Luke, receipted in `HANDOFF.md` at the moment of agreement (#98 rule 3):** citation capture —
-DOIs for the haematocrit RCV work and the plasma-volume papers. On landing they promote
-`plasma_volume_status` out of `_deferred_levers` and let the `haematocrit`/`haemoglobin`
-`min_meaningful_delta` constants land cited, discharging #96's withholding. Until then **`erythroid`
-produces no news beyond the default gates and the TRT→Hct concern stays uninstrumented.**
+**Still dark: the 0.50–0.54 band.** `min_meaningful_delta` is a *delta* gate; it says nothing about
+whether a value is dangerous now. **Q34 (`safety_threshold`) is the only open item standing between
+the repo and the clinical concern that opened this fork.** Everything else on the 4b list — Q36
+(discriminator semantics), Q37 (I1 enforcement), Q38 (interval-banding), Q39 (`effect_locus`), Q40
+(asymmetrical RCV) — is correctness.
 
-**OWED, carried:** the backfill dry run still needs a Railway run — `backend/.env` points
-`DATABASE_URL` at local SQLite, where zero NULL rows make the check structurally incapable of
-returning anything but its expected zero. HCA **Q11** should close `DONE → #93` from an HCA-rooted
-session; HCA **Q9 item 1** and **Q10** remain open there. **Q33** — the shared block's `parked`, needing
-its own mirror-first brief. `probe_resolver.py` container run and `hevy-resolver-activation` limb 2,
-both blocked on Anthropic API credit.
+**OWED, carried:** `haemoglobin`'s per-parameter figure was never read from Buoro 2018 full text — it
+now has a published constant from Coşkun instead, so #99's withholding is discharged by supersession
+rather than by reading. The backfill dry run still needs a Railway run (`backend/.env` points at local
+SQLite with zero NULL rows, so it cannot return anything but its expected zero). HCA **Q11** should
+close `DONE → #93` from an HCA-rooted session; HCA **Q9 item 1** and **Q10** remain open there.
+**Q33** — the shared block's `parked`, needing its own mirror-first brief. `probe_resolver.py`
+container run and `hevy-resolver-activation` limb 2, both blocked on Anthropic API credit.
 
-**Single clearest next action:** Luke's citation capture. It is the only thing standing between the
-authored `erythroid` structure and a group that actually produces news — everything else in the
-follow-up brief is mechanical once the DOIs exist.
+**Single clearest next action:** **Q34 — `safety_threshold`.** It is the last thing between a
+group that reports movement and one that reports risk, and the 0.50–0.54 band is uninstrumented until
+it exists.

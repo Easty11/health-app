@@ -270,9 +270,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **#98** — Three standing guards, each replacing care with a mechanism: the reference-JSON edit guard (heredoc backslash-eating is silent in the direction that writes bad bytes), push branches even while holding for review, and post-close-out agreements get a `HANDOFF` receipt at the moment of agreement. When a lesson has to be re-learned, find the surface that enforces it. See DECISIONS_LOG #98.
-- **#96/#97** — `erythroid` authored as structure only with constants withheld under I1, and `trt_erythrocytosis_watch` reclassified `blocked_on_contract` with one surviving blocker, not two — a vocabulary blocker clearing does not clear a contract blocker, and the three-class taxonomy applies per-blocker, not per-entry. See DECISIONS_LOG #96, #97.
-- **#95** — A deferred entry names one of three blockers, not one: `marker_canonical` to v0.3 (31→65 entries), `_deferred` split into vocabulary-gap / never-ordered / lab-does-not-report-it, and invariant I1 extended from levers to read-constants — an uncited number that sets a threshold is the same defect as an uncited lever that surfaces. See DECISIONS_LOG #95.
+- **#103** — Evidence that looks like evidence: the paired-control rule lands as `FEEDBACK` §17, plus controls must discriminate on *identity* not just function, and a check whose failure cannot stop what follows is not a check. See DECISIONS_LOG #103.
+- **#101/#102** — Four erythroid RCV constants from a single published source, superseding #99's haematocrit 0.12; and a merge authorisation is a cross-lane instruction needing a receipt, widening #98 rule 3. See DECISIONS_LOG #101, #102.
+- **#99/#100** — `haematocrit` constant landed with `haemoglobin` withheld under I1, and `plasma_volume_status` promoted with verified citations — `evidence_refs` now admits stable non-DOI identifiers where no DOI exists. See DECISIONS_LOG #99, #100.
 
 ---
 
