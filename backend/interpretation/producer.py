@@ -5,6 +5,7 @@ build_foundation(user_id, db, trigger_panel, prior_panel) -> {meta, groups[], un
 Consumes ONLY:
   * newest+prior per marker (labs_reads.marker_series)
   * marker_groups.json (membership, roles, group display names)
+  * safety_thresholds.json (via gates.safety_gate - gate 3, level vs policy constant)
   * lever_dictionary.marker_interpretation[*].min_meaningful_delta + _defaults
     (via gates.min_meaningful_delta — never levers[])
 
@@ -26,6 +27,7 @@ from reads.labs_reads import LabRow, MarkerPair, marker_series
 from .gates import _LEVER_DICTIONARY
 from .gates import delta as build_delta
 from .gates import news_gate as build_news_gate
+from .gates import safety_gate as build_safety_gate
 from .gates import range_gate as build_range_gate
 
 _MARKER_GROUPS_PATH = Path(__file__).resolve().parent.parent / "reference" / "marker_groups.json"
@@ -64,6 +66,7 @@ def _reading(row: LabRow | None) -> dict | None:
 def _foundation_row(pair: MarkerPair) -> dict:
     """The per-marker 4a fields, shared by grouped members and ungrouped rows."""
     delta_obj = build_delta(pair.current, pair.prior)
+    safety_obj = build_safety_gate(pair.current, pair.prior)
     return {
         "marker_canonical": pair.current.marker_canonical,
         "display_name": pair.current.marker_name_raw,  # provisional; polished names are 4b
@@ -71,7 +74,8 @@ def _foundation_row(pair: MarkerPair) -> dict:
         "current": _reading(pair.current),
         "prior": _reading(pair.prior),
         "delta": delta_obj,
-        "news_gate": build_news_gate(delta_obj),
+        "safety_gate": safety_obj,
+        "news_gate": build_news_gate(delta_obj, safety_gate=safety_obj),
         "range_gate": build_range_gate(pair.current),
     }
 
@@ -80,10 +84,23 @@ def _member(pair: MarkerPair, role: str | None) -> dict:
     return {**_foundation_row(pair), "role": role}
 
 
-def _is_moved(members: list[dict]) -> bool:
-    """A group is moved iff ANY member is news (gate 1) OR out of range (gate 2).
-    Producer-emitted so the frontend reads it, never derives it."""
-    return any(m["news_gate"]["is_news"] or m["range_gate"]["is_out_of_range"] for m in members)
+def _should_surface(members: list[dict]) -> bool:
+    """A group surfaces iff ANY member is news (gate 1) OR out of range (gate 2) OR
+    sits in a safety band (gate 3). Producer-emitted so the frontend reads it, never
+    derives it.
+
+    Renamed from `_is_moved` at #106, and the emitted key with it. Once gate 3 feeds
+    this predicate it is no longer testing movement: a persistently elevated value that
+    has not moved at all must still surface, or it hides inside a quiet group -- the
+    exact failure the safety gate exists to prevent. A key named `is_moved` that is true
+    for something that did not move is the drift this repo punishes.
+    """
+    return any(
+        m["news_gate"]["is_news"]
+        or m["range_gate"]["is_out_of_range"]
+        or m["safety_gate"]["status"] == "in_band"
+        for m in members
+    )
 
 
 def _groups(series: dict[str, MarkerPair]) -> tuple[list[dict], set[str]]:
@@ -111,7 +128,7 @@ def _groups(series: dict[str, MarkerPair]) -> tuple[list[dict], set[str]]:
             "display_name": group_def["display_name"],
             "is_group_of_one": group_def.get("is_group_of_one", False),
             "members": members,
-            "is_moved": _is_moved(members),
+            "should_surface": _should_surface(members),
         })
 
     return groups, claimed

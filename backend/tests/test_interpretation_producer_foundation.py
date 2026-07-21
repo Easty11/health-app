@@ -228,25 +228,25 @@ def test_ast_is_news_via_crossed_ref_but_not_a_breach(db_session):
     assert ast["range_gate"]["is_out_of_range"] is False
 
 
-# ---------- G3 / G6: is_moved and section placement ----------
+# ---------- G3 / G6: should_surface and section placement ----------
 
-def test_is_moved_hpg_on_the_fsh_breach_alone(db_session):
+def test_should_surface_hpg_on_the_fsh_breach_alone(db_session):
     """Gate 2 independently load-bearing: nothing in hpg is news, yet it moves."""
     user, current, prior = _seed_fixture(db_session, "moved1@example.com")
     hpg = _group(_build(db_session, user, current, prior), "hpg_axis")
 
-    assert hpg["is_moved"] is True
+    assert hpg["should_surface"] is True
     assert not any(m["news_gate"]["is_news"] for m in hpg["members"])
     assert [m["marker_canonical"] for m in hpg["members"] if m["range_gate"]["is_out_of_range"]] == ["fsh"]
 
 
-def test_is_moved_hepatocellular_on_ast_news_alone(db_session):
+def test_should_surface_hepatocellular_on_ast_news_alone(db_session):
     """Gate 1 independently load-bearing: nothing in hepatocellular is out of
     range, yet it moves."""
     user, current, prior = _seed_fixture(db_session, "moved2@example.com")
     hep = _group(_build(db_session, user, current, prior), "hepatocellular")
 
-    assert hep["is_moved"] is True
+    assert hep["should_surface"] is True
     assert not any(m["range_gate"]["is_out_of_range"] for m in hep["members"])
     assert [m["marker_canonical"] for m in hep["members"] if m["news_gate"]["is_news"]] == ["ast"]
 
@@ -267,9 +267,9 @@ def test_vitamin_d_is_ungrouped_stable_not_a_group(db_session):
     assert vd["range_gate"] == {"is_out_of_range": False, "flag": None}
 
 
-def test_all_stable_group_is_not_moved(db_session):
-    """G6 non-vacuity: is_moved is NOT hardwired true. A group whose members are
-    all in-range and non-news reports is_moved False — an `is_moved≡True`
+def test_all_stable_group_does_not_surface(db_session):
+    """G6 non-vacuity: should_surface is NOT hardwired true. A group whose members
+    are all in-range, non-news and in no safety band reports should_surface False — a `should_surface≡True`
     mutation fails here (the §2 fixture alone cannot catch it, since both its
     authored groups move)."""
     user = _make_user(db_session, "stable@example.com")
@@ -282,7 +282,7 @@ def test_all_stable_group_is_not_moved(db_session):
     _make_result(db_session, current.id, "ALT", "alt", value_num=25.0, ref_high=45.0)
 
     hep = _group(build_foundation(user.id, db_session, current, prior), "hepatocellular")
-    assert hep["is_moved"] is False
+    assert hep["should_surface"] is False
 
 
 # ---------- G3 boundary: 4b fields absent ----------

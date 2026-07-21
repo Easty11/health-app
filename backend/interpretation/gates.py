@@ -1,9 +1,29 @@
 """Gate arithmetic for the foundation producer — pure functions, no I/O.
 
-Three mechanical questions per marker:
+Four mechanical questions per marker:
   delta       — how did it move vs the prior draw?
-  news_gate   — gate 1, delta arm ONLY (raw; 4b may append relation basis and demote)
+  news_gate   — gate 1, TWO arms: the delta arm (raw) and the safety arm.
+                4b may append a relation basis and may demote the DELTA arm.
+                It may NEVER demote the safety arm — see below.
   range_gate  — gate 2, driven by the LAB flag; computed_flag is withheld (V2)
+  safety_gate — gate 3, a LEVEL compared to an authored policy constant
+
+The three gates answer different questions from different authorities:
+  * delta compares a value to its own predecessor.
+  * range_gate compares it to the interval the LAB shipped with the report.
+  * safety_gate compares it to a number from OUTSIDE the data that does not
+    care what preceded it and is not the lab's opinion.
+So output may legitimately carry range_gate.is_out_of_range False alongside
+safety_gate.status "in_band". Both are correct, from two authorities. The
+renderer shows both with their sources; it does not reconcile them.
+
+THE SAFETY ARM IS NOT DEMOTABLE. 4b's relation arm may demote delta-driven
+news — "AST rose but GGT is normal, so this is muscle" legitimately makes a
+delta story not worth surfacing. Nothing may demote a band change. Explaining
+WHY a value rose is a different claim from whether it should surface, and no
+mechanistic account makes a haematocrit of 0.52 not worth showing. Written
+down before demotion logic exists, so that logic inherits the constraint
+rather than discovering it.
 
 The one deliberate asymmetry, both faces of it recorded here:
   * range_gate.is_out_of_range reads `lab_flag` — a lab-asserted breach — and
@@ -34,6 +54,25 @@ def _load_lever_dictionary() -> dict:
 
 
 _LEVER_DICTIONARY = _load_lever_dictionary()
+
+_SAFETY_THRESHOLDS_PATH = Path(__file__).resolve().parent.parent / "reference" / "safety_thresholds.json"
+_MARKER_CANONICAL_PATH = Path(__file__).resolve().parent.parent / "reference" / "marker_canonical.json"
+
+
+def _load_json(path: Path) -> dict:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+_SAFETY_THRESHOLDS = _load_json(_SAFETY_THRESHOLDS_PATH)
+_UNIT_ESTABLISHED = {
+    e["marker_canonical"]: e.get("unit_established")
+    for e in _load_json(_MARKER_CANONICAL_PATH)["entries"]
+}
+
+# A censoring operator either points the SAME way as the threshold direction (so the
+# bound is evidence the true value is at least/most that far along) or the opposite way.
+_AGREES = {"above": {">", ">="}, "below": {"<", "<="}}
 
 
 def min_meaningful_delta(marker_canonical: str | None, dictionary: dict | None = None) -> dict:
@@ -164,11 +203,156 @@ def _magnitude(abs_change, pct_change, crossed_ref, mmd: dict) -> str:
     return "within_noise"
 
 
-def news_gate(delta_obj: dict | None) -> dict:
-    """Gate 1, DELTA ARM ONLY (raw). is_news = (magnitude meaningful) OR
-    (crossed_ref set). basis names only delta/crossed arms — NO relation basis
-    (4b appends and may demote). A first observation is not news."""
+def _undecidable(reason: str, entry: dict | None = None) -> dict:
+    return {
+        "status": None,
+        "band_key": None,
+        "threshold_value": None,
+        "direction": (entry or {}).get("direction"),
+        "contested": (entry or {}).get("contested"),
+        "evidence_refs": [],
+        "band_change": None,
+        "undecidable_reason": reason,
+    }
+
+
+def _breached_band(value: float, direction: str, bands: list[dict]) -> dict | None:
+    """The HIGHEST breached band, or None. 'Highest' means most severe along
+    `direction`: for `above` that is the largest threshold cleared, for `below`
+    the smallest."""
+    hits = [b for b in bands
+            if (value >= b["value"] if direction == "above" else value <= b["value"])]
+    if not hits:
+        return None
+    return max(hits, key=lambda b: b["value"]) if direction == "above" \
+        else min(hits, key=lambda b: b["value"])
+
+
+def _severity(band: dict | None, direction: str) -> float | None:
+    """Orders bands so escalated/de_escalated can be decided without assuming the
+    asset lists them in order."""
+    if band is None:
+        return None
+    return band["value"] if direction == "above" else -band["value"]
+
+
+def _resolve_band(row: LabRow | None, entry: dict) -> tuple[dict | None, str | None]:
+    """(band, undecidable_reason) for one row against one asset entry."""
+    if row is None:
+        return None, "no_value"
+    if row.value_num is None:
+        return None, "no_value"
+
+    marker = row.marker_canonical
+    direction = entry["direction"]
+    established = _UNIT_ESTABLISHED.get(marker, "__absent__")
+
+    if established not in (None, "__absent__"):
+        if row.unit_canonical != established:
+            return None, "unit_mismatch"
+    else:
+        lo, hi = entry.get("value_plausibility", (None, None))
+        if lo is not None and not (lo <= row.value_num <= hi):
+            return None, "implausible_value"
+
+    bands = entry.get("bands", [])
+    op = row.value_operator
+
+    if op:
+        # Censoring destroys a MAGNITUDE; it does not necessarily destroy a threshold
+        # comparison. So this deliberately does NOT inherit delta's blanket rule.
+        if op in _AGREES[direction]:
+            band = _breached_band(row.value_num, direction, bands)
+            if band is not None:
+                # ">0.55" with direction above and a band at 0.54: the true value is
+                # at least 0.55, so the band is cleared whatever the real number is.
+                return band, None
+            # ">0.30" against a band at 0.50 is NOT "not in band" — the true value is
+            # unbounded above and could sit in any band. Reporting not_in_band here
+            # would be a false negative on a safety gate, the one direction never to
+            # be wrong in. The brief's table does not enumerate this case; it is
+            # resolved to indeterminate deliberately (#104).
+            return None, "censored_indeterminate"
+        return None, "censored_indeterminate"
+
+    return _breached_band(row.value_num, direction, bands), None
+
+
+def safety_gate(current: LabRow, prior: LabRow | None, thresholds: dict | None = None) -> dict:
+    """Gate 3 — a LEVEL against an authored policy constant.
+
+    Unlike delta (value vs its predecessor) and range_gate (value vs the interval the
+    lab shipped), this compares a value to a number from outside the data. It fires on
+    a level, not a transition: a persistently elevated value that has not moved at all
+    still surfaces.
+
+    Returns status/band_key/threshold_value/direction/contested/evidence_refs/
+    band_change/undecidable_reason. `status` is None whenever the comparison could not
+    be made, and `undecidable_reason` always says why.
+    """
+    asset = thresholds if thresholds is not None else _SAFETY_THRESHOLDS
+    entry = asset.get("thresholds", {}).get(current.marker_canonical or "")
+    if not entry:
+        return _undecidable("no_asset")
+
+    band, reason = _resolve_band(current, entry)
+    if reason is not None:
+        return _undecidable(reason, entry)
+
+    prior_band, prior_reason = _resolve_band(prior, entry)
+    direction = entry["direction"]
+
+    cur_sev = _severity(band, direction)
+    pri_sev = _severity(prior_band, direction)
+
+    if band is not None and (prior is None or prior_reason is not None):
+        band_change = "first_observation_in_band"
+    elif band is not None and prior_band is None:
+        band_change = "entered"
+    elif band is not None and cur_sev > pri_sev:
+        band_change = "escalated"
+    elif band is not None and cur_sev < pri_sev:
+        band_change = "de_escalated"
+    elif band is None and prior_band is not None and prior_reason is None:
+        band_change = "exited"
+    else:
+        band_change = None
+
+    return {
+        "status": "in_band" if band is not None else "not_in_band",
+        "band_key": band["band_key"] if band else None,
+        "threshold_value": band["value"] if band else None,
+        "direction": direction,
+        "contested": entry.get("contested"),
+        "evidence_refs": list(band.get("evidence_refs", [])) if band else [],
+        "band_change": band_change,
+        "undecidable_reason": None,
+    }
+
+
+def news_gate(delta_obj: dict | None, safety_gate: dict | None = None) -> dict:
+    """Gate 1, TWO arms.
+
+    Delta arm (raw): is_news = (magnitude meaningful) OR (crossed_ref set). A first
+    observation is not news on this arm.
+
+    Safety arm (optional keyword, default None so every pre-existing call site behaves
+    identically): when a `safety_gate` dict is passed and its `band_change` is non-null,
+    is_news is forced true and `safety_band_<change>` is appended to basis.
+
+    The return shape is EXACTLY {is_news, basis} on every path. The safety arm appends
+    to `basis`; it never adds a sibling key. Three tests pin this dict whole
+    (`fsh`, `ast`, `vitamin_d`), and that is deliberate — the shape is contract surface.
+
+    NOT DEMOTABLE: 4b may append a relation basis and may demote the delta arm. It must
+    never demote a band change. See the module docstring.
+    """
+    band_change = (safety_gate or {}).get("band_change")
+
     if delta_obj is None:
+        if band_change:
+            return {"is_news": True,
+                    "basis": ["no_prior_first_observation", f"safety_band_{band_change}"]}
         return {"is_news": False, "basis": ["no_prior_first_observation"]}
 
     crossed = delta_obj["crossed_ref"]
@@ -186,5 +370,9 @@ def news_gate(delta_obj: dict | None) -> dict:
         basis.append("flat_vs_prior")
     else:
         basis.append("delta_within_min_meaningful")
+
+    if band_change:
+        is_news = True
+        basis.append(f"safety_band_{band_change}")
 
     return {"is_news": is_news, "basis": basis}
