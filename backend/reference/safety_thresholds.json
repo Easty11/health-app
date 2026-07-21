@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "version": "v0.1",
+    "status": "ai_draft",
+    "binds_to": "marker_canonical.json v0.3",
+    "contract": "INTERPRETATION_OUTPUT_CONTRACT v0.4 (#63)",
+    "authored": "2026-07-22",
+    "review_due": "2027-07-22",
+    "asset_class": "POLICY-DERIVED, NOT MEASURED. Every value here is committee judgement about where a level becomes worth surfacing \u2014 not a measurement of biological or analytical variation. That is why this asset lives outside lever_dictionary.json, whose read-constants are measured quantities (CVI/CVA-derived RCVs) that do not expire, and why it carries a review_due that they do not: guidance is revised, and a threshold that silently outlives its source is worse than none.",
+    "surfacing_only": "A band names a level and its sources. It NEVER names an action. No recommended_action, no intervention, no imperative field \u2014 enforced by test_safety_thresholds_schema.py, not by care. The platform surfaces; the clinician acts.",
+    "authority_note": "A safety threshold is a DIFFERENT bound from a DIFFERENT authority than the lab's own reference interval, and never writes to `flag`. Output may legitimately carry range_gate.is_out_of_range:false alongside safety_gate.status:in_band. Both are correct; the renderer shows both with their sources and does not reconcile them into one verdict."
+  },
+
+  "_schema": {
+    "entry": ["direction", "value_plausibility", "contested", "contested_note", "bands"],
+    "band": ["band_key", "value", "grade", "evidence_refs", "note"],
+    "direction_values": ["above", "below"],
+    "grade_values": ["low", "moderate", "high"],
+    "rules": [
+      "I1: a live band MUST carry non-empty evidence_refs. Uncited bands stay in _deferred.",
+      "A marker whose marker_canonical unit_established is null MUST set value_plausibility, because a unit-mismatch check cannot run without an established unit.",
+      "bands are ordered by increasing severity along `direction`; the HIGHEST breached band wins.",
+      "No key outside `band` is permitted on a live band object."
+    ]
+  },
+
+  "thresholds": {},
+
+  "_deferred": {
+    "haematocrit": {
+      "direction": "above",
+      "value_plausibility": [0.20, 0.70],
+      "contested": true,
+      "blocked_on": ["citation capture \u2014 no verified DOIs for the band values"],
+      "intended_bands": [
+        { "band_key": "watch",    "value": 0.50, "grade": "low" },
+        { "band_key": "elevated", "value": 0.52, "grade": "moderate" },
+        { "band_key": "high",     "value": 0.54, "grade": "moderate" }
+      ],
+      "contested_note": "Cutoffs across guidelines appear arbitrarily chosen and the evidence for benefit of intervention is thin in both directions. Bands are surfacing triggers, not action thresholds."
+    }
+  }
+}
