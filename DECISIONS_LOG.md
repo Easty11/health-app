@@ -3120,6 +3120,55 @@ would mean the category is *still* drawn too narrowly.
 
 ---
 
+### 103. Evidence that looks like evidence — the paired-control rule lands, with identity and coupling
+
+**Decision:** the paired-control rule reaches its canonical home as `FEEDBACK` §17, with two additions
+earned in the session that landed it, and two `CLAUDE.md` standing lines.
+
+**1. The base rule.** Any negative offered as evidence — a 404, zero rows, an empty grep — must be
+paired with a **positive control in the same command**, and the control's output goes in the report.
+A bare negative is equally consistent with "the thing is absent", "the probe was aimed wrong", and "the
+probe could not have succeeded". Agreed post-close-out at #98 rule 3 and receipted then; this entry is
+the landing, which is the distinction that rule exists to make.
+
+**2. Identity, not just function.** The base rule is necessary and not sufficient. A control proves the
+*instrument* works — it says nothing about whether the artefact probed is the intended one. After a
+rebase, three `curl` probes returned honest 200s **against the pre-rebase branch still on origin**. The
+control passed; the bytes were abandoned. So: **where a probe could succeed against the wrong artefact
+— stale refs, cached CDN copies, reused branch names — pin to a SHA or assert on content only the
+intended version carries.** "Does something exist at this URL" and "is it what I just built" are
+different questions; a status code answers only the first.
+
+**3. A check whose failure cannot stop what follows is not a check.** In the same session an assertion
+failed loudly and was followed, in the same command, by `git add && git rebase --continue` — so the
+rebase completed and committed conflict markers into an append-only ledger. The machinery existed; the
+coupling did not. Chaining a verification to an action is a reflex rather than a decision, which is the
+precise condition #98 identifies as needing a gate rather than diligence.
+
+**Rationale:** all three are cases of **evidence that looks like evidence**. An unpaired negative looks
+like absence; a passing control looks like confirmation; a chained check looks like verification. Each
+produces a report that reads correct to someone who was not there — which is the only reader that
+matters, since the whole point of the loop is that a later session cannot re-run the moment.
+
+Note the shape of how this arrived. The base rule was proposed after three instances, and then failed
+*twice more in the session that implemented it*, in forms one step outside its wording. That is the
+same widening #102 had to make for cross-lane instructions, and the same lesson #98 states generally:
+when a category keeps being drawn too narrowly, widen the category rather than adding the next
+instance to a list.
+
+**Status:** Landed. `FEEDBACK` §17 + two `CLAUDE.md` standing lines, both repo-specific — the shared
+block is untouched, so no G1 breach and no paired obligation.
+
+**How you know:** both additions are worked examples from this session with their artefacts named — the
+three 200s against a pre-rebase ref, and the conflict markers committed at `fa10b70`'s pre-amend state;
+shared block verified at `4243c91ce78e0331ddfa5178aa3006b8` / 155 / 10232; backend suite **206 passed**,
+unchanged.
+
+**Do not revisit unless:** a fourth form appears outside "evidence that looks like evidence", which
+would again mean the category is drawn too narrowly.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

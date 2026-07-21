@@ -211,6 +211,19 @@ must match it.
   files — re-serialising reflows every hunk and rewrites escapes, burying a small change in
   a whole-file diff. Surgical text edits only.
 
+- **Never chain a verification to an action in one command (standing, #103).** A check whose
+  failure cannot stop what follows is not a check. Run the check, read the result, then act —
+  or make the action explicitly conditional on the check's exit status. Earned when a failed
+  assertion was followed by `git add && git rebase --continue` in the same command, completing
+  a rebase that committed conflict markers into an append-only ledger. Chaining is a reflex,
+  not a decision, which is why it needs a gate rather than care. See `FEEDBACK` §17.
+
+- **Controls discriminate on identity, not just function (standing, #103).** A positive control
+  proves the instrument works; it does not prove the thing probed is the thing you meant. Where
+  a probe could succeed against the wrong artefact — stale refs, cached CDN copies, reused
+  branch names — pin to a SHA or assert on content only the intended version carries. Earned
+  when three honest HTTP 200s described pre-rebase bytes. See `FEEDBACK` §17.
+
 - **Push branches even while holding for review (standing, #98).** A local-only branch is
   unreadable to chat — `raw.githubusercontent.com` 404s — so a "hold before merge" gate that
   chat cannot independently verify rests on Code's report alone, which is the one thing the

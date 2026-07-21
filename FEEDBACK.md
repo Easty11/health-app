@@ -647,3 +647,53 @@ which is precisely how it drifted unnoticed. A derived view should be a *digest 
 to know what exists and where, never enough to answer from. Size is a design constraint on
 trustworthiness, not just on convenience.
 
+---
+
+## 17. An unpaired negative is not a finding — and a control must discriminate on identity (DECISIONS_LOG #103)
+
+**Rule:** any negative result offered as evidence — a 404, zero rows, an empty grep — must be paired
+with a **positive control in the same command**, and the control's output goes in the report alongside
+the negative.
+
+A bare negative is uninterpretable. It is equally consistent with "the thing is absent", "the probe was
+aimed wrong", and "the probe could not have succeeded". Chosen over "verify premises before acting"
+because that is a care-rule, and this is checkable by a reader: a report either shows the control or it
+does not.
+
+Instances it would have caught, all inside 48 hours:
+
+- A 404 on `feat/interpretation-view-skeleton` read as "branch unpushed". Unreproducible on re-probe —
+  a paired master-vs-branch check returned 200 on all four ref/file pairs. The premise was false and
+  had already been carried into a brief.
+- The backfill dry run's expected zero: local SQLite held zero `marker_canonical IS NULL` rows, so the
+  query could not have returned anything else (see [[§11]]).
+- #95's brief asserting the ritual was "already struck" — a declarative about an unread file.
+- A `git grep -l` for the asymmetrical-RCV question that matched a *filename*, where the only content
+  hit was unrelated prose. Filename-level nulls and content-level nulls are different claims.
+
+**Refinement — identity, not just function.** The rule above is necessary and not sufficient. A control
+proves the *instrument* works; it says nothing about whether the thing probed is the thing you meant.
+Worked example from the session that produced this entry: after a rebase, three `curl` probes returned
+honest 200s — against the **pre-rebase** branch still on origin. The control passed. The bytes were
+abandoned ones.
+
+> **A control must discriminate on identity, not just on function.** Where a probe could succeed
+> against the wrong artefact — stale refs, cached CDN copies, reused branch names — pin to a SHA, or
+> assert on content that only the intended version carries.
+
+"Does something exist at this URL" and "is it what I just built" are different questions, and a status
+code only answers the first. Force-push, rebase and branch-name reuse all break the binding silently.
+The remedy is cheap: SHA-pin the URL, or assert on a value the new version has and the old does not.
+
+**Corollary — a check whose failure cannot stop what follows is not a check.** Same family, different
+surface. In the same session an assertion failed loudly and was followed, *in the same command*, by
+`git add && git rebase --continue` — so the rebase completed and committed conflict markers into an
+append-only ledger. The machinery existed; the coupling did not. Chaining a verification to an action
+is a reflex rather than a decision, which is exactly the condition [[§16]] and #98 identify as needing
+a gate rather than diligence. Run the check, read the result, then act — or make the action
+conditional on the check's exit status. Never put both in one unconditional sequence.
+
+**Why the three belong together:** each is a case of evidence that *looks* like evidence. An unpaired
+negative looks like absence, a passing control looks like confirmation, and a chained check looks like
+verification. In every case the report reads correct to someone who was not there.
+
