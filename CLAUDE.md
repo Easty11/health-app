@@ -257,9 +257,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#98** — Three standing guards, each replacing care with a mechanism: the reference-JSON edit guard (heredoc backslash-eating is silent in the direction that writes bad bytes), push branches even while holding for review, and post-close-out agreements get a `HANDOFF` receipt at the moment of agreement. When a lesson has to be re-learned, find the surface that enforces it. See DECISIONS_LOG #98.
+- **#96/#97** — `erythroid` authored as structure only with constants withheld under I1, and `trt_erythrocytosis_watch` reclassified `blocked_on_contract` with one surviving blocker, not two — a vocabulary blocker clearing does not clear a contract blocker, and the three-class taxonomy applies per-blocker, not per-entry. See DECISIONS_LOG #96, #97.
 - **#95** — A deferred entry names one of three blockers, not one: `marker_canonical` to v0.3 (31→65 entries), `_deferred` split into vocabulary-gap / never-ordered / lab-does-not-report-it, and invariant I1 extended from levers to read-constants — an uncited number that sets a threshold is the same defect as an uncited lever that surfaces. See DECISIONS_LOG #95.
-- **#94** — The consolidated governance view is generated, never hand-assembled: `scripts/gen_governance_view.py` emits a digest-with-anchors from both repos' four stores read at master, with a live provenance block; output is gitignored. Standing rule that a derived artifact declaring a generation source must have one, or the declaration is a fiction that suppresses scrutiny. See DECISIONS_LOG #94.
-- **#93** — Vocabulary adoption completes at the frame, not the values: the ritual's status verb and the `BRANCHES.md` column header struck and mirrored to HCA, with one instance knowingly deferred in the G1-fingerprinted shared block (Q33). Standing rule that sweeps run definition-first — the layers fell in order of increasing authority across three sessions, which is one failure of ordering rather than several of thoroughness. See DECISIONS_LOG #93.
 
 ---
 

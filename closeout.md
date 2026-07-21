@@ -3,136 +3,134 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`. Interruption ledger: `HANDOFF.md`._
 
-2026-07-21 · marker vocabulary v0.3 (#95)
+2026-07-21 · erythroid group authoring (#96 / #97 / #98)
 
 ## 1. Real commits this session
 
-Session-open ref: `965e0aa`. Landed on `master` at **`3bb200e`**, pushed.
+Session-open ref: `fcb7530`. Landed on `master` at **`970224c`**, pushed.
 
 ```
-3bb200e governance: DECISIONS_LOG #95 — three-class blocker taxonomy, I1 extends to read-constants
-478e6ea reference: canonical v0.3, binds_to, _deferred restructure
+970224c governance: DECISIONS_LOG #98 — three standing guards replacing care with mechanism
+47c6d68 governance: DECISIONS_LOG #96/#97, OPEN_QUESTIONS Q36/Q37
+9fc2f4e reference: trt_erythrocytosis_watch reclassified; plasma_volume_status deferred
+0cf3212 reference: author the erythroid group as structure only
+cdff7a4 gov(handoff): receipt — erythroid group-authoring brief received, not started
 ```
 
 Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
+2026-07-21 governance: DECISIONS_LOG #98 — three standing guards replacing care with mechanism
+2026-07-21 governance: DECISIONS_LOG #96/#97, OPEN_QUESTIONS Q36/Q37
+2026-07-21 reference: trt_erythrocytosis_watch reclassified; plasma_volume_status deferred
+2026-07-21 reference: author the erythroid group as structure only
+2026-07-21 gov(handoff): receipt — erythroid group-authoring brief received, not started
+2026-07-21 chore: session close-out
 2026-07-21 governance: DECISIONS_LOG #95 — three-class blocker taxonomy, I1 extends to read-constants
 2026-07-21 reference: canonical v0.3, binds_to, _deferred restructure
 2026-07-20 chore: session close-out
 2026-07-20 gov: DECISIONS_LOG #94 + FEEDBACK §16 — generated view supersedes the hand-assembled mirror
-2026-07-20 feat(scripts): generate the consolidated governance view from master
-2026-07-20 gov(handoff): record the 10-hour timestamp error, append-only
-2026-07-20 gov(handoff): receipt — governance view generator brief received, not started
-2026-07-20 chore: session close-out
-2026-07-20 gov: DECISIONS_LOG #93 — adoption completes at the frame; sweeps run definition-first
-2026-07-20 gov(feedback): §14 occurrence 4 (the false PASS); mint §15
 ```
 
-Scope held: 5 files — `backend/reference/` ×3, `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`.
-**No migration, no producer change, no ingestion.** Backend suite **206 passed**, unchanged.
+Step 0 was honoured this session: the `CHAT→CODE` receipt (`cdff7a4`) was committed alone before
+any work, correcting the previous session's breach. No `backend/interpretation/`, `alembic/`,
+`tests/` or `routers/` touched; no fixture or oracle moved. Backend suite **206 passed**.
 
 ## 2. Pending-queue reconciliation
 
 | Brief item | Outcome |
 |---|---|
-| Step 1 — `marker_canonical.json` v0.3, +34 entries | **LANDED** `478e6ea`. 31 → 65, pure additions |
-| Step 2 — `lever_dictionary._meta.binds_to` → v0.3 | **LANDED** `478e6ea`. One-line diff; `_meta.version` left at `v0` (fixtures pin it) |
-| Step 3 — `_deferred` restructure, 5 sub-items | **LANDED** `478e6ea`. All five |
-| Step 4 — backfill dry run, expect zero | **RAN, DID NOT VERIFY.** See below — this gate is not discharged |
-| LOG — DECISIONS + OPEN_QUESTIONS | **LANDED** `3bb200e` as **#95**, Q34, Q35 |
+| Step 0 — HANDOFF receipt | **LANDED** `cdff7a4`, alone, before anchor work |
+| Step 1 — verify shape | **VERIFIED** against the file. `groups` is a list; schema matches the `hepatocellular` element; `relation_kinds` retains `co_movement` + `discriminator` |
+| Step 2 — append `erythroid` | **LANDED** `0cf3212`. 30 insertions, 0 deletions |
+| Step 3 — no `group_levers` | **LANDED**, empty array |
+| Step 4 — correct `trt_erythrocytosis_watch` | **LANDED** `9fc2f4e` — **one blocker, not two.** See below |
+| Step 5 — withhold constants | **HELD.** `plasma_volume_status` added to `_deferred_levers` in the existing three-field shape |
+| LOG | **LANDED** `47c6d68` + `970224c` — **#96, #97, #98, Q36, Q37** |
 
-### The anchor was stale
+Minted from actual maxima verified at open — DECISIONS `#95`, questions `Q35` — not from the
+numbers stated in the brief.
 
-The brief anchored to master **#87 (`eed3c76`)**; master was at **#94 (`965e0aa`)**, seven decisions
-on. Minted **#95**, and `binds_to` reads `v0.3 (#95)`.
+### Step 4: one of the two proposed blockers was not real
 
-### The marker table arrived flattened
+The brief proposed `blocked_on: [cross-group references, precondition_phase]`. Verification killed
+the second. `hpg_gonadotropin_suppression` — an **authored, live relation inside the promoted
+`hpg_axis` group** — already carries `precondition_phase: "on_trt"`, *and* a `driver` key. Authored
+relations demonstrably hold arbitrary keys beyond the base schema, so `precondition_phase` is
+precedented and disqualifies nothing. Recorded in #97 as **checked and cleared** so it is not
+re-opened.
 
-The brief's table lost its delimiters in transit and arrived as one run-on string — the rendered-view
-flattening `CLAUDE.md`'s chat→Code transport rule exists to prevent. Reconstructed 34 rows,
-**round-tripped back to the brief's exact bytes**, and the count independently matched the stated 34.
-A round-trip proves the split is *a* valid decomposition, not necessarily *the* intended one, and
-`marker_name_raw` is verbatim-critical under exact match. Judgement calls, still unconfirmed by a
-byte-faithful source: `Transferrin`/`transferrin`/`g/L` · `Saturation`/`transferrin_saturation`/`%` ·
-`Non HDLC`/`non_hdl`/`mmol/L` · `Tot Chol/HDL`/`chol_hdl_ratio`/`null` ·
-`Zinc-plasma`/`zinc_plasma`/`umol/L`. **A label wrong by one space fails silently.**
+The companion rationale — "the 4a producer does not consume it" — was rejected as a criterion
+outright: it is equally true of `group_levers` and every `relations` block, **including the
+`erythroid` content authored one commit earlier**. A criterion that would disqualify the commit just
+authorised is not a promotion criterion.
 
-### Two gates NOT claimed
+Landed as `blocked_on: ["4b contract: cross-group relation references"]`,
+`status: "blocked_on_contract"`. `references` has no precedent: zero across the eight authored
+relations in both groups.
 
-- **The backfill dry run verified nothing.** It returned `0 rows across 65 mappings` — the expected
-  answer. But `backend/.env` sets `DATABASE_URL` to **local SQLite, not Railway**, and that database
-  holds 24 `lab_results` rows with **zero** `marker_canonical IS NULL`. With no NULL rows to match, the
-  query cannot return anything but zero: it is structurally incapable of detecting the raw-label
-  variant it exists to catch. §11's probe-that-presumes-its-own-answer, wearing a passed gate's
-  costume. **Re-run against Railway before trusting it.**
-- **I1's extension has no enforcement and one live violation.**
-  `backend/interpretation/gates.py:39-53` falls back only when the entry is absent or `value is None`,
-  and explicitly projects `evidence_refs` away — its docstring states they "are NOT part of a delta".
-  Under extended I1, `alt` (`value: 0.45`, `evidence_refs: []`) must fall back to `_defaults` 0.30 and
-  does not. **Canon and code now disagree by design.** Recorded in #95's body only — it has no
-  `OPEN_QUESTIONS` row, so nothing points at it. Offered before merge, not taken up; **still owed.**
+### The test gate is weak by construction — reported as unchanged, not verified
 
-### Ritual breach, recorded not hidden
+`producer.py`'s docstring lists `relations_rendered` and `shared_levers` under "Emits NONE of"
+(4b), and greps confirm zero consumption of `relations`, `group_levers`, `precondition_phase` or
+`references` anywhere in `backend/interpretation/`. The producer reads membership, roles and display
+names only. **206 green means nothing broke, not that anything works** — this session's content is
+4b-latent by design.
 
-**No `CHAT→CODE` receipt was written before work began.** This brief carried no step 0 and the standing
-rule (`HANDOFF.md` header, #88) was not applied from memory. The omission defeats the receipt's entire
-purpose — an interruption mid-session would have left no trace of what was being attempted. A
-`CODE→CHAT` entry was appended at close instead, which is not a substitute.
+### A premise corrected during the go
 
-### A process correction mid-session
-
-The first pass wrote all three JSON files via `json.dump` round-trips. That reflowed
-`marker_groups.json`'s hand-aligned columns across all 31 hunks and rewrote `\uXXXX` escapes to
-literal characters — value-identical churn that buried a 47-line change inside a 316-line diff, and
-touched two files the brief said to change one string and append entries in. Both commits were reset
-and redone surgically. `lever_dictionary.json` is now a **1-line** diff; for `marker_groups.json` the
-bytes before `_deferred` are asserted unchanged and every non-`_deferred` key equal to master.
+The 404 that prompted #98's push-branches rule was on `feat/erythroid-group-authoring`, which was
+genuinely local-only. It was generalised to `feat/interpretation-view-skeleton`, which is **pushed
+and fully readable** — verified: all three raw URL forms (plain, `refs/heads/`, SHA-pinned) return
+**200** for `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md` and both reference JSONs. **O3's re-verify is not
+blocked by branch visibility and can proceed now.** The genuinely unpushed branch was
+`feat/recovery-metrics-rhr` — now pushed under the new rule, and its `BRANCHES.md` row corrected,
+since it read "local-only (never pushed)".
 
 ## 3. Cold-resume handoff
 
-**Branch:** `master` @ `3bb200e` (+ this close-out), pushed, clean. Untracked stray:
+**Branch:** `master` @ `970224c` (+ this close-out), pushed, clean. Untracked stray:
 `.claude/launch.json` (known).
 
 | Check | Result |
 |---|---|
-| `marker_canonical.json` | v0.2 → **v0.3**, entries **31 → 65** |
-| Duplicate `marker_name_raw` / `marker_canonical` | **zero / zero** across all 65 (`_CANONICAL_MAP` is a plain dict — a dupe silently wins last) |
-| `glucose_fasting` vs `glucose_random` | both present, distinct, not merged |
-| Tests asserting entry count or map version | **none** — verified, not taken on report |
-| Over-collapse guard | untouched; cannot fire on null `unit_established` (`haematocrit`, `chol_hdl_ratio`) |
+| `erythroid` group | members ×4, relations ×2, `group_levers: []`; all six referenced ids resolve in `marker_canonical.json` v0.3 |
+| Diff confinement | `erythroid` 30 insertions / 0 deletions; `_deferred` correction 4 / 2, confined to the one relation object; non-`groups` keys and both pre-existing groups byte-identical to master |
+| Reference-JSON guard (#98) | all three files `isascii() == True`, **zero** literal em dashes |
 | Backend tests | **206 passed**, unchanged |
-| Shared block G1 | `4243c91ce78e0331ddfa5178aa3006b8` / 155 / 10232 — untouched |
+| Shared block G1 | `4243c91ce78e0331ddfa5178aa3006b8` / 155 / 10232 — untouched; all three new rules are repo-specific or `HANDOFF`-local, so no G1 breach and no paired obligation |
 
-**Branch terminal-state gate — passes.** Only `feat/marker-canonical-v03` was touched (ff-merged,
-deleted; never pushed, so no remote ref). The four pre-existing locals all carry `+` commits and are
-all rowed in `BRANCHES.md`:
+**Branch terminal-state gate — passes, and every branch is now on origin.**
+`feat/erythroid-group-authoring` was pushed *before* merge (per #98 rule 2), ff-merged, then deleted
+local + remote.
 
 ```
-feat/checkin-injury-probe          2 +   rowed, pushed
-feat/feedback-ledger               4 +   rowed, pushed
-feat/interpretation-view-skeleton  3 +   rowed, pushed
-feat/recovery-metrics-rhr          1 +   rowed (UNSTARTED), local-only by design
+feat/checkin-injury-probe          2 +   rowed, on origin
+feat/feedback-ledger               4 +   rowed, on origin
+feat/interpretation-view-skeleton  3 +   rowed, on origin — readable, verified 200
+feat/recovery-metrics-rhr          1 +   rowed, pushed this session
 ```
 
-**Open questions** — 35 total. New this session: **Q34** (is `safety_threshold` a third read-constant
-class? due 4b with D3/PV1) and **Q35** (the over-collapse guard is unit-only and blind to same-unit
-semantic collapse; `glucose_fasting`/`glucose_random` is the live pair, both `mmol/L`).
+**Open questions** — 37 total. New this session: **Q36** (`discriminator` field semantics inverted
+between `ggt_hepatobiliary_discriminator` and `bilirubin_isolation`; `haemoconcentration_discriminator`
+took the `ggt` side, making it 2-to-1, so a renderer built on the other reading renders it backwards —
+plus `protein_total` is a second evidence marker with nowhere to live in a single-string field) and
+**Q37** (I1's extension has no enforcement and one live violation, `alt`; parent question to #96's
+withholding). Both due 4b with Q34, D3, PV1.
 
-**Ready to promote, follow-on brief:** `_deferred.groups.erythroid` and
-`_deferred.relations.trt_erythrocytosis_watch` now carry `blocked_on: []` and
-`status: "ready_to_promote"` — their vocabulary blockers cleared at v0.3. Group authoring was
-explicitly out of scope here.
+**OWED — Luke, receipted in `HANDOFF.md` at the moment of agreement (#98 rule 3):** citation capture —
+DOIs for the haematocrit RCV work and the plasma-volume papers. On landing they promote
+`plasma_volume_status` out of `_deferred_levers` and let the `haematocrit`/`haemoglobin`
+`min_meaningful_delta` constants land cited, discharging #96's withholding. Until then **`erythroid`
+produces no news beyond the default gates and the TRT→Hct concern stays uninstrumented.**
 
-**OWED — this session:** re-run the backfill dry run against Railway; and either enforce extended I1 in
-`gates.py` or record it as a question. Neither is tracked anywhere but #95's body and this file.
+**OWED, carried:** the backfill dry run still needs a Railway run — `backend/.env` points
+`DATABASE_URL` at local SQLite, where zero NULL rows make the check structurally incapable of
+returning anything but its expected zero. HCA **Q11** should close `DONE → #93` from an HCA-rooted
+session; HCA **Q9 item 1** and **Q10** remain open there. **Q33** — the shared block's `parked`, needing
+its own mirror-first brief. `probe_resolver.py` container run and `hevy-resolver-activation` limb 2,
+both blocked on Anthropic API credit.
 
-**OWED, carried:** HCA **Q11** should close `DONE → #93` from an HCA-rooted session; HCA **Q9 item 1**
-and **Q10** remain open there. **Q33** — the shared block's `parked`, needing its own mirror-first
-brief. `probe_resolver.py` container run and `hevy-resolver-activation` limb 2, both blocked on
-Anthropic API credit, owner Luke.
-
-**Single clearest next action:** re-run `python backend/backfill_marker_canonical.py` with
-`DATABASE_URL` pointed at Railway. Until then the vocabulary bump has landed with its one data-safety
-gate unverified, and that gate exists precisely because a raw-label variant would otherwise
-double-count a marker across the COALESCE partition.
+**Single clearest next action:** Luke's citation capture. It is the only thing standing between the
+authored `erythroid` structure and a group that actually produces news — everything else in the
+follow-up brief is mechanical once the DOIs exist.
