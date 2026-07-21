@@ -2874,6 +2874,65 @@ one thing still holding this relation.
 
 ---
 
+### 98. Three standing guards, each replacing care with a mechanism
+
+**Decision:** three rules land, each converting a failure that "being careful" was supposed to
+prevent into one a mechanism catches.
+
+**1. Reference-JSON edit guard.** `backend/reference/*.json` is hand-aligned and pure ASCII with
+non-ASCII as `\uXXXX`. Never construct a `\uXXXX` escape inside heredoc source — the Bash tool's
+heredoc consumes one backslash **even when quoted** (`<<'EOF'`), so the escape arrives at Python as a
+literal character and is written into the file. Build the backslash via `chr(92) + "u2014"`, or write
+the script to a file. After any edit, assert `raw.isascii()` and zero literal em dashes, and that the
+file still parses. No `json.dump` round-trips.
+
+The property that makes this worth a gate rather than a note: **the failure is silent in the direction
+that writes bad bytes.** It bit twice in one session. The first time the malformed string failed an
+assertion — loud, harmless. The second time it *succeeded*, producing a valid, value-identical file
+that violated the encoding convention, and was caught only by reading the result. A defect whose safe
+mode is loud and whose damaging mode is silent will not survive contact with the next session on care
+alone.
+
+**2. Push branches even while holding for review.** A local-only branch is unreadable to chat —
+`raw.githubusercontent.com` 404s — so a hold-before-merge gate that chat cannot independently verify
+rests on Code's report alone. That is precisely what the loop's evidence rules exist to prevent, and it
+recurred this session: the go for #96/#97 was given explicitly on report rather than on bytes. Pushing
+is not merging; it costs nothing. Push when work becomes reviewable, not when it lands.
+
+**3. Post-close-out agreements get a receipt at the moment of agreement.** Recorded in `HANDOFF.md`'s
+header. An agreement reached after a close-out is written has nowhere to live — not in a brief, not in
+the close-out already on disk, and the next brief carries it only if someone remembers. **Q37 is the
+worked example:** flagged at #95's close-out, agreed; flagged again before #96's merge, agreed; landed
+only at #97's, on the third session. Both parties said yes both times and the mechanism still lost it.
+This is the step-0 receipt breach from the opposite end — step 0 protects work in flight, this protects
+an *agreement* in flight.
+
+**Rationale:** all three share a shape. Each was already understood by both parties, each was
+re-committed to verbally, and each still failed on the next pass, because an understanding held in a
+person's head or a chat scrollback is not a control. The general form: **when a lesson has to be
+re-learned, the fix is not to learn it harder — it is to find the surface that will enforce it when
+nobody is paying attention.** #94 made this argument for derived artifacts; these three apply it to
+process.
+
+**Status:** Landed. Governance only.
+
+**How you know:** `feat/interpretation-view-skeleton` verified **present on origin** and readable —
+all three raw URL forms (plain, `refs/heads/`, SHA-pinned) return HTTP 200 for
+`DECISIONS_LOG.md`, `OPEN_QUESTIONS.md` and both reference JSONs; both reference files verified
+`isascii() == True` with zero literal em dashes after this session's edits;
+`feat/erythroid-group-authoring` pushed before merge and confirmed readable at 200.
+
+**Correction to the premise that prompted rule 2:** the observed 404 was on
+`feat/erythroid-group-authoring`, which was genuinely local-only. It was generalised to
+`feat/interpretation-view-skeleton`, which is **pushed and fully readable** — so O3's re-verify is not
+blocked by branch visibility and can proceed now. The rule stands on the branch that really was
+invisible; the second instance was an inference, not an observation, and testing it took one command.
+
+**Do not revisit unless:** the Bash heredoc's backslash handling changes, which would only widen what
+rule 1 permits, never narrow it.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

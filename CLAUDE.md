@@ -196,6 +196,27 @@ must match it.
   diffs the written file against the intended source before landing. Repo-canonical
   docs are edited in place and never cross this transport.
 
+- **Reference-JSON edit guard (standing, #98).** `backend/reference/*.json` is hand-aligned
+  and pure ASCII, with non-ASCII written as `\uXXXX`. Two rules, both mechanical:
+  1. **Never construct a `\uXXXX` escape inside heredoc source.** The Bash tool's heredoc
+     consumes one backslash *even when quoted* (`<<'EOF'`), so `—` in source arrives at
+     Python as a literal em dash and gets written into the file. Build the backslash via
+     `chr(92) + "u2014"`, or write the script to a file first.
+  2. **After any edit, assert the file is pure ASCII with zero literal em dashes** —
+     `raw.isascii() and raw.count(chr(0x2014)) == 0` — and that it still parses. This fires
+     regardless of who is careful.
+  Rationale: the failure is silent *in the direction that writes bad bytes*. The malformed
+  case succeeds and produces a valid, value-identical file that violates the encoding
+  convention; only the assertion catches it. Also: **no `json.dump` round-trips** on these
+  files — re-serialising reflows every hunk and rewrites escapes, burying a small change in
+  a whole-file diff. Surgical text edits only.
+
+- **Push branches even while holding for review (standing, #98).** A local-only branch is
+  unreadable to chat — `raw.githubusercontent.com` 404s — so a "hold before merge" gate that
+  chat cannot independently verify rests on Code's report alone, which is the one thing the
+  loop's evidence rules exist to avoid. Pushing costs nothing and is not a merge. Push at the
+  point work becomes reviewable, not at the point it lands.
+
 ### Tooling
 
 - **MarkItDown — the document→markdown ingestion path.** Microsoft MarkItDown converts

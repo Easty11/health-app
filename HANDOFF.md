@@ -14,6 +14,15 @@ The `CHAT→CODE` receipt is written before any work begins and states received-
 that entry is the one that survives an interruption, so it must not wait for the work. Other
 entries may ride the next substantive commit.
 
+**Post-close-out agreements get a receipt at the moment of agreement (#98).** An agreement
+reached *after* a close-out is written has nowhere to live: it is not in a brief, not in the
+close-out already on disk, and the next brief carries it only if someone remembers. Q37 is the
+worked example — flagged at #95's close-out and again before #96's merge, agreed both times,
+and it still took a third session to land, because a "yes" between sessions had no home. This
+is the step-0 breach from the opposite end: the receipt protects work in flight, and this
+protects an agreement in flight. Write it as a `CHAT→CODE` line when it is agreed, not when it
+is next actioned.
+
 ---
 
 2026-07-21 11:27 AEST | CHAT→CODE | Erythroid group-authoring brief received — author `erythroid` in `marker_groups.json` as structure only (members, roles, 2 relations, no `group_levers`); correct `trt_erythrocytosis_watch`, which #95 wrongly cleared to `ready_to_promote`; read-constants and the `plasma_volume_status` lever withheld under #95's I1 extension pending verbatim DOIs (→ #96/#97 + Q36 at merge; master `fcb7530`, DECISIONS max #95 and questions max Q35 both verified at open, not taken from the brief). Received, not started.
