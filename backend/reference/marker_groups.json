@@ -228,8 +228,10 @@
         ],
         "precondition_phase": "on_trt",
         "reads": "On TRT, watch Hct for erythrocytosis \u2014 a protocol-driven context, not a breach of the erythroid axis itself.",
-        "blocked_on": [],
-        "status": "ready_to_promote"
+        "blocked_on": [
+          "4b contract: cross-group relation references"
+        ],
+        "status": "blocked_on_contract"
       }
     },
     "_blocked_on_order": {

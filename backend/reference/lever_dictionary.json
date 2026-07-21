@@ -115,6 +115,11 @@
       "reason": "Competing lever for ALT (hepatic origin). Held out of live nodes: no real DOI to hand \u2014 I1 forbids surfacing an uncited lever. Add citation to promote.",
       "target_markers": ["alt", "ast"],
       "provisional_grade": "moderate"
+    },
+    "plasma_volume_status": {
+      "reason": "Discriminates haemoconcentration (draw artefact) from true erythron expansion \u2014 plasma-based analytes rise with plasma contraction while MCV, being per-cell, does not. Held out of live nodes: sources identified but no DOI captured verbatim \u2014 I1 forbids surfacing an uncited lever. Add citation to promote.",
+      "target_markers": ["haemoglobin", "haematocrit", "rbc", "albumin", "protein_total"],
+      "provisional_grade": "moderate"
     }
   }
 }
