@@ -27,6 +27,8 @@ Ordering is determined by FK dependencies. Do not reorder.
 014 — user_health_state       PLACEHOLDER — design after first data flowing
 015 — hevy_exercise_templates FK to users (owner_user_id, nullable) — otherwise standalone
 016 — exercise_region_tags    FK to hevy_exercise_templates (CASCADE) — app-owned annotation
+017 — cbti_blocks             FK to users (CASCADE) — append-only titration block ledger
+018 — cbti_prescriptions      FK to cbti_blocks (CASCADE) + self (superseded_by) — append-only window ledger
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -774,6 +776,58 @@ CREATE TABLE exercise_region_tags (
 CREATE INDEX ix_exercise_region_tags_region_key
     ON exercise_region_tags (region_key);
 ```
+
+### 017 — cbti_blocks
+
+CBT-I titration block ledger (DECISIONS_LOG #105). The module is block-structured, not a single arc: a block opens carrying the in-flight prescription (`decision='adopt'`) and closes (`decision='close'`); the ledger persists permanently after closure and is the baseline any later block titrates against. **Append-only** — the only permitted UPDATE is setting `closed_on` / `close_reason` / `exit_tst_min` / `exit_se_pct` at closure. This is a model+application invariant, not a DB trigger (the repo has no trigger precedent and the SQLite test path builds via `create_all`, not migrations). Read-only with respect to readiness in phase 1.
+
+```sql
+CREATE TABLE cbti_blocks (
+    id            INTEGER PRIMARY KEY,
+    user_id       INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    opened_on     DATE NOT NULL,
+    closed_on     DATE,                    -- UPDATE-once at closure
+    wake_anchor   VARCHAR(5) NOT NULL,     -- "05:00"
+    open_reason   TEXT,
+    close_reason  TEXT,                    -- UPDATE-once at closure
+    exit_tst_min  INTEGER,                 -- UPDATE-once at closure
+    exit_se_pct   FLOAT,                   -- UPDATE-once at closure
+    notes         TEXT
+);
+
+CREATE INDEX ix_cbti_blocks_user_id ON cbti_blocks (user_id);
+```
+
+### 018 — cbti_prescriptions
+
+One prescribed sleep window within a block (DECISIONS_LOG #104). Titration controls on total sleep time with sleep efficiency as a **floor** (≥85%), not SE as the target: `window_minutes` = rolling mean TST + buffer; exit on TST plateau with SE held ≥85%. **Append-only** — the only permitted UPDATEs are `effective_to` (when a successor takes over) and `superseded_by` (self-referential pointer to that successor); `basis_*` / `decision` / `rationale` are frozen at authorship. The `decision` domain is the one DB-enforced constraint (`ck_cbti_prescription_decision`). `excluded_nights` is reason-tagged JSON (`{"2026-04-02":"alcohol"}`) — recorded, not counted.
+
+```sql
+CREATE TABLE cbti_prescriptions (
+    id                     INTEGER PRIMARY KEY,
+    block_id               INT NOT NULL REFERENCES cbti_blocks(id) ON DELETE CASCADE,
+    effective_from         DATE NOT NULL,
+    effective_to           DATE,                    -- UPDATE-once when superseded
+    prescribed_lights_out  VARCHAR(5) NOT NULL,     -- "22:36"
+    wake_anchor            VARCHAR(5) NOT NULL,     -- "05:00"
+    window_minutes         INTEGER NOT NULL,
+    decision               VARCHAR(10) NOT NULL,    -- adopt|extend|hold|compress|close (CHECK ck_cbti_prescription_decision)
+    basis_tst_min          INTEGER,
+    basis_se_pct           FLOAT,
+    basis_nights_n         INTEGER,
+    basis_window_start     DATE,
+    basis_window_end       DATE,
+    excluded_nights        JSON,                    -- reason-tagged: {"2026-04-02":"alcohol",...}
+    rationale              TEXT,
+    superseded_by          INT REFERENCES cbti_prescriptions(id) ON DELETE SET NULL,  -- UPDATE-once when superseded
+    CONSTRAINT ck_cbti_prescription_decision
+        CHECK (decision IN ('adopt','extend','hold','compress','close'))
+);
+
+CREATE INDEX ix_cbti_prescriptions_block_id ON cbti_prescriptions (block_id);
+```
+
+**daily_records diary columns** (migration `e5f2a9c7b104`). Nine additive nullable AM-moment columns extend `daily_records` for the CBT-I sleep diary, sparse by design (captured only while an open `cbti_block` exists): `lights_out`, `sleep_latency_min`, `waso_min`, `night_wakings_n`, `final_wake`, `out_of_bed`, `naps_min`, `diary_se_pct`, `diary_tst_min`. `diary_se_pct` / `diary_tst_min` are frozen at AM capture (same contract as `naive_baseline`, never recomputed). `naps_min` is logged PM on date D but belongs to the night terminating on wake-date D+1 — stored at PM on D, the engine reads it from `(date - 1)`. _(The `daily_records` parent table itself predates this document's coverage; only the CBT-I additions are recorded here.)_
 
 ## Canonical Metric Type Whitelist
 

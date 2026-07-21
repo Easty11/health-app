@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
@@ -131,6 +131,26 @@ class DailyRecord(Base):
     passive_hrv_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     passive_sleep_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # ── CBT-I sleep diary (AM moment) ──────────────────────────────────────────
+    # Additive, nullable, sparse by design: rendered/captured only while an open
+    # cbti_block exists, legended by cbti_prescription.effective_from/to (#105).
+    # Same freeze contract as naive_baseline — set at AM write, never recomputed.
+    lights_out: Mapped[str | None] = mapped_column(String(5), nullable=True)          # "22:36"
+    sleep_latency_min: Mapped[int | None] = mapped_column(Integer, nullable=True)     # SOL; device systematically wrong — never prefilled
+    waso_min: Mapped[int | None] = mapped_column(Integer, nullable=True)              # wake after sleep onset; never prefilled
+    night_wakings_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    final_wake: Mapped[str | None] = mapped_column(String(5), nullable=True)          # "05:00"
+    out_of_bed: Mapped[str | None] = mapped_column(String(5), nullable=True)          # "05:10"
+    # naps_min is logged at PM on date D but belongs to the night terminating on
+    # wake-date D+1. Stored at PM on D; the titration engine reads it from (date - 1).
+    # Silent when wrong — the attribution lives here, not only in the engine.
+    naps_min: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+        comment="Logged PM on date D; belongs to night terminating D+1. Engine reads from (date-1).",
+    )
+    diary_se_pct: Mapped[float | None] = mapped_column(Float, nullable=True)          # frozen at AM; same contract as naive_baseline
+    diary_tst_min: Mapped[int | None] = mapped_column(Integer, nullable=True)         # frozen at AM; same contract as naive_baseline
+
 
 class DailyCheckIn(Base):
     __tablename__ = "daily_check_ins"
@@ -205,6 +225,70 @@ class HealthConnectRecordSource(Base):
     record_start: Mapped[str] = mapped_column(String(40), nullable=False)  # record's primary timestamp (ISO)
     source_package: Mapped[str | None] = mapped_column(String(255))        # coalesced to 'unknown' at capture; nullable column
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class CBTIBlock(Base):
+    """A single CBT-I titration block (#102). The module is block-structured, not a
+    single arc: a block opens with the in-flight prescription (decision='adopt') and
+    closes (decision='close'); the ledger persists permanently after closure and is
+    the baseline any later block titrates against.
+
+    Append-only. The ONLY permitted UPDATE is setting closed_on / close_reason /
+    exit_tst_min / exit_se_pct at closure — no other column is ever rewritten. There
+    is no DB trigger enforcing this (the repo has no such precedent and the test path
+    builds via create_all, not migrations); it is a model+application invariant, the
+    same discipline DailyRecord's AM fields carry.
+    """
+    __tablename__ = "cbti_blocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    opened_on: Mapped[date] = mapped_column(Date, nullable=False)
+    closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)          # UPDATE-once at closure
+    wake_anchor: Mapped[str] = mapped_column(String(5), nullable=False)          # "05:00"
+    open_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)        # UPDATE-once at closure
+    exit_tst_min: Mapped[int | None] = mapped_column(Integer, nullable=True)     # UPDATE-once at closure
+    exit_se_pct: Mapped[float | None] = mapped_column(Float, nullable=True)      # UPDATE-once at closure
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CBTIPrescription(Base):
+    """One prescribed sleep window within a block (#101). Titration controls on total
+    sleep time with sleep efficiency as a FLOOR (>=85%), not SE as the target: window =
+    rolling mean TST + buffer, exit on TST plateau, SE held >=85%.
+
+    Append-only. The ONLY permitted UPDATEs are setting effective_to (when a successor
+    prescription takes over) and superseded_by (self-referential pointer to that
+    successor). basis_* / decision / rationale are frozen at authorship. Same
+    no-DB-trigger, model+application-invariant discipline as CBTIBlock.
+    """
+    __tablename__ = "cbti_prescriptions"
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('adopt','extend','hold','compress','close')",
+            name="ck_cbti_prescription_decision",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    block_id: Mapped[int] = mapped_column(ForeignKey("cbti_blocks.id", ondelete="CASCADE"), nullable=False, index=True)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)       # UPDATE-once when superseded
+    prescribed_lights_out: Mapped[str] = mapped_column(String(5), nullable=False)   # "22:36"
+    wake_anchor: Mapped[str] = mapped_column(String(5), nullable=False)          # "05:00"
+    window_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    decision: Mapped[str] = mapped_column(String(10), nullable=False)            # adopt|extend|hold|compress|close
+    basis_tst_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    basis_se_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    basis_nights_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    basis_window_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    basis_window_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    excluded_nights: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # reason-tagged: {"2026-04-02":"alcohol",...}
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    superseded_by: Mapped[int | None] = mapped_column(
+        ForeignKey("cbti_prescriptions.id", ondelete="SET NULL"), nullable=True   # UPDATE-once when superseded
+    )
 
 
 class AerobicSession(Base):
