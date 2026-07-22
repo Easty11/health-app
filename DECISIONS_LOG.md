@@ -3287,6 +3287,91 @@ for an all-stable group, so the predicate remains falsifiable.
 
 **Do not revisit unless:** the frontend consumes `is_moved` somewhere not yet reconciled — which is
 what O3's re-verify is for.
+### 107. CBT-I titration controls on total sleep time, with sleep efficiency as a floor rather than the target
+
+**Decision:** the titration rule computes the prescribed window from rolling mean TST plus a buffer, and
+exits on TST plateau with SE held ≥85% — not on SE reaching or stalling at a threshold. SE is the
+constraint that keeps the window honest; TST is the outcome the protocol exists to produce.
+
+The completed 2026-03-19 → 2026-05-13 block is the evidence. Mean SE peaked at **0.958** at a 6h30
+window and declined monotonically to **0.896** at 7h38, while mean TST rose across the same span to
+**7.13h**. An SE-maximising rule terminates at the point of greatest efficiency, which on this data is
+roughly 45 minutes short of need. Sleep need is estimated at **~7h30**, from the only week where time in
+bed was not the binding constraint (week 7, TIB 8h07 against a 7h38 prescription, TST 7h29, SE 92.2%),
+corroborated by the two post-prescription nights at SE 0.925 and 0.989. The workbook's own
+`Biological Sleep Need (TST24)` field is **not** used: the FAQ confirms it is TST plus naps, so
+restriction lowers it and it reports need falling as a consequence of the intervention. Circular.
+
+**Status:** Rule adopted; engine gated behind schema and import. Phase-1 substrate landed
+(`feat/cbti-module`); the engine and its replay against the imported block are phase 2 (brief Steps 5–7).
+
+**How you know:** nine prescription blocks reconstructed from `Rx Bedtime` change-points against a
+constant 05:00 anchor and loaded to Railway (block id=1, contiguous effective ranges, `superseded_by`
+chained); 53 diary nights loaded, recomputed SE reconciled against the sheet's `Sleep Efficiency`
+**0/53 mismatch to ±0.001** (worst residual 0.000047), with a negative control that flags exactly one
+injected 0.01 perturbation. The block's exit aggregates as stored — mean TST **428 min (7.13h)**, mean
+SE **89.6% (0.896)** over the final window — reproduce this decision's own decline figures. Engine
+replay (Gate 5) is **not** yet run.
+
+**Do not revisit unless:** a second unconstrained week contradicts the ~7h30 estimate — it currently
+rests on one observation.
+
+---
+
+### 108. The CBT-I module is block-structured, and read-only with respect to readiness
+
+**Decision:** CBT-I is modelled as repeating blocks, not a single arc — this is the third block, two
+prior completions. A block opens with `decision='adopt'` carrying the in-flight prescription and closes
+at the block level (`closed_on` + exit metrics); the ledger persists permanently after closure and is
+the baseline any later block titrates against. Diary fields on `DailyRecord` are sparse by design,
+legended by `cbti_prescription.effective_from/to`, and render only while a block is open. No new column
+feeds readiness in this phase — a titration artefact must not propagate into training-load decisions
+before the module has demonstrated it is calibrated.
+
+Early-morning awakening is instrumented but does not drive compression: wakes cluster at
+**04:32 ±21 min** — time-locked, not distributed — so EMA is diagnostic, not a compression signal.
+
+**Status:** Adopted. Schema landed as two append-only ledgers (`cbti_blocks`, `cbti_prescriptions`)
+plus nine nullable AM-moment diary columns; append-only is a model+application invariant with the
+`decision` domain as the one DB-enforced constraint (`ck_cbti_prescription_decision`).
+
+**How you know:** readiness isolation verified this session — a repo-wide grep confirms no code path
+outside the models, the importer, tests, and the migration reads any of the nine diary columns or either
+cbti table; readiness code (`context_builder.py`, `engine/selection.py`) reads none. One closed block
+loaded and its supersession chain and contiguous effective ranges verified against Railway. The
+04:32 cluster figure is inherited from the block's diary and is not re-derived here.
+
+**Do not revisit unless:** a block opens under a materially different wake anchor and the 04:32 cluster
+moves with it, which would reclassify it from conditioned arousal to anchor-relative.
+
+---
+
+### 109. A reconciliation is not evidence until its negative control has fired — sibling to #103
+
+**Decision:** a reconciliation offered as proof that imported data matches its source ("all 53 nights
+match to ±0.001") must, in the same run, perturb one record and confirm the comparator flags **exactly**
+that record. An all-match result is equally consistent with "the data is faithful" and "the comparator
+is blind" — a swallowed exception, a misaligned join, or a unit mismatch passes identically. The perturb
+→ detect → restore cycle proves the check *can* fail before its *not* failing is allowed to mean
+anything. This is #103's paired-control rule (a negative needs a positive control) applied to the
+matched case: a clean reconciliation is a negative finding about mismatches, and it needs its own
+positive control.
+
+Earned in the CBT-I import (#107): the independent SE recompute caught a real defect — an unconditional
++24h midnight wrap under-read one after-midnight night by **0.445** — which a comparator that could not
+see mismatches would have hidden as a clean pass. The negative control (perturb 0.01 → exactly one
+night flagged) is what licensed trusting the eventual 0/53.
+
+**Status:** Adopted as method; realised in `import_cbti_block.py` (`reconcile_with_control`) which aborts
+the load if the control does not localise its injected mismatch, and in `tests/test_cbti_import.py`.
+
+**How you know:** the importer's own output — `control_ok=True (perturbed 2026-04-14, flagged
+['2026-04-14'])` alongside `real_mismatches=0` — and the seven synthetic-data tests (223 passed, was
+216). The midnight-wrap defect and its 0.445 residual are the worked example.
+
+**Do not revisit unless:** a reconciliation gate is added that cannot express a negative control (no way
+to perturb one record), which would mean the check is structurally unfalsifiable and should be redesigned
+rather than trusted.
 
 ---
 

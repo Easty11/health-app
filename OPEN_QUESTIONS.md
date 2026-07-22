@@ -898,6 +898,19 @@ rather than commentary.
 
 **Status:** UNSTARTED — no blocker; the capture is the first step of the work, not a precondition on
 someone else. Owner: Luke.
+## Q42. The 12-hour-clock scrape failure in `parseSleepTimingContentDesc` is silent and cross-cutting — owned by `health-connect-app`
+
+`HRVDataModel.parseSleepTimingContentDesc` captures `(\d+:\d+)` from a Samsung content-desc, and
+`parseClockToMinutes` accepts it without a meridiem. If the phone clock is ever set to 12-hour, `10:12 pm`
+is stored as `10:12` — a 12-hour error that reads as a valid time. It is silent, and it affects **every**
+consumer of `bedtime`/`wake_time`, not just CBT-I (surfaced while designing the CBT-I diary prefill,
+which now sanity-gates prefills against the prescribed window as a local defence — brief Step 6).
+
+This is a scraper defect in the companion app's store, not health-app's. Raised here so it is not lost;
+the fix and its canonical question belong in `health-connect-app`'s `OPEN_QUESTIONS`, not this repo.
+
+**Status:** UNSTARTED — no blocker. Owner: Luke. **Next action:** carry to `health-connect-app`'s
+`OPEN_QUESTIONS` (cross-repo; not editable from a health-app-rooted session).
 
 ---
 
