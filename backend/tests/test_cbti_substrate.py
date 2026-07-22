@@ -1,7 +1,7 @@
 """CBT-I data substrate (phase 1) — schema smoke + append-only invariants.
 
 Covers the block/prescription ledger and the sleep-diary fields on DailyRecord
-(#104 titration-on-TST / #105 block-structured, readiness-isolated). No engine
+(#107 titration-on-TST / #108 block-structured, readiness-isolated). No engine
 under test here — this is the substrate the import (Gate 4) and titration engine
 (Gate 5) are built on.
 

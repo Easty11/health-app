@@ -22,6 +22,7 @@ Last updated: July 2026
 
 | Item | Notes |
 |------|-------|
+| CBT-I module phase 2 (engine + surfaces + ISI) | Phase-1 substrate landed on `feat/cbti-module` (held for review, DECISIONS_LOG #107/#108/#109): schema + completed-block import (1 block, 9 prescriptions, 53 nights, SE-reconciled). Phase 2 = titration engine (weekly eval; sufficiency/regularity/adherence gates; TST-plateau exit with SE≥85% as a floor; **replay against the imported block = Gate 5**); AM/PM surfaces with the 12h-clock prefill sanity-gate (Q42); ISI 7-item capture. Separate brief. Confirm the VA nap-timing convention before the engine relies on the `naps_min` date−1 read. |
 | Scraper canary + honest score degradation | Detect null/stale/implausible scraper output. Surface degraded state to user when HRV unavailable — never silently score without it. |
 | Basic readiness score | Formally suppressed until HRV data path is confirmed end-to-end with 7+ days of readings (scraper path confirmed; pending 7-day sample). Once confirmed: Banister fitness-fatigue model (Form = Fitness − Fatigue, dual EWMA) integrated with RMSSD baseline deviation, sleep architecture, and RHR trend. ACWR rejected — see Decisions Log. |
 | Manual cardio entry | Unconnected sessions (Rogue Echo bike, gym machines) must be loggable to prevent ACWR silently under-reading load. |

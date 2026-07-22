@@ -133,7 +133,7 @@ class DailyRecord(Base):
 
     # ── CBT-I sleep diary (AM moment) ──────────────────────────────────────────
     # Additive, nullable, sparse by design: rendered/captured only while an open
-    # cbti_block exists, legended by cbti_prescription.effective_from/to (#105).
+    # cbti_block exists, legended by cbti_prescription.effective_from/to (#108).
     # Same freeze contract as naive_baseline — set at AM write, never recomputed.
     lights_out: Mapped[str | None] = mapped_column(String(5), nullable=True)          # "22:36"
     sleep_latency_min: Mapped[int | None] = mapped_column(Integer, nullable=True)     # SOL; device systematically wrong — never prefilled
@@ -228,7 +228,7 @@ class HealthConnectRecordSource(Base):
 
 
 class CBTIBlock(Base):
-    """A single CBT-I titration block (#102). The module is block-structured, not a
+    """A single CBT-I titration block (#108). The module is block-structured, not a
     single arc: a block opens with the in-flight prescription (decision='adopt') and
     closes (decision='close'); the ledger persists permanently after closure and is
     the baseline any later block titrates against.
@@ -254,7 +254,7 @@ class CBTIBlock(Base):
 
 
 class CBTIPrescription(Base):
-    """One prescribed sleep window within a block (#101). Titration controls on total
+    """One prescribed sleep window within a block (#107). Titration controls on total
     sleep time with sleep efficiency as a FLOOR (>=85%), not SE as the target: window =
     rolling mean TST + buffer, exit on TST plateau, SE held >=85%.
 

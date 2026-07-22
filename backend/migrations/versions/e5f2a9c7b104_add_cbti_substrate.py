@@ -4,7 +4,7 @@ Revision ID: e5f2a9c7b104
 Revises: c3a2d8e5f109
 Create Date: 2026-07-22
 
-CBT-I module phase 1 (DECISIONS_LOG #104 titration-on-TST / #105 block-structured,
+CBT-I module phase 1 (DECISIONS_LOG #107 titration-on-TST / #108 block-structured,
 readiness-isolated). All additive.
 
 daily_records gains 9 nullable AM-moment diary columns, sparse by design (captured

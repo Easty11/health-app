@@ -213,8 +213,8 @@ def load(db, user_id, nights, prescriptions, close_date, apply):
         wake_anchor=WAKE_ANCHOR,
         open_reason="Third CBT-I block (two prior completions). Imported from VA CBT-I "
                     "Sleep Diary Calculator export.",
-        close_reason="TST plateau at 7h38 window with SE held >=85% (#104 exit condition); "
-                     "sleep need ~7h30 (#101).",
+        close_reason="TST plateau at 7h38 window with SE held >=85% (#107 exit condition); "
+                     "sleep need ~7h30 (#107).",
         exit_tst_min=exit_tst, exit_se_pct=exit_se,
         notes="Source: VA CBT-I Sleep Diary Calculator (Manber 2010). 53 nights, 3 gaps.",
     )

@@ -1,119 +1,104 @@
-# closeout — health-app
+# Close-out — CBT-I module phase 1 (brief Steps 1–4)
 
-_Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
-`DECISIONS_LOG.md`. Forward work: `ROADMAP.md`. Interruption ledger: `HANDOFF.md`._
+Branch: `feat/cbti-module` (cut from `master` @ `d22eeba`). Held for review, pushed, **not merged**.
 
-2026-07-22 · safety-threshold gate (#104 → #106, Q34 closed, Q41 minted) + §19 receipt
+---
 
-## 1. Real commits this session
-
-Session-open ref: `d22eeba`. Landed on `master` at **`b3af58a`**, pushed, in sync.
+## 1 — Real commits this session (`d22eeba..HEAD`)
 
 ```
-b3af58a gov(handoff): receipt — resolution-table-is-a-hypothesis rule (FEEDBACK §19 candidate)
-4f3582b chore: session close-out
-caf5204 gov(handoff): written go for f078f1c; mutation-verification rule receipted
-f078f1c governance: DECISIONS_LOG #104/#105/#106, Q34 closed, Q41 minted
-262c9ac feat(interpretation): safety_gate as gate 3; news_gate gains a non-demotable arm
-436111a reference: safety_thresholds.json schema + guard, no live entries
-95808fe gov(handoff): receipt — safety-threshold gate brief received, not started
+894f335 governance: DECISIONS_LOG #107/#108/#109, OPEN_QUESTIONS Q42, CLAUDE recent-landings
+88fb61d feat(cbti): completed-block importer + reconciliation (Gate 4)
+876dbd8 chore(cbti): gitignore personal-data workbooks before import
+f0899eb feat(cbti): data substrate — diary fields + block/prescription ledgers
 ```
 
-`4f3582b` was this session's first close-out (the safety-gate work). `b3af58a` is a
-**ledger-only** commit since — the §19 receipt — carrying no `#N` and no code/store change, so
-the "Recent landings" block is unchanged and correct at `#104/#105/#106`.
-
-Maxima now: **DECISIONS #106 · questions Q41 · FEEDBACK §17.**
-Backend suite **258 passed** (206 → 222 → 258). No `alembic/`, `routers/` or `frontend/` touched.
-
-## 2. Pending-queue reconciliation
-
-Substantive brief (safety-threshold gate) — all landed; full detail in the commit bodies:
-
-| Brief item | Outcome |
-|---|---|
-| Step 0 — receipt before touching anything | **LANDED** `95808fe`, alone |
-| Step 1 — four verifications with controls | **VERIFIED**; the whole-dict premise was narrowed |
-| Steps 2–3 — asset + schema test with negative control | **LANDED** `436111a`, 16 tests |
-| Steps 4–5 — `safety_gate()` + non-demotable `news_gate` arm | **LANDED** `262c9ac` |
-| Step 6 — producer wiring + `is_moved` → `should_surface` | **LANDED** `262c9ac`; **three** tests moved, not two |
-| Step 7 — gate tests + the added shape guard | **LANDED** `262c9ac`, 36 tests |
-| LOG | **LANDED** `f078f1c` — #104/#105/#106, Q34 `DONE → #104`, Q41 minted |
-| Written go (#102) | **LANDED** `caf5204` before the merge acted |
-
-### The three deliberate divergences (unchanged from the safety-gate close-out)
-
-1. The live constraint was **three exact-dict asserts on `news_gate`**, not the oracle tests — forcing
-   the safety arm to append to `basis`, never add a sibling key. Verified by mutation (see §18 below).
-2. The resolution table's *agreeing-operator, bound-below-all-bands* case (`>0.30` vs a 0.50 band)
-   falls through to a false `not_in_band` — a false negative on a safety gate. Resolved to
-   `censored_indeterminate` (#105). This is the worked instance behind §19.
-3. The rename moved **three** tests; the third is the G6 non-vacuity guard, now
-   `test_all_stable_group_does_not_surface`, still asserting `False`.
-
-### Two standing rules agreed this session, both receipted, both still owed to FEEDBACK
-
-- **§18 — a guard is verified by mutation, not by passing.** Earned when the `news_gate` shape guard
-  was confirmed by reimplementing the arm as a sibling key and watching 6 tests fail. Receipted at
-  `caf5204`. **Not landed.**
-- **§19 — a resolution table is a hypothesis about the input space until Code enumerates it.** Prose
-  has no totality check; code must return something for every input, which is what exposed both #104's
-  and #105's table gaps. Receipted at `b3af58a`. **Not landed.**
-
-Both were held to the ledger rather than folded into `FEEDBACK.md`: each is chat-agreed canon that
-needs a brief to carry it across and a read before it merges, and the safety-gate go authorised
-*verified bytes*, not a later `FEEDBACK` section. The receipt is the in-flight protection; the landing
-is a deliberate act. They land as **§18** and **§19** (numbers pinned in the receipts) when a brief
-next actions the pair.
-
-## 3. Cold-resume handoff
-
-**Branch:** `master` @ `b3af58a`, pushed, clean, in sync. Untracked stray: `.claude/launch.json` (known).
-
-| Check | Result |
-|---|---|
-| Gate 3 | `gates.safety_gate(current, prior, thresholds=None)` — level vs authored policy constant |
-| Gate 1 second arm | appends `safety_band_<change>` to `basis`; shape exactly `{is_news, basis}`; **not demotable**, recorded in the module docstring before demotion logic exists |
-| Asset | `thresholds` **empty**; `_deferred.haematocrit` holds 0.50/0.52/0.54 + `contested` + `value_plausibility`, blocked on citation capture |
-| Schema guard | validator **raises** on `recommended_action`; 16 tests, every rule paired with a positive control |
-| Contract key | `is_moved` → `should_surface`; `grep is_moved backend/ --include=*.py` = 2, both inside the explaining docstring |
-| #98 guard | new asset `isascii()` True, **0** literal em dashes |
-| Shared block G1 | `4243c91ce78e0331ddfa5178aa3006b8` / 155 / 10232 — untouched |
-| `interpretation_s2.json` / `marker_groups` / `lever_dictionary` / `marker_canonical` | untouched |
-| Backend tests | **258 passed** |
-
-**Branch terminal-state gate — passes.** No feature branch was touched this session (the safety-gate
-branch merged + deleted at the first close-out; `b3af58a` committed directly to master as a ledger
-line). The four pre-existing locals are all rowed and all on origin:
-
 ```
-feat/checkin-injury-probe          2 +   rowed, on origin
-feat/feedback-ledger               4 +   rowed, on origin
-feat/interpretation-view-skeleton  3 +   rowed, on origin
-feat/recovery-metrics-rhr          1 +   rowed, on origin
+2026-07-22 894f335 governance: DECISIONS_LOG #107/#108/#109, OPEN_QUESTIONS Q42, CLAUDE recent-landings
+2026-07-22 88fb61d feat(cbti): completed-block importer + reconciliation (Gate 4)
+2026-07-22 876dbd8 chore(cbti): gitignore personal-data workbooks before import
+2026-07-22 f0899eb feat(cbti): data substrate — diary fields + block/prescription ledgers
 ```
 
-**Where the fork stands — the mechanism for danger exists and is tested; the content is empty.**
-`safety_gate` returns `no_asset` for every marker, so **the 0.50–0.54 band is still dark**. That is
-**Q41**, owner Luke: three band values (0.50 cohort definitions, 0.52 AUA / Endocrine Society, 0.54
-Canadian guidance) and two contested-position claims, none with a verified DOI. A citation-capture
-session of the Coşkun shape; landing them uncited would be exactly what #99 refused for `haemoglobin`.
+A fifth commit (`chore: session close-out`) lands this file + the store updates from this ritual.
 
-**OWED, this session:** `FEEDBACK` **§18** (mutation rule, receipted `caf5204`) and **§19**
-(resolution-table rule, receipted `b3af58a`) — both need a brief to land them.
+What landed, against the brief's gates:
 
-**OWED, carried:** `haemoglobin`'s per-parameter figure unread from Buoro 2018 full text. **Q37** (I1
-has no enforcement; `alt` is a live violation). **Q33** (shared block still says `parked`). HCA **Q11**
-should close `DONE → #93` from an HCA-rooted session; HCA **Q9 item 1** and **Q10** remain open there.
-O3's re-verify of `feat/interpretation-view-skeleton` now also covers the `should_surface` rename.
-`probe_resolver.py` container run and `hevy-resolver-activation` limb 2, both blocked on Anthropic API
-credit.
+- **Gate 1** — `alembic heads` → single head `c3a2d8e5f109`. Migration `e5f2a9c7b104` chained on it.
+- **Gate 2** — migration up/down/up verified clean on SQLite **in isolation** (the full chain is not
+  SQLite-runnable — a pre-existing `ALTER COLUMN … DROP DEFAULT` is Postgres-only, which is why the
+  suite builds via `create_all`), AND applied for real to Railway/Postgres. Suite **223 passed** (was
+  206; +10 substrate, +7 import), 2 new test files.
+- **Gate 3** — `cbti_blocks` + `cbti_prescriptions` created. Append-only is a model+application
+  invariant (no DB trigger: no repo precedent, and a trigger would be invisible to the `create_all`
+  test path). One DB-enforced constraint: `ck_cbti_prescription_decision`
+  (`adopt|extend|hold|compress|close`), proven by a negative control that raises `IntegrityError` on
+  `decision='tighten'`.
+- **Gate 4** — completed 2026-03-19→05-13 block loaded to Railway (user 1): **1 block, 9
+  prescriptions, 53 daily_records**. Per-night SE recomputed independently and reconciled vs the
+  sheet's `Sleep Efficiency` **0/53 to ±0.001** (worst residual 0.000047); DB-stored `diary_se_pct`
+  re-queried and reconciled 0/53. Negative control (perturb one night 0.01) flags exactly that night.
+  Workbook git-ignored and read from outside the tree — never committed. `git status` shows no xlsx
+  tracked.
 
-**4b list, all correctness rather than coverage:** Q36 (discriminator semantics), Q37 (I1 enforcement),
-Q38 (interval-banding), Q39 (`effect_locus`), Q40 (asymmetrical RCV).
+Amendment made before acting on it (now DECISIONS_LOG #109): the Gate 4 reconciliation gained a
+negative control. It earned its keep — the independent recompute caught a real defect (an
+unconditional +24h midnight wrap under-read one after-midnight night by 0.445) before the load ran.
 
-**Single clearest next action:** capture DOIs for the three haematocrit band values and the two
-contested-position claims (Q41), then promote `_deferred.haematocrit` into `thresholds` in one edit —
-at which point the schema test starts validating something and a haematocrit of 0.52 produces a
-surfaced band with its sources, at a value the lab will not flag and the delta gate will not catch.
-The two owed `FEEDBACK` rules (§18/§19) can ride the same or a separate governance brief.
+Findings surfaced, not worked around:
+
+- `feat/cbti-module` did not exist at session open (session was on `master`); branch was cut, not adapted.
+- Brief's LOG numbering was stale (said master max 100; actual **103**) — entries minted #107/#108/#109.
+- The named workbook was absent at first; a differently-dated `cbti_user_data_4_April_2026.xlsx` was
+  on disk and correctly refused (an April export cannot hold data through May). Correct file supplied.
+- **`naps_min` attribution is silent-when-wrong** — stored on the diary's own row-date, NOT shifted.
+  The VA diary's nap-timing convention must be confirmed before the engine relies on the date−1 read.
+  Only 2 nap nights in this block.
+
+---
+
+## 2 — Pending-commit queue reconciliation
+
+**No `;cc` pending-commit queue was carried into this session.** Work ran from a pasted brief (the
+proposal), not from a chat close-out queue. The brief's own proposed decisions all landed:
+
+- Titration-on-TST / SE-as-floor → DECISIONS_LOG **#107** (`894f335`). *(Brief called it #101; renumbered.)*
+- Block-structured / readiness-isolated → DECISIONS_LOG **#108** (`894f335`). *(Brief called it #102.)*
+- Negative-control amendment → DECISIONS_LOG **#109** (`894f335`).
+- 12h-clock scrape failure (raise, don't fix) → OPEN_QUESTIONS **Q42** (`894f335`).
+
+Nothing decided this session is uncommitted. Numbers are **provisional per number-at-merge** (master
+max #103 / Q40): claimed at the ff-merge, renumbered if `feat/feedback-ledger` (#85–88) or
+`feat/checkin-injury-probe` (#89–90) merge first.
+
+---
+
+## 3 — Cold-resume handoff
+
+**State.** Phase-1 CBT-I substrate is built, tested (223 green), and loaded to Railway. The branch is
+pushed and **held for chat review** — not merged. Prod schema is **ahead of master**: the migration is
+applied to Railway (Postgres at `e5f2a9c7b104`) but the migration file lives only on this branch
+(master's chain ends at `c3a2d8e5f109`). Merging reconciles this; abandoning the branch would strand a
+prod migration with no master file.
+
+**Open questions (this module).**
+- **Q42** — UNSTARTED. 12h-clock scrape failure in `parseSleepTimingContentDesc`; owned by
+  `health-connect-app`'s store; carry it there in an HCA-rooted session.
+- Nap-timing convention (VA diary) — confirm before the phase-2 engine trusts the `naps_min` date−1 read.
+- `~7h30` sleep-need estimate rests on **one** unconstrained week (#107's "do not revisit unless").
+
+**Phase 2 (brief Steps 5–7) — a separate future brief, none started:**
+- **Step 5** titration engine — weekly eval; sufficiency/regularity/adherence gates; TST-plateau exit
+  with SE≥85% as a *floor*; adherence reads `samsung_hrv_readings` only via the `passive_overnight`
+  allowlist; **replay against the imported block = Gate 5** (divergence is a finding about the rule).
+- **Step 6** AM/PM surfaces — diary fields render only when an open `cbti_block` exists; prefill
+  `lights_out`/`out_of_bed`/`final_wake` from Samsung but **never** `sleep_latency_min`/`waso_min`;
+  reject a prefill >~4h from prescription (the Q42 12h-clock guard).
+- **Step 7** ISI 7-item capture at block open/mid/close.
+
+**Single clearest next action:** review the pushed `feat/cbti-module`, then
+`git checkout master; git merge --ff-only feat/cbti-module; git push origin master; git branch -d feat/cbti-module; git push origin --delete feat/cbti-module`
+— renumber #107/#108/#109 + Q42 if another governance branch merges first. Then take phase 2 as a new brief.
+
+**Security note (one-off):** the Railway Postgres password was pasted into chat this session to enable
+the load. Consider rotating it.

@@ -779,7 +779,7 @@ CREATE INDEX ix_exercise_region_tags_region_key
 
 ### 017 — cbti_blocks
 
-CBT-I titration block ledger (DECISIONS_LOG #105). The module is block-structured, not a single arc: a block opens carrying the in-flight prescription (`decision='adopt'`) and closes (`decision='close'`); the ledger persists permanently after closure and is the baseline any later block titrates against. **Append-only** — the only permitted UPDATE is setting `closed_on` / `close_reason` / `exit_tst_min` / `exit_se_pct` at closure. This is a model+application invariant, not a DB trigger (the repo has no trigger precedent and the SQLite test path builds via `create_all`, not migrations). Read-only with respect to readiness in phase 1.
+CBT-I titration block ledger (DECISIONS_LOG #108). The module is block-structured, not a single arc: a block opens carrying the in-flight prescription (`decision='adopt'`) and closes (`decision='close'`); the ledger persists permanently after closure and is the baseline any later block titrates against. **Append-only** — the only permitted UPDATE is setting `closed_on` / `close_reason` / `exit_tst_min` / `exit_se_pct` at closure. This is a model+application invariant, not a DB trigger (the repo has no trigger precedent and the SQLite test path builds via `create_all`, not migrations). Read-only with respect to readiness in phase 1.
 
 ```sql
 CREATE TABLE cbti_blocks (
@@ -800,7 +800,7 @@ CREATE INDEX ix_cbti_blocks_user_id ON cbti_blocks (user_id);
 
 ### 018 — cbti_prescriptions
 
-One prescribed sleep window within a block (DECISIONS_LOG #104). Titration controls on total sleep time with sleep efficiency as a **floor** (≥85%), not SE as the target: `window_minutes` = rolling mean TST + buffer; exit on TST plateau with SE held ≥85%. **Append-only** — the only permitted UPDATEs are `effective_to` (when a successor takes over) and `superseded_by` (self-referential pointer to that successor); `basis_*` / `decision` / `rationale` are frozen at authorship. The `decision` domain is the one DB-enforced constraint (`ck_cbti_prescription_decision`). `excluded_nights` is reason-tagged JSON (`{"2026-04-02":"alcohol"}`) — recorded, not counted.
+One prescribed sleep window within a block (DECISIONS_LOG #107). Titration controls on total sleep time with sleep efficiency as a **floor** (≥85%), not SE as the target: `window_minutes` = rolling mean TST + buffer; exit on TST plateau with SE held ≥85%. **Append-only** — the only permitted UPDATEs are `effective_to` (when a successor takes over) and `superseded_by` (self-referential pointer to that successor); `basis_*` / `decision` / `rationale` are frozen at authorship. The `decision` domain is the one DB-enforced constraint (`ck_cbti_prescription_decision`). `excluded_nights` is reason-tagged JSON (`{"2026-04-02":"alcohol"}`) — recorded, not counted.
 
 ```sql
 CREATE TABLE cbti_prescriptions (
