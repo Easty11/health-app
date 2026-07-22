@@ -3427,6 +3427,64 @@ would mean the rule needs an escape hatch, not an exception.
 
 ---
 
+### 111. Secret-rendering commands are prohibited by instruction, not by configuration — the declarative layer does not hold
+
+**Decision:** The prohibition on commands that render secret values lives in `CLAUDE.md`'s shared
+block, and **that is the enforcing layer**. `.claude/settings.json` deny rules are added as a second
+layer and are explicitly **not** relied upon.
+
+This is not a preference. Claude Code's `permissions.deny` for Bash is documented, but non-enforcement
+reports are open and recurring and the standard remedy is a custom `PreToolUse` hook to obtain the
+behaviour the configuration already promises. Piped and compound commands are a known bypass. The
+layer is therefore a speed bump, and recording it as such prevents a later reader assuming coverage
+that does not exist.
+
+**Two structural constraints shaped the deny list.** A deny rule cannot carry an allowlist exception —
+a broad pattern blocks every matching call including narrower permitted ones. Separately, a `Read()`
+deny blocks the Read tool but not an equivalent Bash invocation, so both forms are listed for
+`backend/.env`.
+
+**The brief's narrow pattern was corrected at execution by reading the CLI's own help.** The plan kept
+the deny scoped to `railway variables --kv` specifically to preserve `--json` as the sanctioned
+substitute. `railway variables --help` states that `--kv` **and** `--json` both print raw values, that
+the base command is `variable` with `variables` as an alias, and that `-k` is a short form. That is
+four bypasses of a `--kv`-only pattern, and the premise for keeping it narrow was false. Because the
+sanctioned substitute was independently changed to `railway run <cmd>` — a different command with no
+flag dependency — the pattern could widen to the whole `railway variable(s)` family without blocking
+the replacement. Verified in that order: help first, widen second, then run the substitute against the
+landed deny list.
+
+**The prohibition is general, not vector-specific.** `railway variables --kv` is the vector Q44 named,
+but bare `railway variables`, `printenv`, `env` and `cat` of a `.env` are the same hazard by another
+route — the last of which is how a live API key and a Fernet key were rendered *while establishing
+that no credential had been rendered*.
+
+**Project-scoped Claude Code configuration is repo-canonical.** `.claude/settings.json` is committed,
+deny patterns only, with no path that reveals structure beyond what `.gitignore` already does. This is
+less of a first than it looked: `.claude/commands/closeout.md` was already tracked, so the precedent
+existed and this extends it. Machine-local files beside it (`settings.local.json`, `launch.json`) stay
+untracked, which is why the staging rule is `git add .claude/settings.json` and never the directory.
+Under the two-lane model the repo is what Code reads, so a rule that is not in the repo is not a rule
+for a fresh clone or a second machine.
+
+A `PreToolUse` hook is the layer that would actually enforce, since hooks run ahead of the permission
+system. It is deliberately deferred until instruction and configuration are observed to fail.
+
+**Status:** Adopted. Q44 closed by this entry. Q43 closed alongside it — both keys prod-isolated,
+established by a digest comparison run at execution rather than by the brief's assertion that it had
+already been run.
+
+**How you know:** the sanctioned names-only substitute was executed **after** the deny list landed and
+returned 114 injected variable names with zero values — the only proof that the rules discriminate
+rather than blanket-block. `.env.example` was confirmed unmatched by any pattern (0 of 10), and
+`railway run` unmatched (0 of 10). The Q43 comparison carried both controls: identical input reported
+equal, differing input unequal.
+
+**Do not revisit unless:** a session renders a secret despite both layers — in which case the hook
+lands, and this entry records why it was needed rather than being the first thing tried.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

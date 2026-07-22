@@ -155,6 +155,17 @@ must match it.
   `confidence`-tagged schema before any algorithm or AI layer. The intelligence layer
   never references device-specific schemas.
 - **Data verification = Postgres query against Railway**, not on-device UI.
+- **Never run a command that renders a secret value.** Includes `railway variables` in
+  any form (`--kv`, `-k`, `--json`, the `variable` singular, and the bare `list` — the
+  CLI's own help states that both `--kv` and `--json` print raw values), `printenv`,
+  `env`, and reading any `.env` by any tool or alias. **To check existence**, read names
+  or presence. **To use a value**, inject it with `railway run <cmd>` — the value enters
+  the child process and never the transcript. **To compare values**, compare SHA-256
+  digests, first 12 characters, both sides. Earned twice: a `--kv` invocation put a live
+  Postgres credential into four session transcripts, and a `.env` grep matching key
+  *names* printed a live API key and a Fernet key while establishing that nothing had
+  been printed. `.claude/settings.json` carries deny patterns as a second layer; it is a
+  speed bump, not the enforcement — this instruction is (DECISIONS_LOG #111).
 - **Branch disposition (patch-id, never SHA).** Merged-vs-pending is decided by
   `git cherry origin/master <branch>` (`-` = patch-upstream, delete; `+` = real work),
   never `merge-base`/`rev-list` — rebase/squash merges rewrite SHAs and make ancestry lie.
@@ -270,9 +281,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#111** — Secret-rendering commands are prohibited by instruction, not by configuration: the rule lives in the shared block and the `.claude/settings.json` deny list is an explicitly unreliable second layer. Closes Q43 and Q44. See DECISIONS_LOG #111.
 - **#110** — A null result is not evidence of absence unless the search proves it had scope (report files scanned, not just matches, plus a positive control); and a diagnostic must not require the operator to redact its output. See DECISIONS_LOG #110.
 - **#107/#108/#109** — CBT-I data substrate (phase 1): titration controls on total sleep time with SE as a floor not the target; the module is block-structured and read-only w.r.t. readiness; and a reconciliation is not evidence until its negative control has fired. See DECISIONS_LOG #107, #108, #109.
-- **#104/#105/#106** — Safety threshold lands as a third gate comparing a level to an authored policy constant, with the asset withheld under I1; gate 1 gains a second arm that is explicitly not demotable; and `is_moved` is renamed `should_surface` because once safety status feeds the predicate it no longer tests movement. Closes Q34. See DECISIONS_LOG #104, #105, #106.
 
 ---
 

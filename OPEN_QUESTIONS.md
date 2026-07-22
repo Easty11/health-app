@@ -924,8 +924,21 @@ Resolve by comparing **SHA-256 digests** local vs Railway — digests only, neve
 second clause. If they match, rotation is not a variable swap: every `api_key_encrypted` row was
 encrypted under the old key and must be re-encrypted, so the fix carries a data migration.
 
-**Status:** UNSTARTED — no blocker. Owner: Luke. **Next action:** compare the two digests; if equal,
-scope the re-encryption migration before rotating anything.
+**Status:** DONE → #111. **Both keys are prod-isolated — the digests differ on both.** No shared key,
+therefore no re-encryption migration over `api_key_encrypted` and no prod rotation on this account.
+
+**Method, which matters as much as the outcome.** A single script run under
+`railway run --service health-app-backend` held both sides at once: Railway's values arrived as
+injected `os.environ`, the dev values were parsed from `backend/.env` on disk, and each was reduced to
+`sha256(value)[:12]` *inside* the comparison. No value was printed, logged, or returned, and the
+digests themselves are deliberately not recorded here — this repo is public and a digest of a live
+secret is still identifying. The comparator carried both controls: identical input reported equal,
+differing input reported unequal, so "differs" cannot be a broken comparison silently passing.
+
+This entry supersedes an earlier assertion that the comparison had already been performed. It had been
+reported in chat but never attested against an artefact — the third instance in this sequence of a
+claim about an unreadable surface being carried as fact (see #110). The result happened to be correct;
+the basis was not, until this run.
 
 ---
 
@@ -952,9 +965,29 @@ Open: whether to ban `--kv` outright in the loop rules or require it be piped th
 and whether the seven existing transcripts are purged or retained after rotation, since they remain the
 exposure surface once the credential is dead only if it is in fact dead.
 
-**Status:** UNSTARTED — no blocker. Owner: Luke. **Next action:** decide the `--kv` rule, and confirm
-the second credential digest observed across four transcripts is a retired credential rather than a
-second live one.
+**Status:** DONE → #111. Resolved by a two-layer prohibition: the standing rule in `CLAUDE.md`'s
+shared block (the enforcing layer) plus `.claude/settings.json` deny patterns (a speed bump, explicitly
+not relied upon — see #111 for why).
+
+**The rule is general, not vector-specific**, because the CLI's own `--help` showed the narrow reading
+was wrong: `--kv` *and* `--json` both state they print raw values, the base command is `variable` with
+`variables` as an alias, and `-k` is a short form — four bypasses of a `--kv`-only pattern. Since the
+sanctioned substitute is `railway run` (a different command entirely, no flag dependency), the deny
+patterns widened to the whole `railway variable(s)` family without blocking the replacement. Proven by
+running the substitute after the deny list landed: 114 injected variables, names only, zero values.
+
+**Residual — NOT immaterial, contrary to the initial framing, and verified rather than assumed.**
+Presence-only search across 60 transcript files (positive control fired on a known-present string):
+the dev `FERNET_KEY` appears in 2 files, `SECRET_KEY` in 2, and the `ANTHROPIC_API_KEY` value currently
+in `backend/.env` in 1 file, 24 times. The local dev DB (`health-app.db`) is **not** fixtures — it holds
+one `user_integrations` row, `provider='hevy'`, encrypted under that exposed dev Fernet key (the row was
+never decrypted; only its existence was read). So a **local** rotation is owed: the Hevy credential
+itself, then the dev `FERNET_KEY`, then re-encrypt or drop that row. Prod is unaffected (Q43).
+
+**Still open, deliberately out of scope here:** whether the second Postgres digest seen across four
+transcripts is a retired credential or a second live one — a cheap co-occurrence test, but a finding
+rather than a fix. And whether the transcripts are purged or retained once the credentials in them are
+dead.
 
 ---
 

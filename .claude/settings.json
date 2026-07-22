@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(railway variables:*)",
+      "Bash(railway variable:*)",
+      "Bash(printenv:*)",
+      "Bash(env:*)",
+      "Bash(cat .env)",
+      "Bash(cat ./.env)",
+      "Bash(cat backend/.env)",
+      "Bash(cat ./backend/.env)",
+      "Read(./.env)",
+      "Read(./backend/.env)"
+    ]
+  }
+}
