@@ -135,6 +135,11 @@ class DailyRecord(Base):
     # Additive, nullable, sparse by design: rendered/captured only while an open
     # cbti_block exists, legended by cbti_prescription.effective_from/to (#108).
     # Same freeze contract as naive_baseline — set at AM write, never recomputed.
+    # got_into_bed and lights_out are DISTINCT moments the diary separates: the
+    # first is when you got into bed, the second when you tried to sleep. Sleep
+    # efficiency is computed from lights_out (the SE window opens there), so only
+    # lights_out was imported in phase 1 — historical rows carry got_into_bed NULL.
+    got_into_bed: Mapped[str | None] = mapped_column(String(5), nullable=True)        # "22:20"
     lights_out: Mapped[str | None] = mapped_column(String(5), nullable=True)          # "22:36"
     sleep_latency_min: Mapped[int | None] = mapped_column(Integer, nullable=True)     # SOL; device systematically wrong — never prefilled
     waso_min: Mapped[int | None] = mapped_column(Integer, nullable=True)              # wake after sleep onset; never prefilled

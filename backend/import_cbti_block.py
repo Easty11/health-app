@@ -52,6 +52,7 @@ import sys
 import openpyxl
 
 import models
+from cbti import timeutil
 from database import SessionLocal
 
 SHEET = "Sleep Diaries For Import"
@@ -71,11 +72,13 @@ def _hhmm(v):
 
 
 def _tib(tts_min, oob_min):
-    """Total time in bed = Out-of-Bed - Time-Tried-to-Sleep, wrapping past midnight
-    only when Out-of-Bed clock time is earlier than Time-Tried-to-Sleep."""
-    if tts_min is None or oob_min is None:
-        return None
-    return (oob_min - tts_min) if oob_min >= tts_min else (oob_min + 1440 - tts_min)
+    """Total time in bed = Out-of-Bed - Time-Tried-to-Sleep, conditional midnight wrap.
+
+    Delegates to cbti.timeutil — extracted in phase 2 so the engine, the prefill
+    gate and this importer share one definition of the wrap. Kept as a thin local
+    alias so the reconciliation's call sites are unchanged.
+    """
+    return timeutil.tib_minutes(tts_min, oob_min)
 
 
 def _parse_alcohol(v):
@@ -90,9 +93,16 @@ def _parse_alcohol(v):
 
 
 def _window_minutes(lights_out_hhmm: str, wake_hhmm: str) -> int:
-    lh, lm = map(int, lights_out_hhmm.split(":"))
-    wh, wm = map(int, wake_hhmm.split(":"))
-    return ((wh * 60 + wm) + 24 * 60) - (lh * 60 + lm)
+    """Prescribed window length. Delegates to cbti.timeutil.
+
+    Behaviour note: the phase-1 local version added 24h unconditionally. Every
+    prescription in the imported block has lights-out 21:22-22:36 against an
+    05:00 anchor, so wake < lights-out and the conditional wrap gives the
+    identical result — asserted in tests/test_cbti_timeutil.py against all nine
+    observed windows. The conditional form additionally refuses to inflate a
+    post-midnight prescription by a whole day.
+    """
+    return timeutil.window_minutes(lights_out_hhmm, wake_hhmm)
 
 
 # ── workbook -> structured nights + prescriptions ───────────────────────────────

@@ -143,3 +143,21 @@ def test_diary_fields_persist_on_daily_record(db_session):
     assert rec.lights_out == "22:36"
     # never-prefilled device-hostile fields still round-trip when user-entered
     assert rec.sleep_latency_min == 12 and rec.waso_min == 8
+    # phase-2 column; historical rows carry it NULL by design
+    assert rec.got_into_bed is None
+
+
+def test_got_into_bed_is_distinct_from_lights_out(db_session):
+    """The diary separates got-into-bed from tried-to-sleep. SE opens at the
+    latter, so they must not be conflated — a 16-minute gap here is typical."""
+    u = _make_user(db_session, email="gib@x.io")
+    rec = models.DailyRecord(
+        user_id=u.id, date=date(2026, 7, 22),
+        got_into_bed="22:20", lights_out="22:36", out_of_bed="05:08",
+    )
+    db_session.add(rec)
+    db_session.commit()
+    db_session.refresh(rec)
+    assert rec.got_into_bed == "22:20"
+    assert rec.lights_out == "22:36"
+    assert rec.got_into_bed != rec.lights_out
