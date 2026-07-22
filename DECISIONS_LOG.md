@@ -3485,6 +3485,47 @@ lands, and this entry records why it was needed rather than being the first thin
 
 ---
 
+### 112. Cross-repo propagation debt is recorded in ROADMAP NOW; `closeout.md` may only point at it
+
+**Decision:** Work owed in a second repository — most commonly a shared-block propagation that could not
+be reached under the single-repo anchoring rule — is recorded in `ROADMAP.md` under **NOW**.
+`closeout.md` may reference it, but never as the store.
+
+Three precedents existed and were used inconsistently: a `BRANCHES.md` outstanding column, an
+`OPEN_QUESTIONS` next-action, and a `closeout.md` OWED list. The discriminator is **whether the record
+survives the thing that created it.**
+
+`closeout.md` is overwritten at every `/closeout` by design, so anything held only there is destroyed by
+the next session — it is a pointer, structurally incapable of being a store. `BRANCHES.md` rows are
+branch-scoped and reach a terminal DONE state; debt attached to one is destroyed exactly when
+propagation is still owed. `OPEN_QUESTIONS` is for matters genuinely undecided, and a propagation is not
+undecided — the content is known and byte-defined, it simply has not been executed. Recording known work
+as a question would make that store's own semantics unreliable. `ROADMAP` NOW is the only store whose
+entries are neither session-scoped nor branch-scoped and whose semantics already mean *known work, not
+yet done*.
+
+**Status:** Adopted. The owed `health-connect-app` shared-block propagation is the first and, as it
+turned out, the only entry under it this session.
+
+**Scope correction made at execution.** The brief anticipated a second instance: if Step 3's prod Hevy
+round-trip blocked on a missing network route, its owed verification would land in the same store, and
+two instances would make a better first application than one. Step 3 did **not** block — `railway ssh`
+reaches inside the container, where the internal host resolves and no proxy is required, and the
+round-trip returned HTTP 200. So the rule lands with one instance. Recording the anticipated second
+instance would have been recording a hypothetical as debt.
+
+**How you know:** the three precedents were located in the stores before the decision was made, not
+inferred — `gov/session-closure-sweep`'s `BRANCHES.md` row, Q42's next-action, and `closeout.md`'s
+OWED-carried list. `closeout.md`'s overwrite semantics are stated in `CLAUDE.md` under the Code
+close-out ritual (steps 6 and 7: *"Overwrites a single `closeout.md`. Never appends narrative"*). The
+propagation gap itself was measured rather than assumed: HCA's `CLAUDE.md` carries the shared-block
+markers but greps 0 for the secret-rendering rule where health-app greps 1.
+
+**Do not revisit unless:** a second repository's debt needs to survive a ROADMAP reorganisation, which
+would argue for a dedicated store rather than a different existing one.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

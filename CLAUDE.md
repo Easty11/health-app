@@ -281,9 +281,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#112** — Cross-repo propagation debt is recorded in `ROADMAP.md` NOW, the only store that is neither session- nor branch-scoped; `closeout.md` may point at it but never hold it. See DECISIONS_LOG #112.
 - **#111** — Secret-rendering commands are prohibited by instruction, not by configuration: the rule lives in the shared block and the `.claude/settings.json` deny list is an explicitly unreliable second layer. Closes Q43 and Q44. See DECISIONS_LOG #111.
 - **#110** — A null result is not evidence of absence unless the search proves it had scope (report files scanned, not just matches, plus a positive control); and a diagnostic must not require the operator to redact its output. See DECISIONS_LOG #110.
-- **#107/#108/#109** — CBT-I data substrate (phase 1): titration controls on total sleep time with SE as a floor not the target; the module is block-structured and read-only w.r.t. readiness; and a reconciliation is not evidence until its negative control has fired. See DECISIONS_LOG #107, #108, #109.
 
 ---
 
