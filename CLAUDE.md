@@ -270,9 +270,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#110** — A null result is not evidence of absence unless the search proves it had scope (report files scanned, not just matches, plus a positive control); and a diagnostic must not require the operator to redact its output. See DECISIONS_LOG #110.
 - **#107/#108/#109** — CBT-I data substrate (phase 1): titration controls on total sleep time with SE as a floor not the target; the module is block-structured and read-only w.r.t. readiness; and a reconciliation is not evidence until its negative control has fired. See DECISIONS_LOG #107, #108, #109.
 - **#104/#105/#106** — Safety threshold lands as a third gate comparing a level to an authored policy constant, with the asset withheld under I1; gate 1 gains a second arm that is explicitly not demotable; and `is_moved` is renamed `should_surface` because once safety status feeds the predicate it no longer tests movement. Closes Q34. See DECISIONS_LOG #104, #105, #106.
-- **#103** — Evidence that looks like evidence: the paired-control rule lands as `FEEDBACK` §17, plus controls must discriminate on *identity* not just function, and a check whose failure cannot stop what follows is not a check. See DECISIONS_LOG #103.
 
 ---
 

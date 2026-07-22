@@ -3375,6 +3375,58 @@ rather than trusted.
 
 ---
 
+### 110. A null result is not evidence of absence unless the search proves it had scope — and a diagnostic must not require the operator to redact its output
+
+**Decision:** Two clauses, both from one failure chain in this module's closure.
+
+**A search whose negative outcome founds a conclusion must report what it scanned.** File count, not
+just match count, and a positive control demonstrating it can return a hit on a known value. The design
+chat ran `Select-String -Path $env:USERPROFILE\.claude\**\*.jsonl` to establish that no credential had
+reached the session. PowerShell has no globstar; `**` resolves as a single path segment, so the command
+enumerated approximately **zero** files. The empty output was read as "no matches" when it meant
+"nothing was searched," and a real exposure was declared non-existent on that basis. The corrected
+search opened **60** files and found **54** occurrences digest-identical to the reference credential
+out of 79 credential-shaped matches, across **7** session transcripts — including six sessions
+predating this work, and a second distinct credential digest consistent with an earlier rotation.
+
+The design chat then drafted a canonical entry retracting a valid security recommendation, and it was
+refused at execution because the artefact was checked rather than the account accepted. That refusal is
+the rule working; the draft is the reason the rule is needed.
+
+**A diagnostic must not require the operator to redact its own output.** The instruction
+`Get-Content .\backend\.env | Select-String -Pattern 'DATABASE_URL|PASSWORD|KEY'` matched key *names*
+and returned whole lines including values — publishing a live API key and a Fernet key in the course of
+establishing that no credential had been published. Any command touching a secrets file returns names,
+counts, digests, roles, line numbers, or presence. Never values. `probe_resolver.py:143` already states
+it: *presence only — the value is never read into output*. The live instance of this clause is
+`railway variables --service <svc> --kv`, which prints values and is the vector recorded at Q44.
+
+The two clauses are one failure: a search that proved nothing and a search that printed everything,
+both written to answer the same question.
+
+**Provenance, since it was contested and is the worked example for both clauses.** Record *role* does
+not establish origin — `tool_result` blocks persist as `user`-role records by API convention, so a
+user-role record carrying a credential is ambiguous. *Content block type* resolves it. The census
+across all seven transcripts: `tool_result` ×4 (all `Bash`), `tool_use` ×16, plain-string user content
+×3, `queue-operation` ×2, `text` ×1. Both mechanisms are real — four sessions carry the credential only
+as tool output, and three carry it as operator-supplied input. The two accounts reconcile rather than
+one being wrong; role was function, block type was identity.
+
+**Status:** Adopted. The corrected artefact check is the first application — 60 files scanned reported
+alongside 79 matches, positive control passed, and identity established by digest with no value
+rendered.
+
+**How you know:** scope proof is the 60-file count against the original's ~0; the positive control
+returned a hit on the reference; provenance was reported by content block type, tool name, and line
+number with no content; the leak-vector command was reported with its credential-shaped substrings
+masked by pattern; `.dbenv` was digested before deletion so identity survived the ops action. No digest
+of the un-rotated credential appears in this entry.
+
+**Do not revisit unless:** a search is genuinely unscopeable and the work is blocked by it — which
+would mean the rule needs an escape hatch, not an exception.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

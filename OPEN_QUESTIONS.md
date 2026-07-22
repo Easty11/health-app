@@ -914,6 +914,50 @@ the fix and its canonical question belong in `health-connect-app`'s `OPEN_QUESTI
 
 ---
 
+## Q43. Does production share `FERNET_KEY` (and `SECRET_KEY`) with the local development `.env`?
+
+`mcp_server.py:288` decrypts `api_key_encrypted` for stored third-party credentials, so a shared Fernet
+key makes every stored credential recoverable by anyone holding the dev value. The question is only
+whether the two environments hold the same key, not what either key is.
+
+Resolve by comparing **SHA-256 digests** local vs Railway — digests only, never values, per #110's
+second clause. If they match, rotation is not a variable swap: every `api_key_encrypted` row was
+encrypted under the old key and must be re-encrypted, so the fix carries a data migration.
+
+**Status:** UNSTARTED — no blocker. Owner: Luke. **Next action:** compare the two digests; if equal,
+scope the re-encryption migration before rotating anything.
+
+---
+
+## Q44. `railway variables --kv` prints secret values into session transcripts — the fix is the command, not the operator
+
+Established while settling #110's provenance question. Four of seven transcripts carry the Railway
+Postgres credential **only** as `tool_result` output, never as operator input, and every one of those
+originates from the same command shape:
+
+```
+railway variables --service <service> --kv
+```
+
+`--kv` returns name=value pairs, so any invocation persists live secrets into the transcript — and the
+grep-for-a-name variants used alongside it (`| grep -i DATABASE_URL`) narrow the lines returned without
+removing the values. This is #110 clause 2 as a live case rather than a retrospective one: the operator
+did nothing wrong, the diagnostic did.
+
+The credential-free substitute already exists and is proven on this machine: `railway run <cmd>` injects
+`DATABASE_URL` into the child process without printing it (used for the phase-1 production reconcile).
+For presence or equality checks, a digest comparison as in [[Q43]] — never `--kv`.
+
+Open: whether to ban `--kv` outright in the loop rules or require it be piped through a masking filter;
+and whether the seven existing transcripts are purged or retained after rotation, since they remain the
+exposure surface once the credential is dead only if it is in fact dead.
+
+**Status:** UNSTARTED — no blocker. Owner: Luke. **Next action:** decide the `--kv` rule, and confirm
+the second credential digest observed across four transcripts is a retired credential rather than a
+second live one.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
