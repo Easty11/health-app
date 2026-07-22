@@ -46,6 +46,13 @@ pnpm-debug.log*
 *.db
 *.sqlite3
 
+# CBT-I personal-data workbooks — NEVER commit. Both repos are public; these
+# contain dated sleep, alcohol-unit counts, and free-text comments. The import
+# script takes the path as an argument and reads from outside the tree; this
+# rule is defence-in-depth against an accidental in-tree copy + `git add -A`.
+cbti_user_data_*.xlsx
+cbti_assessment_data_*.xlsx
+
 # OS
 .DS_Store
 Thumbs.db
