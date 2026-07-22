@@ -3,22 +3,20 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`._
 
-2026-07-22 · CBT-I phase 1 built, rebased, merged (#107–#109) + the null-result/redaction guard (#110)
+2026-07-23 · secrets residuals closed by artefact (#112) + cross-repo debt convention
 
 ## 1. Real commits this session
 
-Landed on `master` at **`d97c992`**, pushed, in sync. Master was at `8658145` at merge time.
+Session-open ref: `779edbe`. Landed on `master` at **`7adaa46`**, pushed, in sync.
 
 ```
-d97c992 governance: DECISIONS_LOG #110, OPEN_QUESTIONS Q43/Q44, CLAUDE recent-landings
-d98b740 chore: session close-out
-384b246 governance: DECISIONS_LOG #107/#108/#109, OPEN_QUESTIONS Q42, CLAUDE recent-landings
-9c9e482 feat(cbti): completed-block importer + reconciliation (Gate 4)
-5d0a462 chore(cbti): gitignore personal-data workbooks before import
-6b43860 feat(cbti): data substrate — diary fields + block/prescription ledgers
+7adaa46 governance: DECISIONS_LOG #112, cross-repo debt convention, secrets residuals closed
 ```
 
 ```
+2026-07-23 governance: DECISIONS_LOG #112, cross-repo debt convention, secrets residuals closed
+2026-07-22 governance: DECISIONS_LOG #111, close Q43/Q44, secret-rendering prohibition
+2026-07-22 chore: session close-out
 2026-07-22 governance: DECISIONS_LOG #110, OPEN_QUESTIONS Q43/Q44, CLAUDE recent-landings
 2026-07-22 chore: session close-out
 2026-07-22 governance: DECISIONS_LOG #107/#108/#109, OPEN_QUESTIONS Q42, CLAUDE recent-landings
@@ -26,104 +24,108 @@ d98b740 chore: session close-out
 2026-07-22 chore(cbti): gitignore personal-data workbooks before import
 2026-07-22 feat(cbti): data substrate — diary fields + block/prescription ledgers
 2026-07-22 chore: session close-out
-2026-07-22 gov(handoff): receipt — resolution-table-is-a-hypothesis rule (FEEDBACK §19 candidate)
-2026-07-22 chore: session close-out
-2026-07-22 gov(handoff): written go for f078f1c; mutation-verification rule receipted
 ```
 
-Maxima now: **DECISIONS #110 · questions Q44 · FEEDBACK §17.**
-Backend suite **275 passed** (master's 258 + 17: 10 substrate, 7 import).
-
-**The branch was rebased mid-flight.** Master advanced 8 commits while `feat/cbti-module` was held
-for review, taking #104/#105/#106 and Q41 — so the branch diverged (5 ahead / 8 behind) and
-`--ff-only` became impossible. Rebased onto `origin/master`, renumbered by anchored pattern
-(#104→#107, #105→#108, #106→#109, Q41→Q42), then ff-merged. Pre-rebase range was
-`f0899eb`→`5fb625d`; recovery ref `backup/cbti-pre-rebase` deleted after Gate 6.
-
-`alembic heads` returned exactly **one** after the rebase — master added no migration, so
-`c3a2d8e5f109` remained the sole predecessor and the prod-pinned revision needed no re-chaining.
+Maxima now: **DECISIONS #112 · questions Q44 · FEEDBACK §17.**
+One governance commit; no feature code touched, no migration, no test delta.
 
 ## 2. Pending-queue reconciliation
 
-Two briefs ran: CBT-I phase 1 (Steps 1–4) and the closure re-issue. All items landed.
+No `;cc` queue was carried in — the session ran from a pasted brief. All seven of its steps
+resolved:
 
-| Brief item | Outcome |
+| Brief step | Outcome |
 |---|---|
-| Gate 1 — single alembic head | **VERIFIED** `c3a2d8e5f109`; brief's 21-head count was a regex artefact |
-| Gate 2 — migration up/down; suite green | **LANDED** `6b43860`; up/down/up on SQLite in isolation |
-| Gate 3 — both tables, append-only | **LANDED** `6b43860`; `ck_cbti_prescription_decision` DB-enforced |
-| Gate 4 — 53 nights + 9 prescriptions, SE ±0.001 | **LANDED** `9c9e482`; 0/53 mismatch, negative control fires |
-| LOG (phase 1) | **LANDED** `384b246` — #107/#108/#109, Q42 |
-| Closure Step 2 — correct a "confabulated" claim | **WITHDRAWN by chat** — the claim was chat's and was wrong; `closeout.md` unchanged, rotation note stands |
-| Closure Step 2′ — provenance by block type | **DONE**, read-only; recorded in #110 evidence |
-| Closure Step 3/4 — #110, Q43, Q44 | **LANDED** `d97c992`, single governance commit |
-| Closure Step 5 — `--ff-only` merge | **DONE** `8658145`→`d97c992`, pushed |
-| Closure Step 6 — prod reconcile | **DONE** — `alembic current` = `e5f2a9c7b104`, revision present on master |
+| 1 — confirm state | **VERIFIED** 0 behind, #111 / Q44 |
+| 2 — which key was disabled | **RESOLVED** — Anthropic key returns 401, with a three-probe control |
+| 3 — prod Hevy round-trip | **PASSED** — HTTP 200 inside the container; did *not* block |
+| 4 — local cleanup | **DONE** — row deleted 1→0; `FERNET_KEY` + `SECRET_KEY` rotated |
+| 5 — cross-repo convention | **DONE** — ROADMAP NOW, per #112 |
+| 6 — propagate to HCA | **STOPPED**, recorded in ROADMAP NOW |
+| 7 — merge | **DONE** `779edbe`→`7adaa46` |
 
 Nothing decided this session is uncommitted.
 
-### Three findings that changed the work
+### The three residuals, each closed by artefact rather than assumption
 
-1. **A false security claim was refused rather than written.** The re-issued brief asked Code to
-   record that a credential leak had been confabulated. The artefact contradicted it: 54 of 79
-   credential-shaped matches were digest-identical to the reference, across 7 transcripts. Writing
-   the correction would have put a false statement into an append-only store and retracted a valid
-   rotation recommendation. Chat withdrew the step. This is #110's worked example.
-2. **Provenance is settled by content block type, not record role.** `tool_result` blocks persist as
-   `user`-role records, so role is function and block type is identity. Census: `tool_result` ×4 (all
-   `Bash`), `tool_use` ×16, plain-string user ×3, `queue-operation` ×2, `text` ×1. **Both mechanisms
-   are real** — four sessions carry the credential only as tool output, three as operator input.
-3. **Dangling brief-provisional refs.** `models.py` and `import_cbti_block.py` still carried `#101`/
-   `#102` from the brief's draft numbering; on master those are erythroid RCV constants and the
-   merge-receipt rule. Corrected to #107/#108. Found only because the brief required a
-   grep-for-dangling-references after renumbering.
+1. **Anthropic key — dead.** `GET /v1/models` with the `backend/.env` value returned **401**.
+   The bare status could not discriminate "key rejected" from "request malformed", so three probes
+   ran (the `.env` key, a bogus key, no key header): all returned `error.type='authentication_error'`
+   rather than `invalid_request_error`, proving the request shape reaches auth. Its 24 transcript
+   occurrences are occurrences of a disabled credential. Nothing revoked; diagnostic only.
+2. **Prod Hevy — healthy.** `user_hevy_key()` → `HevyClient.get_workout_count()` → **HTTP 200**,
+   run inside the container via `railway ssh` (which is why no proxy was needed). Prod's Fernet key
+   decrypts the stored row and Hevy accepts the credential. Read-only; existing connector path, not
+   hand-rolled; credential never printed (length only).
+3. **Local — cleaned.** The single `user_integrations` row deleted (1→0), and **both** dev
+   `FERNET_KEY` and `SECRET_KEY` rotated in `backend/.env`. `SECRET_KEY` was folded in because it was
+   found exposed in 2 transcripts and Q43 had already established prod isolation, making the rotation
+   local-only. New values verified absent from all 59 transcripts; old exposed values verified gone
+   from `.env`; `api_key_encrypted` confirmed the sole Fernet-encrypted column, so nothing was orphaned.
+
+**The local delete is characterised as mitigation-or-tidying-UNKNOWN, deliberately.** A disabled
+Anthropic key proves an operator rotation happened for *that* credential and says nothing about Hevy —
+different provider, different console. Prod's stored value cannot be compared to the local row's
+without decrypting both, which this brief did not do. The action was identical either way; the claim
+attached to it is not, and the honest claim is the unknown one.
+
+### Two brief premises corrected at execution
+
+- **`railway run` is local, not in-container.** Step 3 said "run inside the production environment so
+  no proxy is required"; `railway run` executes locally with injected variables, so the internal host
+  does not resolve from Windows. `railway ssh` does run inside the container and needed no proxy —
+  the brief's intent, reached by a different route.
+- **#112 lands with one instance, not two.** The brief anticipated Step 3 blocking and its owed
+  verification joining the propagation debt in ROADMAP NOW. Step 3 passed, so recording a second
+  instance would have been recording a hypothetical as debt.
 
 ## 3. Cold-resume handoff
 
-**Branch:** `master` @ `d97c992`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
+**Branch:** `master` @ `7adaa46`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
 
-**Branch terminal-state gate — passes.** `feat/cbti-module` merged + deleted (local and remote), row
-**DONE** at `d97c992`. The four pre-existing locals are all rowed and all on origin:
+**Branch terminal-state gate — passes.** `chore/secrets-hygiene` and `chore/secrets-residuals` both
+merged and deleted, local and remote (0 unmerged commits by patch-id). Five branches remain, all
+rowed in `BRANCHES.md` and all on origin:
 
 ```
+feat/cbti-engine                   1 +   rowed, on origin   (phase 2, paused mid-brief)
 feat/checkin-injury-probe          2 +   rowed, on origin
 feat/feedback-ledger               4 +   rowed, on origin
 feat/interpretation-view-skeleton  3 +   rowed, on origin
 feat/recovery-metrics-rhr          1 +   rowed, on origin
 ```
 
-**Prod/master divergence CLOSED.** For the branch's lifetime the migration was applied to Railway
-while its file existed only on the branch. Gate 6: `railway run --service health-app-DB` →
-`alembic current` = `e5f2a9c7b104`, and that revision now exists on master. Prod and master agree.
+**Security posture — all three original exposures now inert or rotated.** The Railway Postgres
+credential was rotated in a prior session; the Anthropic key is confirmed disabled; the dev Fernet and
+Secret keys are rotated and their replacements are absent from every transcript. Prod was never
+affected: Q43 established both prod keys distinct from dev, and Q44's `--kv` vector is now prohibited
+by #111. **Still open, deliberately:** whether the second Postgres digest seen across four transcripts
+is a retired credential or a second live one (a cheap co-occurrence test, a finding not a fix), and
+whether the transcripts are purged or retained now the credentials in them are dead.
 
-**OPEN — security, and the most urgent thing here.** The Railway Postgres credential is **live and
-exposed**. It sits in **7 session transcripts** on disk, earliest file dated **2026-07-06** — over two
-weeks. A second distinct credential digest appears in 4 of those, consistent with an earlier rotation.
+**OWED — cross-repo, and now with a canonical home (#112).** The `health-connect-app` shared-block
+propagation is in **`ROADMAP.md` NOW**. Drift measured, not assumed: HCA carries the shared block's
+`BEGIN/END` markers but greps **0** for #111's secret-rendering rule where health-app greps 1. Blocked
+on three counts — `chore/secrets-residuals` is not cut in HCA, HCA's working tree is not clean, and a
+canonical-store edit in a second repo is forbidden from a health-app-rooted session. Owner: Luke, from
+an HCA-rooted session.
 
-- **Rotate the Railway Postgres password.** Operator action, outside the repo.
-- **Q44** — `railway variables --kv` prints values and is the vector in 4 transcripts; `railway run`
-  is the credential-free substitute (proven at Gate 6). Decide whether `--kv` is banned outright.
-- **Q44** also carries: confirm the second digest is a retired credential, and decide whether the
-  transcripts are purged or retained — they remain the exposure surface until the credential is dead.
-- **Q43** — does prod share `FERNET_KEY`/`SECRET_KEY` with the dev `.env`? Compare SHA-256 digests,
-  digests only. If shared, rotation carries a re-encryption migration over `api_key_encrypted`.
-
-**OPEN — CBT-I phase 2 (Steps 5–7), a separate brief, none started.**
-Titration engine (weekly eval; sufficiency/regularity/adherence gates; TST-plateau exit with SE≥85%
-as a *floor*; adherence reads `samsung_hrv_readings` only via the `passive_overnight` allowlist;
-**replay against the imported block = its Gate 5**); AM/PM surfaces (diary fields render only while a
-block is open; never prefill `sleep_latency_min`/`waso_min`; reject a prefill >~4h from prescription);
-ISI 7-item capture. **Confirm the VA diary's nap-timing convention before the engine trusts the
-`naps_min` date−1 read** — it is silent when wrong; 2 nap nights in the imported block.
+**CBT-I phase 2 resumes under its existing brief, paused at Step 3 (the engine).** Steps 1–2 landed on
+`feat/cbti-engine` @ `b7908fc`. Before further work it needs a **rebase** — master moved to `7adaa46`,
+so it is 1 ahead / 1 behind and `--ff-only` will refuse. Its provisional entries claim **#113/#114**
+and its nap question **Q45** (still free). Four amendments are outstanding on that brief: synthetic
+adherence-gate tests; the tried-to-sleep vs got-into-bed mismatch named in the replay account;
+`n_samsung`/`n_diary` composition per prescription; and Gate 6's production route, which this session
+established still exists. Adherence is settled by measurement: Samsung `bedtime` is 0 rows inside the
+replay window, so the replay runs entirely on the labelled weak source and must say so.
 
 **OWED, carried from prior sessions:** `FEEDBACK` **§18** (mutation rule, receipted `caf5204`) and
 **§19** (resolution-table rule, receipted `b3af58a`) — both need a brief to land them. `haemoglobin`'s
 per-parameter figure unread from Buoro 2018. **Q41** (haematocrit band citation capture). **Q37** (I1
-has no enforcement). **Q33** (shared block still says `parked`). HCA **Q11** should close `DONE → #93`
-from an HCA-rooted session; HCA **Q9 item 1** and **Q10** remain open there. `probe_resolver.py`
-container run and `hevy-resolver-activation` limb 2, both blocked on Anthropic API credit.
-**Q42** (12h-clock scrape failure) belongs to `health-connect-app`'s store — carry it there.
+has no enforcement). **Q33** (shared block still says `parked`). **Q42** (12h-clock scrape failure)
+belongs to HCA's store — carry it there. HCA **Q11** should close `DONE → #93`; HCA **Q9 item 1** and
+**Q10** remain open there. `probe_resolver.py` container run and `hevy-resolver-activation` limb 2.
 
-**Single clearest next action:** rotate the Railway Postgres password, then confirm the second
-credential digest is retired. It has been live and in-transcript for over two weeks, and every other
-open item on this list tolerates delay better than this one does.
+**Single clearest next action:** resume CBT-I phase 2 — rebase `feat/cbti-engine` onto `7adaa46`,
+confirm `alembic heads` returns exactly one, then build Step 3's titration engine. The security work
+that displaced it is finished, and nothing else on this list is time-sensitive.
