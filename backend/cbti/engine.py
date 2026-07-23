@@ -15,6 +15,34 @@ Gate order — first failure short-circuits to HOLD with a reason:
   1. SUFFICIENCY  >= 5 valid nights after exclusions
   2. ADHERENCE    actual bedtime vs prescribed, +/-30 min, failing on >= 3 of 7
 
+TIB OVER-RUN is INSTRUMENTED, NOT GATED, and the reasoning is worth keeping
+because two candidate gates were built up and rejected on evidence.
+
+  1. A second ADHERENCE ARM on `out_of_bed` vs the wake anchor (+/-30, same
+     >=3-of-7 threshold) was proposed and TESTED against the block. It fires on
+     NOTHING: the worst cycle is 2 of 6 outside tolerance, below the threshold,
+     because wake-end failures on this block are few-and-huge (+225, +90, +85,
+     +75, +70) while the bed-end failures the existing arm catches are
+     many-and-small. A count-based rule suits the latter and not the former.
+     Recorded as tested-and-rejected so it is not re-proposed.
+
+  2. A DIRECT TIB gate (mean TIB - window > tolerance) discriminates on this
+     block, and was still withdrawn, for three reasons. It measures what the SE
+     floor already measures — SE is TST/TIB and over-run is TIB minus window, so
+     they share TIB and move together BY CONSTRUCTION, not as a finding. No
+     threshold exists in the data: over-runs run +3/+25/+32/+34/+43/+43/+64,
+     continuous with no break, so any tolerance would be read off the very block
+     it then "validates". And it would fire on 4 of 8 cycles on top of 3
+     insufficiency HOLDs, leaving two titrations in eight — the same starvation
+     the alcohol predicate produced, reached from the other direction.
+
+  The discriminator was never over-run MAGNITUDE but SE AT over-run. #107's
+  sleep-need basis week itself over-ran (TIB 8h07 against a 7h38 prescription,
+  +29) at SE 92.2% — slept through the extra time, genuine capacity. The block's
+  worst cycles over-ran at SE 85.7% — lay awake in it. Same TIB behaviour,
+  opposite meaning, separated by the SE floor without a new gate. Gating over-run
+  out as contamination would have contradicted the estimate #107 rests on.
+
 Regularity (lights-out SD, wake-time SD) is COMPUTED AND REPORTED but does not
 gate (#114): across the observed block, lights-out SD against weekly mean SE gives
 r = -0.206, and a >0.5h gate would have blocked five of eight weeks including the
@@ -34,6 +62,7 @@ from cbti.timeutil import (
     clock_to_minutes,
     minutes_to_clock,
     signed_offset_minutes,
+    tib_minutes,
 )
 
 # ── constants ─────────────────────────────────────────────────────────────────
@@ -45,6 +74,11 @@ BUFFER_MIN = 30
 
 FLOOR_MIN = 300               # 5h00 — never prescribe below this
 SE_FLOOR_PCT = 85.0           # #107: efficiency is the floor, not the target
+# UNDETERMINABLE FROM THE OBSERVED BLOCK. The three cycles that failed this gate
+# had n = 3, 3, 2. Lowering the threshold to 4 changes nothing — all three still
+# fail; lowering to 3 rescues two and still leaves one. The block's failures sit
+# far below any defensible value, so it cannot distinguish the options. Left at 5
+# deliberately: moving it would be tuning against data that cannot test it.
 MIN_VALID_NIGHTS = 5          # sufficiency gate
 ADHERENCE_TOL_MIN = 30        # +/- tolerance on bedtime vs prescription
 ADHERENCE_FAIL_N = 3          # >= this many failures in the cycle -> HOLD
@@ -83,7 +117,8 @@ class Night:
     date: date                            # wake date; the diary's own row-date
     tst_min: int | None = None
     se_pct: float | None = None           # 0-100
-    lights_out: str | None = None         # diary "tried to sleep"
+    lights_out: str | None = None         # diary "tried to sleep" — SE window opens
+    out_of_bed: str | None = None         # SE window closes; needed for TIB over-run
     final_wake: str | None = None
     naps_min: int | None = None
     alcohol_units: int | None = None      # None means NOT RECORDED, not zero
@@ -126,6 +161,13 @@ class CycleDecision:
     wake_time_sd_min: float | None = None
     ema_count: int = 0
     move_capped: bool = False
+    # INSTRUMENTED, NOT GATED. Mean TIB over the basis nights minus the prescribed
+    # window: how far the window was over-run in practice. Recorded because it
+    # cannot yet be adjudicated — see the TIB-gate note above. Mean-based and so
+    # outlier-sensitive: on the observed block one night (2026-03-21, out of bed
+    # +225 min past anchor) moves a 6-night cycle mean by ~37 min. A future
+    # threshold must be set against a distribution across blocks, not this one.
+    basis_tib_over_run_min: float | None = None
 
 
 # ── exclusions ────────────────────────────────────────────────────────────────
@@ -210,6 +252,23 @@ def _sd_minutes(clocks: list[str | None]) -> float | None:
     return round(statistics.stdev(centred), 2)
 
 
+def _mean_tib_over_run(verdicts: list[NightVerdict], window_min: int) -> float | None:
+    """Mean actual TIB across the basis nights, minus the prescribed window.
+
+    Positive means the window was over-run. Instrumented only — see the module
+    docstring for why the two candidate gates over this quantity were rejected.
+    """
+    tibs = [
+        tib_minutes(clock_to_minutes(v.night.lights_out),
+                    clock_to_minutes(v.night.out_of_bed))
+        for v in verdicts
+    ]
+    tibs = [t for t in tibs if t is not None]
+    if not tibs:
+        return None
+    return round(statistics.mean(tibs) - window_min, 1)
+
+
 def _ema_count(verdicts: list[NightVerdict], anchor: str) -> int:
     """Early-morning awakenings: final wake before the anchor. #108 — instrumented,
     diagnostic, and explicitly not permitted to drive compression."""
@@ -256,6 +315,7 @@ def evaluate_cycle(
         basis_window_start=nights[0].date if nights else None,
         basis_window_end=nights[-1].date if nights else None,
         excluded_nights=excluded,
+        basis_tib_over_run_min=_mean_tib_over_run(valid, current_window_min),
         lights_out_sd_min=_sd_minutes([v.night.lights_out for v in valid]),
         wake_time_sd_min=_sd_minutes([v.night.final_wake for v in valid]),
         ema_count=_ema_count(valid, wake_anchor),

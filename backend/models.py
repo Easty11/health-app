@@ -299,6 +299,11 @@ class CBTIPrescription(Base):
     # clean. Recorded so the ledger states how much of a decision rested on an
     # assumption; provenance, independent of how the predicate is set.
     basis_n_alcohol_unknown: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Mean actual TIB across the basis nights minus the prescribed window.
+    # INSTRUMENTED, NOT GATED — two candidate gates over this quantity were built
+    # and rejected on evidence (see cbti/engine.py). Recorded so a threshold can
+    # eventually be set against a distribution across blocks rather than one.
+    basis_tib_over_run_min: Mapped[float | None] = mapped_column(Float, nullable=True)
     basis_window_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     basis_window_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     excluded_nights: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # reason-tagged: {"2026-04-02":"alcohol",...}

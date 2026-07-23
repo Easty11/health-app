@@ -347,3 +347,61 @@ def test_close_is_reachable_only_after_two_prior_cycles():
     for prior in ([], [444]):
         d = evaluate_cycle(week(tst=445, se=90.0), 475, RX, ANCHOR, prior_basis_tst=prior)
         assert d.decision != "close"
+
+
+# ── TIB over-run: INSTRUMENTED, NOT GATED ────────────────────────────────────
+# Two candidate gates over this quantity were built and rejected on evidence.
+# The endpoint arm (out_of_bed vs anchor, +/-30, >=3 of 7) fires on NOTHING —
+# worst cycle 2 of 6. The direct TIB gate discriminates but measures what the SE
+# floor already measures (SE = TST/TIB; over-run = TIB - window; they share TIB
+# BY CONSTRUCTION), has no threshold in the data (+3..+64, continuous), and
+# would starve the engine to 2 titrations in 8. These tests pin that the
+# quantity is RECORDED and that it never changes a decision.
+
+def _n(day, *, lo="22:30", oob="05:00", **kw):
+    return night(day, lights_out=lo, **kw)
+
+
+def test_tib_over_run_is_recorded():
+    nights = [_n(d) for d in range(1, 8)]
+    for x in nights:
+        x.out_of_bed = "05:30"                    # 22:30 -> 05:30 = 420 vs window 390
+    d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
+    assert d.basis_tib_over_run_min == pytest.approx(30.0)
+
+
+def test_tib_over_run_is_negative_when_the_window_is_under_run():
+    nights = [_n(d) for d in range(1, 8)]
+    for x in nights:
+        x.out_of_bed = "04:30"                    # 22:30 -> 04:30 = 360 vs 390
+    d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
+    assert d.basis_tib_over_run_min == pytest.approx(-30.0)
+
+
+def test_tib_over_run_does_NOT_gate_the_decision():
+    """A large over-run must still titrate on TST. If this ever fails, a TIB gate
+    has been introduced without the distribution needed to justify a threshold."""
+    nights = [_n(d, tst=400) for d in range(1, 8)]
+    for x in nights:
+        x.out_of_bed = "07:00"                    # +150 min over-run
+    d = evaluate_cycle(nights, 405, RX, ANCHOR)
+    assert d.basis_tib_over_run_min > 100
+    assert d.decision == "extend"                 # decided on TST, not on TIB
+    assert "over_run" not in d.reason and "tib" not in d.reason.lower()
+
+
+def test_tib_over_run_is_none_when_out_of_bed_is_missing():
+    d = evaluate_cycle(week(), WINDOW, RX, ANCHOR)   # no out_of_bed set
+    assert d.basis_tib_over_run_min is None
+
+
+def test_over_run_at_high_SE_and_at_low_SE_both_titrate():
+    """The discriminator is SE AT over-run, not over-run magnitude — #107's own
+    sleep-need basis week over-ran (+29) at SE 92.2%. Both cases titrate here;
+    the SE floor separates them only at the exit condition."""
+    for se in (92.2, 85.7):
+        nights = [_n(d, tst=400, se=se) for d in range(1, 8)]
+        for x in nights:
+            x.out_of_bed = "05:30"
+        d = evaluate_cycle(nights, 405, RX, ANCHOR)
+        assert d.decision == "extend"

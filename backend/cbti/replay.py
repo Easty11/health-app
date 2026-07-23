@@ -44,7 +44,7 @@ _TRAINING_SQL = text(
 
 
 _NIGHTS_SQL = text(
-    "SELECT date, diary_tst_min, diary_se_pct, lights_out, final_wake, "
+    "SELECT date, diary_tst_min, diary_se_pct, lights_out, out_of_bed, final_wake, "
     "       naps_min, alcohol_units "
     "FROM daily_records "
     "WHERE user_id = :uid AND date BETWEEN :d0 AND :d1 "
@@ -65,11 +65,11 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     training = {r[0]: r[1] for r in db.execute(_TRAINING_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
 
     nights = []
-    for (d, tst, se, lo, fw, naps, alc) in rows:
+    for (d, tst, se, lo, oob, fw, naps, alc) in rows:
         if tst is None:
             continue
         nights.append(Night(
-            date=d, tst_min=tst, se_pct=se, lights_out=lo, final_wake=fw,
+            date=d, tst_min=tst, se_pct=se, lights_out=lo, out_of_bed=oob, final_wake=fw,
             naps_min=naps, alcohol_units=alc,
             samsung_bedtime=samsung.get(d),
             training_end=training.get(d - timedelta(days=1)),
@@ -108,6 +108,7 @@ def replay(nights: list[Night], opened_on: date, wake_anchor: str,
             "n": d.basis_nights_n, "n_samsung": d.basis_n_samsung,
             "n_diary": d.basis_n_diary,
             "n_alc_unk": d.basis_n_alcohol_unknown,
+            "tib_over": d.basis_tib_over_run_min,
             "excluded": d.excluded_nights,
             "lo_sd": d.lights_out_sd_min, "wk_sd": d.wake_time_sd_min,
             "ema": d.ema_count, "capped": d.move_capped,
@@ -165,14 +166,15 @@ def main() -> None:
 
         print("\n=== REPLAY SERIES ===")
         print(f"{'cy':>2} {'window':>16} {'dec':<9} {'win':>4} {'lo':>6} "
-              f"{'TST':>4} {'SE':>6} {'n':>2} {'sam':>3} {'dia':>3} {'a?':>3} {'exc':>3} {'ema':>3}")
+              f"{'TST':>4} {'SE':>6} {'n':>2} {'sam':>3} {'dia':>3} {'a?':>3} {'exc':>3} {'ema':>3} {'tibOver':>8}")
         for s in series:
+            over = f"{s['tib_over']:+.1f}" if s["tib_over"] is not None else "-"
             print(f"{s['cycle']:>2} {str(s['from'])[5:]}..{str(s['to'])[5:]:>5} "
                   f"{s['decision']:<9} {s['window']:>4} {s['lights_out'] or '-':>6} "
                   f"{s['tst'] if s['tst'] is not None else '-':>4} "
                   f"{s['se'] if s['se'] is not None else '-':>6} "
                   f"{s['n']:>2} {s['n_samsung']:>3} {s['n_diary']:>3} {s['n_alc_unk']:>3} "
-                  f"{len(s['excluded']):>3} {s['ema']:>3}")
+                  f"{len(s['excluded']):>3} {s['ema']:>3} {over:>8}")
 
         print("\n=== REASONS ===")
         for s in series:

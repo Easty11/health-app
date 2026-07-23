@@ -44,9 +44,14 @@ def upgrade() -> None:
         'basis_n_alcohol_unknown', sa.Integer(), nullable=True,
         comment='Basis nights admitted with alcohol unrecorded - assumed clean, not verified.',
     ))
+    op.add_column('cbti_prescriptions', sa.Column(
+        'basis_tib_over_run_min', sa.Float(), nullable=True,
+        comment='Mean basis TIB minus prescribed window. Instrumented, not gated.',
+    ))
 
 
 def downgrade() -> None:
+    op.drop_column('cbti_prescriptions', 'basis_tib_over_run_min')
     op.drop_column('cbti_prescriptions', 'basis_n_alcohol_unknown')
     op.drop_column('cbti_prescriptions', 'basis_n_diary')
     op.drop_column('cbti_prescriptions', 'basis_n_samsung')
