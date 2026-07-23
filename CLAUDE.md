@@ -244,6 +244,11 @@ must match it.
   "controls discriminate on identity" (above) applied to search patterns: a hit count answers
   *did the pattern fire*, never *did it fire on the thing you meant*. **Read the matches, not
   the count** — that habit is what caught this one, and it is cheaper than the rule.
+  **Corrected documents produce this false positive BY DESIGN.** The correct-don't-delete
+  discipline leaves each superseded claim quoted inside its own correction, so an audit of a
+  corrected doc greps a hit for the very text it is checking was removed — `not yet implemented`
+  returned 1 in `docs/checkin-schema.md` immediately *after* the correction landed, and the hit was
+  the correction note quoting it. Expect the shape; read the line.
 
 - **Verify a deploy after it settles, and confirm which instance answered (standing, #116).** A check
   against a system mid-deploy can return a **well-formed answer from the outgoing instance**. At the
