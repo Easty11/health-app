@@ -223,11 +223,15 @@ class TodayOut(BaseModel):
     sibling key.
     """
     id: Optional[int] = None
-    # `_dt.date`, NOT `date`: the field is itself named `date`, and with a default
-    # the class attribute shadows the module-level name when pydantic re-resolves
-    # annotations via get_type_hints — `Optional[date]` collapses to Optional[None]
-    # and every real record is rejected. DailyRecordOut escapes this only because
-    # its `date: date` has no default. Caught by the flat-field test.
+    # `_dt.date`, NOT `date`: this file has no `from __future__ import annotations`,
+    # so annotations evaluate EAGERLY at class-body time. CPython binds a field's
+    # default into the class namespace BEFORE evaluating its annotation, so
+    # `date: Optional[date] = None` first lands `date = None`, then the annotation's
+    # `LOAD_NAME date` finds that None instead of datetime.date — the field collapses
+    # to Optional[None] and rejects every real record. The corruption is POSITIONAL:
+    # this line and any LATER `date`-annotated field in this body would break; fields
+    # declared earlier are fine. DailyRecordOut escapes it only because `date: date`
+    # has no default, so nothing is bound. Caught by the flat-field shape test.
     date: Optional[_dt.date] = None
     am_timestamp: Optional[datetime] = None
     pm_timestamp: Optional[datetime] = None

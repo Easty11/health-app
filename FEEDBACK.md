@@ -697,3 +697,40 @@ conditional on the check's exit status. Never put both in one unconditional sequ
 negative looks like absence, a passing control looks like confirmation, and a chained check looks like
 verification. In every case the report reads correct to someone who was not there.
 
+
+---
+
+## 18. State inferred from an adjacent attestation, rather than measured
+
+The load-bearing failure mode of this working model, and the one Claude is in more than
+the operator is. The shape: a value is asserted from something true *next to* the value —
+a displayed summary, a close-out note, a memory, a just-made argument — instead of from the
+value itself. The adjacent fact is genuinely true, which is exactly what makes the inference
+feel safe and stops it registering as a guess.
+
+Four instances in a single session, same shape:
+
+- **SE floor called inert** from weekly-average SE reading >100% on a *displayed* dashboard.
+  The database carried real per-night SE of 78–98%. The average was the artefact; the stored
+  values were fine.
+- **"Extend `CheckInAM.jsx`"** taken from a close-out stating the check-in was routed and
+  consuming v2 — inferred from that to mean a CBT-I section already existed in the component.
+  It did not; the file had never been read.
+- **"Samsung baseline was 6"** asserted from memory to frame a diff. The real baseline was 10;
+  the honest number was the diff itself (0 lines added), which needed no baseline at all.
+- **`get_type_hints` named as the `date`-shadowing mechanism** — asserted inside the very
+  report that had just self-caught the "was 6" fabrication above it. The file has no
+  `from __future__ import annotations`; annotations evaluate eagerly and `get_type_hints` is
+  never reached. The real mechanism is eager class-body evaluation with the default bound
+  before the annotation. Same session, one paragraph later.
+
+> **Rule going forward:** a value that gates a claim, a commit, or an action is read from the
+> thing it describes, never from an attestation adjacent to it. A dashboard average is not the
+> stored rows; a close-out's "routed" is not the render logic; a remembered count is not a
+> diff; a plausible mechanism is not the disassembly. When the measurement is one command away,
+> the inference is not a shortcut — it is the error. The tell is that the adjacent fact checks
+> out; that is not corroboration of the inferred value, and its truth is precisely the camouflage.
+
+This is [[§12]] (a declarative claim about an unseeable surface is an instruction to verify)
+turned inward: the unseeable surface is not always remote infrastructure — it is just as often
+the value you did not open because something beside it read true.
