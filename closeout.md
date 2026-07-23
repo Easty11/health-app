@@ -73,8 +73,8 @@ guard is now recorded as owed rather than treated as fixed.
 
 ## 3. Cold-resume handoff
 
-**Branch:** `feat/cbti-surfaces` @ `8771a19`, pushed, **0 commits ahead of master**. Master is also at
-`8771a19`. Untracked stray: `.claude/launch.json` (known).
+**Branch:** `feat/cbti-surfaces`, pushed, **level with master** — both at this close-out's own commit.
+Untracked stray: `.claude/launch.json` (known).
 
 **Branch terminal-state gate — passes.** Five branches, all rowed in `BRANCHES.md` and all on origin:
 
