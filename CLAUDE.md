@@ -245,6 +245,18 @@ must match it.
   *did the pattern fire*, never *did it fire on the thing you meant*. **Read the matches, not
   the count** — that habit is what caught this one, and it is cheaper than the rule.
 
+- **Verify a deploy after it settles, and confirm which instance answered (standing, #116).** A check
+  against a system mid-deploy can return a **well-formed answer from the outgoing instance**. At the
+  phase-2 merge, `railway ssh` → `alembic current` returned the *pre-merge* revision with only the
+  pre-merge migration file present; `railway deployment list` showed the new deployment SUCCESS and the
+  previous one REMOVING — the SSH had landed on the draining instance. The retry returned the correct
+  revision. Read alone, the first answer says "the deploy did not take" and sends you hunting a failure
+  that does not exist. **Check `railway deployment list` for SUCCESS before trusting an in-container
+  answer**, and prefer a probe whose result differs between the two images (a file listing, not just a
+  version string). Third axis alongside #110 clause 1 (scope — did the search look at anything) and
+  #113 (pattern — did the match mean what it appears to): this one is **timing — was the answer
+  current**, and neither of the others would have caught it.
+
 - **Push branches even while holding for review (standing, #98).** A local-only branch is
   unreadable to chat — `raw.githubusercontent.com` 404s — so a "hold before merge" gate that
   chat cannot independently verify rests on Code's report alone, which is the one thing the
@@ -291,9 +303,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#116** — A check against a system mid-deploy can answer correctly from the outgoing instance; verify after the deployment settles and confirm which instance answered. See DECISIONS_LOG #116.
 - **#114/#115** — CBT-I titration engine: regularity is instrumented not gating and three constants are recorded unvalidated rather than chosen; the +30 buffer is recovered from the prior block, whose sleep-need basis week itself over-ran. See DECISIONS_LOG #114, #115.
 - **#113** — An unanchored audit can certify the condition it is auditing for; match on anchors and read the matches, not the count. See DECISIONS_LOG #113.
-- **#112** — Cross-repo propagation debt is recorded in `ROADMAP.md` NOW, the only store that is neither session- nor branch-scoped; `closeout.md` may point at it but never hold it. See DECISIONS_LOG #112.
 
 ---
 

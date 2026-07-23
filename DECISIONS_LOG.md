@@ -3659,6 +3659,47 @@ resolve — in which case the successor models efficiency explicitly rather than
 
 ---
 
+### 116. A check against a system mid-deploy can answer correctly from the outgoing instance — verify after settled, and confirm which instance answered
+
+**Decision:** A verification against a deployed system must be run **after the deployment reports
+settled**, and must establish **which instance answered**. A well-formed, confidently-wrong answer from
+a draining instance is indistinguishable from a real result on its face.
+
+Earned at the phase-2 merge. Master was merged and pushed; Railway rebuilds and runs
+`alembic upgrade head` on deploy. The first `railway ssh` → `alembic current` returned
+**`e5f2a9c7b104`** — the pre-merge revision — with only the pre-merge migration file present in the
+image. Read alone, that says *the deploy did not take* and sends a reader hunting a failure that does
+not exist. `railway deployment list` showed the new deployment SUCCESS and the previous one REMOVING:
+the SSH had landed on the instance still draining. The retry after it settled returned
+**`c4e8a2019bd7`** with all three migration files present, matching master exactly.
+
+**This is a distinct axis from its neighbours, which is why it earns its own entry rather than a
+clause.** #110 clause 1 is **scope** — did the search look at anything. #113 is **pattern** — did the
+match mean what it appears to. This is **timing** — was the answer current. All three produce a
+well-formed result that reads as authoritative; none of the other two would have caught this one.
+
+**It is a property of the environment, not a one-off.** Railway cycles instances on every deploy, so
+this recurs on *every* post-push production verification. `railway ssh` defaults to the first active
+instance, which during a cycle may be the outgoing one. The cheap discipline: check
+`railway deployment list` for SUCCESS on the new deployment before trusting an in-container answer, and
+prefer a check whose result would differ between the two images — the migration-file listing did that
+here, where the bare revision string alone would have been ambiguous.
+
+**Status:** Adopted as a repo-specific standing rule in `CLAUDE.md` Conventions, beside #103's
+identity/coupling rules and #113's anchored-match rule. **Not** shared-block: `health-connect-app` is an
+Expo React Native app with no rolling-deploy model, so the rule has no application there, and the shared
+block already carries an unpaid propagation debt (ROADMAP NOW) that a further addition would enlarge.
+
+**How you know:** the two `railway ssh` results are the worked example — same command, same session,
+minutes apart, different answers, only the second one true. The deployment list is the artefact that
+explained the first.
+
+**Do not revisit unless:** a deployment platform is adopted whose instance cycling is not observable
+from the CLI, which would mean the "confirm which instance answered" half is unenforceable and the rule
+needs a different mechanism rather than an exception.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |

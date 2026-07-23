@@ -133,10 +133,18 @@ production until the merge; Railway's `alembic upgrade head` applied them on dep
 direction. This is the opposite configuration to phase 1's alarm (prod ahead of master, a revision
 production had applied that master could not produce) and it resolved without a reconciliation brief.
 
-**One check-shape note worth keeping:** the first `railway ssh` after the merge returned the OLD
-revision and only the old migration file, because it landed on the draining instance while the new
-deployment was still cycling. A single check would have read as "the deploy did not take". The retry
-after the deployment settled showed `c4e8a2019bd7` and all three migration files present.
+**The draining-instance finding is now DECISIONS_LOG #116** plus a `CLAUDE.md` Conventions rule — it
+is a property of how Railway cycles instances and recurs on every post-push verification, so it does
+not belong only here, where it would evaporate at the next close-out. Summary: the first `railway ssh`
+after the merge returned the pre-merge revision from the draining instance; the retry after the
+deployment settled returned `c4e8a2019bd7`.
+
+**A second, lesser near-miss, left here deliberately** — a correctly-caught operator error rather than
+a property of the environment, so it does not warrant an entry. The pre-merge chain check used
+`git diff --name-only HEAD..origin/master` and returned **2**, which reads as "master added two
+migrations" and would have implied a merge point on the alembic chain. It was the *reverse* diff
+showing this branch's own two migrations. The sound check is `git rev-list --count HEAD..origin/master`
+= 0, which proves master added no commits at all and therefore no migration.
 
 **NEXT — CBT-I phase 2 Step 5 (surfaces), not started.** A fresh session with a clean brief. Scope:
 AM diary fields render only when an open `cbti_block` exists; prefill `lights_out` / `got_into_bed` /
