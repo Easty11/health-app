@@ -1,4 +1,4 @@
-"""add cbti_prescriptions.basis_n_samsung / basis_n_diary (adherence-source composition)
+"""add cbti_prescriptions basis provenance columns (adherence source + alcohol-unknown)
 
 Revision ID: c4e8a2019bd7
 Revises: a7b3f1c8d240
@@ -40,8 +40,13 @@ def upgrade() -> None:
         'basis_n_diary', sa.Integer(), nullable=True,
         comment='Basis nights whose adherence fell back to diary lights_out (self-report).',
     ))
+    op.add_column('cbti_prescriptions', sa.Column(
+        'basis_n_alcohol_unknown', sa.Integer(), nullable=True,
+        comment='Basis nights admitted with alcohol unrecorded - assumed clean, not verified.',
+    ))
 
 
 def downgrade() -> None:
+    op.drop_column('cbti_prescriptions', 'basis_n_alcohol_unknown')
     op.drop_column('cbti_prescriptions', 'basis_n_diary')
     op.drop_column('cbti_prescriptions', 'basis_n_samsung')

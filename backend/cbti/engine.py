@@ -52,13 +52,18 @@ CYCLE_NIGHTS = 7
 NAP_EXCLUDE_MIN = 0           # Q45: ANY nap-flagged night is excluded, not >20
 TRAINING_RECOVERY_MIN = 90    # constrained night floor = session end + 90 min
 
-# NOT derived from data — flagged deliberately. The observed prescription moves
-# ranged 1..35 min, so this cap would have clipped exactly one of eight. The
-# replay reports how often it binds; if it binds often the constant is wrong.
+# UNVALIDATED BY THE OBSERVED BLOCK. Not derived from data; the observed
+# prescription moves ranged 1..35 min so this would have clipped one of eight,
+# but on replay the cap BOUND IN ZERO of 8 cycles — the block never exercised it.
+# Left at 30 deliberately rather than tuned: a better number cannot be chosen
+# from data that never reached the constraint. Revisit when a block binds it.
 MAX_MOVE_MIN = 30
 
-# NOT specified by the brief. "TST plateau across two cycles" needs a tolerance;
-# 10 min is chosen as smaller than the smallest observed prescription move (16).
+# UNVALIDATED BY THE OBSERVED BLOCK. Not specified by the brief; "TST plateau
+# across two cycles" needs a tolerance, and 10 is smaller than the smallest
+# observed prescription move (16). The replay NEVER PLATEAUED, so this constant
+# has no empirical support at all — only synthetic coverage. Same disposition:
+# left as-is, recorded as untested, revisited when a block plateaus.
 PLATEAU_TOL_MIN = 10
 
 Decision = Literal["adopt", "extend", "hold", "compress", "close"]
@@ -95,6 +100,7 @@ class NightVerdict:
     adherence_source: AdherenceSource = "none"
     adherence_delta_min: int | None = None
     adherent: bool | None = None
+    alcohol_unknown: bool = False         # admitted, but not verified clean
 
 
 @dataclass
@@ -109,6 +115,9 @@ class CycleDecision:
     basis_nights_n: int = 0
     basis_n_samsung: int = 0
     basis_n_diary: int = 0
+    # how much of this decision rested on nights ASSUMED clean rather than
+    # verified clean — provenance, recorded regardless of the predicate's setting
+    basis_n_alcohol_unknown: int = 0
     basis_window_start: date | None = None
     basis_window_end: date | None = None
     excluded_nights: dict[str, str] = field(default_factory=dict)
@@ -132,14 +141,29 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
     if night.tst_min is None or night.se_pct is None:
         return NightVerdict(night, False, "incomplete")
 
-    # alcohol: NULL means NOT RECORDED, and unknown is not the same as zero.
-    # `alcohol_units > 0` alone is false for NULL in SQL and would silently admit
-    # every unrecorded night into the denominator.
-    if night.alcohol_units is None or night.alcohol_units > 0:
-        return NightVerdict(
-            night, False,
-            "alcohol_unknown" if night.alcohol_units is None else "alcohol",
-        )
+    # ALCOHOL. Only a RECORDED non-zero night is excluded. An unrecorded night is
+    # admitted and flagged (`alcohol_unknown`), so the basis says how much of it
+    # rested on nights assumed clean rather than verified clean.
+    #
+    # Excluding unknowns as well was tried and refuted on the observed block: it
+    # removed 29 of 53 nights and starved the sufficiency gate to eight straight
+    # HOLDs with no titration at all. Three lines of evidence licensed admitting
+    # them — TST (unknown 383 vs zero 370 vs drink 430) and WASO (22 / 20 / 30)
+    # both place unknowns with the zeros, while SE at 2.5-vs-2.1 is noise against
+    # a within-group SD of 6-11; and decisively, ZERO of 19 blanks sit adjacent
+    # to a drink night where ~3.7 would be expected under random placement
+    # (p = 0.0033). That actively refutes "blank means drank and did not log",
+    # which is the only hypothesis conservative exclusion was guarding against.
+    #
+    # RATIONALE, CORRECTED. Exclusion was originally justified as keeping
+    # pharmacologically SUPPRESSED sleep out of the window estimate. The data
+    # refutes that mechanism: drink nights carry the block's HIGHEST TST (430 vs
+    # 370), with higher WASO at equal SE — i.e. more time in bed, not less sleep.
+    # They are nights run under a different regime, later to bed or later up, so
+    # the filter is functioning as a NON-ADHERENCE PROXY and overlaps the
+    # adherence gate rather than acting independently of it.
+    if night.alcohol_units is not None and night.alcohol_units > 0:
+        return NightVerdict(night, False, "alcohol")
 
     # naps: Q45 — the VA instrument does not say which day a recorded nap belongs
     # to, so nap-flagged nights are excluded entirely rather than attributed.
@@ -168,7 +192,8 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
         source = "diary"
         delta = clock_delta_minutes(prescribed_lights_out, night.lights_out)
     adherent = None if delta is None else abs(delta) <= ADHERENCE_TOL_MIN
-    return NightVerdict(night, True, None, source, delta, adherent)
+    return NightVerdict(night, True, None, source, delta, adherent,
+                        alcohol_unknown=night.alcohol_units is None)
 
 
 # ── diagnostics (computed, never gating) ──────────────────────────────────────
@@ -219,6 +244,7 @@ def evaluate_cycle(
 
     n_samsung = sum(1 for v in valid if v.adherence_source == "samsung")
     n_diary = sum(1 for v in valid if v.adherence_source == "diary")
+    n_alc_unknown = sum(1 for v in valid if v.alcohol_unknown)
 
     base = dict(
         prescribed_lights_out=prescribed_lights_out,
@@ -226,6 +252,7 @@ def evaluate_cycle(
         basis_nights_n=len(valid),
         basis_n_samsung=n_samsung,
         basis_n_diary=n_diary,
+        basis_n_alcohol_unknown=n_alc_unknown,
         basis_window_start=nights[0].date if nights else None,
         basis_window_end=nights[-1].date if nights else None,
         excluded_nights=excluded,

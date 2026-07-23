@@ -295,6 +295,10 @@ class CBTIPrescription(Base):
     # neither count).
     basis_n_samsung: Mapped[int | None] = mapped_column(Integer, nullable=True)
     basis_n_diary: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Basis nights ADMITTED with alcohol unrecorded — assumed clean, not verified
+    # clean. Recorded so the ledger states how much of a decision rested on an
+    # assumption; provenance, independent of how the predicate is set.
+    basis_n_alcohol_unknown: Mapped[int | None] = mapped_column(Integer, nullable=True)
     basis_window_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     basis_window_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     excluded_nights: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # reason-tagged: {"2026-04-02":"alcohol",...}

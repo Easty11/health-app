@@ -107,6 +107,7 @@ def replay(nights: list[Night], opened_on: date, wake_anchor: str,
             "tst": d.basis_tst_min, "se": d.basis_se_pct,
             "n": d.basis_nights_n, "n_samsung": d.basis_n_samsung,
             "n_diary": d.basis_n_diary,
+            "n_alc_unk": d.basis_n_alcohol_unknown,
             "excluded": d.excluded_nights,
             "lo_sd": d.lights_out_sd_min, "wk_sd": d.wake_time_sd_min,
             "ema": d.ema_count, "capped": d.move_capped,
@@ -164,13 +165,13 @@ def main() -> None:
 
         print("\n=== REPLAY SERIES ===")
         print(f"{'cy':>2} {'window':>16} {'dec':<9} {'win':>4} {'lo':>6} "
-              f"{'TST':>4} {'SE':>6} {'n':>2} {'sam':>3} {'dia':>3} {'exc':>3} {'ema':>3}")
+              f"{'TST':>4} {'SE':>6} {'n':>2} {'sam':>3} {'dia':>3} {'a?':>3} {'exc':>3} {'ema':>3}")
         for s in series:
             print(f"{s['cycle']:>2} {str(s['from'])[5:]}..{str(s['to'])[5:]:>5} "
                   f"{s['decision']:<9} {s['window']:>4} {s['lights_out'] or '-':>6} "
                   f"{s['tst'] if s['tst'] is not None else '-':>4} "
                   f"{s['se'] if s['se'] is not None else '-':>6} "
-                  f"{s['n']:>2} {s['n_samsung']:>3} {s['n_diary']:>3} "
+                  f"{s['n']:>2} {s['n_samsung']:>3} {s['n_diary']:>3} {s['n_alc_unk']:>3} "
                   f"{len(s['excluded']):>3} {s['ema']:>3}")
 
         print("\n=== REASONS ===")
@@ -196,6 +197,8 @@ def main() -> None:
         print("\n=== COMPOSITION ===")
         ts, td = sum(s["n_samsung"] for s in series), sum(s["n_diary"] for s in series)
         print(f"  basis-night adherence sources across all cycles: samsung={ts} diary={td}")
+        print(f"  basis nights ADMITTED with alcohol unrecorded (assumed clean): "
+              f"{sum(s['n_alc_unk'] for s in series)}")
         print(f"  move capped in {sum(1 for s in series if s['capped'])} of {len(series)} cycles"
               f" (cap {MAX_MOVE_MIN} min)")
     finally:

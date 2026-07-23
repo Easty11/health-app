@@ -48,12 +48,16 @@ def test_alcohol_recorded_nonzero_is_excluded():
     assert not v.valid and v.reason == "alcohol"
 
 
-def test_alcohol_UNKNOWN_is_excluded_and_distinguishable_from_zero():
-    """NULL means not recorded. `alcohol_units > 0` alone is false for NULL and
-    would silently admit every unrecorded night — 19 of 53 in the real block."""
-    v = classify_night(night(1, alcohol=None), RX)
-    assert not v.valid and v.reason == "alcohol_unknown"
-    assert classify_night(night(1, alcohol=0), RX).valid
+def test_alcohol_unknown_is_distinguishable_from_recorded_zero():
+    """SUPERSEDED BEHAVIOUR: unknown was briefly EXCLUDED alongside recorded
+    drinks. That starved the observed block (29 of 53 nights removed, 8 straight
+    HOLDs) and was refuted by the adjacency test — see the alcohol-predicate
+    block below. Unknown is now admitted; what survives is that the two states
+    remain distinguishable, which is what the flag is for."""
+    unknown = classify_night(night(1, alcohol=None), RX)
+    zero = classify_night(night(1, alcohol=0), RX)
+    assert unknown.valid and zero.valid
+    assert unknown.alcohol_unknown is True and zero.alcohol_unknown is False
 
 
 def test_any_nap_excludes_the_night_per_Q45():
@@ -99,7 +103,7 @@ def test_sufficiency_failure_short_circuits_before_adherence():
     gates would fail; the reason must be sufficiency."""
     nights = week(samsung="01:00")               # wildly non-adherent
     for n in nights[:3]:
-        n.alcohol_units = None
+        n.alcohol_units = 2                      # RECORDED drinks -> excluded
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold" and "insufficient_nights" in d.reason
     assert "adherence" not in d.reason
@@ -252,3 +256,94 @@ def test_excluded_nights_are_reason_tagged():
 def test_composition_never_exceeds_basis_count():
     d = evaluate_cycle(week(), WINDOW, RX, ANCHOR)
     assert d.basis_n_samsung + d.basis_n_diary <= d.basis_nights_n
+
+
+# ── alcohol predicate: admit unknown, flag it ────────────────────────────────
+# Refuted on the observed block: excluding unknowns removed 29 of 53 nights and
+# starved sufficiency to 8 straight HOLDs. Zero of 19 blanks sat adjacent to a
+# drink night (~3.7 expected under random placement, p=0.0033), which refutes
+# "blank means drank and did not log" — the only hypothesis exclusion guarded.
+
+def test_unknown_alcohol_is_ADMITTED_and_flagged():
+    v = classify_night(night(1, alcohol=None), RX)
+    assert v.valid is True
+    assert v.alcohol_unknown is True
+
+
+def test_recorded_zero_is_admitted_and_NOT_flagged():
+    v = classify_night(night(1, alcohol=0), RX)
+    assert v.valid is True and v.alcohol_unknown is False
+
+
+def test_recorded_nonzero_is_still_excluded():
+    """Still excluded — but as a NON-ADHERENCE proxy, not as suppressed sleep.
+    Drink nights carry the block's HIGHEST TST (430 vs 370 for recorded-zero),
+    i.e. more time in bed, so the original 'alcohol suppresses TST' rationale is
+    refuted by the data it described."""
+    v = classify_night(night(1, alcohol=2), RX)
+    assert not v.valid and v.reason == "alcohol"
+
+
+def test_alcohol_unknown_count_reaches_the_basis():
+    nights = week()
+    for n in nights[:3]:
+        n.alcohol_units = None
+    d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
+    assert d.basis_nights_n == 7                  # all admitted
+    assert d.basis_n_alcohol_unknown == 3         # three assumed clean, not verified
+
+
+def test_unknown_alcohol_no_longer_starves_sufficiency():
+    """The regression this predicate change exists to prevent."""
+    d = evaluate_cycle(week(alcohol=None), WINDOW, RX, ANCHOR)
+    assert "insufficient_nights" not in d.reason
+    assert d.basis_n_alcohol_unknown == 7
+
+
+# ── EXIT CONDITION — untouched by the observed block, synthetic-only ─────────
+# The replay never plateaued, so this rule and PLATEAU_TOL_MIN have no empirical
+# support whatsoever. These are the only coverage they have.
+
+def test_plateau_within_tolerance_and_SE_at_floor_closes():
+    d = evaluate_cycle(week(tst=445, se=88.0), 475, RX, ANCHOR,
+                       prior_basis_tst=[440, 444])          # deltas +4, +1
+    assert d.decision == "close" and "tst_plateau" in d.reason
+
+
+def test_plateau_JUST_outside_tolerance_does_not_close():
+    """One delta at 11 min against PLATEAU_TOL_MIN=10 — still climbing."""
+    d = evaluate_cycle(week(tst=455, se=88.0), 475, RX, ANCHOR,
+                       prior_basis_tst=[440, 444])          # deltas +4, +11
+    assert d.decision != "close"
+
+
+def test_plateau_at_the_tolerance_boundary_closes():
+    d = evaluate_cycle(week(tst=454, se=88.0), 475, RX, ANCHOR,
+                       prior_basis_tst=[440, 444])          # delta exactly +10
+    assert d.decision == "close"
+
+
+def test_plateau_with_SE_BELOW_floor_does_not_close():
+    """SE is a floor, not a target. A plateau at poor efficiency is not an exit —
+    it is a window that is too wide."""
+    d = evaluate_cycle(week(tst=445, se=84.9), 475, RX, ANCHOR,
+                       prior_basis_tst=[440, 444])
+    assert d.decision != "close"
+
+
+def test_plateau_with_SE_exactly_at_floor_closes():
+    d = evaluate_cycle(week(tst=445, se=85.0), 475, RX, ANCHOR,
+                       prior_basis_tst=[440, 444])
+    assert d.decision == "close"
+
+
+def test_falling_tst_is_not_a_plateau():
+    d = evaluate_cycle(week(tst=400, se=95.0), 475, RX, ANCHOR,
+                       prior_basis_tst=[440, 444])
+    assert d.decision != "close"
+
+
+def test_close_is_reachable_only_after_two_prior_cycles():
+    for prior in ([], [444]):
+        d = evaluate_cycle(week(tst=445, se=90.0), 475, RX, ANCHOR, prior_basis_tst=prior)
+        assert d.decision != "close"
