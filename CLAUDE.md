@@ -291,9 +291,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#114/#115** — CBT-I titration engine: regularity is instrumented not gating and three constants are recorded unvalidated rather than chosen; the +30 buffer is recovered from the prior block, whose sleep-need basis week itself over-ran. See DECISIONS_LOG #114, #115.
 - **#113** — An unanchored audit can certify the condition it is auditing for; match on anchors and read the matches, not the count. See DECISIONS_LOG #113.
 - **#112** — Cross-repo propagation debt is recorded in `ROADMAP.md` NOW, the only store that is neither session- nor branch-scoped; `closeout.md` may point at it but never hold it. See DECISIONS_LOG #112.
-- **#111** — Secret-rendering commands are prohibited by instruction, not by configuration: the rule lives in the shared block and the `.claude/settings.json` deny list is an explicitly unreliable second layer. Closes Q43 and Q44. See DECISIONS_LOG #111.
 
 ---
 

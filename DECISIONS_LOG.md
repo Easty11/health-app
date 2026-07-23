@@ -3562,6 +3562,103 @@ argue for reading a wider result set rather than for a different pattern.
 
 ---
 
+### 114. Regularity is instrumented, not gating — and three other constants are recorded as unvalidated rather than chosen
+
+**Decision:** Lights-out SD and wake-time SD are computed, stored and displayed, but do **not** gate
+titration.
+
+The proposal was a HOLD gate on lights-out SD, reasoning that the block's largest single-week efficiency
+gain coincided with SD collapsing from **1.21 to 0.23**. That was two adjacent points selected from
+eight. Across the full block, lights-out SD against mean weekly SE gives **r = −0.206**. Week 2
+contradicts the rule outright: SD *rose* from 0.23 to 0.98 while SE *rose* from 94.59 to 95.44, the
+block's highest. A >0.5h gate would have blocked **five of eight weeks, including the two best**
+(95.44 and 92.23).
+
+Wake-time SD correlates better at **r = −0.441**, but the wake anchor is fixed at 05:00 by
+prescription, so its variance *is* early waking — the same phenomenon #108 instruments as EMA, and
+downstream of the outcome rather than an input to it. Gating on it would compress the window in
+response to a signal #108 establishes must not drive compression.
+
+**A second adherence arm was proposed, built up, and rejected on evidence.** The gate compares diary
+`lights_out` against the prescription and checks nothing at the wake end, so a night that starts on
+time and ends late passes while over-running the window — and both of the replay's extensions sat on
+over-run. The proposed fix was an `out_of_bed` vs wake-anchor arm at ±30 with the same ≥3-of-7
+threshold. Tested against the block, **it fires on nothing**: the worst cycle is 2 of 6 outside
+tolerance. Wake-end failures here are few-and-huge (+225, +90, +85, +75, +70 min); the bed-end failures
+the existing arm catches are many-and-small. A count-based rule suits the latter and not the former.
+Recorded as a negative result so it is not re-proposed from scratch.
+
+**Three constants are unvalidated by this block and left as-is rather than tuned.** Choosing better
+numbers from data that cannot test them is fitting the rule to one block:
+
+- `MAX_MOVE_MIN = 30` — bound in **0 of 8** cycles. The block never reached the constraint.
+- `PLATEAU_TOL_MIN = 10` — the replay **never plateaued**, so this has no empirical support at all;
+  its only coverage is synthetic.
+- `MIN_VALID_NIGHTS = 5` — **undeterminable**. The three failing cycles had n = 3, 3, 2. Lowering to 4
+  changes nothing; lowering to 3 rescues two and still leaves one. The failures sit far below any
+  defensible value, so the block cannot distinguish the options.
+
+**Status:** Adopted. The regularity gate was removed from the engine spec before it was built; the
+adherence arm was removed after being tested; the constants ship recorded-as-unvalidated in-source.
+
+**How you know:** eight weekly rows, Pearson on complete cases; the blocked-week count computed
+directly against the proposed 0.5h threshold; the endpoint arm's 2-of-6 worst case measured against the
+imported block's own `out_of_bed` values; the cap and plateau counts read off the Gate-4 replay.
+
+**Do not revisit unless:** a later block shows regularity varying independently of the fixed anchor —
+which would require an anchor change mid-block, currently prohibited — or a block binds `MAX_MOVE_MIN`
+or reaches a plateau, at which point those two constants have data behind them for the first time.
+
+---
+
+### 115. The titration buffer is +30 min, recovered from the prior block rather than assumed — and its basis week over-ran
+
+**Decision:** Prescribed window = mean TST over the last 7 valid nights **+ 30 minutes**, floored at
+5h00.
+
+The constant is not taken from convention. It is recovered from the completed block by differencing
+each prescribed window against the mean TST of the seven nights preceding it: **+36, +45, +36, +27,
++16, +48, +65** — median **+36**, mean +39, range +16 to +65. The instrument that produced those
+prescriptions was the VA CBT-I Sleep Diary Calculator, so this is an observed rule, not a
+reconstruction of intent.
+
+**+30 is adopted rather than +36** because it sits at the conservative end of the observed range and
+coincides with the standard sleep-restriction buffer — two independent supports rather than one. The
+spread (+16 to +65, widening late in the block) indicates the source rule carried a second term this
+scalar does not model, likely efficiency-dependent. That is a known simplification, recorded as such.
+
+**The over-run acknowledgement, which belongs here rather than in #107.** #107 estimates sleep need at
+~7h30 from week 7 — "the only week where time in bed was not the binding constraint" — and that week
+ran **TIB 8h07 against a 7h38 prescription: +29 min of over-run**. The estimate is treated as ground
+truth *because* it over-ran. That is consistent, but only once stated: it means over-run cannot also be
+gated out as contamination, and a TIB-over-run gate was withdrawn partly on that ground (see #114 for
+the endpoint arm; the direct TIB gate was withdrawn because SE = TST/TIB and over-run = TIB − window
+share TIB **by construction**, so it measures what the SE floor already measures).
+
+The discriminator was never over-run magnitude but **SE at over-run**: week 7 over-ran at SE 92.2% —
+slept through the extra time, genuine capacity — while the replay's worst cycles over-ran at SE 85.7%,
+lying awake in it. Same TIB behaviour, opposite meaning, separated by the existing SE floor without a
+new gate. `basis_tib_over_run_min` is recorded per prescription so a threshold can eventually be set
+against a distribution across blocks rather than this one.
+
+**#107 is on master and append-only, so this is a forward reference and not an amendment.** The
+estimate stands; only the reasoning is made explicit, because a later reader who noticed the over-run
+unaided would reasonably read it as a contradiction.
+
+**Status:** Adopted as a single scalar. Revisit if replay shows systematic divergence attributable to
+the buffer.
+
+**How you know:** seven prescription change-points with ≥4 prior nights each, all with n=7; differences
+computed against the prescribed window derived from the constant 05:00 anchor. The over-run figures are
+direct per-night measurements of `lights_out` → `out_of_bed` across the basis nights of each replay
+cycle, not inverted from SE — the derived and measured values agree to within ~3 min, but the
+measurement is what is recorded.
+
+**Do not revisit unless:** replay shows the fixed buffer producing divergence a second term would
+resolve — in which case the successor models efficiency explicitly rather than widening the scalar.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
