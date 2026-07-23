@@ -3,12 +3,12 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`._
 
-2026-07-23 · CBT-I phase 2 Steps 1–4: titration engine, Gate-4 replay, governance #114/#115
+2026-07-23 · CBT-I phase 2 Steps 1–4 MERGED: titration engine, Gate-4 replay, #114/#115, prod reconciled
 
 ## 1. Real commits this session
 
-Session-open ref: `4e12894` (master tip). Work sits on **`feat/cbti-engine` @ `0e340a7`**, pushed,
-**5 ahead / 0 behind master — NOT merged.**
+Session-open ref: `4e12894`. **Merged to master at `ee9aa1f`**, pushed; `feat/cbti-engine` deleted
+local and remote (0 unmerged commits by patch-id). #114/#115 claimed at merge (master max was #113).
 
 ```
 0e340a7 governance: DECISIONS_LOG #114/#115 (CBT-I titration engine)
@@ -115,23 +115,28 @@ re-implementations. The shortest-path offset moved to `cbti.timeutil.signed_offs
 
 ## 3. Cold-resume handoff
 
-**Branch:** `feat/cbti-engine` @ `0e340a7`, pushed, 5 ahead / 0 behind, `--ff-only` available.
-Untracked stray: `.claude/launch.json` (known). **Master is at `4e12894`.**
+**Branch:** `master` @ `ee9aa1f`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
 
-**Branch terminal-state gate — passes.** All five branches rowed in `BRANCHES.md` and on origin:
+**Branch terminal-state gate — passes.** `feat/cbti-engine` merged + deleted, row **DONE** at
+`ee9aa1f`. Four branches remain, all rowed in `BRANCHES.md` and all on origin:
 
 ```
-feat/cbti-engine                   5 +   rowed, on origin   (phase 2, Steps 1-4 done)
 feat/checkin-injury-probe          2 +   rowed, on origin
 feat/feedback-ledger               4 +   rowed, on origin
 feat/interpretation-view-skeleton  3 +   rowed, on origin
 feat/recovery-metrics-rhr          1 +   rowed, on origin
 ```
 
-**Migrations are NOT applied to production, deliberately.** Prod stays at `e5f2a9c7b104`; Railway runs
-`alembic upgrade head` on deploy, so `a7b3f1c8d240` and `c4e8a2019bd7` land at merge. Applying them
-ahead of the merge is what created the prod-ahead-of-master divergence phase 1 spent a brief undoing.
-The replay reads production **column-explicitly** so it works against the pre-migration schema.
+**Prod reconciled at merge — VERIFIED, not assumed.** Both migrations were deliberately withheld from
+production until the merge; Railway's `alembic upgrade head` applied them on deploy, and
+`railway ssh -> alembic current` returns **`c4e8a2019bd7`**, matching master. No divergence in either
+direction. This is the opposite configuration to phase 1's alarm (prod ahead of master, a revision
+production had applied that master could not produce) and it resolved without a reconciliation brief.
+
+**One check-shape note worth keeping:** the first `railway ssh` after the merge returned the OLD
+revision and only the old migration file, because it landed on the draining instance while the new
+deployment was still cycling. A single check would have read as "the deploy did not take". The retry
+after the deployment settled showed `c4e8a2019bd7` and all three migration files present.
 
 **NEXT — CBT-I phase 2 Step 5 (surfaces), not started.** A fresh session with a clean brief. Scope:
 AM diary fields render only when an open `cbti_block` exists; prefill `lights_out` / `got_into_bed` /
@@ -141,8 +146,10 @@ the protocol); prefill sanity-gate rejecting any device value >~4h from the pres
 clock failure — see Q42); PM close-out displays the current prescribed lights-out. **This is the first
 work in the sequence to touch `frontend/`.**
 
-**Then:** merge `feat/cbti-engine` (`--ff-only`, claiming #114/#115 — re-verify master's max first),
-and fold in the `9688f2…` co-occurrence test from ROADMAP NOW.
+**Then:** fold in the `9688f2…` co-occurrence test from ROADMAP NOW.
+
+**The engine ships DORMANT.** No router or service imports `cbti/` — verified by grep at merge — so
+nothing changes behaviourally until Step 5 wires a surface to it.
 
 **Three constants ship unvalidated, recorded not chosen** (#114): `MAX_MOVE_MIN` bound 0 of 8;
 `PLATEAU_TOL_MIN` never reached, synthetic coverage only; `MIN_VALID_NIGHTS` undeterminable — failing
@@ -154,6 +161,12 @@ to HCA's store. The `health-connect-app` shared-block propagation is in **ROADMA
 `FEEDBACK` **§18**/**§19** still need a brief to land them. **Q41** (haematocrit citation capture),
 **Q37**, **Q33**. HCA **Q11** should close `DONE → #93`; HCA **Q9 item 1** and **Q10** remain open there.
 
-**Single clearest next action:** brief and build Step 5 (surfaces) in a fresh session, then merge
-`feat/cbti-engine`. The engine is proven against real data and the branch is landable as it stands —
-nothing is half-built.
+**Single clearest next action:** brief and build Step 5 (surfaces) in a fresh session.
+
+**That brief needs MORE verification steps than the engine brief carried, not fewer.** Everything in
+this sequence has concerned backend code and governance stores readable from master; `frontend/` has
+never been fetched or inspected by the design chat, whose error rate on unverified surfaces is
+documented across #110/#113 and four further instances this sequence. In particular
+`docs/checkin-schema.md` describes the check-in as a target rather than as implemented — a claim about
+a year of commits ago — so **where AM/PM capture actually lives now is unverified and must be
+established before anything is designed against it.**
