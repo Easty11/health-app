@@ -815,6 +815,12 @@ CREATE TABLE cbti_prescriptions (
     basis_tst_min          INTEGER,
     basis_se_pct           FLOAT,
     basis_nights_n         INTEGER,
+    -- basis provenance (migration c4e8a2019bd7). Recorded so a later reader can see
+    -- what each decision rested on; none of these gate anything.
+    basis_n_samsung        INTEGER,   -- basis nights whose adherence used Samsung bedtime (independent)
+    basis_n_diary          INTEGER,   -- basis nights that fell back to diary lights_out
+    basis_n_alcohol_unknown INTEGER,  -- basis nights admitted with alcohol unrecorded: assumed clean, not verified
+    basis_tib_over_run_min FLOAT,     -- mean basis TIB minus prescribed window; instrumented, NOT gated (#114/#115)
     basis_window_start     DATE,
     basis_window_end       DATE,
     excluded_nights        JSON,                    -- reason-tagged: {"2026-04-02":"alcohol",...}
