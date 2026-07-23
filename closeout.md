@@ -3,178 +3,132 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`._
 
-2026-07-23 · CBT-I phase 2 Steps 1–4 MERGED: titration engine, Gate-4 replay, #114/#115, prod reconciled
+2026-07-23 · CBT-I Step 5 begun: two canonical docs corrected on master, SCHEMA-lag guard recorded owed
 
 ## 1. Real commits this session
 
-Session-open ref: `4e12894`. **Merged to master at `ee9aa1f`**, pushed; `feat/cbti-engine` deleted
-local and remote (0 unmerged commits by patch-id). #114/#115 claimed at merge (master max was #113).
+Session-open ref: `f54f60c`. Both commits **merged to master at `8771a19`**, pushed.
 
 ```
-0e340a7 governance: DECISIONS_LOG #114/#115 (CBT-I titration engine)
-5ce61ed feat(cbti): instrument TIB over-run; record two rejected gates and one dead end
-f776813 fix(cbti): admit unknown-alcohol nights with provenance; exit-condition tests
-2532e60 feat(cbti): titration engine + replay harness (phase 2, Step 3-4)
-8ad304e feat(cbti): extract midnight-wrap primitives + got_into_bed (phase 2, Steps 1-2)
+8771a19 governance: record the SCHEMA-lag guard as owed; note the corrected-doc audit shape
+7442bb5 docs: correct two stale claims in checkin-schema.md, and a real SCHEMA.md lag
 ```
 
 ```
+2026-07-23 governance: record the SCHEMA-lag guard as owed; note the corrected-doc audit shape
+2026-07-23 docs: correct two stale claims in checkin-schema.md, and a real SCHEMA.md lag
+2026-07-23 governance: DECISIONS_LOG #116 — verify a deploy after it settles
+2026-07-23 chore: session close-out — phase 2 merged, prod reconciled
+2026-07-23 chore: session close-out
 2026-07-23 governance: DECISIONS_LOG #114/#115 (CBT-I titration engine)
 2026-07-23 feat(cbti): instrument TIB over-run; record two rejected gates and one dead end
 2026-07-23 fix(cbti): admit unknown-alcohol nights with provenance; exit-condition tests
 2026-07-23 feat(cbti): titration engine + replay harness (phase 2, Step 3-4)
 2026-07-22 feat(cbti): extract midnight-wrap primitives + got_into_bed (phase 2, Steps 1-2)
-2026-07-23 governance: DECISIONS_LOG #113, mint Q45, schedule the co-occurrence test
-2026-07-23 chore: session close-out
-2026-07-23 governance: DECISIONS_LOG #112, cross-repo debt convention, secrets residuals closed
-2026-07-22 governance: DECISIONS_LOG #111, close Q43/Q44, secret-rendering prohibition
-2026-07-22 chore: session close-out
 ```
 
-Maxima on the branch: **DECISIONS #115 · questions Q45 · FEEDBACK §17.** Master is at **#113 / Q45**,
-so #114/#115 are claimed at the ff-merge. Backend suite **352 passed** (was 308 at session open).
-Migrations `a7b3f1c8d240` (got_into_bed) and `c4e8a2019bd7` (basis provenance) — **single head**.
+Maxima: **DECISIONS #116 · questions Q45 · FEEDBACK §17.** No new decision entries this session —
+#117/#118 remain provisional for the surfaces branch. No code, no migration, no test delta.
 
 ## 2. Pending-queue reconciliation
 
-No `;cc` queue carried in. Phase 2's standing brief drove Steps 1–4; every item resolved:
+No `;cc` queue carried in. The surfaces brief drove Step 1 only; Steps 2–9 are not started.
 
-| Brief item | Outcome |
+| Brief step | Outcome |
 |---|---|
-| 1a — extract the midnight wrap | **LANDED** `8ad304e`; importer reconciliation still 0/53, `worst_residual` byte-identical |
-| 1b — `got_into_bed` | **LANDED** `8ad304e`, migration `a7b3f1c8d240` |
-| 1c — alcohol three-state | **WITHDRAWN by chat** — column already nullable; became an engine predicate |
-| 1d — nap attribution | **Q45 on master**; engine excludes nap-flagged nights |
-| 2 — migration | **LANDED**, single head, up/down/up clean in isolation |
-| 3 — engine | **LANDED** `2532e60`; all three VERIFYs pass (one failed first — see below) |
-| 4 — replay + divergence | **LANDED**; ran against production, account below |
-| 5 — surfaces | **NOT STARTED** — deliberate stopping point |
-| LOG #114/#115 | **LANDED** `0e340a7` |
+| 1 — correct `docs/checkin-schema.md`; check SCHEMA.md | **DONE**, merged `7442bb5` |
+| 2–9 — endpoints, prefill gate, AM/PM, components, trigger, block-open | **NOT STARTED** — session boundary |
 
 Nothing decided this session is uncommitted.
 
-### Gate 4 — the replay, and what it found
+### Step 1 found a second, real lag — and it was mine
 
-Final series (51 nights in block window, **0 with a Samsung bedtime**, 17 with a constraining session
-end, 9 historical prescriptions):
+`docs/checkin-schema.md` carried two claims, **both verified stale before editing** rather than taken
+from the brief:
 
-```
-cy  window        dec       win     lo   TST     SE   n  sam  dia   a?  exc  ema  tibOver
- 1  03-19..03-25  hold      384  22:36   362  85.69   6    0    6    4    1    3    +42.7
- 2  03-26..04-01  compress  380  22:40   350  94.63   7    0    7    3    0    1    -14.0
- 3  04-02..04-08  hold      380  22:40     -      -   3    0    3    1    4    2     +3.3
- 4  04-09..04-15  hold      380  22:40     -      -   3    0    3    0    4    0    +31.7
- 5  04-16..04-22  hold      380  22:40   378  85.68   6    0    6    2    0    1    +64.2
- 6  04-23..04-29  extend    410  22:10   380  94.02   6    0    6    4    0    0    +25.0
- 7  04-30..05-06  extend    425  21:55   395  89.13   6    0    6    4    0    3    +34.2
- 8  05-07..05-13  hold      425  21:55     -      -   2    0    2    0    3    1    +42.5
-```
+- *"This is the target spec — not yet implemented."* The check-in **is** implemented: `checkin_v2.py`
+  serves `/prefill` `/am` `/pm` `/today` `/history`, wired at `main.py`; `CheckInAM.jsx` (`/checkin-am`)
+  and `NightlyCloseOut.jsx` (`/nightly`) are live surfaces behind `RequireAuth`. Stale by roughly a
+  year, and it **mis-scoped the CBT-I surfaces work as construction rather than extension** until
+  checked — the reconnaissance that caught it is the reason Step 5 is a smaller build than briefed.
+- *"Soreness items are hardcoded for now. **Future:** drive from the active injury list."* That future
+  arrived: `derive_soreness_items` is called at `checkin_v2.py:218` and consumed by `CheckInAM.jsx`.
 
-**Hard floor holds.** Never closes; ends at 425 min (7h05) **still extending**. No early exit, so
-#107's premise survives — the failure mode the floor watches for did not occur.
+**The VERIFY then found a lag in SCHEMA.md, which is the repo-canonical one.** Four columns from
+migration `c4e8a2019bd7` — `basis_n_samsung`, `basis_n_diary`, `basis_n_alcohol_unknown`,
+`basis_tib_over_run_min` — were in `models.py` and absent from SCHEMA.md. **An omission when that
+migration was folded in during phase 2, not an anomaly of `checkin-schema.md`.** That reframes the
+problem from "one doc is unreliable" to "the never-lag rule has no enforcement", which is why the
+guard is now recorded as owed rather than treated as fixed.
 
-**Divergence from the VA app's nine prescriptions, which IS the output:** direction agrees, magnitude
-lags (425 vs 458, unfinished not stopped). The engine holds on drink clusters where VA titrated
-through them (cy3/4/8); compresses at cy2 where VA extended, which is #107 working as designed — high
-SE alone does not buy window; and holds twice on adherence, which VA had no gate for.
+### Two audit shapes worth carrying forward
 
-**Composition: `samsung=0, diary=39, alcohol_unknown=18`.** Every basis night on the diary source
-(Samsung `bedtime` begins 2026-06-08; the block closed 2026-05-11), and **18 of 39 basis nights were
-admitted as assumed-clean rather than verified-clean.** Recorded per prescription so a later reader
-sees that nearly half the basis rests on an inference.
-
-### The alcohol predicate was corrected mid-flight, on evidence
-
-The first replay was **eight straight HOLDs, no titration** — it measured the predicate, not the
-engine. Excluding unknown-alcohol nights alongside recorded drinks removed 29 of 53 nights. Three
-lines discriminated, one decisively: TST and WASO both place unknowns with recorded-zeros (383/22 vs
-370/20, against drink 430/30), SE is noise (2.5 vs 2.1 on SD 6–11), and **0 of 19 blanks sit adjacent
-to a drink night where ~3.7 are expected under random placement, p = 0.0033** — active refutation of
-"blank means drank and did not log". Unknown is now admitted and flagged.
-
-**The exclusion rationale was also wrong and is corrected in-source:** drink nights carry the block's
-**highest** TST (430 vs 370), not suppressed sleep. They are higher-TIB nights run under a different
-regime, so the alcohol filter is a **non-adherence proxy that overlaps the adherence gate** rather than
-an independent filter.
-
-### Two candidate gates built up and rejected, both recorded
-
-Recorded in #114 and the engine docstring so neither is re-proposed from scratch:
-
-1. **Endpoint adherence arm** (`out_of_bed` vs anchor, ±30, ≥3 of 7) — **tested, fires on nothing**,
-   worst cycle 2 of 6. Wake-end failures are few-and-huge; bed-end failures many-and-small.
-2. **Direct TIB gate** — discriminates, still withdrawn: SE = TST/TIB and over-run = TIB − window share
-   TIB **by construction**; no threshold exists in the data (+3…+64, continuous); and it would starve
-   the engine to 2 titrations in 8. `basis_tib_over_run_min` is instrumented instead.
-
-### One VERIFY failed on my own code
-
-VERIFY 3 (nothing re-implements the midnight wrap) **failed against `engine.py`** — two local
-re-implementations. The shortest-path offset moved to `cbti.timeutil.signed_offset_minutes`;
-`clock_delta_minutes` delegates. Grep now shows zero wrap arithmetic outside `timeutil`.
+- **A corrected document produces a grep false positive by design.** `not yet implemented` greps **1**
+  in `checkin-schema.md` *immediately after* the correction landed — the hit is the correction note
+  quoting the superseded text. Correct-don't-delete and audit-by-grep are each right and they
+  interact. Recorded as a clause on #113 in `CLAUDE.md`; read the line, not the count.
+- **The models-vs-SCHEMA detector was demonstrated with a negative control** — a fabricated column
+  name reports LAG, proving the check can detect absence rather than always passing. That control is
+  what makes it worth promoting to a test rather than re-deriving.
 
 ## 3. Cold-resume handoff
 
-**Branch:** `master` @ `ee9aa1f`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
+**Branch:** `feat/cbti-surfaces` @ `8771a19`, pushed, **0 commits ahead of master**. Master is also at
+`8771a19`. Untracked stray: `.claude/launch.json` (known).
 
-**Branch terminal-state gate — passes.** `feat/cbti-engine` merged + deleted, row **DONE** at
-`ee9aa1f`. Four branches remain, all rowed in `BRANCHES.md` and all on origin:
+**Branch terminal-state gate — passes.** Five branches, all rowed in `BRANCHES.md` and all on origin:
 
 ```
+feat/cbti-surfaces                 0 +   rowed UNSTARTED, on origin   (Step 5, resume at Step 2)
 feat/checkin-injury-probe          2 +   rowed, on origin
 feat/feedback-ledger               4 +   rowed, on origin
 feat/interpretation-view-skeleton  3 +   rowed, on origin
 feat/recovery-metrics-rhr          1 +   rowed, on origin
 ```
 
-**Prod reconciled at merge — VERIFIED, not assumed.** Both migrations were deliberately withheld from
-production until the merge; Railway's `alembic upgrade head` applied them on deploy, and
-`railway ssh -> alembic current` returns **`c4e8a2019bd7`**, matching master. No divergence in either
-direction. This is the opposite configuration to phase 1's alarm (prod ahead of master, a revision
-production had applied that master could not produce) and it resolved without a reconciliation brief.
+**Why the branch is empty and re-cut.** Step 1 corrected a *canonical surface*, and a fix for a
+canonical-surface defect only counts once it is on the canonical surface — until it merged, master
+still told the next reader the check-in was unimplemented, which is the exact wire the correction
+exists to remove. It was docs-only (no migration, no code, no dormancy question), so it merged at
+near-zero cost and the branch was re-cut from the new master under the **same name**, keeping the
+brief's ANCHOR valid verbatim.
 
-**The draining-instance finding is now DECISIONS_LOG #116** plus a `CLAUDE.md` Conventions rule — it
-is a property of how Railway cycles instances and recurs on every post-push verification, so it does
-not belong only here, where it would evaporate at the next close-out. Summary: the first `railway ssh`
-after the merge returned the pre-merge revision from the draining instance; the retry after the
-deployment settled returned `c4e8a2019bd7`.
+**NEXT — resume the surfaces brief at Step 2, unchanged.** Known before starting: AM/PM capture is
+implemented and routed, so Step 5 is extension, not construction. Three VERIFYs carry the risk, all
+recorded in full on the `BRANCHES.md` row:
 
-**A second, lesser near-miss, left here deliberately** — a correctly-caught operator error rather than
-a property of the environment, so it does not warrant an entry. The pre-merge chain check used
-`git diff --name-only HEAD..origin/master` and returned **2**, which reads as "master added two
-migrations" and would have implied a merge point on the alembic chain. It was the *reverse* diff
-showing this branch's own two migrations. The sound check is `git rev-list --count HEAD..origin/master`
-= 0, which proves master added no commits at all and therefore no migration.
+1. **The Samsung `bedtime` → `got_into_bed` mapping may be untestable.** Clock times live on
+   `samsung_hrv_readings`; `sleep_duration_minutes` lives on `health_connect_syncs`. The arithmetic
+   needs a join that may lack per-night correspondence. If untestable, map as the brief specifies but
+   record the mapping as **UNVERIFIED** — an unverified prefill *default* is recoverable (the operator
+   edits `lights_out` when the two diverge, so the diary self-corrects and the SE denominator stays
+   honest); an unverified *stored* value would not be.
+2. **Step 4 deliberately ends the engine's dormancy.** `checkin_v2.py` becomes the first non-test
+   consumer of `cbti/`, so a `timeutil` bug stops being latent and becomes a live capture-path bug.
+   The freeze contract is the branch's highest-risk assertion and needs a **mutation control**: write
+   a value, mutate the inputs it was derived from, re-read, assert the frozen value did not move. A
+   write-then-read test proves storage, not freezing.
+3. **Step 3's negative control is the gate.** A synthetic `10:12`-for-`22:12` must be *demonstrated*
+   rejected and a valid value shown to pass. Frontend test infrastructure existence is unestablished;
+   if absent, assert backend-side and say so rather than standing a framework up inside a feature brief.
 
-**NEXT — CBT-I phase 2 Step 5 (surfaces), not started.** A fresh session with a clean brief. Scope:
-AM diary fields render only when an open `cbti_block` exists; prefill `lights_out` / `got_into_bed` /
-`out_of_bed` / `final_wake` from Samsung as editable defaults; **never** prefill `sleep_latency_min` or
-`waso_min` (the device is systematically wrong on wakefulness magnitude, in the direction that breaks
-the protocol); prefill sanity-gate rejecting any device value >~4h from the prescription (the 12-hour
-clock failure — see Q42); PM close-out displays the current prescribed lights-out. **This is the first
-work in the sequence to touch `frontend/`.**
+**Standing caution for Steps 6–7:** read `CheckInAM.jsx` and `NightlyCloseOut.jsx` properly before
+designing against them. Every structural claim in the brief about those files traces to greps of call
+sites and line counts, **not to their render logic**. "Follow the existing soreness-from-`/prefill`
+pattern" is an inference from a call site; if it does not match, report rather than force it.
 
-**Then:** fold in the `9688f2…` co-occurrence test from ROADMAP NOW.
+**Then:** ISI capture — a separate brief, and it **must land before block 3 opens**, since a block-open
+ISI cannot be retrofitted once the block has started.
 
-**The engine ships DORMANT.** No router or service imports `cbti/` — verified by grep at merge — so
-nothing changes behaviourally until Step 5 wires a surface to it.
+**OWED, newly recorded:** the **SCHEMA.md-vs-`models.py` guard** (ROADMAP NOW, per #112) — turn the
+demonstrated one-off detector into a test so the never-lag rule is enforced rather than aspirational.
+Separate concern from surfaces, deliberately not that branch.
 
-**Three constants ship unvalidated, recorded not chosen** (#114): `MAX_MOVE_MIN` bound 0 of 8;
-`PLATEAU_TOL_MIN` never reached, synthetic coverage only; `MIN_VALID_NIGHTS` undeterminable — failing
-cycles at n=3/3/2, so lowering to 4 changes nothing and 3 still leaves one.
+**OWED, carried:** the `health-connect-app` shared-block propagation and the `9688f2…` co-occurrence
+test (both ROADMAP NOW). `FEEDBACK` **§18**/**§19** need a brief to land them. **Q45** (nap
+attribution — close from the VA protocol documentation, not the workbook). **Q42** belongs to HCA's
+store. **Q41**, **Q37**, **Q33**. HCA **Q11** should close `DONE → #93`; HCA **Q9 item 1** and **Q10**
+remain open there.
 
-**Open, carried:** **Q45** (nap attribution — engine excludes; close it from the VA protocol
-documentation, not the workbook, which is searched to exhaustion). **Q42** (12h-clock scrape) belongs
-to HCA's store. The `health-connect-app` shared-block propagation is in **ROADMAP NOW** (#112).
-`FEEDBACK` **§18**/**§19** still need a brief to land them. **Q41** (haematocrit citation capture),
-**Q37**, **Q33**. HCA **Q11** should close `DONE → #93`; HCA **Q9 item 1** and **Q10** remain open there.
-
-**Single clearest next action:** brief and build Step 5 (surfaces) in a fresh session.
-
-**That brief needs MORE verification steps than the engine brief carried, not fewer.** Everything in
-this sequence has concerned backend code and governance stores readable from master; `frontend/` has
-never been fetched or inspected by the design chat, whose error rate on unverified surfaces is
-documented across #110/#113 and four further instances this sequence. In particular
-`docs/checkin-schema.md` describes the check-in as a target rather than as implemented — a claim about
-a year of commits ago — so **where AM/PM capture actually lives now is unverified and must be
-established before anything is designed against it.**
+**Single clearest next action:** resume the surfaces brief at Step 2 on `feat/cbti-surfaces`. The
+branch is empty and current; nothing needs rewriting.
