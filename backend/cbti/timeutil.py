@@ -69,6 +69,21 @@ def window_minutes(lights_out_hhmm: str, wake_hhmm: str) -> int | None:
     return minutes_between(clock_to_minutes(lights_out_hhmm), clock_to_minutes(wake_hhmm))
 
 
+def signed_offset_minutes(from_min: int | None, to_min: int | None) -> int | None:
+    """Signed shortest distance between two minutes-since-midnight values, in
+    [-720, +720]. The single definition of "how far apart are two clock times",
+    used for adherence deltas, the prefill sanity gate, and for centring a set of
+    clock times before taking their standard deviation.
+
+    Kept here rather than inline at each call site for the same reason the wrap
+    is: two copies of clock arithmetic drift, and the drift is silent.
+    """
+    if from_min is None or to_min is None:
+        return None
+    d = (to_min - from_min) % MINUTES_PER_DAY
+    return d - MINUTES_PER_DAY if d > MINUTES_PER_DAY // 2 else d
+
+
 def clock_delta_minutes(a_hhmm: str | None, b_hhmm: str | None) -> int | None:
     """Signed shortest distance from a to b in minutes, in [-720, +720].
 
@@ -76,8 +91,4 @@ def clock_delta_minutes(a_hhmm: str | None, b_hhmm: str | None) -> int | None:
     prefill sanity gate ("is this device value implausibly far from the
     prescription?"), where 23:50 and 00:10 are 20 minutes apart, not 1420.
     """
-    a, b = clock_to_minutes(a_hhmm), clock_to_minutes(b_hhmm)
-    if a is None or b is None:
-        return None
-    d = (b - a) % MINUTES_PER_DAY
-    return d - MINUTES_PER_DAY if d > MINUTES_PER_DAY // 2 else d
+    return signed_offset_minutes(clock_to_minutes(a_hhmm), clock_to_minutes(b_hhmm))

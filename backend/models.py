@@ -287,6 +287,14 @@ class CBTIPrescription(Base):
     basis_tst_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     basis_se_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     basis_nights_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Adherence-source composition of the basis window. Written at the same moment
+    # as basis_nights_n, never backfilled — a prescription whose adherence rested
+    # on self-report must say so on its own row, because a later reader comparing
+    # prescriptions cannot otherwise tell a device-verified basis from a diary one.
+    # n_samsung + n_diary <= basis_nights_n (a night with neither contributes to
+    # neither count).
+    basis_n_samsung: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    basis_n_diary: Mapped[int | None] = mapped_column(Integer, nullable=True)
     basis_window_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     basis_window_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     excluded_nights: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # reason-tagged: {"2026-04-02":"alcohol",...}
