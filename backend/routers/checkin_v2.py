@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
+from cbti.timeutil import clock_delta_minutes
 from database import get_db
 from injury_trajectory import injury_soreness_key
 
@@ -211,6 +212,72 @@ def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
     )
 
 
+# A prefill this far from the prescription is not a late night — it is a corrupt
+# source clock. The scraper captures (\d+:\d+) from a Samsung content-desc, so a
+# phone set to 12-hour stores "10:12 pm" as "10:12" — a 12-hour (720 min) error
+# (#117). 4h is comfortably wider than any real bedtime drift and comfortably
+# narrower than that corruption, so it separates the two without a false reject.
+PREFILL_GATE_MAX_DELTA_MIN = 240
+
+
+class DiaryPrefillOut(BaseModel):
+    """Editable clock defaults for the AM diary, sourced from Samsung and gated.
+
+    Prefills ONLY clock positions — the four times a consumer device tracks
+    competently. `sleep_latency_min` / `waso_min` are never here: the device
+    systematically under-scores wakefulness, and a prefilled-low WASO inflates
+    diary SE, opening the window before the sleep it is opened for exists (#117).
+    Those two stay manual by design.
+
+    `gate_rejected` distinguishes "no device data" (all None, flag False) from
+    "device data suppressed as implausible" (all None, flag True) so the surface
+    can say which — a rejected prefill leaves the fields empty for manual entry
+    and never degrades to the raw device value.
+    """
+    got_into_bed: Optional[str] = None
+    lights_out: Optional[str] = None
+    final_wake: Optional[str] = None
+    out_of_bed: Optional[str] = None
+    gate_rejected: bool = False
+
+
+def _diary_prefill(
+    bedtime: Optional[str],
+    wake_time: Optional[str],
+    prescribed_lights_out: Optional[str],
+) -> DiaryPrefillOut:
+    """Map Samsung clock values to diary defaults, gated against the prescription.
+
+    `bedtime` maps to `got_into_bed` — VERIFIED bed-entry, not sleep onset: over 31
+    real passive-overnight nights the span (wake − bedtime) exceeded scored sleep by
+    a median +35 min (30/31 positive), which is the latency + WASO you would expect
+    if bedtime is when you got INTO bed. `lights_out` defaults to `got_into_bed`
+    (#117); the operator edits it down on nights the two diverge, and because that
+    edit moves the SE denominator the diary self-corrects even if this default is
+    wrong. `wake_time` defaults both wake-side fields — the device emits one wake
+    clock, and `out_of_bed`/`final_wake` are refined by hand.
+
+    THE GATE (#110 — a gate proves nothing without a demonstrated rejection): if the
+    prefilled lights-out is more than 4h from the prescription, the source clock is
+    corrupt (12-hour format), so EVERY clock prefill is suppressed — the corruption
+    is global to the phone clock, not local to one field. Suppression returns empty
+    fields flagged `gate_rejected`; it never falls back to the raw device value.
+    With no prescription in force there is no reference to gate against, so values
+    pass ungated — recoverable, since these are editable defaults, not stored values.
+    """
+    got = bedtime
+    if got is not None and prescribed_lights_out is not None:
+        delta = clock_delta_minutes(got, prescribed_lights_out)
+        if delta is not None and abs(delta) > PREFILL_GATE_MAX_DELTA_MIN:
+            return DiaryPrefillOut(gate_rejected=True)
+    return DiaryPrefillOut(
+        got_into_bed=got,
+        lights_out=got,          # default to got_into_bed (#117)
+        final_wake=wake_time,
+        out_of_bed=wake_time,
+    )
+
+
 class TodayOut(BaseModel):
     """PM close-out's view: today's record if it exists, plus the CBT-I context.
 
@@ -258,6 +325,9 @@ class AMPrefillOut(BaseModel):
     # CBT-I block status + prescription in force. Additive: CheckInAM.jsx reads
     # flat keys off this object, so a new sibling key breaks nothing.
     cbti: CBTIContextOut = Field(default_factory=CBTIContextOut)
+    # Editable clock defaults for the diary, gated against the prescription. Empty
+    # (and unrendered) unless a block is open. Additive sibling, same as `cbti`.
+    diary_prefill: DiaryPrefillOut = Field(default_factory=DiaryPrefillOut)
 
 
 # ── helper ─────────────────────────────────────────────────────────────────────
@@ -298,13 +368,37 @@ def get_prefill(
     baseline = sum(hrv_values) / len(hrv_values) if hrv_values else None
     vs_baseline = round(hrv_ms - baseline, 1) if (hrv_ms and baseline) else None
 
+    cbti_ctx = _cbti_context(current_user.id, today, db)
+    diary_prefill = DiaryPrefillOut()
+    if cbti_ctx.block_open:
+        # Fresh read on the `passive_overnight` ALLOWLIST — not the `!= 'session'`
+        # denylist the readiness snapshot uses (that admits `calibration`; see the
+        # guard row in ROADMAP). The diary must not be seeded from a non-overnight
+        # reading.
+        sam = (
+            db.query(models.SamsungHRVReading)
+            .filter(
+                models.SamsungHRVReading.user_id == current_user.id,
+                models.SamsungHRVReading.captured_at <= today,
+                models.SamsungHRVReading.context == 'passive_overnight',
+                models.SamsungHRVReading.bedtime.isnot(None),
+            )
+            .order_by(models.SamsungHRVReading.captured_at.desc())
+            .first()
+        )
+        if sam is not None:
+            diary_prefill = _diary_prefill(
+                sam.bedtime, sam.wake_time, cbti_ctx.prescribed_lights_out
+            )
+
     return AMPrefillOut(
         hrv_ms=hrv_ms,
         hrv_vs_baseline=vs_baseline,
         sleep_min=passive["passive_sleep_min"],
         soreness=derive_soreness_items(current_user.id, db),
         existing=existing,
-        cbti=_cbti_context(current_user.id, today, db),
+        cbti=cbti_ctx,
+        diary_prefill=diary_prefill,
     )
 
 
