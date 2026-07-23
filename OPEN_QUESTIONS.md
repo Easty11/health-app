@@ -991,6 +991,37 @@ dead.
 
 ---
 
+## Q45. The VA CBT-I diary does not say which day a recorded nap belongs to — so the engine excludes nap nights rather than attributing them
+
+`daily_records.naps_min` is silent when wrong. The titration engine reads naps for the night
+terminating on wake-date W from `date = W-1`, which is only correct if the instrument's nap item refers
+to the day *preceding* the recorded night. **The instrument does not say.**
+
+**This search was run, and it was scoped.** Every text cell across all five sheets of the VA CBT-I
+Sleep Diary Calculator export was matched against both a nap pattern and a temporal pattern
+(`yesterday|today|last night|previous day|during the day|...`). Every nap reference is bare:
+`Naps (minutes)`, `Naps`, `Biological Need for Sleep (TST + Naps)`. The FAQ mentions naps only for the
+TST24 definition and for scheduled-nap timing advice — neither states which day a diary row's nap
+covers.
+
+**Positive control — this is what makes it a scoped null and not a failed search.** The temporal
+pattern *did* fire elsewhere in the same workbook, on `"Did you eat before bed? How long before bed?"`.
+The detector demonstrably finds temporal qualifiers in this instrument and found none attached to the
+nap item. Per #110 clause 1, that is the difference between "the wording does not settle it" and
+"nobody looked". **Do not re-run this search.**
+
+**Resolution, adopted:** the engine **excludes nap-flagged nights entirely**, recording them in
+`cbti_prescriptions.excluded_nights` with reason `nap`, rather than attributing them to a date. Two of
+the imported block's 53 nights carry naps, so exclusion costs almost nothing while a wrong attribution
+is silent. This is the standing behaviour until the question is answered, not a placeholder.
+
+**Status:** UNSTARTED — no blocker; the engine's exclusion path is the interim answer. Owner: Luke.
+**Next action to close it:** establish the nap item's referent from the VA CBT-I protocol
+documentation or by asking the clinician who administered the block — not from the workbook, which has
+already been searched to exhaustion.
+
+---
+
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._

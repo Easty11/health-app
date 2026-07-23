@@ -3,7 +3,7 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`._
 
-2026-07-23 · secrets residuals closed by artefact (#112) + cross-repo debt convention
+2026-07-23 · secrets residuals closed by artefact (#112) + cross-repo debt convention + the anchored-audit rule (#113)
 
 ## 1. Real commits this session
 
@@ -26,8 +26,8 @@ Session-open ref: `779edbe`. Landed on `master` at **`7adaa46`**, pushed, in syn
 2026-07-22 chore: session close-out
 ```
 
-Maxima now: **DECISIONS #112 · questions Q44 · FEEDBACK §17.**
-One governance commit; no feature code touched, no migration, no test delta.
+Maxima now: **DECISIONS #113 · questions Q45 · FEEDBACK §17.**
+Two governance commits; no feature code touched, no migration, no test delta.
 
 ## 2. Pending-queue reconciliation
 
@@ -99,9 +99,10 @@ feat/recovery-metrics-rhr          1 +   rowed, on origin
 credential was rotated in a prior session; the Anthropic key is confirmed disabled; the dev Fernet and
 Secret keys are rotated and their replacements are absent from every transcript. Prod was never
 affected: Q43 established both prod keys distinct from dev, and Q44's `--kv` vector is now prohibited
-by #111. **Still open, deliberately:** whether the second Postgres digest seen across four transcripts
-is a retired credential or a second live one (a cheap co-occurrence test, a finding not a fix), and
-whether the transcripts are purged or retained now the credentials in them are dead.
+by #111. **Now scheduled rather than open-by-choice:** the second Postgres digest's co-occurrence test is an
+entry in **ROADMAP NOW** (#112's second instance) — it was previously recorded only inside Q44's body,
+and Q44 is `DONE → #111`, so it sat in a store nobody scans for live work. Genuinely optional and
+left alone: whether the transcripts are purged now the credentials in them are dead.
 
 **OWED — cross-repo, and now with a canonical home (#112).** The `health-connect-app` shared-block
 propagation is in **`ROADMAP.md` NOW**. Drift measured, not assumed: HCA carries the shared block's
@@ -112,8 +113,8 @@ an HCA-rooted session.
 
 **CBT-I phase 2 resumes under its existing brief, paused at Step 3 (the engine).** Steps 1–2 landed on
 `feat/cbti-engine` @ `b7908fc`. Before further work it needs a **rebase** — master moved to `7adaa46`,
-so it is 1 ahead / 1 behind and `--ff-only` will refuse. Its provisional entries claim **#113/#114**
-and its nap question **Q45** (still free). Four amendments are outstanding on that brief: synthetic
+so it is 1 ahead / 1 behind and `--ff-only` will refuse. Its provisional entries claim **#114/#115** (shifted when #113 landed)
+and its nap question is **Q45, now minted on master** — the engine implements Q45's exclusion path rather than re-deriving it. Four amendments are outstanding on that brief: synthetic
 adherence-gate tests; the tried-to-sleep vs got-into-bed mismatch named in the replay account;
 `n_samsung`/`n_diary` composition per prescription; and Gate 6's production route, which this session
 established still exists. Adherence is settled by measurement: Samsung `bedtime` is 0 rows inside the
@@ -126,6 +127,6 @@ has no enforcement). **Q33** (shared block still says `parked`). **Q42** (12h-cl
 belongs to HCA's store — carry it there. HCA **Q11** should close `DONE → #93`; HCA **Q9 item 1** and
 **Q10** remain open there. `probe_resolver.py` container run and `hevy-resolver-activation` limb 2.
 
-**Single clearest next action:** resume CBT-I phase 2 — rebase `feat/cbti-engine` onto `7adaa46`,
+**Single clearest next action:** resume CBT-I phase 2 — rebase `feat/cbti-engine` onto the new master,
 confirm `alembic heads` returns exactly one, then build Step 3's titration engine. The security work
 that displaced it is finished, and nothing else on this list is time-sensitive.

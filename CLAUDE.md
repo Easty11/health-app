@@ -235,6 +235,16 @@ must match it.
   branch names — pin to a SHA or assert on content only the intended version carries. Earned
   when three honest HTTP 200s described pre-rebase bytes. See `FEEDBACK` §17.
 
+- **Match on anchors, not substrings — especially in an audit (standing, #113).** A grep that
+  decides whether something is recorded must anchor on the form the thing actually takes
+  (`^### 104\.`, `^## Q45\.`, a whole word) rather than a bare substring. Unanchored, the audit
+  can report the very condition it is auditing for: a check for `nap` in `BRANCHES.md` matched
+  **`snapshot`**, which would have certified a decision as recorded when it was not recorded
+  anywhere. Same defect as a bare `s/104/107/` renumber, and the same fix. This is
+  "controls discriminate on identity" (above) applied to search patterns: a hit count answers
+  *did the pattern fire*, never *did it fire on the thing you meant*. **Read the matches, not
+  the count** — that habit is what caught this one, and it is cheaper than the rule.
+
 - **Push branches even while holding for review (standing, #98).** A local-only branch is
   unreadable to chat — `raw.githubusercontent.com` 404s — so a "hold before merge" gate that
   chat cannot independently verify rests on Code's report alone, which is the one thing the
@@ -281,9 +291,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#113** — An unanchored audit can certify the condition it is auditing for; match on anchors and read the matches, not the count. See DECISIONS_LOG #113.
 - **#112** — Cross-repo propagation debt is recorded in `ROADMAP.md` NOW, the only store that is neither session- nor branch-scoped; `closeout.md` may point at it but never hold it. See DECISIONS_LOG #112.
 - **#111** — Secret-rendering commands are prohibited by instruction, not by configuration: the rule lives in the shared block and the `.claude/settings.json` deny list is an explicitly unreliable second layer. Closes Q43 and Q44. See DECISIONS_LOG #111.
-- **#110** — A null result is not evidence of absence unless the search proves it had scope (report files scanned, not just matches, plus a positive control); and a diagnostic must not require the operator to redact its output. See DECISIONS_LOG #110.
 
 ---
 

@@ -3526,6 +3526,42 @@ would argue for a dedicated store rather than a different existing one.
 
 ---
 
+### 113. An unanchored audit can certify the condition it is auditing for — match on anchors, read the matches
+
+**Decision:** A search whose result decides whether something is *recorded* must anchor on the form
+the thing actually takes — `^### 104\.`, `^## Q45\.`, a whole word — never a bare substring. And the
+matches are read, not counted.
+
+Earned in the same breath as the thing it protects. An audit ran to establish whether the CBT-I nap
+resolution had a durable home; its check for `nap` in `BRANCHES.md` returned a hit, and the hit was
+**`snapshot`**. Counted rather than read, that audit would have certified the decision as recorded
+when it existed in no store, no commit message, and no question — leaving a silent-when-wrong field
+to be attributed by convention in a later session. The audit would have produced exactly the false
+assurance it was run to prevent.
+
+This is #103's second clause — *controls discriminate on identity, not just function* — applied to
+search patterns, and the same defect as the bare `s/104/107/` that #111's renumber avoided. A hit
+count answers *did the pattern fire*; it never answers *did it fire on the thing you meant*. The
+failure is worse in an audit than anywhere else, because an audit's output is trusted precisely when
+nobody re-examines it.
+
+**The cheaper half of the rule is the habit, not the pattern.** Anchoring is defeatable — a
+sufficiently odd form slips any regex. Reading the matched text is not. Where the two conflict, read
+the matches.
+
+**Status:** Adopted as a repo-specific standing rule in `CLAUDE.md` Conventions, beside #103's
+identity clause. **Not** placed in the shared block: its siblings are repo-specific, and the shared
+block already carries an unpaid propagation debt to `health-connect-app` (ROADMAP NOW) that a second
+addition would enlarge without benefit.
+
+**How you know:** the `snapshot` false positive is the worked example, and it was caught in this
+session's own audit by reading the match rather than the count — which is why Q45 exists at all.
+
+**Do not revisit unless:** an anchored pattern produces a false *negative* that matters, which would
+argue for reading a wider result set rather than for a different pattern.
+
+---
+
 ## Known open issues (as of June 2026)
 
 | # | Issue | Location | Status |
