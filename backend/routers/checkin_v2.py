@@ -9,6 +9,7 @@ naive_baseline is the old formula frozen at AM capture time:
   fatigue (0-10) and motivation (0-10) pass through unchanged.
   formula: sleep×0.3 + (10-fatigue)×0.3 + (10-soreness)×0.2 + motivation×0.2
 """
+import datetime as _dt
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -159,6 +160,85 @@ class DailyRecordOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CBTIContextOut(BaseModel):
+    """Whether a CBT-I block is open, and the prescription in force for a date.
+
+    Drives conditional render: the diary fields appear only while `block_open` is
+    true (#108 — the fields are sparse by design, legended by the prescription's
+    effective_from/to). Read-only projection of the append-only ledger; nothing
+    here writes, and the titration engine is not involved in serving it.
+    """
+    block_open: bool = False
+    block_id: Optional[int] = None
+    wake_anchor: Optional[str] = None
+    prescribed_lights_out: Optional[str] = None
+    window_minutes: Optional[int] = None
+    effective_from: Optional[date] = None
+
+
+def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
+    """Open block for this user, plus the prescription covering `for_date`.
+
+    A block is open when `closed_on IS NULL`. The prescription in force is the
+    latest one whose `effective_from <= for_date` and whose `effective_to` is
+    either null or on/after it — the ledger is append-only and supersession is
+    recorded rather than deleted, so "latest effective" is a query, not a flag.
+    """
+    block = (
+        db.query(models.CBTIBlock)
+        .filter(models.CBTIBlock.user_id == user_id,
+                models.CBTIBlock.closed_on.is_(None))
+        .order_by(models.CBTIBlock.opened_on.desc())
+        .first()
+    )
+    if block is None:
+        return CBTIContextOut()
+
+    rx = (
+        db.query(models.CBTIPrescription)
+        .filter(models.CBTIPrescription.block_id == block.id,
+                models.CBTIPrescription.effective_from <= for_date)
+        .order_by(models.CBTIPrescription.effective_from.desc())
+        .first()
+    )
+    return CBTIContextOut(
+        block_open=True,
+        block_id=block.id,
+        wake_anchor=block.wake_anchor,
+        prescribed_lights_out=rx.prescribed_lights_out if rx else None,
+        window_minutes=rx.window_minutes if rx else None,
+        effective_from=rx.effective_from if rx else None,
+    )
+
+
+class TodayOut(BaseModel):
+    """PM close-out's view: today's record if it exists, plus the CBT-I context.
+
+    Every record field is optional and the endpoint ALWAYS returns an object —
+    previously it returned the record or null. PM must display the prescribed
+    lights-out on a day with no AM check-in yet, and a null response cannot carry
+    it. The record fields stay FLAT rather than nested under a `record` key
+    because `NightlyCloseOut.jsx` reads them as `data?.pm_timestamp` etc.;
+    flattening keeps those reads working and makes `cbti` a purely additive
+    sibling key.
+    """
+    id: Optional[int] = None
+    # `_dt.date`, NOT `date`: the field is itself named `date`, and with a default
+    # the class attribute shadows the module-level name when pydantic re-resolves
+    # annotations via get_type_hints — `Optional[date]` collapses to Optional[None]
+    # and every real record is rejected. DailyRecordOut escapes this only because
+    # its `date: date` has no default. Caught by the flat-field test.
+    date: Optional[_dt.date] = None
+    am_timestamp: Optional[datetime] = None
+    pm_timestamp: Optional[datetime] = None
+    today_rating: Optional[int] = None
+    session_quality: Optional[int] = None
+    session_rpe: Optional[float] = None
+    cbti: CBTIContextOut = Field(default_factory=CBTIContextOut)
+
+    model_config = {"from_attributes": True}
+
+
 class AMPrefillOut(BaseModel):
     hrv_ms: Optional[float] = None
     hrv_vs_baseline: Optional[float] = None
@@ -171,6 +251,9 @@ class AMPrefillOut(BaseModel):
     life_load: int = 3
     # Today's record if it already exists (allows re-entry pre-PM)
     existing: Optional[DailyRecordOut] = None
+    # CBT-I block status + prescription in force. Additive: CheckInAM.jsx reads
+    # flat keys off this object, so a new sibling key breaks nothing.
+    cbti: CBTIContextOut = Field(default_factory=CBTIContextOut)
 
 
 # ── helper ─────────────────────────────────────────────────────────────────────
@@ -217,6 +300,7 @@ def get_prefill(
         sleep_min=passive["passive_sleep_min"],
         soreness=derive_soreness_items(current_user.id, db),
         existing=existing,
+        cbti=_cbti_context(current_user.id, today, db),
     )
 
 
@@ -271,14 +355,20 @@ def submit_pm(
     return record
 
 
-@router.get("/today", response_model=Optional[DailyRecordOut])
+@router.get("/today", response_model=TodayOut)
 def get_today(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return db.query(models.DailyRecord).filter_by(
-        user_id=current_user.id, date=_today_aest()
+    """Always returns an object, never null — see TodayOut. The prescribed
+    lights-out must be displayable on a day with no AM check-in yet."""
+    today = _today_aest()
+    record = db.query(models.DailyRecord).filter_by(
+        user_id=current_user.id, date=today
     ).first()
+    out = TodayOut.model_validate(record) if record is not None else TodayOut()
+    out.cbti = _cbti_context(current_user.id, today, db)
+    return out
 
 
 @router.get("/history", response_model=list[DailyRecordOut])
