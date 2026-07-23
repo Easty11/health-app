@@ -3,130 +3,157 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`._
 
-2026-07-23 · secrets residuals closed by artefact (#112) + cross-repo debt convention + the anchored-audit rule (#113)
+2026-07-23 · CBT-I phase 2 Steps 1–4: titration engine, Gate-4 replay, governance #114/#115
 
 ## 1. Real commits this session
 
-Session-open ref: `779edbe`. Landed on `master` at **`7adaa46`**, pushed, in sync.
+Session-open ref: `4e12894` (master tip). Work sits on **`feat/cbti-engine` @ `0e340a7`**, pushed,
+**5 ahead / 0 behind master — NOT merged.**
 
 ```
-7adaa46 governance: DECISIONS_LOG #112, cross-repo debt convention, secrets residuals closed
+0e340a7 governance: DECISIONS_LOG #114/#115 (CBT-I titration engine)
+5ce61ed feat(cbti): instrument TIB over-run; record two rejected gates and one dead end
+f776813 fix(cbti): admit unknown-alcohol nights with provenance; exit-condition tests
+2532e60 feat(cbti): titration engine + replay harness (phase 2, Step 3-4)
+8ad304e feat(cbti): extract midnight-wrap primitives + got_into_bed (phase 2, Steps 1-2)
 ```
 
 ```
+2026-07-23 governance: DECISIONS_LOG #114/#115 (CBT-I titration engine)
+2026-07-23 feat(cbti): instrument TIB over-run; record two rejected gates and one dead end
+2026-07-23 fix(cbti): admit unknown-alcohol nights with provenance; exit-condition tests
+2026-07-23 feat(cbti): titration engine + replay harness (phase 2, Step 3-4)
+2026-07-22 feat(cbti): extract midnight-wrap primitives + got_into_bed (phase 2, Steps 1-2)
+2026-07-23 governance: DECISIONS_LOG #113, mint Q45, schedule the co-occurrence test
+2026-07-23 chore: session close-out
 2026-07-23 governance: DECISIONS_LOG #112, cross-repo debt convention, secrets residuals closed
 2026-07-22 governance: DECISIONS_LOG #111, close Q43/Q44, secret-rendering prohibition
 2026-07-22 chore: session close-out
-2026-07-22 governance: DECISIONS_LOG #110, OPEN_QUESTIONS Q43/Q44, CLAUDE recent-landings
-2026-07-22 chore: session close-out
-2026-07-22 governance: DECISIONS_LOG #107/#108/#109, OPEN_QUESTIONS Q42, CLAUDE recent-landings
-2026-07-22 feat(cbti): completed-block importer + reconciliation (Gate 4)
-2026-07-22 chore(cbti): gitignore personal-data workbooks before import
-2026-07-22 feat(cbti): data substrate — diary fields + block/prescription ledgers
-2026-07-22 chore: session close-out
 ```
 
-Maxima now: **DECISIONS #113 · questions Q45 · FEEDBACK §17.**
-Two governance commits; no feature code touched, no migration, no test delta.
+Maxima on the branch: **DECISIONS #115 · questions Q45 · FEEDBACK §17.** Master is at **#113 / Q45**,
+so #114/#115 are claimed at the ff-merge. Backend suite **352 passed** (was 308 at session open).
+Migrations `a7b3f1c8d240` (got_into_bed) and `c4e8a2019bd7` (basis provenance) — **single head**.
 
 ## 2. Pending-queue reconciliation
 
-No `;cc` queue was carried in — the session ran from a pasted brief. All seven of its steps
-resolved:
+No `;cc` queue carried in. Phase 2's standing brief drove Steps 1–4; every item resolved:
 
-| Brief step | Outcome |
+| Brief item | Outcome |
 |---|---|
-| 1 — confirm state | **VERIFIED** 0 behind, #111 / Q44 |
-| 2 — which key was disabled | **RESOLVED** — Anthropic key returns 401, with a three-probe control |
-| 3 — prod Hevy round-trip | **PASSED** — HTTP 200 inside the container; did *not* block |
-| 4 — local cleanup | **DONE** — row deleted 1→0; `FERNET_KEY` + `SECRET_KEY` rotated |
-| 5 — cross-repo convention | **DONE** — ROADMAP NOW, per #112 |
-| 6 — propagate to HCA | **STOPPED**, recorded in ROADMAP NOW |
-| 7 — merge | **DONE** `779edbe`→`7adaa46` |
+| 1a — extract the midnight wrap | **LANDED** `8ad304e`; importer reconciliation still 0/53, `worst_residual` byte-identical |
+| 1b — `got_into_bed` | **LANDED** `8ad304e`, migration `a7b3f1c8d240` |
+| 1c — alcohol three-state | **WITHDRAWN by chat** — column already nullable; became an engine predicate |
+| 1d — nap attribution | **Q45 on master**; engine excludes nap-flagged nights |
+| 2 — migration | **LANDED**, single head, up/down/up clean in isolation |
+| 3 — engine | **LANDED** `2532e60`; all three VERIFYs pass (one failed first — see below) |
+| 4 — replay + divergence | **LANDED**; ran against production, account below |
+| 5 — surfaces | **NOT STARTED** — deliberate stopping point |
+| LOG #114/#115 | **LANDED** `0e340a7` |
 
 Nothing decided this session is uncommitted.
 
-### The three residuals, each closed by artefact rather than assumption
+### Gate 4 — the replay, and what it found
 
-1. **Anthropic key — dead.** `GET /v1/models` with the `backend/.env` value returned **401**.
-   The bare status could not discriminate "key rejected" from "request malformed", so three probes
-   ran (the `.env` key, a bogus key, no key header): all returned `error.type='authentication_error'`
-   rather than `invalid_request_error`, proving the request shape reaches auth. Its 24 transcript
-   occurrences are occurrences of a disabled credential. Nothing revoked; diagnostic only.
-2. **Prod Hevy — healthy.** `user_hevy_key()` → `HevyClient.get_workout_count()` → **HTTP 200**,
-   run inside the container via `railway ssh` (which is why no proxy was needed). Prod's Fernet key
-   decrypts the stored row and Hevy accepts the credential. Read-only; existing connector path, not
-   hand-rolled; credential never printed (length only).
-3. **Local — cleaned.** The single `user_integrations` row deleted (1→0), and **both** dev
-   `FERNET_KEY` and `SECRET_KEY` rotated in `backend/.env`. `SECRET_KEY` was folded in because it was
-   found exposed in 2 transcripts and Q43 had already established prod isolation, making the rotation
-   local-only. New values verified absent from all 59 transcripts; old exposed values verified gone
-   from `.env`; `api_key_encrypted` confirmed the sole Fernet-encrypted column, so nothing was orphaned.
+Final series (51 nights in block window, **0 with a Samsung bedtime**, 17 with a constraining session
+end, 9 historical prescriptions):
 
-**The local delete is characterised as mitigation-or-tidying-UNKNOWN, deliberately.** A disabled
-Anthropic key proves an operator rotation happened for *that* credential and says nothing about Hevy —
-different provider, different console. Prod's stored value cannot be compared to the local row's
-without decrypting both, which this brief did not do. The action was identical either way; the claim
-attached to it is not, and the honest claim is the unknown one.
+```
+cy  window        dec       win     lo   TST     SE   n  sam  dia   a?  exc  ema  tibOver
+ 1  03-19..03-25  hold      384  22:36   362  85.69   6    0    6    4    1    3    +42.7
+ 2  03-26..04-01  compress  380  22:40   350  94.63   7    0    7    3    0    1    -14.0
+ 3  04-02..04-08  hold      380  22:40     -      -   3    0    3    1    4    2     +3.3
+ 4  04-09..04-15  hold      380  22:40     -      -   3    0    3    0    4    0    +31.7
+ 5  04-16..04-22  hold      380  22:40   378  85.68   6    0    6    2    0    1    +64.2
+ 6  04-23..04-29  extend    410  22:10   380  94.02   6    0    6    4    0    0    +25.0
+ 7  04-30..05-06  extend    425  21:55   395  89.13   6    0    6    4    0    3    +34.2
+ 8  05-07..05-13  hold      425  21:55     -      -   2    0    2    0    3    1    +42.5
+```
 
-### Two brief premises corrected at execution
+**Hard floor holds.** Never closes; ends at 425 min (7h05) **still extending**. No early exit, so
+#107's premise survives — the failure mode the floor watches for did not occur.
 
-- **`railway run` is local, not in-container.** Step 3 said "run inside the production environment so
-  no proxy is required"; `railway run` executes locally with injected variables, so the internal host
-  does not resolve from Windows. `railway ssh` does run inside the container and needed no proxy —
-  the brief's intent, reached by a different route.
-- **#112 lands with one instance, not two.** The brief anticipated Step 3 blocking and its owed
-  verification joining the propagation debt in ROADMAP NOW. Step 3 passed, so recording a second
-  instance would have been recording a hypothetical as debt.
+**Divergence from the VA app's nine prescriptions, which IS the output:** direction agrees, magnitude
+lags (425 vs 458, unfinished not stopped). The engine holds on drink clusters where VA titrated
+through them (cy3/4/8); compresses at cy2 where VA extended, which is #107 working as designed — high
+SE alone does not buy window; and holds twice on adherence, which VA had no gate for.
+
+**Composition: `samsung=0, diary=39, alcohol_unknown=18`.** Every basis night on the diary source
+(Samsung `bedtime` begins 2026-06-08; the block closed 2026-05-11), and **18 of 39 basis nights were
+admitted as assumed-clean rather than verified-clean.** Recorded per prescription so a later reader
+sees that nearly half the basis rests on an inference.
+
+### The alcohol predicate was corrected mid-flight, on evidence
+
+The first replay was **eight straight HOLDs, no titration** — it measured the predicate, not the
+engine. Excluding unknown-alcohol nights alongside recorded drinks removed 29 of 53 nights. Three
+lines discriminated, one decisively: TST and WASO both place unknowns with recorded-zeros (383/22 vs
+370/20, against drink 430/30), SE is noise (2.5 vs 2.1 on SD 6–11), and **0 of 19 blanks sit adjacent
+to a drink night where ~3.7 are expected under random placement, p = 0.0033** — active refutation of
+"blank means drank and did not log". Unknown is now admitted and flagged.
+
+**The exclusion rationale was also wrong and is corrected in-source:** drink nights carry the block's
+**highest** TST (430 vs 370), not suppressed sleep. They are higher-TIB nights run under a different
+regime, so the alcohol filter is a **non-adherence proxy that overlaps the adherence gate** rather than
+an independent filter.
+
+### Two candidate gates built up and rejected, both recorded
+
+Recorded in #114 and the engine docstring so neither is re-proposed from scratch:
+
+1. **Endpoint adherence arm** (`out_of_bed` vs anchor, ±30, ≥3 of 7) — **tested, fires on nothing**,
+   worst cycle 2 of 6. Wake-end failures are few-and-huge; bed-end failures many-and-small.
+2. **Direct TIB gate** — discriminates, still withdrawn: SE = TST/TIB and over-run = TIB − window share
+   TIB **by construction**; no threshold exists in the data (+3…+64, continuous); and it would starve
+   the engine to 2 titrations in 8. `basis_tib_over_run_min` is instrumented instead.
+
+### One VERIFY failed on my own code
+
+VERIFY 3 (nothing re-implements the midnight wrap) **failed against `engine.py`** — two local
+re-implementations. The shortest-path offset moved to `cbti.timeutil.signed_offset_minutes`;
+`clock_delta_minutes` delegates. Grep now shows zero wrap arithmetic outside `timeutil`.
 
 ## 3. Cold-resume handoff
 
-**Branch:** `master` @ `7adaa46`, pushed, clean. Untracked stray: `.claude/launch.json` (known).
+**Branch:** `feat/cbti-engine` @ `0e340a7`, pushed, 5 ahead / 0 behind, `--ff-only` available.
+Untracked stray: `.claude/launch.json` (known). **Master is at `4e12894`.**
 
-**Branch terminal-state gate — passes.** `chore/secrets-hygiene` and `chore/secrets-residuals` both
-merged and deleted, local and remote (0 unmerged commits by patch-id). Five branches remain, all
-rowed in `BRANCHES.md` and all on origin:
+**Branch terminal-state gate — passes.** All five branches rowed in `BRANCHES.md` and on origin:
 
 ```
-feat/cbti-engine                   1 +   rowed, on origin   (phase 2, paused mid-brief)
+feat/cbti-engine                   5 +   rowed, on origin   (phase 2, Steps 1-4 done)
 feat/checkin-injury-probe          2 +   rowed, on origin
 feat/feedback-ledger               4 +   rowed, on origin
 feat/interpretation-view-skeleton  3 +   rowed, on origin
 feat/recovery-metrics-rhr          1 +   rowed, on origin
 ```
 
-**Security posture — all three original exposures now inert or rotated.** The Railway Postgres
-credential was rotated in a prior session; the Anthropic key is confirmed disabled; the dev Fernet and
-Secret keys are rotated and their replacements are absent from every transcript. Prod was never
-affected: Q43 established both prod keys distinct from dev, and Q44's `--kv` vector is now prohibited
-by #111. **Now scheduled rather than open-by-choice:** the second Postgres digest's co-occurrence test is an
-entry in **ROADMAP NOW** (#112's second instance) — it was previously recorded only inside Q44's body,
-and Q44 is `DONE → #111`, so it sat in a store nobody scans for live work. Genuinely optional and
-left alone: whether the transcripts are purged now the credentials in them are dead.
+**Migrations are NOT applied to production, deliberately.** Prod stays at `e5f2a9c7b104`; Railway runs
+`alembic upgrade head` on deploy, so `a7b3f1c8d240` and `c4e8a2019bd7` land at merge. Applying them
+ahead of the merge is what created the prod-ahead-of-master divergence phase 1 spent a brief undoing.
+The replay reads production **column-explicitly** so it works against the pre-migration schema.
 
-**OWED — cross-repo, and now with a canonical home (#112).** The `health-connect-app` shared-block
-propagation is in **`ROADMAP.md` NOW**. Drift measured, not assumed: HCA carries the shared block's
-`BEGIN/END` markers but greps **0** for #111's secret-rendering rule where health-app greps 1. Blocked
-on three counts — `chore/secrets-residuals` is not cut in HCA, HCA's working tree is not clean, and a
-canonical-store edit in a second repo is forbidden from a health-app-rooted session. Owner: Luke, from
-an HCA-rooted session.
+**NEXT — CBT-I phase 2 Step 5 (surfaces), not started.** A fresh session with a clean brief. Scope:
+AM diary fields render only when an open `cbti_block` exists; prefill `lights_out` / `got_into_bed` /
+`out_of_bed` / `final_wake` from Samsung as editable defaults; **never** prefill `sleep_latency_min` or
+`waso_min` (the device is systematically wrong on wakefulness magnitude, in the direction that breaks
+the protocol); prefill sanity-gate rejecting any device value >~4h from the prescription (the 12-hour
+clock failure — see Q42); PM close-out displays the current prescribed lights-out. **This is the first
+work in the sequence to touch `frontend/`.**
 
-**CBT-I phase 2 resumes under its existing brief, paused at Step 3 (the engine).** Steps 1–2 landed on
-`feat/cbti-engine` @ `b7908fc`. Before further work it needs a **rebase** — master moved to `7adaa46`,
-so it is 1 ahead / 1 behind and `--ff-only` will refuse. Its provisional entries claim **#114/#115** (shifted when #113 landed)
-and its nap question is **Q45, now minted on master** — the engine implements Q45's exclusion path rather than re-deriving it. Four amendments are outstanding on that brief: synthetic
-adherence-gate tests; the tried-to-sleep vs got-into-bed mismatch named in the replay account;
-`n_samsung`/`n_diary` composition per prescription; and Gate 6's production route, which this session
-established still exists. Adherence is settled by measurement: Samsung `bedtime` is 0 rows inside the
-replay window, so the replay runs entirely on the labelled weak source and must say so.
+**Then:** merge `feat/cbti-engine` (`--ff-only`, claiming #114/#115 — re-verify master's max first),
+and fold in the `9688f2…` co-occurrence test from ROADMAP NOW.
 
-**OWED, carried from prior sessions:** `FEEDBACK` **§18** (mutation rule, receipted `caf5204`) and
-**§19** (resolution-table rule, receipted `b3af58a`) — both need a brief to land them. `haemoglobin`'s
-per-parameter figure unread from Buoro 2018. **Q41** (haematocrit band citation capture). **Q37** (I1
-has no enforcement). **Q33** (shared block still says `parked`). **Q42** (12h-clock scrape failure)
-belongs to HCA's store — carry it there. HCA **Q11** should close `DONE → #93`; HCA **Q9 item 1** and
-**Q10** remain open there. `probe_resolver.py` container run and `hevy-resolver-activation` limb 2.
+**Three constants ship unvalidated, recorded not chosen** (#114): `MAX_MOVE_MIN` bound 0 of 8;
+`PLATEAU_TOL_MIN` never reached, synthetic coverage only; `MIN_VALID_NIGHTS` undeterminable — failing
+cycles at n=3/3/2, so lowering to 4 changes nothing and 3 still leaves one.
 
-**Single clearest next action:** resume CBT-I phase 2 — rebase `feat/cbti-engine` onto the new master,
-confirm `alembic heads` returns exactly one, then build Step 3's titration engine. The security work
-that displaced it is finished, and nothing else on this list is time-sensitive.
+**Open, carried:** **Q45** (nap attribution — engine excludes; close it from the VA protocol
+documentation, not the workbook, which is searched to exhaustion). **Q42** (12h-clock scrape) belongs
+to HCA's store. The `health-connect-app` shared-block propagation is in **ROADMAP NOW** (#112).
+`FEEDBACK` **§18**/**§19** still need a brief to land them. **Q41** (haematocrit citation capture),
+**Q37**, **Q33**. HCA **Q11** should close `DONE → #93`; HCA **Q9 item 1** and **Q10** remain open there.
+
+**Single clearest next action:** brief and build Step 5 (surfaces) in a fresh session, then merge
+`feat/cbti-engine`. The engine is proven against real data and the branch is landable as it stands —
+nothing is half-built.
