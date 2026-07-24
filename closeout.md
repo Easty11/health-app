@@ -76,24 +76,24 @@ the revision string), deployed `checkin_v2.py` carries `diary_prefill`/`_freeze_
 
 ### NEXT: one piece left to close the titration loop through the app
 
-Updated 2026-07-25 (post `feat/cbti-isi-pm`, merged `9331c31`). The module now captures block 3
-AND shows the prescription at night. What remains:
+Updated 2026-07-25 (post `feat/cbti-pm-naps`, merged `802ddd6`). AM capture, PM prescription
+display, ISI storage, and PM nap capture are all in. **One piece remains:**
 
-1. **PM prescribed-lights-out display** — **DONE** (`9331c31`): `NightlyCloseOut.jsx` renders the
-   prescribed window from `/today`'s `cbti` block. **Nap capture still open** — `NightlyCloseOut.jsx`
-   does not yet accept `naps_min` (a small PM-form addition; `daily_records.naps_min` exists).
+1. **PM prescribed-lights-out display** — **DONE** (`9331c31`). **PM nap capture** — **DONE**
+   (`802ddd6`, #122): `NightlyCloseOut.jsx` accepts `naps_min`, blank→0 while a block is open so the
+   engine's nap exclusion can fire.
 2. **The manual witnessed evaluation trigger — THE LAST PIECE.** #118's PM-offer half: offer
    evaluation on PM close-out once ≥7 days since `effective_from`; engine returns the decision, row
    minted on acceptance. #118's block-open half is DONE. **Dependency, not deferral:** it cannot
    fire before ~31 Jul — it needs a full cycle of nights and the block opened 24 Jul.
-3. **ISI storage** — **DONE** (`9331c31`): block 3's baseline ISI is stored (`cbti_isi` id=1, items
-   `[0,3,2,3,2,2,3]`, canonical 15 / reported 16, administered 2026-07-24 19:10, 13 of 14 recall days
-   pre-block). The earlier "opened without ISI / cannot be retrofitted" claim was **false** — the gap
-   was storage, not capture, and it is closed. DECISIONS_LOG #120.
+3. **ISI storage** — **DONE** (`9331c31`, #120): block 3's baseline is stored (`cbti_isi` id=1).
 
-**Single clearest next action:** the **manual evaluation trigger** (item 2) — the last piece of the
-in-app titration loop — plus PM `naps_min` capture (item 1's remainder). Not before ~31 Jul: the
-trigger needs a full cycle of nights and block 3 opened 24 Jul. Cut a fresh branch from master.
+**Single clearest next action:** the **manual evaluation trigger** (item 2) — the only remaining piece
+of the in-app titration loop. Not before ~31 Jul: it needs a full cycle of nights and block 3 opened
+24 Jul, so there is no work-forcing urgency before then. Cut a fresh branch from master.
+
+**Carried (from #122):** block 3's nights logged 24 Jul → 25 Jul (pre-nap-capture) keep `naps_min = NULL`
+and cannot be nap-gated retrospectively without a memory backfill. Two nights — worth a manual note.
 
 ### #118 is minted but half-built — a live watch-item
 
