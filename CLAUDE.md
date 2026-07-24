@@ -310,9 +310,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#117/#118/#119** — CBT-I capture surfaces: the device prefills clock positions never wakefulness magnitudes; titration and block-open are manual and witnessed not scheduled; waking-cause is instrumented observationally without gating on it. See DECISIONS_LOG #117, #118, #119.
 - **#116** — A check against a system mid-deploy can answer correctly from the outgoing instance; verify after the deployment settles and confirm which instance answered. See DECISIONS_LOG #116.
 - **#114/#115** — CBT-I titration engine: regularity is instrumented not gating and three constants are recorded unvalidated rather than chosen; the +30 buffer is recovered from the prior block, whose sleep-need basis week itself over-ran. See DECISIONS_LOG #114, #115.
-- **#113** — An unanchored audit can certify the condition it is auditing for; match on anchors and read the matches, not the count. See DECISIONS_LOG #113.
 
 ---
 

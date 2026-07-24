@@ -3729,3 +3729,94 @@ needs a different mechanism rather than an exception.
 - **Garmin Body Battery:** Explicitly closed — no API access available regardless of method.
 - **Native Kotlin companion app:** Superseded by Expo for cross-platform reasons.
 - **Terra unified wearable layer:** Evaluated June 2026. Third-party dependency + cost model doesn't justify itself at personal/family scale. Deferred unless scraper + SDK path proves unworkable.
+
+### 117. The device prefills clock positions and never wakefulness magnitudes
+
+**Decision:** Samsung-derived values prefill `got_into_bed`, `lights_out`, `final_wake` and `out_of_bed`
+as **editable** defaults. `sleep_latency_min` and `waso_min` are **never** prefilled and are always
+manual entry.
+
+The split is by what consumer sleep tracking is reliably wrong about. Timing — when a sleep period
+started and ended — is within actigraphic competence. Magnitude of wakefulness *within* that period is
+not: devices systematically score quiet wakefulness as sleep, and the error runs in exactly the
+direction that defeats sleep restriction. A prefilled-low WASO produces a diary SE biased high, which
+opens the window before the sleep it is opened for exists. Prefilling those two would corrupt the
+titration signal while appearing to reduce burden. Anchoring is the mechanism, not just error
+propagation: a prefilled value that only needs confirming *is* confirmed, so the burden reduction is
+real — which is exactly why it must not apply to the two fields the device biases. In the UI the
+difference is made legible rather than incidental: prefilled clock fields carry a "from ring" treatment,
+the two manual fields an "your recall — not the ring" one.
+
+**Status:** Adopted and built — prefill in `checkin_v2.get_prefill` (`diary_prefill`), render in
+`CheckInAM.jsx`. The 4h sanity gate is its safety catch: a prefill is rejected outright, never degraded
+to a raw device value, when it falls more than 4h from the prescription (a 12-hour-clock corruption).
+
+**How you know:** the scraper captures `(\d+:\d+)` from a Samsung content-desc and `parseClockToMinutes`
+accepts `10:12` for `10:12 pm`, so a 12-hour phone clock silently stores a 12-hour error — demonstrated
+rejected by the gate's negative control (synthetic `10:12`-for-`22:12` suppressed, valid value passes).
+The `bedtime -> got_into_bed` mapping is verified bed-entry over 31 real nights (median +35 min remainder).
+
+**Do not revisit unless:** a device is added whose wakefulness scoring is validated against
+polysomnography, in which case the split is re-drawn by evidence rather than by category.
+
+---
+
+### 118. Titration is triggered manually and witnessed, not scheduled; block open is manual
+
+**Decision:** The engine evaluates when the operator runs it, and a block **opens** only by a manual,
+witnessed act — never on a schedule and never from a data signal. Block **close** remains engine-driven,
+since the exit condition is a computation over the ledger rather than an instruction.
+
+A prescription changes what the operator does for the following week. Minting one from a background job
+means a behavioural instruction can change without the person it instructs seeing the decision or its
+basis, and the ledger's design assumes decisions are auditable at the moment they are made, not
+reconstructed afterwards. Manual triggering makes each row an event with a witness. It also fails safe:
+a missed evaluation delays a cycle rather than voiding it. Nothing in the data should decide that a
+course of treatment *begins*, which is why open is manual even though close is computed.
+
+**Status:** Adopted. The **block-open** half is BUILT and exercised — block 3 was opened by
+`open_cbti_block3.py` (dry-run default, `--apply` to write, duplicate-ABORT guard), a manual witnessed
+act, writing block id=2 / prescription id=10 to prod. The **PM evaluation-trigger** half (offer
+evaluation on PM close-out once >=7 days have elapsed since the current prescription's `effective_from`)
+is specified but **not yet built** — deferred with `NightlyCloseOut.jsx` and the PM prescribed-lights-out
+display. This entry records the decision; the trigger UI is owed (ROADMAP / next brief).
+
+**How you know:** the replay produced eight decisions across the imported block, of which five were HOLD
+— a rate that under scheduling would have written five unread rows for three actionable ones. Block 3's
+manual open is the worked instance of the open-is-manual half.
+
+**Do not revisit unless:** adherence to the module itself becomes the binding constraint, which would
+argue for prompting rather than for automating the decision.
+
+---
+
+### 119. Waking-cause is instrumented observationally, decomposing the count without gating on it
+
+**Decision:** Three nullable counts on `daily_records` (`wakings_nocturia_n`, `wakings_pain_n`,
+`wakings_spontaneous_n`, migration `b2d5f9e04a17`) decompose `night_wakings_n` by cause. They are
+**observational only** — the titration engine must not read them (`grep -rn 'wakings_' backend/cbti/`
+stays empty) — and carry **no sum constraint** to `night_wakings_n`.
+
+`night_wakings_n` records how many arousals and `waso_min` how long, but nothing recorded *why*. Sleep
+restriction addresses conditioned and homeostatic fragmentation; it does not address nocturia. With PVR
+229 mL on record and no urology relationship, a titration stalling at the SE floor is ambiguous between
+behavioural non-response and a urological constraint, and the two imply opposite next actions. Counts
+not timestamps (3am recall does not support timestamps); three columns not JSON (the series is meant to
+be trended). No sum constraint because recall is imperfect and enforcement would block submission —
+consistency is surfaced, never enforced. Observational isolation from the engine is what makes the
+columns safe to land **mid-block** (block 3 is open) without perturbing an in-flight prescription.
+
+**Status:** Adopted and built — migration `b2d5f9e04a17` (off head `c4e8a2019bd7`), AM capture in
+`checkin_v2.submit_am`, UI in `CheckInAM.jsx` (toilet / pain / other). Value already evident: block 3's
+first night was a single 03:40 nocturia trip against an ISI showing severe maintenance difficulty and
+zero onset difficulty. A CPAP mask-off cross-check is filed as an objective instrument (ROADMAP).
+
+**How you know:** the isolation grep is the guarantee — the engine cannot read what it does not
+reference. The columns are nullable and additive, so historical rows and non-block nights carry NULL
+without perturbation.
+
+**Do not revisit unless:** a causal decomposition is shown to improve a titration decision, which would
+move one or more counts from observational into the engine — a change that must re-clear the mid-block
+safety argument, since an engine-read column is no longer inert.
+
+---

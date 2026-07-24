@@ -1025,3 +1025,42 @@ already been searched to exhaustion.
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
+
+## Q46. No column records whether a prescription's `basis_tst` came from device or diary — only its adherence source
+
+The `cbti_prescriptions` basis-source columns (`basis_n_samsung` / `basis_n_diary`, migration
+`c4e8a2019bd7`) record the **adherence** source of each basis night — whether bedtime was checked
+against Samsung or against the diary's own `lights_out`. They do **not** record whether `basis_tst_min`
+itself was computed from device `actual_sleep_time_minutes` or from diary TST. These are different axes.
+
+Surfaced opening block 3. Its opening prescription (block id=2, rx id=10) is **device-derived**:
+`basis_n_samsung=27`, `basis_n_diary=0`, `basis_tst_min=349` computed from Samsung
+`actual_sleep_time_minutes` over 2026-06-23..2026-07-23 — stated only in the prescription's `rationale`
+text. Block 2's basis was diary-derived. A later reader comparing the two blocks' bases cannot tell the
+two provenances apart from structured columns, and a device basis and a diary basis are not equivalent.
+
+**Status:** UNSTARTED — no blocker; the interim is the rationale text on rx id=10. Owner: Luke. **No
+column added mid-block** — block 3 is open, an additive nullable migration is safe, but a new provenance
+axis is a design choice not a hotfix. **Next action to close it:** decide whether `basis_tst` provenance
+warrants its own column (`device|diary|mixed`) or the rationale text suffices, before block 4 opens.
+
+---
+
+## Q47. The adherence gate prefers Samsung `bedtime`, whose detection lag can flip a night against a ±30 tolerance
+
+`cbti/engine.py:230-235` establishes adherence from `samsung_bedtime` **in preference to** diary
+`lights_out` where a `passive_overnight` row exists (`elif night.lights_out` is the fallback). Samsung's
+`bedtime` is a **detected** onset; it lags the actual lights-out ("tried to sleep") by a measured ~10
+min. The adherence tolerance (`ADHERENCE_TOL_MIN`) is ±30. A systematic 10-min lag is a third of the
+band — enough to flip a borderline night between adherent and non-adherent, which changes whether it
+counts toward a titration cycle (`ADHERENCE_FAIL_N` = 3 of 7 → HOLD). The diary `lights_out` and the
+device `bedtime` are not the same instant, and the gate treats the preferred one interchangeably with
+the prescription's lights-out.
+
+**Status:** UNSTARTED — no blocker; the gate runs as built and the source is recorded per-night
+(`adherence_source`). Owner: Luke. **Next action:** measure the lag distribution across block 3's live
+nights (same night: diary `lights_out` vs Samsung `bedtime`) and then choose — subtract a calibrated
+offset, widen the tolerance, or prefer diary `lights_out` for adherence. Do not adjust before the
+distribution is measured (empirical-specificity).
+
+---
