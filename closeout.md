@@ -84,11 +84,14 @@ but cannot yet **close a cycle through the app**. Unbuilt (surfaces Steps 5/7/8)
 2. **The manual witnessed evaluation trigger** — #118's PM-offer half (offer evaluation on PM
    close-out once ≥7 days since `effective_from`; engine returns the decision, row minted on
    acceptance). #118's block-open half is DONE.
-3. **ISI capture** — owed and now **more urgent**: block 3 opened *without* it, and a block-open
-   ISI cannot be retrofitted. A clean block 4 depends on it.
+3. **ISI storage** — CORRECTED 2026-07-25: block 3's baseline ISI **was captured** (QxMD,
+   2026-07-24 19:10, score 16 moderate, all seven items), one night into the block. The earlier
+   claim here that it "opened without ISI" and "cannot be retrofitted" was **false** — inherited
+   from a stale close-out. The gap was **storage, not capture**, and it is now closed: the
+   `cbti_isi` table (migration `d3f7a1908c62`) and the backfilled baseline row land in this branch.
 
-**Single clearest next action:** a new brief covering PM display + evaluation trigger + ISI
-(cut a fresh concern-named branch from master; do not resurrect `feat/cbti-surfaces`).
+**Single clearest next action:** a new brief covering PM display + evaluation trigger (the ISI
+storage + PM display are handled on `feat/cbti-isi-pm`; cut any further work fresh from master).
 
 ### #118 is minted but half-built — a live watch-item
 
