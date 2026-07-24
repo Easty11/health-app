@@ -88,6 +88,7 @@ def replay(nights: list[Night], opened_on: date, wake_anchor: str,
     last = max(by_date) if by_date else opened_on
 
     cycle_start = opened_on
+    rx_effective_from = opened_on          # settling clock; resets only on a real change
     idx = 0
     while cycle_start <= last:
         cycle_end = cycle_start + timedelta(days=CYCLE_NIGHTS - 1)
@@ -98,7 +99,13 @@ def replay(nights: list[Night], opened_on: date, wake_anchor: str,
             cycle_start = cycle_end + timedelta(days=1)
             continue
 
-        d = evaluate_cycle(wnights, window, rx, wake_anchor, prior_basis_tst=prior_tst)
+        # Nights logged since the current prescription took effect (settling period).
+        # Passed through purely to instrument (#124); the engine never branches on it.
+        # NOT evidence — block 2 is confounded (exclusions, suppressed sleep, a lumbar
+        # investigation spanning it). Recorded as a free by-product only.
+        nse = sum(1 for dd in by_date if rx_effective_from <= dd <= cycle_end)
+        d = evaluate_cycle(wnights, window, rx, wake_anchor, prior_basis_tst=prior_tst,
+                           nights_since_effective_from=nse)
         series.append({
             "cycle": idx,
             "from": cycle_start, "to": cycle_end,
@@ -112,11 +119,14 @@ def replay(nights: list[Night], opened_on: date, wake_anchor: str,
             "excluded": d.excluded_nights,
             "lo_sd": d.lights_out_sd_min, "wk_sd": d.wake_time_sd_min,
             "ema": d.ema_count, "capped": d.move_capped,
+            "nse": d.nights_since_effective_from,
         })
         if d.basis_tst_min is not None:
             prior_tst.append(d.basis_tst_min)
         if d.decision == "close":
             break
+        if d.decision in ("extend", "compress"):
+            rx_effective_from = cycle_end + timedelta(days=1)   # a real change resets the settling clock
         window, rx = d.window_minutes, d.prescribed_lights_out
         cycle_start = cycle_end + timedelta(days=1)
     return series

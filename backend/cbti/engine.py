@@ -168,6 +168,17 @@ class CycleDecision:
     # +225 min past anchor) moves a 6-night cycle mean by ~37 min. A future
     # threshold must be set against a distribution across blocks, not this one.
     basis_tib_over_run_min: float | None = None
+    # INSTRUMENTED, NOT GATED (#124). Nights elapsed since the current prescription's
+    # effective_from — the settling period. NOT `basis_`-prefixed: the basis_* fields are
+    # properties of the basis window the engine computes; this is passed-in cycle context
+    # the engine cannot compute (it has no prescription, only nights and a window), so it
+    # is named like the other unprefixed diagnostics (ema_count, move_capped). NOTHING
+    # branches on it — the settling parameter is undeterminable from both available
+    # sources and the observed failure mode is under-firing, so a fourth gate would move
+    # against the defect the data shows. Recorded so a curve can be fit later. None is
+    # CORRECT here (no prescription context — replay/tests) and must stay inert: do NOT
+    # convert to a gate by analogy to #122, where naps' 0-not-null WAS load-bearing.
+    nights_since_effective_from: int | None = None
 
 
 # ── exclusions ────────────────────────────────────────────────────────────────
@@ -289,6 +300,7 @@ def evaluate_cycle(
     prescribed_lights_out: str,
     wake_anchor: str,
     prior_basis_tst: list[int] | None = None,
+    nights_since_effective_from: int | None = None,
 ) -> CycleDecision:
     """Adjudicate one weekly cycle. `nights` is the trailing window (<= 7 nights).
 
@@ -319,6 +331,11 @@ def evaluate_cycle(
         lights_out_sd_min=_sd_minutes([v.night.lights_out for v in valid]),
         wake_time_sd_min=_sd_minutes([v.night.final_wake for v in valid]),
         ema_count=_ema_count(valid, wake_anchor),
+        # instrumented, not gated (#124) — see the dataclass field. Carried into base so
+        # it lands on ALL four verdict paths, HOLDs included (a HOLD is exactly where
+        # "how few nights had elapsed" matters). None = no prescription context; nothing
+        # branches on it, so there is no gate to disable.
+        nights_since_effective_from=nights_since_effective_from,
     )
 
     # ── GATE 1: sufficiency ───────────────────────────────────────────────────
