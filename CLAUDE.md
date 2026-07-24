@@ -264,6 +264,8 @@ must match it.
   #113 (pattern — did the match mean what it appears to): this one is **timing — was the answer
   current**, and neither of the others would have caught it.
 
+- **A deploy check must cover every service that changed, with a per-service discriminating probe (standing, #121).** This project is **two Railway services** — `health-app-backend` and `health-app-frontend` — deploying from one repo. `alembic current` / a migration-file listing verifies the backend and is **structurally blind to the frontend**: it cannot fail on an undeployed or mis-rooted frontend, so a green backend probe reads as "deployed" while a frontend change may be unshipped. Two frontend merges (`2f9004e` `CheckInAM.jsx`, `9331c31` `NightlyCloseOut.jsx`) were each reported deployed on a backend-only check; both happened to ship, which is luck, not verification. **The frontend probe is a served-bundle content grep:** fetch the live asset (`curl $FRONTEND_URL/` → the `assets/index-*.js` name → `curl` it) and grep for a string literal only the new code carries (`"Tonight's sleep window"`, `"Sleep diary"`) — string literals survive minification, and the built hash differs by environment so it is **not** a reliable probe on its own. `railway service health-app-frontend` then `railway deployment list` splits the three failure modes (nothing triggered / FAILED / SUCCESS-but-wrong-tree). Same discriminating-probe logic as #116, applied to the service the backend probe never sees: #116 is **timing** (was the answer current), this is **coverage** (did the check see every service that changed).
+
 - **Push branches even while holding for review (standing, #98).** A local-only branch is
   unreadable to chat — `raw.githubusercontent.com` 404s — so a "hold before merge" gate that
   chat cannot independently verify rests on Code's report alone, which is the one thing the
@@ -310,9 +312,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#120/#121** — ISI stored item-level with the tool's total preserved and the canonical total derived; and a deploy check must cover every service that changed with a per-service discriminating probe (the frontend one is a served-bundle content grep, blind to `alembic current`). See DECISIONS_LOG #120, #121.
 - **#117/#118/#119** — CBT-I capture surfaces: the device prefills clock positions never wakefulness magnitudes; titration and block-open are manual and witnessed not scheduled; waking-cause is instrumented observationally without gating on it. See DECISIONS_LOG #117, #118, #119.
 - **#116** — A check against a system mid-deploy can answer correctly from the outgoing instance; verify after the deployment settles and confirm which instance answered. See DECISIONS_LOG #116.
-- **#114/#115** — CBT-I titration engine: regularity is instrumented not gating and three constants are recorded unvalidated rather than chosen; the +30 buffer is recovered from the prior block, whose sleep-need basis week itself over-ran. See DECISIONS_LOG #114, #115.
 
 ---
 

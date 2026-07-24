@@ -3854,3 +3854,39 @@ computed property with no backing column, so the 16-vs-15 case is representable 
 which would need either a second table or an instrument-tagged item schema rather than fixed `item_1..7`.
 
 ---
+
+### 121. A deploy check must cover every service that changed, with a per-service discriminating probe
+
+**Decision:** Deployment verification must probe **each service that changed**, using a probe whose
+result **differs between the old and new image for that service**. This project runs two Railway
+services from one repo — `health-app-backend` and `health-app-frontend`. The backend probe
+(`alembic current` / migration-file listing) is **structurally blind to the frontend**: it verifies the
+Python image and cannot fail on an undeployed, failed, or mis-rooted frontend build. A green backend
+probe therefore reads as "deployed" while a frontend change may be unshipped.
+
+**The frontend probe is a served-bundle content grep**, not a deployment status and not a hash. Fetch
+the live site (`curl $FRONTEND_URL/`), read the `assets/index-*.js` name it references, fetch that asset,
+and grep for a **string literal only the new code carries** (e.g. `"Tonight's sleep window"`,
+`"Sleep diary"`). String literals survive minification; the built content-hash differs by build
+environment (local `index-C5_3m34c.js` vs deployed `index-V4WCQMwV.js` for identical source), so the hash
+is **not** a reliable probe on its own. To split the three failure modes, `railway service
+health-app-frontend` then `railway deployment list`: latest older than the merge → nothing triggered;
+FAILED → read the build log; SUCCESS but the grep misses → wrong Root Directory / stale tree.
+
+**Status:** Adopted as a repo-specific standing rule in `CLAUDE.md` Conventions, beside #116. Earned when
+two frontend merges (`2f9004e` `CheckInAM.jsx`, `9331c31` `NightlyCloseOut.jsx`) were each reported
+"deployed and verified" on a backend-only check. Both had in fact shipped — the frontend service
+auto-deploys on push — but that was established only retroactively by the content grep this rule
+prescribes; the original "verified" claims rested on a probe that could not have caught the failure they
+asserted was absent.
+
+**How you know:** the live bundle `index-V4WCQMwV.js` returned PRESENT for all six probed strings from
+both merges; `railway deployment list` on the frontend service showed three deploys matching the night's
+three pushes, latest SUCCESS. The gap was in the verification, not the deployment — which is the point:
+the check passed for a reason unrelated to the thing it claimed to confirm.
+
+**Do not revisit unless:** the deployment surface collapses to a single artifact (one service, or a
+monolithic image serving both API and static assets), at which point one probe can cover both and the
+per-service requirement is vacuous rather than wrong.
+
+---
