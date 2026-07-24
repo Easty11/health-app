@@ -3955,3 +3955,52 @@ tonight's 4h gate covers prefill only and Q42 stays open, re-scoped.
 hold — in which case the dates are no longer discriminating and the axis needs revisiting, not the rows.
 
 ---
+
+### 124. The settling period between prescription changes is instrumented, not gated — the parameter is undeterminable from both available sources
+
+**Decision:** `evaluate_cycle` accepts `nights_since_effective_from` and records it on every verdict,
+including all HOLD paths. **Nothing branches on it.** No constant is introduced. This supersedes the
+earlier settling-*gate* proposal by recording why the gate is not built, so it is not re-proposed from
+first principles a third time.
+
+**Rationale:** A minimum settling period was proposed on a real defect — the basis is the trailing
+`CYCLE_NIGHTS`, so a move inside that span is adjudicated partly on nights run under a *superseded*
+window, the same objection the adherence comment already raises in another form. It is not implemented
+as a gate for three reasons. **(1) The parameter cannot be estimated.** Titration interval has never been
+studied as a variable; the SRT literature's named failure mode is *under*-titration (Scott 2022: 45%
+reach baseline TST by end of acute treatment, concluding further titration of sleep opportunity may
+accelerate gains). Block 2 cannot supply it either — 29 of 53 nights removed by one exclusion,
+pharmacologically suppressed sleep contaminating the window estimate, a lumbar investigation spanning the
+block (CT 7 Apr). **(2) The observed failure mode is under-firing** — two titrations in eight cycles
+against three insufficiency HOLDs; a fourth gate moves against the defect the data actually shows.
+**(3)** `MAX_MOVE_MIN` (bound in 0 of 8 cycles) and `PLATEAU_TOL_MIN` (never reached) are already carried
+as unvalidated; a third guessed constant enlarges that set while presenting as rigour.
+
+Physiology, recorded so it is not re-derived: with the wake anchor fixed and morning light unmoved,
+extension shifts lights-out *earlier* and needs no circadian phase adjustment — the "week to adapt"
+figure from jet-lag / shift-work research does not apply. The real term is sleep-efficiency recovery
+after an extension: TIB rises immediately, TST rises slowly, SE dips by construction and recovers as TST
+fills the window. That duration is state-dependent — fast at large deficit, slow near sleep need — so any
+fixed constant is too long early and too short late. The corollary is that a *lengthening* settling time
+is itself a plateau signal, which is why this parameter and the exit criterion should be derived from one
+curve rather than guessed separately.
+
+Interim control: #118's manual, witnessed trigger already functions as a settling gate — a human
+declining to offer an evaluation at three nights is a valid control, and unlike a hard-coded constant,
+each decision becomes evidence for what the rule should be. Precedent: the direct TIB gate — proposed,
+tested, rejected in favour of `basis_tib_over_run_min`, recorded and not acted on. Same shape.
+
+**Status:** Landed. `evaluate_cycle` accepts `nights_since_effective_from` and records it on every verdict
+including all HOLD paths; nothing branches on it; no constant introduced.
+
+**How you know:** `grep -n nights_since_effective_from backend/cbti/engine.py` shows the field in the
+dataclass (181), signature (303) and `base` (338) only — never in a conditional. A verdict with the
+parameter set is byte-identical to one with it unset (`dataclasses.replace` neutralises the one field and
+compares equal), asserted on both a move and a HOLD path. Replay populates it as a by-product: block 2's
+nine prescriptions ran for `[3,7,5,6,6,6,7,7,6]` nights (range 3–7, median 6) — recorded, NOT evidence,
+because the block is confounded. Suite 401 passed, was 394.
+
+**Do not revisit unless:** block 3 yields enough post-extension SE-recovery observations to estimate the
+curve — at which point this becomes a gate proposal with data behind it rather than a guess.
+
+---

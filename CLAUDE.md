@@ -312,6 +312,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#124** — The settling period between prescription changes is instrumented (`nights_since_effective_from` on every cycle verdict), not gated — the parameter is undeterminable from both available sources and the observed failure mode is under-firing, so a fourth gate would move against the defect. See DECISIONS_LOG #124.
 - **#123** — ROADMAP NOW is anchored to external dates and ordered by them (undated live work → NEXT); OPEN_QUESTIONS gains a `## CLOSED` foot section holding the 14 DONE entries verbatim so the live list is the scan surface. Nothing deleted. See DECISIONS_LOG #123.
 - **#122** — Naps are captured at PM as 0-not-null; the engine's nap exclusion is guarded on `is not None`, so a null leaves the night un-gateable — capturing 0/N is what makes the exclusion able to fire for block 3. See DECISIONS_LOG #122.
 - **#120/#121** — ISI stored item-level with the tool's total preserved and the canonical total derived; and a deploy check must cover every service that changed with a per-service discriminating probe (the frontend one is a served-bundle content grep, blind to `alembic current`). See DECISIONS_LOG #120, #121.

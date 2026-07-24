@@ -758,6 +758,32 @@ offset, widen the tolerance, or prefer diary `lights_out` for adherence. Do not 
 distribution is measured (empirical-specificity).
 
 ---
+## Q48. What is the settling period between prescription changes, and does it lengthen as TST approaches need?
+
+The titration engine adjudicates each cycle on the trailing `CYCLE_NIGHTS`, so a move made soon after a
+change is judged partly on nights run under the superseded window. A minimum settling period was proposed
+as a gate and **not built** (#124): the parameter is undeterminable from both available sources — the SRT
+literature has never studied titration interval as a variable (its named failure mode is *under*-titration),
+and block 2 is confounded (an exclusion removed 29 of 53 nights, suppressed sleep in the window estimate,
+a lumbar investigation spanning it). The physiological term is sleep-efficiency recovery after an
+extension, which is state-dependent (fast at large deficit, slow near sleep need) — so a *lengthening*
+settling time is itself a plateau signal, and this parameter and the exit criterion should be derived from
+**one curve**, not guessed separately.
+
+`nights_since_effective_from` is now recorded on every cycle verdict (#124) as the instrument. **Block 3 is
+the dataset** and carries what block 2 lacked: waking cause, nap capture, alcohol, adherence against a
+*recorded* prescription, an ISI baseline, a CPAP mask-off cross-check — and **no concurrent orthopaedic
+investigation**. By-product from block 2's ledger, recorded but not evidence: nine prescriptions ran for
+`[3,7,5,6,6,6,7,7,6]` nights (range 3–7, median 6).
+
+**Status:** UNSTARTED — no blocker; the instrument exists and block 3 is accumulating the observations.
+Owner: Luke. Sibling to the `MIN_VALID_NIGHTS` undeterminability recorded at #114/#115 — the same "cannot
+be estimated from the one confounded block" about a different constant. **Next action:** once block 3 has
+post-extension cycles, fit the SE-recovery curve; if it supports a threshold, #124's "do not revisit
+unless" is met and this becomes a gate proposal with data behind it.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
