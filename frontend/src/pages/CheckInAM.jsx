@@ -46,6 +46,55 @@ function SliderField({ label, value, onChange, min = 0, max = 10 }) {
   )
 }
 
+// Clock field for the sleep diary. `prefilled` marks a value the ring supplied (the
+// operator confirms rather than recalls it); `manual` marks a field the device is
+// systematically wrong about (latency/WASO), styled distinctly so the difference is
+// legible rather than incidental (#117).
+function ClockField({ label, value, onChange, prefilled }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-baseline">
+        <label className="text-xs text-gray-500">{label}</label>
+        {prefilled && <span className="text-[10px] text-indigo-400">from ring · edit if wrong</span>}
+      </div>
+      <input
+        type="time"
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        className={`block w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+          prefilled
+            ? 'border border-indigo-200 bg-indigo-50/40 focus:ring-indigo-300'
+            : 'border border-gray-200 focus:ring-indigo-300'
+        }`}
+      />
+    </div>
+  )
+}
+
+function NumField({ label, value, onChange, hint, manual }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-baseline">
+        <label className="text-xs text-gray-500">{label}</label>
+        {manual && <span className="text-[10px] text-amber-500">your recall — not the ring</span>}
+      </div>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className={`block w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+          manual
+            ? 'border border-amber-200 bg-amber-50/40 focus:ring-amber-300'
+            : 'border border-gray-200 focus:ring-indigo-300'
+        }`}
+      />
+      {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
+    </div>
+  )
+}
+
 function PassiveCard({ hrv, hrvVsBaseline, sleepMin }) {
   if (!hrv && !sleepMin) return null
   const sign = hrvVsBaseline >= 0 ? '+' : ''
@@ -100,6 +149,19 @@ export default function CheckInAM() {
   const [alcoholUnits, setAlcoholUnits] = useState(2)
   const [alcoholFinishTime, setAlcoholFinishTime] = useState('22:00')
 
+  // CBT-I sleep diary (rendered only while a block is open). Clock fields are
+  // prefilled from the ring; latency/WASO are always manual (#117).
+  const [gotIntoBed, setGotIntoBed] = useState('')
+  const [lightsOut, setLightsOut] = useState('')
+  const [finalWake, setFinalWake] = useState('')
+  const [outOfBed, setOutOfBed] = useState('')
+  const [sleepLatency, setSleepLatency] = useState('')
+  const [waso, setWaso] = useState('')
+  const [nightWakings, setNightWakings] = useState('')
+  const [wakeNocturia, setWakeNocturia] = useState('')
+  const [wakePain, setWakePain] = useState('')
+  const [wakeSpontaneous, setWakeSpontaneous] = useState('')
+
   useEffect(() => {
     api.get('/checkin-v2/prefill')
       .then(({ data }) => {
@@ -114,6 +176,15 @@ export default function CheckInAM() {
           setMotivation(data.motivation ?? 5)
           setLifeLoad(data.life_load ?? 3)
           if (data.soreness) setSoreness(data.soreness)
+          // Prefill diary clock positions from the ring (empty when the sanity gate
+          // rejected them). latency/WASO are never prefilled — left for manual entry.
+          const dp = data.diary_prefill
+          if (dp) {
+            setGotIntoBed(dp.got_into_bed ?? '')
+            setLightsOut(dp.lights_out ?? '')
+            setFinalWake(dp.final_wake ?? '')
+            setOutOfBed(dp.out_of_bed ?? '')
+          }
         }
       })
       .catch(() => {})
@@ -128,6 +199,20 @@ export default function CheckInAM() {
     e.preventDefault()
     setSaving(true)
     setError('')
+    const num = v => (v === '' || v == null ? null : Number(v))
+    const blockOpen = prefill?.cbti?.block_open
+    const diary = blockOpen ? {
+      got_into_bed: gotIntoBed || null,
+      lights_out: lightsOut || null,
+      sleep_latency_min: num(sleepLatency),
+      waso_min: num(waso),
+      night_wakings_n: num(nightWakings),
+      final_wake: finalWake || null,
+      out_of_bed: outOfBed || null,
+      wakings_nocturia_n: num(wakeNocturia),
+      wakings_pain_n: num(wakePain),
+      wakings_spontaneous_n: num(wakeSpontaneous),
+    } : {}
     try {
       const { data } = await api.post('/checkin-v2/am', {
         morning_readiness: morningReadiness,
@@ -139,6 +224,7 @@ export default function CheckInAM() {
         drank_last_night: drankLastNight,
         alcohol_units: drankLastNight ? alcoholUnits : null,
         alcohol_finish_time: drankLastNight ? alcoholFinishTime : null,
+        ...diary,
       })
       setResult(data)
       setSubmitted(true)
@@ -254,6 +340,50 @@ export default function CheckInAM() {
               </div>
             ))}
           </div>
+
+          {/* CBT-I sleep diary — only while a titration block is open */}
+          {prefill?.cbti?.block_open && (
+            <div className="space-y-3 border-t border-gray-100 pt-5">
+              <div className="flex items-baseline justify-between">
+                <label className="text-sm font-medium text-gray-700">Sleep diary</label>
+                {prefill.cbti.prescribed_lights_out && (
+                  <span className="text-xs text-gray-400">
+                    window {prefill.cbti.prescribed_lights_out}–{prefill.cbti.wake_anchor}
+                  </span>
+                )}
+              </div>
+
+              {prefill.diary_prefill?.gate_rejected && (
+                <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+                  Ring sleep times looked implausible and were not filled in — enter them manually.
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <ClockField label="Got into bed" value={gotIntoBed} onChange={setGotIntoBed} prefilled />
+                <ClockField label="Lights out (tried to sleep)" value={lightsOut} onChange={setLightsOut} prefilled />
+                <ClockField label="Final wake" value={finalWake} onChange={setFinalWake} prefilled />
+                <ClockField label="Out of bed" value={outOfBed} onChange={setOutOfBed} prefilled />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <NumField label="Time to fall asleep (min)" value={sleepLatency} onChange={setSleepLatency} manual />
+                <NumField label="Time awake in night (min)" value={waso} onChange={setWaso} manual />
+              </div>
+
+              <NumField
+                label="Times woken"
+                value={nightWakings}
+                onChange={setNightWakings}
+                hint="If you can, split the count by cause below — it need not add up exactly."
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <NumField label="Toilet" value={wakeNocturia} onChange={setWakeNocturia} />
+                <NumField label="Pain" value={wakePain} onChange={setWakePain} />
+                <NumField label="Other" value={wakeSpontaneous} onChange={setWakeSpontaneous} />
+              </div>
+            </div>
+          )}
 
           {/* Alcohol */}
           <div className="space-y-3">
