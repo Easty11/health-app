@@ -78,6 +78,8 @@ export default function NightlyCloseOut() {
   const [alreadyDone, setAlreadyDone] = useState(false)
   const [cbti, setCbti] = useState(null)
   const [napsMin, setNapsMin] = useState('')   // '' = blank; blank+block_open submits 0, never null
+  const [pmNotes, setPmNotes] = useState('')
+  const [amNotes, setAmNotes] = useState('')   // read-only: the morning's note, for context
 
   useEffect(() => {
     api.get('/checkin-v2/today')
@@ -91,6 +93,8 @@ export default function NightlyCloseOut() {
         if (data?.today_rating) setTodayRating(data.today_rating)
         if (data?.session_rpe != null) setSessionRpe(data.session_rpe)
         if (data?.naps_min != null) setNapsMin(String(data.naps_min))
+        setPmNotes(data?.pm_notes ?? '')
+        setAmNotes(data?.am_notes ?? '')
       })
       .catch(() => {})
   }, [])
@@ -105,6 +109,7 @@ export default function NightlyCloseOut() {
         trained_today: trainedToday,
         session_quality: trainedToday ? sessionQuality : null,
         session_rpe: trainedToday ? sessionRpe : null,
+        pm_notes: pmNotes.trim() || null,
         // Load-bearing (DECISIONS #C): while a block is open a blank field submits 0
         // ("asked, no nap"), NEVER null — null means "not asked" and disables the
         // engine's nap exclusion (guarded on `is not None`). No block: not asked -> null.
@@ -208,6 +213,23 @@ export default function NightlyCloseOut() {
               <p className="text-[10px] text-gray-400">Leave blank for no nap. Any nap excludes tonight from the titration window.</p>
             </div>
           )}
+
+          {/* Free-text notes — always available. The morning's note shows read-only for context. */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">Notes (optional)</label>
+            {amNotes && (
+              <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 whitespace-pre-wrap">
+                <span className="font-medium text-gray-500">This morning:</span> {amNotes}
+              </p>
+            )}
+            <textarea
+              value={pmNotes}
+              onChange={e => setPmNotes(e.target.value)}
+              rows={3}
+              placeholder="Anything worth remembering about today or tonight"
+              className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+          </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-500">
             Wind-down ritual (offload + gratitude) happens <em>after</em> this — borrow your meditation app or use paper. Not logged here.

@@ -162,6 +162,11 @@ class DailyRecord(Base):
     wakings_nocturia_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
     wakings_pain_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
     wakings_spontaneous_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Free-text context that doesn't fit a structured field (an off night, a carnival
+    # alarm). Separate AM/PM columns because the two submits are independent and a
+    # shared column would clobber. Observational — read by no engine code.
+    am_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pm_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class DailyCheckIn(Base):

@@ -161,6 +161,7 @@ export default function CheckInAM() {
   const [wakeNocturia, setWakeNocturia] = useState('')
   const [wakePain, setWakePain] = useState('')
   const [wakeSpontaneous, setWakeSpontaneous] = useState('')
+  const [amNotes, setAmNotes] = useState('')   // free-text; always available, not block-gated
 
   useEffect(() => {
     api.get('/checkin-v2/prefill')
@@ -185,6 +186,7 @@ export default function CheckInAM() {
             setFinalWake(dp.final_wake ?? '')
             setOutOfBed(dp.out_of_bed ?? '')
           }
+          setAmNotes(data.existing?.am_notes ?? '')
         }
       })
       .catch(() => {})
@@ -224,6 +226,7 @@ export default function CheckInAM() {
         drank_last_night: drankLastNight,
         alcohol_units: drankLastNight ? alcoholUnits : null,
         alcohol_finish_time: drankLastNight ? alcoholFinishTime : null,
+        am_notes: amNotes.trim() || null,
         ...diary,
       })
       setResult(data)
@@ -411,6 +414,18 @@ export default function CheckInAM() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Free-text notes — always available, with or without a CBT-I block */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">Notes (optional)</label>
+            <textarea
+              value={amNotes}
+              onChange={e => setAmNotes(e.target.value)}
+              rows={3}
+              placeholder="Anything worth remembering about last night or this morning"
+              className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
           </div>
 
           {error && (

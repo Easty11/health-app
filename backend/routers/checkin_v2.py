@@ -178,6 +178,7 @@ class AMCheckInIn(BaseModel):
     wakings_nocturia_n: Optional[int] = None
     wakings_pain_n: Optional[int] = None
     wakings_spontaneous_n: Optional[int] = None
+    am_notes: Optional[str] = None      # free-text; observational, not block-gated
 
 
 class NightlyCloseOutIn(BaseModel):
@@ -191,6 +192,7 @@ class NightlyCloseOutIn(BaseModel):
     # `engine.py` excludes any night with naps_min > 0 (Q45); its guard is
     # `is not None`, so a null silently leaves the nap exclusion un-firable.
     naps_min: Optional[int] = Field(None, ge=0)
+    pm_notes: Optional[str] = None      # free-text; observational, not block-gated
 
 
 class DailyRecordOut(BaseModel):
@@ -220,6 +222,8 @@ class DailyRecordOut(BaseModel):
     # both are computed server-side at AM submit and never accepted as input.
     diary_tst_min: Optional[int] = None
     diary_se_pct: Optional[float] = None
+    am_notes: Optional[str] = None
+    pm_notes: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -369,6 +373,8 @@ class TodayOut(BaseModel):
     session_quality: Optional[int] = None
     session_rpe: Optional[float] = None
     naps_min: Optional[int] = None       # round-trips the stored PM nap value into the form
+    am_notes: Optional[str] = None       # round-trips so PM sees the morning's note
+    pm_notes: Optional[str] = None
     cbti: CBTIContextOut = Field(default_factory=CBTIContextOut)
 
     model_config = {"from_attributes": True}
@@ -499,6 +505,7 @@ def submit_am(
     record.wakings_nocturia_n = body.wakings_nocturia_n
     record.wakings_pain_n = body.wakings_pain_n
     record.wakings_spontaneous_n = body.wakings_spontaneous_n
+    record.am_notes = body.am_notes
     tst, se, _valid = _freeze_diary(
         body.lights_out, body.final_wake, body.out_of_bed,
         body.sleep_latency_min, body.waso_min,
@@ -536,6 +543,7 @@ def submit_pm(
     # is open, null when the field was not shown. Coercion of blank->0 is the client's
     # (a null here after this build means the night predates PM nap capture).
     record.naps_min = body.naps_min
+    record.pm_notes = body.pm_notes
 
     db.commit()
     db.refresh(record)
