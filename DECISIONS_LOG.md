@@ -3820,3 +3820,37 @@ move one or more counts from observational into the engine — a change that mus
 safety argument, since an engine-read column is no longer inert.
 
 ---
+
+### 120. The ISI is stored as its seven items, with the tool's total preserved separately and the canonical total derived
+
+**Decision:** Insomnia Severity Index administrations are stored item-level (`cbti_isi.item_1..item_7`,
+migration `d3f7a1908c62`). The administering tool's returned total is preserved as `total_reported`, a
+fact about the tool; the **canonical total is derived on read** (`sum(item_1..7)`), never stored. Rows
+are **block-scoped and nullable** (`block_id` FK to `cbti_blocks`, `ON DELETE SET NULL`): a screening or
+between-block administration belongs to no block. One administration per `(block_id, timepoint)`;
+`timepoint` domain is DB-enforced (`ck_cbti_isi_timepoint`: baseline|mid|exit).
+
+The ISI is the outcome measure a block is judged by, and a **total cannot be decomposed later**. Storing
+only the total would throw away the distinction that matters: item-level separates a **sleep** change
+(items 1-3: onset / maintenance / early waking) from a **distress** change (items 6-7: worry / daytime
+interference), which are different results and can move in opposite directions under the same total.
+Storing both totals would be redundant and invites them to disagree silently; seven integers sum cheaply,
+and the reported total is kept only because it is what the instrument said, not because it is authoritative.
+
+Block 3's baseline is the worked case: QxMD returned **16**, the seven items sum to **15** (QxMD anchors
+one response differently) — band unchanged (moderate clinical either way), but the discrepancy is visible
+precisely because the items are the record and the total is derived, not reconciled away.
+
+**Status:** Adopted and built — table `cbti_isi`, model `CBTIISI.canonical_total`, `backfill_cbti_isi_baseline.py`.
+Block 3's baseline (items `[0,3,2,3,2,2,3]`, administered 2026-07-24 19:10 via QxMD, one night into the
+block so 13 of 14 recall days are pre-block) is stored. No read endpoint yet — a UI for future
+administrations waits for the exit ISI (weeks out), which lands with the evaluation trigger.
+
+**How you know:** the seven items and `total_reported` are distinct columns; `canonical_total` is a
+computed property with no backing column, so the 16-vs-15 case is representable rather than lossy. The
+`(block_id, timepoint)` unique with a nullable `block_id` admits screenings without collision (NULL != NULL).
+
+**Do not revisit unless:** an instrument is adopted whose subscale structure is not the seven Morin items,
+which would need either a second table or an instrument-tagged item schema rather than fixed `item_1..7`.
+
+---
