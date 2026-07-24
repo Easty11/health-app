@@ -74,24 +74,26 @@ the revision string), deployed `checkin_v2.py` carries `diary_prefill`/`_freeze_
   agrees under both wrap methods; `actual_sleep` exceeds the clock span. Step B's night-validity
   filter now excludes exactly this shape (TST > TIB freezes to NULL).
 
-### NEXT: a new brief — finish the loop the reorder deliberately left open
+### NEXT: one piece left to close the titration loop through the app
 
-The reorder scoped only open→AM-capture→render→merge. The module can now **capture** block 3
-but cannot yet **close a cycle through the app**. Unbuilt (surfaces Steps 5/7/8):
+Updated 2026-07-25 (post `feat/cbti-isi-pm`, merged `9331c31`). The module now captures block 3
+AND shows the prescription at night. What remains:
 
-1. **PM prescribed-lights-out display + nap capture** — `/today` already returns the
-   prescription; `NightlyCloseOut.jsx` must show it and accept `naps_min`.
-2. **The manual witnessed evaluation trigger** — #118's PM-offer half (offer evaluation on PM
-   close-out once ≥7 days since `effective_from`; engine returns the decision, row minted on
-   acceptance). #118's block-open half is DONE.
-3. **ISI storage** — CORRECTED 2026-07-25: block 3's baseline ISI **was captured** (QxMD,
-   2026-07-24 19:10, score 16 moderate, all seven items), one night into the block. The earlier
-   claim here that it "opened without ISI" and "cannot be retrofitted" was **false** — inherited
-   from a stale close-out. The gap was **storage, not capture**, and it is now closed: the
-   `cbti_isi` table (migration `d3f7a1908c62`) and the backfilled baseline row land in this branch.
+1. **PM prescribed-lights-out display** — **DONE** (`9331c31`): `NightlyCloseOut.jsx` renders the
+   prescribed window from `/today`'s `cbti` block. **Nap capture still open** — `NightlyCloseOut.jsx`
+   does not yet accept `naps_min` (a small PM-form addition; `daily_records.naps_min` exists).
+2. **The manual witnessed evaluation trigger — THE LAST PIECE.** #118's PM-offer half: offer
+   evaluation on PM close-out once ≥7 days since `effective_from`; engine returns the decision, row
+   minted on acceptance. #118's block-open half is DONE. **Dependency, not deferral:** it cannot
+   fire before ~31 Jul — it needs a full cycle of nights and the block opened 24 Jul.
+3. **ISI storage** — **DONE** (`9331c31`): block 3's baseline ISI is stored (`cbti_isi` id=1, items
+   `[0,3,2,3,2,2,3]`, canonical 15 / reported 16, administered 2026-07-24 19:10, 13 of 14 recall days
+   pre-block). The earlier "opened without ISI / cannot be retrofitted" claim was **false** — the gap
+   was storage, not capture, and it is closed. DECISIONS_LOG #120.
 
-**Single clearest next action:** a new brief covering PM display + evaluation trigger (the ISI
-storage + PM display are handled on `feat/cbti-isi-pm`; cut any further work fresh from master).
+**Single clearest next action:** the **manual evaluation trigger** (item 2) — the last piece of the
+in-app titration loop — plus PM `naps_min` capture (item 1's remainder). Not before ~31 Jul: the
+trigger needs a full cycle of nights and block 3 opened 24 Jul. Cut a fresh branch from master.
 
 ### #118 is minted but half-built — a live watch-item
 
