@@ -3890,3 +3890,33 @@ monolithic image serving both API and static assets), at which point one probe c
 per-service requirement is vacuous rather than wrong.
 
 ---
+
+### 122. Naps are captured at PM as 0-not-null, which is what makes the engine's nap exclusion able to fire
+
+**Decision:** The PM close-out captures `naps_min` while a block is open, and a blank field is submitted
+as **0** ("asked, no nap"), never null. `null` is reserved for "not asked" — a night with no open block,
+or a night predating this capture.
+
+The engine excludes any nap-flagged night (`engine.py`, `naps_min > NAP_EXCLUDE_MIN` with the threshold
+at 0 per Q45), but its guard is `naps_min is not None`. A null therefore does not merely fail to exclude
+— it makes the night **un-gateable**: an unrecorded nap night is indistinguishable from a no-nap night,
+so a real nap silently counts toward the titration window. Before this, PM never captured naps, so every
+block-3 night was null and the exclusion was **structurally dead** — present in code, unable to fire.
+Capturing 0-or-N at PM is what turns it back on. This matches `import_cbti_block.py:135`'s `or 0`, which
+gave block 2's imported nights the same 0-not-null property.
+
+**Status:** Adopted and built — `NightlyCloseOutIn.naps_min`, `submit_pm` storage, `TodayOut` round-trip,
+and the `NightlyCloseOut.jsx` field gated on `block_open` with the blank→0 coercion client-side.
+
+**How you know:** tests pin that 0 stores as 0 (not dropped as falsy), null persists as not-asked, and the
+engine excludes `naps_min > 0`, keeps `naps_min = 0`, and **silently keeps `naps_min = None`** — the last
+asserted explicitly as the failure mode this closes.
+
+**Do not revisit unless:** the VA instrument's nap-day referent is established (Q45), which would allow
+attributing a nap to a specific night rather than excluding the night wholesale — at which point the
+capture stays but the engine's response to it changes.
+
+**Carried, not a decision:** block 3's already-logged nights (24 Jul onward) keep `naps_min = NULL` and
+cannot be nap-gated retrospectively without a memory backfill. Two nights so far — worth a manual note.
+
+---
