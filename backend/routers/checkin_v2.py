@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
-from cbti.timeutil import clock_delta_minutes
+from cbti.timeutil import clock_delta_minutes, clock_to_minutes, minutes_between
 from database import get_db
 from injury_trajectory import injury_soreness_key
 
@@ -84,6 +84,45 @@ def derive_soreness_items(user_id: int, db: Session) -> dict[str, int]:
     return items
 
 
+# ── CBT-I diary freeze ──────────────────────────────────────────────────────────
+
+def _freeze_diary(
+    lights_out: Optional[str],
+    final_wake: Optional[str],
+    out_of_bed: Optional[str],
+    sleep_latency_min: Optional[int],
+    waso_min: Optional[int],
+) -> tuple[Optional[int], Optional[float], bool]:
+    """Compute (diary_tst_min, diary_se_pct, valid) from the AM diary, FROZEN at write.
+
+    Same contract as naive_baseline: computed once at AM submit and stored, never
+    recomputed on read. The formula is the VA CBT-I diary's, validated 12/12 against
+    block 2's stored rows:
+        TIB = lights_out ("tried to sleep") -> out_of_bed
+        TST = (lights_out -> final_wake) - sleep_latency_min - waso_min
+        SE  = TST / TIB * 100     (stored as percent, samsung convention)
+
+    NIGHT-VALIDITY FILTER (returns valid=False, both values None):
+      - any input missing, or TIB <= 0, or
+      - scored sleep exceeds the clock window: TST > TIB (the diary analogue of the
+        2026-06-28 device row, 435 min scored inside a 366 min span), or TST < 0.
+    An impossible night must not freeze a diary_se the engine would then read; leaving
+    the pair NULL makes the engine's sufficiency gate exclude it, which is the intent.
+    """
+    lo = clock_to_minutes(lights_out)
+    fw = clock_to_minutes(final_wake)
+    oob = clock_to_minutes(out_of_bed)
+    tib = minutes_between(lo, oob)
+    sleep_period = minutes_between(lo, fw)
+    if (tib is None or tib <= 0 or sleep_period is None
+            or sleep_latency_min is None or waso_min is None):
+        return None, None, False
+    tst = sleep_period - sleep_latency_min - waso_min
+    if tst < 0 or tst > tib:
+        return None, None, False
+    return tst, round(tst / tib * 100, 2), True
+
+
 # ── passive snapshot ──────────────────────────────────────────────────────────
 
 def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, Any]:
@@ -125,6 +164,20 @@ class AMCheckInIn(BaseModel):
     drank_last_night: bool = False
     alcohol_units: Optional[int] = None
     alcohol_finish_time: Optional[str] = None   # "22:30"
+    # CBT-I diary (AM-moment; present only while a block is open, else all None).
+    # diary_se_pct / diary_tst_min are NOT accepted — they are frozen server-side
+    # from these fields. Never accept a derived value the client could corrupt.
+    got_into_bed: Optional[str] = None
+    lights_out: Optional[str] = None            # "time tried to sleep" — SE window opens here
+    sleep_latency_min: Optional[int] = None
+    waso_min: Optional[int] = None
+    night_wakings_n: Optional[int] = None
+    final_wake: Optional[str] = None
+    out_of_bed: Optional[str] = None
+    # waking-cause decomposition (observational; engine must not read)
+    wakings_nocturia_n: Optional[int] = None
+    wakings_pain_n: Optional[int] = None
+    wakings_spontaneous_n: Optional[int] = None
 
 
 class NightlyCloseOutIn(BaseModel):
@@ -157,6 +210,10 @@ class DailyRecordOut(BaseModel):
     model_confidence: Optional[float] = None
     passive_hrv_ms: Optional[float] = None
     passive_sleep_min: Optional[int] = None
+    # CBT-I diary — the frozen derived pair is echoed so the surface can confirm it;
+    # both are computed server-side at AM submit and never accepted as input.
+    diary_tst_min: Optional[int] = None
+    diary_se_pct: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -420,6 +477,27 @@ def submit_am(
     record.life_load = body.life_load
     record.alcohol_units = body.alcohol_units if body.drank_last_night else None
     record.alcohol_finish_time = body.alcohol_finish_time if body.drank_last_night else None
+
+    # CBT-I diary capture — store the raw AM fields, then FREEZE the derived pair
+    # (diary_tst_min / diary_se_pct) server-side. The client never sends the derived
+    # values. Fields are simply None when no block is open; storing them is harmless
+    # (the engine only reads nights inside a block's date range).
+    record.got_into_bed = body.got_into_bed
+    record.lights_out = body.lights_out
+    record.sleep_latency_min = body.sleep_latency_min
+    record.waso_min = body.waso_min
+    record.night_wakings_n = body.night_wakings_n
+    record.final_wake = body.final_wake
+    record.out_of_bed = body.out_of_bed
+    record.wakings_nocturia_n = body.wakings_nocturia_n
+    record.wakings_pain_n = body.wakings_pain_n
+    record.wakings_spontaneous_n = body.wakings_spontaneous_n
+    tst, se, _valid = _freeze_diary(
+        body.lights_out, body.final_wake, body.out_of_bed,
+        body.sleep_latency_min, body.waso_min,
+    )
+    record.diary_tst_min = tst
+    record.diary_se_pct = se
 
     # Freeze naive_baseline and passive refs at this moment — never recomputed
     record.naive_baseline = calc_naive_baseline(

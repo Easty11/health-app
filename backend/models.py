@@ -155,6 +155,13 @@ class DailyRecord(Base):
     )
     diary_se_pct: Mapped[float | None] = mapped_column(Float, nullable=True)          # frozen at AM; same contract as naive_baseline
     diary_tst_min: Mapped[int | None] = mapped_column(Integer, nullable=True)         # frozen at AM; same contract as naive_baseline
+    # Waking-cause decomposition of night_wakings_n (nocturia/pain/spontaneous).
+    # OBSERVATIONAL ONLY — the titration engine must not read these (grep -rn
+    # 'wakings_' cbti/ stays empty). No sum constraint: recall is imperfect and
+    # enforcement would block submission; consistency is surfaced, not enforced.
+    wakings_nocturia_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wakings_pain_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wakings_spontaneous_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class DailyCheckIn(Base):
