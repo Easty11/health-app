@@ -320,6 +320,50 @@ class CBTIPrescription(Base):
     )
 
 
+class CBTIISI(Base):
+    """Insomnia Severity Index administration (Morin) — the outcome measure a block is
+    judged by. Stored as the SEVEN items (the record) plus the tool's reported total (a
+    fact about the tool, not about us); the canonical total is DERIVED on read, never
+    stored. A total cannot be decomposed later, and item-level distinguishes a sleep
+    change (items 1-3) from a distress change (items 6-7) — different results.
+
+    `block_id` is nullable: a screening or between-block administration belongs to no
+    block. Unique on (block_id, timepoint) — one baseline/mid/exit per block; NULL
+    block_ids do not collide (NULL != NULL), so screenings are unconstrained.
+    """
+    __tablename__ = "cbti_isi"
+    __table_args__ = (
+        UniqueConstraint("block_id", "timepoint", name="uq_cbti_isi_block_timepoint"),
+        CheckConstraint("timepoint IN ('baseline','mid','exit')", name="ck_cbti_isi_timepoint"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # SET NULL, not CASCADE: the ISI is the outcome record and must survive even a block
+    # deletion (blocks are append-only and never deleted, so this is belt-and-braces).
+    block_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cbti_blocks.id", ondelete="SET NULL"), nullable=True, index=True)
+    administered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    timepoint: Mapped[str] = mapped_column(String(10), nullable=False)   # baseline | mid | exit
+    item_1: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_2: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_3: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_4: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_5: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_6: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_7: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_reported: Mapped[int | None] = mapped_column(Integer, nullable=True)   # what the tool returned
+    instrument: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("'ISI'"))
+    administered_via: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def canonical_total(self) -> int:
+        """Sum of the seven items — the canonical ISI total, derived not stored. May
+        differ from total_reported when the administering tool anchors differently."""
+        return (self.item_1 + self.item_2 + self.item_3 + self.item_4
+                + self.item_5 + self.item_6 + self.item_7)
+
+
 class AerobicSession(Base):
     """Aerobic sessions for ACWR load tracking — seeded from Polar Flow export, future HC."""
     __tablename__ = "aerobic_sessions"

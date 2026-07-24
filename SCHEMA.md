@@ -29,6 +29,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 016 — exercise_region_tags    FK to hevy_exercise_templates (CASCADE) — app-owned annotation
 017 — cbti_blocks             FK to users (CASCADE) — append-only titration block ledger
 018 — cbti_prescriptions      FK to cbti_blocks (CASCADE) + self (superseded_by) — append-only window ledger
+019 — cbti_isi                FK to cbti_blocks (SET NULL, nullable) — ISI outcome-measure administrations
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -831,6 +832,34 @@ CREATE TABLE cbti_prescriptions (
 );
 
 CREATE INDEX ix_cbti_prescriptions_block_id ON cbti_prescriptions (block_id);
+```
+
+### 019 — cbti_isi
+
+Insomnia Severity Index administrations (Morin) — the outcome measure a block is judged by (migration `d3f7a1908c62`). The **seven items are the record**; `total_reported` preserves what the administering tool returned, and the **canonical total is derived on read** (`sum(item_1..7)`), never stored — a total cannot be decomposed later, and item-level distinguishes a sleep change (items 1–3) from a distress change (items 6–7). `block_id` is **nullable** (a screening or between-block administration belongs to no block); unique on `(block_id, timepoint)`, and NULL `block_id`s do not collide so screenings are unconstrained. `timepoint` domain is DB-enforced (`ck_cbti_isi_timepoint`).
+
+```sql
+CREATE TABLE cbti_isi (
+    id                INTEGER PRIMARY KEY,
+    block_id          INT REFERENCES cbti_blocks(id) ON DELETE SET NULL,  -- nullable: screening has no block
+    administered_at   TIMESTAMPTZ NOT NULL,
+    timepoint         VARCHAR(10) NOT NULL,    -- baseline|mid|exit (CHECK ck_cbti_isi_timepoint)
+    item_1            INTEGER NOT NULL,        -- ... item_2 .. item_7, all NOT NULL (the record)
+    item_2            INTEGER NOT NULL,
+    item_3            INTEGER NOT NULL,
+    item_4            INTEGER NOT NULL,
+    item_5            INTEGER NOT NULL,
+    item_6            INTEGER NOT NULL,
+    item_7            INTEGER NOT NULL,
+    total_reported    INTEGER,                 -- what the tool returned; may differ from sum(items)
+    instrument        VARCHAR(40) NOT NULL DEFAULT 'ISI',
+    administered_via  VARCHAR(40),             -- e.g. 'QxMD'
+    notes             TEXT,
+    CONSTRAINT uq_cbti_isi_block_timepoint UNIQUE (block_id, timepoint),
+    CONSTRAINT ck_cbti_isi_timepoint CHECK (timepoint IN ('baseline','mid','exit'))
+);
+
+CREATE INDEX ix_cbti_isi_block_id ON cbti_isi (block_id);
 ```
 
 **daily_records diary columns** (migrations `e5f2a9c7b104`, `a7b3f1c8d240`, `b2d5f9e04a17`). Thirteen additive nullable AM-moment columns extend `daily_records` for the CBT-I sleep diary, sparse by design (captured only while an open `cbti_block` exists): `got_into_bed`, `lights_out`, `sleep_latency_min`, `waso_min`, `night_wakings_n`, `final_wake`, `out_of_bed`, `naps_min`, `diary_se_pct`, `diary_tst_min`, and — from `b2d5f9e04a17` — the waking-cause decomposition `wakings_nocturia_n`, `wakings_pain_n`, `wakings_spontaneous_n`. The three waking-cause counts decompose `night_wakings_n` by cause; they are **observational only** (the titration engine must not read them — `grep -rn 'wakings_' backend/cbti/` stays empty) and carry **no sum constraint** to `night_wakings_n` (recall is imperfect; consistency is surfaced, never enforced). `got_into_bed` (phase 2) is the moment you got into bed, **distinct** from `lights_out` (tried to sleep) — sleep efficiency is computed over the `lights_out`→`out_of_bed` window, so only `lights_out` was imported in phase 1 and the 53 historical rows carry `got_into_bed` NULL. `diary_se_pct` / `diary_tst_min` are frozen at AM capture (same contract as `naive_baseline`, never recomputed). `naps_min` is logged PM on date D but belongs to the night terminating on wake-date D+1 — stored at PM on D, the engine reads it from `(date - 1)`. _(The `daily_records` parent table itself predates this document's coverage; only the CBT-I additions are recorded here.)_
