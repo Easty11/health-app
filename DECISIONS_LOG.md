@@ -4004,3 +4004,32 @@ because the block is confounded. Suite 401 passed, was 394.
 curve — at which point this becomes a gate proposal with data behind it rather than a guess.
 
 ---
+
+### 125. Free-text AM/PM notes on the daily record — captured context that must not become an engine input
+
+**Decision:** Two nullable `Text` columns on `daily_records` — `am_notes`, `pm_notes` (migration
+`f1a4c7e29b83`) — captured through the AM and PM check-in surfaces. **Observational: read by no engine
+code.** Not gated on an open block — notes are useful with or without a CBT-I block.
+
+**Rationale:** the block generates one-off explanations that belong on the record but must not become
+titration inputs — a carnival alarm, an off night. A structured field cannot hold them and the engine
+must not read them (the same discipline as the waking-cause columns, #119). **Separate AM/PM columns,
+not one:** the two surfaces submit independently, so a shared column's later write would clobber the
+earlier — the record already carries separate `am_timestamp` / `pm_timestamp`, and the notes follow that
+shape. Both fields round-trip through `DailyRecordOut` / `TodayOut` so the morning's note is visible when
+the PM form loads.
+
+**Status:** Landed. Migration chains off the real head `d3f7a1908c62` (the ISI migration superseded the
+brief's stated `b2d5f9e04a17` — Step-A VERIFY caught it). Both surfaces capture, both fields round-trip,
+a plain textarea on each page.
+
+**How you know:** suite asserts round-trip and null-accepted for both fields, and that a PM submit does
+**not** clobber `am_notes` (the two-columns justification, executable). Migration verified up/down/up in
+isolation on SQLite (via `create_all` — a bare stamp cannot test `add_column`, no table). Both services
+deploy-verified per #121: backend OpenAPI carries `am_notes`/`pm_notes`, frontend bundle carries the
+textarea label, each with a negative control. 406 passed, was 401.
+
+**Do not revisit unless:** a structured field is later shown to be the right home for something currently
+going into notes — at which point that content is promoted to its own column, and the note stays free-text.
+
+---
