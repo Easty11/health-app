@@ -3920,3 +3920,38 @@ capture stays but the engine's response to it changes.
 cannot be nap-gated retrospectively without a memory backfill. Two nights so far — worth a manual note.
 
 ---
+
+### 123. ROADMAP priority is anchored to external dates; closed questions leave the scan surface
+
+**Decision:** `ROADMAP.md` NOW holds only work serving a **known external date**, ordered by that date;
+undated live work sits in NEXT. `OPEN_QUESTIONS.md` gains a `## CLOSED` foot section holding the 14 DONE
+entries **verbatim**, below the live 33. No item is deleted — only moved or re-tiered, every body intact.
+The outer NOW / NEXT / LATER vocabulary is unchanged, because other stores bind to it (#112 names
+"ROADMAP NOW" as the canonical home for cross-repo debt); priority is implemented *inside* it. The
+cross-repo propagation row is therefore **pinned to NOW by #112** even though it is undated — the one
+NOW row that is not date-anchored, and it says so.
+
+**Rationale:** NOW had accumulated twelve unrelated rows with no ordering inside it, while the only two
+date-bound programmes in the backlog — the CBT-I titration due ~31 Jul and the lab/interpretation spine
+due against the early-Aug TRT panel — both sat in NEXT. A readiness-ordered list with no priority axis
+cannot answer "what next," so selection defaulted to whatever surfaced in conversation. Dates are the one
+ordering input that isn't a matter of taste. Closed questions were 30% of the store and, per #112, are
+not scanned for live work — pure noise in a file meant to be scanned.
+
+**Status:** Landed.
+
+**How you know:** pre-edit counts, measured not inherited — 47 question headers (14 DONE / 26 UNSTARTED /
+5 OWED / 2 BLOCKED); ROADMAP NOW 12 / NEXT 11 / LATER 6. Post-edit: 33 live questions above the fold, 14
+in CLOSED; ROADMAP NOW 6 / NEXT 19 / LATER 6. Content preservation verified independently against HEAD —
+46/47 question blocks byte-identical (Q42 gained a re-scope note, no deletion), and every one of the 33
+original ROADMAP rows preserved (30 verbatim, 3 prefix-extended, zero lost). Two brief-internal points
+were resolved against the file rather than assumed: the 4b package is **Q36–Q41 (six)**, not "Q35–Q41" —
+Q35 carries no `Due 4b` tag and none of the six cross-reference it; and Step 5's two stale candidates were
+checked against code — the morning check-in screen IS built (full Hooper set in `CheckInAM.jsx`; kept live
+only for the audit-trail and DOMS-split gaps), and Q42's scraper parse lives in `health-connect-app`, so
+tonight's 4h gate covers prefill only and Q42 stays open, re-scoped.
+
+**Do not revisit unless:** a third dated programme appears, or NOW again exceeds what one session can
+hold — in which case the dates are no longer discriminating and the axis needs revisiting, not the rows.
+
+---
