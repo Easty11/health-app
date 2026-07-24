@@ -185,6 +185,12 @@ class NightlyCloseOutIn(BaseModel):
     trained_today: bool = False
     session_quality: Optional[int] = Field(None, ge=1, le=5)
     session_rpe: Optional[float] = Field(None, ge=0, le=10)
+    # PM nap capture (present only while a block is open). The frontend sends 0 for a
+    # blank field when a block is open ("asked, no nap") and never null — null means
+    # "not asked", which after this only applies to nights before capture existed.
+    # `engine.py` excludes any night with naps_min > 0 (Q45); its guard is
+    # `is not None`, so a null silently leaves the nap exclusion un-firable.
+    naps_min: Optional[int] = Field(None, ge=0)
 
 
 class DailyRecordOut(BaseModel):
@@ -362,6 +368,7 @@ class TodayOut(BaseModel):
     today_rating: Optional[int] = None
     session_quality: Optional[int] = None
     session_rpe: Optional[float] = None
+    naps_min: Optional[int] = None       # round-trips the stored PM nap value into the form
     cbti: CBTIContextOut = Field(default_factory=CBTIContextOut)
 
     model_config = {"from_attributes": True}
@@ -525,6 +532,10 @@ def submit_pm(
     record.today_rating = body.today_rating
     record.session_quality = body.session_quality if body.trained_today else None
     record.session_rpe = body.session_rpe if body.trained_today else None
+    # Store what the client sent: 0 (asked, no nap) or a positive count while a block
+    # is open, null when the field was not shown. Coercion of blank->0 is the client's
+    # (a null here after this build means the night predates PM nap capture).
+    record.naps_min = body.naps_min
 
     db.commit()
     db.refresh(record)

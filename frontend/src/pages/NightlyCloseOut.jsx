@@ -77,6 +77,7 @@ export default function NightlyCloseOut() {
   const [error, setError] = useState('')
   const [alreadyDone, setAlreadyDone] = useState(false)
   const [cbti, setCbti] = useState(null)
+  const [napsMin, setNapsMin] = useState('')   // '' = blank; blank+block_open submits 0, never null
 
   useEffect(() => {
     api.get('/checkin-v2/today')
@@ -89,6 +90,7 @@ export default function NightlyCloseOut() {
         }
         if (data?.today_rating) setTodayRating(data.today_rating)
         if (data?.session_rpe != null) setSessionRpe(data.session_rpe)
+        if (data?.naps_min != null) setNapsMin(String(data.naps_min))
       })
       .catch(() => {})
   }, [])
@@ -103,6 +105,10 @@ export default function NightlyCloseOut() {
         trained_today: trainedToday,
         session_quality: trainedToday ? sessionQuality : null,
         session_rpe: trainedToday ? sessionRpe : null,
+        // Load-bearing (DECISIONS #C): while a block is open a blank field submits 0
+        // ("asked, no nap"), NEVER null — null means "not asked" and disables the
+        // engine's nap exclusion (guarded on `is not None`). No block: not asked -> null.
+        naps_min: cbti?.block_open ? (napsMin === '' ? 0 : Number(napsMin)) : null,
       })
       setSubmitted(true)
     } catch (err) {
@@ -184,6 +190,24 @@ export default function NightlyCloseOut() {
               </div>
             )}
           </div>
+
+          {/* Nap capture — only while a titration block is open. A blank submits 0
+              ("no nap today"), never null; any nap excludes the night from titration. */}
+          {cbti?.block_open && (
+            <div className="space-y-1 border-t border-gray-100 pt-5">
+              <label className="text-sm font-medium text-gray-700">Naps today (minutes)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="0"
+                value={napsMin}
+                onChange={e => setNapsMin(e.target.value)}
+                className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              />
+              <p className="text-[10px] text-gray-400">Leave blank for no nap. Any nap excludes tonight from the titration window.</p>
+            </div>
+          )}
 
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-500">
             Wind-down ritual (offload + gratitude) happens <em>after</em> this — borrow your meditation app or use paper. Not logged here.
