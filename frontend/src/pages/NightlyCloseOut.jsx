@@ -43,6 +43,24 @@ function SliderField({ label, value, onChange, min = 0, max = 10 }) {
   )
 }
 
+// Tonight's prescribed sleep window, surfaced from /today's `cbti` block. Renders only
+// while a titration block is open — the whole point of the PM page in a block is to show
+// the operator when to go to bed. `window_minutes` is display-only (360 -> "6h00").
+function PrescriptionCard({ cbti }) {
+  if (!cbti?.block_open) return null
+  const w = cbti.window_minutes
+  const win = w != null ? `${Math.floor(w / 60)}h${String(w % 60).padStart(2, '0')}` : null
+  return (
+    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-5 text-center">
+      <p className="text-xs text-indigo-400 uppercase tracking-wide mb-1">Tonight's sleep window</p>
+      <p className="text-2xl font-bold text-indigo-700">
+        {cbti.prescribed_lights_out || '—'} <span className="text-indigo-300 font-normal">→</span> {cbti.wake_anchor || '—'}
+      </p>
+      {win && <p className="text-xs text-indigo-400 mt-1">{win} in bed · lights out at {cbti.prescribed_lights_out}</p>}
+    </div>
+  )
+}
+
 const DAY_LABELS = ['Terrible', 'Poor', 'Okay', 'Good', 'Great']
 const SESSION_LABELS = ['Very poor', 'Below plan', 'As planned', 'Above plan', 'Exceptional']
 
@@ -58,10 +76,12 @@ export default function NightlyCloseOut() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [alreadyDone, setAlreadyDone] = useState(false)
+  const [cbti, setCbti] = useState(null)
 
   useEffect(() => {
     api.get('/checkin-v2/today')
       .then(({ data }) => {
+        setCbti(data?.cbti || null)
         if (data?.pm_timestamp) setAlreadyDone(true)
         if (data?.session_quality) {
           setTrainedToday(true)
@@ -103,6 +123,7 @@ export default function NightlyCloseOut() {
           <p className="text-sm text-gray-500 mb-6">
             Wind down — offload + gratitude (paper or your meditation app).
           </p>
+          <PrescriptionCard cbti={cbti} />
           <p className="text-xs text-gray-400 mb-6">
             Mindfulness session will be read from Health Connect automatically.
           </p>
@@ -124,6 +145,8 @@ export default function NightlyCloseOut() {
           <button onClick={() => navigate('/dashboard')} className="text-sm text-indigo-600 hover:text-indigo-800">← Back</button>
           <h1 className="text-lg font-semibold text-gray-800">Nightly Close-out</h1>
         </div>
+
+        <PrescriptionCard cbti={cbti} />
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Today rating */}
