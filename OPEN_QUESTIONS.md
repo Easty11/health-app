@@ -6,40 +6,6 @@ resolving `DECISIONS_LOG` entry.
 
 ---
 
-## Q1. Backend HC stage-constant fix + historical backfill
-
-`routers/health_connect.py` stage constants are confirmed wrong (DECISIONS_LOG #20):
-`SLEEP_STAGE_DEEP=4`, `REM=5`, `LIGHT=2`. Correct to the official enum — `LIGHT=4`,
-`DEEP=5`, `REM=6`, `AWAKE=1` — and add handling for stage 6 (currently dropped) so
-REM is counted. Then decide whether to **backfill** the corrupted `health_connect_syncs`
-rows or let them age out: the HC path looks dormant (latest row 2026-06-21, all written
-in a single backfill at 2026-06-21 19:04Z; live sleep stages currently come from the
-scraper). Also re-verify the HC `sleep_score` derivation and the `_section_health_connect`
-AI-prompt block, which both consume the mislabelled values.
-
-**Status:** DONE → #20. Fix deployed to Railway (PR #2) and all 31 HC rows
-re-synced from device on 2026-06-22 (30-day backfill, range 05-22→06-21). Verified
-against Railway Postgres: `light_sleep_minutes` now populated (was 0 on every row),
-deep/REM no longer swapped, slivers no longer truncated; corrected values track the
-scraper. Surfaced a new date-attribution bug — see Q4.
-
----
-
-## Q2. Companion `validateNight` returns overlapping/duplicate SleepSession records
-
-`validateNight()` for last night returned `sleepRecords: 4` with the per-stage `durMin`
-arrays clearly doubled (totals ≈2× the real night: stage-5 deep 69→~34.5, stage-6 rem
-134→67). `runDeepConfidence`/`flagDeepSegments` currently `flatMap` all sessions and will
-double-count. Must de-duplicate before `trustedDeepMin` is meaningful — e.g. pick the
-longest session per night (as `health_connect.py:_aggregate_day` does), or union by time
-range. Until then `runDeepConfidence` output is not trustworthy.
-
-**Status:** DONE — fixed in `health-connect-app` `36df9a2` (confirmed patch-present
-on HCA master): `collapseSleepSessions()` de-duplicates the overlapping SleepSession
-records before downstream consumers, behaviorally verified 9/9.
-
----
-
 ## Q3. HR sampling cadence during sleep unconfirmed (`hrMedianGapSec = 0`)
 
 Gate 3 returned `hrMedianGapSec: 0` over 802 samples, not the expected ~60s (1/min). Caused
@@ -132,22 +98,6 @@ ledger, and decide the findings-detail schema jointly with Q20. No blocker named
 
 ---
 
-## Q8. Event-spine schema fork
-
-Adopt `health_events` + `user_health_state` as the canonical spine, OR keep the organic
-schema (`aerobic_sessions`, `daily_records`, `daily_check_ins`, `samsung_hrv_readings`)
-with `user_health_state` as an overlay view on top? Design-stage; not in master. Blocks
-the `user_health_state` build and the Decision Support layer.
-
-Resolution: overlay adopted; `user_health_state` is a compute-on-read `current_state`
-read model over existing stores, not a `health_events` spine. `health_events` deferred
-and narrowed to an additive projection scoped to the medical timeline; call timed to the
-lab pipeline.
-
-**Status:** DONE → #43
-
----
-
 ## Q9. Consolidate legacy free-text `user_knowledge` into `user_knowledge_entries`?
 
 Legacy `user_knowledge` (free-text category/content) coexists with structured
@@ -174,23 +124,6 @@ wearable integration deferred, Cooper has no wearable).
 pathway, so nothing prevents building it; there is simply no consumer yet (Deb's wearable integration
 deferred, Cooper has no wearable). Revisit when the Metabolic-load channel is wired to Polar-in-HC data
 for a real consumer.
-
----
-
-## Q11. Lab store — where per-marker observed results live
-
-Fork: `lab_result` typed table vs `user_knowledge_entries type="lab"` vs `health_events`.
-Blocked the #49 build, the #48 write path, and lever-dictionary wiring alike.
-
-**Status:** DONE → #52 (`lab_report` + `lab_result` table pair).
-
----
-
-## Q12. Per-marker minimum meaningful delta
-
-Where the #49 delta-gate threshold lives; global vs per-marker.
-
-**Status:** DONE → #53 (per-marker `min_meaningful_delta`, in-repo #51-family reference asset).
 
 ---
 
@@ -222,24 +155,6 @@ Owner: Luke. If absent-confirmed, the residual is the HRV single-point-of-failur
 
 ---
 
-## Q14. Hevy create-loop id contract
-
-Does `POST /v1/exercise_templates` return the canonical string id (UUID/hex) or a bare
-integer (the spec example shows an int)? This decides the create loop's shape:
-create→single-row-upsert (if the create response carries the canonical id) vs
-create→list-back (if it does not). Resolve empirically: one throwaway live create + a
-list-match against `get_exercise_templates`. **How-you-know** artifact required before
-any build.
-
-**Status:** DONE → #65 — the live OpenAPI spec types the `POST
-/v1/exercise_templates` response as `{"id": <integer>}`, distinct from the canonical
-string UUID `GET` returns; the create loop adopts create→list-back (create → sync →
-resolve within the custom subset), so the POST-response representation never gates the
-build. The deferred micro-opt (skip the re-pull if the POST is later confirmed to carry
-the canonical UUID) is out of scope.
-
----
-
 ## Q15. `3497ab483935` prod-drift reconciliation
 
 Autogenerate surfaced (and Code stripped) three divergences between local and prod at
@@ -249,70 +164,6 @@ a real un-migrated delta. Resolve against Railway Postgres, not local.
 
 **Status:** OWED — outstanding check: confirm each of the three divergences against **Railway Postgres**
 (not local) as either an intended local/prod difference or a real un-migrated delta. Owner: Luke.
-
----
-
-## Q16. `hevy.py` `get_exercise_history` path
-
-The connector calls `/exercise_templates/{id}/history`; community docs show
-`/exercise_history/{id}`. Verify against the live API and fix the connector path if it is
-wrong.
-
-**Status:** DONE → #69. Path corrected to `/v1/exercise_history/{id}` (template id unchanged)
-on `fix/hevy-exercise-history-path`; basis is official docs + 3 independent current clients.
-Live corroboration remains optional belt-and-braces (local Hevy MCP hung this session).
-
----
-
-## Q17. HRV step-change from 6 Jul — (A) instrumentation vs (B) physiology
-
-`get_recovery_metrics(days=30)` surfaced a step (not ramp) in scraper HRV: pre-6-Jul (13 Jun–4 Jul,
-22 nights) mean ≈57 ms, range 24–88, high variance; post-6-Jul (7 nights) mean ≈96 ms, range 83–117,
-variance collapsed. No row exists for 5 Jul — the discontinuity sits in that gap. The 57 ms pre-period
-mean matches the established operative baseline exactly, so old data was valid and the break is new.
-Two hypotheses, possibly both true: **(A) instrumentation** — the phantom-node fix changed which node
-the scraper binds, now reading a different metric (RMSSD→SDNN ≈ the observed 1.7× ratio); **(B)
-physiology** — tirzepatide ceased 2+ weeks ago (~3 half-lives), GLP-1/GIP washout produces a genuine
-HRV rebound, ~~corroborated by respiratory rate drifting ~14.0→~13.5 br/min over the same window via a
-*different sensor path* (a scraper bug cannot move RR). The 68% rise exceeds published GLP-1 HRV
-effects alone.~~ **[struck — resolved → #89 on (A): RR is NOT a different sensor path. It is
-`vitality_respiratory_rate_average_title`, read from the same Vitality screen through the same
-phantom-affected selector, fixed in the same HCA commit as HRV (`1db8833`/#19). The RR drift is a
-*prediction* of (A); the "68% rise" is an artifact of stale reads, not a real rebound.]**
-
-**Decision gate = Task 1 node dump** (branch `feat/hrv-node-dump` in **`health-connect-app`**, a
-separate repo — not reachable from a health-app-rooted session). Dump the `HRVAccessibilityService`
-node tree; identify the bound node's field/metric identity and whether a sibling node carries the
-pre-6-Jul metric. Different node/metric → (A): correct the binding, then reconcile. Same node/metric →
-(B): rebound is real. **Historical row reconciliation must NOT run until this gate resolves** —
-reconciling against a moving metric definition bakes the error in permanently. Confirmatory input held
-ready: `feat/recovery-metrics-rhr` (Task 2, RHR series in `get_recovery_metrics`) — but note the primary
-`samsung_hrv_readings` RHR is the scraper's `sleep_hr_bpm`, same device family as HRV; the truly
-independent discriminator is Health Connect `resting_heart_rate` (query `health_connect_syncs` directly).
-
-**Resolution (→ #89 · 2026-07-19).** Closed on **(A) instrumentation**, verified against
-`health-connect-app` master (`1db8833`/#19):
-1. **(A) confirmed — mechanism is stale-phantom *selection*, not a metric change.** #19 routes all
-   three Energy-score reads through `findByIdValidBounds` instead of `findById(...).firstOrNull()`; the
-   phantom is a Compose view-recycling duplicate bearing the *prior* render's value with negative width,
-   which `.firstOrNull()` returned. Same node, same metric (RMSSD) throughout — the scraper simply
-   stopped binding the stale duplicate. (Authored 26 Jun on unmerged `fix/scraper-sh-relayout`; reached
-   HCA master 11 Jul, renumbered #16→#19 — the gate's binary "different node→A / same node→B" missed
-   this third case: same node, but the old reads were the phantom.)
-2. **RMSSD→SDNN withdrawn as surplus.** The 1.7× ratio is coincidence. A stale prior-render value
-   predicts the statistics directly — pre (mean 57, range 24–88, high variance) = scattered stale reads;
-   post (mean 96, range 83–117, variance collapsed) = locked to on-screen truth — with no analyte change
-   required.
-3. **(B)'s corroborator is void — never independent.** RR shares the exact read path (see the struck
-   clause above), so the 14.0→13.5 drift is a *prediction* of (A), not evidence against it.
-
-(B) as *physiology* is **unevidenced, not disproven** — washout may still have moved HRV, but this
-series cannot speak to it. The pre-install baseline ≈57 ms is not a baseline; trustworthy HRV history is
-short, not long. **Historical rows are NOT reconciled here — see Q29** (install-history segmentation is
-the prerequisite; the changepoint is an APK-install event, not a commit).
-
-**Status:** DONE → #89 (instrumentation limb; (A) confirmed vs HCA master). Cross-refs Q13, Q18,
-Q29, issue #9, `BRANCHES.md` `feat/recovery-metrics-rhr`, HCA #19 / Q3.
 
 ---
 
@@ -385,19 +236,6 @@ both together.
 
 ---
 
-## Q21. Does the lab-side expectation contract (#63 / SPEC_64) generalise to injury trajectories?
-
-**Status:** DONE (this session; no DECISIONS entry — logged conclusion only) — they **rhyme, they do not share code.** Both follow declare
-expectation → surface divergence → never suppress (lab gate-2 "annotate, don't hide" ≡ injury "surface,
-don't gate"). But the lab contract is bound to marker/delta semantics (`marker_groups.json`,
-`min_meaningful_delta`, two-gate axis-verdicts) while injury trajectory is a soreness series vs a
-declared shape (`injury_trajectory.py`). Kept as separate mechanisms deliberately — forcing a shared
-abstraction over two things that merely share a shape is how you get a bad one. Logged per the
-constraint-consumption brief; no further action unless a third expectation-gated surface appears and the
-rhyme becomes a rule worth abstracting.
-
----
-
 ## Q22. Promote exercise-region tags to a source-agnostic canonical exercise layer
 
 Tags are currently keyed on the **Hevy** template id (`exercise_region_tags.hevy_exercise_template_id`),
@@ -436,51 +274,6 @@ by (future) plan↔log reconciliation.
 **Status:** BLOCKED — blocker: the plan↔log reconciliation is not built, and it is `laterality`'s ONLY
 consumer, so whether a `capability_state.side` join *should* exist cannot be settled until that consumer
 exists. Owner: Luke. Unblocks on: reconciliation being designed/built.
-
----
-
-## Q25. (cross-repo, health-connect-app) Disposition of remote branch `claude/hevy-api-workout-query-teulc2`
-
-Remote branch `claude/hevy-api-workout-query-teulc2` (`4dfccbe`) is on `origin` for **health-connect-app**,
-unmerged, and is NOT in that repo's `BRANCHES.md` — whose own header states "every branch not master lives
-here until merged+deleted." The store is violating its own rule. Needs a disposition: govern it (add to
-BRANCHES.md) or kill it. Not this repo's / this brief's job — logged only.
-
-**Status:** DONE → #91 — the branch now carries a dedicated row in `health-connect-app`'s `BRANCHES.md`
-(added at HCA `f15b545`, "row the unrowed branch"). This question asked whether the branch was **governed or
-killed**; governing it discharges the question.
-
-**Both limbs now closed (verified 2026-07-20, #93).** The disposition this entry left OWED in HCA's store has
-since completed: the operator deleted the remote ref, HCA's row reads `DONE → discarded 2026-07-20`, and
-`git ls-remote --heads origin claude/hevy-api-workout-query-teulc2` returns empty — verified from an
-HCA read during the #93 session. Both the omission this question recorded and its subject are gone.
-The row remains HCA's to hold; tracking it here too would be the duplication defect Q31 records.
-
----
-
-## Q26. Taxonomy has no home for isolation / adductor-abductor work — G2 "zero fallback" vs benign empties
-
-`Capability_Taxonomy_v0` is a movement-PATTERN + capacity vocabulary. A large share of the user's logged
-work has no clean region: **Hip Adduction / Hip Abduction (Machine)** (frontal-hip strength — pes-anserine-
-relevant, the injury the tagging brief itself cares about), knee isolations (leg extension / leg curl), and
-arm/shoulder isolations (curls, raises, delt flies, triceps). These are left UNTAGGED in the v0 proposal —
-the keyword fallback returns `[]` for all of them (benign: no wrong region, just a logged coverage-gap hit).
-This puts G2 ("100% of active-window templates tagged, fallback hit-count 0") in tension with reality:
-forcing a tag would pollute the region signal.
-
-Three resolutions for Luke: (a) accept benign empties and redefine the coverage metric as "zero *wrong*
-tags" rather than "zero fallback"; (b) add an accessory/no-pattern sentinel so isolations are "tagged" (bypass
-the keyword path) but contribute no region — needs a mechanism, since region_key validates fail-closed
-against the taxonomy; (c) extend the taxonomy (e.g. a frontal-hip adductor/abductor strength region) — a
-`TAXONOMY_VERSION` bump. The adductor gap is the load-bearing one given the active pes anserine injury.
-
-**Status:** DONE → **DECISIONS_LOG #76**, option **(b)** with a correction. Not two states but THREE —
-`tagged` / `adjudicated no-pattern` / `untagged` — via a `hevy_exercise_templates.adjudicated_at` timestamp,
-NOT a sentinel region_key (which would weaken fail-closed validation). G2 stands UNSOFTENED (option (a) was
-rejected: redefining coverage as "zero wrong tags" forfeits the ability to detect a real gap later). Option
-(c) — the taxonomy bump — is deliberately NOT done inside a tag confirmation (the log must not shape the
-screen); it is spun out to Q27 as a grounded v1 design pass. Interim: calf / shoulder ER-IR / Copenhagen /
-hip add-abd are adjudicated no-pattern.
 
 ---
 
@@ -667,40 +460,6 @@ re-fingerprint on both sides. Owner: Luke.
 
 ---
 
-## Q34. Is `safety_threshold` a third class of read-constant, alongside delta and stable_rationale?
-
-`lever_dictionary.marker_interpretation[*]` currently carries two kinds of authored constant:
-`min_meaningful_delta` (is this change news?) and `stable_rationale` (is this persistent flag benign?).
-Both answer *interpretive* questions — they shape how a reading is narrated.
-
-Neither answers a **safety** question: is this value dangerous *now*, regardless of whether it moved or
-whether it is constitutionally normal for this person? Haematocrit on TRT is the live case that
-prompted this — `trt_erythrocytosis_watch` (now `ready_to_promote` at #95) is a context relation, and
-context is not a threshold. A rising-but-in-range Hct and an Hct at 0.54 are different claims, and only
-the second is a safety statement.
-
-The open fork: does `safety_threshold` belong as a third key on `marker_interpretation`, or is it a
-distinct asset that should not share a home with interpretive constants — on the grounds that mixing a
-"this is interesting" constant with a "this is dangerous" constant in one dict invites a producer bug
-that treats them interchangeably?
-
-Whatever the shape, extended I1 (#95) applies: a safety threshold with empty `evidence_refs` must not
-gate anything. That is more load-bearing here than for a delta, because the failure direction is
-asymmetric — an uncited delta produces a boring narration, an uncited safety threshold produces a
-false reassurance or a false alarm.
-
-**Status:** DONE → #104 — `safety_threshold` is a third class, and a third *gate*, not a third
-read-constant. It lives in its own asset (`backend/reference/safety_thresholds.json`) rather than in
-`lever_dictionary.marker_interpretation`, because the two existing constants are **measured**
-(CVI/CVA-derived, non-expiring) while a safety threshold is **policy** — committee judgement carrying a
-`review_due`. `gates.safety_gate()` compares a level to it, and the mechanism is complete and tested.
-
-**The asset is empty and that is the remaining work — tracked as Q41, not here.** The question asked
-what shape the thing should take; that is answered. Whether haematocrit's bands can be cited is a
-different question with a different owner.
-
----
-
 ## Q35. The over-collapse guard is unit-only and cannot see same-unit semantic collapse
 
 `backend/routers/labs.py:394` refuses a write when a raw label maps to a canonical whose
@@ -728,6 +487,10 @@ other panel has yet printed that word.
 **Status:** UNSTARTED — no blocker. Owner: Luke.
 
 ---
+
+### ▸ Interpretation 4b package — Q36–Q41
+
+_These six forks travel together: they are the open questions blocking the interpretation-layer build (4b), and their single ROADMAP home is the **Interpretation layer build** NOW row (they do not each get a roadmap row). Kept as distinct entries — each carries separate content — but grouped here so the package is legible. Q35 above is related but **not** in the package: it carries no `Due 4b` tag and none of the six cross-reference it._
 
 ## Q36. `discriminator` field semantics are inverted between two authored relations
 
@@ -912,6 +675,336 @@ the fix and its canonical question belong in `health-connect-app`'s `OPEN_QUESTI
 **Status:** UNSTARTED — no blocker. Owner: Luke. **Next action:** carry to `health-connect-app`'s
 `OPEN_QUESTIONS` (cross-repo; not editable from a health-app-rooted session).
 
+**Re-scoped (2026-07-25, backlog triage — Step 5 stale check):** the 4h prefill sanity-gate shipped in
+health-app (#117's safety catch) catches the *symptom* at prefill — a 12-hour-format value more than 4h
+from the prescription is rejected rather than prefilled. It does **not** fix the source parse, which lives
+in `health-connect-app` (`parseSleepTimingContentDesc` / `parseClockToMinutes`, absent from this repo,
+verified) and is unverifiable from a health-app-rooted session. Scope is now explicit: **the gate covers
+prefill only; the source mis-parse is still open and belongs to HCA.** So the question stays live, not
+closed by tonight's gate.
+
+---
+
+## Q45. The VA CBT-I diary does not say which day a recorded nap belongs to — so the engine excludes nap nights rather than attributing them
+
+`daily_records.naps_min` is silent when wrong. The titration engine reads naps for the night
+terminating on wake-date W from `date = W-1`, which is only correct if the instrument's nap item refers
+to the day *preceding* the recorded night. **The instrument does not say.**
+
+**This search was run, and it was scoped.** Every text cell across all five sheets of the VA CBT-I
+Sleep Diary Calculator export was matched against both a nap pattern and a temporal pattern
+(`yesterday|today|last night|previous day|during the day|...`). Every nap reference is bare:
+`Naps (minutes)`, `Naps`, `Biological Need for Sleep (TST + Naps)`. The FAQ mentions naps only for the
+TST24 definition and for scheduled-nap timing advice — neither states which day a diary row's nap
+covers.
+
+**Positive control — this is what makes it a scoped null and not a failed search.** The temporal
+pattern *did* fire elsewhere in the same workbook, on `"Did you eat before bed? How long before bed?"`.
+The detector demonstrably finds temporal qualifiers in this instrument and found none attached to the
+nap item. Per #110 clause 1, that is the difference between "the wording does not settle it" and
+"nobody looked". **Do not re-run this search.**
+
+**Resolution, adopted:** the engine **excludes nap-flagged nights entirely**, recording them in
+`cbti_prescriptions.excluded_nights` with reason `nap`, rather than attributing them to a date. Two of
+the imported block's 53 nights carry naps, so exclusion costs almost nothing while a wrong attribution
+is silent. This is the standing behaviour until the question is answered, not a placeholder.
+
+**Status:** UNSTARTED — no blocker; the engine's exclusion path is the interim answer. Owner: Luke.
+**Next action to close it:** establish the nap item's referent from the VA CBT-I protocol
+documentation or by asking the clinician who administered the block — not from the workbook, which has
+already been searched to exhaustion.
+
+---
+
+_Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
+GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
+fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
+
+## Q46. No column records whether a prescription's `basis_tst` came from device or diary — only its adherence source
+
+The `cbti_prescriptions` basis-source columns (`basis_n_samsung` / `basis_n_diary`, migration
+`c4e8a2019bd7`) record the **adherence** source of each basis night — whether bedtime was checked
+against Samsung or against the diary's own `lights_out`. They do **not** record whether `basis_tst_min`
+itself was computed from device `actual_sleep_time_minutes` or from diary TST. These are different axes.
+
+Surfaced opening block 3. Its opening prescription (block id=2, rx id=10) is **device-derived**:
+`basis_n_samsung=27`, `basis_n_diary=0`, `basis_tst_min=349` computed from Samsung
+`actual_sleep_time_minutes` over 2026-06-23..2026-07-23 — stated only in the prescription's `rationale`
+text. Block 2's basis was diary-derived. A later reader comparing the two blocks' bases cannot tell the
+two provenances apart from structured columns, and a device basis and a diary basis are not equivalent.
+
+**Status:** UNSTARTED — no blocker; the interim is the rationale text on rx id=10. Owner: Luke. **No
+column added mid-block** — block 3 is open, an additive nullable migration is safe, but a new provenance
+axis is a design choice not a hotfix. **Next action to close it:** decide whether `basis_tst` provenance
+warrants its own column (`device|diary|mixed`) or the rationale text suffices, before block 4 opens.
+
+---
+
+## Q47. The adherence gate prefers Samsung `bedtime`, whose detection lag can flip a night against a ±30 tolerance
+
+`cbti/engine.py:230-235` establishes adherence from `samsung_bedtime` **in preference to** diary
+`lights_out` where a `passive_overnight` row exists (`elif night.lights_out` is the fallback). Samsung's
+`bedtime` is a **detected** onset; it lags the actual lights-out ("tried to sleep") by a measured ~10
+min. The adherence tolerance (`ADHERENCE_TOL_MIN`) is ±30. A systematic 10-min lag is a third of the
+band — enough to flip a borderline night between adherent and non-adherent, which changes whether it
+counts toward a titration cycle (`ADHERENCE_FAIL_N` = 3 of 7 → HOLD). The diary `lights_out` and the
+device `bedtime` are not the same instant, and the gate treats the preferred one interchangeably with
+the prescription's lights-out.
+
+**Status:** UNSTARTED — no blocker; the gate runs as built and the source is recorded per-night
+(`adherence_source`). Owner: Luke. **Next action:** measure the lag distribution across block 3's live
+nights (same night: diary `lights_out` vs Samsung `bedtime`) and then choose — subtract a calibrated
+offset, widen the tolerance, or prefer diary `lights_out` for adherence. Do not adjust before the
+distribution is measured (empirical-specificity).
+
+---
+## CLOSED
+
+_Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
+deciding `DECISIONS_LOG` entry. Per #112 closed questions are not scanned for live work — they
+sit below the fold so the live list above is the scan surface. Nothing is deleted; only moved._
+
+---
+
+## Q1. Backend HC stage-constant fix + historical backfill
+
+`routers/health_connect.py` stage constants are confirmed wrong (DECISIONS_LOG #20):
+`SLEEP_STAGE_DEEP=4`, `REM=5`, `LIGHT=2`. Correct to the official enum — `LIGHT=4`,
+`DEEP=5`, `REM=6`, `AWAKE=1` — and add handling for stage 6 (currently dropped) so
+REM is counted. Then decide whether to **backfill** the corrupted `health_connect_syncs`
+rows or let them age out: the HC path looks dormant (latest row 2026-06-21, all written
+in a single backfill at 2026-06-21 19:04Z; live sleep stages currently come from the
+scraper). Also re-verify the HC `sleep_score` derivation and the `_section_health_connect`
+AI-prompt block, which both consume the mislabelled values.
+
+**Status:** DONE → #20. Fix deployed to Railway (PR #2) and all 31 HC rows
+re-synced from device on 2026-06-22 (30-day backfill, range 05-22→06-21). Verified
+against Railway Postgres: `light_sleep_minutes` now populated (was 0 on every row),
+deep/REM no longer swapped, slivers no longer truncated; corrected values track the
+scraper. Surfaced a new date-attribution bug — see Q4.
+
+---
+
+## Q2. Companion `validateNight` returns overlapping/duplicate SleepSession records
+
+`validateNight()` for last night returned `sleepRecords: 4` with the per-stage `durMin`
+arrays clearly doubled (totals ≈2× the real night: stage-5 deep 69→~34.5, stage-6 rem
+134→67). `runDeepConfidence`/`flagDeepSegments` currently `flatMap` all sessions and will
+double-count. Must de-duplicate before `trustedDeepMin` is meaningful — e.g. pick the
+longest session per night (as `health_connect.py:_aggregate_day` does), or union by time
+range. Until then `runDeepConfidence` output is not trustworthy.
+
+**Status:** DONE — fixed in `health-connect-app` `36df9a2` (confirmed patch-present
+on HCA master): `collapseSleepSessions()` de-duplicates the overlapping SleepSession
+records before downstream consumers, behaviorally verified 9/9.
+
+---
+
+## Q8. Event-spine schema fork
+
+Adopt `health_events` + `user_health_state` as the canonical spine, OR keep the organic
+schema (`aerobic_sessions`, `daily_records`, `daily_check_ins`, `samsung_hrv_readings`)
+with `user_health_state` as an overlay view on top? Design-stage; not in master. Blocks
+the `user_health_state` build and the Decision Support layer.
+
+Resolution: overlay adopted; `user_health_state` is a compute-on-read `current_state`
+read model over existing stores, not a `health_events` spine. `health_events` deferred
+and narrowed to an additive projection scoped to the medical timeline; call timed to the
+lab pipeline.
+
+**Status:** DONE → #43
+
+---
+
+## Q11. Lab store — where per-marker observed results live
+
+Fork: `lab_result` typed table vs `user_knowledge_entries type="lab"` vs `health_events`.
+Blocked the #49 build, the #48 write path, and lever-dictionary wiring alike.
+
+**Status:** DONE → #52 (`lab_report` + `lab_result` table pair).
+
+---
+
+## Q12. Per-marker minimum meaningful delta
+
+Where the #49 delta-gate threshold lives; global vs per-marker.
+
+**Status:** DONE → #53 (per-marker `min_meaningful_delta`, in-repo #51-family reference asset).
+
+---
+
+## Q14. Hevy create-loop id contract
+
+Does `POST /v1/exercise_templates` return the canonical string id (UUID/hex) or a bare
+integer (the spec example shows an int)? This decides the create loop's shape:
+create→single-row-upsert (if the create response carries the canonical id) vs
+create→list-back (if it does not). Resolve empirically: one throwaway live create + a
+list-match against `get_exercise_templates`. **How-you-know** artifact required before
+any build.
+
+**Status:** DONE → #65 — the live OpenAPI spec types the `POST
+/v1/exercise_templates` response as `{"id": <integer>}`, distinct from the canonical
+string UUID `GET` returns; the create loop adopts create→list-back (create → sync →
+resolve within the custom subset), so the POST-response representation never gates the
+build. The deferred micro-opt (skip the re-pull if the POST is later confirmed to carry
+the canonical UUID) is out of scope.
+
+---
+
+## Q16. `hevy.py` `get_exercise_history` path
+
+The connector calls `/exercise_templates/{id}/history`; community docs show
+`/exercise_history/{id}`. Verify against the live API and fix the connector path if it is
+wrong.
+
+**Status:** DONE → #69. Path corrected to `/v1/exercise_history/{id}` (template id unchanged)
+on `fix/hevy-exercise-history-path`; basis is official docs + 3 independent current clients.
+Live corroboration remains optional belt-and-braces (local Hevy MCP hung this session).
+
+---
+
+## Q17. HRV step-change from 6 Jul — (A) instrumentation vs (B) physiology
+
+`get_recovery_metrics(days=30)` surfaced a step (not ramp) in scraper HRV: pre-6-Jul (13 Jun–4 Jul,
+22 nights) mean ≈57 ms, range 24–88, high variance; post-6-Jul (7 nights) mean ≈96 ms, range 83–117,
+variance collapsed. No row exists for 5 Jul — the discontinuity sits in that gap. The 57 ms pre-period
+mean matches the established operative baseline exactly, so old data was valid and the break is new.
+Two hypotheses, possibly both true: **(A) instrumentation** — the phantom-node fix changed which node
+the scraper binds, now reading a different metric (RMSSD→SDNN ≈ the observed 1.7× ratio); **(B)
+physiology** — tirzepatide ceased 2+ weeks ago (~3 half-lives), GLP-1/GIP washout produces a genuine
+HRV rebound, ~~corroborated by respiratory rate drifting ~14.0→~13.5 br/min over the same window via a
+*different sensor path* (a scraper bug cannot move RR). The 68% rise exceeds published GLP-1 HRV
+effects alone.~~ **[struck — resolved → #89 on (A): RR is NOT a different sensor path. It is
+`vitality_respiratory_rate_average_title`, read from the same Vitality screen through the same
+phantom-affected selector, fixed in the same HCA commit as HRV (`1db8833`/#19). The RR drift is a
+*prediction* of (A); the "68% rise" is an artifact of stale reads, not a real rebound.]**
+
+**Decision gate = Task 1 node dump** (branch `feat/hrv-node-dump` in **`health-connect-app`**, a
+separate repo — not reachable from a health-app-rooted session). Dump the `HRVAccessibilityService`
+node tree; identify the bound node's field/metric identity and whether a sibling node carries the
+pre-6-Jul metric. Different node/metric → (A): correct the binding, then reconcile. Same node/metric →
+(B): rebound is real. **Historical row reconciliation must NOT run until this gate resolves** —
+reconciling against a moving metric definition bakes the error in permanently. Confirmatory input held
+ready: `feat/recovery-metrics-rhr` (Task 2, RHR series in `get_recovery_metrics`) — but note the primary
+`samsung_hrv_readings` RHR is the scraper's `sleep_hr_bpm`, same device family as HRV; the truly
+independent discriminator is Health Connect `resting_heart_rate` (query `health_connect_syncs` directly).
+
+**Resolution (→ #89 · 2026-07-19).** Closed on **(A) instrumentation**, verified against
+`health-connect-app` master (`1db8833`/#19):
+1. **(A) confirmed — mechanism is stale-phantom *selection*, not a metric change.** #19 routes all
+   three Energy-score reads through `findByIdValidBounds` instead of `findById(...).firstOrNull()`; the
+   phantom is a Compose view-recycling duplicate bearing the *prior* render's value with negative width,
+   which `.firstOrNull()` returned. Same node, same metric (RMSSD) throughout — the scraper simply
+   stopped binding the stale duplicate. (Authored 26 Jun on unmerged `fix/scraper-sh-relayout`; reached
+   HCA master 11 Jul, renumbered #16→#19 — the gate's binary "different node→A / same node→B" missed
+   this third case: same node, but the old reads were the phantom.)
+2. **RMSSD→SDNN withdrawn as surplus.** The 1.7× ratio is coincidence. A stale prior-render value
+   predicts the statistics directly — pre (mean 57, range 24–88, high variance) = scattered stale reads;
+   post (mean 96, range 83–117, variance collapsed) = locked to on-screen truth — with no analyte change
+   required.
+3. **(B)'s corroborator is void — never independent.** RR shares the exact read path (see the struck
+   clause above), so the 14.0→13.5 drift is a *prediction* of (A), not evidence against it.
+
+(B) as *physiology* is **unevidenced, not disproven** — washout may still have moved HRV, but this
+series cannot speak to it. The pre-install baseline ≈57 ms is not a baseline; trustworthy HRV history is
+short, not long. **Historical rows are NOT reconciled here — see Q29** (install-history segmentation is
+the prerequisite; the changepoint is an APK-install event, not a commit).
+
+**Status:** DONE → #89 (instrumentation limb; (A) confirmed vs HCA master). Cross-refs Q13, Q18,
+Q29, issue #9, `BRANCHES.md` `feat/recovery-metrics-rhr`, HCA #19 / Q3.
+
+---
+
+## Q21. Does the lab-side expectation contract (#63 / SPEC_64) generalise to injury trajectories?
+
+**Status:** DONE (this session; no DECISIONS entry — logged conclusion only) — they **rhyme, they do not share code.** Both follow declare
+expectation → surface divergence → never suppress (lab gate-2 "annotate, don't hide" ≡ injury "surface,
+don't gate"). But the lab contract is bound to marker/delta semantics (`marker_groups.json`,
+`min_meaningful_delta`, two-gate axis-verdicts) while injury trajectory is a soreness series vs a
+declared shape (`injury_trajectory.py`). Kept as separate mechanisms deliberately — forcing a shared
+abstraction over two things that merely share a shape is how you get a bad one. Logged per the
+constraint-consumption brief; no further action unless a third expectation-gated surface appears and the
+rhyme becomes a rule worth abstracting.
+
+---
+
+## Q25. (cross-repo, health-connect-app) Disposition of remote branch `claude/hevy-api-workout-query-teulc2`
+
+Remote branch `claude/hevy-api-workout-query-teulc2` (`4dfccbe`) is on `origin` for **health-connect-app**,
+unmerged, and is NOT in that repo's `BRANCHES.md` — whose own header states "every branch not master lives
+here until merged+deleted." The store is violating its own rule. Needs a disposition: govern it (add to
+BRANCHES.md) or kill it. Not this repo's / this brief's job — logged only.
+
+**Status:** DONE → #91 — the branch now carries a dedicated row in `health-connect-app`'s `BRANCHES.md`
+(added at HCA `f15b545`, "row the unrowed branch"). This question asked whether the branch was **governed or
+killed**; governing it discharges the question.
+
+**Both limbs now closed (verified 2026-07-20, #93).** The disposition this entry left OWED in HCA's store has
+since completed: the operator deleted the remote ref, HCA's row reads `DONE → discarded 2026-07-20`, and
+`git ls-remote --heads origin claude/hevy-api-workout-query-teulc2` returns empty — verified from an
+HCA read during the #93 session. Both the omission this question recorded and its subject are gone.
+The row remains HCA's to hold; tracking it here too would be the duplication defect Q31 records.
+
+---
+
+## Q26. Taxonomy has no home for isolation / adductor-abductor work — G2 "zero fallback" vs benign empties
+
+`Capability_Taxonomy_v0` is a movement-PATTERN + capacity vocabulary. A large share of the user's logged
+work has no clean region: **Hip Adduction / Hip Abduction (Machine)** (frontal-hip strength — pes-anserine-
+relevant, the injury the tagging brief itself cares about), knee isolations (leg extension / leg curl), and
+arm/shoulder isolations (curls, raises, delt flies, triceps). These are left UNTAGGED in the v0 proposal —
+the keyword fallback returns `[]` for all of them (benign: no wrong region, just a logged coverage-gap hit).
+This puts G2 ("100% of active-window templates tagged, fallback hit-count 0") in tension with reality:
+forcing a tag would pollute the region signal.
+
+Three resolutions for Luke: (a) accept benign empties and redefine the coverage metric as "zero *wrong*
+tags" rather than "zero fallback"; (b) add an accessory/no-pattern sentinel so isolations are "tagged" (bypass
+the keyword path) but contribute no region — needs a mechanism, since region_key validates fail-closed
+against the taxonomy; (c) extend the taxonomy (e.g. a frontal-hip adductor/abductor strength region) — a
+`TAXONOMY_VERSION` bump. The adductor gap is the load-bearing one given the active pes anserine injury.
+
+**Status:** DONE → **DECISIONS_LOG #76**, option **(b)** with a correction. Not two states but THREE —
+`tagged` / `adjudicated no-pattern` / `untagged` — via a `hevy_exercise_templates.adjudicated_at` timestamp,
+NOT a sentinel region_key (which would weaken fail-closed validation). G2 stands UNSOFTENED (option (a) was
+rejected: redefining coverage as "zero wrong tags" forfeits the ability to detect a real gap later). Option
+(c) — the taxonomy bump — is deliberately NOT done inside a tag confirmation (the log must not shape the
+screen); it is spun out to Q27 as a grounded v1 design pass. Interim: calf / shoulder ER-IR / Copenhagen /
+hip add-abd are adjudicated no-pattern.
+
+---
+
+## Q34. Is `safety_threshold` a third class of read-constant, alongside delta and stable_rationale?
+
+`lever_dictionary.marker_interpretation[*]` currently carries two kinds of authored constant:
+`min_meaningful_delta` (is this change news?) and `stable_rationale` (is this persistent flag benign?).
+Both answer *interpretive* questions — they shape how a reading is narrated.
+
+Neither answers a **safety** question: is this value dangerous *now*, regardless of whether it moved or
+whether it is constitutionally normal for this person? Haematocrit on TRT is the live case that
+prompted this — `trt_erythrocytosis_watch` (now `ready_to_promote` at #95) is a context relation, and
+context is not a threshold. A rising-but-in-range Hct and an Hct at 0.54 are different claims, and only
+the second is a safety statement.
+
+The open fork: does `safety_threshold` belong as a third key on `marker_interpretation`, or is it a
+distinct asset that should not share a home with interpretive constants — on the grounds that mixing a
+"this is interesting" constant with a "this is dangerous" constant in one dict invites a producer bug
+that treats them interchangeably?
+
+Whatever the shape, extended I1 (#95) applies: a safety threshold with empty `evidence_refs` must not
+gate anything. That is more load-bearing here than for a delta, because the failure direction is
+asymmetric — an uncited delta produces a boring narration, an uncited safety threshold produces a
+false reassurance or a false alarm.
+
+**Status:** DONE → #104 — `safety_threshold` is a third class, and a third *gate*, not a third
+read-constant. It lives in its own asset (`backend/reference/safety_thresholds.json`) rather than in
+`lever_dictionary.marker_interpretation`, because the two existing constants are **measured**
+(CVI/CVA-derived, non-expiring) while a safety threshold is **policy** — committee judgement carrying a
+`review_due`. `gates.safety_gate()` compares a level to it, and the mechanism is complete and tested.
+
+**The asset is empty and that is the remaining work — tracked as Q41, not here.** The question asked
+what shape the thing should take; that is answered. Whether haematocrit's bands can be cited is a
+different question with a different owner.
+
 ---
 
 ## Q43. Does production share `FERNET_KEY` (and `SECRET_KEY`) with the local development `.env`?
@@ -991,76 +1084,3 @@ dead.
 
 ---
 
-## Q45. The VA CBT-I diary does not say which day a recorded nap belongs to — so the engine excludes nap nights rather than attributing them
-
-`daily_records.naps_min` is silent when wrong. The titration engine reads naps for the night
-terminating on wake-date W from `date = W-1`, which is only correct if the instrument's nap item refers
-to the day *preceding* the recorded night. **The instrument does not say.**
-
-**This search was run, and it was scoped.** Every text cell across all five sheets of the VA CBT-I
-Sleep Diary Calculator export was matched against both a nap pattern and a temporal pattern
-(`yesterday|today|last night|previous day|during the day|...`). Every nap reference is bare:
-`Naps (minutes)`, `Naps`, `Biological Need for Sleep (TST + Naps)`. The FAQ mentions naps only for the
-TST24 definition and for scheduled-nap timing advice — neither states which day a diary row's nap
-covers.
-
-**Positive control — this is what makes it a scoped null and not a failed search.** The temporal
-pattern *did* fire elsewhere in the same workbook, on `"Did you eat before bed? How long before bed?"`.
-The detector demonstrably finds temporal qualifiers in this instrument and found none attached to the
-nap item. Per #110 clause 1, that is the difference between "the wording does not settle it" and
-"nobody looked". **Do not re-run this search.**
-
-**Resolution, adopted:** the engine **excludes nap-flagged nights entirely**, recording them in
-`cbti_prescriptions.excluded_nights` with reason `nap`, rather than attributing them to a date. Two of
-the imported block's 53 nights carry naps, so exclusion costs almost nothing while a wrong attribution
-is silent. This is the standing behaviour until the question is answered, not a placeholder.
-
-**Status:** UNSTARTED — no blocker; the engine's exclusion path is the interim answer. Owner: Luke.
-**Next action to close it:** establish the nap item's referent from the VA CBT-I protocol
-documentation or by asking the clinician who administered the block — not from the workbook, which has
-already been searched to exhaustion.
-
----
-
-_Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
-GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
-fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
-
-## Q46. No column records whether a prescription's `basis_tst` came from device or diary — only its adherence source
-
-The `cbti_prescriptions` basis-source columns (`basis_n_samsung` / `basis_n_diary`, migration
-`c4e8a2019bd7`) record the **adherence** source of each basis night — whether bedtime was checked
-against Samsung or against the diary's own `lights_out`. They do **not** record whether `basis_tst_min`
-itself was computed from device `actual_sleep_time_minutes` or from diary TST. These are different axes.
-
-Surfaced opening block 3. Its opening prescription (block id=2, rx id=10) is **device-derived**:
-`basis_n_samsung=27`, `basis_n_diary=0`, `basis_tst_min=349` computed from Samsung
-`actual_sleep_time_minutes` over 2026-06-23..2026-07-23 — stated only in the prescription's `rationale`
-text. Block 2's basis was diary-derived. A later reader comparing the two blocks' bases cannot tell the
-two provenances apart from structured columns, and a device basis and a diary basis are not equivalent.
-
-**Status:** UNSTARTED — no blocker; the interim is the rationale text on rx id=10. Owner: Luke. **No
-column added mid-block** — block 3 is open, an additive nullable migration is safe, but a new provenance
-axis is a design choice not a hotfix. **Next action to close it:** decide whether `basis_tst` provenance
-warrants its own column (`device|diary|mixed`) or the rationale text suffices, before block 4 opens.
-
----
-
-## Q47. The adherence gate prefers Samsung `bedtime`, whose detection lag can flip a night against a ±30 tolerance
-
-`cbti/engine.py:230-235` establishes adherence from `samsung_bedtime` **in preference to** diary
-`lights_out` where a `passive_overnight` row exists (`elif night.lights_out` is the fallback). Samsung's
-`bedtime` is a **detected** onset; it lags the actual lights-out ("tried to sleep") by a measured ~10
-min. The adherence tolerance (`ADHERENCE_TOL_MIN`) is ±30. A systematic 10-min lag is a third of the
-band — enough to flip a borderline night between adherent and non-adherent, which changes whether it
-counts toward a titration cycle (`ADHERENCE_FAIL_N` = 3 of 7 → HOLD). The diary `lights_out` and the
-device `bedtime` are not the same instant, and the gate treats the preferred one interchangeably with
-the prescription's lights-out.
-
-**Status:** UNSTARTED — no blocker; the gate runs as built and the source is recorded per-night
-(`adherence_source`). Owner: Luke. **Next action:** measure the lag distribution across block 3's live
-nights (same night: diary `lights_out` vs Samsung `bedtime`) and then choose — subtract a calibrated
-offset, widen the tolerance, or prefer diary `lights_out` for adherence. Do not adjust before the
-distribution is measured (empirical-specificity).
-
----
