@@ -235,13 +235,21 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
         if rx_min is not None and earliest_min > rx_min:
             return NightVerdict(night, False, "training_constrained")
 
-    # valid — now establish HOW adherence is known for this night
+    # valid — now establish HOW adherence is known for this night.
+    # RECALL-ONLY (#127): adherence differences the prescribed lights-out against the
+    # DIARY lights_out only. A device-DETECTED onset (samsung_bedtime) is a different
+    # construct from a RECALLED lights-out ("tried to sleep"); clinical CBT-I is
+    # recall-only by design, and its ~10-min detection lag can flip a borderline night
+    # against the ±30 band (Q47). Diary lights_out coverage is complete on the observed
+    # block (51/51) so there is no fallback gap, and the Samsung arm never executed on a
+    # completed block (samsung_hrv_readings begins 2026-06-08, after block 2 closed) — so
+    # nothing historical is revalued. samsung_bedtime is left on the Night dataclass and
+    # in replay's _SAMSUNG_SQL (now dead as an adherence input, still populated and
+    # counted by the n_with_samsung diagnostic); AdherenceSource='samsung' / n_samsung
+    # are now structurally 0. Their removal is deferred, not folded into this change.
     source: AdherenceSource = "none"
     delta = None
-    if night.samsung_bedtime:
-        source = "samsung"
-        delta = clock_delta_minutes(prescribed_lights_out, night.samsung_bedtime)
-    elif night.lights_out:
+    if night.lights_out:
         source = "diary"
         delta = clock_delta_minutes(prescribed_lights_out, night.lights_out)
     adherent = None if delta is None else abs(delta) <= ADHERENCE_TOL_MIN

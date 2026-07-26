@@ -32,7 +32,7 @@ def test_sufficiency_hold_carries_the_field():
 
 
 def test_adherence_hold_carries_the_field():
-    nights = [night(i, 380, 90, bedtime="22:00") for i in (1, 2, 3)] + [night(i, 380, 90) for i in (4, 5)]
+    nights = [night(i, 380, 90, lo="22:00") for i in (1, 2, 3)] + [night(i, 380, 90) for i in (4, 5)]
     d = _eval(nights, nights_since_effective_from=7)
     assert d.decision == "hold" and "adherence" in d.reason
     assert d.nights_since_effective_from == 7

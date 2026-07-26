@@ -1,10 +1,10 @@
 """CBT-I titration engine — SYNTHETIC data only.
 
-Real data cannot reach the adherence gate: Samsung `bedtime` begins 2026-06-08
-and the imported block closed 2026-05-11, so every replayed night falls back to
-the diary source and no night has an independent bedtime to disagree with. The
-gate is therefore exercised here or nowhere — which is the whole reason these
-tests are synthetic rather than fixtures cut from the block.
+Adherence is RECALL-ONLY (#127): the gate differences the prescribed lights-out
+against the diary `lights_out`, and the Samsung `samsung_bedtime` arm was removed.
+These tests therefore drive (non-)adherence through `lights_out`. They stay
+synthetic — real block nights don't sit on the gate's ±30 / 3-of-7 edges — so the
+gate is exercised here or nowhere.
 
 No real rows appear (both repos are public).
 """
@@ -101,7 +101,7 @@ def test_insufficient_valid_nights_holds():
 def test_sufficiency_failure_short_circuits_before_adherence():
     """A HOLD names the FIRST failing gate, not the last one checked. Here both
     gates would fail; the reason must be sufficiency."""
-    nights = week(samsung="01:00")               # wildly non-adherent
+    nights = week(lights_out="01:00")            # wildly non-adherent (by diary)
     for n in nights[:3]:
         n.alcohol_units = 2                      # RECORDED drinks -> excluded
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
@@ -112,15 +112,15 @@ def test_sufficiency_failure_short_circuits_before_adherence():
 # ── gate 2: adherence — unreachable from real data, so tested only here ───────
 
 def test_adherence_failure_holds_and_reports_source_composition():
-    nights = week(samsung="23:45")               # +75 min, all 7 outside tolerance
+    nights = week(lights_out="23:45")            # +75 min by diary, all 7 outside tolerance
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold" and d.reason.startswith("adherence")
-    assert d.basis_n_samsung == 7 and d.basis_n_diary == 0
+    assert d.basis_n_diary == 7 and d.basis_n_samsung == 0
     assert d.window_minutes == WINDOW
 
 
 def test_adherence_passes_at_the_tolerance_boundary():
-    nights = week(samsung="23:00")               # exactly +30
+    nights = week(lights_out="23:00")            # exactly +30 by diary
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision != "hold" or "adherence" not in d.reason
 
@@ -128,34 +128,36 @@ def test_adherence_passes_at_the_tolerance_boundary():
 def test_two_failures_is_below_the_threshold_three_is_not():
     ok = week()
     for n in ok[:2]:
-        n.samsung_bedtime = "23:45"
+        n.lights_out = "23:45"
     for n in ok[2:]:
-        n.samsung_bedtime = RX
+        n.lights_out = RX
     assert "adherence" not in evaluate_cycle(ok, WINDOW, RX, ANCHOR).reason
 
     bad = week()
     for n in bad[:3]:
-        n.samsung_bedtime = "23:45"
+        n.lights_out = "23:45"
     for n in bad[3:]:
-        n.samsung_bedtime = RX
+        n.lights_out = RX
     assert evaluate_cycle(bad, WINDOW, RX, ANCHOR).reason.startswith("adherence")
 
 
-def test_adherence_falls_back_to_diary_and_labels_it():
-    """No Samsung row -> diary lights_out, counted as n_diary. This is the regime
-    the entire replay runs in."""
-    d = evaluate_cycle(week(samsung=None), WINDOW, RX, ANCHOR)
+def test_adherence_uses_diary_lights_out_and_labels_it():
+    """Adherence is recall-only (#127): diary lights_out is the sole source, counted
+    as n_diary. This is the regime the entire replay runs in."""
+    d = evaluate_cycle(week(), WINDOW, RX, ANCHOR)
     assert d.basis_n_samsung == 0 and d.basis_n_diary == 7
 
 
-def test_samsung_is_preferred_over_diary_when_both_present():
+def test_samsung_bedtime_is_ignored_adherence_is_recall_only():
+    # #127: even with a passive_overnight bedtime present, adherence uses diary
+    # lights_out only. Diary 22:30 == RX -> adherent; the device's +70 is not consulted.
     v = classify_night(night(1, lights_out="22:30", samsung="23:40"), RX)
-    assert v.adherence_source == "samsung"
-    assert v.adherent is False           # +70 by the device, adherent by the diary
+    assert v.adherence_source == "diary"
+    assert v.adherent is True
 
 
 def test_adherence_delta_uses_shortest_path_across_midnight():
-    v = classify_night(night(1, samsung="00:10"), "23:50")
+    v = classify_night(night(1, lights_out="00:10"), "23:50")
     assert v.adherence_delta_min == 20 and v.adherent is True
 
 
