@@ -1,17 +1,31 @@
-"""Gate 4 — replay the titration engine over an imported CBT-I block.
+"""Replay the titration engine over a CBT-I block, adjudicating each cycle against
+the EFFECTIVE prescription from the ledger (Q49).
 
-The expectation is NOT that the output matches the nine historical prescriptions.
-Those came from the VA CBT-I Sleep Diary Calculator, which used a different rule
-with a different exit condition and different gates. **Divergence is the output.**
+The replay reads the prescription in force for each cycle from `cbti_prescriptions`;
+it does NOT regenerate the chain from the engine's own decisions. So a mid-block
+operator correction — or any ledger prescription the engine would not have produced —
+is honoured by construction: adherence is always differenced against the prescription
+the nights were actually run under, and the wake anchor comes from that prescription,
+not from the block's opening state.
 
-One hard floor: the replay must not terminate before the block's observed
-endpoint. #107's whole basis is that an SE-driven rule exits ~45 min short of
-need; if this engine does the same, the rule is wrong and the finding is that,
-not a tuning target.
+Cycles are anchored to each prescription's `effective_from` and NEVER span a
+prescription boundary — the same "≥7 nights since the current prescription's
+effective_from" unit the live evaluation trigger (#118) uses, so replay and trigger
+share one model. Before Q49 the replay walked fixed 7-day cycles from the block open
+and carried the engine's own output forward as the next window; a correction landing
+mid-cycle (block 3: id=11 supersedes id=10 on the 4th night of cycle 1) was invisible,
+and the four nights run under the correction read as adherence failures against the
+seeded prescription — a false GATE-2 HOLD. That is the defect this module now fixes.
 
-This is the DB adapter. The engine itself is pure — every query lives here, and
-the Samsung read goes through the `context = 'passive_overnight'` allowlist and
-nowhere else.
+The engine's per-cycle DECISION is recorded as a RECOMMENDATION — what the engine
+would prescribe given these nights — but it never becomes the next cycle's
+prescription; the ledger does. A plateau "close" is recorded (for #107's
+exit-too-early check) but does NOT terminate the walk, because the operator's ledger,
+not the engine, decides when the block ends.
+
+This is the DB adapter. The engine itself is pure — every query lives here, and the
+Samsung read goes through the `context = 'passive_overnight'` allowlist and nowhere
+else.
 
 Usage:
     python -m cbti.replay --user-id 1 --block-id 1
@@ -19,13 +33,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from sqlalchemy import text
 
 import models
 from cbti.engine import CYCLE_NIGHTS, MAX_MOVE_MIN, Night, evaluate_cycle
-from cbti.timeutil import clock_to_minutes, window_minutes
 from database import SessionLocal
 
 # The ONLY permitted Samsung read. A second query path around this allowlist is
@@ -50,6 +64,29 @@ _NIGHTS_SQL = text(
     "WHERE user_id = :uid AND date BETWEEN :d0 AND :d1 "
     "ORDER BY date"
 )
+
+# Column-explicit for the same reason load_nights is: a full ORM load would select
+# basis_n_* and fail against a database that has not yet taken a later branch's
+# migrations. effective_to and wake_anchor are original cbti_prescriptions columns,
+# so reading them here is safe on any schema that has the table at all.
+_PRESCRIPTIONS_SQL = text(
+    "SELECT effective_from, effective_to, prescribed_lights_out, wake_anchor, "
+    "       window_minutes, decision "
+    "FROM cbti_prescriptions WHERE block_id = :bid ORDER BY effective_from"
+)
+
+
+@dataclass
+class LedgerRx:
+    """A prescription as read from `cbti_prescriptions` for the replay to adjudicate
+    against (Q49). `effective_to` is None for the live prescription of an open block.
+    """
+    effective_from: date
+    effective_to: date | None
+    lights_out: str
+    wake_anchor: str
+    window_minutes: int
+    decision: str
 
 
 def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
@@ -77,58 +114,70 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     return nights
 
 
-def replay(nights: list[Night], opened_on: date, wake_anchor: str,
-           initial_lights_out: str) -> list[dict]:
-    """Walk the block in 7-day cycles from the open date, adjudicating each."""
-    window = window_minutes(initial_lights_out, wake_anchor)
-    rx = initial_lights_out
-    prior_tst: list[int] = []
-    series = []
+def replay(nights: list[Night], prescriptions: list[LedgerRx],
+           last_night: date) -> list[dict]:
+    """Walk the block by LEDGER PRESCRIPTION (Q49), adjudicating each 7-night cycle
+    against the prescription actually in force over those nights.
+
+    A prescription P governs the nights in
+    ``[P.effective_from, min(P.effective_to, next.effective_from - 1, last_night)]``,
+    and cycles walk 7 nights at a time from ``P.effective_from`` within that span, so
+    a cycle can never straddle a prescription change. `prior_basis_tst` accumulates
+    across ALL cycles (TST-plateau is a trajectory property, indifferent to window
+    nudges); `nights_since_effective_from` resets at each prescription (#124).
+    """
     by_date = {n.date: n for n in nights}
-    last = max(by_date) if by_date else opened_on
-
-    cycle_start = opened_on
-    rx_effective_from = opened_on          # settling clock; resets only on a real change
+    rxs = sorted(prescriptions, key=lambda r: r.effective_from)
+    series: list[dict] = []
+    prior_tst: list[int] = []
     idx = 0
-    while cycle_start <= last:
-        cycle_end = cycle_start + timedelta(days=CYCLE_NIGHTS - 1)
-        wnights = [by_date[d] for d in sorted(by_date)
-                   if cycle_start <= d <= cycle_end]
-        idx += 1
-        if not wnights:
-            cycle_start = cycle_end + timedelta(days=1)
-            continue
 
-        # Nights logged since the current prescription took effect (settling period).
-        # Passed through purely to instrument (#124); the engine never branches on it.
-        # NOT evidence — block 2 is confounded (exclusions, suppressed sleep, a lumbar
-        # investigation spanning it). Recorded as a free by-product only.
-        nse = sum(1 for dd in by_date if rx_effective_from <= dd <= cycle_end)
-        d = evaluate_cycle(wnights, window, rx, wake_anchor, prior_basis_tst=prior_tst,
-                           nights_since_effective_from=nse)
-        series.append({
-            "cycle": idx,
-            "from": cycle_start, "to": cycle_end,
-            "decision": d.decision, "reason": d.reason,
-            "window": d.window_minutes, "lights_out": d.prescribed_lights_out,
-            "tst": d.basis_tst_min, "se": d.basis_se_pct,
-            "n": d.basis_nights_n, "n_samsung": d.basis_n_samsung,
-            "n_diary": d.basis_n_diary,
-            "n_alc_unk": d.basis_n_alcohol_unknown,
-            "tib_over": d.basis_tib_over_run_min,
-            "excluded": d.excluded_nights,
-            "lo_sd": d.lights_out_sd_min, "wk_sd": d.wake_time_sd_min,
-            "ema": d.ema_count, "capped": d.move_capped,
-            "nse": d.nights_since_effective_from,
-        })
-        if d.basis_tst_min is not None:
-            prior_tst.append(d.basis_tst_min)
-        if d.decision == "close":
-            break
-        if d.decision in ("extend", "compress"):
-            rx_effective_from = cycle_end + timedelta(days=1)   # a real change resets the settling clock
-        window, rx = d.window_minutes, d.prescribed_lights_out
-        cycle_start = cycle_end + timedelta(days=1)
+    for i, rx in enumerate(rxs):
+        next_from = rxs[i + 1].effective_from if i + 1 < len(rxs) else None
+        span_end = last_night
+        if rx.effective_to is not None:
+            span_end = min(span_end, rx.effective_to)
+        if next_from is not None:
+            # the successor's effective_from is a hard wall: the night before it is
+            # the last night this prescription can be adjudicated over
+            span_end = min(span_end, next_from - timedelta(days=1))
+
+        cycle_start = rx.effective_from
+        while cycle_start <= span_end:
+            cycle_end = min(cycle_start + timedelta(days=CYCLE_NIGHTS - 1), span_end)
+            wnights = [by_date[d] for d in sorted(by_date)
+                       if cycle_start <= d <= cycle_end]
+            if not wnights:
+                cycle_start = cycle_end + timedelta(days=1)
+                continue
+            idx += 1
+            # nights logged since THIS prescription took effect (settling period, #124)
+            nse = sum(1 for dd in by_date if rx.effective_from <= dd <= cycle_end)
+            d = evaluate_cycle(wnights, rx.window_minutes, rx.lights_out, rx.wake_anchor,
+                               prior_basis_tst=prior_tst, nights_since_effective_from=nse)
+            series.append({
+                "cycle": idx,
+                "from": cycle_start, "to": cycle_end,
+                # the prescription these nights were ADJUDICATED AGAINST (from the ledger)
+                "rx_from": rx.effective_from, "rx_decision": rx.decision,
+                "rx_window": rx.window_minutes, "rx_lights_out": rx.lights_out,
+                "rx_anchor": rx.wake_anchor,
+                # the engine's RECOMMENDATION — never fed forward; the ledger is
+                "decision": d.decision, "reason": d.reason,
+                "rec_window": d.window_minutes, "rec_lights_out": d.prescribed_lights_out,
+                "tst": d.basis_tst_min, "se": d.basis_se_pct,
+                "n": d.basis_nights_n, "n_samsung": d.basis_n_samsung,
+                "n_diary": d.basis_n_diary,
+                "n_alc_unk": d.basis_n_alcohol_unknown,
+                "tib_over": d.basis_tib_over_run_min,
+                "excluded": d.excluded_nights,
+                "lo_sd": d.lights_out_sd_min, "wk_sd": d.wake_time_sd_min,
+                "ema": d.ema_count, "capped": d.move_capped,
+                "nse": d.nights_since_effective_from,
+            })
+            if d.basis_tst_min is not None:
+                prior_tst.append(d.basis_tst_min)
+            cycle_start = cycle_end + timedelta(days=1)
     return series
 
 
@@ -145,16 +194,11 @@ def main() -> None:
     db = SessionLocal()
     try:
         block = db.query(models.CBTIBlock).filter_by(id=args.block_id).one()
-        # Column-explicit rather than a full ORM load: the replay is read-only and
-        # must run against a database that has not yet taken this branch's
-        # migration. Selecting the ORM entity would pull basis_n_samsung /
-        # basis_n_diary and fail on a pre-migration schema — and applying the
-        # migration to prod ahead of the merge is what created the
-        # prod-ahead-of-master divergence in phase 1.
-        rxs = db.execute(text(
-            "SELECT effective_from, prescribed_lights_out, window_minutes, decision "
-            "FROM cbti_prescriptions WHERE block_id = :bid ORDER BY effective_from"
-        ), {"bid": block.id}).all()
+        rx_rows = db.execute(_PRESCRIPTIONS_SQL, {"bid": block.id}).all()
+        rxs = [LedgerRx(effective_from=ef, effective_to=et, lights_out=lo,
+                        wake_anchor=anchor, window_minutes=win, decision=dec)
+               for (ef, et, lo, anchor, win, dec) in rx_rows]
+
         d1 = block.closed_on or date.today()
         nights = load_nights(db, args.user_id, block.opened_on, d1)
         if args.admit_unknown_alcohol:
@@ -163,56 +207,65 @@ def main() -> None:
                     n.alcohol_units = 0
             print("*** DIAGNOSTIC MODE: unknown alcohol admitted as zero ***")
 
-        print(f"block {block.id}: {block.opened_on} .. {block.closed_on} anchor {block.wake_anchor}")
+        last_night = block.closed_on or (max((n.date for n in nights), default=d1))
+
+        print(f"block {block.id}: {block.opened_on} .. {block.closed_on} block-anchor {block.wake_anchor}")
         print(f"nights loaded: {len(nights)}")
         n_with_samsung = sum(1 for n in nights if n.samsung_bedtime)
         n_with_training = sum(1 for n in nights if n.training_end)
         print(f"  nights with a passive_overnight bedtime: {n_with_samsung}")
         print(f"  nights with a constraining session end : {n_with_training}")
-        print(f"historical prescriptions: {len(rxs)}")
+        print(f"ledger prescriptions: {len(rxs)}")
+        for rx in rxs:
+            print(f"  rx {rx.effective_from}..{rx.effective_to or '(live)'} "
+                  f"{rx.lights_out}->{rx.wake_anchor} win={rx.window_minutes} dec={rx.decision}")
 
-        series = replay(nights, block.opened_on, block.wake_anchor,
-                        rxs[0][1] if rxs else "22:30")
+        series = replay(nights, rxs, last_night)
 
-        print("\n=== REPLAY SERIES ===")
-        print(f"{'cy':>2} {'window':>16} {'dec':<9} {'win':>4} {'lo':>6} "
-              f"{'TST':>4} {'SE':>6} {'n':>2} {'sam':>3} {'dia':>3} {'a?':>3} {'exc':>3} {'ema':>3} {'tibOver':>8}")
+        print("\n=== REPLAY SERIES (adjudicated against the ledger rx) ===")
+        print(f"{'cy':>2} {'window':>13} {'rxLO':>6} {'rxWin':>5} {'dec':<9} "
+              f"{'recWin':>6} {'TST':>4} {'SE':>6} {'n':>2} {'dia':>3} {'exc':>3} {'ema':>3} {'nse':>3}")
         for s in series:
-            over = f"{s['tib_over']:+.1f}" if s["tib_over"] is not None else "-"
             print(f"{s['cycle']:>2} {str(s['from'])[5:]}..{str(s['to'])[5:]:>5} "
-                  f"{s['decision']:<9} {s['window']:>4} {s['lights_out'] or '-':>6} "
+                  f"{s['rx_lights_out']:>6} {s['rx_window']:>5} {s['decision']:<9} "
+                  f"{s['rec_window']:>6} "
                   f"{s['tst'] if s['tst'] is not None else '-':>4} "
                   f"{s['se'] if s['se'] is not None else '-':>6} "
-                  f"{s['n']:>2} {s['n_samsung']:>3} {s['n_diary']:>3} {s['n_alc_unk']:>3} "
-                  f"{len(s['excluded']):>3} {s['ema']:>3} {over:>8}")
+                  f"{s['n']:>2} {s['n_diary']:>3} {len(s['excluded']):>3} "
+                  f"{s['ema']:>3} {s['nse']:>3}")
 
         print("\n=== REASONS ===")
         for s in series:
-            print(f"  cy{s['cycle']}: {s['reason']}")
+            print(f"  cy{s['cycle']} [{s['from']}..{s['to']} vs rx {s['rx_lights_out']}]: {s['reason']}")
             if s["excluded"]:
                 print(f"        excluded: {s['excluded']}")
 
-        print("\n=== HARD FLOOR ===")
-        terminal = [s for s in series if s["decision"] == "close"]
-        if terminal:
-            end = terminal[0]["to"]
-            print(f"  replay CLOSED in cycle {terminal[0]['cycle']}, window ending {end}")
+        # #107's exit-too-early check. The engine's "close" is a RECOMMENDATION and
+        # does not terminate the ledger walk; we report the FIRST cycle it would have
+        # closed on and compare to the block's observed endpoint.
+        print("\n=== #107 EXIT CHECK (engine close is advisory, not terminal) ===")
+        closes = [s for s in series if s["decision"] == "close"]
+        if closes:
+            first = closes[0]
+            print(f"  engine would FIRST close in cycle {first['cycle']}, window ending {first['to']}")
             print(f"  block observed endpoint: {block.closed_on}")
-            ok = end >= block.closed_on
-            print(f"  terminates at or after the observed endpoint: {ok}")
-            if not ok:
-                print("  *** FLOOR BREACHED — #107's premise is wrong; STOP, do not tune ***")
+            if block.closed_on is not None:
+                early = first["to"] < block.closed_on
+                print(f"  engine close precedes the observed endpoint: {early}"
+                      + ("  *** exits early — #107's premise ***" if early else ""))
         else:
-            print(f"  replay did NOT close within the block (ran {len(series)} cycles)")
-            print(f"  block observed endpoint: {block.closed_on} — floor not breached")
+            print(f"  engine never recommended close across {len(series)} cycles"
+                  f" — floor not breached (observed endpoint {block.closed_on})")
 
         print("\n=== COMPOSITION ===")
-        ts, td = sum(s["n_samsung"] for s in series), sum(s["n_diary"] for s in series)
-        print(f"  basis-night adherence sources across all cycles: samsung={ts} diary={td}")
+        td = sum(s["n_diary"] for s in series)
+        ts = sum(s["n_samsung"] for s in series)
+        print(f"  basis-night adherence sources across all cycles: diary={td} samsung={ts}"
+              f"  (samsung is dead as an adherence input, #127)")
         print(f"  basis nights ADMITTED with alcohol unrecorded (assumed clean): "
               f"{sum(s['n_alc_unk'] for s in series)}")
-        print(f"  move capped in {sum(1 for s in series if s['capped'])} of {len(series)} cycles"
-              f" (cap {MAX_MOVE_MIN} min)")
+        print(f"  engine recommendation capped in {sum(1 for s in series if s['capped'])} of "
+              f"{len(series)} cycles (cap {MAX_MOVE_MIN} min)")
     finally:
         db.close()
 
