@@ -20,8 +20,7 @@ scoring layer owns inversion; the dual anchors make each item's direction explic
 | Fatigue | Fresh | Exhausted | Replaces the prior "feel right now" item (F2 collapse) |
 | Stress | None | Very high | |
 | Motivation | None | High | |
-| Shoulder soreness | None | Very sore | Hardcoded for now |
-| Hamstring soreness | None | Very sore | Hardcoded for now |
+| Soreness (one item per active injury) | None | Very sore | **Built.** Derived from the active `type='injury'` ledger — not a fixed pair. See Notes. |
 
 ## Alcohol block (conditional, retained)
 
@@ -36,5 +35,12 @@ scoring layer owns inversion; the dual anchors make each item's direction explic
   each item via `injury_soreness_key`; `/prefill` returns them and `CheckInAM.jsx` renders them.
   This note previously read "hardcoded for now — **Future:** drive from the active injury list
   (FEEDBACK 2.6)"; that future arrived and the note was not updated.
+- **Injury-TYPE-specific probe questions are NOT complete and are not claimed to be**
+  (`backend/injury_probes.py`, DECISIONS_LOG #134). The scaffold is versioned and provenance-stamped
+  (`PROBE_QUESTIONS_VERSION`, `PROBE_QUESTIONS_PROVENANCE`) and seeded with exactly ONE injury type
+  (gastroc strain). Every other injury type falls back to the generic soreness item above — by
+  design, never a fabricated question set. Adding a type is a deliberate authoring step; the
+  check-in machinery then consumes it. Probe questions are elicitation-only and escalation is
+  referral-only, both enforced by tests, not by this doc (#133).
 - Direction/polarity inversion is the scoring layer's responsibility, not the UI's
   (Decision 10 logic applied to UX — annotate direction, let scoring invert).
