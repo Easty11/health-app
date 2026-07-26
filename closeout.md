@@ -3,71 +3,105 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`._
 
-2026-07-25 · Free-text AM/PM notes on the daily record (#125) — both surfaces, deployed and verified
+Session date: 2026-07-26.
 
-## 1. Real commits this session
+## Real commits this session
 
-Session-open ref: `e47e867` (the prior close-out ritual). Three commits on `feat/daily-notes`,
-ff-merged to **master @ `a4bfd39`**, pushed; branch deleted.
+Session-open ref: `2662729` (#125 close-out). `git log --oneline 2662729..HEAD`:
 
 ```
-a4bfd39 governance: CLAUDE.md recent-landings — prepend #125
-dcaeed7 governance: DECISIONS_LOG #125 — free-text AM/PM notes on the daily record
-7e5372c feat: free-text am_notes / pm_notes on the daily record, both check-in surfaces
+7809dfe governance: DECISIONS_LOG #127 — recall-only adherence & capture; resolve Q47
+c1b4cb8 feat(capture): recall-only lights_out — drop the Samsung prefill default (#127)
+a00eeba feat(engine): recall-only adherence — drop the samsung_bedtime arm (#127)
+2f47327 governance: DECISIONS_LOG #126 — block 3 opening-rx operator correction
+5237a82 seed: operator correction to block 3 opening prescription (supersede id=10)
 ```
 
-DECISIONS max **#125**; questions max **Q48**. Migration `f1a4c7e29b83` (two nullable `Text` columns,
-`am_notes`/`pm_notes`) chained off the real head `d3f7a1908c62` — the Step-A VERIFY caught that the ISI
-migration had superseded the brief's stated `b2d5f9e04a17`. Both services deploy-verified per #121:
-backend `alembic current = f1a4c7e29b83` with both columns present in prod, OpenAPI carries the fields;
-frontend bundle carries the textarea label — each with a negative control. Suite **406 passed** (was 401).
+Immutable commit dates (`git log --format="%ad %s" --date=short -10`):
 
-## 2. Pending-queue reconciliation
+```
+2026-07-26 governance: DECISIONS_LOG #127 — recall-only adherence & capture; resolve Q47
+2026-07-26 feat(capture): recall-only lights_out — drop the Samsung prefill default (#127)
+2026-07-26 feat(engine): recall-only adherence — drop the samsung_bedtime arm (#127)
+2026-07-26 governance: DECISIONS_LOG #126 — block 3 opening-rx operator correction
+2026-07-26 seed: operator correction to block 3 opening prescription (supersede id=10)
+2026-07-25 chore: session close-out — daily notes (#125) landed and verified
+2026-07-25 governance: CLAUDE.md recent-landings — prepend #125
+2026-07-25 governance: DECISIONS_LOG #125 — free-text AM/PM notes on the daily record
+2026-07-25 feat: free-text am_notes / pm_notes on the daily record, both check-in surfaces
+2026-07-24 chore: session close-out
+```
 
-No `;cc` queue carried in. Nothing decided is uncommitted. Two columns, not one, because the AM and PM
-surfaces submit independently — asserted by a test that a PM submit does not clobber `am_notes`. The
-notes are observational: read by no engine code, not block-gated. **Usable tonight** — a note logged in
-the AM/PM check-in lands on the daily record.
+Two concern-named branches, both ff-merged to master and remote + local deleted:
 
-**Deliberately excluded (next brief, per this brief's GUARD):** the external-disruption boolean and the
-`n_alcohol_unknown` retirement — both touch `classify_night` and both have open VERIFYs
-(the `TRAINING_RECOVERY_MIN` constrained-night path; whether the alcohol flag is stored or derived).
+- `seed/cbti-block3-rx-correction` → `5237a82`, `2f47327` (landed; deploy `8420d396` SUCCESS)
+- `fix/cbti-recall-only` → `a00eeba`, `c1b4cb8`, `7809dfe` (landed; deploy `8a8d934b` SUCCESS,
+  served instance content-probed — `RECALL-ONLY (#127)` present in both files, old
+  `if night.samsung_bedtime:` branch absent)
 
-## 3. Cold-resume handoff
+**Prod DB write** (runtime effect, not in git — the committed artifact is
+`backend/correct_cbti_block3_rx.py`): applied in-container via `railway ssh`, dry-run then
+`--apply`. `cbti_prescriptions`: inserted **id=11** (block 2, 22:30→05:00, window 390,
+`decision='adopt'`, `effective_from` 2026-07-27, `basis_*` NULL); set **id=10**
+`effective_to`=2026-07-26 and `superseded_by`=11 (every other column frozen). `cbti_blocks`
+id=2 unchanged (`wake_anchor` 05:45, append-only invariant upheld). Read-back confirmed all
+three rows. Full backend suite 406 passed.
 
-**Branch:** `master @ a4bfd39`, level with origin. **Branch gate — passes.** `feat/daily-notes` merged +
-deleted. Four parked branches, untouched this session, all rowed in `BRANCHES.md`:
-`feat/checkin-injury-probe` (+2), `feat/feedback-ledger` (+4), `feat/interpretation-view-skeleton` (+3),
-`feat/recovery-metrics-rhr` (+1). None in limbo.
+## Pending-queue reconciliation
 
-### CBT-I is capture-complete + instrumented — one build-piece left
+No `;cc` pending-commit queue was carried into this session — it ran from a live brief, not a
+chat close-out payload. The brief specified "Decisions minted at merge, not here," honoured.
+Brief steps → disposition:
 
-Block 3 runs live: AM diary + prefill + 4h gate, PM prescription display + nap capture, ISI baseline, the
-settling instrument (#124), and now free-text notes (#125). The one remaining piece to **close** a cycle
-in-app is the **manual evaluation trigger** (#118's PM-offer half) — a dependency, not a deferral: it
-cannot fire before ~31 Jul (needs a full cycle; block opened 24 Jul). When built it also supplies #124's
-`nights_since_effective_from`.
+- **V1** (verify basis boundary before S1) — answered, no commit. Basis is cycle-windowed and
+  the prescription tracks in lockstep; not block-bounded, so the GUARD did not halt.
+  Corrected in-session: the clearance is narrow — safe to WRITE tonight, but the replay
+  regenerates the chain from row zero and would false-HOLD a mid-cycle correction (filed Q49).
+- **S1** (prescription correction) — LANDED: `5237a82` (seed script) + prod write
+  (id=11 supersedes id=10) + `2f47327` (#126 governance + Q49).
+- **S2** (drop samsung adherence arm) — LANDED: `a00eeba`.
+- **S3** (drop lights_out prefill) — LANDED: `c1b4cb8`.
+- **S4** (lag query) — read-only, no commit by design. Result (n=2 matched nights, sensor−diary
+  mean +3.5 min — too thin; the export's own `bedtime_detection_delay` p50 14 / n=211 is the
+  real distribution) folded into `7809dfe` (#127) and Q47's resolution.
 
-### ROADMAP is date-anchored (#123) — read NOW top-to-bottom
+Nothing provisional; all decided work committed. Q47 marked DONE → #127; Q49 opened UNSTARTED.
 
-NOW (6 rows): **Q45 nap attribution** (contaminating capture now) · **manual evaluation trigger**
-(~31 Jul) · **lab pipeline** · **interpretation 4b + Q36–Q41** · **appointment brief** (early-Aug TRT
-panel) · **cross-repo propagation** (undated, pinned to NOW by #112). NEXT 19; LATER 6.
+## Cold-resume handoff
 
-**Single clearest next action:** the **manual evaluation trigger** — the first dated Code build, due
-~31 Jul; nothing in NOW is buildable before then. Running in parallel, not a Code task: **Q45** — Luke
-resolves the nap day-attribution from the VA CBT-I protocol docs or the clinician.
+**Decisions minted this session:** #126 (block-3 opening-rx operator correction, append+supersede;
+block row left at 05:45), #127 (CBT-I adherence & capture are recall-only — samsung adherence arm
+and the AM `lights_out` prefill default both removed; resolves Q47).
 
-### Open questions — 34 live (14 DONE in `## CLOSED`)
+**Current sprint (ROADMAP NOW):**
 
-- **OWED (5):** Q4, Q6, Q13, Q15, Q18. **BLOCKED (2):** Q24, Q29.
-- **UNSTARTED (27):** incl. **Q45** (nap attribution — gates CBT-I validity), **Q46/Q47** (basis
-  provenance; adherence lag), **Q48** (settling period — block 3 is the dataset, #124), the **Q36–Q41
-  interpretation 4b package**, **Q42** (12h-clock scrape — re-scoped: 4h gate covers prefill only).
+- **CBT-I evaluation path — HARD-GATED by Q49 (NEW blocker, ahead of ~31 Jul):** the
+  replay/evaluation must read the effective prescription per cycle from `cbti_prescriptions`
+  instead of regenerating from row zero (and must take the wake anchor from the effective
+  prescription, not `cbti_blocks`). Block 3's mid-cycle correction (#126) is invisible to the
+  current replay, which would FALSE-HOLD cycle 1 on adherence. **This gates the ~31 Jul manual
+  evaluation trigger** — running an evaluation against the current evaluator is wrong.
+- **CBT-I manual witnessed evaluation trigger** (#118's PM-offer half) — DATED ~31 Jul (first
+  titration cycle; block 3 opened 24 Jul). Build after / together with Q49.
+- **Q45 nap day-attribution** — DATED, contaminating capture now: validate the `naps_min`
+  date−1 read against the VA protocol before the engine relies on it.
+- Lab upload pipeline → interpretation layer → appointment brief (medical spine; design Locked,
+  build pending).
+- **Cross-repo:** propagate the CLAUDE.md shared block (incl. #111 secret-rendering rule) to
+  `health-connect-app` — OWED, from an HCA-rooted session.
 
-### OWED, carried across sessions
+**Open questions by status (CBT-I-relevant):**
 
-FEEDBACK **§18** stands. Cross-repo: HCA still greps 0 for #111's secret-rendering rule — propagate the
-shared block byte-identically from an HCA-rooted session (ROADMAP NOW, pinned by #112). The `9688f2…`
-co-occurrence test, the canonical-surface consistency guard, and the `total_`/`actual_` semantic
-field-swap sit in NEXT. Block 3's 24–25 Jul nights predate PM nap capture (`naps_min = NULL`, #122).
+- **UNSTARTED:** Q49 (replay reads effective prescription — blocker on first evaluation),
+  Q45 (nap attribution, dated), Q46 (device-vs-diary basis provenance), Q48 (settling period —
+  instrument exists, block 3 accumulating).
+- **DONE this session:** Q47 → #127 (samsung adherence-lag flip, resolved on principle by
+  recall-only).
+- Older live items unchanged: Q3, Q4, Q42, and the rest of the OPEN_QUESTIONS live list.
+
+**Single clearest next action:** Cut a fresh branch from master and fix **Q49** — make the
+evaluation path (`cbti/replay.py`, and the forthcoming manual trigger) read the effective
+prescription (window, lights-out, wake anchor) per cycle from `cbti_prescriptions`, not
+regenerate from row zero. It is the hard dependency ahead of the ~31 Jul evaluation trigger;
+until it lands, do NOT run a block-3 replay/evaluation — the first clean post-correction cycle
+will false-HOLD on GATE 2 adherence.
