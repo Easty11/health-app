@@ -954,6 +954,31 @@ Owner: Luke.
 
 ---
 
+## Q55. Four CBT-I gate constants are chosen, not derived — no data or literature grounding
+
+`NAP_EXCLUDE_MIN` (0), `TRAINING_RECOVERY_MIN` (90), `ADHERENCE_TOL_MIN` (30) and `ADHERENCE_FAIL_N` (3)
+in `cbti/engine.py` are operating values set by choice — not estimated from data and not traced to a CBT-I
+literature source. They are NOT block-2-derived (that block is discarded for outcome claims); they are
+simply the numbers the gates were built with:
+
+| Constant | Value | Gate | Basis on record |
+|----------|-------|------|-----------------|
+| `NAP_EXCLUDE_MIN` | 0 | any nap-flagged night excluded | Q45 policy choice (exclude, not attribute); the *threshold* 0 (vs >20) is chosen |
+| `TRAINING_RECOVERY_MIN` | 90 | constrained-night floor = session end + 90 | chosen recovery margin; no source |
+| `ADHERENCE_TOL_MIN` | 30 | ± tolerance, bedtime vs prescription | chosen; ±30 is conventional but uncited here |
+| `ADHERENCE_FAIL_N` | 3 | ≥ N failures of 7 → HOLD | chosen; 3-of-7 is conventional but uncited here |
+
+Same shape as Q27's reference-band gap and the constants already flagged undeterminable in code
+(`MIN_VALID_NIGHTS`, `MAX_MOVE_MIN`, `PLATEAU_TOL_MIN`): the value functions, but nothing on record says it
+is *right*.
+
+**Status:** UNSTARTED — NOT blocking; the gates function as built and every exclusion is recorded with a
+reason, so a wrong constant shows up in the output rather than acting silently. **Next action:** ground each
+against a named CBT-I source (SRT adherence tolerance, nap-inclusion convention) or a cross-block distribution
+once more than one live block exists — do not tune against the single discarded block. Owner: Luke.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
