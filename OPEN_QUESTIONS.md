@@ -801,12 +801,12 @@ bite today only because nothing auto-evaluates (`evaluate_cycle` is called only 
 This is the general defect behind the anchor divergence #126 accepts: computation and ledger are divorced,
 so they can disagree only quietly, and nothing records which of the two produced a given verdict.
 
-**Status:** UNSTARTED — no blocker on being *possible*, but this is the BLOCKER ON THE FIRST EVALUATION:
-do not run a block-3 replay until the fix lands, or the first clean post-correction cycle will false-HOLD.
-Owner: Luke. **Next action** (own concern, own commit): make the replay read the effective prescription
-for each cycle from `cbti_prescriptions` — window, lights-out, AND wake anchor — instead of reconstructing
-from row zero. Then block-vs-prescription divergence stops mattering, mid-cycle corrections are handled by
-construction, and the ledger becomes authoritative. Ahead of Q48's settling work and any v2.
+**Status:** DONE → #128. `replay.py` reworked to read the effective prescription per cycle from
+`cbti_prescriptions` (window, lights-out, AND wake anchor); cycles anchor to each prescription's
+`effective_from` and never span a boundary, so a mid-cycle correction is adjudicated against, not
+false-held. Verified read-only against prod block 1 (9 cycles, one per ledger prescription) and block 3
+(id=10 stub vs the id=11 correction). New `test_cbti_replay.py` pins the regression; suite 412. The live
+evaluation trigger (#118) must reuse this same read (the shared "≥7 nights since effective_from" model).
 
 ---
 

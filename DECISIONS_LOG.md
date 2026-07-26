@@ -4107,3 +4107,37 @@ onset-to-lights-out model exists — at which point the sensor could supplement 
 nights only, never in preference to it.
 
 ---
+
+### 128
+
+**Decision:** The replay adjudicates each cycle against the EFFECTIVE prescription read from
+`cbti_prescriptions`, not a chain regenerated from the engine's own decisions. Cycles anchor to each
+prescription's `effective_from` and never span a prescription boundary; the engine's per-cycle decision
+is a recorded recommendation, never fed forward. Resolves Q49.
+
+**Rationale:** The prior replay walked fixed 7-day cycles from block-open, seeded from the earliest
+prescription, and carried the engine's own output forward as the next window — so a mid-block operator
+correction was invisible, and nights run under it read as adherence failures against the superseded
+prescription (a false GATE-2 HOLD). Block 3's correction (#126: id=11 supersedes id=10 on the 4th night of
+cycle 1) is the live instance. Reading the effective prescription per cycle — window, lights-out, AND wake
+anchor — makes block-vs-prescription divergence (incl. the #126 anchor divergence) inert: adherence is
+always differenced against the prescription the nights were actually run under. Cycles anchored to
+`effective_from` are the same "≥7 nights since the current prescription's effective_from" unit the live
+evaluation trigger (#118) will use, so replay and trigger share one model. A plateau "close" is advisory
+(recorded for #107's exit-too-early check) and no longer terminates the walk — the operator's ledger, not
+the engine, decides when the block ends.
+
+**Status:** DONE. `replay.py` reworked; the prescription SELECT extended to carry `effective_to` +
+`wake_anchor`. New `test_cbti_replay.py` (the module had no tests): flagship Q49 regression (a mid-cycle
+correction is adjudicated, not false-held) + no-cycle-spans-a-boundary invariant + per-prescription anchor
++ plateau continuity across cycles. Resolves Q49 — it was the blocker on the first block-3 evaluation.
+
+**How you know:** full backend suite passes (412, was 406 — +6 replay tests). Verified READ-ONLY against
+prod: block 1 (completed, 9 ledger prescriptions) walks 9 cycles, one per prescription, each adjudicated
+against its own ledger lights-out/window/anchor; block 3 shows id=10's 2-night stub (insufficient) and will
+adjudicate id=11's nights against 22:30/05:00 (the correction), not the seeded 23:45.
+
+**Do not revisit unless:** the live evaluation trigger (#118) is built to consume something other than the
+effective prescription per cycle — it must reuse this same read, or the two paths diverge again.
+
+---

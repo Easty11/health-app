@@ -312,9 +312,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#128** — The replay adjudicates each cycle against the effective prescription read from `cbti_prescriptions` (window, lights-out, anchor), not a chain regenerated from the engine's own decisions; cycles anchor to each prescription's `effective_from` and never span a boundary, so a mid-cycle correction is adjudicated against, not false-held. Resolves Q49; the live evaluation trigger (#118) reuses this read. See DECISIONS_LOG #128.
 - **#127** — CBT-I adherence and capture are recall-only: the engine's `samsung_bedtime` adherence arm and the AM prefill's `lights_out`-from-Samsung default are both removed, so diary `lights_out` (entered from recall) is the sole source on both surfaces. Resolves Q47; `samsung_bedtime` left in place but dead as an adherence input. See DECISIONS_LOG #127.
 - **#126** — Block 3's opening prescription is superseded by an operator correction (id=11, 22:30/05:00/window 390, `adopt`) via append+supersede on `cbti_prescriptions`; the `cbti_blocks` row is left at 05:45 (append-only invariant), the superseding rx being the artifact that expresses the anchor change. Replay-reads-the-block-anchor tracked as OPEN_QUESTIONS Q49. See DECISIONS_LOG #126.
-- **#125** — Free-text `am_notes` / `pm_notes` on the daily record, captured through both check-in surfaces; observational (read by no engine code), not block-gated, and two columns not one so the independent AM/PM submits don't clobber. See DECISIONS_LOG #125.
 
 ---
 
