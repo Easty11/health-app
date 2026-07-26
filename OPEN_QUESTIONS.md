@@ -751,11 +751,13 @@ counts toward a titration cycle (`ADHERENCE_FAIL_N` = 3 of 7 → HOLD). The diar
 device `bedtime` are not the same instant, and the gate treats the preferred one interchangeably with
 the prescription's lights-out.
 
-**Status:** UNSTARTED — no blocker; the gate runs as built and the source is recorded per-night
-(`adherence_source`). Owner: Luke. **Next action:** measure the lag distribution across block 3's live
-nights (same night: diary `lights_out` vs Samsung `bedtime`) and then choose — subtract a calibrated
-offset, widen the tolerance, or prefer diary `lights_out` for adherence. Do not adjust before the
-distribution is measured (empirical-specificity).
+**Status:** DONE → #127. Resolved by choosing the third option — prefer diary `lights_out` for adherence —
+but ON PRINCIPLE (recall-only), not by calibrating an offset: the `samsung_bedtime` arm is removed from
+`classify_night`, so the detection lag can no longer flip a night. S4 (this session) tried to measure the
+sensor−diary lag over 2026-06-08..2026-07-26 and found only n=2 nights with both a diary `lights_out` and a
+`passive_overnight` bedtime (block 3 had just opened; mean +3.5 min) — too thin to characterize, which is
+itself why the export's own `bedtime_detection_delay` (p50 14, n=211), not an in-app join, is the lag
+source, and why adherence should not depend on the sensor at all.
 
 ---
 ## Q48. What is the settling period between prescription changes, and does it lengthen as TST approaches need?

@@ -4070,3 +4070,40 @@ anchor divergence this entry knowingly accepts is tracked separately as OPEN_QUE
 reads the block anchor, not the effective prescription's), which is the blocker on the first evaluation.
 
 ---
+
+### 127
+
+**Decision:** CBT-I adherence and diary capture are RECALL-ONLY. (1) The engine's adherence gate
+differences the prescribed lights-out against the diary `lights_out` only — the `samsung_bedtime` arm is
+removed from `classify_night` (`cbti/engine.py`). (2) The AM diary prefill no longer defaults `lights_out`
+from Samsung `got_into_bed` (`routers/checkin_v2.py` `_diary_prefill`): `lights_out` returns None and is
+entered from recall with no device value shown. `got_into_bed` prefill (a distinct, verified bed-entry
+moment) and the 12h-corruption gate are unchanged.
+
+**Rationale:** Clinical CBT-I is recall-only by design; a device-DETECTED onset is a different construct
+from a RECALLED lights-out ("tried to sleep"). Treating the two interchangeably against a ±30 tolerance
+let a systematic detection lag flip a borderline night (Q47). Removing the sensor arm ON PRINCIPLE moots
+the calibration Q47 deferred — the lag need not be known if the sensor is not consulted. Diary
+`lights_out` coverage is complete on the observed block (51/51), so no fallback gap; and the Samsung arm
+never executed on a completed block (`samsung_hrv_readings` begins 2026-06-08, after block 2 closed
+2026-05-11), so nothing historical is revalued. The prefill is the same intent at capture: a prefilled
+`lights_out` invites accepting the device value as recall, defeating recall-only at the point of entry.
+
+**Status:** DONE. `samsung_bedtime` left on the `Night` dataclass and in replay's `_SAMSUNG_SQL` (now dead
+as an adherence input — still populated and counted by the `n_with_samsung` diagnostic; removal deferred,
+not folded here). `basis_n_samsung` / `AdherenceSource='samsung'` are now structurally 0. Resolves Q47.
+
+**How you know:** full backend suite passes (406) with the engine tests driving (non-)adherence through
+diary `lights_out` (Samsung ignored even when present) and the prefill suite asserting `lights_out` is None
+post-change with `got_into_bed` still defaulted. S4 (read-only, this session) tried to measure the
+sensor−diary lag over 2026-06-08..2026-07-26: only n=2 nights carry BOTH a diary `lights_out` and a
+`passive_overnight` bedtime (block 3 had just opened), mean +3.5 min (sensor later) — sign-consistent with
+but far too thin to characterize. The export's own `bedtime_detection_delay` (p50 14, p90 19, n=211) is the
+real distribution; the in-app join cannot reproduce it, which itself argues against depending on the sensor
+for adherence.
+
+**Do not revisit unless:** a future block has incomplete diary `lights_out` coverage AND a validated device
+onset-to-lights-out model exists — at which point the sensor could supplement recall for missing-diary
+nights only, never in preference to it.
+
+---
