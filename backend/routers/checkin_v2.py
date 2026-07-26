@@ -318,14 +318,14 @@ def _diary_prefill(
     `bedtime` maps to `got_into_bed` — VERIFIED bed-entry, not sleep onset: over 31
     real passive-overnight nights the span (wake − bedtime) exceeded scored sleep by
     a median +35 min (30/31 positive), which is the latency + WASO you would expect
-    if bedtime is when you got INTO bed. `lights_out` defaults to `got_into_bed`
-    (#117); the operator edits it down on nights the two diverge, and because that
-    edit moves the SE denominator the diary self-corrects even if this default is
-    wrong. `wake_time` defaults both wake-side fields — the device emits one wake
+    if bedtime is when you got INTO bed. `lights_out` is NOT prefilled (recall-only,
+    #127; supersedes the #117 default): it is entered from recall with no device value
+    shown first, so a device-detected onset is never mistaken for a recalled lights-out.
+    `wake_time` defaults both wake-side fields — the device emits one wake
     clock, and `out_of_bed`/`final_wake` are refined by hand.
 
     THE GATE (#110 — a gate proves nothing without a demonstrated rejection): if the
-    prefilled lights-out is more than 4h from the prescription, the source clock is
+    device bedtime (which prefills got_into_bed) is >4h from the prescription, the clock is
     corrupt (12-hour format), so EVERY clock prefill is suppressed — the corruption
     is global to the phone clock, not local to one field. Suppression returns empty
     fields flagged `gate_rejected`; it never falls back to the raw device value.
@@ -339,7 +339,10 @@ def _diary_prefill(
             return DiaryPrefillOut(gate_rejected=True)
     return DiaryPrefillOut(
         got_into_bed=got,
-        lights_out=got,          # default to got_into_bed (#117)
+        # RECALL-ONLY (#127): lights_out is NOT prefilled — entered from recall with no
+        # device value shown. got_into_bed (a distinct, verified bed-entry moment) stays
+        # defaulted; the frontend coerces this null to an empty field.
+        lights_out=None,
         final_wake=wake_time,
         out_of_bed=wake_time,
     )

@@ -38,10 +38,10 @@ def test_a_valid_bedtime_is_NOT_rejected():
 
 # ── the mapping (VERIFIED against 31 real nights: bedtime is bed-entry) ───────────
 
-def test_bedtime_maps_to_got_into_bed_and_defaults_lights_out():
+def test_bedtime_maps_to_got_into_bed_lights_out_not_prefilled():
     out = _diary_prefill(bedtime="22:40", wake_time="06:10", prescribed_lights_out="22:30")
     assert out.got_into_bed == "22:40"
-    assert out.lights_out == "22:40"          # defaults to got_into_bed (#117)
+    assert out.lights_out is None             # recall-only (#127): entered from recall, not prefilled
 
 
 def test_wake_time_defaults_both_wake_side_fields():
@@ -126,7 +126,7 @@ def test_open_block_prefills_from_a_passive_overnight_row(db_session):
     out = get_prefill(current_user=u, db=db_session)
     assert out.cbti.block_open is True
     assert out.diary_prefill.got_into_bed == "22:35"
-    assert out.diary_prefill.lights_out == "22:35"
+    assert out.diary_prefill.lights_out is None       # recall-only (#127): not prefilled
 
 
 def test_prefill_ignores_a_calibration_row_the_denylist_would_admit(db_session):
