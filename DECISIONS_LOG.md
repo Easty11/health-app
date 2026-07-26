@@ -4033,3 +4033,40 @@ textarea label, each with a negative control. 406 passed, was 401.
 going into notes — at which point that content is promoted to its own column, and the note stays free-text.
 
 ---
+
+### 126
+
+**Decision:** Block 3's opening prescription (id=10, 23:45→05:45, window 360) is superseded by an
+operator correction (id=11, 22:30→05:00, window 390, `decision='adopt'`, `effective_from` 2026-07-27)
+rather than edited in place, and the `cbti_blocks` row is left unchanged. The write is APPEND +
+SUPERSEDE on `cbti_prescriptions` — insert id=11, then set id=10 `effective_to`=2026-07-26 and
+`superseded_by`=11, the only permitted UPDATE shape (models.py:278-281). The block's `wake_anchor`
+stays 05:45.
+
+**Rationale:** The opening window 360 was operator-set to ≈ the device mean TST (basis_tst_min=349 on
+id=10), a mean measured over nights already under self-restriction, and the anchor 05:45 sat above the
+measured wake terminus. The correction returns the anchor to 05:00 (the wake terminus, and the anchor
+under which the completed block closed at window 458) and the window to 390. `decision='adopt'`, not
+`extend`: an operator correction must not enter the titration chain as a move ('adopt' is in the CHECK
+set and carries no titration semantics). `basis_*` left NULL: operator-set, not basis-derived, so
+id=10's device-derived provenance is not copied forward. The block row is NOT rewritten because
+CBTIBlock is append-only (models.py:253-257) and 05:45 is a true fact about how block 3 opened — the
+superseding prescription is the artifact that expresses the anchor change, exactly as prescription
+supersession expresses a titration.
+
+**Status:** DONE. Applied to prod in-container (`railway ssh` → the seed script's `--apply` path):
+inserted id=11, superseded id=10, block id=2 unchanged. Seed script committed
+(`backend/correct_cbti_block3_rx.py`) — dry-run-default, resolves the target (the single live rx on the
+single open block) at read time, guards against double-apply.
+
+**How you know:** post-write read-back of all three rows, reproduced in the session transcript: id=10 →
+`effective_to`=2026-07-26, `superseded_by`=11, every other column frozen (23:45/05:45/360/adopt,
+basis_tst 349); id=11 → 22:30/05:00/window 390/adopt, `basis_*` NULL, `superseded_by` NULL; block id=2
+→ `wake_anchor` 05:45, unchanged.
+
+**Do not revisit unless:** a further operator correction or a genuine titration move supersedes id=11 in
+turn — done the same way, an append + supersede, never an in-place edit. The block-vs-prescription
+anchor divergence this entry knowingly accepts is tracked separately as OPEN_QUESTIONS Q49 (the replay
+reads the block anchor, not the effective prescription's), which is the blocker on the first evaluation.
+
+---

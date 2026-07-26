@@ -783,6 +783,30 @@ post-extension cycles, fit the SE-recovery curve; if it supports a threshold, #1
 unless" is met and this becomes a gate proposal with data behind it.
 
 ---
+## Q49. The replay regenerates the prescription chain from row zero instead of reading the effective prescription per cycle — a mid-block operator correction is invisible to it, and reads as an adherence failure
+
+`cbti/replay.py` seeds the initial lights-out from `rxs[0][1]` (the earliest prescription) and then
+regenerates the chain by the engine's own titration logic; it never reads `cbti_prescriptions` for the
+prescription in force in a later cycle, and it takes the wake anchor from `cbti_blocks.wake_anchor` (the
+block's OPENING state, replay.py:174), not the effective prescription's. So block 3's operator correction
+(#126: id=11, 22:30/05:00 from 2026-07-27, superseding id=10's 23:45/05:45) is invisible to a replay —
+not just the anchor, the whole change. Concretely: cycle 1 spans 24–30 Jul (`CYCLE_NIGHTS`=7) and the
+correction lands on night 4; a replay differences all seven nights against the seeded 23:45, so the four
+nights actually run at 22:30 read ~75 min early, and with `ADHERENCE_FAIL_N`=3 the cycle FALSE-HOLDS on
+GATE 2 adherence — the exact failure mode the V1 basis-boundary check was asked to rule out. It does not
+bite today only because nothing auto-evaluates (`evaluate_cycle` is called only by `replay.py`, manually).
+
+This is the general defect behind the anchor divergence #126 accepts: computation and ledger are divorced,
+so they can disagree only quietly, and nothing records which of the two produced a given verdict.
+
+**Status:** UNSTARTED — no blocker on being *possible*, but this is the BLOCKER ON THE FIRST EVALUATION:
+do not run a block-3 replay until the fix lands, or the first clean post-correction cycle will false-HOLD.
+Owner: Luke. **Next action** (own concern, own commit): make the replay read the effective prescription
+for each cycle from `cbti_prescriptions` — window, lights-out, AND wake anchor — instead of reconstructing
+from row zero. Then block-vs-prescription divergence stops mattering, mid-cycle corrections are handled by
+construction, and the ledger becomes authoritative. Ahead of Q48's settling work and any v2.
+
+---
 
 ## CLOSED
 
