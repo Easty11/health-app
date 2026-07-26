@@ -4376,3 +4376,65 @@ three-section / hybrid-inline / colour-as-fact model fails against a real panel 
 producer lands.
 
 ---
+
+### 136. Block 1 (2026-03-19 → 2026-05-11) is discarded for outcome claims; instrument and parameter evidence survives
+
+**Decision:** Block 1 (`cbti_blocks.id=1`, the clinical "block 2") is DISCARDED for OUTCOME CLAIMS — any
+claim about what the prescription produced: TST, SE, titration counts, adherence rates, exclusion loads,
+cycle verdicts. Instrument-characterisation and parameter-setting evidence from the same nights survives,
+and #107's week 7 survives, each for its own reason (below). This mints a premise a substantial amount of
+landed code and comment already leans on (commit `d07b538`, OPEN_QUESTIONS Q55) but which until now
+existed only in chat.
+
+**Grounds for the discard.** (1) Prescriptions were extended mid-block for external reasons, so TIB was
+not held. (2) The observed TIB SD (~67 min) is statistically indistinguishable from the subsequent
+self-restricted hold period — i.e. the restriction was largely not in force. *(This SD figure is from
+prior chat analysis; it is NOT verified against the repo or DB, and is recorded here as the operator's
+stated basis, not as an attested measurement.)* (3) The ledger and diary spans disagree:
+`cbti_blocks.id=1.closed_on = 2026-05-11` (51 nights) against #107 / BRANCHES prose describing the imported
+block as 2026-03-19 → 05-13 (53 nights), so two nights (05-12, 05-13) carried no prescription.
+`replay.load_nights` bounds on `closed_on`, so a replay sees 51. *(This span discrepancy IS repo/DB-checkable
+and was checked: the block-1 replay reports "nights loaded: 51"; the importer loaded 53.)*
+
+**What survives — three classes, each for its own reason.**
+
+- *Instrument characterisation.* The relationship between recalled lights-out and detected sleep onset is a
+  property of the SENSOR, not of the prescription; a mid-block prescription change cannot corrupt it. This
+  is why lag queries on block-1 data (Q47 / #127) are legitimate.
+- *Parameter-setting from unforced periods.* Chronotype and wake-mode determination from periods where the
+  schedule was not binding. These are not measurements of the intervention and are not runtime reads.
+- *#107's week 7.* TIB 8h07 against a 7h38 prescription, TST 7h29, SE 92.2%. It survives BECAUSE it is the
+  over-run: the non-adherence that voids the block's outcome claims is precisely what makes this week
+  informative — the only observed period where TIB was not the binding constraint. Applying the discard
+  uniformly would delete the project's only sleep-need estimate. #107 stands.
+
+**Consequence.** Any claim citing block-1 outcome measurements as design justification is void, including
+where it appears in code comments. Commit `d07b538` neutralised the known sites in `engine.py`; future work
+must not reintroduce them.
+
+**Interaction with prior locked decisions (reconciliation deferred, not done here).** This entry does not
+amend any append-only decision. Where a prior locked decision cites a block-1 OUTCOME as a support — #115's
+buffer "recovered from the prior block" (+36 median) and #114's regularity / second-adherence-arm rejections
+(`r = −0.206`, "fires on nothing") — that citation now rests on discarded ground, and `d07b538` already
+removed the mirror of it from code, so store and code disagree about the basis. Reconciling each is a
+SEPARATE supersession with its own weight, not folded into this discard. (#124 already labels its block-1
+figures "recorded, NOT evidence, because the block is confounded", so it needs none.)
+
+**Not covered (a limit, not a discard).** No unrestricted baseline exists in any dataset — every recorded
+night is prescribed-restricted or self-restricted. Sleep need is therefore unmeasurable from existing data
+by any method, and plateau detection must be self-referential rather than referenced to a need estimate.
+
+**Status:** Minted as the canonical home for a premise already relied on by landed code (`d07b538`) and
+OPEN_QUESTIONS Q55. Not an amendment to any existing decision.
+
+**How you know:** the span discrepancy is repo/DB-checkable and was checked (`closed_on` 2026-05-11 vs a
+53-night import; the block-1 replay loads 51). The TIB-SD ground and "extended mid-block for external
+reasons" are the operator's stated basis from chat analysis, marked as such above and NOT attested at the
+repo or DB.
+
+**Do not revisit unless:** an unrestricted-baseline dataset becomes available (which would make sleep need
+directly measurable and reopen the "Not covered" clause), or a specific block-1 quantity is shown
+prescription-independent by an argument that does not itself rest on a block-1 outcome — in which case it
+joins the "survives" classes rather than reopening the discard.
+
+---
