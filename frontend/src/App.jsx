@@ -9,6 +9,7 @@ import CheckIn from './pages/CheckIn'
 import CheckInAM from './pages/CheckInAM'
 import NightlyCloseOut from './pages/NightlyCloseOut'
 import Metrics from './pages/Metrics'
+import InterpretationView from './pages/InterpretationView'
 
 function RequireAuth({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/nightly" element={<RequireAuth><NightlyCloseOut /></RequireAuth>} />
         <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
         <Route path="/metrics" element={<RequireAuth><Metrics /></RequireAuth>} />
+        <Route path="/interpretation" element={<RequireAuth><InterpretationView /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

@@ -937,6 +937,23 @@ uncommitted). Ref: DECISIONS_LOG #84 for the precedent pattern; FEEDBACK §11.
 
 ---
 
+## Q54. The interpretation view (increment 1/5) renders against a superseded contract — its fixture lacks the `ungrouped[]` the #86 producer emits
+
+`frontend/src/fixtures/interpretationExample.json` has top-level keys `['groups', 'meta']`, but master's
+#86 producer (`backend/interpretation/producer.py`, `build_foundation`) emits `{meta, groups[],
+ungrouped[]}`. The view (increment 1/5, DECISIONS_LOG #135) is fixture-driven and ships **INERT** — it
+renders the committed fixture, not the live producer — so nothing ships broken. But the increment that
+wires the view to the live producer MUST (a) regenerate `interpretationExample.json` from current
+`build_foundation` output and (b) add an `ungrouped` render section; wiring it against the current fixture
+would silently DROP every ungrouped marker.
+
+**Status:** UNSTARTED — no blocker; the view is inert (fixture-driven), so this is owed work, not a live
+defect. **Next action** (at increment 2+, when the `context_builder` AI pointer is swapped to the live
+producer): regenerate the fixture from `build_foundation` output and add an `ungrouped[]` render section.
+Owner: Luke.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
