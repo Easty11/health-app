@@ -810,6 +810,73 @@ evaluation trigger (#118) must reuse this same read (the shared "≥7 nights sin
 
 ---
 
+## Q50. Where do the four operating rules live — project instructions or CLAUDE.md?
+
+The 15 Jul calf investigation produced four rules that are not yet homed anywhere enforceable:
+
+- **no hypothesis before the manifest**
+- **inline source-of-claim tags** (per claim, naming the artefact it leans on)
+- **artefact ≠ source** (a record-artefact is not the thing it describes)
+- **a gate is a subtraction** (a constraint removes an exposure; log its cost at issue)
+
+These are the `prevention` values of ledger rows 5, 6, 8, 10 and 15 (`FEEDBACK.md` §19.6, DECISIONS_LOG #129–#132).
+The ledger records that the failures happened and what would have prevented them; it does not *enforce* the
+rules. Enforcement needs a home that loads before the analysis starts.
+
+**The fork.** Chat's position (schema proposal §6) is **project instructions** — permanent, enforced every chat,
+model-uneditable, porting the existing EPISTEMIC DISCIPLINE block (which already holds the parent rule) into the
+health lane where it was never applied. The alternative is **CLAUDE.md**, which reaches Code sessions but not
+chat — and these failures happened in chat, not Code. A third option is both, which re-creates the two-master
+drift the loop model exists to kill unless one is unambiguously the master.
+
+**Why it is not decided here:** project instructions are a UI surface, not a repo write — Code cannot write them,
+so this cannot be closed by the ledger's own commit. It is also the item the schema proposal flagged as bearing
+on cross-repo propagation: if the rules land in CLAUDE.md they hit the shared verbatim block and propagate to
+`health-connect-app`; if they land in project instructions they do not.
+
+**Status:** open — blocking nothing in the repo; blocks the rules being enforced anywhere. Decide the surface
+before writing them, not after.
+
+---
+
+## Q51. `BRANCHES.md`'s header describes a convention its own rows contradict
+
+The header reads:
+
+> `# BRANCHES — every branch not master lives here until merged+deleted`
+
+"Until merged+deleted" says a row leaves once its branch lands. **The file does not do this.** 14 rows are
+retained with a `**LANDED <date>**` status (`fix/probe-harness-fidelity`, `feat/hevy-resolver-activation`,
+`chore/markitdown-mcp`, …), and the landing commits say so explicitly — `gov(branches):
+fix/probe-harness-fidelity LANDED at adb67e8`. Practice is retain-and-mark; the header says delete.
+
+**Practice is almost certainly the correct half.** Retained rows carry the `Unblocks on` column, which holds
+owed operator loops that outlive the merge — e.g. `feat/hevy-resolver-activation`'s "loop closes on Luke,
+post-merge + deploy: exercise the live path", and `chore/markitdown-mcp`'s parked Desktop registration.
+Deleting a row on land would destroy the record of what is still owed *because* it landed. The header is
+stale prose; the rows are the convention.
+
+**Why this is logged and not patched.** It is a repo defect with a live cost — it already produced one
+failure. `FEEDBACK.md` §19 row 16 records Code reading this header instead of the rows it governs and
+writing a false instruction (`"Owed on land: delete this row"`) into `BRANCHES.md` at `17ffe60`, corrected
+at `554e448`. That is row 8's class — an artefact read as the thing it describes — and the artefact here is
+a canonical store's own header. Row 16 records the misread; this question records the thing misread. They
+are the two halves of one `COUPLED` failure and neither is complete alone.
+
+**The fork:** (a) rewrite the header to match practice — "every branch not master lives here until landed;
+landed rows are retained and marked `LANDED`" — accepting that the file is an append-only branch history,
+not a live-branch inventory; or (b) rewrite the practice to match the header, deleting landed rows and
+relocating owed operator loops somewhere that survives. (a) is cheap and preserves the `Unblocks on`
+record; (b) costs a new home for owed loops and would discard 14 rows of history.
+
+**Status:** open — not Code's call to silently rewrite a header that 14 rows and the close-out
+terminal-state gate depend on. Blocks nothing; misleads every reader until decided, including the next
+model to read it.
+
+---
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
