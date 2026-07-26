@@ -3,8 +3,8 @@
 Controls on TOTAL SLEEP TIME with sleep efficiency as a FLOOR, never as the target
 (#107). The window is rolling mean TST plus a buffer; the block exits on TST
 plateau with SE held >= 85%, not on SE reaching or stalling at a threshold. An
-SE-maximising rule terminates at peak efficiency, which on the observed block is
-roughly 45 minutes short of need.
+SE-maximising rule terminates at peak efficiency, ~45 minutes short of need per
+#107's sleep-need estimate.
 
 This module is PURE: it takes `Night` records and returns a `CycleDecision`. It
 opens no database session, reads no readiness output, and re-implements no clock
@@ -15,40 +15,39 @@ Gate order — first failure short-circuits to HOLD with a reason:
   1. SUFFICIENCY  >= 5 valid nights after exclusions
   2. ADHERENCE    actual bedtime vs prescribed, +/-30 min, failing on >= 3 of 7
 
-TIB OVER-RUN is INSTRUMENTED, NOT GATED, and the reasoning is worth keeping
-because two candidate gates were built up and rejected on evidence.
+TIB OVER-RUN is INSTRUMENTED, NOT GATED. Two candidate gates over it were considered
+and left un-built. The block-2 evidence that originally drove those rejections is
+DISCARDED for outcome claims (prescriptions were extended mid-block, TIB was not held,
+and the ledger/diary spans disagree), so any count it produced here is void; what
+remains below is only the reasoning that stands on first principles.
 
   1. A second ADHERENCE ARM on `out_of_bed` vs the wake anchor (+/-30, same
-     >=3-of-7 threshold) was proposed and TESTED against the block. It fires on
-     NOTHING: the worst cycle is 2 of 6 outside tolerance, below the threshold,
-     because wake-end failures on this block are few-and-huge (+225, +90, +85,
-     +75, +70) while the bed-end failures the existing arm catches are
-     many-and-small. A count-based rule suits the latter and not the former.
-     Recorded as tested-and-rejected so it is not re-proposed.
+     >=3-of-7 threshold). Structural mismatch: a count-based >=3-of-7 rule responds
+     to MANY-AND-SMALL deviations, not FEW-AND-LARGE ones, so it is the wrong
+     instrument for wake-end failures IF those are few-and-large. Whether they are
+     is NOT ATTESTED — prior block discarded. The arm stays un-built and the
+     question open.
 
-  2. A DIRECT TIB gate (mean TIB - window > tolerance) discriminates on this
-     block, and was still withdrawn, for three reasons. It measures what the SE
-     floor already measures — SE is TST/TIB and over-run is TIB minus window, so
-     they share TIB and move together BY CONSTRUCTION, not as a finding. No
-     threshold exists in the data: over-runs run +3/+25/+32/+34/+43/+43/+64,
-     continuous with no break, so any tolerance would be read off the very block
-     it then "validates". And it would fire on 4 of 8 cycles on top of 3
-     insufficiency HOLDs, leaving two titrations in eight — the same starvation
-     the alcohol predicate produced, reached from the other direction.
+  2. A DIRECT TIB gate (mean TIB - window > tolerance). Withdrawn on a
+     FIRST-PRINCIPLES ground that needs no block: it measures what the SE floor
+     already measures — SE is TST/TIB and over-run is TIB minus window, so the two
+     share TIB and move together BY CONSTRUCTION, not as a finding. Redundant with
+     the SE floor. (A tolerance would also have to be read off the same block it
+     then "validates" — circular — but the redundancy alone is sufficient.)
 
-  The discriminator was never over-run MAGNITUDE but SE AT over-run. #107's
-  sleep-need basis week itself over-ran (TIB 8h07 against a 7h38 prescription,
-  +29) at SE 92.2% — slept through the extra time, genuine capacity. The block's
-  worst cycles over-ran at SE 85.7% — lay awake in it. Same TIB behaviour,
-  opposite meaning, separated by the SE floor without a new gate. Gating over-run
-  out as contamination would have contradicted the estimate #107 rests on.
+  The discriminator that matters is SE AT over-run, not over-run MAGNITUDE: a night
+  that over-runs at high SE is genuine capacity (slept through the extra time); one
+  that over-runs at low SE is time lying awake. The SE floor already separates these
+  without a new gate, and gating over-run out as contamination would contradict the
+  sleep-need estimate #107 rests on. (The per-cycle SE figures that once illustrated
+  this are block-2 outcomes — discarded.)
 
-Regularity (lights-out SD, wake-time SD) is COMPUTED AND REPORTED but does not
-gate (#114): across the observed block, lights-out SD against weekly mean SE gives
-r = -0.206, and a >0.5h gate would have blocked five of eight weeks including the
-two best. Early-morning awakening is instrumented but never drives compression
-(#108) — wakes cluster time-locked at 04:32 +/-21 min and do not track window
-length.
+Regularity (lights-out SD, wake-time SD) is COMPUTED AND REPORTED but does not gate
+(#114): retained as an observational construct, not a titration signal — regularity
+is context for a reading, not itself a control quantity. (The block-2 correlation and
+week-count that argued against gating are discarded — prior block.) Early-morning
+awakening is instrumented but never drives compression (#108): observational only.
+(Its block-2 clustering figures are discarded.)
 """
 from __future__ import annotations
 
@@ -66,10 +65,10 @@ from cbti.timeutil import (
 )
 
 # ── constants ─────────────────────────────────────────────────────────────────
-# Derived from the observed block (#115): differencing each prescribed window
-# against the mean TST of its preceding seven nights gave +36/+45/+36/+27/+16/
-# +48/+65 — median +36. 30 is adopted at the conservative end, where it also
-# coincides with the standard sleep-restriction buffer: two supports, not one.
+# CHOSEN, not block-derived. 30 min is the standard sleep-restriction-therapy buffer
+# added to mean TST when setting the window — a first-principles / literature support
+# that stands without the prior block. (A block-2 derivation once co-supported ~30 but
+# is discarded for outcome claims; the SRT-buffer support is sufficient on its own.)
 BUFFER_MIN = 30
 
 FLOOR_MIN = 300               # 5h00 — never prescribe below this
@@ -80,8 +79,8 @@ SE_FLOOR_PCT = 85.0           # #107: efficiency is the floor, not the target
 # far below any defensible value, so it cannot distinguish the options. Left at 5
 # deliberately: moving it would be tuning against data that cannot test it.
 MIN_VALID_NIGHTS = 5          # sufficiency gate
-ADHERENCE_TOL_MIN = 30        # +/- tolerance on bedtime vs prescription
-ADHERENCE_FAIL_N = 3          # >= this many failures in the cycle -> HOLD
+ADHERENCE_TOL_MIN = 30        # +/- tolerance on bedtime vs prescription — CHOSEN, not derived (unattested; see OPEN_QUESTIONS)
+ADHERENCE_FAIL_N = 3          # >= this many failures in the cycle -> HOLD — CHOSEN, not derived (unattested; see OPEN_QUESTIONS)
 CYCLE_NIGHTS = 7
 NAP_EXCLUDE_MIN = 0           # Q45: ANY nap-flagged night is excluded, not >20
 TRAINING_RECOVERY_MIN = 90    # constrained night floor = session end + 90 min
@@ -164,9 +163,9 @@ class CycleDecision:
     # INSTRUMENTED, NOT GATED. Mean TIB over the basis nights minus the prescribed
     # window: how far the window was over-run in practice. Recorded because it
     # cannot yet be adjudicated — see the TIB-gate note above. Mean-based and so
-    # outlier-sensitive: on the observed block one night (2026-03-21, out of bed
-    # +225 min past anchor) moves a 6-night cycle mean by ~37 min. A future
-    # threshold must be set against a distribution across blocks, not this one.
+    # outlier-sensitive: a single large-over-run night pulls a small-n cycle mean, so
+    # a future threshold must be set against a distribution across blocks, not read
+    # off one. (The block-2 night that once illustrated this is discarded for outcome claims.)
     basis_tib_over_run_min: float | None = None
     # INSTRUMENTED, NOT GATED (#124). Nights elapsed since the current prescription's
     # effective_from — the settling period. NOT `basis_`-prefixed: the basis_* fields are
@@ -190,31 +189,30 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
     Order matters only for which reason is reported; a night excluded for any
     reason contributes to neither the TST mean nor the adherence count.
     """
-    # incomplete data cannot support a basis
+    # incomplete data cannot support a basis.
+    # MARKER (not implemented): this gates on `se_pct` being present. A pending policy
+    # revision retires SE as a control quantity; when that is ratified this predicate
+    # must be RESTATED over the recall components (e.g. tst / diary times) rather than
+    # SE. Not changed here — the revision is not minted, and redefining the gate now
+    # would be building against an unratified spec.
     if night.tst_min is None or night.se_pct is None:
         return NightVerdict(night, False, "incomplete")
 
     # ALCOHOL. Only a RECORDED non-zero night is excluded. An unrecorded night is
-    # admitted and flagged (`alcohol_unknown`), so the basis says how much of it
+    # admitted and flagged (`alcohol_unknown`), so the basis records how much of it
     # rested on nights assumed clean rather than verified clean.
     #
-    # Excluding unknowns as well was tried and refuted on the observed block: it
-    # removed 29 of 53 nights and starved the sufficiency gate to eight straight
-    # HOLDs with no titration at all. Three lines of evidence licensed admitting
-    # them — TST (unknown 383 vs zero 370 vs drink 430) and WASO (22 / 20 / 30)
-    # both place unknowns with the zeros, while SE at 2.5-vs-2.1 is noise against
-    # a within-group SD of 6-11; and decisively, ZERO of 19 blanks sit adjacent
-    # to a drink night where ~3.7 would be expected under random placement
-    # (p = 0.0033). That actively refutes "blank means drank and did not log",
-    # which is the only hypothesis conservative exclusion was guarding against.
+    # RATIONALE (first-principles): alcohol alters sleep architecture, so a drink
+    # night is evidence about a DIFFERENT physiological state than the one being
+    # titrated — structurally the same argument as the adherence gate (a night not
+    # run to prescription is evidence about a different window). Excluded on that
+    # ground, not on any block-2 measurement (the block that once supplied the
+    # TST/adjacency figures here is discarded for outcome claims).
     #
-    # RATIONALE, CORRECTED. Exclusion was originally justified as keeping
-    # pharmacologically SUPPRESSED sleep out of the window estimate. The data
-    # refutes that mechanism: drink nights carry the block's HIGHEST TST (430 vs
-    # 370), with higher WASO at equal SE — i.e. more time in bed, not less sleep.
-    # They are nights run under a different regime, later to bed or later up, so
-    # the filter is functioning as a NON-ADHERENCE PROXY and overlaps the
-    # adherence gate rather than acting independently of it.
+    # PENDING POLICY (not implemented): a policy revision would reclass this
+    # exclusion as EXCUSABLE rather than DISQUALIFYING. Those classes do not exist
+    # in code and the revision is not ratified, so this stays a plain exclusion —
+    # building the split now would be constructing against an unratified spec.
     if night.alcohol_units is not None and night.alcohol_units > 0:
         return NightVerdict(night, False, "alcohol")
 

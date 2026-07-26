@@ -185,10 +185,6 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--user-id", type=int, required=True)
     ap.add_argument("--block-id", type=int, required=True)
-    ap.add_argument("--admit-unknown-alcohol", action="store_true",
-                    help="DIAGNOSTIC ONLY: treat alcohol_units IS NULL as zero, "
-                         "reproducing the defective `> 0` predicate. Isolates how "
-                         "much of the exclusion load is unknown-vs-recorded.")
     args = ap.parse_args()
 
     db = SessionLocal()
@@ -201,11 +197,6 @@ def main() -> None:
 
         d1 = block.closed_on or date.today()
         nights = load_nights(db, args.user_id, block.opened_on, d1)
-        if args.admit_unknown_alcohol:
-            for n in nights:
-                if n.alcohol_units is None:
-                    n.alcohol_units = 0
-            print("*** DIAGNOSTIC MODE: unknown alcohol admitted as zero ***")
 
         last_night = block.closed_on or (max((n.date for n in nights), default=d1))
 
