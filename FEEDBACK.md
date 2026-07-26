@@ -864,3 +864,67 @@ later regardless. The correct fix is **not "more questions first"** but **"no hy
 manifest, and inline source-of-claim tags that surface the gap the moment a claim leans on the wrong
 artefact — then ask the precise question."** This converts N rounds of ad-hoc correction into one targeted
 question when it is earned. Fewer rounds, aimed.
+
+---
+
+## 20. Hardcoded governance numbers on held branches accrue renumber debt
+
+Governance numbers — DECISIONS `#N`, OPEN_QUESTIONS `Q N`, FEEDBACK `§N` — are minted at ff-merge, not
+at authorship. A branch that writes a governance entry must still put *something* in the header, and a
+concrete number is a bet on merge order: every merge that lands while the branch is held claims the number
+the branch guessed and invalidates it. The cost scales with **intervening merges, not elapsed time**, and
+compounds across a batch — each land shifts the next held branch's numbers again.
+
+**The rule already exists and was applied unevenly.** `CLAUDE.md` → *Number-at-merge* (the DECISIONS_LOG
+discipline, shared block): *"On a branch, a new entry is headed `### #NEXT`; the integer is claimed only
+when the governance commit fast-forwards to master."* So this is a **compliance failure**, not a missing
+rule — and one branch got it right while two ignored it.
+
+Evidence — the five-branch landing session of 2026-07-26 (branches authored/pushed 13–17 Jul, held until
+this session):
+
+| Branch | Merge | Governance | Numbering | Behind | Renumber cost |
+|--------|-------|-----------|-----------|--------|---------------|
+| `feat/recovery-metrics-rhr` | `5e770be` | none | — | 190 | **zero** — clean merge |
+| `feat/interpretation-view-skeleton` | `5a4680f` | yes | `#NEXT` placeholder ✓ | 139 | **one** substitution |
+| `feat/checkin-injury-probe` | `e70b37e` | yes | hardcoded ✗ | 139 | **four**, two also carried in code docstrings |
+| `feat/feedback-ledger` | `bd813a6` | yes | hardcoded ✗ | 139 | **seven**, across three ledgers |
+
+**Root cause is the hardcoding, not the holding.** The compliant branch (`#NEXT`) and the two hardcoded
+branches were the same age (139 behind) with comparable governance weight, and their cost differed by two
+orders of magnitude. `feat/recovery-metrics-rhr` — the *most* stale at 190 behind — cost zero because it
+authored no governance number: a negative control proving staleness alone is free. A `#NEXT` branch is safe
+held indefinitely.
+
+Two aggravators seen this session:
+
+- **Semantic collision, not just staleness.** `feat/feedback-ledger`'s `§12` had, in the interim, been
+  claimed on master by a *different* rule ([[§12]], the unseeable-surface rule, #88). The renumber to
+  `§19` was not "the next free slot" but "the slot you meant is now something else" — a hardcoded number
+  can go quietly *wrong* on master, not merely stale.
+- **It leaks into source.** `feat/checkin-injury-probe` carried `#89`/`#90` in `injury_probes.py` and
+  `tests/test_injury_probes.py` docstrings. Grep-and-replace across code is riskier than in an append-only
+  ledger — a mis-anchored `#89`→`#133` can hit an unrelated token — so the placeholder rule must cover
+  **code comments and docstrings**, not only the governance files. The documented rule names DECISIONS
+  entries only; this is exactly where its scope falls short.
+
+> **Rule going forward:** a governance number authored on a branch is written as a **placeholder token**
+> (`#NEXT`, `§NEXT`, `Q-NEXT`), never a concrete number, and resolved at merge. This binds DECISIONS,
+> OPEN_QUESTIONS, and FEEDBACK entries **and any `#N` / `§N` / `Q N` reference in code comments or
+> docstrings**. Landing promptly reduces exposure but is not the fix — the fix is that a held branch
+> carries no bet on merge order to begin with.
+
+**Related, same read — a held branch's *state* label drifts too, not only its numbers.**
+`feat/recovery-metrics-rhr` was rowed `UNSTARTED` in `BRANCHES.md` while carrying a complete feature commit
+(`a4e1887`, the RHR series) — the row quoted the commit while contradicting its own label. Same underlying
+failure as the hardcoded number: metadata authored on a held branch is a snapshot reality invalidates, and
+contagious the same way — one row that lies forces re-verification of *every* row, as one hardcoded number
+that collides forces a full renumber sweep.
+
+*Scope note:* extending the documented `#NEXT` rule (CLAUDE.md, DECISIONS_LOG discipline, **shared block**)
+to name FEEDBACK / OPEN_QUESTIONS entries and code comments/docstrings is a shared-block change, byte-identical
+across both repos — logged as cross-repo propagation debt in `ROADMAP.md` NOW, not written here (writing it
+in one repo alone breaks the two-master invariant). This section is the repo-local record; the shared-block
+line is owed separately.
+
+---
