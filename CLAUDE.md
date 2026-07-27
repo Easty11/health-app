@@ -322,9 +322,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **4b-i (interpretation producer, structural half)** — three-pass restructure (`should_surface` computed after relations), member `relations_rendered[]` with operand degradation and `feedback`→`unresolvable`, and draw-dated `meta.protocol_context_snapshot`. No demotion, levers, or verdict (held for 4b-ii). On `feat/interpretation-relations`, pushed + held for review; DECISIONS `#NEXT`×3 and OPEN_QUESTIONS `Q-NEXT`×2 mint at ff-merge. See `closeout.md`.
 - **#139** — Three haematocrit safety bands (0.50 / 0.52 / 0.54) promoted from `_deferred` to live in `safety_thresholds.json`, each on its own `evidence_refs`; gate 3 moves from inert (`no_asset` for every marker) to live for haematocrit, and gate 1's safety arm becomes reachable. Fraction-unit convention verified. Closes the Q41 coverage gap; fires on nothing until a haematocrit result is ingested. See DECISIONS_LOG #139.
 - **#138** — Interpretation output contract v0.5: three-gate safety (news / range / safety-band) supersedes v0.4's two-gate model, adds the three producer keys v0.4 lacked (`safety_gate`, `should_surface`, `ungrouped[]`), and rules that ungrouped markers render in their own section between What Moved and Stable. Contract is UI-maintained, so the entry carries its own substance. See DECISIONS_LOG #138.
-- **#137** — The recorded bases of #115 (the +30 titration buffer) and #114 (regularity-not-gating, rejected second adherence arm) are restated on their surviving supports — block-1 derivations retired under #136, values unchanged; the store is aligned to the code `d07b538` already landed. See DECISIONS_LOG #137.
 
 ---
 
