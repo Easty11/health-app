@@ -4566,3 +4566,50 @@ its placement misleads; or the verification gap is closed, which would change wh
 therefore what this entry is for.
 
 ---
+
+### #NEXT. Haematocrit safety bands promoted with per-band citations — gate 3 fires for the first time
+
+**Decision:** Three haematocrit bands move from `_deferred` into live `thresholds` in
+`safety_thresholds.json`, each carrying its own `evidence_refs`: **0.50** the monitoring target
+ceiling, **0.52** the observed risk inflection, **0.54** the intervention threshold. Gate 3 previously
+resolved undecidable (`no_asset`) for every marker because the asset was empty; it now fires for
+haematocrit, and gate 1's safety arm becomes reachable with it.
+
+**Why three bands rather than one.** They rest on different kinds of evidence and license different
+readings, so each carries its OWN citation — a shared citation across all three would assert an
+evidential unity that does not exist, the laundering I1 exists to prevent. **0.50** is a management
+target from contemporary haematology reviews and a relative contraindication in andrology guidance.
+**0.52** is an observed outcome inflection — matched cohorts on testosterone therapy, MACE/VTE odds
+ratio 1.35 (95% CI 1.13–1.61) — scoped to the FIRST YEAR of therapy, which the band's note records
+rather than generalises. **0.54** is a normative action threshold from the Endocrine Society, with a
+second guideline body (EAU) independently specifying withdrawal / dose reduction / venesection; EAU is
+attested only secondhand here, so it is recorded via resolvable secondary attestations rather than
+cited without an identifier.
+
+**Why this marker first.** The reporting lab's own reference interval runs to 0.54, so no value below
+the intervention threshold is flagged at all. Gate 3 at 0.50 and 0.52 surfaces before the lab does.
+That is the capability; the citations are what let it land under I1.
+
+**Unit convention — verified, load-bearing.** Haematocrit's `unit_established` is null, so `safety_gate`
+does NOT normalise: it plausibility-gates on [0.20, 0.70] and compares the raw value directly against
+band values. The reporting lab issues haematocrit as a FRACTION (0.47, interval 0.40–0.54), and the
+bands are stored as fractions (0.50 / 0.52 / 0.54) to match. A band stored as 50 against a fraction
+result would never fire, and would fail SILENTLY — a clean negative, not an error. The fraction
+convention is the decision, not an accident.
+
+**Status:** Reference asset plus its schema/gate test. No producer or gate logic changed
+(`gates.py` / `producer.py` untouched). The lab store holds zero haematocrit results, so in production
+the gate fires on nothing yet — the capability lands ahead of the data.
+
+**How you know:** `safety_thresholds.json` now carries `thresholds.haematocrit` with three cited bands
+and `_deferred` emptied; the asset re-verified pure ASCII, zero literal em dashes, and parsing (the
+reference-JSON edit guard). `test_safety_thresholds_schema.py` gains live-asset coverage: `validate()`
+walks the three bands, a positive `safety_gate(0.53) -> elevated` carrying its own citation, a
+`no_asset` negative control on an unbanded marker, and gate 1's safety arm firing on
+`first_observation_in_band` where the delta arm cannot. Backend suite **448 passed** (was 445, +3).
+
+**Do not revisit unless:** a band's underlying guidance changes; the first-year scope on 0.52 is found
+to generalise or to fail to; or the unit convention changes such that the stored fractions no longer
+match reported results.
+
+---
