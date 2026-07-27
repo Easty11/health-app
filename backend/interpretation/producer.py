@@ -1,18 +1,25 @@
-"""Foundation producer (4a) — the group-primary skeleton with 4a fields only.
+"""Interpretation producer — group-primary, three-pass.
 
 build_foundation(user_id, db, trigger_panel, prior_panel) -> {meta, groups[], ungrouped[]}
 
-Consumes ONLY:
+Three passes (4b-i restructure over 4a's single pass):
+  Pass 1  per member  — delta, safety_gate, range_gate, raw news_gate (unchanged 4a).
+  Pass 2  per group   — relations over the assembled member set, THEN should_surface.
+  Pass 3  per group   — interpretive layer (verdict, levers — held for 4b-ii).
+
+Consumes:
   * newest+prior per marker (labs_reads.marker_series)
-  * marker_groups.json (membership, roles, group display names)
+  * marker_groups.json (membership, roles, display names, relations)
   * safety_thresholds.json (via gates.safety_gate - gate 3, level vs policy constant)
   * lever_dictionary.marker_interpretation[*].min_meaningful_delta + _defaults
     (via gates.min_meaningful_delta — never levers[])
+  * current_state(...).declared_state — for meta.protocol_context_snapshot only,
+    dated to the panel's draw (never date.today()).
 
-Emits NONE of: axis_verdict, relations_rendered, shared_levers,
-member_lever_effects, mechanism, stable_rationale, protocol_context_snapshot,
-expected_by_phase, note. Those are 4b. The producer reads neither current_state
-nor declared_state, and applies no relation-based news demotion (raw gate 1).
+Emits, over 4a: meta.protocol_context_snapshot, member relations_rendered[].
+Still HELD for 4b-ii (demotion + interpretive half): axis_verdict, shared_levers,
+member_lever_effects, mechanism, stable_rationale, expected_by_phase. No
+relation-based news demotion — gate 1 is still raw.
 """
 from __future__ import annotations
 
@@ -22,6 +29,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from current_state import current_state
 from reads.labs_reads import LabRow, MarkerPair, marker_series
 
 from .gates import _LEVER_DICTIONARY
@@ -103,33 +111,57 @@ def _should_surface(members: list[dict]) -> bool:
     )
 
 
+def _assemble_members(group_def: dict, series: dict[str, MarkerPair], claimed: set[str]) -> list[dict]:
+    """Pass 1 — the group's present members, each a full foundation row (delta,
+    safety_gate, range_gate, raw news_gate). Records every authored key in
+    `claimed`, present or not, so `_ungrouped` never re-surfaces a claimed key.
+    Identical per-member work to 4a; only lifted into its own pass so pass 2 has
+    the assembled set to reason over."""
+    members = []
+    for member_def in group_def["members"]:
+        key = member_def["marker_canonical"]
+        claimed.add(key)
+        pair = series.get(key)
+        if pair is not None:
+            members.append(_member(pair, member_def.get("role")))
+    return members
+
+
+def _build_group(group_def: dict, members: list[dict]) -> dict:
+    """Pass 2 (+ pass 3) — assemble the group object over its already-built member
+    set. Relations are authored over the whole member set (4b, Step D) and would
+    land here, BEFORE `should_surface`; the interpretive layer (verdict, levers —
+    held) is pass 3, after. `should_surface` is computed here, not in pass 1,
+    precisely so a later relation pass can finalise each member's news_gate first.
+    In this increment no relation runs, so the value is identical to 4a's."""
+    return {
+        "group_key": group_def["group_key"],
+        "display_name": group_def["display_name"],
+        "is_group_of_one": group_def.get("is_group_of_one", False),
+        "members": members,
+        "should_surface": _should_surface(members),
+    }
+
+
 def _groups(series: dict[str, MarkerPair]) -> tuple[list[dict], set[str]]:
     """Authored groups from marker_groups.json, members restricted to markers
     present in this panel. A group with no present members is omitted (an empty
     shell carries nothing; an `insufficient_data` verdict is 4b). Returns the
-    groups and the set of marker keys they claimed."""
+    groups and the set of marker keys they claimed.
+
+    Three-pass, additive over 4a's single pass: pass 1 assembles member rows
+    (`_assemble_members`), pass 2 builds the group over them (`_build_group`,
+    where relations then `should_surface` land). The passes are separated so a
+    relation needing the full member set can run between member assembly and
+    surfacing — see #NEXT (three-pass restructure)."""
     groups: list[dict] = []
     claimed: set[str] = set()
 
     for group_def in _MARKER_GROUPS["groups"]:
-        members = []
-        for member_def in group_def["members"]:
-            key = member_def["marker_canonical"]
-            claimed.add(key)
-            pair = series.get(key)
-            if pair is not None:
-                members.append(_member(pair, member_def.get("role")))
-
+        members = _assemble_members(group_def, series, claimed)  # pass 1
         if not members:
             continue
-
-        groups.append({
-            "group_key": group_def["group_key"],
-            "display_name": group_def["display_name"],
-            "is_group_of_one": group_def.get("is_group_of_one", False),
-            "members": members,
-            "should_surface": _should_surface(members),
-        })
+        groups.append(_build_group(group_def, members))  # pass 2 (+3)
 
     return groups, claimed
 
@@ -157,9 +189,42 @@ def _panel_ref(panel) -> dict | None:
     }
 
 
-def _meta(trigger_panel, prior_panel) -> dict:
-    """The 4a meta subset. No protocol_context_snapshot — that carries phase (4b).
-    first_ever_panel is derived from the absence of a prior panel (the caller
+_SNAPSHOT_FIELDS = ("key", "type", "phase", "assumable_present", "relevant_date")
+
+
+def _protocol_context_snapshot(user_id: int, db: Session, trigger_panel) -> dict | None:
+    """meta.protocol_context_snapshot (4b) — the declared-state factors as-of the
+    panel's collection date, projected to the fields that bear on interpretation.
+
+    `as_of` is the trigger panel's `collected_date`, NEVER `date.today()`: the
+    phase that interprets a panel is the phase at draw time. `derive_phase`
+    consumes `as_of` in no rule today (deliberate, documented), so this is INERT
+    now and correct the moment window logic lands. Passing `today` would be
+    silently wrong later and invisible in every test.
+
+    Each factor carries only `key`, `type`, `phase`, `assumable_present`,
+    `relevant_date`. It omits `detail` (unbounded free text, not an interpretive
+    input) and `active` — `declared_state.py` documents two incompatible senses
+    of "active"; `phase` is the one that survives the distinction.
+
+    Returns None only if the caller resolved no trigger panel (nothing to date
+    against); the normal flow always supplies one."""
+    if trigger_panel is None:
+        return None
+    as_of = trigger_panel.collected_date
+    state = current_state(user_id, db, today=as_of)
+    factors = [
+        {field: factor[field] for field in _SNAPSHOT_FIELDS}
+        for type_factors in state.declared_state.values()
+        for factor in type_factors
+    ]
+    return {"as_of": as_of.isoformat(), "factors": factors}
+
+
+def _meta(user_id: int, db: Session, trigger_panel, prior_panel) -> dict:
+    """Meta. `protocol_context_snapshot` is 4b (carries phase) and is dated to the
+    panel's draw, not the generation time — see `_protocol_context_snapshot`.
+    `first_ever_panel` is derived from the absence of a prior panel (the caller
     supplies None when there is nothing to compare against)."""
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -170,6 +235,7 @@ def _meta(trigger_panel, prior_panel) -> dict:
         "lever_dictionary_version": _LEVER_DICTIONARY["_meta"]["version"],
         "marker_groups_version": _MARKER_GROUPS["_meta"]["version"],
         "overall_extraction_confidence": getattr(trigger_panel, "overall_confidence", None),
+        "protocol_context_snapshot": _protocol_context_snapshot(user_id, db, trigger_panel),
     }
 
 
@@ -180,7 +246,7 @@ def build_foundation(user_id: int, db: Session, trigger_panel, prior_panel) -> d
     series = marker_series(user_id, db)
     groups, claimed = _groups(series)
     return {
-        "meta": _meta(trigger_panel, prior_panel),
+        "meta": _meta(user_id, db, trigger_panel, prior_panel),
         "groups": groups,
         "ungrouped": _ungrouped(series, claimed),
     }

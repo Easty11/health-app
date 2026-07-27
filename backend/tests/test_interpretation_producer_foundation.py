@@ -309,11 +309,14 @@ def test_producer_emits_no_4b_fields_though_the_fixture_carries_them(db_session)
             assert field not in row, f"ungrouped {row['marker_canonical']} leaked {field}"
 
 
-def test_meta_is_phase_free_and_names_both_panels(db_session):
+def test_meta_carries_the_snapshot_and_names_both_panels(db_session):
+    """Inverted from 4a's `test_meta_is_phase_free_...`: 4b-i emits
+    `protocol_context_snapshot` (dated to the draw — see the as_of test below),
+    where 4a asserted its absence. Everything else in meta is unchanged."""
     user, current, prior = _seed_fixture(db_session, "meta@example.com")
     meta = _build(db_session, user, current, prior)["meta"]
 
-    assert "protocol_context_snapshot" not in meta  # carries phase -> 4b
+    assert "protocol_context_snapshot" in meta  # 4b-i emits it (was absent in 4a)
     assert meta["trigger_panel"] == {"panel_name_raw": "Gonadal Hormones", "collected": "2026-05-30"}
     assert meta["compared_against"] == {"panel_name_raw": "Androgens", "collected": "2026-01-07"}
     assert meta["first_ever_panel"] is False
@@ -332,6 +335,50 @@ def test_first_ever_panel_true_when_no_prior_panel(db_session):
     meta = build_foundation(user.id, db_session, current, None)["meta"]
     assert meta["first_ever_panel"] is True
     assert meta["compared_against"] is None
+
+
+# ---------- G3: snapshot is DRAW-dated, never generation-dated ----------
+
+def test_protocol_context_snapshot_as_of_is_the_draw_date_not_today(db_session):
+    """G3. The snapshot's `as_of` is the trigger panel's collected_date, never
+    date.today(). NEGATIVE CONTROL: the fixture's draw date (2026-05-30) is not
+    today, so a `date.today()`-based implementation CANNOT pass this — the equality
+    would land on the wrong string. Asserted in both directions: == draw date AND
+    != today."""
+    user, current, prior = _seed_fixture(db_session, "asof@example.com")
+    snap = _build(db_session, user, current, prior)["meta"]["protocol_context_snapshot"]
+
+    assert snap["as_of"] == "2026-05-30"
+    assert snap["as_of"] == current.collected_date.isoformat()
+    assert snap["as_of"] != date.today().isoformat(), \
+        "draw date must differ from today or the negative control is vacuous"
+    assert current.collected_date != date.today()  # the control is live, not accidental
+
+
+def test_protocol_context_snapshot_projects_phase_fields_only(db_session):
+    """The snapshot flattens declared_state across its three types and projects
+    each factor to exactly {key, type, phase, assumable_present, relevant_date}.
+    It carries NO `detail` (unbounded free text) and NO `active` (two-senses trap).
+    A steady continuous protocol derives phase `steady` / assumable_present True."""
+    user = _make_user(db_session, "snapfields@example.com")
+    current = _make_report(db_session, user.id, _CURRENT)
+    _make_result(db_session, current.id, "AST", "ast", value_num=20.0, ref_high=40.0)
+    db_session.add(models.UserKnowledgeEntry(
+        user_id=user.id, type="protocol", key="trt", source="onboarding", active=True,
+        value={"active": True, "continuity": "continuous", "phase": None,
+               "detail": "125mg/wk test-C", "relevant_date": "2025-11-01"},
+    ))
+    db_session.commit()
+
+    snap = build_foundation(user.id, db_session, current, None)["meta"]["protocol_context_snapshot"]
+    assert snap["as_of"] == "2026-05-30"
+    trt = next(f for f in snap["factors"] if f["key"] == "trt")
+    assert set(trt) == {"key", "type", "phase", "assumable_present", "relevant_date"}
+    assert "detail" not in trt and "active" not in trt
+    assert trt["type"] == "protocol"
+    assert trt["phase"] == "steady"  # continuous + active, non-behavioural
+    assert trt["assumable_present"] is True
+    assert trt["relevant_date"] == "2025-11-01"
 
 
 # ---------- G5: gate-2 source is lab_flag, not computed_flag ----------
