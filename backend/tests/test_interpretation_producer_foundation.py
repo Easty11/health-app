@@ -36,10 +36,14 @@ _PRIOR = date(2026, 1, 7)
 _CURRENT = date(2026, 5, 30)
 _VITD = date(2025, 12, 27)
 
-# 4b fields the foundation must never emit.
-_FOUR_B_MEMBER_FIELDS = ["axis_verdict", "relations_rendered", "shared_levers",
-                         "member_lever_effects", "mechanism", "stable_rationale"]
-_FOUR_B_GROUP_FIELDS = ["axis_verdict", "relations_rendered", "shared_levers"]
+# 4b-ii interpretive-half fields still HELD — absent from every group and member.
+# `relations_rendered` is NOT here: 4b-i emits it on grouped members (Step D/E).
+_HELD_MEMBER_FIELDS = ["axis_verdict", "shared_levers", "member_lever_effects",
+                       "mechanism", "stable_rationale"]
+_HELD_GROUP_FIELDS = ["axis_verdict", "shared_levers"]
+# Ungrouped rows have no group, hence no relations by construction: they keep the
+# FULL absent list, including relations_rendered.
+_UNGROUPED_ABSENT_FIELDS = _HELD_MEMBER_FIELDS + ["relations_rendered"]
 
 
 def _make_user(db, email):
@@ -287,9 +291,13 @@ def test_all_stable_group_does_not_surface(db_session):
 
 # ---------- G3 boundary: 4b fields absent ----------
 
-def test_producer_emits_no_4b_fields_though_the_fixture_carries_them(db_session):
-    """The fixture proves these fields EXIST (asserted below), so their absence
-    in the producer output is the projection dropping them, not a vacuous pass."""
+def test_producer_emits_relations_rendered_but_holds_the_rest_of_4b(db_session):
+    """Split at 4b-i (G7): `relations_rendered` is now EMITTED on grouped members;
+    the interpretive-half fields stay held. The fixture proves the held fields
+    EXIST (asserted below), so their absence in the producer output is the
+    projection dropping them, not a vacuous pass. `relations_rendered` stays a
+    MEMBER field (absent at group level) and is absent from ungrouped rows — no
+    group, no relations, by construction not omission."""
     g0 = _FIXTURE["groups"][0]
     assert "axis_verdict" in g0 and "shared_levers" in g0
     assert "relations_rendered" in g0["members"][0] and "mechanism" in g0["members"][0]
@@ -299,14 +307,99 @@ def test_producer_emits_no_4b_fields_though_the_fixture_carries_them(db_session)
 
     assert out["groups"], "fixture seeds two authored groups — an empty result would pass vacuously"
     for group in out["groups"]:
-        for field in _FOUR_B_GROUP_FIELDS:
+        assert "relations_rendered" not in group, f"{group['group_key']} carries a member field at group level"
+        for field in _HELD_GROUP_FIELDS:
             assert field not in group, f"{group['group_key']} leaked {field}"
         for member in group["members"]:
-            for field in _FOUR_B_MEMBER_FIELDS:
+            assert "relations_rendered" in member, f"{member['marker_canonical']} missing relations_rendered"
+            assert isinstance(member["relations_rendered"], list)
+            for field in _HELD_MEMBER_FIELDS:
                 assert field not in member, f"{member['marker_canonical']} leaked {field}"
+
+    assert out["ungrouped"], "fixture seeds vitamin_d ungrouped — an empty list would pass vacuously"
     for row in out["ungrouped"]:
-        for field in _FOUR_B_MEMBER_FIELDS:
+        for field in _UNGROUPED_ABSENT_FIELDS:
             assert field not in row, f"ungrouped {row['marker_canonical']} leaked {field}"
+
+
+# ---------- G4: relations degrade, never fabricate ----------
+
+def test_relations_degrade_naming_missing_operands_never_fabricate(db_session):
+    """G4. A relation with one operand missing renders `degraded` and NAMES the
+    missing key; a relation with NO operand present in the panel is not rendered
+    at all — never fabricated. Both directions asserted."""
+    user, current, prior = _seed_fixture(db_session, "reln@example.com")
+    out = _build(db_session, user, current, prior)
+
+    # de_ritis (ast, alt): alt is absent from the panel -> degraded, alt named.
+    ast = _row(out, "ast")
+    de_ritis = next(r for r in ast["relations_rendered"] if r["relation_key"] == "de_ritis_ratio")
+    assert de_ritis["operand_status"] == "degraded"
+    assert de_ritis["operands_missing"] == ["alt"]
+
+    # hpg_t_e2_ratio (testosterone_total, oestradiol): both present -> complete.
+    tt = _row(out, "testosterone_total")
+    t_e2 = next(r for r in tt["relations_rendered"] if r["relation_key"] == "hpg_t_e2_ratio")
+    assert t_e2["operand_status"] == "complete"
+    assert t_e2["operands_missing"] == []
+
+    # Relations whose operands are ALL absent are rendered nowhere (not fabricated):
+    #   shbg_free_fraction (free-T + shbg), cholestatic_co_movement (alp + ggt),
+    #   bilirubin_isolation (ggt/alp/haemolysis_index/ld).
+    rendered_keys = {r["relation_key"] for g in out["groups"] for m in g["members"]
+                     for r in m["relations_rendered"]}
+    assert "shbg_free_fraction" not in rendered_keys
+    assert "cholestatic_co_movement" not in rendered_keys
+    assert "bilirubin_isolation" not in rendered_keys
+
+
+# ---------- G5: the vocabulary gap is recorded, not papered ----------
+
+def test_feedback_relations_are_unresolvable_and_no_on_trt_mapping_exists(db_session):
+    """G5. Every feedback relation emits precondition_status 'unresolvable' with
+    the raw precondition_phase echoed — never a guessed mapping. Backed by a grep:
+    the literal precondition value appears in NO non-test source file, so no code
+    path maps it to a derived phase."""
+    user, current, prior = _seed_fixture(db_session, "feedback@example.com")
+    out = _build(db_session, user, current, prior)
+
+    fsh = _row(out, "fsh")
+    supp = next(r for r in fsh["relations_rendered"] if r["kind"] == "feedback")
+    assert supp["relation_key"] == "hpg_gonadotropin_suppression"
+    assert supp["precondition_status"] == "unresolvable"
+    assert supp["precondition_phase"] == "on_trt"  # echoed raw off the asset, not mapped
+
+    # EVERY feedback relation anywhere in the output is unresolvable.
+    for g in out["groups"]:
+        for m in g["members"]:
+            for r in m["relations_rendered"]:
+                if r["kind"] == "feedback":
+                    assert r["precondition_status"] == "unresolvable", r["relation_key"]
+
+    # Grep, not review: 'on_trt' is a value derive_phase can never return, and no
+    # non-test source hardcodes it -> nothing maps it.
+    import subprocess
+    backend = Path(__file__).resolve().parent.parent
+    res = subprocess.run(["git", "grep", "-l", "on_trt", "--", "*.py", ":!tests/"],
+                         cwd=str(backend), capture_output=True, text=True)
+    assert res.stdout.strip() == "", f"'on_trt' hardcoded in non-test source:\n{res.stdout}"
+
+
+# ---------- G6: demotion did not sneak in ----------
+
+def test_no_demotion_news_gate_two_key_and_no_demot_basis(db_session):
+    """G6. This increment enables NO demotion. `news_gate` returns exactly
+    {is_news, basis} on every member and ungrouped row, and no emitted basis
+    string mentions demotion."""
+    user, current, prior = _seed_fixture(db_session, "nodemote@example.com")
+    out = _build(db_session, user, current, prior)
+    rows = [m for g in out["groups"] for m in g["members"]] + out["ungrouped"]
+    assert rows, "non-vacuous"
+    for r in rows:
+        assert set(r["news_gate"]) == {"is_news", "basis"}, \
+            f"{r['marker_canonical']} news_gate is not exactly two keys"
+        for b in r["news_gate"]["basis"]:
+            assert "demot" not in b, f"{r['marker_canonical']} basis mentions demotion: {b}"
 
 
 def test_meta_carries_the_snapshot_and_names_both_panels(db_session):

@@ -127,13 +127,66 @@ def _assemble_members(group_def: dict, series: dict[str, MarkerPair], claimed: s
     return members
 
 
-def _build_group(group_def: dict, members: list[dict]) -> dict:
-    """Pass 2 (+ pass 3) — assemble the group object over its already-built member
-    set. Relations are authored over the whole member set (4b, Step D) and would
-    land here, BEFORE `should_surface`; the interpretive layer (verdict, levers —
-    held) is pass 3, after. `should_surface` is computed here, not in pass 1,
-    precisely so a later relation pass can finalise each member's news_gate first.
-    In this increment no relation runs, so the value is identical to 4a's."""
+def _relations_rendered(marker_key: str, group_def: dict, present: set[str]) -> list[dict]:
+    """The relations authored on this group that render on `marker_key` and have
+    at least one operand present in the panel.
+
+    Author-group, present-marker (I7): a relation is authored once on the group
+    and rendered on each member named in `render_on`. This NEVER fabricates a
+    missing operand — a relation with no operand present is dropped entirely; one
+    with some operands present degrades and NAMES what is missing, so the reader
+    sees the relation is partial rather than being shown a confident reading built
+    on absent data.
+
+    `precondition_status`:
+      * `not_applicable` for ratio / co_movement / discriminator / context.
+      * `unresolvable` for feedback — the asset's `precondition_phase` (its
+        on-TRT value) is not a value `derive_phase` can ever return, and no
+        mapping exists in asset or code. That value is echoed straight off the
+        asset via `rel.get("precondition_phase")`; it is never written as a
+        literal in this module, so a grep for it over non-test source is empty —
+        the mechanical proof that nothing here maps it. The raw phase is echoed,
+        never guessed: a guessed mapping
+        would silently decide whether LH/FSH suppression is expected or is news,
+        which is the entire clinical content of that relation. See OPEN_QUESTIONS
+        (precondition_phase vs derive_phase vocabulary). `expected_by_phase` is
+        NOT emitted this increment; it depends on that resolution.
+    """
+    rendered = []
+    for rel in group_def.get("relations", []):
+        if marker_key not in rel.get("render_on", []):
+            continue
+        operands = rel.get("operands", [])
+        missing = [op for op in operands if op not in present]
+        if operands and len(missing) == len(operands):
+            continue  # no operand present -> not rendered (never fabricate)
+
+        entry = {
+            "relation_key": rel["relation_key"],
+            "kind": rel["kind"],
+            "reads": rel["reads"],
+            "operand_status": "degraded" if missing else "complete",
+            "operands_missing": missing,
+        }
+        if rel["kind"] == "feedback":
+            entry["precondition_status"] = "unresolvable"
+            entry["precondition_phase"] = rel.get("precondition_phase")  # echoed raw, not mapped
+        else:
+            entry["precondition_status"] = "not_applicable"
+        rendered.append(entry)
+    return rendered
+
+
+def _build_group(group_def: dict, members: list[dict], present: set[str]) -> dict:
+    """Pass 2 (+ pass 3) — assemble the group over its already-built member set.
+    Pass 2 authors `relations_rendered` on each member (over the whole assembled
+    set + panel-present operands), THEN computes `should_surface`. The interpretive
+    layer (verdict, levers — held for 4b-ii) is pass 3, after. `should_surface` is
+    computed here, not in pass 1, precisely so the relation pass (and, in 4b-ii,
+    relation-based demotion) can finalise each member's news_gate first. No
+    demotion runs this increment, so the value is still identical to 4a's."""
+    for member in members:  # pass 2: relations over the assembled set
+        member["relations_rendered"] = _relations_rendered(member["marker_canonical"], group_def, present)
     return {
         "group_key": group_def["group_key"],
         "display_name": group_def["display_name"],
@@ -156,12 +209,13 @@ def _groups(series: dict[str, MarkerPair]) -> tuple[list[dict], set[str]]:
     surfacing — see #NEXT (three-pass restructure)."""
     groups: list[dict] = []
     claimed: set[str] = set()
+    present = set(series)  # every marker in this panel — operands may reference non-members
 
     for group_def in _MARKER_GROUPS["groups"]:
         members = _assemble_members(group_def, series, claimed)  # pass 1
         if not members:
             continue
-        groups.append(_build_group(group_def, members))  # pass 2 (+3)
+        groups.append(_build_group(group_def, members, present))  # pass 2 (+3)
 
     return groups, claimed
 
