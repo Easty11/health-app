@@ -4493,7 +4493,7 @@ evidence, not by reinstating the void block-1 figures.
 
 ---
 
-### #NEXT. Interpretation contract v0.5 — three-gate safety supersedes the two-gate model; ungrouped markers render in their own section
+### 138. Interpretation contract v0.5 — three-gate safety supersedes the two-gate model; ungrouped markers render in their own section
 
 **Decision:** The interpretation output contract moves to v0.5. Two parts, different in kind. The
 contract document is UI-maintained and sits outside both repositories; this entry is the canonical,
