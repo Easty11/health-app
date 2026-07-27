@@ -4567,7 +4567,7 @@ therefore what this entry is for.
 
 ---
 
-### #NEXT. Haematocrit safety bands promoted with per-band citations — gate 3 fires for the first time
+### 139. Haematocrit safety bands promoted with per-band citations — gate 3 fires for the first time
 
 **Decision:** Three haematocrit bands move from `_deferred` into live `thresholds` in
 `safety_thresholds.json`, each carrying its own `evidence_refs`: **0.50** the monitoring target
