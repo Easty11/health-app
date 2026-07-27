@@ -14,9 +14,13 @@ synthetic cases are what make the green mean something today.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
+
+from interpretation.gates import news_gate, safety_gate
+from reads.labs_reads import LabRow
 
 ASSET = Path(__file__).resolve().parent.parent / "reference" / "safety_thresholds.json"
 MARKER_CANONICAL = Path(__file__).resolve().parent.parent / "reference" / "marker_canonical.json"
@@ -93,31 +97,31 @@ def test_asset_parses_and_is_pure_ascii():
 def test_live_asset_validates():
     asset = json.loads(ASSET.read_text(encoding="utf-8"))
     checked = validate(asset)
-    # Truthful about what this proves: today the asset has no live entries, so the call
-    # validated nothing. The synthetic cases below are the real cover.
-    assert checked == 0, (
-        "live bands now exist -- this assertion is the reminder that the synthetic "
-        "controls below, not this call, are what has been exercising the validator"
-    )
+    # The live asset now carries the three haematocrit bands. validate() walks every band
+    # and raises on any I1 / schema violation, so the count is what confirms it looked:
+    # three validated, none rejected. The synthetic controls below still carry the negative
+    # cases (an uncited or action-bearing band) the live asset must never contain.
+    assert checked == 3, "expected exactly the three live haematocrit bands to validate"
 
 
-def test_deferred_haematocrit_is_shaped_but_not_live():
+def test_haematocrit_is_live_and_no_longer_deferred():
     asset = json.loads(ASSET.read_text(encoding="utf-8"))
-    assert "haematocrit" not in asset["thresholds"], "must not be live without citations"
-    d = asset["_deferred"]["haematocrit"]
-    assert d["blocked_on"], "a deferred entry must name what blocks it"
-    assert d["contested"] is True
-    assert [b["value"] for b in d["intended_bands"]] == [0.50, 0.52, 0.54]
-    for band in d["intended_bands"]:
-        assert "evidence_refs" not in band, "deferred bands are uncited by definition"
+    hct = asset["thresholds"]["haematocrit"]
+    assert hct["direction"] == "above"
+    assert "value_plausibility" in hct, "null unit_established requires a plausibility window"
+    assert hct["contested"] is True
+    assert [b["value"] for b in hct["bands"]] == [0.50, 0.52, 0.54]
+    ref_sets = [tuple(b["evidence_refs"]) for b in hct["bands"]]
+    assert all(ref_sets), "a live band must carry non-empty evidence_refs (I1)"
+    assert len(set(ref_sets)) == 3, "each band rests on its own citation, not a shared one"
+    assert "haematocrit" not in asset.get("_deferred", {}), "promoted, not duplicated"
 
 
-def test_deferred_entries_are_not_validated_as_live():
-    """_deferred is deliberately outside validate()'s reach: its bands are uncited, which
-    is exactly the state that would fail I1 if they were live."""
+def test_deferred_is_now_empty_and_outside_validate():
+    """_deferred held only haematocrit; promoted, it is empty. validate() reads solely
+    `thresholds`, so nothing parked in _deferred could ever gate."""
     asset = json.loads(ASSET.read_text(encoding="utf-8"))
-    assert validate(asset) == 0
-    assert asset["_deferred"]["haematocrit"]["intended_bands"]
+    assert asset.get("_deferred", {}) == {}
 
 
 # --------------------------------------------------------------------------------------
@@ -184,3 +188,48 @@ def test_live_entry_without_bands_is_rejected():
     asset["thresholds"]["haematocrit"]["bands"] = []
     with pytest.raises(SchemaError, match="at least one band"):
         validate(asset, units={"haematocrit": None})
+
+
+# --------------------------------------------------------------------------------------
+# The gate fires (S2) -- safety_gate against the LIVE asset, not a synthetic one.
+# --------------------------------------------------------------------------------------
+
+def _hct_row(value, *, marker="haematocrit", unit=None):
+    return LabRow(
+        marker_name_raw="Haematocrit", marker_canonical=marker, value_num=value,
+        value_operator=None, value_qualitative=None, unit_canonical=unit,
+        ref_low=None, ref_high=None, ref_low_exclusive=False, ref_high_exclusive=False,
+        lab_flag=None, computed_flag=None, is_derived=False, collected_date=date(2026, 7, 1),
+    )
+
+
+def test_live_safety_gate_fires_for_haematocrit():
+    """Gate 3 against the LIVE asset (no synthetic thresholds passed): a haematocrit at
+    0.53 resolves in the cited 'elevated' band. This is the capability the citations
+    unlock -- before this branch safety_gate returned no_asset for every marker."""
+    g = safety_gate(_hct_row(0.53), None)
+    assert g["undecidable_reason"] is None
+    assert g["status"] == "in_band"
+    assert g["band_key"] == "elevated"
+    assert g["threshold_value"] == 0.52
+    assert g["evidence_refs"] == ["10.1097/JU.0000000000002437"]
+
+
+def test_live_safety_gate_is_no_asset_for_an_unbanded_marker():
+    """Negative control: a marker with no authored band still resolves no_asset against
+    the live asset. Without it, the positive above proves only that something returned."""
+    g = safety_gate(_hct_row(400, marker="ferritin", unit="ug/L"), None)
+    assert g["status"] is None
+    assert g["undecidable_reason"] == "no_asset"
+
+
+def test_live_gate1_safety_arm_fires_on_first_observation():
+    """S2's question, answered: with the band populated, gate 1's safety arm fires on a
+    first-ever haematocrit in band -- band_change is first_observation_in_band, so it does
+    NOT wait for a prior. The delta arm alone is 'not news' on a first observation."""
+    g = safety_gate(_hct_row(0.53), None)
+    assert g["band_change"] == "first_observation_in_band"
+    out = news_gate(None, safety_gate=g)
+    assert out["is_news"] is True
+    assert "safety_band_first_observation_in_band" in out["basis"]
+    assert set(out.keys()) == {"is_news", "basis"}
