@@ -4492,3 +4492,77 @@ offered to ADD the regularity gate or a wake-end adherence arm — in which case
 evidence, not by reinstating the void block-1 figures.
 
 ---
+
+### #NEXT. Interpretation contract v0.5 — three-gate safety supersedes the two-gate model; ungrouped markers render in their own section
+
+**Decision:** The interpretation output contract moves to v0.5. Two parts, different in kind. The
+contract document is UI-maintained and sits outside both repositories; this entry is the canonical,
+master-readable record of what it now says, because Code cannot read the document and cannot verify the
+producer against it.
+
+**Part 1 — records what the code already does.** v0.4 stated a two-gate safety model as the structural
+resolution of the regulatory-framing boundary. The code (`backend/interpretation/gates.py`) has three
+independent runtime gates:
+
+- **Gate 1 — news.** Two arms. The delta arm is movement-based (`crossed_ref` set, or magnitude
+  `meaningful`) and may be demoted by an in-phase relation. The safety arm fires on a safety-band change
+  and forces `is_news` true with **no demotion path** in code.
+- **Gate 2 — range.** Absolute value against the lab's per-report reference bounds. Always fires; never
+  suppressed.
+- **Gate 3 — safety band.** Level against an authored policy band, independent of movement **and** of the
+  reference range: an unmoved, in-range value can still sit in a band. (Currently inert — the asset
+  carries no live band.)
+
+The contract also lacked three keys the producer emits: `safety_gate` on every member (and `ungrouped`)
+row, `should_surface` at group level, and `ungrouped[]` as a top-level array. v0.5 adds all three.
+`should_surface` is the classification predicate materialised — it decides where a group renders
+(What Moved vs the collapsed Stable line); the axis verdict is the narrative above the member lines once
+it does.
+
+**Part 2 — a new ruling.** Markers present in the panel but in no authored group render in their **own
+section**, ordered surfacing-first, placed **between What Moved and Stable**. They are not pooled into
+Stable and not synthesised into groups-of-one.
+
+**Two new contract invariants.** Content is recorded here as canonical; the ordinal for each is assigned
+in the UI-maintained contract and is **not mintable from master** — master establishes the contract's
+invariant series only through I1 and I6, so the next-free number cannot be confirmed from the repo and is
+deliberately not asserted here.
+
+- **Safety-arm non-demotability.** Gate 1's safety arm may not be demoted; relations may demote the delta
+  arm only. Recorded before demotion logic exists so that logic inherits it (the `gates.py` module
+  docstring already carries "THE SAFETY ARM IS NOT DEMOTABLE").
+- **No present marker is dropped.** Every marker present in the panel renders somewhere.
+
+**Why the ungrouped ruling is a correctness fix, not a layout preference.** The non-suppressible range
+gate says nothing may hide an out-of-range value. The producer places every unauthored marker in
+`ungrouped[]`; the view renders groups only. So an ungrouped marker breaching its reference range is
+silently dropped the moment the view is wired to the producer. Pooling into Stable does not fix it — a
+breach rendered under a "Stable" heading is hidden by prominence instead of by suppression. Its own
+section, above Stable, is the placement that satisfies the gate rather than its letter.
+
+**The mechanism that produced the drift, and the change that addresses it.** v0.4 carried a hand-authored
+worked example; the producer's oracle tests compared output to a committed fixture. Both were
+hand-maintained, so they were only ever checked against each other — and the contract fell a full gate
+behind the code across several subsequent decisions without anything failing. In v0.5 the worked example
+is generated from producer output rather than authored, and the contract defines the shape normatively
+instead.
+
+**Left open, deliberately.** The contract is UI-maintained and sits outside both repositories, so Code
+cannot read it and cannot verify the producer against it. Two candidate closures — commit the file to the
+repo, or accept the generated fixture as the operative contract and treat the document as design
+narrative — are **not decided here**.
+
+**Status:** Governance only. No code, asset, or migration touched. The contract document itself is
+UI-maintained and unreadable from master; this entry is the canonical record of what it now says.
+
+**How you know:** The three gate functions, the safety arm's unconditional `is_news` force with no
+demotion path, `should_surface`, and the producer's top-level `ungrouped[]` emission with `safety_gate`
+on every row are all verifiable in `backend/interpretation/gates.py` and `backend/interpretation/producer.py`,
+re-confirmed at read time on this branch. The build sequence recorded in `ROADMAP.md` carries the same
+three-gate model, established independently.
+
+**Do not revisit unless:** a fourth gate is added; the ungrouped section is re-litigated on evidence that
+its placement misleads; or the verification gap is closed, which would change where the contract lives and
+therefore what this entry is for.
+
+---
