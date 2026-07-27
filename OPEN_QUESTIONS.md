@@ -638,8 +638,11 @@ whether the asymmetric form forces `min_meaningful_delta` to become a pair.
 
 ## Q41. `safety_thresholds.json` citation capture for haematocrit — the last thing before the band
 
-The mechanism landed at #104/#105/#106 and is fully tested. **The asset has no live entries**, so
-`safety_gate` returns `no_asset` for every marker and the 0.50–0.54 band is still dark.
+The mechanism landed at #104/#105/#106 and is fully tested. ~~**The asset has no live entries**, so
+`safety_gate` returns `no_asset` for every marker and the 0.50–0.54 band is still dark.~~
+**Corrected #139:** the three haematocrit bands are now live in `thresholds`, each on its own
+`evidence_refs`; `safety_gate` returns a band for haematocrit and `no_asset` only for markers still
+uncovered. The quoted sentence describes the pre-#139 state and is preserved struck, not deleted.
 
 Bands identified but **uncited**: **0.50** from cohort definitions, **0.52** from AUA / Endocrine
 Society guidance, **0.54** from Canadian guidance. Also uncited: the two positions that make
@@ -648,7 +651,8 @@ evidence for benefit of intervention is thin in *both* directions.
 
 None has a verified DOI. Under I1 as extended at #95, landing them would be exactly the failure #99
 refused for `haemoglobin`: a citation pointing at a source that does not state the number, which makes
-an unsupported value look supported. So `_deferred.haematocrit` holds the shape and nothing is live.
+an unsupported value look supported. So `_deferred.haematocrit` held the shape and nothing was live
+**until #139**, which promoted the three bands into `thresholds` with per-band citations.
 
 **This is the last item between the repo and the clinical concern that opened the erythroid fork.**
 Everything else on the 4b list — Q36 (discriminator semantics), Q37 (I1 enforcement), Q38
@@ -659,8 +663,10 @@ Note the contested flag is not a hedge to be resolved away. If the cutoffs reall
 belongs in the output next to the band, which is why `contested` and `contested_note` are asset fields
 rather than commentary.
 
-**Status:** UNSTARTED — no blocker; the capture is the first step of the work, not a precondition on
-someone else. Owner: Luke.
+**Status:** DONE → #139. Resolved by #139 — three haematocrit bands promoted from `_deferred` to
+`thresholds`, each carrying its own `evidence_refs` (0.50 monitoring ceiling; 0.52 observed risk
+inflection, first-year scope recorded; 0.54 intervention threshold). Gate 3 fires for haematocrit;
+gate 1's safety arm is reachable. Asset and test only — no gate or producer logic changed. Owner: Luke.
 ## Q42. The 12-hour-clock scrape failure in `parseSleepTimingContentDesc` is silent and cross-cutting — owned by `health-connect-app`
 
 `HRVDataModel.parseSleepTimingContentDesc` captures `(\d+:\d+)` from a Samsung content-desc, and

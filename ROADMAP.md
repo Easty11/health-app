@@ -34,7 +34,7 @@ _Numbering is organic: it began as a five-increment plan, the producer split int
 
 **4b's two blockers, both prerequisites rather than parallel work:**
 
-- **Safety-band citation capture.** The safety-threshold asset is empty (`thresholds: {}`), so gate 3 resolves undecidable (`no_asset`) for every marker and the news gate's safety arm is inert with it. Building 4b's phase-aware gate work against a permanently-undecidable gate means building it blind. Bands and citations are in hand; the asset write is small.
+- ~~**Safety-band citation capture.** The safety-threshold asset is empty (`thresholds: {}`), so gate 3 resolves undecidable (`no_asset`) for every marker and the news gate's safety arm is inert with it.~~ **Discharged by #139** — the three haematocrit bands are live in `thresholds` with per-band `evidence_refs`; gate 3 fires for haematocrit and gate 1's safety arm is reachable. Struck, not deleted (correct-don't-delete). No longer a 4b blocker.
 - **Ingestion.** The lab store is empty — `lab_reports` and `lab_results` both hold zero rows. 4b wires the view fixture→live, which cannot be verified against an empty store. The early-Aug TRT panel named as the first real consumer above is the natural first input, and also the pre-dose-increase prior the next panel will be differenced against.
 
 **Runtime gates — not build stages.** "Gate" is overloaded in this project. Inside the interpretation, every marker passes three independent runtime gates:
@@ -43,7 +43,7 @@ _Numbering is organic: it began as a five-increment plan, the producer split int
 |------|-------|-------|
 | **1 — news** | Meaningful change vs prior, or crossed a reference bound | **Two arms.** The delta arm may be demoted by an in-phase relation. The **safety arm** fires on a band change and is **non-demotable**. |
 | **2 — range** | Out of range vs the lab's own per-report bounds | Always fires, never suppressed. Phase may annotate a breach as expected; it never hides it. |
-| **3 — safety band** | Level vs an authored policy band | Independent of movement *and* of the reference range: an unmoved, in-range value can still sit in a band. Currently inert — the asset is empty. |
+| **3 — safety band** | Level vs an authored policy band | Independent of movement *and* of the reference range: an unmoved, in-range value can still sit in a band. Live for haematocrit as of #139 (three bands); `no_asset` for every other marker until authored. |
 
 A group surfaces if any member trips any gate, which routes it to What Moved rather than the collapsed Stable line.
 
