@@ -3,105 +3,113 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md`. Forward work: `ROADMAP.md`._
 
-Session date: 2026-07-26.
+Session-open ref: `ced7dfc` · branch: `master` · level with `origin/master` (0/0).
 
-## Real commits this session
+---
 
-Session-open ref: `2662729` (#125 close-out). `git log --oneline 2662729..HEAD`:
+## 1 · Real commits this session
 
-```
-7809dfe governance: DECISIONS_LOG #127 — recall-only adherence & capture; resolve Q47
-c1b4cb8 feat(capture): recall-only lights_out — drop the Samsung prefill default (#127)
-a00eeba feat(engine): recall-only adherence — drop the samsung_bedtime arm (#127)
-2f47327 governance: DECISIONS_LOG #126 — block 3 opening-rx operator correction
-5237a82 seed: operator correction to block 3 opening prescription (supersede id=10)
-```
-
-Immutable commit dates (`git log --format="%ad %s" --date=short -10`):
+`git log --oneline ced7dfc..HEAD` (all on master, pushed):
 
 ```
-2026-07-26 governance: DECISIONS_LOG #127 — recall-only adherence & capture; resolve Q47
-2026-07-26 feat(capture): recall-only lights_out — drop the Samsung prefill default (#127)
-2026-07-26 feat(engine): recall-only adherence — drop the samsung_bedtime arm (#127)
-2026-07-26 governance: DECISIONS_LOG #126 — block 3 opening-rx operator correction
-2026-07-26 seed: operator correction to block 3 opening prescription (supersede id=10)
-2026-07-25 chore: session close-out — daily notes (#125) landed and verified
-2026-07-25 governance: CLAUDE.md recent-landings — prepend #125
-2026-07-25 governance: DECISIONS_LOG #125 — free-text AM/PM notes on the daily record
-2026-07-25 feat: free-text am_notes / pm_notes on the daily record, both check-in surfaces
-2026-07-24 chore: session close-out
+ace2d98 governance: resolve #NEXT -> #139 at merge (haematocrit safety bands)
+babd9e6 governance(decisions): record haematocrit band promotion (#NEXT)
+c61a8b2 feat(safety): promote haematocrit safety bands with per-band citations
+e34a8ce governance: resolve #NEXT -> #138 at merge (interpretation contract v0.5)
+0d55761 governance(decisions): mint interpretation contract v0.5 (#NEXT)
+1463607 governance(branches): mark gov/interpretation-sequence landed (OWED -> DONE)
+5a2a62e governance(roadmap): record the interpretation-layer build sequence
 ```
 
-Two concern-named branches, both ff-merged to master and remote + local deleted:
+Three concerns landed, each on its own concern-named branch, ff-merged + deleted:
 
-- `seed/cbti-block3-rx-correction` → `5237a82`, `2f47327` (landed; deploy `8420d396` SUCCESS)
-- `fix/cbti-recall-only` → `a00eeba`, `c1b4cb8`, `7809dfe` (landed; deploy `8a8d934b` SUCCESS,
-  served instance content-probed — `RECALL-ONLY (#127)` present in both files, old
-  `if night.samsung_bedtime:` branch absent)
+- **`gov/interpretation-sequence`** (`5a2a62e` + `1463607`) — recorded the interpretation-layer
+  build sequence as a NOW sub-block in `ROADMAP.md` (seven increments in execution order, 4b's two
+  blockers, the corrected three-runtime-gate model). Governance-only. Merged, deleted, rowed DONE.
+- **`gov/interpretation-contract-v05`** (`0d55761` + `e34a8ce`) — **DECISIONS_LOG #138**: interpretation
+  output contract v0.5 (three-gate safety supersedes v0.4's two-gate model; ungrouped markers render in
+  their own section). Governance-only. Merged, deleted, rowed DONE.
+- **`feat/safety-bands-haematocrit`** (`c61a8b2` + `babd9e6` + `ace2d98`) — **DECISIONS_LOG #139**: three
+  cited haematocrit safety bands promoted `_deferred → thresholds`; gate 3 live for haematocrit. Reference
+  asset + its schema/gate test only (no `gates.py`/`producer.py`). Merged, deleted, rowed DONE.
 
-**Prod DB write** (runtime effect, not in git — the committed artifact is
-`backend/correct_cbti_block3_rx.py`): applied in-container via `railway ssh`, dry-run then
-`--apply`. `cbti_prescriptions`: inserted **id=11** (block 2, 22:30→05:00, window 390,
-`decision='adopt'`, `effective_from` 2026-07-27, `basis_*` NULL); set **id=10**
-`effective_to`=2026-07-26 and `superseded_by`=11 (every other column frozen). `cbti_blocks`
-id=2 unchanged (`wake_anchor` 05:45, append-only invariant upheld). Read-back confirmed all
-three rows. Full backend suite 406 passed.
+Branch terminal-state gate: **PASS** — local = `master` only; remote = `origin/master` only; all three
+touched branches merged + remote-deleted and carried in `BRANCHES.md` as DONE with SHAs. No branch in limbo.
 
-## Pending-queue reconciliation
+Suite at close: **448 passed** (445 at session open + 3 from #139's gate-firing tests). Governance commits
+moved nothing.
 
-No `;cc` pending-commit queue was carried into this session — it ran from a live brief, not a
-chat close-out payload. The brief specified "Decisions minted at merge, not here," honoured.
-Brief steps → disposition:
+---
 
-- **V1** (verify basis boundary before S1) — answered, no commit. Basis is cycle-windowed and
-  the prescription tracks in lockstep; not block-bounded, so the GUARD did not halt.
-  Corrected in-session: the clearance is narrow — safe to WRITE tonight, but the replay
-  regenerates the chain from row zero and would false-HOLD a mid-cycle correction (filed Q49).
-- **S1** (prescription correction) — LANDED: `5237a82` (seed script) + prod write
-  (id=11 supersedes id=10) + `2f47327` (#126 governance + Q49).
-- **S2** (drop samsung adherence arm) — LANDED: `a00eeba`.
-- **S3** (drop lights_out prefill) — LANDED: `c1b4cb8`.
-- **S4** (lag query) — read-only, no commit by design. Result (n=2 matched nights, sensor−diary
-  mean +3.5 min — too thin; the export's own `bedtime_detection_delay` p50 14 / n=211 is the
-  real distribution) folded into `7809dfe` (#127) and Q47's resolution.
+## 2 · Pending-queue reconciliation
 
-Nothing provisional; all decided work committed. Q47 marked DONE → #127; Q49 opened UNSTARTED.
+**No `;cc` pending-commit queue was carried into this session.** Work arrived as chat-relayed briefs
+(an orientation read, then three build/governance briefs), not as flagged `PENDING` canonical entries.
+Every brief's decision landed in a commit above — nothing is left provisional:
 
-## Cold-resume handoff
+- Interpretation build sequence → `ROADMAP.md` NOW sub-block (`5a2a62e`).
+- Contract v0.5 → DECISIONS_LOG #138 (`0d55761`, resolved `e34a8ce`).
+- Haematocrit bands → DECISIONS_LOG #139 + `safety_thresholds.json` (`c61a8b2`, resolved `ace2d98`).
 
-**Decisions minted this session:** #126 (block-3 opening-rx operator correction, append+supersede;
-block row left at 05:45), #127 (CBT-I adherence & capture are recall-only — samsung adherence arm
-and the AM `lights_out` prefill default both removed; resolves Q47).
+**One reconciliation owed (store inconsistency, not uncommitted work):** `OPEN_QUESTIONS.md` **Q41**
+(`safety_thresholds.json` citation capture for haematocrit) still reads **UNSTARTED**, but #139 landed
+exactly that capture. Q41 should be marked `DONE → #139`. `OPEN_QUESTIONS.md` was not in any brief's
+scope this session, so it was left untouched deliberately — flagged here rather than silently edited in a
+close-out.
 
-**Current sprint (ROADMAP NOW):**
+---
 
-- **CBT-I evaluation path — HARD-GATED by Q49 (NEW blocker, ahead of ~31 Jul):** the
-  replay/evaluation must read the effective prescription per cycle from `cbti_prescriptions`
-  instead of regenerating from row zero (and must take the wake anchor from the effective
-  prescription, not `cbti_blocks`). Block 3's mid-cycle correction (#126) is invisible to the
-  current replay, which would FALSE-HOLD cycle 1 on adherence. **This gates the ~31 Jul manual
-  evaluation trigger** — running an evaluation against the current evaluator is wrong.
-- **CBT-I manual witnessed evaluation trigger** (#118's PM-offer half) — DATED ~31 Jul (first
-  titration cycle; block 3 opened 24 Jul). Build after / together with Q49.
-- **Q45 nap day-attribution** — DATED, contaminating capture now: validate the `naps_min`
-  date−1 read against the VA protocol before the engine relies on it.
-- Lab upload pipeline → interpretation layer → appointment brief (medical spine; design Locked,
-  build pending).
-- **Cross-repo:** propagate the CLAUDE.md shared block (incl. #111 secret-rendering rule) to
-  `health-connect-app` — OWED, from an HCA-rooted session.
+## 3 · Cold-resume handoff
 
-**Open questions by status (CBT-I-relevant):**
+### Where things stand — interpretation layer
 
-- **UNSTARTED:** Q49 (replay reads effective prescription — blocker on first evaluation),
-  Q45 (nap attribution, dated), Q46 (device-vs-diary basis provenance), Q48 (settling period —
-  instrument exists, block 3 accumulating).
-- **DONE this session:** Q47 → #127 (samsung adherence-lag flip, resolved on principle by
-  recall-only).
-- Older live items unchanged: Q3, Q4, Q42, and the rest of the OPEN_QUESTIONS live list.
+The interpretation module now has its governance footing complete for the 4b build:
 
-**Single clearest next action:** Cut a fresh branch from master and fix **Q49** — make the
-evaluation path (`cbti/replay.py`, and the forthcoming manual trigger) read the effective
-prescription (window, lights-out, wake anchor) per cycle from `cbti_prescriptions`, not
-regenerate from row zero. It is the hard dependency ahead of the ~31 Jul evaluation trigger;
-until it lands, do NOT run a block-3 replay/evaluation — the first clean post-correction cycle
-will false-HOLD on GATE 2 adherence.
+- **Build sequence** recorded in `ROADMAP.md` NOW (increments 1 / 4a / declared-state = DONE; 4b = NEXT,
+  blocked; 2 / 3 / 5 = UNSTARTED).
+- **Contract v0.5** (#138) is the canonical, master-readable record of the output shape: three runtime
+  gates (news / range / safety-band), the three producer keys (`safety_gate`, `should_surface`,
+  `ungrouped[]`), and the ungrouped-own-section ruling. The contract *document* is UI-maintained and
+  unreadable from master — #138 carries its substance instead.
+- **Gate 3 is live** (#139) for haematocrit: three cited bands at 0.50 / 0.52 / 0.54. It fires on nothing
+  in production yet — the lab store is empty (0 `lab_reports`, 0 `lab_results`).
+
+### Current sprint (`ROADMAP.md` NOW)
+
+- **CBT-I: Q45 nap day-attribution** — DATED, contaminating capture now; confirm the VA nap-timing
+  convention before the engine's `naps_min` date−1 read is trusted.
+- **CBT-I: manual witnessed evaluation trigger** (#118's PM-offer half) — DATED ~31 Jul; reuses #128's
+  effective-prescription read.
+- **Lab upload pipeline** — ingestion (`extract`→`confirm` endpoints exist; never run in prod). The
+  gate that turns #139 and 4b into something viewable.
+- **Interpretation layer build** — packages Q36–Q41; the build-sequence block is its detail.
+- **Appointment brief**, plus two **cross-repo OWED** rows (propagate the CLAUDE.md shared block to
+  `health-connect-app`; extend the `#NEXT`/number-at-merge rule — both shared-block, HCA-rooted session).
+
+### Open questions by status
+
+- **4b package — Q36–Q40, all UNSTARTED, no blocker, Due 4b:** Q36 discriminator-field semantics
+  inverted (design decision), Q37 I1 enforcement gap in `gates.py` — `alt` uses 0.45 uncited (code change),
+  Q38 interval-awareness on `min_meaningful_delta` (design), Q39 lever `effect_locus` (content + small
+  renderer), Q40 RCV rise/fall asymmetry (design). Separable: Q36 / Q39 run in parallel; Q37 is a
+  self-contained code fix; Q38 + Q40 decide together.
+- **Q41 — UNSTARTED in-file but resolved by #139** (see §2). Mark `DONE → #139`.
+- **Q54 — UNSTARTED:** the view fixture must be regenerated from `build_foundation` output and gain an
+  `ungrouped[]` render section at the producer-wiring increment (4), or every ungrouped marker is dropped.
+- **Q55 — open:** four CBT-I gate constants are chosen, not derived.
+
+### Single clearest next action
+
+**Draft the 4b interpretation-producer spec** off contract v0.5 (#138 §3/§5/§6) and the now-live gate 3
+(#139): the interpretive half — axis verdict, rendered relations, shared levers with already-in-play
+filtering against the live declared-state ledger, phase-aware gates, the ungrouped section, the endpoint,
+and the view wired fixture→live. It must resolve the Q36–Q40 forks and honour Q54's fixture-regeneration.
+Note it produces nothing viewable until ingestion runs (store empty) — 4b is the build behind ingestion,
+not ahead of it.
+
+**Cheap governance tidy owed first:** mark `OPEN_QUESTIONS.md` Q41 `DONE → #139`.
+
+Two operator-side items remain outside Code's reach: (a) contract v0.5's *document* into project knowledge
+(UI-maintained; #138 records its substance regardless), and (b) whether to close #138's verification-gap
+fork — commit the contract file to the repo, or accept the generated fixture as operative. Recorded open in
+#138, deliberately not decided.
