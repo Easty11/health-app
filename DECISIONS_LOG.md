@@ -4613,3 +4613,93 @@ to generalise or to fail to; or the unit convention changes such that the stored
 match reported results.
 
 ---
+
+### #NEXT. The interpretation producer is three-pass; `should_surface` is computed after relations, and ungrouped rows are non-demotable by construction
+
+**Decision:** The producer moves from single-pass (4a) to three passes: pass 1 builds each member row
+(delta, safety_gate, range_gate, raw news_gate — unchanged 4a arithmetic); pass 2 authors group
+relations over the assembled member set, then computes `should_surface`; pass 3 is the interpretive
+layer (verdict, levers — held for 4b-ii). `should_surface` moves from pass 1 to pass 2.
+
+**Rationale:** 4a composed each member row in one shot and computed `should_surface` inside `_groups()`.
+That order cannot survive 4b: a relation needs the group's fully assembled member set (a `ratio` needs
+both operands) and the protocol phase, so a member's final `news_gate` is not knowable while that member
+is being built. `_should_surface`'s predicate is unchanged and undoubled; only its call site moved. It
+remains `any(news OR out_of_range OR in_band)`, and that OR is what makes demotion safe: demotion can
+only ever clear `news`, so a group carrying a range breach or a safety band stays surfaced by
+construction rather than by a rule someone has to remember. **Ungrouped rows never enter pass 2.**
+Demotion requires a relation; relations are group-authored; an ungrouped marker has none. Its gates are
+final at pass 1. The asymmetry is deliberate: ungrouped markers over-surface relative to grouped ones,
+which is the safe direction, and I9 exists precisely because the alternative — silent omission — is the
+failure mode. Moving `should_surface` is the highest-risk edit in 4b; landing it while it is provably a
+no-op makes it reviewable as a refactor, where landing it in the same commit that grants relations
+authority over surfacing would make a behaviour change and a structural change indistinguishable in the
+diff.
+
+**Status:** Landed on `feat/interpretation-relations` (feature commit, Steps B/C). Behaviour-neutral —
+no output changed. Restructure and snapshot rode one commit; relations a second.
+
+**How you know:** `build_foundation` output on the fixture seed is byte-identical pre- and
+post-restructure (captured to JSON, `meta.generated_at` stripped, `diff` empty), and
+`test_interpretation_producer_foundation.py` passed unmodified at the restructure checkpoint
+(`git diff --stat` carried no entry for it before Steps C/E edited it).
+
+**Do not revisit unless:** a fourth pass is needed, or a relation is found that requires cross-*group*
+state — which this structure does not provide and which would need its own decision.
+
+---
+
+### #NEXT. Protocol context is snapshotted as of the panel's collection date, not the generation date
+
+**Decision:** `meta.protocol_context_snapshot` is built with
+`current_state(..., today=trigger_panel.collected_date)`, not `date.today()`. It carries `key`, `type`,
+`phase`, `assumable_present`, `relevant_date` per factor, flattened across the three declared types.
+
+**Rationale:** The phase that interprets a panel is the phase at draw time; a panel from six weeks ago
+read against today's stack would attribute the wrong protocol to the wrong numbers. `derive_phase`
+currently consumes `as_of` in no rule — deliberately and documented, because every window that would
+consume it needs a clinical number the module does not author. So this is **inert today**. It is
+recorded now because the failure it prevents is silent: once window logic lands, a producer passing
+`today` would be wrong in a way no test would catch and no output would show. The snapshot omits
+`detail` (unbounded free text, not an interpretive input) and omits `active` — the ledger holds two
+incompatible senses of that word, and `phase` is the one that survives the distinction.
+
+**Status:** Landed on `feat/interpretation-relations` (feature commit, Step C).
+
+**How you know:** a test asserts `as_of == trigger_panel.collected_date` against a fixture whose
+collected date (2026-05-30) is not today, so a `today`-based implementation cannot pass it (asserted in
+both directions: `== draw date` AND `!= date.today()`, with the control proven live).
+
+**Do not revisit unless:** `derive_phase` gains window arithmetic, at which point this stops being inert
+and the test above becomes load-bearing rather than anticipatory.
+
+---
+
+### #NEXT. Relations are emitted before they are given authority — assembly and demotion land separately
+
+**Decision:** This increment (4b-i) emits `relations_rendered` and enables **no** demotion. Gate 1's
+delta arm is untouched; `news_gate` still returns exactly `{is_news, basis}` with no demotion basis
+string anywhere in the tree. `feedback` relations are emitted with `precondition_status: "unresolvable"`.
+
+**Rationale:** Relation *assembly* and relation *authority over surfacing* are separable, and separating
+them is the point. Assembly is verifiable against the fixture right now — do the operands resolve, does
+`render_on` place them on the right member lines, does a missing operand degrade rather than fabricate.
+Authority over surfacing is not verifiable yet: it depends on relation semantics that are still
+contested (the `discriminator` inversion is an open question) and on a phase vocabulary that does not
+resolve (next entry / Q-NEXT). Granting authority to a surface whose correctness is unestablished would
+make the first demotion bug indistinguishable from an assembly bug. `feedback` relations are emitted
+`unresolvable` rather than silently skipped or silently satisfied: a skipped relation looks like an
+absent relation; a satisfied one asserts that LH/FSH suppression is expected. Neither is a claim this
+increment can make.
+
+**Status:** Landed on `feat/interpretation-relations` (feature commit, Steps D/E).
+
+**How you know:** a grep proves no basis string containing `demot` exists in the emitted tree; the
+`news_gate` two-key shape holds on every member and ungrouped row; every `feedback` relation in the
+output carries `unresolvable`; and `on_trt` is hardcoded in no non-test source file (grep clean), so no
+code path maps it to a derived phase.
+
+**Do not revisit unless:** the phase-vocabulary and discriminator questions both resolve, at which point
+demotion is its own brief and its own entry (4b-ii).
+
+---

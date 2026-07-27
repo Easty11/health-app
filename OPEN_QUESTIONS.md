@@ -1311,3 +1311,46 @@ dead.
 
 ---
 
+
+## Q-NEXT. `precondition_phase` and `derive_phase` speak different vocabularies, so no `feedback` relation can be evaluated
+
+`marker_groups.json` gates `hpg_gonadotropin_suppression` on `precondition_phase: "on_trt"`.
+`declared_state.derive_phase` returns `steady | episodic | washout | stopped | re_entering | None`.
+There is no mapping between them in either the assets or the code, and `on_trt` is not a value the
+derivation can ever produce (verified by grep: `on_trt` appears in no non-test source file).
+
+The consequence is not cosmetic. That relation is what distinguishes *expected* gonadotropin suppression
+on TRT from suppression that is news — the single most load-bearing relation in the HPG group for this
+user. Until it resolves, the relation is emitted as `unresolvable` (4b-i) and cannot demote anything.
+
+Two shapes of fix, and they are not equivalent. The asset could adopt derived-phase vocabulary
+(`steady` on the `trt` factor) — cheap, but it conflates "on a steady protocol" with "on *this*
+protocol". Or the asset could carry an explicit precondition object naming a declared-factor key plus an
+admissible phase set — more authoring, and it says what it means. A guessed mapping silently decides
+whether LH/FSH suppression is expected or is news, which is the whole clinical content of that relation.
+
+**Status:** UNSTARTED — no blocker; the authoring is the work. Owner: Luke. **Blocks:** 4b-ii
+relation-based demotion of the `feedback` arm. Does **not** block 4b-i (relations assemble and emit
+`unresolvable`).
+
+## Q-NEXT. Levers carry no link to declared-state factors, so I3 filtering cannot be implemented
+
+I3 requires filtered levers to be **shown with a reason**, never dropped. Filtering needs to know whether
+a lever is already in play, which means joining a lever to the declared-state factor that represents it.
+**That join does not exist.**
+
+Lever keys: `testosterone_substrate_load`, `aromatase_inhibition`, `aromatase_adiposity`, `alcohol`,
+`exercise_muscle`, `plasma_volume_status`. Declared-state keys: `trt`, `tirzepatide`, `cbt_i`, `zinc`, …
+Different namespaces. The lever node's fields are `label`, `mechanism_summary`, `grade`,
+`grade_rationale`, `evidence_refs`, `actor`, `channel`, `draft_status` — **no mapping field**.
+`testosterone_substrate_load` ↔ `trt` is obvious to a reader and unrepresented in data; `alcohol` has no
+declared-state row at all.
+
+Smallest fix: an authored `declared_factor_keys: []` on each lever node. Asset content, not code. The
+filtering predicate then reads `is_assumable_present` on any matched factor — which is also what keeps an
+episodic peptide from being treated as present at a draw it may not have been present for.
+
+**Status:** UNSTARTED — no blocker. Owner: Luke. **Blocks:** `shared_levers[]`, hence the 4b-ii
+increment after this one. Does **not** block 4b-i.
+
+---
