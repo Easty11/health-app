@@ -4438,3 +4438,57 @@ prescription-independent by an argument that does not itself rest on a block-1 o
 joins the "survives" classes rather than reopening the discard.
 
 ---
+
+### 137. Buffer and rejected-gate bases restated — block-1 derivations retired, values unchanged
+
+**Decision:** Supersedes the recorded BASES of #115 (the +30 titration buffer) and #114 (regularity-not-gating
+and the rejected second adherence arm), whose stated evidence is void under #136 (block 1 discarded for
+outcome claims). NO constant changes and NO code changes — the code already reads this way after `d07b538`;
+this aligns the store to the code, not the reverse. #115 and #114 stand as append-only history; only their
+recorded bases are restated here, and #114's constants portion is left untouched.
+
+**Buffer (+30) — one support, not two.** #115 derived the buffer by differencing each prescribed window
+against the mean TST of the preceding seven nights (+36, +45, +36, +27, +16, +48, +65; median +36) and
+adopted 30 as sitting at the conservative end of that range AND matching the standard sleep-restriction
+convention — claiming two independent supports. The derivation is void under #136, and for a sharper reason
+than general contamination: it measures the gap between a prescribed window and actual sleep, and where the
+window was not run that quantity is not headroom but the distance between a paper figure and reality — the
+fourfold spread (+16 to +65) is consistent with that reading. **+30 now stands on the standard
+sleep-restriction convention alone — one support.** The value is unchanged; the code (`BUFFER_MIN = 30`,
+comment already SRT-only) is already correct.
+
+This parameter is LIVE, not settled. `target = mean_TST + BUFFER_MIN` governs whether titration climbs at
+all, and it interacts with a known servo problem: restricting TIB suppresses TST, which lowers the target,
+which shrinks the move. Any re-derivation belongs to the pending policy revision, not here. The only observed
+period where TIB was not binding shows a ~+38 min gap (TIB 8h07, TST 7h29, SE 92.2% — #115/#107's surviving
+week 7) — recorded as context, not adopted.
+
+**Rejected gates — NOT ATTESTED, not refuted.** #114 rejected the regularity gate and the second adherence
+arm on block-1 outcome figures (`r = −0.206`, "blocked five of eight weeks"; the arm "fires on nothing",
+worst cycle 2 of 6). Those figures are void under #136, so the rejections no longer rest on evidence. This
+does NOT reopen them: evidence is required to ADD a gate, not to omit one, so losing the evidence leaves both
+unbuilt with no case for building — which is where they already stood. The change is only that the recorded
+basis becomes NOT ATTESTED rather than refuted-by-data, correctly leaving room for either to be argued later
+on new evidence. #114's constants portion — `MAX_MOVE_MIN` / `PLATEAU_TOL_MIN` / `MIN_VALID_NIGHTS` recorded
+as unvalidated — survives untouched: an honest limitation, not a derivation from void data, and the same
+carve-out already applied in code.
+
+**Closes the deferred clause in #136** ("Interaction with prior locked decisions … reconciling each is a
+SEPARATE supersession"). #124 needed none — it self-labels its block-1 figures "recorded, NOT evidence,
+because the block is confounded".
+
+**Status:** Store aligned to code. No constant and no `.py` file touched (governance-only). #115 and #114
+stand as history; this entry is the current basis of record for the +30 buffer and the two omitted gates.
+
+**How you know:** `engine.py` post-`d07b538` already states the restated bases — the `BUFFER_MIN` comment
+cites the SRT buffer only ("a block-2 derivation once co-supported ~30 but is discarded"); the module
+docstring marks the second adherence arm "NOT ATTESTED — prior block discarded" and regularity as an
+observational construct; the three constants remain "unvalidated". No comment required editing to match
+this entry (Step-3 check confirmed).
+
+**Do not revisit unless:** the pending policy revision re-derives the buffer against a period where TIB was
+binding (which #136's "Not covered" clause notes is unmeasurable from existing data), or new evidence is
+offered to ADD the regularity gate or a wake-end adherence arm — in which case the argument is made on that
+evidence, not by reinstating the void block-1 figures.
+
+---
