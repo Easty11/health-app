@@ -5,90 +5,86 @@ _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 
 ## 1. Real commits this session
 
-Session-open ref: `31997d7` (prior session's `#NEXT -> #140/#141/#142` merge governance).
-`git log --oneline 31997d7..HEAD`:
+Session-open ref: `c4e5da2` (the silently-failed governance commit this session repairs).
+`git log --oneline c4e5da2..HEAD`:
 
 ```
-cd35786 asset: record precondition-authoring prerequisite on trt_erythrocytosis_watch
-524cc60 governance(Q56/Q57): record precondition-shape + lever-join resolution across the stores
-0404c64 feat(interpretation): resolve feedback preconditions; expected_by_phase with no authority (Q56)
-778a3c1 asset(Q56): precondition shape on hpg_gonadotropin_suppression (factor_key + admissible_phases)
-fce128a asset(Q57): add declared_factor_keys join to lever nodes
-eb024b5 governance: resolve carried #NEXT docstring token -> #140 in producer.py
+f8f020a gov: resolve #149 / Q59 missed at c4e5da2; record the staging failure (FEEDBACK §21)
 ```
 
-Date-stamped (`git log --format="%ad %s" --date=short`, immutable):
+Date-stamped (`git log --format="%ad %s" --date=short`, immutable — recent history for context):
 
 ```
-2026-07-28 asset: record precondition-authoring prerequisite on trt_erythrocytosis_watch
-2026-07-28 governance(Q56/Q57): record precondition-shape + lever-join resolution across the stores
-2026-07-28 feat(interpretation): resolve feedback preconditions; expected_by_phase with no authority (Q56)
-2026-07-28 asset(Q56): precondition shape on hpg_gonadotropin_suppression (factor_key + admissible_phases)
-2026-07-28 asset(Q57): add declared_factor_keys join to lever nodes
-2026-07-28 governance: resolve carried #NEXT docstring token -> #140 in producer.py
+2026-07-29 gov: resolve #149 / Q59 missed at c4e5da2; record the staging failure (FEEDBACK §21)
+2026-07-29 gov: number-at-merge - #149, Q59; branch row DONE       <- c4e5da2, the failed no-op
+2026-07-29 governance: record MCP-pin decision + the deployability gap; park branch
+2026-07-29 fix(deps): pin mcp[cli]==1.28.1 to restore deploys
+2026-07-29 governance: resolve #NEXT -> #146/#147, Q-NEXT -> Q58, +#148 scope rule (on-branch, pre-ff)
+2026-07-28 governance(ingestion): record derived-confidence + draw-as-trigger; findings; unblock 4b-ii
 ```
 
-All six are on `feat/relation-preconditions`, pushed to origin (0 ahead / 0 behind), all `+`
-under `git cherry origin/master` (real work, unmerged). A seventh `chore: session close-out`
-commit carries this file + the CLAUDE.md Recent-landings update.
+One commit this session, direct on master (no branch — see §2). It repairs `c4e5da2`, whose
+message claimed "#149, Q59; branch row DONE" but which committed ONLY an untracked
+`.claude/launch.json`: the governance edits were never staged (`git add -A` found only the stray
+file, so `git commit` succeeded and masked the would-be "nothing to commit"). `f8f020a` resolves
+`### #NEXT` → `### 149.` (MCP pin), `## Q-NEXT` → `## Q59.` (deployability gap), flips the
+`fix/pin-mcp-sdk` BRANCHES row OWED → DONE with the deploy verification, and adds FEEDBACK §21
+(stage governance by name, never `git add -A`; a passing `git commit` proves the instrument works,
+not that it committed what you meant — §17's discriminate-on-identity in a new mechanism).
 
-The branch resolves **Q56** and **Q57** for the relation-preconditions increment: lever->declared-factor
-join (`declared_factor_keys`), the precondition object shape (`factor_key` + `admissible_phases`,
-authored by Luke, replacing `on_trt`), producer resolution (`precondition_status` satisfied /
-not_satisfied / unresolvable) and `expected_by_phase` emitted **with no authority**. Plus Step 0
-(carried `#NEXT` docstring -> `#140`) and a promotion-note on the `_deferred` `trt_erythrocytosis_watch`.
-
-Backend suite **457 passed** (baseline 453 per the prior branch, **+4**). Gates G1-G10 all reported
-green in session (Q57 output-neutral; admissible_phases a real derive_phase subset; resolution
-draw-dated + `current_state` queried once; three resolution arms with pos/neg controls; should_surface
-+ news_gate byte-identical across the producer change; `on_trt` gone from producer source + live asset;
-held-4b-ii fields still absent; Q56/Q57 both `DONE`).
+Staged by name; suite **460**, unchanged; no code touched. `.claude/launch.json` left tracked
+(inspected: no secrets, nothing machine-specific — removing/ignoring it would be a second unrelated
+change on a repair commit).
 
 ## 2. Pending-commit queue reconciliation
 
-**No `;cc` pending-commit queue was carried into this session.** The session was driven by the
-chat-authored relation-preconditions brief (a proposal, not a pending-queue paste), so there are no
-`PENDING` items to reconcile. The brief WAS the payload; every step (0, A-E, governance) plus the
-reviewer-surfaced promotion-note landed in the six commits above. Nothing decided this session remains
-uncommitted **on the branch** — but the whole branch is provisional against master until it ff-merges:
-DECISIONS `#NEXT`x3 are unminted and Q56/Q57 read `DONE -> #NEXT`.
+**No `;cc` pending-commit queue was carried into this session.** The session was a targeted repair
+of a prior merge's silent no-op, driven by a chat-authored brief (not a pending-queue paste). No
+`PENDING` items to reconcile. Everything the brief specified landed in `f8f020a`; nothing decided
+this session remains uncommitted.
+
+**Branch terminal-state gate: PASS.** This session cut no branch — the repair ran directly on
+master (renumber-then-land does not apply: `fix/pin-mcp-sdk` was already merged as `c4e5da2` and
+deleted before this session, so there was nothing to renumber on, and cutting a branch would only
+widen the window master carried live placeholders). `git branch` shows only `master`, even with
+`origin/master` (0/0). The `fix/pin-mcp-sdk` row in `BRANCHES.md` is DONE (`c4e5da2`), with the
+missed-renumber cause, the deploy verification, and the one still-outstanding operator check.
 
 ## 3. Cold-resume handoff
 
-**Where things stand.** The relation-preconditions increment is complete, tested, pushed, and **held
-for review** on `feat/relation-preconditions` — not merged. Feedback-relation preconditions now resolve
-(`factor_key` "trt" + `admissible_phases` ["steady"] on `hpg_gonadotropin_suppression`, authored by
-Luke), the producer emits `precondition_status` + `expected_by_phase` (no authority, demotion still
-held), lever nodes carry `declared_factor_keys`, and the dead `on_trt` vocabulary is gone from the live
-producer surface.
+**Where things stand.** Master is at `f8f020a`, even with origin, tree clean. DECISIONS through
+**#149**, questions through **Q59**, zero live `#NEXT`/`Q-NEXT` placeholders anywhere. Production
+is **healthy**: the MCP-pin deploy (`1778471d`) is Online, `GET /health` → `{"status":"ok"}`,
+database at `c1e8b4d70f92` with both ingestion migrations confirmed by operator query (no
+`overall_confidence` zeros; `marker_canonical IS NULL` count = 0).
 
-**Single clearest next action:** review `feat/relation-preconditions`; on acceptance, ff-merge to master
-(`git checkout master; git merge --ff-only feat/relation-preconditions; git push origin master;
-git branch -d feat/relation-preconditions; git push origin --delete feat/relation-preconditions`). At
-that merge: resolve the three `### #NEXT` DECISIONS headings to **#143/#144/#145** (file order), resolve
-Q56/Q57 `DONE -> #NEXT` to those numbers, and flip the BRANCHES row OWED -> DONE(SHA). BRANCHES.md
-carries the row with the full merge checklist.
+**Single clearest next action:** begin **4b-ii** (the interpretation producer's interpretive half)
+— it is UNSTARTED and fully unblocked (ingestion exercised, Q56/Q57 discharged, trigger resolution
+settled as a draw per #147). Its own brief covers: relation-based demotion of gate 1's delta arm,
+`shared_levers` with already-in-play filtering, `axis_verdict`, `mechanism`/`stable_rationale`, the
+draw-triggered `GET /labs/interpretation` endpoint, and the view wired fixture→live.
 
-**Open questions by status (this session's changes):**
-- **DONE this session:** Q56 (precondition vocabulary — resolved by the precondition-object shape) and
-  Q57 (lever->declared-factor join — resolved by `declared_factor_keys`). Both `DONE -> #NEXT`; numbers
-  resolve at merge.
+**Open questions (this session's additions + the live near-term ones):**
+- **Q59 (new, UNSTARTED)** — nothing verifies the deployable artifact: no CI, and no check observes
+  that the app boots (the 2.0 outage passed 460 tests against a session venv that already had the
+  SDK). One gap, two faces. Owner: Luke — design call on where a boot check lives given no pipeline.
+- **Q58 (UNSTARTED)** — the editable-confirm increment (read-only screen has no remedy for a wrong
+  value; `missingCollected` dead-end; post-edit provenance undesigned). Needs a provenance design
+  before build.
+- **Q56/Q57 — DONE** (#143 / #145). **Q41 — DONE** (#139).
 
-**4b-ii's blocker — ingestion is now the ONLY one.** The two asset-content blockers (phase-vocabulary
-mismatch, lever join) are discharged. The lab store is still empty (`lab_reports` / `lab_results` zero
-rows, unverified-from-session); the ~30 May TRT panel is the natural first input. Relation-based
-**demotion** remains 4b-ii's own work (its own brief), not a blocker on it.
+**Operator items still owed (unreadable from a Code session; recorded on the `fix/pin-mcp-sdk`
+BRANCHES row):**
+- The last-good pre-failure Railway build log's `Successfully installed` line names the exact prior
+  mcp version — if it differs from 1.28.1, prefer it. (The pin is verified sound in a clean venv;
+  this is a belt-and-braces cross-check.)
 
-**Known follow-on, recorded not lost:** `_deferred.relations.trt_erythrocytosis_watch` still carries the
-legacy `precondition_phase: "on_trt"` and is `ready_to_promote`. A `promotion_note` on the entry (commit
-`cd35786`) records that promoting it requires converting to the precondition-object shape and authoring
-its clinical content (Luke) first — else it emits `unresolvable` on arrival. Chat-only finding, now
-durable on the asset where the promoter will look.
+**Sprint (ROADMAP):** interpretation build sequence — 1 / 4a / declared-state / 4b-i all DONE; **4b-ii
+UNSTARTED, unblocked**; increments 2 (rephrase), 3 (lever-tap thread), 5 (go-live) UNSTARTED.
 
-**Convention set this session:** gate-label namespacing in the interpretation test file is now
-`<increment>-G<n>` (`4a-G*`, `4b-i-G*`, `4b-ii-G*`), resolving the two-G5 / two-G6 collision.
+**Process note this session (FEEDBACK §21):** stage governance files by name, never `git add -A`,
+and read `git diff --stat` before staging — a `git commit` that succeeds does not prove it committed
+the intended files, and an incidental untracked file can supply the signal that masks a no-op.
 
-**Loop discipline:** single-repo (health-app only) throughout; no `frontend/`, no `health-connect-app`,
-no shared-CLAUDE.md-block edits. `INTERPRETATION_OUTPUT_CONTRACT.md` (UI-maintained) not written;
-`precondition_status` / `expected_by_phase` semantics changed here — report the divergence from v0.5
-rather than reconciling the contract file.
+**Loop discipline:** single-repo (health-app) throughout; no `frontend/`, no `health-connect-app`,
+no shared-CLAUDE.md-block edits; `backend/` untouched (the pin is live and correct).
