@@ -4614,7 +4614,7 @@ match reported results.
 
 ---
 
-### #NEXT. The interpretation producer is three-pass; `should_surface` is computed after relations, and ungrouped rows are non-demotable by construction
+### 140. The interpretation producer is three-pass; `should_surface` is computed after relations, and ungrouped rows are non-demotable by construction
 
 **Decision:** The producer moves from single-pass (4a) to three passes: pass 1 builds each member row
 (delta, safety_gate, range_gate, raw news_gate — unchanged 4a arithmetic); pass 2 authors group
@@ -4649,7 +4649,7 @@ state — which this structure does not provide and which would need its own dec
 
 ---
 
-### #NEXT. Protocol context is snapshotted as of the panel's collection date, not the generation date
+### 141. Protocol context is snapshotted as of the panel's collection date, not the generation date
 
 **Decision:** `meta.protocol_context_snapshot` is built with
 `current_state(..., today=trigger_panel.collected_date)`, not `date.today()`. It carries `key`, `type`,
@@ -4675,7 +4675,7 @@ and the test above becomes load-bearing rather than anticipatory.
 
 ---
 
-### #NEXT. Relations are emitted before they are given authority — assembly and demotion land separately
+### 142. Relations are emitted before they are given authority — assembly and demotion land separately
 
 **Decision:** This increment (4b-i) emits `relations_rendered` and enables **no** demotion. Gate 1's
 delta arm is untouched; `news_gate` still returns exactly `{is_news, basis}` with no demotion basis
@@ -4686,7 +4686,7 @@ them is the point. Assembly is verifiable against the fixture right now — do t
 `render_on` place them on the right member lines, does a missing operand degrade rather than fabricate.
 Authority over surfacing is not verifiable yet: it depends on relation semantics that are still
 contested (the `discriminator` inversion is an open question) and on a phase vocabulary that does not
-resolve (next entry / Q-NEXT). Granting authority to a surface whose correctness is unestablished would
+resolve (Q56). Granting authority to a surface whose correctness is unestablished would
 make the first demotion bug indistinguishable from an assembly bug. `feedback` relations are emitted
 `unresolvable` rather than silently skipped or silently satisfied: a skipped relation looks like an
 absent relation; a satisfied one asserts that LH/FSH suppression is expected. Neither is a claim this

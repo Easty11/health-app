@@ -1312,7 +1312,7 @@ dead.
 ---
 
 
-## Q-NEXT. `precondition_phase` and `derive_phase` speak different vocabularies, so no `feedback` relation can be evaluated
+## Q56. `precondition_phase` and `derive_phase` speak different vocabularies, so no `feedback` relation can be evaluated
 
 `marker_groups.json` gates `hpg_gonadotropin_suppression` on `precondition_phase: "on_trt"`.
 `declared_state.derive_phase` returns `steady | episodic | washout | stopped | re_entering | None`.
@@ -1333,7 +1333,7 @@ whether LH/FSH suppression is expected or is news, which is the whole clinical c
 relation-based demotion of the `feedback` arm. Does **not** block 4b-i (relations assemble and emit
 `unresolvable`).
 
-## Q-NEXT. Levers carry no link to declared-state factors, so I3 filtering cannot be implemented
+## Q57. Levers carry no link to declared-state factors, so I3 filtering cannot be implemented
 
 I3 requires filtered levers to be **shown with a reason**, never dropped. Filtering needs to know whether
 a lever is already in play, which means joining a lever to the declared-state factor that represents it.
