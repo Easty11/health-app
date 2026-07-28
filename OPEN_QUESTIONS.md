@@ -1329,7 +1329,7 @@ protocol". Or the asset could carry an explicit precondition object naming a dec
 admissible phase set — more authoring, and it says what it means. A guessed mapping silently decides
 whether LH/FSH suppression is expected or is news, which is the whole clinical content of that relation.
 
-**Status:** DONE → #NEXT. Resolved by the **second** of the two shapes above — an explicit
+**Status:** DONE → #143. Resolved by the **second** of the two shapes above — an explicit
 precondition object, not derived-phase vocabulary adoption. `hpg_gonadotropin_suppression` now carries
 `{ factor_key: "trt", admissible_phases: ["steady"], grade, rationale, evidence_refs, contested_note }`
 (authored by Luke), and the producer resolves it against the declared-state phase map to
@@ -1342,7 +1342,7 @@ live relation and producer source. `expected_by_phase` is emitted with no author
 
 I3 requires filtered levers to be **shown with a reason**, never dropped. Filtering needs to know whether
 a lever is already in play, which means joining a lever to the declared-state factor that represents it.
-~~**That join does not exist.**~~ **Corrected #NEXT:** the join now exists — each lever node carries
+~~**That join does not exist.**~~ **Corrected #145:** the join now exists — each lever node carries
 `declared_factor_keys` (struck-not-deleted per correct-don't-delete; the sentence described the
 pre-resolution state).
 
@@ -1357,7 +1357,7 @@ Smallest fix: an authored `declared_factor_keys: []` on each lever node. Asset c
 filtering predicate then reads `is_assumable_present` on any matched factor — which is also what keeps an
 episodic peptide from being treated as present at a draw it may not have been present for.
 
-**Status:** DONE → #NEXT. Resolved as the body's own "smallest fix": `declared_factor_keys` authored on
+**Status:** DONE → #145. Resolved as the body's own "smallest fix": `declared_factor_keys` authored on
 all six lever nodes — only `testosterone_substrate_load` joined (to `["trt"]`), the other five `[]`
 (a truthful "no declared factor represents this lever", distinguishable from the field being absent). No
 declared-state entry was created for `alcohol`. The consumer — `shared_levers[]` already-in-play

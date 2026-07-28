@@ -4704,7 +4704,7 @@ demotion is its own brief and its own entry (4b-ii).
 
 ---
 
-### #NEXT. A relation precondition names a factor and a set of admissible phases, not a phase
+### #143. A relation precondition names a factor and a set of admissible phases, not a phase
 
 **Decision:** A `feedback` relation's precondition is
 `{ factor_key, admissible_phases[], grade, rationale, evidence_refs[], contested_note }`,
@@ -4744,7 +4744,7 @@ this shape does not express and which would need its own decision.
 
 ---
 
-### #NEXT. The producer resolves preconditions; `expected_by_phase` is emitted with no authority
+### #144. The producer resolves preconditions; `expected_by_phase` is emitted with no authority
 
 **Decision:** `_relations_rendered` resolves a `feedback` relation's precondition against the
 declared-state phase map into `precondition_status` (`satisfied` / `not_satisfied` /
@@ -4776,7 +4776,7 @@ and that is its own decision (4b-ii).
 
 ---
 
-### #NEXT. Levers carry `declared_factor_keys`, and an empty list is an assertion
+### #145. Levers carry `declared_factor_keys`, and an empty list is an assertion
 
 **Decision:** each of the six `lever_dictionary.levers` nodes carries `declared_factor_keys`.
 Only `testosterone_substrate_load` is joined, to `["trt"]`; the other five carry `[]`.
