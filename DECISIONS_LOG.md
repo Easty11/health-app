@@ -4804,3 +4804,70 @@ reference-JSON edit guard passed.
 factor.
 
 ---
+
+### #NEXT. Extraction confidence is derived at confirm, not reported by the model
+
+**Decision:** `lab_reports.overall_confidence` is derived at confirm as `min(row confidences)`
+— the same per-row `min(field_confidence)` values written to each `LabResult` — instead of
+being read from the model's extraction output. The field is removed from `ReportExtractionMeta`
+and from the extraction prompt's worked example.
+
+**Rationale:** the first real ingestion run produced seven reports whose `overall_confidence`
+was either 0.97 or exactly 0.0, never anything between. The three zeroes had per-row confidences
+of 0.92–0.99 and values that matched the paper report, so extraction had succeeded and the field
+alone was wrong. Two causes compounded: the Pydantic field defaulted to `0.0` when absent, and the
+extraction prompt's own worked example contained `"overall_confidence": 0.0`, so the template the
+model copies from carried a zero — sometimes it computed a value, sometimes it transcribed the
+example. Fixing the example would have been the smaller change and the wrong one: `0.0` is a valid
+confidence, so an omitted field and a certain-it-is-wrong field are indistinguishable, and the field
+asked the model to invent a number with no grounded basis. `confirm` already derives per-row
+confidence deterministically from `field_confidence`; overall is now derived the same way from the
+same values. `min` was implemented over `mean` (the fork): it propagates the worst row, is consistent
+with the per-row rule, and — because this gates a user-facing confidence statement — a single bad row
+must not hide. The derived number is **triage** (direct human attention at rows worth checking), not a
+verdict on the data; no human-verification/provenance field was added, because an edited value's
+provenance is a different class from extraction confidence and needs its own design (see the
+editable-confirm question).
+
+**Status:** Landed on `feat/ingestion-findings` (feature commit). Forward fix + a backfill migration
+(`b7f3a1c92e40`) recomputing every existing report's value from stored per-row confidences.
+
+**How you know:** a report whose model output omits the field still scores non-zero (test), with a
+low-confidence-row negative control proving the test cannot pass on a constant, and a no-field-confidence
+row falling back to 1.0. Backfill proven on a synthetic seven-report reproduction (three 0.0 → 0.92/0.93/
+0.94, zero zeros remaining); the real Railway before/after is an operator step post-deploy.
+
+**Do not revisit unless:** a genuine per-report confidence signal appears that is not a function of its
+rows.
+
+---
+
+### #NEXT. A draw, not a report, is the interpretation trigger
+
+**Decision:** the interpretation trigger is the newest **`collected_date`** and everything collected on
+it; `compared_against` is the next distinct `collected_date` back — not "the newest `lab_report`" and
+"the one before it". **No endpoint logic lands with this entry** — the 4b-ii endpoint is its own brief;
+this records the resolution so the endpoint inherits it.
+
+**Rationale:** the first ingestion run stored seven `lab_reports` rows sharing
+`collected_date = 2026-05-30` — one blood draw, seven printed Sullivan Nicolaides panels. The 4b-ii
+endpoint was specced to resolve the trigger as "the newest confirmed `lab_report`" and the comparison as
+"the one before it"; against real data that is ambiguous in both halves and would compare a panel against
+a sibling from the same draw. The draw is the unit the sample was actually taken in, and it makes
+"compared against the prior panel" mean what a reader assumes. The read layer already worked this way and
+is the precedent: `marker_series` partitions per marker over `(collected_date DESC, id DESC)`, so it never
+carried the report-shaped assumption — only the trigger concept did. The producer is draw-safe already: it
+reads only panel identity off the passed object; the fixture's `meta` encodes `collected` dates, not report
+ids, so no regeneration is owed here (a producer docstring that called the inputs "report rows" was
+corrected to note the draw-shaped trigger — doc only, no logic).
+
+**Status:** Landed on `feat/ingestion-findings` (decision + producer docstring note). Endpoint deferred to
+4b-ii.
+
+**How you know:** the seven-report, one-date panel is in the store (first ingestion run) and is the case
+that falsifies the report-shaped reading.
+
+**Do not revisit unless:** two genuinely distinct draws land on one date, which a date cannot distinguish
+and which would need a draw identifier rather than a date.
+
+---

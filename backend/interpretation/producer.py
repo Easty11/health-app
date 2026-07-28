@@ -344,9 +344,17 @@ def _meta(trigger_panel, prior_panel, snapshot: dict | None) -> dict:
 
 
 def build_foundation(user_id: int, db: Session, trigger_panel, prior_panel) -> dict:
-    """The entry point. `trigger_panel` / `prior_panel` are the report rows the
-    caller already resolved (LabReport, or None for prior); the producer reads
-    panel identity off them and the marker series off the DB.
+    """The entry point. `trigger_panel` / `prior_panel` are the panel-identity rows
+    the caller already resolved; the producer reads panel identity (collected_date,
+    panel_name_raw, overall_confidence) off them and the marker series off the DB.
+
+    The trigger is a DRAW, not a report (#NEXT): the endpoint (4b-ii) resolves it as
+    the newest `collected_date` and the comparison as the next distinct date back — one
+    blood draw can print several reports sharing a date, so a single-report trigger is
+    ambiguous. This producer is draw-safe already: it reads only panel identity here,
+    and `marker_series` partitions per marker over (collected_date DESC, id DESC), never
+    per report. Any LabReport from the triggering draw carries the identity fields this
+    reads; which one the endpoint passes is 4b-ii's resolution, not this layer's.
 
     The declared state is resolved ONCE, as-of the panel's draw date: the same
     snapshot feeds `meta.protocol_context_snapshot` and the phase map that resolves

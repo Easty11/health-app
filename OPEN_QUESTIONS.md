@@ -1364,3 +1364,33 @@ declared-state entry was created for `alcohol`. The consumer — `shared_levers[
 filtering — is held for 4b-ii; the join lands before the consumer. Owner: Luke.
 
 ---
+
+## Q-NEXT. The confirmation screen is read-only, which turns three separate defects into one design problem
+
+Surfaced by the first real ingestion run. Three symptoms, one root cause — the confirm screen displays
+extraction output and offers only Discard / Confirm, with no inputs. They are recorded as ONE row
+because splitting them invites three partial fixes; the fix is one editable-confirm increment.
+
+**A — read-only means a wrong value has no remedy but discard.** `Metrics.jsx`'s `STAGE.CONFIRM` renders
+the report envelope and a results table (including a `Conf.` column) with two actions and no fields. A
+reader who can see a value was extracted wrongly cannot correct it — the only recourse is discarding the
+whole report and re-uploading. Per-field confidence is computed, displayed, and unactionable.
+
+**B — `missingCollected` is a hard dead-end.** When extraction fails to find the collection date, Confirm
+is disabled and the report cannot be saved; because the screen is read-only, the date cannot be typed in.
+The user must discard and re-upload the same file hoping for a different extraction. Read-only design
+producing an unrecoverable state on a plausible failure (scanned/photographed reports the likely trigger).
+
+**C — provenance after an edit is undesigned.** `LabResult.confidence` currently describes the model's
+certainty. If a human retypes a value, that number describes a guess that no longer exists: 1.0 erases the
+distinction, leaving it untouched is false. *Human-checked* is a stronger, more useful claim than any
+extraction confidence, and the query it enables — which values a person has actually verified against the
+paper — needs its own field rather than being folded into `confidence`. This is the design call the
+increment turns on: a column on `lab_results`, or a separate verification record.
+
+**Status:** UNSTARTED — no blocker; nothing currently built depends on it. **Owner:** Luke — the design call
+(provenance column vs verification record) comes first; a partial fix would set the schema by accident.
+Deliberately not built this branch (the derived-confidence work makes the `Conf.` signal honest so this
+increment has something trustworthy to highlight against).
+
+---
