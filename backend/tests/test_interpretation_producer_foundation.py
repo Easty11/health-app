@@ -142,7 +142,7 @@ def _fixture_member(group_key, marker):
     return next(m for m in g["members"] if m["marker_canonical"] == marker)
 
 
-# ---------- G3 oracle: current / prior readings ----------
+# ---------- 4a-G3 oracle: current / prior readings ----------
 
 def test_oracle_readings_match_the_fixture(db_session):
     user, current, prior = _seed_fixture(db_session, "read@example.com")
@@ -168,7 +168,7 @@ def test_oracle_readings_match_the_fixture(db_session):
                 assert row["prior"][field] == fm["prior"][field], f"{marker}.prior.{field}"
 
 
-# ---------- G3 oracle: delta ----------
+# ---------- 4a-G3 oracle: delta ----------
 
 def test_oracle_delta_matches_the_fixture(db_session):
     user, current, prior = _seed_fixture(db_session, "delta@example.com")
@@ -195,7 +195,7 @@ def test_min_meaningful_delta_is_asset_derived(db_session):
     assert "min_meaningful_delta" not in _row(out, "fsh")["delta"]  # censored
 
 
-# ---------- G3 oracle: gates ----------
+# ---------- 4a-G3 oracle: gates ----------
 
 def test_oracle_news_and_range_gates_match_the_fixture(db_session):
     """Raw gate-1 is_news equals the fixture exactly here (no relation demotion
@@ -232,7 +232,7 @@ def test_ast_is_news_via_crossed_ref_but_not_a_breach(db_session):
     assert ast["range_gate"]["is_out_of_range"] is False
 
 
-# ---------- G3 / G6: should_surface and section placement ----------
+# ---------- 4a-G3 / 4a-G6: should_surface and section placement ----------
 
 def test_should_surface_hpg_on_the_fsh_breach_alone(db_session):
     """Gate 2 independently load-bearing: nothing in hpg is news, yet it moves."""
@@ -289,7 +289,7 @@ def test_all_stable_group_does_not_surface(db_session):
     assert hep["should_surface"] is False
 
 
-# ---------- G3 boundary: 4b fields absent ----------
+# ---------- 4b-i-G7 boundary: relations_rendered emitted, held stays held ----------
 
 def test_producer_emits_relations_rendered_but_holds_the_rest_of_4b(db_session):
     """Split at 4b-i (G7): `relations_rendered` is now EMITTED on grouped members;
@@ -322,7 +322,7 @@ def test_producer_emits_relations_rendered_but_holds_the_rest_of_4b(db_session):
             assert field not in row, f"ungrouped {row['marker_canonical']} leaked {field}"
 
 
-# ---------- G4: relations degrade, never fabricate ----------
+# ---------- 4b-i-G4: relations degrade, never fabricate ----------
 
 def test_relations_degrade_naming_missing_operands_never_fabricate(db_session):
     """G4. A relation with one operand missing renders `degraded` and NAMES the
@@ -353,46 +353,185 @@ def test_relations_degrade_naming_missing_operands_never_fabricate(db_session):
     assert "bilirubin_isolation" not in rendered_keys
 
 
-# ---------- G5: the vocabulary gap is recorded, not papered ----------
+# ---------- 4b-ii-G3 / G5 / I1 / G7: preconditions resolve (Q56) ----------
+# Gate-label convention (swept 2026-07-28, this brief): every section label is
+# namespaced by increment — 4a-G*, 4b-i-G*, 4b-ii-G* — because bare G-letters
+# collided across briefs (two G5s, two G6s). This is now the convention.
 
-def test_feedback_relations_are_unresolvable_and_no_on_trt_mapping_exists(db_session):
-    """G5. Every feedback relation emits precondition_status 'unresolvable' with
-    the raw precondition_phase echoed — never a guessed mapping. Backed by a grep:
-    the literal precondition value appears in NO non-test source file, so no code
-    path maps it to a derived phase."""
-    user, current, prior = _seed_fixture(db_session, "feedback@example.com")
-    out = _build(db_session, user, current, prior)
+_MARKER_GROUPS_JSON = Path(__file__).resolve().parent.parent / "reference" / "marker_groups.json"
 
-    fsh = _row(out, "fsh")
-    supp = next(r for r in fsh["relations_rendered"] if r["kind"] == "feedback")
-    assert supp["relation_key"] == "hpg_gonadotropin_suppression"
-    assert supp["precondition_status"] == "unresolvable"
-    assert supp["precondition_phase"] == "on_trt"  # echoed raw off the asset, not mapped
 
-    # EVERY feedback relation anywhere in the output is unresolvable.
-    for g in out["groups"]:
-        for m in g["members"]:
-            for r in m["relations_rendered"]:
-                if r["kind"] == "feedback":
-                    assert r["precondition_status"] == "unresolvable", r["relation_key"]
+def _steady_trt():
+    return {"active": True, "continuity": "continuous", "phase": None,
+            "detail": "125mg/wk", "relevant_date": "2025-11-01"}
 
-    # Grep, not review: 'on_trt' is a value derive_phase can never return, and no
-    # non-test source hardcodes it -> nothing maps it.
+
+def _washout_trt():
+    return {"active": False, "continuity": "stopped", "phase": None,
+            "detail": "", "relevant_date": "2026-03-01"}
+
+
+def _seed_declared(db, user_id, key, value, type_="protocol"):
+    db.add(models.UserKnowledgeEntry(user_id=user_id, type=type_, key=key,
+                                     source="onboarding", active=True, value=value))
+    db.commit()
+
+
+def _feedback_rel(out, marker="fsh"):
+    return next(r for r in _row(out, marker)["relations_rendered"] if r["kind"] == "feedback")
+
+
+def _derive_phase_return_set():
+    """derive_phase's resolvable string return set, extracted programmatically:
+    string constants in any Return (incl. inside IfExp) plus module-level string
+    constants returned by name (EPISODIC, STOPPED, ...)."""
+    import ast
+    import declared_state
+    src = Path(declared_state.__file__).read_text(encoding="utf-8")
+    mod = ast.parse(src)
+    consts = {t.id: n.value.value for n in mod.body if isinstance(n, ast.Assign)
+              for t in n.targets if isinstance(t, ast.Name)
+              and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str)}
+    fn = next(n for n in ast.walk(mod) if isinstance(n, ast.FunctionDef) and n.name == "derive_phase")
+    out = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Return) and node.value is not None:
+            for sub in ast.walk(node.value):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                    out.add(sub.value)
+                elif isinstance(sub, ast.Name) and sub.id in consts:
+                    out.add(consts[sub.id])
+    return out
+
+
+def _authored_preconditions():
+    groups = json.loads(_MARKER_GROUPS_JSON.read_text(encoding="utf-8"))
+    return [(r["relation_key"], r["precondition"]) for g in groups["groups"]
+            for r in g.get("relations", []) if "precondition" in r]
+
+
+def test_precondition_admissible_phases_are_real_derive_phase_outputs():
+    """4b-ii-G3. Every value in an authored precondition's admissible_phases must be
+    a phase derive_phase can actually return — asserted against the function's
+    resolved return set, programmatically not by eye. `on_trt` failed exactly this;
+    ["steady"] passes it. re_entering is deliberately NOT admissible here (it is
+    unreachable for a protocol-type factor), which this does not contradict —
+    subset, not equality."""
+    returns = _derive_phase_return_set()
+    preconds = _authored_preconditions()
+    assert preconds, "no precondition authored — would pass vacuously"
+    for key, pc in preconds:
+        assert set(pc["admissible_phases"]) <= returns, \
+            f"{key}: {pc['admissible_phases']} not all in derive_phase returns {sorted(returns)}"
+    assert "steady" in returns  # the value this brief authored
+
+
+def test_precondition_evidence_refs_are_non_empty_I1():
+    """4b-ii-I1. A precondition feeds gate 1's delta arm the moment demotion lands,
+    so it is a read-constant: every authored precondition MUST carry non-empty
+    evidence_refs (#95), as safety bands do. Enforced by test — marker_groups.json
+    has no _schema block — mirroring test_safety_thresholds_schema.validate()."""
+    preconds = _authored_preconditions()
+    assert preconds, "no precondition authored — vacuous"
+    for key, pc in preconds:
+        assert pc.get("evidence_refs"), f"{key}: precondition has empty evidence_refs (I1)"
+
+
+def test_feedback_precondition_resolves_both_arms_and_names_absent_factor(db_session):
+    """4b-ii-G5. The producer RESOLVES the precondition rather than asserting
+    unresolvable. Positive control: declared trt in `steady` -> satisfied /
+    expected_by_phase True. Not-satisfied control: trt in washout -> not_satisfied /
+    False. Negative control: no trt declared -> unresolvable, NAMING the missing
+    factor. All three, or the test proves nothing."""
+    def _fsh_panel(email):
+        u = _make_user(db_session, email)
+        cur = _make_report(db_session, u.id, _CURRENT)
+        _make_result(db_session, cur.id, "FSH", "fsh", value_num=0.1, value_operator="<",
+                     unit_canonical="IU/L", ref_low=1.5, ref_high=12.4, lab_flag="L")
+        return u, cur
+
+    # satisfied
+    u1, c1 = _fsh_panel("sat@example.com")
+    _seed_declared(db_session, u1.id, "trt", _steady_trt())
+    r1 = _feedback_rel(build_foundation(u1.id, db_session, c1, None))
+    assert r1["relation_key"] == "hpg_gonadotropin_suppression"
+    assert r1["precondition_status"] == "satisfied"
+    assert r1["observed_phase"] == "steady"
+    assert r1["expected_by_phase"] is True
+
+    # not_satisfied (washout is not in admissible_phases)
+    u2, c2 = _fsh_panel("notsat@example.com")
+    _seed_declared(db_session, u2.id, "trt", _washout_trt())
+    r2 = _feedback_rel(build_foundation(u2.id, db_session, c2, None))
+    assert r2["precondition_status"] == "not_satisfied"
+    assert r2["observed_phase"] == "washout"
+    assert r2["expected_by_phase"] is False
+
+    # unresolvable — factor absent from the ledger, named (never silently satisfied)
+    u3, c3 = _fsh_panel("absent@example.com")
+    r3 = _feedback_rel(build_foundation(u3.id, db_session, c3, None))
+    assert r3["precondition_status"] == "unresolvable"
+    assert r3["missing_factor_key"] == "trt"
+    assert r3["expected_by_phase"] is None
+
+
+def test_resolution_is_draw_dated_and_current_state_queried_once(db_session, monkeypatch):
+    """4b-ii-G4. current_state is queried ONCE per build (the snapshot and the
+    precondition phase map share it), and with today == the panel's collected_date,
+    never date.today(). The fixture draw date (2026-05-30) != today, so a today-based
+    resolution cannot pass."""
+    import interpretation.producer as prod
+    seen = []
+    real = prod.current_state
+
+    def spy(user_id, db, today):
+        seen.append(today)
+        return real(user_id, db, today)
+
+    monkeypatch.setattr(prod, "current_state", spy)
+    user, current, prior = _seed_fixture(db_session, "once@example.com")
+    _build(db_session, user, current, prior)
+
+    assert len(seen) == 1, f"current_state called {len(seen)}x, expected once"
+    assert seen[0] == current.collected_date == date(2026, 5, 30)
+    assert seen[0] != date.today(), "draw date must differ from today or the control is vacuous"
+
+
+def test_on_trt_vocabulary_is_gone_from_source_and_live_asset():
+    """4b-ii-G7. The dead `on_trt` vocabulary is gone from the producer source AND
+    from every LIVE relation in marker_groups.json. History legitimately retains it
+    (append-only DECISIONS, correct-don't-delete Q56 body, the held 4b-ii fixtures,
+    and the _deferred trt_erythrocytosis_watch awaiting its own precondition
+    authoring), so the scope is the live producer surface, not a whole-tree grep."""
     import subprocess
-    backend = Path(__file__).resolve().parent.parent
-    res = subprocess.run(["git", "grep", "-l", "on_trt", "--", "*.py", ":!tests/"],
-                         cwd=str(backend), capture_output=True, text=True)
-    assert res.stdout.strip() == "", f"'on_trt' hardcoded in non-test source:\n{res.stdout}"
+    repo = Path(__file__).resolve().parents[2]
+    src = subprocess.run(["git", "grep", "-l", "on_trt", "--", "backend/interpretation/*.py"],
+                         cwd=str(repo), capture_output=True, text=True)
+    assert src.stdout.strip() == "", f"on_trt in producer source:\n{src.stdout}"
+
+    groups = json.loads(_MARKER_GROUPS_JSON.read_text(encoding="utf-8"))
+    for g in groups["groups"]:
+        for r in g.get("relations", []):
+            assert "precondition_phase" not in r, f"{r['relation_key']} keeps legacy precondition_phase"
+            assert "on_trt" not in json.dumps(r), f"{r['relation_key']} live relation still carries on_trt"
 
 
-# ---------- G6: demotion did not sneak in ----------
+# ---------- 4b-i-G6 / 4b-ii-G6: no demotion, precondition has no authority ----------
 
 def test_no_demotion_news_gate_two_key_and_no_demot_basis(db_session):
-    """G6. This increment enables NO demotion. `news_gate` returns exactly
-    {is_news, basis} on every member and ungrouped row, and no emitted basis
-    string mentions demotion."""
+    """4b-i-G6 + 4b-ii-G6. NO demotion this increment, and the resolved precondition
+    has NO authority: `news_gate` is exactly {is_news, basis} on every member and
+    ungrouped row, no basis mentions demotion, and no basis mentions the precondition
+    or expectation — resolving a precondition must not move a gate. Positive-control:
+    a declared trt in steady makes the fsh feedback `satisfied`, yet fsh's news_gate
+    is unchanged (it stays surfaced on its range breach, not demoted)."""
     user, current, prior = _seed_fixture(db_session, "nodemote@example.com")
+    _seed_declared(db_session, user.id, "trt", _steady_trt())  # precondition resolves satisfied
     out = _build(db_session, user, current, prior)
+
+    # the precondition IS satisfied here — so this is a live authority check, not vacuous
+    assert _feedback_rel(out)["precondition_status"] == "satisfied"
+
     rows = [m for g in out["groups"] for m in g["members"]] + out["ungrouped"]
     assert rows, "non-vacuous"
     for r in rows:
@@ -400,6 +539,12 @@ def test_no_demotion_news_gate_two_key_and_no_demot_basis(db_session):
             f"{r['marker_canonical']} news_gate is not exactly two keys"
         for b in r["news_gate"]["basis"]:
             assert "demot" not in b, f"{r['marker_canonical']} basis mentions demotion: {b}"
+            assert "precondition" not in b and "expected" not in b, \
+                f"{r['marker_canonical']} basis leaked precondition authority: {b}"
+
+    # fsh: satisfied precondition, still surfaced on its range breach (gate 2), not demoted
+    assert _group(out, "hpg_axis")["should_surface"] is True
+    assert _row(out, "fsh")["range_gate"]["is_out_of_range"] is True
 
 
 def test_meta_carries_the_snapshot_and_names_both_panels(db_session):
@@ -430,7 +575,7 @@ def test_first_ever_panel_true_when_no_prior_panel(db_session):
     assert meta["compared_against"] is None
 
 
-# ---------- G3: snapshot is DRAW-dated, never generation-dated ----------
+# ---------- 4b-i-G3: snapshot is DRAW-dated, never generation-dated ----------
 
 def test_protocol_context_snapshot_as_of_is_the_draw_date_not_today(db_session):
     """G3. The snapshot's `as_of` is the trigger panel's collected_date, never
@@ -474,7 +619,7 @@ def test_protocol_context_snapshot_projects_phase_fields_only(db_session):
     assert trt["relevant_date"] == "2025-11-01"
 
 
-# ---------- G5: gate-2 source is lab_flag, not computed_flag ----------
+# ---------- 4a-G5: gate-2 source is lab_flag, not computed_flag ----------
 
 def test_range_gate_reads_lab_flag_not_computed_flag(db_session):
     """G5: computed_flag is withheld (V2). A row flagged H by COMPUTATION only
@@ -492,7 +637,7 @@ def test_range_gate_reads_lab_flag_not_computed_flag(db_session):
     assert _row(out, "alt")["range_gate"] == {"is_out_of_range": True, "flag": "H"}
 
 
-# ---------- G6: non-vacuity of magnitude and crossed_ref ----------
+# ---------- 4a-G6: non-vacuity of magnitude and crossed_ref ----------
 
 def test_magnitude_is_mode_aware_not_raw_pct(db_session):
     """G6: E2 moves 28.2% against a 0.42 RELATIVE threshold -> marginal. A

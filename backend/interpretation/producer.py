@@ -13,13 +13,16 @@ Consumes:
   * safety_thresholds.json (via gates.safety_gate - gate 3, level vs policy constant)
   * lever_dictionary.marker_interpretation[*].min_meaningful_delta + _defaults
     (via gates.min_meaningful_delta — never levers[])
-  * current_state(...).declared_state — for meta.protocol_context_snapshot only,
-    dated to the panel's draw (never date.today()).
+  * current_state(...).declared_state — resolved ONCE, dated to the panel's draw
+    (never date.today()); feeds meta.protocol_context_snapshot AND the phase map
+    that resolves feedback-relation preconditions in pass 2.
 
-Emits, over 4a: meta.protocol_context_snapshot, member relations_rendered[].
+Emits, over 4a: meta.protocol_context_snapshot; member relations_rendered[] with a
+RESOLVED precondition_status (satisfied / not_satisfied / unresolvable) and
+expected_by_phase. expected_by_phase has NO authority — it touches no gate.
 Still HELD for 4b-ii (demotion + interpretive half): axis_verdict, shared_levers,
-member_lever_effects, mechanism, stable_rationale, expected_by_phase. No
-relation-based news demotion — gate 1 is still raw.
+member_lever_effects, mechanism, stable_rationale. No relation-based news demotion
+— gate 1 is still raw.
 """
 from __future__ import annotations
 
@@ -127,7 +130,49 @@ def _assemble_members(group_def: dict, series: dict[str, MarkerPair], claimed: s
     return members
 
 
-def _relations_rendered(marker_key: str, group_def: dict, present: set[str]) -> list[dict]:
+def _resolve_precondition(rel: dict, phase_of: dict[str, str | None]) -> dict:
+    """Resolve a `feedback` relation's precondition against the declared-state
+    phase map, into `{precondition_status, expected_by_phase, ...}`.
+
+    The precondition is `{factor_key, admissible_phases[], ...}` (#141 shape). It
+    is resolved, not asserted: earlier this module hardcoded `unresolvable`, which
+    was honest while nothing *could* resolve and became a false statement the
+    moment an asset carried a resolvable precondition.
+
+      * legacy `precondition_phase` shape (no `precondition` object) -> `unresolvable`,
+        echoing the raw phase. The legacy compressed value was never a phase
+        `derive_phase` returns; a guessed mapping would silently decide whether LH/FSH
+        suppression is expected or is news, so the raw value is echoed, never mapped.
+      * `factor_key` absent from the ledger -> `unresolvable`, naming the missing key.
+      * factor present, phase in `admissible_phases` -> `satisfied` / expected True.
+      * factor present, phase not in `admissible_phases` -> `not_satisfied` / expected False.
+
+    `expected_by_phase` has NO authority this increment — it touches no gate. Demotion
+    is 4b-ii; resolution is verifiable now and authority is not, and a demotion bug and
+    a resolution bug must not arrive in the same diff (#142 seam)."""
+    pc = rel.get("precondition")
+    if pc is None:
+        # legacy shape, or none at all -> raw echo (may itself be None)
+        return {"precondition_status": "unresolvable",
+                "precondition_phase": rel.get("precondition_phase"),
+                "expected_by_phase": None}
+
+    factor_key = pc["factor_key"]
+    if factor_key not in phase_of:
+        return {"precondition_status": "unresolvable",
+                "missing_factor_key": factor_key,
+                "expected_by_phase": None}
+
+    phase = phase_of[factor_key]
+    satisfied = phase in pc.get("admissible_phases", [])
+    return {"precondition_status": "satisfied" if satisfied else "not_satisfied",
+            "precondition_factor": factor_key,
+            "observed_phase": phase,
+            "expected_by_phase": bool(satisfied)}
+
+
+def _relations_rendered(marker_key: str, group_def: dict, present: set[str],
+                        phase_of: dict[str, str | None]) -> list[dict]:
     """The relations authored on this group that render on `marker_key` and have
     at least one operand present in the panel.
 
@@ -138,20 +183,9 @@ def _relations_rendered(marker_key: str, group_def: dict, present: set[str]) -> 
     sees the relation is partial rather than being shown a confident reading built
     on absent data.
 
-    `precondition_status`:
-      * `not_applicable` for ratio / co_movement / discriminator / context.
-      * `unresolvable` for feedback — the asset's `precondition_phase` (its
-        on-TRT value) is not a value `derive_phase` can ever return, and no
-        mapping exists in asset or code. That value is echoed straight off the
-        asset via `rel.get("precondition_phase")`; it is never written as a
-        literal in this module, so a grep for it over non-test source is empty —
-        the mechanical proof that nothing here maps it. The raw phase is echoed,
-        never guessed: a guessed mapping
-        would silently decide whether LH/FSH suppression is expected or is news,
-        which is the entire clinical content of that relation. See OPEN_QUESTIONS
-        (precondition_phase vs derive_phase vocabulary). `expected_by_phase` is
-        NOT emitted this increment; it depends on that resolution.
-    """
+    `precondition_status` is `not_applicable` for ratio / co_movement /
+    discriminator / context, and is *resolved* for `feedback` against the panel's
+    declared-state phase map — see `_resolve_precondition`."""
     rendered = []
     for rel in group_def.get("relations", []):
         if marker_key not in rel.get("render_on", []):
@@ -169,24 +203,26 @@ def _relations_rendered(marker_key: str, group_def: dict, present: set[str]) -> 
             "operands_missing": missing,
         }
         if rel["kind"] == "feedback":
-            entry["precondition_status"] = "unresolvable"
-            entry["precondition_phase"] = rel.get("precondition_phase")  # echoed raw, not mapped
+            entry.update(_resolve_precondition(rel, phase_of))
         else:
             entry["precondition_status"] = "not_applicable"
         rendered.append(entry)
     return rendered
 
 
-def _build_group(group_def: dict, members: list[dict], present: set[str]) -> dict:
+def _build_group(group_def: dict, members: list[dict], present: set[str],
+                 phase_of: dict[str, str | None]) -> dict:
     """Pass 2 (+ pass 3) — assemble the group over its already-built member set.
     Pass 2 authors `relations_rendered` on each member (over the whole assembled
-    set + panel-present operands), THEN computes `should_surface`. The interpretive
-    layer (verdict, levers — held for 4b-ii) is pass 3, after. `should_surface` is
-    computed here, not in pass 1, precisely so the relation pass (and, in 4b-ii,
-    relation-based demotion) can finalise each member's news_gate first. No
-    demotion runs this increment, so the value is still identical to 4a's."""
+    set + panel-present operands + the declared-state phase map), THEN computes
+    `should_surface`. The interpretive layer (verdict, levers — held for 4b-ii) is
+    pass 3, after. `should_surface` is computed here, not in pass 1, precisely so
+    the relation pass (and, in 4b-ii, relation-based demotion) can finalise each
+    member's news_gate first. No demotion runs this increment, so the value is
+    still identical to 4a's."""
     for member in members:  # pass 2: relations over the assembled set
-        member["relations_rendered"] = _relations_rendered(member["marker_canonical"], group_def, present)
+        member["relations_rendered"] = _relations_rendered(
+            member["marker_canonical"], group_def, present, phase_of)
     return {
         "group_key": group_def["group_key"],
         "display_name": group_def["display_name"],
@@ -196,7 +232,8 @@ def _build_group(group_def: dict, members: list[dict], present: set[str]) -> dic
     }
 
 
-def _groups(series: dict[str, MarkerPair]) -> tuple[list[dict], set[str]]:
+def _groups(series: dict[str, MarkerPair],
+            phase_of: dict[str, str | None]) -> tuple[list[dict], set[str]]:
     """Authored groups from marker_groups.json, members restricted to markers
     present in this panel. A group with no present members is omitted (an empty
     shell carries nothing; an `insufficient_data` verdict is 4b). Returns the
@@ -204,9 +241,9 @@ def _groups(series: dict[str, MarkerPair]) -> tuple[list[dict], set[str]]:
 
     Three-pass, additive over 4a's single pass: pass 1 assembles member rows
     (`_assemble_members`), pass 2 builds the group over them (`_build_group`,
-    where relations then `should_surface` land). The passes are separated so a
-    relation needing the full member set can run between member assembly and
-    surfacing — see #140 (three-pass restructure)."""
+    where relations — resolved against `phase_of` — then `should_surface` land).
+    The passes are separated so a relation needing the full member set can run
+    between member assembly and surfacing — see #140 (three-pass restructure)."""
     groups: list[dict] = []
     claimed: set[str] = set()
     present = set(series)  # every marker in this panel — operands may reference non-members
@@ -215,7 +252,7 @@ def _groups(series: dict[str, MarkerPair]) -> tuple[list[dict], set[str]]:
         members = _assemble_members(group_def, series, claimed)  # pass 1
         if not members:
             continue
-        groups.append(_build_group(group_def, members, present))  # pass 2 (+3)
+        groups.append(_build_group(group_def, members, present, phase_of))  # pass 2 (+3)
 
     return groups, claimed
 
@@ -275,11 +312,24 @@ def _protocol_context_snapshot(user_id: int, db: Session, trigger_panel) -> dict
     return {"as_of": as_of.isoformat(), "factors": factors}
 
 
-def _meta(user_id: int, db: Session, trigger_panel, prior_panel) -> dict:
-    """Meta. `protocol_context_snapshot` is 4b (carries phase) and is dated to the
-    panel's draw, not the generation time — see `_protocol_context_snapshot`.
-    `first_ever_panel` is derived from the absence of a prior panel (the caller
-    supplies None when there is nothing to compare against)."""
+def _phase_map(snapshot: dict | None) -> dict[str, str | None]:
+    """`{declared factor key -> phase}`, derived from the SAME snapshot object
+    `_meta` emits. Relation-precondition resolution and `protocol_context_snapshot`
+    therefore read one declared-state derivation, and `current_state` is queried
+    ONCE per build. Empty when there is no trigger panel / no declared ledger — in
+    which case every precondition resolves `unresolvable` (factor absent), never
+    silently satisfied."""
+    if not snapshot:
+        return {}
+    return {factor["key"]: factor["phase"] for factor in snapshot["factors"]}
+
+
+def _meta(trigger_panel, prior_panel, snapshot: dict | None) -> dict:
+    """Meta. `protocol_context_snapshot` is built ONCE by the caller and threaded in
+    (the same object `_phase_map` reads), so the snapshot and relation resolution
+    never diverge and there is no second `current_state` query. It is dated to the
+    panel's draw, not generation time — see `_protocol_context_snapshot`.
+    `first_ever_panel` is derived from the absence of a prior panel."""
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "trigger_panel": _panel_ref(trigger_panel),
@@ -289,18 +339,24 @@ def _meta(user_id: int, db: Session, trigger_panel, prior_panel) -> dict:
         "lever_dictionary_version": _LEVER_DICTIONARY["_meta"]["version"],
         "marker_groups_version": _MARKER_GROUPS["_meta"]["version"],
         "overall_extraction_confidence": getattr(trigger_panel, "overall_confidence", None),
-        "protocol_context_snapshot": _protocol_context_snapshot(user_id, db, trigger_panel),
+        "protocol_context_snapshot": snapshot,
     }
 
 
 def build_foundation(user_id: int, db: Session, trigger_panel, prior_panel) -> dict:
-    """The 4a entry point. `trigger_panel` / `prior_panel` are the report rows
-    the caller already resolved (LabReport, or None for prior); the producer
-    reads panel identity off them and the marker series off the DB."""
+    """The entry point. `trigger_panel` / `prior_panel` are the report rows the
+    caller already resolved (LabReport, or None for prior); the producer reads
+    panel identity off them and the marker series off the DB.
+
+    The declared state is resolved ONCE, as-of the panel's draw date: the same
+    snapshot feeds `meta.protocol_context_snapshot` and the phase map that resolves
+    relation preconditions in pass 2."""
     series = marker_series(user_id, db)
-    groups, claimed = _groups(series)
+    snapshot = _protocol_context_snapshot(user_id, db, trigger_panel)  # single current_state query
+    phase_of = _phase_map(snapshot)
+    groups, claimed = _groups(series, phase_of)
     return {
-        "meta": _meta(user_id, db, trigger_panel, prior_panel),
+        "meta": _meta(trigger_panel, prior_panel, snapshot),
         "groups": groups,
         "ungrouped": _ungrouped(series, claimed),
     }
