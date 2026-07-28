@@ -390,6 +390,12 @@
       "marker_canonical": "glucose_random",
       "unit_established": "mmol/L",
       "loinc": null
+    },
+    {
+      "marker_name_raw": "Total PSA",
+      "marker_canonical": "psa",
+      "unit_established": "ug/L",
+      "loinc": null
     }
   ]
 }
