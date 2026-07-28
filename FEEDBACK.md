@@ -928,3 +928,26 @@ in one repo alone breaks the two-master invariant). This section is the repo-loc
 line is owed separately.
 
 ---
+
+## 21. `git commit` succeeding proves the instrument works, not that it committed what you meant — stage governance by name ([[§17]])
+
+**Rule:** stage governance files **by name** (`git add DECISIONS_LOG.md OPEN_QUESTIONS.md BRANCHES.md`),
+never `git add -A`, and confirm `git diff --stat` names the expected files **before** staging. A commit
+that succeeds is a passing positive control; it does not discriminate on *which* files it carried.
+
+This is [[§17]]'s discriminate-on-identity principle in a new mechanism. §17's failures were a check
+scoped too narrowly (a grep that matched a filename, a probe against a stale ref). Here the check was not
+too narrow — it read a real signal from the **wrong source**. `c4e5da2` carried the message
+*"gov: number-at-merge - #149, Q59; branch row DONE"* and committed **one file: an untracked
+`.claude/launch.json`**. The intended governance edits were never made; `git add -A` found only the stray
+file, and `git commit` succeeded on it. Had the tree been clean, `git commit` would have failed with
+*nothing to commit* and surfaced the no-op immediately — an incidental artifact supplied exactly the
+signal (`there is something to commit`) that the absent edits should have, and masked the failure. The
+commit message attested the renumber; only `git show --stat` measured it (this is also [[§18]] — an
+attestation read in place of a measurement). Master then carried live `#NEXT`/`Q-NEXT` placeholders past
+the merge that was supposed to resolve them, invisible until a later read.
+
+**Mitigation, concrete and cheap:** name the files at `git add`, and read `git diff --stat` before staging
+— if it names fewer files than the edits should have touched, an edit did not save, which is silent. The
+repair itself (`#149`/`Q59`, this entry) was staged by name for exactly this reason. No new decision: the
+number-at-merge rule was not followed, not changed.

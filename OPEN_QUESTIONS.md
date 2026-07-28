@@ -1395,7 +1395,7 @@ increment has something trustworthy to highlight against).
 
 ---
 
-## Q-NEXT. Nothing verifies the deployable artifact — no CI, and no check can observe "the application starts"
+## Q59. Nothing verifies the deployable artifact — no CI, and no check can observe "the application starts"
 
 Surfaced by the 2026-07-28 deploy outage (an unpinned `mcp` resolved to a breaking major and the app
 died at import while 460 tests passed). One gap with two faces; recorded as one row because they are

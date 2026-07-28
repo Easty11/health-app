@@ -4909,7 +4909,7 @@ enumeration becomes a tooling concern rather than a per-brief one and this entry
 
 ---
 
-### #NEXT. Every dependency is pinned; the MCP SDK stays on 1.x until migration is a deliberate increment
+### 149. Every dependency is pinned; the MCP SDK stays on 1.x until migration is a deliberate increment
 
 **Decision:** `mcp[cli]` is pinned to `==1.28.1`, closing the last unpinned line in
 `requirements.txt` (twenty-one of twenty-two were already `==`). Migrating to the mcp 2.0 API is
