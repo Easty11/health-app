@@ -52,8 +52,21 @@
           "driver": "testosterone_total",
           "operands": ["lh", "fsh"],
           "render_on": ["lh", "fsh"],
-          "precondition_phase": "on_trt",
-          "reads": "Exogenous androgen closes the hypothalamic\u2013pituitary loop \u2192 LH/FSH suppressed. Expected on_trt; off-TRT the same suppression is news."
+          "precondition": {
+            "factor_key": "trt",
+            "admissible_phases": ["steady"],
+            "grade": "moderate",
+            "rationale": "Exogenous androgen exerts negative feedback at hypothalamus and pituitary, suppressing LH and FSH. Suppression is the expected reading only while the factor is actually being taken. Excluded from washout: gonadotropin recovery after cessation runs on a months-to-years scale, so suppression during washout is recovery-in-progress, and marking it expected would suppress the signal being watched for.",
+            "evidence_refs": [
+              "10.1111/andr.13699",
+              "10.1002/j.1939-4640.1994.tb01674.x",
+              "10.2164/jandrol.05140",
+              "10.2164/jandrol.108.006296",
+              "10.1111/nyas.15187"
+            ],
+            "contested_note": "Suppression is usual, not universal. In 40 healthy men given intramuscular testosterone, LH/FSH decline was consistent in 17.5% and almost absent in 25%, with higher body fat predicting weaker suppression (10.2164/jandrol.108.006296). Recovery-interval estimates (LH ~10.7 months, FSH ~19.6 months) derive from androgen-abuse cohorts at supraphysiological doses, not from replacement-dose TRT, and the interval at replacement dose is not established."
+          },
+          "reads": "Exogenous androgen closes the hypothalamic\u2013pituitary loop \u2192 LH/FSH suppressed. Expected while on TRT; off TRT the same suppression is news."
         },
         {
           "relation_key": "shbg_free_fraction",
