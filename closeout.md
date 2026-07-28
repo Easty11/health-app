@@ -5,89 +5,90 @@ _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 
 ## 1. Real commits this session
 
-Session-open ref: `82df331` (prior `chore: session close-out`). `git log --oneline 82df331..HEAD`:
+Session-open ref: `31997d7` (prior session's `#NEXT -> #140/#141/#142` merge governance).
+`git log --oneline 31997d7..HEAD`:
 
 ```
-c541561 governance(4b-i): record the assembly/authority split across all four stores
-3a9b18e feat(interpretation): emit relations_rendered with operand degradation (4b-i)
-f6b3d1c feat(interpretation): three-pass restructure + draw-dated protocol snapshot (4b-i)
-e84383d governance: correct stale safety-asset facts, resolve Q41 -> #139
+cd35786 asset: record precondition-authoring prerequisite on trt_erythrocytosis_watch
+524cc60 governance(Q56/Q57): record precondition-shape + lever-join resolution across the stores
+0404c64 feat(interpretation): resolve feedback preconditions; expected_by_phase with no authority (Q56)
+778a3c1 asset(Q56): precondition shape on hpg_gonadotropin_suppression (factor_key + admissible_phases)
+fce128a asset(Q57): add declared_factor_keys join to lever nodes
+eb024b5 governance: resolve carried #NEXT docstring token -> #140 in producer.py
 ```
 
 Date-stamped (`git log --format="%ad %s" --date=short`, immutable):
 
 ```
-2026-07-28 governance(4b-i): record the assembly/authority split across all four stores
-2026-07-28 feat(interpretation): emit relations_rendered with operand degradation (4b-i)
-2026-07-28 feat(interpretation): three-pass restructure + draw-dated protocol snapshot (4b-i)
-2026-07-28 governance: correct stale safety-asset facts, resolve Q41 -> #139
+2026-07-28 asset: record precondition-authoring prerequisite on trt_erythrocytosis_watch
+2026-07-28 governance(Q56/Q57): record precondition-shape + lever-join resolution across the stores
+2026-07-28 feat(interpretation): resolve feedback preconditions; expected_by_phase with no authority (Q56)
+2026-07-28 asset(Q56): precondition shape on hpg_gonadotropin_suppression (factor_key + admissible_phases)
+2026-07-28 asset(Q57): add declared_factor_keys join to lever nodes
+2026-07-28 governance: resolve carried #NEXT docstring token -> #140 in producer.py
 ```
 
-All four are on `feat/interpretation-relations`, pushed to `origin/feat/interpretation-relations`
-(0 unpushed), all `+` under `git cherry origin/master` (real work, unmerged). A fifth
-`chore: session close-out` commit carries this file + the CLAUDE.md Recent-landings update.
+All six are on `feat/relation-preconditions`, pushed to origin (0 ahead / 0 behind), all `+`
+under `git cherry origin/master` (real work, unmerged). A seventh `chore: session close-out`
+commit carries this file + the CLAUDE.md Recent-landings update.
 
-The branch delivers the **structural half of 4b (4b-i)** from the `SPEC_4b_producer.md` brief:
-three-pass producer restructure, member `relations_rendered[]`, and draw-dated
-`meta.protocol_context_snapshot`. Demotion, `shared_levers`, `axis_verdict`,
-`member_lever_effects`, `mechanism`, `stable_rationale`, `expected_by_phase`, the endpoint, and
-fixture regeneration are **deliberately held for 4b-ii** (each named in `BRANCHES.md`).
+The branch resolves **Q56** and **Q57** for the relation-preconditions increment: lever->declared-factor
+join (`declared_factor_keys`), the precondition object shape (`factor_key` + `admissible_phases`,
+authored by Luke, replacing `on_trt`), producer resolution (`precondition_status` satisfied /
+not_satisfied / unresolvable) and `expected_by_phase` emitted **with no authority**. Plus Step 0
+(carried `#NEXT` docstring -> `#140`) and a promotion-note on the `_deferred` `trt_erythrocytosis_watch`.
 
-Backend suite **453 passed** (baseline 448 per #139, **+5**). Gates G1–G9 all reported green in
-session (behaviour-neutral restructure proven by empty pre/post `build_foundation` diff + 4a test
-file byte-unchanged at the checkpoint; snapshot draw-dated with a live negative control; relations
-degrade-not-fabricate; feedback `unresolvable` + `on_trt` in no non-test source; `news_gate`
-two-key with no `demot` basis; held fields absent; split recorded in all four stores).
+Backend suite **457 passed** (baseline 453 per the prior branch, **+4**). Gates G1-G10 all reported
+green in session (Q57 output-neutral; admissible_phases a real derive_phase subset; resolution
+draw-dated + `current_state` queried once; three resolution arms with pos/neg controls; should_surface
++ news_gate byte-identical across the producer change; `on_trt` gone from producer source + live asset;
+held-4b-ii fields still absent; Q56/Q57 both `DONE`).
 
 ## 2. Pending-commit queue reconciliation
 
 **No `;cc` pending-commit queue was carried into this session.** The session was driven by the
-`SPEC_4b_producer.md` brief (a chat-authored proposal, not a pending-queue paste), so there are no
-`PENDING` items to reconcile against. The brief WAS the payload; every step (A–E + governance) landed
-in the four commits above. Nothing decided this session remains uncommitted **on the branch** — but
-the whole branch is provisional against master until it ff-merges: the DECISIONS `#NEXT`×3 and
-OPEN_QUESTIONS `Q-NEXT`×2 are unminted, and 4b-i is not truth-on-master until the merge.
+chat-authored relation-preconditions brief (a proposal, not a pending-queue paste), so there are no
+`PENDING` items to reconcile. The brief WAS the payload; every step (0, A-E, governance) plus the
+reviewer-surfaced promotion-note landed in the six commits above. Nothing decided this session remains
+uncommitted **on the branch** — but the whole branch is provisional against master until it ff-merges:
+DECISIONS `#NEXT`x3 are unminted and Q56/Q57 read `DONE -> #NEXT`.
 
 ## 3. Cold-resume handoff
 
-**Where things stand.** 4b-i (interpretation producer structural half) is complete, tested, pushed,
-and **held for review** on `feat/interpretation-relations` — not merged. The producer is now
-three-pass (`_assemble_members` → `_relations_rendered` → `_should_surface` inside `_build_group`),
-emits member `relations_rendered[]` (operand `complete`/`degraded`+`operands_missing`, `feedback`→
-`precondition_status: "unresolvable"` echoing the raw `precondition_phase`), and emits
-`meta.protocol_context_snapshot` dated to the panel's `collected_date`. No demotion; gate 1 still raw.
+**Where things stand.** The relation-preconditions increment is complete, tested, pushed, and **held
+for review** on `feat/relation-preconditions` — not merged. Feedback-relation preconditions now resolve
+(`factor_key` "trt" + `admissible_phases` ["steady"] on `hpg_gonadotropin_suppression`, authored by
+Luke), the producer emits `precondition_status` + `expected_by_phase` (no authority, demotion still
+held), lever nodes carry `declared_factor_keys`, and the dead `on_trt` vocabulary is gone from the live
+producer surface.
 
-**Single clearest next action:** review `feat/interpretation-relations`; on acceptance, ff-merge to
-master (`git checkout master; git merge --ff-only feat/interpretation-relations; git push origin master;
-git branch -d feat/interpretation-relations; git push origin --delete feat/interpretation-relations`).
-At that merge, resolve the three `### #NEXT` DECISIONS headings to the next three integers
-(140/141/142) and the two `## Q-NEXT` OPEN_QUESTIONS headings to Q56/Q57, and set the ROADMAP 4b-i row
-status from OWED to DONE(SHA). BRANCHES.md carries the branch row (OWED) with the full merge checklist.
+**Single clearest next action:** review `feat/relation-preconditions`; on acceptance, ff-merge to master
+(`git checkout master; git merge --ff-only feat/relation-preconditions; git push origin master;
+git branch -d feat/relation-preconditions; git push origin --delete feat/relation-preconditions`). At
+that merge: resolve the three `### #NEXT` DECISIONS headings to **#143/#144/#145** (file order), resolve
+Q56/Q57 `DONE -> #NEXT` to those numbers, and flip the BRANCHES row OWED -> DONE(SHA). BRANCHES.md
+carries the row with the full merge checklist.
 
-**Open questions by status (this session's additions):**
-- **UNSTARTED (Q-NEXT, mint Q56/Q57 at merge):**
-  - `precondition_phase` (`on_trt`) vs `derive_phase` (`steady|episodic|washout|stopped|re_entering|
-    None`) — no mapping in asset or code. Blocks 4b-ii demotion of the `feedback` arm. Asset content.
-    Owner: Luke.
-  - Lever→declared-factor join absent (no mapping field on lever nodes). Blocks I3 `shared_levers[]`.
-    Smallest fix: authored `declared_factor_keys: []` per lever node. Asset content. Owner: Luke.
-- **DONE this session:** Q41 → `DONE → #139` (safety-asset stale-fact correction, commit `e84383d`).
+**Open questions by status (this session's changes):**
+- **DONE this session:** Q56 (precondition vocabulary — resolved by the precondition-object shape) and
+  Q57 (lever->declared-factor join — resolved by `declared_factor_keys`). Both `DONE -> #NEXT`; numbers
+  resolve at merge.
 
-**4b-ii blockers (none block 4b-i):** the two Q-NEXT above (asset content) + ingestion (empty
-`lab_reports`/`lab_results`, unverified-from-session) which blocks 4b-ii's view-wiring half only. The
-safety-band citation blocker is discharged (#139).
+**4b-ii's blocker — ingestion is now the ONLY one.** The two asset-content blockers (phase-vocabulary
+mismatch, lever join) are discharged. The lab store is still empty (`lab_reports` / `lab_results` zero
+rows, unverified-from-session); the ~30 May TRT panel is the natural first input. Relation-based
+**demotion** remains 4b-ii's own work (its own brief), not a blocker on it.
 
-**Two cosmetic 4b-ii carry-overs (flagged in review, non-blocking):**
-- Duplicate `# ---------- G5` section label in `test_interpretation_producer_foundation.py` (two
-  gate-numbering schemes collide: 4a-brief G5 = gate-2 source vs this brief's G5 = vocab gap).
-  Harmless to pytest; sweep when that file is next open (4b-ii).
-- The G5 grep proves no bare `on_trt` literal, not no *mapping*. Right guard for the live threat
-  (hardcoded `if phase == "on_trt"`); 4b-ii's phase-resolution work needs a positive test that the
-  mapping does the right thing, not a substitute discharged here.
+**Known follow-on, recorded not lost:** `_deferred.relations.trt_erythrocytosis_watch` still carries the
+legacy `precondition_phase: "on_trt"` and is `ready_to_promote`. A `promotion_note` on the entry (commit
+`cd35786`) records that promoting it requires converting to the precondition-object shape and authoring
+its clinical content (Luke) first — else it emits `unresolvable` on arrival. Chat-only finding, now
+durable on the asset where the promoter will look.
 
-**Sprint (ROADMAP):** interpretation build sequence now splits 4b into **4b-i** (OWED, this branch) and
-**4b-ii** (BLOCKED — interpretive half: demotion, levers, verdict, endpoint, view fixture→live). Forks
-still open for 4b-ii: cache-on-confirm vs compute-on-read, and `axis_verdict` depth.
+**Convention set this session:** gate-label namespacing in the interpretation test file is now
+`<increment>-G<n>` (`4a-G*`, `4b-i-G*`, `4b-ii-G*`), resolving the two-G5 / two-G6 collision.
 
 **Loop discipline:** single-repo (health-app only) throughout; no `frontend/`, no `health-connect-app`,
-no shared-CLAUDE.md-block edits. `INTERPRETATION_OUTPUT_CONTRACT.md` (UI-maintained) not written.
+no shared-CLAUDE.md-block edits. `INTERPRETATION_OUTPUT_CONTRACT.md` (UI-maintained) not written;
+`precondition_status` / `expected_by_phase` semantics changed here — report the divergence from v0.5
+rather than reconciling the contract file.

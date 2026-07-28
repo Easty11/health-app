@@ -322,9 +322,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q56/Q57 (relation preconditions + lever join)** — feedback-relation preconditions resolve against a factor-key + admissible-phase-set shape (replacing the dead `on_trt` string); the producer emits `precondition_status` + `expected_by_phase` at **no** authority (demotion still held for 4b-ii); lever nodes gain `declared_factor_keys`. On `feat/relation-preconditions`, pushed + held for review; DECISIONS `#NEXT`×3 and Q56/Q57 `DONE → #NEXT` mint at ff-merge. See `closeout.md`.
 - **#140–#142 (4b-i, interpretation producer structural half)** — three-pass restructure (`should_surface` computed after relations), member `relations_rendered[]` with operand degradation and `feedback`→`unresolvable`, and draw-dated `meta.protocol_context_snapshot`. No demotion, levers, or verdict (held for 4b-ii). Surfaced Q56/Q57 (the two 4b-ii asset-content blockers). See DECISIONS_LOG #140–#142.
 - **#139** — Three haematocrit safety bands (0.50 / 0.52 / 0.54) promoted from `_deferred` to live in `safety_thresholds.json`, each on its own `evidence_refs`; gate 3 moves from inert (`no_asset` for every marker) to live for haematocrit, and gate 1's safety arm becomes reachable. Fraction-unit convention verified. Closes the Q41 coverage gap; fires on nothing until a haematocrit result is ingested. See DECISIONS_LOG #139.
-- **#138** — Interpretation output contract v0.5: three-gate safety (news / range / safety-band) supersedes v0.4's two-gate model, adds the three producer keys v0.4 lacked (`safety_gate`, `should_surface`, `ungrouped[]`), and rules that ungrouped markers render in their own section between What Moved and Stable. Contract is UI-maintained, so the entry carries its own substance. See DECISIONS_LOG #138.
 
 ---
 
