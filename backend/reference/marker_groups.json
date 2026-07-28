@@ -254,6 +254,7 @@
         "blocked_on": [
           "4b contract: cross-group relation references"
         ],
+        "promotion_note": "Legacy precondition_phase 'on_trt' predates Q56. Before promotion, convert it to the precondition object shape { factor_key, admissible_phases, grade, rationale, evidence_refs, contested_note } with clinical content authored by Luke. The producer resolves only that shape and emits 'unresolvable' for the legacy string, exactly as hpg_gonadotropin_suppression did before Q56. Precondition authoring is a second prerequisite alongside the cross-group contract above.",
         "status": "blocked_on_contract"
       }
     },
