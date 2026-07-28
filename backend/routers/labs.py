@@ -94,7 +94,10 @@ class ReportSourceDoc(BaseModel):
 class ReportExtractionMeta(BaseModel):
     extracted_at: datetime | None = None
     model: str | None = None
-    overall_confidence: float = 0.0
+    # overall_confidence is NOT a model self-report (#NEXT): it defaulted silently
+    # to 0.0 when the model omitted it and was seeded by the prompt example, so an
+    # omitted field was indistinguishable from a genuine zero. It is now DERIVED at
+    # confirm from the same per-row confidences already written. See confirm_lab_report.
 
 
 class ReportEnvelope(BaseModel):
@@ -158,8 +161,7 @@ column order and layout vary between reports from the same lab.
     "source_doc": { "filename": "20260306__Routine_Chemistry.pdf", "page_count": 2 },
     "extraction": {
       "extracted_at": "2026-06-22T12:00:00+10:00",
-      "model": "<model-id>",
-      "overall_confidence": 0.0
+      "model": "<model-id>"
     }
   },
   "results": [
@@ -402,6 +404,22 @@ def confirm_lab_report(
             )
 
     report = body.report
+    # Derive each row's confidence ONCE (min over its field_confidences, the per-row
+    # rule), then reuse those same values for the row records AND the report's
+    # overall_confidence. overall = min(row confidences): it propagates the worst row,
+    # consistent with the per-row rule, and — because this gates a user-facing
+    # confidence statement — a single bad row must not hide behind a mean. Derived at
+    # confirm from stored inputs, not reported by the model (#NEXT).
+    row_confidences: list[tuple[ResultItem, str | None, float]] = []
+    for r, canonical, _established_unit in resolved:
+        confidences = list(r.field_confidence.model_dump().values()) if r.field_confidence else None
+        row_confidences.append((r, canonical, min(confidences) if confidences else 1.0))
+
+    # confirm always writes at least one row (resolved is non-empty upstream); assert
+    # rather than assume, so min() below never sees an empty sequence.
+    assert row_confidences, "confirm_lab_report: no resolved rows to write"
+    overall_confidence = min(conf for _, _, conf in row_confidences)
+
     lab_report = models.LabReport(
         user_id=current_user.id,
         lab_name=report.lab_name,
@@ -420,15 +438,13 @@ def confirm_lab_report(
         source="file_extraction",
         source_doc_filename=report.source_doc.filename if report.source_doc else None,
         page_count=report.source_doc.page_count if report.source_doc else None,
-        overall_confidence=report.extraction.overall_confidence,
+        overall_confidence=overall_confidence,
         extracted_at=report.extraction.extracted_at,
     )
     db.add(lab_report)
     db.flush()  # get lab_report.id before inserting results
 
-    for r, canonical, _established_unit in resolved:
-        confidences = list(r.field_confidence.model_dump().values()) if r.field_confidence else None
-        confidence = min(confidences) if confidences else 1.0
+    for r, canonical, confidence in row_confidences:
         db.add(models.LabResult(
             lab_report_id=lab_report.id,
             marker_name_raw=r.marker_name_raw,
