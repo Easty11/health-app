@@ -1329,15 +1329,22 @@ protocol". Or the asset could carry an explicit precondition object naming a dec
 admissible phase set — more authoring, and it says what it means. A guessed mapping silently decides
 whether LH/FSH suppression is expected or is news, which is the whole clinical content of that relation.
 
-**Status:** UNSTARTED — no blocker; the authoring is the work. Owner: Luke. **Blocks:** 4b-ii
-relation-based demotion of the `feedback` arm. Does **not** block 4b-i (relations assemble and emit
-`unresolvable`).
+**Status:** DONE → #NEXT. Resolved by the **second** of the two shapes above — an explicit
+precondition object, not derived-phase vocabulary adoption. `hpg_gonadotropin_suppression` now carries
+`{ factor_key: "trt", admissible_phases: ["steady"], grade, rationale, evidence_refs, contested_note }`
+(authored by Luke), and the producer resolves it against the declared-state phase map to
+`satisfied` / `not_satisfied` / `unresolvable` (naming an absent factor). `admissible_phases` is
+`["steady"]` only — `re_entering` is unreachable for a `protocol`-type factor. `on_trt` is gone from the
+live relation and producer source. `expected_by_phase` is emitted with no authority; demotion of the
+`feedback` arm stays held for 4b-ii. Owner: Luke.
 
 ## Q57. Levers carry no link to declared-state factors, so I3 filtering cannot be implemented
 
 I3 requires filtered levers to be **shown with a reason**, never dropped. Filtering needs to know whether
 a lever is already in play, which means joining a lever to the declared-state factor that represents it.
-**That join does not exist.**
+~~**That join does not exist.**~~ **Corrected #NEXT:** the join now exists — each lever node carries
+`declared_factor_keys` (struck-not-deleted per correct-don't-delete; the sentence described the
+pre-resolution state).
 
 Lever keys: `testosterone_substrate_load`, `aromatase_inhibition`, `aromatase_adiposity`, `alcohol`,
 `exercise_muscle`, `plasma_volume_status`. Declared-state keys: `trt`, `tirzepatide`, `cbt_i`, `zinc`, …
@@ -1350,7 +1357,10 @@ Smallest fix: an authored `declared_factor_keys: []` on each lever node. Asset c
 filtering predicate then reads `is_assumable_present` on any matched factor — which is also what keeps an
 episodic peptide from being treated as present at a draw it may not have been present for.
 
-**Status:** UNSTARTED — no blocker. Owner: Luke. **Blocks:** `shared_levers[]`, hence the 4b-ii
-increment after this one. Does **not** block 4b-i.
+**Status:** DONE → #NEXT. Resolved as the body's own "smallest fix": `declared_factor_keys` authored on
+all six lever nodes — only `testosterone_substrate_load` joined (to `["trt"]`), the other five `[]`
+(a truthful "no declared factor represents this lever", distinguishable from the field being absent). No
+declared-state entry was created for `alcohol`. The consumer — `shared_levers[]` already-in-play
+filtering — is held for 4b-ii; the join lands before the consumer. Owner: Luke.
 
 ---

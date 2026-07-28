@@ -4703,3 +4703,104 @@ code path maps it to a derived phase.
 demotion is its own brief and its own entry (4b-ii).
 
 ---
+
+### #NEXT. A relation precondition names a factor and a set of admissible phases, not a phase
+
+**Decision:** A `feedback` relation's precondition is
+`{ factor_key, admissible_phases[], grade, rationale, evidence_refs[], contested_note }`,
+replacing the bare `precondition_phase: "on_trt"`. For `hpg_gonadotropin_suppression`:
+`factor_key "trt"`, `admissible_phases ["steady"]`, `grade "moderate"`, five `evidence_refs`,
+and a `contested_note`. Content authored and authorised by Luke; transcribed verbatim.
+
+**Rationale:** `on_trt` was a value `derive_phase` can never return, so the relation was
+unevaluable from the day it was authored. The fix is not a translation table: `on_trt` was
+never a phase, it was a factor and a phase compressed into one string, and the compression is
+what made it untranslatable. The pair is load-bearing in both directions — a phase alone
+(`steady`) fires identically on steady tirzepatide, and a factor alone ignores that a
+washing-out factor does not close the loop. **`admissible_phases` is `["steady"]`, not
+`["steady", "re_entering"]`** (an earlier draft's value): `derive_phase` reaches `re_entering`
+only for `type == "behavioural"`, and `trt` is seeded `type == "protocol"`, so `re_entering`
+is unreachable for this factor and authoring it would assert a possibility that cannot occur.
+`washout` is excluded because gonadotropin recovery after cessation runs on a months-to-years
+scale, so suppression during washout is recovery-in-progress, and marking it expected would
+suppress the signal being watched for — a clinical judgement, authored by Luke, not derived
+here. `evidence_refs` is required because a precondition becomes a read-constant under I1's
+extension the moment demotion reads it; authored now rather than retrofitted, on the
+safety-asset precedent (Q41 stayed open precisely as long as its citations were missing).
+`grade "moderate"` and the `contested_note` are load-bearing: suppression on exogenous
+testosterone is usual but not universal, so when demotion lands in 4b-ii this relation must
+annotate rather than demote hard — an unsuppressed LH/FSH on TRT is a real finding this
+relation must not be able to bury.
+
+**Status:** Landed on `feat/relation-preconditions` (asset commit). Resolves Q56.
+
+**How you know:** every value in `admissible_phases` is asserted (programmatically, against
+`derive_phase`'s AST-resolved return set) to be a phase the function can return; `["steady"]`
+passes, and the test is non-vacuous. The reference-JSON edit guard passed (pure ASCII, 0
+literal em/en-dash, parses).
+
+**Do not revisit unless:** a relation needs a precondition over two factors at once, which
+this shape does not express and which would need its own decision.
+
+---
+
+### #NEXT. The producer resolves preconditions; `expected_by_phase` is emitted with no authority
+
+**Decision:** `_relations_rendered` resolves a `feedback` relation's precondition against the
+declared-state phase map into `precondition_status` (`satisfied` / `not_satisfied` /
+`unresolvable`) and emits `expected_by_phase`. `expected_by_phase` touches no gate.
+
+**Rationale:** the producer hardcoded `precondition_status = "unresolvable"` for every
+`feedback` relation. That was honest while nothing *could* resolve and became a false
+statement the moment an asset carried a resolvable precondition — the code asserted a property
+of the world rather than testing it. Status is now computed; `unresolvable` names its reason
+(legacy shape, or `factor_key` absent from the ledger). `expected_by_phase` has **no
+authority** — demotion stays held for 4b-ii, on the same seam and for the same reason as #142:
+resolution is verifiable against the fixture today, authority is not, and a demotion bug and a
+resolution bug arriving in one diff would be indistinguishable. The declared state is resolved
+**once** per build — the same snapshot `meta.protocol_context_snapshot` uses, at the panel's
+`collected_date` — because a second derivation is the shape of bug that reads `date.today()`
+and passes every functional test.
+
+**Status:** Landed on `feat/relation-preconditions` (feature commit). Partially resolves the
+4b-ii track (resolution + `expected_by_phase`); demotion itself remains held.
+
+**How you know:** `should_surface` and `news_gate` are byte-identical across the change on the
+fixture seed (gate projection diffed empty); `news_gate` keeps its two-key shape and no basis
+mentions demotion, precondition, or expectation; the three resolution arms have positive and
+negative controls; a spy asserts `current_state` is queried once, with `today` == the draw
+date != `date.today()`.
+
+**Do not revisit unless:** demotion lands, at which point `expected_by_phase` gains authority
+and that is its own decision (4b-ii).
+
+---
+
+### #NEXT. Levers carry `declared_factor_keys`, and an empty list is an assertion
+
+**Decision:** each of the six `lever_dictionary.levers` nodes carries `declared_factor_keys`.
+Only `testosterone_substrate_load` is joined, to `["trt"]`; the other five carry `[]`.
+
+**Rationale:** I3 requires filtered levers to be shown with a reason rather than dropped, which
+needs a join from a lever to the declared factor representing it. No join existed — lever keys
+(`testosterone_substrate_load`, `alcohol`, …) and ledger keys (`trt`, `tirzepatide`, …) are
+different namespaces, and the lever node had no connecting field. **Present-and-empty is a
+claim** — *no declared factor represents this lever, so I3 renders it unfiltered* — and is
+deliberately distinguishable from the field being absent, which is why the key is present on
+every node. `alcohol` has no ledger row and **none was created**: a declaration asserts
+something true of Luke, and asset plumbing has no standing to make one. The filtering predicate
+(4b-ii) will read `is_assumable_present` on a matched factor, which is also what stops an
+episodic factor being assumed present at a draw it may not have been present for.
+
+**Status:** Landed on `feat/relation-preconditions` (asset commit). Resolves Q57. The consumer
+(`shared_levers` filtering) is held for 4b-ii — the join lands before the consumer.
+
+**How you know:** `build_foundation` output is byte-identical across this change on the fixture
+seed (nothing reads lever nodes beyond `min_meaningful_delta`, which reads
+`marker_interpretation`, never `levers[]`); `trt` verified as a seeded declared factor; the
+reference-JSON edit guard passed.
+
+**Do not revisit unless:** a lever needs to be filtered by something other than a declared
+factor.
+
+---
