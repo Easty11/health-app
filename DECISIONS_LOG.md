@@ -4908,3 +4908,41 @@ carries `#140` and `#147` simultaneously; the eight pre-existing source files ap
 enumeration becomes a tooling concern rather than a per-brief one and this entry is superseded.
 
 ---
+
+### #NEXT. Every dependency is pinned; the MCP SDK stays on 1.x until migration is a deliberate increment
+
+**Decision:** `mcp[cli]` is pinned to `==1.28.1`, closing the last unpinned line in
+`requirements.txt` (twenty-one of twenty-two were already `==`). Migrating to the mcp 2.0 API is
+explicitly deferred to its own increment; the pin holds 1.x until then.
+
+**Rationale:** `requirements.txt` left `mcp[cli]>=1.0.0` open. On 2026-07-28 the SDK published
+2.0.0, the next Railway build resolved to it, and `mcp/server/fastmcp` — removed in that release —
+took the application down at import (`ModuleNotFoundError: No module named 'mcp.server.fastmcp'`).
+Migrations had already run, so the database advanced to `c1e8b4d70f92` while the code could not
+start, and the previous container kept serving stale. The failure was invisible to the suite, which
+passed 460 against a session venv holding a working SDK — the check ran against an environment that
+already had the dependency the deploy lacked. The pin is the fix; the version choice is the
+judgement: 1.28.1 (26 June) predates the major by a month, where 1.29.0 shipped the same day as
+2.0.0 and is unvalidated here.
+
+Migrating to 2.0 is worth doing and is not this change. The new API is a redesign, not a rename
+(`FastMCP` → `MCPServer`, with extensions, tool bindings, a request-state codec, elicitation
+primitives); the auth and transport paths survive, so the blast radius is one file. Three things make
+it a separate increment: the release was hours old when it broke this, nothing in the project can
+verify that the application starts (see the deployability question), and production was stale while
+the decision was being made. Restoring service and choosing an SDK architecture are different kinds
+of work and must not share a commit.
+
+**Status:** Landed on `fix/pin-mcp-sdk` (fix commit, one line). Deploy-reaches-healthy + `/mcp`
+answers are operator verifications post-merge (the migrations already applied, so a green deploy is
+the only outstanding proof).
+
+**How you know:** a CLEAN virtualenv built from `requirements.txt` (not the session venv, which
+already holds a working SDK) resolves mcp to 1.28.1 and imports all six SDK paths the app reaches —
+`mcp.server.fastmcp.FastMCP` and every name in `oauth_provider`'s provider block among them; the
+`git diff --stat` for the fix commit names one file and one line; the suite is unchanged at 460.
+
+**Do not revisit unless:** the 2.0 migration lands, which supersedes the version choice but not the
+pinning rule.
+
+---

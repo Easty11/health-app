@@ -1394,3 +1394,29 @@ Deliberately not built this branch (the derived-confidence work makes the `Conf.
 increment has something trustworthy to highlight against).
 
 ---
+
+## Q-NEXT. Nothing verifies the deployable artifact — no CI, and no check can observe "the application starts"
+
+Surfaced by the 2026-07-28 deploy outage (an unpinned `mcp` resolved to a breaking major and the app
+died at import while 460 tests passed). One gap with two faces; recorded as one row because they are
+the same absence — nothing between "the suite passed in a session" and "Railway builds and deploys"
+looks at the artifact that actually ships.
+
+**A — there is no CI.** No `.github/workflows`, no pipeline config of any kind. The only gate between a
+green session and a production deploy is a person, and every check the project relies on runs against a
+developer venv that already has working dependencies installed — which is exactly why a clean-venv
+resolution difference (the unpinned SDK) was invisible until Railway built from scratch.
+
+**B — no check can observe that the application boots.** The failure was total: the process died at
+import, before binding, and no test caught it because no test imports the app in a clean environment. A
+boot check is not a one-liner: `main` imports `database`, which constructs an engine from
+`DATABASE_URL`, so importing `main` needs environment to succeed at all. The check therefore needs
+either a test harness with a throwaway env or a build-stage import in a deploy pipeline — and there is
+no pipeline to put the latter in (finding A). That coupling is why the two are one question.
+
+**Status:** UNSTARTED — no blocker; nothing built depends on it. **Owner:** Luke — design call on where a
+boot check would live (test harness vs build stage) given there is no pipeline, and whether CI is worth
+standing up for a single-developer project. Deliberately not built with the pin (production was down;
+restoring service and designing a verification gate are different work).
+
+---
