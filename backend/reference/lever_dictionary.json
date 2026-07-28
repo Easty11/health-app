@@ -12,6 +12,7 @@
 
   "levers": {
     "testosterone_substrate_load": {
+      "declared_factor_keys": ["trt"],
       "label": "Testosterone substrate load",
       "mechanism_summary": "The exogenous testosterone dose sets the substrate pool the HPG axis operates on; oestradiol tracks the aromatised fraction of that pool.",
       "grade": "high",
@@ -22,6 +23,7 @@
       "draft_status": "ai_draft"
     },
     "aromatase_inhibition": {
+      "declared_factor_keys": [],
       "label": "Aromatase inhibition",
       "mechanism_summary": "Pharmacologic aromatase inhibition lowers the T\u2192E2 conversion rate, reducing serum oestradiol at a given substrate load.",
       "grade": "high",
@@ -32,6 +34,7 @@
       "draft_status": "ai_draft"
     },
     "aromatase_adiposity": {
+      "declared_factor_keys": [],
       "label": "Adiposity / aromatase activity",
       "mechanism_summary": "Adipose tissue is a primary aromatase site; body-fat change shifts peripheral T\u2192E2 conversion.",
       "grade": "low",
@@ -42,6 +45,7 @@
       "draft_status": "ai_draft"
     },
     "alcohol": {
+      "declared_factor_keys": [],
       "label": "Alcohol intake",
       "mechanism_summary": "Alcohol modulates hepatic oestrogen handling and (in the liver panel) raises GGT/AST; effect on male serum E2 is small and inconsistent.",
       "grade": "very_low",
@@ -52,6 +56,7 @@
       "draft_status": "ai_draft"
     },
     "exercise_muscle": {
+      "declared_factor_keys": [],
       "label": "Exercise / skeletal-muscle turnover",
       "mechanism_summary": "Training raises transaminases of skeletal-muscle origin; chronic pattern gives AST:ALT \u2248 1 and correlates with CK, distinguishing muscle from hepatocellular source.",
       "grade": "high",
@@ -62,6 +67,7 @@
       "draft_status": "ai_draft"
     },
     "plasma_volume_status": {
+      "declared_factor_keys": [],
       "label": "Plasma volume status",
       "mechanism_summary": "Haemoglobin, haematocrit and RBC are concentrations, so plasma volume sets the denominator. Contraction from dehydration, heat, recent training or prolonged tourniquet raises all three without any change in red cell mass. Albumin and total protein are plasma constituents and concentrate the same way; MCV is per-cell and does not move. This lever changes the measured value, not the underlying erythron.",
       "grade": "high",
