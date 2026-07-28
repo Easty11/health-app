@@ -4805,7 +4805,7 @@ factor.
 
 ---
 
-### #NEXT. Extraction confidence is derived at confirm, not reported by the model
+### 146. Extraction confidence is derived at confirm, not reported by the model
 
 **Decision:** `lab_reports.overall_confidence` is derived at confirm as `min(row confidences)`
 — the same per-row `min(field_confidence)` values written to each `LabResult` — instead of
@@ -4842,7 +4842,7 @@ rows.
 
 ---
 
-### #NEXT. A draw, not a report, is the interpretation trigger
+### 147. A draw, not a report, is the interpretation trigger
 
 **Decision:** the interpretation trigger is the newest **`collected_date`** and everything collected on
 it; `compared_against` is the next distinct `collected_date` back — not "the newest `lab_report`" and
@@ -4869,5 +4869,42 @@ that falsifies the report-shaped reading.
 
 **Do not revisit unless:** two genuinely distinct draws land on one date, which a date cannot distinguish
 and which would need a draw identifier rather than a date.
+
+---
+
+### 148. Renumber scope follows the branch's own tokens, not a file-type boundary
+
+**Decision:** a merge's renumber resolves every `#NEXT` the branch introduced, wherever it
+lives — markdown or source — and leaves every token it did not. The scope is **ownership**,
+not file type. The pre-land verification must **classify** residual tokens (branch-own vs
+pre-existing debt vs rule-text), not merely count them.
+
+**Rationale:** the first two renumber merges treated `backend/**/*.py` as wholly out of scope,
+because every `#NEXT` there was pre-existing debt from earlier branches — "skip source" and
+"skip other branches' debt" described the same set. `feat/ingestion-findings` broke that
+coincidence by writing decision references at the points the decisions are embodied (a comment
+in `labs.py` explaining why `overall_confidence` is derived; a docstring in `producer.py`
+recording the draw-shaped trigger) — correct practice, and it put six live placeholders inside
+a directory the ritual had learned to ignore. `producer.py` is the case that forces the
+distinction: it carries a resolved `#140` from an earlier branch and an unresolved `#NEXT` from
+this one in the same file, so neither "skip the file" nor "substitute the file" is right. This
+is the fifth instance of a verification scoped more narrowly than the property it was meant to
+establish (after `demot` in a tree grep, `on_trt` across history, `^### #NEXT` against a
+docstring, and a markdown-only sweep). The pattern is not carelessness: a check is written
+against the failure imagined at authoring time, and the next failure is somewhere the check
+cannot see. The mitigation is procedural — enumerate the branch's own tokens explicitly in the
+merge brief, and require the pre-land verification to classify residuals rather than count them.
+
+**Status:** Applied at this merge (`feat/ingestion-findings`): six source tokens resolved
+(`labs.py`/`test_labs_confirm_confidence.py`/backfill migration → #146; `producer.py` draw
+docstring → #147), the resolved `#140` and the ten pre-existing ROADMAP-L19 placeholders +
+`SCHEMA.md:762` left untouched. Does **not** discharge ROADMAP L19 — that debt still needs a
+shared-block edit across both repos; what changes is that the debt stops growing.
+
+**How you know:** `backend/**/*.py` token count falls 16 → 10 across this merge; `producer.py`
+carries `#140` and `#147` simultaneously; the eight pre-existing source files appear in no diff.
+
+**Do not revisit unless:** the shared-block extension (ROADMAP L19) lands, at which point the
+enumeration becomes a tooling concern rather than a per-brief one and this entry is superseded.
 
 ---

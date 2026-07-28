@@ -348,7 +348,7 @@ def build_foundation(user_id: int, db: Session, trigger_panel, prior_panel) -> d
     the caller already resolved; the producer reads panel identity (collected_date,
     panel_name_raw, overall_confidence) off them and the marker series off the DB.
 
-    The trigger is a DRAW, not a report (#NEXT): the endpoint (4b-ii) resolves it as
+    The trigger is a DRAW, not a report (#147): the endpoint (4b-ii) resolves it as
     the newest `collected_date` and the comparison as the next distinct date back — one
     blood draw can print several reports sharing a date, so a single-report trigger is
     ambiguous. This producer is draw-safe already: it reads only panel identity here,

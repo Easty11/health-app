@@ -1365,7 +1365,7 @@ filtering — is held for 4b-ii; the join lands before the consumer. Owner: Luke
 
 ---
 
-## Q-NEXT. The confirmation screen is read-only, which turns three separate defects into one design problem
+## Q58. The confirmation screen is read-only, which turns three separate defects into one design problem
 
 Surfaced by the first real ingestion run. Three symptoms, one root cause — the confirm screen displays
 extraction output and offers only Discard / Confirm, with no inputs. They are recorded as ONE row

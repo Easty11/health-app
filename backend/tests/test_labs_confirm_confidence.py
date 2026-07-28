@@ -1,4 +1,4 @@
-"""confirm_lab_report derives overall_confidence from the rows (#NEXT).
+"""confirm_lab_report derives overall_confidence from the rows (#146).
 
 The first ingestion run produced reports whose model-reported overall_confidence
 was 0.0 despite per-row confidences of 0.92-0.99 and correct values: the field
@@ -70,7 +70,7 @@ def test_overall_confidence_is_derived_nonzero_when_model_omits_it(db_session):
 def test_overall_confidence_low_row_drags_it_down_negative_control(db_session):
     """G2 negative control: a single low-confidence row scores the report low, so
     the derivation cannot be passing on a hardcoded constant. min propagates the
-    worst row (implemented over mean, per #NEXT — a bad row must not hide)."""
+    worst row (implemented over mean, per #146 — a bad row must not hide)."""
     user = _user(db_session, "control@example.com")
     body = _envelope([
         _result("AST", {"name": 0.99, "value": 0.99, "unit": 0.98, "ref": 0.97}),

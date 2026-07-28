@@ -4,7 +4,7 @@ Revision ID: b7f3a1c92e40
 Revises: f1a4c7e29b83
 Create Date: 2026-07-28
 
-Data-only migration (no schema change). DECISIONS_LOG #NEXT: overall_confidence
+Data-only migration (no schema change). DECISIONS_LOG #146: overall_confidence
 was a model self-report that defaulted to 0.0 when omitted and was seeded by the
 extraction prompt example, so the first ingestion run stored 0.0 on three of seven
 reports whose per-row confidences were 0.92-0.99 and whose values were correct.

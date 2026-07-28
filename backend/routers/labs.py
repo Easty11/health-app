@@ -94,7 +94,7 @@ class ReportSourceDoc(BaseModel):
 class ReportExtractionMeta(BaseModel):
     extracted_at: datetime | None = None
     model: str | None = None
-    # overall_confidence is NOT a model self-report (#NEXT): it defaulted silently
+    # overall_confidence is NOT a model self-report (#146): it defaulted silently
     # to 0.0 when the model omitted it and was seeded by the prompt example, so an
     # omitted field was indistinguishable from a genuine zero. It is now DERIVED at
     # confirm from the same per-row confidences already written. See confirm_lab_report.
@@ -409,7 +409,7 @@ def confirm_lab_report(
     # overall_confidence. overall = min(row confidences): it propagates the worst row,
     # consistent with the per-row rule, and — because this gates a user-facing
     # confidence statement — a single bad row must not hide behind a mean. Derived at
-    # confirm from stored inputs, not reported by the model (#NEXT).
+    # confirm from stored inputs, not reported by the model (#146).
     row_confidences: list[tuple[ResultItem, str | None, float]] = []
     for r, canonical, _established_unit in resolved:
         confidences = list(r.field_confidence.model_dump().values()) if r.field_confidence else None
