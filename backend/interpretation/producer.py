@@ -206,7 +206,7 @@ def _groups(series: dict[str, MarkerPair]) -> tuple[list[dict], set[str]]:
     (`_assemble_members`), pass 2 builds the group over them (`_build_group`,
     where relations then `should_surface` land). The passes are separated so a
     relation needing the full member set can run between member assembly and
-    surfacing — see #NEXT (three-pass restructure)."""
+    surfacing — see #140 (three-pass restructure)."""
     groups: list[dict] = []
     claimed: set[str] = set()
     present = set(series)  # every marker in this panel — operands may reference non-members
