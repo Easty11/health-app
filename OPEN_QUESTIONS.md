@@ -1495,3 +1495,45 @@ against the #49 seam (not #47) and `confidence` against the misleading-at-a-glan
 Numbered `Q61` on the `gov/readback-riders` branch (pre-ff; max was Q60, no competing branch).
 
 ---
+
+## Q62. How is `#47` enforced structurally for a generated field?
+
+**State:** open. **Blocks:** `axis_verdict.text`, and every future generated interpretation
+field. **Related:** Q60 (the same question for a CBT-I titration verdict).
+
+`#47` says enforcement is *"at the prompt layer **AND** structurally — no
+interpretation-output field expresses a personalised action."* Every field the producer
+emits today satisfies the structural half by construction: its content can only be what a
+reviewed asset contains, or arithmetic over the user's own data. A **generated prose field
+has no such bound.** Its only control is the prompt, which is the behavioural half alone.
+
+This project has already rejected that trade once. `#59` made lab-value absence from the
+standing chat prompt *structural* — values fetched on demand rather than present-but-
+instructed-against — on the explicit reasoning that a "don't mention it" instruction over
+data that is already present leaks under long context or clever prompting. A generated
+`axis_verdict.text` reintroduces exactly that shape at the interpretation layer.
+
+The question is not whether an axis verdict is inherently over the line. *"These three moved
+together"* is description, and `#47` names explaining mechanisms as education. The question
+is **what structural control replaces the one that generation removes.**
+
+Candidates:
+
+- **(a) Don't generate.** Bounded enum plus templated text assembled from asset fragments.
+  Fully structural; least expressive. Cheapest if `verdict` proves derivable.
+- **(b) Generate, then validate structurally.** A post-generation gate rejecting directive or
+  prioritising constructs. Requires defining the reject set — and a reject set is itself a
+  behavioural rule wearing a schema, so this needs care to be genuinely structural.
+- **(c) Generate under prompt control only.** Matches `#47`'s prompt-layer half and abandons
+  its structural half for this field. Weakest; recorded for completeness.
+- **(d) Generate, then human-review before surfacing.** Reuses the existing
+  `ai_draft` -> `human_verified` promotion gate already applied to `lever_dictionary.json` and
+  `marker_groups.json`. Precedent exists in this repo; cost is a human in the loop per panel,
+  which may not survive contact with a daily-use product.
+
+**Resolve before:** any increment that emits generated prose. Not before 1a or delivery —
+neither touches it.
+
+Numbered `Q62` on the `feat/interp-producer-1a` branch (pre-ff; max was Q61, no competing branch).
+
+---
