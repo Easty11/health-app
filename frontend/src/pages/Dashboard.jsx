@@ -71,6 +71,12 @@ export default function Dashboard() {
         <span className="text-sm font-bold text-gray-900">Health &amp; Performance</span>
         <div className="flex items-center gap-3">
           <CheckInButtons />
+          <Link to="/checkin-history" className="text-xs text-gray-500 hover:text-gray-800 transition-colors">
+            History
+          </Link>
+          <Link to="/metrics" className="text-xs text-gray-500 hover:text-gray-800 transition-colors">
+            Labs
+          </Link>
           <Link to="/settings" className="text-xs text-gray-500 hover:text-gray-800 transition-colors">
             Settings
           </Link>

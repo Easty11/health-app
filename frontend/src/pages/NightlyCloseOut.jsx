@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import api from '../api'
 
 function TapSelect({ value, onChange, count = 5, labels }) {
@@ -134,6 +134,35 @@ export default function NightlyCloseOut() {
           <p className="text-sm text-gray-500 mb-6">
             Wind down — offload + gratitude (paper or your meditation app).
           </p>
+          <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-4 text-left space-y-2">
+            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Tonight's entry</p>
+            <div className="grid grid-cols-2 gap-y-1.5 text-sm">
+              <span className="text-gray-500">Day rating</span>
+              <span className="text-gray-800 font-medium text-right tabular-nums">{todayRating}/5</span>
+              {trainedToday ? (
+                <>
+                  <span className="text-gray-500">Session quality</span>
+                  <span className="text-gray-800 font-medium text-right tabular-nums">{sessionQuality}/5</span>
+                  <span className="text-gray-500">Session RPE</span>
+                  <span className="text-gray-800 font-medium text-right tabular-nums">{sessionRpe}</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-gray-500">Trained today</span>
+                  <span className="text-gray-800 font-medium text-right">No</span>
+                </>
+              )}
+              {cbti?.block_open && napsMin !== '' && (
+                <>
+                  <span className="text-gray-500">Naps</span>
+                  <span className="text-gray-800 font-medium text-right tabular-nums">{napsMin} min</span>
+                </>
+              )}
+            </div>
+            <Link to="/checkin-history" className="block text-xs text-indigo-600 hover:text-indigo-800 pt-1">
+              View check-in history →
+            </Link>
+          </div>
           <PrescriptionCard cbti={cbti} />
           <p className="text-xs text-gray-400 mb-6">
             Mindfulness session will be read from Health Connect automatically.

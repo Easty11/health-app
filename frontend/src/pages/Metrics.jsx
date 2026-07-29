@@ -81,6 +81,56 @@ function ResultRow({ r, canonicalMap }) {
   )
 }
 
+// ---------- stored results read-back (#59 consumer; #47 raw values only) ----------
+// Deliberately NOT the confirm ResultRow: no confidence, no computed_flag, no
+// suspect-classification — those are extraction QA. This is the user's own data,
+// shown as values / lab reference ranges / lab-asserted flags only. Interpreted
+// meaning (deltas, mechanisms, levers) is the 4b view, not this surface (#49).
+
+function StoredResultRow({ r }) {
+  return (
+    <tr className={r.lab_flag ? 'bg-yellow-50' : ''}>
+      <td className="px-3 py-2 text-sm text-gray-800">{r.marker_name_raw}</td>
+      <td className="px-3 py-2 text-sm font-medium text-gray-900 tabular-nums">{formatValue(r)}</td>
+      <td className="px-3 py-2 text-xs text-gray-500">{r.unit_canonical || '—'}</td>
+      <td className="px-3 py-2 text-xs text-gray-500 tabular-nums">{formatRefRange(r)}</td>
+      <td className="px-3 py-2 text-xs">
+        {r.lab_flag && <span className="font-semibold text-orange-600">{r.lab_flag}</span>}
+      </td>
+    </tr>
+  )
+}
+
+function StoredReportCard({ report }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 truncate">{report.panel_name_raw}</p>
+          <p className="text-xs text-gray-500 truncate">{report.lab_name}</p>
+        </div>
+        <p className="text-xs text-gray-400 tabular-nums shrink-0">{formatDate(report.collected_date)}</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Marker</th>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Value</th>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Unit</th>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Ref range</th>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Flag</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {report.results.map((r, i) => <StoredResultRow key={i} r={r} />)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ---------- main ----------
 
 export default function Metrics() {
@@ -90,10 +140,16 @@ export default function Metrics() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
+  const [storedReports, setStoredReports] = useState(null) // null=loading, []=none
   const fileInputRef = useRef(null)
+
+  function loadStored() {
+    api.get('/labs/results').then((res) => setStoredReports(res.data)).catch(() => setStoredReports([]))
+  }
 
   useEffect(() => {
     api.get('/labs/canonical-map').then((res) => setCanonicalMap(res.data)).catch(() => {})
+    loadStored()
   }, [])
 
   function showToast(msg) {
@@ -133,6 +189,7 @@ export default function Metrics() {
       await api.post('/labs/confirm', extraction)
       showToast('Report saved')
       reset()
+      loadStored() // the just-saved report joins the read-back
     } catch (err) {
       const detail = err.response?.data?.detail
       setError((typeof detail === 'string' ? detail : detail?.error) || 'Failed to save report')
@@ -179,6 +236,18 @@ export default function Metrics() {
             >
               Attach Lab Report
             </button>
+          </div>
+        )}
+
+        {stage === STAGE.IDLE && storedReports && storedReports.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Your results</p>
+              <p className="text-[11px] text-gray-400 text-right">Values and lab reference ranges as reported — no interpretation.</p>
+            </div>
+            {storedReports.map((rep) => (
+              <StoredReportCard key={rep.report_id} report={rep} />
+            ))}
           </div>
         )}
 
