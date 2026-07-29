@@ -1457,3 +1457,41 @@ Scoped in (not "no interim surface until v2 titration") per the 2026-07-29 read-
 `Q60` at the `feat/frontend-readback` merge.
 
 ---
+
+## Q61. `GET /labs/results` omits `computed_flag`/`confidence` under a #47 bound that #47's text does not support — re-examine on its own merits
+
+`routers/labs.py` `StoredResultOut` (~L292) projects the read-back to "the RAW education fields
+only (#47)" and **deliberately omits** `computed_flag` and `confidence` (plus `is_derived` and
+anything interpretive), recorded at build time as a `#47` bound with interpreted meaning deferred to
+4b (#49). This question is about the **`#47` half of that justification for `computed_flag`** — read
+against #47's actual text, it does not hold.
+
+**Why the #47 bound is misapplied.** #47 (locked) bars connecting a lever to a *personalised
+recommended action* — "given your dose, adjust X" is prescription; "levers that influence oestradiol"
+and evidence-ranked lists are education; **comparison to the range printed on the user's own report is
+education**. `computed_flag` is exactly that: it is our derivation of value-vs-normalised-reference-range
+(`labs.py` extraction spec, L200 / L248-254 — `null` outside range handling and all), the *same class*
+of information as `lab_flag`, **which this projection already returns** (L309). Reproducing an
+in/out-of-range flag is not a personalised action, so #47 does not bound it out. The omission inherited
+a #47 label that does not fit.
+
+**Do NOT read "the #47 reason is wrong" as "therefore surface it."** There may be a separate and still
+sound reason to keep both fields out of this surface; the point of this row is that the omission be
+re-decided on *those* merits, not defended by a mislabel. Candidates to weigh:
+- **#49 raw/interpreted seam.** This endpoint is deliberately the raw values/ranges/lab-flags surface;
+  `computed_flag` is a *derived* read that arguably belongs to the interpreted 4b view (#49). Surfacing
+  it here may blur the seam #49 draws — a coherence reason, distinct from #47.
+- **`confidence` is extraction QA, not a clinical read** (the docstring's own words). A per-row
+  extraction confidence shown at a glance can mislead — a genuinely different rationale from
+  `computed_flag`'s, and one that may well stand. The two omitted fields should not be re-decided as a
+  bundle.
+
+**No code change this session** (verify-only; producer/endpoint build is frozen). Recorded so the
+projection is re-examined on its own merits rather than inheriting "settled by #47."
+
+**Status:** UNSTARTED — no blocker; the fields exist on the stored rows, the question is whether the
+raw read-back should carry them and under what rationale. **Owner:** Luke — decide `computed_flag`
+against the #49 seam (not #47) and `confidence` against the misleading-at-a-glance concern, separately.
+Numbered `Q61` on the `gov/readback-riders` branch (pre-ff; max was Q60, no competing branch).
+
+---
