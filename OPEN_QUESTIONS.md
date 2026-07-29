@@ -1421,28 +1421,39 @@ restoring service and designing a verification gate are different work).
 
 ---
 
-## Q-NEXT. CBT-I has no user surface — what should an interim one show, and how does the sensor firewall bind it?
+## Q60. CBT-I has no user surface — the gating fork is #47 (verdict-as-directive), not display hygiene
 
 The CBT-I titration engine is built (backend: `cbti/` engine + replay + block import + ISI;
 #114/#115/#117/#118), but there is **no route, page, or nav link** — CBT-I is invisible to the user,
-surfacing only as readiness-protocol modifiers and `_section_protocols` in chat context. This gap was
-surfaced alongside the labs/check-in read-back gaps (`feat/frontend-readback`); labs and check-in got
-interim surfaces there, CBT-I was scoped in but deliberately not built blind — it needs a design pass
-first.
+surfacing only as readiness-protocol modifiers and `_section_protocols` in chat context. Scoped in on
+`feat/frontend-readback` (labs/check-in got interim surfaces there), deliberately not built blind: it
+needs a design pass, and the first fork is regulatory, not cosmetic.
 
-**The design questions an interim surface turns on:**
-- **What it shows.** The engine's *outputs* are the candidate content — the current prescription
-  (window / prescribed lights-out / anchor) and titration state (cycle, days since `effective_from`,
-  the next-evaluation gate). A read-only "where am I in the protocol" surface, not a new input path.
-- **The sensor firewall (I1) is load-bearing here and is a silent failure mode.** Any CBT-I surface
-  reads the **recall diary** columns only (`diary_tst_min`, `diary_se_pct`, the prescription) — it must
-  **never** blend Samsung passive sleep (`passive_sleep_min`, `passive_hrv_ms`). The two are separate by
-  design; mixing them is invisible if it happens. The endpoint/projection should enforce this at the
-  data layer, as the labs read-back enforces #47 at its projection.
-- **Where it lives.** A dedicated route (like `/checkin-history`), or a section on an existing surface.
+**Fork 1 — GATING — #47 education-not-clinical-advice: may the engine's VERDICT be surfaced at all?**
+The engine's outputs are two different kinds of thing. *State* — the current prescription (window /
+prescribed lights-out / anchor) and where you are in the cycle (days since `effective_from`, next-eval
+gate) — is a factual read-back, the same class as the labs raw table. But the engine also produces a
+**MOVE / REVERSE verdict** ("extend the window", "pull it back"): surfacing that as a directive is the
+AI output layer issuing a **clinical instruction**, which is exactly the boundary #47 draws. So the fork
+is: show *state only* (education-safe), or show the *verdict/action* (crosses into instruction and must
+not ship without resolving #47 the way the interpretation lane resolves it for labs — #49). This is the
+blocker; it is **not** cleared by clearing the firewall below. Recording it under I1 alone would let a
+later session build the surface believing the regulatory question was settled when it was never asked.
 
-**Status:** UNSTARTED — no blocker; the engine's outputs exist to read. **Owner:** Luke — the design
-call (content + route) comes first; the I1 firewall is a hard constraint, not a preference. Scoped in
-(not "no interim surface until v2 titration") per the 2026-07-29 read-back triage.
+**Fork 2 — diary capture: operator-script vs in-app.** The diary data the engine runs on is currently
+loaded by **operator scripts** (`import_cbti_block.py`, `open_cbti_block3.py`). A user surface that only
+*reads* state needs none of this; a surface that lets the user *log tonight's diary in-app* is a new
+input path with its own design (and re-opens the nap-attribution question, Q45). Decide the surface's
+scope — read-only vs capture — before its route.
+
+**Constraint (not a fork) — I1 sensor firewall.** Whatever ships reads **recall-diary** columns only
+(`diary_tst_min` / `diary_se_pct` / the prescription) and must **never** blend Samsung passive sleep
+(`passive_sleep_min` / `passive_hrv_ms`) — a silent failure mode, enforced at the projection as the labs
+read-back enforces #47. Real and hard, but display hygiene, not the gate.
+
+**Status:** UNSTARTED — no blocker; the engine's outputs exist to read. **Owner:** Luke — resolve #47
+(Fork 1) FIRST; it decides whether an interim surface is state-only or must wait on the regulatory call.
+Scoped in (not "no interim surface until v2 titration") per the 2026-07-29 read-back triage. Numbered
+`Q60` at the `feat/frontend-readback` merge.
 
 ---
