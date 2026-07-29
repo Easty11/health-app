@@ -1537,3 +1537,30 @@ neither touches it.
 Numbered `Q62` on the `feat/interp-producer-1a` branch (pre-ff; max was Q61, no competing branch).
 
 ---
+
+## Q63. What does the interpretation tile show?
+
+**State:** open. **Blocks:** the hub tile set (#150). **Blocked by:** 4b-ii.
+
+A design question, not a regulatory one — under #150 Constraint A a tile may carry counts, deltas and
+section structure. What it may not carry is a personalised priority ordering, which rules out the most
+tempting phrasing ("2 things need your attention") but not the underlying counts.
+
+Candidates:
+
+- **(a) Structural counts** — "What Moved: 2 · Stable: 5 · last generated 30 May." Permitted,
+  informative. A reader may still infer priority from the numbers, which is inference from their own
+  data rather than the product ordering it for them.
+- **(b) Existence only** — "Interpretation available, generated 30 May." Minimal.
+- **(c) No tile** — reached from the Labs tile only. Removes the question.
+
+**Why not decided here:** the producer's interpretive output shape is being settled in 4b-ii (1a landed
+the deterministic asset fields; axis_verdict/mechanism remain held — Q62). Authoring tile content
+before knowing what the producer emits is authoring against a guess.
+
+**Resolve by:** the hub shell build, itself behind 4b-ii — so this resolves in that order without
+blocking anything now.
+
+Numbered `Q63` on the `gov/navigation-model` branch (pre-ff; max was Q62, no competing branch).
+
+---

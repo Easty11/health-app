@@ -4946,3 +4946,84 @@ already holds a working SDK) resolves mcp to 1.28.1 and imports all six SDK path
 pinning rule.
 
 ---
+
+### 150. Navigation model — hub-as-home with persistent chat
+
+**Decision:** `/dashboard` becomes a module hub — a tile grid routing to the app's surfaces, with
+chat persistent rather than a destination. Four rules:
+
+1. **Chat is docked, not routed.** A rail on desktop, a sheet/drawer on mobile. Present in every hub
+   state, reachable from every module. There is no `/chat` route and chat is never a tile — you do not
+   navigate to it.
+2. **Header links retire into the hub as it absorbs them.** The current header (AM / PM / Labs /
+   History / Settings / Sign-out) is at six and grows one per module; that growth forced the decision.
+3. **Tiles may seed chat context, and must do so through existing paths.** A seeded lab entry routes
+   through the existing on-ask mechanism (`find_marker` → `render_asked_lab_value`, request-scoped); it
+   must not inject values into the standing prompt. Value-absence from standing context was made
+   structural (#59) precisely so it could not be undone behaviourally, and a seeding feature is the
+   most likely thing to undo it by accident. (Prompt hygiene, not #47 — see Constraint C.)
+4. **The two dashboard panels become tiles, executed as a relocation.** `HealthPanel` and
+   `WorkoutPanel` leave the dashboard and become two hub tiles — Recovery and Training — each routing
+   to a page hosting the existing panel component rendered full-width. A move, not a rewrite: no new
+   view is authored, and the hub shell stays a layout job.
+
+**Constraint A — the #47 boundary is personalised action, and nothing wider.** #47 (verbatim) has the
+platform "explains mechanisms, lists evidence-ranked levers, and filters for relevance; it never
+connects a lever to a personalised recommended action", with the worked line "levers that influence
+oestradiol" = education; "given your dose, adjust X" = prescription; "personalised prioritisation to
+the individual" = prescription; enforced structurally — "no interpretation-output field expresses a
+personalised action". So the gate is *personalised action or personal priority ordering*, not a
+general prohibition on computation, richness, or explanation.
+  * **Permitted on a tile:** values, lab-asserted flags, computed flags, deltas, trends, counts, dates,
+    recency, completion state, mechanism, evidence-ranked lists, section counts — the user's own data
+    or education about it.
+  * **Forbidden:** any field or phrasing expressing a personalised action or ranking issues *for this
+    user* — `recommended_action`, `priority_for_you`, `dose`, "your top three", "needs attention",
+    "you should".
+  * **The test:** does it tell this user what to do, or order their problems for them? Out. Does it show
+    them their data, or explain how something works? In. `"3 markers out of range"` is arithmetic
+    against the report's own printed range — in; `"3 markers need attention"` is personalised
+    prioritisation, which #47 names as prescription — out. This corrects an earlier draft that read #47
+    as forbidding computed flags/deltas/mechanism; that was contradicted by #47's own text.
+
+**Constraint B — a readiness tile may not present the model forecast as authoritative (data integrity,
+not regulatory).** NOT the old HRV suppression — that precondition is met and lifted (`95355fa`; the
+row must not be re-frozen into this decision). What survives is narrower: `context_builder.
+_section_daily_record` keeps the model forecast low-confidence "until it demonstrably beats the naive
+baseline on this user's data" (`context_builder.py:368-369`) — a claim about the *model*, not HRV
+availability. So a readiness tile is permitted, but must render `naive_baseline` and `model_forecast`
+as what they are — the forecast not given authoritative visual weight until it has beaten the baseline.
+Nothing here is a #47 matter.
+
+**Constraint C — interpreted synthesis has one home (architectural, not regulatory).** #49 puts
+interpreted meaning in the interpretation view. A tile duplicating that synthesis is not forbidden — it
+is a coherence problem (two sources of interpretation drift apart). Soft, subordinate to product need,
+and distinct from Constraint A; conflating the two produced the earlier draft's over-broad rule.
+
+**Supersedes:** Nothing — no prior navigation/IA-model decision exists on master (verified: only #26,
+a chat→repo handoff mechanism, matched). Ratifies, in modified form, the parked `Ideas.md` "chat entry
+points as a feature" thesis (rules 1 + 3 keep chat ambient and every tile a doorway into it); rejects
+only the strong reading in which no orientation surface exists at all. `Ideas.md` is project-knowledge,
+not a repo artifact, so its parked state is not verifiable against master.
+
+**Rationale:** Header-link growth is linear in modules and the app is phone-first for its daily
+touchpoints, where six links is already poor. Decided now rather than after the interpretation view
+lands — that view is the largest new surface coming (already routed at `/interpretation`, inert), and a
+nav model decided after it is a retrofit. Chat-persistent over chat-as-tile because demoting chat to one
+destination among six would abandon the stated product thesis silently; if that thesis is to change, it
+should change in a decision that says so.
+
+**Status:** Decided (design). **Build deferred behind 4b-ii** — governance-only, no hub shell built
+this increment.
+
+**How you know:** verified against master before minting — #47's Constraint-A quotations are verbatim
+(`awk` extract of the entry); `Dashboard.jsx` still composes `ChatPanel` + `HealthPanel` +
+`WorkoutPanel` (rule 4's relocation premise); `/interpretation` is routed under `RequireAuth` with no
+nav link (inert); the on-ask path is `find_marker` → `render_asked_lab_value`, request-scoped and
+documented "never part of the standing" prompt (rule 3's premise); no prior nav decision exists.
+
+**Do not revisit unless:** a module needs to be a destination chat cannot serve (re-examine rule 1); or
+#47's classification analysis changes on regulatory advice (per #47's own revisit clause), which would
+move Constraint A.
+
+---
