@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from database import engine, SessionLocal
 from injury_trajectory import evaluate as evaluate_injury_trajectories
