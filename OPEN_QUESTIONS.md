@@ -1420,3 +1420,29 @@ standing up for a single-developer project. Deliberately not built with the pin 
 restoring service and designing a verification gate are different work).
 
 ---
+
+## Q-NEXT. CBT-I has no user surface — what should an interim one show, and how does the sensor firewall bind it?
+
+The CBT-I titration engine is built (backend: `cbti/` engine + replay + block import + ISI;
+#114/#115/#117/#118), but there is **no route, page, or nav link** — CBT-I is invisible to the user,
+surfacing only as readiness-protocol modifiers and `_section_protocols` in chat context. This gap was
+surfaced alongside the labs/check-in read-back gaps (`feat/frontend-readback`); labs and check-in got
+interim surfaces there, CBT-I was scoped in but deliberately not built blind — it needs a design pass
+first.
+
+**The design questions an interim surface turns on:**
+- **What it shows.** The engine's *outputs* are the candidate content — the current prescription
+  (window / prescribed lights-out / anchor) and titration state (cycle, days since `effective_from`,
+  the next-evaluation gate). A read-only "where am I in the protocol" surface, not a new input path.
+- **The sensor firewall (I1) is load-bearing here and is a silent failure mode.** Any CBT-I surface
+  reads the **recall diary** columns only (`diary_tst_min`, `diary_se_pct`, the prescription) — it must
+  **never** blend Samsung passive sleep (`passive_sleep_min`, `passive_hrv_ms`). The two are separate by
+  design; mixing them is invisible if it happens. The endpoint/projection should enforce this at the
+  data layer, as the labs read-back enforces #47 at its projection.
+- **Where it lives.** A dedicated route (like `/checkin-history`), or a section on an existing surface.
+
+**Status:** UNSTARTED — no blocker; the engine's outputs exist to read. **Owner:** Luke — the design
+call (content + route) comes first; the I1 firewall is a hard constraint, not a preference. Scoped in
+(not "no interim surface until v2 titration") per the 2026-07-29 read-back triage.
+
+---
