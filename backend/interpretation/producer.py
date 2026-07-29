@@ -19,12 +19,14 @@ Consumes:
 
 Emits, over 4a: meta.protocol_context_snapshot; member relations_rendered[] with a
 RESOLVED precondition_status (satisfied / not_satisfied / unresolvable) and
-expected_by_phase (expected_by_phase has NO authority — it touches no gate); and
-member stable_rationale (asset projection of marker_interpretation).
-Still HELD for 4b-ii: axis_verdict and mechanism (GENERATED interpretive prose, no
-asset source — a deterministic producer cannot emit them), shared_levers +
-member_lever_effects (asset-derived; land next), and demotion. No relation-based
-news demotion — gate 1 is still raw.
+expected_by_phase (expected_by_phase has NO authority — it touches no gate); and the
+deterministic asset-projection interpretive fields — member stable_rationale and
+member_lever_effects, and group shared_levers (I1-cited, present-filtered, with an
+already-in-play status resolved against declared_factor_keys per #145).
+Still HELD for 4b-ii: axis_verdict.text and mechanism.text (GENERATED interpretive
+prose — no asset source, so a deterministic producer cannot emit them; axis_verdict
+also gated on Q62's structural-#47 question), and demotion. No relation-based news
+demotion — gate 1 is still raw.
 """
 from __future__ import annotations
 
@@ -224,32 +226,118 @@ def _stable_rationale(marker_canonical: str | None) -> str | None:
     return entry.get("stable_rationale") if entry else None
 
 
+def _citable_lever(lever_key: str) -> dict | None:
+    """The `lever_dictionary.levers` node for `lever_key` IF it satisfies I1 —
+    grade, grade_rationale and NON-EMPTY evidence_refs — else None. One predicate,
+    shared by `shared_levers` (group) and `member_lever_effects` (member), so a
+    lever dropped for being uncited is dropped from BOTH: a member never names a
+    lever that has no group-level entry (I7). Enforced here, not by care — the
+    read-constant citation extension already carries one live violation and must
+    not gain a second (G3)."""
+    node = _LEVER_DICTIONARY.get("levers", {}).get(lever_key)
+    if not node or not node.get("grade") or not node.get("grade_rationale") \
+            or not node.get("evidence_refs"):
+        return None
+    return node
+
+
+def _member_lever_effects(marker_canonical: str, group_def: dict) -> list[dict]:
+    """member.member_lever_effects — the levers acting on THIS member, the per-member
+    transpose of the group's `group_levers[].member_effects`. Each `{lever_key,
+    direction, grade}` is copied from the authored effect (asset projection, nothing
+    generated). The lever is authored once at group level (`shared_levers`) and named
+    here per member — the I7 author-group / present-member pair. Uncited levers are
+    skipped on the SAME predicate `shared_levers` uses, so this never names a lever
+    absent from the group's list. Empty when no citable lever acts on the marker."""
+    effects = []
+    for gl in group_def.get("group_levers", []):
+        if _citable_lever(gl["lever_key"]) is None:
+            continue
+        for eff in gl.get("member_effects", []):
+            if eff["marker_canonical"] == marker_canonical:
+                effects.append({"lever_key": gl["lever_key"],
+                                "direction": eff["direction"], "grade": eff["grade"]})
+    return effects
+
+
+def _shared_levers(group_def: dict, present: set[str],
+                   assumable_of: dict[str, bool | None]) -> list[dict]:
+    """group.shared_levers — the group's authored levers, each joined to its
+    `lever_dictionary` node and projected to the panel. Every field is a pure
+    projection of a reviewed asset (`marker_groups.group_levers` x
+    `lever_dictionary.levers`); nothing is generated. Three mechanical rules:
+
+      * I1 citation (G3): a lever surfaces only if `_citable_lever` resolves it —
+        grade + grade_rationale + non-empty evidence_refs. Uncited → dropped.
+      * PRESENT-marker (I7): `member_effects` are filtered to markers in this panel;
+        a lever whose affected markers are all absent explains nothing here and is
+        dropped — the lever-side of the relation present-marker rule.
+      * already-in-play (#145 / Q57, I3): `status` is `already_in_play` when a
+        `declared_factor_key` of the lever is assumable-present in the panel's declared
+        state, else `surfaced`. Reads `declared_factor_keys` + `is_assumable_present` —
+        the join #145 authored for exactly this consumer. The committed fixture's
+        `status` values PRE-DATE this rule and are inverted; the RULE governs, never
+        the fixture (assert the rule + shape, not fixture-match)."""
+    levers = []
+    for gl in group_def.get("group_levers", []):
+        node = _citable_lever(gl["lever_key"])
+        if node is None:
+            continue
+        member_effects = [
+            {"marker_canonical": e["marker_canonical"], "direction": e["direction"], "grade": e["grade"]}
+            for e in gl.get("member_effects", []) if e["marker_canonical"] in present
+        ]
+        if not member_effects:
+            continue  # present-marker: nothing in this panel for the lever to attach to
+        matched = [k for k in node.get("declared_factor_keys", []) if assumable_of.get(k)]
+        levers.append({
+            "lever_key": gl["lever_key"],
+            "label": node["label"],
+            "mechanism_summary": node["mechanism_summary"],
+            "grade": node["grade"],
+            "grade_rationale": node["grade_rationale"],
+            "evidence_refs": list(node["evidence_refs"]),
+            "actor": node.get("actor"),
+            "channel": node.get("channel"),
+            "status": "already_in_play" if matched else "surfaced",
+            "already_in_play_reason": (
+                "Declared factor(s) " + ", ".join(matched) + " assumable-present."
+                if matched else None),
+            "member_effects": member_effects,
+        })
+    return levers
+
+
 def _build_group(group_def: dict, members: list[dict], present: set[str],
-                 phase_of: dict[str, str | None]) -> dict:
+                 phase_of: dict[str, str | None],
+                 assumable_of: dict[str, bool | None]) -> dict:
     """Pass 2 (+ pass 3) — assemble the group over its already-built member set.
     Pass 2 authors `relations_rendered` on each member (over the whole assembled
     set + panel-present operands + the declared-state phase map), THEN computes
-    `should_surface`. Pass 3 (interpretive) begins landing here: `stable_rationale`
-    is emitted per member (asset projection). Still held: the GENERATED prose
-    (axis_verdict, mechanism) and demotion. `should_surface` is computed here, not
-    in pass 1, precisely so the relation pass (and, in 4b-ii, relation-based
-    demotion) can finalise each member's news_gate first. No demotion runs this
-    increment, so the value is still identical to 4a's."""
+    `should_surface`. Pass 3 (interpretive) lands the deterministic asset-projection
+    fields: per member `stable_rationale` and `member_lever_effects`, and the group's
+    `shared_levers`. Still held: the GENERATED prose (axis_verdict, mechanism) and
+    demotion. `should_surface` is computed here, not in pass 1, precisely so the
+    relation pass (and, in 4b-ii, relation-based demotion) can finalise each member's
+    news_gate first. No demotion runs this increment, so the value is identical to 4a's."""
     for member in members:  # pass 2: relations over the assembled set
         member["relations_rendered"] = _relations_rendered(
             member["marker_canonical"], group_def, present, phase_of)
         member["stable_rationale"] = _stable_rationale(member["marker_canonical"])  # pass 3 (asset)
+        member["member_lever_effects"] = _member_lever_effects(member["marker_canonical"], group_def)
     return {
         "group_key": group_def["group_key"],
         "display_name": group_def["display_name"],
         "is_group_of_one": group_def.get("is_group_of_one", False),
         "members": members,
         "should_surface": _should_surface(members),
+        "shared_levers": _shared_levers(group_def, present, assumable_of),
     }
 
 
 def _groups(series: dict[str, MarkerPair],
-            phase_of: dict[str, str | None]) -> tuple[list[dict], set[str]]:
+            phase_of: dict[str, str | None],
+            assumable_of: dict[str, bool | None]) -> tuple[list[dict], set[str]]:
     """Authored groups from marker_groups.json, members restricted to markers
     present in this panel. A group with no present members is omitted (an empty
     shell carries nothing; an `insufficient_data` verdict is 4b). Returns the
@@ -268,7 +356,7 @@ def _groups(series: dict[str, MarkerPair],
         members = _assemble_members(group_def, series, claimed)  # pass 1
         if not members:
             continue
-        groups.append(_build_group(group_def, members, present, phase_of))  # pass 2 (+3)
+        groups.append(_build_group(group_def, members, present, phase_of, assumable_of))  # pass 2 (+3)
 
     return groups, claimed
 
@@ -340,6 +428,17 @@ def _phase_map(snapshot: dict | None) -> dict[str, str | None]:
     return {factor["key"]: factor["phase"] for factor in snapshot["factors"]}
 
 
+def _assumable_map(snapshot: dict | None) -> dict[str, bool | None]:
+    """`{declared factor key -> is_assumable_present}`, from the SAME snapshot object
+    `_phase_map` reads. Feeds the `shared_levers` already-in-play predicate (#145): a
+    lever is `already_in_play` when one of its `declared_factor_keys` is assumable-
+    present. Empty when there is no trigger panel / no declared ledger — then no lever
+    matches and every lever is `surfaced`, never silently already-in-play."""
+    if not snapshot:
+        return {}
+    return {factor["key"]: factor["assumable_present"] for factor in snapshot["factors"]}
+
+
 def _meta(trigger_panel, prior_panel, snapshot: dict | None) -> dict:
     """Meta. `protocol_context_snapshot` is built ONCE by the caller and threaded in
     (the same object `_phase_map` reads), so the snapshot and relation resolution
@@ -378,7 +477,8 @@ def build_foundation(user_id: int, db: Session, trigger_panel, prior_panel) -> d
     series = marker_series(user_id, db)
     snapshot = _protocol_context_snapshot(user_id, db, trigger_panel)  # single current_state query
     phase_of = _phase_map(snapshot)
-    groups, claimed = _groups(series, phase_of)
+    assumable_of = _assumable_map(snapshot)  # same snapshot; feeds shared_levers already-in-play (#145)
+    groups, claimed = _groups(series, phase_of, assumable_of)
     return {
         "meta": _meta(trigger_panel, prior_panel, snapshot),
         "groups": groups,

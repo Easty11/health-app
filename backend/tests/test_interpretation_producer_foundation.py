@@ -38,11 +38,13 @@ _VITD = date(2025, 12, 27)
 
 # 4b-ii interpretive-half fields still HELD — absent from every group and member.
 # `relations_rendered` is NOT here: 4b-i emits it on grouped members (Step D/E).
-# `stable_rationale` LEFT this list at increment 1a — it is now emitted on every
-# grouped member (asset projection); see test_stable_rationale_is_emitted_per_member.
-_HELD_MEMBER_FIELDS = ["axis_verdict", "shared_levers", "member_lever_effects",
-                       "mechanism"]
-_HELD_GROUP_FIELDS = ["axis_verdict", "shared_levers"]
+# Increment 1a emitted the three DETERMINISTIC asset-projection fields, each leaving
+# this list as it landed: stable_rationale + member_lever_effects (member) and
+# shared_levers (group). What remains held is the GENERATED prose — axis_verdict and
+# mechanism — which a deterministic producer cannot emit (no asset source; see Q62).
+# `shared_levers` STAYS in the member list: it is a group field, never on a member.
+_HELD_MEMBER_FIELDS = ["axis_verdict", "shared_levers", "mechanism"]
+_HELD_GROUP_FIELDS = ["axis_verdict"]
 # Ungrouped rows carry NO interpretive field — with no group, nothing in the
 # interpretive layer attaches by construction. Defined EXPLICITLY, NOT derived from
 # _HELD_MEMBER_FIELDS: as fields leave the held list on emission the ungrouped guard
@@ -354,6 +356,77 @@ def test_stable_rationale_is_emitted_per_member(db_session):
 
     assert _row(out, "bilirubin_total")["stable_rationale"] == bili_rationale  # non-null projection
     assert _row(out, "ast")["stable_rationale"] is None                        # null projection
+
+
+_GRADES = {"high", "moderate", "low", "very_low"}
+_DIRS = {"raises", "lowers"}
+
+
+def test_shared_levers_and_member_lever_effects_are_asset_projections(db_session):
+    """1a I7 pair. shared_levers (group) + member_lever_effects (member) land together
+    as deterministic projections of marker_groups.group_levers x lever_dictionary.levers.
+    Assert shape + invariants, NEVER fixture-match (the fixture's status values pre-date
+    #145 and are inverted).
+
+    Invariants: I1 — every surfaced lever is cited (grade + rationale + non-empty refs);
+    present-marker — member_effects non-empty and every marker is present in the panel;
+    I7 — every lever a member names has a group-level shared_levers entry (same citation
+    predicate drops a lever from both)."""
+    user, current, prior = _seed_fixture(db_session, "levers@example.com")
+    out = _build(db_session, user, current, prior)
+    present = {m["marker_canonical"] for g in out["groups"] for m in g["members"]} | \
+              {r["marker_canonical"] for r in out["ungrouped"]}
+
+    assert out["groups"]
+    for g in out["groups"]:
+        assert isinstance(g["shared_levers"], list), g["group_key"]
+        keys_here = {L["lever_key"] for L in g["shared_levers"]}
+        for L in g["shared_levers"]:
+            assert L["grade"] in _GRADES
+            assert isinstance(L["grade_rationale"], str) and L["grade_rationale"]
+            assert isinstance(L["evidence_refs"], list) and L["evidence_refs"], \
+                f"{L['lever_key']} surfaced uncited (I1)"
+            assert isinstance(L["label"], str) and isinstance(L["mechanism_summary"], str)
+            assert L["status"] in {"surfaced", "already_in_play"}
+            assert (L["already_in_play_reason"] is None) == (L["status"] == "surfaced")
+            assert L["member_effects"], f"{L['lever_key']} surfaced with no present effect"
+            for e in L["member_effects"]:
+                assert e["marker_canonical"] in present, f"{L['lever_key']} effect on absent marker"
+                assert e["direction"] in _DIRS and e["grade"] in _GRADES
+        for m in g["members"]:
+            assert isinstance(m["member_lever_effects"], list)
+            for eff in m["member_lever_effects"]:
+                assert eff["direction"] in _DIRS and eff["grade"] in _GRADES
+                assert eff["lever_key"] in keys_here, \
+                    f"{m['marker_canonical']} names lever {eff['lever_key']} absent from shared_levers (I7)"
+
+
+def test_shared_levers_status_follows_declared_state_not_the_fixture(db_session):
+    """#145 / Q57 (I3). A lever is `already_in_play` iff one of its declared_factor_keys
+    is assumable-present; else `surfaced`. testosterone_substrate_load carries
+    declared_factor_keys ["trt"]. Two branches:
+      - no trt declared (the §2 seed) -> surfaced, reason null;
+      - trt declared steady (assumable_present True) -> already_in_play, reason names trt.
+    This is the exact INVERSE of the committed fixture (hand-authored, pre-#145) — proof
+    the rule governs, not the fixture. A lever with empty declared_factor_keys stays
+    surfaced even when trt is declared (present-and-empty is 'no factor represents me')."""
+    def _tsl(user, c, p):
+        hpg = _group(_build(db_session, user, c, p), "hpg_axis")
+        return {L["lever_key"]: L for L in hpg["shared_levers"]}
+
+    u1, c1, p1 = _seed_fixture(db_session, "lev_surf@example.com")
+    levs1 = _tsl(u1, c1, p1)
+    assert levs1["testosterone_substrate_load"]["status"] == "surfaced"
+    assert levs1["testosterone_substrate_load"]["already_in_play_reason"] is None
+
+    u2, c2, p2 = _seed_fixture(db_session, "lev_aip@example.com")
+    _seed_declared(db_session, u2.id, "trt", _steady_trt())
+    levs2 = _tsl(u2, c2, p2)
+    tsl = levs2["testosterone_substrate_load"]
+    assert tsl["status"] == "already_in_play"
+    assert tsl["already_in_play_reason"] and "trt" in tsl["already_in_play_reason"]
+    # empty declared_factor_keys -> still surfaced under a declared trt
+    assert levs2["aromatase_inhibition"]["status"] == "surfaced"
 
 
 # ---------- 4b-i-G4: relations degrade, never fabricate ----------
