@@ -19,10 +19,12 @@ Consumes:
 
 Emits, over 4a: meta.protocol_context_snapshot; member relations_rendered[] with a
 RESOLVED precondition_status (satisfied / not_satisfied / unresolvable) and
-expected_by_phase. expected_by_phase has NO authority — it touches no gate.
-Still HELD for 4b-ii (demotion + interpretive half): axis_verdict, shared_levers,
-member_lever_effects, mechanism, stable_rationale. No relation-based news demotion
-— gate 1 is still raw.
+expected_by_phase (expected_by_phase has NO authority — it touches no gate); and
+member stable_rationale (asset projection of marker_interpretation).
+Still HELD for 4b-ii: axis_verdict and mechanism (GENERATED interpretive prose, no
+asset source — a deterministic producer cannot emit them), shared_levers +
+member_lever_effects (asset-derived; land next), and demotion. No relation-based
+news demotion — gate 1 is still raw.
 """
 from __future__ import annotations
 
@@ -210,19 +212,33 @@ def _relations_rendered(marker_key: str, group_def: dict, present: set[str],
     return rendered
 
 
+def _stable_rationale(marker_canonical: str | None) -> str | None:
+    """member.stable_rationale — the authored annotation for a persistently-flagged
+    marker that is NOT news (e.g. the Gilbert's-pattern bilirubin). Pure asset
+    projection: `lever_dictionary.marker_interpretation[marker].stable_rationale`,
+    a reviewed string or null. This layer authors nothing and generates nothing —
+    the field can only carry what the reviewed asset carries (contrast the generated
+    interpretive prose, axis_verdict/mechanism, still held). Null when the marker has
+    no marker_interpretation entry or the entry sets it null (the common case)."""
+    entry = _LEVER_DICTIONARY.get("marker_interpretation", {}).get(marker_canonical or "")
+    return entry.get("stable_rationale") if entry else None
+
+
 def _build_group(group_def: dict, members: list[dict], present: set[str],
                  phase_of: dict[str, str | None]) -> dict:
     """Pass 2 (+ pass 3) — assemble the group over its already-built member set.
     Pass 2 authors `relations_rendered` on each member (over the whole assembled
     set + panel-present operands + the declared-state phase map), THEN computes
-    `should_surface`. The interpretive layer (verdict, levers — held for 4b-ii) is
-    pass 3, after. `should_surface` is computed here, not in pass 1, precisely so
-    the relation pass (and, in 4b-ii, relation-based demotion) can finalise each
-    member's news_gate first. No demotion runs this increment, so the value is
-    still identical to 4a's."""
+    `should_surface`. Pass 3 (interpretive) begins landing here: `stable_rationale`
+    is emitted per member (asset projection). Still held: the GENERATED prose
+    (axis_verdict, mechanism) and demotion. `should_surface` is computed here, not
+    in pass 1, precisely so the relation pass (and, in 4b-ii, relation-based
+    demotion) can finalise each member's news_gate first. No demotion runs this
+    increment, so the value is still identical to 4a's."""
     for member in members:  # pass 2: relations over the assembled set
         member["relations_rendered"] = _relations_rendered(
             member["marker_canonical"], group_def, present, phase_of)
+        member["stable_rationale"] = _stable_rationale(member["marker_canonical"])  # pass 3 (asset)
     return {
         "group_key": group_def["group_key"],
         "display_name": group_def["display_name"],

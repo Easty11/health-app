@@ -38,12 +38,18 @@ _VITD = date(2025, 12, 27)
 
 # 4b-ii interpretive-half fields still HELD — absent from every group and member.
 # `relations_rendered` is NOT here: 4b-i emits it on grouped members (Step D/E).
+# `stable_rationale` LEFT this list at increment 1a — it is now emitted on every
+# grouped member (asset projection); see test_stable_rationale_is_emitted_per_member.
 _HELD_MEMBER_FIELDS = ["axis_verdict", "shared_levers", "member_lever_effects",
-                       "mechanism", "stable_rationale"]
+                       "mechanism"]
 _HELD_GROUP_FIELDS = ["axis_verdict", "shared_levers"]
-# Ungrouped rows have no group, hence no relations by construction: they keep the
-# FULL absent list, including relations_rendered.
-_UNGROUPED_ABSENT_FIELDS = _HELD_MEMBER_FIELDS + ["relations_rendered"]
+# Ungrouped rows carry NO interpretive field — with no group, nothing in the
+# interpretive layer attaches by construction. Defined EXPLICITLY, NOT derived from
+# _HELD_MEMBER_FIELDS: as fields leave the held list on emission the ungrouped guard
+# must not shrink with them, or a field emitted on grouped members could begin
+# leaking onto ungrouped rows unnoticed.
+_UNGROUPED_ABSENT_FIELDS = ["axis_verdict", "shared_levers", "member_lever_effects",
+                            "mechanism", "stable_rationale", "relations_rendered"]
 
 
 def _make_user(db, email):
@@ -320,6 +326,34 @@ def test_producer_emits_relations_rendered_but_holds_the_rest_of_4b(db_session):
     for row in out["ungrouped"]:
         for field in _UNGROUPED_ABSENT_FIELDS:
             assert field not in row, f"ungrouped {row['marker_canonical']} leaked {field}"
+
+
+def test_stable_rationale_is_emitted_per_member(db_session):
+    """1a shape gate. stable_rationale lands on every GROUPED member as a faithful
+    projection of lever_dictionary.marker_interpretation[marker].stable_rationale —
+    a reviewed string or null, never generated. Non-vacuous on BOTH branches: every
+    §2-seed marker projects null, and a seeded bilirubin_total (hepatocellular member;
+    the sole asset entry with a non-null rationale) projects the exact asset string.
+    Ungrouped rows stay flat — guarded by _UNGROUPED_ABSENT_FIELDS in the boundary test."""
+    ld = json.loads((_MARKER_GROUPS_JSON.parent / "lever_dictionary.json").read_text(encoding="utf-8"))
+    bili_rationale = ld["marker_interpretation"]["bilirubin_total"]["stable_rationale"]
+    assert isinstance(bili_rationale, str) and bili_rationale, \
+        "asset must carry a non-null bilirubin_total rationale, else this test is vacuous"
+
+    user, current, prior = _seed_fixture(db_session, "stablerat@example.com")
+    _make_result(db_session, current.id, "Bilirubin (total)", "bilirubin_total",
+                 value_num=22.0, unit_canonical="umol/L", ref_high=20.0, lab_flag="H")
+    out = _build(db_session, user, current, prior)
+
+    grouped = [m for g in out["groups"] for m in g["members"]]
+    assert grouped, "seed authors groups — empty would pass vacuously"
+    for m in grouped:
+        assert "stable_rationale" in m, f"{m['marker_canonical']} missing stable_rationale"
+        assert m["stable_rationale"] is None or isinstance(m["stable_rationale"], str), \
+            f"{m['marker_canonical']}.stable_rationale wrong type"
+
+    assert _row(out, "bilirubin_total")["stable_rationale"] == bili_rationale  # non-null projection
+    assert _row(out, "ast")["stable_rationale"] is None                        # null projection
 
 
 # ---------- 4b-i-G4: relations degrade, never fabricate ----------
