@@ -287,6 +287,89 @@ def get_canonical_map(
     return _CANONICAL_MAP
 
 
+# ---------- GET /labs/results (#59 read-back consumer) ----------
+
+class StoredResultOut(BaseModel):
+    """One stored result, projected to the RAW education fields only (#47).
+
+    Deliberately omits `computed_flag` (withheld-computed, contract V2), `confidence`
+    (extraction QA, not a clinical read), `is_derived`, and anything interpretive
+    (deltas, mechanisms, levers) — interpreted meaning is the 4b deliverable (#49).
+    The boundary is enforced HERE at the projection, not only in the view."""
+    marker_name_raw: str
+    marker_canonical: str | None
+    value_num: float | None
+    value_operator: str | None
+    value_qualitative: str | None
+    unit_canonical: str | None
+    ref_low: float | None
+    ref_high: float | None
+    ref_low_exclusive: bool
+    ref_high_exclusive: bool
+    lab_flag: str | None
+
+
+class StoredReportOut(BaseModel):
+    report_id: int
+    lab_name: str
+    panel_name_raw: str
+    collected_date: date
+    results: list[StoredResultOut]
+
+
+@router.get("/results", response_model=list[StoredReportOut])
+def get_lab_results(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Read-back of the user's confirmed lab results, grouped by report, newest
+    `collected_date` first. This is #59's "consumer" — a raw values/ranges/lab-flags
+    surface (#47), NOT the interpreted view (that stays 4b, #49). User-scoped (#42):
+    every row is filtered on the authenticated user's id.
+
+    A report read-back, so it is grouped by report — distinct from
+    `labs_reads.latest_lab_results`, which is one-row-per-marker-latest for the
+    interpretation producer."""
+    reports = (
+        db.query(models.LabReport)
+        .filter(models.LabReport.user_id == current_user.id)
+        .order_by(models.LabReport.collected_date.desc(), models.LabReport.id.desc())
+        .all()
+    )
+
+    out: list[StoredReportOut] = []
+    for rep in reports:
+        results = (
+            db.query(models.LabResult)
+            .filter(models.LabResult.lab_report_id == rep.id)
+            .order_by(models.LabResult.marker_canonical.is_(None), models.LabResult.marker_name_raw)
+            .all()
+        )
+        out.append(StoredReportOut(
+            report_id=rep.id,
+            lab_name=rep.lab_name,
+            panel_name_raw=rep.panel_name_raw,
+            collected_date=rep.collected_date,
+            results=[
+                StoredResultOut(
+                    marker_name_raw=r.marker_name_raw,
+                    marker_canonical=r.marker_canonical,
+                    value_num=r.value_num,
+                    value_operator=r.value_operator,
+                    value_qualitative=r.value_qualitative,
+                    unit_canonical=r.unit_canonical,
+                    ref_low=r.ref_low,
+                    ref_high=r.ref_high,
+                    ref_low_exclusive=r.ref_low_exclusive,
+                    ref_high_exclusive=r.ref_high_exclusive,
+                    lab_flag=r.lab_flag,
+                )
+                for r in results
+            ],
+        ))
+    return out
+
+
 # ---------- POST /labs/extract ----------
 
 @router.post("/extract")
