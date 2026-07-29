@@ -5,86 +5,95 @@ _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 
 ## 1. Real commits this session
 
-Session-open ref: `c4e5da2` (the silently-failed governance commit this session repairs).
-`git log --oneline c4e5da2..HEAD`:
+Session-open ref: `1b0c8c3` (prior `chore: session close-out`). This session ran a design+build
+brief on `feat/frontend-readback`, then renumber-then-landed it. `git log --oneline 1b0c8c3..HEAD`:
 
 ```
-f8f020a gov: resolve #149 / Q59 missed at c4e5da2; record the staging failure (FEEDBACK §21)
+671dd54 governance(readback): re-lead CBT-I Q on #47; resolve Q-NEXT -> Q60 (on-branch, pre-ff)
+75607cc governance(fix): correct feat/frontend-readback suite count 468 -> 464
+38ab3d0 governance(readback): CBT-I interim surface Q, ROADMAP read-back rows, BRANCHES
+6264c8a feat(frontend): surface labs + check-in read-back, add nav links
+473461e feat(labs): GET /labs/results read-back endpoint (#59 consumer)
+e01ed01 fix(mcp): import Session in mcp_server.py
 ```
 
-Date-stamped (`git log --format="%ad %s" --date=short`, immutable — recent history for context):
+Date-stamped (`git log --format="%ad %s" --date=short`, immutable):
 
 ```
-2026-07-29 gov: resolve #149 / Q59 missed at c4e5da2; record the staging failure (FEEDBACK §21)
-2026-07-29 gov: number-at-merge - #149, Q59; branch row DONE       <- c4e5da2, the failed no-op
-2026-07-29 governance: record MCP-pin decision + the deployability gap; park branch
-2026-07-29 fix(deps): pin mcp[cli]==1.28.1 to restore deploys
-2026-07-29 governance: resolve #NEXT -> #146/#147, Q-NEXT -> Q58, +#148 scope rule (on-branch, pre-ff)
-2026-07-28 governance(ingestion): record derived-confidence + draw-as-trigger; findings; unblock 4b-ii
+2026-07-29 governance(readback): re-lead CBT-I Q on #47; resolve Q-NEXT -> Q60 (on-branch, pre-ff)
+2026-07-29 governance(fix): correct feat/frontend-readback suite count 468 -> 464
+2026-07-29 governance(readback): CBT-I interim surface Q, ROADMAP read-back rows, BRANCHES
+2026-07-29 feat(frontend): surface labs + check-in read-back, add nav links
+2026-07-29 feat(labs): GET /labs/results read-back endpoint (#59 consumer)
+2026-07-29 fix(mcp): import Session in mcp_server.py
 ```
 
-One commit this session, direct on master (no branch — see §2). It repairs `c4e5da2`, whose
-message claimed "#149, Q59; branch row DONE" but which committed ONLY an untracked
-`.claude/launch.json`: the governance edits were never staged (`git add -A` found only the stray
-file, so `git commit` succeeded and masked the would-be "nothing to commit"). `f8f020a` resolves
-`### #NEXT` → `### 149.` (MCP pin), `## Q-NEXT` → `## Q59.` (deployability gap), flips the
-`fix/pin-mcp-sdk` BRANCHES row OWED → DONE with the deploy verification, and adds FEEDBACK §21
-(stage governance by name, never `git add -A`; a passing `git commit` proves the instrument works,
-not that it committed what you meant — §17's discriminate-on-identity in a new mechanism).
+All six landed on master via ff (`1b0c8c3..671dd54`); `feat/frontend-readback` deleted local + remote.
+A seventh `chore: session close-out` commit carries this file + the CLAUDE.md Recent-landings update.
 
-Staged by name; suite **460**, unchanged; no code touched. `.claude/launch.json` left tracked
-(inspected: no secrets, nothing machine-specific — removing/ignoring it would be a second unrelated
-change on a repair commit).
+The branch closed the input-first read-back/nav gaps (three modules invisible in the UI):
+- **A1** Dashboard nav links → Labs (`/metrics`) + History (`/checkin-history`); `/interpretation`
+  left UNLINKED (inert fixture, #135).
+- **A2** one-line `Session` import in `mcp_server.py` — correctness, NOT a live crash (local annotation,
+  proven empirically; ROADMAP L77's "NameError at call time" was overstated, struck).
+- **A4** `GET /labs/results` (#59's consumer), report-grouped, user-scoped (#42), #47-bounded at the
+  projection (values/ranges/lab-flags only; computed_flag/confidence withheld) + a read-only table in
+  `Metrics.jsx`.
+- **A3** `CheckInHistory.jsx` (new `/checkin-history`) over the existing `GET /checkin-v2/history` +
+  PM done-state value read-back. Frontend-only (the REST already existed).
+
+Investigation first — four brief claims were stale vs master and corrected before they became build
+errors: check-in history is already REST (no backend needed); the `Session` "crash" is a no-op; the
+CBT-I titration engine is built (only the surface is absent); `/interpretation` is routed but inert.
+
+Backend suite **464** (460 baseline +4 labs-readback tests: #47 field-set, #42 isolation, grouping).
+Frontend builds clean (99 modules); app boots, login renders, new pages mount with zero console errors.
+No DECISIONS entry (follows locked #47/#49/#59/#42). One question minted: **Q60**.
 
 ## 2. Pending-commit queue reconciliation
 
-**No `;cc` pending-commit queue was carried into this session.** The session was a targeted repair
-of a prior merge's silent no-op, driven by a chat-authored brief (not a pending-queue paste). No
-`PENDING` items to reconcile. Everything the brief specified landed in `f8f020a`; nothing decided
-this session remains uncommitted.
+**No `;cc` pending-commit queue.** A chat-authored design+investigation brief drove the session; no
+`PENDING` items. Everything greenlit (A1/A2/A3/A4) landed; CBT-I was governance-only by decision
+(scoped in, needs a design pass). A review correction (CBT-I Q re-led on #47, not I1) was folded into
+the renumber commit before the ff. Nothing decided remains uncommitted.
 
-**Branch terminal-state gate: PASS.** This session cut no branch — the repair ran directly on
-master (renumber-then-land does not apply: `fix/pin-mcp-sdk` was already merged as `c4e5da2` and
-deleted before this session, so there was nothing to renumber on, and cutting a branch would only
-widen the window master carried live placeholders). `git branch` shows only `master`, even with
-`origin/master` (0/0). The `fix/pin-mcp-sdk` row in `BRANCHES.md` is DONE (`c4e5da2`), with the
-missed-renumber cause, the deploy verification, and the one still-outstanding operator check.
+**Branch terminal-state gate: PASS.** `feat/frontend-readback` merged + deleted (local + remote,
+`git cherry` clean); `git branch` shows only `master`, even with `origin/master` (0/0). Its BRANCHES
+row is DONE and carries the post-deploy open loop (see §3).
 
 ## 3. Cold-resume handoff
 
-**Where things stand.** Master is at `f8f020a`, even with origin, tree clean. DECISIONS through
-**#149**, questions through **Q59**, zero live `#NEXT`/`Q-NEXT` placeholders anywhere. Production
-is **healthy**: the MCP-pin deploy (`1778471d`) is Online, `GET /health` → `{"status":"ok"}`,
-database at `c1e8b4d70f92` with both ingestion migrations confirmed by operator query (no
-`overall_confidence` zeros; `marker_canonical IS NULL` count = 0).
+**Where things stand.** Master `671dd54`, even with origin, tree clean. DECISIONS through **#149**,
+questions through **Q60**, zero live placeholders. The labs read-back, check-in history, and nav links
+are on master; the MCP pin (#149) keeps prod deployable.
 
-**Single clearest next action:** begin **4b-ii** (the interpretation producer's interpretive half)
-— it is UNSTARTED and fully unblocked (ingestion exercised, Q56/Q57 discharged, trigger resolution
-settled as a draw per #147). Its own brief covers: relation-based demotion of gate 1's delta arm,
-`shared_levers` with already-in-play filtering, `axis_verdict`, `mechanism`/`stable_rationale`, the
-draw-triggered `GET /labs/interpretation` endpoint, and the view wired fixture→live.
+**Single clearest next action:** **verify the read-back surfaces post-deploy** (the open loop below) —
+they could not be checked from a Code session (authed pages need a login; `/labs/results` was
+branch-only). After that, **4b-ii** (interpretation interpretive half) remains the next real increment,
+UNSTARTED and unblocked.
 
-**Open questions (this session's additions + the live near-term ones):**
-- **Q59 (new, UNSTARTED)** — nothing verifies the deployable artifact: no CI, and no check observes
-  that the app boots (the 2.0 outage passed 460 tests against a session venv that already had the
-  SDK). One gap, two faces. Owner: Luke — design call on where a boot check lives given no pipeline.
-- **Q58 (UNSTARTED)** — the editable-confirm increment (read-only screen has no remedy for a wrong
-  value; `missingCollected` dead-end; post-edit provenance undesigned). Needs a provenance design
-  before build.
-- **Q56/Q57 — DONE** (#143 / #145). **Q41 — DONE** (#139).
+**OPEN LOOP — post-deploy operator checks (recorded on the `feat/frontend-readback` BRANCHES row;
+deploy is not verification):**
+1. The **Labs table renders the ingested results** — this **doubles as discharging the #42 `user_id`
+   binding**: an empty table means the 27 rows are bound to a different `user_id` than the app login.
+2. `/checkin-history` renders.
+3. The Dashboard **nav links** (Labs, History) work.
 
-**Operator items still owed (unreadable from a Code session; recorded on the `fix/pin-mcp-sdk`
-BRANCHES row):**
-- The last-good pre-failure Railway build log's `Successfully installed` line names the exact prior
-  mcp version — if it differs from 1.28.1, prefer it. (The pin is verified sound in a clean venv;
-  this is a belt-and-braces cross-check.)
+**Open questions (this session):**
+- **Q60 (new, UNSTARTED)** — CBT-I has no user surface. **Gating fork is #47** (may the engine's
+  MOVE/REVERSE verdict be surfaced as a directive — a clinical instruction — at all; show state-only vs
+  the action), diary-capture (operator-script vs in-app) second, I1 firewall a projection-level
+  constraint. Resolve #47 FIRST. Owner: Luke.
+- **Q59 (UNSTARTED)** — no CI, no boot check (nothing verifies the deployable artifact).
+- **Q58 (UNSTARTED)** — the editable-confirm increment (needs a provenance design).
 
-**Sprint (ROADMAP):** interpretation build sequence — 1 / 4a / declared-state / 4b-i all DONE; **4b-ii
-UNSTARTED, unblocked**; increments 2 (rephrase), 3 (lever-tap thread), 5 (go-live) UNSTARTED.
+**Sprint (ROADMAP):** interpretation lane — 4a / declared-state / 4b-i DONE; **4b-ii UNSTARTED,
+unblocked**. Labs raw read-back shipped (distinct from the #49 interpreted view). Check-in read-back
+shipped; **edit + audit trail** still the NOW item. CBT-I interim surface is a NEXT item, #47-gated.
 
-**Process note this session (FEEDBACK §21):** stage governance files by name, never `git add -A`,
-and read `git diff --stat` before staging — a `git commit` that succeeds does not prove it committed
-the intended files, and an incidental untracked file can supply the signal that masks a no-op.
+**Design note flagged, not silently reversed:** the read-back *screens* are a deliberate exception to
+the chat-primary / screens-as-input model (Ideas.md), justified by "the user cannot see their own data
+anywhere." Worth a conscious ratify when that model is next touched.
 
-**Loop discipline:** single-repo (health-app) throughout; no `frontend/`, no `health-connect-app`,
-no shared-CLAUDE.md-block edits; `backend/` untouched (the pin is live and correct).
+**Loop discipline:** single-repo (health-app) throughout; touched `frontend/` this session (the point
+of the brief); no `health-connect-app`, no shared-CLAUDE.md-block edits.

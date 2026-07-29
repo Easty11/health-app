@@ -322,9 +322,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Frontend read-back & nav (labs / check-in)** — closed the input-first read-back gaps: Dashboard nav links (Labs, History), `GET /labs/results` (#59 consumer, #47-bounded) + a read-only labs table, and a `/checkin-history` page over the existing check-in REST. Investigation corrected four stale claims vs master. No DECISIONS entry (follows locked #47/#49/#59/#42); surfaced Q60 (CBT-I surface, gated on #47). Post-deploy render checks owed. See `closeout.md` / BRANCHES `feat/frontend-readback`.
 - **#149 (MCP SDK pinned; deploy restored)** — pinned `mcp[cli]==1.28.1` (the only unpinned dependency), which had resolved to the same-day 2.0.0 major and took the app down at import; the 2.0 migration is deferred to its own increment. Surfaced Q59 (nothing verifies the deployable artifact — no CI, no boot check). See DECISIONS_LOG #149.
 - **#146–#147 (first-ingestion findings)** — `overall_confidence` becomes DERIVED at confirm (`min(row confidences)`), removed from the extraction model + prompt example, with a backfill migration; the interpretation trigger is a DRAW (newest `collected_date`), not a report (seven panels shared one date). PSA canonical entry + rebind (26→27 markers bound). Read-only-confirm findings recorded as Q58, built nothing. **4b-ii is now unblocked.** See DECISIONS_LOG #146–#147.
-- **Q56/Q57 (relation preconditions + lever join)** — feedback-relation preconditions resolve against a factor-key + admissible-phase-set shape (replacing the dead `on_trt` string); the producer emits `precondition_status` + `expected_by_phase` at **no** authority (demotion still held for 4b-ii); lever nodes gain `declared_factor_keys`. DECISIONS #143–#145; Q56 → #143 (precondition), Q57 → #145 (lever join). See DECISIONS_LOG #143–#145.
 
 ---
 
