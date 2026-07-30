@@ -1,99 +1,127 @@
 # closeout — health-app
 
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
-`DECISIONS_LOG.md`. Forward work: `ROADMAP.md`._
+`DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
+
+Session date: 2026-07-30.
 
 ## 1. Real commits this session
 
-Session-open ref: `1b0c8c3` (prior `chore: session close-out`). This session ran a design+build
-brief on `feat/frontend-readback`, then renumber-then-landed it. `git log --oneline 1b0c8c3..HEAD`:
+Session-open ref: `faf4ba9` (prior `chore: session close-out`). Six commits, all on
+master and pushed (`origin/master` 0 ahead / 0 behind). `git log --oneline faf4ba9..HEAD`:
 
 ```
-671dd54 governance(readback): re-lead CBT-I Q on #47; resolve Q-NEXT -> Q60 (on-branch, pre-ff)
-75607cc governance(fix): correct feat/frontend-readback suite count 468 -> 464
-38ab3d0 governance(readback): CBT-I interim surface Q, ROADMAP read-back rows, BRANCHES
-6264c8a feat(frontend): surface labs + check-in read-back, add nav links
-473461e feat(labs): GET /labs/results read-back endpoint (#59 consumer)
-e01ed01 fix(mcp): import Session in mcp_server.py
+55b05e0 governance: mint #150 navigation model (hub-as-home, persistent chat) + Q63 (interp tile)
+f8212f2 governance(open-questions): Q62 — how is #47 enforced structurally for a generated field?
+5d1cab7 feat(interpretation): 4b-ii/1a — emit shared_levers + member_lever_effects (I7 pair)
+5e6f2c2 feat(interpretation): 4b-ii/1a — emit member stable_rationale (asset projection)
+e395eac governance(open-questions): Q61 — labs read-back #47-omission reasoning does not hold; re-examine
+95355fa governance(roadmap): lift stale readiness suppression; readiness row -> Banister build (owed)
 ```
 
-Date-stamped (`git log --format="%ad %s" --date=short`, immutable):
+Immutable dated log (`git log --format="%ad %s" --date=short`):
 
 ```
-2026-07-29 governance(readback): re-lead CBT-I Q on #47; resolve Q-NEXT -> Q60 (on-branch, pre-ff)
-2026-07-29 governance(fix): correct feat/frontend-readback suite count 468 -> 464
-2026-07-29 governance(readback): CBT-I interim surface Q, ROADMAP read-back rows, BRANCHES
-2026-07-29 feat(frontend): surface labs + check-in read-back, add nav links
-2026-07-29 feat(labs): GET /labs/results read-back endpoint (#59 consumer)
-2026-07-29 fix(mcp): import Session in mcp_server.py
+2026-07-30 governance: mint #150 navigation model (hub-as-home, persistent chat) + Q63 (interp tile)
+2026-07-30 governance(open-questions): Q62 — how is #47 enforced structurally for a generated field?
+2026-07-30 feat(interpretation): 4b-ii/1a — emit shared_levers + member_lever_effects (I7 pair)
+2026-07-30 feat(interpretation): 4b-ii/1a — emit member stable_rationale (asset projection)
+2026-07-29 governance(open-questions): Q61 — labs read-back #47-omission reasoning does not hold; re-examine
+2026-07-29 governance(roadmap): lift stale readiness suppression; readiness row -> Banister build (owed)
 ```
 
-All six landed on master via ff (`1b0c8c3..671dd54`); `feat/frontend-readback` deleted local + remote.
-A seventh `chore: session close-out` commit carries this file + the CLAUDE.md Recent-landings update.
+Files touched this session (`faf4ba9..HEAD`): `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`,
+`ROADMAP.md`, `backend/interpretation/producer.py`,
+`backend/tests/test_interpretation_producer_foundation.py` (+ this close-out and CLAUDE.md
+Recent-landings).
 
-The branch closed the input-first read-back/nav gaps (three modules invisible in the UI):
-- **A1** Dashboard nav links → Labs (`/metrics`) + History (`/checkin-history`); `/interpretation`
-  left UNLINKED (inert fixture, #135).
-- **A2** one-line `Session` import in `mcp_server.py` — correctness, NOT a live crash (local annotation,
-  proven empirically; ROADMAP L77's "NameError at call time" was overstated, struck).
-- **A4** `GET /labs/results` (#59's consumer), report-grouped, user-scoped (#42), #47-bounded at the
-  projection (values/ranges/lab-flags only; computed_flag/confidence withheld) + a read-only table in
-  `Metrics.jsx`.
-- **A3** `CheckInHistory.jsx` (new `/checkin-history`) over the existing `GET /checkin-v2/history` +
-  PM done-state value read-back. Frontend-only (the REST already existed).
+### What each commit did
 
-Investigation first — four brief claims were stale vs master and corrected before they became build
-errors: check-in history is already REST (no backend needed); the `Session` "crash" is a no-op; the
-CBT-I titration engine is built (only the surface is absent); `/interpretation` is routed but inert.
+- **95355fa** — lifted the stale `Basic readiness score` ROADMAP suppression. The ≥7-day
+  HRV precondition was **Code-verified against Railway Postgres**: `samsung_hrv_readings` =
+  47 distinct `passive_overnight` days (2026-06-08 → 2026-07-29, all `hrv_ms` non-null), 32
+  propagated to `daily_records.passive_hrv_ms`. Row now tracks the still-owed Banister build;
+  the `context_builder.py:368-369` low-confidence caveat preserved.
+- **e395eac** — Q61: `GET /labs/results` omits `computed_flag`/`confidence` under a `#47`
+  bound that `#47`'s text does not support (computed_flag = value-vs-printed-range =
+  education). Recorded for re-examination on its own merits (#49 seam / confidence-at-a-glance).
+  No code change.
+- **5e6f2c2** — 4b-ii/1a: producer emits member `stable_rationale` (asset projection of
+  `lever_dictionary.marker_interpretation[m].stable_rationale`). G1 diff added-keys-only;
+  suite 464→465.
+- **5d1cab7** — 4b-ii/1a: producer emits group `shared_levers` (I1-cited via `_citable_lever`,
+  `member_effects` present-filtered, already-in-play status via #145 `declared_factor_keys` +
+  `is_assumable_present`) and member `member_lever_effects` (the I7 pair). G1 added-keys-only;
+  gates.py/reference byte-identical to master; suite 465→467.
+- **f8212f2** — Q62: how is `#47` enforced structurally for a generated field? Generated prose
+  (`axis_verdict.text`) has only the prompt (behavioural half); every emitted field today is
+  structurally bounded. Same shape as #59's lab-value structural absence and Q60. Candidates
+  (a)–(d) recorded. Blocks `axis_verdict.text`. No code change.
+- **55b05e0** — `#150` navigation model (hub-as-home, chat docked-not-routed, header links
+  retire into hub, dashboard panels → Recovery/Training tiles; Constraints A/B/C) + `Q63`
+  (what the interpretation tile shows). Decided (design), build-deferred behind 4b-ii.
+  Verify-before-mint checklist run against master.
 
-Backend suite **464** (460 baseline +4 labs-readback tests: #47 field-set, #42 isolation, grouping).
-Frontend builds clean (99 modules); app boots, login renders, new pages mount with zero console errors.
-No DECISIONS entry (follows locked #47/#49/#59/#42). One question minted: **Q60**.
+## 2. Pending-commit-queue reconciliation
 
-## 2. Pending-commit queue reconciliation
+No chat `;cc` pending-commit queue was carried into this session — work arrived as four
+briefs (Part-A verify sweep + three riders; the 4b-ii/1a build brief; a CORRECTION
+superseding it; the navigation-model PROPOSAL). All resulting decisions landed in commits;
+nothing is provisional.
 
-**No `;cc` pending-commit queue.** A chat-authored design+investigation brief drove the session; no
-`PENDING` items. Everything greenlit (A1/A2/A3/A4) landed; CBT-I was governance-only by decision
-(scoped in, needs a design pass). A review correction (CBT-I Q re-led on #47, not I1) was folded into
-the renumber commit before the ff. Nothing decided remains uncommitted.
-
-**Branch terminal-state gate: PASS.** `feat/frontend-readback` merged + deleted (local + remote,
-`git cherry` clean); `git branch` shows only `master`, even with `origin/master` (0/0). Its BRANCHES
-row is DONE and carries the post-deploy open loop (see §3).
+- 4b-ii/1a producer fields (3 of 5, deterministic) → **5e6f2c2, 5d1cab7** (landed).
+- `axis_verdict` + `mechanism` (2 of 5, not deterministic) → **deliberately NOT built**;
+  recorded as Q62 (**f8212f2**) + the ROADMAP 4b-ii row. `mechanism` reclassified a
+  content-task (chat-side); `axis_verdict.verdict` derivability = an unrun read, deferred by
+  the CORRECTION.
+- Navigation model → `#150` + `Q63` (**55b05e0**, landed).
+- Rider 2 (readiness suppression) → **95355fa**. Rider 3 (labs projection) → **e395eac / Q61**.
+  The PROPOSAL's two "raise separately" items duplicated these; **not** re-minted (checklist
+  said to drop the ROADMAP note if already rewritten — it was).
 
 ## 3. Cold-resume handoff
 
-**Where things stand.** Master `671dd54`, even with origin, tree clean. DECISIONS through **#149**,
-questions through **Q60**, zero live placeholders. The labs read-back, check-in history, and nav links
-are on master; the MCP pin (#149) keeps prod deployable.
+### State
+- Branch: `master`, clean, synced with `origin/master` (0/0). No other local or remote
+  branches — every feature/governance branch this session was ff-merged + remote-deleted.
+  `BRANCHES.md` unchanged (nothing to row).
+- Suite: **467 passed** (backend). Baseline this session was 464; +3 tests from 1a.
+- DECISIONS max **#150**; OPEN_QUESTIONS max **Q63**.
 
-**Single clearest next action:** **verify the read-back surfaces post-deploy** (the open loop below) —
-they could not be checked from a Code session (authed pages need a login; `/labs/results` was
-branch-only). After that, **4b-ii** (interpretation interpretive half) remains the next real increment,
-UNSTARTED and unblocked.
+### Sprint (ROADMAP NOW)
+Two dated CBT-I items: Q45 nap day-attribution (contaminating capture now); the ~31 Jul
+manual evaluation trigger (#118's PM-offer half). Interpretation-layer build is the large
+lane; lab pipeline + appointment brief downstream. Cross-repo debt (shared-block propagation
+to `health-connect-app`) OWED — needs an HCA-rooted session.
 
-**OPEN LOOP — post-deploy operator checks (recorded on the `feat/frontend-readback` BRANCHES row;
-deploy is not verification):**
-1. The **Labs table renders the ingested results** — this **doubles as discharging the #42 `user_id`
-   binding**: an empty table means the 27 rows are bound to a different `user_id` than the app login.
-2. `/checkin-history` renders.
-3. The Dashboard **nav links** (Labs, History) work.
+### Interpretation layer — where 4b-ii stands
+1a landed (producer emits the three deterministic asset fields). Remaining is **not uniform**:
+- **`mechanism`** — content task: author a `marker_interpretation.mechanism` slot, then a
+  trivial deterministic projection. No LLM. No repo home yet (the slot doesn't exist).
+- **`axis_verdict`** — `.text` is generated prose, blocked on **Q62** (structural-#47).
+  `.verdict`-enum derivability from member gates / relation kinds is an **unrun read** (deferred).
+- **demotion** — relation authority over gate 1's delta arm; needs a **seeded haematocrit
+  band-crossing pair** to exercise I8 end-to-end (the #139 asset is populated but haematocrit
+  is not in `seed_engine.py`).
+- **1b (delivery)** — regenerate the fixture from the producer (fixes missing `ungrouped[]`
+  and the `protocol_context_snapshot` shape by construction), then correct the view (consume
+  `should_surface`, not the gate-1∨2 recompute; add the Ungrouped section; fix the
+  `protocol_context_snapshot` reader), then the endpoint (draw-triggered #147), then wire
+  fixture→live. The view currently hard-reads the held fields, so wiring cannot precede the
+  field work.
 
-**Open questions (this session):**
-- **Q60 (new, UNSTARTED)** — CBT-I has no user surface. **Gating fork is #47** (may the engine's
-  MOVE/REVERSE verdict be surfaced as a directive — a clinical instruction — at all; show state-only vs
-  the action), diary-capture (operator-script vs in-app) second, I1 firewall a projection-level
-  constraint. Resolve #47 FIRST. Owner: Luke.
-- **Q59 (UNSTARTED)** — no CI, no boot check (nothing verifies the deployable artifact).
-- **Q58 (UNSTARTED)** — the editable-confirm increment (needs a provenance design).
+### Open questions (by status)
+- **OPEN, blocked by 4b-ii:** Q63 (interpretation-tile content — design, under #150
+  Constraint A), Q60 (CBT-I user surface — gating fork is #47 verdict-as-directive).
+- **OPEN, design/policy:** Q62 (structural #47 for generated fields — blocks `axis_verdict.text`),
+  Q61 (labs projection `computed_flag`/`confidence` omission — re-examine on merits, not #47).
+- **OPEN, infra:** Q59 (nothing verifies the deployable artifact — no CI, no boot check).
+- Q45 (nap day-attribution) is the live sprint blocker on the CBT-I lane.
 
-**Sprint (ROADMAP):** interpretation lane — 4a / declared-state / 4b-i DONE; **4b-ii UNSTARTED,
-unblocked**. Labs raw read-back shipped (distinct from the #49 interpreted view). Check-in read-back
-shipped; **edit + audit trail** still the NOW item. CBT-I interim surface is a NEXT item, #47-gated.
-
-**Design note flagged, not silently reversed:** the read-back *screens* are a deliberate exception to
-the chat-primary / screens-as-input model (Ideas.md), justified by "the user cannot see their own data
-anywhere." Worth a conscious ratify when that model is next touched.
-
-**Loop discipline:** single-repo (health-app) throughout; touched `frontend/` this session (the point
-of the brief); no `health-connect-app`, no shared-CLAUDE.md-block edits.
+### Single clearest next action
+**4b-ii still holds the build lane.** The next producer step is the smallest safe one: write
+the **1b delivery brief** starting with fixture regeneration from the now-richer producer
+(it fixes `ungrouped[]` absence and the `protocol_context_snapshot` shape by construction) —
+or, to pick off the cheap content task first, author the `marker_interpretation.mechanism`
+slot. `axis_verdict` stays parked until **Q62** resolves. The nav hub (#150) build stays
+deferred behind 4b-ii.
