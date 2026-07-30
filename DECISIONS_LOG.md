@@ -5084,3 +5084,102 @@ ordered the work:
 absence, or the field leaves the contract, and this entry is superseded either way.
 
 ---
+
+### 152. `axis_verdict` reduced to `{protocol_phase, text}`; `confidence` removed from the interpretation output entirely
+
+**Decision:** The `axis_verdict` object is amended from four fields to two, and `confidence`
+is removed from every interpretation-output field that carried it.
+
+- **`verdict` — removed.** A neutral enum label communicates nothing to a reader, and any
+  plain-language rendering of it is either reassurance or prioritisation, both of which `#47`
+  places outside the education boundary. The value an axis-level statement carries was never
+  the label; it is the explanation of why the members relate as they do. The label goes and
+  the explanation stays.
+- **`confidence` — removed, from `axis_verdict` and from `mechanism`.** The concept it would
+  express is already structurally carried: an axis verdict is less certain exactly when its
+  relations could not be fully evaluated, which `operand_status` already records and which an
+  `insufficient_data` outcome already expresses. A separate scalar duplicates that in a
+  weaker, unfalsifiable form. On `mechanism` there is nothing for it to express at all —
+  the text is authored physiology, which is either correct or does not belong in the asset.
+- **`protocol_phase` — retained, redefined as a projection.** The concept is sound; the
+  fixture's values were not. They intersect `derive_phase`'s return set at zero and include
+  `on_trt`, vocabulary a live test forbids in producer source. The field is therefore a
+  projection of the per-factor phase already carried in `meta.protocol_context_snapshot`,
+  not a separately-authored value.
+- **`text` — retained, authored rather than generated.** An axis explanation describes a
+  pattern — suppressed gonadotropins with an active TRT factor — not a set of numbers. It is
+  therefore authorable once per (group, relation outcome, phase) and projected, following the
+  precedent that `relations_rendered[].reads` narrative already lives in `marker_groups.json`
+  and is copied verbatim by the producer.
+
+Resulting shapes: `axis_verdict: {protocol_phase, text}` and
+`mechanism: {text, protocol_factors_referenced}`. Both fully deterministic asset projections.
+
+**Amends — corrected against master; the draft's premise did not hold.** No DECISIONS entry
+ever established the four-field shape, so there is no prior ruling to amend. Verified: the
+only occurrence of `protocol_phase` in the whole log is inside `#151`'s own sizing-read block,
+which *reports* the fixture rather than establishing canon, and no entry names
+`axis_verdict.confidence` or a `verdict` sub-field at all. The entries that record the
+axis-verdict's *conceptual* content are `#63` (v0.4 promotes the output to group-primary and
+names an "axis-verdict" per group, no sub-fields) and `#138` (v0.5, which states the axis
+verdict is "the narrative above the member lines" — consistent with, and closer to, this
+entry's `{protocol_phase, text}` than to the four-field object); `#135` records the view that
+renders it. So the four-field shape was never canon in master: it existed only in the
+UI-maintained contract file, the two hand-authored fixtures, and the view's reads of them.
+**This entry is therefore the first master-canonical statement of the shape, and it supersedes
+that residue rather than amending a decision.** The interpretation output contract
+knowledge-file is stale from this entry forward; it is orientation-only and outside the repo,
+so it cannot be corrected by Code.
+
+**Rationale:** The fixture was the only source for all four sub-fields, and it is not a
+specification. Four independent defects are now demonstrated in it: `shared_levers[].status`
+inverted against the `#145` rule; `protocol_phase` values with zero intersection with
+`derive_phase`; an invented `training_load` declared-factor key that exists nowhere in the
+repo; and `confidence` values (`Likely`, `Certain`) that are the operator's own conversational
+epistemic tags, imported into a data contract by an earlier chat session. A field whose entire
+specification is a hand-authored artifact with four proven defects is residue, not requirement
+— but the *need* an axis-level statement serves is real, so the field is reduced to the part
+that carries value rather than removed outright.
+
+**Consequences:**
+- **Q62 has no current consumer.** It asked how `#47` is enforced structurally for a generated
+  field; `axis_verdict.text` is now authored, so nothing generated remains in the
+  interpretation output. Q62 stays open for any future generated field — it is not answered,
+  it is unblocked-around.
+- **`mechanism`'s producer projection is unblocked.** `{text, protocol_factors_referenced}` is
+  now the complete contract shape, not a partial one, so emitting it is no longer a
+  non-contract shape. The content is already authored and landed for all 15 group members.
+- **The 1b view-correction list gains two removals** — `axis_verdict.verdict` and
+  `.confidence` — alongside the corrections already known (consume `should_surface` rather
+  than recompute; add the Ungrouped section; fix the `protocol_context_snapshot` reader).
+  Verified complete: the ONLY consumers are `GroupCard.jsx` (lines 15, 17) and
+  `GroupCollapsed.jsx` (lines 10, 12), and `.confidence` is read nowhere else in the frontend
+  — `mechanism.confidence` has no consumer at all, so removing it costs the view nothing.
+
+**Open gap this entry does not close — the projection needs a source-factor rule.**
+`meta.protocol_context_snapshot.factors` is a LIST (one entry per declared factor), while
+`axis_verdict.protocol_phase` is a single scalar. With more than one factor declared (trt +
+tirzepatide + cbt_i are all real ledger keys) the projection is ambiguous until it names WHICH
+factor's phase a given group carries. The mechanism for that already exists — relation
+preconditions resolve against a named `factor_key` (`#141`/`#145`) — so the likely answer is a
+group-scoped factor reference, but it is not decided here and the field cannot be emitted
+until it is.
+
+**Status:** Decided (contract). No code in this entry. Build order unchanged from `#151`:
+producer completed before fixture regeneration and view wiring.
+
+**How you know:** verified against master before minting — no entry pins the four-field shape
+(grep over `protocol_phase` / `axis_verdict.confidence` / verdict-sub-field across
+`DECISIONS_LOG.md`); `_SNAPSHOT_FIELDS` includes `phase` and a seeded steady TRT factor
+projects `{"key": "trt", "phase": "steady", "assumable_present": true, ...}`, so
+`protocol_phase` has a real source; all 7 rendered `relations_rendered[].reads` in the seeded
+build are byte-identical to `marker_groups.json`, so the authored-narrative precedent is live,
+not historical; and the view's `.verdict` / `.confidence` consumers are exactly the four lines
+named above.
+
+**Do not revisit unless:** the (group × relation-outcome × phase) authoring table proves
+combinatorially intractable — at which point generated prose returns as the only practical
+option and Q62 binds again. That sizing is not yet done and is the one empirical risk this
+entry carries.
+
+---
