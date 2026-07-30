@@ -1656,6 +1656,15 @@ are compatible with the one it names — (a) supersedes its clause 2 later, (b) 
 Choosing requires drafting a candidate `demotes_when` for the two discriminator cases and seeing
 whether it stays declarative, which is design work, not a read.
 
+**Second affected party — `axis_verdict`'s authoring table, not just demotion.** The same asset
+gap forces that table to key on **evaluability** (which relations rendered, `operand_status` per
+relation, and `precondition_status` for `hpg_gonadotropin_suppression` alone) rather than on
+whether a relation *held* — a ratio has no threshold and a discriminator has no predicate, so
+"held" is not computable. If branch (a) lands a declared `demotes_when`, the table could key on
+truth instead, and its authored strings would be **superseded rather than extended**. Recorded
+here so Q65 is not resolved on demotion's merits alone by a session that does not notice it
+invalidated the verdict content.
+
 **Resolve by:** the first time a demotion is wanted that #153 refuses. Not urgent — nothing is
 blocked today. **Owner:** Luke.
 
