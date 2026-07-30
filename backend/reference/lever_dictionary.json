@@ -87,7 +87,11 @@
         "note": "CVi \u2248 14% (R\u00f8ys 2022). Assay-pin caveat: on immunoassay widen to ~0.50. Ahokoski 1998 gives \u00b138% consistent range.",
         "evidence_refs": ["10.1093/clinchem/hvac175"]
       },
-      "stable_rationale": null
+      "stable_rationale": null,
+      "mechanism": {
+        "text": "Oestradiol in men derives largely from aromatisation of testosterone in adipose and other tissues, so it tracks testosterone availability \u2014 more substrate, more conversion. Aromatase activity also varies with adiposity, so body composition shifts the ratio at constant testosterone.",
+        "protocol_factors_referenced": ["trt"]
+      }
     },
     "bilirubin_total": {
       "min_meaningful_delta": {
@@ -96,7 +100,11 @@
         "note": "EuBIVAS population RCV. Gilbert's inflates within-subject variance, so this is a FLOOR for a Gilbert's carrier, not a ceiling (#53 context case).",
         "evidence_refs": ["10.1373/clinchem.2018.288415"]
       },
-      "stable_rationale": "Constitutional/benign (Gilbert's pattern): unconjugated, isolated, normal GGT, normal haemolysis_index/LD (no haemolysis). Persistent H flag is annotated, never treated as news."
+      "stable_rationale": "Constitutional/benign (Gilbert's pattern): unconjugated, isolated, normal GGT, normal haemolysis_index/LD (no haemolysis). Persistent H flag is annotated, never treated as news.",
+      "mechanism": {
+        "text": "Total bilirubin is the sum of an unconjugated fraction, produced from haem breakdown before the liver processes it, and a conjugated fraction produced after. A raised total with normal alkaline phosphatase and normal transaminases reflects conjugation capacity rather than hepatocellular or biliary disease, and fasting and physical stress raise it further in that pattern.",
+        "protocol_factors_referenced": []
+      }
     },
     "alt": {
       "min_meaningful_delta": {
@@ -105,7 +113,11 @@
         "note": "CVi \u2248 15%. Citation pending \u2014 CVi source not yet pinned to a DOI.",
         "evidence_refs": []
       },
-      "stable_rationale": null
+      "stable_rationale": null,
+      "mechanism": {
+        "text": "Alanine aminotransferase is more liver-specific than AST but is still present in skeletal muscle at lower concentration. The AST-to-ALT relationship, read alongside the biliary markers, indicates whether a transaminase rise is hepatocellular or muscular in origin.",
+        "protocol_factors_referenced": []
+      }
     },
     "ast": {
       "min_meaningful_delta": {
@@ -114,7 +126,11 @@
         "note": "AST CVi unverified \u2014 no authored delta. Module falls back to default until pinned.",
         "evidence_refs": []
       },
-      "stable_rationale": null
+      "stable_rationale": null,
+      "mechanism": {
+        "text": "Aspartate aminotransferase is present in liver, cardiac muscle, skeletal muscle and red cells. Because of that distribution it rises with muscle damage as well as with hepatocellular injury, so a rise does not by itself localise to the liver \u2014 the biliary markers are what separate the two.",
+        "protocol_factors_referenced": []
+      }
     },
     "haemoglobin": {
       "min_meaningful_delta": {
@@ -123,7 +139,11 @@
         "note": "RCV published directly by Co\u015fkun et al. (EFLM Working Group on Biological Variation), 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000, computed as 2^0.5 \u00b7 Z \u00b7 (CVA\u00b2 + CVI\u00b2)^0.5 with Z = 1.96 two-sided. CVA is research-grade (duplicate analysis, single reagent lot, no IQC drift), so this RCV is a floor \u2014 a routine-laboratory CVA widens it. Substituting the desirable CVAPS from the same table gives ~8.5% here. CVI showed no significant sex difference for erythrocyte parameters.",
         "evidence_refs": ["10.1515/cclm-2017-1155"]
       },
-      "stable_rationale": null
+      "stable_rationale": null,
+      "mechanism": {
+        "text": "Haemoglobin measures oxygen-carrying capacity per volume of blood. It rises both with increased red cell production and with reduced plasma volume, so hydration state moves it independently of erythropoiesis. Androgens stimulate erythropoiesis, so it rises where exogenous testosterone is present.",
+        "protocol_factors_referenced": ["trt"]
+      }
     },
     "haematocrit": {
       "min_meaningful_delta": {
@@ -132,7 +152,11 @@
         "note": "RCV published directly by Co\u015fkun et al. (EFLM Working Group on Biological Variation), 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000, computed as 2^0.5 \u00b7 Z \u00b7 (CVA\u00b2 + CVI\u00b2)^0.5 with Z = 1.96 two-sided. CVA is research-grade (duplicate analysis, single reagent lot, no IQC drift), so this RCV is a floor \u2014 a routine-laboratory CVA widens it. Substituting the desirable CVAPS from the same table gives ~8.5% here. CVI showed no significant sex difference for erythrocyte parameters. Interval caveat: the study sampled weekly over 10 weeks, less than one erythrocyte turnover period (~4 months), which the authors note may explain why erythrocyte CVI came out lower than other parameters. For intervals crossing a season or exceeding ~4 months this RCV understates variation; Thirup 2003 gives ~15% relative at up to 6 months, from warm-weather haemodilution.",
         "evidence_refs": ["10.1515/cclm-2017-1155", "10.2165/00007256-200333030-00005"]
       },
-      "stable_rationale": null
+      "stable_rationale": null,
+      "mechanism": {
+        "text": "Haematocrit is the proportion of blood volume occupied by red cells, and moves with haemoglobin for the same reasons. It is the parameter conventionally tracked during androgen therapy, because rising red cell mass increases blood viscosity.",
+        "protocol_factors_referenced": ["trt"]
+      }
     },
     "rbc": {
       "min_meaningful_delta": {
@@ -141,7 +165,11 @@
         "note": "RCV published directly by Co\u015fkun et al. (EFLM Working Group on Biological Variation), 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000, computed as 2^0.5 \u00b7 Z \u00b7 (CVA\u00b2 + CVI\u00b2)^0.5 with Z = 1.96 two-sided. CVA is research-grade (duplicate analysis, single reagent lot, no IQC drift), so this RCV is a floor \u2014 a routine-laboratory CVA widens it. Substituting the desirable CVAPS from the same table gives ~8.5% here. CVI showed no significant sex difference for erythrocyte parameters.",
         "evidence_refs": ["10.1515/cclm-2017-1155"]
       },
-      "stable_rationale": null
+      "stable_rationale": null,
+      "mechanism": {
+        "text": "Red cell count is the number of red cells per volume of blood. Read together with haemoglobin and haematocrit, it distinguishes whether a change in oxygen-carrying capacity comes from more cells or from each cell carrying more haemoglobin.",
+        "protocol_factors_referenced": ["trt"]
+      }
     },
     "mcv": {
       "min_meaningful_delta": {
@@ -150,7 +178,53 @@
         "note": "RCV published directly by Co\u015fkun et al. (EFLM Working Group on Biological Variation), 30 healthy subjects, weekly sampling over 10 weeks, Sysmex XN 3000, computed as 2^0.5 \u00b7 Z \u00b7 (CVA\u00b2 + CVI\u00b2)^0.5 with Z = 1.96 two-sided. CVA is research-grade (duplicate analysis, single reagent lot, no IQC drift), so this RCV is a floor \u2014 a routine-laboratory CVA widens it. Substituting the desirable CVAPS from the same table gives ~2.4% here. CVI showed no significant sex difference for erythrocyte parameters.",
         "evidence_refs": ["10.1515/cclm-2017-1155"]
       },
-      "stable_rationale": null
+      "stable_rationale": null,
+      "mechanism": {
+        "text": "Mean corpuscular volume is the average size of a red cell, derived from haematocrit and red cell count. It falls when iron availability limits haemoglobin synthesis and rises when B12 or folate availability limits cell division, so it indicates which substrate is constraining production.",
+        "protocol_factors_referenced": []
+      }
+    },
+    "testosterone_total": {
+      "mechanism": {
+        "text": "Total testosterone measures both bound and unbound hormone. Most circulates bound to SHBG and albumin, with only a small fraction free. Where testosterone is administered rather than produced, the total reflects the dose and its timing relative to the draw rather than testicular output.",
+        "protocol_factors_referenced": ["trt"]
+      }
+    },
+    "testosterone_free_calculated": {
+      "mechanism": {
+        "text": "Calculated free testosterone is derived from total testosterone, SHBG and albumin using the Vermeulen equation \u2014 it is not measured directly. It therefore moves when either total testosterone or SHBG moves, and a change can originate in either: a fall in SHBG raises free testosterone with total testosterone unchanged.",
+        "protocol_factors_referenced": ["trt"]
+      }
+    },
+    "shbg": {
+      "mechanism": {
+        "text": "Sex hormone binding globulin determines how much testosterone is bound and therefore how much is free. It is produced in the liver, rises with thyroid hormone and oestrogen, and falls with androgens and insulin resistance. Because free testosterone is calculated from it, SHBG movement changes free testosterone without any change in total.",
+        "protocol_factors_referenced": ["trt"]
+      }
+    },
+    "lh": {
+      "mechanism": {
+        "text": "Luteinising hormone is the pituitary signal driving testicular testosterone production, and is regulated by negative feedback from circulating androgens and oestradiol. Exogenous androgen suppresses it. A suppressed LH in that setting is the expected feedback response rather than an independent signal.",
+        "protocol_factors_referenced": ["trt"]
+      }
+    },
+    "fsh": {
+      "mechanism": {
+        "text": "Follicle stimulating hormone drives spermatogenesis through Sertoli cells, and is suppressed by the same negative feedback as LH with additional input from testicular inhibin B. Like LH, it reflects the feedback state rather than an independent signal when exogenous androgen is present.",
+        "protocol_factors_referenced": ["trt"]
+      }
+    },
+    "ggt": {
+      "mechanism": {
+        "text": "Gamma-glutamyl transferase is a biliary and microsomal enzyme, induced by alcohol and by a range of drugs. It is the panel's main discriminator: a transaminase rise accompanied by normal GGT points away from a hepatobiliary source.",
+        "protocol_factors_referenced": []
+      }
+    },
+    "alp": {
+      "mechanism": {
+        "text": "Alkaline phosphatase originates in both the biliary canaliculi of the liver and in bone. A rise alongside raised GGT suggests a biliary source; a rise with normal GGT suggests bone. It is typically unchanged in isolated hepatocellular injury.",
+        "protocol_factors_referenced": []
+      }
     }
   },
 
