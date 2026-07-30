@@ -5027,3 +5027,60 @@ documented "never part of the standing" prompt (rule 3's premise); no prior nav 
 move Constraint A.
 
 ---
+
+### 151. Producer completed before the interpretation view is wired — the view is not made absence-tolerant
+
+**Decision:** The interpretation view will not be made tolerant of absent producer fields.
+Instead the producer is completed — `mechanism` and `axis_verdict` emitted — before the
+committed fixture is regenerated and before the view is wired to a live endpoint. The view's
+unconditional reads of `group.axis_verdict.*` and `member.mechanism.text` are therefore
+accepted as correct rather than treated as brittleness to be defended against.
+
+**Rationale:** Regenerating the fixture from the producer today would remove exactly the
+fields the view hard-reads, breaking a view that currently renders. That forces a choice:
+make the view tolerate absence, or complete the producer first. Absence-tolerance was
+rejected because it makes a contract field's disappearance render as an empty section rather
+than as a failure — the view would stop being able to tell "the producer does not emit this
+yet" from "the producer regressed." Completing the producer keeps the view a faithful
+consumer of a complete shape, at the cost of ordering one content task and one open question
+ahead of all delivery work. That cost was accepted knowingly.
+
+**Consequence for sequencing:** `mechanism` (content authoring) and `axis_verdict` (gated on
+the generated-field `#47` question) both precede fixture regeneration, the endpoint, and view
+wiring. Delivery is not partially startable ahead of them.
+
+**Status:** Decided (sequencing). No code in this entry.
+
+**Sizing reads that accompanied this decision (2026-07-30, read-only, this session).** Recorded
+because they change what "complete the producer" costs, and both findings postdate the brief that
+ordered the work:
+
+- **`axis_verdict` is FOUR fields, not "an enum plus prose", and none is derivable today.** The
+  object is `{verdict, protocol_phase, text, confidence}` in all six instances across both
+  fixtures. `verdict` is `"coherent"` in every one — zero variation, so the fixture cannot reveal
+  the vocabulary; no enum set exists anywhere in the repo (searched `backend/interpretation`,
+  `backend/reference/*.json`, `backend/tests`, `frontend/src`, for `verdict` and for candidate
+  values). The only other value named in the repo is `insufficient_data`, and it appears solely in
+  a producer docstring aside. `protocol_phase` is worse than unsourced: its fixture values
+  (`on_trt`, `active_training`, `baseline`) intersect `derive_phase`'s actual return set
+  (`episodic`, `re_entering`, `steady`, `stopped`, `washout`) at **zero**, and `on_trt` is
+  vocabulary a live test (`test_on_trt_vocabulary_is_gone_from_source_and_live_asset`) forbids in
+  producer source. `confidence` (`Likely` / `Certain`) has no definition anywhere either. So
+  `axis_verdict` needs an authored vocabulary + derivation rule before any part of it is
+  emittable — it is not "one prose field behind an easy enum."
+- **`mechanism` is three fields — `{text, protocol_factors_referenced, confidence}`** — with
+  `text` the literal `…` placeholder in all ten instances. Authoring scope: **15 markers** can
+  appear as group members (`hpg_axis` 6, `hepatocellular` 5, `erythroid` 4); **no marker belongs to
+  more than one group** (multi-group count 0), so a flat `marker_interpretation[marker].mechanism`
+  is a structurally valid home and group-scoping is unnecessary. The testable subset is the 4
+  grouped markers the producer test seed carries (`testosterone_total`, `oestradiol`, `fsh`, `ast`;
+  `vitamin_d_25oh` is seeded but ungrouped). **I1 does not bind the authored text:** `#95` extends
+  I1 to `marker_interpretation` constants that *influence a gate*, `mechanism.text` influences
+  none, the existing authored-prose precedent (`bilirubin_total.stable_rationale`) carries no
+  citation, and no test enforces citation on that file.
+
+**Do not revisit unless:** the generated-field question resolves in a way that leaves
+`axis_verdict.text` permanently unemittable — at which point the view must tolerate its
+absence, or the field leaves the contract, and this entry is superseded either way.
+
+---
