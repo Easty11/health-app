@@ -1564,3 +1564,52 @@ blocking anything now.
 Numbered `Q63` on the `gov/navigation-model` branch (pre-ff; max was Q62, no competing branch).
 
 ---
+
+## Q64. Do marker-authored member fields belong on `ungrouped[]` rows? `vitamin_d_25oh` gets no explanation today
+
+**State:** open. **Blocks:** nothing — the producer follows a consistent rule today. **Related:**
+`#138` (ungrouped markers render in their own section), `#152` (output shape), I9.
+
+Two of the emitted member fields are **marker-authored**, not group-authored:
+`stable_rationale` and `mechanism` both project from the flat
+`lever_dictionary.marker_interpretation[marker]` slot and reference nothing about the group.
+By the contract's own logic for `ungrouped[]` — member fields that do not depend on group
+authorship may appear there — both **could** legitimately project onto ungrouped rows.
+
+They do not. 1a scoped `stable_rationale` to grouped members, and the mechanism increment
+followed that precedent rather than diverging silently. The consequence is concrete and
+visible in the seeded fixture: **`vitamin_d_25oh` is a real panel marker, is ungrouped
+(`marker_groups.json` authors no vitamin-D group), and therefore renders with no explanation
+of what the marker is** — while an identically-authored explanation is shown for every grouped
+marker. A reader will eventually ask why the lone marker is the one left unexplained.
+
+Note the asymmetry is **not** uniform across the member fields, which is why this is a real
+question rather than a tidy-up: `relations_rendered` and `member_lever_effects` are
+group-derived and their absence from ungrouped rows is structural (no group, no relations, no
+group_levers — by construction, not omission). Only the two marker-authored fields are
+arguable.
+
+Candidates:
+
+- **(a) Project both onto ungrouped rows.** `vitamin_d_25oh` gains its mechanism; the flat slot
+  already contains it for any canonical marker, so the producer change is small. Ungrouped rows
+  become "a member row minus the group-derived fields", which is arguably what they already are.
+- **(b) Keep grouped-only (status quo).** Ungrouped means minimally-rendered: value, gates,
+  nothing interpretive. Defensible, and it keeps the ungrouped section visually distinct from
+  What Moved — but it leaves the gap above.
+- **(c) Project `mechanism` only, not `stable_rationale`.** A mechanism explains the marker
+  and always applies; `stable_rationale` annotates a persistently-flagged marker that is not
+  news, which is closer to a gate-adjacent judgement. Splits the two on what they actually do,
+  at the cost of the flat-slot symmetry.
+
+**Why not decided here:** the mechanism increment's job was plumbing an already-authored asset,
+and widening the ungrouped projection changes what a whole section of the view renders — a
+render-scope decision that belongs with the 1b delivery work, where the Ungrouped section is
+being built anyway (it does not exist in the view yet).
+
+**Resolve by:** the 1b view increment, which must add the Ungrouped section regardless — the
+right moment to decide what a row in it carries. **Owner:** Luke.
+
+Numbered `Q64` on the `feat/interp-mechanism-emit` branch (pre-ff; max was Q63, no competing branch).
+
+---
