@@ -36,14 +36,17 @@ _PRIOR = date(2026, 1, 7)
 _CURRENT = date(2026, 5, 30)
 _VITD = date(2025, 12, 27)
 
-# 4b-ii interpretive-half fields still HELD — absent from every group and member.
-# `relations_rendered` is NOT here: 4b-i emits it on grouped members (Step D/E).
-# Increment 1a emitted the three DETERMINISTIC asset-projection fields, each leaving
-# this list as it landed: stable_rationale + member_lever_effects (member) and
-# shared_levers (group). What remains held is the GENERATED prose — axis_verdict and
-# mechanism — which a deterministic producer cannot emit (no asset source; see Q62).
-# `shared_levers` STAYS in the member list: it is a group field, never on a member.
-_HELD_MEMBER_FIELDS = ["axis_verdict", "shared_levers", "mechanism"]
+# Fields asserted ABSENT from every group / member.
+#
+# `_HELD_MEMBER_FIELDS` NO LONGER CONTAINS A GENUINE HOLD. Every member field in the
+# contract is now emitted — stable_rationale + member_lever_effects (1a), mechanism (this
+# increment), relations_rendered (4b-i). What is left are the two GROUP-level fields, kept
+# here as the standing "a member never carries a group field" boundary check. Read the two
+# lists together: `axis_verdict` in the GROUP list is the producer's one real remaining
+# hold (#152 reduced it to {protocol_phase, text}; the projection still needs a
+# source-factor rule and an authoring table); `shared_levers` appears ONLY in the member
+# list because it is emitted at group level and must never leak onto a member.
+_HELD_MEMBER_FIELDS = ["axis_verdict", "shared_levers"]
 _HELD_GROUP_FIELDS = ["axis_verdict"]
 # Ungrouped rows carry NO interpretive field — with no group, nothing in the
 # interpretive layer attaches by construction. Defined EXPLICITLY, NOT derived from
@@ -300,12 +303,16 @@ def test_all_stable_group_does_not_surface(db_session):
 # ---------- 4b-i-G7 boundary: relations_rendered emitted, held stays held ----------
 
 def test_producer_emits_relations_rendered_but_holds_the_rest_of_4b(db_session):
-    """Split at 4b-i (G7): `relations_rendered` is now EMITTED on grouped members;
-    the interpretive-half fields stay held. The fixture proves the held fields
-    EXIST (asserted below), so their absence in the producer output is the
-    projection dropping them, not a vacuous pass. `relations_rendered` stays a
-    MEMBER field (absent at group level) and is absent from ungrouped rows — no
-    group, no relations, by construction not omission."""
+    """The standing field-boundary check, tightened as fields landed.
+
+    `relations_rendered` is a MEMBER field: emitted on grouped members, absent at group
+    level, and absent from ungrouped rows (no group, no relations — by construction, not
+    omission). The two remaining absence lists now mean different things: `axis_verdict` is
+    the producer's one genuine hold (#152), while `shared_levers` is absent from MEMBERS
+    only because it is emitted at GROUP level. The fixture proves both fields exist
+    (asserted below), so their absence from the projection is real dropping, not a vacuous
+    pass. `mechanism` left this check when it landed and is asserted positively in
+    test_mechanism_is_emitted_per_member; it remains in _UNGROUPED_ABSENT_FIELDS."""
     g0 = _FIXTURE["groups"][0]
     assert "axis_verdict" in g0 and "shared_levers" in g0
     assert "relations_rendered" in g0["members"][0] and "mechanism" in g0["members"][0]
@@ -356,6 +363,42 @@ def test_stable_rationale_is_emitted_per_member(db_session):
 
     assert _row(out, "bilirubin_total")["stable_rationale"] == bili_rationale  # non-null projection
     assert _row(out, "ast")["stable_rationale"] is None                        # null projection
+
+
+def test_mechanism_is_emitted_per_member(db_session):
+    """1a-completion shape gate. `mechanism` lands on every GROUPED member as a faithful
+    projection of `lever_dictionary.marker_interpretation[m].mechanism`, in the #152 shape
+    `{text, protocol_factors_referenced}` — `confidence` is REMOVED from the output and its
+    presence here would be a regression, so it is asserted absent.
+
+    Non-vacuous: the asset text is read independently and compared per marker, so a producer
+    that emitted a constant, an empty string, or a stale copy fails. Ungrouped rows stay
+    flat (guarded by _UNGROUPED_ABSENT_FIELDS in the boundary test) — see Q64."""
+    asset = json.loads((_MARKER_GROUPS_JSON.parent / "lever_dictionary.json")
+                       .read_text(encoding="utf-8"))["marker_interpretation"]
+
+    user, current, prior = _seed_fixture(db_session, "mech@example.com")
+    out = _build(db_session, user, current, prior)
+
+    grouped = [m for g in out["groups"] for m in g["members"]]
+    assert grouped, "seed authors groups — empty would pass vacuously"
+    for m in grouped:
+        key = m["marker_canonical"]
+        assert "mechanism" in m, f"{key} missing mechanism"
+        mech = m["mechanism"]
+        assert set(mech) == {"text", "protocol_factors_referenced"}, (key, sorted(mech))
+        assert "confidence" not in mech, f"{key}: #152 removed mechanism.confidence"
+        authored = asset[key]["mechanism"]
+        assert mech["text"] == authored["text"], f"{key}: text is not the authored asset text"
+        assert isinstance(mech["text"], str) and mech["text"].strip()
+        assert mech["protocol_factors_referenced"] == authored["protocol_factors_referenced"]
+
+    # the projection copies, so mutating output cannot corrupt the module-level asset
+    grouped[0]["mechanism"]["protocol_factors_referenced"].append("mutated")
+    again = _build(db_session, user, current, prior)
+    fresh = next(m for g in again["groups"] for m in g["members"]
+                 if m["marker_canonical"] == grouped[0]["marker_canonical"])
+    assert "mutated" not in fresh["mechanism"]["protocol_factors_referenced"]
 
 
 _GRADES = {"high", "moderate", "low", "very_low"}

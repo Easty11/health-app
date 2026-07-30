@@ -20,13 +20,24 @@ Consumes:
 Emits, over 4a: meta.protocol_context_snapshot; member relations_rendered[] with a
 RESOLVED precondition_status (satisfied / not_satisfied / unresolvable) and
 expected_by_phase (expected_by_phase has NO authority — it touches no gate); and the
-deterministic asset-projection interpretive fields — member stable_rationale and
-member_lever_effects, and group shared_levers (I1-cited, present-filtered, with an
+deterministic asset-projection interpretive fields — member stable_rationale, mechanism
+and member_lever_effects, and group shared_levers (I1-cited, present-filtered, with an
 already-in-play status resolved against declared_factor_keys per #145).
-Still HELD for 4b-ii: axis_verdict.text and mechanism.text (GENERATED interpretive
-prose — no asset source, so a deterministic producer cannot emit them; axis_verdict
-also gated on Q62's structural-#47 question), and demotion. No relation-based news
-demotion — gate 1 is still raw.
+
+EVERY MEMBER FIELD IN THE CONTRACT IS NOW EMITTED. Two holds remain, both group-level or
+cross-cutting rather than per-member:
+  * `axis_verdict` — reduced to {protocol_phase, text} by #152 and still held. Not on
+    generation grounds any more (#152 makes `text` authored, so nothing generated remains
+    in the output, and Q62 has no current consumer): it is held on two open specifics —
+    protocol_context_snapshot.factors is a LIST while protocol_phase is a scalar, so the
+    projection needs a source-factor rule; and the (group x relation-outcome x phase)
+    authoring table is not enumerated.
+  * relation-based news demotion — gate 1 is still raw.
+
+Grouped members only: `mechanism` and `stable_rationale` are marker-authored, so they
+COULD project onto ungrouped[] rows; 1a scoped stable_rationale to grouped members and
+this follows that precedent rather than diverging silently. See OPEN_QUESTIONS Q64 —
+`vitamin_d_25oh` is seeded, ungrouped, and therefore carries no explanation under this rule.
 """
 from __future__ import annotations
 
@@ -226,6 +237,35 @@ def _stable_rationale(marker_canonical: str | None) -> str | None:
     return entry.get("stable_rationale") if entry else None
 
 
+def _mechanism(marker_canonical: str | None) -> dict | None:
+    """member.mechanism — the authored physiology for this marker, projected from
+    `lever_dictionary.marker_interpretation[marker].mechanism`.
+
+    Shape is `{text, protocol_factors_referenced}` per #152, which removed `confidence`
+    from the interpretation output entirely (the concept it would express is already
+    carried structurally by `operand_status`, and on authored physiology there is nothing
+    for it to express). Pure asset projection — this layer authors nothing and generates
+    nothing; the text explains the MARKER, never this user's result, which is what keeps
+    it inside #47's education line by construction.
+
+    `protocol_factors_referenced` is copied, not aliased, so a caller cannot mutate the
+    module-level asset.
+
+    Returns None only if the marker has no authored mechanism. That is defensive, not
+    expected: all 15 markers that can appear as a group member carry one, and
+    `test_lever_dictionary_mechanism.py` fails the asset if a group member ever lacks it —
+    so the None path exists to be honest about an absence the guard prevents, never to
+    paper over one."""
+    entry = _LEVER_DICTIONARY.get("marker_interpretation", {}).get(marker_canonical or "")
+    mech = entry.get("mechanism") if entry else None
+    if not mech:
+        return None
+    return {
+        "text": mech["text"],
+        "protocol_factors_referenced": list(mech.get("protocol_factors_referenced", [])),
+    }
+
+
 def _citable_lever(lever_key: str) -> dict | None:
     """The `lever_dictionary.levers` node for `lever_key` IF it satisfies I1 —
     grade, grade_rationale and NON-EMPTY evidence_refs — else None. One predicate,
@@ -315,15 +355,17 @@ def _build_group(group_def: dict, members: list[dict], present: set[str],
     Pass 2 authors `relations_rendered` on each member (over the whole assembled
     set + panel-present operands + the declared-state phase map), THEN computes
     `should_surface`. Pass 3 (interpretive) lands the deterministic asset-projection
-    fields: per member `stable_rationale` and `member_lever_effects`, and the group's
-    `shared_levers`. Still held: the GENERATED prose (axis_verdict, mechanism) and
-    demotion. `should_surface` is computed here, not in pass 1, precisely so the
+    fields: per member `stable_rationale`, `mechanism` and `member_lever_effects`, and the
+    group's `shared_levers`. EVERY member field in the contract is now emitted; the only
+    remaining producer hold is the group-level `axis_verdict`, and demotion.
+    `should_surface` is computed here, not in pass 1, precisely so the
     relation pass (and, in 4b-ii, relation-based demotion) can finalise each member's
     news_gate first. No demotion runs this increment, so the value is identical to 4a's."""
     for member in members:  # pass 2: relations over the assembled set
         member["relations_rendered"] = _relations_rendered(
             member["marker_canonical"], group_def, present, phase_of)
         member["stable_rationale"] = _stable_rationale(member["marker_canonical"])  # pass 3 (asset)
+        member["mechanism"] = _mechanism(member["marker_canonical"])
         member["member_lever_effects"] = _member_lever_effects(member["marker_canonical"], group_def)
     return {
         "group_key": group_def["group_key"],
