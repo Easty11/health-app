@@ -209,8 +209,10 @@ def test_min_meaningful_delta_is_asset_derived(db_session):
 # ---------- 4a-G3 oracle: gates ----------
 
 def test_oracle_news_and_range_gates_match_the_fixture(db_session):
-    """Raw gate-1 is_news equals the fixture exactly here (no relation demotion
-    is exercised); range_gate matches lab-flag-for-flag."""
+    """Raw gate-1 is_news equals the fixture exactly here. Demotion exists but is not
+    exercised on this panel — its feedback relation is `degraded` (the seed omits `lh`),
+    which `test_news_gate_shape_and_no_unearned_demotion_on_the_s2_panel` pins explicitly;
+    range_gate matches lab-flag-for-flag."""
     user, current, prior = _seed_fixture(db_session, "gate@example.com")
     out = _build(db_session, user, current, prior)
 
@@ -577,10 +579,13 @@ def test_precondition_admissible_phases_are_real_derive_phase_outputs():
 
 
 def test_precondition_evidence_refs_are_non_empty_I1():
-    """4b-ii-I1. A precondition feeds gate 1's delta arm the moment demotion lands,
-    so it is a read-constant: every authored precondition MUST carry non-empty
-    evidence_refs (#95), as safety bands do. Enforced by test — marker_groups.json
-    has no _schema block — mirroring test_safety_thresholds_schema.validate()."""
+    """4b-ii-I1. A precondition NOW feeds gate 1's delta arm — demotion has landed, and a
+    `satisfied` precondition is exactly what withdraws a news verdict — so it is a
+    gate-influencing read-constant: every authored precondition MUST carry non-empty
+    evidence_refs (#95), as safety bands do. This test predates the authority and was
+    written for the moment it arrived; that moment is now. Enforced by test —
+    marker_groups.json has no _schema block — mirroring
+    test_safety_thresholds_schema.validate()."""
     preconds = _authored_preconditions()
     assert preconds, "no precondition authored — vacuous"
     for key, pc in preconds:
@@ -666,21 +671,34 @@ def test_on_trt_vocabulary_is_gone_from_source_and_live_asset():
             assert "on_trt" not in json.dumps(r), f"{r['relation_key']} live relation still carries on_trt"
 
 
-# ---------- 4b-i-G6 / 4b-ii-G6: no demotion, precondition has no authority ----------
+# ---------- news_gate shape, and no UNEARNED demotion on the §2 panel ----------
 
-def test_no_demotion_news_gate_two_key_and_no_demot_basis(db_session):
-    """4b-i-G6 + 4b-ii-G6. NO demotion this increment, and the resolved precondition
-    has NO authority: `news_gate` is exactly {is_news, basis} on every member and
-    ungrouped row, no basis mentions demotion, and no basis mentions the precondition
-    or expectation — resolving a precondition must not move a gate. Positive-control:
-    a declared trt in steady makes the fsh feedback `satisfied`, yet fsh's news_gate
-    is unchanged (it stays surfaced on its range breach, not demoted)."""
+def test_news_gate_shape_and_no_unearned_demotion_on_the_s2_panel(db_session):
+    """FLIPPED, not deleted (was `test_no_demotion_news_gate_two_key_and_no_demot_basis`,
+    asserting demotion did not exist). Demotion now DOES exist — see
+    `test_in_phase_relation_demotes_the_delta_arm_end_to_end` and `test_relation_demotion.py`
+    — so a blanket "no basis mentions demotion" would from here on be passing for a reason
+    it no longer states, which is the drift this repo punishes.
+
+    What survives unchanged: `news_gate` is exactly {is_news, basis} on every member and
+    ungrouped row (shape is contract surface), and no basis ever leaks a `precondition` or
+    `expected` token — resolving a precondition is not itself authority; only the named
+    `relation_demoted_<key>` token is.
+
+    What is now asserted POSITIVELY: the §2 panel does not demote, and the REASON is stated
+    and checked — its feedback relation is `degraded`, because `_seed_fixture` seeds `fsh`
+    without `lh`. Pinning the reason is the point: if that seed ever gains `lh`, this test
+    fails loudly instead of quietly continuing to report "no demotion here"."""
     user, current, prior = _seed_fixture(db_session, "nodemote@example.com")
     _seed_declared(db_session, user.id, "trt", _steady_trt())  # precondition resolves satisfied
     out = _build(db_session, user, current, prior)
 
-    # the precondition IS satisfied here — so this is a live authority check, not vacuous
-    assert _feedback_rel(out)["precondition_status"] == "satisfied"
+    # the precondition IS satisfied — so demotion is refused on the operand clause alone
+    relation = _feedback_rel(out)
+    assert relation["precondition_status"] == "satisfied"
+    assert relation["operand_status"] == "degraded", \
+        "the §2 seed omits `lh`; if that changed, this panel would start demoting"
+    assert "lh" in relation["operands_missing"]
 
     rows = [m for g in out["groups"] for m in g["members"]] + out["ungrouped"]
     assert rows, "non-vacuous"
@@ -688,7 +706,8 @@ def test_no_demotion_news_gate_two_key_and_no_demot_basis(db_session):
         assert set(r["news_gate"]) == {"is_news", "basis"}, \
             f"{r['marker_canonical']} news_gate is not exactly two keys"
         for b in r["news_gate"]["basis"]:
-            assert "demot" not in b, f"{r['marker_canonical']} basis mentions demotion: {b}"
+            assert not b.startswith("relation_demoted_"), \
+                f"{r['marker_canonical']} demoted on a degraded relation: {b}"
             assert "precondition" not in b and "expected" not in b, \
                 f"{r['marker_canonical']} basis leaked precondition authority: {b}"
 
@@ -939,3 +958,106 @@ def test_band_change_propagates_end_to_end_and_forces_news(db_session):
     assert "safety_band_escalated" in member["news_gate"]["basis"]
 
     assert group["should_surface"] is True
+
+
+# ---------- §4 relation demotion of gate 1's delta arm, END TO END ----------
+
+def _seed_hpg_feedback_panel(db, email, fsh_prior, fsh_current, lab_flag=None,
+                             ref_low=1.5, ref_high=12.4, declare_trt=True):
+    """A panel where the `hpg_gonadotropin_suppression` feedback relation can actually
+    demote: BOTH its operands (`lh`, `fsh`) are present so `operand_status` is `complete`,
+    and a steady `trt` factor is declared so `precondition_status` resolves `satisfied`.
+
+    `_seed_fixture` cannot serve here — it seeds `fsh` without `lh`, so the relation is
+    permanently `degraded` there, and its `fsh` pair is censored-flat so there is no news to
+    demote. That is also why demotion leaves the §2 oracle panel byte-identical."""
+    user = _make_user(db, email)
+    prior = _make_report(db, user.id, _PRIOR, panel_name="Gonadal (prior)")
+    current = _make_report(db, user.id, _CURRENT, panel_name="Gonadal")
+    for report, fsh_value in ((prior, fsh_prior), (current, fsh_current)):
+        _make_result(db, report.id, "FSH", "fsh", value_num=fsh_value, unit_canonical="IU/L",
+                     ref_low=ref_low, ref_high=ref_high, lab_flag=lab_flag)
+    # lh present so the relation's operand set is COMPLETE (this is what _seed_fixture lacks)
+    _make_result(db, prior.id, "LH", "lh", value_num=5.0, unit_canonical="IU/L",
+                 ref_low=1.7, ref_high=8.6)
+    _make_result(db, current.id, "LH", "lh", value_num=4.6, unit_canonical="IU/L",
+                 ref_low=1.7, ref_high=8.6)
+    # the relation's driver, for a physiologically coherent panel
+    _make_result(db, prior.id, "Testosterone (total)", "testosterone_total",
+                 value_num=22.5, unit_canonical="nmol/L", ref_low=10.0, ref_high=30.0)
+    _make_result(db, current.id, "Testosterone (total)", "testosterone_total",
+                 value_num=24.0, unit_canonical="nmol/L", ref_low=10.0, ref_high=30.0)
+    if declare_trt:
+        _seed_declared(db, user.id, "trt", _steady_trt())
+    return user, current, prior
+
+
+def test_in_phase_relation_demotes_the_delta_arm_end_to_end(db_session):
+    """§4 through the real producer. FSH falls 8.0 -> 3.0 (-62.5%, well past the 0.30
+    fallback threshold) entirely INSIDE the reference interval, so the delta arm is news and
+    no bound is crossed. With steady TRT declared, the gonadotropin-suppression relation
+    resolves `satisfied` with `complete` operands, so the movement is expected and gate 1 is
+    withdrawn — naming the relation."""
+    user, current, prior = _seed_hpg_feedback_panel(db_session, "demote@example.com", 8.0, 3.0)
+    out = _build(db_session, user, current, prior)
+    fsh = _row(out, "fsh")
+
+    # the demotion path was genuinely live
+    relation = _feedback_rel(out)
+    assert relation["precondition_status"] == "satisfied"
+    assert relation["operand_status"] == "complete"
+    assert fsh["delta"]["magnitude"] == "meaningful"
+    assert fsh["delta"]["crossed_ref"] is None
+
+    assert fsh["news_gate"]["is_news"] is False, "an in-phase feedback relation demotes it"
+    assert "delta_meaningful" in fsh["news_gate"]["basis"]
+    assert "relation_demoted_hpg_gonadotropin_suppression" in fsh["news_gate"]["basis"]
+
+
+def test_the_same_movement_is_news_without_the_declared_factor(db_session):
+    """The control that makes the test above mean something: identical FSH movement, no
+    declared `trt`, so the precondition resolves `unresolvable` and nothing demotes. Without
+    this, the demotion could be an artefact of the seed rather than of the relation."""
+    user, current, prior = _seed_hpg_feedback_panel(
+        db_session, "nodemote@example.com", 8.0, 3.0, declare_trt=False)
+    out = _build(db_session, user, current, prior)
+    fsh = _row(out, "fsh")
+
+    assert _feedback_rel(out)["precondition_status"] == "unresolvable"
+    assert fsh["news_gate"]["is_news"] is True
+    assert not any(b.startswith("relation_demoted_") for b in fsh["news_gate"]["basis"])
+
+
+def test_gate_2_breach_survives_demotion_and_the_group_still_surfaces(db_session):
+    """I5 UNDER PRESSURE, end to end. FSH sits BELOW the interval on both draws (lab flag L,
+    so gate 2 fires) and falls 0.9 -> 0.3, a meaningful move with NO bound crossing — so the
+    demotion path is live and does fire on gate 1.
+
+    Gate 2 is untouched by it and the group still surfaces. That is the invariant: the breach
+    is annotated by the relation, never hidden by it. Demotion is structurally unable to
+    reach gate 2 — it only rewrites gate 1's return, and `should_surface` ORs the three."""
+    user, current, prior = _seed_hpg_feedback_panel(
+        db_session, "i5@example.com", 0.9, 0.3, lab_flag="L")
+    out = _build(db_session, user, current, prior)
+    fsh = _row(out, "fsh")
+
+    assert fsh["delta"]["crossed_ref"] is None, "both draws out of range — no crossing"
+    assert fsh["news_gate"]["is_news"] is False, "gate 1 demoted, so this is real pressure"
+    assert "relation_demoted_hpg_gonadotropin_suppression" in fsh["news_gate"]["basis"]
+
+    # ... and yet
+    assert fsh["range_gate"]["is_out_of_range"] is True, "I5: gate 2 is not suppressible"
+    assert _group(out, "hpg_axis")["should_surface"] is True, \
+        "the group must still surface on the breach alone"
+
+
+def test_demotion_never_reaches_gate_3(db_session):
+    """Gate 3 is asserted untouched on the same panel: no relation writes to `safety_gate`,
+    whatever it does to gate 1. (`fsh` has no authored band, so `no_asset` is the correct
+    and only honest value here — this pins that demotion did not invent one.)"""
+    user, current, prior = _seed_hpg_feedback_panel(db_session, "gate3@example.com", 8.0, 3.0)
+    fsh = _row(_build(db_session, user, current, prior), "fsh")
+    assert fsh["news_gate"]["is_news"] is False           # demotion did happen
+    assert fsh["safety_gate"]["status"] is None
+    assert fsh["safety_gate"]["band_change"] is None
+    assert fsh["safety_gate"]["undecidable_reason"] == "no_asset"

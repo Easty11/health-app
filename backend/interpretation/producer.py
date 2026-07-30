@@ -3,9 +3,12 @@
 build_foundation(user_id, db, trigger_panel, prior_panel) -> {meta, groups[], ungrouped[]}
 
 Three passes (4b-i restructure over 4a's single pass):
-  Pass 1  per member  — delta, safety_gate, range_gate, raw news_gate (unchanged 4a).
-  Pass 2  per group   — relations over the assembled member set, THEN should_surface.
-  Pass 3  per group   — interpretive layer (verdict, levers — held for 4b-ii).
+  Pass 1  per member  — delta, safety_gate, range_gate, PROVISIONAL news_gate (no relations
+                        exist yet, so its delta arm is undemoted).
+  Pass 2  per group   — relations over the assembled member set, then news_gate RE-COMPUTED
+                        with those relations (delta-arm demotion, §4), THEN should_surface.
+  Pass 3  per group   — interpretive layer (stable_rationale / mechanism / levers; the
+                        group-level axis_verdict is still held).
 
 Consumes:
   * newest+prior per marker (labs_reads.marker_series)
@@ -32,7 +35,11 @@ cross-cutting rather than per-member:
     protocol_context_snapshot.factors is a LIST while protocol_phase is a scalar, so the
     projection needs a source-factor rule; and the (group x relation-outcome x phase)
     authoring table is not enumerated.
-  * relation-based news demotion — gate 1 is still raw.
+Relation-based demotion of gate 1's DELTA arm is now LIVE (§4): a member carrying an
+in-phase `feedback` relation (precondition satisfied, operands complete) has a
+magnitude-driven news verdict withdrawn, naming the relation in `basis`. A `crossed_ref`
+transition is never demoted, and the safety arm re-forces news after demotion, so I8 holds
+by construction. See `gates.demoting_relations` for the predicate.
 
 Grouped members only: `mechanism` and `stable_rationale` are marker-authored, so they
 COULD project onto ungrouped[] rows; 1a scoped stable_rationale to grouped members and
@@ -364,6 +371,15 @@ def _build_group(group_def: dict, members: list[dict], present: set[str],
     for member in members:  # pass 2: relations over the assembled set
         member["relations_rendered"] = _relations_rendered(
             member["marker_canonical"], group_def, present, phase_of)
+        # Gate 1 is RE-COMPUTED here, now that this member's relations exist, so an
+        # in-phase relation can demote its delta arm (§4). This is the whole reason the
+        # three-pass restructure (#140) moved surfacing out of pass 1: pass 1's news_gate
+        # is provisional, and `should_surface` below must read the finalised one. The
+        # safety arm is re-applied inside news_gate AFTER demotion, so a band change
+        # survives it by construction (I8).
+        member["news_gate"] = build_news_gate(
+            member["delta"], safety_gate=member["safety_gate"],
+            relations_rendered=member["relations_rendered"])
         member["stable_rationale"] = _stable_rationale(member["marker_canonical"])  # pass 3 (asset)
         member["mechanism"] = _mechanism(member["marker_canonical"])
         member["member_lever_effects"] = _member_lever_effects(member["marker_canonical"], group_def)

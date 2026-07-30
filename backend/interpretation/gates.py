@@ -2,9 +2,9 @@
 
 Four mechanical questions per marker:
   delta       — how did it move vs the prior draw?
-  news_gate   — gate 1, TWO arms: the delta arm (raw) and the safety arm.
-                4b may append a relation basis and may demote the DELTA arm.
-                It may NEVER demote the safety arm — see below.
+  news_gate   — gate 1, TWO arms: the delta arm (demotable) and the safety arm.
+                An in-phase relation may demote the DELTA arm (§4, now LIVE —
+                see `demoting_relations`). It may NEVER demote the safety arm.
   range_gate  — gate 2, driven by the LAB flag; computed_flag is withheld (V2)
   safety_gate — gate 3, a LEVEL compared to an authored policy constant
 
@@ -17,13 +17,17 @@ So output may legitimately carry range_gate.is_out_of_range False alongside
 safety_gate.status "in_band". Both are correct, from two authorities. The
 renderer shows both with their sources; it does not reconcile them.
 
-THE SAFETY ARM IS NOT DEMOTABLE. 4b's relation arm may demote delta-driven
+THE SAFETY ARM IS NOT DEMOTABLE. The relation arm may demote delta-driven
 news — "AST rose but GGT is normal, so this is muscle" legitimately makes a
 delta story not worth surfacing. Nothing may demote a band change. Explaining
 WHY a value rose is a different claim from whether it should surface, and no
 mechanistic account makes a haematocrit of 0.52 not worth showing. Written
-down before demotion logic exists, so that logic inherits the constraint
-rather than discovering it.
+down before demotion logic existed, so that logic would inherit the constraint
+rather than discover it — and it did: `news_gate` applies demotion BEFORE the
+safety arm, which then re-forces news on any band change unconditionally, so
+I8 holds by construction and not by a check that could be forgotten. What the
+relation arm can demote is narrower than "any relation": see
+`demoting_relations` for the predicate and why only `feedback` qualifies today.
 
 The one deliberate asymmetry, both faces of it recorded here:
   * range_gate.is_out_of_range reads `lab_flag` — a lab-asserted breach — and
@@ -330,22 +334,72 @@ def safety_gate(current: LabRow, prior: LabRow | None, thresholds: dict | None =
     }
 
 
-def news_gate(delta_obj: dict | None, safety_gate: dict | None = None) -> dict:
-    """Gate 1, TWO arms.
+def demoting_relations(relations_rendered: list[dict] | None) -> list[str]:
+    """The relation keys that are entitled to demote gate 1's DELTA arm — the §4 authority,
+    resolved (this is the predicate #153 names; it is a decision, not an implementation
+    detail, so it lives in one named function rather than inline in the gate).
+
+    A relation qualifies iff ALL THREE hold:
+
+      1. `kind == "feedback"`. Feedback is the ONLY kind whose applicability the producer
+         actually resolves: it carries a machine-readable `precondition` (`factor_key` +
+         `admissible_phases`, #141) that `_resolve_precondition` evaluates against the
+         panel's declared state. `ratio` / `co_movement` / `discriminator` / `context`
+         carry a narrative `reads` string and operand lists and nothing testable — the
+         asset declares no demotion condition for them (verified across all ten authored
+         relations). Demoting on one of those would mean asserting an explanation the
+         producer never checked; for `haemoconcentration_discriminator` that is literally
+         "this rise is a draw artefact" with no look at albumin. Widening past feedback is
+         an ASSET-vocabulary change, not a code change — see OPEN_QUESTIONS.
+      2. `precondition_status == "satisfied"` — the phase precondition actually holds for
+         THIS panel. `not_satisfied` means the expected reading does not apply (that is
+         news, not an explanation) and `unresolvable` means we could not tell, which is
+         never grounds for silence.
+      3. `operand_status == "complete"` — no operand missing. A degraded relation is
+         explicitly the case where the producer NAMES what it could not see, so it cannot
+         also be treated as a full explanation.
+
+    Returns keys (not booleans) so the demotion can name itself in `basis`."""
+    qualifying = []
+    for relation in relations_rendered or []:
+        if (relation.get("kind") == "feedback"
+                and relation.get("precondition_status") == "satisfied"
+                and relation.get("operand_status") == "complete"):
+            qualifying.append(relation["relation_key"])
+    return qualifying
+
+
+def news_gate(delta_obj: dict | None, safety_gate: dict | None = None,
+              relations_rendered: list[dict] | None = None) -> dict:
+    """Gate 1, TWO arms — with the delta arm now demotable by an in-phase relation.
 
     Delta arm (raw): is_news = (magnitude meaningful) OR (crossed_ref set). A first
     observation is not news on this arm.
 
-    Safety arm (optional keyword, default None so every pre-existing call site behaves
-    identically): when a `safety_gate` dict is passed and its `band_change` is non-null,
-    is_news is forced true and `safety_band_<change>` is appended to basis.
+    Relation demotion (§4, optional keyword — default None so every pre-existing call site
+    behaves identically): a delta-arm news verdict is withdrawn when `demoting_relations`
+    finds a qualifying relation AND the news did not come from a reference-bound crossing.
+    `relation_demoted_<key>` is appended to basis, so a demotion always names the relation
+    that bought it — a silent demotion would be indistinguishable from a quiet marker.
 
-    The return shape is EXACTLY {is_news, basis} on every path. The safety arm appends
-    to `basis`; it never adds a sibling key. Three tests pin this dict whole
+    WHY `crossed_ref` IS NEVER DEMOTED. Not I5 — I5 needs no help here, because gate 2
+    fires on a breach independently and `should_surface` ORs the three gates, so demoting
+    the delta arm on a breaching member cannot hide it. The case that actually bites is the
+    OPPOSITE transition: `crossed_ref == "into_range"`. There gate 2 goes QUIET (the value
+    is back inside the interval), `_magnitude` returns `meaningful` precisely BECAUSE of the
+    crossing, and an in-phase relation would swallow "this marker returned to range" — which
+    is real news to a reader whatever the mechanism. `crossed_ref` is bidirectional
+    (`delta()` emits `into_range` / `out_of_range`), so the clause is live, not decorative.
+
+    ORDER IS THE I8 GUARANTEE. Demotion runs BEFORE the safety arm, and the safety arm then
+    re-forces `is_news = True` on any `band_change` unconditionally. So a band change cannot
+    be demoted by construction rather than by a check that could be forgotten — there is no
+    code path in which a demotion outlives a band change. Gates 2 and 3 are untouched: this
+    function only ever returns gate 1, and `should_surface` reads all three.
+
+    The return shape is EXACTLY {is_news, basis} on every path. Demotion and the safety arm
+    append to `basis`; neither adds a sibling key. Three tests pin this dict whole
     (`fsh`, `ast`, `vitamin_d`), and that is deliberate — the shape is contract surface.
-
-    NOT DEMOTABLE: 4b may append a relation basis and may demote the delta arm. It must
-    never demote a band change. See the module docstring.
     """
     band_change = (safety_gate or {}).get("band_change")
 
@@ -370,6 +424,13 @@ def news_gate(delta_obj: dict | None, safety_gate: dict | None = None) -> dict:
         basis.append("flat_vs_prior")
     else:
         basis.append("delta_within_min_meaningful")
+
+    # §4 delta-arm demotion — before the safety arm, which overrides it (I8).
+    if is_news and crossed is None:
+        for key in demoting_relations(relations_rendered):
+            is_news = False
+            basis.append(f"relation_demoted_{key}")
+            break
 
     if band_change:
         is_news = True
