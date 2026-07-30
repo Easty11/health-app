@@ -1613,3 +1613,52 @@ right moment to decide what a row in it carries. **Owner:** Luke.
 Numbered `Q64` on the `feat/interp-mechanism-emit` branch (pre-ff; max was Q63, no competing branch).
 
 ---
+
+## Q65. Four of the five relation kinds carry no machine-readable demotion condition — asset gap, or permanent boundary?
+
+**State:** open. **Blocks:** any widening of #153's demotion predicate past `kind == "feedback"`.
+**Related:** #153 (the predicate), #63 (`marker_groups.json` is "purely relational"), #141 (the
+precondition object), I5/I8.
+
+`feedback` is the only relation kind the producer can evaluate, because it alone carries a
+machine-readable `precondition` (`factor_key` + `admissible_phases`). The other four —
+`ratio`, `co_movement`, `discriminator`, `context` — carry a narrative `reads` string and
+operand lists, and **nothing testable**: verified across all ten authored relations, no
+`demotes` / `demotes_when` / `condition` / `predicate` field exists on any of them.
+
+This matters because the most *intuitive* demotions all live in the four narrative kinds.
+`ggt_hepatobiliary_discriminator` (normal GGT, so the transaminase rise is not hepatobiliary)
+and `haemoconcentration_discriminator` (a red cell rise with albumin rising is a draw artefact)
+both read like textbook demotions — and the producer cannot act on either, because nothing tells
+it to compare GGT to its range or to check whether albumin moved. Acting anyway would emit an
+explanation never checked.
+
+Two futures, and they are genuinely different:
+
+- **(a) Extend the asset with a declared demotion condition per relation** — e.g.
+  `demotes_when: {operand: "ggt", state: "in_range"}` or
+  `{co_operand: "albumin", direction: "same"}`. Demotion stays declared-in-asset and evaluated
+  generically in code, the same split `precondition` already uses successfully. **The real
+  question this branch tests is whether #63's "purely relational" asset can carry a predicate
+  without becoming code.** A `demotes_when` vocabulary rich enough for the discriminator cases
+  starts to look like a small expression language, and #63 drew the asset/code line specifically
+  to keep judgement out of the producer. If the vocabulary stays small and declarative this is
+  the better future; if it grows conditionals, the asset has become code wearing JSON.
+- **(b) Accept that demotion is a `feedback`-kind capability by definition.** The other four
+  kinds exist to *explain on the member line* — they already render their `reads` narrative to
+  the reader — but never to change what surfaces. Defensible on a clean principle: only a
+  relation whose applicability is resolvable from declared state should be able to silence news;
+  the rest inform the reader who is looking rather than deciding whether they look. Costs nothing
+  to adopt (it is the status quo) but permanently forecloses the GGT and albumin demotions above.
+
+**Why not decided here:** #153 needed a predicate the data actually supports, and both branches
+are compatible with the one it names — (a) supersedes its clause 2 later, (b) freezes it.
+Choosing requires drafting a candidate `demotes_when` for the two discriminator cases and seeing
+whether it stays declarative, which is design work, not a read.
+
+**Resolve by:** the first time a demotion is wanted that #153 refuses. Not urgent — nothing is
+blocked today. **Owner:** Luke.
+
+Numbered `Q65` on the `feat/interp-demotion` branch (pre-ff; max was Q64, no competing branch).
+
+---

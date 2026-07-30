@@ -5183,3 +5183,84 @@ option and Q62 binds again. That sizing is not yet done and is the one empirical
 entry carries.
 
 ---
+
+### 153. Relation-based demotion of gate 1's delta arm — the predicate is `feedback` + satisfied + complete, and never a bound crossing
+
+**Decision:** Relations are granted authority over gate 1's **delta arm only**. A member's
+delta-arm news verdict is withdrawn iff **both**:
+
+1. the news did **not** come from a reference-bound crossing (`delta.crossed_ref is None`); and
+2. the member carries a `relations_rendered` entry with `kind == "feedback"` **and**
+   `precondition_status == "satisfied"` **and** `operand_status == "complete"`.
+
+The demotion names itself in `news_gate.basis` as `relation_demoted_<relation_key>`. The
+predicate lives in one named function (`gates.demoting_relations`) rather than inline, because
+it is this decision and not an implementation detail.
+
+**Why `feedback` only — the phrase "fully explained away by an in-phase relation" resolves to
+one kind, not five.** `feedback` is the only relation kind whose applicability the producer can
+*evaluate*: it alone carries a machine-readable `precondition` (`factor_key` +
+`admissible_phases`, #141) which `_resolve_precondition` resolves against the panel's declared
+state. The other four kinds — `ratio`, `co_movement`, `discriminator`, `context` — carry a
+narrative `reads` string and operand lists and **no demotion condition whatsoever** (verified
+across all ten authored relations; no `demotes` / `demotes_when` / `condition` / `predicate`
+field exists on any). Demoting on one of those would mean asserting an explanation the producer
+never checked: for `haemoconcentration_discriminator` it would literally be emitting "this rise
+is a draw artefact" without ever looking at albumin. Encoding that arithmetic in code would also
+put physiology in the producer, which #63 forbids by making `marker_groups.json` "purely
+relational". So widening the predicate is an **asset-vocabulary change, not a code change** —
+see OPEN_QUESTIONS Q65. The contract's own wording supports the narrowing: "**in-phase**" is
+precisely the feedback precondition holding.
+
+**Why a reference-bound crossing is never demoted — and why this is NOT the I5 clause it looks
+like.** I5 needs no help from this predicate: gate 2 fires on a breach independently and
+`should_surface` ORs the three gates, so demoting the delta arm on a breaching member cannot
+hide it. The case the clause actually protects is the **opposite** transition,
+`crossed_ref == "into_range"`. There gate 2 goes **quiet** (the value is back inside the
+interval), `_magnitude` returns `meaningful` precisely *because* of the crossing, and an
+in-phase relation would swallow "this marker returned to range" — which is real news to a
+reader whatever the mechanism explains. `crossed_ref` is bidirectional (`delta()` emits
+`into_range` / `out_of_range`), so the clause is live rather than unfalsifiable caution.
+
+**What this deliberately does not demote:** the safety arm (I8), gate 2 (I5), gate 3, a
+`not_satisfied` or `unresolvable` precondition (the first is news, the second is never grounds
+for silence), a `degraded` relation (it is the case where the producer names what it could not
+see, so it cannot also be a full explanation), a first observation (no delta arm exists), and a
+delta arm that was already quiet (demotion withdraws a verdict; it never adds a token to a
+marker that never moved).
+
+**I8 holds by construction, not by check.** Demotion runs **before** the safety arm, and the
+safety arm re-forces `is_news = True` on any `band_change` unconditionally — so no code path
+lets a demotion outlive a band change. This is the ordering the gate module's docstring demanded
+before the logic existed, and the logic inherited it.
+
+**Status:** Landed on `feat/interp-demotion`. Producer gate 1 is now re-computed in pass 2 once
+a member's relations exist — the reason #140 moved surfacing out of pass 1; pass 1's `news_gate`
+is explicitly provisional from here.
+
+**How you know:** G1 artifact — both canonical panels are **byte-identical** before and after
+(the §2 seed's feedback relation is permanently `degraded`: it seeds `fsh` without `lh`), and on
+a panel where the relation resolves satisfied+complete exactly one member leaves What Moved —
+`fsh`, attributed to `hpg_gonadotropin_suppression`, carrying `gate2_breach=False`,
+`band_change=None`, `crossed_ref=None`. I5 under pressure end-to-end: `fsh` below range on both
+draws has gate 1 demoted and still surfaces on the breach. I8 under pressure at gate level,
+**paired** — the identical call minus the band change demotes, which is what proves the path was
+live rather than unavailable. `gates.py` diff confined to the delta arm: `range_gate`,
+`safety_gate`, `delta`, `_magnitude` and `_resolve_band` bodies are absent from it and the
+executable safety-arm block is unchanged. Suite 478 to 506.
+
+**One coverage gap, recorded not glossed:** the I8 pressure test is **gate-level, not
+end-to-end**, because no marker can currently carry both a safety band and a demotable relation
+— the asset bands `haematocrit` alone and the sole `feedback` relation renders on `lh`/`fsh`.
+That intersection is **contingent, not structural**: a haematocrit feedback relation or an `lh`
+band would close it, at which point the unit-level test would keep passing while covering less.
+`test_banded_and_feedback_markers_do_not_yet_intersect` is the tripwire — it asserts the
+emptiness, and its docstring instructs the reader to write the end-to-end test and delete the
+tripwire when it fires.
+
+**Do not revisit unless:** a relation proves able to explain a movement this predicate refuses
+to demote — most likely a `discriminator` whose condition someone can state mechanically (the
+normal-GGT / transaminase-rise case is the obvious candidate). That is Q65's first branch, and
+it supersedes clause 2 of this predicate rather than this entry as a whole.
+
+---
