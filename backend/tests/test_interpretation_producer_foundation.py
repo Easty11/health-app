@@ -880,3 +880,62 @@ def test_marker_series_isolates_users(db_session):
 
     series = marker_series(a.id, db_session)
     assert len(series) == 1 and series["sodium"].current.value_num == 138.0
+
+
+# ---------- gate 3 -> gate 1 safety arm, END TO END through build_foundation ----------
+
+def _seed_haematocrit_band_crossing(db, email):
+    """A haematocrit pair that ESCALATES watch -> elevated through the real asset.
+
+    Deliberately constructed so the ONLY reason the member is news is the safety arm:
+      * both draws sit inside the lab's own 0.40-0.54 reference range, so gate 2 is quiet;
+      * +2.9% is below haematocrit's authored 8% min_meaningful_delta, so the delta arm is
+        quiet (`within_noise`) and no reference bound is crossed;
+      * 0.515 clears the `watch` band (0.50) and 0.53 clears `elevated` (0.52), so the
+        highest breached band escalates and `safety_gate.band_change` fires.
+
+    A SEPARATE seed from `_seed_fixture` on purpose: the §2 oracle panel stays byte-identical,
+    so this addition cannot move the canonical invariance baseline."""
+    user = _make_user(db, email)
+    prior = _make_report(db, user.id, _PRIOR, panel_name="FBC (prior)")
+    current = _make_report(db, user.id, _CURRENT, panel_name="FBC")
+    _make_result(db, prior.id, "Haematocrit", "haematocrit",
+                 value_num=0.515, ref_low=0.40, ref_high=0.54)
+    _make_result(db, current.id, "Haematocrit", "haematocrit",
+                 value_num=0.53, ref_low=0.40, ref_high=0.54)
+    return user, current, prior
+
+
+def test_band_change_propagates_end_to_end_and_forces_news(db_session):
+    """The safety arm through the REAL path, which no test had exercised before.
+
+    `test_safety_gate.py` drives band_change at gate-unit level with an injected asset;
+    `build_foundation` reads the module-level asset and nothing had ever seeded a banded
+    marker, so no `band_change` had propagated through the producer at all. This closes
+    that gap.
+
+    NON-VACUITY: the two other gates are asserted QUIET here, so `is_news` cannot be
+    arriving from anywhere but the safety arm. That also demonstrates #138's point that
+    gate 3 is independent of gate 2 - an in-range value still sits in a band."""
+    user, current, prior = _seed_haematocrit_band_crossing(db_session, "band@example.com")
+    out = build_foundation(user.id, db_session, current, prior)
+
+    group = _group(out, "erythroid")
+    member = next(m for m in group["members"] if m["marker_canonical"] == "haematocrit")
+
+    # gate 3 fired, and escalated between the two draws
+    assert member["safety_gate"]["status"] == "in_band"
+    assert member["safety_gate"]["band_change"] == "escalated"
+    assert member["safety_gate"]["band_key"] == "elevated"
+    assert member["safety_gate"]["undecidable_reason"] is None
+
+    # the other two gates are quiet, so the news below is the safety arm's alone
+    assert member["range_gate"]["is_out_of_range"] is False, "gate 2 must be quiet here"
+    assert member["delta"]["magnitude"] == "within_noise", "delta arm must be quiet here"
+    assert member["delta"]["crossed_ref"] is None
+
+    # gate 1: forced true by the safety arm, and it NAMES the band change
+    assert member["news_gate"]["is_news"] is True
+    assert "safety_band_escalated" in member["news_gate"]["basis"]
+
+    assert group["should_surface"] is True
