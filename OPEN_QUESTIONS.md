@@ -1665,8 +1665,14 @@ truth instead, and its authored strings would be **superseded rather than extend
 here so Q65 is not resolved on demotion's merits alone by a session that does not notice it
 invalidated the verdict content.
 
-**Resolve by:** the first time a demotion is wanted that #153 refuses. Not urgent — nothing is
-blocked today. **Owner:** Luke.
+**Status:** DONE → #154. Resolved toward branch (a), in a stronger form than this entry framed:
+relations gain a declared machine-readable condition decomposed into an **eliminative branch
+set** (`excluded` / `not_excluded` / `not_assessed`), not a single `demotes_when` predicate — so
+partial exclusion becomes reportable information rather than a binary. #154 also **corrects this
+entry's assumption that condition shape follows from relation kind**: it does not
+(`haemoconcentration_discriminator` is declared `discriminator` but carries a co-movement
+condition), so shape is authored per relation. #153's demotion predicate is unchanged until that
+asset work lands. **Owner:** Luke.
 
 Numbered `Q65` on the `feat/interp-demotion` branch (pre-ff; max was Q64, no competing branch).
 

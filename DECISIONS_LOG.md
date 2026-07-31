@@ -5264,3 +5264,81 @@ normal-GGT / transaminase-rise case is the obvious candidate). That is Q65's fir
 it supersedes clause 2 of this predicate rather than this entry as a whole.
 
 ---
+
+### 154. Relation conditions become machine-readable and eliminative; the group descriptor states a position only where it is defensible
+
+**Decision:** Q65 resolves toward a declared condition per relation. Relation `reads` prose is
+decomposed into a branch set, each branch carrying its own fragment and resolving to
+`excluded`, `not_excluded`, or `not_assessed`. The group descriptor reports the surviving set
+with the evidence that excluded the others and the operands that were never assessed.
+
+**Governing rules:** (1) the descriptor describes the overall position; (2) it takes a position
+only where defensible; (3) where the evidence produces only options it presents the options and
+the evidence rather than picking one; (4) it never proposes a solution — levers are presented
+separately, information only, ranked by evidence strength and filtered for relevance.
+
+**Defensibility, operationally:** every branch resolved `excluded` except exactly one, and no
+branch resolved `not_assessed`. A live unassessed branch means a leading option, not a position.
+
+**Condition shapes** — `ratio_band`, `operand_in_range`, `co_movement`, and the existing
+`feedback_precondition`. Authors supply thresholds and operand names to a shape; they do not
+author predicates. This is why the vocabulary does not become an expression language, which was
+Q65's stated worry. Band sets must tile — an explicit non-discriminating band is required rather
+than a gap between bands.
+
+**CORRECTED FROM THE PROPOSAL — shape is declared per relation, not implied by kind.** The
+proposal claimed the relation kind fixes the condition's form. Verified false against master:
+`haemoconcentration_discriminator` is declared `kind: discriminator` but its condition is a
+co-movement test (do albumin/protein rise *with* the red cell line) with MCV as a tiebreak. Kind
+and shape therefore diverge in the live asset, so `condition_shape` must be an authored field
+per relation and "kind implies shape" is at most a default. Recorded because building the
+mapping as a rule would have failed on the first relation that uses it.
+
+**Cross-relation conflict is a first-class output.** Where two relations each resolve cleanly and
+point in different directions, the descriptor states that both apply and disagree, with the
+evidence for each. It does not adjudicate — that would violate rule 2. This case is invisible at
+member level by construction and is the primary justification for a group-level descriptor.
+
+**`#47` boundary:** the descriptor never names a lever; it may state its own coverage (which
+declared operands the panel lacked) because that is a statement about the algorithm rather than
+about the reader; it must never recommend a test and must never carry "talk to your doctor",
+which belongs to chat, asked and in context, per `#59`. Levers are ranked by evidence strength,
+never by predicted effect for the individual. **Verified already-built, so rule 4 constrains
+rather than adds:** `poolLevers` sorts on `GRADE_ORDER` (evidence grade) and `shared_levers`
+already filters to present markers and marks `already_in_play` from declared state (#145).
+
+**Amends:** `#152`, for the `axis_verdict` authoring approach only. `#152` retained
+`protocol_phase` and made `text` authored per (group x relation-outcome x phase); this replaces
+that with assembly from branch fragments and **drops `protocol_phase`**, which duplicated
+`meta.protocol_context_snapshot` and whose scalar-vs-list projection gap `#152` itself recorded
+as unresolved. Resulting shape: `axis_verdict: {text}`. No decision pins `reads` as a single
+verbatim string (verified — the only mention in this log is `#153`'s observation that relations
+carry narrative `reads` and no condition), so nothing else is amended.
+
+**Decomposability, walked over all ten relations (Q65's own gate).** Every string decomposes
+structurally, but three findings qualify the work:
+- **Two ratios carry no authored thresholds.** `hpg_t_e2_ratio` names no numbers at all and
+  `de_ritis_ratio`'s three bands do not tile (a ratio of 1.4 falls in none). Decomposition is
+  therefore *new evidence-cited authoring* (I1), not mechanical splitting.
+- **`ggt_hepatobiliary_discriminator` states only one branch** (normal GGT). Its complement is
+  unauthored and must be written.
+- **`shbg_free_fraction` (`context`) does not branch at all** — it is guidance on how to read
+  another marker. Confirmed: `context` carries no condition and always renders.
+- **The near-counter-example:** `hpg_substrate_co_movement` reads "On stable dosing these track
+  the substrate pool together" — a co-movement that is itself PHASE-CONDITIONAL. None of the four
+  shapes expresses that; it needs `co_movement` composed with a `feedback_precondition`. The
+  four-shape model must admit composition, or this relation is authored wrong.
+
+**Consequence for sequencing:** this is a lane, not a tail on 4b-ii. `axis_verdict` emits the
+invariant per-group floor sentence in the interim, which satisfies `#151`'s producer-complete
+requirement against the reduced contract and unblocks 1b delivery immediately.
+
+**Status:** Decided (contract + asset vocabulary). No code in this entry. Resolves Q65.
+
+**Do not revisit unless:** a `reads` string is found that cannot be decomposed into branch
+fragments without loss of meaning — which would show the conditional structure is not general,
+and the model would have to admit non-branching relations as a first-class case rather than only
+`context`. (`hpg_substrate_co_movement` is the near miss: decomposable, but only under shape
+composition.)
+
+---
