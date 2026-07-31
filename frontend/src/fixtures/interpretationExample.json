@@ -1,105 +1,600 @@
 {
   "meta": {
-    "generated_at": "2026-07-06T14:00:00+10:00",
-    "trigger_panel": { "panel_name_raw": "Gonadal Hormones", "collected": "2026-05-30T09:00:00+10:00" },
-    "compared_against": { "panel_name_raw": "Androgens", "collected": "2026-01-07T08:10:00+10:00" },
+    "generated_at": "2026-01-01T00:00:00+00:00",
+    "trigger_panel": {
+      "panel_name_raw": "Gonadal Hormones",
+      "collected": "2026-05-30"
+    },
+    "compared_against": {
+      "panel_name_raw": "Androgens",
+      "collected": "2026-01-07"
+    },
     "first_ever_panel": false,
     "regulatory_mode": "education",
     "lever_dictionary_version": "v0",
     "marker_groups_version": "v0",
-    "protocol_context_snapshot": [
-      { "factor": "trt",  "detail": "TRT active",       "source": "current_state", "phase": "on_trt" },
-      { "factor": "glp1", "detail": "GLP-1/GIP active", "source": "current_state", "phase": "active" }
-    ],
-    "overall_extraction_confidence": 0.97
+    "overall_extraction_confidence": 0.99,
+    "protocol_context_snapshot": {
+      "as_of": "2026-05-30",
+      "factors": []
+    }
   },
   "groups": [
     {
       "group_key": "hpg_axis",
-      "display_name": "Hypothalamic–Pituitary–Gonadal axis",
+      "display_name": "Hypothalamic\u2013Pituitary\u2013Gonadal axis",
       "is_group_of_one": false,
-      "axis_verdict": { "verdict": "coherent", "protocol_phase": "on_trt", "text": "On TRT the axis reads coherently: total and free testosterone high-normal, oestradiol proportionate to substrate, gonadotropins suppressed as expected for exogenous androgen. No member contradicts the others.", "confidence": "Likely" },
       "members": [
         {
-          "marker_canonical": "testosterone_total", "display_name": "Testosterone (total)", "role": "substrate", "is_derived": false,
-          "current": { "value_num": 24.0, "unit_canonical": "nmol/L", "ref_low": 10.0, "ref_high": 30.0, "flag": null, "collected": "2026-05-30" },
-          "prior":   { "value_num": 22.5, "unit_canonical": "nmol/L", "ref_low": 10.0, "ref_high": 30.0, "flag": null, "collected": "2026-01-07" },
-          "delta": { "direction": "up", "abs_change": 1.5, "pct_change": 6.7, "crossed_ref": null, "magnitude": "within_noise", "censored": false, "min_meaningful_delta": { "mode": "relative", "value": 0.20 } },
-          "news_gate": { "is_news": false, "basis": ["delta_within_min_meaningful"] },
-          "range_gate": { "is_out_of_range": false, "flag": null },
-          "relations_rendered": [ { "relation_key": "hpg_t_e2_ratio", "kind": "ratio", "role_here": "numerator", "partner": "oestradiol", "reads": "T:E2 proportionate — E2 tracks substrate, not excess aromatisation." } ],
-          "mechanism": { "text": "…", "protocol_factors_referenced": ["trt"], "confidence": "Likely" },
-          "member_lever_effects": [ { "lever_key": "testosterone_substrate_load", "direction": "raises", "grade": "high" } ]
+          "marker_canonical": "testosterone_total",
+          "display_name": "Testosterone (total)",
+          "is_derived": false,
+          "current": {
+            "value_num": 24.0,
+            "value_operator": null,
+            "value_qualitative": null,
+            "unit_canonical": "nmol/L",
+            "ref_low": 10.0,
+            "ref_high": 30.0,
+            "flag": null,
+            "collected": "2026-05-30"
+          },
+          "prior": {
+            "value_num": 22.5,
+            "value_operator": null,
+            "value_qualitative": null,
+            "unit_canonical": "nmol/L",
+            "ref_low": 10.0,
+            "ref_high": 30.0,
+            "flag": null,
+            "collected": "2026-01-07"
+          },
+          "delta": {
+            "direction": "up",
+            "abs_change": 1.5,
+            "pct_change": 6.7,
+            "crossed_ref": null,
+            "magnitude": "within_noise",
+            "censored": false,
+            "min_meaningful_delta": {
+              "mode": "relative",
+              "value": 0.3
+            }
+          },
+          "safety_gate": {
+            "status": null,
+            "band_key": null,
+            "threshold_value": null,
+            "direction": null,
+            "contested": null,
+            "evidence_refs": [],
+            "band_change": null,
+            "undecidable_reason": "no_asset"
+          },
+          "news_gate": {
+            "is_news": false,
+            "basis": [
+              "delta_within_min_meaningful"
+            ]
+          },
+          "range_gate": {
+            "is_out_of_range": false,
+            "flag": null
+          },
+          "role": "substrate",
+          "relations_rendered": [
+            {
+              "relation_key": "hpg_t_e2_ratio",
+              "kind": "ratio",
+              "reads": "T:E2 proportionality \u2014 E2 tracking substrate vs disproportionate aromatisation.",
+              "operand_status": "complete",
+              "operands_missing": [],
+              "precondition_status": "not_applicable"
+            },
+            {
+              "relation_key": "hpg_substrate_co_movement",
+              "kind": "co_movement",
+              "reads": "On stable dosing these track the substrate pool together; divergence is the signal.",
+              "operand_status": "degraded",
+              "operands_missing": [
+                "testosterone_free_calculated"
+              ],
+              "precondition_status": "not_applicable"
+            }
+          ],
+          "stable_rationale": null,
+          "mechanism": {
+            "text": "Total testosterone measures both bound and unbound hormone. Most circulates bound to SHBG and albumin, with only a small fraction free. Where testosterone is administered rather than produced, the total reflects the dose and its timing relative to the draw rather than testicular output.",
+            "protocol_factors_referenced": [
+              "trt"
+            ]
+          },
+          "member_lever_effects": [
+            {
+              "lever_key": "testosterone_substrate_load",
+              "direction": "raises",
+              "grade": "high"
+            }
+          ]
         },
         {
-          "marker_canonical": "oestradiol", "display_name": "Oestradiol", "role": "product", "is_derived": false,
-          "current": { "value_num": 141.0, "unit_canonical": "pmol/L", "ref_low": null, "ref_high": 165.0, "flag": null, "collected": "2026-05-30" },
-          "prior":   { "value_num": 110.0, "unit_canonical": "pmol/L", "ref_low": null, "ref_high": 165.0, "flag": null, "collected": "2026-01-07" },
-          "delta": { "direction": "up", "abs_change": 31.0, "pct_change": 28.2, "crossed_ref": null, "magnitude": "marginal", "censored": false, "min_meaningful_delta": { "mode": "relative", "value": 0.42 } },
-          "news_gate": { "is_news": false, "basis": ["delta_below_min_meaningful_42pct", "explained_by_ratio_with_substrate"] },
-          "range_gate": { "is_out_of_range": false, "flag": null, "note": "high-normal — headroom limited, watch not breach" },
-          "relations_rendered": [ { "relation_key": "hpg_t_e2_ratio", "kind": "ratio", "role_here": "denominator", "partner": "testosterone_total", "reads": "Proportionate to high-normal T; rise is substrate-tracking, not disproportionate aromatisation." } ],
-          "mechanism": { "text": "…", "protocol_factors_referenced": ["trt"], "confidence": "Likely" },
-          "member_lever_effects": [ { "lever_key": "aromatase_adiposity", "direction": "raises", "grade": "low" }, { "lever_key": "aromatase_inhibition", "direction": "lowers", "grade": "high" } ]
+          "marker_canonical": "oestradiol",
+          "display_name": "Oestradiol",
+          "is_derived": false,
+          "current": {
+            "value_num": 141.0,
+            "value_operator": null,
+            "value_qualitative": null,
+            "unit_canonical": "pmol/L",
+            "ref_low": null,
+            "ref_high": 165.0,
+            "flag": null,
+            "collected": "2026-05-30"
+          },
+          "prior": {
+            "value_num": 110.0,
+            "value_operator": null,
+            "value_qualitative": null,
+            "unit_canonical": "pmol/L",
+            "ref_low": null,
+            "ref_high": 165.0,
+            "flag": null,
+            "collected": "2026-01-07"
+          },
+          "delta": {
+            "direction": "up",
+            "abs_change": 31.0,
+            "pct_change": 28.2,
+            "crossed_ref": null,
+            "magnitude": "marginal",
+            "censored": false,
+            "min_meaningful_delta": {
+              "mode": "relative",
+              "value": 0.42
+            }
+          },
+          "safety_gate": {
+            "status": null,
+            "band_key": null,
+            "threshold_value": null,
+            "direction": null,
+            "contested": null,
+            "evidence_refs": [],
+            "band_change": null,
+            "undecidable_reason": "no_asset"
+          },
+          "news_gate": {
+            "is_news": false,
+            "basis": [
+              "delta_marginal"
+            ]
+          },
+          "range_gate": {
+            "is_out_of_range": false,
+            "flag": null
+          },
+          "role": "product",
+          "relations_rendered": [
+            {
+              "relation_key": "hpg_t_e2_ratio",
+              "kind": "ratio",
+              "reads": "T:E2 proportionality \u2014 E2 tracking substrate vs disproportionate aromatisation.",
+              "operand_status": "complete",
+              "operands_missing": [],
+              "precondition_status": "not_applicable"
+            },
+            {
+              "relation_key": "hpg_substrate_co_movement",
+              "kind": "co_movement",
+              "reads": "On stable dosing these track the substrate pool together; divergence is the signal.",
+              "operand_status": "degraded",
+              "operands_missing": [
+                "testosterone_free_calculated"
+              ],
+              "precondition_status": "not_applicable"
+            }
+          ],
+          "stable_rationale": null,
+          "mechanism": {
+            "text": "Oestradiol in men derives largely from aromatisation of testosterone in adipose and other tissues, so it tracks testosterone availability \u2014 more substrate, more conversion. Aromatase activity also varies with adiposity, so body composition shifts the ratio at constant testosterone.",
+            "protocol_factors_referenced": [
+              "trt"
+            ]
+          },
+          "member_lever_effects": [
+            {
+              "lever_key": "testosterone_substrate_load",
+              "direction": "raises",
+              "grade": "high"
+            },
+            {
+              "lever_key": "aromatase_inhibition",
+              "direction": "lowers",
+              "grade": "high"
+            },
+            {
+              "lever_key": "aromatase_adiposity",
+              "direction": "raises",
+              "grade": "low"
+            },
+            {
+              "lever_key": "alcohol",
+              "direction": "raises",
+              "grade": "very_low"
+            }
+          ]
         },
         {
-          "marker_canonical": "fsh", "display_name": "FSH", "role": "feedback_signal", "is_derived": false,
-          "current": { "value_num": 0.1, "value_operator": "<", "unit_canonical": "IU/L", "ref_low": 1.5, "ref_high": 12.4, "flag": "L", "collected": "2026-05-30" },
-          "prior":   { "value_num": 0.1, "value_operator": "<", "unit_canonical": "IU/L", "ref_low": 1.5, "ref_high": 12.4, "flag": "L", "collected": "2026-01-07" },
-          "delta": { "direction": "flat", "abs_change": null, "pct_change": null, "crossed_ref": null, "magnitude": "within_noise", "censored": true },
-          "news_gate": { "is_news": false, "basis": ["feedback_expected_on_trt", "flat_vs_prior"] },
-          "range_gate": { "is_out_of_range": true, "flag": "L", "expected_by_phase": true, "note": "Below range, but gonadotropin suppression is expected on exogenous androgen — the breach is annotated, never suppressed." },
-          "relations_rendered": [ { "relation_key": "hpg_gonadotropin_suppression", "kind": "feedback", "role_here": "suppressed_signal", "partner": "testosterone_total", "precondition_phase": "on_trt", "reads": "Suppressed as expected — exogenous T closes the hypothalamic–pituitary loop. Off-TRT this would read as news." } ],
-          "mechanism": { "text": "…", "protocol_factors_referenced": ["trt"], "confidence": "Certain" },
+          "marker_canonical": "fsh",
+          "display_name": "FSH",
+          "is_derived": false,
+          "current": {
+            "value_num": 0.1,
+            "value_operator": "<",
+            "value_qualitative": null,
+            "unit_canonical": "IU/L",
+            "ref_low": 1.5,
+            "ref_high": 12.4,
+            "flag": "L",
+            "collected": "2026-05-30"
+          },
+          "prior": {
+            "value_num": 0.1,
+            "value_operator": "<",
+            "value_qualitative": null,
+            "unit_canonical": "IU/L",
+            "ref_low": 1.5,
+            "ref_high": 12.4,
+            "flag": "L",
+            "collected": "2026-01-07"
+          },
+          "delta": {
+            "direction": "flat",
+            "abs_change": null,
+            "pct_change": null,
+            "crossed_ref": null,
+            "magnitude": "within_noise",
+            "censored": true
+          },
+          "safety_gate": {
+            "status": null,
+            "band_key": null,
+            "threshold_value": null,
+            "direction": null,
+            "contested": null,
+            "evidence_refs": [],
+            "band_change": null,
+            "undecidable_reason": "no_asset"
+          },
+          "news_gate": {
+            "is_news": false,
+            "basis": [
+              "flat_vs_prior"
+            ]
+          },
+          "range_gate": {
+            "is_out_of_range": true,
+            "flag": "L"
+          },
+          "role": "feedback_signal",
+          "relations_rendered": [
+            {
+              "relation_key": "hpg_gonadotropin_suppression",
+              "kind": "feedback",
+              "reads": "Exogenous androgen closes the hypothalamic\u2013pituitary loop \u2192 LH/FSH suppressed. Expected while on TRT; off TRT the same suppression is news.",
+              "operand_status": "degraded",
+              "operands_missing": [
+                "lh"
+              ],
+              "precondition_status": "unresolvable",
+              "missing_factor_key": "trt",
+              "expected_by_phase": null
+            }
+          ],
+          "stable_rationale": null,
+          "mechanism": {
+            "text": "Follicle stimulating hormone drives spermatogenesis through Sertoli cells, and is suppressed by the same negative feedback as LH with additional input from testicular inhibin B. Like LH, it reflects the feedback state rather than an independent signal when exogenous androgen is present.",
+            "protocol_factors_referenced": [
+              "trt"
+            ]
+          },
           "member_lever_effects": []
         }
       ],
+      "should_surface": true,
       "shared_levers": [
-        { "lever_key": "testosterone_substrate_load", "label": "Testosterone substrate load", "mechanism_summary": "The exogenous dose sets the substrate pool the whole axis operates on.", "grade": "high", "grade_rationale": "Direct interventional evidence (dose→T→E2).", "evidence_refs": ["10.1016/j.jacc.2018.12.062", "10.1210/jcem.86.6.7520"], "actor": "physician", "channel": "pharmacologic", "status": "surfaced", "already_in_play_reason": null, "member_effects": [ { "marker_canonical": "testosterone_total", "direction": "raises", "grade": "high" }, { "marker_canonical": "oestradiol", "direction": "raises", "grade": "high" } ] }
-      ]
+        {
+          "lever_key": "testosterone_substrate_load",
+          "label": "Testosterone substrate load",
+          "mechanism_summary": "The exogenous testosterone dose sets the substrate pool the HPG axis operates on; oestradiol tracks the aromatised fraction of that pool.",
+          "grade": "high",
+          "grade_rationale": "Direct interventional dose\u2192T\u2192E2 evidence.",
+          "evidence_refs": [
+            "10.1016/j.jacc.2018.12.062",
+            "10.1210/jcem.86.6.7520",
+            "10.1210/jcem.78.4.8157711"
+          ],
+          "actor": "physician",
+          "channel": "pharmacologic",
+          "status": "surfaced",
+          "already_in_play_reason": null,
+          "member_effects": [
+            {
+              "marker_canonical": "testosterone_total",
+              "direction": "raises",
+              "grade": "high"
+            },
+            {
+              "marker_canonical": "oestradiol",
+              "direction": "raises",
+              "grade": "high"
+            }
+          ]
+        },
+        {
+          "lever_key": "aromatase_inhibition",
+          "label": "Aromatase inhibition",
+          "mechanism_summary": "Pharmacologic aromatase inhibition lowers the T\u2192E2 conversion rate, reducing serum oestradiol at a given substrate load.",
+          "grade": "high",
+          "grade_rationale": "RCT/interventional evidence for AI effect on male serum E2.",
+          "evidence_refs": [
+            "10.1111/j.1365-2265.2008.03327.x",
+            "10.1111/andr.12126"
+          ],
+          "actor": "physician",
+          "channel": "pharmacologic",
+          "status": "surfaced",
+          "already_in_play_reason": null,
+          "member_effects": [
+            {
+              "marker_canonical": "oestradiol",
+              "direction": "lowers",
+              "grade": "high"
+            }
+          ]
+        },
+        {
+          "lever_key": "aromatase_adiposity",
+          "label": "Adiposity / aromatase activity",
+          "mechanism_summary": "Adipose tissue is a primary aromatase site; body-fat change shifts peripheral T\u2192E2 conversion.",
+          "grade": "low",
+          "grade_rationale": "Observational + weight-loss evidence; downgraded for indirectness (populations differ) and imprecision.",
+          "evidence_refs": [
+            "10.1210/clinem/dgaf038",
+            "10.1055/a-0658-7712",
+            "10.1111/cen.13723"
+          ],
+          "actor": "self",
+          "channel": "behavioural",
+          "status": "surfaced",
+          "already_in_play_reason": null,
+          "member_effects": [
+            {
+              "marker_canonical": "oestradiol",
+              "direction": "raises",
+              "grade": "low"
+            }
+          ]
+        },
+        {
+          "lever_key": "alcohol",
+          "label": "Alcohol intake",
+          "mechanism_summary": "Alcohol modulates hepatic oestrogen handling and (in the liver panel) raises GGT/AST; effect on male serum E2 is small and inconsistent.",
+          "grade": "very_low",
+          "grade_rationale": "Small, inconsistent observational effect on male serum E2; downgraded for imprecision and inconsistency.",
+          "evidence_refs": [
+            "10.1136/bmjopen-2014-005462"
+          ],
+          "actor": "self",
+          "channel": "behavioural",
+          "status": "surfaced",
+          "already_in_play_reason": null,
+          "member_effects": [
+            {
+              "marker_canonical": "oestradiol",
+              "direction": "raises",
+              "grade": "very_low"
+            }
+          ]
+        }
+      ],
+      "axis_verdict": {
+        "text": "These six markers describe one control loop. The pituitary signals the testes to produce testosterone, circulating testosterone and the oestradiol it converts to feed back to damp that signal, and binding proteins set how much of the hormone is actually available. A change in any one of them moves the others, which is why they are read together rather than separately."
+      }
     },
     {
       "group_key": "hepatocellular",
-      "display_name": "Hepatocellular enzymes",
+      "display_name": "Hepatobiliary enzymes + bilirubin",
       "is_group_of_one": false,
-      "axis_verdict": { "verdict": "coherent", "protocol_phase": "active_training", "text": "Transaminases fell toward range with GGT normal — the discriminator says muscle/exercise origin, not hepatocellular injury. Movement is favourable and coherent.", "confidence": "Likely" },
       "members": [
         {
-          "marker_canonical": "ast", "display_name": "AST", "role": "transaminase", "is_derived": false,
-          "current": { "value_num": 32.0, "unit_canonical": "U/L", "ref_low": null, "ref_high": 40.0, "flag": null, "collected": "2026-05-30" },
-          "prior":   { "value_num": 47.0, "unit_canonical": "U/L", "ref_low": null, "ref_high": 40.0, "flag": "H", "collected": "2026-01-07" },
-          "delta": { "direction": "down", "abs_change": -15.0, "pct_change": -31.9, "crossed_ref": "into_range", "magnitude": "meaningful", "censored": false, "min_meaningful_delta": { "mode": "relative", "value": 0.30, "note": "AST CVi unverified — provisional" } },
-          "news_gate": { "is_news": true, "basis": ["crossed_ref_into_range", "delta_meaningful"] },
-          "range_gate": { "is_out_of_range": false, "flag": null },
-          "relations_rendered": [ { "relation_key": "de_ritis_ratio", "kind": "ratio", "role_here": "numerator", "partner": "alt", "reads": "AST:ALT ≈ 1 — chronic muscle pattern, not the >2 of alcoholic injury." }, { "relation_key": "ggt_hepatobiliary_discriminator", "kind": "discriminator", "role_here": "discriminated", "partner": "ggt", "reads": "GGT normal → transaminase rise is not hepatobiliary." } ],
-          "mechanism": { "text": "…", "protocol_factors_referenced": ["training_load"], "confidence": "Likely" },
-          "member_lever_effects": [ { "lever_key": "exercise_muscle", "direction": "raises", "grade": "high" } ]
-        }
-      ],
-      "shared_levers": [
-        { "lever_key": "exercise_muscle", "label": "Exercise / skeletal-muscle turnover", "mechanism_summary": "Training raises transaminases of muscle origin; the De Ritis ratio and normal GGT localise the source.", "grade": "high", "grade_rationale": "Consistent cohort + mechanistic CK-correlation evidence.", "evidence_refs": ["10.1002/hep.20548", "10.1177/1941738118764870"], "actor": "self", "channel": "behavioural", "status": "already_in_play", "already_in_play_reason": "Training load is active and intended — see current_state.", "member_effects": [ { "marker_canonical": "ast", "direction": "raises", "grade": "high" }, { "marker_canonical": "alt", "direction": "raises", "grade": "high" } ] }
-      ]
-    },
-    {
-      "group_key": "vitamin_d_25oh",
-      "display_name": "25-OH Vitamin D",
-      "is_group_of_one": true,
-      "axis_verdict": { "verdict": "coherent", "protocol_phase": "baseline", "text": "A lone in-range marker still carries its own axis-read. 25-OH vitamin D is adequate; with no co-members there is nothing to reconcile, and with no prior draw there is no delta to gate — the group-of-one exists to show that a solitary marker is still read, not dropped.", "confidence": "Certain" },
-      "members": [
-        {
-          "marker_canonical": "vitamin_d_25oh", "display_name": "25-OH Vitamin D", "role": "sole", "is_derived": false,
-          "current": { "value_num": 90.0, "unit_canonical": "nmol/L", "ref_low": 50.0, "ref_high": 150.0, "flag": null, "collected": "2025-12-27" },
-          "prior": null,
-          "delta": null,
-          "news_gate": { "is_news": false, "basis": ["no_prior_first_observation"] },
-          "range_gate": { "is_out_of_range": false, "flag": null, "expected_by_phase": true, "note": "In range (90 within 50–150) — adequate repletion; no breach to annotate." },
+          "marker_canonical": "ast",
+          "display_name": "AST",
+          "is_derived": false,
+          "current": {
+            "value_num": 32.0,
+            "value_operator": null,
+            "value_qualitative": null,
+            "unit_canonical": "U/L",
+            "ref_low": null,
+            "ref_high": 40.0,
+            "flag": null,
+            "collected": "2026-05-30"
+          },
+          "prior": {
+            "value_num": 47.0,
+            "value_operator": null,
+            "value_qualitative": null,
+            "unit_canonical": "U/L",
+            "ref_low": null,
+            "ref_high": 40.0,
+            "flag": "H",
+            "collected": "2026-01-07"
+          },
+          "delta": {
+            "direction": "down",
+            "abs_change": -15.0,
+            "pct_change": -31.9,
+            "crossed_ref": "into_range",
+            "magnitude": "meaningful",
+            "censored": false,
+            "min_meaningful_delta": {
+              "mode": "relative",
+              "value": 0.3
+            }
+          },
+          "safety_gate": {
+            "status": null,
+            "band_key": null,
+            "threshold_value": null,
+            "direction": null,
+            "contested": null,
+            "evidence_refs": [],
+            "band_change": null,
+            "undecidable_reason": "no_asset"
+          },
+          "news_gate": {
+            "is_news": true,
+            "basis": [
+              "crossed_ref_into_range",
+              "delta_meaningful"
+            ]
+          },
+          "range_gate": {
+            "is_out_of_range": false,
+            "flag": null
+          },
+          "role": "transaminase",
+          "relations_rendered": [
+            {
+              "relation_key": "de_ritis_ratio",
+              "kind": "ratio",
+              "reads": "AST:ALT \u2014 \u22481 chronic muscle, >2 alcoholic injury, <1 common in steatosis.",
+              "operand_status": "degraded",
+              "operands_missing": [
+                "alt"
+              ],
+              "precondition_status": "not_applicable"
+            },
+            {
+              "relation_key": "ggt_hepatobiliary_discriminator",
+              "kind": "discriminator",
+              "reads": "Normal GGT \u2192 transaminase rise is not hepatobiliary (points to muscle/exercise).",
+              "operand_status": "degraded",
+              "operands_missing": [
+                "alt"
+              ],
+              "precondition_status": "not_applicable"
+            }
+          ],
           "stable_rationale": null,
-          "relations_rendered": [],
-          "mechanism": { "text": "…", "protocol_factors_referenced": [], "confidence": "Certain" },
-          "member_lever_effects": []
+          "mechanism": {
+            "text": "Aspartate aminotransferase is present in liver, cardiac muscle, skeletal muscle and red cells. Because of that distribution it rises with muscle damage as well as with hepatocellular injury, so a rise does not by itself localise to the liver \u2014 the biliary markers are what separate the two.",
+            "protocol_factors_referenced": []
+          },
+          "member_lever_effects": [
+            {
+              "lever_key": "exercise_muscle",
+              "direction": "raises",
+              "grade": "high"
+            },
+            {
+              "lever_key": "alcohol",
+              "direction": "raises",
+              "grade": "low"
+            }
+          ]
         }
       ],
-      "shared_levers": []
+      "should_surface": true,
+      "shared_levers": [
+        {
+          "lever_key": "exercise_muscle",
+          "label": "Exercise / skeletal-muscle turnover",
+          "mechanism_summary": "Training raises transaminases of skeletal-muscle origin; chronic pattern gives AST:ALT \u2248 1 and correlates with CK, distinguishing muscle from hepatocellular source.",
+          "grade": "high",
+          "grade_rationale": "Consistent cohort evidence (chronic muscle \u2192 De Ritis \u2248 1) plus mechanistic CK correlation.",
+          "evidence_refs": [
+            "10.1002/hep.20548",
+            "10.1177/1941738118764870"
+          ],
+          "actor": "self",
+          "channel": "behavioural",
+          "status": "surfaced",
+          "already_in_play_reason": null,
+          "member_effects": [
+            {
+              "marker_canonical": "ast",
+              "direction": "raises",
+              "grade": "high"
+            }
+          ]
+        },
+        {
+          "lever_key": "alcohol",
+          "label": "Alcohol intake",
+          "mechanism_summary": "Alcohol modulates hepatic oestrogen handling and (in the liver panel) raises GGT/AST; effect on male serum E2 is small and inconsistent.",
+          "grade": "very_low",
+          "grade_rationale": "Small, inconsistent observational effect on male serum E2; downgraded for imprecision and inconsistency.",
+          "evidence_refs": [
+            "10.1136/bmjopen-2014-005462"
+          ],
+          "actor": "self",
+          "channel": "behavioural",
+          "status": "surfaced",
+          "already_in_play_reason": null,
+          "member_effects": [
+            {
+              "marker_canonical": "ast",
+              "direction": "raises",
+              "grade": "low"
+            }
+          ]
+        }
+      ],
+      "axis_verdict": {
+        "text": "These five markers are read together because none of them localises a problem on its own. The transaminases rise with liver injury and with muscle damage alike; the biliary enzymes and bilirubin are what separate a hepatic origin from a muscular or a constitutional one."
+      }
+    }
+  ],
+  "ungrouped": [
+    {
+      "marker_canonical": "vitamin_d_25oh",
+      "display_name": "25-OH Vitamin D",
+      "is_derived": false,
+      "current": {
+        "value_num": 90.0,
+        "value_operator": null,
+        "value_qualitative": null,
+        "unit_canonical": "nmol/L",
+        "ref_low": 50.0,
+        "ref_high": 150.0,
+        "flag": null,
+        "collected": "2025-12-27"
+      },
+      "prior": null,
+      "delta": null,
+      "safety_gate": {
+        "status": null,
+        "band_key": null,
+        "threshold_value": null,
+        "direction": null,
+        "contested": null,
+        "evidence_refs": [],
+        "band_change": null,
+        "undecidable_reason": "no_asset"
+      },
+      "news_gate": {
+        "is_news": false,
+        "basis": [
+          "no_prior_first_observation"
+        ]
+      },
+      "range_gate": {
+        "is_out_of_range": false,
+        "flag": null
+      },
+      "ungrouped": true
     }
   ]
 }

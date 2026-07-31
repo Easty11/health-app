@@ -41,11 +41,10 @@ _VITD = date(2025, 12, 27)
 # `_HELD_MEMBER_FIELDS` NO LONGER CONTAINS A GENUINE HOLD. Every member field in the
 # contract is now emitted — stable_rationale + member_lever_effects (1a), mechanism (this
 # increment), relations_rendered (4b-i). What is left are the two GROUP-level fields, kept
-# here as the standing "a member never carries a group field" boundary check. Read the two
-# lists together: `axis_verdict` in the GROUP list is the producer's one real remaining
-# hold (#152 reduced it to {protocol_phase, text}; the projection still needs a
-# source-factor rule and an authoring table); `shared_levers` appears ONLY in the member
-# list because it is emitted at group level and must never leak onto a member.
+# here as the standing "a member never carries a group field" boundary check. Both entries now
+# mean the SAME thing — `axis_verdict` and `shared_levers` are GROUP fields that must never leak
+# onto a member. Neither is a hold any more: `axis_verdict` began emitting the invariant
+# per-group frame under #154, so the producer holds nothing at either level.
 _HELD_MEMBER_FIELDS = ["axis_verdict", "shared_levers"]
 # EMPTY — the producer now holds nothing at group level. `axis_verdict` left this list when the
 # invariant per-group frame landed (#154), the same way `mechanism` left the member list. The
