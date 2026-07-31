@@ -22,6 +22,7 @@
     {
       "group_key": "hpg_axis",
       "display_name": "Hypothalamic\u2013Pituitary\u2013Gonadal axis",
+      "axis_frame": "These six markers describe one control loop. The pituitary signals the testes to produce testosterone, circulating testosterone and the oestradiol it converts to feed back to damp that signal, and binding proteins set how much of the hormone is actually available. A change in any one of them moves the others, which is why they are read together rather than separately.",
       "is_group_of_one": false,
       "members": [
         { "marker_canonical": "testosterone_total",           "role": "substrate" },
@@ -109,6 +110,7 @@
     {
       "group_key": "hepatocellular",
       "display_name": "Hepatobiliary enzymes + bilirubin",
+      "axis_frame": "These five markers are read together because none of them localises a problem on its own. The transaminases rise with liver injury and with muscle damage alike; the biliary enzymes and bilirubin are what separate a hepatic origin from a muscular or a constitutional one.",
       "is_group_of_one": false,
       "members": [
         { "marker_canonical": "ast",             "role": "transaminase" },
@@ -171,6 +173,7 @@
     {
       "group_key": "erythroid",
       "display_name": "Red cell mass + oxygen carriage",
+      "axis_frame": "These four markers describe the red cell line from different angles: oxygen-carrying capacity per volume, the proportion of blood occupied by cells, the number of cells, and the average size of each. Read together they distinguish a real change in red cell mass from a change in plasma volume.",
       "is_group_of_one": false,
       "members": [
         { "marker_canonical": "haemoglobin", "role": "concentration" },

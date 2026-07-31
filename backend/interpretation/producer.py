@@ -390,7 +390,35 @@ def _build_group(group_def: dict, members: list[dict], present: set[str],
         "members": members,
         "should_surface": _should_surface(members),
         "shared_levers": _shared_levers(group_def, present, assumable_of),
+        "axis_verdict": _axis_verdict(group_def),
     }
+
+
+def _axis_verdict(group_def: dict) -> dict | None:
+    """`axis_verdict: {text}` — the invariant per-group frame, projected VERBATIM from the
+    asset's `axis_frame`, following the `relations_rendered[].reads` precedent.
+
+    `#154` reduced the object to `{text}` (dropping `#152`'s `protocol_phase`, which duplicated
+    `meta.protocol_context_snapshot`) and states that `axis_verdict` "emits the invariant
+    per-group floor sentence in the interim". This is that emission — implementation of a
+    decided position, not a new one, which is why no DECISIONS entry accompanies it.
+
+    It renders on EVERY group on EVERY panel, not only where relations are unevaluable: until
+    the branch-condition lane lands there is nothing else to say at group level, and nothing
+    else in the output says why these markers are one group. When that lane lands the frame
+    becomes the degenerate case and this shape does not change.
+
+    NOT gated by I1. I1 binds surfaced levers and, per `#95`, read-constants — things that
+    assert a number or recommend an action. The frame asserts neither: it states physiology
+    and group composition, exactly as relation `reads` does, and no relation in the asset
+    carries `evidence_refs` (verified across all ten). `#47` holds for the same reason — none
+    of the three strings names a lever, characterises the reader's results, or recommends
+    anything.
+
+    None when a group carries no authored frame, so a missing string is visibly absent rather
+    than an empty sentence."""
+    frame = group_def.get("axis_frame")
+    return {"text": frame} if frame else None
 
 
 def _groups(series: dict[str, MarkerPair],

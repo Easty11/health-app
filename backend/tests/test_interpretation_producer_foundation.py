@@ -47,7 +47,11 @@ _VITD = date(2025, 12, 27)
 # source-factor rule and an authoring table); `shared_levers` appears ONLY in the member
 # list because it is emitted at group level and must never leak onto a member.
 _HELD_MEMBER_FIELDS = ["axis_verdict", "shared_levers"]
-_HELD_GROUP_FIELDS = ["axis_verdict"]
+# EMPTY — the producer now holds nothing at group level. `axis_verdict` left this list when the
+# invariant per-group frame landed (#154), the same way `mechanism` left the member list. The
+# constant is kept rather than deleted so a future hold has a home, and the boundary test asserts
+# emptiness explicitly instead of looping vacuously over it.
+_HELD_GROUP_FIELDS: list[str] = []
 # Ungrouped rows carry NO interpretive field — with no group, nothing in the
 # interpretive layer attaches by construction. Defined EXPLICITLY, NOT derived from
 # _HELD_MEMBER_FIELDS: as fields leave the held list on emission the ungrouped guard
@@ -309,18 +313,24 @@ def test_producer_emits_relations_rendered_but_holds_the_rest_of_4b(db_session):
 
     `relations_rendered` is a MEMBER field: emitted on grouped members, absent at group
     level, and absent from ungrouped rows (no group, no relations — by construction, not
-    omission). The two remaining absence lists now mean different things: `axis_verdict` is
-    the producer's one genuine hold (#152), while `shared_levers` is absent from MEMBERS
-    only because it is emitted at GROUP level. The fixture proves both fields exist
-    (asserted below), so their absence from the projection is real dropping, not a vacuous
-    pass. `mechanism` left this check when it landed and is asserted positively in
-    test_mechanism_is_emitted_per_member; it remains in _UNGROUPED_ABSENT_FIELDS."""
+    omission). `shared_levers` is absent from MEMBERS only because it is emitted at GROUP
+    level. The fixture proves the fields exist (asserted below), so their absence from the
+    projection is real dropping, not a vacuous pass. `mechanism` left this check when it
+    landed and is asserted positively in test_mechanism_is_emitted_per_member; `axis_verdict`
+    left it the same way when the invariant per-group frame landed (#154) and is asserted
+    positively in test_axis_verdict_frame.py. Both remain in _UNGROUPED_ABSENT_FIELDS — a
+    field leaving the HELD list must never leave the ungrouped guard, or emission on grouped
+    members would license leakage onto ungrouped rows."""
     g0 = _FIXTURE["groups"][0]
     assert "axis_verdict" in g0 and "shared_levers" in g0
     assert "relations_rendered" in g0["members"][0] and "mechanism" in g0["members"][0]
 
     user, current, prior = _seed_fixture(db_session, "boundary@example.com")
     out = _build(db_session, user, current, prior)
+
+    assert _HELD_GROUP_FIELDS == [], (
+        "the producer holds nothing at group level; if a hold is reintroduced, assert it here "
+        "deliberately rather than letting the loop below pass vacuously")
 
     assert out["groups"], "fixture seeds two authored groups — an empty result would pass vacuously"
     for group in out["groups"]:
