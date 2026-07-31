@@ -385,7 +385,7 @@ function PrecheckPanel({ precheck }) {
       </p>
       <p className="text-xs text-gray-700">
         {all
-          ? `All ${total} marker${total === 1 ? '' : 's'} were recorded for ${collectedDate} on report${reportIds.length === 1 ? '' : 's'} ${reportIds.join(', ')}. Saving would file an upload that contributes no values. Cancel unless you mean to keep a second copy.`
+          ? `${total === 1 ? 'Its single marker was' : `All ${total} markers were`} already recorded for ${collectedDate} on report${reportIds.length === 1 ? '' : 's'} ${reportIds.join(', ')}. Saving would file an upload that contributes no values. Cancel unless you mean to keep a second copy.`
           : `Already recorded for ${collectedDate} on report${reportIds.length === 1 ? '' : 's'} ${reportIds.join(', ')}. Saving writes the ${total - hits.length} new marker${total - hits.length === 1 ? '' : 's'} and skips these.`}
       </p>
       <div className="bg-white/70 border border-black/5 rounded-xl overflow-x-auto">
