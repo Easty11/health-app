@@ -1721,3 +1721,51 @@ marker where a correction is known to exist. **Owner:** Luke.
 Numbered `Q66` on the `gov/two-open-questions` branch (pre-ff; max was Q65, no competing branch).
 
 ---
+
+## Q67. `hpg_substrate_co_movement` is phase-conditional, and no `#154` condition shape expresses it
+
+**State:** open. **Blocks:** the relation branch-condition lane's `co_movement` shape work.
+**Related:** `#154`.
+
+**Pointer entry — the case is already named in `#154`, so this is work-tracking, not discovery.**
+`#154`'s do-not-revisit clause ends: *"(`hpg_substrate_co_movement` is the near miss: decomposable,
+but only under shape composition.)"* The analysis is there and is not restated here. What `#154`
+does not carry — because a do-not-revisit clause is a supersession trigger, not a work item, and a
+reader scanning for open work would not find it there — is the candidate set and the point at which
+it must be resolved. That is what this entry adds.
+
+**The clause does not FIRE on this case, and that is deliberate.** It triggers on a `reads` string
+that cannot be decomposed into branch fragments. This one decomposes cleanly — co-moved and
+diverged fragments are both statable. What fails is expressing its *condition* in the fixed shape
+vocabulary. Expressibility, not decomposability. So the case is recorded but is not, and should not
+be, a supersession trigger for `#154`.
+
+**Verified:** `hpg_substrate_co_movement` carries `{relation_key, kind, operands, render_on, reads}`
+and **no `precondition`** today; `hpg_gonadotropin_suppression` remains the only relation with one.
+Its `reads` is *"On stable dosing these track the substrate pool together; divergence is the
+signal."*
+
+**Candidate (a) is a PRODUCER change, not a schema change.** `marker_groups.json` has no `_schema`
+block, so nothing forbids authoring a `precondition` on a `co_movement` relation — but
+`_relations_rendered` calls `_resolve_precondition` only when `kind == "feedback"` and hardcodes
+`precondition_status: "not_applicable"` otherwise, so an authored precondition would be silently
+inert. Representable in the asset, ignored by the code.
+
+Candidates:
+- **(a) Shapes compose** — any shape may carry an optional precondition, making
+  `feedback_precondition` a modifier rather than a fourth peer shape. Most expressive; weakens
+  "kind implies shape" further, which the live asset already falsified once via
+  `haemoconcentration_discriminator` (`#154`).
+- **(b) The relation is authored wrong and should be split** — an unconditional co-movement plus a
+  separate phase-conditional reading. Keeps the vocabulary flat, at the cost of two relations where
+  the physiology is one.
+- **(c) Drop the phase clause from the condition** and leave it in prose, so the relation renders
+  unconditionally and the reader carries the caveat. Cheapest; reintroduces exactly the
+  reader-does-the-branch-work problem `#154` exists to remove.
+
+**Resolve before:** the lane authors any `co_movement` shape — candidate (a) changes that shape's
+schema for all four co-movement relations. **Owner:** Luke.
+
+Numbered `Q67` on the `gov/two-open-questions` branch (pre-ff; max was Q66, no competing branch).
+
+---
