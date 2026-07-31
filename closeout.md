@@ -3,160 +3,157 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-07-30 (second session that day; the prior close-out is `bb29c0a`).
+Session date: 2026-08-01. Branch at close: `master` (clean). Session-open ref: `2cc8cb6`.
 
 ## 1. Real commits this session
 
-Session-open ref: `bb29c0a` (prior `chore: session close-out`). Eight commits, all on master
-and pushed. `git log --oneline bb29c0a..HEAD`:
+Six commits, all on master and pushed. `git log --oneline 2cc8cb6..HEAD`:
 
 ```
-d8af288 governance: #153 demotion predicate (feedback + satisfied + complete) + Q65 asset-vocabulary gap
-45d36fb feat(interpretation): §4 — an in-phase relation may demote gate 1's delta arm
-4ceb48f test(interpretation): seed a haematocrit band crossing — first band_change through build_foundation
-4157784 governance(open-questions): Q64 — do marker-authored member fields belong on ungrouped rows?
-33001a1 feat(interpretation): emit member mechanism — every member field in the contract is now emitted
-182ce19 governance: #152 — axis_verdict reduced to {protocol_phase, text}; confidence removed
-bd08ac9 content(interpretation): author mechanism for all 15 group members + coverage guard
-3dc425b governance: #151 — complete the producer before wiring the view (not absence-tolerant)
+7ff5d26 governance: resolve #NEXT -> #157, Q-NEXT -> Q68 (on-branch, pre-ff)
+6a4cf44 governance: #NEXT — ingest asserts persistence; the zero-row reports were #156 working
+03dc017 feat(labs): a stored report with zero results reads as a fault, not as emptiness
+2e38a51 fix(labs): do not promise "nothing was lost" when a value was in fact discarded
+4a8b620 fix(labs): report what the save actually wrote instead of an unconditional toast
+36af7f1 fix(labs): a marker repeated in one document no longer drops every copy
 ```
 
-Immutable dated log (`git log --format="%ad %s" --date=short`):
+`git log --format="%ad %s" --date=short -10`:
 
 ```
-2026-07-30 governance: #153 demotion predicate (feedback + satisfied + complete) + Q65 asset-vocabulary gap
-2026-07-30 feat(interpretation): §4 — an in-phase relation may demote gate 1's delta arm
-2026-07-30 test(interpretation): seed a haematocrit band crossing — first band_change through build_foundation
-2026-07-30 governance(open-questions): Q64 — do marker-authored member fields belong on ungrouped rows?
-2026-07-30 feat(interpretation): emit member mechanism — every member field in the contract is now emitted
-2026-07-30 governance: #152 — axis_verdict reduced to {protocol_phase, text}; confidence removed
-2026-07-30 content(interpretation): author mechanism for all 15 group members + coverage guard
-2026-07-30 governance: #151 — complete the producer before wiring the view (not absence-tolerant)
-2026-07-30 chore: session close-out
-2026-07-30 governance: mint #150 navigation model (hub-as-home, persistent chat) + Q63 (interp tile)
+2026-08-01 governance: resolve #NEXT -> #157, Q-NEXT -> Q68 (on-branch, pre-ff)
+2026-08-01 governance: #NEXT — ingest asserts persistence; the zero-row reports were #156 working
+2026-08-01 feat(labs): a stored report with zero results reads as a fault, not as emptiness
+2026-08-01 fix(labs): do not promise "nothing was lost" when a value was in fact discarded
+2026-08-01 fix(labs): report what the save actually wrote instead of an unconditional toast
+2026-08-01 fix(labs): a marker repeated in one document no longer drops every copy
+2026-07-31 governance(open-questions): Q67 — phase-conditional co_movement has no expressing shape (pointer)
+2026-07-31 governance(open-questions): Q66 — no supersede affordance on LabResult
+2026-07-31 governance: #156 — series integrity guarded at ingest, not assumed
+2026-07-31 chore(labs): post-backfill series-integrity verification query
 ```
 
-Files touched (`bb29c0a..HEAD`): `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`,
-`backend/interpretation/gates.py`, `backend/interpretation/producer.py`,
-`backend/reference/lever_dictionary.json`,
-`backend/tests/test_interpretation_producer_foundation.py`,
-`backend/tests/test_lever_dictionary_mechanism.py` (new),
-`backend/tests/test_relation_demotion.py` (new) — plus `ROADMAP.md`, `CLAUDE.md` and this file
-from the close-out ritual.
+Suite **521 passed**, from a **513** baseline measured at session open — reconciled against the
+brief's stated 513. The +8 are `backend/tests/test_labs_confirm_persistence.py`.
 
-### What each commit did
+**Branch gate.** `fix/labs-confirm-persistence` — merged + deleted, local and remote;
+`git cherry origin/master` clean. `git branch` shows `master` only; `refs/remotes/origin` shows
+`origin/master` only. Row added to `BRANCHES.md` (**DONE**, `7ff5d26`). No branch in limbo.
 
-- **3dc425b — #151.** Records the sequencing choice: complete the producer before regenerating
-  the fixture or wiring the view; the view's unconditional reads are accepted as correct rather
-  than defended against with absence-tolerance. Carries the two sizing reads that motivated it —
-  `axis_verdict` is FOUR fields with no vocabulary anywhere in the repo (and a `protocol_phase`
-  whose fixture values intersect `derive_phase`'s real return set at ZERO, including
-  test-forbidden `on_trt`); `mechanism` is three fields over 15 authorable markers, no marker is
-  in two groups, and I1 does not bind the prose (#95 covers gate-influencing constants only).
-- **bd08ac9 — mechanism content.** `marker_interpretation[*].mechanism` authored for all 15
-  possible group members (8 entries extended, 7 created). `confidence` deliberately NOT authored.
-  `#98` guard honoured: surgical text insertion, escapes via `chr(92)`, asserted pure-ASCII /
-  zero literal em dashes / parses / only `mechanism` keys added. New guard
-  `test_lever_dictionary_mechanism.py` (9 tests) with a synthetic violation per rule — including
-  one that catches the fixture's invented `training_load` factor key.
-- **182ce19 — #152.** `axis_verdict` reduced to `{protocol_phase, text}`; `confidence` removed
-  from both `axis_verdict` and `mechanism`. Draft's `Amends:` premise corrected against master —
-  NO entry had ever established the four-field shape, so this is the FIRST master-canonical
-  statement of it and supersedes fixture/contract-file residue. Records the open gap the draft
-  glossed: `protocol_context_snapshot.factors` is a LIST while `protocol_phase` is a scalar.
-- **33001a1 — mechanism emitted.** The real state change: `_HELD_MEMBER_FIELDS` no longer holds
-  a genuine hold (what remains are the group-field boundary checks), so EVERY member field in the
-  contract is emitted and group-level `axis_verdict` is the sole producer hold.
-- **4157784 — Q64.** Marker-authored member fields (`stable_rationale`, `mechanism`) could
-  project onto `ungrouped[]` but do not; `vitamin_d_25oh` is seeded, ungrouped, and renders with
-  no explanation. Recorded, not decided — belongs with 1b, which must build that section anyway.
-- **4ceb48f — haematocrit seed.** First `band_change` propagated through `build_foundation`
-  (previously only ever driven at gate-unit level with an injected asset). Escalates
-  `watch`→`elevated` with gate 2 AND the delta arm asserted quiet, so `is_news` can only come
-  from the safety arm. Commit message states explicitly it is NOT demotion's control.
-- **45d36fb — §4 demotion.** In-phase relation demotes gate 1's delta arm. Producer re-computes
-  gate 1 in pass 2 once relations exist (the reason #140 moved surfacing out of pass 1).
-- **d8af288 — #153 + Q65.** The predicate as a named decision, plus the asset-vocabulary gap
-  with both candidate futures stated.
+## 2. Pending-queue reconciliation
 
-## 2. Pending-commit-queue reconciliation
+The brief carried **one** conditional `PENDING` item: a DECISIONS entry, *"conditional on Step 2
+confirming the blind spot."*
 
-No chat `;cc` queue was carried in; work arrived as four briefs (the `axis_verdict`/`mechanism`
-sizing brief, the mechanism CONTENT brief, the shape-amendment DECISION brief, and the demotion
-brief with three amendments). Everything decided landed; nothing is provisional.
+**Step 2 did not confirm it — it falsified it.** The drafted entry asserted that `#156`'s guard
+"cannot fire on a write that produces no rows" and that a lab result displayed on the confirm
+screen was failing to reach the database. Neither is true. The guard fired, correctly, and
+*caused* the zero-row writes by design. The entry was therefore **rewritten, not landed as
+drafted**: the persistence-standard clause survives, the blind-spot clause is replaced by what was
+actually found.
 
-- Sizing reads → **3dc425b** (recorded inside #151, since they postdate the brief that ordered
-  the work).
-- Mechanism content + slot → **bd08ac9**; producer projection → **33001a1**.
-- Shape amendment → **182ce19** (#152), with the `Amends:` line corrected against master.
-- Demotion, all three amendments applied → **4ceb48f / 45d36fb / d8af288**: (A) emptiness
-  tripwire added, (B) clause 1 re-justified on the `into_range` transition after verifying
-  `crossed_ref` is bidirectional, (C) Q65 carries both candidate resolutions.
-- **Deliberately NOT built:** `axis_verdict` (two named blockers), the `verdict`-enum
-  derivability read (deferred by the CORRECTION), fixture regeneration, view, endpoint.
+| Item | Disposition |
+|------|-------------|
+| DECISIONS `### #NEXT` — persistence standard + `#156` blind spot | **Landed rewritten** as **#157** in `6a4cf44`; renumbered in `7ff5d26`. Blind-spot framing falsified in the entry text; persistence standard stands. |
+| Q68 — not in the brief's queue, surfaced by the investigation | **Landed** as **Q68** in `6a4cf44`. |
+
+**Numbering collision, flagged deliberately.** The brief lists *"Q68's cross-date operand
+question"* under "Not in this brief", as though Q68 exists. **It does not and never did** — repo
+max was Q67. Number-at-merge claims the next sequential integer at the instant of merge, so this
+session's entry **is** Q68. The cross-date operand question is still pending in chat and takes the
+next free number when it lands. `OPEN_QUESTIONS.md` Q68 carries this note inline.
+
+Nothing decided this session is uncommitted. No provisional state carried forward.
 
 ## 3. Cold-resume handoff
 
-### State
-- Branch `master`, clean, synced with `origin/master` (0/0). No other local or remote branch —
-  every branch this session was ff-merged and deleted. `BRANCHES.md` unchanged (nothing to row).
-- Suite **506 passed** (was 476 at session open; +9 mechanism asset guard, +1 mechanism emission,
-  +1 band-crossing, +24 gate-level demotion, +4 end-to-end demotion, minus none).
-- DECISIONS max **#153**; OPEN_QUESTIONS max **Q65**.
+### What this session established — read before re-opening the lab lane
 
-### Interpretation layer — 4b-ii is one item from producer-complete
-**Emitted:** all member fields — `relations_rendered` (4b-i), `stable_rationale`,
-`member_lever_effects`, `mechanism` — plus group `shared_levers`, plus **relation-based demotion
-of gate 1's delta arm** (#153).
+**There was no data loss.** All ten `lab_reports` rows carrying zero `lab_results` are re-uploads
+in which **every** submitted marker already existed for that user at that `collected_date`. Each
+row was skipped by `#156`, `result_count` returned `0`, and the envelope was still created per
+`#155` retain-raw. The values are held on the earlier report.
 
-**The one remaining producer item is `axis_verdict`**, reduced by #152 to `{protocol_phase, text}`,
-blocked on exactly two things:
-1. **A source-factor rule.** `meta.protocol_context_snapshot.factors` is a LIST (one per declared
-   factor); `protocol_phase` is a scalar. With `trt` + `tirzepatide` + `cbt_i` all real ledger
-   keys the projection is ambiguous. Relation preconditions' named `factor_key` (#141/#145) is the
-   likely mechanism — not decided.
-2. **The authoring table**, keyed on **evaluability, not truth** (9 of 10 relations carry no
-   machine-readable condition, so "did the relation hold" is not computable): which relations
-   rendered, `operand_status` per relation, and `precondition_status` for
-   `hpg_gonadotropin_suppression` alone. Chat is drafting the table and the coarse-keying decision
-   (~10 authored strings). Q62 has no current consumer — `text` is authored, not generated.
+Live database at investigation (queried inside the container; `DATABASE_URL` never rendered, #111):
 
-**Then 1b (delivery), per #151 after the producer:** regenerate the fixture from the producer
-(fixes missing `ungrouped[]` and the `protocol_context_snapshot` shape by construction) → correct
-the view (consume `should_surface` instead of recomputing gate 1∨2; add the Ungrouped section; fix
-the `protocol_context_snapshot` reader; drop the `.verdict` / `.confidence` reads at
-`GroupCard.jsx` 15/17 and `GroupCollapsed.jsx` 10/12) → endpoint (draw-triggered, #147) → wire.
+```
+reports=43  results=168  empty_reports=10  distinct_markers=66
+series integrity: CLEAN — no marker duplicated at any collection date
+```
 
-**Known and accepted:** demotion is **inert on the canonical panel** — `_seed_fixture` omits `lh`,
-so `hpg_gonadotropin_suppression` is permanently `degraded` there. The regenerated fixture will
-therefore ship with the demotion path unexercised in the view. Deliberate: adding `lh` to that
-seed would break the `fsh` oracle tests. The `lh` absence is now **load-bearing**, and
-`test_news_gate_shape_and_no_unearned_demotion_on_the_s2_panel` pins the reason so it fails loudly
-if someone adds `lh` casually.
+66 distinct canonical markers against a 66-entry `marker_canonical.json` — every mapped marker is
+present.
 
-**Also open on this lane:** the I8-under-pressure test is gate-level, not end-to-end, because
-banded markers ∩ feedback-rendered markers = ∅ (`haematocrit` vs `lh`/`fsh`). That is
-**contingent**, and `test_banded_and_feedback_markers_do_not_yet_intersect` is the tripwire that
-fires when it closes, instructing its own deletion.
+**What actually failed was silence.** `#156` closes by recording that `result_count` reports rows
+written *"so a skipped collision is visible to the caller."* It was visible. The caller —
+`Metrics.jsx` — awaited the POST, discarded the response, and rendered an unconditional
+`"Report saved"`. The read-back then drew the resulting empty report as column headings above
+nothing, which reads as a report that had no results rather than as a fault. **A field that is
+returned but not read is not a report.**
 
-### Sprint (ROADMAP NOW)
-Two dated CBT-I items: **Q45 nap day-attribution** (contaminating capture now — the engine reads
-`naps_min` from `date − 1` on an unverified attribution) and the **~31 Jul manual evaluation
-trigger** (#118's PM-offer half). Cross-repo shared-block propagation to `health-connect-app`
-remains **OWED** and needs an HCA-rooted session. Banister build still owed (readiness suppression
-lifted `95355fa`).
+**A genuine loss was found separately.** The skip set was keyed by *marker* and the write loop
+tested membership by that key, so a marker appearing twice inside one submission suppressed every
+row carrying it — including the first, which had nothing to collide with. Now decided per **row
+index**. Latent today (no canonical id has more than one raw synonym); armed by any synonym added
+to the map.
 
-### Open questions (by status)
-- **Blocked by 4b-ii:** Q63 (interpretation-tile content), Q60 (CBT-I user surface — gating fork
-  is #47 verdict-as-directive).
-- **Design/policy, not blocking:** Q65 (no `demotes_when` on four relation kinds — also gates the
-  `axis_verdict` table's keying, so resolving it on demotion's merits alone would invalidate the
-  verdict content), Q64 (marker-authored fields on ungrouped rows — resolve with 1b), Q62 (#47 for
-  a generated field — no current consumer), Q61 (labs projection `computed_flag`/`confidence`).
-- **Infra:** Q59 (nothing verifies the deployable artifact — no CI, no boot check).
-- **Live sprint blocker:** Q45 (nap day-attribution), on the CBT-I lane.
+**Non-vacuity is on the record.** Against the pre-fix handler the new persistence file ran
+**2 failed, 6 passed** (the two intra-batch cases); **8 passed** after. The six that passed pre-fix
+state the standard against a happy path that was never broken, and are reported as such rather
+than dressed up as regressions.
+
+### Deploy state — verified per `#121` on BOTH services
+
+| Service | Discriminating probe | Result |
+|---|---|---|
+| `health-app-backend` | introspect the **live imported handler** in-container | `skip_indices` present, `skip_keys` absent; `tests/test_labs_confirm_persistence.py` on disk |
+| `health-app-frontend` | served-bundle grep of `assets/index-CgweDcPR.js` | three new string literals present; removed `"Report saved"` **absent** (negative control) |
+
+Both deployments `SUCCESS` at `2026-08-01 07:07:38 +10:00` before probing (#116 — timing).
+
+### OWED — operator decision, not a Code step
+
+**Ten zero-result `LabReport` rows and eight duplicate `(collected_date, panel)` groups are
+reported and NOT deleted.** `#155` ratified retention and a delete is the operator's call. A
+zero-result report carries no data, so removal costs nothing — but it is still a delete.
+
+| id | collected | panel | file | data lives on |
+|---|---|---|---|---|
+| 32 | 2025-05-16 | Haematinics | `20250516__Haematinics.pdf` | 8, 9, 10, 33, 34, 35 |
+| 22 | 2025-12-27 | Routine Chemistry | `20251227__Routine_Chemistry.pdf` | 11–17, 24 |
+| 23 | 2025-12-27 | 25-OH Vitamin D | `20251227__25-OH_Vitamin_D.pdf` | 11–17, 24 |
+| 21 | 2026-01-07 | Androgens | `20260107__Androgens.pdf` | 18, 19, 20 |
+| 37 | 2026-04-20 | Androgens | `20260420__Androgens.pdf` | 36, 42 |
+| 38 | 2026-05-30 | Prostate Specific Antigen (PSA) | `20260530__PSA.pdf` | 1–7 |
+| 39 | 2026-05-30 | Homocysteine | *(none)* | 1–7 |
+| 40 | 2026-05-30 | Homocysteine | `20260530__Homocysteine.pdf` | 1–7 |
+| 41 | 2026-05-30 | HbA1c | `20260530__HbA1c.pdf` | 1–7 |
+| 43 | 2026-05-30 | Prostate Specific Antigen (PSA) | `20260530__PSA.pdf` | 1–7 |
+
+Duplicate `(collected_date, panel)` groups: `2025-05-16` Haematinics (10, 32) · `2025-05-16`
+Haematology (9, 33) · `2025-12-27` 25-OH Vitamin D (14, 23) · `2026-01-07` Androgens (19, 21) ·
+`2026-04-20` Androgens (36, 37) · `2026-05-30` HbA1c (3, 41) · `2026-05-30` Homocysteine
+(2, 39, 40) · `2026-05-30` PSA (1, 38, 43).
+
+**Uploading is unpaused.** It was paused on the belief that reports were silently dropping their
+results. They were not.
+
+### Open questions touched
+
+- **Q68 (new, open)** — should a full-collision re-upload create an empty `LabReport` envelope at
+  all? `#155` retain-raw says the document exists; the envelope carries no data. Settled properly
+  only by report-level identity (`Document ID` / `Lab ID`, uncaptured). **Trigger, not blocker** —
+  the schema change is possible now, it is simply not yet worth doing.
+- **Q66** (no supersede affordance on `LabResult`) — unchanged, and now has a concrete consumer:
+  the confirm outcome panel tells the operator when a re-upload carries a *changed* value, which
+  `skip` discards. `keep_both` remains the only resolution.
 
 ### Single clearest next action
-Mint the **`axis_verdict` authoring table + coarse-keying decision** (chat is drafting it) and
-decide the **source-factor rule** for `protocol_phase`. Those two close the producer; only then
-does 1b start, per #151. Nothing else on this lane is startable ahead of them.
+
+**Resume the lab backfill.** The ingest path is fixed, verified on both deployed services, and now
+reports what it wrote. If a re-upload collides, the outcome panel names the marker and shows
+stored-vs-incoming, so a corrected result is distinguishable from a repeat.
+
+Then, unrelated and unchanged: **4b-ii's sole remaining hold is `axis_verdict`** — the
+source-factor rule for the `factors` list → scalar `protocol_phase`, plus the evaluability-keyed
+authoring table. See `ROADMAP.md` → Interpretation layer build sequence.
