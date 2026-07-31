@@ -331,6 +331,12 @@ class StoredReportOut(BaseModel):
     lab_name: str
     panel_name_raw: str
     collected_date: date
+    # Ingest PROVENANCE, not interpretation — #47 bounds what may be said about a result's
+    # clinical meaning, and says nothing about which file a report came from or whether it
+    # contributed rows. Both are needed by the upload history, which answers "which of my
+    # documents went in" — a question nothing previously could.
+    source_doc_filename: str | None
+    zero_row_reason: str | None
     results: list[StoredResultOut]
 
 
@@ -367,6 +373,8 @@ def get_lab_results(
             lab_name=rep.lab_name,
             panel_name_raw=rep.panel_name_raw,
             collected_date=rep.collected_date,
+            source_doc_filename=rep.source_doc_filename,
+            zero_row_reason=rep.zero_row_reason,
             results=[
                 StoredResultOut(
                     marker_name_raw=r.marker_name_raw,
@@ -595,14 +603,18 @@ def confirm_lab_report(
         confidences = list(r.field_confidence.model_dump().values()) if r.field_confidence else None
         row_confidences.append((r, canonical, min(confidences) if confidences else 1.0))
 
-    # confirm always writes at least one row (resolved is non-empty upstream); assert
-    # rather than assume, so min() below never sees an empty sequence.
-    assert row_confidences, "confirm_lab_report: no resolved rows to write"
     # `skip_indices` indexes `resolved`; the write loop below indexes `row_confidences`.
     # They are built from the same source in the same order — asserted, not assumed, because
     # a silent misalignment would skip the wrong row and lose a result without erroring.
     assert len(row_confidences) == len(resolved), "row/confidence lists must stay aligned"
-    overall_confidence = min(conf for _, _, conf in row_confidences)
+    # A document from which NOTHING could be extracted is a recorded event, not a 500. This
+    # previously tripped `assert row_confidences`, which raised before `db.commit()` — so an
+    # unparseable upload (a graph or chart PDF with no results table) left no trace whatever,
+    # and could not afterwards be told apart from a correctly-declined repeat. It is now stored
+    # with `zero_row_reason='no_values_extracted'` and surfaced as a fault.
+    # `overall_confidence` is 0.0 in that case and is NOT ambiguous the way #146's silent 0.0
+    # was: `zero_row_reason` states why, so an omitted field and a genuine zero are distinct.
+    overall_confidence = min((conf for _, _, conf in row_confidences), default=0.0)
 
     lab_report = models.LabReport(
         user_id=current_user.id,
@@ -652,6 +664,14 @@ def confirm_lab_report(
             computed_flag=r.computed_flag,
             confidence=confidence,
         ))
+
+    # Persist WHY nothing landed, so the two zero-row cases stay distinguishable after the fact.
+    # Without this the results list could only filter on row count, which would hide a fault
+    # (nothing extractable) exactly as readily as a repeat (everything already stored).
+    if written == 0:
+        lab_report.zero_row_reason = (
+            "all_markers_declined" if resolved else "no_values_extracted"
+        )
 
     db.commit()
 

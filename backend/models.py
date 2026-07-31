@@ -508,6 +508,16 @@ class LabReport(Base):
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     overall_confidence: Mapped[float] = mapped_column(Float, nullable=False)
     extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Why this report contributed no `LabResult` rows. NULL when it contributed at least one.
+    #   all_markers_declined — every extracted marker was already stored at this collected_date
+    #                          and was skipped by the #156 guard. The system worked.
+    #   no_values_extracted  — the document yielded no extractable values at all (a graph or
+    #                          chart PDF with no table). A FAULT.
+    # Both previously looked identical after the fact: the confirm response carried `duplicates`
+    # but nothing persisted it, so a zero-row report could not be classified by any stored field.
+    # Filtering the results list on "zero rows" alone would therefore have hidden the faults
+    # along with the repeats — absence-as-emptiness one layer along.
+    zero_row_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
