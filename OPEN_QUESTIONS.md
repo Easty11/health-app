@@ -1769,3 +1769,30 @@ schema for all four co-movement relations. **Owner:** Luke.
 Numbered `Q67` on the `gov/two-open-questions` branch (pre-ff; max was Q66, no competing branch).
 
 ---
+
+## Q-NEXT. A full-collision re-upload creates an empty `LabReport` envelope, and nothing decides whether it should
+
+**State:** open. **Blocks:** nothing today — the empty envelope is now visible as a fault, so this
+is a correctness-of-model question, not a live defect. **Related:** `#155`, `#156`, `#NEXT`. Numbered at merge — the brief
+ references a Q68 (cross-date operands) still pending in chat, so this must not claim 68.
+
+**The fork.** `#155` ratifies retain-raw: the report row is created because the document genuinely
+exists. `#156` keys duplicate detection at the marker level and explicitly adds **no report-level
+key**. Together these mean a re-upload whose every marker collides produces a `lab_reports` row
+with zero `lab_results` — ten such rows exist in production today. Neither entry decided whether
+that is the *intended* outcome or an unexamined consequence of two independently correct choices.
+
+**Why it is not obvious either way.** Retaining it is defensible: the document was uploaded, the
+upload is an event, and `#155`'s whole argument is that discarding raw provenance is the mistake.
+Discarding it is also defensible: the envelope carries no data, no `source_doc_filename` in some
+cases, and duplicates provenance already held on the report that owns the rows — it is a record
+that someone uploaded a file twice, which is operator behaviour rather than health data.
+
+**What would settle it** is report-level identity (`Document ID` / `Lab ID`, currently uncaptured),
+which is the same dependency `#NEXT`'s do-not-revisit clause names. With it, the question stops
+being "keep or discard the empty envelope" and becomes "recognise the document before writing
+anything" — at which point the envelope is never created and the fork dissolves. **This is a
+trigger, not a blocker:** the schema change is possible now, it is simply not yet worth doing.
+
+**Do not resolve by deleting the existing ten rows** — that is a separate operator decision under
+`#155`, and answering a design question by mutating the evidence for it is the wrong order.

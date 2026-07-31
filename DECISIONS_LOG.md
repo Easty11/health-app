@@ -5489,3 +5489,71 @@ cover — at which point the guard belongs at the read layer (`marker_series` as
 inputs) rather than at each write path, and this entry is superseded rather than extended.
 
 ---
+### #NEXT. The ingest path asserts persistence rather than response success; the zero-row reports were `#156` working, and the loss was one nobody read
+
+**Decision:** The lab ingest path is held to a **persistence standard** — a confirmed result is
+proven present in `lab_results` by reading the row back, never inferred from a `201` — and the
+confirm outcome is **surfaced to the operator** rather than merely returned. `#156`'s guard is
+recorded as correct and load-bearing; the defect was in what happened to its report.
+
+**The reported symptom was not the defect. VERIFIED at Step 2, and the brief's causal hypothesis
+is falsified.** The brief proposed that `#156` "cannot fire on a write that produces no rows,"
+and that a lab result displayed on the confirm screen was failing to reach the database. Both are
+wrong, in the same direction: the guard fired, correctly, and *caused* the zero-row write by
+design. All ten zero-result `lab_reports` are re-uploads in which **every** submitted marker
+already existed for that user at that collection date, so every row was skipped, `result_count`
+returned `0`, and the report envelope was still created per `#155` retain-raw. Nothing was lost.
+The values are held on the earlier report. Live database, at investigation: 43 reports, 168
+results, **zero** duplicated `(user, marker, collection date)` groups, and 66 distinct canonical
+markers against a 66-entry canonical map.
+
+**How the wrong conclusion was reachable, and what actually failed.** `#156` closes by recording
+that `result_count` reports rows **written** rather than submitted, *"so a skipped collision is
+visible to the caller."* It was visible to the caller. The caller — `Metrics.jsx` — awaited the
+POST, discarded the response, and rendered an unconditional `"Report saved"` toast. So a save
+that wrote zero rows was indistinguishable from one that wrote twelve, and the read-back rendered
+the resulting empty report as column headings above nothing, which reads as a report that had no
+results rather than as a fault. Ten of these accumulated across a backfill and were discovered
+weeks later by reading a screenshot.
+
+**A field that is returned but not read is not a report.** That is the generalisable finding, and
+it is a *different* failure from the one `#156` guarded: `#156` correctly refused to write blind
+and correctly told the caller. The loop closed at the API boundary and stopped. An outcome
+channel is only load-bearing when something consumes it — the same standard `#146` applied to
+`overall_confidence` (a model self-report nobody could distinguish from a genuine zero), one
+layer further out.
+
+**A genuine loss WAS found — a different one.** The skip set was keyed by **marker**, and the
+write loop tested membership by that key, so a marker appearing twice inside one submission
+suppressed **every** row carrying it, including the first, which had nothing to collide with.
+That marker reached no row anywhere. This is categorically unlike the database-collision case,
+where skipping is correct precisely *because* the value is already stored. Skip is now decided
+per **row index**. Today this is latent rather than active — no canonical id in
+`marker_canonical.json` currently has more than one raw synonym, so the path fires only on an
+identical raw label repeated in one document — but it arms itself the moment a synonym is added,
+which is a routine map edit.
+
+**How you know:** the persistence tests confirm a document and then query `lab_results`
+**directly**, asserting the row exists with the value submitted; the response object is not the
+evidence. Non-vacuity is on the record rather than asserted: against the pre-fix handler the new
+file ran **2 failed, 6 passed** — the two intra-batch cases — and **8 passed** after. The six that
+passed pre-fix state the standard against a happy path that was never broken, and are reported as
+such rather than dressed up as regressions. Full suite 521, from 513.
+
+**Why the empty envelopes exist at all, and the limit of this entry.** `#155` retain-raw means the
+report row is created because the document genuinely exists, and `#156` is explicit that detection
+is marker-level with **no report-level key**. A full-collision re-upload therefore has nothing to
+collide on *at the report layer*, and produces an empty envelope every time. That is the real
+structural gap — not the one the brief named — and it is not closed here, because closing it needs
+report-level identity the schema does not capture. It is now at least visible: an empty report
+renders as a fault.
+
+**Status:** Decided (ingest integrity). Code in this entry. Junk rows reported to the operator and
+**not deleted** — `#155` ratified retention and a delete is the operator's call.
+
+**Do not revisit unless:** report-level identity lands — `Document ID` / `Lab ID` from the source
+document, currently uncaptured — at which point a re-uploaded document is recognised as the same
+document before any row is examined, the empty envelopes stop being created rather than being
+explained, and this entry's last two paragraphs are superseded.
+
+---
