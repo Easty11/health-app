@@ -119,11 +119,15 @@ function StoredReportCard({ report }) {
       </div>
       {empty ? (
         <div className="px-4 py-3 bg-red-50 space-y-1">
-          <p className="text-xs font-semibold text-red-800">No results stored for this report</p>
+          <p className="text-xs font-semibold text-red-800">
+            {report.zero_row_reason === 'no_values_extracted'
+              ? 'No values could be read from this document'
+              : 'No results stored for this report'}
+          </p>
           <p className="text-xs text-red-700">
-            The report was filed but no marker was saved against it. This usually means every
-            marker was already recorded for {formatDate(report.collected_date)} and the upload
-            was a repeat — your values are held on the earlier report, not here.
+            {report.zero_row_reason === 'no_values_extracted'
+              ? 'The document was ingested but carried no extractable results — a chart or scan with no results table will do this. Nothing from it has been recorded. Re-upload the document that contains the results table.'
+              : 'The report was filed but no marker was saved against it, and no reason was recorded. Check the upload history.'}
           </p>
         </div>
       ) : (
@@ -496,6 +500,17 @@ export default function Metrics() {
     ? [...extraction.results].sort((a, b) => rowTier(a, canonicalMap) - rowTier(b, canonicalMap))
     : []
 
+  // "Your results" carries VALUES. A report whose markers were all declined as already-stored
+  // duplicates contributed none, so it is an upload event and belongs in the history instead.
+  //
+  // Keyed on `zero_row_reason`, NEVER on row count. Those are not the same filter: a report that
+  // yielded nothing extractable also has zero rows, and hiding it would be the same
+  // absence-as-emptiness failure one layer along — a fault disappearing behind a green check.
+  // Only the decline is hidden; anything else with no rows stays visible as a fault.
+  const resultReports = (storedReports || []).filter(
+    (r) => !(r.results.length === 0 && r.zero_row_reason === 'all_markers_declined')
+  )
+
   // Runs on data already in hand — no request, and nothing is written until the operator acts.
   const precheck = stage === STAGE.CONFIRM
     ? precheckCollisions(extraction, storedReports, canonicalMap)
@@ -541,13 +556,13 @@ export default function Metrics() {
           </div>
         )}
 
-        {stage === STAGE.IDLE && storedReports && storedReports.length > 0 && (
+        {stage === STAGE.IDLE && resultReports.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Your results</p>
               <p className="text-[11px] text-gray-400 text-right">Values and lab reference ranges as reported — no interpretation.</p>
             </div>
-            {storedReports.map((rep) => (
+            {resultReports.map((rep) => (
               <StoredReportCard key={rep.report_id} report={rep} />
             ))}
           </div>
