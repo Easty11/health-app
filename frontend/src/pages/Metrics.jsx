@@ -148,6 +148,72 @@ function StoredReportCard({ report }) {
   )
 }
 
+// ---------- upload history ----------
+// Every report the app has ingested, including the ones that contributed no values. This is the
+// manifest answering "which of my documents went in" — nothing previously could. It renders from
+// `GET /labs/results`, which the page already fetches; VERIFIED that no new endpoint was needed
+// once the projection carried `source_doc_filename` and `zero_row_reason`.
+//
+// Deliberately a flat list: no search, no filtering, no drill-down, no editing. If it grows any
+// of those it has become a module and should be planned as one.
+
+function contributionNote(report) {
+  const n = report.results.length
+  if (n > 0) return { text: `${n} marker${n === 1 ? '' : 's'}`, tone: 'text-gray-600' }
+  switch (report.zero_row_reason) {
+    case 'all_markers_declined':
+      // #156 working. Not a fault — the values are on an earlier report from the same draw.
+      return { text: 'No new values — all markers already recorded', tone: 'text-gray-500' }
+    case 'no_values_extracted':
+      // A fault, and the whole reason the results filter keys on this field rather than on
+      // row count: filtering by count alone would hide this exactly as readily as the above.
+      return { text: 'No values could be read from this document', tone: 'text-red-700 font-medium' }
+    default:
+      return { text: 'No values recorded', tone: 'text-gray-500' }
+  }
+}
+
+function UploadHistory({ reports }) {
+  const ordered = [...reports].sort(
+    (a, b) => (a.collected_date < b.collected_date ? 1 : a.collected_date > b.collected_date ? -1 : b.report_id - a.report_id)
+  )
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <p className="text-sm font-semibold text-gray-900">Upload history</p>
+        <p className="text-xs text-gray-500">Every report ingested, including those that added no values.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Collected</th>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Panel</th>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Lab</th>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Document</th>
+              <th className="px-3 py-2 text-xs font-medium text-gray-500">Contributed</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {ordered.map((rep) => {
+              const note = contributionNote(rep)
+              return (
+                <tr key={rep.report_id} className={rep.zero_row_reason === 'no_values_extracted' ? 'bg-red-50' : ''}>
+                  <td className="px-3 py-2 text-xs text-gray-600 tabular-nums whitespace-nowrap">{formatDate(rep.collected_date)}</td>
+                  <td className="px-3 py-2 text-xs text-gray-800">{rep.panel_name_raw}</td>
+                  <td className="px-3 py-2 text-xs text-gray-500">{rep.lab_name}</td>
+                  <td className="px-3 py-2 text-xs text-gray-500 break-all">{rep.source_doc_filename || '—'}</td>
+                  <td className={`px-3 py-2 text-xs ${note.tone}`}>{note.text}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ---------- what the save actually wrote ----------
 // /labs/confirm has always reported `result_count` (rows WRITTEN), `duplicates` and
 // `unmapped`. The client discarded the response and showed an unconditional "Report saved",
@@ -485,6 +551,10 @@ export default function Metrics() {
               <StoredReportCard key={rep.report_id} report={rep} />
             ))}
           </div>
+        )}
+
+        {stage === STAGE.IDLE && storedReports && storedReports.length > 0 && (
+          <UploadHistory reports={storedReports} />
         )}
 
         {stage === STAGE.EXTRACTING && (
