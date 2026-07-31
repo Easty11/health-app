@@ -5489,7 +5489,7 @@ cover — at which point the guard belongs at the read layer (`marker_series` as
 inputs) rather than at each write path, and this entry is superseded rather than extended.
 
 ---
-### #NEXT. The ingest path asserts persistence rather than response success; the zero-row reports were `#156` working, and the loss was one nobody read
+### 157. The ingest path asserts persistence rather than response success; the zero-row reports were `#156` working, and the loss was one nobody read
 
 **Decision:** The lab ingest path is held to a **persistence standard** — a confirmed result is
 proven present in `lab_results` by reading the row back, never inferred from a `201` — and the
