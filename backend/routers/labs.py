@@ -552,21 +552,28 @@ def confirm_lab_report(
         existing_at_date.setdefault(_duplicate_key(canonical, raw), (existing_report_id, value_num))
 
     duplicates: list[DuplicateCollision] = []
-    skip_keys: set[str] = set()
+    # Skip is decided per ROW INDEX, never per marker key. Keying the skip set by marker
+    # meant an intra-batch repeat suppressed EVERY row carrying that marker — including the
+    # first, which had nothing to collide with — so a marker appearing twice in one document
+    # was dropped entirely rather than stored once. That is real loss (the value reaches no
+    # row anywhere), as distinct from the DB-collision case where the value is already
+    # stored and skipping it is the point. Row indices align with `resolved`.
+    skip_indices: set[int] = set()
     seen_in_batch: set[str] = set()
-    for r, canonical, _established_unit in resolved:
+    for idx, (r, canonical, _established_unit) in enumerate(resolved):
         key = _duplicate_key(canonical, r.marker_name_raw)
         prior = existing_at_date.get(key)
-        if prior is None and key in seen_in_batch:
+        if prior is None:
+            if key not in seen_in_batch:
+                seen_in_batch.add(key)
+                continue          # first sighting of a marker not already stored — write it
             # the same marker twice inside ONE submission (two raw labels, one canonical);
             # the (lab_report_id, marker_name_raw) constraint does not catch this.
             prior = (0, None)
         seen_in_batch.add(key)
-        if prior is None:
-            continue
         existing_report_id, existing_value = prior
         if on_duplicate == "skip":
-            skip_keys.add(key)
+            skip_indices.add(idx)
         duplicates.append(DuplicateCollision(
             marker=canonical or r.marker_name_raw,
             marker_canonical=canonical,
@@ -591,6 +598,10 @@ def confirm_lab_report(
     # confirm always writes at least one row (resolved is non-empty upstream); assert
     # rather than assume, so min() below never sees an empty sequence.
     assert row_confidences, "confirm_lab_report: no resolved rows to write"
+    # `skip_indices` indexes `resolved`; the write loop below indexes `row_confidences`.
+    # They are built from the same source in the same order — asserted, not assumed, because
+    # a silent misalignment would skip the wrong row and lose a result without erroring.
+    assert len(row_confidences) == len(resolved), "row/confidence lists must stay aligned"
     overall_confidence = min(conf for _, _, conf in row_confidences)
 
     lab_report = models.LabReport(
@@ -618,8 +629,8 @@ def confirm_lab_report(
     db.flush()  # get lab_report.id before inserting results
 
     written = 0
-    for r, canonical, confidence in row_confidences:
-        if _duplicate_key(canonical, r.marker_name_raw) in skip_keys:
+    for idx, (r, canonical, confidence) in enumerate(row_confidences):
+        if idx in skip_indices:
             continue  # collision reported in `duplicates`; the series stays single-valued
         written += 1
         db.add(models.LabResult(
