@@ -194,8 +194,13 @@ function SaveOutcome({ outcome, onDismiss }) {
       {nothingWritten && (
         <p className="text-xs text-gray-700">
           Every marker in this report is already recorded for this collection date, so no new
-          rows were written. The report itself was still filed. Your existing values are
-          unchanged — nothing was lost.
+          rows were written. The report itself was still filed.
+          {/* "nothing was lost" is only true when the incoming values MATCH. If one differs,
+              a reading was in fact discarded, and the reassurance would be a lie — the exact
+              species of reassurance this whole branch exists to remove. */}
+          {anyCorrected
+            ? ' One incoming value differs from what is stored — see below.'
+            : ' Your existing values are unchanged, and nothing was lost.'}
         </p>
       )}
 
