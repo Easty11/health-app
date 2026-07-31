@@ -5342,3 +5342,73 @@ and the model would have to admit non-branching relations as a first-class case 
 composition.)
 
 ---
+
+### 155. Retain-raw is ratified as intended architecture, not an accident; promotion is two-tier, and the live gap is ingestion, not recognition
+
+**Decision:** Every analyte the extractor observes is stored with its raw label, value, unit,
+reference interval, source report and collection date, whether or not it maps to a canonical
+marker. Canonicalisation is a **mapping layer over a complete raw store**, never a filter applied
+at ingest. Unmapped analytes are surfaced — identified and returned for human binding — never
+silently discarded. Because the raw store is complete, **promotion is retroactive**: making a
+marker canonical unlocks its entire observed history rather than starting a series at the
+promotion date.
+
+**Promotion is two-tier.** A marker becomes *canonical* (key, display name, unit, reference-range
+source) cheaply; it is then stored, charted and trend-visible. It becomes *interpretable* (group
+membership, `min_meaningful_delta`, `stable_rationale`, `mechanism`, all I1-cited) as a separate
+authoring act. Conflating the two makes cheap work wait on expensive work.
+
+**THIS ENTRY RATIFIES; IT DOES NOT INTRODUCE.** Verified against master before minting, and the
+proposal's premise was wrong in four ways. Recorded in full because the corrections change what
+is owed:
+
+1. **Retain-raw is already built.** `LabResult.marker_canonical` is **nullable** and `#58`
+   already rules that "unmapped raw names surface as an interpretation-layer skip, not a
+   placeholder canonical id". The confirm path writes every extracted row regardless of mapping
+   and returns `unmapped` in `ConfirmResponse` for human binding. So the architecture is present;
+   what this entry adds is that it is **intended and constraining** — a future change that
+   filters at the door is now a violation of a decision rather than a refactor.
+2. **`ld` and `haemolysis_index` are already canonical** (`marker_canonical.json`, 66 entries,
+   both exact keys). The proposal's §6 rested on their being unrecognised. They are not.
+3. **The canonicalisation work queue is empty.** Every operand and render target declared across
+   all ten relations — 17 keys, including `albumin`, `ld`, `haemolysis_index` — is already
+   canonical. So coverage-driven prioritisation over *canonicalisation* has nothing to rank
+   today. The metric that does have signal is **interpretability**: exactly three declared
+   operands are canonical-but-not-interpretable — `albumin`, `ld`, `haemolysis_index`. That is
+   the two-tier state, live, and it is the list worth ranking.
+4. **The live gap is INGESTION, not recognition.** The store holds 7 reports, all collected
+   2026-05-30, 27 results, and **zero unmapped rows**. It contains no `bilirubin_total`, `ggt`,
+   `alp`, `ld`, `haemolysis_index`, `ast`, `alt` or `albumin` — the 6 Mar 2026 routine chemistry
+   the worked example draws on has never been ingested. Once it is, `bilirubin_isolation`
+   resolves fully **with no asset change at all**: a relation operand only needs to be present in
+   `marker_series`, which requires the marker to be canonical and ingested — NOT to be
+   interpretable or a group member (`albumin` already works this way, as an operand of
+   `haemoconcentration_discriminator` while being no member of `erythroid`). The difference
+   between an open option set and a defensible position on that panel is one upload.
+
+**Two further corrections, both to worries the proposal raised:**
+- **Panels already span reports.** `marker_series` partitions **per marker** across all of a
+  user's reports (`partition_by=marker_key`, ordered `collected_date DESC, id DESC`); it never
+  scopes to a single report. So a cross-report relation such as albumin-with-haemoglobin resolves
+  by construction, and the "unit of interpretation might be a report" risk does not exist. Note
+  the actual shape is broader than a collection episode: it is newest-per-marker regardless of
+  date, which is why the §2 fixture legitimately mixes a 2025-12-27 vitamin D with a 2026-05-30
+  draw.
+- **There is no `ai_draft` → `human_verified` gate to reuse.** `ai_draft` appears as a `status` /
+  `draft_status` string in the three reference assets; **`human_verified` appears nowhere in the
+  repo and no code implements a promotion mechanism.** It is a convention marker, not a gate, so
+  a marker-promotion workflow would be building one, not reusing one.
+
+**`#42` applies unchanged** — verified: both `latest_lab_results` and `marker_series` filter
+`LabReport.user_id`, so the raw store is per-user on every read.
+
+**Status:** Decided (architecture). Ratifies built behaviour and names the two-tier distinction;
+the only new build implied is an interpretability-coverage ranking, and it has exactly three
+candidates today.
+
+**Do not revisit unless:** raw retention proves to carry a storage or privacy cost that outweighs
+retroactive promotion — in which case the fallback is retention of unmapped analytes only for a
+bounded window, which preserves most of the value and should be costed before the decision is
+reversed outright.
+
+---
