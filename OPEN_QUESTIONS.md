@@ -1801,7 +1801,7 @@ trigger, not a blocker:** the schema change is possible now, it is simply not ye
 **Do not resolve by deleting the existing ten rows** — that is a separate operator decision under
 `#155`, and answering a design question by mutating the evidence for it is the wrong order.
 
-## Q-NEXT. `marker_series` has no temporal bound, so the interpretation output is a composite of draws rather than a reading of one
+## Q69. `marker_series` has no temporal bound, so the interpretation output is a composite of draws rather than a reading of one
 
 **State:** open. **Blocks:** wiring the interpretation view to live data (1b).
 **Related:** `#155` (retain-raw), `#154` (eliminative branch model), `#147` (many panels per draw),
