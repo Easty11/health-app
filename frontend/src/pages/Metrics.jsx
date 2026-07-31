@@ -257,6 +257,108 @@ function SaveOutcome({ outcome, onDismiss }) {
   )
 }
 
+// ---------- collision pre-check (before the write, at the decision point) ----------
+// The write-time guard (#156, `labs.py`) is unchanged and is what actually protects the series.
+// This is the INTERFACE to it: the operator previously committed and only then learned every
+// marker was already stored. No endpoint is needed — `GET /labs/results` already returns every
+// stored report with its `collected_date`, `marker_canonical` and `marker_name_raw`, and
+// `GET /labs/canonical-map` resolves an extracted raw label the same way the server does. Both
+// are already fetched on mount for the results table.
+
+function incomingKey(rawName, canonicalMap) {
+  // mirrors `_duplicate_key`: canonical id where mapped, `raw:<label>` where not. Extraction
+  // leaves `marker_canonical` null by design, so the map is the only resolver on this side.
+  const canonical = canonicalMap[rawName]?.marker_canonical
+  return canonical || `raw:${rawName}`
+}
+
+function storedKeysAtDate(storedReports, collectedDate) {
+  const at = new Map()
+  for (const rep of storedReports || []) {
+    if (formatDate(rep.collected_date) !== collectedDate) continue
+    for (const r of rep.results) {
+      const key = r.marker_canonical || `raw:${r.marker_name_raw}`
+      if (!at.has(key)) {
+        at.set(key, { reportId: rep.report_id, panel: rep.panel_name_raw, value: r.value_num })
+      }
+    }
+  }
+  return at
+}
+
+function precheckCollisions(extraction, storedReports, canonicalMap) {
+  const collectedDate = formatDate(extraction?.report?.dates?.collected)
+  if (!collectedDate || !storedReports) return null
+  const at = storedKeysAtDate(storedReports, collectedDate)
+  if (at.size === 0) return null
+
+  const hits = []
+  for (const r of extraction.results) {
+    const prior = at.get(incomingKey(r.marker_name_raw, canonicalMap))
+    if (prior) hits.push({ marker: r.marker_name_raw, incoming: r.value_num, ...prior })
+  }
+  if (hits.length === 0) return null
+  return {
+    hits,
+    total: extraction.results.length,
+    all: hits.length === extraction.results.length,
+    collectedDate,
+    reportIds: [...new Set(hits.map((h) => h.reportId))],
+  }
+}
+
+function PrecheckPanel({ precheck }) {
+  const { hits, total, all, collectedDate, reportIds } = precheck
+  const changed = hits.filter((h) => h.value !== null && h.incoming !== null && h.value !== h.incoming)
+  return (
+    <div className={`border rounded-2xl p-4 space-y-2 ${all ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+      <p className="text-sm font-semibold text-gray-900">
+        {all
+          ? 'Every marker in this report is already stored'
+          : `${hits.length} of ${total} markers are already stored`}
+      </p>
+      <p className="text-xs text-gray-700">
+        {all
+          ? `All ${total} marker${total === 1 ? '' : 's'} were recorded for ${collectedDate} on report${reportIds.length === 1 ? '' : 's'} ${reportIds.join(', ')}. Saving would file an upload that contributes no values. Cancel unless you mean to keep a second copy.`
+          : `Already recorded for ${collectedDate} on report${reportIds.length === 1 ? '' : 's'} ${reportIds.join(', ')}. Saving writes the ${total - hits.length} new marker${total - hits.length === 1 ? '' : 's'} and skips these.`}
+      </p>
+      <div className="bg-white/70 border border-black/5 rounded-xl overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className="border-b border-gray-200">
+            <tr>
+              <th className="px-3 py-1.5 text-[11px] font-medium text-gray-500">Marker</th>
+              <th className="px-3 py-1.5 text-[11px] font-medium text-gray-500">Stored</th>
+              <th className="px-3 py-1.5 text-[11px] font-medium text-gray-500">In this report</th>
+              <th className="px-3 py-1.5 text-[11px] font-medium text-gray-500">On report</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {hits.map((h, i) => {
+              const differs = h.value !== null && h.incoming !== null && h.value !== h.incoming
+              return (
+                <tr key={i} className={differs ? 'bg-red-50' : ''}>
+                  <td className="px-3 py-1.5 text-xs text-gray-800">{h.marker}</td>
+                  <td className="px-3 py-1.5 text-xs text-gray-600 tabular-nums">{fmtNum(h.value)}</td>
+                  <td className={`px-3 py-1.5 text-xs tabular-nums ${differs ? 'text-red-700 font-semibold' : 'text-gray-600'}`}>
+                    {fmtNum(h.incoming)}
+                  </td>
+                  <td className="px-3 py-1.5 text-xs text-gray-500">#{h.reportId} {h.panel}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {changed.length > 0 && (
+        <p className="text-xs text-red-800">
+          A value above differs from what is stored. If this document is a corrected result, keep
+          both — saving normally would skip it and leave the old value standing.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ---------- main ----------
 
 export default function Metrics() {
@@ -303,12 +405,12 @@ export default function Metrics() {
     }
   }
 
-  async function handleConfirm() {
+  async function handleConfirm(onDuplicate = 'skip') {
     setSaving(true)
     setError('')
     try {
       const panel = extraction.report?.panel_name_raw
-      const res = await api.post('/labs/confirm', extraction)
+      const res = await api.post('/labs/confirm', extraction, { params: { on_duplicate: onDuplicate } })
       // The response is the only account of what was written. Reporting "saved" without
       // reading it is what let ten zero-row reports pass for successful uploads.
       setOutcome({ panel, ...res.data })
@@ -327,6 +429,12 @@ export default function Metrics() {
   const sortedResults = extraction
     ? [...extraction.results].sort((a, b) => rowTier(a, canonicalMap) - rowTier(b, canonicalMap))
     : []
+
+  // Runs on data already in hand — no request, and nothing is written until the operator acts.
+  const precheck = stage === STAGE.CONFIRM
+    ? precheckCollisions(extraction, storedReports, canonicalMap)
+    : null
+  const allAlreadyStored = !!precheck?.all
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -394,6 +502,8 @@ export default function Metrics() {
               </div>
             )}
 
+            {precheck && <PrecheckPanel precheck={precheck} />}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Left: report envelope summary */}
               <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3 md:col-span-1">
@@ -445,20 +555,38 @@ export default function Metrics() {
               </div>
             </div>
 
+            {/* When every marker is already stored, CANCEL is the default action and `keep_both`
+                is the deliberate one (#156 — the resolution is operator-chosen, never inferred).
+                Cancelling issues no request: no LabReport row, no history entry. An abandoned
+                upload is not an upload. */}
             <div className="flex gap-3">
               <button
                 onClick={reset}
-                className="flex-1 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold rounded-2xl py-3 text-sm transition-colors"
+                className={`flex-1 font-semibold rounded-2xl py-3 text-sm transition-colors ${
+                  allAlreadyStored
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    : 'bg-white border border-gray-200 hover:bg-gray-50 text-gray-700'
+                }`}
               >
-                Discard
+                {allAlreadyStored ? 'Cancel — nothing to add' : 'Discard'}
               </button>
-              <button
-                onClick={handleConfirm}
-                disabled={saving || missingCollected}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-2xl py-3 text-sm transition-colors"
-              >
-                {saving ? 'Saving…' : 'Confirm & Save'}
-              </button>
+              {allAlreadyStored ? (
+                <button
+                  onClick={() => handleConfirm('keep_both')}
+                  disabled={saving || missingCollected}
+                  className="flex-1 bg-white border border-red-200 hover:bg-red-50 disabled:opacity-50 text-red-700 font-semibold rounded-2xl py-3 text-sm transition-colors"
+                >
+                  {saving ? 'Saving…' : 'Save anyway (keep both)'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleConfirm('skip')}
+                  disabled={saving || missingCollected}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-2xl py-3 text-sm transition-colors"
+                >
+                  {saving ? 'Saving…' : 'Confirm & Save'}
+                </button>
+              )}
             </div>
           </>
         )}
