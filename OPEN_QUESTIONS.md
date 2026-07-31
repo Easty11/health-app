@@ -1800,3 +1800,103 @@ trigger, not a blocker:** the schema change is possible now, it is simply not ye
 
 **Do not resolve by deleting the existing ten rows** — that is a separate operator decision under
 `#155`, and answering a design question by mutating the evidence for it is the wrong order.
+
+## Q-NEXT. `marker_series` has no temporal bound, so the interpretation output is a composite of draws rather than a reading of one
+
+**State:** open. **Blocks:** wiring the interpretation view to live data (1b).
+**Related:** `#155` (retain-raw), `#154` (eliminative branch model), `#147` (many panels per draw),
+`Q65` (four relation kinds carry no machine-readable condition), `Q68` (empty envelope),
+`Q66` (supersede affordance).
+
+`marker_series` partitions on `COALESCE(marker_canonical, marker_name_raw)`, orders
+`LabReport.collected_date DESC, LabResult.id DESC`, and takes `rn <= 2`. **Its only filter is
+`LabReport.user_id`** — quoted from `backend/reads/labs_reads.py:131-156`, not from a report of it.
+There is no bound on how old either row may be, and no requirement that the markers in one output
+share a collection date. What the interpretation output presents as a panel is a **synthetic
+composite of each marker's most recent value, whenever that was.**
+
+**Measured against live data by running `marker_series(1, db)` itself**, newest draw `2026-05-30`:
+
+| current `collected_date` | markers | age vs the newest draw |
+|---|---|---|
+| 2026-05-30 | 27 | — |
+| 2026-04-20 | 1 | 40 days |
+| 2026-03-06 | 30 | 85 days |
+| 2025-12-27 | 7 | 154 days |
+| 2025-05-16 | 1 | 379 days |
+
+**39 of 66 markers carry a current value from a draw other than the newest one.** The composite is
+the majority of the output, not an edge.
+
+- **The hepatocellular group is absent from the 2026-05-30 draw entirely — confirmed.** Every
+  member (`ast`, `alt`, `ggt`, `alp`, `bilirubin_total`) has current `2026-03-06` against prior
+  `2025-12-27`. The whole group renders off an 85-day-old draw with a 69-day-old comparison,
+  presented alongside erythroid data from `2026-05-30` as though contemporaneous.
+- **`min_meaningful_delta` carries no time dimension — confirmed.** Across all 8 authored entries
+  and the `_defaults` fallback the keys are exactly `{mode, value, note, evidence_refs}`; no key
+  matching day/window/period/elapsed/interval exists anywhere in `lever_dictionary.json`, and
+  `delta()` emits no elapsed field. The consequence is live *inside a single group*: in `hpg_axis`,
+  `testosterone_total` moves over **40 days** (2026-05-30 vs 2026-04-20) while `oestradiol` moves
+  over **154 days** (2026-05-30 vs 2025-12-27), and gate 1's delta arm judges both with the same
+  bare percentage. `hpg_t_e2_ratio` then relates the two.
+
+**Two claims from the drafting inventory did NOT survive verification, and the entry is weaker and
+truer without them.**
+
+1. **Albumin is not an operand of `haemoconcentration_discriminator`.** The relation carries a
+   separate `"discriminator": "albumin"` field alongside `"operands": ["haemoglobin",
+   "haematocrit", "rbc"]`, and **no code anywhere reads the `discriminator` key**. Albumin's age
+   therefore cannot affect `operand_status`, because albumin is not consulted at all. That the
+   relation asserts "this rise is a draw artefact" without ever looking at albumin is real, is
+   already documented at `backend/interpretation/gates.py:351-353`, and is already **`Q65`** —
+   a different question from this one.
+2. **No relation today has operands from different draws.** Running the real operand check across
+   all ten authored relations, every one resolves `operand_status: complete` with an operand date
+   spread of **0 days**. The cross-draw-operand hazard is **latent, not observed**: nothing bounds
+   it, and it arms the moment a group's members split across draws — which the hepatocellular
+   group already demonstrates is the normal shape of this dataset. Stating it as latent is the
+   honest form; claiming a current instance would have been false.
+
+The question is not whether newest-per-marker is wrong. It is a reasonable answer to "what does the
+platform know about this person." It is the wrong answer to "what does this panel say," and the
+interpretation output presents itself as the second.
+
+Candidates:
+
+- **(a) Recency-bounded operands.** A value older than a declared window resolves `not_assessed`
+  rather than counting as present. Smallest change; requires a window declared per marker or
+  globally, and any global number is arbitrary across markers with very different half-lives.
+- **(b) Draw-scoped interpretation.** The unit is a collection episode; markers absent from it are
+  absent. Truest to what a reader expects from a panel, and it makes the temporal question
+  disappear rather than parameterising it. On this dataset it would drop the entire hepatocellular
+  group from a 2026-05-30 reading — 39 of 66 markers would fall out — which is either the correct
+  answer or a fatal objection depending on which question the output is meant to answer.
+- **(c) Surface the age.** **Cheaper than the draft assumed: the dates are already in the output.**
+  The producer emits `groups[].members[].current.collected`, `.prior.collected`,
+  `meta.trigger_panel.collected` and `meta.compared_against.collected`, and `LabRow` has carried
+  `collected_date` since the read layer was built. A consumer can already compute every staleness
+  figure in the table above. (c) is therefore **not a producer change at all** — it is the view
+  choosing to display what it is already being handed. **Composes with the others rather than
+  competing.**
+- **(d) Hybrid.** Draw-scoped for gates and relations; newest-per-marker for trend display. The
+  two readings answer different questions, and conflating them is what produced this.
+
+`#154`'s eliminative model can express the result of any of these: a stale operand is a
+`not_assessed` branch with a stated reason, and "this reading is from twelve weeks earlier" is
+exactly the evidence its rule 3 exists to surface. So this question decides an input rule, not an
+output shape.
+
+**Episode identity, if (b) or (d) wins:** inferring a collection episode from `collected_date` is a
+heuristic that breaks when two draws land on one date. The source documents carry a per-draw
+accession — `Lab ID` — and the position is better than "uncaptured": **it is already extracted and
+then discarded.** `ReportPatient.lab_accession` is parsed by `/labs/extract` and populated by the
+system prompt, but `confirm_lab_report` never reads `report.patient` and `LabReport` has no column
+for it, so it is dropped at the write. Persisting it is a schema change, not an extraction problem.
+**Coverage is UNVERIFIED and must not be assumed:** no source PDFs exist in the repo, so whether
+pre-2026 reports carry the accession in the same position could not be checked here. If the older
+layouts differ, episode identity has a coverage gap over exactly the back-catalogue this dataset is
+built from.
+
+**Resolve before:** the interpretation view is wired to live data. A temporally incoherent reading
+with a UI on top is harder to see than one in a JSON dump, and 1b's Step 0 exists to prevent
+exactly that.
