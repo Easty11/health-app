@@ -119,10 +119,27 @@ class ExtractionResult(BaseModel):
     results: list[ResultItem]
 
 
+class DuplicateCollision(BaseModel):
+    """One marker already present for this user at this collection date.
+
+    Surfaced, never silently absorbed — the same category of thing as `unmapped` (#58):
+    something the platform saw, declined to write blind, and is telling the caller about.
+    Carries both values so the caller can tell a byte-identical re-upload from a corrected
+    result without another round trip."""
+    marker: str                      # canonical id, or the raw label when unmapped
+    marker_canonical: str | None
+    collected_date: date
+    existing_lab_report_id: int
+    existing_value_num: float | None
+    incoming_value_num: float | None
+    action: str                      # "skipped" | "written"
+
+
 class ConfirmResponse(BaseModel):
     lab_report_id: int
-    result_count: int
+    result_count: int                # rows actually WRITTEN, which may be fewer than submitted
     unmapped: list[str]
+    duplicates: list[DuplicateCollision] = []
 
 
 # ---------- extraction system prompt (LAB_EXTRACTION_SCHEMA v0.3 §2/§4/§5/§6) ----------
@@ -451,12 +468,40 @@ async def extract_lab_report(
 
 # ---------- POST /labs/confirm ----------
 
+def _duplicate_key(marker_canonical: str | None, marker_name_raw: str) -> str:
+    """The series-identity key for one result row.
+
+    `(user, marker, collected_date)` is the tuple `marker_series` actually partitions on,
+    so it is the only key that guards what the gate model reads. Falls back to the RAW
+    label when `marker_canonical` is null: unmapped rows are stored (#58/#155) and become a
+    live series the moment the marker is promoted, so a duplicate that slips in unmapped
+    would surface as a corrupted series long after the upload that caused it. Guarding the
+    raw label closes that, rather than leaving it as a known gap."""
+    return marker_canonical if marker_canonical else f"raw:{marker_name_raw}"
+
+
 @router.post("/confirm", response_model=ConfirmResponse, status_code=status.HTTP_201_CREATED)
 def confirm_lab_report(
     body: ExtractionResult,
+    on_duplicate: str = "skip",
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """`on_duplicate` resolves a marker already present at this collection date:
+
+      * `skip` (default) — the colliding ROW is not written; every other row is, and the
+        report itself is still created because the document genuinely exists (#155
+        retain-raw). One collision never fails the whole upload.
+      * `keep_both` — write it anyway. For the case the operator knows is legitimate.
+
+    `supersede` is NOT offered, deliberately. There is no supersede column on `LabResult`
+    (#52 is explicit: compute-on-read, no supersede column), so the only mechanism available
+    would be deleting the earlier row — which directly contradicts `#155`'s ratification of
+    retain-raw. Superseding needs a `superseded_at`/`superseded_by` affordance so the
+    original is retained but excluded from the series; that is a schema change and is not
+    invented here. A correction is therefore resolved today by `keep_both` plus a follow-up,
+    or by adding that column first.
+    """
     if body.report.dates.collected is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -487,6 +532,51 @@ def confirm_lab_report(
             )
 
     report = body.report
+
+    # ---------- series-integrity guard (#156) ----------
+    # A marker already present for this user at this collection date would give
+    # `marker_series` two same-draw rows at rn=1/rn=2, drop the true earlier prior, and
+    # resolve both safety bands identically — returning band_change None. The safety arm
+    # then never fires and the marker reads as flat and quiet. Detected here, at the only
+    # point where the series can still be kept correct.
+    collected_date = report.dates.collected.date()
+    existing_at_date: dict[str, tuple[int, float | None]] = {}
+    for canonical, raw, value_num, existing_report_id in (
+        db.query(models.LabResult.marker_canonical, models.LabResult.marker_name_raw,
+                 models.LabResult.value_num, models.LabResult.lab_report_id)
+        .join(models.LabReport, models.LabReport.id == models.LabResult.lab_report_id)
+        .filter(models.LabReport.user_id == current_user.id,            # #42
+                models.LabReport.collected_date == collected_date)
+        .all()
+    ):
+        existing_at_date.setdefault(_duplicate_key(canonical, raw), (existing_report_id, value_num))
+
+    duplicates: list[DuplicateCollision] = []
+    skip_keys: set[str] = set()
+    seen_in_batch: set[str] = set()
+    for r, canonical, _established_unit in resolved:
+        key = _duplicate_key(canonical, r.marker_name_raw)
+        prior = existing_at_date.get(key)
+        if prior is None and key in seen_in_batch:
+            # the same marker twice inside ONE submission (two raw labels, one canonical);
+            # the (lab_report_id, marker_name_raw) constraint does not catch this.
+            prior = (0, None)
+        seen_in_batch.add(key)
+        if prior is None:
+            continue
+        existing_report_id, existing_value = prior
+        if on_duplicate == "skip":
+            skip_keys.add(key)
+        duplicates.append(DuplicateCollision(
+            marker=canonical or r.marker_name_raw,
+            marker_canonical=canonical,
+            collected_date=collected_date,
+            existing_lab_report_id=existing_report_id,
+            existing_value_num=existing_value,
+            incoming_value_num=r.value_num,
+            action="skipped" if on_duplicate == "skip" else "written",
+        ))
+
     # Derive each row's confidence ONCE (min over its field_confidences, the per-row
     # rule), then reuse those same values for the row records AND the report's
     # overall_confidence. overall = min(row confidences): it propagates the worst row,
@@ -527,7 +617,11 @@ def confirm_lab_report(
     db.add(lab_report)
     db.flush()  # get lab_report.id before inserting results
 
+    written = 0
     for r, canonical, confidence in row_confidences:
+        if _duplicate_key(canonical, r.marker_name_raw) in skip_keys:
+            continue  # collision reported in `duplicates`; the series stays single-valued
+        written += 1
         db.add(models.LabResult(
             lab_report_id=lab_report.id,
             marker_name_raw=r.marker_name_raw,
@@ -552,6 +646,7 @@ def confirm_lab_report(
 
     return ConfirmResponse(
         lab_report_id=lab_report.id,
-        result_count=len(body.results),
+        result_count=written,          # rows WRITTEN, not submitted — a skipped collision differs
         unmapped=unmapped,
+        duplicates=duplicates,
     )
