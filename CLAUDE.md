@@ -322,9 +322,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Upload history + declined uploads leave the results list (#158)** — collision is now stated at the confirm screen before the write, and `lab_reports.zero_row_reason` makes a decline distinguishable from an unreadable document. See `closeout.md` / DECISIONS_LOG #158.
 - **Lab ingest integrity (#157, Q68)** — the ten zero-result reports were `#156` working, not data loss; the defect was the confirm outcome being reported and discarded. Ingest now asserts persistence, not response success. See `closeout.md` / DECISIONS_LOG #157.
 - **4b-ii producer all but complete (#151–#153)** — every member field now emitted (incl. `mechanism`, authored for all 15 group members) plus relation-based demotion of gate 1's delta arm; `axis_verdict` reduced to `{protocol_phase, text}` and is the sole remaining hold. Surfaced Q64/Q65. See `closeout.md` / DECISIONS_LOG #151–#153.
-- **4b-ii/1a producer fields + #150 nav model** — producer now emits the three DETERMINISTIC interpretation held fields (`stable_rationale`, `member_lever_effects`, `shared_levers`); the two GENERATED ones (`axis_verdict`/`mechanism`) stay held. #150 mints hub-as-home navigation (build-deferred behind 4b-ii). Surfaced Q61/Q62/Q63; readiness suppression lifted (ROADMAP). See `closeout.md` / DECISIONS_LOG #150.
 
 ---
 

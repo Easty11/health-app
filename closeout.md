@@ -3,156 +3,150 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-01. Branch at close: `master` (clean). Session-open ref: `2cc8cb6`.
+Session date: 2026-08-01 (second session that day; the prior close-out is `b94a59f`).
+Branch at close: `master` (clean). Session-open ref: `b94a59f`.
 
 ## 1. Real commits this session
 
-Six commits, all on master and pushed. `git log --oneline 2cc8cb6..HEAD`:
+Six commits, all on master and pushed. `git log --oneline b94a59f..HEAD`:
 
 ```
-7ff5d26 governance: resolve #NEXT -> #157, Q-NEXT -> Q68 (on-branch, pre-ff)
-6a4cf44 governance: #NEXT — ingest asserts persistence; the zero-row reports were #156 working
-03dc017 feat(labs): a stored report with zero results reads as a fault, not as emptiness
-2e38a51 fix(labs): do not promise "nothing was lost" when a value was in fact discarded
-4a8b620 fix(labs): report what the save actually wrote instead of an unconditional toast
-36af7f1 fix(labs): a marker repeated in one document no longer drops every copy
+d65e98e governance: #158 — declined uploads leave the results list; SCHEMA.md drift recorded
+fb1fe00 feat(labs): declined reports leave "Your Results" for the upload history
+7ad5f40 fix(labs): pre-check copy read "All 1 marker were recorded"
+975635d feat(labs): upload history — every ingested report, including those that added nothing
+3570af1 feat(labs): record WHY a report contributed no rows — decline is not fault
+8d399eb feat(labs): collision pre-check at the confirm screen, before anything is written
 ```
 
 `git log --format="%ad %s" --date=short -10`:
 
 ```
+2026-08-01 governance: #158 — declined uploads leave the results list; SCHEMA.md drift recorded
+2026-08-01 feat(labs): declined reports leave "Your Results" for the upload history
+2026-08-01 fix(labs): pre-check copy read "All 1 marker were recorded"
+2026-08-01 feat(labs): upload history — every ingested report, including those that added nothing
+2026-08-01 feat(labs): record WHY a report contributed no rows — decline is not fault
+2026-08-01 feat(labs): collision pre-check at the confirm screen, before anything is written
+2026-08-01 chore: session close-out
 2026-08-01 governance: resolve #NEXT -> #157, Q-NEXT -> Q68 (on-branch, pre-ff)
 2026-08-01 governance: #NEXT — ingest asserts persistence; the zero-row reports were #156 working
 2026-08-01 feat(labs): a stored report with zero results reads as a fault, not as emptiness
-2026-08-01 fix(labs): do not promise "nothing was lost" when a value was in fact discarded
-2026-08-01 fix(labs): report what the save actually wrote instead of an unconditional toast
-2026-08-01 fix(labs): a marker repeated in one document no longer drops every copy
-2026-07-31 governance(open-questions): Q67 — phase-conditional co_movement has no expressing shape (pointer)
-2026-07-31 governance(open-questions): Q66 — no supersede affordance on LabResult
-2026-07-31 governance: #156 — series integrity guarded at ingest, not assumed
-2026-07-31 chore(labs): post-backfill series-integrity verification query
 ```
 
-Suite **521 passed**, from a **513** baseline measured at session open — reconciled against the
-brief's stated 513. The +8 are `backend/tests/test_labs_confirm_persistence.py`.
+Suite **527 passed**, from a **521** baseline — reconciled against the brief's stated 521. The +6
+are `backend/tests/test_labs_zero_row_reason.py`.
 
-**Branch gate.** `fix/labs-confirm-persistence` — merged + deleted, local and remote;
-`git cherry origin/master` clean. `git branch` shows `master` only; `refs/remotes/origin` shows
-`origin/master` only. Row added to `BRANCHES.md` (**DONE**, `7ff5d26`). No branch in limbo.
+**Branch gate.** `feat/labs-upload-history` — merged + deleted, local and remote;
+`git cherry origin/master` returned empty. `git branch` shows `master` only;
+`refs/remotes/origin` shows `origin/master` only. Row added to `BRANCHES.md` (**DONE**,
+`d65e98e`). No branch in limbo.
 
 ## 2. Pending-queue reconciliation
 
-The brief carried **one** conditional `PENDING` item: a DECISIONS entry, *"conditional on Step 2
-confirming the blind spot."*
-
-**Step 2 did not confirm it — it falsified it.** The drafted entry asserted that `#156`'s guard
-"cannot fire on a write that produces no rows" and that a lab result displayed on the confirm
-screen was failing to reach the database. Neither is true. The guard fired, correctly, and
-*caused* the zero-row writes by design. The entry was therefore **rewritten, not landed as
-drafted**: the persistence-standard clause survives, the blind-spot clause is replaced by what was
-actually found.
+The brief carried **one** `PENDING` item: a DECISIONS entry.
 
 | Item | Disposition |
 |------|-------------|
-| DECISIONS `### #NEXT` — persistence standard + `#156` blind spot | **Landed rewritten** as **#157** in `6a4cf44`; renumbered in `7ff5d26`. Blind-spot framing falsified in the entry text; persistence standard stands. |
-| Q68 — not in the brief's queue, surfaced by the investigation | **Landed** as **Q68** in `6a4cf44`. |
+| DECISIONS `### #NEXT` — results list carries values; pre-check; declined vs unparseable | **Landed** as **#158** in `d65e98e`, renumbered in the same commit (master max was #157). The `[VERIFY]` placeholder in the drafted "Distinguishing declined from unparseable" clause is resolved with what was actually found. |
 
-**Numbering collision, flagged deliberately.** The brief lists *"Q68's cross-date operand
-question"* under "Not in this brief", as though Q68 exists. **It does not and never did** — repo
-max was Q67. Number-at-merge claims the next sequential integer at the instant of merge, so this
-session's entry **is** Q68. The cross-date operand question is still pending in chat and takes the
-next free number when it lands. `OPEN_QUESTIONS.md` Q68 carries this note inline.
+The drafted entry left one clause open: *"[VERIFY — state whether the store already
+distinguished them, or what was added so it could.]"* Resolved, and the answer was worse than the
+brief's two options allowed for — see §3.
 
 Nothing decided this session is uncommitted. No provisional state carried forward.
 
 ## 3. Cold-resume handoff
 
-### What this session established — read before re-opening the lab lane
+### What this session established
 
-**There was no data loss.** All ten `lab_reports` rows carrying zero `lab_results` are re-uploads
-in which **every** submitted marker already existed for that user at that `collected_date`. Each
-row was skipped by `#156`, `result_count` returned `0`, and the envelope was still created per
-`#155` retain-raw. The values are held on the earlier report.
+**The pre-check needed no endpoint.** `GET /labs/results` already returns every stored report with
+`collected_date`, `marker_canonical` and `marker_name_raw`; `GET /labs/canonical-map` resolves an
+extracted raw label exactly as `_duplicate_key` does. Both are fetched on mount to render the
+results table, so the collision check is client-side computation over state already in hand.
 
-Live database at investigation (queried inside the container; `DATABASE_URL` never rendered, #111):
+**`#156`'s write-time guard is untouched, and that is proven rather than asserted.** Both regions
+hash byte-identical to the pre-change baseline: detection block `fb9e9cbf84a535c5`, write-loop skip
+`c478d7313ea5c50f`. Two mechanisms, different jobs — the pre-check informs a decision, the guard
+protects the data.
 
-```
-reports=43  results=168  empty_reports=10  distinct_markers=66
-series integrity: CLEAN — no marker duplicated at any collection date
-```
+**The store could not distinguish a decline from a fault, and the gap was deeper than a missing
+field.** Both findings verified directly against the pre-change handler:
 
-66 distinct canonical markers against a 66-entry `marker_canonical.json` — every mapped marker is
-present.
+1. Nothing persisted the outcome — the confirm response carried `duplicates`, but no column
+   recorded it, so after the fact both cases were simply a report with zero rows.
+2. **An unparseable document could not reach the store at all.** `results=[]` tripped
+   `assert row_confidences`, which raised *before* `db.commit()` — HTTP 500, no row written. The
+   fault case had no representation to be confused with; it had none.
 
-**What actually failed was silence.** `#156` closes by recording that `result_count` reports rows
-written *"so a skipped collision is visible to the caller."* It was visible. The caller —
-`Metrics.jsx` — awaited the POST, discarded the response, and rendered an unconditional
-`"Report saved"`. The read-back then drew the resulting empty report as column headings above
-nothing, which reads as a report that had no results rather than as a fault. **A field that is
-returned but not read is not a report.**
+`lab_reports.zero_row_reason` was added (migration `d7c4b1a90e35`): `NULL` when the report
+contributed rows, `all_markers_declined`, or `no_values_extracted`. The assert became a recorded
+event — a chart or scan with no results table is a real document the operator uploaded and is owed
+a record of. Finding (2) is also what makes the backfill a **proof** rather than an inference: the
+fault value was unreachable before this change, so no legacy row can carry it.
 
-**A genuine loss was found separately.** The skip set was keyed by *marker* and the write loop
-tested membership by that key, so a marker appearing twice inside one submission suppressed every
-row carrying it — including the first, which had nothing to collide with. Now decided per **row
-index**. Latent today (no canonical id has more than one raw synonym); armed by any synonym added
-to the map.
+**Divergence from the brief, stated not absorbed.** The brief said not to reword the zero-row red
+panel. But the panel must survive for faults (G4), and its copy attributed the emptiness to a
+repeat — *"this usually means every marker was already recorded ... the upload was a repeat."* Left
+in place it would tell the operator that an unreadable chart PDF was a duplicate. The decline copy
+was not polished; it leaves that surface with the declines, and the fault has copy true of it.
 
-**Non-vacuity is on the record.** Against the pre-fix handler the new persistence file ran
-**2 failed, 6 passed** (the two intra-batch cases); **8 passed** after. The six that passed pre-fix
-state the standard against a happy path that was never broken, and are reported as such rather
-than dressed up as regressions.
+### Gate evidence
+
+| Gate | Evidence |
+|---|---|
+| **G1** | Real page driven with a stubbed axios adapter. Confirm screen states *"Every marker in this report is already stored ... on report 1"* with a stored-vs-incoming table, before any write. Buttons become **Cancel — nothing to add** (default) / **Save anyway (keep both)**. **Cancel issued ZERO requests** — no `/labs/confirm`, none at all. |
+| **G2** | SHA-256 of both guard regions identical to baseline (above). |
+| **G3** | History lists every report with a contribution note; live DB shows all 10 legacy zero-row rows carrying `all_markers_declined`. |
+| **G4** | Non-vacuity. Both a declined and an unparseable report have zero rows; the filter keys on `zero_row_reason`, never on row count. Declined → absent from results, present in history. Unparseable → present in **both**, with fault copy. Backend test asserts the two reasons are *unequal* so a future collapse fails there. |
+| **G5** | Live: 10 zero-row reports, all `all_markers_declined`, total still **43** — none deleted. |
+| **G6** | 527, from 521. |
 
 ### Deploy state — verified per `#121` on BOTH services
 
 | Service | Discriminating probe | Result |
 |---|---|---|
-| `health-app-backend` | introspect the **live imported handler** in-container | `skip_indices` present, `skip_keys` absent; `tests/test_labs_confirm_persistence.py` on disk |
-| `health-app-frontend` | served-bundle grep of `assets/index-CgweDcPR.js` | three new string literals present; removed `"Report saved"` **absent** (negative control) |
+| `health-app-backend` | AST introspection of the live imported handler + live DB | `alembic=d7c4b1a90e35`; `zero_row_reason` column present; handler sets it; only the alignment assert remains; `min(..., default=0.0)` live |
+| `health-app-frontend` | served-bundle grep of `assets/index-HenL5rqa.js` | 6 new string literals present; removed decline copy **absent** (negative control) |
 
-Both deployments `SUCCESS` at `2026-08-01 07:07:38 +10:00` before probing (#116 — timing).
+Both deployments `SUCCESS` at `2026-08-01 07:50 +10:00` before probing (#116 — timing).
 
-### OWED — operator decision, not a Code step
+**A `#113` false positive was hit and caught.** A substring grep for `assert row_confidences`
+against the live handler returned **True** — from the *comment explaining the assert's removal*.
+The executable statement is gone; an AST walk shows the only remaining assert is
+`len(row_confidences) == len(resolved)`. Exactly the corrected-document shape `#113` warns about:
+read the match, not the count.
 
-**Ten zero-result `LabReport` rows and eight duplicate `(collected_date, panel)` groups are
-reported and NOT deleted.** `#155` ratified retention and a delete is the operator's call. A
-zero-result report carries no data, so removal costs nothing — but it is still a delete.
+### What `#157`'s owed operator decision became
 
-| id | collected | panel | file | data lives on |
-|---|---|---|---|---|
-| 32 | 2025-05-16 | Haematinics | `20250516__Haematinics.pdf` | 8, 9, 10, 33, 34, 35 |
-| 22 | 2025-12-27 | Routine Chemistry | `20251227__Routine_Chemistry.pdf` | 11–17, 24 |
-| 23 | 2025-12-27 | 25-OH Vitamin D | `20251227__25-OH_Vitamin_D.pdf` | 11–17, 24 |
-| 21 | 2026-01-07 | Androgens | `20260107__Androgens.pdf` | 18, 19, 20 |
-| 37 | 2026-04-20 | Androgens | `20260420__Androgens.pdf` | 36, 42 |
-| 38 | 2026-05-30 | Prostate Specific Antigen (PSA) | `20260530__PSA.pdf` | 1–7 |
-| 39 | 2026-05-30 | Homocysteine | *(none)* | 1–7 |
-| 40 | 2026-05-30 | Homocysteine | `20260530__Homocysteine.pdf` | 1–7 |
-| 41 | 2026-05-30 | HbA1c | `20260530__HbA1c.pdf` | 1–7 |
-| 43 | 2026-05-30 | Prostate Specific Antigen (PSA) | `20260530__PSA.pdf` | 1–7 |
+**DISSOLVED, not deferred.** The ten zero-result reports are reclassified as upload events rather
+than junk. `#155` retention holds unchanged and no deletion decision is required. Nothing was
+deleted — the live report count is still 43.
 
-Duplicate `(collected_date, panel)` groups: `2025-05-16` Haematinics (10, 32) · `2025-05-16`
-Haematology (9, 33) · `2025-12-27` 25-OH Vitamin D (14, 23) · `2026-01-07` Androgens (19, 21) ·
-`2026-04-20` Androgens (36, 37) · `2026-05-30` HbA1c (3, 41) · `2026-05-30` Homocysteine
-(2, 39, 40) · `2026-05-30` PSA (1, 38, 43).
+### Open questions
 
-**Uploading is unpaused.** It was paused on the belief that reports were silently dropping their
-results. They were not.
+- **Q68** — should a full-collision re-upload create an empty `LabReport` envelope at all?
+  Unchanged and still open, but materially softened: the envelope is now a legible history entry
+  rather than an unexplained empty card, so the cost of keeping it has dropped. Still settled
+  properly only by report-level identity (`Document ID` / `Lab ID`, uncaptured). Trigger, not
+  blocker.
 
-### Open questions touched
+### OWED — new, surfaced this session
 
-- **Q68 (new, open)** — should a full-collision re-upload create an empty `LabReport` envelope at
-  all? `#155` retain-raw says the document exists; the envelope carries no data. Settled properly
-  only by report-level identity (`Document ID` / `Lab ID`, uncaptured). **Trigger, not blocker** —
-  the schema change is possible now, it is simply not yet worth doing.
-- **Q66** (no supersede affordance on `LabResult`) — unchanged, and now has a concrete consumer:
-  the confirm outcome panel tells the operator when a re-upload carries a *changed* value, which
-  `skip` discards. `keep_both` remains the only resolution.
+**`SCHEMA.md` is stale for the entire lab family** (`ROADMAP.md` NEXT). `CLAUDE.md` makes it
+repo-canonical and says it must never lag master. It documents a **superseded** design —
+`lab_results` hanging off `lab_panel` *events*, plus `marker_aliases` and `unknown_markers`, none
+of which exist. The implemented `lab_reports`/`lab_results` pair (#52) has never been in it, and no
+lab migration has ever updated it (`c655bd6`, `005c1a6`, `7753758`, `d7c4b1a90e35`). Discovered
+while landing `zero_row_reason`: the rule could not be honoured because there is no table entry to
+update without first authoring the whole family. A doc rewrite with its own scope — deliberately
+not absorbed here. Owner: Luke.
 
 ### Single clearest next action
 
-**Resume the lab backfill.** The ingest path is fixed, verified on both deployed services, and now
-reports what it wrote. If a re-upload collides, the outcome panel names the marker and shows
-stored-vs-incoming, so a corrected result is distinguishable from a repeat.
+**Resume the lab backfill.** The confirm screen now warns before the write, cancelling costs
+nothing, and the upload history answers which documents went in. A repeat is a two-click cancel; a
+corrected result is visible as a differing value and resolved with **keep both**.
 
 Then, unrelated and unchanged: **4b-ii's sole remaining hold is `axis_verdict`** — the
 source-factor rule for the `factors` list → scalar `protocol_phase`, plus the evaluability-keyed
