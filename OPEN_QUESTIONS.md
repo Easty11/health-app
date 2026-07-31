@@ -1677,3 +1677,47 @@ asset work lands. **Owner:** Luke.
 Numbered `Q65` on the `feat/interp-demotion` branch (pre-ff; max was Q64, no competing branch).
 
 ---
+
+## Q66. `LabResult` has no supersede affordance, so a corrected result cannot be marked as replacing an earlier one
+
+**State:** open. **Blocks:** nothing today; live from the next lab upload onward.
+**Related:** `#156` (confirm-time duplicate detection), `#155` (retain-raw), `#52` (compute-on-read).
+
+`#156` offers `skip` and `keep_both` on a marker collision and deliberately does not offer
+`supersede`, because the only available implementation would delete the earlier row — contradicting
+`#155`'s ratification that every observed analyte is retained. See `#156` for that reasoning; it is
+not restated here.
+
+The gap that leaves: pathology reports do issue corrected results, and for those the second value
+at a collection date is the correct one. Today the only handling is `keep_both` plus manual
+follow-up, after which the series carries two values for one draw with nothing recording which
+supersedes which. `marker_series` orders `collected_date DESC, id DESC`, so the later-inserted row
+wins **by insertion order rather than by any declared correctness**. That is right for a correction
+and wrong for an accidental re-upload, and the two are indistinguishable after the fact — `#156`
+established that nothing stored distinguishes them.
+
+**Verified:** `LabResult` carries no supersede-capable column. Its 17 columns are `id`,
+`lab_report_id`, `marker_name_raw`, `marker_canonical`, `is_derived`, `value_num`,
+`value_operator`, `value_qualitative`, `unit_canonical`, `ref_low`, `ref_high`,
+`ref_low_exclusive`, `ref_high_exclusive`, `lab_flag`, `computed_flag`, `confidence`,
+`created_at` — nothing named for supersession, replacement, voiding or correction. The nearest
+things are `id` and `created_at`, and both encode **insertion order**, which is precisely what this
+question objects to being load-bearing. So the answer is not "narrow the question to whether an
+existing field should carry it"; there is no such field.
+
+Candidates:
+- **(a) `superseded_at` / `superseded_by` on `LabResult`**, with `marker_series` filtering superseded
+  rows. Retains the row, consistent with `#155`; declares the relationship explicitly; smallest
+  schema change that closes it.
+- **(b) Correction as a distinct ingest path** rather than a collision outcome — the operator marks
+  an upload as a correction and every row in it supersedes its counterpart. Fewer per-marker
+  decisions; requires knowing at upload time.
+- **(c) Accept `keep_both` permanently** and let insertion order decide. Cheapest, and it makes the
+  series silently order-dependent — the class of failure `#156` exists to prevent.
+
+**Resolve before:** a correction is actually ingested, or before `marker_series` is relied on for a
+marker where a correction is known to exist. **Owner:** Luke.
+
+Numbered `Q66` on the `gov/two-open-questions` branch (pre-ff; max was Q65, no competing branch).
+
+---
