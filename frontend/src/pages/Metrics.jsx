@@ -102,8 +102,14 @@ function StoredResultRow({ r }) {
 }
 
 function StoredReportCard({ report }) {
+  // A report with no rows previously rendered as column headings above nothing, which reads
+  // as "this report had no results" — legitimate emptiness — rather than "something went
+  // wrong". Same failure shape as a masked band change: absence presenting as a normal
+  // state. An empty report is never normal; a lab report that produced no stored marker is
+  // a fault, and says so instead of rendering a table it has no rows for.
+  const empty = report.results.length === 0
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+    <div className={`bg-white border rounded-2xl overflow-hidden ${empty ? 'border-red-200' : 'border-gray-200'}`}>
       <div className="px-4 py-3 border-b border-gray-100 flex items-baseline justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900 truncate">{report.panel_name_raw}</p>
@@ -111,6 +117,16 @@ function StoredReportCard({ report }) {
         </div>
         <p className="text-xs text-gray-400 tabular-nums shrink-0">{formatDate(report.collected_date)}</p>
       </div>
+      {empty ? (
+        <div className="px-4 py-3 bg-red-50 space-y-1">
+          <p className="text-xs font-semibold text-red-800">No results stored for this report</p>
+          <p className="text-xs text-red-700">
+            The report was filed but no marker was saved against it. This usually means every
+            marker was already recorded for {formatDate(report.collected_date)} and the upload
+            was a repeat — your values are held on the earlier report, not here.
+          </p>
+        </div>
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b border-gray-200">
@@ -127,6 +143,7 @@ function StoredReportCard({ report }) {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }
