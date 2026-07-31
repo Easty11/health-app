@@ -1,13 +1,20 @@
 // Section placement for the lab-interpretation view (contract v0.4 §2).
 //
-// A group is "moved" iff ANY member is news (gate 1) OR out-of-range (gate 2).
-// The two gates are independent: a group with nothing newsworthy in it still
-// moves on a lone range breach — that is the #47 gate-2 spine, not a bug.
+// Placement CONSUMES `should_surface`; it does not recompute it. The view previously
+// recomputed moved-ness as gate 1 OR gate 2, which silently dropped gate 3 — the safety band.
+// A marker can be unmoved and in-range and still sit in an authored band (that independence is
+// the whole point of gate 3, #139), so a safety-band-only group was routed to Stable and its
+// members folded away. That is the one placement error the view could make that hides the most
+// serious finding it has.
+//
+// Recomputing a gate verdict client-side is the defect, not the particular formula: the
+// producer resolves three gates against authored assets and declared state, and any
+// reimplementation here is a second source of truth that drifts silently.
 
 const GRADE_ORDER = { high: 0, moderate: 1, low: 2 }
 
 export function isMovedGroup(group) {
-  return group.members.some((m) => m.news_gate.is_news || m.range_gate.is_out_of_range)
+  return group.should_surface === true
 }
 
 export function splitSections(interpretation) {

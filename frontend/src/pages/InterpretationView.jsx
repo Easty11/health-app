@@ -9,6 +9,7 @@ import interpretationExample from '../fixtures/interpretationExample.json'
 import { splitSections } from '../components/interpretation/sections'
 import GroupCard from '../components/interpretation/GroupCard'
 import GroupCollapsed from '../components/interpretation/GroupCollapsed'
+import UngroupedLine from '../components/interpretation/UngroupedLine'
 import MechanismsIndex from '../components/interpretation/MechanismsIndex'
 
 function formatDate(iso) {
@@ -19,6 +20,12 @@ export default function InterpretationView() {
   const interpretation = interpretationExample
   const { meta } = interpretation
   const { moved, stable } = splitSections(interpretation)
+  const factors = meta.protocol_context_snapshot?.factors ?? []
+  const panelCollected = meta.trigger_panel?.collected
+  // Ungrouped rows are markers no authored group claims. The view had no section for them, so
+  // wiring it to the producer would have silently dropped every one — on the live series that is
+  // 51 of 66 markers (Q54).
+  const ungrouped = interpretation.ungrouped ?? []
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -45,16 +52,23 @@ export default function InterpretationView() {
             Compared against {meta.compared_against.panel_name_raw} ·{' '}
             {formatDate(meta.compared_against.collected)}
           </p>
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {meta.protocol_context_snapshot.map((factor) => (
-              <span
-                key={factor.factor}
-                className="text-xs text-gray-600 bg-gray-100 rounded-full px-2 py-0.5"
-              >
-                {factor.detail}
-              </span>
-            ))}
-          </div>
+          {/* `protocol_context_snapshot` is an OBJECT — `{as_of, factors[]}` — not a list. This
+              called `.map` on it, which throws. Each factor carries `key` / `type` / `phase` /
+              `assumable_present` / `relevant_date`; `detail` and `factor` no longer exist
+              (`detail` is deliberately omitted upstream as unbounded free text). */}
+          {factors.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {factors.map((factor) => (
+                <span
+                  key={factor.key}
+                  className="text-xs text-gray-600 bg-gray-100 rounded-full px-2 py-0.5"
+                >
+                  {factor.key}
+                  {factor.phase && <span className="text-gray-400"> · {factor.phase}</span>}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <section className="space-y-3">
@@ -62,7 +76,9 @@ export default function InterpretationView() {
           {moved.length === 0 ? (
             <p className="text-xs text-gray-500">Nothing moved on this panel.</p>
           ) : (
-            moved.map((group) => <GroupCard key={group.group_key} group={group} />)
+            moved.map((group) => (
+              <GroupCard key={group.group_key} group={group} panelCollected={panelCollected} />
+            ))
           )}
         </section>
 
@@ -72,6 +88,24 @@ export default function InterpretationView() {
             <p className="text-xs text-gray-500">No stable groups on this panel.</p>
           ) : (
             stable.map((group) => <GroupCollapsed key={group.group_key} group={group} />)
+          )}
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-bold text-gray-900">Ungrouped</h2>
+            <p className="text-[11px] text-gray-400 text-right">
+              Markers no authored group claims. Values and gates only — no relations, no levers.
+            </p>
+          </div>
+          {ungrouped.length === 0 ? (
+            <p className="text-xs text-gray-500">No ungrouped markers on this panel.</p>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+              {ungrouped.map((row) => (
+                <UngroupedLine key={row.marker_canonical} row={row} panelCollected={panelCollected} />
+              ))}
+            </div>
           )}
         </section>
 

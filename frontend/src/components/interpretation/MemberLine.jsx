@@ -46,6 +46,24 @@ function DeltaLine({ delta, prior }) {
   )
 }
 
+// The collection date of THIS marker's current value, shown against the panel the output claims
+// to be reading. `marker_series` has no temporal bound — it takes each marker's newest value
+// whenever that was — so a group can render entirely off a draw months before the trigger panel
+// (Q69). On the live series 39 of 66 markers are currently sourced from a non-newest draw, and
+// every out-of-range marker comes from a draw 85 days before the one named in the header.
+//
+// This does not stop a reading spanning draws; it stops it doing so INVISIBLY, which is the
+// mitigation Q69 records as composing with every candidate resolution. Silent when the marker is
+// from the trigger draw, so the marker carries a date only when the date is the point.
+function CollectedFrom({ collected, panelCollected }) {
+  if (!collected || collected === panelCollected) return null
+  return (
+    <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 tabular-nums">
+      from {collected}, not this panel
+    </span>
+  )
+}
+
 function BreachIndicator({ rangeGate }) {
   if (!rangeGate.is_out_of_range) return null
   return (
@@ -61,9 +79,7 @@ function BreachIndicator({ rangeGate }) {
   )
 }
 
-export default function MemberLine({ member }) {
-  const breached = member.range_gate.is_out_of_range
-
+export default function MemberLine({ member, panelCollected }) {
   return (
     <div className="border-t border-gray-100 px-5 py-3 space-y-2">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
@@ -81,26 +97,33 @@ export default function MemberLine({ member }) {
               news
             </span>
           )}
+          <CollectedFrom collected={member.current?.collected} panelCollected={panelCollected} />
         </div>
         <BreachIndicator rangeGate={member.range_gate} />
       </div>
 
       <DeltaLine delta={member.delta} prior={member.prior} />
 
-      {/* The note: beside the coloured breach when there is one, monochrome when
-          there is not. Never dropped either way. */}
-      {member.range_gate.note && (
-        <p className={`text-xs ${breached ? 'text-orange-700 bg-orange-50 rounded-lg px-2 py-1' : 'text-gray-500'}`}>
-          {member.range_gate.note}
-        </p>
-      )}
+      {/* `range_gate.note` was removed here: range_gate is {is_out_of_range, flag} and carries no
+          note. The block rendered nothing and implied the producer supplies breach prose. An
+          expected-by-phase breach is now stated on the relation, not on the gate. */}
 
       {member.relations_rendered.length > 0 && (
         <ul className="space-y-1">
           {member.relations_rendered.map((rel) => (
             <li key={rel.relation_key} className="text-xs text-gray-600 pl-2 border-l-2 border-gray-200">
-              <span className="text-gray-400">{rel.kind} · {rel.partner}</span>{' '}
+              {/* `rel.partner` was removed: a single partner cannot express a multi-operand
+                  relation, and the contract carries `operands_missing` + `operand_status`
+                  instead. A degraded relation NAMES what it could not see — dropping that was
+                  showing a partial reading as a whole one. */}
+              <span className="text-gray-400">{rel.kind}</span>{' '}
               {rel.reads}
+              {rel.operand_status === 'degraded' && (
+                <span className="text-amber-700"> · partial: no {rel.operands_missing.join(', ')}</span>
+              )}
+              {rel.precondition_status === 'not_satisfied' && (
+                <span className="text-amber-700"> · not expected in this phase</span>
+              )}
             </li>
           ))}
         </ul>
