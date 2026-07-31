@@ -131,6 +131,110 @@ function StoredReportCard({ report }) {
   )
 }
 
+// ---------- what the save actually wrote ----------
+// /labs/confirm has always reported `result_count` (rows WRITTEN), `duplicates` and
+// `unmapped`. The client discarded the response and showed an unconditional "Report saved",
+// so a save that wrote ZERO rows was indistinguishable from one that wrote twelve. That
+// silence is the reason ten empty reports accumulated unnoticed across a backfill. The
+// server was never the quiet one — this surface is.
+
+function fmtNum(v) {
+  return v === null || v === undefined ? '—' : String(v)
+}
+
+function CollisionRow({ d }) {
+  // A byte-identical re-upload is housekeeping. A CHANGED value is a corrected result being
+  // discarded, which is the case worth shouting about — `skip` drops it and the stored value
+  // stands. Both values are carried in the response precisely so this is distinguishable.
+  const corrected =
+    d.existing_value_num !== null && d.incoming_value_num !== null &&
+    d.existing_value_num !== d.incoming_value_num
+  return (
+    <tr className={corrected ? 'bg-red-50' : ''}>
+      <td className="px-3 py-1.5 text-xs text-gray-800">{d.marker}</td>
+      <td className="px-3 py-1.5 text-xs text-gray-600 tabular-nums">{fmtNum(d.existing_value_num)}</td>
+      <td className="px-3 py-1.5 text-xs text-gray-600 tabular-nums">{fmtNum(d.incoming_value_num)}</td>
+      <td className="px-3 py-1.5 text-xs">
+        {corrected
+          ? <span className="text-red-700 font-semibold">differs — not saved</span>
+          : <span className="text-gray-400">already recorded</span>}
+      </td>
+    </tr>
+  )
+}
+
+function SaveOutcome({ outcome, onDismiss }) {
+  const { panel, result_count, duplicates = [], unmapped = [] } = outcome
+  const nothingWritten = result_count === 0
+  const anyCorrected = duplicates.some(
+    (d) => d.existing_value_num !== null && d.incoming_value_num !== null &&
+           d.existing_value_num !== d.incoming_value_num
+  )
+
+  const tone = nothingWritten || anyCorrected
+    ? 'bg-red-50 border-red-200'
+    : duplicates.length > 0
+      ? 'bg-amber-50 border-amber-200'
+      : 'bg-emerald-50 border-emerald-200'
+
+  return (
+    <div className={`border rounded-2xl p-4 space-y-3 ${tone}`}>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm font-semibold text-gray-900">
+          {nothingWritten
+            ? 'Nothing was saved from this report'
+            : `Saved ${result_count} result${result_count === 1 ? '' : 's'}`}
+          {panel ? <span className="font-normal text-gray-500"> · {panel}</span> : null}
+        </p>
+        <button onClick={onDismiss} className="text-xs text-gray-500 hover:text-gray-800 shrink-0">
+          Dismiss
+        </button>
+      </div>
+
+      {nothingWritten && (
+        <p className="text-xs text-gray-700">
+          Every marker in this report is already recorded for this collection date, so no new
+          rows were written. The report itself was still filed. Your existing values are
+          unchanged — nothing was lost.
+        </p>
+      )}
+
+      {duplicates.length > 0 && (
+        <div className="bg-white/70 border border-black/5 rounded-xl overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="border-b border-gray-200">
+              <tr>
+                <th className="px-3 py-1.5 text-[11px] font-medium text-gray-500">Marker</th>
+                <th className="px-3 py-1.5 text-[11px] font-medium text-gray-500">Stored</th>
+                <th className="px-3 py-1.5 text-[11px] font-medium text-gray-500">In this report</th>
+                <th className="px-3 py-1.5 text-[11px] font-medium text-gray-500">Outcome</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {duplicates.map((d, i) => <CollisionRow key={i} d={d} />)}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {anyCorrected && (
+        <p className="text-xs text-red-800">
+          A marker above carries a different value to the one already stored. This report may be
+          a corrected result — the stored value was kept and the new one discarded. Re-upload
+          with “keep both” if the new value is the right one.
+        </p>
+      )}
+
+      {unmapped.length > 0 && (
+        <p className="text-xs text-gray-600">
+          Stored without a canonical marker (they will not appear in trends until mapped):{' '}
+          <span className="text-gray-800">{unmapped.join(', ')}</span>
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ---------- main ----------
 
 export default function Metrics() {
@@ -139,7 +243,7 @@ export default function Metrics() {
   const [canonicalMap, setCanonicalMap] = useState({})
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState('')
+  const [outcome, setOutcome] = useState(null) // what the last save actually wrote
   const [storedReports, setStoredReports] = useState(null) // null=loading, []=none
   const fileInputRef = useRef(null)
 
@@ -151,11 +255,6 @@ export default function Metrics() {
     api.get('/labs/canonical-map').then((res) => setCanonicalMap(res.data)).catch(() => {})
     loadStored()
   }, [])
-
-  function showToast(msg) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 3000)
-  }
 
   function reset() {
     setStage(STAGE.IDLE)
@@ -186,8 +285,11 @@ export default function Metrics() {
     setSaving(true)
     setError('')
     try {
-      await api.post('/labs/confirm', extraction)
-      showToast('Report saved')
+      const panel = extraction.report?.panel_name_raw
+      const res = await api.post('/labs/confirm', extraction)
+      // The response is the only account of what was written. Reporting "saved" without
+      // reading it is what let ten zero-row reports pass for successful uploads.
+      setOutcome({ panel, ...res.data })
       reset()
       loadStored() // the just-saved report joins the read-back
     } catch (err) {
@@ -218,6 +320,10 @@ export default function Metrics() {
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-4">
         {error && (
           <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>
+        )}
+
+        {stage === STAGE.IDLE && outcome && (
+          <SaveOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />
         )}
 
         {stage === STAGE.IDLE && (
@@ -336,11 +442,6 @@ export default function Metrics() {
         )}
       </div>
 
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs font-medium rounded-xl px-4 py-2.5 shadow-lg z-50">
-          {toast}
-        </div>
-      )}
     </div>
   )
 }
