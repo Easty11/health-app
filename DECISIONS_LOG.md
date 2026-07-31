@@ -5557,3 +5557,66 @@ document before any row is examined, the empty envelopes stop being created rath
 explained, and this entry's last two paragraphs are superseded.
 
 ---
+### 158. "Your Results" carries values; an upload that contributed none is an upload event, not a result
+
+**Decision:** The results list shows reports that contributed marker values. A report whose
+markers were all declined as already-stored duplicates is removed from that list and surfaced in
+an upload history instead. Collision detection is additionally performed at the confirm screen,
+before the write, so the operator learns of a repeat while still deciding rather than afterwards.
+
+**The pre-check does not replace `#156`'s write-time guard.** The guard is the correctness
+mechanism and is unchanged; the pre-check is the interface to it. A check that informs a decision
+and a check that protects the data are different obligations, and collapsing them would leave the
+write unguarded the moment the interface changes. **Proven, not asserted:** both guard regions
+hash byte-identical to the pre-change baseline (detection block `fb9e9cbf84a535c5`, write-loop
+skip `c478d7313ea5c50f`).
+
+**The pre-check needed no endpoint — verified before building.** `GET /labs/results` already
+returns every stored report with its `collected_date`, `marker_canonical` and `marker_name_raw`,
+and `GET /labs/canonical-map` resolves an extracted raw label exactly as the server does. Both are
+already fetched on mount to render the results table, so the check is client-side computation over
+state in hand. Cancelling therefore issues no request at all: **no `LabReport` row, no history
+entry** — confirmed by driving the real page and counting requests (zero after cancel).
+
+**Rationale:** `#156` worked exactly as designed and the interface reported it as a permanent
+fault — four red cards apologising in the operator's history for a correctly declined re-upload.
+The information was right and its placement and persistence were both wrong. A record of the
+upload is still owed, which is what the history view is for; it also answers which source
+documents have been ingested, which nothing previously could.
+
+**Consequence for `#156`'s junk rows:** the ten zero-result reports listed at `#157`'s close-out
+are reclassified rather than deleted. They were never junk — they are upload events with no
+contribution, which is what the history view records. `#155`'s retention holds unchanged and no
+deletion decision is required.
+
+**Distinguishing declined from unparseable — the store could NOT, and the gap was deeper than a
+missing field.** Two findings, both verified against the pre-change handler:
+
+1. Nothing persisted the outcome. The confirm response carried `duplicates`, but no column
+   recorded it, so after the fact both cases were simply a report with zero rows.
+2. **An unparseable document could not reach the store at all.** A submission carrying no results
+   tripped `assert row_confidences`, which raised *before* `db.commit()` — HTTP 500, no row
+   written. So the fault case had no representation to be confused with; it had none at all.
+
+Filtering the results list on row count would therefore have hidden faults along with repeats, and
+the fault would additionally have been invisible everywhere. `lab_reports.zero_row_reason` is
+added: `NULL` when the report contributed rows, `all_markers_declined`, or `no_values_extracted`.
+The assert becomes a recorded event — a chart or scan with no results table is a real document the
+operator uploaded and is owed a record of. Finding (2) is also what makes the migration's backfill
+a **proof** rather than an inference: the fault value was unreachable before this change, so no
+legacy zero-row row can carry it and the backfill cannot mislabel one.
+
+**Where the brief was diverged from, and why.** It said not to reword the zero-row red panel, on
+the reasoning that once declines left the list the copy would only appear at confirm. But the panel
+must remain for faults, and its copy attributed the emptiness to a repeat — *"this usually means
+every marker was already recorded ... the upload was a repeat."* Left in place it would tell the
+operator that an unreadable chart PDF was a duplicate. That is a misattribution, and worse than the
+emptiness it replaced. The decline copy was not polished; it leaves that surface together with the
+declines, and the fault is given copy that is true of it.
+
+**Status:** Decided (interface + ingest surfacing). Code in this entry. Suite 527, from 521.
+
+**Do not revisit unless:** the upload history grows past a flat list — at which point it is a
+module with its own scope and should be planned as one rather than extended by increments.
+
+---

@@ -80,6 +80,8 @@ _Live, undated — no external date orders these; pick by readiness._
 
 ---
 
+| **SCHEMA.md is stale for the entire lab family** | **OWED.** `CLAUDE.md` makes `SCHEMA.md` repo-canonical and says it "must never lag master; a canonical-but-stale schema doc is worse than a stale project-knowledge copy." It lags, and not by one column: it documents a **superseded** design — `lab_results` hanging off `lab_panel` **events**, plus `marker_aliases` and `unknown_markers` — none of which exist. The implemented `lab_reports` / `lab_results` pair (#52) has never been in it, and **no lab migration has ever updated it** (`c655bd6`, `005c1a6`, `7753758`, `d7c4b1a90e35` all touch `models.py` and none touch `SCHEMA.md`). Discovered while landing `zero_row_reason`: the rule could not be honoured because there is no table entry to update without first authoring the whole family. Fixing it means rewriting the lab section against master, not appending a column — a doc task with its own scope, deliberately not absorbed into a data-loss or interface branch. Owner: Luke. |
+
 ## LATER — planned
 
 _Unchanged from before this triage._
