@@ -5412,3 +5412,80 @@ bounded window, which preserves most of the value and should be costed before th
 reversed outright.
 
 ---
+
+### 156. Series integrity is a precondition of the gate model, and is guarded at ingest rather than assumed
+
+**Decision:** Confirm-time ingest detects that a marker already exists for the user at the same
+collection date, keyed `(user_id, marker_canonical, collected_date)`, and surfaces the collision
+for resolution rather than silently accepting it. Detection is marker-level only; no
+report-level key is added.
+
+**Why this is a decision and not a bug fix:** every invariant the gate model asserts is
+conditional on the series being correct, and nothing tested that. `I8` guarantees a
+`band_change` cannot be *demoted* — `#153` made that hold by construction. It does not guarantee
+a `band_change` is *detected*. A duplicated prior gives `marker_series` two same-draw rows at
+`rn=1` and `rn=2`, drops the true earlier prior, resolves both bands identically, and returns
+`band_change: None`. The safety arm never fires, and the output reads as a legitimately quiet
+marker — `direction: flat`, `magnitude: within_noise` — with nothing recording that a comparison
+was lost. The guarantee the model actually carries is "no gate suppresses this," not "this cannot
+be missed." Dedupe is the first instance of that class, not a one-off.
+
+**Demonstrated before it was built** (empirically, not argued — the brief rested on one claim
+about `marker_series` and that claim was tested first). Haematocrit 0.515 (`watch`) → 0.530
+(`elevated`), constructed so the safety arm is the only possible source of news:
+
+| scenario | `band_change` | `is_news` | `should_surface` |
+|---|---|---|---|
+| clean two episodes | `escalated` | True | True |
+| duplicate of the **newest** episode | **None** | **False** (`flat_vs_prior`) | True |
+| duplicate of the **older** episode | `escalated` | True | True |
+| full band **exit**, clean | `exited` | True | True |
+| full band **exit**, duplicate of newest | **None** | **False** | **False** |
+
+Three findings the brief did not have. **(a)** It is the duplicate of the **NEWEST** episode that
+masks; duplicating the older one changes nothing, because `rn=1`/`rn=2` must both land on the
+same draw. The brief's construction said the opposite while its description of the mechanism was
+right. **(b)** While the marker stays *in* a band, `should_surface` survives via gate 3 — the
+loss is the transition and the news verdict, not the group. **(c)** When the marker **exits the
+bands entirely**, gate 3 goes quiet too and `should_surface` flips to False: the group leaves
+What Moved altogether. That last row is the complete-masking case.
+
+**Detection, not enforcement.** A unique constraint would block the corrected-result case, where
+the second value for a marker at a collection date is the correct one — the pathology reports
+state results "can only be changed with a corrected result." Two panels from one draw may also
+legitimately carry a common analyte, which is `#147`'s expected shape. A collision on one marker
+never fails the whole upload: `on_duplicate=skip` (default) writes every non-colliding row and
+still creates the report, because the document genuinely exists (`#155` retain-raw);
+`keep_both` writes the colliding row for a case the operator knows is legitimate.
+
+**`supersede` is deliberately NOT offered.** `LabResult` has no supersede column — `#52` is
+explicit that supersession is compute-on-read — so the only available mechanism would be
+deleting the earlier row, which contradicts `#155`'s ratification of retain-raw. Superseding
+needs a `superseded_at`/`superseded_by` affordance so the original is retained but excluded from
+the series. That is a schema change and was not invented here; recording the absence is the
+honest outcome.
+
+**Correction versus re-upload — VERIFIED, nothing distinguishes them.** `source_completeness`
+separates `sonic_dx_extract` from `full_report`, but that is document provenance, not correction
+status, and no other stored field carries it. The resolution is therefore **operator-chosen and
+must never be inferred**; no heuristic is implemented. What the platform does instead is return
+both the existing and incoming values on the collision, so the operator can distinguish a
+byte-identical re-upload from a changed value without a second round trip.
+
+**Null-canonical is GUARDED, not left as a gap.** `marker_canonical` is nullable, so a
+canonical-only key would miss unmapped rows — and under `#155`'s retroactive promotion a
+duplicated unmapped raw becomes a duplicated series at the moment of promotion, the same failure
+surfacing long after its cause. The key therefore falls back to `marker_name_raw` when canonical
+is null. The check also catches the same marker twice within one submission, which the
+`(lab_report_id, marker_name_raw)` constraint cannot see when two raw labels resolve to one
+canonical id.
+
+**Status:** Decided (ingest integrity). Code in this entry. `result_count` now reports rows
+**written** rather than submitted, so a skipped collision is visible to the caller. Verified
+against live data: zero duplicate `(user, marker, collection date)` groups today.
+
+**Do not revisit unless:** a second series-integrity failure is found that this key does not
+cover — at which point the guard belongs at the read layer (`marker_series` asserting its own
+inputs) rather than at each write path, and this entry is superseded rather than extended.
+
+---
