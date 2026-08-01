@@ -391,7 +391,32 @@ def _build_group(group_def: dict, members: list[dict], present: set[str],
         "should_surface": _should_surface(members),
         "shared_levers": _shared_levers(group_def, present, assumable_of),
         "axis_verdict": _axis_verdict(group_def),
+        "as_of": _group_as_of(members),
     }
+
+
+def _group_as_of(members: list[dict]) -> dict | None:
+    """`#159` rule 1 — the group's as-of, derived from its members' CURRENT collection dates.
+
+    `#159` requires the field and states it is "derived from its members"; it does not fix the
+    derivation. Current-side only, deliberately: the PRIOR side spanning draws is a different
+    defect — about comparison intervals, not about what the panel contains — and is recorded at
+    `Q71`. Deriving from both sides would conflate them and would mark part of `Q71` resolved by a
+    decision that does not address it. That matters concretely today: `hpg_axis`'s current side is
+    coherent at 2026-05-30 while its prior side spans 2026-04-20 / 2026-01-07 / 2025-12-27, so a
+    both-sides derivation would report that group as spanning when what it contains does not.
+
+    `spans_draws` is derived here rather than left to the caller so every consumer answers it the
+    same way. `earliest`/`latest` are equal when the group is coherent — the common case — and the
+    view renders one date rather than a degenerate range.
+    """
+    dates = sorted({
+        m["current"]["collected"] for m in members
+        if m.get("current") and m["current"].get("collected")
+    })
+    if not dates:
+        return None
+    return {"earliest": dates[0], "latest": dates[-1], "spans_draws": len(dates) > 1}
 
 
 def _axis_verdict(group_def: dict) -> dict | None:

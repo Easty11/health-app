@@ -400,6 +400,11 @@
       ],
       "axis_verdict": {
         "text": "These six markers describe one control loop. The pituitary signals the testes to produce testosterone, circulating testosterone and the oestradiol it converts to feed back to damp that signal, and binding proteins set how much of the hormone is actually available. A change in any one of them moves the others, which is why they are read together rather than separately."
+      },
+      "as_of": {
+        "earliest": "2026-05-30",
+        "latest": "2026-05-30",
+        "spans_draws": false
       }
     },
     {
@@ -554,6 +559,11 @@
       ],
       "axis_verdict": {
         "text": "These five markers are read together because none of them localises a problem on its own. The transaminases rise with liver injury and with muscle damage alike; the biliary enzymes and bilirubin are what separate a hepatic origin from a muscular or a constitutional one."
+      },
+      "as_of": {
+        "earliest": "2026-05-30",
+        "latest": "2026-05-30",
+        "spans_draws": false
       }
     }
   ],

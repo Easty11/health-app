@@ -8,6 +8,7 @@
 
 import MemberLine from './MemberLine'
 import LeverStrip from './LeverStrip'
+import GroupAsOf from './GroupAsOf'
 
 export default function GroupCard({ group, panelCollected }) {
   return (
@@ -15,6 +16,7 @@ export default function GroupCard({ group, panelCollected }) {
       <header className="px-5 py-4 space-y-1">
         <div className="flex items-baseline gap-2 flex-wrap">
           <h3 className="text-sm font-bold text-gray-900">{group.display_name}</h3>
+          <GroupAsOf asOf={group.as_of} panelCollected={panelCollected} />
         </div>
         {group.axis_verdict?.text && (
           <p className="text-xs text-gray-600">{group.axis_verdict.text}</p>

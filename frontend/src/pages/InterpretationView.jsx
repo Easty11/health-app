@@ -87,7 +87,9 @@ export default function InterpretationView() {
           {stable.length === 0 ? (
             <p className="text-xs text-gray-500">No stable groups on this panel.</p>
           ) : (
-            stable.map((group) => <GroupCollapsed key={group.group_key} group={group} />)
+            stable.map((group) => (
+              <GroupCollapsed key={group.group_key} group={group} panelCollected={panelCollected} />
+            ))
           )}
         </section>
 
