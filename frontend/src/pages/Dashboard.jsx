@@ -77,6 +77,13 @@ export default function Dashboard() {
           <Link to="/metrics" className="text-xs text-gray-500 hover:text-gray-800 transition-colors">
             Labs
           </Link>
+          {/* Interim link. `#150` retires header links into the hub shell as it absorbs them and
+              anticipates this one; it does not forbid adding it meanwhile — verified in `#158`.
+              The route has been reachable only by typing its URL since increment 1, which is the
+              defect that opened this whole lane. */}
+          <Link to="/interpretation" className="text-xs text-gray-500 hover:text-gray-800 transition-colors">
+            Interpretation
+          </Link>
           <Link to="/settings" className="text-xs text-gray-500 hover:text-gray-800 transition-colors">
             Settings
           </Link>
