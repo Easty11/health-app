@@ -1900,3 +1900,75 @@ built from.
 **Resolve before:** the interpretation view is wired to live data. A temporally incoherent reading
 with a UI on top is harder to see than one in a JSON dump, and 1b's Step 0 exists to prevent
 exactly that.
+
+**Status note (2026-08-01, 1b delivery).** Everything in 1b except wiring has now landed:
+`axis_verdict` emits the per-group frame, the fixture is generated, the view is corrected, and
+`GET /interpretation` exists and is tested. **Delivery stopped here on this clause**, deliberately.
+Candidate **(c) has been implemented** - the view shows each marker's collection date whenever it
+did not come from the trigger panel - but (c) is by this entry's own text *"the mitigation that
+holds whichever of (a), (b) or (d) is chosen"*, so implementing it does not decide which input
+rule governs, and this clause requires resolution rather than mitigation. The remaining 1b work is
+one commit: point the view at the endpoint and add a dashboard link. **Unblock by choosing between
+(a), (b) and (d)** - nothing else is outstanding.
+
+## Q70. A censored delta reports `delta_within_min_meaningful` without ever consulting the threshold, so a large suppression reads as quiet
+
+**State:** open. **Blocks:** nothing today — the surfacing verdict is coincidentally correct on the
+live panel (see below), which is precisely why this needs recording rather than fixing in passing.
+**Related:** `#153` (the demotion predicate), `#141` (the precondition object), `Q69` (temporal
+bound), I8.
+
+Found by running `build_foundation` over the real series for the first time (1b Step 0).
+
+`delta()` collapses a censored comparison — either draw carrying a `<` or `>` operator — to
+`abs_change=null`, `pct_change=null`, **`min_meaningful_delta` omitted entirely**, and
+`magnitude="within_noise"`. `build_news_gate` then derives the basis token from `magnitude` alone
+(`gates.py:416-426`): not `meaningful`, not `marginal`, direction not `flat`, so it falls to the
+`else` branch and emits **`delta_within_min_meaningful`**.
+
+That token asserts a comparison the producer did not perform. No percentage was computed, no
+threshold was read, and the delta object carries no `min_meaningful_delta` to have compared
+against. The honest statement is "magnitude unknown", not "within the minimum meaningful delta".
+
+**Observed live, on the markers where it matters most:**
+
+| marker | prior | current | emitted |
+|---|---|---|---|
+| `lh` | 1.0 IU/L | `<0.1` IU/L | `magnitude: within_noise`, basis `["delta_within_min_meaningful"]`, `is_news: false` |
+| `fsh` | 3.0 IU/L | `<0.1` IU/L | same |
+| `oestradiol` | `<50` pmol/L | 141 pmol/L | same |
+
+A gonadotropin falling from 1.0 to below 0.1 is a suppression of at least an order of magnitude,
+and the output says it was within noise. Oestradiol nearly tripling gets the same sentence.
+
+**Why this is not caught by the surfacing tests, and why that is the danger.** The verdict
+`is_news: false` is *correct* for `lh`/`fsh` on this panel — the subject is on TRT,
+`hpg_gonadotropin_suppression` resolves `precondition_status: satisfied` with
+`expected_by_phase: true`, and suppression is exactly what that relation predicts. So the right
+answer is reached, **by the wrong route**: not by `#153`'s relation demotion, which would have
+appended `relation_demoted_hpg_gonadotropin_suppression` and stated the real reason, but by a
+censoring shortcut that asserts smallness. An invariant holding by accident is the shape `#156`
+and `#157` were both about.
+
+Candidates:
+
+- **(a) A distinct basis token.** `delta_magnitude_unknown_censored` (or similar) instead of
+  reusing `delta_within_min_meaningful`. Smallest change, and it makes the output honest without
+  touching any surfacing decision. Does not by itself stop the value being read as quiet.
+- **(b) Censored comparisons become news by default.** Defensible where a bound moved (`1.0` to
+  `<0.1` crosses the censoring bound in a direction that is informative), but it would fire on
+  every stable `<0.1` to `<0.1` pair, which is genuinely nothing.
+- **(c) Bound-aware magnitude.** Where prior is uncensored and current is censored (or the
+  reverse), the change is bounded below by `|prior - bound|` — a floor on the magnitude, which IS
+  computable and could be compared against the threshold. Most informative, most work.
+- **(d) Leave the verdict, fix only the statement.** (a) plus rendering censored deltas as
+  "magnitude not computable" in the view.
+
+**Do not resolve by widening `#153`'s demotion predicate** to reach this case. Demotion is a
+different mechanism answering a different question, its predicate is deliberately narrow
+(`kind == "feedback"` + precondition satisfied + operands complete), and `Q65`/`#154` already own
+the question of widening it.
+
+**Resolve before:** any claim is made that gate 1's basis tokens are a faithful account of why a
+marker did or did not surface — for example before they are shown to the reader, or used to
+generate prose.
