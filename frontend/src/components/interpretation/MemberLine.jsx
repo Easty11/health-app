@@ -46,17 +46,22 @@ function DeltaLine({ delta, prior }) {
   )
 }
 
-// The collection date of THIS marker's current value, shown against the panel the output claims
-// to be reading. `marker_series` has no temporal bound — it takes each marker's newest value
-// whenever that was — so a group can render entirely off a draw months before the trigger panel
-// (Q69). On the live series 39 of 66 markers are currently sourced from a non-newest draw, and
-// every out-of-range marker comes from a draw 85 days before the one named in the header.
+// The collection date of THIS marker's current value. `marker_series` has no temporal bound, so a
+// group can render entirely off a draw months before the trigger panel (Q69/#159).
 //
-// This does not stop a reading spanning draws; it stops it doing so INVISIBLY, which is the
-// mitigation Q69 records as composing with every candidate resolution. Silent when the marker is
-// from the trigger draw, so the marker carries a date only when the date is the point.
-function CollectedFrom({ collected, panelCollected }) {
+// SUPPRESSED WHEN THE GROUP ALREADY SAYS IT. Found by reading the live page: with a member badge
+// on every stale marker the page carried FORTY "not this panel" labels, five of them repeating
+// the one the hepatocellular group header had just stated. Repetition at that volume is how a
+// signal becomes wallpaper, and it drowned the group-level label #159 exists to add.
+//
+// So the two levels divide the work exactly as #159 rules 1 and 2 do:
+//   * group COHERENT  -> the group header states the date once; members stay silent.
+//   * group SPANS     -> the header can only give a range, so each member carries its own date,
+//                        which is the detail rule 2 asks for.
+// Ungrouped rows have no group to defer to and keep their own badge (see UngroupedLine).
+function CollectedFrom({ collected, panelCollected, groupAsOf }) {
   if (!collected || collected === panelCollected) return null
+  if (groupAsOf && !groupAsOf.spans_draws) return null   // the group header already said it
   return (
     <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 tabular-nums">
       from {collected}, not this panel
@@ -79,7 +84,7 @@ function BreachIndicator({ rangeGate }) {
   )
 }
 
-export default function MemberLine({ member, panelCollected }) {
+export default function MemberLine({ member, panelCollected, groupAsOf }) {
   return (
     <div className="border-t border-gray-100 px-5 py-3 space-y-2">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
@@ -97,7 +102,7 @@ export default function MemberLine({ member, panelCollected }) {
               news
             </span>
           )}
-          <CollectedFrom collected={member.current?.collected} panelCollected={panelCollected} />
+          <CollectedFrom collected={member.current?.collected} panelCollected={panelCollected} groupAsOf={groupAsOf} />
         </div>
         <BreachIndicator rangeGate={member.range_gate} />
       </div>

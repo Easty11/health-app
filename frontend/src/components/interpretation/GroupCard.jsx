@@ -24,7 +24,12 @@ export default function GroupCard({ group, panelCollected }) {
       </header>
 
       {group.members.map((member) => (
-        <MemberLine key={member.marker_canonical} member={member} panelCollected={panelCollected} />
+        <MemberLine
+          key={member.marker_canonical}
+          member={member}
+          panelCollected={panelCollected}
+          groupAsOf={group.as_of}
+        />
       ))}
 
       <LeverStrip group={group} />
