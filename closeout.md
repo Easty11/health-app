@@ -3,163 +3,149 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-01 (fourth session that day; the prior close-out is `d1193c2`).
-Branch at close: `master` (clean). Session-open ref: `9ee9cc3`.
+Session date: 2026-08-01 (fifth session that day; the prior close-out is `6c3be0e`).
+Branch at close: `master` (clean). Session-open ref: `0b65357`.
+
+**1b is complete.** The interpretation view reads live data and is reachable by clicking.
 
 ## 1. Real commits this session
 
-Five commits, all on master and pushed. `git log --oneline 9ee9cc3..HEAD`:
+Six commits, all on master and pushed. `git log --oneline 0b65357..HEAD`:
 
 ```
-bf4b5f8 governance(open-questions): Q70 — censored deltas assert a comparison never performed
-cf501a8 feat(interpretation): GET /interpretation endpoint
-2894e03 fix(interpretation): correct the view against the regenerated fixture
-b19f5fb feat(interpretation): generate the frontend fixture instead of hand-maintaining it
-093c8a1 feat(interpretation): axis_verdict emits the invariant per-group frame
+f7aa6bc governance: resolve #NEXT -> #160 (on-branch, pre-ff)
+d8e366c governance: #NEXT — the group as-of derivation, and the label #159 actually asked for
+192ed54 fix(interpretation): a member defers its date badge to the group that already stated it
+edb8f13 feat(interpretation): link the interpretation view from the dashboard
+7192b6d feat(interpretation): the view reads GET /interpretation instead of the fixture
+dc99faa feat(interpretation): group-level as-of date, labelled when off the trigger draw
 ```
 
 `git log --format="%ad %s" --date=short -10`:
 
 ```
-2026-08-01 governance(open-questions): Q70 — censored deltas assert a comparison never performed
-2026-08-01 feat(interpretation): GET /interpretation endpoint
-2026-08-01 fix(interpretation): correct the view against the regenerated fixture
-2026-08-01 feat(interpretation): generate the frontend fixture instead of hand-maintaining it
-2026-08-01 feat(interpretation): axis_verdict emits the invariant per-group frame
-2026-08-01 governance(branches): row for governance/q-temporal-bound (DONE, Q69)
-2026-08-01 governance: resolve Q-NEXT -> Q69 (on-branch, pre-ff)
-2026-08-01 governance(open-questions): Q-NEXT — marker_series has no temporal bound
+2026-08-01 governance: resolve #NEXT -> #160 (on-branch, pre-ff)
+2026-08-01 governance: #NEXT — the group as-of derivation, and the label #159 actually asked for
+2026-08-01 fix(interpretation): a member defers its date badge to the group that already stated it
+2026-08-01 feat(interpretation): link the interpretation view from the dashboard
+2026-08-01 feat(interpretation): the view reads GET /interpretation instead of the fixture
+2026-08-01 feat(interpretation): group-level as-of date, labelled when off the trigger draw
+2026-08-01 governance(branches): row for governance/q69-resolution (DONE, #159 + Q71)
+2026-08-01 governance: resolve #NEXT -> #159, Q-NEXT -> Q71 (on-branch, pre-ff)
+2026-08-01 governance: #NEXT — Q69 resolves to (e), provenance partitioning; interval sensitivity split out
 2026-08-01 chore: session close-out
-2026-08-01 governance: #158 — declined uploads leave the results list; SCHEMA.md drift recorded
 ```
 
-Suite **539 passed**, from a **527** baseline — reconciled against the brief. +6 axis-frame,
-+6 endpoint.
+Suite **545 passed**, from a **539** baseline — reconciled. +6 from
+`backend/tests/test_group_as_of.py`. **The fixture-based tests still pass**: the oracle is
+backend-side and the view switch could not touch it (G6).
 
-**Branch gate.** `feat/1b-delivery` — merged + deleted, local and remote; `git cherry
-origin/master` returned empty. `git branch` shows `master` only. Row in `BRANCHES.md` (**PARTIAL —
-stopped at Step 4**, `bf4b5f8`). No branch in limbo.
+**Branch gate.** Three branches, all merged + deleted local and remote, `git cherry origin/master`
+empty for each: `feat/1b-step5-wiring` (`edb8f13`), `fix/date-badge-dedup` (`192ed54`),
+`governance/as-of-derivation` (`f7aa6bc`). Rows in `BRANCHES.md`. No branch in limbo.
+
+**One process slip, self-corrected:** the badge-dedup fix was first committed onto `master`
+directly. Caught before pushing, soft-reset onto `fix/date-badge-dedup`, and landed by ff-merge.
 
 ## 2. Pending-queue reconciliation
 
-The brief carried **one conditional** `PENDING` item: a DECISIONS entry for `axis_verdict.text`,
-gated on *"VERIFY 1.2 finds the interim content unestablished."*
+The brief carried **one conditional** `PENDING` item, gated on *"Step 1's VERIFY finds `#159` does
+not fix the derivation."*
 
 | Item | Disposition |
 |------|-------------|
-| DECISIONS `### #NEXT` — `axis_verdict.text` renders an invariant per-group frame | **NOT MINTED — the condition failed.** `#154` already establishes it: *"`axis_verdict` emits the invariant per-group floor sentence in the interim, which satisfies `#151`'s producer-complete requirement against the reduced contract and unblocks 1b delivery immediately."* Authoring three strings is implementation of a decided position. A duplicate entry was correctly avoided. |
-| Q70 — not in the brief's queue | **Landed** as **Q70** in `bf4b5f8`. |
+| DECISIONS `### #NEXT` — group as-of derivation | **Condition HELD — minted** as **#160** in `d8e366c`, renumbered in `f7aa6bc`. `#159` requires the field and says "derived from its members" without fixing the derivation. |
 
-No DECISIONS integer claimed this session; max stays **#158**. `Q-NEXT` resolved to **Q70**
-(master max was Q69). Nothing decided is uncommitted.
+Master max is now **#160 / Q71**. Nothing decided is uncommitted.
 
 ## 3. Cold-resume handoff
 
-### Step 0 — the producer over real series, first run ever
+### The as-of derivation (`#160`)
 
-Precondition met: `#156`'s script returned **exit 0** ("no marker appears more than once at any
-collection date"). Inventory: 6 collection dates, 66 markers, **39 of 66** current values from a
-draw other than the newest, 56 of 66 carry a prior.
+**Current side only.** Where members agree it is that date; where they differ the group states the
+span and each member carries its own date. The prior side is deliberately excluded: it is `Q71`
+(comparison intervals), and a both-sides derivation would mark part of `Q71` resolved by a decision
+that does not address it. Live `hpg_axis` is the proof — coherent current side at `2026-05-30`, prior
+side spanning `2026-04-20` / `2026-01-07` / `2025-12-27`. A test pins the boundary.
 
-| group | should_surface | members' current draw |
-|---|---|---|
-| `hpg_axis` | **False** | all 2026-05-30 |
-| `hepatocellular` | True | **all 2026-03-06** — 85 days before the trigger |
-| `erythroid` | True | all 2026-05-30 |
+Emitted by the producer, not derived in the view: a view computing `min(member dates)` would be the
+second source of truth `sections.js` had before it read `should_surface`.
 
-Ungrouped: **51 rows**. `is_news` true for 15 of 66.
+**`#159` says "labelled", not "labelled and separated"** — the brief misquoted it. An in-place label
+is exactly compliant; no minimum-vs-sectioning trade-off was made. Sectioning remains part of (e),
+unstarted.
 
-**The single most important finding: all three out-of-range markers are stale.** `ast` 47 H,
-`alt` 53 H, `bilirubin_total` 28 H — every one from `2026-03-06`, against a header naming
-`2026-05-30`. The most alarming content of the interpretation does not come from the panel it
-claims to read. This is Q69 made concrete and is why Step 3's date display was worth doing.
+### G2 — shape parity, demonstrated BEFORE the switch
 
-**Gate 3 fires on nothing.** No marker sits in any authored band; `haematocrit` returns
-`status: not_in_band, contested: true`. Live but inert, as `#139` predicted.
+157 deployed-endpoint key paths vs 138 fixture. **Zero structural differences.** Every delta is
+either the group `as_of` this increment adds, or a data-dependent optional key:
+`protocol_context_snapshot.factors[]` nested keys (fixture user has no declared state; live has 23
+factors), `ungrouped[].delta`/`.prior` (the fixture's one ungrouped row has no prior), and the
+resolved-vs-unresolved branches of the precondition object (`observed_phase`,
+`precondition_factor`, `missing_factor_key`).
 
-**Two brief/Q69 illustrations were falsified.** The `oestradiol` example does not work: its delta
-is **censored** (prior `<50`), so no percentage is computed at all — the "same bare percentage
-across 40 vs 154 days" claim does not hold for that pair. The true cross-interval statement is
-40 d (`hpg_axis`) vs 69 d (`hepatocellular`) vs 85 d (`erythroid`), all judged by bare percentages.
+Optional keys in both directions are exactly the risk for a hard-reading view, so a **null-audit**
+was run over the live payload — 15 grouped members, 51 ungrouped rows, 7 levers — and no field the
+view hard-reads is null there.
 
-**`is_derived` is false on all 168 rows** — including `anion_gap`, `non_hdl`, `egfr`,
-`testosterone_free_calculated`. The field exists, is emitted, and has never been set at ingest.
-Not actioned.
+### G3 — the three non-happy states
 
-**Judgement: nothing halted the build.** Every gate behaves as written and as decided; the
-findings are known questions (Q69), designed consequences (censoring), or presentation gaps
-Steps 1/3 address. The one genuine output defect found is recorded as **Q70** rather than fixed in
-passing.
+| state | render |
+|---|---|
+| loading | spinner, *"Reading your latest panel…"* |
+| empty (404) | *"No lab results yet"*, neutral card, CTA to Metrics |
+| error (any other) | **red** panel, *"Could not load your interpretation"* + *"This is a fault, not an empty result"* + the detail |
 
-### Q65 pointer — neither of the brief's two options
+404 is treated as EMPTY because it is the endpoint's documented no-reports-confirmed case, not a
+failure. Error is red, empty is neutral — an error can never render as an empty interpretation.
 
-The brief expected "pointer stale" or "`#154` closed something it did not cover". It is a third
-thing: **Q65 carries two contradictory status lines** — header `**State:** open`, footer
-`**Status:** DONE → #154` — and `#154` itself ends "Resolves Q65." That violates one-status-per-item.
-Reported, not actioned, per the brief.
+### G4/G5 — how "live" and "reachable" were confirmed, and the one limit
 
-### Step 3 — both lists
+- The deployed backend serves the route: `GET /interpretation` → **401** without a token, versus
+  **404** for a nonexistent path. Discriminating, not just "a response".
+- The deployed served bundle carries `to:\`/interpretation\`` (dashboard nav), `L.get(\`/interpretation\`)`
+  (the view's call) and `path:\`/interpretation\`` (the route). The fixture is **gone** from the app
+  bundle — `Example Pathology` greps 0, and the bundle shrank 407 → 397 kB.
+- The view was rendered against the **deployed backend's actual payload**, captured verbatim from
+  the container (80 KB, 3 groups, 51 ungrouped) — not invented data. Clicking "Interpretation" on
+  the dashboard navigated to `/interpretation` and rendered it.
 
-The brief's four are all real. The derivation found three more:
+**The limit, stated plainly:** the browser→production authenticated round trip was not exercised,
+because that needs the operator's login and I will not handle a password. Everything either side of
+it is verified. One click by the operator closes it.
 
-| # | correction | on the brief's list? |
-|---|---|---|
-| 1 | `sections.js` recomputed moved-ness, dropping gate 3 → consumes `should_surface` | yes |
-| 2 | no Ungrouped section (would drop 51/66 live) | yes |
-| 3 | `protocol_context_snapshot.map()` — it is an object, this threw | yes |
-| 4 | `axis_verdict.verdict` / `.confidence` removed (#152) | yes |
-| 5 | `range_gate.note` — no such field; dead block | **no** |
-| 6 | `rel.partner` — superseded by `operands_missing`; dropped the naming of what a degraded relation could not see | **no** |
-| 7 | `safety_gate` rendered nowhere — left alone, gate 3 fires on nothing; recorded not skipped | **no** |
+### Step 4 — reading it as the operator
 
-### Step 2 re-scoped, per the brief's own VERIFY
+**It reads honestly.** The header says `Prostate Specific Antigen (PSA) · collected 2026-05-30`, and
+the first thing under *What Moved* is the liver group headed **"as of 2026-03-06 · not this panel"**.
+The three out-of-range markers — AST 47 H, ALT 53 H, Bilirubin 28 — sit under that label, each with
+`vs 2025-12-27` on its delta line. A reader is told the values are from March, and told what they
+were compared against. That is the thing this lane existed to fix.
 
-The fixture was **hand-transcribed**, not generated (`DECISIONS_LOG:2249`), so regenerating it by
-hand would rebuild the fragility. It is now a build artefact —
-`backend/scripts/gen_interpretation_fixture.py`. `backend/tests/fixtures/interpretation_s2.json`
-is deliberately untouched: it is the conformance **oracle**, and generating it from the producer it
-tests would make the test self-referential. Seed is synthetic, not the live series — the fixture is
-committed to git and the live data is one person's lab results.
+The floor descriptors read as worth reading rather than as boilerplate — they are short, sit under
+the heading, and say something the rest of the card does not. They will become skippable once read
+a few times, which is exactly what `#158`'s do-not-revisit clause is armed for; nothing to act on
+yet.
 
-98 → 134 key paths. All 14 removals accounted for in the commit message.
+**Two things noticed, one fixed:**
 
-### Deploy state — verified per `#121` on BOTH services
+1. **FIXED —** forty "not this panel" badges on one page, five of them repeating the group header
+   verbatim. Signal becoming wallpaper. The member badge now defers to a coherent group; 40 → 35.
+   Every automated check passed on the noisy version.
+2. **NOT fixed, reported —** the declared-state block renders **23 chips** between the panel header
+   and the first finding (`trt · steady`, `tirzepatide · washout`, … ). It is honest and it is
+   correct, but it is the largest single block on the page and it sits in front of the content.
+   Two of the chips (`hgh`, `ultra_muscleze_night`) render as bare keys because their phase is null.
+   Restyling declared-state display is a design decision, not a wiring fix, and was out of scope.
 
-| Service | Probe | Result |
-|---|---|---|
-| `health-app-backend` | in-container: live route table + `get_interpretation` over the real DB | `/interpretation` registered; all three `axis_verdict.text` frames populated; 5 grouped members flagged as not from the trigger draw |
-| `health-app-frontend` | served-bundle grep of `assets/index-Bo8gNYRx.js` | 3 new literals present; `axis_verdict.verdict`, `.confidence`, `range_gate.note`, `rel.partner` all **absent** |
+### Open questions unchanged
 
-**A `#116` timing trap fired and was caught.** The first frontend probe fetched a **cached
-`index.html`** and returned the previous session's asset hash — all new literals absent, removed
-literals present. The negative control is what exposed it; a cache-busted re-fetch gave the current
-bundle and passed. Reported because the naive read was "the deploy did not take".
-
-### Step 5 — STOPPED on Q69, and the wording that stopped it
-
-> **State:** open. **Blocks:** wiring the interpretation view to live data (1b).
->
-> **Resolve before:** the interpretation view is wired to live data. A temporally incoherent
-> reading with a UI on top is harder to see than one in a JSON dump, and 1b's Step 0 exists to
-> prevent exactly that.
-
-**Q69 does not admit the brief's reading.** The brief argued Step 3's date display discharges the
-*reason* for the gate. But the operative words are "Blocks" and "Resolve before", and candidate
-(c) — surface the age — is by Q69's own text *"the mitigation that holds whichever of (a), (b) or
-(d) is chosen"*. Implementing one candidate that explicitly composes with the others does not
-decide which input rule governs. Q69's State is still `open`.
-
-`#150` was checked and does **not** forbid interim links — rule 2 plans for hub absorption, and its
-rationale anticipates the interpretation view adding one. Q69 is the sole blocker.
-
-The link was also not added alone: the view still renders the fixture, so linking it would present
-synthetic example data to the operator as their interpretation.
+`Q66`, `Q67`, `Q68`, `Q70`, `Q71` all open and untouched. `Q69` is `DONE → #159`.
 
 ### Single clearest next action
 
-**Resolve Q69 by choosing between (a) recency-bounded operands, (b) draw-scoped interpretation and
-(d) hybrid.** (c) is already built. That unblocks the last 1b commit, which is small: point
-`InterpretationView` at `GET /interpretation` and add the dashboard link.
+**Log in and click Interpretation** — the one step of the round trip I could not exercise.
 
-Then: **Q70** (censored deltas assert a comparison never performed) before any basis token is shown
-to a reader or used to generate prose.
+Then the next substantive lane, and the strongest small one available: **persist `lab_accession`**.
+It is parsed at extract and discarded at confirm, and one column unlocks report identity, a dedupe
+key above the result rows (`Q68`), and episode scoping (`#159`'s do-not-revisit dependency).
