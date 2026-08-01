@@ -5693,3 +5693,45 @@ group-level as-of misleads more than it informs — at which case the group-leve
 unit and the partition belongs at the member level throughout.
 
 ---
+### #NEXT. A group's as-of date derives from its members' current values, and a group off the trigger draw is labelled rather than merged
+
+**Decision:** A group's as-of date is derived from the collection dates of its members' **current**
+values only. Where those agree it is that date; where they differ the group states the span, and
+per `#158` each member already carries its own date. A group whose as-of differs from the trigger
+draw is labelled in place.
+
+**Why this entry exists:** `#159` rule 1 requires the field and says it is "derived from its
+members" without fixing the derivation. Verified against master before implementing — it does not,
+so the derivation is decided here rather than chosen silently at the keyboard.
+
+**Why current-only:** the prior side spanning draws is a distinct defect — about comparison
+intervals rather than about what the panel contains — and is recorded at `Q71`. Deriving the as-of
+from both sides would conflate them and would mark part of `Q71` resolved by a decision that does
+not address it. This is concrete, not hypothetical: live `hpg_axis` has a coherent current side at
+`2026-05-30` and a prior side spanning `2026-04-20` / `2026-01-07` / `2025-12-27`, so a both-sides
+derivation would report that group as spanning when what it *contains* does not. A test pins the
+boundary.
+
+**Emitted by the producer, not derived in the view.** A view computing `min(member dates)` itself
+would be a second source of truth — the same defect `sections.js` carried when it recomputed
+moved-ness from the gates instead of reading `should_surface`.
+
+**"Labelled", verified — not "labelled and separated".** The brief proposing this entry quoted
+`#159` as requiring the group be "labelled and separated rather than merged", and framed an
+in-place label as the minimum standing in for sectioning. `#159`'s committed text is "is **labelled**
+rather than merged". An in-place label is therefore exactly compliant, and no minimum-versus-full
+trade-off was made. Provenance sectioning remains part of (e), unstarted and not owed here.
+
+**Two levels, one statement — corrected after reading the live page.** With a member-level date
+badge on every stale marker the page carried **forty** "not this panel" labels, five of them
+repeating verbatim what the group header had just said. The member badge is therefore suppressed
+where the group is coherent, and shown where the group spans — the header states the range, the
+members carry the detail, exactly as `#159` rules 1 and 2 divide it. Found by looking, not by a
+gate; every automated check passed on the noisy version.
+
+**Status:** Decided (presentation). Code in this entry.
+
+**Do not revisit unless:** provenance sectioning lands as part of (e), at which point the in-place
+label is superseded by the section and this entry is absorbed rather than amended.
+
+---
