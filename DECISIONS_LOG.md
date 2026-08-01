@@ -5620,3 +5620,76 @@ declines, and the fault is given copy that is true of it.
 module with its own scope and should be planned as one rather than extended by increments.
 
 ---
+### #NEXT. The interpretation output is a reading of more than one draw, and says so; provenance is partitioned rather than bounded, scoped away, or composited silently
+
+**Decision:** `Q69` resolves to candidate **(e) — partition the output by provenance**, a candidate
+added to the set after the fact. `marker_series` keeps its unbounded newest-per-marker read. What
+changes is that the output stops presenting a multi-draw composite as a single panel: every group
+carries an as-of date derived from its members, a group whose as-of differs from the trigger draw
+is labelled rather than merged, a group whose members span draws says so with each member carrying
+its own date, and a relation whose operands come from different draws states that.
+
+**Why the original candidates were amended rather than chosen from.** `Q69`'s (a), (b) and (d) were
+drafted before the producer had ever run over real series. The first run (1b Step 0) falsified all
+three on one piece of evidence: **the `hepatocellular` group is absent from the newest draw
+entirely — every member current at `2026-03-06` against a `2026-05-30` trigger — and it carries all
+three out-of-range markers in the dataset** (`ast` 47 H, `alt` 53 H, `bilirubin_total` 28 H).
+Verified: the `2026-05-30` draw measured no liver marker at all.
+
+- **(a) recency-bounded operands** — at 85 days the group survives an arbitrary window and vanishes
+  at 91. A cliff, not a rule.
+- **(b) draw-scoped interpretation** — an interpretation of the `2026-05-30` draw would contain no
+  liver markers, because that draw did not measure liver. The raised transaminases and the elevated
+  bilirubin disappear until a new liver panel is drawn.
+- **(d) hybrid** — inherits (b) for gates and relations, so it hides the same content.
+
+All three suppress the most clinically interesting finding in the data. **(c) surface the age** is
+built (`#158`, member-level dates rendered and confirmed) and is the foundation of (e) rather than a
+competitor to it.
+
+**The reframe.** `Q69` asked which markers belong in the panel. The answer is all of them — a raised
+bilirubin from March is real, and hiding it because a May draw did not repeat the test would be a
+defect, not a fix. The answerable question is *what the output is a reading of*, and the honest
+answer is: more than one draw.
+
+**Group date coherence is a property of the DATA, not of the code — verified, and rule 2 is already
+firing.** `_assemble_members` pulls each member independently from `marker_series` with no date
+constraint, so nothing enforces coherence within a group. Two partial-group draws have already
+occurred (`hpg_axis`, `2026-01-07` at 3/6 and `2026-04-20` at 3/6), and the **prior** side of
+`hpg_axis` already spans three dates today: `testosterone_total`/`shbg`/`testosterone_free_calculated`
+against `2026-04-20`, `lh`/`fsh` against `2026-01-07`, `oestradiol` against `2025-12-27`. The
+group's current side is coherent only because the May draw happened to measure all six. Rule 2 is
+not a hypothetical guard.
+
+**CORRECTED FROM THE PROPOSAL — rule 3 does NOT amend `#154`, and adding a fourth state would be a
+category error.** The proposal asked whether `#154`'s eliminative model has room for a fourth
+relation state, "evaluated across draws", alongside `excluded` / `not_excluded` / `not_assessed`.
+Read against master: those three are **branch** resolutions — each branch of a decomposed condition
+answers "did the evidence rule this out?" — not relation states. Operand provenance is not a
+resolution of a branch; it is a property of the inputs, and its existing peer is `operand_status`
+(`complete` / `degraded`), which already sits outside the branch model. Cross-draw provenance
+belongs there, orthogonally: a relation can be both degraded and cross-draw. `#154` is therefore
+**not amended** — and its own `#47` clause already licenses the statement, since the descriptor
+"may state its own coverage ... because that is a statement about the algorithm rather than about
+the reader", which is exactly what naming an operand's draw is.
+
+**What (e) does NOT fix, stated so it cannot be claimed later.** `min_meaningful_delta` remains a
+bare percentage with no time dimension. (e) makes the interval visible; it does not make the
+threshold sensitive to it. That defect would exist in a perfectly draw-scoped world with irregular
+spacing and is recorded as its own question rather than being marked resolved by a decision that
+does not touch it.
+
+**Status:** Decided (interpretation input model). **No code in this entry** — the producer and view
+changes are the delivery, and the wiring bar below is what gates them.
+
+**Wiring bar (1b Step 5).** Resolution on paper does not discharge a concern about invisibility, so
+`Q69`'s block on wiring the view to live data lifts when **both** hold: member-level dates (built,
+`#158`) and **group-level as-of rendered**, so a group three months older than the panel header says
+so at group level rather than only per member. Relation qualifiers and provenance sectioning — the
+rest of (e) — follow without blocking delivery.
+
+**Do not revisit unless:** a group is found whose members span draws so widely that a single
+group-level as-of misleads more than it informs — at which case the group-level date is the wrong
+unit and the partition belongs at the member level throughout.
+
+---

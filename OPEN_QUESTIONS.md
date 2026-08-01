@@ -1803,7 +1803,7 @@ trigger, not a blocker:** the schema change is possible now, it is simply not ye
 
 ## Q69. `marker_series` has no temporal bound, so the interpretation output is a composite of draws rather than a reading of one
 
-**State:** open. **Blocks:** wiring the interpretation view to live data (1b).
+**State:** DONE -> #NEXT. **Blocks (until the wiring bar is met):** wiring the interpretation view to live data (1b).
 **Related:** `#155` (retain-raw), `#154` (eliminative branch model), `#147` (many panels per draw),
 `Q65` (four relation kinds carry no machine-readable condition), `Q68` (empty envelope),
 `Q66` (supersede affordance).
@@ -1911,6 +1911,28 @@ rule governs, and this clause requires resolution rather than mitigation. The re
 one commit: point the view at the endpoint and add a dashboard link. **Unblock by choosing between
 (a), (b) and (d)** - nothing else is outstanding.
 
+**RESOLVED -> `#NEXT`: candidate (e), added to the set after the fact.** The candidates below were
+drafted before the producer had ever run over real series. The first run (1b Step 0) falsified all
+three substantive options on one piece of evidence: the `hepatocellular` group is absent from the
+newest draw entirely and carries all three out-of-range markers in the dataset (`ast` 47 H, `alt`
+53 H, `bilirubin_total` 28 H). Recency-bounding gives a cliff, draw-scoping deletes the finding
+until a new liver panel is drawn, and the hybrid inherits draw-scoping for gates and relations. The
+question asked which markers belong in the panel; the answer is all of them, and the answerable
+question is what the output is a reading of. **(c) is built (`#158`) and is (e)'s foundation, not
+its competitor.** The candidate list below is left standing as written — it is the record of what
+was considered, and the amendment is only legible against it.
+
+**Corrected while resolving:** (e)'s relation qualifier does NOT require a fourth state in `#154`.
+`excluded` / `not_excluded` / `not_assessed` are BRANCH resolutions; operand provenance is a
+property of the inputs whose peer is `operand_status`, outside the branch model. `#154` is not
+amended.
+
+**Not resolved by this:** `min_meaningful_delta` remains time-blind. Split out as its own question
+rather than being marked resolved by a decision that does not address it.
+
+**Wiring bar:** member-level dates (built) **and** group-level as-of rendered. Resolution on paper
+does not discharge a concern about invisibility.
+
 ## Q70. A censored delta reports `delta_within_min_meaningful` without ever consulting the threshold, so a large suppression reads as quiet
 
 **State:** open. **Blocks:** nothing today — the surfacing verdict is coincidentally correct on the
@@ -1972,3 +1994,47 @@ the question of widening it.
 **Resolve before:** any claim is made that gate 1's basis tokens are a faithful account of why a
 marker did or did not surface — for example before they are shown to the reader, or used to
 generate prose.
+
+## Q-NEXT. `min_meaningful_delta` has no time dimension, so an 8% move over 40 days and over 154 days are the same event to gate 1
+
+**State:** open. **Blocks:** nothing today. **Related:** `Q69`/`#NEXT` (provenance partitioning,
+which makes the interval visible but not consequential), `Q70` (censored deltas), `#95` (I1 extended
+to read-constants), I1.
+
+**Split out of `Q69`, which cited it as evidence for the composite problem. That was wrong.** This
+defect would exist in a perfectly draw-scoped world with irregular draw spacing: it is a property of
+the threshold, not of which draws the output composites. Left inside `Q69` it would have been marked
+resolved by `#NEXT`, which does not touch it.
+
+**VERIFIED distinct from `Q70`.** `Q70` concerns a comparison that never happened — a censored delta
+emitting `delta_within_min_meaningful` without consulting any threshold. This concerns a comparison
+that *did* happen, against a threshold that is correct for an unstated interval. Different defect,
+different fix; `Q70`'s four candidates are all about censoring and none of them touches this.
+
+`min_meaningful_delta` is `{mode, value}` — verified across all 8 authored entries and the
+`_defaults` fallback, with no key matching day/window/period/elapsed anywhere in
+`lever_dictionary.json`, and `delta()` emits no elapsed field. The authored values are
+reference-change-interval figures derived from within-subject biological variation (CVi), which is
+itself measured over a stated interval in the source literature — so the numbers carry an implied
+timescale that the asset does not record.
+
+**Live spans in one output**, all judged by the same bare percentages: `hpg_axis` compares over
+**40 days** (`testosterone_total`, `shbg`) and **143 days** (`lh`, `fsh`) and **154 days**
+(`oestradiol`) *within the one group*; `hepatocellular` over **69 days**; `erythroid` over **85
+days**. `hpg_t_e2_ratio` relates two markers whose comparisons are 114 days apart in span.
+
+Candidates:
+
+- **(a) Record the interval each authored value is valid over**, and resolve `not_assessed` (or a
+  stated caveat) outside it. Honest, and cheap in code — but it is new authoring against I1 for
+  every marker, and the CVi literature does not always state the interval.
+- **(b) Scale the threshold with elapsed time.** Requires a model of how each analyte drifts, which
+  is not CVi and is not authored anywhere. Most likely to invent physiology.
+- **(c) Emit the elapsed days alongside the delta and state the span in the view**, leaving the
+  threshold alone. The `Q69` (c) move applied to the delta arm: makes the arbitrariness visible
+  without pretending to fix it. Composes with (a).
+- **(d) Accept it.** Defensible if the draw cadence is regular enough that spans cluster — which
+  this dataset falsifies, spanning 40 to 154 days inside one group.
+
+**Resolve before:** any authored `min_meaningful_delta` is presented to the reader as the reason a
+move was or was not meaningful.
