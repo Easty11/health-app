@@ -5693,7 +5693,7 @@ group-level as-of misleads more than it informs — at which case the group-leve
 unit and the partition belongs at the member level throughout.
 
 ---
-### #NEXT. A group's as-of date derives from its members' current values, and a group off the trigger draw is labelled rather than merged
+### 160. A group's as-of date derives from its members' current values, and a group off the trigger draw is labelled rather than merged
 
 **Decision:** A group's as-of date is derived from the collection dates of its members' **current**
 values only. Where those agree it is that date; where they differ the group states the span, and
