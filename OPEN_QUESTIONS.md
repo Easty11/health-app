@@ -1803,7 +1803,7 @@ trigger, not a blocker:** the schema change is possible now, it is simply not ye
 
 ## Q69. `marker_series` has no temporal bound, so the interpretation output is a composite of draws rather than a reading of one
 
-**State:** DONE -> #NEXT. **Blocks (until the wiring bar is met):** wiring the interpretation view to live data (1b).
+**State:** DONE -> #159. **Blocks (until the wiring bar is met):** wiring the interpretation view to live data (1b).
 **Related:** `#155` (retain-raw), `#154` (eliminative branch model), `#147` (many panels per draw),
 `Q65` (four relation kinds carry no machine-readable condition), `Q68` (empty envelope),
 `Q66` (supersede affordance).
@@ -1911,7 +1911,7 @@ rule governs, and this clause requires resolution rather than mitigation. The re
 one commit: point the view at the endpoint and add a dashboard link. **Unblock by choosing between
 (a), (b) and (d)** - nothing else is outstanding.
 
-**RESOLVED -> `#NEXT`: candidate (e), added to the set after the fact.** The candidates below were
+**RESOLVED -> `#159`: candidate (e), added to the set after the fact.** The candidates below were
 drafted before the producer had ever run over real series. The first run (1b Step 0) falsified all
 three substantive options on one piece of evidence: the `hepatocellular` group is absent from the
 newest draw entirely and carries all three out-of-range markers in the dataset (`ast` 47 H, `alt`
@@ -1995,16 +1995,16 @@ the question of widening it.
 marker did or did not surface — for example before they are shown to the reader, or used to
 generate prose.
 
-## Q-NEXT. `min_meaningful_delta` has no time dimension, so an 8% move over 40 days and over 154 days are the same event to gate 1
+## Q71. `min_meaningful_delta` has no time dimension, so an 8% move over 40 days and over 154 days are the same event to gate 1
 
-**State:** open. **Blocks:** nothing today. **Related:** `Q69`/`#NEXT` (provenance partitioning,
+**State:** open. **Blocks:** nothing today. **Related:** `Q69`/`#159` (provenance partitioning,
 which makes the interval visible but not consequential), `Q70` (censored deltas), `#95` (I1 extended
 to read-constants), I1.
 
 **Split out of `Q69`, which cited it as evidence for the composite problem. That was wrong.** This
 defect would exist in a perfectly draw-scoped world with irregular draw spacing: it is a property of
 the threshold, not of which draws the output composites. Left inside `Q69` it would have been marked
-resolved by `#NEXT`, which does not touch it.
+resolved by `#159`, which does not touch it.
 
 **VERIFIED distinct from `Q70`.** `Q70` concerns a comparison that never happened — a censored delta
 emitting `delta_within_min_meaningful` without consulting any threshold. This concerns a comparison

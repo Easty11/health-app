@@ -5620,7 +5620,7 @@ declines, and the fault is given copy that is true of it.
 module with its own scope and should be planned as one rather than extended by increments.
 
 ---
-### #NEXT. The interpretation output is a reading of more than one draw, and says so; provenance is partitioned rather than bounded, scoped away, or composited silently
+### 159. The interpretation output is a reading of more than one draw, and says so; provenance is partitioned rather than bounded, scoped away, or composited silently
 
 **Decision:** `Q69` resolves to candidate **(e) — partition the output by provenance**, a candidate
 added to the set after the fact. `marker_series` keeps its unbounded newest-per-marker read. What
