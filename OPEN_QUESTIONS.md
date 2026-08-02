@@ -1,8 +1,9 @@
 # OPEN QUESTIONS
 
-Undecided forks and unverified-at-machine items. One status per item, from the four states
-defined in `CLAUDE.md` → **State vocabulary** (the sole definition). `DONE → #N` names the
-resolving `DECISIONS_LOG` entry.
+Undecided forks and unverified-at-machine items. One state per item, from the **question-state**
+axis (`OPEN` / `OWED` / `DONE → #N`) defined in `CLAUDE.md` → **State vocabulary** (the sole
+definition). The label is `**State:**` (never `**Status:**`). `DONE → #N` names the resolving
+`DECISIONS_LOG` entry.
 
 ---
 
@@ -14,7 +15,7 @@ on real HR density during sleep, so this must be re-measured after HR is de-dupe
 INCONCLUSIVE — do **not** calibrate `DELTA_ARTIFACT` / `SPREAD_SPIKE` / `SHORT_MS` or wire
 `runDeepConfidence` into readiness/Banister until resolved.
 
-**Status:** UNSTARTED — re-run the Gate 3 HR-cadence measurement. **The stated precondition has CLEARED**:
+**State:** OPEN — re-run the Gate 3 HR-cadence measurement. **The stated precondition has CLEARED**:
 Q2's `collapseSleepSessions()` de-dup landed on HCA master (`36df9a2`), so HR is de-duped and the
 re-measurement is simply not done. No blocker.
 
@@ -32,7 +33,7 @@ date, so HC and scraper rows for the *same physical night* land on different day
 single canonical sleep-date convention (likely wake-date, to match the scraper) and align
 `_aggregate_day`.
 
-**Status:** OWED — resolved in code at DECISIONS_LOG #64
+**State:** OWED — resolved in code at DECISIONS_LOG #64
 (`fix/hc-sleep-wake-date-attribution`): canonical sleep-date = **local (AEST) wake-date**
 (`endTime`), aligning to the scraper; `_aggregate_day` filter + date-collection loop switched
 to wake-date-only via a tz-aware `_wake_date`, and existing sleep values cleared by migration
@@ -56,7 +57,7 @@ same can be done here: capture one real on-device sync, confirm exactly which fi
 and delete the `.get_*()` reconcilers (this is "Phase 2" of the contract work). Which name to
 keep is unverified until an actual payload is captured.
 
-**Status:** UNSTARTED — capture one real on-device sync payload, confirm which field names HCA actually
+**State:** OPEN — capture one real on-device sync payload, confirm which field names HCA actually
 posts, pick the canonical name, then collapse the dual acceptance. No blocker: the capture is the first
 step of the work, not a precondition on someone else.
 
@@ -72,7 +73,7 @@ load path before the four-window engine — or even Tier 0 with a strength term 
 trusted. Was tracked as "B2" in an out-of-project session's scheme that never entered the
 repo; recorded here under the canonical Q-series.
 
-**Status:** OWED — outstanding check: a Railway Postgres query confirming Hevy strength volume actually
+**State:** OWED — outstanding check: a Railway Postgres query confirming Hevy strength volume actually
 populates the per-window `load_metrics` rows. Resolves → #28 on that verify. Owner: Luke.
 
 ---
@@ -93,7 +94,7 @@ missing: the richer three-valued provocative/clear/untested detail per injury th
 `FEEDBACK.md` §5 carries but the current `_INJURY_SEED` schema (`body_part`, `side`,
 `restrictions`, `detail`) does not have a field for.
 
-**Status:** UNSTARTED — author the fourth injury (right proximal semimembranosus) into the structured
+**State:** OPEN — author the fourth injury (right proximal semimembranosus) into the structured
 ledger, and decide the findings-detail schema jointly with Q20. No blocker named in-row.
 
 ---
@@ -107,7 +108,7 @@ retire `routers/knowledge.py`'s legacy write path + `context_builder`'s parallel
 `current_state` — or keep them permanently distinct (free-text notes vs typed declared
 state)? Deferred by #44; not urgent.
 
-**Status:** UNSTARTED — undecided design fork (fold the legacy KB in as `type="note"` vs keep the two
+**State:** OPEN — undecided design fork (fold the legacy KB in as `type="note"` vs keep the two
 permanently distinct). Deferred by #44, not urgent. No blocker.
 
 ---
@@ -120,7 +121,7 @@ not built. PSL covers Luke's direct solo/gym capture, so the need only bites if 
 HC/companion lane carries a Polar user requiring per-second — currently none (Deb's
 wearable integration deferred, Cooper has no wearable).
 
-**Status:** UNSTARTED — low priority, deliberately deferred. **Not BLOCKED**: #46 already specified the
+**State:** OPEN — low priority, deliberately deferred. **Not BLOCKED**: #46 already specified the
 pathway, so nothing prevents building it; there is simply no consumer yet (Deb's wearable integration
 deferred, Cooper has no wearable). Revisit when the Metabolic-load channel is wired to Polar-in-HC data
 for a real consumer.
@@ -148,7 +149,7 @@ competing (less likely) explanation is that HCA posts HRV under a field name nei
 `get_rmssd()` branch maps — the open **Q5** territory. One captured real payload's `hrv[]`
 (or a Railway sync/`health_connect_record_sources` check) disambiguates absent-vs-unmapped.
 
-**Status:** OWED — root cause is a closed platform finding; what remains is confirmatory. Outstanding
+**State:** OWED — root cause is a closed platform finding; what remains is confirmatory. Outstanding
 check: capture one real HC sync payload and confirm `payload.hrv` is empty (absent, not unmapped per Q5).
 Owner: Luke. If absent-confirmed, the residual is the HRV single-point-of-failure risk, tracked to issue #9
 (`health-connect-app` scraper canary). Cross-refs Q5, issue #9.
@@ -162,7 +163,7 @@ revision `3497ab483935`: an `exercise_sessions` drop, `samsung_hrv_readings.cont
 `api_key_encrypted` `VARCHAR`→`TEXT`. Confirm each is an intended local/prod difference or
 a real un-migrated delta. Resolve against Railway Postgres, not local.
 
-**Status:** OWED — outstanding check: confirm each of the three divergences against **Railway Postgres**
+**State:** OWED — outstanding check: confirm each of the three divergences against **Railway Postgres**
 (not local) as either an intended local/prod difference or a real un-migrated delta. Owner: Luke.
 
 ---
@@ -177,7 +178,7 @@ Postgres**; for any historical violator, null/clamp the offending field (the gua
 writes). If efficiency was unbounded, assume other fields were too — the sweep covers the whole
 numeric schema, not just efficiency.
 
-**Status:** OWED — outstanding check: run the full-schema `NOT BETWEEN` sweep against Railway Postgres and
+**State:** OWED — outstanding check: run the full-schema `NOT BETWEEN` sweep against Railway Postgres and
 null/clamp any historical violator. Owner: Luke. Independent of Q17. Same loop as `BRANCHES.md`
 `fix/hrv-sleep-integrity` Task 3.
 
@@ -215,7 +216,7 @@ more room and may not exhibit it. A faithful isolated repro (real compiled CSS, 
 **not** reproduce it; the trigger is specifically the detail-view chrome height vs the ~363 px
 half-column, which the repro did not stage.
 
-**Status:** UNSTARTED — frontend layout fork: decide direction (a) / (b) / (c), then implement. Branch
+**State:** OPEN — frontend layout fork: decide direction (a) / (b) / (c), then implement. Branch
 `fix/desktop-column-scroll` was cut then discarded (zero commits; deleted). No DECISIONS_LOG entry.
 No blocker — the decision is Luke's to make at will, nothing external gates it.
 
@@ -230,7 +231,7 @@ Positive right slump, S1-pattern referral, frontal-plane deficit have no first-c
 elsewhere too: FEEDBACK §5 documents these findings clinically, but the structured ledger the engine and
 snapshot read does not carry them. Q7 territory.
 
-**Status:** UNSTARTED — resolve jointly with Q7 (injury-ledger completeness), not piecemeal. This is a
+**State:** OPEN — resolve jointly with Q7 (injury-ledger completeness), not piecemeal. This is a
 sequencing coupling, **not** a blocker: Q7 is itself UNSTARTED and startable, so nothing prevents doing
 both together.
 
@@ -244,7 +245,7 @@ problem (`marker_canonical`). Deferred deliberately for the tagging brief — 49
 and movement-identity-across-sources is a real design exercise that should not be rushed inside a tagging
 task.
 
-**Status:** UNSTARTED — deliberately deferred, not abandoned (#74). **Not BLOCKED**: 493 rows are cheap to
+**State:** OPEN — deliberately deferred, not abandoned (#74). **Not BLOCKED**: 493 rows are cheap to
 re-key, so nothing prevents it. Revisit when a second exercise source appears or the canonical-exercise
 layer is designed.
 
@@ -257,7 +258,7 @@ the radicular rotation-block behave correctly for this user. Other blocks in `se
 tuned against wrong keyword inputs and never noticed — the block sets and the (now-fixed) loaded-region
 inference were never independently validated.
 
-**Status:** UNSTARTED — **the stated precondition has CLEARED**: active-window tags were human-confirmed
+**State:** OPEN — **the stated precondition has CLEARED**: active-window tags were human-confirmed
 and seeded in prod on 2026-07-14 (`seed_exercise_region_tags.py 1 --confirm` → 37 tag rows, 56/56 titles
 resolved; see `BRANCHES.md` `fix/exercise-tag-coverage`). The audit of `_RADICULAR_BLOCKS` /
 `_RA_FLARE_BLOCKS` has simply not been run. No blocker.
@@ -271,7 +272,7 @@ now records whether a movement is unilateral. A unilateral logged exercise plaus
 `capability_state` row, but no such join exists today. `laterality` is currently written and consumed only
 by (future) plan↔log reconciliation.
 
-**Status:** BLOCKED — blocker: the plan↔log reconciliation is not built, and it is `laterality`'s ONLY
+**State:** OPEN — blocker: the plan↔log reconciliation is not built, and it is `laterality`'s ONLY
 consumer, so whether a `capability_state.side` join *should* exist cannot be settled until that consumer
 exists. Owner: Luke. Unblocks on: reconciliation being designed/built.
 
@@ -299,7 +300,7 @@ flagged deficit he is actively fortifying, and the platform currently has no axi
 `capability_state` is already per-region-per-side, so ratio reads are natively supported once the vocabulary
 exists — the schema is ready, the vocabulary is not.
 
-**Status:** UNSTARTED — the v1 taxonomy bump is its own design pass: externally grounded (HAGOS / adductor
+**State:** OPEN — the v1 taxonomy bump is its own design pass: externally grounded (HAGOS / adductor
 squeeze; ER:IR isokinetic references; return-to-sport LSI), with adductor:abductor and ER:IR as first-class
 reads. NOT a bolt-on from a tag file (the taxonomy is external-authority so its breadth does not inherit the
 user's blind spots — #76). No blocker — the external references are named and nothing gates starting it.
@@ -336,7 +337,7 @@ constraints simultaneously, and the two suggested in passing each fail one:
 subjects already exercise the ratio tier (`Preacher Curl` → `Rope Cable Curl` 0.643 / `Drag Curl` 0.636).
 The third subject adds coverage, not capability.
 
-**Status:** UNSTARTED — the resolution is already identified (drop `Pullover`, keep `Calf Raise` +
+**State:** OPEN — the resolution is already identified (drop `Pullover`, keep `Calf Raise` +
 `Preacher Curl`); deferred to the next harness-open, not a branch. Test-instrument only; no production code
 path is involved. No blocker. Ref: live probe run 2026-07-15; DECISIONS_LOG #83/#84; FEEDBACK §11.
 
@@ -363,7 +364,7 @@ stale-but-plausible) and from **Q17** (now resolved). The RHR discriminator is l
 `feat/recovery-metrics-rhr`), so Health Connect `resting_heart_rate` (`health_connect_syncs`) is the
 only clean independent path.
 
-**Status:** BLOCKED — blocker: the series must be segmented by APK-install history first (the changepoint
+**State:** OPEN — blocker: the series must be segmented by APK-install history first (the changepoint
 is an install event, not a commit). Owner: Luke. **Do NOT reconcile, backfill, or delete a
 single `samsung_hrv_readings` row until segmented.** Cross-refs Q17, Q18, issue #9, HCA #19 / Q3.
 
@@ -386,7 +387,7 @@ committed content is identical — the exact false verdict #91's gate had to be 
 Deliberately NOT done in the #91 brief: it changes working-tree checkouts on the next checkout in
 both repos — a behavioural change beyond a governance brief's bounds.
 
-**Status:** UNSTARTED — blocker-free, action named above. Owner: Luke.
+**State:** OPEN — blocker-free, action named above. Owner: Luke.
 
 ---
 
@@ -404,7 +405,7 @@ of vocabulary — two stores that can disagree about the same fact. Verify wheth
 before deciding either question; a vocabulary sweep over a duplicated store would entrench the
 duplication rather than expose it.
 
-**Status:** UNSTARTED — no blocker. Owner: Luke.
+**State:** OPEN — no blocker. Owner: Luke.
 
 ---
 
@@ -428,7 +429,7 @@ repo's ritual definition is out of this brief's scope, and doing it unbidden is 
    reading as drift. Right now nothing distinguishes "intentionally different" from "quietly
    drifted", which is the same ambiguity the vocabulary sweeps existed to remove.
 
-**Status:** UNSTARTED — no blocker; both questions are answerable at will. Owner: Luke.
+**State:** OPEN — no blocker; both questions are answerable at will. Owner: Luke.
 
 ---
 
@@ -455,7 +456,7 @@ The two repos are **identical** on this line, so nothing has diverged — the de
 merely tolerable. What is *not* safe is leaving it untracked: after #93 both rituals say `rowed`
 while the document that defines the vocabulary says `parked`.
 
-**Status:** UNSTARTED — no blocker; needs a shared-block brief with a mirror-first plan and a G1
+**State:** OPEN — no blocker; needs a shared-block brief with a mirror-first plan and a G1
 re-fingerprint on both sides. Owner: Luke.
 
 ---
@@ -484,7 +485,7 @@ one canonical across the whole map, plus a same-unit sibling registry), or is ex
 `Saturation` entry is the argument for the former — it is a bare generic label, safe only because no
 other panel has yet printed that word.
 
-**Status:** UNSTARTED — no blocker. Owner: Luke.
+**State:** OPEN — no blocker. Owner: Luke.
 
 ---
 
@@ -517,7 +518,7 @@ cost of leaving the ambiguity open, and it should be settled by decision rather 
 `plasma_volume_status.target_markers`, i.e. nowhere a renderer can reach it. Should `discriminator`
 become a list?
 
-**Status:** UNSTARTED — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q37 (I1 enforcement),
+**State:** OPEN — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q37 (I1 enforcement),
 D3 and PV1. Owner: Luke.
 
 ---
@@ -548,7 +549,7 @@ Recorded here because it lived only in #95's body and this file is what gets act
 in an append-only entry has nothing pointing at it. Flagged at #95's close-out and again before #96's
 merge, unminted both times.
 
-**Status:** UNSTARTED — no blocker. Due **4b**, with Q34, Q36, D3 and PV1. Owner: Luke.
+**State:** OPEN — no blocker. Due **4b**, with Q34, Q36, D3 and PV1. Owner: Luke.
 
 ---
 
@@ -588,7 +589,7 @@ direction-agnostic. EFLM's calculator defaults to one-sided (Z 1.64); the one-si
 with `safety_threshold` (Q34), which is directional. Not an open fork — stated so it is not
 re-derived differently next time.
 
-**Status:** UNSTARTED — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q36, Q37, Q39 and Q40.
+**State:** OPEN — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q36, Q37, Q39 and Q40.
 Owner: Luke.
 
 ---
@@ -612,7 +613,7 @@ Proposal: an `effect_locus` field, `physiology` | `measurement`, defaulting to `
 existing lever is correct without edit. The renderer can then refuse to rank a measurement-locus lever
 alongside physiology-locus ones, or label it distinctly.
 
-**Status:** UNSTARTED — no blocker. Due **4b**. Owner: Luke.
+**State:** OPEN — no blocker. Due **4b**. Owner: Luke.
 
 ---
 
@@ -632,7 +633,7 @@ asks "is this dangerous now", which has a side. The delta gate is direction-agno
 asymmetry question is whether a direction-agnostic gate can honestly use a statistic that isn't, or
 whether the asymmetric form forces `min_meaningful_delta` to become a pair.
 
-**Status:** UNSTARTED — no blocker. Due **4b**, with Q34, Q36, Q37, Q38 and Q39. Owner: Luke.
+**State:** OPEN — no blocker. Due **4b**, with Q34, Q36, Q37, Q38 and Q39. Owner: Luke.
 
 ---
 
@@ -663,7 +664,7 @@ Note the contested flag is not a hedge to be resolved away. If the cutoffs reall
 belongs in the output next to the band, which is why `contested` and `contested_note` are asset fields
 rather than commentary.
 
-**Status:** DONE → #139. Resolved by #139 — three haematocrit bands promoted from `_deferred` to
+**State:** DONE → #139. Resolved by #139 — three haematocrit bands promoted from `_deferred` to
 `thresholds`, each carrying its own `evidence_refs` (0.50 monitoring ceiling; 0.52 observed risk
 inflection, first-year scope recorded; 0.54 intervention threshold). Gate 3 fires for haematocrit;
 gate 1's safety arm is reachable. Asset and test only — no gate or producer logic changed. Owner: Luke.
@@ -678,7 +679,7 @@ which now sanity-gates prefills against the prescribed window as a local defence
 This is a scraper defect in the companion app's store, not health-app's. Raised here so it is not lost;
 the fix and its canonical question belong in `health-connect-app`'s `OPEN_QUESTIONS`, not this repo.
 
-**Status:** UNSTARTED — no blocker. Owner: Luke. **Next action:** carry to `health-connect-app`'s
+**State:** OPEN — no blocker. Owner: Luke. **Next action:** carry to `health-connect-app`'s
 `OPEN_QUESTIONS` (cross-repo; not editable from a health-app-rooted session).
 
 **Re-scoped (2026-07-25, backlog triage — Step 5 stale check):** the 4h prefill sanity-gate shipped in
@@ -715,7 +716,7 @@ nap item. Per #110 clause 1, that is the difference between "the wording does no
 the imported block's 53 nights carry naps, so exclusion costs almost nothing while a wrong attribution
 is silent. This is the standing behaviour until the question is answered, not a placeholder.
 
-**Status:** UNSTARTED — no blocker; the engine's exclusion path is the interim answer. Owner: Luke.
+**State:** OPEN — no blocker; the engine's exclusion path is the interim answer. Owner: Luke.
 **Next action to close it:** establish the nap item's referent from the VA CBT-I protocol
 documentation or by asking the clinician who administered the block — not from the workbook, which has
 already been searched to exhaustion.
@@ -739,7 +740,7 @@ Surfaced opening block 3. Its opening prescription (block id=2, rx id=10) is **d
 text. Block 2's basis was diary-derived. A later reader comparing the two blocks' bases cannot tell the
 two provenances apart from structured columns, and a device basis and a diary basis are not equivalent.
 
-**Status:** UNSTARTED — no blocker; the interim is the rationale text on rx id=10. Owner: Luke. **No
+**State:** OPEN — no blocker; the interim is the rationale text on rx id=10. Owner: Luke. **No
 column added mid-block** — block 3 is open, an additive nullable migration is safe, but a new provenance
 axis is a design choice not a hotfix. **Next action to close it:** decide whether `basis_tst` provenance
 warrants its own column (`device|diary|mixed`) or the rationale text suffices, before block 4 opens.
@@ -757,7 +758,7 @@ counts toward a titration cycle (`ADHERENCE_FAIL_N` = 3 of 7 → HOLD). The diar
 device `bedtime` are not the same instant, and the gate treats the preferred one interchangeably with
 the prescription's lights-out.
 
-**Status:** DONE → #127. Resolved by choosing the third option — prefer diary `lights_out` for adherence —
+**State:** DONE → #127. Resolved by choosing the third option — prefer diary `lights_out` for adherence —
 but ON PRINCIPLE (recall-only), not by calibrating an offset: the `samsung_bedtime` arm is removed from
 `classify_night`, so the detection lag can no longer flip a night. S4 (this session) tried to measure the
 sensor−diary lag over 2026-06-08..2026-07-26 and found only n=2 nights with both a diary `lights_out` and a
@@ -784,7 +785,7 @@ the dataset** and carries what block 2 lacked: waking cause, nap capture, alcoho
 investigation**. By-product from block 2's ledger, recorded but not evidence: nine prescriptions ran for
 `[3,7,5,6,6,6,7,7,6]` nights (range 3–7, median 6).
 
-**Status:** UNSTARTED — no blocker; the instrument exists and block 3 is accumulating the observations.
+**State:** OPEN — no blocker; the instrument exists and block 3 is accumulating the observations.
 Owner: Luke. Sibling to the `MIN_VALID_NIGHTS` undeterminability recorded at #114/#115 — the same "cannot
 be estimated from the one confounded block" about a different constant. **Next action:** once block 3 has
 post-extension cycles, fit the SE-recovery curve; if it supports a threshold, #124's "do not revisit
@@ -807,7 +808,7 @@ bite today only because nothing auto-evaluates (`evaluate_cycle` is called only 
 This is the general defect behind the anchor divergence #126 accepts: computation and ledger are divorced,
 so they can disagree only quietly, and nothing records which of the two produced a given verdict.
 
-**Status:** DONE → #128. `replay.py` reworked to read the effective prescription per cycle from
+**State:** DONE → #128. `replay.py` reworked to read the effective prescription per cycle from
 `cbti_prescriptions` (window, lights-out, AND wake anchor); cycles anchor to each prescription's
 `effective_from` and never span a boundary, so a mid-cycle correction is adjudicated against, not
 false-held. Verified read-only against prod block 1 (9 cycles, one per ledger prescription) and block 3
@@ -840,7 +841,7 @@ so this cannot be closed by the ledger's own commit. It is also the item the sch
 on cross-repo propagation: if the rules land in CLAUDE.md they hit the shared verbatim block and propagate to
 `health-connect-app`; if they land in project instructions they do not.
 
-**Status:** open — blocking nothing in the repo; blocks the rules being enforced anywhere. Decide the surface
+**State:** OPEN — blocking nothing in the repo; blocks the rules being enforced anywhere. Decide the surface
 before writing them, not after.
 
 ---
@@ -875,7 +876,7 @@ not a live-branch inventory; or (b) rewrite the practice to match the header, de
 relocating owed operator loops somewhere that survives. (a) is cheap and preserves the `Unblocks on`
 record; (b) costs a new home for owed loops and would discard 14 rows of history.
 
-**Status:** open — not Code's call to silently rewrite a header that 14 rows and the close-out
+**State:** OPEN — not Code's call to silently rewrite a header that 14 rows and the close-out
 terminal-state gate depend on. Blocks nothing; misleads every reader until decided, including the next
 model to read it.
 
@@ -911,7 +912,7 @@ reader beneath three projections. Neither is obviously right at this scale.
 `signal_type` to `"mechanical"` while the others don't default it at all) — that drift, if real, is the
 argument for consolidating, and nobody has looked.
 
-**Status:** open — no decision, own concern, own branch when taken. Ref: DECISIONS_LOG #134; the retracted
+**State:** OPEN — no decision, own concern, own branch when taken. Ref: DECISIONS_LOG #134; the retracted
 citation is recorded here so the refactor is not re-proposed on the same false basis.
 
 ---
@@ -936,7 +937,7 @@ instrument stays loose forever: untracked means it is invisible to review, absen
 - **Delete it** — it was scaffolding for the labs extraction work and its assertions may already be carried by
   `tests/test_labs_reads.py`. Nobody has checked whether they are.
 
-**Status:** open — NOT touched on `feat/checkin-injury-probe` (unrelated concern; the file stays untracked and
+**State:** OPEN — NOT touched on `feat/checkin-injury-probe` (unrelated concern; the file stays untracked and
 uncommitted). Ref: DECISIONS_LOG #84 for the precedent pattern; FEEDBACK §11.
 
 ---
@@ -953,7 +954,7 @@ wires the view to the live producer MUST (a) regenerate `interpretationExample.j
 `build_foundation` output and (b) add an `ungrouped` render section; wiring it against the current fixture
 would silently DROP every ungrouped marker.
 
-**Status:** UNSTARTED — no blocker; the view is inert (fixture-driven), so this is owed work, not a live
+**State:** OPEN — no blocker; the view is inert (fixture-driven), so this is owed work, not a live
 defect. **Next action** (at increment 2+, when the `context_builder` AI pointer is swapped to the live
 producer): regenerate the fixture from `build_foundation` output and add an `ungrouped[]` render section.
 Owner: Luke.
@@ -978,7 +979,7 @@ Same shape as Q27's reference-band gap and the constants already flagged undeter
 (`MIN_VALID_NIGHTS`, `MAX_MOVE_MIN`, `PLATEAU_TOL_MIN`): the value functions, but nothing on record says it
 is *right*.
 
-**Status:** UNSTARTED — NOT blocking; the gates function as built and every exclusion is recorded with a
+**State:** OPEN — NOT blocking; the gates function as built and every exclusion is recorded with a
 reason, so a wrong constant shows up in the output rather than acting silently. **Next action:** ground each
 against a named CBT-I source (SRT adherence tolerance, nap-inclusion convention) or a cross-block distribution
 once more than one live block exists — do not tune against the single discarded block. Owner: Luke.
@@ -1004,7 +1005,7 @@ in a single backfill at 2026-06-21 19:04Z; live sleep stages currently come from
 scraper). Also re-verify the HC `sleep_score` derivation and the `_section_health_connect`
 AI-prompt block, which both consume the mislabelled values.
 
-**Status:** DONE → #20. Fix deployed to Railway (PR #2) and all 31 HC rows
+**State:** DONE → #20. Fix deployed to Railway (PR #2) and all 31 HC rows
 re-synced from device on 2026-06-22 (30-day backfill, range 05-22→06-21). Verified
 against Railway Postgres: `light_sleep_minutes` now populated (was 0 on every row),
 deep/REM no longer swapped, slivers no longer truncated; corrected values track the
@@ -1021,7 +1022,7 @@ double-count. Must de-duplicate before `trustedDeepMin` is meaningful — e.g. p
 longest session per night (as `health_connect.py:_aggregate_day` does), or union by time
 range. Until then `runDeepConfidence` output is not trustworthy.
 
-**Status:** DONE — fixed in `health-connect-app` `36df9a2` (confirmed patch-present
+**State:** DONE — fixed in `health-connect-app` `36df9a2` (confirmed patch-present
 on HCA master): `collapseSleepSessions()` de-duplicates the overlapping SleepSession
 records before downstream consumers, behaviorally verified 9/9.
 
@@ -1039,7 +1040,7 @@ read model over existing stores, not a `health_events` spine. `health_events` de
 and narrowed to an additive projection scoped to the medical timeline; call timed to the
 lab pipeline.
 
-**Status:** DONE → #43
+**State:** DONE → #43
 
 ---
 
@@ -1048,7 +1049,7 @@ lab pipeline.
 Fork: `lab_result` typed table vs `user_knowledge_entries type="lab"` vs `health_events`.
 Blocked the #49 build, the #48 write path, and lever-dictionary wiring alike.
 
-**Status:** DONE → #52 (`lab_report` + `lab_result` table pair).
+**State:** DONE → #52 (`lab_report` + `lab_result` table pair).
 
 ---
 
@@ -1056,7 +1057,7 @@ Blocked the #49 build, the #48 write path, and lever-dictionary wiring alike.
 
 Where the #49 delta-gate threshold lives; global vs per-marker.
 
-**Status:** DONE → #53 (per-marker `min_meaningful_delta`, in-repo #51-family reference asset).
+**State:** DONE → #53 (per-marker `min_meaningful_delta`, in-repo #51-family reference asset).
 
 ---
 
@@ -1069,7 +1070,7 @@ create→list-back (if it does not). Resolve empirically: one throwaway live cre
 list-match against `get_exercise_templates`. **How-you-know** artifact required before
 any build.
 
-**Status:** DONE → #65 — the live OpenAPI spec types the `POST
+**State:** DONE → #65 — the live OpenAPI spec types the `POST
 /v1/exercise_templates` response as `{"id": <integer>}`, distinct from the canonical
 string UUID `GET` returns; the create loop adopts create→list-back (create → sync →
 resolve within the custom subset), so the POST-response representation never gates the
@@ -1084,7 +1085,7 @@ The connector calls `/exercise_templates/{id}/history`; community docs show
 `/exercise_history/{id}`. Verify against the live API and fix the connector path if it is
 wrong.
 
-**Status:** DONE → #69. Path corrected to `/v1/exercise_history/{id}` (template id unchanged)
+**State:** DONE → #69. Path corrected to `/v1/exercise_history/{id}` (template id unchanged)
 on `fix/hevy-exercise-history-path`; basis is official docs + 3 independent current clients.
 Live corroboration remains optional belt-and-braces (local Hevy MCP hung this session).
 
@@ -1137,14 +1138,14 @@ series cannot speak to it. The pre-install baseline ≈57 ms is not a baseline; 
 short, not long. **Historical rows are NOT reconciled here — see Q29** (install-history segmentation is
 the prerequisite; the changepoint is an APK-install event, not a commit).
 
-**Status:** DONE → #89 (instrumentation limb; (A) confirmed vs HCA master). Cross-refs Q13, Q18,
+**State:** DONE → #89 (instrumentation limb; (A) confirmed vs HCA master). Cross-refs Q13, Q18,
 Q29, issue #9, `BRANCHES.md` `feat/recovery-metrics-rhr`, HCA #19 / Q3.
 
 ---
 
 ## Q21. Does the lab-side expectation contract (#63 / SPEC_64) generalise to injury trajectories?
 
-**Status:** DONE (this session; no DECISIONS entry — logged conclusion only) — they **rhyme, they do not share code.** Both follow declare
+**State:** DONE (this session; no DECISIONS entry — logged conclusion only) — they **rhyme, they do not share code.** Both follow declare
 expectation → surface divergence → never suppress (lab gate-2 "annotate, don't hide" ≡ injury "surface,
 don't gate"). But the lab contract is bound to marker/delta semantics (`marker_groups.json`,
 `min_meaningful_delta`, two-gate axis-verdicts) while injury trajectory is a soreness series vs a
@@ -1162,7 +1163,7 @@ unmerged, and is NOT in that repo's `BRANCHES.md` — whose own header states "e
 here until merged+deleted." The store is violating its own rule. Needs a disposition: govern it (add to
 BRANCHES.md) or kill it. Not this repo's / this brief's job — logged only.
 
-**Status:** DONE → #91 — the branch now carries a dedicated row in `health-connect-app`'s `BRANCHES.md`
+**State:** DONE → #91 — the branch now carries a dedicated row in `health-connect-app`'s `BRANCHES.md`
 (added at HCA `f15b545`, "row the unrowed branch"). This question asked whether the branch was **governed or
 killed**; governing it discharges the question.
 
@@ -1190,7 +1191,7 @@ the keyword path) but contribute no region — needs a mechanism, since region_k
 against the taxonomy; (c) extend the taxonomy (e.g. a frontal-hip adductor/abductor strength region) — a
 `TAXONOMY_VERSION` bump. The adductor gap is the load-bearing one given the active pes anserine injury.
 
-**Status:** DONE → **DECISIONS_LOG #76**, option **(b)** with a correction. Not two states but THREE —
+**State:** DONE → **DECISIONS_LOG #76**, option **(b)** with a correction. Not two states but THREE —
 `tagged` / `adjudicated no-pattern` / `untagged` — via a `hevy_exercise_templates.adjudicated_at` timestamp,
 NOT a sentinel region_key (which would weaken fail-closed validation). G2 stands UNSOFTENED (option (a) was
 rejected: redefining coverage as "zero wrong tags" forfeits the ability to detect a real gap later). Option
@@ -1222,7 +1223,7 @@ gate anything. That is more load-bearing here than for a delta, because the fail
 asymmetric — an uncited delta produces a boring narration, an uncited safety threshold produces a
 false reassurance or a false alarm.
 
-**Status:** DONE → #104 — `safety_threshold` is a third class, and a third *gate*, not a third
+**State:** DONE → #104 — `safety_threshold` is a third class, and a third *gate*, not a third
 read-constant. It lives in its own asset (`backend/reference/safety_thresholds.json`) rather than in
 `lever_dictionary.marker_interpretation`, because the two existing constants are **measured**
 (CVI/CVA-derived, non-expiring) while a safety threshold is **policy** — committee judgement carrying a
@@ -1244,7 +1245,7 @@ Resolve by comparing **SHA-256 digests** local vs Railway — digests only, neve
 second clause. If they match, rotation is not a variable swap: every `api_key_encrypted` row was
 encrypted under the old key and must be re-encrypted, so the fix carries a data migration.
 
-**Status:** DONE → #111. **Both keys are prod-isolated — the digests differ on both.** No shared key,
+**State:** DONE → #111. **Both keys are prod-isolated — the digests differ on both.** No shared key,
 therefore no re-encryption migration over `api_key_encrypted` and no prod rotation on this account.
 
 **Method, which matters as much as the outcome.** A single script run under
@@ -1285,7 +1286,7 @@ Open: whether to ban `--kv` outright in the loop rules or require it be piped th
 and whether the seven existing transcripts are purged or retained after rotation, since they remain the
 exposure surface once the credential is dead only if it is in fact dead.
 
-**Status:** DONE → #111. Resolved by a two-layer prohibition: the standing rule in `CLAUDE.md`'s
+**State:** DONE → #111. Resolved by a two-layer prohibition: the standing rule in `CLAUDE.md`'s
 shared block (the enforcing layer) plus `.claude/settings.json` deny patterns (a speed bump, explicitly
 not relied upon — see #111 for why).
 
@@ -1329,7 +1330,7 @@ protocol". Or the asset could carry an explicit precondition object naming a dec
 admissible phase set — more authoring, and it says what it means. A guessed mapping silently decides
 whether LH/FSH suppression is expected or is news, which is the whole clinical content of that relation.
 
-**Status:** DONE → #143. Resolved by the **second** of the two shapes above — an explicit
+**State:** DONE → #143. Resolved by the **second** of the two shapes above — an explicit
 precondition object, not derived-phase vocabulary adoption. `hpg_gonadotropin_suppression` now carries
 `{ factor_key: "trt", admissible_phases: ["steady"], grade, rationale, evidence_refs, contested_note }`
 (authored by Luke), and the producer resolves it against the declared-state phase map to
@@ -1357,7 +1358,7 @@ Smallest fix: an authored `declared_factor_keys: []` on each lever node. Asset c
 filtering predicate then reads `is_assumable_present` on any matched factor — which is also what keeps an
 episodic peptide from being treated as present at a draw it may not have been present for.
 
-**Status:** DONE → #145. Resolved as the body's own "smallest fix": `declared_factor_keys` authored on
+**State:** DONE → #145. Resolved as the body's own "smallest fix": `declared_factor_keys` authored on
 all six lever nodes — only `testosterone_substrate_load` joined (to `["trt"]`), the other five `[]`
 (a truthful "no declared factor represents this lever", distinguishable from the field being absent). No
 declared-state entry was created for `alcohol`. The consumer — `shared_levers[]` already-in-play
@@ -1388,7 +1389,7 @@ extraction confidence, and the query it enables — which values a person has ac
 paper — needs its own field rather than being folded into `confidence`. This is the design call the
 increment turns on: a column on `lab_results`, or a separate verification record.
 
-**Status:** UNSTARTED — no blocker; nothing currently built depends on it. **Owner:** Luke — the design call
+**State:** OPEN — no blocker; nothing currently built depends on it. **Owner:** Luke — the design call
 (provenance column vs verification record) comes first; a partial fix would set the schema by accident.
 Deliberately not built this branch (the derived-confidence work makes the `Conf.` signal honest so this
 increment has something trustworthy to highlight against).
@@ -1414,7 +1415,7 @@ boot check is not a one-liner: `main` imports `database`, which constructs an en
 either a test harness with a throwaway env or a build-stage import in a deploy pipeline — and there is
 no pipeline to put the latter in (finding A). That coupling is why the two are one question.
 
-**Status:** UNSTARTED — no blocker; nothing built depends on it. **Owner:** Luke — design call on where a
+**State:** OPEN — no blocker; nothing built depends on it. **Owner:** Luke — design call on where a
 boot check would live (test harness vs build stage) given there is no pipeline, and whether CI is worth
 standing up for a single-developer project. Deliberately not built with the pin (production was down;
 restoring service and designing a verification gate are different work).
@@ -1451,7 +1452,7 @@ scope — read-only vs capture — before its route.
 (`passive_sleep_min` / `passive_hrv_ms`) — a silent failure mode, enforced at the projection as the labs
 read-back enforces #47. Real and hard, but display hygiene, not the gate.
 
-**Status:** UNSTARTED — no blocker; the engine's outputs exist to read. **Owner:** Luke — resolve #47
+**State:** OPEN — no blocker; the engine's outputs exist to read. **Owner:** Luke — resolve #47
 (Fork 1) FIRST; it decides whether an interim surface is state-only or must wait on the regulatory call.
 Scoped in (not "no interim surface until v2 titration") per the 2026-07-29 read-back triage. Numbered
 `Q60` at the `feat/frontend-readback` merge.
@@ -1489,7 +1490,7 @@ re-decided on *those* merits, not defended by a mislabel. Candidates to weigh:
 **No code change this session** (verify-only; producer/endpoint build is frozen). Recorded so the
 projection is re-examined on its own merits rather than inheriting "settled by #47."
 
-**Status:** UNSTARTED — no blocker; the fields exist on the stored rows, the question is whether the
+**State:** OPEN — no blocker; the fields exist on the stored rows, the question is whether the
 raw read-back should carry them and under what rationale. **Owner:** Luke — decide `computed_flag`
 against the #49 seam (not #47) and `confidence` against the misleading-at-a-glance concern, separately.
 Numbered `Q61` on the `gov/readback-riders` branch (pre-ff; max was Q60, no competing branch).
@@ -1498,7 +1499,7 @@ Numbered `Q61` on the `gov/readback-riders` branch (pre-ff; max was Q60, no comp
 
 ## Q62. How is `#47` enforced structurally for a generated field?
 
-**State:** open. **Blocks:** `axis_verdict.text`, and every future generated interpretation
+**State:** OPEN. **Blocks:** `axis_verdict.text`, and every future generated interpretation
 field. **Related:** Q60 (the same question for a CBT-I titration verdict).
 
 `#47` says enforcement is *"at the prompt layer **AND** structurally — no
@@ -1540,7 +1541,7 @@ Numbered `Q62` on the `feat/interp-producer-1a` branch (pre-ff; max was Q61, no 
 
 ## Q63. What does the interpretation tile show?
 
-**State:** open. **Blocks:** the hub tile set (#150). **Blocked by:** 4b-ii.
+**State:** OPEN. **Blocks:** the hub tile set (#150). **Blocked by:** 4b-ii.
 
 A design question, not a regulatory one — under #150 Constraint A a tile may carry counts, deltas and
 section structure. What it may not carry is a personalised priority ordering, which rules out the most
@@ -1567,7 +1568,7 @@ Numbered `Q63` on the `gov/navigation-model` branch (pre-ff; max was Q62, no com
 
 ## Q64. Do marker-authored member fields belong on `ungrouped[]` rows? `vitamin_d_25oh` gets no explanation today
 
-**State:** open. **Blocks:** nothing — the producer follows a consistent rule today. **Related:**
+**State:** OPEN. **Blocks:** nothing — the producer follows a consistent rule today. **Related:**
 `#138` (ungrouped markers render in their own section), `#152` (output shape), I9.
 
 Two of the emitted member fields are **marker-authored**, not group-authored:
@@ -1616,7 +1617,7 @@ Numbered `Q64` on the `feat/interp-mechanism-emit` branch (pre-ff; max was Q63, 
 
 ## Q65. Four of the five relation kinds carry no machine-readable demotion condition — asset gap, or permanent boundary?
 
-**State:** open. **Blocks:** any widening of #153's demotion predicate past `kind == "feedback"`.
+**State:** DONE → #154. **Was blocking:** any widening of #153's demotion predicate past `kind == "feedback"` — now permitted in principle but unbuilt; that widening lives in the branch-condition lane and `Q67` (its `co_movement` shape), not here.
 **Related:** #153 (the predicate), #63 (`marker_groups.json` is "purely relational"), #141 (the
 precondition object), I5/I8.
 
@@ -1665,7 +1666,7 @@ truth instead, and its authored strings would be **superseded rather than extend
 here so Q65 is not resolved on demotion's merits alone by a session that does not notice it
 invalidated the verdict content.
 
-**Status:** DONE → #154. Resolved toward branch (a), in a stronger form than this entry framed:
+**Resolution (#154).** Resolved toward branch (a), in a stronger form than this entry framed:
 relations gain a declared machine-readable condition decomposed into an **eliminative branch
 set** (`excluded` / `not_excluded` / `not_assessed`), not a single `demotes_when` predicate — so
 partial exclusion becomes reportable information rather than a binary. #154 also **corrects this
@@ -1680,7 +1681,7 @@ Numbered `Q65` on the `feat/interp-demotion` branch (pre-ff; max was Q64, no com
 
 ## Q66. `LabResult` has no supersede affordance, so a corrected result cannot be marked as replacing an earlier one
 
-**State:** open. **Blocks:** nothing today; live from the next lab upload onward.
+**State:** OPEN. **Blocks:** nothing today; live from the next lab upload onward.
 **Related:** `#156` (confirm-time duplicate detection), `#155` (retain-raw), `#52` (compute-on-read).
 
 `#156` offers `skip` and `keep_both` on a marker collision and deliberately does not offer
@@ -1724,7 +1725,7 @@ Numbered `Q66` on the `gov/two-open-questions` branch (pre-ff; max was Q65, no c
 
 ## Q67. `hpg_substrate_co_movement` is phase-conditional, and no `#154` condition shape expresses it
 
-**State:** open. **Blocks:** the relation branch-condition lane's `co_movement` shape work.
+**State:** OPEN. **Blocks:** the relation branch-condition lane's `co_movement` shape work.
 **Related:** `#154`.
 
 **Pointer entry — the case is already named in `#154`, so this is work-tracking, not discovery.**
@@ -1772,7 +1773,7 @@ Numbered `Q67` on the `gov/two-open-questions` branch (pre-ff; max was Q66, no c
 
 ## Q68. A full-collision re-upload creates an empty `LabReport` envelope, and nothing decides whether it should
 
-**State:** open. **Blocks:** nothing today — the empty envelope is now visible as a fault, so this
+**State:** OPEN. **Blocks:** nothing today — the empty envelope is now visible as a fault, so this
 is a correctness-of-model question, not a live defect. **Related:** `#155`, `#156`, `#157`.
 **Numbering collision — read this before filing the cross-date operand question.** The brief that
 produced this entry refers to "Q68's cross-date operand question" as though it exists; it is not in
@@ -1803,7 +1804,7 @@ trigger, not a blocker:** the schema change is possible now, it is simply not ye
 
 ## Q69. `marker_series` has no temporal bound, so the interpretation output is a composite of draws rather than a reading of one
 
-**State:** DONE -> #159. **Blocks (until the wiring bar is met):** wiring the interpretation view to live data (1b).
+**State:** DONE → #159. **Blocks (until the wiring bar is met):** wiring the interpretation view to live data (1b).
 **Related:** `#155` (retain-raw), `#154` (eliminative branch model), `#147` (many panels per draw),
 `Q65` (four relation kinds carry no machine-readable condition), `Q68` (empty envelope),
 `Q66` (supersede affordance).
@@ -1935,7 +1936,7 @@ does not discharge a concern about invisibility.
 
 ## Q70. A censored delta reports `delta_within_min_meaningful` without ever consulting the threshold, so a large suppression reads as quiet
 
-**State:** open. **Blocks:** nothing today — the surfacing verdict is coincidentally correct on the
+**State:** OPEN. **Blocks:** nothing today — the surfacing verdict is coincidentally correct on the
 live panel (see below), which is precisely why this needs recording rather than fixing in passing.
 **Related:** `#153` (the demotion predicate), `#141` (the precondition object), `Q69` (temporal
 bound), I8.
@@ -1997,7 +1998,7 @@ generate prose.
 
 ## Q71. `min_meaningful_delta` has no time dimension, so an 8% move over 40 days and over 154 days are the same event to gate 1
 
-**State:** open. **Blocks:** nothing today. **Related:** `Q69`/`#159` (provenance partitioning,
+**State:** OPEN. **Blocks:** nothing today. **Related:** `Q69`/`#159` (provenance partitioning,
 which makes the interval visible but not consequential), `Q70` (censored deltas), `#95` (I1 extended
 to read-constants), I1.
 
@@ -2041,7 +2042,7 @@ move was or was not meaningful.
 
 ## Q72. Sprint max velocity has no home on the v0 axis list, so the one Catapult measure most worth capturing cannot be recorded
 
-**State:** open. **Blocks:** recording `max_velocity_ms` from the GPS unit — and only that; the rest
+**State:** OPEN. **Blocks:** recording `max_velocity_ms` from the GPS unit — and only that; the rest
 of the `capability_observations` battery (`#161`) is seeded and working. **Related:** `#161`
 (the measure registry and the observations table), the deferred Catapult `.gt` backfill.
 
@@ -2099,3 +2100,39 @@ after it inherits the same shape and the same reason for exclusion.
 **Resolve before:** the Catapult `.gt` backfill runs (`.gt` = zip → brotli → msgpack, speed in mm/s),
 since that is the point at which a max-velocity series exists and needs a region to be written to.
 Not before — nothing is lost by leaving it open while no sprint data is being ingested.
+
+
+## Q73. The declared-state block sits in front of the content it contextualises
+
+**State:** OPEN. **Blocks:** nothing. **Related:** the interpretation view; `#47`.
+
+The interpretation page renders the declared-factor chips (23 on the live page per the 2026-08-02
+review) between the panel header and the first finding. It is honest and correct, and it is the
+largest block on the page while being context rather than content.
+
+The proposed principle is placement, not compression: a declared factor belongs **where it changes
+a reading**. TRT is why LH and FSH are suppressed and belongs against `hpg_axis`; it is largely
+irrelevant to `erythroid`. This is the same principle as the fix already applied to the "not this
+panel" badge, where the member defers to a coherent group.
+
+Candidates:
+- **(a) Collapsed summary plus per-group citation** — a one-line count at the top, with each factor
+  cited at the group whose reading it affects. Most consistent with the rest of the design.
+- **(b) Move the block below the findings** — cheapest; keeps it in one place, removes it from the
+  path to the content.
+- **(c) Compress in place** — smallest change, does not address that context precedes content.
+
+**Resolve before:** the hub shell (`#150`) lands, since a busy page is what the hub exists to relieve
+and this block is a large part of the busyness.
+
+## Q74. A declared factor with no derived phase cannot satisfy a `feedback` precondition — evaluability, not a data gap
+
+**State:** OPEN. **Blocks:** authoring any `feedback` relation precondition against a factor key whose `derive_phase` yields `None`. **Related:** `#85` (`derive_phase`), `#141` (the precondition object), `#154`/`Q67` (the branch-condition lane), `Q65`.
+
+`hgh` and `ultra_muscleze_night` render as bare keys with no phase on the interpretation view. This is **not a data gap**: `derive_phase` (`backend/declared_state.py`) returns `None` by design for a superseded/inactive continuous factor and an inactive episodic one, and `#85` records exactly this — `hgh→None`, `ultra_muscleze_night→None` — as intended derivation, not omission.
+
+The consequence worth checking is evaluability, not display. A `feedback` relation's precondition resolves `factor_key` + `admissible_phases` against the factor's derived phase (`gates.py` `_resolve_precondition`, `#141`). A factor whose phase is `None` can never resolve `precondition_status == "satisfied"` — so **it can never be the basis of a demotion**. For `hgh` / `ultra_muscleze_night` today nothing authors such a precondition, so this is latent, not live.
+
+Establish, before any precondition is authored against a currently-`None` key: is the `None` the correct permanent answer for that factor (it genuinely has no interpretable phase), or a seam that a declared washout/re-entry window (the `as_of` parameter `derive_phase` accepts but no rule consumes) is meant to fill later.
+
+**Resolve before:** a `feedback` precondition is authored against any factor key outside the currently phase-bearing set.

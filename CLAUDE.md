@@ -69,8 +69,9 @@ report; never land on it.
 
 ### State vocabulary
 
-Four states, exhaustive, no fifth. Applies to `BRANCHES.md` Status, `OPEN_QUESTIONS.md`,
-`ROADMAP.md`, and close-outs.
+Four work-states, exhaustive, no fifth. Applies to `BRANCHES.md` Status, `ROADMAP.md`, and
+close-outs. `OPEN_QUESTIONS.md` uses the **question-state** axis below instead — a question is
+not a work item.
 
 - **DONE** — landed on master (SHA) or applied to a named UI file. Nothing further required by
   anyone.
@@ -83,6 +84,17 @@ Four states, exhaustive, no fifth. Applies to `BRANCHES.md` Status, `OPEN_QUESTI
 - **UNSTARTED** — untouched.
 
 No "in progress": half-done work is **BLOCKED** (has a blocker) or **UNSTARTED** (doesn't).
+
+**Question state (`OPEN_QUESTIONS.md` only).** The four work-states do not fit a question — an
+untouched question is a live fork, not "UNSTARTED", and a question awaiting a dependency is not
+"BLOCKED". A question carries exactly one state, under the sole label `**State:**` (never
+`**Status:**`):
+
+- **OPEN** — the fork is live; no decision answers it yet. A question gated on a dependency
+  before it is *worth* deciding is OPEN with a `**Blocked by:**` note — not BLOCKED.
+- **OWED** — the fork is decided, but a named verification or loop-close is still outstanding
+  (mirrors the work-state OWED).
+- **DONE → #N** — resolved; decision `#N` is the answer (mirrors the work-state `DONE → #N`).
 
 ### DECISIONS_LOG discipline
 
@@ -106,7 +118,9 @@ The trigger is not the payload. The payload is defined here; the snippet/command
 must match it.
 
 - **Session open** — at session start, before acting on any brief, Code reports the current
-  `DECISIONS_LOG.md` max decision number (matching the file's actual `###` heading format).
+  `DECISIONS_LOG.md` max decision number — counted period-agnostically with `^### [0-9]+`,
+  never `^### [0-9]+\.`, because entries `126`–`128` carry no trailing period and a
+  period-requiring sweep undercounts by three and invents phantom gaps (verified 2026-08-02).
   Chat re-aims any brief against it, so a stale project copy never masquerades as canon.
 - **Chat close-out (`;cc`)** emits the **pending-commit queue**: canonical-format
   `DECISIONS_LOG` / `OPEN_QUESTIONS` entries for everything decided that session, each
@@ -190,97 +204,27 @@ must match it.
 
 ### Conventions
 
-- **`FEEDBACK.md` §19 is the integrity ledger** (health-app only — the shared canonical-stores
-  row above is unchanged and still describes the file correctly; §19 is a section of that file,
-  not a new store). It records failures in the analysis loop — `HUMAN` / `MODEL` / `COUPLED` —
-  as a table: append-only for entries, `status` mutable (`STANDS` / `STRUCK`). Two rules bind
-  anyone writing to it: a row exists **only** if a procedural change would have prevented the
-  failure (`prevention` is mandatory and non-null — no prevention, no row), and `caused_by` is
-  **derived** as the inverse of `caused`, never authored independently. Ids are never reused and
-  gaps are expected. §1–§11 keep their own remit; §19 is the structured formalisation of what
-  §1/§3 do in prose, not a redefinition of the file. See DECISIONS_LOG #129–#132.
+- **`FEEDBACK.md` §19 is the integrity ledger** (health-app only; a section of `FEEDBACK.md`, not a new store). Append-only rows typed `HUMAN`/`MODEL`/`COUPLED`, `status` mutable (`STANDS`/`STRUCK`); a row exists only if a procedural change would have prevented the failure (`prevention` mandatory, non-null), and `caused_by` is derived from `caused`, never authored. See DECISIONS_LOG #129–#132.
 
-- **Hevy:** the canonical creation method is `create_workout`, not `create_routine` —
-  custom exercise UUIDs do not resolve via the routine endpoint (confirmed API
-  limitation). See `Hevy_Pattern` for the field/type matrix.
+- **Hevy:** canonical creation is `create_workout`, not `create_routine` — custom exercise UUIDs do not resolve via the routine endpoint (confirmed API limitation). Field/type matrix: `Hevy_Pattern`.
 
-- **SCHEMA.md is repo-canonical** (root), the human/AI-readable mirror of
-  `backend/migrations/`. Code updates it in the same commit — or an immediately
-  paired governance commit — as any migration that changes the schema. It must
-  never lag master; a canonical-but-stale schema doc is worse than a stale
-  project-knowledge copy.
+- **SCHEMA.md is repo-canonical** (root), the readable mirror of `backend/migrations/`. Update it in the same commit (or an immediately paired governance commit) as any schema-changing migration — it must never lag master.
 
-- **Chat→Code file transport.** When a project-knowledge doc must cross to Code, chat
-  grabs it from the project mount (byte-faithful read) and emits it as a raw fenced
-  block — never copied from the rendered project view, which flattens markdown (bold,
-  inline code, numbered lists, horizontal rules). The human carries the paste; Code
-  diffs the written file against the intended source before landing. Repo-canonical
-  docs are edited in place and never cross this transport.
+- **Chat→Code file transport.** A project-knowledge doc crossing to Code is emitted as a raw fenced block read byte-faithfully from the mount — never copied from the rendered view (which flattens markdown); Code diffs before landing. Repo-canonical docs are edited in place and never cross this transport.
 
-- **Reference-JSON edit guard (standing, #98).** `backend/reference/*.json` is hand-aligned
-  and pure ASCII, with non-ASCII written as `\uXXXX`. Two rules, both mechanical:
-  1. **Never construct a `\uXXXX` escape inside heredoc source.** The Bash tool's heredoc
-     consumes one backslash *even when quoted* (`<<'EOF'`), so `—` in source arrives at
-     Python as a literal em dash and gets written into the file. Build the backslash via
-     `chr(92) + "u2014"`, or write the script to a file first.
-  2. **After any edit, assert the file is pure ASCII with zero literal em dashes** —
-     `raw.isascii() and raw.count(chr(0x2014)) == 0` — and that it still parses. This fires
-     regardless of who is careful.
-  Rationale: the failure is silent *in the direction that writes bad bytes*. The malformed
-  case succeeds and produces a valid, value-identical file that violates the encoding
-  convention; only the assertion catches it. Also: **no `json.dump` round-trips** on these
-  files — re-serialising reflows every hunk and rewrites escapes, burying a small change in
-  a whole-file diff. Surgical text edits only.
+- **Reference-JSON edit guard (#98).** `backend/reference/*.json` is hand-aligned pure ASCII (non-ASCII as `\uXXXX`). Never build a `\uXXXX` escape in heredoc source (the Bash tool eats one backslash even when quoted — use `chr(92)+"u2014"` or a script file); after any edit assert `raw.isascii() and raw.count(chr(0x2014))==0` and that it still parses; no `json.dump` round-trips (they reflow every hunk). The bad-byte failure is silent — only the assertion catches it.
 
-- **Never chain a verification to an action in one command (standing, #103).** A check whose
-  failure cannot stop what follows is not a check. Run the check, read the result, then act —
-  or make the action explicitly conditional on the check's exit status. Earned when a failed
-  assertion was followed by `git add && git rebase --continue` in the same command, completing
-  a rebase that committed conflict markers into an append-only ledger. Chaining is a reflex,
-  not a decision, which is why it needs a gate rather than care. See `FEEDBACK` §17.
+- **Never chain a verification to an action in one command (#103).** A check whose failure cannot stop what follows is not a check. Run it, read it, then act — or make the action conditional on its exit status. See `FEEDBACK` §17.
 
-- **Controls discriminate on identity, not just function (standing, #103).** A positive control
-  proves the instrument works; it does not prove the thing probed is the thing you meant. Where
-  a probe could succeed against the wrong artefact — stale refs, cached CDN copies, reused
-  branch names — pin to a SHA or assert on content only the intended version carries. Earned
-  when three honest HTTP 200s described pre-rebase bytes. See `FEEDBACK` §17.
+- **Controls discriminate on identity, not just function (#103).** A positive control proves the instrument works, not that it probed the thing you meant. Where a probe could hit the wrong artefact (stale ref, cached copy, reused branch name), pin to a SHA or assert on content only the intended version carries. See `FEEDBACK` §17.
 
-- **Match on anchors, not substrings — especially in an audit (standing, #113).** A grep that
-  decides whether something is recorded must anchor on the form the thing actually takes
-  (`^### 104\.`, `^## Q45\.`, a whole word) rather than a bare substring. Unanchored, the audit
-  can report the very condition it is auditing for: a check for `nap` in `BRANCHES.md` matched
-  **`snapshot`**, which would have certified a decision as recorded when it was not recorded
-  anywhere. Same defect as a bare `s/104/107/` renumber, and the same fix. This is
-  "controls discriminate on identity" (above) applied to search patterns: a hit count answers
-  *did the pattern fire*, never *did it fire on the thing you meant*. **Read the matches, not
-  the count** — that habit is what caught this one, and it is cheaper than the rule.
-  **Corrected documents produce this false positive BY DESIGN** *(added `8771a19`, POSTDATES #113 —
-  this clause is not in that entry's text, which is locked; it extends the convention, not the
-  decision)*. The correct-don't-delete
-  discipline leaves each superseded claim quoted inside its own correction, so an audit of a
-  corrected doc greps a hit for the very text it is checking was removed — `not yet implemented`
-  returned 1 in `docs/checkin-schema.md` immediately *after* the correction landed, and the hit was
-  the correction note quoting it. Expect the shape; read the line.
+- **Match on anchors, not substrings — especially in an audit (#113).** A recorded-or-not grep must anchor on the form the thing takes (`^### 104\.`, `^## Q45\.`, a whole word), never a bare substring, and you **read the matches, not the count**. Corrected docs produce this false positive by design — the superseded claim is quoted inside its own correction — so expect the hit and read the line *(this by-design clause postdates the locked #113 entry; added `8771a19`, it extends the convention, not the decision)*. See `FEEDBACK` §17.
 
-- **Verify a deploy after it settles, and confirm which instance answered (standing, #116).** A check
-  against a system mid-deploy can return a **well-formed answer from the outgoing instance**. At the
-  phase-2 merge, `railway ssh` → `alembic current` returned the *pre-merge* revision with only the
-  pre-merge migration file present; `railway deployment list` showed the new deployment SUCCESS and the
-  previous one REMOVING — the SSH had landed on the draining instance. The retry returned the correct
-  revision. Read alone, the first answer says "the deploy did not take" and sends you hunting a failure
-  that does not exist. **Check `railway deployment list` for SUCCESS before trusting an in-container
-  answer**, and prefer a probe whose result differs between the two images (a file listing, not just a
-  version string). Third axis alongside #110 clause 1 (scope — did the search look at anything) and
-  #113 (pattern — did the match mean what it appears to): this one is **timing — was the answer
-  current**, and neither of the others would have caught it.
+- **Verify a deploy after it settles, and confirm which instance answered (#116).** A mid-deploy check can return a well-formed answer from the *outgoing* instance. Check `railway deployment list` for SUCCESS before trusting an in-container answer, and prefer a probe whose result differs between the two images (a file listing, not a version string). The **timing** axis — was the answer current.
 
-- **A deploy check must cover every service that changed, with a per-service discriminating probe (standing, #121).** This project is **two Railway services** — `health-app-backend` and `health-app-frontend` — deploying from one repo. `alembic current` / a migration-file listing verifies the backend and is **structurally blind to the frontend**: it cannot fail on an undeployed or mis-rooted frontend, so a green backend probe reads as "deployed" while a frontend change may be unshipped. Two frontend merges (`2f9004e` `CheckInAM.jsx`, `9331c31` `NightlyCloseOut.jsx`) were each reported deployed on a backend-only check; both happened to ship, which is luck, not verification. **The frontend probe is a served-bundle content grep:** fetch the live asset (`curl $FRONTEND_URL/` → the `assets/index-*.js` name → `curl` it) and grep for a string literal only the new code carries (`"Tonight's sleep window"`, `"Sleep diary"`) — string literals survive minification, and the built hash differs by environment so it is **not** a reliable probe on its own. `railway service health-app-frontend` then `railway deployment list` splits the three failure modes (nothing triggered / FAILED / SUCCESS-but-wrong-tree). Same discriminating-probe logic as #116, applied to the service the backend probe never sees: #116 is **timing** (was the answer current), this is **coverage** (did the check see every service that changed).
+- **A deploy check must cover every service that changed (#121).** Two Railway services deploy from this repo (`health-app-backend`, `health-app-frontend`); a backend probe (`alembic current`) is structurally blind to the frontend. Probe the frontend by its served bundle — fetch the live `assets/index-*.js` and grep a string literal only the new code carries — then split failure modes with `railway service … && railway deployment list`. The **coverage** axis to #116's timing.
 
-- **Push branches even while holding for review (standing, #98).** A local-only branch is
-  unreadable to chat — `raw.githubusercontent.com` 404s — so a "hold before merge" gate that
-  chat cannot independently verify rests on Code's report alone, which is the one thing the
-  loop's evidence rules exist to avoid. Pushing costs nothing and is not a merge. Push at the
-  point work becomes reviewable, not at the point it lands.
+- **Push branches even while holding for review (#98).** A local-only branch is unreadable to chat (`raw.githubusercontent.com` 404s), so a hold-gate chat cannot verify rests on Code's word alone. Pushing is not a merge; push when work becomes reviewable, not when it lands.
 
 ### Tooling
 

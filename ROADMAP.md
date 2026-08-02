@@ -1,6 +1,6 @@
 # ROADMAP
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 ---
 
@@ -55,8 +55,12 @@ A group surfaces if any member trips any gate, which routes it to What Moved rat
 
 _Live, undated — no external date orders these; pick by readiness._
 
+**Post-1b next lanes (2026-08-02 reconciliation).** `ROADMAP.md` is the single canonical answer to "what's next" (per the canonical-stores table); the committed close-out's next-action and any chat proposal are candidates until promoted here. With 1b delivered, the interpretation lane's sequenced continuation remains increments **2 (rephrase) -> 3 (lever-tap) -> 5 (go-live)** in the build-sequence block above. Separately, the **hub shell (#150)** is now unblocked and is the operator-preferred next pick, with **`lab_accession`** as the strongest small alternative — both queued as rows below. Dated NOW items still precede these.
+
 | Item | Notes |
 |------|-------|
+| **Interpretation hub shell (#150)** — now UNBLOCKED | 4b-ii closed (2026-08-01), which was #150's sole build-deferral (see the 4b-ii cell above). The other half of the session that opened this review: the "busy main screen" complaint #150 answers with hub-as-home, and the dashboard has since accreted another link, so the problem is growing rather than static. Recommended next lane per the 2026-08-02 review and close-out; final priority is Luke's. Owner: Luke. |
+| **Persist `lab_accession`** — small lane | `lab_accession` is parsed at extract and discarded at confirm; one column unlocks report identity, a dedupe key above the result rows (`Q68`), and episode scoping (`#159`'s do-not-revisit dependency). Owner: Luke. |
 | **CBT-I user surface (interim)** | The titration engine is built (backend `cbti/`, #114/#115/#117/#118) but CBT-I is invisible in the app — no route/page/nav. **Gating fork is #47, not display hygiene:** the engine's *state* (current prescription: window/lights-out/anchor; cycle position) is an education-safe read-back, but its **MOVE/REVERSE verdict** surfaced as a directive is the AI layer giving a clinical instruction — resolve #47 (show state-only vs show the action) BEFORE building. Second fork: diary capture (operator-script vs in-app; in-app re-opens Q45). I1 sensor firewall (recall-diary only, never Samsung passive sleep) is a hard constraint but a projection-level one, not the gate. See OPEN_QUESTIONS **Q60**. Owner: Luke. |
 | CBT-I module phase 2 (engine + surfaces + ISI) | Phase-1 substrate landed on `feat/cbti-module` (held for review, DECISIONS_LOG #107/#108/#109): schema + completed-block import (1 block, 9 prescriptions, 53 nights, SE-reconciled). Phase 2 = titration engine (weekly eval; sufficiency/regularity/adherence gates; TST-plateau exit with SE≥85% as a floor; **replay against the imported block = Gate 5**); AM/PM surfaces with the 12h-clock prefill sanity-gate (Q42); ISI 7-item capture. Separate brief. Confirm the VA nap-timing convention before the engine relies on the `naps_min` date−1 read. **LARGELY LANDED (2026-07-25):** engine (#114/#115), capture surfaces + block 3 opened live (#117/#118/#119), and **ISI capture/storage** (table `cbti_isi` migration `d3f7a1908c62`; block 3 baseline backfilled — corrects the earlier stale "ISI not captured" framing: it was captured 24 Jul, the gap was storage, now closed). Still open: PM prescribed-lights-out display and the manual evaluation trigger (#118's unbuilt half). **Remaining piece — the manual evaluation trigger — is promoted to a dated NOW row (~31 Jul); this row is now programme history.** |
 | Scraper canary + honest score degradation | Detect null/stale/implausible scraper output. Surface degraded state to user when HRV unavailable — never silently score without it. |

@@ -951,3 +951,32 @@ the merge that was supposed to resolve them, invisible until a later read.
 — if it names fewer files than the edits should have touched, an edit did not save, which is silent. The
 repair itself (`#149`/`Q59`, this entry) was staged by name for exactly this reason. No new decision: the
 number-at-merge rule was not followed, not changed.
+
+
+## 22. A brief that cites governance from memory sends Code to verify an invention — carry the quote or point to the entry ([[§12]], [[§18]])
+
+**Rule:** a chat-side brief leaning on a committed `DECISIONS_LOG` / `OPEN_QUESTIONS` entry **carries
+that entry's text verbatim**, or names the entry and tells Code to read it before acting — it never
+paraphrases governance from memory. A remembered entry is a claim about an unseeable surface ([[§12]]):
+declarative in mood, unattested in fact, and it costs a verification round every time the memory is wrong.
+
+Three governance quotes were reconstructed from memory in one session (2026-08-02 review) and each was
+wrong in a way that sent Code hunting:
+- `#154` was cited as needing "a fourth relation state" and as concerning "operand provenance". Neither
+  is in `#154`; both belong to `#159`, whose text reads *"adding a fourth state would be a category
+  error"* and *"Operand provenance is not a resolution of a branch; it is a property of the inputs"*.
+  `#154`'s branch resolutions are `excluded` / `not_excluded` / `not_assessed`.
+- `#159` was quoted as "labelled and separated". The repo had **already caught this exact misquote**:
+  `#160` records the brief quoting `#159` as "labelled and separated rather than merged" when the
+  committed text is *"is **labelled** rather than merged"*. An entry existed only to correct the
+  paraphrase — and the paraphrase recurred after it.
+- The closeout's own `DECISIONS_LOG` maxima ("155 headings for a max of 158") were stale: master ran to
+  **#160** at review (157 with a trailing period, 160 period-agnostic; `#161` has since landed). The number that anchors a re-aim was
+  itself remembered wrong.
+
+**Mitigation, cheap:** a brief citing an entry carries the quote, or writes *"read `#N` before acting on
+this"*. This is [[§18]]'s attestation-vs-measurement in the authoring direction — a remembered entry is an
+attestation, the file is the measurement — and the `#159`→`#160` loop is the proof it is not free: the
+same string was paraphrased wrong twice, once after an entry was written to fix it. (The session also
+recorded a related pattern — illustrations chosen from the shape of an identifier rather than from data;
+those specific instances are in the session report and are not re-verified here.)
