@@ -698,6 +698,13 @@ closed by tonight's gate.
 terminating on wake-date W from `date = W-1`, which is only correct if the instrument's nap item refers
 to the day *preceding* the recorded night. **The instrument does not say.**
 
+**Now VISIBLE, still unresolved (2026-08-02, the `#118` PM trigger).** The evaluation offer renders
+`nights_excluded` as a dated list with each exclusion's reason, not as a count, so the operator can
+see which nights a titration decision dropped and on what grounds. That surfaces the exposure — a
+nap exclusion resting on this unverified attribution is now legible at the moment the decision is
+witnessed — but it does not settle the attribution. Q45 still closes from the VA protocol docs or the
+administering clinician, not from code.
+
 **This search was run, and it was scoped.** Every text cell across all five sheets of the VA CBT-I
 Sleep Diary Calculator export was matched against both a nap pattern and a temporal pattern
 (`yesterday|today|last night|previous day|during the day|...`). Every nap reference is bare:
@@ -1541,7 +1548,7 @@ Numbered `Q62` on the `feat/interp-producer-1a` branch (pre-ff; max was Q61, no 
 
 ## Q63. What does the interpretation tile show?
 
-**State:** DONE → #NEXT (integer claimed when `feat/hub-shell` fast-forwards to master).
+**State:** DONE → #162.
 
 Resolved to candidate **(a)**, with one amendment: the shipped string reads `collected <date>`, not
 `generated <date>`. `meta.generated_at` is stamped at request time, so it is always "now" and says

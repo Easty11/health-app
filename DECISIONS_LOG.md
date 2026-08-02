@@ -5830,7 +5830,7 @@ are the surfaces to re-read — not the append-only rule, which is the point of 
 
 ---
 
-### #NEXT. The interpretation hub tile shows structural counts, not a priority ordering (resolves Q63)
+### 162. The interpretation hub tile shows structural counts, not a priority ordering (resolves Q63)
 
 **Decision:** Under `#150` Constraint A the interpretation tile carries Q63 candidate (a) — counts,
 section structure and recency read from the existing `GET /interpretation` payload. The tile routes
@@ -5855,8 +5855,10 @@ counts is inference from their own data, not the product ordering their problems
 Constraint A draws from `#47`: "3 markers out of range" is arithmetic (in), "3 need attention" is
 personalised prioritisation (out).
 
-**Status:** Decided (design + build). Resolves `Q63`. Tile built on `feat/hub-shell`, pushed and
-held for review; not on master at time of writing.
+**Status:** Decided (design + build). Resolves `Q63`. Tile built on `feat/hub-shell` and merged to
+master at `001df4c`. (The number was claimed late: the branch fast-forwarded while the heading still
+read `#NEXT`, so `#162` was resolved on the next branch rather than pre-ff as number-at-merge
+requires. Recorded rather than silently corrected — the gap is the point.)
 
 **How you know:**
 - The copy is a pure function (`interpretationTileCopy`), not a literal buried in JSX, so the `#47`
@@ -5877,5 +5879,62 @@ held for review; not on master at time of writing.
 (Q62 / 4b-ii follow-ons); `#47` classification moves (its own revisit clause), which would move
 Constraint A; or `/interpretation` gains a cached/stored generation, at which point `generated_at`
 becomes a real recency signal and the collected-vs-generated amendment above is worth re-reading.
+
+---
+
+### #NEXT. The PM evaluation trigger offers on elapsed DAYS, refuses to mint a block close, and replays the whole block to reach one
+
+**Decision:** Building `#118`'s PM half forced three calls neither `#118` nor `#128` settles. All
+three are recorded here because each has a live consequence for the operator.
+
+1. **Eligibility is CALENDAR DAYS elapsed since `effective_from`, not logged nights.** `#118` says
+   "once >=7 days have elapsed"; `#128` describes the same unit as ">=7 nights", and the
+   commissioning brief specified `nights_since_effective_from >= 7`. Days wins. `replay()`'s cycle
+   spans are already calendar-dated (`cycle_start + CYCLE_NIGHTS - 1`), so days is the unit that
+   matches the code both decisions point at. Night COUNT still governs the DECISION, through the
+   engine's existing sufficiency gate (`>= MIN_VALID_NIGHTS` valid), which returns a HOLD naming the
+   shortfall. Both quantities are reported to the operator.
+
+2. **A `close` recommendation is surfaced but NOT acceptable.** `#118` keeps block close
+   engine-driven, and no close path is built. The trigger therefore renders the recommendation with
+   no accept control and the accept endpoint refuses it (409), rather than minting a
+   terminal-looking prescription that would leave the block open.
+
+3. **The trigger runs the FULL block replay, not the live prescription in isolation.**
+   `prior_basis_tst` accumulates across every prior cycle and the TST-plateau exit needs two of them.
+
+**Rationale:** (1) is the one with teeth. Gating the OFFER on logged nights strands the operator:
+cycle 1 can never reach 7 logged nights once one of its 7 calendar days goes unlogged, so a single
+missed diary entry withholds the evaluation permanently and there is no path back to it — the cycle's
+span is in the past. That converts a data gap into a silent halt of titration, which is the
+under-firing failure mode `#124` already names as the observed one. Eligibility asks "has the cycle
+ended", a calendar question; sufficiency asks "do these nights support a decision", a count question
+the engine already answers. Conflating them puts a data-quality gate in front of the offer.
+(2) refuses rather than improvises: minting on a `close` would write a row whose decision the ledger
+cannot act on. (3) is not an optimisation — evaluating the live cycle alone starts the plateau
+history empty, so `close` could never fire and the engine would be structurally unable to recommend
+the one decision that ends a block.
+
+**Status:** Decided and built on `feat/cbti-eval-trigger`. `GET /checkin-v2/cbti/evaluation` (offer,
+read-only) and `POST /checkin-v2/cbti/evaluation/accept` (witnessed mint), surfaced in
+`NightlyCloseOut.jsx`. Reuses `#128`'s ledger read via `cbti.replay.evaluate_live_cycle`.
+
+**How you know:**
+- 11 new tests (`test_cbti_eval_trigger.py`); suite **589 passed** (578 baseline +11), no regressions.
+  `test_cbti_replay.py` green **before** the endpoint was added, so the extraction is proven
+  decision-neutral for the replay.
+- The (1) failure mode is pinned by a test that logs 6 of 7 calendar nights and asserts the offer is
+  still made, with `nights_since_effective_from == 6` visible.
+- `#128` reuse is pinned by a test reproducing block 3's shape (a correction superseding the seed
+  mid-block): the basis reports the correction's lights-out and window, not the seed's.
+- The append-only invariant is asserted by column diff, not by inspection — the prior row is
+  re-read after accept and the set of changed columns is asserted `== {effective_to, superseded_by}`.
+- **NOT verified against prod.** `railway run` injects the internal-only `DATABASE_URL` (no public
+  URL variable exists on the backend service) and `railway ssh` was blocked in-session. The live
+  block-3 read the brief asked for is OWED, not claimed.
+
+**Do not revisit unless:** a block-close path is built (which retires call 2), or the settling-period
+question (`Q48`) resolves into an actual gate — at which point eligibility gains a second condition
+and call 1 is the surface to re-read, not the engine's sufficiency gate.
 
 ---

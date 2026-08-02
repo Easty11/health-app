@@ -14,12 +14,13 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 import pytz
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
+from cbti.replay import evaluate_live_cycle
 from cbti.timeutil import clock_delta_minutes, clock_to_minutes, minutes_between
 from database import get_db
 from injury_trajectory import injury_soreness_key
@@ -585,4 +586,201 @@ def get_history(
         )
         .order_by(models.DailyRecord.date.desc())
         .all()
+    )
+
+
+# ── CBT-I evaluation trigger (#118's PM half) ────────────────────────────────
+#
+# #118: the engine evaluates WHEN THE OPERATOR RUNS IT, and a prescription is minted
+# only by a manual, witnessed act — never on a schedule and never from a data signal.
+# So this is two endpoints, not one: a read-only OFFER that shows the decision and its
+# basis, and an ACCEPT the operator must explicitly invoke. Nothing here may be called
+# from a background or scheduled path; that is the whole point of the decision.
+#
+# Both go through `cbti.replay.evaluate_live_cycle`, which runs the same block replay
+# the offline script runs. #128's revisit clause makes that reuse a hard boundary —
+# the trigger "must reuse this same read, or the two paths diverge again".
+
+
+class CBTIEvaluationBasisOut(BaseModel):
+    """What the decision rests on. Surfaced in full because #118's rationale is that a
+    prescription changes behaviour and must be auditable at the moment it is made.
+    """
+    cycle_from: Optional[date] = None
+    cycle_to: Optional[date] = None
+    tst_min: Optional[int] = None
+    se_pct: Optional[float] = None
+    window_minutes_current: Optional[int] = None
+    window_minutes_proposed: Optional[int] = None
+    lights_out_current: Optional[str] = None
+    lights_out_proposed: Optional[str] = None
+    wake_anchor: Optional[str] = None
+    nights_counted: int = 0
+    n_diary: int = 0
+    n_samsung: int = 0
+    n_alcohol_unknown: int = 0
+    # date -> exclusion reason. Rendered, not merely counted: some of these are nap
+    # exclusions resting on the UNVERIFIED date-1 nap attribution (Q45, open), so the
+    # operator must be able to see which nights the decision dropped and why.
+    nights_excluded: dict[str, str] = Field(default_factory=dict)
+    ema_count: int = 0
+    move_capped: bool = False
+    tib_over_run_min: Optional[float] = None
+
+
+class CBTIEvaluationOut(BaseModel):
+    block_open: bool = False
+    eligible: bool = False
+    # Why no offer is being made, when there is none — "cycle_in_progress: day 3 of 7".
+    reason: str = ""
+    days_since_effective_from: Optional[int] = None
+    nights_since_effective_from: Optional[int] = None
+    decision: Optional[str] = None
+    decision_reason: Optional[str] = None
+    # A `close` recommendation is surfaced but NOT actionable here — see the accept
+    # endpoint. The flag lets the surface say so rather than offering a dead control.
+    acceptable: bool = False
+    basis: Optional[CBTIEvaluationBasisOut] = None
+
+
+def _open_block(user_id: int, db: Session):
+    return (
+        db.query(models.CBTIBlock)
+        .filter(models.CBTIBlock.user_id == user_id,
+                models.CBTIBlock.closed_on.is_(None))
+        .order_by(models.CBTIBlock.opened_on.desc())
+        .first()
+    )
+
+
+def _live_evaluation(user_id: int, db: Session):
+    """(block, LiveCycleEval) for the open block; (block, None) or (None, None)."""
+    block = _open_block(user_id, db)
+    if block is None:
+        return None, None
+    return block, evaluate_live_cycle(db, user_id, block, _today_aest())
+
+
+def _basis_from(cycle: dict, live_rx) -> CBTIEvaluationBasisOut:
+    return CBTIEvaluationBasisOut(
+        cycle_from=cycle["from"], cycle_to=cycle["to"],
+        tst_min=cycle["tst"], se_pct=cycle["se"],
+        window_minutes_current=live_rx.window_minutes,
+        window_minutes_proposed=cycle["rec_window"],
+        lights_out_current=live_rx.lights_out,
+        lights_out_proposed=cycle["rec_lights_out"],
+        wake_anchor=live_rx.wake_anchor,
+        nights_counted=cycle["n"], n_diary=cycle["n_diary"],
+        n_samsung=cycle["n_samsung"], n_alcohol_unknown=cycle["n_alc_unk"],
+        nights_excluded=cycle["excluded"],
+        ema_count=cycle["ema"], move_capped=cycle["capped"],
+        tib_over_run_min=cycle["tib_over"],
+    )
+
+
+@router.get("/cbti/evaluation", response_model=CBTIEvaluationOut)
+def get_cbti_evaluation(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Read-only. Writes nothing, mints nothing — the offer half of #118.
+
+    `eligible` says a full cycle has elapsed and there is a decision to show. It does
+    NOT say the decision is a change: the engine may return a HOLD, and a HOLD is a real
+    outcome the operator should still witness.
+    """
+    block, ev = _live_evaluation(current_user.id, db)
+    if block is None or ev is None:
+        return CBTIEvaluationOut(block_open=block is not None)
+
+    out = CBTIEvaluationOut(
+        block_open=True,
+        eligible=ev.eligible,
+        reason=ev.reason,
+        days_since_effective_from=ev.days_since_effective_from,
+        nights_since_effective_from=ev.nights_since_effective_from,
+    )
+    if ev.cycle is not None:
+        out.decision = ev.cycle["decision"]
+        out.decision_reason = ev.cycle["reason"]
+        out.basis = _basis_from(ev.cycle, ev.live_rx)
+        out.acceptable = ev.eligible and ev.cycle["decision"] != "close"
+    return out
+
+
+@router.post("/cbti/evaluation/accept", response_model=CBTIEvaluationOut)
+def accept_cbti_evaluation(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The witnessed act (#118). Mints the successor prescription.
+
+    The decision is RE-EVALUATED here rather than taken from the client: the request
+    carries no body, so there is no path by which a posted decision could mint a
+    prescription the engine did not produce.
+
+    Appends one row and applies the ledger's only two permitted UPDATEs to the prior one
+    — `effective_to` and `superseded_by`. The block row is not touched: block close stays
+    engine-driven (#118), so a `close` recommendation is REFUSED here rather than
+    half-applied by minting a terminal-looking prescription that leaves the block open.
+    """
+    block, ev = _live_evaluation(current_user.id, db)
+    if block is None or ev is None:
+        raise HTTPException(status_code=409, detail="No open CBT-I block with a live prescription.")
+    if not ev.eligible or ev.cycle is None:
+        raise HTTPException(status_code=409, detail=f"No cycle to accept: {ev.reason}")
+    if ev.cycle["decision"] == "close":
+        raise HTTPException(
+            status_code=409,
+            detail="The engine recommends closing this block. Block close is engine-driven "
+                   "and is not minted by the evaluation trigger (#118) — no close path is built.",
+        )
+
+    prior = (
+        db.query(models.CBTIPrescription)
+        .filter(models.CBTIPrescription.block_id == block.id,
+                models.CBTIPrescription.effective_to.is_(None))
+        .order_by(models.CBTIPrescription.effective_from.desc())
+        .first()
+    )
+    # Idempotency: a second accept finds the prior row already superseded and stops.
+    # Without this a double-tap mints two successors, both claiming the same cycle.
+    if prior is None or prior.superseded_by is not None:
+        raise HTTPException(status_code=409, detail="This evaluation has already been accepted.")
+
+    today = _today_aest()
+    cycle = ev.cycle
+    successor = models.CBTIPrescription(
+        block_id=block.id,
+        effective_from=today,
+        effective_to=None,
+        prescribed_lights_out=cycle["rec_lights_out"],
+        wake_anchor=ev.live_rx.wake_anchor,
+        window_minutes=cycle["rec_window"],
+        decision=cycle["decision"],
+        basis_tst_min=cycle["tst"],
+        basis_se_pct=cycle["se"],
+        basis_nights_n=cycle["n"],
+        basis_n_samsung=cycle["n_samsung"],
+        basis_n_diary=cycle["n_diary"],
+        basis_n_alcohol_unknown=cycle["n_alc_unk"],
+    )
+    db.add(successor)
+    db.flush()
+
+    # The ONLY two permitted UPDATEs on an existing prescription row.
+    prior.effective_to = today - timedelta(days=1)
+    prior.superseded_by = successor.id
+    db.commit()
+
+    return CBTIEvaluationOut(
+        block_open=True,
+        eligible=False,
+        reason="accepted",
+        days_since_effective_from=0,
+        nights_since_effective_from=0,
+        decision=successor.decision,
+        decision_reason=cycle["reason"],
+        acceptable=False,
+        basis=_basis_from(cycle, ev.live_rx),
     )
