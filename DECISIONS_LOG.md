@@ -5988,3 +5988,114 @@ to hang it on rather than a third call site; or `sync_exercise_templates` change
 which is what `_sync_failure` and `_SYNC_ERROR_TYPES` read.
 
 ---
+
+### #NEXT. Custom-exercise creation is an explicit, separately-confirmed block — never a repair for a resolve miss
+
+**Decision:** `create_and_resolve` (`#65`) gets a model-facing call site. `chat.py` parses a new
+`<hevy_create_exercise>` block via `_process_exercise_actions`, and `context_builder` gains
+`_section_exercise_creation` — the contract, gated on a connected Hevy. Creation stays a **separate,
+separately-confirmed act**: `_resolve_missing_ids` is unchanged and still only refuses on a miss.
+
+**Rationale — the asymmetry that shapes everything here is permanence.** Hevy has no API to delete
+or edit an exercise template. A routine created wrongly is deleted in the app in two taps; a custom
+exercise created wrongly is in the user's picker forever, and so is a typo in its title. Every
+design call below falls out of that.
+
+**Auto-create on a resolve miss is the tempting fix and is rejected.** `_resolve_missing_ids`
+already knows the title did not resolve, and minting it there would close the loop in one turn with
+no new idiom. It would also turn **every typo into a permanent record** — `Bulgairan Split Squat`
+becomes a real template the moment the model misspells it. A resolve miss is far more often a
+naming mismatch against an exercise Hevy already has (which is why `#83` returns ranked candidates)
+than a genuine absence. The one-turn saving is not worth trading a recoverable miss for an
+unrecoverable write, so the miss stays loud and the create stays explicit. Guarded by test, not
+just by intent: `test_resolve_miss_refuses_and_creates_nothing`.
+
+**Ordering at the call site is load-bearing, not stylistic.** Exercise blocks are processed **before**
+routine blocks. The model cannot cite a server-minted UUID it has never seen, so a same-turn routine
+must reference the new exercise by TITLE — and `_resolve_missing_ids` finds it only if the create
+and its list-back sync have already run. Reverse the two and a same-turn create-then-use fails an
+unresolved-title miss on an exercise created seconds earlier in the same reply.
+
+**Idempotency is re-checked in the processor, not left to the orchestrator.** `create_and_resolve`
+short-circuits an existing title by returning its id — which is indistinguishable at the chat layer
+from a fresh create. Reporting `✓ … created in Hevy` for something that already existed would be a
+false confirmation about an irreversible act, so the processor resolves first and reports
+`already in the exercise catalogue — nothing created`. The orchestrator's own pre-check remains as
+defence; this one exists so the *confirmation can tell the truth*.
+
+**`HevyCreateUnresolvedError` forbids a retry rather than merely reporting.** That error means the
+POST may well have succeeded and only the list-back failed. The naive next move — try again — is
+exactly how a delete-less API ends up with two identically-named permanent templates. The message
+says so explicitly.
+
+**Status:** Decided and landed on `feat/hevy-create-exercise-block`. `hevy_templates.py` and
+`connectors/hevy.py` are untouched — the orchestrator and connector already existed and were tested
+(`#65`). The routine idiom's resolution logic is unchanged. No migration.
+
+**How you know:**
+
+*The enum artifact.* The repo has no enum authority — the connector passes strings through and a
+bad one returns 400 — so the contract's values are quoted from **Hevy's live OpenAPI spec**, read
+2026-08-03. The spec is not served at `/openapi.json` (404), and `/docs/*` returns the Swagger UI
+HTML for **any** path, including invented ones: `/docs/spec.json` and `/docs/v1/openapi.json` both
+answer 200 with HTML, so a status-code check alone would have "found" a spec that does not exist.
+The document is embedded in `api.hevyapp.com/docs/swagger-ui-init.js` as `swaggerDoc`
+(`openapi 3.0.0`, `Hevy API Docs`, 28 schemas), and `CreateCustomExerciseRequestBody` confirms the
+wrapped `{"exercise": {…}}` body `#65` recorded. Captured verbatim:
+
+- **`CustomExerciseType` (8):** `weight_reps`, `reps_only`, `bodyweight_reps`,
+  `bodyweight_assisted_reps`, `duration`, `weight_duration`, `distance_duration`,
+  `short_distance_weight`
+- **`EquipmentCategory` (9):** `none`, `barbell`, `dumbbell`, `kettlebell`, `machine`, `plate`,
+  `resistance_band`, `suspension`, `other`
+- **`MuscleGroup` (20):** `abdominals`, `shoulders`, `biceps`, `triceps`, `forearms`, `quadriceps`,
+  `hamstrings`, `calves`, `glutes`, `abductors`, `adductors`, `lats`, `upper_back`, `traps`,
+  `lower_back`, `chest`, `cardio`, `neck`, `full_body`, `other`
+
+*The cross-check, which found a real trap.* The brief asked for `hevy exercises --json`; that CLI is
+not on this machine, so the cross-check ran against the **synced catalogue itself** — 499 rows of
+the same account's real data, refreshed by `#163`'s sync hours earlier. `MuscleGroup` matches
+perfectly in both directions: all 20 spec values occur in `primary_muscle_group`, and nothing occurs
+that the spec lacks. `CustomExerciseType` **does not**, vindicating `#65`'s warning that the create
+enums differ from the values seen elsewhere:
+
+- Present in the live catalogue's `type` but **invalid for creation**: `bodyweight_assisted`,
+  `bodyweight_weighted`, `floors_duration`, `steps_duration`
+- Valid for creation but never observed: `bodyweight_assisted_reps`, `bodyweight_reps`,
+  `weight_duration`
+
+The dangerous pair is `bodyweight_assisted` (GET) versus `bodyweight_assisted_reps` (CREATE) — near
+enough that copying a type off the workout history reads as correct and returns a 400. The spec
+confirms the divergence is structural rather than an artifact of this account:
+`ExerciseTemplate.type` is typed as a bare `string` with no enum, while creation constrains it to
+`CustomExerciseType`. Both schemas *do* share `EquipmentCategory`, which is also why that one field
+could not be cross-checked against the catalogue — the sync does not persist `equipment_category`.
+It is recorded as spec-only, uncross-checked. The contract names the four GET-only values as
+invalid, and a test pins each.
+
+*Tests.* 61 new in `backend/tests/test_hevy_create_exercise_block.py`; full suite **655 passed**
+(baseline **594** at `#163`).
+
+- The ordering gate drives the **real call-site sequence**, not the processors in isolation, and is
+  paired with a control (`test_reversed_order_would_fail_to_resolve`) pinning what reversing them
+  would cost — so the requirement is held by a passing test, not only by a comment.
+- **Paired mutation control:** renaming the block tag to `<hevy_MUTATED_tag>` fails **13 of 61**,
+  and the 13 are exactly the tests that drive a block through the processor. The 48 that survive are
+  the contract-text tests, the non-goal guards (routine path), the no-block no-op, and the
+  reversed-order control — none of which parse an exercise block. Read as names, not counted
+  (`#113`).
+- A **regression the mutation run surfaced**: adding the section broke
+  `test_context_builder_output_unchanged_pre_post_refactor`. That guard compares against a frozen
+  pre-`#43` builder with `connected_integrations=[]`, where the new section correctly renders `""` —
+  but the extra list separator alone shifted the whitespace. Fixed by giving both Hevy authoring
+  contracts **one** section slot that collapses to `""` when Hevy is absent, so the list is
+  byte-identical when the guard runs. The guard itself was neither touched nor narrowed.
+
+*What is NOT proven.* No live create was performed this session — the deferral and its watch-point
+are recorded as an open question below.
+
+**Do not revisit unless:** Hevy ships a delete or edit endpoint for exercise templates, which
+removes the permanence premise every call above rests on and would make auto-create-on-miss worth
+re-arguing; or the enum lists drift (`Q#NEXT`).
+
+---

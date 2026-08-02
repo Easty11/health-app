@@ -12,12 +12,25 @@ from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
-from connectors.hevy import HevyAuthError, HevyClient
+from connectors.hevy import (
+    HevyAuthError,
+    HevyBadRequestError,
+    HevyClient,
+    HevyCustomExerciseLimitError,
+)
 from context_builder import build_system_prompt, render_asked_lab_value
 from current_state import current_state as compute_current_state
 from database import get_db
 from encryption import decrypt
-from hevy_templates import catalogue_titles_by_id, resolve_exercise, suggest_candidates
+from hevy_templates import (
+    HevyCreateUnresolvedError,
+    HevyKeyMissingError,
+    catalogue_titles_by_id,
+    create_and_resolve,
+    resolve_exercise,
+    suggest_candidates,
+    user_hevy_key,
+)
 from engine import adaptation, selection
 from reads.labs_reads import find_marker
 from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
@@ -33,6 +46,15 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # Regex to find <hevy_create_routine>...</hevy_create_routine> blocks
 _ROUTINE_BLOCK_RE = re.compile(
     r"<hevy_create_routine>\s*(.*?)\s*</hevy_create_routine>",
+    re.DOTALL,
+)
+
+# Regex to find <hevy_create_exercise>...</hevy_create_exercise> blocks — the
+# app-originated custom-exercise idiom. Separate from the routine block ON PURPOSE:
+# creation is permanent (Hevy has no delete/edit-template API), so it stays an
+# explicit, separately-confirmed act rather than a side effect of a resolve miss.
+_EXERCISE_BLOCK_RE = re.compile(
+    r"<hevy_create_exercise>\s*(.*?)\s*</hevy_create_exercise>",
     re.DOTALL,
 )
 
@@ -126,6 +148,167 @@ def _annotate_canonical_titles(hevy_data: dict[str, Any], db: Session) -> dict[s
             drifted, missing,
         )
     return hevy_data
+
+
+# ---------- custom-exercise action parsing ----------
+
+# The CREATE enums, captured from Hevy's live OpenAPI spec
+# (api.hevyapp.com/docs/swagger-ui-init.js, embedded `swaggerDoc`,
+# `CreateCustomExerciseRequestBody`). Held here only to make a 400 CORRECTABLE — the
+# request itself passes the model's strings straight through, so this copy never gates
+# a create and cannot fail closed if Hevy adds a member (Q#NEXT takes round-trip-and-
+# correct over a validating table).
+_CREATE_EXERCISE_TYPES = (
+    "weight_reps", "reps_only", "bodyweight_reps", "bodyweight_assisted_reps",
+    "duration", "weight_duration", "distance_duration", "short_distance_weight",
+)
+_CREATE_EQUIPMENT = (
+    "none", "barbell", "dumbbell", "kettlebell", "machine", "plate",
+    "resistance_band", "suspension", "other",
+)
+_CREATE_MUSCLE_GROUPS = (
+    "abdominals", "shoulders", "biceps", "triceps", "forearms", "quadriceps",
+    "hamstrings", "calves", "glutes", "abductors", "adductors", "lats",
+    "upper_back", "traps", "lower_back", "chest", "cardio", "neck", "full_body",
+    "other",
+)
+
+_CREATE_ENUM_BY_FIELD = {
+    "exercise_type": _CREATE_EXERCISE_TYPES,
+    "equipment_category": _CREATE_EQUIPMENT,
+    "muscle_group": _CREATE_MUSCLE_GROUPS,
+    "other_muscles": _CREATE_MUSCLE_GROUPS,
+}
+
+
+def _format_exercise_rejection(title: str, detail: str) -> str:
+    """Render a Hevy 400 as a message the next turn can act on (#83's pattern).
+
+    A bare "Hevy rejected the body" leaves the model re-guessing the same wrong string.
+    Hevy's 400 text names the offending field, so echo the VALID values for that field
+    back — the same reason `_format_unresolved` names candidate titles rather than just
+    reporting a miss.
+
+    The field is matched against the create-schema field names rather than parsed out of
+    Hevy's prose, so an unrecognised message degrades to listing every enum instead of
+    guessing wrong about which one is at fault.
+    """
+    named = [f for f in _CREATE_ENUM_BY_FIELD if f in detail.lower()]
+    fields = named or ["exercise_type", "equipment_category", "muscle_group"]
+    parts = [
+        f"{f} must be one of: " + ", ".join(_CREATE_ENUM_BY_FIELD[f])
+        for f in fields
+    ]
+    return (
+        f"⚠️ Custom exercise '{title}' not created — Hevy rejected the request. "
+        + " | ".join(parts)
+        + f" (Hevy said: {detail})"
+    )
+
+
+async def _process_exercise_actions(
+    reply: str,
+    user_id: int,
+    db: Session,
+) -> tuple[str, list[str]]:
+    """Scan `reply` for <hevy_create_exercise> blocks and mint each one.
+
+    Mirrors `_process_routine_actions`: parse, act, strip the raw block, record a
+    confirmation. Delegates to `create_and_resolve` (#65), which owns the
+    create -> sync -> list-back-in-the-custom-subset loop and returns the canonical
+    string id — never the integer id the POST response carries.
+
+    MUST run before `_process_routine_actions`. The model cannot know a server-minted
+    UUID, so a same-turn routine references the new exercise by TITLE, and
+    `_resolve_missing_ids` finds it only if the create and its sync have already run.
+    Reverse the order and the routine fails an unresolved-title miss on an exercise that
+    was created moments earlier in the same reply.
+
+    Idempotency is re-checked HERE, not just inside `create_and_resolve`, so the
+    confirmation can tell the truth. The orchestrator short-circuits an existing title by
+    returning its id — indistinguishable at this layer from a fresh create — and
+    reporting "created" for something that already existed would be a false confirmation
+    about an irreversible act.
+
+    Returns (cleaned_reply, actions_taken).
+    """
+    actions_taken: list[str] = []
+    matches = list(_EXERCISE_BLOCK_RE.finditer(reply))
+
+    if not matches:
+        return reply, actions_taken
+
+    # Not connected — strip every block with one message, as routines do, rather than
+    # emitting an identical warning per block. The `HevyKeyMissingError` branch below is
+    # the defensive twin: it catches a key deleted between this check and the create.
+    if user_hevy_key(db, user_id) is None:
+        cleaned = _EXERCISE_BLOCK_RE.sub("", reply).strip()
+        actions_taken.append("⚠️ Custom exercise not created — Hevy is not connected.")
+        return cleaned, actions_taken
+
+    cleaned = reply
+    for match in matches:
+        raw_json = match.group(1)
+        try:
+            data = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            actions_taken.append(f"⚠️ Could not parse custom-exercise JSON: {exc}")
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
+
+        title = (data.get("title") or "").strip()
+        if not title:
+            actions_taken.append("⚠️ Custom exercise not created — no title given.")
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
+
+        # Honest-confirmation pre-check (see docstring). Default-wins, same predicate the
+        # routine path resolves against, so "already there" means "the routine block will
+        # resolve it".
+        existing = resolve_exercise(db, title, user_id)
+        if existing is not None:
+            actions_taken.append(
+                f"✓ '{title}' is already in the exercise catalogue — nothing created"
+            )
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
+
+        try:
+            await create_and_resolve(
+                db,
+                user_id,
+                title=title,
+                exercise_type=data.get("exercise_type"),
+                equipment_category=data.get("equipment_category"),
+                muscle_group=data.get("muscle_group"),
+                other_muscles=data.get("other_muscles"),
+            )
+            actions_taken.append(f"✓ Custom exercise '{title}' created in Hevy")
+        except HevyCustomExerciseLimitError:
+            actions_taken.append(
+                "⚠️ Custom exercise not created — Hevy's custom-exercise limit reached."
+            )
+        except HevyBadRequestError as exc:
+            actions_taken.append(_format_exercise_rejection(title, str(exc)))
+        except HevyCreateUnresolvedError as exc:
+            # The POST may well have SUCCEEDED — only the list-back failed. Say so, and
+            # say not to retry: a second create against a delete-less API is how you get
+            # two permanent templates with the same name.
+            actions_taken.append(
+                f"⚠️ Custom exercise '{title}' — created in Hevy but it did not surface "
+                f"in the catalogue after the sync retries. Do NOT create it again; it "
+                f"likely exists. ({exc})"
+            )
+        except HevyKeyMissingError:
+            actions_taken.append(
+                "⚠️ Custom exercise not created — Hevy is not connected."
+            )
+        except Exception as exc:  # noqa: BLE001 — mirror the routine path's catch-all
+            actions_taken.append(f"⚠️ Failed to create custom exercise '{title}': {exc}")
+
+        cleaned = cleaned.replace(match.group(0), "")
+
+    return cleaned.strip(), actions_taken
 
 
 # ---------- routine action parsing ----------
@@ -550,12 +733,17 @@ async def chat(
 
     reply = response.content[0].text
 
-    # Parse and execute any embedded action blocks
+    # Parse and execute any embedded action blocks.
+    # Exercise creation runs FIRST and the order is load-bearing: a custom minted this
+    # turn must be in the catalogue before the routine block's `_resolve_missing_ids`
+    # looks for it by title. The model cannot cite a server-minted UUID it has never
+    # seen, so same-turn create-then-use resolves only in this order.
+    reply, exercise_actions = await _process_exercise_actions(reply, current_user.id, db)
     reply, routine_actions = await _process_routine_actions(reply, hevy_client, current_user.id, db)
     reply, knowledge_actions = _process_knowledge_updates(reply, current_user.id, db)
     reply, capability_actions = _process_capability_updates(reply, current_user.id, db)
 
-    all_actions = routine_actions + knowledge_actions + capability_actions
+    all_actions = exercise_actions + routine_actions + knowledge_actions + capability_actions
 
     # Append confirmation messages inline so they appear in the chat bubble
     if all_actions:

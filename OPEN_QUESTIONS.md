@@ -2159,3 +2159,37 @@ Candidates:
 The axis to decide first is **what freshness is actually for**: (b) and (c) keep the catalogue fresh only for the paths that read it, while (a) is the only one that would catch drift before a read needs it. That distinction only becomes load-bearing once a *write* path depends on the store being current — which is exactly what custom-exercise creation is.
 
 **Resolve before:** custom-exercise creation (`<hevy_create_exercise>`) is wired to a user-facing surface. Its idempotency pre-check reads this store, so a stale catalogue there mints duplicate templates rather than merely missing a resolution.
+
+## Q#NEXT. The create-enum lists live in two places and nothing detects when Hevy adds a member
+
+**State:** OPEN. **Blocked by:** nothing — round-trip-and-correct is implemented and sufficient; this records the fork rather than gating on it. **Related:** `#NEXT` (the block), `#65` (the create loop), `#83` (correctable-miss pattern).
+
+The three create enums — `CustomExerciseType`, `EquipmentCategory`, `MuscleGroup` — are Hevy's, not ours. They now appear twice in this repo: as prose in `context_builder._section_exercise_creation` (so the model gets them right first time) and as tuples in `chat._CREATE_ENUM_BY_FIELD` (so a 400 can name the valid values). A test asserts the two agree, so they cannot drift from *each other* — but nothing detects them drifting from **Hevy**.
+
+Crucially, neither copy **validates**. The processor passes the model's strings straight through and lets Hevy adjudicate. That is deliberate: a validating table would fail closed the day Hevy adds a type, rejecting a request the API would have accepted — the worst failure mode, because it is invisible and looks like our own rule working.
+
+The fork is what to do about the drift that remains:
+
+- **(a) Round-trip-and-correct — implemented.** Send what the model wrote; on a 400, echo the valid values for the named field so the next turn self-corrects. Never fails closed, no new machinery. Costs one wasted turn per enum miss, and the echoed list is stale in exactly the case that caused the miss.
+- **(b) Hardcoded validating table.** Reject before the call. First-try accuracy, no wasted turn — but fails closed on any Hevy addition and needs re-capturing by hand.
+- **(c) Periodic re-capture with a drift test.** A test that fetches `swagger-ui-init.js` and asserts the embedded `swaggerDoc` enums still equal the local copies. Catches drift loudly at CI time rather than at user time. Costs a network-dependent test — which this suite currently has none of, and which would fail on Hevy's outage rather than on a real change.
+
+This is a live fork rather than settled because (c) is genuinely attractive and was not evaluated against the no-network-tests convention. Note the drift is not hypothetical: the GET-side vocabulary already carries four values the create enum lacks (`bodyweight_assisted`, `bodyweight_weighted`, `floors_duration`, `steps_duration`), which is direct evidence that Hevy maintains these lists independently and does change them.
+
+**Resolve before:** a second surface needs the enums (a UI picker, a validation layer, the companion app), at which point a third copy makes the drift question load-bearing rather than tolerable.
+
+## Q#NEXT+1. The live create→list-back round-trip is unproven — the first real custom-exercise creation is the test
+
+**State:** OPEN. **Blocked by:** nothing — this is a deliberate, recorded deferral, not a missing dependency. **Related:** `#NEXT` (the block), `#65` (the create loop), `FEEDBACK` §8 (landed ≠ live).
+
+Luke chose to land `#NEXT` on the test suite and the enum artifact rather than mint a permanent custom exercise to prove the path. That is a reasonable trade against an API with no delete — but it leaves a named gap, and an unproven path that nobody has written down is the exact `FEEDBACK` §8 shape this project exists to avoid. So it is written down.
+
+**Covered by the faked-client tests (`#65`, and this branch's 61):** the idempotency pre-check, the create call and its parsed fields, the sync, list-back within the user's own custom subset, the bounded retry over create-visibility latency, every typed error's message, and unresolved-raises-never-returns-None.
+
+**Covered by the live spec (`#65`, re-confirmed 2026-08-03):** the wrapped `{"exercise": {…}}` body shape and the integer-id response that must not be trusted as the store key.
+
+**NOT covered — what only a real POST can establish:** that Hevy accepts the body as this code assembles it, that the created template then appears in a follow-up `GET /exercise_templates` page, and that it does so within `_CREATE_RESOLVE_ATTEMPTS` syncs. Every one of those is an assumption about the live API's behaviour, and the retry bound in particular is a guess about eventual-consistency timing that no fixture can validate.
+
+**Treat the first real create as a watch-point.** It is the de facto integration test, and it fails correctably: a rejected body surfaces the 400's field-and-enum message, and a create that does not surface returns `HevyCreateUnresolvedError`, whose message explicitly forbids a retry. Neither failure is silent and neither loses data — the worst case is one permanent template that the catalogue has not yet indexed. What to watch on that first run: whether the confirmation is `✓ … created in Hevy` (list-back succeeded within the retry bound) or the unresolved warning (it did not, and `_CREATE_RESOLVE_ATTEMPTS` or its backoff needs raising).
+
+**Resolve before:** custom creation is exercised by anyone other than Luke, or is invoked anywhere the failure message is not read by a human — a batch path, a scheduled job, or an agent loop that would retry on its own and duplicate.

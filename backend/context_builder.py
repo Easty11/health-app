@@ -297,6 +297,71 @@ Rules for routine creation:
   with a confirmation message once the routine is created."""
 
 
+def _section_exercise_creation(connected: list[str]) -> str:
+    """The <hevy_create_exercise> contract.
+
+    Enum values are quoted from Hevy's live OpenAPI spec
+    (`CreateCustomExerciseRequestBody`), not from the workout history above — the two
+    vocabularies genuinely differ, which is why they are spelled out here rather than
+    left to be inferred from the catalogue.
+    """
+    if "hevy" not in connected:
+        return ""
+    return """## Creating a Custom Hevy Exercise
+
+If a movement the user wants is NOT in their Hevy exercise catalogue, you can mint it
+as a custom exercise by embedding this block:
+
+<hevy_create_exercise>
+{
+  "title": "Copenhagen Plank",
+  "exercise_type": "duration",
+  "equipment_category": "none",
+  "muscle_group": "adductors",
+  "other_muscles": ["abdominals"]
+}
+</hevy_create_exercise>
+
+THIS IS PERMANENT AND CANNOT BE UNDONE. Hevy has no API to delete or edit an exercise
+template. Every custom you create stays in the user's account forever, cluttering their
+exercise picker, and a typo in the title is permanent too. This is a stronger bar than
+routine creation, which the user can simply delete in the app.
+
+- NEVER emit this block unless the user has explicitly asked for this exercise to be
+  created, in this conversation, in response to you telling them it is permanent. An
+  instruction to "build me a session" is NOT consent to mint exercises.
+- Quote the exact title back and get a yes on the SPELLING before emitting the block.
+- Prefer an existing catalogue exercise every time. If a title fails to resolve for a
+  routine, the fix is almost always a different name for a movement Hevy already has —
+  not a new custom. Check the suggestions reported back to you first.
+- If the exercise already exists, the block is a no-op and reports as such. It will not
+  create a duplicate.
+
+Field values — use ONLY these:
+- exercise_type: weight_reps, reps_only, bodyweight_reps, bodyweight_assisted_reps,
+  duration, weight_duration, distance_duration, short_distance_weight
+- equipment_category: none, barbell, dumbbell, kettlebell, machine, plate,
+  resistance_band, suspension, other
+- muscle_group: abdominals, shoulders, biceps, triceps, forearms, quadriceps,
+  hamstrings, calves, glutes, abductors, adductors, lats, upper_back, traps,
+  lower_back, chest, cardio, neck, full_body, other
+- other_muscles: optional list, same values as muscle_group
+
+WARNING — the exercise_type values above are NOT the type values you see on exercises in
+the workout history. Those come from a different Hevy schema and include names that are
+INVALID here: bodyweight_assisted, bodyweight_weighted, floors_duration, steps_duration.
+Note the near-miss: history shows "bodyweight_assisted", but creation requires
+"bodyweight_assisted_reps". Copying a type from the history is a common way to get a
+rejection. Use the list above.
+
+- To use a newly created exercise in a routine in the SAME reply, put the
+  <hevy_create_exercise> block first, then reference the exercise by "title" (spelled
+  identically) in the <hevy_create_routine> block. The exercise is created before the
+  routine is resolved, so the title will match. You will not know its ID — do not guess
+  one.
+- The block is removed from your visible response and replaced with a confirmation."""
+
+
 def _section_daily_record(record: Any) -> str:
     """
     Descriptive section for the new two-moment daily record.
@@ -1062,7 +1127,17 @@ def build_system_prompt(
         "If data is missing or incomplete, say so and suggest what they could connect. "
         "Never fabricate workout details that are not in the context.",
         "",
-        _section_routine_creation(connected_integrations),
+        # The two Hevy authoring contracts share ONE slot. Both are gated on the same
+        # `connected_integrations`, so when Hevy is absent both render "" and this slot
+        # collapses to the single "" the pre-#43 builder emitted — keeping the section
+        # list byte-identical for the parity guard in `test_current_state.py`, which
+        # compares against a frozen copy with `connected_integrations=[]`. Giving the
+        # exercise contract its own slot plus separator would break that guard on
+        # whitespace alone, while changing nothing a model ever reads.
+        "\n\n".join(s for s in (
+            _section_routine_creation(connected_integrations),
+            _section_exercise_creation(connected_integrations),
+        ) if s),
         "",
         _section_knowledge_update(),
     ]
