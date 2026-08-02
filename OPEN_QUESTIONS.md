@@ -2141,9 +2141,9 @@ The consequence worth checking is evaluability, not display. A `feedback` relati
 Establish, before any precondition is authored against a currently-`None` key: is the `None` the correct permanent answer for that factor (it genuinely has no interpretable phase), or a seam that a declared washout/re-entry window (the `as_of` parameter `derive_phase` accepts but no rule consumes) is meant to fill later.
 
 **Resolve before:** a `feedback` precondition is authored against any factor key outside the currently phase-bearing set.
-## Q#NEXT. The catalogue is now populated on connect, but nothing keeps it fresh — the sync has a trigger, not a schedule
+## Q75. The catalogue is now populated on connect, but nothing keeps it fresh — the sync has a trigger, not a schedule
 
-**State:** OPEN. **Blocked by:** nothing — the today-fix (connect-time seed + `POST /integrations/hevy/sync`) is landed and sufficient for a populated substrate; this is unbuilt, not gated. **Related:** `#NEXT` (the wiring decision), `#77`/`FEEDBACK` §8 (landed ≠ live), `#79`/`#81` (logged titles drift from catalogue titles), `#65` (the create-loop's own `sync_one_user` refresh).
+**State:** OPEN. **Blocked by:** nothing — the today-fix (connect-time seed + `POST /integrations/hevy/sync`) is landed and sufficient for a populated substrate; this is unbuilt, not gated. **Related:** `#163` (the wiring decision), `#77`/`FEEDBACK` §8 (landed ≠ live), `#79`/`#81` (logged titles drift from catalogue titles), `#65` (the create-loop's own `sync_one_user` refresh).
 
 The connect-time seed populates `hevy_exercise_templates` once, at the moment a key first exists, and the operator endpoint repopulates it whenever someone asks. Neither is a freshness guarantee. The catalogue drifts in three independent ways:
 

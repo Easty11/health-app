@@ -5879,7 +5879,7 @@ Constraint A; or `/interpretation` gains a cached/stored generation, at which po
 becomes a real recency signal and the collected-vs-generated amendment above is worth re-reading.
 
 ---
-### #NEXT. The Hevy template sync gets a call site: an operator endpoint plus a connect-time seed
+### 163. The Hevy template sync gets a call site: an operator endpoint plus a connect-time seed
 
 **Decision:** `sync_exercise_templates` — the only writer of `hevy_exercise_templates`, the substrate
 every resolver reads (`resolve_exercise`, `catalogue_titles_by_id`, `suggest_candidates`,
@@ -5961,7 +5961,7 @@ exercise creation (`<hevy_create_exercise>`) is a separate step that depends on 
   `max(synced_at)` advancing off 2026-07-14. A rising count would mean new templates existed
   upstream; an unchanged count with a fresh `synced_at` is the success case.
 
-**Do not revisit unless:** a recurring/scheduled sync is built (`Q#NEXT` — cron vs. staleness-on-read
+**Do not revisit unless:** a recurring/scheduled sync is built (`Q75` — cron vs. staleness-on-read
 vs. sync-on-workout-fetch), at which point the shared path this decision establishes is the surface
 to hang it on rather than a third call site; or `sync_exercise_templates` changes its summary contract,
 which is what `_sync_failure` and `_SYNC_ERROR_TYPES` read.

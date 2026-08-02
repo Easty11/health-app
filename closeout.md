@@ -105,8 +105,8 @@ as `PENDING` canonical entries. Reconciled instead against the brief's own deliv
 | Unit tests: endpoint 200 / non-200 / 404, connect-seed happy + raising | **YES** — 16 tests, `2f377ad` |
 | Full backend suite green, count reported | **YES** — 594 passed (was 578) |
 | **Prod population gate, paired before/after** | **NO — OWED.** See below. |
-| `DECISIONS_LOG ### #NEXT` | **YES** — `c7bed98` |
-| `OPEN_QUESTIONS Q#NEXT` (recurring sync deferred) | **YES** — `c7bed98` |
+| `DECISIONS_LOG ### #NEXT` | **YES** — `c7bed98`, resolved to **#163** at the ff |
+| `OPEN_QUESTIONS Q#NEXT` (recurring sync deferred) | **YES** — `c7bed98`, resolved to **Q75** at the ff |
 | Branch pushed even while held (`#98`) | **YES** — `origin/feat/hevy-template-sync-wiring` |
 
 ### The prod population gate — BEFORE recorded, AFTER owed, gate NOT claimed
@@ -180,13 +180,23 @@ Local branches: `master`, `feat/cbti-eval-trigger`, `feat/hevy-template-sync-wir
 Remote refs: `origin/master`, `origin/feat/cbti-eval-trigger`, `origin/feat/hevy-template-sync-wiring`.
 Nothing unpushed, nothing undiscarded.
 
-### Governance numbering — two `#NEXT` placeholders in flight
+### Governance numbering — resolved to #163 / Q75 at the ff-merge
 
-`master` already carries one unnumbered `### #NEXT` (the held hub-shell entry, on
-`feat/hub-shell`). This session added a second, plus a `Q#NEXT`. Both are correctly headed per
-number-at-merge (`FEEDBACK` §20), so the cost is one substitution each — but **merge order decides
-which claims 162**. Whichever branch ff-merges first takes the integer; the second renumbers above
-it.
+This branch's tokens were resolved on-branch before the fast-forward, per number-at-merge and
+`#148` (renumber scope follows the branch's **own** tokens, wherever they live; residuals are
+**classified**, not counted).
+
+It took **#163, not #162**. Master already carried one unnumbered `### #NEXT` — the hub-tile
+entry, which sits *earlier* in the append-only file and had already been staked as **162** by
+`feat/cbti-eval-trigger`. Taking 162 here would have numbered this entry below an entry that
+physically precedes it, and collided with that branch. So 162 stays owed to the hub-tile
+placeholder, and master carries a visible, explained gap until `feat/cbti-eval-trigger` lands.
+
+Residual `#NEXT` tokens left deliberately, classified per `#148`: the rule text in `CLAUDE.md`
+(number-at-merge) and `ROADMAP.md` L19; the hub-tile entry in `DECISIONS_LOG.md` and its
+`DONE → #NEXT` in `OPEN_QUESTIONS.md`; other branches' `BRANCHES.md` rows; the historical
+`#NEXT` references inside locked entries; and the quoted `git log` commit messages in §1, which
+are immutable and must not be rewritten.
 
 ### Current sprint
 
@@ -203,7 +213,7 @@ read.
 
 ### Open questions touched
 
-- **`Q#NEXT`** (new, OPEN, gated on nothing) — the catalogue now gets populated on connect, but
+- **`Q75`** (new, OPEN, gated on nothing) — the catalogue now gets populated on connect, but
   nothing keeps it fresh. Three independent drift sources: Hevy renames its defaults (`#79`/`#81`,
   already a live phenomenon and the reason `catalogue_titles_by_id` exists), the user adds customs
   in the Hevy client directly, and the sync is upsert-only so drift only accumulates. Candidates:
