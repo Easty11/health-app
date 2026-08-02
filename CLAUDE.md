@@ -266,9 +266,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Hub shell built, held for review (`#NEXT`)** - `/dashboard` is a module tile grid with chat docked, the two panels relocated to their own routes, and `Q63` resolved to structural counts. On `feat/hub-shell`, not master. See `closeout.md` / `BRANCHES.md`.
 - **1b COMPLETE (#160)** - the interpretation view reads live data, groups carry an as-of date and are labelled when off the trigger draw, and the route is reachable from the dashboard. See `closeout.md` / DECISIONS_LOG #159-#160.
 - **1b delivery, Steps 0-4 (Q70)** - producer read over the real series, `axis_verdict` frame, generated fixture, corrected view with collection dates, and `GET /interpretation`. Wiring held on Q69. See `closeout.md` / OPEN_QUESTIONS Q69-Q70.
-- **Upload history + declined uploads leave the results list (#158)** — collision is now stated at the confirm screen before the write, and `lab_reports.zero_row_reason` makes a decline distinguishable from an unreadable document. See `closeout.md` / DECISIONS_LOG #158.
 
 ---
 

@@ -3,149 +3,163 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-01 (fifth session that day; the prior close-out is `6c3be0e`).
-Branch at close: `master` (clean). Session-open ref: `0b65357`.
+Session date: 2026-08-02. Branch at close: `feat/hub-shell` (pushed, **not merged**).
+Session-open ref: `35e8a1d`.
 
-**1b is complete.** The interpretation view reads live data and is reachable by clicking.
+**The `#150` hub shell is built and held for review.** `/dashboard` is a module tile grid with
+chat docked; the two panels now have their own routes. Nothing is on master.
 
 ## 1. Real commits this session
 
-Six commits, all on master and pushed. `git log --oneline 0b65357..HEAD`:
+`git log --oneline 35e8a1d..HEAD`:
 
 ```
-f7aa6bc governance: resolve #NEXT -> #160 (on-branch, pre-ff)
-d8e366c governance: #NEXT — the group as-of derivation, and the label #159 actually asked for
-192ed54 fix(interpretation): a member defers its date badge to the group that already stated it
-edb8f13 feat(interpretation): link the interpretation view from the dashboard
-7192b6d feat(interpretation): the view reads GET /interpretation instead of the fixture
-dc99faa feat(interpretation): group-level as-of date, labelled when off the trigger draw
+001df4c feat(frontend): #150 hub shell — tile grid on /dashboard, chat docked, panels relocated
 ```
 
-`git log --format="%ad %s" --date=short -10`:
+Plus this close-out commit. Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
+2026-08-02 feat(frontend): #150 hub shell — tile grid on /dashboard, chat docked, panels relocated
+2026-08-02 governance: question-state vocab (carve+sweep), Q65 collapse, Q73/Q74, FEEDBACK §22, CLAUDE accretion compress, ROADMAP NEXT reconcile
+2026-08-02 governance: renumber #NEXT -> #161 and land; Q72 carries the owner's position
+2026-08-02 governance: #NEXT (verdict-vs-measurement scoping), Q72, BRANCHES row
+2026-08-02 feat(engine): capability_observations — graded, timestamped measurement
+2026-08-01 chore: session close-out
 2026-08-01 governance: resolve #NEXT -> #160 (on-branch, pre-ff)
 2026-08-01 governance: #NEXT — the group as-of derivation, and the label #159 actually asked for
 2026-08-01 fix(interpretation): a member defers its date badge to the group that already stated it
 2026-08-01 feat(interpretation): link the interpretation view from the dashboard
-2026-08-01 feat(interpretation): the view reads GET /interpretation instead of the fixture
-2026-08-01 feat(interpretation): group-level as-of date, labelled when off the trigger draw
-2026-08-01 governance(branches): row for governance/q69-resolution (DONE, #159 + Q71)
-2026-08-01 governance: resolve #NEXT -> #159, Q-NEXT -> Q71 (on-branch, pre-ff)
-2026-08-01 governance: #NEXT — Q69 resolves to (e), provenance partitioning; interval sensitivity split out
-2026-08-01 chore: session close-out
 ```
-
-Suite **545 passed**, from a **539** baseline — reconciled. +6 from
-`backend/tests/test_group_as_of.py`. **The fixture-based tests still pass**: the oracle is
-backend-side and the view switch could not touch it (G6).
-
-**Branch gate.** Three branches, all merged + deleted local and remote, `git cherry origin/master`
-empty for each: `feat/1b-step5-wiring` (`edb8f13`), `fix/date-badge-dedup` (`192ed54`),
-`governance/as-of-derivation` (`f7aa6bc`). Rows in `BRANCHES.md`. No branch in limbo.
-
-**One process slip, self-corrected:** the badge-dedup fix was first committed onto `master`
-directly. Caught before pushing, soft-reset onto `fix/date-badge-dedup`, and landed by ff-merge.
 
 ## 2. Pending-queue reconciliation
 
-The brief carried **one conditional** `PENDING` item, gated on *"Step 1's VERIFY finds `#159` does
-not fix the derivation."*
+No `;cc` pending-commit queue was carried in. The input was a **code-ready brief** (hub shell,
+`#150`), reconciled step by step. Everything in it is either landed at `001df4c` or listed as
+outstanding — nothing is silently dropped.
 
-| Item | Disposition |
-|------|-------------|
-| DECISIONS `### #NEXT` — group as-of derivation | **Condition HELD — minted** as **#160** in `d8e366c`, renumbered in `f7aa6bc`. `#159` requires the field and says "derived from its members" without fixing the derivation. |
+| Brief step | Outcome |
+|---|---|
+| 0 — cut branch, report max decision number | **Landed.** Max is **#161** (period-agnostic `^### [0-9]+`), matching the brief. Branch cut from master. |
+| 1 — chat-dock layout wrapper | **Landed.** `HubLayout` docks one `ChatPanel`: static right rail ≥ md, fixed bottom sheet < md. **No prop or data-path change** — `pendingFeedback` / `onFeedbackSent` exactly as `Dashboard` passed them; `ChatPanel.jsx` unedited. No standing-context wiring added. |
+| 2 — relocate the two panels | **Landed.** `/recovery` and `/training` host `HealthPanel` / `WorkoutPanel` full-width under `RequireAuth`. Neither panel's internals edited. |
+| 3 — tile grid on `/dashboard` | **Landed.** Six tiles + prominent AM/PM. Every prior header destination enumerated and re-homed *before* any link was deleted (table in §3). |
+| 4 — interpretation tile, `Q63` → (a) | **Landed, amended.** Copy is `What Moved: <n> · Stable: <m> · collected <date>` — *not* `generated`. See §3 "Corrections". |
+| 5 — Constraint B | **N/A — no forecast on tile.** The Recovery tile is navigation-only (label + static description); it previews no readiness number, so `#150` Constraint B does not engage. |
+| 6 — no chat-context seeding | **Held.** Tiles are plain doorways. Nothing touches the standing prompt or the request-scoped `find_marker` → `render_asked_lab_value` path (`#59`). |
+| LOG | **Landed** as `### #NEXT` in `DECISIONS_LOG.md`; `OPEN_QUESTIONS` `Q63` → `DONE → #NEXT`. Adjudicated as a standalone decision, not pure application of Constraint A — `#150` permits candidate (a) but does not select it over (b)/(c), and the `generated`→`collected` amendment needs its own "How you know". |
 
-Master max is now **#160 / Q71**. Nothing decided is uncommitted.
+**Provisional, not done:** `#NEXT` is unresolved and `Q63` reads `DONE → #NEXT` because the branch
+is **not merged**. The integer is claimed only at the fast-forward, per number-at-merge.
 
 ## 3. Cold-resume handoff
 
-### The as-of derivation (`#160`)
+### What exists now
 
-**Current side only.** Where members agree it is that date; where they differ the group states the
-span and each member carries its own date. The prior side is deliberately excluded: it is `Q71`
-(comparison intervals), and a both-sides derivation would mark part of `Q71` resolved by a decision
-that does not address it. Live `hpg_axis` is the proof — coherent current side at `2026-05-30`, prior
-side spanning `2026-04-20` / `2026-01-07` / `2025-12-27`. A test pins the boundary.
+`feat/hub-shell` at `001df4c`, pushed to `origin`, **not merged**. Frontend only; no backend delta.
 
-Emitted by the producer, not derived in the view: a view computing `min(member dates)` would be the
-second source of truth `sections.js` had before it read `should_surface`.
+- `frontend/src/components/HubLayout.jsx` — the shell. Header (back / title / mobile chat toggle /
+  Sign-out), module area as `{children}`, and **one** `ChatPanel`. The single instance is
+  load-bearing: a rail plus a separate drawer would mount twice, both receive `pendingFeedback`,
+  both `POST /chat`, and both write the same `chat_history_<sub>` key. One element, position
+  switched at the breakpoint. Sheet rules are `max-md:`-scoped so the rail needs no `md:` resets.
+  A `fill` prop bounds the module area for the panel pages so their `h-full` + internal scroll
+  behave as they did in the old Dashboard column.
+- `frontend/src/components/hub/HubChatContext.js` — `sendToChat`. A separate module only because
+  react-refresh requires a component file to export components and nothing else.
+- `frontend/src/components/hub/{Tile,InterpretationTile}.jsx`, `interpretationTileCopy.js`.
+- `frontend/src/pages/{Recovery,Training}.jsx`; `Dashboard.jsx` rewritten as the hub;
+  `App.jsx` + two routes.
 
-**`#159` says "labelled", not "labelled and separated"** — the brief misquoted it. An in-place label
-is exactly compliant; no minimum-vs-sectioning trade-off was made. Sectioning remains part of (e),
-unstarted.
+### Corrections made to the brief (expected output, not failure)
 
-### G2 — shape parity, demonstrated BEFORE the switch
+1. **`generated` → `collected` on the interpretation tile.** `Q63` (a) and the brief both said
+   "generated `<date>`". `meta.generated_at` exists but `GET /interpretation` builds the payload per
+   request (`producer.py:560` stamps `datetime.now`), so it is always "now" — the tile would read
+   "generated 2 Aug" on 2 Aug over an unchanged draw. Shipped `collected`, from
+   `meta.trigger_panel.collected`. `Q63`'s own "30 May" *is* that collection date in the fixture.
+2. **The header was seven links, not six.** `#150` rule 2 lists six; `Interpretation` was added
+   since (`#158`, with a comment anticipating this retirement). All seven re-homed.
+3. **"How you know" is not a test.** The brief's LOG draft asserted a test on the tile string. This
+   repo has **no frontend test runner** — no vitest/jest, no `test` script, no spec files under
+   `frontend/src`. Adding one is tooling adoption, not a layout job. The copy was extracted into a
+   pure function and evaluated through Vite's own resolver instead; the assertion is recorded OWED.
+4. **ANCHOR could not hold as written.** `git cherry origin/master` was not empty at branch cut —
+   `master` was already **ahead 1** of `origin/master` (`35e8a1d`, from the prior session). Not this
+   session's work; flagged rather than silently pushed. See "Outstanding".
 
-157 deployed-endpoint key paths vs 138 fixture. **Zero structural differences.** Every delta is
-either the group `as_of` this increment adds, or a data-dependent optional key:
-`protocol_context_snapshot.factors[]` nested keys (fixture user has no declared state; live has 23
-factors), `ungrouped[].delta`/`.prior` (the fixture's one ungrouped row has no prior), and the
-resolved-vs-unresolved branches of the precondition object (`observed_phase`,
-`precondition_factor`, `missing_factor_key`).
+### Gate evidence
 
-Optional keys in both directions are exactly the risk for a hard-reading view, so a **null-audit**
-was run over the live payload — 15 grouped members, 51 ungrouped rows, 7 levers — and no field the
-view hard-reads is null there.
+- **Step 1** — no prop/data-path change (expected: none, confirmed). `ChatPanel.jsx` not in the diff.
+- **Step 2 coupling finding** — `HealthPanel` is self-contained (fetches `/health/summary`, held no
+  Dashboard state). `WorkoutPanel` is **not**: it takes `onFeedback`, which in the old Dashboard set
+  Dashboard-held `pendingFeedback` that fed `ChatPanel` — panel → Dashboard state → chat. That state
+  moved to `HubLayout` and is reached via `useHubChat`; the panel itself is unedited.
+  `git diff --stat` shows new pages + `App.jsx` + `Dashboard.jsx` only — **not** `HealthPanel` /
+  `WorkoutPanel` / `ChatPanel`.
+- **Step 3 orphan check** — every prior header destination, re-homed before deletion:
 
-### G3 — the three non-happy states
+  | Old header control | Destination | Now |
+  |---|---|---|
+  | AM | `/checkin-am` | Prominent `CheckInButtons` above the grid |
+  | PM | `/nightly` | Prominent `CheckInButtons` above the grid |
+  | History | `/checkin-history` | History tile |
+  | Labs | `/metrics` | Labs tile |
+  | Interpretation | `/interpretation` | Interpretation tile |
+  | Settings | `/settings` | Settings tile |
+  | Sign out | (action) | `HubLayout` header, on every route |
 
-| state | render |
-|---|---|
-| loading | spinner, *"Reading your latest panel…"* |
-| empty (404) | *"No lab results yet"*, neutral card, CTA to Metrics |
-| error (any other) | **red** panel, *"Could not load your interpretation"* + *"This is a fault, not an empty result"* + the detail |
+  Verified in-browser: 8 `main` destinations render — the six tiles plus both check-in buttons.
+  `/recovery` and `/training` are new reachable surfaces. `/checkin` was already URL-only on master
+  (no link anywhere) — unchanged, not a regression introduced here.
+- **Step 4 copy string**, evaluated through Vite's own resolver against the committed fixture and a
+  synthetic payload:
+  `What Moved: 2 · Stable: 0 · collected 30 May` (fixture)
+  `What Moved: 2 · Stable: 5 · collected 30 May` (2-moved / 5-stable)
+  Counts and a date only; no priority phrasing. Counts come from `splitSections` — the view's own
+  placement function, consuming `should_surface` rather than recomputing it.
+- **Build / lint** — `npm run build` clean (401.69 kB). eslint **5 errors, unchanged from the master
+  baseline** (`ChatPanel`, `WorkoutPanel`, `Settings` — all pre-existing; an added 6th was fixed by
+  moving the chat context to its own module). Frontend-only; backend untouched, no suite delta.
+- **Browser verification** (offline harness: backend pointed at a closed port so the 401 redirect
+  does not fire). At **375×812**: sheet off-screen when closed (`top` = 812 = viewport height); open
+  places it flush-bottom with the chat input visible and the backdrop present; backdrop tap
+  re-closes. At **1280×800**: rail `position: static`, side-by-side with `main` (853 + 427 = 1280),
+  full height, border-left, no sheet radius/shadow, toggle and Close hidden. **One** `ChatPanel`
+  instance at both widths. Note: the preview pane does not composite
+  (`document.visibilityState === "hidden"`), so CSS transitions never advance — settled positions
+  were read with the transition disabled. A harness artifact, not a defect; it briefly presented as
+  a stuck-translate bug and is not one.
 
-404 is treated as EMPTY because it is the endpoint's documented no-reports-confirmed case, not a
-failure. Error is red, empty is neutral — an error can never render as an empty interpretation.
+### Open questions touched
 
-### G4/G5 — how "live" and "reachable" were confirmed, and the one limit
+- `Q63` — **DONE → #NEXT** (integer at ff). Resolved to candidate (a), amended to `collected`.
+- No other question's state changed.
 
-- The deployed backend serves the route: `GET /interpretation` → **401** without a token, versus
-  **404** for a nonexistent path. Discriminating, not just "a response".
-- The deployed served bundle carries `to:\`/interpretation\`` (dashboard nav), `L.get(\`/interpretation\`)`
-  (the view's call) and `path:\`/interpretation\`` (the route). The fixture is **gone** from the app
-  bundle — `Example Pathology` greps 0, and the bundle shrank 407 → 397 kB.
-- The view was rendered against the **deployed backend's actual payload**, captured verbatim from
-  the container (80 KB, 3 groups, 51 ungrouped) — not invented data. Clicking "Interpretation" on
-  the dashboard navigated to `/interpretation` and rendered it.
+### Outstanding (owner: Luke)
 
-**The limit, stated plainly:** the browser→production authenticated round trip was not exercised,
-because that needs the operator's login and I will not handle a password. Everything either side of
-it is verified. One click by the operator closes it.
+1. **Merge decision on `feat/hub-shell`.** Held for review per the brief, not merged.
+2. On merge: resolve `#NEXT` on-branch pre-ff (re-read master max at that instant — do **not** reuse
+   #161), then `git land feat/hub-shell`.
+3. **Deploy probe, not yet run** (post-merge; `#116` timing + `#121` coverage):
+   `railway service health-app-frontend`, then `railway deployment list` → SUCCESS, then fetch the
+   live `assets/index-*.js` and grep `HRV, sleep and overnight vitals` — confirmed present in the
+   local production bundle, so it survives minification.
+4. **`master` is ahead 1 of `origin/master`** (`35e8a1d`, prior session). Not touched this session
+   and not pushed here — the owner's call. It is reachable on `origin` via `feat/hub-shell`, so chat
+   can read it, but `origin/master` itself still lags. Resolve with `git push origin master`.
+5. **No frontend test runner.** The `#47` no-priority-phrasing assertion on the tile string is
+   inspection-backed, not test-backed. Standing up vitest is its own decision.
+6. **`BRANCHES.md` column drift** (pre-existing, not introduced here): rows from
+   `governance/q69-resolution` onward carry **6** columns against a **5**-column header, so their
+   trailing cell is dropped when rendered. The new row matches the header at 5.
 
-### Step 4 — reading it as the operator
+### Single next action
 
-**It reads honestly.** The header says `Prostate Specific Antigen (PSA) · collected 2026-05-30`, and
-the first thing under *What Moved* is the liver group headed **"as of 2026-03-06 · not this panel"**.
-The three out-of-range markers — AST 47 H, ALT 53 H, Bilirubin 28 — sit under that label, each with
-`vs 2025-12-27` on its delta line. A reader is told the values are from March, and told what they
-were compared against. That is the thing this lane existed to fix.
+Review `feat/hub-shell` (`001df4c`, pushed) and decide merge. If merging: resolve `#NEXT` on-branch
+pre-ff, `git land feat/hub-shell`, then run the frontend deploy probe in item 3.
 
-The floor descriptors read as worth reading rather than as boilerplate — they are short, sit under
-the heading, and say something the rest of the card does not. They will become skippable once read
-a few times, which is exactly what `#158`'s do-not-revisit clause is armed for; nothing to act on
-yet.
+### Governance stores changed this session
 
-**Two things noticed, one fixed:**
-
-1. **FIXED —** forty "not this panel" badges on one page, five of them repeating the group header
-   verbatim. Signal becoming wallpaper. The member badge now defers to a coherent group; 40 → 35.
-   Every automated check passed on the noisy version.
-2. **NOT fixed, reported —** the declared-state block renders **23 chips** between the panel header
-   and the first finding (`trt · steady`, `tirzepatide · washout`, … ). It is honest and it is
-   correct, but it is the largest single block on the page and it sits in front of the content.
-   Two of the chips (`hgh`, `ultra_muscleze_night`) render as bare keys because their phase is null.
-   Restyling declared-state display is a design decision, not a wiring fix, and was out of scope.
-
-### Open questions unchanged
-
-`Q66`, `Q67`, `Q68`, `Q70`, `Q71` all open and untouched. `Q69` is `DONE → #159`.
-
-### Single clearest next action
-
-**Log in and click Interpretation** — the one step of the round trip I could not exercise.
-
-Then the next substantive lane, and the strongest small one available: **persist `lab_accession`**.
-It is parsed at extract and discarded at confirm, and one column unlocks report identity, a dedupe
-key above the result rows (`Q68`), and episode scoping (`#159`'s do-not-revisit dependency).
+`DECISIONS_LOG.md` · `OPEN_QUESTIONS.md` · `ROADMAP.md` · `BRANCHES.md` · `CLAUDE.md`
+(`FEEDBACK.md` and `Ideas.md` unchanged.)
