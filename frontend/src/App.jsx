@@ -11,6 +11,8 @@ import CheckInHistory from './pages/CheckInHistory'
 import NightlyCloseOut from './pages/NightlyCloseOut'
 import Metrics from './pages/Metrics'
 import InterpretationView from './pages/InterpretationView'
+import Recovery from './pages/Recovery'
+import Training from './pages/Training'
 
 function RequireAuth({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />
@@ -29,6 +31,8 @@ export default function App() {
         <Route path="/nightly" element={<RequireAuth><NightlyCloseOut /></RequireAuth>} />
         <Route path="/checkin-history" element={<RequireAuth><CheckInHistory /></RequireAuth>} />
         <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+        <Route path="/recovery" element={<RequireAuth><Recovery /></RequireAuth>} />
+        <Route path="/training" element={<RequireAuth><Training /></RequireAuth>} />
         <Route path="/metrics" element={<RequireAuth><Metrics /></RequireAuth>} />
         <Route path="/interpretation" element={<RequireAuth><InterpretationView /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />

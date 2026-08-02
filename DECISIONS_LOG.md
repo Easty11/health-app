@@ -5829,3 +5829,53 @@ Hevy-derived measure), at which point the `source` vocabulary and the per-measur
 are the surfaces to re-read — not the append-only rule, which is the point of the table.
 
 ---
+
+### #NEXT. The interpretation hub tile shows structural counts, not a priority ordering (resolves Q63)
+
+**Decision:** Under `#150` Constraint A the interpretation tile carries Q63 candidate (a) — counts,
+section structure and recency read from the existing `GET /interpretation` payload. The tile routes
+to `/interpretation` and does not reproduce the interpreted synthesis (`#150` Constraint C, `#49`).
+The rendered string is:
+
+> `What Moved: 2 · Stable: 5 · collected 30 May`
+
+**Amends the candidate as written.** Q63 (a) and the commissioning brief both said *"generated
+<date>"*. That is wrong against master and is not shipped. `meta.generated_at` exists, but
+`GET /interpretation` builds the payload on every request — `producer.py:560` stamps
+`datetime.now(timezone.utc)` — so the field is always "now". A tile reading "generated 2 Aug" on
+2 Aug and "generated 3 Aug" on 3 Aug, over an unchanged lab draw, states nothing about the user's
+data and implies a stored artefact with an age. `meta.trigger_panel.collected` is the real recency:
+the date of the draw being interpreted, and the date the view itself already labels "collected".
+Q63's own example — "last generated 30 May" — *is* that collection date in the committed fixture, so
+the candidate conflated the two rather than choosing generation deliberately.
+
+**Rationale:** (a) is permitted and informative; (b) existence-only discards free, already-computed
+structure; (c) no-tile removes a doorway the hub exists to provide. A reader inferring salience from
+counts is inference from their own data, not the product ordering their problems — the line `#150`
+Constraint A draws from `#47`: "3 markers out of range" is arithmetic (in), "3 need attention" is
+personalised prioritisation (out).
+
+**Status:** Decided (design + build). Resolves `Q63`. Tile built on `feat/hub-shell`, pushed and
+held for review; not on master at time of writing.
+
+**How you know:**
+- The copy is a pure function (`interpretationTileCopy`), not a literal buried in JSX, so the `#47`
+  boundary has one reviewable site. Evaluated through Vite's own resolver in the browser against
+  the committed fixture: `What Moved: 2 · Stable: 0 · collected 30 May`; against a synthetic 2-moved
+  / 5-stable payload: `What Moved: 2 · Stable: 5 · collected 30 May`. No priority phrasing in either.
+- Counts come from `splitSections`, the same placement function the view uses, which CONSUMES
+  `should_surface` rather than recomputing it — no second source of truth (the defect `sections.js`
+  was written to close).
+- The tile renders four distinct states (loading / empty-404 / error / ready); an error does not
+  render as an absent or empty tile.
+- **Not** a test assertion. This repo has no frontend test runner — no vitest/jest, no `test`
+  script, no spec files anywhere under `frontend/src` (verified). Adding one is tooling adoption,
+  not a layout job, so the artefact above is evaluation-plus-inspection and the assertion Q63's
+  brief anticipated is recorded as OWED, not claimed.
+
+**Do not revisit unless:** the producer's emitted section shape changes which counts are available
+(Q62 / 4b-ii follow-ons); `#47` classification moves (its own revisit clause), which would move
+Constraint A; or `/interpretation` gains a cached/stored generation, at which point `generated_at`
+becomes a real recency signal and the collected-vs-generated amendment above is worth re-reading.
+
+---

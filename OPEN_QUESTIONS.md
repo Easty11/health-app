@@ -1541,7 +1541,12 @@ Numbered `Q62` on the `feat/interp-producer-1a` branch (pre-ff; max was Q61, no 
 
 ## Q63. What does the interpretation tile show?
 
-**State:** OPEN. **Blocks:** the hub tile set (#150). **Blocked by:** 4b-ii.
+**State:** DONE → #NEXT (integer claimed when `feat/hub-shell` fast-forwards to master).
+
+Resolved to candidate **(a)**, with one amendment: the shipped string reads `collected <date>`, not
+`generated <date>`. `meta.generated_at` is stamped at request time, so it is always "now" and says
+nothing about the draw; the "30 May" in (a)'s own example is the *collection* date in the fixture.
+See the decision entry for the full reasoning.
 
 A design question, not a regulatory one — under #150 Constraint A a tile may carry counts, deltas and
 section structure. What it may not carry is a personalised priority ordering, which rules out the most
