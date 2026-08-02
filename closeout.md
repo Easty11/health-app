@@ -3,23 +3,33 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-02. Branch at close: `feat/hub-shell` (pushed, **not merged**).
-Session-open ref: `35e8a1d`.
+Session date: 2026-08-02. Branch at close: `feat/hevy-template-sync-wiring` (pushed, **not merged**).
+Session-open ref: `d11b2b8`. Session-open `DECISIONS_LOG` max on master: **161** (counted
+`^### [0-9]+`, period-agnostic). The brief was written against #161 / Q74 — no re-aim needed.
 
-**The `#150` hub shell is built and held for review.** `/dashboard` is a module tile grid with
-chat docked; the two panels now have their own routes. Nothing is on master.
+**The Hevy exercise-template sync now has call sites; the prod population gate is OWED.** The
+operator endpoint and the connect-time seed are built and tested. The route does not exist in prod
+until this branch merges, so the population gate the brief exists to force is recorded as
+BEFORE-only and **not claimed**.
 
 ## 1. Real commits this session
 
-`git log --oneline 35e8a1d..HEAD`:
+`git log --oneline d11b2b8..HEAD`:
 
 ```
-001df4c feat(frontend): #150 hub shell — tile grid on /dashboard, chat docked, panels relocated
+c7bed98 governance: #NEXT (sync wiring), Q#NEXT (recurring-sync fork), BRANCHES row
+2f377ad feat(hevy): #NEXT wire the exercise-template sync — operator endpoint + connect-time seed
 ```
 
-Plus this close-out commit. Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
+Plus this close-out commit. Both pushed to `origin/feat/hevy-template-sync-wiring`;
+`git cherry origin/master HEAD` reports both as `+` (real, unmerged work).
+
+Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
+2026-08-02 governance: #NEXT (sync wiring), Q#NEXT (recurring-sync fork), BRANCHES row
+2026-08-02 feat(hevy): #NEXT wire the exercise-template sync — operator endpoint + connect-time seed
+2026-08-02 chore: session close-out
 2026-08-02 feat(frontend): #150 hub shell — tile grid on /dashboard, chat docked, panels relocated
 2026-08-02 governance: question-state vocab (carve+sweep), Q65 collapse, Q73/Q74, FEEDBACK §22, CLAUDE accretion compress, ROADMAP NEXT reconcile
 2026-08-02 governance: renumber #NEXT -> #161 and land; Q72 carries the owner's position
@@ -27,139 +37,189 @@ Plus this close-out commit. Repo's own dated record (`git log --format="%ad %s" 
 2026-08-02 feat(engine): capability_observations — graded, timestamped measurement
 2026-08-01 chore: session close-out
 2026-08-01 governance: resolve #NEXT -> #160 (on-branch, pre-ff)
-2026-08-01 governance: #NEXT — the group as-of derivation, and the label #159 actually asked for
-2026-08-01 fix(interpretation): a member defers its date badge to the group that already stated it
-2026-08-01 feat(interpretation): link the interpretation view from the dashboard
 ```
+
+### What landed in code
+
+`backend/routers/integrations.py` — `sync_exercise_templates` gains its two call sites:
+
+- `POST /integrations/hevy/sync` — `async def`, `get_current_user` auth, calls
+  `sync_exercise_templates(db, only_user_id=current_user.id)` and returns the summary verbatim.
+  Scoped to the caller: a user-facing route never runs a family-wide sync.
+- `connect_hevy` — converted `def` → `async def`; after the key's `db.commit()` it calls the
+  **same** path. Ordering is load-bearing: the commit is what makes the key visible to
+  `users_with_hevy_key`, which the sync reads.
+- `_sync_failure(summary)` — the failure signal mapped to HTTP. `users_attempted == 0` → 404
+  carrying the byte-identical body `_require_integration` produces
+  (`"hevy integration not connected"`); `users_failed >= 1` → the recorded error routed through
+  the existing `_hevy_error_to_http` choke point. A failed run is never a 200 with a silent zero.
+- `_SYNC_ERROR_TYPES` / `_sync_error_to_http` — the summary keeps only
+  `f"{type(exc).__name__}: {exc}"`, so the two types whose mapping is not the 502 default
+  (`HevyAuthError`, `HevyForbiddenError`) are rehydrated from that string. Without this a revoked
+  Hevy key would flatten to 502 and quietly undo `#66`'s 401→424 decoupling — whose whole point is
+  that a dead *connector* key must not log the user out of the app.
+- Connect-time seed failure: 201 stands (storing the key is the request's contract) and the failure
+  is **not** swallowed — the response body gains `sync`, carrying the summary (whose `users_failed`
+  / `rows_processed` expose a partial run) or a failure shape.
+
+`backend/hevy_templates.py` is **untouched** — the summary contract, per-user isolation and the CLI
+keep their behaviour. No migration, no schema change. The routine contract,
+`context_builder._section_routine_creation` and `chat.py`'s block parser were not edited; the
+brief's scope fence held. Custom-exercise creation (`<hevy_create_exercise>`) is step 2 and is not
+started.
+
+### Tests
+
+`backend/tests/test_hevy_sync_wiring.py`, 16 new tests. Full backend suite **594 passed**
+(baseline on `master` before the branch: **578**).
+
+```powershell
+cd C:\Users\lukee\Projects\health-app\backend; .\.venv\Scripts\python.exe -m pytest -q
+```
+
+Two choices worth carrying forward:
+
+- The tests drive the **routes** over a standalone `FastAPI` app with `get_db` /
+  `get_current_user` overridden — not the handler objects, as the house pattern in
+  `test_connector_error_policy.py` otherwise does. The defect being fixed is precisely "the
+  function exists and nothing reaches it"; a handler-object call would prove the body and skip the
+  wiring, which is the only thing under test.
+- **Paired negative controls** (`FEEDBACK` §17, `#103` — a control must discriminate on identity,
+  not just function). Renaming the route to `/hevy/sync-UNWIRED` fails **6 of 16** and passes the
+  10 that never touch that path; replacing the connect-time seed call with a literal fails the
+  **4** connect tests and passes the other 12. Each control fails exactly its own half, so neither
+  half is being carried by the other. The keyless-caller assertion checks the **detail string**,
+  not just the status code, because an unregistered route also returns 404 and would otherwise pass.
 
 ## 2. Pending-queue reconciliation
 
-No `;cc` pending-commit queue was carried in. The input was a **code-ready brief** (hub shell,
-`#150`), reconciled step by step. Everything in it is either landed at `001df4c` or listed as
-outstanding — nothing is silently dropped.
+No chat `;cc` pending-commit queue was carried into this session — the brief arrived as prose, not
+as `PENDING` canonical entries. Reconciled instead against the brief's own deliverables:
 
-| Brief step | Outcome |
-|---|---|
-| 0 — cut branch, report max decision number | **Landed.** Max is **#161** (period-agnostic `^### [0-9]+`), matching the brief. Branch cut from master. |
-| 1 — chat-dock layout wrapper | **Landed.** `HubLayout` docks one `ChatPanel`: static right rail ≥ md, fixed bottom sheet < md. **No prop or data-path change** — `pendingFeedback` / `onFeedbackSent` exactly as `Dashboard` passed them; `ChatPanel.jsx` unedited. No standing-context wiring added. |
-| 2 — relocate the two panels | **Landed.** `/recovery` and `/training` host `HealthPanel` / `WorkoutPanel` full-width under `RequireAuth`. Neither panel's internals edited. |
-| 3 — tile grid on `/dashboard` | **Landed.** Six tiles + prominent AM/PM. Every prior header destination enumerated and re-homed *before* any link was deleted (table in §3). |
-| 4 — interpretation tile, `Q63` → (a) | **Landed, amended.** Copy is `What Moved: <n> · Stable: <m> · collected <date>` — *not* `generated`. See §3 "Corrections". |
-| 5 — Constraint B | **N/A — no forecast on tile.** The Recovery tile is navigation-only (label + static description); it previews no readiness number, so `#150` Constraint B does not engage. |
-| 6 — no chat-context seeding | **Held.** Tiles are plain doorways. Nothing touches the standing prompt or the request-scoped `find_marker` → `render_asked_lab_value` path (`#59`). |
-| LOG | **Landed** as `### #NEXT` in `DECISIONS_LOG.md`; `OPEN_QUESTIONS` `Q63` → `DONE → #NEXT`. Adjudicated as a standalone decision, not pure application of Constraint A — `#150` permits candidate (a) but does not select it over (b)/(c), and the `generated`→`collected` amendment needs its own "How you know". |
+| Brief item | Landed? |
+|-----------|---------|
+| `POST /integrations/hevy/sync`, async, `get_current_user`, `only_user_id=current_user.id`, summary verbatim | **YES** — `2f377ad` |
+| `users_failed >= 1` → error through `_hevy_error_to_http`; `users_attempted == 0` → 404 | **YES** — `2f377ad` (`_sync_failure`) |
+| `connect_hevy` → `async def`, seed after `db.commit()`, same path | **YES** — `2f377ad` |
+| Seed failure never fails the key store; reported in `response.sync` | **YES** — `2f377ad` |
+| Unit tests: endpoint 200 / non-200 / 404, connect-seed happy + raising | **YES** — 16 tests, `2f377ad` |
+| Full backend suite green, count reported | **YES** — 594 passed (was 578) |
+| **Prod population gate, paired before/after** | **NO — OWED.** See below. |
+| `DECISIONS_LOG ### #NEXT` | **YES** — `c7bed98` |
+| `OPEN_QUESTIONS Q#NEXT` (recurring sync deferred) | **YES** — `c7bed98` |
+| Branch pushed even while held (`#98`) | **YES** — `origin/feat/hevy-template-sync-wiring` |
 
-**Provisional, not done:** `#NEXT` is unresolved and `Q63` reads `DONE → #NEXT` because the branch
-is **not merged**. The integer is claimed only at the fast-forward, per number-at-merge.
+### The prod population gate — BEFORE recorded, AFTER owed, gate NOT claimed
+
+Read via `railway run --service health-app-DB` over `DATABASE_PUBLIC_URL` (`#56` — `railway run`
+injects the private-network hostname, unresolvable from a laptop), printing counts only and never a
+credential (`#111`):
+
+```
+hevy_exercise_templates total=494 defaults=451 customs=43
+max_synced_at=2026-07-14 12:09:06.888252+00:00
+user_integrations provider=hevy rows=3
+```
+
+So the table is **not** the zero-row substrate `FEEDBACK` §8 recorded — the one-off CLI run of
+2026-07-14 populated it, and `max(synced_at)` shows nothing has touched it since. That is the
+precise state this wiring exists to end: populated once by someone remembering, never by the
+application.
+
+**Why the after-half was not taken:** the deployed backend's `openapi.json` lists five
+`/integrations/hevy*` paths — `/integrations/hevy`, `/routines`, `/workout-count`, `/workouts`,
+`/workouts/all` — and **not** `/integrations/hevy/sync`. The route does not exist in prod until this
+branch merges and Railway redeploys. Probed, not assumed. Per the brief the gate is therefore **not
+claimed**, marked OWED, and the branch is parked pushed-but-unmerged.
+
+**One correction for whoever runs the after-half.** The paired before/after count is the right
+control, but its signal here is not what a naive read expects: the sync is **upsert-only** (`#77` —
+the Hevy API cannot delete templates) and the table already holds 494 rows. On a healthy prod the
+after-count is expected to be **494 unchanged, not higher** — a zero delta is the success case, not
+a failure. The signals that must actually move are `defaults_seen > 0` in the returned summary and
+`max(synced_at)` advancing off 2026-07-14. A rising count would additionally mean new templates
+exist upstream.
+
+Sequence to close it — the timing axis (`#116`) then the coverage axis (`#121`), each read before
+the next runs rather than chained (`#103`):
+
+```powershell
+git checkout master; git merge --ff-only feat/hevy-template-sync-wiring; git push origin master
+```
+
+```powershell
+railway deployment list --service health-app-backend
+```
+
+```powershell
+curl.exe -s https://health-app-backend-production-760e.up.railway.app/openapi.json | Select-String "hevy/sync"
+```
+
+Then POST `/integrations/hevy/sync` authenticated as Luke, read `defaults_seen` off the response,
+and re-run the count:
+
+```powershell
+railway run --service health-app-DB -- C:\Users\lukee\Projects\health-app\backend\.venv\Scripts\python.exe C:\Users\lukee\AppData\Local\Temp\claude\C--Users-lukee-Projects-health-app\df14783b-6605-4913-969e-8c50f9c67901\scratchpad\count_templates.py
+```
+
+That script is session-scratchpad and prints counts, `max(synced_at)` and the hevy-key row count
+only — reproduce it in-repo if the gate outlives the scratchpad.
 
 ## 3. Cold-resume handoff
 
-### What exists now
+### Branch terminal states (gate PASSED — nothing in limbo)
 
-`feat/hub-shell` at `001df4c`, pushed to `origin`, **not merged**. Frontend only; no backend delta.
+Local branches: `master`, `feat/cbti-eval-trigger`, `feat/hevy-template-sync-wiring`.
 
-- `frontend/src/components/HubLayout.jsx` — the shell. Header (back / title / mobile chat toggle /
-  Sign-out), module area as `{children}`, and **one** `ChatPanel`. The single instance is
-  load-bearing: a rail plus a separate drawer would mount twice, both receive `pendingFeedback`,
-  both `POST /chat`, and both write the same `chat_history_<sub>` key. One element, position
-  switched at the breakpoint. Sheet rules are `max-md:`-scoped so the rail needs no `md:` resets.
-  A `fill` prop bounds the module area for the panel pages so their `h-full` + internal scroll
-  behave as they did in the old Dashboard column.
-- `frontend/src/components/hub/HubChatContext.js` — `sendToChat`. A separate module only because
-  react-refresh requires a component file to export components and nothing else.
-- `frontend/src/components/hub/{Tile,InterpretationTile}.jsx`, `interpretationTileCopy.js`.
-- `frontend/src/pages/{Recovery,Training}.jsx`; `Dashboard.jsx` rewritten as the hub;
-  `App.jsx` + two routes.
+| Branch | `git cherry origin/master` | State |
+|--------|---------------------------|-------|
+| `feat/hevy-template-sync-wiring` | 2 × `+` (`2f377ad`, `c7bed98`) | **OWED** — pushed, rowed in `BRANCHES.md`. Outstanding: the prod population gate above; command sequence in §2. Owner: Luke. |
+| `feat/cbti-eval-trigger` | 2 × `+` (`f30dd49`, `fec0324`) | **Not touched this session** — carried in as the session-open branch, read only, never committed to. Pushed to `origin` and carries its own `BRANCHES.md` row on its own branch. Not in limbo. |
+| `master` | — | at `d11b2b8`, clean. |
 
-### Corrections made to the brief (expected output, not failure)
+Remote refs: `origin/master`, `origin/feat/cbti-eval-trigger`, `origin/feat/hevy-template-sync-wiring`.
+Nothing unpushed, nothing undiscarded.
 
-1. **`generated` → `collected` on the interpretation tile.** `Q63` (a) and the brief both said
-   "generated `<date>`". `meta.generated_at` exists but `GET /interpretation` builds the payload per
-   request (`producer.py:560` stamps `datetime.now`), so it is always "now" — the tile would read
-   "generated 2 Aug" on 2 Aug over an unchanged draw. Shipped `collected`, from
-   `meta.trigger_panel.collected`. `Q63`'s own "30 May" *is* that collection date in the fixture.
-2. **The header was seven links, not six.** `#150` rule 2 lists six; `Interpretation` was added
-   since (`#158`, with a comment anticipating this retirement). All seven re-homed.
-3. **"How you know" is not a test.** The brief's LOG draft asserted a test on the tile string. This
-   repo has **no frontend test runner** — no vitest/jest, no `test` script, no spec files under
-   `frontend/src`. Adding one is tooling adoption, not a layout job. The copy was extracted into a
-   pure function and evaluated through Vite's own resolver instead; the assertion is recorded OWED.
-4. **ANCHOR could not hold as written.** `git cherry origin/master` was not empty at branch cut —
-   `master` was already **ahead 1** of `origin/master` (`35e8a1d`, from the prior session). Not this
-   session's work; flagged rather than silently pushed. See "Outstanding".
+### Governance numbering — two `#NEXT` placeholders in flight
 
-### Gate evidence
+`master` already carries one unnumbered `### #NEXT` (the held hub-shell entry, on
+`feat/hub-shell`). This session added a second, plus a `Q#NEXT`. Both are correctly headed per
+number-at-merge (`FEEDBACK` §20), so the cost is one substitution each — but **merge order decides
+which claims 162**. Whichever branch ff-merges first takes the integer; the second renumbers above
+it.
 
-- **Step 1** — no prop/data-path change (expected: none, confirmed). `ChatPanel.jsx` not in the diff.
-- **Step 2 coupling finding** — `HealthPanel` is self-contained (fetches `/health/summary`, held no
-  Dashboard state). `WorkoutPanel` is **not**: it takes `onFeedback`, which in the old Dashboard set
-  Dashboard-held `pendingFeedback` that fed `ChatPanel` — panel → Dashboard state → chat. That state
-  moved to `HubLayout` and is reached via `useHubChat`; the panel itself is unedited.
-  `git diff --stat` shows new pages + `App.jsx` + `Dashboard.jsx` only — **not** `HealthPanel` /
-  `WorkoutPanel` / `ChatPanel`.
-- **Step 3 orphan check** — every prior header destination, re-homed before deletion:
+### Current sprint
 
-  | Old header control | Destination | Now |
-  |---|---|---|
-  | AM | `/checkin-am` | Prominent `CheckInButtons` above the grid |
-  | PM | `/nightly` | Prominent `CheckInButtons` above the grid |
-  | History | `/checkin-history` | History tile |
-  | Labs | `/metrics` | Labs tile |
-  | Interpretation | `/interpretation` | Interpretation tile |
-  | Settings | `/settings` | Settings tile |
-  | Sign out | (action) | `HubLayout` header, on every route |
+`ROADMAP.md` NOW is unchanged by this session and still carries: CBT-I `Q45` nap day-attribution
+(dated, contaminating capture now), CBT-I `#118` PM evaluation trigger (built on
+`feat/cbti-eval-trigger`, unmerged), the lab upload pipeline, the interpretation layer build (4b-ii
+closed; increments 2 / 3 / 5 unstarted), and the two cross-repo OWED rows.
 
-  Verified in-browser: 8 `main` destinations render — the six tiles plus both check-in buttons.
-  `/recovery` and `/training` are new reachable surfaces. `/checkin` was already URL-only on master
-  (no link anywhere) — unchanged, not a regression introduced here.
-- **Step 4 copy string**, evaluated through Vite's own resolver against the committed fixture and a
-  synthetic payload:
-  `What Moved: 2 · Stable: 0 · collected 30 May` (fixture)
-  `What Moved: 2 · Stable: 5 · collected 30 May` (2-moved / 5-stable)
-  Counts and a date only; no priority phrasing. Counts come from `splitSections` — the view's own
-  placement function, consuming `should_surface` rather than recomputing it.
-- **Build / lint** — `npm run build` clean (401.69 kB). eslint **5 errors, unchanged from the master
-  baseline** (`ChatPanel`, `WorkoutPanel`, `Settings` — all pre-existing; an added 6th was fixed by
-  moving the chat context to its own module). Frontend-only; backend untouched, no suite delta.
-- **Browser verification** (offline harness: backend pointed at a closed port so the 401 redirect
-  does not fire). At **375×812**: sheet off-screen when closed (`top` = 812 = viewport height); open
-  places it flush-bottom with the chat input visible and the backdrop present; backdrop tap
-  re-closes. At **1280×800**: rail `position: static`, side-by-side with `main` (853 + 427 = 1280),
-  full height, border-left, no sheet radius/shadow, toggle and Close hidden. **One** `ChatPanel`
-  instance at both widths. Note: the preview pane does not composite
-  (`document.visibilityState === "hidden"`), so CSS transitions never advance — settled positions
-  were read with the transition disabled. A harness artifact, not a defect; it briefly presented as
-  a stuck-translate bug and is not one.
+`ROADMAP.md` NEXT gained one row: **Hevy custom-exercise creation (step 2)** — the
+`<hevy_create_exercise>` wiring, explicitly gated on the step-1 prod gate closing, because
+`create_and_resolve`'s idempotency pre-check reads `hevy_exercise_templates` and a stale or empty
+catalogue makes it mint duplicate templates rather than short-circuit. A wrong write, not a missed
+read.
 
 ### Open questions touched
 
-- `Q63` — **DONE → #NEXT** (integer at ff). Resolved to candidate (a), amended to `collected`.
-- No other question's state changed.
+- **`Q#NEXT`** (new, OPEN, gated on nothing) — the catalogue now gets populated on connect, but
+  nothing keeps it fresh. Three independent drift sources: Hevy renames its defaults (`#79`/`#81`,
+  already a live phenomenon and the reason `catalogue_titles_by_id` exists), the user adds customs
+  in the Hevy client directly, and the sync is upsert-only so drift only accumulates. Candidates:
+  (a) cron, (b) sync-on-read-staleness, (c) sync-on-workout-fetch. The axis to decide first is what
+  freshness is *for* — (b) and (c) refresh only what a read touches, (a) is the only one that
+  catches drift before a read needs it, and that distinction only bites once a **write** path
+  depends on the store being current. Resolve-before: custom-exercise creation.
+- No existing question was resolved or restated. `Q74` (the brief's stated aim point) was not
+  touched.
 
-### Outstanding (owner: Luke)
+### Single clearest next action
 
-1. **Merge decision on `feat/hub-shell`.** Held for review per the brief, not merged.
-2. On merge: resolve `#NEXT` on-branch pre-ff (re-read master max at that instant — do **not** reuse
-   #161), then `git land feat/hub-shell`.
-3. **Deploy probe, not yet run** (post-merge; `#116` timing + `#121` coverage):
-   `railway service health-app-frontend`, then `railway deployment list` → SUCCESS, then fetch the
-   live `assets/index-*.js` and grep `HRV, sleep and overnight vitals` — confirmed present in the
-   local production bundle, so it survives minification.
-4. **`master` is ahead 1 of `origin/master`** (`35e8a1d`, prior session). Not touched this session
-   and not pushed here — the owner's call. It is reachable on `origin` via `feat/hub-shell`, so chat
-   can read it, but `origin/master` itself still lags. Resolve with `git push origin master`.
-5. **No frontend test runner.** The `#47` no-priority-phrasing assertion on the tile string is
-   inspection-backed, not test-backed. Standing up vitest is its own decision.
-6. **`BRANCHES.md` column drift** (pre-existing, not introduced here): rows from
-   `governance/q69-resolution` onward carry **6** columns against a **5**-column header, so their
-   trailing cell is dropped when rendered. The new row matches the header at 5.
-
-### Single next action
-
-Review `feat/hub-shell` (`001df4c`, pushed) and decide merge. If merging: resolve `#NEXT` on-branch
-pre-ff, `git land feat/hub-shell`, then run the frontend deploy probe in item 3.
-
-### Governance stores changed this session
-
-`DECISIONS_LOG.md` · `OPEN_QUESTIONS.md` · `ROADMAP.md` · `BRANCHES.md` · `CLAUDE.md`
-(`FEEDBACK.md` and `Ideas.md` unchanged.)
+**Close the prod population gate.** ff-merge `feat/hevy-template-sync-wiring` to `master`, confirm
+the `health-app-backend` deployment reports SUCCESS and that the live `openapi.json` now lists
+`/integrations/hevy/sync`, then POST it as Luke and re-run the count — asserting `defaults_seen > 0`
+and `max(synced_at)` advanced off 2026-07-14, **not** that the row count rose. Until that lands,
+step 1 is code-complete and unproven in prod, which is the exact `FEEDBACK` §8 state the brief
+exists to end — and step 2 (custom-exercise creation) must not start, because its idempotency
+pre-check reads the substrate this gate is proving.

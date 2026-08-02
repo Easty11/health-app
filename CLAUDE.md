@@ -266,9 +266,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Hevy template sync wired, prod gate OWED (`#NEXT`)** - the catalogue sync gains an operator endpoint and a connect-time seed. On `feat/hevy-template-sync-wiring`, not master. See `closeout.md` / `BRANCHES.md`.
 - **Hub shell built, held for review (`#NEXT`)** - `/dashboard` is a module tile grid with chat docked, the two panels relocated to their own routes, and `Q63` resolved to structural counts. On `feat/hub-shell`, not master. See `closeout.md` / `BRANCHES.md`.
 - **1b COMPLETE (#160)** - the interpretation view reads live data, groups carry an as-of date and are labelled when off the trigger draw, and the route is reachable from the dashboard. See `closeout.md` / DECISIONS_LOG #159-#160.
-- **1b delivery, Steps 0-4 (Q70)** - producer read over the real series, `axis_verdict` frame, generated fixture, corrected view with collection dates, and `GET /interpretation`. Wiring held on Q69. See `closeout.md` / OPEN_QUESTIONS Q69-Q70.
 
 ---
 
