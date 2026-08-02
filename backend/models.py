@@ -451,7 +451,7 @@ class CapabilityState(Base):
     (DECISIONS_LOG — Adaptive Exposure Engine entry).
 
     THE WEARABLE-METRIC INVARIANT SCOPES TO THIS TABLE'S VERDICT, NOT TO
-    MEASUREMENT (DECISIONS_LOG #NEXT). `status` here remains self-reported through
+    MEASUREMENT (DECISIONS_LOG #161). `status` here remains self-reported through
     the education idiom (spec §12) and is never derived from a wearable. That is
     unchanged. What changed is that it is no longer the engine's only capability
     signal: `capability_observations` carries measured QUANTITIES, which may be
@@ -486,7 +486,7 @@ class CapabilityState(Base):
 
 class CapabilityObservation(Base):
     """Adaptive Exposure Engine — graded, timestamped capability MEASUREMENT
-    (DECISIONS_LOG #NEXT).
+    (DECISIONS_LOG #161).
 
     Not a replacement for `capability_state`, and deliberately not a column on it.
     `capability_state.status` is the response-to-load VERDICT, written from the

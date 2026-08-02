@@ -1,7 +1,7 @@
 """add capability_observations
 
 Graded, timestamped capability measurement for the Adaptive Exposure Engine
-(DECISIONS_LOG #NEXT). Purely additive: `capability_state` is untouched, and
+(DECISIONS_LOG #161). Purely additive: `capability_state` is untouched, and
 nothing existing reads this table.
 
 WHY A NEW TABLE. `capability_state` holds one row per (user, region, side) and is

@@ -64,7 +64,7 @@ class Measure:
     Distinct from `capability_state.status`, which is the response-to-load verdict
     written from the adaptation loop's education idiom. A measure is a quantity
     someone recorded — different signal, different provenance, both real
-    (DECISIONS_LOG #NEXT). Declaring the set here rather than accepting free text
+    (DECISIONS_LOG #161). Declaring the set here rather than accepting free text
     is what stops `measure_key` drifting into a synonym pile within weeks.
 
     `per_side` is a property of the INSTRUMENT, not of the region. A region can be
@@ -106,7 +106,7 @@ class Region:
     queue_eligible: bool = True
     # Quantities this region may be OBSERVED on (capability_observations). Empty
     # = observation-ineligible. Versioned with TAXONOMY_VERSION like the rest of
-    # the axis list; seeded narrow on purpose (DECISIONS_LOG #NEXT).
+    # the axis list; seeded narrow on purpose (DECISIONS_LOG #161).
     measures: tuple[Measure, ...] = ()
 
     def sides(self) -> list[str]:

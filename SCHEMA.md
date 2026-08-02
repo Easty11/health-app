@@ -865,7 +865,7 @@ CREATE INDEX ix_cbti_isi_block_id ON cbti_isi (block_id);
 
 ### 020 — capability_observations
 
-Graded, timestamped capability **measurement** for the Adaptive Exposure Engine (migration `b6f3d92a4e17`, DECISIONS_LOG #NEXT). Deliberately NOT a widening of `capability_state`: that table holds one row per `(user, region, side)`, is overwritten in place by `engine/adaptation.py::apply_response`, and its `status` is a 4-level ordinal — so it can only ever show today's label, cannot be regressed against dose, and has no trajectory. This table holds the history. `capability_state` is **unchanged** by this migration and nothing existing reads the new table.
+Graded, timestamped capability **measurement** for the Adaptive Exposure Engine (migration `b6f3d92a4e17`, DECISIONS_LOG #161). Deliberately NOT a widening of `capability_state`: that table holds one row per `(user, region, side)`, is overwritten in place by `engine/adaptation.py::apply_response`, and its `status` is a 4-level ordinal — so it can only ever show today's label, cannot be regressed against dose, and has no trajectory. This table holds the history. `capability_state` is **unchanged** by this migration and nothing existing reads the new table.
 
 **The two are different signals.** `capability_state.status` is the response-to-load **verdict**, self-reported through the education idiom and never a wearable metric — that invariant is unchanged and now stated explicitly on the model. A row here is a measured **quantity** and **may be device-derived** (GPS max velocity, deceleration counts). The wearable-metric invariant scopes to the verdict, not to measurement.
 

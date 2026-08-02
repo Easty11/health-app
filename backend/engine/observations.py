@@ -1,5 +1,5 @@
 """
-Capability observations (DECISIONS_LOG #NEXT) — the measured half of the map.
+Capability observations (DECISIONS_LOG #161) — the measured half of the map.
 
 `capability_state` says what the user's response to load revealed: a verdict, in
 four ordinal levels, overwritten in place. This module records what was MEASURED:

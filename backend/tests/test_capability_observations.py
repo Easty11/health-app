@@ -1,5 +1,5 @@
 """`capability_observations` — validation, append-only, and the §7 boundary
-(DECISIONS_LOG #NEXT).
+(DECISIONS_LOG #161).
 
 Three gates live here, and the third is the reason the table is allowed to hold
 numbers at all: the app may MEASURE, but must not CLEAR. That boundary is enforced

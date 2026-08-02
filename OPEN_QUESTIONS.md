@@ -2042,7 +2042,7 @@ move was or was not meaningful.
 ## Q72. Sprint max velocity has no home on the v0 axis list, so the one Catapult measure most worth capturing cannot be recorded
 
 **State:** open. **Blocks:** recording `max_velocity_ms` from the GPS unit — and only that; the rest
-of the `capability_observations` battery (`#NEXT`) is seeded and working. **Related:** `#NEXT`
+of the `capability_observations` battery (`#161`) is seeded and working. **Related:** `#161`
 (the measure registry and the observations table), the deferred Catapult `.gt` backfill.
 
 The proposing brief seeded seven measures and left an eighth — a hamstring velocity proxy,
@@ -2072,6 +2072,29 @@ Candidates:
   meaningless for the second one.
 - **(c) Leave it unseeded.** The current state, and not costly while the `.gt` backfill is itself
   out of scope. It stops being free the moment sprint data starts arriving with nowhere to land.
+
+**OWNER'S POSITION (Luke, 2026-08-02) — (a), and the reasoning names a third region class.**
+Recorded here rather than minted as a decision: the fork stays open until the region is actually
+authored, but the direction and its rationale are settled and should not be re-derived.
+
+Max velocity is a DISTINCT capability, not a second measure of an existing one. `single_leg_hop` is
+unilateral concentric power; `change_of_direction` is deceleration plus re-acceleration under a
+direction change; top-end speed is cyclic, and its peak hamstring demand arrives in late swing.
+Different failure mode, different tissue demand — so candidate (b) would make the series
+uninterpretable, not merely untidy. Proposed shape: `max_velocity`, group E, `Capacity.POWER`,
+`Plane.SAGITTAL`, `per_side=False` (trunk-mounted unit cannot attribute), expectation
+self-referenced against the athlete's own season peak so `needs_norm=False`, `Confidence.LIKELY`.
+
+**The non-obvious flag is `queue_eligible=False`, and NOT for the §G reason.** §G axes are excluded
+because they lack normative grounding. This one would be excluded because **Probe must never
+schedule a sprint**: top speed on two velocity-gated hamstrings is a max effort the engine has no
+business prescribing, and `injury_probes.py` already forbids instructing the user to load. The
+observations arrive passively from the Catapult regardless of what the queue does.
+
+That makes it the taxonomy's first **passively-observed** region — a third class alongside
+probe-eligible and norm-blocked, where the axis is real and measured but the engine never initiates
+the measurement. Worth naming as a class when this resolves, because every device-derived region
+after it inherits the same shape and the same reason for exclusion.
 
 **Resolve before:** the Catapult `.gt` backfill runs (`.gt` = zip → brotli → msgpack, speed in mm/s),
 since that is the point at which a max-velocity series exists and needs a region to be written to.

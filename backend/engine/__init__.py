@@ -22,7 +22,7 @@ idiom (spec §12) — the VERDICT is never a wearable metric. Quantitative dosin
 references the Banister fitness-fatigue model (DECISIONS_LOG #18), never ACWR.
 
 The wearable-metric invariant scopes to the verdict, not to measurement
-(DECISIONS_LOG #NEXT). `capability_state.status` is self-reported and stays so.
+(DECISIONS_LOG #161). `capability_state.status` is self-reported and stays so.
 `capability_observations` (`observations.py`) records measured quantities and MAY
 carry device-derived values — GPS max velocity, deceleration counts — because
 those are the best available objective measures for exactly the §E regions that

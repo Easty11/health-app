@@ -9,7 +9,7 @@ Endpoints:
   GET  /engine/probe-queue      — the computed probe queue (§4)
   GET  /engine/next             — one Fortify rec + one Probe suggestion (§2)
   POST /engine/response         — apply an adaptation-loop response tag (§7)
-  POST /engine/observations     — append one capability MEASUREMENT (#NEXT)
+  POST /engine/observations     — append one capability MEASUREMENT (#161)
   GET  /engine/observations     — the series for one (region, measure) + symmetry
 
 The two capability surfaces are deliberately separate. `/response` writes the
@@ -250,7 +250,7 @@ def post_response(
 
 
 # --------------------------------------------------------------------------- #
-# Capability observations — measurement, not verdict (DECISIONS_LOG #NEXT)     #
+# Capability observations — measurement, not verdict (DECISIONS_LOG #161)      #
 # --------------------------------------------------------------------------- #
 
 @router.post("/observations", status_code=status.HTTP_201_CREATED)

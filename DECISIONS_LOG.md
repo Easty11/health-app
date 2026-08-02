@@ -5736,7 +5736,7 @@ label is superseded by the section and this entry is absorbed rather than amende
 
 ---
 
-### #NEXT. The wearable-metric invariant scopes to the verdict, not to the measurement — and capability gets a history
+### 161. The wearable-metric invariant scopes to the verdict, not to the measurement — and capability gets a history
 
 **Decision:** `capability_observations` is added: an append-only, per-`(region, side, measure)`
 ledger of measured quantities with the date they were measured. `capability_state` is unchanged —
