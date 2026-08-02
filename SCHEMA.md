@@ -30,6 +30,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 017 — cbti_blocks             FK to users (CASCADE) — append-only titration block ledger
 018 — cbti_prescriptions      FK to cbti_blocks (CASCADE) + self (superseded_by) — append-only window ledger
 019 — cbti_isi                FK to cbti_blocks (SET NULL, nullable) — ISI outcome-measure administrations
+020 — capability_observations FK to users (CASCADE) — append-only capability measurement ledger
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -861,6 +862,59 @@ CREATE TABLE cbti_isi (
 
 CREATE INDEX ix_cbti_isi_block_id ON cbti_isi (block_id);
 ```
+
+### 020 — capability_observations
+
+Graded, timestamped capability **measurement** for the Adaptive Exposure Engine (migration `b6f3d92a4e17`, DECISIONS_LOG #NEXT). Deliberately NOT a widening of `capability_state`: that table holds one row per `(user, region, side)`, is overwritten in place by `engine/adaptation.py::apply_response`, and its `status` is a 4-level ordinal — so it can only ever show today's label, cannot be regressed against dose, and has no trajectory. This table holds the history. `capability_state` is **unchanged** by this migration and nothing existing reads the new table.
+
+**The two are different signals.** `capability_state.status` is the response-to-load **verdict**, self-reported through the education idiom and never a wearable metric — that invariant is unchanged and now stated explicitly on the model. A row here is a measured **quantity** and **may be device-derived** (GPS max velocity, deceleration counts). The wearable-metric invariant scopes to the verdict, not to measurement.
+
+**Append-only.** No `updated_at` column and no UPDATE path anywhere — a correction is a new row, and supersession is resolved on read by `observed_on`, then `created_at`, then `id`. `observed_on` is the **measurement** date, not the insert date, so a backfilled battery lands on the day it happened; a backdated correction therefore supersedes its own date without displacing a later real measurement. No backfill was possible on first upgrade — `capability_state` carries no numeric value — so an empty table is the correct initial state.
+
+`region_key` and `measure_key` are both validated against `engine/taxonomy.py` at write time (fail-closed, same guard as `exercise_region_tags`). Measures are **declared per region** on `Region.measures` and versioned with `TAXONOMY_VERSION`; a region with no declared measure is observation-ineligible, which is the correct default rather than a gap (7 of 31 regions are seeded). **`side` is validated against the MEASURE, not only the region** — sidedness is a property of the instrument: `deceleration_landing` is a per-side region, but a trunk-mounted GPS records one figure for the athlete and cannot attribute it to a leg, so `peak_decel_ms2` is `bilateral`-only.
+
+**Boundary:** values, symmetry ratios, and trends are legal outputs; a clearance, "safe to return", severity grade, or return-to-sport verdict is not. Enforced by `backend/tests/test_capability_observations.py`, not by docstring — same construction as `injury_probes.py`.
+
+```sql
+CREATE TABLE capability_observations (
+    id                INTEGER PRIMARY KEY,
+    user_id           INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    region_key        VARCHAR(100) NOT NULL,   -- validated vs engine/taxonomy.py Region.key
+    side              VARCHAR(20) NOT NULL DEFAULT 'bilateral',  -- bilateral | left | right
+    observed_on       DATE NOT NULL,           -- MEASUREMENT date, not insert date
+    measure_key       VARCHAR(60) NOT NULL,    -- validated vs the region's declared Measure set
+    value             FLOAT NOT NULL,
+    unit              VARCHAR(20) NOT NULL,    -- taken from the declared measure; mismatch refuses
+    method            VARCHAR(30) NOT NULL,    -- baseline_battery | probe | session | manual
+    source            VARCHAR(30) NOT NULL,    -- self_report | catapult | hevy | polar | manual
+    confidence        VARCHAR(20) NOT NULL DEFAULT 'likely',   -- certain | likely | guessing
+    context           JSON,                    -- {block, load, fatigue_state, notes, session_id}
+    taxonomy_version  VARCHAR(20) NOT NULL DEFAULT 'v0',
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    -- NO updated_at, by construction. See "Append-only" above.
+);
+
+CREATE INDEX ix_capability_observations_user_id
+    ON capability_observations (user_id);
+CREATE INDEX ix_capability_obs_user_region_side_date
+    ON capability_observations (user_id, region_key, side, observed_on);
+CREATE INDEX ix_capability_obs_user_date
+    ON capability_observations (user_id, observed_on);
+```
+
+**Seeded measures (v0)** — narrow first; broadening is additive and needs no schema change:
+
+| region_key | measure_key | unit | sides |
+|---|---|---|---|
+| `hip_flexion_pc_length` | `aslr_deg` | deg | left / right |
+| `single_leg_hop` | `hop_distance_cm` | cm | left / right |
+| `ankle_df` | `knee_to_wall_cm` | cm | left / right |
+| `frontal_single_leg_stability` | `stance_seconds` | s | left / right |
+| `shoulder_mobility` | `er_rom_deg` | deg | left / right |
+| `deceleration_landing` | `peak_decel_ms2` | m/s^2 | bilateral |
+| `change_of_direction` | `cod_count` | count | bilateral |
+
+_(`capability_state` and `fortification_profiles`, migration `d8e1f2a3b4c5`, predate this document's coverage and are not recorded here.)_
 
 **daily_records diary columns** (migrations `e5f2a9c7b104`, `a7b3f1c8d240`, `b2d5f9e04a17`). Thirteen additive nullable AM-moment columns extend `daily_records` for the CBT-I sleep diary, sparse by design (captured only while an open `cbti_block` exists): `got_into_bed`, `lights_out`, `sleep_latency_min`, `waso_min`, `night_wakings_n`, `final_wake`, `out_of_bed`, `naps_min`, `diary_se_pct`, `diary_tst_min`, and — from `b2d5f9e04a17` — the waking-cause decomposition `wakings_nocturia_n`, `wakings_pain_n`, `wakings_spontaneous_n`. The three waking-cause counts decompose `night_wakings_n` by cause; they are **observational only** (the titration engine must not read them — `grep -rn 'wakings_' backend/cbti/` stays empty) and carry **no sum constraint** to `night_wakings_n` (recall is imperfect; consistency is surfaced, never enforced). Migration `f1a4c7e29b83` adds two nullable `Text` free-text columns, **`am_notes`** and **`pm_notes`** — uncaptured context that doesn't fit a structured field, captured through the AM and PM surfaces respectively. **Separate columns, not one:** the two surfaces submit independently, so a shared column's later write would clobber the earlier. Observational — read by no engine code, and not gated on an open block. `got_into_bed` (phase 2) is the moment you got into bed, **distinct** from `lights_out` (tried to sleep) — sleep efficiency is computed over the `lights_out`→`out_of_bed` window, so only `lights_out` was imported in phase 1 and the 53 historical rows carry `got_into_bed` NULL. `diary_se_pct` / `diary_tst_min` are frozen at AM capture (same contract as `naive_baseline`, never recomputed). `naps_min` is logged PM on date D but belongs to the night terminating on wake-date D+1 — stored at PM on D, the engine reads it from `(date - 1)`. _(The `daily_records` parent table itself predates this document's coverage; only the CBT-I additions are recorded here.)_
 

@@ -58,6 +58,36 @@ SIDE_RIGHT = "right"
 
 
 @dataclass(frozen=True)
+class Measure:
+    """A declared, unit-bearing quantity a region can be MEASURED on.
+
+    Distinct from `capability_state.status`, which is the response-to-load verdict
+    written from the adaptation loop's education idiom. A measure is a quantity
+    someone recorded — different signal, different provenance, both real
+    (DECISIONS_LOG #NEXT). Declaring the set here rather than accepting free text
+    is what stops `measure_key` drifting into a synonym pile within weeks.
+
+    `per_side` is a property of the INSTRUMENT, not of the region. A region can be
+    readable per-side (`Region.per_side`, the §F symmetry layer) while a particular
+    measure of it is not: a trunk-mounted GPS unit records one deceleration count
+    for the athlete and cannot attribute it to a leg, even though
+    `deceleration_landing` is a per-side region. Sidedness is therefore validated
+    per-measure, and a region's `sides()` remains the ceiling.
+
+    A region with no declared measure is observation-ineligible. That is the
+    correct default for an axis nobody has chosen an instrument for, not a gap.
+    """
+    key: str                    # stable id, e.g. "knee_to_wall_cm"
+    unit: str                   # "cm", "deg", "s", "m/s", "m/s^2", "count"
+    higher_is_better: bool
+    per_side: bool = True
+
+    def sides(self) -> list[str]:
+        """Sides this measure can legally carry, before the region's own ceiling."""
+        return [SIDE_LEFT, SIDE_RIGHT] if self.per_side else [SIDE_BILATERAL]
+
+
+@dataclass(frozen=True)
 class Region:
     key: str                    # stable id, e.g. "hinge", "ankle_df"
     label: str
@@ -74,9 +104,19 @@ class Region:
     # §G longevity-end axes are flagged but "need normative grounding before they
     # enter the queue" — excluded from the probe queue until grounded, non-blocking.
     queue_eligible: bool = True
+    # Quantities this region may be OBSERVED on (capability_observations). Empty
+    # = observation-ineligible. Versioned with TAXONOMY_VERSION like the rest of
+    # the axis list; seeded narrow on purpose (DECISIONS_LOG #NEXT).
+    measures: tuple[Measure, ...] = ()
 
     def sides(self) -> list[str]:
         return [SIDE_LEFT, SIDE_RIGHT] if self.per_side else [SIDE_BILATERAL]
+
+    def measure(self, measure_key: str) -> Measure | None:
+        for m in self.measures:
+            if m.key == measure_key:
+                return m
+        return None
 
 
 # Ordering used when ranking the probe queue: the comfort-cluster blind spot (E)
@@ -126,10 +166,12 @@ _REGIONS: tuple[Region, ...] = (
     Region("ankle_df", "Ankle dorsiflexion", "B", Capacity.MOBILITY, Plane.SAGITTAL,
            "Weight-bearing lunge / knee-to-wall (cm, heel down)",
            "Functional target ~9-10 cm; L/R difference is the more reliable signal",
-           Confidence.LIKELY, gates=("squat",)),
+           Confidence.LIKELY, gates=("squat",),
+           measures=(Measure("knee_to_wall_cm", "cm", higher_is_better=True),)),
     Region("hip_flexion_pc_length", "Hip flexion / posterior-chain length", "B",
            Capacity.MOBILITY, Plane.SAGITTAL, "Active straight-leg raise (FMS)",
-           "Symmetry L/R; gates hinge depth", Confidence.LIKELY, gates=("hinge",)),
+           "Symmetry L/R; gates hinge depth", Confidence.LIKELY, gates=("hinge",),
+           measures=(Measure("aslr_deg", "deg", higher_is_better=True),)),
     Region("hip_ir_er", "Hip IR / ER", "B", Capacity.MOBILITY, Plane.TRANSVERSE,
            "Seated / prone rotation ROM",
            "Asymmetry flags the side bias", Confidence.GUESSING, needs_norm=True),
@@ -140,7 +182,8 @@ _REGIONS: tuple[Region, ...] = (
     Region("shoulder_mobility", "Shoulder mobility", "B", Capacity.MOBILITY, Plane.MULTI,
            "FMS shoulder reach (fists behind back)",
            "Bilateral; combines IR+add / ER+abd", Confidence.LIKELY,
-           gates=("vertical_push",)),
+           gates=("vertical_push",),
+           measures=(Measure("er_rom_deg", "deg", higher_is_better=True),)),
 
     # ---- C. Stability / motor control ----
     Region("trunk_stability_sagittal", "Trunk stability (sagittal)", "C",
@@ -152,7 +195,8 @@ _REGIONS: tuple[Region, ...] = (
            Confidence.LIKELY),
     Region("frontal_single_leg_stability", "Frontal-plane / single-leg stability", "C",
            Capacity.STABILITY, Plane.FRONTAL, "Single-leg stance (eyes open/closed, timed)",
-           "Age-referenced balance norms", Confidence.GUESSING, needs_norm=True),
+           "Age-referenced balance norms", Confidence.GUESSING, needs_norm=True,
+           measures=(Measure("stance_seconds", "s", higher_is_better=True),)),
     Region("anti_lateral_flexion", "Anti-lateral-flexion", "C", Capacity.STABILITY,
            Plane.FRONTAL, "Offset carry / suitcase hold",
            "Symmetry under unilateral load", Confidence.LIKELY),
@@ -175,14 +219,21 @@ _REGIONS: tuple[Region, ...] = (
            "Single / triple / crossover hop",
            "Limb Symmetry Index >=90% as the return-to-sport reference — rarely met "
            "even uninjured, so treat as direction-of-travel", Confidence.CERTAIN,
-           probe_priority=True),
+           probe_priority=True,
+           measures=(Measure("hop_distance_cm", "cm", higher_is_better=True),)),
     Region("deceleration_landing", "Deceleration / landing control", "E", Capacity.POWER,
            Plane.MULTI, "Drop-landing, controlled decel",
-           "Quality of absorption; asymmetry", Confidence.LIKELY, probe_priority=True),
+           "Quality of absorption; asymmetry", Confidence.LIKELY, probe_priority=True,
+           # Trunk-mounted GPS: one figure for the athlete, not attributable to a
+           # leg — hence per_side=False on a per-side region (see Measure).
+           measures=(Measure("peak_decel_ms2", "m/s^2", higher_is_better=True,
+                             per_side=False),)),
     Region("change_of_direction", "Change of direction", "E", Capacity.POWER, Plane.MULTI,
            "COD drills (controlled)",
            "Explicitly absent from FMS; the under-probed region", Confidence.CERTAIN,
-           probe_priority=True),
+           probe_priority=True,
+           measures=(Measure("cod_count", "count", higher_is_better=True,
+                             per_side=False),)),
 
     # ---- G. Longevity-end axes (flagged; need norms before they enter the queue) ----
     Region("sit_to_rise", "Sit-to-rise / floor-transfer", "G", Capacity.MOBILITY,
@@ -219,6 +270,24 @@ def by_key(key: str) -> Region | None:
     return _BY_KEY.get(key)
 
 
+def measures_for(region_key: str) -> tuple[Measure, ...]:
+    """Declared measures for a region. Empty for an unknown key AND for a known
+    region with no instrument chosen — callers that must tell those apart check
+    `by_key()` first, which is why this does not raise."""
+    region = _BY_KEY.get(region_key)
+    return region.measures if region else ()
+
+
+def measure_for(region_key: str, measure_key: str) -> Measure | None:
+    region = _BY_KEY.get(region_key)
+    return region.measure(measure_key) if region else None
+
+
+def observable_regions() -> list[Region]:
+    """Regions carrying at least one declared measure — the observation-eligible set."""
+    return [r for r in _REGIONS if r.measures]
+
+
 def queue_eligible_regions() -> list[Region]:
     """Regions Probe is allowed to sample — excludes ungrounded §G axes."""
     return [r for r in _REGIONS if r.queue_eligible]
@@ -248,4 +317,14 @@ def as_dict(region: Region) -> dict:
         "probe_priority": region.probe_priority,
         "needs_norm": region.needs_norm,
         "queue_eligible": region.queue_eligible,
+        "measures": [
+            {
+                "key": m.key,
+                "unit": m.unit,
+                "higher_is_better": m.higher_is_better,
+                "per_side": m.per_side,
+                "sides": m.sides(),
+            }
+            for m in region.measures
+        ],
     }

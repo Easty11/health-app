@@ -448,8 +448,17 @@ class CapabilityState(Base):
 
     source/confidence-tagged per the device-agnostic schema rule (CLAUDE.md).
     Standalone table for now; folds into `health_events` when that schema lands
-    (DECISIONS_LOG — Adaptive Exposure Engine entry). Capability state is
-    self-reported through the education idiom (spec §12), never a wearable metric.
+    (DECISIONS_LOG — Adaptive Exposure Engine entry).
+
+    THE WEARABLE-METRIC INVARIANT SCOPES TO THIS TABLE'S VERDICT, NOT TO
+    MEASUREMENT (DECISIONS_LOG #NEXT). `status` here remains self-reported through
+    the education idiom (spec §12) and is never derived from a wearable. That is
+    unchanged. What changed is that it is no longer the engine's only capability
+    signal: `capability_observations` carries measured QUANTITIES, which may be
+    device-derived (GPS max velocity, deceleration counts). Different signal,
+    different provenance, both real — the verdict stays self-reported, the
+    measurement need not be. Stated here explicitly because a silent widening of
+    this invariant is the failure mode it exists to prevent.
     """
     __tablename__ = "capability_state"
     __table_args__ = (
@@ -473,6 +482,72 @@ class CapabilityState(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class CapabilityObservation(Base):
+    """Adaptive Exposure Engine — graded, timestamped capability MEASUREMENT
+    (DECISIONS_LOG #NEXT).
+
+    Not a replacement for `capability_state`, and deliberately not a column on it.
+    `capability_state.status` is the response-to-load VERDICT, written from the
+    adaptation loop's response tags and self-reported through the education idiom.
+    A row here is a measured QUANTITY someone recorded. Different signals,
+    different provenance, both real — which is why they are different tables and
+    why this one may carry device-derived values (see the invariant note on
+    `CapabilityState`).
+
+    Why a table and not a wider `capability_state`: `capability_state` is
+    overwritten in place, so it can only ever show today's label. A 4-level
+    ordinal cannot be regressed against dose, and an overwritten row has no
+    trajectory. Asymmetry direction-of-travel, re-attainment curves, and
+    dose-response slopes all need history that the state table structurally
+    cannot hold.
+
+    APPEND-ONLY. There is no `updated_at` and no UPDATE path, by construction: a
+    correction is a NEW row, and supersession is decided by `observed_on` then
+    `created_at`. `observed_on` is the date the measurement was taken, which is
+    not the date it was entered — backfilling a battery from a fortnight ago must
+    land on the day it happened or the series lies about when it moved.
+
+    `region_key` and `measure_key` are both validated against `engine/taxonomy.py`
+    at write time (fail-closed — an orphan key is refused, never stored), the same
+    guard `adaptation.py` applies to `region_key`. A region with no declared
+    measure is observation-ineligible.
+
+    BOUNDARY: a value here is a measurement, never a verdict. Deriving symmetry,
+    trend, or dose-response for display is legal; converting any of it into a
+    clearance, a "safe to return", a severity grade, or a return-to-sport call is
+    not. Enforced by `tests/test_capability_observations.py`, not by this
+    docstring — same pattern as `injury_probes.py`.
+    """
+    __tablename__ = "capability_observations"
+    __table_args__ = (
+        Index("ix_capability_obs_user_region_side_date",
+              "user_id", "region_key", "side", "observed_on"),
+        Index("ix_capability_obs_user_date", "user_id", "observed_on"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    region_key: Mapped[str] = mapped_column(String(100), nullable=False)   # matches taxonomy Region.key
+    side: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'bilateral'"))
+    # The measurement date, NOT the insert date. See the append-only note above.
+    observed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    measure_key: Mapped[str] = mapped_column(String(60), nullable=False)   # matches taxonomy Measure.key
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(20), nullable=False)
+    # baseline_battery | probe | session | manual — the protocol that produced it
+    method: Mapped[str] = mapped_column(String(30), nullable=False)
+    # self_report | catapult | hevy | polar | manual — device-agnostic source tag
+    source: Mapped[str] = mapped_column(String(30), nullable=False)
+    # certain | likely | guessing — mirrors taxonomy.Confidence
+    confidence: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'likely'"))
+    # {block, load, fatigue_state, notes, session_id} — free context, not queried on
+    context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'v0'"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class LabReport(Base):

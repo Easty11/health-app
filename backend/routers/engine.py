@@ -9,6 +9,14 @@ Endpoints:
   GET  /engine/probe-queue      — the computed probe queue (§4)
   GET  /engine/next             — one Fortify rec + one Probe suggestion (§2)
   POST /engine/response         — apply an adaptation-loop response tag (§7)
+  POST /engine/observations     — append one capability MEASUREMENT (#NEXT)
+  GET  /engine/observations     — the series for one (region, measure) + symmetry
+
+The two capability surfaces are deliberately separate. `/response` writes the
+response-to-load verdict into `capability_state`; `/observations` appends a
+measured quantity to `capability_observations` and touches neither
+`capability_state` nor the probe queue. Read paths here return values, trends and
+symmetry ratios — never a clearance, severity grade, or return-to-sport verdict.
 
 Avoidance (§4) is read from Hevy load history — what the user does NOT load is the
 candidate deficiency set. Probe-queue / next fetch that best-effort; if Hevy is
@@ -17,9 +25,10 @@ safe over-inclusion bounded by the one-probe-per-session cadence.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -28,7 +37,13 @@ from auth import get_current_user
 from connectors.hevy import HevyAuthError, HevyClient
 from database import get_db
 from encryption import decrypt
-from engine import adaptation, profile as profile_mod, selection, taxonomy
+from engine import (
+    adaptation,
+    observations as observations_mod,
+    profile as profile_mod,
+    selection,
+    taxonomy,
+)
 
 router = APIRouter(prefix="/engine", tags=["engine"])
 
@@ -58,6 +73,21 @@ class ResponseIn(BaseModel):
     probe_result: str | None = None  # pass | deficient (required for capability_revealed)
     signal_text: str | None = None   # the user's education-idiom report
     source: str = "probe"
+
+
+class ObservationIn(BaseModel):
+    region_key: str
+    measure_key: str
+    value: float
+    side: str = taxonomy.SIDE_BILATERAL
+    observed_on: date | None = None   # measurement date; defaults to today (AEST)
+    method: str = "manual"            # baseline_battery | probe | session | manual
+    source: str = "self_report"       # self_report | catapult | hevy | polar | manual
+    confidence: str = "likely"        # certain | likely | guessing
+    context: dict[str, Any] | None = None
+    # Optional assertion of the sending unit. The declared unit always wins; a
+    # mismatch 422s rather than converting.
+    unit: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -216,4 +246,89 @@ def post_response(
         "source": row.source,
         "detail": row.detail,
         "last_probed_at": str(row.last_probed_at) if row.last_probed_at else None,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Capability observations — measurement, not verdict (DECISIONS_LOG #NEXT)     #
+# --------------------------------------------------------------------------- #
+
+@router.post("/observations", status_code=status.HTTP_201_CREATED)
+def post_observation(
+    body: ObservationIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Append one measurement. Append-only — there is no PUT or PATCH companion,
+    and adding one would break the supersession model. A correction is a new POST
+    carrying the same `observed_on`."""
+    try:
+        row = observations_mod.record_observation(
+            db, current_user.id,
+            region_key=body.region_key, measure_key=body.measure_key,
+            value=body.value, side=body.side, observed_on=body.observed_on,
+            method=body.method, source=body.source, confidence=body.confidence,
+            context=body.context, unit=body.unit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    return {"observation": observations_mod.observation_to_dict(row)}
+
+
+@router.get("/observations")
+def get_observations(
+    region_key: str = Query(...),
+    measure_key: str = Query(...),
+    side: str | None = Query(None),
+    since: date | None = Query(None),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The full series for one (region, measure), plus the current value per side
+    and the left/right ratio where the measure is per-side.
+
+    `symmetry` is a ratio and a direction. It is deliberately not compared to the
+    >=90% return-to-sport threshold anywhere in this response — that comparison is
+    a clearance, which this tier does not emit (§7 boundary, `injury_probes.py`).
+    """
+    region = taxonomy.by_key(region_key)
+    if region is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"unknown region_key: {region_key!r}",
+        )
+    measure = region.measure(measure_key)
+    if measure is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(f"unknown measure_key {measure_key!r} for region {region_key!r} "
+                    f"(declared: {', '.join(sorted(m.key for m in region.measures)) or 'none'})"),
+        )
+
+    rows = observations_mod.series(
+        db, current_user.id, region_key=region_key,
+        measure_key=measure_key, side=side, since=since,
+    )
+    current = {
+        s: observations_mod.observation_to_dict(row)
+        for s in measure.sides()
+        if (row := observations_mod.latest(
+            db, current_user.id, region_key=region_key,
+            measure_key=measure_key, side=s)) is not None
+    }
+    return {
+        "region_key": region_key,
+        "label": region.label,
+        "measure": {
+            "key": measure.key,
+            "unit": measure.unit,
+            "higher_is_better": measure.higher_is_better,
+            "per_side": measure.per_side,
+            "sides": measure.sides(),
+        },
+        "observations": [observations_mod.observation_to_dict(r) for r in rows],
+        "latest": current,
+        "symmetry": observations_mod.symmetry(
+            db, current_user.id, region_key=region_key, measure_key=measure_key,
+        ),
     }
