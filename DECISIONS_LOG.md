@@ -5961,6 +5961,27 @@ exercise creation (`<hevy_create_exercise>`) is a separate step that depends on 
   `max(synced_at)` advancing off 2026-07-14. A rising count would mean new templates existed
   upstream; an unchanged count with a fresh `synced_at` is the success case.
 
+**Amendment 2026-08-03 — the prod population gate is CLOSED.** *(Appended, not rewritten: the two
+bullets above record what was true at authoring and stay as written. The entry is locked; this
+extends its evidence, it does not revise the decision.)* The branch ff-merged at `9c8176a`; the
+`health-app-backend` deploy `34cda96f` reported SUCCESS (`#116`, timing); the live `openapi.json`
+gained `/integrations/hevy/sync`, six `/integrations/hevy*` paths where there were five (`#121`,
+coverage); unauthenticated `POST /integrations/hevy/sync` returned **401** against **404** for a
+nonexistent sibling path — a control discriminating on identity, so the 401 proves registered-and-
+gated rather than absent. Luke then ran the authenticated POST.
+
+AFTER: **499 rows (451 default / 48 custom)**, `max(synced_at)` **2026-08-02 21:59:50+00** — which
+is 07:59 on 2026-08-03 AEST; the column is UTC, so the date reads a day behind local and is not
+stale. The prediction above held exactly: the default count did **not** move (upsert-only), and the
++5 delta is five real customs added in the Hevy client since July.
+
+`defaults_seen > 0` was confirmed in **durable DB form** rather than read off the response body:
+`synced_at` is stamped per row on upsert, so a run that had read only customs would leave the
+default rows carrying the July timestamp. **451 default rows carry the new timestamp and ZERO rows
+remain stale.** This is the stronger artifact — it does not depend on anyone having captured the
+summary at the moment of the call, and it distinguishes "the sync ran and read the whole catalogue"
+from "the sync ran" in a way the row count alone cannot.
+
 **Do not revisit unless:** a recurring/scheduled sync is built (`Q75` — cron vs. staleness-on-read
 vs. sync-on-workout-fetch), at which point the shared path this decision establishes is the surface
 to hang it on rather than a third call site; or `sync_exercise_templates` changes its summary contract,
