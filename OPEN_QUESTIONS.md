@@ -2038,3 +2038,41 @@ Candidates:
 
 **Resolve before:** any authored `min_meaningful_delta` is presented to the reader as the reason a
 move was or was not meaningful.
+
+## Q72. Sprint max velocity has no home on the v0 axis list, so the one Catapult measure most worth capturing cannot be recorded
+
+**State:** open. **Blocks:** recording `max_velocity_ms` from the GPS unit — and only that; the rest
+of the `capability_observations` battery (`#NEXT`) is seeded and working. **Related:** `#NEXT`
+(the measure registry and the observations table), the deferred Catapult `.gt` backfill.
+
+The proposing brief seeded seven measures and left an eighth — a hamstring velocity proxy,
+`max_velocity_ms`, m/s, from Catapult — with its region marked *TBD*, explicitly instructing that it
+be flagged rather than guessed. It was not seeded. **Verified against the v0 axis list:** 31 regions,
+and the only key containing any velocity/speed/sprint token is `gait_speed`, which is a §G
+longevity-end axis, `queue_eligible=False`, `needs_norm=True`, probing test "Timed walk". A walking
+axis is not a sprint max-velocity axis, and attaching the measure there would put GPS sprint data
+onto a region whose norms are geriatric-referenced.
+
+Why it matters more than the other six: max velocity is the closest available field proxy for
+hamstring capacity at the speeds injuries actually occur, and it is the measure the GPS unit
+produces most reliably. It is also the one with no self-report substitute — every other seeded
+measure has one.
+
+Candidates:
+
+- **(a) A new §E region** (e.g. `max_velocity` / `sprint_velocity`, group E, `Capacity.POWER`,
+  `per_side=False`). Honest to what is being measured, and §E is already the probe-priority
+  comfort-gap group. Costs a `TAXONOMY_VERSION` bump — the axis list is external-authority and
+  versioned, and adding an axis is exactly the change the version exists to record. Needs a probing
+  test and an expectation grounded outside this repo, which is the real work.
+- **(b) Attach it to `single_leg_hop` as a second measure.** Zero taxonomy change; `Region.measures`
+  is already a tuple and the registry supports it today. But `single_leg_hop` is a per-side hop
+  distance test and max velocity is a bilateral running quantity — the region's `probing_test` and
+  `expectation` would then describe neither measure, and the LSI note attached to it would be
+  meaningless for the second one.
+- **(c) Leave it unseeded.** The current state, and not costly while the `.gt` backfill is itself
+  out of scope. It stops being free the moment sprint data starts arriving with nowhere to land.
+
+**Resolve before:** the Catapult `.gt` backfill runs (`.gt` = zip → brotli → msgpack, speed in mm/s),
+since that is the point at which a max-velocity series exists and needs a region to be written to.
+Not before — nothing is lost by leaving it open while no sprint data is being ingested.

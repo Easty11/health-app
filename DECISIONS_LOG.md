@@ -5735,3 +5735,97 @@ gate; every automated check passed on the noisy version.
 label is superseded by the section and this entry is absorbed rather than amended.
 
 ---
+
+### #NEXT. The wearable-metric invariant scopes to the verdict, not to the measurement — and capability gets a history
+
+**Decision:** `capability_observations` is added: an append-only, per-`(region, side, measure)`
+ledger of measured quantities with the date they were measured. `capability_state` is unchanged —
+not widened, not read differently, not swapped. The two carry different signals. `status` is the
+response-to-load **verdict**, written from adaptation response tags and self-reported through the
+education idiom (spec §12). A row in the new table is a **measured quantity**. The invariant that
+"nothing introduces a wearable metric" scopes to the first and not the second: `status` remains
+self-reported and never device-derived, while an observation **may** carry a device value.
+
+**Why this is a decision and not a code comment:** two places assert the invariant in prose —
+`models.CapabilityState`'s docstring and `engine/__init__`'s module docstring. The GPS unit
+(Catapult SPT3) is intended to feed max velocity, deceleration counts, and change-of-direction load
+into this table, and those are wearable metrics by any reading. The failure mode is widening the
+invariant **silently** — letting the docstrings quietly go stale while the behaviour changes under
+them. Both were amended in this commit to state the split explicitly, so the narrowing is on the
+record rather than inferred from what the code happens to do.
+
+**Why a table and not a wider `capability_state`:** `capability_state` holds one row per
+`(user, region, side)` and is overwritten in place by `adaptation.apply_response`. Only today's
+label is ever visible; a 4-level ordinal cannot be regressed against dose; and an overwritten row
+has no trajectory. Asymmetry direction-of-travel, re-attainment curves after injury, and
+dose-response slopes each need history the state table structurally cannot hold. The other half was
+already present — `exercise_region_tags` joins templates to regions with primary/secondary roles, so
+dose-per-region is computable today. The offseason (season ends ~6 Sep 2026) is the highest-variance
+window, and a table added afterwards cannot retroactively observe it.
+
+**Append-only, and `observed_on` is the measurement date.** No `updated_at`, no UPDATE path, and a
+test asserts the module exposes no update/delete/upsert function so the discipline cannot lapse
+quietly. A correction is a new row; supersession resolves on read by `observed_on`, then
+`created_at`, then `id`. The date split matters and is tested: a correction entered today for a
+June measurement supersedes June without displacing a real July measurement — the naive
+"latest row wins" would silently rewind the series.
+
+**Sidedness is a property of the instrument, not of the region — the brief was wrong here.** The
+proposing brief's §8 table assigned `deceleration_landing` and `change_of_direction` the side
+`bilateral`. Both are declared `per_side=True` in `taxonomy.py`, so `Region.sides()` returns
+`[left, right]` and a bilateral write would have been refused by the very fail-closed guard the
+brief asked for — the seed battery would not have loaded. Resolved by moving sidedness onto
+`Measure` (`per_side`), bounded by the region's `sides()` as a ceiling: a trunk-mounted GPS unit
+records one deceleration figure for the athlete and cannot attribute it to a leg, even though the
+region is legitimately readable per-side. This yields exactly the brief's intended table without
+misdeclaring the regions.
+
+**`measure_key` is a declared, versioned registry, not free text.** `Region.measures` carries
+`Measure(key, unit, higher_is_better, per_side)`, versioned with `TAXONOMY_VERSION` like the rest of
+the axis list, and writes validate against it — the same fail-closed guard `adaptation.py` applies
+to `region_key`. Free text would have drifted into a synonym pile within weeks. `unit` is taken from
+the declaration rather than the caller; a caller may assert a unit, and a mismatch **raises rather
+than converting**, because a conversion we invented is a value we made up. Seven of thirty-one
+regions are seeded. A region with no declared measure is observation-ineligible — the correct
+default for an axis nobody has chosen an instrument for, not a gap.
+
+**The boundary is enforced, not documented.** A numeric capability value sits close to the line
+`injury_probes.py` exists to hold. Legal: storing a measured quantity; deriving symmetry, trend, or
+dose-response slope for display. Illegal: converting any of it into a clearance, a "safe to return",
+a severity grade, or a return-to-sport verdict. `symmetry()` is the sharpest edge — the
+return-to-sport literature attaches a >=90% Limb Symmetry Index threshold to exactly this ratio — so
+it returns the ratio, both collection dates, and which side is lower, and compares nothing to a
+threshold. A regex gate over every observation read path enforces this, with negative controls
+proving it bites and a positive control proving the payload was non-empty. The gate is deliberately
+NOT applied to the taxonomy reference text, which legitimately quotes the >=90% figure as a
+documented expectation FLAG.
+
+**The engine already had an HTTP surface — the brief was wrong here too.** §3 stated "no capability
+endpoints exist. The engine currently has no HTTP surface", and §9 accordingly placed the routes in
+`main.py`. `backend/routers/engine.py` has existed with seven endpoints under `/engine`, including
+`GET /engine/capability-state` and `POST /engine/response`. The two new routes went there,
+alongside the verdict surface they are the counterpart to, rather than establishing a second
+capability API in `main.py`.
+
+**Status:** Decided and landed. Additive only — `capability_state`, `engine/selection.py`, and the
+Probe queue are untouched, and nothing existing reads the new table.
+
+**How you know:**
+- 33 new tests in `backend/tests/test_capability_observations.py`; full suite **578 passed**, no
+  regressions.
+- Migration `b6f3d92a4e17` (on verified head `d7c4b1a90e35`, single head confirmed via
+  `ScriptDirectory.get_heads()`) applied and reversed against a scratch SQLite database — table
+  created with all three indexes and the CASCADE FK, and absent after downgrade. The full chain does
+  NOT run on SQLite (pre-existing `da60d2b93599` uses Postgres-only `ALTER COLUMN ... DROP DEFAULT`),
+  so the migration was exercised in isolation from a stamped parent, not via a full replay.
+- ORM-model-versus-migration DDL diff run programmatically: it caught a real drift — `created_at`
+  NOT NULL on the model, nullable in the migration — which was fixed, and the re-run reports no
+  drift. The visual read of the DDL had missed it.
+- Every §3 claim in the brief re-verified against `master` before implementing; two were false and
+  are corrected above.
+
+**Do not revisit unless:** a second writer of measured values appears (a Catapult ingest path, a
+Hevy-derived measure), at which point the `source` vocabulary and the per-measure sidedness rule
+are the surfaces to re-read — not the append-only rule, which is the point of the table.
+
+---
