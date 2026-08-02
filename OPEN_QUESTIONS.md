@@ -2141,3 +2141,21 @@ The consequence worth checking is evaluability, not display. A `feedback` relati
 Establish, before any precondition is authored against a currently-`None` key: is the `None` the correct permanent answer for that factor (it genuinely has no interpretable phase), or a seam that a declared washout/re-entry window (the `as_of` parameter `derive_phase` accepts but no rule consumes) is meant to fill later.
 
 **Resolve before:** a `feedback` precondition is authored against any factor key outside the currently phase-bearing set.
+## Q#NEXT. The catalogue is now populated on connect, but nothing keeps it fresh — the sync has a trigger, not a schedule
+
+**State:** OPEN. **Blocked by:** nothing — the today-fix (connect-time seed + `POST /integrations/hevy/sync`) is landed and sufficient for a populated substrate; this is unbuilt, not gated. **Related:** `#NEXT` (the wiring decision), `#77`/`FEEDBACK` §8 (landed ≠ live), `#79`/`#81` (logged titles drift from catalogue titles), `#65` (the create-loop's own `sync_one_user` refresh).
+
+The connect-time seed populates `hevy_exercise_templates` once, at the moment a key first exists, and the operator endpoint repopulates it whenever someone asks. Neither is a freshness guarantee. The catalogue drifts in three independent ways:
+
+- **Hevy renames its default templates.** Already recorded as a live phenomenon (`#79`/`#81`) — it is the reason `catalogue_titles_by_id` exists at all. A stale row carries a title `resolve_exercise` will no longer match, since resolution is byte-exact by design.
+- **The user adds customs outside the app** — in the Hevy client directly. Those ids never enter the store until a sync runs, so `resolve_custom_exercise` misses them and a create path would mint a duplicate against an idempotency check that cannot see them.
+- **A row is never deleted.** The sync is upsert-only (the Hevy API cannot delete templates), so drift only ever accumulates.
+
+Candidates:
+- **(a) Cron / scheduled job** — a periodic family-wide sync. Predictable and observable, and the only option that keeps the store fresh with no user action. Costs a scheduler this repo does not currently have, and syncs users who are not using the app.
+- **(b) Sync-on-read-staleness** — the resolvers check `synced_at` and refresh past a threshold. Freshness exactly where it matters, but it puts a network call on a read path that is currently pure, and a Hevy outage would then degrade reads that today succeed against the local store.
+- **(c) Sync-on-workout-fetch** — piggyback the existing `/hevy/workouts` traffic, which already implies both a live key and a user present. No new scheduler, no new failure surface on a pure read; but freshness is only as regular as the user's habit, and a user who never opens the training view never resyncs.
+
+The axis to decide first is **what freshness is actually for**: (b) and (c) keep the catalogue fresh only for the paths that read it, while (a) is the only one that would catch drift before a read needs it. That distinction only becomes load-bearing once a *write* path depends on the store being current — which is exactly what custom-exercise creation is.
+
+**Resolve before:** custom-exercise creation (`<hevy_create_exercise>`) is wired to a user-facing surface. Its idempotency pre-check reads this store, so a stale catalogue there mints duplicate templates rather than merely missing a resolution.

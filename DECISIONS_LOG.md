@@ -5879,3 +5879,91 @@ Constraint A; or `/interpretation` gains a cached/stored generation, at which po
 becomes a real recency signal and the collected-vs-generated amendment above is worth re-reading.
 
 ---
+### #NEXT. The Hevy template sync gets a call site: an operator endpoint plus a connect-time seed
+
+**Decision:** `sync_exercise_templates` — the only writer of `hevy_exercise_templates`, the substrate
+every resolver reads (`resolve_exercise`, `catalogue_titles_by_id`, `suggest_candidates`,
+`resolve_custom_exercise`) — is wired to two call sites in `backend/routers/integrations.py`:
+
+- **`POST /integrations/hevy/sync`** — operator trigger, `get_current_user` auth, scoped to the caller
+  via `only_user_id=current_user.id`. Returns the summary verbatim.
+- **`connect_hevy` (`POST /integrations/hevy`)** — now `async def`; after the key's `db.commit()` it
+  calls the **same** path, so the catalogue is seeded at the moment a key first exists.
+
+**Rationale:** the sync had no call site at all. It was reachable only from the module `__main__` and
+the `sync_hevy_templates.py` CLI, both operator-invoked from a shell. `FEEDBACK` §8 (`#77`) records
+what that cost: three landed features — the resolver (`#60`/`#61`), `create_and_resolve` (`#65`), and
+the taxonomy tagging effort (`#74`–`#76`) — were structurally inert in prod on a zero-row table, all
+green locally. The CLI run of 2026-07-14 populated it once by hand; nothing in the *application* has
+ever populated it, so a fresh key, a new user, or a wiped table leaves every title→id resolution
+missing and would make a future custom-create path mint duplicates against an empty idempotency
+check. A sync reachable only from a shell is a sync that runs when someone remembers.
+
+**The connect-time seed is where the substrate stops being optional.** A key and an empty catalogue is
+not a half-connected integration — it is a connected integration whose reads all miss. Ordering is
+load-bearing: the seed runs **after** the commit, because the committed `UserIntegration` row is what
+makes the key visible to `users_with_hevy_key`, which the sync reads. One sync path serves both call
+sites, so there are not two sets of sync semantics to reason about.
+
+**A seed failure does not fail the key store, and is not swallowed either.** Storing the key is the
+request's contract and still returns 201. But the response body gains `sync`, carrying the summary
+(whose `users_failed` / `rows_processed` expose a partial run) or, if the call raised outright, a
+failure shape. Swallowing it would reproduce the §8 blind spot precisely: a 201 that reads as a
+working integration over an empty catalogue. Additive to the response, so no caller breaks.
+
+**The failure signal is mapped to HTTP, never returned as a 200 with a zero.** `hevy_templates`
+documents `users_synced == 0` as a first-class failure signal, and with `only_user_id` set there is
+exactly one user in scope, so a zero is *this* user's failure and never a family-wide partial.
+`_sync_failure` splits the two shapes: `users_attempted == 0` is a 404 carrying the identical body
+`_require_integration` produces (`"hevy integration not connected"`), so a keyless caller reads the
+same whichever Hevy route it hits; `users_failed >= 1` routes the recorded error through the existing
+`_hevy_error_to_http` choke point.
+
+**The recorded error is a string, so the type is rehydrated.** `sync_exercise_templates` consumes the
+exception inside its per-user isolation wrapper and keeps only `f"{type(exc).__name__}: {exc}"`.
+Passing that text to `_hevy_error_to_http` as a bare `Exception` would flatten a revoked Hevy key to
+502 and quietly undo `#66`'s 401→424 decoupling — the whole point of which is that a dead *connector*
+key must not log the user out of the app. `_SYNC_ERROR_TYPES` rehydrates the two types whose mapping
+is not the 502 default (`HevyAuthError`, `HevyForbiddenError`); everything else maps to 502 either
+way, so the registry stops there rather than growing a case per exception.
+
+**Status:** Decided; code landed on `feat/hevy-template-sync-wiring`, pushed, **not merged**. The prod
+population gate is **OWED** and is the reason: the route cannot be exercised in prod until the branch
+deploys (see *How you know*). No migration, no schema change. `hevy_templates.py` is untouched — the
+summary contract, the per-user isolation, and the CLI all keep their existing behaviour. The routine
+contract, `context_builder`, and `chat.py`'s block parser are out of scope and unedited; custom-
+exercise creation (`<hevy_create_exercise>`) is a separate step that depends on this one.
+
+**How you know:**
+- 16 new tests in `backend/tests/test_hevy_sync_wiring.py`; full backend suite **594 passed** (baseline
+  on `master` before the branch: **578**).
+- The tests drive the **routes** over a standalone `FastAPI` app with `get_db` / `get_current_user`
+  overridden — not the handler objects — because the defect being fixed is exactly "the function
+  exists and nothing reaches it". A handler-object call would prove the body and skip the wiring.
+- **Paired negative controls** (`FEEDBACK` §17, `#103`): renaming the route to `/hevy/sync-UNWIRED`
+  fails 6 of 16 and passes the 10 that do not touch that path; replacing the connect-time seed call
+  with a literal fails the 4 connect tests and passes the other 12. Each control fails exactly the
+  half it should, so neither half is being carried by the other. The 404 assertion checks the
+  **detail string**, not just the code, so an unregistered route (which also 404s) cannot pass it.
+- Prod population gate, paired against the Railway database — **BEFORE recorded, AFTER owed.**
+  `hevy_exercise_templates` = **494** rows (451 default, 43 custom), `max(synced_at)` =
+  **2026-07-14 12:09:06+00** — i.e. still the one-off CLI run of that date; three `user_integrations`
+  rows carry `provider='hevy'`. Queried via `railway run --service health-app-DB` over
+  `DATABASE_PUBLIC_URL` (`#56`), printing counts only, never a credential (`#111`).
+  The AFTER half cannot be taken this session: the deployed backend's `openapi.json` lists five
+  `/integrations/hevy*` paths and **not** `/integrations/hevy/sync`, so the route does not exist in
+  prod until this branch merges and Railway redeploys. Verified by probe, not assumed. Per the brief
+  the gate is therefore **not claimed**.
+- **The delta is not the signal on an already-populated table** — worth recording, because a naive
+  read of the paired control would call a zero delta a failure. The sync is upsert-only (`#77`: the
+  Hevy API cannot delete templates), so on a healthy prod the after-count is expected to *equal* 494,
+  not exceed it. The load-bearing after-signals are `defaults_seen > 0` in the returned summary and
+  `max(synced_at)` advancing off 2026-07-14. A rising count would mean new templates existed
+  upstream; an unchanged count with a fresh `synced_at` is the success case.
+
+**Do not revisit unless:** a recurring/scheduled sync is built (`Q#NEXT` — cron vs. staleness-on-read
+vs. sync-on-workout-fetch), at which point the shared path this decision establishes is the surface
+to hang it on rather than a third call site; or `sync_exercise_templates` changes its summary contract,
+which is what `_sync_failure` and `_SYNC_ERROR_TYPES` read.
+
+---
