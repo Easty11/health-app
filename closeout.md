@@ -3,23 +3,26 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-02. Branch at close: `feat/hub-shell` (pushed, **not merged**).
-Session-open ref: `35e8a1d`.
+Session date: 2026-08-02 (second session that day; the prior close-out is `d11b2b8`).
+Branch at close: `feat/cbti-eval-trigger` (pushed, **not merged**). Session-open ref: `d11b2b8`.
 
-**The `#150` hub shell is built and held for review.** `/dashboard` is a module tile grid with
-chat docked; the two panels now have their own routes. Nothing is on master.
+**`#118`'s owed PM half is built.** The engine's cycle decision is offered at nightly close-out with
+its full basis, and the successor prescription is minted only on an explicit accept. One gate was
+NOT met — live prod verification — and it is owed, not claimed.
 
 ## 1. Real commits this session
 
-`git log --oneline 35e8a1d..HEAD`:
+`git log --oneline d11b2b8..HEAD`:
 
 ```
-001df4c feat(frontend): #150 hub shell — tile grid on /dashboard, chat docked, panels relocated
+f30dd49 feat(cbti): #118 PM evaluation trigger — witnessed offer + accept, reusing #128's ledger read
 ```
 
 Plus this close-out commit. Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
+2026-08-02 feat(cbti): #118 PM evaluation trigger — witnessed offer + accept, reusing #128's ledger read
+2026-08-02 chore: session close-out
 2026-08-02 feat(frontend): #150 hub shell — tile grid on /dashboard, chat docked, panels relocated
 2026-08-02 governance: question-state vocab (carve+sweep), Q65 collapse, Q73/Q74, FEEDBACK §22, CLAUDE accretion compress, ROADMAP NEXT reconcile
 2026-08-02 governance: renumber #NEXT -> #161 and land; Q72 carries the owner's position
@@ -28,136 +31,139 @@ Plus this close-out commit. Repo's own dated record (`git log --format="%ad %s" 
 2026-08-01 chore: session close-out
 2026-08-01 governance: resolve #NEXT -> #160 (on-branch, pre-ff)
 2026-08-01 governance: #NEXT — the group as-of derivation, and the label #159 actually asked for
-2026-08-01 fix(interpretation): a member defers its date badge to the group that already stated it
-2026-08-01 feat(interpretation): link the interpretation view from the dashboard
 ```
 
 ## 2. Pending-queue reconciliation
 
-No `;cc` pending-commit queue was carried in. The input was a **code-ready brief** (hub shell,
-`#150`), reconciled step by step. Everything in it is either landed at `001df4c` or listed as
-outstanding — nothing is silently dropped.
+No `;cc` queue was carried in. The input was a **code-ready brief** (CBT-I PM evaluation trigger,
+`#118`), reconciled step by step. Nothing in it is silently dropped.
 
 | Brief step | Outcome |
 |---|---|
-| 0 — cut branch, report max decision number | **Landed.** Max is **#161** (period-agnostic `^### [0-9]+`), matching the brief. Branch cut from master. |
-| 1 — chat-dock layout wrapper | **Landed.** `HubLayout` docks one `ChatPanel`: static right rail ≥ md, fixed bottom sheet < md. **No prop or data-path change** — `pendingFeedback` / `onFeedbackSent` exactly as `Dashboard` passed them; `ChatPanel.jsx` unedited. No standing-context wiring added. |
-| 2 — relocate the two panels | **Landed.** `/recovery` and `/training` host `HealthPanel` / `WorkoutPanel` full-width under `RequireAuth`. Neither panel's internals edited. |
-| 3 — tile grid on `/dashboard` | **Landed.** Six tiles + prominent AM/PM. Every prior header destination enumerated and re-homed *before* any link was deleted (table in §3). |
-| 4 — interpretation tile, `Q63` → (a) | **Landed, amended.** Copy is `What Moved: <n> · Stable: <m> · collected <date>` — *not* `generated`. See §3 "Corrections". |
-| 5 — Constraint B | **N/A — no forecast on tile.** The Recovery tile is navigation-only (label + static description); it previews no readiness number, so `#150` Constraint B does not engage. |
-| 6 — no chat-context seeding | **Held.** Tiles are plain doorways. Nothing touches the standing prompt or the request-scoped `find_marker` → `render_asked_lab_value` path (`#59`). |
-| LOG | **Landed** as `### #NEXT` in `DECISIONS_LOG.md`; `OPEN_QUESTIONS` `Q63` → `DONE → #NEXT`. Adjudicated as a standalone decision, not pure application of Constraint A — `#150` permits candidate (a) but does not select it over (b)/(c), and the `generated`→`collected` amendment needs its own "How you know". |
+| 0 — cut branch, report max decision number | **Landed.** Cut clean from master. Max is **#161** numbered — but master also carried an unresolved `### #NEXT`; see "Inherited defect" below. |
+| 1 — extract the shared cycle read/eval | **Landed.** `load_ledger_rxs` + `evaluate_live_cycle` in `cbti/replay.py`. `test_cbti_replay.py` green (6 passed) **before** the endpoints were added — the extraction is proven decision-neutral for the replay. |
+| 2 — read-only offer endpoint | **Landed** as `GET /checkin-v2/cbti/evaluation`. Writes nothing. **Gate NOT fully met** — the live prod verification could not run; see "Outstanding". |
+| 3 — witnessed-accept mint endpoint | **Landed** as `POST /checkin-v2/cbti/evaluation/accept`. Append-only invariant asserted by column diff; double-accept guarded; block row untouched; `close` refused. |
+| 4 — PM offer surface | **Landed** in `NightlyCloseOut.jsx`. Integration point reported below. |
+| 5 — Q45 caveat surfaced, not resolved | **Landed.** `nights_excluded` renders as a dated list with reasons, not a count. `Q45` gains a note recording that the exposure is now legible and still unresolved. |
+| LOG | **Entry minted** as `### #NEXT`, against the brief's "Likely None". Adjudication below. |
 
-**Provisional, not done:** `#NEXT` is unresolved and `Q63` reads `DONE → #NEXT` because the branch
-is **not merged**. The integer is claimed only at the fast-forward, per number-at-merge.
+**Provisional, not done:** this branch's `#NEXT` is unresolved because it is **not merged**. The
+integer is claimed at the fast-forward.
+
+### Inherited defect, fixed here
+
+Master carried an **unresolved `### #NEXT`**: `feat/hub-shell` fast-forwarded last session while its
+heading still read `#NEXT`, so number-at-merge did not happen. Left alone, this session's entry would
+have been a second `#NEXT` in the same file — exactly the collision the rule exists to kill. Resolved
+to **#162** here, with the miss recorded in the entry, `BRANCHES.md` and `ROADMAP.md` rather than
+quietly corrected. Renumber scope was classified, not counted (`#148`): five live tokens
+(`DECISIONS_LOG` heading + Status, `OPEN_QUESTIONS` Q63, `CLAUDE.md` landings, `BRANCHES.md` row,
+`ROADMAP.md` row); every other `#NEXT` in the tree is pre-existing prose *about* the convention and
+was left untouched.
 
 ## 3. Cold-resume handoff
 
 ### What exists now
 
-`feat/hub-shell` at `001df4c`, pushed to `origin`, **not merged**. Frontend only; no backend delta.
+`feat/cbti-eval-trigger` at `f30dd49`, pushed, **not merged**.
 
-- `frontend/src/components/HubLayout.jsx` — the shell. Header (back / title / mobile chat toggle /
-  Sign-out), module area as `{children}`, and **one** `ChatPanel`. The single instance is
-  load-bearing: a rail plus a separate drawer would mount twice, both receive `pendingFeedback`,
-  both `POST /chat`, and both write the same `chat_history_<sub>` key. One element, position
-  switched at the breakpoint. Sheet rules are `max-md:`-scoped so the rail needs no `md:` resets.
-  A `fill` prop bounds the module area for the panel pages so their `h-full` + internal scroll
-  behave as they did in the old Dashboard column.
-- `frontend/src/components/hub/HubChatContext.js` — `sendToChat`. A separate module only because
-  react-refresh requires a component file to export components and nothing else.
-- `frontend/src/components/hub/{Tile,InterpretationTile}.jsx`, `interpretationTileCopy.js`.
-- `frontend/src/pages/{Recovery,Training}.jsx`; `Dashboard.jsx` rewritten as the hub;
-  `App.jsx` + two routes.
+- `backend/cbti/replay.py` — `load_ledger_rxs` (the `#128` prescription read, extracted from `main`),
+  `evaluate_live_cycle` (+ `LiveCycleEval`), and `_as_date`.
+- `backend/routers/checkin_v2.py` — the offer and accept endpoints, their schemas, and helpers.
+- `backend/tests/test_cbti_eval_trigger.py` — 11 tests.
+- `frontend/src/components/cbti/{EvaluationOffer.jsx,evaluationCopy.js}`; `NightlyCloseOut.jsx` +6 lines.
 
-### Corrections made to the brief (expected output, not failure)
+### Adjudications made (corrections are the expected output)
 
-1. **`generated` → `collected` on the interpretation tile.** `Q63` (a) and the brief both said
-   "generated `<date>`". `meta.generated_at` exists but `GET /interpretation` builds the payload per
-   request (`producer.py:560` stamps `datetime.now`), so it is always "now" — the tile would read
-   "generated 2 Aug" on 2 Aug over an unchanged draw. Shipped `collected`, from
-   `meta.trigger_panel.collected`. `Q63`'s own "30 May" *is* that collection date in the fixture.
-2. **The header was seven links, not six.** `#150` rule 2 lists six; `Interpretation` was added
-   since (`#158`, with a comment anticipating this retirement). All seven re-homed.
-3. **"How you know" is not a test.** The brief's LOG draft asserted a test on the tile string. This
-   repo has **no frontend test runner** — no vitest/jest, no `test` script, no spec files under
-   `frontend/src`. Adding one is tooling adoption, not a layout job. The copy was extracted into a
-   pure function and evaluated through Vite's own resolver instead; the assertion is recorded OWED.
-4. **ANCHOR could not hold as written.** `git cherry origin/master` was not empty at branch cut —
-   `master` was already **ahead 1** of `origin/master` (`35e8a1d`, from the prior session). Not this
-   session's work; flagged rather than silently pushed. See "Outstanding".
+1. **Eligibility is calendar DAYS elapsed, not logged nights** — the brief specified
+   `nights_since_effective_from >= 7`; `#118` says "7 days". Days wins, and the difference has teeth:
+   gating the offer on logged nights strands the operator, because cycle 1 can never reach 7 logged
+   nights once one of its 7 calendar days goes unlogged and that span is already past. Night count
+   still governs the decision through the engine's existing sufficiency gate, which HOLDs and names
+   the shortfall. Both quantities are reported. Pinned by a test.
+2. **`close` is surfaced but not acceptable** — block close stays engine-driven (`#118`) and no close
+   path is built, so the offer renders with no accept control and accept returns 409 rather than
+   minting a terminal-looking prescription that leaves the block open.
+3. **The trigger replays the whole block** — `prior_basis_tst` needs two prior cycles for the plateau
+   exit, so evaluating the live cycle alone would make `close` structurally unreachable.
+4. **Reuse target named wrongly in the brief** — the constant is `_PRESCRIPTIONS_SQL`, not `_RX_SQL`.
+   No `_RX_SQL` exists on master.
+5. **LOG is not "None".** The brief predicted no entry. Calls 1–3 are settled by neither `#118` nor
+   `#128` and each has a live consequence, so one entry was minted. The brief's own two candidate
+   triggers were both declined: the `#47`/`Q60` boundary was already drawn by `#118` (building to it
+   is application, not a new call), and nothing here settles `Q48`, which stays open.
 
 ### Gate evidence
 
-- **Step 1** — no prop/data-path change (expected: none, confirmed). `ChatPanel.jsx` not in the diff.
-- **Step 2 coupling finding** — `HealthPanel` is self-contained (fetches `/health/summary`, held no
-  Dashboard state). `WorkoutPanel` is **not**: it takes `onFeedback`, which in the old Dashboard set
-  Dashboard-held `pendingFeedback` that fed `ChatPanel` — panel → Dashboard state → chat. That state
-  moved to `HubLayout` and is reached via `useHubChat`; the panel itself is unedited.
-  `git diff --stat` shows new pages + `App.jsx` + `Dashboard.jsx` only — **not** `HealthPanel` /
-  `WorkoutPanel` / `ChatPanel`.
-- **Step 3 orphan check** — every prior header destination, re-homed before deletion:
+- **Step 1** — `test_cbti_replay.py` **6 passed** after the extraction, run before any endpoint
+  existed. `main()` now calls `load_ledger_rxs` with the same query and construction it had inline.
+- **Step 2 / Step 3** — 11 new tests, full backend suite **589 passed** (578 baseline **+11**), no
+  regressions. Append-only proven by re-reading the prior row after accept and asserting the changed
+  column set `== {effective_to, superseded_by}`; successor count asserted `== 2` rows on the block;
+  block `closed_on` asserted still null; double-accept asserts 409 **and** still 2 rows.
+- **`#128` reuse** — a test reproduces block 3's shape (a correction superseding the seed mid-block)
+  and asserts the basis reports the correction's `22:30`/390, not the seed's `23:45`/360.
+- **Step 4 integration point** — `NightlyCloseOut.jsx` fetches `GET /checkin-v2/today` on mount and
+  posts `POST /checkin-v2/pm` from `handleSubmit`. `<EvaluationOffer />` is slotted immediately after
+  `<PrescriptionCard />` in both render branches, **outside** the `<form>`: it carries its own submit
+  button, and nesting it would have made that button submit the close-out. It self-fetches, so the PM
+  payload and submit path are untouched (`git diff` on the page is +6 lines, all render/import).
+- **Copy** — extracted to a pure module and evaluated in node (no runner exists; the assertion is
+  OWED, not faked). This caught a real bug: `close` rendered as `"Close the block by +30 min"`. The
+  delta phrase is now restricted to `extend`/`compress`. Verified output:
+  `Extend the window by +30 min` · `Compress the window by -30 min` · `Hold the window` ·
+  `Close the block` · `1 night excluded from the basis` · `Next evaluation in 4 nights`.
+- **Build/lint** — `npm run build` clean; eslint **5 errors, unchanged from the master baseline**.
 
-  | Old header control | Destination | Now |
-  |---|---|---|
-  | AM | `/checkin-am` | Prominent `CheckInButtons` above the grid |
-  | PM | `/nightly` | Prominent `CheckInButtons` above the grid |
-  | History | `/checkin-history` | History tile |
-  | Labs | `/metrics` | Labs tile |
-  | Interpretation | `/interpretation` | Interpretation tile |
-  | Settings | `/settings` | Settings tile |
-  | Sign out | (action) | `HubLayout` header, on every route |
+### Not verified — the one gate not met
 
-  Verified in-browser: 8 `main` destinations render — the six tiles plus both check-in buttons.
-  `/recovery` and `/training` are new reachable surfaces. `/checkin` was already URL-only on master
-  (no link anywhere) — unchanged, not a regression introduced here.
-- **Step 4 copy string**, evaluated through Vite's own resolver against the committed fixture and a
-  synthetic payload:
-  `What Moved: 2 · Stable: 0 · collected 30 May` (fixture)
-  `What Moved: 2 · Stable: 5 · collected 30 May` (2-moved / 5-stable)
-  Counts and a date only; no priority phrasing. Counts come from `splitSections` — the view's own
-  placement function, consuming `should_surface` rather than recomputing it.
-- **Build / lint** — `npm run build` clean (401.69 kB). eslint **5 errors, unchanged from the master
-  baseline** (`ChatPanel`, `WorkoutPanel`, `Settings` — all pre-existing; an added 6th was fixed by
-  moving the chat context to its own module). Frontend-only; backend untouched, no suite delta.
-- **Browser verification** (offline harness: backend pointed at a closed port so the 401 redirect
-  does not fire). At **375×812**: sheet off-screen when closed (`top` = 812 = viewport height); open
-  places it flush-bottom with the chat input visible and the backdrop present; backdrop tap
-  re-closes. At **1280×800**: rail `position: static`, side-by-side with `main` (853 + 427 = 1280),
-  full height, border-left, no sheet radius/shadow, toggle and Close hidden. **One** `ChatPanel`
-  instance at both widths. Note: the preview pane does not composite
-  (`document.visibilityState === "hidden"`), so CSS transitions never advance — settled positions
-  were read with the transition disabled. A harness artifact, not a defect; it briefly presented as
-  a stuck-translate bug and is not one.
+**Live prod verification (step 2's gate) did not run.** Two independent blockers, neither worked around:
+
+1. `railway run` injects `DATABASE_URL` pointing at `postgres-*.railway.internal`, which does not
+   resolve off-network. The backend service exposes **no** public URL variable (checked by listing
+   env var **names** only — no value was rendered), and the Postgres service cannot be enumerated
+   without the Railway agent tooling (`railway setup agent`).
+2. `railway ssh` was **blocked by this session's permission classifier**.
+
+A local server was also deliberately **not** started: `database.py` calls `load_dotenv()`, so a
+mis-set `DATABASE_URL` would point a **write** endpoint (`accept` mints a ledger row) at production
+health data. Not worth a screenshot. Consequently the populated offer card has not been seen
+rendered with live data — the component's states are exercised only by construction and by the pure
+copy functions.
 
 ### Open questions touched
 
-- `Q63` — **DONE → #NEXT** (integer at ff). Resolved to candidate (a), amended to `collected`.
-- No other question's state changed.
+- `Q45` — still **OPEN**. Gains a note: exclusions are now rendered dated-with-reasons at the moment
+  a decision is witnessed, so the exposure is legible; the attribution is unchanged and still closes
+  from VA protocol docs or the clinician.
+- `Q48` — untouched, still OPEN. The trigger settles nothing about the settling window.
+- `Q63` — **DONE → #162** (was `DONE → #NEXT`; see "Inherited defect").
 
 ### Outstanding (owner: Luke)
 
-1. **Merge decision on `feat/hub-shell`.** Held for review per the brief, not merged.
-2. On merge: resolve `#NEXT` on-branch pre-ff (re-read master max at that instant — do **not** reuse
-   #161), then `git land feat/hub-shell`.
-3. **Deploy probe, not yet run** (post-merge; `#116` timing + `#121` coverage):
-   `railway service health-app-frontend`, then `railway deployment list` → SUCCESS, then fetch the
-   live `assets/index-*.js` and grep `HRV, sleep and overnight vitals` — confirmed present in the
-   local production bundle, so it survives minification.
-4. **`master` is ahead 1 of `origin/master`** (`35e8a1d`, prior session). Not touched this session
-   and not pushed here — the owner's call. It is reachable on `origin` via `feat/hub-shell`, so chat
-   can read it, but `origin/master` itself still lags. Resolve with `git push origin master`.
-5. **No frontend test runner.** The `#47` no-priority-phrasing assertion on the tile string is
-   inspection-backed, not test-backed. Standing up vitest is its own decision.
-6. **`BRANCHES.md` column drift** (pre-existing, not introduced here): rows from
-   `governance/q69-resolution` onward carry **6** columns against a **5**-column header, so their
-   trailing cell is dropped when rendered. The new row matches the header at 5.
+1. **Merge decision on `feat/cbti-eval-trigger`.** On merge: resolve `#NEXT` on-branch pre-ff
+   (re-read master max at that instant — it is **#162** now, do not reuse), then
+   `git land feat/cbti-eval-trigger`.
+2. **Live prod verification, owed from step 2.** Either run `railway setup agent` and re-probe, or
+   run the read-only check from an environment with DB reach: read block 3's live prescription and
+   confirm `eligible` / decision / basis against it.
+3. **Both deploy probes, post-merge** (`#116` timing, `#121` coverage). Backend:
+   `railway deployment list` SUCCESS and `GET /checkin-v2/cbti/evaluation` answers. Frontend:
+   `railway service health-app-frontend` SUCCESS and grep the live `assets/index-*.js` for
+   `Cycle complete · evaluation ready`.
+4. **The hub shell's own frontend deploy probe is still un-run** from the prior session — grep the
+   live bundle for `HRV, sleep and overnight vitals`. It merged without it.
+5. **No frontend test runner.** The evaluation copy is inspection-and-node-backed, not test-backed.
+6. **No block-close path exists.** If the engine recommends `close`, the operator reaches a state the
+   app surfaces but cannot action. That is deliberate (`#118`), but it is a dead end until a close
+   path is built.
 
 ### Single next action
 
-Review `feat/hub-shell` (`001df4c`, pushed) and decide merge. If merging: resolve `#NEXT` on-branch
-pre-ff, `git land feat/hub-shell`, then run the frontend deploy probe in item 3.
+Review `feat/cbti-eval-trigger` (`f30dd49`, pushed). Before merging, decide whether the live prod
+verification in item 2 must run first — it is the one gate the brief set that this session could
+not meet.
 
 ### Governance stores changed this session
 
