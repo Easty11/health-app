@@ -3,14 +3,14 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-02. Branch at close: `feat/hevy-template-sync-wiring` (pushed, **not merged**).
+Session date: 2026-08-02, **amended 2026-08-03 at the merge**. Branch at close: none — `feat/hevy-template-sync-wiring` ff-merged to master at `9c8176a` and deleted both sides.
 Session-open ref: `d11b2b8`. Session-open `DECISIONS_LOG` max on master: **161** (counted
 `^### [0-9]+`, period-agnostic). The brief was written against #161 / Q74 — no re-aim needed.
 
-**The Hevy exercise-template sync now has call sites; the prod population gate is OWED.** The
-operator endpoint and the connect-time seed are built and tested. The route does not exist in prod
-until this branch merges, so the population gate the brief exists to force is recorded as
-BEFORE-only and **not claimed**.
+**The Hevy exercise-template sync now has call sites; the population half of the prod gate is
+still OWED.** The operator endpoint and the connect-time seed are built, tested, merged (`9c8176a`)
+and deployed. Post-merge the route is live and auth-gated — see §2 — but the authenticated POST that
+actually repopulates the catalogue has not been taken, so the gate is **not claimed**.
 
 ## 1. Real commits this session
 
@@ -109,7 +109,7 @@ as `PENDING` canonical entries. Reconciled instead against the brief's own deliv
 | `OPEN_QUESTIONS Q#NEXT` (recurring sync deferred) | **YES** — `c7bed98`, resolved to **Q75** at the ff |
 | Branch pushed even while held (`#98`) | **YES** — `origin/feat/hevy-template-sync-wiring` |
 
-### The prod population gate — BEFORE recorded, AFTER owed, gate NOT claimed
+### The prod population gate — BEFORE recorded, route deployed and gated, POPULATION half owed
 
 Read via `railway run --service health-app-DB` over `DATABASE_PUBLIC_URL` (`#56` — `railway run`
 injects the private-network hostname, unresolvable from a laptop), printing counts only and never a
@@ -126,11 +126,17 @@ So the table is **not** the zero-row substrate `FEEDBACK` §8 recorded — the o
 precise state this wiring exists to end: populated once by someone remembering, never by the
 application.
 
-**Why the after-half was not taken:** the deployed backend's `openapi.json` lists five
-`/integrations/hevy*` paths — `/integrations/hevy`, `/routines`, `/workout-count`, `/workouts`,
-`/workouts/all` — and **not** `/integrations/hevy/sync`. The route does not exist in prod until this
-branch merges and Railway redeploys. Probed, not assumed. Per the brief the gate is therefore **not
-claimed**, marked OWED, and the branch is parked pushed-but-unmerged.
+**Post-merge (2026-08-03), the deploy half passes on both axes.** Timing (`#116`):
+`railway deployment list --service health-app-backend` reports `34cda96f` **SUCCESS** at
+2026-08-03 07:38. Coverage (`#121`): the live `openapi.json` now lists **six** `/integrations/hevy*`
+paths including **`/integrations/hevy/sync`** — it listed five before the merge. Unauthenticated
+`POST /integrations/hevy/sync` returns **401** while `POST /integrations/hevy/sync-does-not-exist`
+returns **404**: a paired control discriminating on identity, so the 401 proves the route is
+registered and auth-gated rather than merely missing.
+
+**What is still owed: the authenticated POST, owner Luke.** Code cannot take it — it needs a session
+token, and handling the operator's credentials is prohibited regardless of who offers them. The
+population half is therefore unproven and the gate is **not claimed**.
 
 **One correction for whoever runs the after-half.** The paired before/after count is the right
 control, but its signal here is not what a naive read expects: the sync is **upsert-only** (`#77` —
@@ -140,23 +146,20 @@ a failure. The signals that must actually move are `defaults_seen > 0` in the re
 `max(synced_at)` advancing off 2026-07-14. A rising count would additionally mean new templates
 exist upstream.
 
-Sequence to close it — the timing axis (`#116`) then the coverage axis (`#121`), each read before
-the next runs rather than chained (`#103`):
+Remaining sequence — merge, deploy and route checks are all discharged above; only these two steps
+are left, read one before running the next rather than chained (`#103`).
 
-```powershell
-git checkout master; git merge --ff-only feat/hevy-template-sync-wiring; git push origin master
+**Step 1, Luke only.** Open the logged-in app, devtools console, and run this. The token is already
+in the browser's `localStorage`; it never leaves the machine and never enters a transcript:
+
+```javascript
+await (await fetch('https://health-app-backend-production-760e.up.railway.app/integrations/hevy/sync', {method:'POST', headers:{Authorization:`Bearer ${localStorage.getItem('token')}`}})).json()
 ```
 
-```powershell
-railway deployment list --service health-app-backend
-```
+Read `defaults_seen` off the returned summary — it must be `> 0`. A `users_failed >= 1` means the
+stored Hevy key is dead; a 404 means no key is stored for that account.
 
-```powershell
-curl.exe -s https://health-app-backend-production-760e.up.railway.app/openapi.json | Select-String "hevy/sync"
-```
-
-Then POST `/integrations/hevy/sync` authenticated as Luke, read `defaults_seen` off the response,
-and re-run the count:
+**Step 2.** Re-run the count:
 
 ```powershell
 railway run --service health-app-DB -- C:\Users\lukee\Projects\health-app\backend\.venv\Scripts\python.exe C:\Users\lukee\AppData\Local\Temp\claude\C--Users-lukee-Projects-health-app\df14783b-6605-4913-969e-8c50f9c67901\scratchpad\count_templates.py
@@ -226,10 +229,10 @@ read.
 
 ### Single clearest next action
 
-**Close the prod population gate.** ff-merge `feat/hevy-template-sync-wiring` to `master`, confirm
-the `health-app-backend` deployment reports SUCCESS and that the live `openapi.json` now lists
-`/integrations/hevy/sync`, then POST it as Luke and re-run the count — asserting `defaults_seen > 0`
-and `max(synced_at)` advanced off 2026-07-14, **not** that the row count rose. Until that lands,
-step 1 is code-complete and unproven in prod, which is the exact `FEEDBACK` §8 state the brief
-exists to end — and step 2 (custom-exercise creation) must not start, because its idempotency
-pre-check reads the substrate this gate is proving.
+**Luke runs the authenticated POST** (the devtools one-liner in §2), then the count script — and
+the assertion is `defaults_seen > 0` plus `max(synced_at)` advanced off 2026-07-14, **not** that the
+row count rose. Everything else on the gate is discharged: merged, deployed, route live and
+auth-gated. Until that one call lands, the catalogue is still the July hand-run CLI's output, which
+is the exact `FEEDBACK` §8 state this work exists to end — and **step 2 (custom-exercise creation)
+must not start**, because `create_and_resolve`'s idempotency pre-check reads this substrate and
+would mint permanent duplicates against a stale copy.
