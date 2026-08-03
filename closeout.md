@@ -3,13 +3,15 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-03. Branch at close: `feat/cbti-hunting-titration` (pushed, **not merged**).
+Session date: 2026-08-03, **amended at the merge**. Branch at close: none — `feat/cbti-hunting-titration`
+ff-merged to master at `004581d` and deleted both sides.
 Session-open ref: `f7901fd`. Session-open `DECISIONS_LOG` max on master: **164** (counted
 `^### [0-9]+`, period-agnostic) — matching the brief, no re-aim needed.
 
-**The titration is now a perpetual 4-night hunting search.** The window dithers ±15 min, the block
-never auto-closes, and the reported sleep-need estimate is the centre of the dither rather than the
-bouncing window. Nothing is deployed; both `#121` probes are owed.
+**The titration is now a perpetual 4-night hunting search, and it is live.** The window dithers ±15 min,
+the block never auto-closes, and the reported sleep-need estimate is the centre of the dither rather
+than the bouncing window. Merged as **#165** / **Q78**; both `#121` deploy probes PASS. The `#162` hole
+that rode master for three sessions is healed.
 
 ## 1. Real commits this session
 
@@ -50,9 +52,9 @@ reconciled step by step.
 | LOG | **Entry minted** as `### #NEXT`. |
 | New question (multi-user nap attribution) | **Minted** as `## Q#NEXT`. |
 
-**Provisional, not done:** `#NEXT` and `Q#NEXT` are unresolved because the branch is **not merged**.
-Integers are claimed at the fast-forward — master max was **#164** / **Q77** at authoring; re-read at
-that instant rather than reusing these.
+**Resolved at the merge.** `#NEXT` → **#165**, `Q#NEXT` → **Q78**, claimed on-branch pre-ff with master
+max re-read at that instant (**#164** / **Q77**). Audit after landing: `max 165, dupes none, gaps none,
+unnumbered #NEXT 0, Q max 78`.
 
 ## 3. Cold-resume handoff
 
@@ -142,15 +144,22 @@ would invalidate history. The engine simply never emits it again, which is asser
 
 ### Outstanding (owner: Luke)
 
-1. **Merge decision on `feat/cbti-hunting-titration`.** On merge: resolve `#NEXT` and `Q#NEXT`
-   on-branch pre-ff — re-read master max at that instant, do **not** reuse #164/Q77.
-2. **Deploy probes, both services, post-merge** (`#116` timing + `#121` coverage). Backend:
-   `railway deployment list --service health-app-backend` SUCCESS and `/checkin-v2/today` returns
-   `centre_minutes`. Frontend: `railway service health-app-frontend` SUCCESS and grep the live
-   `assets/index-*.js` for `What drives deep sleep`.
-3. **Decide `feat/cbti-eval-trigger`'s fate.** It is the `#118` PM trigger and has been held two
-   sessions. Merging it after this branch gives the 4-night cadence a surface; abandoning it loses the
-   witnessed-accept path *and* the duplicate `#162` fix.
+1. ~~Merge decision~~ — **DONE.** Landed at `004581d`; branch deleted both sides.
+2. ~~Deploy probes~~ — **DONE, both services, both with negative controls.** Backend `/openapi.json`
+   carries `centre_minutes` / `centre_cycles_n` / `dither_minutes` with `dither_minutes` **defaulting
+   to 15** (a value probe — it discriminates the retuned image from the old `MAX_MOVE_MIN=30` build);
+   frontend bundle `assets/index-D1XPQevM.js` greps 1 for `What drives deep sleep`. Both deploys
+   reached SUCCESS at 11:15 **before** any probe ran (`#116`). Negative controls: no `cbti` evaluation
+   routes in the schema, 0 hits for `Cycle complete` in the bundle.
+3. **`feat/cbti-eval-trigger` needs REWORK, not a merge.** Superseded in substance by `#165` before it
+   landed. Full checklist on its `BRANCHES.md` row — the load-bearing item is that its 7-day offer
+   eligibility must move to 4, and `days_since_effective_from == 7` still *passing* is the trap, not
+   the proof. Its `#NEXT` is now **166**.
+4. **Pre-land `#NEXT` guard (process root cause).** Number-at-merge has now been missed or deferred
+   enough times to be a pattern, not an accident — the `#162` hole rode master for three sessions
+   because the fix kept living on branches that did not merge. `git land` merges without ever checking
+   the diff for an unresolved `### #NEXT`; a one-line refusal would have caught every instance. Not
+   built here — it is a shared-block/governance change, and this session was mid-tangle.
 4. **No prod verification of the new cadence.** Nothing here was run against block 3's live data —
    this session was synthetic-only by design, but the first real 4-night cycle is the watch-point.
    Specifically: whether the dither converges, or the centre wanders (the decision's revisit clause
@@ -159,8 +168,9 @@ would invalidate history. The engine simply never emits it again, which is asser
 
 ### Single next action
 
-Review `feat/cbti-hunting-titration` (`4b247f4`, pushed). If merging: resolve `#NEXT`/`Q#NEXT` pre-ff,
-`git land feat/cbti-hunting-titration`, then run both deploy probes in item 2.
+Rework `feat/cbti-eval-trigger` against the 4-night engine — checklist on its `BRANCHES.md` row.
+Do not force-merge it: 5 of its 11 tests fail against master's engine and its close path is now dead
+code. The first real 4-night cycle on block 3 is the watch-point for whether the dither converges.
 
 ### Governance stores changed this session
 
