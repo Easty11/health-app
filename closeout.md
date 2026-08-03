@@ -3,176 +3,163 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-03, **amended at the merge**. Branch at close: none — `feat/cbti-hunting-titration`
-ff-merged to master at `004581d` and deleted both sides.
-Session-open ref: `f7901fd`. Session-open `DECISIONS_LOG` max on master: **164** (counted
-`^### [0-9]+`, period-agnostic) — matching the brief, no re-aim needed.
+Session date: 2026-08-03. Branch at close: none — `gov/next-resolution-guard` ff-merged to master
+and deleted both sides. Session-open ref: `3fadc96`.
 
-**The titration is now a perpetual 4-night hunting search, and it is live.** The window dithers ±15 min,
-the block never auto-closes, and the reported sleep-need estimate is the centre of the dither rather
-than the bouncing window. Merged as **#165** / **Q78**; both `#121` deploy probes PASS. The `#162` hole
-that rode master for three sessions is healed.
+**Number-at-merge is now enforced rather than trusted (`#167`).** A pre-push ref guard refuses any
+push to master carrying an unresolved `### #NEXT` or `## Q#NEXT`.
+
+**Read this before trusting anything below: TWO Code sessions shared this clone today.** Master's
+current state is the product of both. `#166` and `#168` are the other session's; `#167` is this
+one's. The overlap produced one real incident, recorded as `FEEDBACK` §19 rows **17** and **18** and
+summarised in §3. Any state either session reports is stale on arrival while that condition holds.
 
 ## 1. Real commits this session
 
-`git log --oneline f7901fd..HEAD`:
+`git log --oneline 3fadc96..master`, **this session's own** marked ▸:
 
 ```
-4b247f4 feat(cbti): perpetual 4-night hunting titration — no auto-close, centre-as-estimate
+e32fd8d governance: resolve #NEXT -> #168 (on-branch, pre-ff)              [other session]
+ad94ee3 feat(chat): #NEXT show the model the whole exercise catalogue       [other session]
+0f996ea governance: resolve #NEXT -> #167 (on-branch, pre-ff)              ▸
+9973a14 governance: BRANCHES row, FEEDBACK §19 rows 17/18, ROADMAP debt    ▸
+672e0ca feat(governance): enforce number-at-merge with a pre-push ref guard ▸
+784763c governance: #166 owed-item (1) discharged — orphan recovered       ▸ (other session's CONTENT)
+11b6b9d governance: #166 landed and deployed                               [other session]
+e438f45 governance: resolve #NEXT -> #166; FEEDBACK §23.1                  [other session]
+23d3e9b fix(hevy): #NEXT create-response parse aborted after the create     [other session]
 ```
 
-Plus this close-out commit. Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
+`784763c` is committed by this session but **authored by the other** — see §3.
+
+Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
-2026-08-03 feat(cbti): perpetual 4-night hunting titration — no auto-close, centre-as-estimate
-2026-08-03 governance: #164 landed — BRANCHES row DONE, step 2 loop closed
-2026-08-03 governance: resolve #NEXT -> #164, Q#NEXT -> Q76, Q#NEXT+1 -> Q77 (on-branch, pre-ff)
-2026-08-03 feat(hevy): #NEXT wire <hevy_create_exercise> — the model-facing custom-exercise path
-2026-08-03 governance: close #163's prod population gate — catalogue proven populated by the app
-2026-08-03 governance: record the #163 merge + post-merge deploy verification
-2026-08-03 governance: resolve #NEXT -> #163, Q#NEXT -> Q75 (on-branch, pre-ff)
-2026-08-02 chore: session close-out
-2026-08-02 governance: #NEXT (sync wiring), Q#NEXT (recurring-sync fork), BRANCHES row
-2026-08-02 feat(hevy): #NEXT wire the exercise-template sync — operator endpoint + connect-time seed
+2026-08-03 governance: resolve #NEXT -> #168 (on-branch, pre-ff)
+2026-08-03 feat(chat): #NEXT show the model the whole exercise catalogue — #61's capability, unsurfaced
+2026-08-03 governance: resolve #NEXT -> #167 (on-branch, pre-ff)
+2026-08-03 governance: BRANCHES row, FEEDBACK §19 rows 17/18, ROADMAP propagation debt
+2026-08-03 feat(governance): enforce number-at-merge with a pre-push ref guard
+2026-08-03 governance: #166 owed-item (1) discharged — orphan recovered and resolver-verified
+2026-08-03 governance: #166 landed and deployed — row carries the three owed items
+2026-08-03 governance: resolve #NEXT -> #166; FEEDBACK §23.1 standing gate; CLAUDE convention + landings
+2026-08-03 fix(hevy): #NEXT create-response parse aborted after the create — false negative + orphan
+2026-08-03 governance: record the #165 merge, deploy verification, and the eval-trigger rework
 ```
 
 ## 2. Pending-queue reconciliation
 
-No `;cc` queue was carried in. The input was a **code-ready brief** (4-night hunting titration),
-reconciled step by step.
+No `;cc` queue. The input was a directive, not a brief: *build the pre-land `#NEXT` guard now*,
+after it had been parked twice as "when I'm not mid-tangle".
 
-| Brief step | Outcome |
+| Item | Outcome |
 |---|---|
-| 0 — cut branch, report max | **Landed.** `git cherry origin/master` empty at cut. Max **#164**. |
-| 1 — four constants | **Landed.** `CYCLE_NIGHTS` 4, `MIN_VALID_NIGHTS` 3, `MAX_MOVE_MIN` 15, `ADHERENCE_FAIL_N` 2, each with an extended CHOSEN-not-derived note. The `MIN_VALID < CYCLE` cascade is now **asserted at import**, not just commented. |
-| 2 — remove auto-close | **Landed, with a correction** — there was no engine-close to remove. See below. |
-| 3 — centre-as-estimate | **Landed.** `CENTRE_CYCLES = 4` + pure `centre_estimate()`; surfaced on `/checkin-v2/today` (`centre_minutes`, `centre_cycles_n`, `dither_minutes`) and rendered in `PrescriptionCard` with a convergence band. |
-| 4 — nap over-exclusion guard | **Landed.** The sufficiency HOLD now carries a per-reason tally. `NAP_EXCLUDE_MIN` untouched; Q45 stays OPEN. |
-| 5 — deep-sleep-lever framing | **Landed** as `#47`-bounded education: five levers, evidence-ranked, identical for every reader, never scored or reordered by anyone's data. |
-| LOG | **Entry minted** as `### #NEXT`. |
-| New question (multi-user nap attribution) | **Minted** as `## Q#NEXT`. |
-
-**Resolved at the merge.** `#NEXT` → **#165**, `Q#NEXT` → **Q78**, claimed on-branch pre-ff with master
-max re-read at that instant (**#164** / **Q77**). Audit after landing: `max 165, dupes none, gaps none,
-unnumbered #NEXT 0, Q max 78`.
+| Pre-push `#NEXT` guard | **Landed** as `#167`. Script + repo-versioned hook + shared-block rule. |
+| Mechanism fork (land-alias vs ref check) | **Adjudicated to the ref**, on evidence — see §3. |
+| `FEEDBACK` §19 rows | **Landed** — 17 (`COUPLED`) and 18 (`MODEL`), `17 caused 18`. |
+| ROADMAP propagation debt | **Landed** — the shared-block edit owes HCA a byte-identical copy. |
+| `BRANCHES` row | **Landed**, and the branch is now DONE. |
+| `#NEXT` → integer | **#167**, claimed on-branch pre-ff with master re-read at that instant (#166). |
+| HCA propagation itself | **NOT done — owed.** Requires an HCA-rooted session. |
 
 ## 3. Cold-resume handoff
 
-### The correction that matters — there was no engine-close to remove
+### The guard (`#167`)
 
-The brief framed step 2 as removing the engine-driven block close `#118` established, and warned to
-enumerate consumers first. Enumerated against master **before** editing:
+- `scripts/check_governance_placeholders.py` — exits 0 clean, 1 on a placeholder (printing every
+  offending file and line, so matches are **read, not counted**), 2 when it cannot run. A check that
+  could not run must never be indistinguishable from one that passed.
+- `.githooks/pre-push` — refuses a push whose remote ref is `master`/`main`. Branch pushes untouched:
+  a placeholder is *correct* on a branch and only wrong on master.
+- `CLAUDE.md` — the rule, **inside the shared loop block**, plus the `git config core.hooksPath
+  .githooks` install line beside the `land`/`stale` aliases.
 
-- **Nothing writes `cbti_blocks.closed_on` from an engine decision.** The only writers are
-  `import_cbti_block.py` (the historical block-1 import) and a read in `correct_cbti_block3_rx.py`.
-- The engine's `close` was consumed **only** by `replay.py`'s advisory `#107` exit-too-early report
-  (which prints) and by tests.
+**Why the ref and not `git land`** — this is the load-bearing choice and it was settled by evidence,
+not preference. The merge that healed `#162` was done **by hand**
+(`checkout master && merge --ff-only && push`), so an alias-only guard would not have fired for it.
+The placeholder reaches master by whichever path is convenient that day.
 
-So `#118`'s "close is engine-driven" half was **specified and never built**. What this session removes
-is a *recommendation*, not a mechanism — a materially smaller change than the brief supposed, and one
-that touches no write path. `close` is **retained** in the `Decision` Literal and the DB CHECK
-constraint: block 1 was imported carrying it and the ledger is append-only, so retiring the value
-would invalidate history. The engine simply never emits it again, which is asserted parametrically.
+**Why anchored on the heading** (`#113`) — `CLAUDE.md`'s own rule text, `#148`'s entry and every
+corrected entry legitimately quote the token. A substring match would fire on the files that define
+the convention, get bypassed out of habit, and protect nothing.
 
-### Gate evidence
+**Controls.** Positive control is the *real defect, not a fixture*: run against `001df4c` — the
+actual `feat/hub-shell` merge that put a live `### #NEXT` on master — and it exits 1 naming
+`DECISIONS_LOG.md:5833`. Negative: clean master exits 0, and the three false-positive shapes are
+asserted explicitly. Hook end-to-end with crafted stdin: master+placeholder REFUSED, same ref to a
+branch ALLOWED, clean master ALLOWED, zero-sha deletion ALLOWED.
 
-- **Step 1** — `test_cbti_replay.py` green. Every changed replay decision traced to an intended
-  constant, nothing flipped for another reason:
+**Exercised on its own landing** — the branch push carrying `### #NEXT` was allowed, and the master
+push after resolution was allowed. Both pushes verified by `git ls-remote`, not by exit status.
 
-  | Change | Cause |
-  |---|---|
-  | 3-night stub `insufficient hold` → `extend` | `MIN_VALID_NIGHTS` 5→3 (3 now suffices) |
-  | a 7-night span splits 1 → 2 cycles | `CYCLE_NIGHTS` 7→4 |
-  | moves cap at 15, not 30 | `MAX_MOVE_MIN` 30→15 |
-  | plateau `close` → `hold` + `converged` | step 2 |
+**Known gap, recorded not papered over:** the `@claude` GitHub Action pushes without a local hook and
+is **not** covered. Closing it means a CI check, not a hook.
 
-- **Step 2** — full `close`/`closed_on` enumeration above. On 28 flat nights the walk yields 7
-  cycles, cycles 3–7 all `hold`/`converged`, and the block never ends. `no input shape makes the
-  engine emit close` is parametrised across five `prior_basis_tst` shapes × four TST/SE combinations.
-- **Step 3 worked example** — windows `[405, 420, 435, 420]` → centre **420 min (7h00)**. A pure ±15
-  dither `[405, 435, 405, 435]` → centre **420** while the latest window reads **435**: probe and
-  estimate are demonstrably different numbers. Ageing-out proven: `[300]×10 + [450]×4` → **450**.
-- **Step 4** — synthetic 4-night cycle with 2 nap nights:
-  `insufficient_nights: 2 valid of 4, need 3 (2 excluded: nap x2)`, with per-night detail retained in
-  `excluded_nights`. Non-vacuity: one nap night still leaves a decidable cycle.
-- **Suite** — backend **674 passed** (master baseline **655**, measured by stashing; **+19** new).
-  Frontend `npm run build` clean; eslint **5 errors, unchanged from the master baseline**.
-- **Copy** — no frontend test runner exists, so `leverContent.js` / `centreCopy.js` are pure modules
-  evaluated in node; assertions recorded OWED, not faked. Verified output: `7h 00m` ·
-  `6h 45m–7h 15m` · `centre of the last 4 cycles` · `from the last cycle only`.
+**`core.hooksPath` is per-clone config.** A fresh clone gets the files and no active hook until
+`git config core.hooksPath .githooks` is run. Landing the file does not arm it.
 
-### Judgement calls beyond the brief
+### The incident — and why it was smaller than first reported
 
-1. **Existing tests were retuned to derive from the constants, not repatched to new literals.**
-   `week()` became `cycle()` sized from `CYCLE_NIGHTS`, and assertions now read `CYCLE_NIGHTS`,
-   `MIN_VALID_NIGHTS`, `ADHERENCE_FAIL_N` rather than 7/5/3. A suite that hardcodes the cadence stops
-   testing a full cycle the moment the constant moves — silently, not red. 17 tests were touched.
-2. **A real bug caught by the build, not by review.** `DeepSleepLevers.jsx` beside a data module named
-   `deepSleepLevers.js` differ only by leading case. On Windows the import resolved to the `.js` data
-   module (no default export) and the build failed; on Railway's case-sensitive filesystem it would
-   have resolved to the `.jsx` and built fine. Renamed to `leverContent.js` — a same-name-different-case
-   pair is a platform-dependent footgun regardless of which side happens to win.
-3. **The stale hub `#NEXT` was resolved to `#162` here too.** Master still carried the unresolved
-   `### #NEXT` heading from the `feat/hub-shell` merge, with `#163`/`#164` minted on top — so `#162`
-   was a hole and a placeholder sat mid-log. Left alone, this branch would have carried **two**
-   `### #NEXT` headings and the pre-ff resolution could have hit the wrong one. Resolved in
-   `DECISIONS_LOG` / `OPEN_QUESTIONS` Q63 / `CLAUDE.md`. `feat/cbti-eval-trigger` resolves it to the
-   same `#162`, so the two branches agree — expect a trivial textual conflict, take either side.
-4. **Two stale `CLAUDE.md` landings lines corrected.** `#163` read "not master" when it is on master
-   and its prod gate is closed; `#164` was absent. Block trimmed back to its 3-line cap.
+The other session ran `git add -A` in the shared tree and swept this session's uncommitted guard work
+into a commit (`f64d4bb`) whose message described only its own one-line `BRANCHES.md` edit.
 
-### Open questions touched
+It was then reported to the operator as *"committed and pushed to master"*, and an A/B/C recovery
+decision was escalated. **Independently verified: the push never landed.** `origin/master` was
+`11b6b9d` throughout and `f64d4bb` reached no remote. All three recovery options were premised on a
+breach that did not happen; the question dissolved rather than being answered.
 
-- **`Q#NEXT` (new)** — exclude-all starves a frequent napper at the 4-night cadence. **OPEN**, blocked
-  by Q45, blocks any second user on the CBT-I module. Four candidates recorded, none costed, with an
-  explicit "do not resolve by loosening `NAP_EXCLUDE_MIN` for the single user".
-- **`Q45`** — unchanged, still OPEN. Exclude-all stands; the over-exclusion is now *legible* (the HOLD
-  names the tally) but not fixed.
-- **`Q48`** — still OPEN, and deliberately so: the dither generates the SE-recovery data its curve-fit
-  would need, so this advances it rather than pre-empting it.
-- **`Q55`** — the cadence constants now carry a recorded rationale, still chosen-not-derived.
-- **`Q63`** — `DONE → #162` (was `DONE → #NEXT`).
+Resolution, in the order that mattered:
 
-### Branch state
+1. **Split before push, not after.** The branch tip *was* the mixed commit. Unpushed, the split was a
+   soft reset and path-scoped restage — free. Pushed, it would have cost a force-push on shared
+   history. This is the one place `#98`'s push-early instinct and rewrite-while-cheap genuinely
+   conflict, and the rewrite has to win because the window closes permanently at the push.
+2. **The other session's line was preserved, not re-authored.** Extracted to a patch outside the repo
+   *before* any reset, then committed alone as `784763c` with authorship stated in the body. It is
+   the `#166` orphan-discharge record — resolver-verified — and re-deriving a verified record from
+   memory is how a closed loop silently re-opens.
+3. `FEEDBACK` §19 rows **17** and **18**, `17 caused 18` (`caused_by` derived, never authored).
 
-- `feat/cbti-hunting-titration` — this session's work. Pushed, rowed in `BRANCHES.md`, **OWED**.
-- `feat/cbti-eval-trigger` — from the prior session, still **unmerged and pushed**. Its `BRANCHES.md`
-  row lives on that branch, so master cannot see it; cross-referenced from this session's row and from
-  `ROADMAP.md` instead of duplicating it (duplicating would guarantee a second conflict). Its
-  eligibility gate reads `CYCLE_NIGHTS`, so it inherits the 4-night cadence automatically once both
-  land — no edit needed there for this change.
+Row 17 is **COUPLED**, not `MODEL`: a `MODEL` row types the fix as "the agent should have been more
+careful", which fails on the next tired session. Prevention is two-part — path-scoped staging
+(proximate) and **worktree isolation** (the one that makes the condition unreachable). Row 18 is
+`MODEL` and stands alone: *a push is verified by the remote ref, never by the push command's exit.*
+Not a new principle — it is `#116`/`#121`'s probe-the-artefact rule and `#103`'s
+discriminate-on-identity rule, applied one layer down to git.
+
+### State at close
+
+- `master` = `e32fd8d`, local == remote (verified by `ls-remote`), working tree clean.
+- Audit: **max 168 · dupes none · gaps none · unnumbered `#NEXT` 0 · Q max 78.**
+- Backend suite **719 passed**. Guard passes against `origin/master` (exit 0).
+- `#162`, which rode master for three sessions, remains healed.
 
 ### Outstanding (owner: Luke)
 
-1. ~~Merge decision~~ — **DONE.** Landed at `004581d`; branch deleted both sides.
-2. ~~Deploy probes~~ — **DONE, both services, both with negative controls.** Backend `/openapi.json`
-   carries `centre_minutes` / `centre_cycles_n` / `dither_minutes` with `dither_minutes` **defaulting
-   to 15** (a value probe — it discriminates the retuned image from the old `MAX_MOVE_MIN=30` build);
-   frontend bundle `assets/index-D1XPQevM.js` greps 1 for `What drives deep sleep`. Both deploys
-   reached SUCCESS at 11:15 **before** any probe ran (`#116`). Negative controls: no `cbti` evaluation
-   routes in the schema, 0 hits for `Cycle complete` in the bundle.
-3. **`feat/cbti-eval-trigger` needs REWORK, not a merge.** Superseded in substance by `#165` before it
-   landed. Full checklist on its `BRANCHES.md` row — the load-bearing item is that its 7-day offer
-   eligibility must move to 4, and `days_since_effective_from == 7` still *passing* is the trap, not
-   the proof. Its `#NEXT` is now **166**.
-4. **Pre-land `#NEXT` guard (process root cause).** Number-at-merge has now been missed or deferred
-   enough times to be a pattern, not an accident — the `#162` hole rode master for three sessions
-   because the fix kept living on branches that did not merge. `git land` merges without ever checking
-   the diff for an unresolved `### #NEXT`; a one-line refusal would have caught every instance. Not
-   built here — it is a shared-block/governance change, and this session was mid-tangle.
-4. **No prod verification of the new cadence.** Nothing here was run against block 3's live data —
-   this session was synthetic-only by design, but the first real 4-night cycle is the watch-point.
-   Specifically: whether the dither converges, or the centre wanders (the decision's revisit clause
-   names the Q45 nap exclusion and `SE_FLOOR_PCT` as first suspects).
-5. **No frontend test runner.** Lever content and centre copy are inspection-and-node-backed.
+1. **HCA propagation — the substantive one.** The `CLAUDE.md` change is inside the shared loop block,
+   so `health-connect-app/CLAUDE.md` owes a byte-identical copy: **two** insertions (the enforcement
+   bullet, and the `core.hooksPath` install line beside the aliases), between the `BEGIN`/`END SHARED
+   LOOP RULES` markers. HCA-rooted session only, `pwd`-verified first — the folder picker has opened
+   the wrong repo before. The script and hook do **not** propagate; whether HCA wants its own
+   enforcement is left undecided rather than pre-empted. Recorded in `ROADMAP` NOW per `#112`.
+2. **`feat/cbti-eval-trigger` — rework, do not merge.** Superseded by `#165` before it landed: its
+   7-day offer eligibility and its whole close-refusal path are obsolete, and a trial integration
+   leaves 5 of its 11 tests failing, one semantically. Full checklist on its `BRANCHES.md` row. Its
+   `#NEXT` is now **169** — master has moved twice since that row was written.
+3. **Concurrent sessions in one clone.** The generator of the whole incident. Until sessions are
+   isolated (separate worktrees), every reported state is stale on arrival — this session watched
+   master move under it three times while reporting.
+4. **`#165`'s real verdict is not in the code.** The first genuine 4-night cycle on block 3 decides
+   whether the dither centres or wanders. If it wanders, the entry's revisit clause names the first
+   suspects: the `Q45` nap exclusion and `SE_FLOOR_PCT`.
 
 ### Single next action
 
-Rework `feat/cbti-eval-trigger` against the 4-night engine — checklist on its `BRANCHES.md` row.
-Do not force-merge it: 5 of its 11 tests fail against master's engine and its close path is now dead
-code. The first real 4-night cycle on block 3 is the watch-point for whether the dither converges.
+Discharge the HCA propagation from an HCA-rooted session — it is the only item where delay actively
+degrades something, because master now carries a shared-block edit with nothing mirroring it, which
+is the two-master drift the block exists to prevent.
 
 ### Governance stores changed this session
 
-`DECISIONS_LOG.md` · `OPEN_QUESTIONS.md` · `ROADMAP.md` · `BRANCHES.md` · `CLAUDE.md`
-(`FEEDBACK.md` and `Ideas.md` unchanged.)
+`DECISIONS_LOG.md` · `FEEDBACK.md` · `ROADMAP.md` · `BRANCHES.md` · `CLAUDE.md`
+(`OPEN_QUESTIONS.md` unchanged by this session — `Q78` was the prior one's.)
