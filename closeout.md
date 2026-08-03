@@ -3,236 +3,166 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-02, **amended 2026-08-03 at the merge**. Branch at close: none — `feat/hevy-template-sync-wiring` ff-merged to master at `9c8176a` and deleted both sides.
-Session-open ref: `d11b2b8`. Session-open `DECISIONS_LOG` max on master: **161** (counted
-`^### [0-9]+`, period-agnostic). The brief was written against #161 / Q74 — no re-aim needed.
+Session date: 2026-08-03. Branch at close: `feat/cbti-hunting-titration` (pushed, **not merged**).
+Session-open ref: `f7901fd`. Session-open `DECISIONS_LOG` max on master: **164** (counted
+`^### [0-9]+`, period-agnostic) — matching the brief, no re-aim needed.
 
-**The Hevy exercise-template sync now has call sites; the population half of the prod gate is
-still OWED.** The operator endpoint and the connect-time seed are built, tested, merged (`9c8176a`)
-and deployed. Post-merge the route is live and auth-gated — see §2 — but the authenticated POST that
-actually repopulates the catalogue has not been taken, so the gate is **not claimed**.
+**The titration is now a perpetual 4-night hunting search.** The window dithers ±15 min, the block
+never auto-closes, and the reported sleep-need estimate is the centre of the dither rather than the
+bouncing window. Nothing is deployed; both `#121` probes are owed.
 
 ## 1. Real commits this session
 
-`git log --oneline d11b2b8..HEAD`:
+`git log --oneline f7901fd..HEAD`:
 
 ```
-c7bed98 governance: #NEXT (sync wiring), Q#NEXT (recurring-sync fork), BRANCHES row
-2f377ad feat(hevy): #NEXT wire the exercise-template sync — operator endpoint + connect-time seed
+4b247f4 feat(cbti): perpetual 4-night hunting titration — no auto-close, centre-as-estimate
 ```
 
-Plus this close-out commit. Both pushed to `origin/feat/hevy-template-sync-wiring`;
-`git cherry origin/master HEAD` reports both as `+` (real, unmerged work).
-
-Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
+Plus this close-out commit. Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
+2026-08-03 feat(cbti): perpetual 4-night hunting titration — no auto-close, centre-as-estimate
+2026-08-03 governance: #164 landed — BRANCHES row DONE, step 2 loop closed
+2026-08-03 governance: resolve #NEXT -> #164, Q#NEXT -> Q76, Q#NEXT+1 -> Q77 (on-branch, pre-ff)
+2026-08-03 feat(hevy): #NEXT wire <hevy_create_exercise> — the model-facing custom-exercise path
+2026-08-03 governance: close #163's prod population gate — catalogue proven populated by the app
+2026-08-03 governance: record the #163 merge + post-merge deploy verification
+2026-08-03 governance: resolve #NEXT -> #163, Q#NEXT -> Q75 (on-branch, pre-ff)
+2026-08-02 chore: session close-out
 2026-08-02 governance: #NEXT (sync wiring), Q#NEXT (recurring-sync fork), BRANCHES row
 2026-08-02 feat(hevy): #NEXT wire the exercise-template sync — operator endpoint + connect-time seed
-2026-08-02 chore: session close-out
-2026-08-02 feat(frontend): #150 hub shell — tile grid on /dashboard, chat docked, panels relocated
-2026-08-02 governance: question-state vocab (carve+sweep), Q65 collapse, Q73/Q74, FEEDBACK §22, CLAUDE accretion compress, ROADMAP NEXT reconcile
-2026-08-02 governance: renumber #NEXT -> #161 and land; Q72 carries the owner's position
-2026-08-02 governance: #NEXT (verdict-vs-measurement scoping), Q72, BRANCHES row
-2026-08-02 feat(engine): capability_observations — graded, timestamped measurement
-2026-08-01 chore: session close-out
-2026-08-01 governance: resolve #NEXT -> #160 (on-branch, pre-ff)
 ```
-
-### What landed in code
-
-`backend/routers/integrations.py` — `sync_exercise_templates` gains its two call sites:
-
-- `POST /integrations/hevy/sync` — `async def`, `get_current_user` auth, calls
-  `sync_exercise_templates(db, only_user_id=current_user.id)` and returns the summary verbatim.
-  Scoped to the caller: a user-facing route never runs a family-wide sync.
-- `connect_hevy` — converted `def` → `async def`; after the key's `db.commit()` it calls the
-  **same** path. Ordering is load-bearing: the commit is what makes the key visible to
-  `users_with_hevy_key`, which the sync reads.
-- `_sync_failure(summary)` — the failure signal mapped to HTTP. `users_attempted == 0` → 404
-  carrying the byte-identical body `_require_integration` produces
-  (`"hevy integration not connected"`); `users_failed >= 1` → the recorded error routed through
-  the existing `_hevy_error_to_http` choke point. A failed run is never a 200 with a silent zero.
-- `_SYNC_ERROR_TYPES` / `_sync_error_to_http` — the summary keeps only
-  `f"{type(exc).__name__}: {exc}"`, so the two types whose mapping is not the 502 default
-  (`HevyAuthError`, `HevyForbiddenError`) are rehydrated from that string. Without this a revoked
-  Hevy key would flatten to 502 and quietly undo `#66`'s 401→424 decoupling — whose whole point is
-  that a dead *connector* key must not log the user out of the app.
-- Connect-time seed failure: 201 stands (storing the key is the request's contract) and the failure
-  is **not** swallowed — the response body gains `sync`, carrying the summary (whose `users_failed`
-  / `rows_processed` expose a partial run) or a failure shape.
-
-`backend/hevy_templates.py` is **untouched** — the summary contract, per-user isolation and the CLI
-keep their behaviour. No migration, no schema change. The routine contract,
-`context_builder._section_routine_creation` and `chat.py`'s block parser were not edited; the
-brief's scope fence held. Custom-exercise creation (`<hevy_create_exercise>`) is step 2 and is not
-started.
-
-### Tests
-
-`backend/tests/test_hevy_sync_wiring.py`, 16 new tests. Full backend suite **594 passed**
-(baseline on `master` before the branch: **578**).
-
-```powershell
-cd C:\Users\lukee\Projects\health-app\backend; .\.venv\Scripts\python.exe -m pytest -q
-```
-
-Two choices worth carrying forward:
-
-- The tests drive the **routes** over a standalone `FastAPI` app with `get_db` /
-  `get_current_user` overridden — not the handler objects, as the house pattern in
-  `test_connector_error_policy.py` otherwise does. The defect being fixed is precisely "the
-  function exists and nothing reaches it"; a handler-object call would prove the body and skip the
-  wiring, which is the only thing under test.
-- **Paired negative controls** (`FEEDBACK` §17, `#103` — a control must discriminate on identity,
-  not just function). Renaming the route to `/hevy/sync-UNWIRED` fails **6 of 16** and passes the
-  10 that never touch that path; replacing the connect-time seed call with a literal fails the
-  **4** connect tests and passes the other 12. Each control fails exactly its own half, so neither
-  half is being carried by the other. The keyless-caller assertion checks the **detail string**,
-  not just the status code, because an unregistered route also returns 404 and would otherwise pass.
 
 ## 2. Pending-queue reconciliation
 
-No chat `;cc` pending-commit queue was carried into this session — the brief arrived as prose, not
-as `PENDING` canonical entries. Reconciled instead against the brief's own deliverables:
+No `;cc` queue was carried in. The input was a **code-ready brief** (4-night hunting titration),
+reconciled step by step.
 
-| Brief item | Landed? |
-|-----------|---------|
-| `POST /integrations/hevy/sync`, async, `get_current_user`, `only_user_id=current_user.id`, summary verbatim | **YES** — `2f377ad` |
-| `users_failed >= 1` → error through `_hevy_error_to_http`; `users_attempted == 0` → 404 | **YES** — `2f377ad` (`_sync_failure`) |
-| `connect_hevy` → `async def`, seed after `db.commit()`, same path | **YES** — `2f377ad` |
-| Seed failure never fails the key store; reported in `response.sync` | **YES** — `2f377ad` |
-| Unit tests: endpoint 200 / non-200 / 404, connect-seed happy + raising | **YES** — 16 tests, `2f377ad` |
-| Full backend suite green, count reported | **YES** — 594 passed (was 578) |
-| **Prod population gate, paired before/after** | **NO — OWED.** See below. |
-| `DECISIONS_LOG ### #NEXT` | **YES** — `c7bed98`, resolved to **#163** at the ff |
-| `OPEN_QUESTIONS Q#NEXT` (recurring sync deferred) | **YES** — `c7bed98`, resolved to **Q75** at the ff |
-| Branch pushed even while held (`#98`) | **YES** — `origin/feat/hevy-template-sync-wiring` |
+| Brief step | Outcome |
+|---|---|
+| 0 — cut branch, report max | **Landed.** `git cherry origin/master` empty at cut. Max **#164**. |
+| 1 — four constants | **Landed.** `CYCLE_NIGHTS` 4, `MIN_VALID_NIGHTS` 3, `MAX_MOVE_MIN` 15, `ADHERENCE_FAIL_N` 2, each with an extended CHOSEN-not-derived note. The `MIN_VALID < CYCLE` cascade is now **asserted at import**, not just commented. |
+| 2 — remove auto-close | **Landed, with a correction** — there was no engine-close to remove. See below. |
+| 3 — centre-as-estimate | **Landed.** `CENTRE_CYCLES = 4` + pure `centre_estimate()`; surfaced on `/checkin-v2/today` (`centre_minutes`, `centre_cycles_n`, `dither_minutes`) and rendered in `PrescriptionCard` with a convergence band. |
+| 4 — nap over-exclusion guard | **Landed.** The sufficiency HOLD now carries a per-reason tally. `NAP_EXCLUDE_MIN` untouched; Q45 stays OPEN. |
+| 5 — deep-sleep-lever framing | **Landed** as `#47`-bounded education: five levers, evidence-ranked, identical for every reader, never scored or reordered by anyone's data. |
+| LOG | **Entry minted** as `### #NEXT`. |
+| New question (multi-user nap attribution) | **Minted** as `## Q#NEXT`. |
 
-### The prod population gate — BEFORE recorded, route deployed and gated, POPULATION half owed
-
-Read via `railway run --service health-app-DB` over `DATABASE_PUBLIC_URL` (`#56` — `railway run`
-injects the private-network hostname, unresolvable from a laptop), printing counts only and never a
-credential (`#111`):
-
-```
-hevy_exercise_templates total=494 defaults=451 customs=43
-max_synced_at=2026-07-14 12:09:06.888252+00:00
-user_integrations provider=hevy rows=3
-```
-
-So the table is **not** the zero-row substrate `FEEDBACK` §8 recorded — the one-off CLI run of
-2026-07-14 populated it, and `max(synced_at)` shows nothing has touched it since. That is the
-precise state this wiring exists to end: populated once by someone remembering, never by the
-application.
-
-**Post-merge (2026-08-03), the deploy half passes on both axes.** Timing (`#116`):
-`railway deployment list --service health-app-backend` reports `34cda96f` **SUCCESS** at
-2026-08-03 07:38. Coverage (`#121`): the live `openapi.json` now lists **six** `/integrations/hevy*`
-paths including **`/integrations/hevy/sync`** — it listed five before the merge. Unauthenticated
-`POST /integrations/hevy/sync` returns **401** while `POST /integrations/hevy/sync-does-not-exist`
-returns **404**: a paired control discriminating on identity, so the 401 proves the route is
-registered and auth-gated rather than merely missing.
-
-**What is still owed: the authenticated POST, owner Luke.** Code cannot take it — it needs a session
-token, and handling the operator's credentials is prohibited regardless of who offers them. The
-population half is therefore unproven and the gate is **not claimed**.
-
-**One correction for whoever runs the after-half.** The paired before/after count is the right
-control, but its signal here is not what a naive read expects: the sync is **upsert-only** (`#77` —
-the Hevy API cannot delete templates) and the table already holds 494 rows. On a healthy prod the
-after-count is expected to be **494 unchanged, not higher** — a zero delta is the success case, not
-a failure. The signals that must actually move are `defaults_seen > 0` in the returned summary and
-`max(synced_at)` advancing off 2026-07-14. A rising count would additionally mean new templates
-exist upstream.
-
-Remaining sequence — merge, deploy and route checks are all discharged above; only these two steps
-are left, read one before running the next rather than chained (`#103`).
-
-**Step 1, Luke only.** Open the logged-in app, devtools console, and run this. The token is already
-in the browser's `localStorage`; it never leaves the machine and never enters a transcript:
-
-```javascript
-await (await fetch('https://health-app-backend-production-760e.up.railway.app/integrations/hevy/sync', {method:'POST', headers:{Authorization:`Bearer ${localStorage.getItem('token')}`}})).json()
-```
-
-Read `defaults_seen` off the returned summary — it must be `> 0`. A `users_failed >= 1` means the
-stored Hevy key is dead; a 404 means no key is stored for that account.
-
-**Step 2.** Re-run the count:
-
-```powershell
-railway run --service health-app-DB -- C:\Users\lukee\Projects\health-app\backend\.venv\Scripts\python.exe C:\Users\lukee\AppData\Local\Temp\claude\C--Users-lukee-Projects-health-app\df14783b-6605-4913-969e-8c50f9c67901\scratchpad\count_templates.py
-```
-
-That script is session-scratchpad and prints counts, `max(synced_at)` and the hevy-key row count
-only — reproduce it in-repo if the gate outlives the scratchpad.
+**Provisional, not done:** `#NEXT` and `Q#NEXT` are unresolved because the branch is **not merged**.
+Integers are claimed at the fast-forward — master max was **#164** / **Q77** at authoring; re-read at
+that instant rather than reusing these.
 
 ## 3. Cold-resume handoff
 
-### Branch terminal states (gate PASSED — nothing in limbo)
+### The correction that matters — there was no engine-close to remove
 
-Local branches: `master`, `feat/cbti-eval-trigger`, `feat/hevy-template-sync-wiring`.
+The brief framed step 2 as removing the engine-driven block close `#118` established, and warned to
+enumerate consumers first. Enumerated against master **before** editing:
 
-| Branch | `git cherry origin/master` | State |
-|--------|---------------------------|-------|
-| `feat/hevy-template-sync-wiring` | 2 × `+` (`2f377ad`, `c7bed98`) | **OWED** — pushed, rowed in `BRANCHES.md`. Outstanding: the prod population gate above; command sequence in §2. Owner: Luke. |
-| `feat/cbti-eval-trigger` | 2 × `+` (`f30dd49`, `fec0324`) | **Not touched this session** — carried in as the session-open branch, read only, never committed to. Pushed to `origin` and carries its own `BRANCHES.md` row on its own branch. Not in limbo. |
-| `master` | — | at `d11b2b8`, clean. |
+- **Nothing writes `cbti_blocks.closed_on` from an engine decision.** The only writers are
+  `import_cbti_block.py` (the historical block-1 import) and a read in `correct_cbti_block3_rx.py`.
+- The engine's `close` was consumed **only** by `replay.py`'s advisory `#107` exit-too-early report
+  (which prints) and by tests.
 
-Remote refs: `origin/master`, `origin/feat/cbti-eval-trigger`, `origin/feat/hevy-template-sync-wiring`.
-Nothing unpushed, nothing undiscarded.
+So `#118`'s "close is engine-driven" half was **specified and never built**. What this session removes
+is a *recommendation*, not a mechanism — a materially smaller change than the brief supposed, and one
+that touches no write path. `close` is **retained** in the `Decision` Literal and the DB CHECK
+constraint: block 1 was imported carrying it and the ledger is append-only, so retiring the value
+would invalidate history. The engine simply never emits it again, which is asserted parametrically.
 
-### Governance numbering — resolved to #163 / Q75 at the ff-merge
+### Gate evidence
 
-This branch's tokens were resolved on-branch before the fast-forward, per number-at-merge and
-`#148` (renumber scope follows the branch's **own** tokens, wherever they live; residuals are
-**classified**, not counted).
+- **Step 1** — `test_cbti_replay.py` green. Every changed replay decision traced to an intended
+  constant, nothing flipped for another reason:
 
-It took **#163, not #162**. Master already carried one unnumbered `### #NEXT` — the hub-tile
-entry, which sits *earlier* in the append-only file and had already been staked as **162** by
-`feat/cbti-eval-trigger`. Taking 162 here would have numbered this entry below an entry that
-physically precedes it, and collided with that branch. So 162 stays owed to the hub-tile
-placeholder, and master carries a visible, explained gap until `feat/cbti-eval-trigger` lands.
+  | Change | Cause |
+  |---|---|
+  | 3-night stub `insufficient hold` → `extend` | `MIN_VALID_NIGHTS` 5→3 (3 now suffices) |
+  | a 7-night span splits 1 → 2 cycles | `CYCLE_NIGHTS` 7→4 |
+  | moves cap at 15, not 30 | `MAX_MOVE_MIN` 30→15 |
+  | plateau `close` → `hold` + `converged` | step 2 |
 
-Residual `#NEXT` tokens left deliberately, classified per `#148`: the rule text in `CLAUDE.md`
-(number-at-merge) and `ROADMAP.md` L19; the hub-tile entry in `DECISIONS_LOG.md` and its
-`DONE → #NEXT` in `OPEN_QUESTIONS.md`; other branches' `BRANCHES.md` rows; the historical
-`#NEXT` references inside locked entries; and the quoted `git log` commit messages in §1, which
-are immutable and must not be rewritten.
+- **Step 2** — full `close`/`closed_on` enumeration above. On 28 flat nights the walk yields 7
+  cycles, cycles 3–7 all `hold`/`converged`, and the block never ends. `no input shape makes the
+  engine emit close` is parametrised across five `prior_basis_tst` shapes × four TST/SE combinations.
+- **Step 3 worked example** — windows `[405, 420, 435, 420]` → centre **420 min (7h00)**. A pure ±15
+  dither `[405, 435, 405, 435]` → centre **420** while the latest window reads **435**: probe and
+  estimate are demonstrably different numbers. Ageing-out proven: `[300]×10 + [450]×4` → **450**.
+- **Step 4** — synthetic 4-night cycle with 2 nap nights:
+  `insufficient_nights: 2 valid of 4, need 3 (2 excluded: nap x2)`, with per-night detail retained in
+  `excluded_nights`. Non-vacuity: one nap night still leaves a decidable cycle.
+- **Suite** — backend **674 passed** (master baseline **655**, measured by stashing; **+19** new).
+  Frontend `npm run build` clean; eslint **5 errors, unchanged from the master baseline**.
+- **Copy** — no frontend test runner exists, so `leverContent.js` / `centreCopy.js` are pure modules
+  evaluated in node; assertions recorded OWED, not faked. Verified output: `7h 00m` ·
+  `6h 45m–7h 15m` · `centre of the last 4 cycles` · `from the last cycle only`.
 
-### Current sprint
+### Judgement calls beyond the brief
 
-`ROADMAP.md` NOW is unchanged by this session and still carries: CBT-I `Q45` nap day-attribution
-(dated, contaminating capture now), CBT-I `#118` PM evaluation trigger (built on
-`feat/cbti-eval-trigger`, unmerged), the lab upload pipeline, the interpretation layer build (4b-ii
-closed; increments 2 / 3 / 5 unstarted), and the two cross-repo OWED rows.
-
-`ROADMAP.md` NEXT gained one row: **Hevy custom-exercise creation (step 2)** — the
-`<hevy_create_exercise>` wiring, explicitly gated on the step-1 prod gate closing, because
-`create_and_resolve`'s idempotency pre-check reads `hevy_exercise_templates` and a stale or empty
-catalogue makes it mint duplicate templates rather than short-circuit. A wrong write, not a missed
-read.
+1. **Existing tests were retuned to derive from the constants, not repatched to new literals.**
+   `week()` became `cycle()` sized from `CYCLE_NIGHTS`, and assertions now read `CYCLE_NIGHTS`,
+   `MIN_VALID_NIGHTS`, `ADHERENCE_FAIL_N` rather than 7/5/3. A suite that hardcodes the cadence stops
+   testing a full cycle the moment the constant moves — silently, not red. 17 tests were touched.
+2. **A real bug caught by the build, not by review.** `DeepSleepLevers.jsx` beside a data module named
+   `deepSleepLevers.js` differ only by leading case. On Windows the import resolved to the `.js` data
+   module (no default export) and the build failed; on Railway's case-sensitive filesystem it would
+   have resolved to the `.jsx` and built fine. Renamed to `leverContent.js` — a same-name-different-case
+   pair is a platform-dependent footgun regardless of which side happens to win.
+3. **The stale hub `#NEXT` was resolved to `#162` here too.** Master still carried the unresolved
+   `### #NEXT` heading from the `feat/hub-shell` merge, with `#163`/`#164` minted on top — so `#162`
+   was a hole and a placeholder sat mid-log. Left alone, this branch would have carried **two**
+   `### #NEXT` headings and the pre-ff resolution could have hit the wrong one. Resolved in
+   `DECISIONS_LOG` / `OPEN_QUESTIONS` Q63 / `CLAUDE.md`. `feat/cbti-eval-trigger` resolves it to the
+   same `#162`, so the two branches agree — expect a trivial textual conflict, take either side.
+4. **Two stale `CLAUDE.md` landings lines corrected.** `#163` read "not master" when it is on master
+   and its prod gate is closed; `#164` was absent. Block trimmed back to its 3-line cap.
 
 ### Open questions touched
 
-- **`Q75`** (new, OPEN, gated on nothing) — the catalogue now gets populated on connect, but
-  nothing keeps it fresh. Three independent drift sources: Hevy renames its defaults (`#79`/`#81`,
-  already a live phenomenon and the reason `catalogue_titles_by_id` exists), the user adds customs
-  in the Hevy client directly, and the sync is upsert-only so drift only accumulates. Candidates:
-  (a) cron, (b) sync-on-read-staleness, (c) sync-on-workout-fetch. The axis to decide first is what
-  freshness is *for* — (b) and (c) refresh only what a read touches, (a) is the only one that
-  catches drift before a read needs it, and that distinction only bites once a **write** path
-  depends on the store being current. Resolve-before: custom-exercise creation.
-- No existing question was resolved or restated. `Q74` (the brief's stated aim point) was not
-  touched.
+- **`Q#NEXT` (new)** — exclude-all starves a frequent napper at the 4-night cadence. **OPEN**, blocked
+  by Q45, blocks any second user on the CBT-I module. Four candidates recorded, none costed, with an
+  explicit "do not resolve by loosening `NAP_EXCLUDE_MIN` for the single user".
+- **`Q45`** — unchanged, still OPEN. Exclude-all stands; the over-exclusion is now *legible* (the HOLD
+  names the tally) but not fixed.
+- **`Q48`** — still OPEN, and deliberately so: the dither generates the SE-recovery data its curve-fit
+  would need, so this advances it rather than pre-empting it.
+- **`Q55`** — the cadence constants now carry a recorded rationale, still chosen-not-derived.
+- **`Q63`** — `DONE → #162` (was `DONE → #NEXT`).
 
-### Single clearest next action
+### Branch state
 
-**Luke runs the authenticated POST** (the devtools one-liner in §2), then the count script — and
-the assertion is `defaults_seen > 0` plus `max(synced_at)` advanced off 2026-07-14, **not** that the
-row count rose. Everything else on the gate is discharged: merged, deployed, route live and
-auth-gated. Until that one call lands, the catalogue is still the July hand-run CLI's output, which
-is the exact `FEEDBACK` §8 state this work exists to end — and **step 2 (custom-exercise creation)
-must not start**, because `create_and_resolve`'s idempotency pre-check reads this substrate and
-would mint permanent duplicates against a stale copy.
+- `feat/cbti-hunting-titration` — this session's work. Pushed, rowed in `BRANCHES.md`, **OWED**.
+- `feat/cbti-eval-trigger` — from the prior session, still **unmerged and pushed**. Its `BRANCHES.md`
+  row lives on that branch, so master cannot see it; cross-referenced from this session's row and from
+  `ROADMAP.md` instead of duplicating it (duplicating would guarantee a second conflict). Its
+  eligibility gate reads `CYCLE_NIGHTS`, so it inherits the 4-night cadence automatically once both
+  land — no edit needed there for this change.
+
+### Outstanding (owner: Luke)
+
+1. **Merge decision on `feat/cbti-hunting-titration`.** On merge: resolve `#NEXT` and `Q#NEXT`
+   on-branch pre-ff — re-read master max at that instant, do **not** reuse #164/Q77.
+2. **Deploy probes, both services, post-merge** (`#116` timing + `#121` coverage). Backend:
+   `railway deployment list --service health-app-backend` SUCCESS and `/checkin-v2/today` returns
+   `centre_minutes`. Frontend: `railway service health-app-frontend` SUCCESS and grep the live
+   `assets/index-*.js` for `What drives deep sleep`.
+3. **Decide `feat/cbti-eval-trigger`'s fate.** It is the `#118` PM trigger and has been held two
+   sessions. Merging it after this branch gives the 4-night cadence a surface; abandoning it loses the
+   witnessed-accept path *and* the duplicate `#162` fix.
+4. **No prod verification of the new cadence.** Nothing here was run against block 3's live data —
+   this session was synthetic-only by design, but the first real 4-night cycle is the watch-point.
+   Specifically: whether the dither converges, or the centre wanders (the decision's revisit clause
+   names the Q45 nap exclusion and `SE_FLOOR_PCT` as first suspects).
+5. **No frontend test runner.** Lever content and centre copy are inspection-and-node-backed.
+
+### Single next action
+
+Review `feat/cbti-hunting-titration` (`4b247f4`, pushed). If merging: resolve `#NEXT`/`Q#NEXT` pre-ff,
+`git land feat/cbti-hunting-titration`, then run both deploy probes in item 2.
+
+### Governance stores changed this session
+
+`DECISIONS_LOG.md` · `OPEN_QUESTIONS.md` · `ROADMAP.md` · `BRANCHES.md` · `CLAUDE.md`
+(`FEEDBACK.md` and `Ideas.md` unchanged.)

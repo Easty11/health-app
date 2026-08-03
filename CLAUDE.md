@@ -266,9 +266,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Hevy template sync wired, prod gate OWED (#163)** - the catalogue sync gains an operator endpoint and a connect-time seed. On `feat/hevy-template-sync-wiring`, not master. See `closeout.md` / `BRANCHES.md`.
+- **Hevy custom-exercise creation (#164)** - the model-facing `<hevy_create_exercise>` path, an explicit separately-confirmed block. See DECISIONS_LOG #164.
+- **Hevy template sync wired (#163)** - the catalogue sync gains an operator endpoint and a connect-time seed; the prod population gate is closed. See DECISIONS_LOG #163.
 - **Hub shell (#162)** - `/dashboard` is a module tile grid with chat docked, the two panels relocated to their own routes, and `Q63` resolved to structural counts. See DECISIONS_LOG #162.
-- **1b COMPLETE (#160)** - the interpretation view reads live data, groups carry an as-of date and are labelled when off the trigger draw, and the route is reachable from the dashboard. See `closeout.md` / DECISIONS_LOG #159-#160.
 
 ---
 
