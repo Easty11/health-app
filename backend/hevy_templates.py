@@ -212,6 +212,31 @@ def suggest_candidates(
     return [(tid, cat_title) for _, _, cat_title, tid in scored[:limit]]
 
 
+def catalogue_titles(db: Session, user_id: int) -> list[tuple[str, bool]]:
+    """Every catalogue title visible to `user_id`, as (title, is_custom). Read-only.
+
+    Backs the chat context's catalogue section (#NEXT): the full synced catalogue was
+    already here (#61) but was never surfaced, so the model reasoned only from the ten
+    recent workouts it was handed and reported — wrongly — that it could not see Hevy's
+    built-in exercises.
+
+    Scoped by `_visible_to` — the SAME predicate `resolve_exercise` and
+    `suggest_candidates` use. This is deliberate and load-bearing: a catalogue shown to
+    the model that differed from the catalogue the resolver resolves over would invite
+    it to emit a title the resolver then refuses, which is the instrument disagreeing
+    with the behaviour it serves (FEEDBACK §10). One rule, not three.
+
+    Sorted defaults-first then title, so the rendering is stable across turns.
+    """
+    Template = models.HevyExerciseTemplate
+    rows = db.execute(
+        select(Template.title, Template.is_custom)
+        .where(_visible_to(user_id))
+        .order_by(Template.is_custom.asc(), Template.title.asc())
+    ).all()
+    return [(r[0], bool(r[1])) for r in rows]
+
+
 def catalogue_titles_by_id(db: Session, template_ids: set[str]) -> dict[str, str]:
     """template_id -> its CURRENT catalogue title. The inverse of `resolve_exercise`.
 

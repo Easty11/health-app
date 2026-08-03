@@ -270,6 +270,17 @@ JSON block in your response using this exact format:
 }
 </hevy_create_routine>
 
+What you can see: the FULL Hevy exercise catalogue — every built-in exercise plus this
+user's customs — is synced server-side and listed above. Title resolution runs against
+all of it, NOT just exercises that appear in the workout history. So:
+- You CAN answer whether any exercise exists in Hevy. Never say you can only confirm
+  exercises from the workout history.
+- Never offer to build, pull, or extend a Hevy catalogue integration. It exists and is
+  live; the list above is its output.
+- To check an exercise you are unsure about, just name it in the block. Resolution either
+  matches it exactly or reports back ranked candidate titles for you to choose from — a
+  miss is reported, never silently dropped, and nothing is created.
+
 Rules for routine creation:
 - ALWAYS confirm with the user before creating a routine. Ask them to confirm
   the exercises, sets, and weights first. Only include the <hevy_create_routine>
@@ -295,6 +306,48 @@ Rules for routine creation:
 - rest_seconds sits on the exercise, not the set.
 - The block will be automatically removed from your visible response and replaced
   with a confirmation message once the routine is created."""
+
+
+def _section_exercise_catalogue(catalogue: list[tuple[str, bool]] | None) -> str:
+    """The FULL synced Hevy catalogue — every default plus this user's customs.
+
+    Takes the already-read rows, never a Session: `context_builder` is a pure formatter
+    and performs no queries (the #43 parity-guard invariant). The read happens upstream in
+    `chat.py`, exactly as `_annotate_canonical_titles` does for logged titles.
+
+    Why the whole list rather than a lookup block: the model was answering catalogue
+    questions from the ten recent workouts it could see, concluding it had no view of
+    Hevy's built-ins, and offering to build the sync that shipped in #61. Handing it the
+    real list kills that error class at the root, with no new mechanism and no extra turn.
+    """
+    if not catalogue:
+        return ""
+    defaults = [t for t, is_custom in catalogue if not is_custom]
+    customs = [t for t, is_custom in catalogue if is_custom]
+
+    lines = [
+        "## Hevy Exercise Catalogue (complete, synced server-side)",
+        "",
+        f"This is the FULL catalogue: all {len(defaults)} Hevy built-in exercises plus "
+        f"the {len(customs)} custom exercises in this user's account. It is synced to "
+        "this app's database, not read from workout history.",
+        "",
+        "Use it directly to answer whether an exercise exists, whether a movement would "
+        "be new, and what the user's own customs are. Do NOT say you can only see "
+        "exercises that appear in the workout history — that is false. Do NOT offer to "
+        "build, pull, or extend a catalogue integration; it already exists and this list "
+        "is its output.",
+        "",
+        "Titles must be copied EXACTLY when you reference one — some contain unusual "
+        "characters (e.g. a non-breaking hyphen) that look ordinary but do not match if "
+        "retyped. Copy from this list rather than typing from memory.",
+        "",
+        f"### The user's custom exercises ({len(customs)})",
+    ]
+    lines += [f"- {t}" for t in customs] or ["- (none)"]
+    lines += ["", f"### Hevy built-in exercises ({len(defaults)})"]
+    lines += [f"- {t}" for t in defaults]
+    return "\n".join(lines)
 
 
 def _section_exercise_creation(connected: list[str]) -> str:
@@ -334,6 +387,11 @@ routine creation, which the user can simply delete in the app.
 - Prefer an existing catalogue exercise every time. If a title fails to resolve for a
   routine, the fix is almost always a different name for a movement Hevy already has —
   not a new custom. Check the suggestions reported back to you first.
+- CHECK THE CATALOGUE LIST ABOVE BEFORE EMITTING THIS BLOCK. It is the complete set of
+  built-ins plus the user's existing customs, so you can see for yourself whether the
+  movement is genuinely absent. Creating a near-duplicate of something already there is
+  permanent and cannot be undone. If it is already listed, say so instead — do not emit
+  the block.
 - If the exercise already exists, the block is a no-op and reports as such. It will not
   create a duplicate.
 
@@ -1056,6 +1114,7 @@ def build_system_prompt(
     samsung_hrv: Any | None = None,
     daily_record: Any | None = None,
     engine_selection: dict[str, Any] | None = None,
+    exercise_catalogue: list[tuple[str, bool]] | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
@@ -1120,6 +1179,16 @@ def build_system_prompt(
         count = hevy_data.get("workout_count", 0)
         workouts = hevy_data.get("recent_workouts", [])
         sections.append(_section_hevy(count, workouts, now))
+
+    # Sits directly after the workout history on purpose: the history is the ten recent
+    # sessions, this is everything that EXISTS. Adjacent, the difference is obvious.
+    # Conditionally appended, so with no catalogue nothing is added at all — which keeps
+    # the section list byte-identical for the #43 parity guard rather than inserting an
+    # empty string and a separator.
+    if exercise_catalogue:
+        catalogue_section = _section_exercise_catalogue(exercise_catalogue)
+        if catalogue_section:
+            sections.append(catalogue_section)
 
     sections += [
         "",

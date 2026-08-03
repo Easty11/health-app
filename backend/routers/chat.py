@@ -25,6 +25,7 @@ from encryption import decrypt
 from hevy_templates import (
     HevyCreateUnresolvedError,
     HevyKeyMissingError,
+    catalogue_titles,
     catalogue_titles_by_id,
     create_and_resolve,
     resolve_exercise,
@@ -614,11 +615,16 @@ async def chat(
 
     hevy_data: dict[str, Any] | None = None
     hevy_client: HevyClient | None = None
+    exercise_catalogue: list[tuple[str, bool]] | None = None
     if "hevy" in connected:
         raw_key = decrypt(connected["hevy"].api_key_encrypted)
         hevy_data = await _gather_hevy_context(raw_key)
         _annotate_canonical_titles(hevy_data, db)
         hevy_client = HevyClient(raw_key)
+        # Read HERE, not in context_builder — that module is a pure formatter and gets no
+        # Session (the #43 parity-guard invariant), same reason _annotate_canonical_titles
+        # runs upstream. It renders whatever we hand it.
+        exercise_catalogue = catalogue_titles(db, current_user.id)
 
     knowledge_entries = (
         db.query(models.UserKnowledge)
@@ -706,6 +712,7 @@ async def chat(
         samsung_hrv=samsung_readings,
         daily_record=daily_record,
         engine_selection=engine_selection,
+        exercise_catalogue=exercise_catalogue,
     )
 
     # On-ask lab value relay (#60): standing feed above is generality-only.

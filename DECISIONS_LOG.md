@@ -6319,3 +6319,92 @@ recorded rather than papered over: the Action is not currently a merge-to-master
 it would mean a CI check, not a hook.
 
 ---
+
+### #NEXT. The model is shown the whole exercise catalogue — the capability shipped in `#61`, it was simply never surfaced
+
+**Decision:** `build_system_prompt` gains an `exercise_catalogue` parameter rendered by
+`_section_exercise_catalogue`, listing every catalogue title visible to the user — all Hevy
+built-ins plus their own customs, each flagged. `hevy_templates.catalogue_titles` is the
+read. Both authoring contracts (`_section_routine_creation`,
+`_section_exercise_creation`) are corrected to state that resolution covers the whole
+catalogue and not merely logged history.
+
+**No new backend capability.** The catalogue has been synced since `#61` and
+`resolve_exercise` / `suggest_candidates` have always run over all of it. This exposes what
+existed.
+
+**Rationale — the model was reasoning from the only exercise data it could see.** Asked in
+prod whether Nordics were in the Hevy catalogue, it answered that it could confirm only
+exercises appearing in the workout history, that it could not see Hevy's built-in
+catalogue, and offered to fix this by "pulling the Hevy exercise catalogue endpoint" —
+i.e. by building `#61`, live since July over 500 rows. Both claims were false about the
+system, and neither was the model's fault: the prompt handed it ten recent workouts and
+nothing else, so ten workouts is what it reasoned from. A capability the model cannot see
+is, from the user's side, a capability that does not exist — and worse than absent, because
+the app then volunteers to rebuild it.
+
+**The full list, not a lookup block.** A `<hevy_lookup_exercise>` block would have cost a
+round trip per question and needed its own processor and contract; a same-turn inject
+mirroring the on-ask lab relay would have needed exercise-phrase detection in free text —
+a fuzzy matcher whose misses are silent. The whole catalogue is ~11,400 characters
+(**measured**, not estimated: 2,839 tokens by the chars/4 rule, 500 rows) rebuilt every turn, so
+it is never stale and there is no invalidation to reason about. For a single-user build
+that is the cheap end of the trade, and it removes the error class at the root rather than
+adding a mechanism the model must remember to invoke.
+
+**Where the read lives is not a style question — the brief's design would have broken an
+invariant.** The brief specified `_section_exercise_catalogue(db, user_id, connected)`.
+`context_builder` is a **pure formatter**: it takes no `Session` and performs no queries,
+which is the invariant the `#43` parity guard exists to protect and which
+`_annotate_canonical_titles` documents in `chat.py` as the reason IT runs upstream. Passing
+a `Session` in would have put a query inside the one module contracted to hold none. So the
+read happens in `chat.py` beside the other Hevy context gathering, and the section receives
+already-read rows — the same shape as `hevy_data`, `knowledge_entries` and every other
+section. A test asserts the signature takes `catalogue` and nothing else, and a second
+greps the module for `sqlalchemy` / `db.query(` / `db.execute(` / `SessionLocal`, so the
+invariant is guarded at module level rather than by memory.
+
+**Scope of the list is `_visible_to`, the resolver's own predicate.** Not a fresh query with
+similar intent — the same one `resolve_exercise` and `suggest_candidates` use. A catalogue
+shown to the model that differed from the catalogue the resolver resolves over would invite
+it to emit a title the resolver then refuses: the instrument disagreeing with the behaviour
+it serves (`FEEDBACK` §10). One rule, now shared three ways.
+
+**Status:** Decided and landed on `feat/chat-catalogue-visibility`. Chat-layer only. The
+sync (`#61`), `resolve_exercise` / `suggest_candidates` / `catalogue_titles_by_id`, the
+create path (`#164`/`#166`) and the `hevy_exercise_templates` schema are untouched. No
+migration.
+
+**How you know:**
+
+- **The live catalogue answers the question that prompted this.** Queried against Railway:
+  `Nordic Hamstrings Curls` is present as a **default**. Note the exact title — *Hamstrings*
+  and *Curls*, both plural — which is not what anyone would type from memory, and is
+  precisely why the list is injected rather than left to recall. `Glute Ham Raise` is also a
+  default; `Prone Hamstring Curl` is one of the user's customs. So the honest answer to
+  "are nordics in the hevy catalogue?" is *yes, as a built-in*, and the app can now say so.
+- **Payload measured, not estimated:** 500 visible rows (451 default / 49 custom) render to
+  11,356 characters ≈ 2,839 tokens per turn.
+- **14 of the 500 live titles are non-ASCII** — the U+2011 non-breaking hyphen family
+  (`Single‑Leg RDL`, `B‑Stance RDL`). They look ordinary and fail a byte-exact resolve if
+  retyped, so the section instructs the model to copy from the list rather than type from
+  memory, and a test pins that a non-ASCII title renders verbatim rather than normalised.
+- **19 new tests** in `backend/tests/test_chat_catalogue_visibility.py`; full suite
+  **719 passed** (baseline **700**).
+- **Mutation control:** unwiring the section from `build_system_prompt` fails exactly **2 of
+  19** — the two end-to-end prompt assertions — while the 17 that call the section directly
+  still pass. The control discriminates the *wiring* from the *rendering*, which is the half
+  that was broken here: the renderer never existed, but the failure mode being fixed is
+  "the data never reaches the model".
+- **Parity guard untouched.** The section is appended conditionally, so with no catalogue
+  nothing is added at all and the section list stays byte-identical under
+  `test_context_builder_output_unchanged_pre_post_refactor` — no empty-string-plus-separator
+  and no narrowing of the guard.
+
+**Do not revisit unless:** the catalogue grows past the point where a few thousand tokens a
+turn is no longer trivial (a multi-user build, or Hevy expanding the default set several
+fold), at which point the model-initiated lookup block described above becomes the live option; or a
+second consumer needs the same list, which would make `catalogue_titles`' scope predicate
+worth asserting rather than merely shared.
+
+---
