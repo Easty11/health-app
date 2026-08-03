@@ -173,6 +173,7 @@ def replay(nights: list[Night], prescriptions: list[LedgerRx],
                 "excluded": d.excluded_nights,
                 "lo_sd": d.lights_out_sd_min, "wk_sd": d.wake_time_sd_min,
                 "ema": d.ema_count, "capped": d.move_capped,
+                "converged": d.converged,
                 "nse": d.nights_since_effective_from,
             })
             if d.basis_tst_min is not None:
@@ -231,22 +232,27 @@ def main() -> None:
             if s["excluded"]:
                 print(f"        excluded: {s['excluded']}")
 
-        # #107's exit-too-early check. The engine's "close" is a RECOMMENDATION and
-        # does not terminate the ledger walk; we report the FIRST cycle it would have
-        # closed on and compare to the block's observed endpoint.
-        print("\n=== #107 EXIT CHECK (engine close is advisory, not terminal) ===")
-        closes = [s for s in series if s["decision"] == "close"]
-        if closes:
-            first = closes[0]
-            print(f"  engine would FIRST close in cycle {first['cycle']}, window ending {first['to']}")
+        # #107's exit-too-early check, restated. The engine no longer emits `close` at
+        # all — the titration is a perpetual hunting search and a plateau is a CONVERGED
+        # HOLD that leaves the block open. So the question is no longer "would it have
+        # exited too early" but "where did it settle", which is the same observation
+        # without the exit: the first converged cycle is where #107's rule would have
+        # closed, and the block's observed endpoint is still the comparison.
+        print("\n=== CONVERGENCE CHECK (the engine never closes a block) ===")
+        converged = [s for s in series if s["converged"]]
+        if converged:
+            first = converged[0]
+            print(f"  engine FIRST converged in cycle {first['cycle']}, window ending {first['to']}")
             print(f"  block observed endpoint: {block.closed_on}")
             if block.closed_on is not None:
                 early = first["to"] < block.closed_on
-                print(f"  engine close precedes the observed endpoint: {early}"
-                      + ("  *** exits early — #107's premise ***" if early else ""))
+                print(f"  convergence precedes the observed endpoint: {early}"
+                      + ("  *** #107 would have exited here ***" if early else ""))
+            print(f"  cycles after first convergence: {len(series) - series.index(first) - 1}"
+                  f"  (the hunt continues; nothing terminates)")
         else:
-            print(f"  engine never recommended close across {len(series)} cycles"
-                  f" — floor not breached (observed endpoint {block.closed_on})")
+            print(f"  engine never converged across {len(series)} cycles"
+                  f" — still hunting (observed endpoint {block.closed_on})")
 
         print("\n=== COMPOSITION ===")
         td = sum(s["n_diary"] for s in series)

@@ -1541,7 +1541,7 @@ Numbered `Q62` on the `feat/interp-producer-1a` branch (pre-ff; max was Q61, no 
 
 ## Q63. What does the interpretation tile show?
 
-**State:** DONE → #NEXT (integer claimed when `feat/hub-shell` fast-forwards to master).
+**State:** DONE → #162.
 
 Resolved to candidate **(a)**, with one amendment: the shipped string reads `collected <date>`, not
 `generated <date>`. `meta.generated_at` is stamped at request time, so it is always "now" and says
@@ -2193,3 +2193,41 @@ Luke chose to land `#164` on the test suite and the enum artifact rather than mi
 **Treat the first real create as a watch-point.** It is the de facto integration test, and it fails correctably: a rejected body surfaces the 400's field-and-enum message, and a create that does not surface returns `HevyCreateUnresolvedError`, whose message explicitly forbids a retry. Neither failure is silent and neither loses data — the worst case is one permanent template that the catalogue has not yet indexed. What to watch on that first run: whether the confirmation is `✓ … created in Hevy` (list-back succeeded within the retry bound) or the unresolved warning (it did not, and `_CREATE_RESOLVE_ATTEMPTS` or its backoff needs raising).
 
 **Resolve before:** custom creation is exercised by anyone other than Luke, or is invoked anywhere the failure message is not read by a human — a batch path, a scheduled job, or an agent loop that would retry on its own and duplicate.
+
+---
+
+## Q#NEXT. Exclude-all starves a frequent napper at a 4-night cadence — multi-user nap attribution needs solving before anyone else runs a block
+
+**State:** OPEN. **Blocked by:** Q45 (the nap referent is unknown, so there is nothing to attribute
+*to* yet). **Blocks:** any second user on the CBT-I module.
+
+Q45 leaves the VA diary's nap referent unknown, and the engine's response is to exclude ANY
+nap-flagged night outright (`NAP_EXCLUDE_MIN = 0`) rather than attribute it. At the old 7-night
+cadence with a 5-night sufficiency threshold that cost a cycle only when three nights were lost. At
+**4 nights with a 3-night threshold the margin is a single night**: two nap-flagged nights in a cycle
+starve it, and the engine HOLDs.
+
+For the current single user (Luke, an infrequent napper) this is tolerable and exclude-all stands —
+it is the conservative reading of an ambiguous instrument, and a wrong attribution corrupts the
+adherence basis silently, where an exclusion only costs a cycle. For a **frequent napper** it is not:
+they would stall indefinitely, and — before this session — silently, with the surface saying only
+"insufficient".
+
+**Partially mitigated, not resolved (this session).** The HOLD reason now names the tally
+(`insufficient_nights: 2 valid of 4, need 3 (2 excluded: nap x2)`), so a stall is diagnosable rather
+than mysterious. That makes the failure *legible*; it does not make titration *work* for that user.
+
+Candidates, none costed:
+
+- **(a) Attribute the nap** once Q45's referent is known — the principled fix, wholly gated on Q45.
+- **(b) A duration threshold** (`NAP_EXCLUDE_MIN > 0`) so short naps stop disqualifying a night.
+  Cheap, but picks a number with no more evidence behind it than the current 0.
+- **(c) Per-user cadence** — a napper runs a longer cycle, restoring the margin without touching the
+  nap predicate at all.
+- **(d) Degrade rather than exclude** — admit the night with a recorded caveat, which trades a clean
+  basis for a decidable one.
+
+**Do not resolve by:** loosening `NAP_EXCLUDE_MIN` for the single user to make a cycle decidable. That
+is tuning the instrument to the outcome, and Q45's whole point is that the referent is unknown.
+
+**Resolve by:** the second user onboarding to the CBT-I module, whichever comes first with Q45.

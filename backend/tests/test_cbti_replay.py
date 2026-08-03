@@ -9,7 +9,7 @@ SYNTHETIC data only; no real rows (both repos are public).
 """
 from datetime import date, timedelta
 
-from cbti.engine import Night
+from cbti.engine import CYCLE_NIGHTS, Night
 from cbti.replay import LedgerRx, replay
 
 
@@ -48,27 +48,31 @@ def test_mid_cycle_correction_is_adjudicated_not_false_held():
     # prescriptions passed unsorted on purpose — replay sorts by effective_from
     series = replay(nights, [rx_b, rx_a], last_night=date(2026, 8, 2))
 
-    assert len(series) == 2
+    # Cycle COUNT is a function of the cadence constant and is deliberately not asserted
+    # here — this test pins WHICH PRESCRIPTION each cycle was adjudicated against, which
+    # is the Q49 property and is cadence-independent.
+    stub = [s for s in series if s["rx_from"] == rx_a.effective_from]
+    corr = [s for s in series if s["rx_from"] == rx_b.effective_from]
+    assert stub and corr
 
-    # the 3-night stub under id=10: adjudicated against 23:45, held for INSUFFICIENCY
-    # (too few nights), never for adherence — those 3 nights were run at 23:45
-    stub = series[0]
-    assert stub["rx_lights_out"] == "23:45" and stub["rx_anchor"] == "05:45"
-    assert stub["from"] == date(2026, 7, 24) and stub["to"] == date(2026, 7, 26)
-    assert stub["decision"] == "hold" and stub["reason"].startswith("insufficient")
-    assert stub["nse"] == 3
+    # the 3-night stub under id=10: adjudicated against 23:45, never against 22:30
+    assert all(s["rx_lights_out"] == "23:45" and s["rx_anchor"] == "05:45" for s in stub)
+    assert stub[0]["from"] == date(2026, 7, 24)
+    assert max(s["to"] for s in stub) == date(2026, 7, 26)   # never crosses the boundary
 
-    # the correction's cycle: adjudicated against 22:30 → all 7 adherent → NOT an
-    # adherence hold. Before Q49 these read +75 min against the seeded 23:45 and
-    # tripped ADHERENCE_FAIL_N. rx_lights_out == "22:30" IS the proof the ledger, not
-    # the regenerated chain, drove adjudication.
-    corr = series[1]
-    assert corr["rx_lights_out"] == "22:30" and corr["rx_anchor"] == "05:00"
-    assert corr["from"] == date(2026, 7, 27) and corr["to"] == date(2026, 8, 2)
-    assert corr["n_diary"] == 7
-    assert "adherence" not in corr["reason"]
-    assert corr["decision"] == "extend"     # 400 + 30 buffer vs 390, +30 cap → 420
-    assert corr["nse"] == 7
+    # the correction's cycles: adjudicated against 22:30 → adherent → NOT an adherence
+    # hold. Before Q49 these read +75 min against the seeded 23:45 and tripped
+    # ADHERENCE_FAIL_N. rx_lights_out == "22:30" IS the proof the ledger, not the
+    # regenerated chain, drove adjudication.
+    assert all(s["rx_lights_out"] == "22:30" and s["rx_anchor"] == "05:00" for s in corr)
+    assert min(s["from"] for s in corr) == date(2026, 7, 27)
+    assert max(s["to"] for s in corr) == date(2026, 8, 2)
+    assert all("adherence" not in s["reason"] for s in corr)
+    assert all(s["decision"] == "extend" for s in corr)
+    # nse counts nights logged since THIS prescription took effect and resets at the
+    # boundary (#124) — so the correction's last cycle sees all 7 of its nights, however
+    # many cycles the cadence split them into.
+    assert corr[-1]["nse"] == 7
 
 
 # ── the invariant that makes the flagship hold ────────────────────────────────────
@@ -114,19 +118,21 @@ def test_each_cycle_uses_its_own_ledger_anchor():
 
 # ── plateau continuity + close is advisory, not terminal ──────────────────────────
 
-def test_prior_tst_carries_across_cycles_and_close_does_not_terminate():
-    """One prescription in force for 28 nights = four 7-night cycles. Flat TST at a
-    held SE floor plateaus by cycle 3 — proving `prior_basis_tst` accumulates across
-    cycles — and the walk CONTINUES to cycle 4, because the operator's ledger, not the
-    engine's advisory close, decides when the block ends."""
+def test_prior_tst_carries_across_cycles_and_convergence_does_not_terminate():
+    """One prescription in force for 28 nights. Flat TST at a held SE floor plateaus —
+    proving `prior_basis_tst` accumulates across cycles — and the walk CONTINUES past
+    it. The engine no longer emits `close` at all: a plateau is a CONVERGED HOLD and the
+    block stays open, so the titration keeps hunting rather than exiting."""
     only = rx(date(2026, 7, 24), None, lo="22:30", win=390)
     nights = [night(d, lo="22:30", tst=445, se=90.0) for d in span(date(2026, 7, 24), 28)]
 
     series = replay(nights, [only], last_night=date(2026, 8, 20))
-    assert len(series) == 4                      # walk did not stop at the close
-    closes = [s for s in series if s["decision"] == "close"]
-    assert closes                                 # plateau reached → prior_tst carried
-    assert series[-1]["cycle"] > closes[0]["cycle"]   # cycles continue past first close
+    assert len(series) == 28 // CYCLE_NIGHTS      # whole span walked, nothing terminated
+    assert not [s for s in series if s["decision"] == "close"]   # `close` is never emitted
+    converged = [s for s in series if s["converged"]]
+    assert converged                              # plateau reached → prior_tst carried
+    assert series[-1]["cycle"] > converged[0]["cycle"]  # cycles continue past convergence
+    assert all(s["decision"] == "hold" for s in converged)
 
 
 def test_prescription_with_no_nights_is_skipped_not_errored():

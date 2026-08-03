@@ -7,7 +7,7 @@ the executable form of "nothing branches on it".
 import dataclasses
 from datetime import date
 
-from cbti.engine import CycleDecision, Night, evaluate_cycle
+from cbti.engine import MIN_VALID_NIGHTS, CycleDecision, Night, evaluate_cycle
 
 RX = "23:45"
 ANCHOR = "05:45"
@@ -26,7 +26,9 @@ def _eval(nights, **kw):
 # ── the field lands on all four verdict paths ─────────────────────────────────────
 
 def test_sufficiency_hold_carries_the_field():
-    d = _eval([night(i, 380, 90) for i in (1, 2, 3)], nights_since_effective_from=7)
+    # one night short of MIN_VALID_NIGHTS, derived so the cadence can move again
+    d = _eval([night(i, 380, 90) for i in range(1, MIN_VALID_NIGHTS)],
+              nights_since_effective_from=7)
     assert d.decision == "hold" and "insufficient" in d.reason
     assert d.nights_since_effective_from == 7
 
@@ -38,10 +40,10 @@ def test_adherence_hold_carries_the_field():
     assert d.nights_since_effective_from == 7
 
 
-def test_plateau_close_carries_the_field():
+def test_plateau_converged_hold_carries_the_field():
     d = _eval([night(i, 382, 90) for i in range(1, 6)],
               prior_basis_tst=[375, 380], nights_since_effective_from=7)
-    assert d.decision == "close" and "plateau" in d.reason
+    assert d.decision == "hold" and d.converged is True and "plateau" in d.reason
     assert d.nights_since_effective_from == 7
 
 

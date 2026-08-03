@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
+from cbti.engine import CENTRE_CYCLES, MAX_MOVE_MIN, centre_estimate
 from cbti.timeutil import clock_delta_minutes, clock_to_minutes, minutes_between
 from database import get_db
 from injury_trajectory import injury_soreness_key
@@ -242,6 +243,14 @@ class CBTIContextOut(BaseModel):
     prescribed_lights_out: Optional[str] = None
     window_minutes: Optional[int] = None
     effective_from: Optional[date] = None
+    # THE SLEEP-NEED ESTIMATE, and it is deliberately NOT `window_minutes`. Under the
+    # hunting search the window dithers by +/-`dither_minutes` around the setpoint, so
+    # any single prescription is a probe, not an estimate — surfacing it as "your sleep
+    # need" would make the app look like it changes its mind every four nights. The
+    # centre is the mean of the last `centre_cycles_n` prescribed windows.
+    centre_minutes: Optional[float] = None
+    centre_cycles_n: int = 0
+    dither_minutes: int = MAX_MOVE_MIN
 
 
 def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
@@ -269,6 +278,17 @@ def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
         .order_by(models.CBTIPrescription.effective_from.desc())
         .first()
     )
+    # The window series the centre averages, in ledger order. A plain ORM read: this is
+    # the history of what was PRESCRIBED, not an adjudication of nights against it, so
+    # it does not go through the replay's effective-prescription read (#128) — there is
+    # no cycle being decided here and nothing for the two paths to diverge about.
+    windows = [
+        w for (w,) in db.query(models.CBTIPrescription.window_minutes)
+        .filter(models.CBTIPrescription.block_id == block.id,
+                models.CBTIPrescription.effective_from <= for_date)
+        .order_by(models.CBTIPrescription.effective_from)
+        .all()
+    ]
     return CBTIContextOut(
         block_open=True,
         block_id=block.id,
@@ -276,6 +296,8 @@ def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
         prescribed_lights_out=rx.prescribed_lights_out if rx else None,
         window_minutes=rx.window_minutes if rx else None,
         effective_from=rx.effective_from if rx else None,
+        centre_minutes=centre_estimate(windows),
+        centre_cycles_n=min(len(windows), CENTRE_CYCLES),
     )
 
 

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import DeepSleepLevers from '../components/cbti/DeepSleepLevers'
+import { centreBasisNote, convergenceBand, formatMinutes } from '../components/cbti/centreCopy'
 import { useNavigate, Link } from 'react-router-dom'
 import api from '../api'
 
@@ -57,6 +59,19 @@ function PrescriptionCard({ cbti }) {
         {cbti.prescribed_lights_out || '—'} <span className="text-indigo-300 font-normal">→</span> {cbti.wake_anchor || '—'}
       </p>
       {win && <p className="text-xs text-indigo-400 mt-1">{win} in bed · lights out at {cbti.prescribed_lights_out}</p>}
+      {/* The ESTIMATE, kept visually subordinate to tonight's instruction and clearly
+          labelled as a centre. The window above dithers by +/-`dither_minutes` every
+          cycle; without this line those nudges read as the app changing its mind, when
+          they are the search. The band is what the window hunts within. */}
+      {cbti.centre_minutes != null && (
+        <p className="text-[11px] text-indigo-400/90 mt-2 border-t border-indigo-100 pt-2">
+          Estimated need ≈ <span className="font-semibold">{formatMinutes(cbti.centre_minutes)}</span>
+          {' '}· {centreBasisNote(cbti.centre_cycles_n)}
+          {convergenceBand(cbti.centre_minutes, cbti.dither_minutes) && (
+            <> · hunting {convergenceBand(cbti.centre_minutes, cbti.dither_minutes)}</>
+          )}
+        </p>
+      )}
     </div>
   )
 }
@@ -187,6 +202,10 @@ export default function NightlyCloseOut() {
         </div>
 
         <PrescriptionCard cbti={cbti} />
+        {/* Education, and only while a block is open — outside the form so its collapse
+            toggle can never submit the close-out. Static content: nothing here reads the
+            user's record or ranks anything for them (#47). */}
+        {cbti?.block_open && <DeepSleepLevers />}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Today rating */}

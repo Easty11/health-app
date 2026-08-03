@@ -5830,7 +5830,7 @@ are the surfaces to re-read — not the append-only rule, which is the point of 
 
 ---
 
-### #NEXT. The interpretation hub tile shows structural counts, not a priority ordering (resolves Q63)
+### 162. The interpretation hub tile shows structural counts, not a priority ordering (resolves Q63)
 
 **Decision:** Under `#150` Constraint A the interpretation tile carries Q63 candidate (a) — counts,
 section structure and recency read from the existing `GET /interpretation` payload. The tile routes
@@ -6097,5 +6097,77 @@ are recorded as an open question below.
 **Do not revisit unless:** Hevy ships a delete or edit endpoint for exercise templates, which
 removes the permanence premise every call above rests on and would make auto-create-on-miss worth
 re-arguing; or the enum lists drift (`Q76`).
+
+---
+
+### #NEXT. Titration becomes a perpetual 4-night hunting search; the block no longer auto-closes; the dither centre is the sleep-need estimate
+
+**Decision:** The titration cadence drops to a 4-night cycle with 15-minute steps; the plateau `close`
+is removed — a converged cycle HOLDs and the block stays open indefinitely, accumulating while the
+operator still logs, so a later drift is visible with its cause rather than a silent reset. The
+reported sleep-need estimate is the running centre (mean of the last `CENTRE_CYCLES` prescribed
+windows), not any single cycle's window. Constants: `CYCLE_NIGHTS` 4, `MIN_VALID_NIGHTS` 3,
+`MAX_MOVE_MIN` 15, `ADHERENCE_FAIL_N` 2, `CENTRE_CYCLES` 4 — all operator-chosen, CHOSEN-not-derived
+(Q55).
+
+**Rationale:** The SRT literature has never studied titration interval as a variable (Q48 — its named
+failure mode is *under*-titration), so a fast small-step dither finds the setpoint empirically while
+staying usable, and the small step makes 4-night noise inconsequential (±15 cannot move the window
+far; the centre averages it out). Compress-on-fragmentation is already inherent
+(`window = mean_tst + buffer`: broken sleep → lower TST → lower target → compress), so no new logic is
+added for it. Adopted engagement-first: a weekly cadence the operator ignores has zero value (#118's
+own "revisit if adherence becomes the binding constraint").
+
+`MIN_VALID_NIGHTS` is the one constant that is **forced, not chosen**: a sufficiency threshold of 5
+cannot be met inside a 4-night cycle, so leaving it would make GATE 1 unsatisfiable and the engine
+would HOLD forever — a stall that reads as "titration is broken", not as a bad constant. The invariant
+`MIN_VALID_NIGHTS < CYCLE_NIGHTS` is now asserted at import rather than left to review.
+
+**Evidence context (honest):** no source supports 4 nights specifically; it is a pragmatic operator
+choice, not a validated constant. The dither generates exactly the SE-recovery data Q48's curve-fit
+would need, so it advances Q48 rather than pre-empting it. CBT-I/SRT consolidates sleep and reduces
+fragmentation; it does not manufacture total sleep time (van Straten 2017: TST the smallest effect,
+g≈0.16, against SE 0.71; Scott 2022) — the surface therefore frames titration as one deep-sleep lever
+among five, evidence-ranked and identical for every reader, never connected to a personalised action
+(#47, #150 Constraint A).
+
+**Correction to the brief — there was no engine-close to remove.** The brief framed this as removing
+the engine-driven block close that #118 established. Enumerated against master before editing: nothing
+writes `cbti_blocks.closed_on` from an engine decision. The only `closed_on` writers are
+`import_cbti_block.py` (the historical block-1 import) and a read in `correct_cbti_block3_rx.py`; the
+engine's `close` was consumed **only** by `replay.py`'s advisory #107 exit-too-early report and by
+tests. So #118's "close is engine-driven" half was specified and never built, and what this decision
+actually removes is a *recommendation*, not a mechanism. `close` is retained in the `Decision`
+vocabulary and the DB CHECK constraint — block 1 was imported carrying it and the ledger is
+append-only, so retiring the value would invalidate history. The engine simply never emits it again.
+
+**Status:** Decided (design + build). Supersedes `#107`'s weekly cadence and its plateau exit; retunes
+`#118`/`#128`. Advances Q48 (cadence adopted pragmatically). Q55's cadence constants now carry a
+recorded rationale (still chosen-not-derived). Q45 unchanged — exclude-all stands, over-exclusion is
+now surfaced rather than silent.
+
+**How you know:**
+- Backend suite **674 passed** (655 baseline **+19**); `test_cbti_replay.py` green, with every changed
+  replay decision traced to an intended constant: the 3-night stub moves `insufficient hold → extend`
+  (`MIN_VALID_NIGHTS` 5→3), a 7-night span splits 1→2 cycles (`CYCLE_NIGHTS` 7→4), moves cap at 15,
+  and the plateau becomes a converged HOLD. Nothing flipped for another reason.
+- The block stays open past a plateau: on 28 flat nights the walk yields 7 cycles, cycles 3–7 all
+  `hold`/`converged`, and no cycle anywhere emits `close` (asserted parametrically across five
+  `prior_basis_tst` shapes and four TST/SE combinations).
+- Worked centre: windows `[405, 420, 435, 420]` → **420 min**; a pure ±15 dither
+  `[405, 435, 405, 435]` → **420** while the latest window reads 435 — probe and estimate are
+  demonstrably different numbers.
+- Nap guard on a synthetic 4-night cycle with 2 nap nights:
+  `insufficient_nights: 2 valid of 4, need 3 (2 excluded: nap x2)`.
+- Frontend `npm run build` clean, eslint at the 5-error master baseline. **No frontend test runner
+  exists**, so the lever content and centre copy are extracted to pure modules
+  (`leverContent.js`, `centreCopy.js`) and evaluated in node; the assertions are recorded OWED, not
+  faked.
+- **NOT verified against prod, and not deployed** — the branch is held for review. Both `#121` deploy
+  probes are owed.
+
+**Do not revisit unless:** block-3 data or a clinician establishes a derived cadence/threshold (Q48's
+curve); or the dither fails to converge — a wandering centre means the extend/compress boundary is
+biased, first suspects being the Q45 nap exclusion (SE reads high) or the `SE_FLOOR_PCT` threshold.
 
 ---

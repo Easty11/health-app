@@ -13,7 +13,9 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from cbti.engine import (
+    ADHERENCE_FAIL_N,
     ADHERENCE_TOL_MIN,
+    CYCLE_NIGHTS,
     BUFFER_MIN,
     FLOOR_MIN,
     MAX_MOVE_MIN,
@@ -37,8 +39,14 @@ def night(day: int, *, tst=420, se=90.0, lights_out=RX, wake="05:00",
     )
 
 
-def week(**kw) -> list[Night]:
-    return [night(d, **kw) for d in range(1, 8)]
+def cycle(**kw) -> list[Night]:
+    """One full cycle of nights, sized from CYCLE_NIGHTS.
+
+    Was `week()` at a fixed 7. The cadence is now a tunable constant, so a builder that
+    hardcodes its length silently stops testing a full cycle the moment the constant
+    moves — which is exactly what happened when it went 7 -> 4.
+    """
+    return [night(d, **kw) for d in range(1, CYCLE_NIGHTS + 1)]
 
 
 # ── exclusions ────────────────────────────────────────────────────────────────
@@ -88,21 +96,22 @@ def test_incomplete_night_excluded():
 # ── gate 1: sufficiency, and it short-circuits ────────────────────────────────
 
 def test_insufficient_valid_nights_holds():
-    nights = week()
-    for n in nights[:3]:
-        n.alcohol_units = 2                      # 3 excluded -> 4 valid
+    nights = cycle()
+    n_excluded = CYCLE_NIGHTS - MIN_VALID_NIGHTS + 1      # one short of sufficiency
+    for n in nights[:n_excluded]:
+        n.alcohol_units = 2
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold"
     assert "insufficient_nights" in d.reason
     assert d.window_minutes == WINDOW            # window untouched on a hold
-    assert d.basis_nights_n == 4
+    assert d.basis_nights_n == CYCLE_NIGHTS - n_excluded
 
 
 def test_sufficiency_failure_short_circuits_before_adherence():
     """A HOLD names the FIRST failing gate, not the last one checked. Here both
     gates would fail; the reason must be sufficiency."""
-    nights = week(lights_out="01:00")            # wildly non-adherent (by diary)
-    for n in nights[:3]:
+    nights = cycle(lights_out="01:00")            # wildly non-adherent (by diary)
+    for n in nights[:CYCLE_NIGHTS - MIN_VALID_NIGHTS + 1]:
         n.alcohol_units = 2                      # RECORDED drinks -> excluded
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold" and "insufficient_nights" in d.reason
@@ -112,31 +121,34 @@ def test_sufficiency_failure_short_circuits_before_adherence():
 # ── gate 2: adherence — unreachable from real data, so tested only here ───────
 
 def test_adherence_failure_holds_and_reports_source_composition():
-    nights = week(lights_out="23:45")            # +75 min by diary, all 7 outside tolerance
+    nights = cycle(lights_out="23:45")            # +75 min by diary, whole cycle outside tolerance
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold" and d.reason.startswith("adherence")
-    assert d.basis_n_diary == 7 and d.basis_n_samsung == 0
+    assert d.basis_n_diary == CYCLE_NIGHTS and d.basis_n_samsung == 0
     assert d.window_minutes == WINDOW
 
 
 def test_adherence_passes_at_the_tolerance_boundary():
-    nights = week(lights_out="23:00")            # exactly +30 by diary
+    nights = cycle(lights_out="23:00")            # exactly +30 by diary
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision != "hold" or "adherence" not in d.reason
 
 
-def test_two_failures_is_below_the_threshold_three_is_not():
-    ok = week()
-    for n in ok[:2]:
+def test_one_below_the_adherence_threshold_passes_and_the_threshold_itself_holds():
+    """Named for the CONSTANT, not for 2-vs-3. The threshold rescaled with the cadence
+    (3-of-7 -> 2-of-4), and a test that hardcodes the old pair silently stops straddling
+    the boundary it exists to pin."""
+    ok = cycle()
+    for n in ok[:ADHERENCE_FAIL_N - 1]:
         n.lights_out = "23:45"
-    for n in ok[2:]:
+    for n in ok[ADHERENCE_FAIL_N - 1:]:
         n.lights_out = RX
     assert "adherence" not in evaluate_cycle(ok, WINDOW, RX, ANCHOR).reason
 
-    bad = week()
-    for n in bad[:3]:
+    bad = cycle()
+    for n in bad[:ADHERENCE_FAIL_N]:
         n.lights_out = "23:45"
-    for n in bad[3:]:
+    for n in bad[ADHERENCE_FAIL_N:]:
         n.lights_out = RX
     assert evaluate_cycle(bad, WINDOW, RX, ANCHOR).reason.startswith("adherence")
 
@@ -144,8 +156,8 @@ def test_two_failures_is_below_the_threshold_three_is_not():
 def test_adherence_uses_diary_lights_out_and_labels_it():
     """Adherence is recall-only (#127): diary lights_out is the sole source, counted
     as n_diary. This is the regime the entire replay runs in."""
-    d = evaluate_cycle(week(), WINDOW, RX, ANCHOR)
-    assert d.basis_n_samsung == 0 and d.basis_n_diary == 7
+    d = evaluate_cycle(cycle(), WINDOW, RX, ANCHOR)
+    assert d.basis_n_samsung == 0 and d.basis_n_diary == CYCLE_NIGHTS
 
 
 def test_samsung_bedtime_is_ignored_adherence_is_recall_only():
@@ -166,60 +178,65 @@ def test_adherence_delta_uses_shortest_path_across_midnight():
 def test_window_is_mean_tst_plus_buffer():
     # start close enough that the per-cycle cap does not bind, so this test
     # measures the buffer rule rather than the cap
-    d = evaluate_cycle(week(tst=400), 405, RX, ANCHOR)
-    assert d.window_minutes == 400 + BUFFER_MIN      # 430
+    d = evaluate_cycle(cycle(tst=400), 400 + BUFFER_MIN - MAX_MOVE_MIN, RX, ANCHOR)
+    assert d.window_minutes == 400 + BUFFER_MIN      # exactly one uncapped step away
     assert d.decision == "extend"
     assert d.move_capped is False
 
 
 def test_window_never_goes_below_the_five_hour_floor():
-    d = evaluate_cycle(week(tst=180), 320, RX, ANCHOR)
+    d = evaluate_cycle(cycle(tst=180), 320, RX, ANCHOR)
     assert d.window_minutes >= FLOOR_MIN
 
 
 def test_move_is_capped_and_the_cap_is_reported():
-    d = evaluate_cycle(week(tst=500), 300, RX, ANCHOR)   # wants +230
+    d = evaluate_cycle(cycle(tst=500), 300, RX, ANCHOR)   # wants +230
     assert d.window_minutes == 300 + MAX_MOVE_MIN
     assert d.move_capped is True
 
 
 def test_new_lights_out_is_derived_from_the_anchor_not_the_old_prescription():
-    d = evaluate_cycle(week(tst=390), 390, RX, ANCHOR)
+    d = evaluate_cycle(cycle(tst=390), 420 - MAX_MOVE_MIN, RX, ANCHOR)
     assert d.window_minutes == 420                      # 390 TST + 30 buffer = 7h00
     assert d.prescribed_lights_out == "22:00"           # 05:00 minus 7h00
 
 
 def test_compress_when_tst_falls():
-    d = evaluate_cycle(week(tst=330), 420, RX, ANCHOR)
+    d = evaluate_cycle(cycle(tst=330), 420, RX, ANCHOR)
     assert d.decision == "compress" and d.window_minutes < 420
 
 
 # ── exit condition — TST plateau, NOT SE stall (#107) ────────────────────────
 
-def test_plateau_with_se_at_floor_closes_the_block():
-    d = evaluate_cycle(week(tst=445, se=92.0), 475, RX, ANCHOR,
+def test_plateau_with_se_at_floor_converges_without_closing_the_block():
+    """The plateau branch used to return `close` and end the block (#107). The
+    titration is a perpetual hunting search now: a plateau is a CONVERGED HOLD — the
+    window stops moving, the block stays open, and evaluation continues."""
+    d = evaluate_cycle(cycle(tst=445, se=92.0), 475, RX, ANCHOR,
                        prior_basis_tst=[440, 442])
-    assert d.decision == "close" and "tst_plateau" in d.reason
+    assert d.decision == "hold" and d.converged is True
+    assert "tst_plateau" in d.reason and d.reason.startswith("converged")
+    assert d.window_minutes == 475                  # held where it converged
 
 
 def test_plateau_below_the_se_floor_does_NOT_close():
     """SE is a floor. A plateau reached at poor efficiency is not an exit."""
-    d = evaluate_cycle(week(tst=445, se=80.0), 475, RX, ANCHOR,
+    d = evaluate_cycle(cycle(tst=445, se=80.0), 475, RX, ANCHOR,
                        prior_basis_tst=[440, 442])
-    assert d.decision != "close"
+    assert d.converged is False
 
 
 def test_high_se_alone_does_not_close_the_block():
     """The #107 counterexample: an SE-maximising rule would exit here. TST is
     still climbing, so this engine must not."""
-    d = evaluate_cycle(week(tst=445, se=97.0), 420, RX, ANCHOR,
+    d = evaluate_cycle(cycle(tst=445, se=97.0), 420, RX, ANCHOR,
                        prior_basis_tst=[380, 410])
-    assert d.decision != "close"
+    assert d.converged is False
 
 
 def test_a_single_prior_cycle_is_not_a_plateau():
-    d = evaluate_cycle(week(tst=445, se=92.0), 475, RX, ANCHOR, prior_basis_tst=[443])
-    assert d.decision != "close"
+    d = evaluate_cycle(cycle(tst=445, se=92.0), 475, RX, ANCHOR, prior_basis_tst=[443])
+    assert d.converged is False
 
 
 # ── diagnostics are computed and never gate ──────────────────────────────────
@@ -227,7 +244,7 @@ def test_a_single_prior_cycle_is_not_a_plateau():
 def test_regularity_is_reported_but_does_not_gate(monkeypatch):
     """#114: lights-out SD is instrumented, not a HOLD condition. Wildly irregular
     bedtimes inside tolerance must still titrate."""
-    nights = week()
+    nights = cycle()
     for i, n in enumerate(nights):
         n.lights_out = ["22:10", "22:50", "22:20", "22:45", "22:15", "22:55", "22:30"][i]
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
@@ -237,26 +254,26 @@ def test_regularity_is_reported_but_does_not_gate(monkeypatch):
 
 def test_ema_is_counted_and_never_compresses():
     """#108: early wakes are instrumented; they must not drive compression."""
-    nights = week(tst=430, wake="04:30")
+    nights = cycle(tst=430, wake="04:30")
     d = evaluate_cycle(nights, 400, RX, ANCHOR)
-    assert d.ema_count == 7
+    assert d.ema_count == CYCLE_NIGHTS
     assert d.decision == "extend"      # TST says extend; EMA does not veto it
 
 
 # ── excluded nights are recorded, not dropped ────────────────────────────────
 
 def test_excluded_nights_are_reason_tagged():
-    nights = week()
+    nights = cycle()
     nights[0].alcohol_units = 3
     nights[1].naps_min = 30
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.excluded_nights[nights[0].date.isoformat()] == "alcohol"
     assert d.excluded_nights[nights[1].date.isoformat()] == "nap"
-    assert d.basis_nights_n == 5
+    assert d.basis_nights_n == CYCLE_NIGHTS - 2
 
 
 def test_composition_never_exceeds_basis_count():
-    d = evaluate_cycle(week(), WINDOW, RX, ANCHOR)
+    d = evaluate_cycle(cycle(), WINDOW, RX, ANCHOR)
     assert d.basis_n_samsung + d.basis_n_diary <= d.basis_nights_n
 
 
@@ -287,19 +304,20 @@ def test_recorded_nonzero_is_still_excluded():
 
 
 def test_alcohol_unknown_count_reaches_the_basis():
-    nights = week()
-    for n in nights[:3]:
+    nights = cycle()
+    n_unknown = CYCLE_NIGHTS - 1
+    for n in nights[:n_unknown]:
         n.alcohol_units = None
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
-    assert d.basis_nights_n == 7                  # all admitted
-    assert d.basis_n_alcohol_unknown == 3         # three assumed clean, not verified
+    assert d.basis_nights_n == CYCLE_NIGHTS       # all admitted
+    assert d.basis_n_alcohol_unknown == n_unknown # assumed clean, not verified
 
 
 def test_unknown_alcohol_no_longer_starves_sufficiency():
     """The regression this predicate change exists to prevent."""
-    d = evaluate_cycle(week(alcohol=None), WINDOW, RX, ANCHOR)
+    d = evaluate_cycle(cycle(alcohol=None), WINDOW, RX, ANCHOR)
     assert "insufficient_nights" not in d.reason
-    assert d.basis_n_alcohol_unknown == 7
+    assert d.basis_n_alcohol_unknown == CYCLE_NIGHTS
 
 
 # ── EXIT CONDITION — untouched by the observed block, synthetic-only ─────────
@@ -307,48 +325,48 @@ def test_unknown_alcohol_no_longer_starves_sufficiency():
 # support whatsoever. These are the only coverage they have.
 
 def test_plateau_within_tolerance_and_SE_at_floor_closes():
-    d = evaluate_cycle(week(tst=445, se=88.0), 475, RX, ANCHOR,
+    d = evaluate_cycle(cycle(tst=445, se=88.0), 475, RX, ANCHOR,
                        prior_basis_tst=[440, 444])          # deltas +4, +1
-    assert d.decision == "close" and "tst_plateau" in d.reason
+    assert d.converged is True and "tst_plateau" in d.reason
 
 
 def test_plateau_JUST_outside_tolerance_does_not_close():
     """One delta at 11 min against PLATEAU_TOL_MIN=10 — still climbing."""
-    d = evaluate_cycle(week(tst=455, se=88.0), 475, RX, ANCHOR,
+    d = evaluate_cycle(cycle(tst=455, se=88.0), 475, RX, ANCHOR,
                        prior_basis_tst=[440, 444])          # deltas +4, +11
-    assert d.decision != "close"
+    assert d.converged is False
 
 
 def test_plateau_at_the_tolerance_boundary_closes():
-    d = evaluate_cycle(week(tst=454, se=88.0), 475, RX, ANCHOR,
+    d = evaluate_cycle(cycle(tst=454, se=88.0), 475, RX, ANCHOR,
                        prior_basis_tst=[440, 444])          # delta exactly +10
-    assert d.decision == "close"
+    assert d.converged is True
 
 
 def test_plateau_with_SE_BELOW_floor_does_not_close():
     """SE is a floor, not a target. A plateau at poor efficiency is not an exit —
     it is a window that is too wide."""
-    d = evaluate_cycle(week(tst=445, se=84.9), 475, RX, ANCHOR,
+    d = evaluate_cycle(cycle(tst=445, se=84.9), 475, RX, ANCHOR,
                        prior_basis_tst=[440, 444])
-    assert d.decision != "close"
+    assert d.converged is False
 
 
 def test_plateau_with_SE_exactly_at_floor_closes():
-    d = evaluate_cycle(week(tst=445, se=85.0), 475, RX, ANCHOR,
+    d = evaluate_cycle(cycle(tst=445, se=85.0), 475, RX, ANCHOR,
                        prior_basis_tst=[440, 444])
-    assert d.decision == "close"
+    assert d.converged is True
 
 
 def test_falling_tst_is_not_a_plateau():
-    d = evaluate_cycle(week(tst=400, se=95.0), 475, RX, ANCHOR,
+    d = evaluate_cycle(cycle(tst=400, se=95.0), 475, RX, ANCHOR,
                        prior_basis_tst=[440, 444])
-    assert d.decision != "close"
+    assert d.converged is False
 
 
 def test_close_is_reachable_only_after_two_prior_cycles():
     for prior in ([], [444]):
-        d = evaluate_cycle(week(tst=445, se=90.0), 475, RX, ANCHOR, prior_basis_tst=prior)
-        assert d.decision != "close"
+        d = evaluate_cycle(cycle(tst=445, se=90.0), 475, RX, ANCHOR, prior_basis_tst=prior)
+        assert d.converged is False
 
 
 # ── TIB over-run: INSTRUMENTED, NOT GATED ────────────────────────────────────
@@ -393,7 +411,7 @@ def test_tib_over_run_does_NOT_gate_the_decision():
 
 
 def test_tib_over_run_is_none_when_out_of_bed_is_missing():
-    d = evaluate_cycle(week(), WINDOW, RX, ANCHOR)   # no out_of_bed set
+    d = evaluate_cycle(cycle(), WINDOW, RX, ANCHOR)   # no out_of_bed set
     assert d.basis_tib_over_run_min is None
 
 
