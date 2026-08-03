@@ -6100,7 +6100,7 @@ re-arguing; or the enum lists drift (`Q76`).
 
 ---
 
-### #NEXT. Titration becomes a perpetual 4-night hunting search; the block no longer auto-closes; the dither centre is the sleep-need estimate
+### 165. Titration becomes a perpetual 4-night hunting search; the block no longer auto-closes; the dither centre is the sleep-need estimate
 
 **Decision:** The titration cadence drops to a 4-night cycle with 15-minute steps; the plateau `close`
 is removed — a converged cycle HOLDs and the block stays open indefinitely, accumulating while the

@@ -2196,7 +2196,7 @@ Luke chose to land `#164` on the test suite and the enum artifact rather than mi
 
 ---
 
-## Q#NEXT. Exclude-all starves a frequent napper at a 4-night cadence — multi-user nap attribution needs solving before anyone else runs a block
+## Q78. Exclude-all starves a frequent napper at a 4-night cadence — multi-user nap attribution needs solving before anyone else runs a block
 
 **State:** OPEN. **Blocked by:** Q45 (the nap referent is unknown, so there is nothing to attribute
 *to* yet). **Blocks:** any second user on the CBT-I module.
