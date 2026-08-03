@@ -1033,7 +1033,35 @@ sit idle; it ran, half-completed an irreversible action, and reported the opposi
 happened. A silent no-op wastes effort. A false negative over a completed write invites the user
 to corrupt their own data.
 
-**Cheap tell for next time.** `#164`'s how-you-know contained the sentence *"What is NOT proven:
-no live create was performed."* That sentence is a correct, honest disclosure — and it is also
-the trigger. Any decision whose how-you-know has to write that line about an **irreversible**
-operation should not have shipped without the probe.
+### 23.1 STANDING CHECK — the irreversible-write pre-ship gate
+
+Not a note on this incident. A check to run against **every** decision entry before it lands,
+for as long as this repo talks to a third-party API it can write to.
+
+**The trigger is a sentence in your own how-you-know.** `#164`'s read: *"What is NOT proven: no
+live create was performed."* That is a correct, honest disclosure — and it is exactly the alarm.
+Any decision whose how-you-know has to admit an unexercised path should answer one question
+before it ships:
+
+> **Can the unproven operation change state in a way we cannot undo?**
+
+- **No** — ship it. File the watch-point in `OPEN_QUESTIONS` and move on. This is the normal,
+  healthy case and most deferrals belong here.
+- **Yes** — the live probe is the **gate, not the launch**. Do not ship on a green suite. The
+  probe's cost is bounded and knowable in advance; a destructive first failure's cost is neither,
+  and it lands on the user rather than on you.
+
+**Applies to, non-exhaustively:** any POST/PUT/PATCH/DELETE against an external API; any write
+whose provider offers no delete or edit (Hevy exercise templates are the type specimen); any
+migration that drops or rewrites data; any outbound message, publish, or purchase.
+
+**Two-line version for a hurry:** *If the how-you-know says a write path is unproven, ask what
+its failure costs. If the answer is "an irreversible change we then misreport", the probe is
+mandatory before ship.*
+
+**And test the boundary, not the wrapper.** The companion rule from §23 above, restated as a
+check: for any code whose job is to interpret a third party's response, **at least one test must
+fake at the transport layer**. If every test for a connector stubs that connector, its
+response-handling code is untested no matter how many tests there are. Mock one level *below*
+the thing under test, never at it. `#164` had 61 passing tests and a live-broken parse for
+exactly this reason.

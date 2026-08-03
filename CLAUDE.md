@@ -214,6 +214,15 @@ must match it.
 
 - **Reference-JSON edit guard (#98).** `backend/reference/*.json` is hand-aligned pure ASCII (non-ASCII as `\uXXXX`). Never build a `\uXXXX` escape in heredoc source (the Bash tool eats one backslash even when quoted — use `chr(92)+"u2014"` or a script file); after any edit assert `raw.isascii() and raw.count(chr(0x2014))==0` and that it still parses; no `json.dump` round-trips (they reflow every hunk). The bad-byte failure is silent — only the assertion catches it.
 
+- **The irreversible-write pre-ship gate (#166, `FEEDBACK` §23.1).** When a decision's
+  **How you know** has to admit an unexercised write path, ask what its failure COSTS before
+  shipping. Non-destructive and loud → ship with an `OPEN_QUESTIONS` watch-point. Able to
+  change state we cannot undo → the live probe is the **gate, not the launch**. Earned when
+  `#164` shipped custom-exercise creation on 61 green tests and its first real use created a
+  permanent template, reported "failed", and left it orphaned. Companion rule: for code that
+  interprets a third party's response, **at least one test must fake at the TRANSPORT layer** —
+  stub the connector and its response handling is untested however many tests there are.
+
 - **Never chain a verification to an action in one command (#103).** A check whose failure cannot stop what follows is not a check. Run it, read it, then act — or make the action conditional on its exit status. See `FEEDBACK` §17.
 
 - **Controls discriminate on identity, not just function (#103).** A positive control proves the instrument works, not that it probed the thing you meant. Where a probe could hit the wrong artefact (stale ref, cached copy, reused branch name), pin to a SHA or assert on content only the intended version carries. See `FEEDBACK` §17.
@@ -266,9 +275,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Hevy create-response parse fix (#166)** - a 2xx create no longer aborts before list-back; the false-negative-plus-orphan failure is closed, and `FEEDBACK` §23.1 adds the irreversible-write pre-ship gate. See DECISIONS_LOG #166.
+- **Perpetual 4-night hunting titration (#165)** - titration no longer auto-closes the block and the dither centre is the sleep-need estimate. See DECISIONS_LOG #165.
 - **Hevy custom-exercise creation (#164)** - the model-facing `<hevy_create_exercise>` path, an explicit separately-confirmed block. See DECISIONS_LOG #164.
-- **Hevy template sync wired (#163)** - the catalogue sync gains an operator endpoint and a connect-time seed; the prod population gate is closed. See DECISIONS_LOG #163.
-- **Hub shell (#162)** - `/dashboard` is a module tile grid with chat docked, the two panels relocated to their own routes, and `Q63` resolved to structural counts. See DECISIONS_LOG #162.
 
 ---
 

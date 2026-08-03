@@ -6172,7 +6172,7 @@ biased, first suspects being the Q45 nap exclusion (SE reads high) or the `SE_FL
 
 ---
 
-### #NEXT. The create-response body is not load-bearing — a 2xx must never abort before list-back (patches `#65`/`#164`)
+### 166. The create-response body is not load-bearing — a 2xx must never abort before list-back (patches `#65`/`#164`)
 
 **Decision:** `HevyClient.create_exercise_template` no longer raises on an unparseable
 **success** body. On a 2xx it attempts `.json()`, and on `json.JSONDecodeError` it logs the
