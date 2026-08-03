@@ -1,4 +1,4 @@
-"""The chat model can see the whole Hevy catalogue (#NEXT).
+"""The chat model can see the whole Hevy catalogue (#168).
 
 Observed in prod 2026-08-03: asked "are nordics in the hevy catalogue?", the model replied
 it could only confirm exercises appearing in the workout history, said it could not see

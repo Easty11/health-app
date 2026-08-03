@@ -6320,7 +6320,7 @@ it would mean a CI check, not a hook.
 
 ---
 
-### #NEXT. The model is shown the whole exercise catalogue — the capability shipped in `#61`, it was simply never surfaced
+### 168. The model is shown the whole exercise catalogue — the capability shipped in `#61`, it was simply never surfaced
 
 **Decision:** `build_system_prompt` gains an `exercise_catalogue` parameter rendered by
 `_section_exercise_catalogue`, listing every catalogue title visible to the user — all Hevy

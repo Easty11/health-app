@@ -215,7 +215,7 @@ def suggest_candidates(
 def catalogue_titles(db: Session, user_id: int) -> list[tuple[str, bool]]:
     """Every catalogue title visible to `user_id`, as (title, is_custom). Read-only.
 
-    Backs the chat context's catalogue section (#NEXT): the full synced catalogue was
+    Backs the chat context's catalogue section (#168): the full synced catalogue was
     already here (#61) but was never surfaced, so the model reasoned only from the ten
     recent workouts it was handed and reported — wrongly — that it could not see Hevy's
     built-in exercises.
