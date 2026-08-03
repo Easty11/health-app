@@ -1,0 +1,34 @@
+#!/bin/sh
+# Refuse to push master carrying an unresolved governance placeholder.
+#
+# Guards the ref, not one command. The merge this exists to prevent was done by hand
+# (`git checkout master && git merge --ff-only && git push`), so a guard inside the
+# `land` alias would have missed it — the placeholder reaches master by whichever path
+# is convenient that day. Branch pushes are untouched: `### #NEXT` is CORRECT on a
+# branch and only wrong on master.
+#
+# Install (once per clone — same shape as the land/stale aliases):
+#   git config core.hooksPath .githooks
+#
+# Bypass, if you ever genuinely must:  git push --no-verify
+#
+# stdin: <local ref> <local sha> <remote ref> <remote sha>, one line per ref.
+
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # branch deletions push the zero sha — nothing to inspect
+    case "$local_sha" in
+        *[!0]*) ;;
+        *) continue ;;
+    esac
+
+    case "$remote_ref" in
+        refs/heads/master|refs/heads/main) ;;
+        *) continue ;;
+    esac
+
+    python scripts/check_governance_placeholders.py --ref "$local_sha" || status=1
+done
+
+exit $status

@@ -111,6 +111,17 @@ Preserve the existing entry format:
   claimed only when the governance commit fast-forwards to master (next sequential at that
   instant). Eliminates the two-branches-both-claim-#N collision and the
   renumber-on-`--ff` dance.
+- **Number-at-merge is ENFORCED, not trusted.** `scripts/check_governance_placeholders.py`
+  refuses any push to master whose `DECISIONS_LOG.md` still carries `^### #NEXT` or whose
+  `OPEN_QUESTIONS.md` still carries `^## Q#NEXT`. It guards the **ref**, not one command:
+  the merge that made this necessary was done by hand, so a guard living inside the `land`
+  alias would not have fired. Branch pushes are untouched — a placeholder is *correct* on a
+  branch and only wrong on master. Anchored on the heading form, never a substring, because
+  the rule text and every corrected entry legitimately quote the token (`#113`). Install
+  once per clone, alongside the aliases: `git config core.hooksPath .githooks`. Bypass is
+  `git push --no-verify`, and needing it twice is a signal the ritual is wrong, not the
+  guard. Earned: the placeholder reached master three sessions running and left a permanent
+  hole at `#162`.
 
 ### Session rituals (the contract the close-outs conform to)
 
@@ -188,6 +199,7 @@ must match it.
   PowerShell-safe):
   `git config --global alias.stale '!f() { git fetch origin -q; git cherry origin/master "${1:-HEAD}"; }; f'`
   `git config --global alias.land '!f() { b="${1:-$(git branch --show-current)}"; git checkout master && git merge --ff-only "$b" && git push origin master && git branch -d "$b" && git push origin --delete "$b"; }; f'`
+  `git config core.hooksPath .githooks`  (per clone, not global — the hook is repo-versioned)
 - **Branch naming & reuse.** One branch per concern, concern-named
   (`fix/validatenight-dedup`), reused across sessions until merged. Claude Code
   `claude/<session-hash>` auto-names are banned for in-flight work — they spawn duplicates.

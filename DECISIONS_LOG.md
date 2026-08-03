@@ -6264,3 +6264,58 @@ shape rather than left permissive; or `create_and_resolve` begins consuming the 
 response, which would make the body load-bearing and invalidate the premise above.
 
 ---
+
+### #NEXT. Number-at-merge is enforced by a pre-push ref guard, not by remembering
+
+**Decision:** `scripts/check_governance_placeholders.py` refuses any push to `master` whose
+`DECISIONS_LOG.md` still carries `^### #NEXT` or whose `OPEN_QUESTIONS.md` still carries
+`^## Q#NEXT`, wired as a repo-versioned `.githooks/pre-push` hook (`git config core.hooksPath
+.githooks`, once per clone, alongside the existing `land`/`stale` aliases). Branch pushes are
+untouched. The rule is added to the shared loop block, so it propagates verbatim to
+`health-connect-app`.
+
+**Rationale:** number-at-merge specified when the integer is claimed and nothing enforced it. The
+placeholder reached master and stayed: `feat/hub-shell` fast-forwarded with its heading still
+reading `#NEXT`, `#163` and `#164` were minted on top, and `#162` became a hole in the canonical
+store. It survived three sessions because the fix kept being written on branches that did not merge
+— the defect and its cure were never on master at the same time. A rule that depends on the person
+merging remembering it has now failed three times; the correct response is to move it out of memory.
+
+**The guard is on the REF, not on `git land`.** This is the load-bearing design choice and it was
+settled by evidence, not preference: the merge that finally healed `#162` was done by hand —
+`git checkout master && git merge --ff-only && git push` — so a guard living inside the `land` alias
+would not have fired for it. The placeholder reaches master by whichever path is convenient that
+day, so the check belongs where master actually changes.
+
+**Anchored on the heading, never a substring (`#113`).** `CLAUDE.md`'s own rule text, `#148`'s
+entry, and every corrected entry legitimately quote the token — a substring match would fire on the
+files that define the convention, get bypassed out of habit, and protect nothing. A guard that cries
+wolf is worse than no guard, because it manufactures the habit that defeats it.
+
+**Fails loud in all three states.** Clean → 0. Placeholder present → 1, printing every offending
+file and line so the matches are read rather than counted. Cannot run (missing file, bad ref) → 2:
+a check that could not run must never be indistinguishable from a check that passed.
+
+**Status:** Decided and built on `gov/next-resolution-guard`. **Shared-block change** — the
+`health-connect-app` copy must be updated byte-identically; recorded as cross-repo debt in `ROADMAP`
+NOW, and it cannot be written from a health-app-rooted session.
+
+**How you know:**
+- 10 tests (`test_governance_placeholder_guard.py`), full suite green.
+- **Positive control is the real defect, not a fixture:** run against `001df4c` — the actual
+  `feat/hub-shell` merge commit that put a live `### #NEXT` on master — the guard exits 1 and names
+  `DECISIONS_LOG.md:5833`. Against `4b247f4` it catches both arms (`### #NEXT` and `## Q#NEXT`).
+- **Negative control:** current `origin/master` exits 0, and the false-positive cases are asserted
+  explicitly — the `CLAUDE.md` rule line that contains the literal token, a correction quoting the
+  superseded token, and a mid-line occurrence all fail to match.
+- **Cannot-run control:** an invalid ref exits 2 with `cannot read`, never 0.
+- End-to-end through the hook itself with crafted stdin: a `refs/heads/master` push of a placeholder
+  ref is refused; the same ref pushed to a branch ref is allowed.
+
+**Do not revisit unless:** the placeholder tokens themselves change form (then the patterns move
+with them), or a second enforcement point is wanted for the `@claude` GitHub Action path — which
+pushes without a local hook and is therefore **not** covered by this guard. That gap is known and
+recorded rather than papered over: the Action is not currently a merge-to-master path, and closing
+it would mean a CI check, not a hook.
+
+---
