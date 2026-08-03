@@ -6171,3 +6171,96 @@ curve); or the dither fails to converge — a wandering centre means the extend/
 biased, first suspects being the Q45 nap exclusion (SE reads high) or the `SE_FLOOR_PCT` threshold.
 
 ---
+
+### #NEXT. The create-response body is not load-bearing — a 2xx must never abort before list-back (patches `#65`/`#164`)
+
+**Decision:** `HevyClient.create_exercise_template` no longer raises on an unparseable
+**success** body. On a 2xx it attempts `.json()`, and on `json.JSONDecodeError` it logs the
+status and the raw bytes and returns `{}`. The typed pre-checks (403 limit, 400 bad body)
+and `_check`'s 401/4xx/5xx raises are untouched — this changes the success path only, and is
+deliberately **not** generalised to the other `.json()` call sites, where the body *is* the
+payload and tolerating a bad parse would convert a real failure into silent empty data.
+
+**Rationale — the throw was destructive, not cosmetic.** The old line was
+`return self._check(r).json()`. By the time it runs, the status is necessarily 2xx: 401 and
+every `is_error` status die inside `_check`, and the 403/400 branches pre-empt it above. So
+**Hevy has already created the template** when the parse fails. `json.JSONDecodeError` is
+not one of the typed connector errors, so it unwound out of `create_and_resolve` before
+steps 4–5 (sync + list-back) ever ran, and surfaced through `_process_exercise_actions`'s
+catch-all as `⚠️ Failed to create custom exercise`.
+
+The resulting state was the worst available combination: the template **live in Hevy**,
+**absent from `hevy_exercise_templates`**, and the user told it had failed. Against an API
+with no delete, a user who believes that message and retries mints a permanent duplicate.
+The only reason no duplicate exists is that Luke checked Hevy and declined to retry.
+
+**The body was never needed.** `create_and_resolve` discards the return of
+`create_exercise_template` entirely and reads the canonical id by list-back — precisely
+because `#65` established that the POST returns an integer id distinct from the canonical
+string UUID. So the parse that broke the flow was decoding a value nothing consumes. That
+asymmetry is the whole decision: a value no caller reads must not be able to abort a
+sequence that has already had an irreversible side effect.
+
+**Why `#164`'s 61 tests passed over a live-broken path.** Every one of them fakes either
+the client or the orchestrator, so each fake returned clean JSON and the real parse never
+executed. A fake installed one layer *above* a defect cannot see it. The new tests fake the
+**transport** (`httpx.AsyncClient.post`) and drive the genuine `HevyClient`, so the parse
+runs. That is the structural lesson, and it generalises past this bug.
+
+**Status:** Decided and landed on `fix/hevy-create-response-parse`. One-function change plus
+tests; no migration, no schema change. `create_and_resolve` needed **no new control flow** —
+with the connector no longer throwing, the "a 2xx always reaches list-back" invariant holds
+automatically, so it is pinned by test rather than defended by a second guard. The trace was
+re-verified against master before changing anything; no other abort point exists between the
+POST and the sync.
+
+**How you know:**
+
+- **The prod failure is identity-level, not inferred.** A live attempt created
+  `Copenhagen Adductor Plank Hip Lift` (Custom · None · Adductors · Glutes) in Luke's Hevy
+  account — visible in-app, screenshotted — while chat returned the failure message. The
+  raised error was `json.JSONDecodeError: Extra data: line 1 column 4 (char 3)`.
+- **What that error string constrains, stated as inference rather than fact:** the body's
+  first three characters form a *complete* JSON document and are followed by further
+  non-whitespace content. It is therefore neither the spec's `{"id": <int>}` (which parses
+  cleanly) nor a bare integer (likewise). **The exact bytes are OWED** — see below.
+- **Trace verified against master**, not taken from the brief: `connectors/hevy.py`
+  `create_exercise_template` ended at `return self._check(r).json()`; `_check` raises on 401
+  and on `response.is_error` and otherwise returns the response, with `.json()` called
+  *outside* it; `create_and_resolve` wraps the POST in no handler; `chat.py`'s catch-all
+  produces the observed message.
+- **16 new tests** in `backend/tests/test_hevy_create_response_tolerance.py`; full suite
+  **690 passed** (master baseline **674** — note this is *not* the brief's 655, which
+  predates `#165`).
+- **Paired negative control:** reverting the connector to `return self._check(r).json()`
+  fails **11 of 16**. The 5 survivors are exactly the tests that must pass either way — the
+  403/400/500/401 typed-error paths and the well-formed-body positive control — so the
+  control discriminates the tolerance from the error handling rather than merely proving the
+  file is reachable.
+- The regression is asserted on the **real captured error shape** (`'123{"id":123}'`,
+  constructed to raise the identical `Extra data: line 1 column 4 (char 3)`), and separately
+  across five other unparseable bodies, so the fix is not keyed to one byte sequence in an
+  endpoint whose true shape is still unknown.
+
+**OWED, not claimed:**
+
+1. **The live response bytes.** The `logger.warning` added here captures `status_code` and
+   the raw body on the next real create; a test asserts the bytes reach the log. Capturing
+   them requires a genuine create, which mints a permanent template — Luke's call, and it
+   needs a *fresh* movement name, since re-attempting the orphan's title now correctly
+   short-circuits to "already in the catalogue" and would prove nothing.
+2. **Prod recovery of the existing orphan.** Confirmed absent from the catalogue
+   (`hevy_exercise_templates` = 499 rows, `max(synced_at)` still 2026-08-02 21:59:50+00; a
+   title search matches only the pre-existing `Copenhagen Plank (Short Lever)`). One
+   `POST /integrations/hevy/sync` upserts it in — no delete, no re-create. Code cannot run
+   it: the endpoint needs a session token, and `railway ssh` (the in-container alternative)
+   is blocked by this environment's permission policy. Expect 499 → 500 and customs 48 → 49.
+3. **`Q77` therefore stays OWED rather than resolved** — see its entry. This decision fixes
+   the defect the watch-point exposed; it does not prove the round-trip.
+
+**Do not revisit unless:** Hevy's create endpoint starts returning a documented, stable body
+that a caller actually needs, at which point the tolerance should be narrowed to the specific
+shape rather than left permissive; or `create_and_resolve` begins consuming the create
+response, which would make the body load-bearing and invalidate the premise above.
+
+---

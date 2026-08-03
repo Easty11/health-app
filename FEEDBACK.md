@@ -980,3 +980,60 @@ attestation, the file is the measurement — and the `#159`→`#160` loop is the
 same string was paraphrased wrong twice, once after an entry was written to fix it. (The session also
 recorded a related pattern — illustrations chosen from the shape of an identifier rather than from data;
 those specific instances are in the session report and are not re-verified here.)
+
+---
+
+## 23. Defer live proof only where failure is non-destructive — and fake BELOW the defect, not above it
+
+**What happened.** `#164` shipped custom-exercise creation with its live proof deliberately
+deferred (option (b)): 61 passing tests, the enum artifact captured from Hevy's live spec, and
+`Q77` filed to record that the real create→list-back round-trip was unproven. The deferral was
+made explicitly, argued, and written down — the process worked as designed.
+
+The first real use then failed, and failed in the one way the deferral had implicitly assumed
+away: **destructively**. `create_exercise_template` ended `return self._check(r).json()`, the
+live 2xx body was not the spec's `{"id": <int>}`, and the parse raised *after* Hevy had already
+created the template. The exception unwound past the sync, so the template was live in Hevy,
+absent from the local catalogue, and reported to the user as "Failed to create" — with a retry
+poised to mint a permanent duplicate against an API with no delete.
+
+**Two distinct lessons, and the second is the more useful one.**
+
+**(1) The deferral criterion is not "how likely is failure" but "what does failure cost".**
+`Q77` weighed the *probability* that the round-trip worked and judged the cost of proving it —
+one permanent exercise — too high. It never asked what an unproven path would do *when* it
+failed. Had it asked, the answer was available from `#164`'s own reasoning: that entry already
+established that Hevy has no delete endpoint, that a create is irreversible, and that
+`HevyCreateUnresolvedError` must forbid a retry precisely because the POST may have succeeded.
+The ingredients for predicting a destructive failure were all in the decision that deferred it.
+
+**Rule going forward:** when deciding whether to defer live verification, classify the failure
+mode first. A path whose failure is **non-destructive and loud** (a 400, a refusal, a visible
+error) may ship unproven with an `OPEN_QUESTIONS` watch-point. A path whose failure can
+**corrupt state, orphan a record, or make an irreversible write invisible** must be probed live
+*before* ship — the live probe is the gate, not the launch. The cost of the probe is bounded and
+known; the cost of a destructive first failure is neither.
+
+**(2) A fake installed above the defect cannot see it.** All 61 of `#164`'s tests faked either
+`create_and_resolve` or the whole `HevyClient`, so every fake returned clean JSON and the real
+`.json()` call never executed. The suite was thorough about *behaviour* and structurally blind
+to *the boundary* — and the boundary is exactly where a third-party API's undocumented
+behaviour lives. The regression tests fake `httpx.AsyncClient.post` instead, one layer **below**
+the defect, so the genuine parse runs; reverting the fix fails 11 of 16.
+
+**Rule going forward:** for any code whose job is to *interpret a third party's response*, at
+least one test must fake at the **transport** layer, not the client layer. If every test for a
+connector stubs the connector, the response-handling code is untested no matter how many tests
+there are. Mock one level below the thing you are testing, never at it.
+
+**The family this belongs to.** §8 recorded landed ≠ live (features inert on an unpopulated prod
+substrate). This is its sharper sibling: **tested ≠ exercised**. §8's failure was a no-op — a
+green suite over a feature doing nothing. This one is worse, because the unexercised path did not
+sit idle; it ran, half-completed an irreversible action, and reported the opposite of what
+happened. A silent no-op wastes effort. A false negative over a completed write invites the user
+to corrupt their own data.
+
+**Cheap tell for next time.** `#164`'s how-you-know contained the sentence *"What is NOT proven:
+no live create was performed."* That sentence is a correct, honest disclosure — and it is also
+the trigger. Any decision whose how-you-know has to write that line about an **irreversible**
+operation should not have shipped without the probe.

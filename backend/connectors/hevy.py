@@ -1,4 +1,5 @@
 import httpx
+import json
 import logging
 from typing import Any
 
@@ -218,4 +219,35 @@ class HevyClient:
             raise HevyBadRequestError(
                 f"Hevy rejected the exercise-template body: {r.text}"
             )
-        return self._check(r).json()
+        checked = self._check(r)
+        # The create-response BODY IS NOT LOAD-BEARING. `create_and_resolve` discards
+        # this return value entirely and reads the canonical id by list-back (#65), so
+        # nothing downstream can be harmed by an unparseable body — but RAISING here is
+        # actively destructive.
+        #
+        # By this line the status is 2xx (401/403/4xx die in `_check`, and the 400/403
+        # branches above pre-empt it), so Hevy has ALREADY created the template. A throw
+        # unwinds past `create_and_resolve`'s sync + list-back, leaving the new template
+        # live in Hevy and absent from `hevy_exercise_templates` — an orphan the app then
+        # reports as "Failed to create". A user who believes that message and retries
+        # mints a permanent duplicate against an API with no delete.
+        #
+        # Observed in prod: the live create returned 2xx with a body that raised
+        # `json.JSONDecodeError: Extra data: line 1 column 4 (char 3)` — the spec's
+        # promised `{"id": <int>}` is not what the endpoint actually sends. So on a 2xx,
+        # a bad parse is logged loudly and swallowed. This changes ONLY the success path;
+        # the typed-error pre-checks above are untouched.
+        #
+        # Deliberately NOT generalised to the other `.json()` call sites: for the GETs the
+        # body IS the payload, and tolerating a bad parse there would turn a real failure
+        # into silent empty data.
+        try:
+            return checked.json()
+        except json.JSONDecodeError:
+            logger.warning(
+                "Hevy create_exercise_template: 2xx with an unparseable body — the "
+                "template WAS created. status=%s body=%r. Returning {} so the caller "
+                "proceeds to sync + list-back rather than orphaning it.",
+                checked.status_code, checked.text,
+            )
+            return {}
