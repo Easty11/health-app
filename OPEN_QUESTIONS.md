@@ -2160,9 +2160,9 @@ The axis to decide first is **what freshness is actually for**: (b) and (c) keep
 
 **Resolve before:** custom-exercise creation (`<hevy_create_exercise>`) is wired to a user-facing surface. Its idempotency pre-check reads this store, so a stale catalogue there mints duplicate templates rather than merely missing a resolution.
 
-## Q#NEXT. The create-enum lists live in two places and nothing detects when Hevy adds a member
+## Q76. The create-enum lists live in two places and nothing detects when Hevy adds a member
 
-**State:** OPEN. **Blocked by:** nothing — round-trip-and-correct is implemented and sufficient; this records the fork rather than gating on it. **Related:** `#NEXT` (the block), `#65` (the create loop), `#83` (correctable-miss pattern).
+**State:** OPEN. **Blocked by:** nothing — round-trip-and-correct is implemented and sufficient; this records the fork rather than gating on it. **Related:** `#164` (the block), `#65` (the create loop), `#83` (correctable-miss pattern).
 
 The three create enums — `CustomExerciseType`, `EquipmentCategory`, `MuscleGroup` — are Hevy's, not ours. They now appear twice in this repo: as prose in `context_builder._section_exercise_creation` (so the model gets them right first time) and as tuples in `chat._CREATE_ENUM_BY_FIELD` (so a 400 can name the valid values). A test asserts the two agree, so they cannot drift from *each other* — but nothing detects them drifting from **Hevy**.
 
@@ -2178,11 +2178,11 @@ This is a live fork rather than settled because (c) is genuinely attractive and 
 
 **Resolve before:** a second surface needs the enums (a UI picker, a validation layer, the companion app), at which point a third copy makes the drift question load-bearing rather than tolerable.
 
-## Q#NEXT+1. The live create→list-back round-trip is unproven — the first real custom-exercise creation is the test
+## Q77. The live create→list-back round-trip is unproven — the first real custom-exercise creation is the test
 
-**State:** OPEN. **Blocked by:** nothing — this is a deliberate, recorded deferral, not a missing dependency. **Related:** `#NEXT` (the block), `#65` (the create loop), `FEEDBACK` §8 (landed ≠ live).
+**State:** OPEN. **Blocked by:** nothing — this is a deliberate, recorded deferral, not a missing dependency. **Related:** `#164` (the block), `#65` (the create loop), `FEEDBACK` §8 (landed ≠ live).
 
-Luke chose to land `#NEXT` on the test suite and the enum artifact rather than mint a permanent custom exercise to prove the path. That is a reasonable trade against an API with no delete — but it leaves a named gap, and an unproven path that nobody has written down is the exact `FEEDBACK` §8 shape this project exists to avoid. So it is written down.
+Luke chose to land `#164` on the test suite and the enum artifact rather than mint a permanent custom exercise to prove the path. That is a reasonable trade against an API with no delete — but it leaves a named gap, and an unproven path that nobody has written down is the exact `FEEDBACK` §8 shape this project exists to avoid. So it is written down.
 
 **Covered by the faked-client tests (`#65`, and this branch's 61):** the idempotency pre-check, the create call and its parsed fields, the sync, list-back within the user's own custom subset, the bounded retry over create-visibility latency, every typed error's message, and unresolved-raises-never-returns-None.
 

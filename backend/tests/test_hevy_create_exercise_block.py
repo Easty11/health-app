@@ -1,4 +1,4 @@
-"""The `<hevy_create_exercise>` block — model-facing custom-exercise creation (#NEXT).
+"""The `<hevy_create_exercise>` block — model-facing custom-exercise creation (#164).
 
 `create_and_resolve` (#65) has been dark since it landed: the only action block `chat.py`
 parsed was `<hevy_create_routine>`, so a movement genuinely absent from the Hevy account

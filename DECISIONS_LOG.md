@@ -5989,7 +5989,7 @@ which is what `_sync_failure` and `_SYNC_ERROR_TYPES` read.
 
 ---
 
-### #NEXT. Custom-exercise creation is an explicit, separately-confirmed block — never a repair for a resolve miss
+### 164. Custom-exercise creation is an explicit, separately-confirmed block — never a repair for a resolve miss
 
 **Decision:** `create_and_resolve` (`#65`) gets a model-facing call site. `chat.py` parses a new
 `<hevy_create_exercise>` block via `_process_exercise_actions`, and `context_builder` gains
@@ -6096,6 +6096,6 @@ are recorded as an open question below.
 
 **Do not revisit unless:** Hevy ships a delete or edit endpoint for exercise templates, which
 removes the permanence premise every call above rests on and would make auto-create-on-miss worth
-re-arguing; or the enum lists drift (`Q#NEXT`).
+re-arguing; or the enum lists drift (`Q76`).
 
 ---

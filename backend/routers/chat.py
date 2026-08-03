@@ -156,7 +156,7 @@ def _annotate_canonical_titles(hevy_data: dict[str, Any], db: Session) -> dict[s
 # (api.hevyapp.com/docs/swagger-ui-init.js, embedded `swaggerDoc`,
 # `CreateCustomExerciseRequestBody`). Held here only to make a 400 CORRECTABLE — the
 # request itself passes the model's strings straight through, so this copy never gates
-# a create and cannot fail closed if Hevy adds a member (Q#NEXT takes round-trip-and-
+# a create and cannot fail closed if Hevy adds a member (Q76 takes round-trip-and-
 # correct over a validating table).
 _CREATE_EXERCISE_TYPES = (
     "weight_reps", "reps_only", "bodyweight_reps", "bodyweight_assisted_reps",
