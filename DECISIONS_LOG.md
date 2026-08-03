@@ -6265,7 +6265,7 @@ response, which would make the body load-bearing and invalidate the premise abov
 
 ---
 
-### #NEXT. Number-at-merge is enforced by a pre-push ref guard, not by remembering
+### 167. Number-at-merge is enforced by a pre-push ref guard, not by remembering
 
 **Decision:** `scripts/check_governance_placeholders.py` refuses any push to `master` whose
 `DECISIONS_LOG.md` still carries `^### #NEXT` or whose `OPEN_QUESTIONS.md` still carries
