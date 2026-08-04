@@ -41,6 +41,16 @@ Execute these steps in order:
    with zero chat history: current sprint (from the `CLAUDE.md` sprint block / `ROADMAP.md`),
    open questions grouped by status, and the single clearest **next action**.
 
+   **The handoff must also name what was NOT touched — explicitly, as its own section.** A
+   close-out lists what moved, and every artifact a session produces points at more of the
+   same kind of work; a reader with no chat history infers the queue from what is written
+   down, so a governance session hands off governance and the next session does more of it
+   because that is what is legible. Name the feature/product work that stood still this
+   session and the questions gating it, even where nothing about them changed — especially
+   then. Where consecutive sessions have gone to instrument rather than to the thing being
+   instrumented, say so in the handoff rather than leaving it to be noticed. Absence is not
+   self-reporting; an unnamed lane reads as a finished one.
+
 6. **Update the CLAUDE.md "Recent landings" block.** Prepend one pointer-only line for
    what landed this session — canonical home only (`#N` in `DECISIONS_LOG.md`, or
    `closeout.md`), no SHAs, no test counts, no decision sub-bullets — then trim to the 3
