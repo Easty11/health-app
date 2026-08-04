@@ -12,14 +12,18 @@
 #   * `pull_request` is the PREVENTION arm. It runs before the merge button is live, so a
 #     placeholder can be stopped rather than merely noticed. It only prevents once BRANCH
 #     PROTECTION requires this check — that is GitHub-side repo config, not committable, and
-#     not in this file. Until it is set, this arm is advisory.
+#     not in this file. It IS set as of 2026-08-05: ruleset `master-pr-gated` (id `20414758`)
+#     requires the `placeholder guard (POSIX)` context by that exact string — the JOB name at
+#     `jobs.guard.name`, not the workflow name above it. Renaming the job silently unbinds the
+#     requirement, because a required context that never reports reads as pending, not failed.
 #   * `push: [master]` is the DETECTION backstop, for anything reaching master outside a PR.
 #     By the time it runs the ref has already moved. Worth having; not the mechanism.
 #
 # THE ENFORCEMENT SPANS THREE LAYERS AND ONLY ONE IS VERSIONED. `core.hooksPath` is per
-# clone, branch protection is per repo, and this file is the only piece with a diff. A fresh
-# clone or a settings change removes enforcement silently. Do not read a green run as proof
-# that all three are in place.
+# clone, the ruleset is per repo, and this file is the only piece with a diff. A fresh
+# clone, a deleted ruleset, or an added bypass actor removes enforcement silently and leaves
+# these runs green. Do not read a green run as proof that all three are in place — read the
+# ruleset: `gh api repos/Easty11/health-app/rules/branches/master` must be non-empty.
 #
 # WHY `ubuntu-latest` IS LOAD-BEARING, NOT INCIDENTAL. Every other control in this project
 # runs on Windows with `core.filemode=false`, and Git for Windows honours a script's shebang

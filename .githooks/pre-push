@@ -7,8 +7,14 @@
 # is convenient that day. Branch pushes are untouched: `### #NEXT` is CORRECT on a
 # branch and only wrong on master.
 #
-# Install (once per clone — same shape as the land/stale aliases):
+# Install (once per clone — same shape as the `stale` alias):
 #   git config core.hooksPath .githooks
+#
+# This is the ONLY enforcement layer every repo in this project shares. What sits above it
+# differs per repo and is deliberately not described here: a repo may also have a CI arm and
+# a ruleset that make a bad merge refusable rather than merely reportable, or it may have
+# neither and rest on this hook alone. Check the repo's own CLAUDE.md below its
+# END SHARED LOOP RULES; do not infer coverage from this file's presence.
 #
 # Bypass, if you ever genuinely must:  git push --no-verify
 #
