@@ -112,16 +112,20 @@ Preserve the existing entry format:
   instant). Eliminates the two-branches-both-claim-#N collision and the
   renumber-on-`--ff` dance.
 - **Number-at-merge is ENFORCED, not trusted.** `scripts/check_governance_placeholders.py`
-  refuses any push to master whose `DECISIONS_LOG.md` still carries `^### #NEXT` or whose
-  `OPEN_QUESTIONS.md` still carries `^## Q#NEXT`. It guards the **ref**, not one command:
+  refuses any push to master whose `DECISIONS_LOG.md` still carries `^#{2,3} #NEXT` or whose
+  `OPEN_QUESTIONS.md` still carries `^#{2,3} Q#NEXT`. It guards the **ref**, not one command:
   the merge that made this necessary was done by hand, so a guard living inside the `land`
   alias would not have fired. Branch pushes are untouched — a placeholder is *correct* on a
   branch and only wrong on master. Anchored on the heading form, never a substring, because
-  the rule text and every corrected entry legitimately quote the token (`#113`). Install
-  once per clone, alongside the aliases: `git config core.hooksPath .githooks`. Bypass is
-  `git push --no-verify`, and needing it twice is a signal the ritual is wrong, not the
-  guard. Earned: the placeholder reached master three sessions running and left a permanent
-  hole at `#162`.
+  the rule text and every corrected entry legitimately quote the token (`#113`). The anchor
+  tolerates the heading **level** and never the **form**: the repos disagree on level —
+  `health-app` heads a question `## Q77.`, `health-connect-app` heads it `### Q8 — …` — so a
+  level-pinned pattern reads one of them as permanently clean, which is a guard that is
+  installed, green and blind. One rule, one implementation, matched to each repo's grammar.
+  Install once per clone, alongside the aliases: `git config core.hooksPath .githooks`.
+  Bypass is `git push --no-verify`, and needing it twice is a signal the ritual is wrong,
+  not the guard. Earned: the placeholder reached master three sessions running and left a
+  permanent hole at `#162`.
 
 ### Session rituals (the contract the close-outs conform to)
 
@@ -129,10 +133,14 @@ The trigger is not the payload. The payload is defined here; the snippet/command
 must match it.
 
 - **Session open** — at session start, before acting on any brief, Code reports the current
-  `DECISIONS_LOG.md` max decision number — counted period-agnostically with `^### [0-9]+`,
-  never `^### [0-9]+\.`, because entries `126`–`128` carry no trailing period and a
-  period-requiring sweep undercounts by three and invents phantom gaps (verified 2026-08-02).
-  Chat re-aims any brief against it, so a stale project copy never masquerades as canon.
+  `DECISIONS_LOG.md` max decision number — counted with `^### #?[0-9]+`, never
+  `^### [0-9]+\.` and never `^### [0-9]+`. **Period-agnostic** because `health-app` entries
+  `126`–`128` carry no trailing period and a period-requiring sweep undercounts by three and
+  invents phantom gaps (verified 2026-08-02). **Sigil-agnostic** because `health-connect-app`
+  heads every entry `### #21 — …`, which `^### [0-9]+` matches **zero** times — a
+  shared-block rule that reports a max of 0 in one of the repos it governs, and reports it
+  as fact (verified against both trees 2026-08-04). Chat re-aims any brief against it, so a
+  stale project copy never masquerades as canon.
 - **Chat close-out (`;cc`)** emits the **pending-commit queue**: canonical-format
   `DECISIONS_LOG` / `OPEN_QUESTIONS` entries for everything decided that session, each
   flagged `PENDING`, ready to paste or file as an issue with zero reformatting. Writes

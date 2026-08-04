@@ -71,6 +71,25 @@ def test_does_not_fire_mid_line():
     assert not DECISIONS_PATTERN.search("see ### #NEXT for the convention\n")
 
 
+# ── it works in the OTHER repo's grammar too (one rule, one implementation) ──
+
+def test_fires_on_the_health_connect_app_question_heading_level():
+    """HCA heads a question `### Q8 — …  ·  OWED`, health-app heads it `## Q77.`. A
+    `^## Q#NEXT`-only pattern reads HCA as permanently clean: installed, green, blind.
+    Verified against both trees 2026-08-04."""
+    assert QUESTIONS_PATTERN.search("### Q21 — Prior\n\n### Q#NEXT — A new fork  ·  OPEN\n")
+
+
+def test_fires_on_the_health_connect_app_decision_heading():
+    """HCA heads a decision `### #21 — …  ·  active` — sigil, em-dash, trailing state."""
+    assert DECISIONS_PATTERN.search("### #21 — Prior  ·  active\n\n### #NEXT — A decision  ·  active\n")
+
+
+def test_still_does_not_fire_on_resolved_headings_in_either_grammar():
+    assert not DECISIONS_PATTERN.search("### #21 — A decision  ·  active\n")
+    assert not QUESTIONS_PATTERN.search("### Q8 — Shared block parity  ·  OWED\n")
+
+
 # ── end to end, through the real script ──────────────────────────────────────
 
 def _run(*args):

@@ -33,9 +33,19 @@ from pathlib import Path
 # token it superseded, and several do. Anchoring on the heading form means prose about
 # the convention — CLAUDE.md's own rule text, #148's entry, historical BRANCHES rows —
 # is not a false positive, and the matches are printed so they are read, not counted.
+#
+# HEADING LEVEL IS TOLERATED, HEADING FORM IS NOT. This script is one implementation of
+# one rule across every repo in the project, so it must match each repo's grammar. The
+# two stores do not agree on level: `health-app/OPEN_QUESTIONS.md` heads a question `##
+# Q77.` while `health-connect-app/OPEN_QUESTIONS.md` heads it `### Q8 — …  ·  OWED`
+# (verified against both trees 2026-08-04). A `^## Q#NEXT`-only pattern therefore reads
+# HCA as permanently clean — installed, green, and blind, which is worse than absent
+# because the next session stops checking by hand. `{2,3}` covers both without loosening
+# the anchor: the token must still open a heading. Decision headings are `### ` in both
+# repos today; the level is generalised there too so the two arms cannot drift apart.
 CHECKS = [
-    ("DECISIONS_LOG.md", re.compile(r"^### #NEXT\b.*$", re.M), "### #NEXT"),
-    ("OPEN_QUESTIONS.md", re.compile(r"^## Q#NEXT\b.*$", re.M), "## Q#NEXT"),
+    ("DECISIONS_LOG.md", re.compile(r"^#{2,3} #NEXT\b.*$", re.M), "a #NEXT decision heading"),
+    ("OPEN_QUESTIONS.md", re.compile(r"^#{2,3} Q#NEXT\b.*$", re.M), "a Q#NEXT question heading"),
 ]
 
 

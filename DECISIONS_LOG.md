@@ -6408,3 +6408,71 @@ second consumer needs the same list, which would make `catalogue_titles`' scope 
 worth asserting rather than merely shared.
 
 ---
+
+### #NEXT. The `#167` guard was written for one repo's heading grammar; generalised before propagation, not after
+
+**Decision:** the placeholder patterns in `scripts/check_governance_placeholders.py` tolerate the
+heading **level** (`^#{2,3}`) while still pinning the heading **form**, and the shared-block
+session-open sweep becomes `^### #?[0-9]+` — sigil-agnostic as well as period-agnostic. Both changes
+land in `health-app` **before** anything is copied to `health-connect-app`, because the script is one
+implementation of one rule and fixing it in the copy would mint a second master one layer beneath the
+shared block. Extends `#167`; supersedes nothing.
+
+**The defect, stated exactly.** Two arms, both verified against both trees on 2026-08-04:
+
+- **Session-open sweep — a false max, reported as fact.** The shared block instructs Code to count
+  `^### [0-9]+`. `health-app` heads an entry `### 166.`; `health-connect-app` heads it
+  `### #21 — …  ·  active`. `grep -cE '^### [0-9]+' DECISIONS_LOG.md` returns **168** in `health-app`
+  and **0** in `health-connect-app`. A shared-block rule that reports a max of zero in one of the two
+  repos it governs is not a stale number — it is an instrument that reads empty and says so
+  confidently, at the exact moment of the session whose whole purpose is to establish canon.
+- **Guard question arm — a false green.** `CHECKS` pinned `^## Q#NEXT`. `health-app` heads a question
+  `## Q77.`; `health-connect-app` heads it `### Q8 — …  ·  OWED`. Copied unchanged, the question arm
+  can never fire in `health-connect-app`: installed, green, and blind. The decision arm was already
+  safe — both repos head a decision `### `, and the placeholder token is `### #NEXT` in both — so
+  exactly one of the two arms was broken, which is the shape most likely to be missed.
+
+**The trap was real; its location was not where the brief put it.** The chat brief predicted the
+break in the guard's *integer* anchor, reasoning that `^### [0-9]+` would not match `### #16 —`. The
+guard has no integer anchor — it matches the literal placeholder token and never computes a max. The
+`^### [0-9]+` the brief was reaching for is in the **session-open ritual**, a different bullet of the
+same shared block, and there the prediction is correct and worse than predicted: not a guard that
+fails to fire but a count that returns zero. Recorded because the near-miss is the lesson — a
+correctly-reasoned failure mode aimed at the wrong artefact still has to be re-derived against the
+tree before it can be believed or dismissed, and dismissing it on "the brief was wrong about the
+script" would have shipped the propagation with the real hole intact.
+
+**Tolerate the level, never the form.** `{2,3}` is not a loosening toward substring matching — the
+token must still open a heading, so `#113`'s false-positive shapes (the rule text quoting the token,
+a correction quoting what it superseded, a mid-line occurrence) remain non-matches and are still
+asserted. The decision arm is generalised alongside the question arm despite not needing it today, so
+the two cannot drift into disagreeing about what a heading is.
+
+**How you know:**
+- **Positive control, the real defect and not a fixture** — `001df4c`, the `feat/hub-shell` merge that
+  put a live `### #NEXT` on master, still exits **1** and names the line post-change; `4b247f4` still
+  catches **both** arms. A widened pattern that lost the original control would be a regression, not a
+  generalisation.
+- **Negative controls** — clean working tree **0**, `master` **0**, unreadable ref **2** (never 0).
+- **Cross-repo cases pinned in tests** — a `### Q#NEXT — …  ·  OPEN` question heading and a
+  `### #NEXT — …  ·  active` decision heading both fire; the resolved `health-connect-app` forms
+  (`### #21 — …`, `### Q8 — …`) do not. **3 new tests**; suite **722 passed**.
+- **Hook end-to-end, crafted stdin, all four paths** — master push carrying the placeholder
+  **REFUSED (1)**; the same ref pushed to a branch **ALLOWED (0)**; clean master **ALLOWED (0)**;
+  zero-sha deletion **ALLOWED (0)**.
+- **The counts are file evidence, not inference** — `168` / `0` under the old anchor and `168` / `21`
+  under the new one, read off both `DECISIONS_LOG.md` files on disk.
+
+**Status:** Decided and built on `gov/placeholder-guard-cross-repo`. **Shared-block change** — the
+`health-connect-app` copy must be updated byte-identically. The propagation itself (`.githooks/` +
+script copy, install, HCA `DECISIONS_LOG` / `OPEN_QUESTIONS` / `BRANCHES` rows) is **not** done here
+and cannot be: this session is `health-app`-rooted, and loop work in a second repo requires an
+HCA-rooted session. Carried in `ROADMAP` NOW as cross-repo debt, now with the generalisation as its
+precondition rather than its follow-up.
+
+**Do not revisit unless:** a third repo joins the project with a heading grammar outside `##`/`###`,
+at which point the honest fix is to derive the pattern from a per-repo declaration rather than widen
+it again; or the `@claude` Action's uncovered push path is closed, which needs a CI check and not a
+hook, and would make the hook the second of two implementations rather than the only one.
+
+---
