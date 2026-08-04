@@ -249,8 +249,12 @@ must match it.
   master depends on enforcement config that exists in one repo and not another, so it is
   repo-local by the boundary criterion above, and a `--global` alias cannot hold two bodies.
   Each repo defines its own `land` with `git config --local` and documents it below its own
-  `END SHARED LOOP RULES`. Disposition, the ledger, and the terminal-state gate are unchanged
-  by this and remain shared.
+  `END SHARED LOOP RULES`. **Repo-local config is NOT cloned**, so that alias joins
+  `core.hooksPath` as per-clone setup a fresh checkout silently lacks — two unversioned things,
+  both absent by default, neither of which announces itself. Every repo lists its full
+  fresh-clone setup below its own `END SHARED LOOP RULES`; do not assume a clone is configured
+  because the repo is. Disposition, the ledger, and the terminal-state gate are unchanged by
+  this and remain shared.
 - **Branch naming & reuse.** One branch per concern, concern-named
   (`fix/validatenight-dedup`), reused across sessions until merged. Claude Code
   `claude/<session-hash>` auto-names are banned for in-flight work — they spawn duplicates.
@@ -300,6 +304,24 @@ sits here and not in the shared block.
   the least durable surface available, which is the exact property that made the placeholder
   guard necessary in the first place. Uniqueness-and-gaplessness belongs in the guard, where
   it binds every path and every clone. `stale` stays global and unchanged.
+
+**Fresh-clone setup — health-app.** Two unversioned settings, both absent in a new clone, and
+neither fails loudly: a missing hook means placeholders push without complaint, and a missing
+alias means `land` is simply not a command. Run both, then verify:
+
+    git config core.hooksPath .githooks
+    git config --local alias.land '!f() { gh pr merge "$(git branch --show-current)" --merge --delete-branch; }; f'
+
+`git config --get core.hooksPath` must return `.githooks`. For the alias the check **must be
+`git config --local --get alias.land`** — with `--local` omitted, `git config --get` reads the
+*merged* config and happily returns the **old global ff-only body**, so an unconfigured clone
+reads as configured while carrying an alias the ruleset refuses. Verified 2026-08-05: the bare
+form returned the global body on a clone where the local alias was absent. A control that
+cannot tell the two apart is not a control (`#103` — discriminate on identity, not function).
+`stale` is global and comes with the machine, not the clone. The ruleset
+is server-side and needs nothing locally — but it is the reason a missing `land` is an
+inconvenience rather than a hazard: without it the merge simply is not made, and the old
+ff-only body would be refused by the server anyway.
 
 ### Conventions
 
