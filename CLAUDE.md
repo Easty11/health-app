@@ -396,9 +396,10 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The pull request becomes the sole route to master (#171, #172)** - `#40` rule 1 had asserted a single merge path since the day it landed while master had in fact accepted two; a ruleset now refuses every non-PR route, and merge-path mechanics leave the shared block under a new boundary criterion. `OPEN_QUESTIONS` Q80. See DECISIONS_LOG #171, #172.
+
 - **Placeholder guard gains a CI surface (#170)** - the guard now runs on `ubuntu-latest` on `pull_request` + `push`, closing `Q79` - whose named agent turned out not to exist; the real uncovered path is the web-UI merge button. First POSIX control surface either repo has had. See DECISIONS_LOG #170.
 - **Governance rules generalised across repo heading grammars (#169)** - three shared-block anchors were pinned to `health-app`'s own grammar and read empty against `health-connect-app`; propagation now requires verifying the source against the destination first. `FEEDBACK` §24, `OPEN_QUESTIONS` Q79. See DECISIONS_LOG #169.
-- **Whole exercise catalogue shown to the model (#168)** - `#61`'s capability was shipped and never surfaced; the model now sees the catalogue rather than guessing at it. See DECISIONS_LOG #168.
 
 ---
 
