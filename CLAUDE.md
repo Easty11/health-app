@@ -213,6 +213,18 @@ must match it.
 
 - **Windows / PowerShell only.** No Linux syntax — no `head`, no backslash line
   continuation. Single-line, or PowerShell backtick continuation.
+  **PowerShell-safe is not the same as Linux-syntax-free, and the difference is a quoting
+  bug, not a style one.** PowerShell re-quotes arguments when it hands them to a native
+  executable, and **embedded double quotes do not survive** — a single-quoted PowerShell
+  string containing `"` reaches `git`/`gh` split across several arguments. It fails with
+  whatever that program says about wrong argument counts, never with anything naming quoting:
+  `git config --local alias.land '…"$(git branch --show-current)"…'` returns
+  `error: no action specified`, which reads like a missing flag. **So a command written for
+  this project must avoid embedded double quotes in its argument, not merely avoid `head`**,
+  and a command Code emits for Luke to run must be exercised in **PowerShell** — Code's own
+  Bash tool passes these strings cleanly and will never reproduce the failure. Earned
+  2026-08-05: the `land` body documented at `#171` was Bash-verified, committed, and then
+  refused on first use.
 - **Verify before design.** Verify data paths end-to-end before designing against them.
   Standing rule after the HRV pipeline failure.
 - **Empirical specificity.** A recorded test result must state the exact pathway
@@ -304,13 +316,20 @@ sits here and not in the shared block.
   the least durable surface available, which is the exact property that made the placeholder
   guard necessary in the first place. Uniqueness-and-gaplessness belongs in the guard, where
   it binds every path and every clone. `stale` stays global and unchanged.
+  **Thin also means no `!f() { … }; f` wrapper and no subshell.** That shape exists to handle
+  `$1`, and `gh pr merge` needs no argument — "without an argument, the pull request that
+  belongs to the current branch is selected" (`gh pr merge --help`). Dropping it removes the
+  embedded double quotes, which is what makes the body enterable from PowerShell at all: see
+  the PowerShell-safe rule above. `stale` keeps its wrapper because it genuinely takes `${1}`,
+  and its `"${1:-HEAD}"` is why `stale` must be installed from a shell that preserves quotes
+  (it was, once, and has not needed reinstalling since).
 
 **Fresh-clone setup — health-app.** Two unversioned settings, both absent in a new clone, and
 neither fails loudly: a missing hook means placeholders push without complaint, and a missing
 alias means `land` is simply not a command. Run both, then verify:
 
     git config core.hooksPath .githooks
-    git config --local alias.land '!f() { gh pr merge "$(git branch --show-current)" --merge --delete-branch; }; f'
+    git config --local alias.land '!gh pr merge --merge --delete-branch'
 
 `git config --get core.hooksPath` must return `.githooks`. For the alias the check **must be
 `git config --local --get alias.land`** — with `--local` omitted, `git config --get` reads the
