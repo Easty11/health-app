@@ -6409,7 +6409,7 @@ worth asserting rather than merely shared.
 
 ---
 
-### #NEXT. The `#167` guard was written for one repo's heading grammar; generalised before propagation, not after
+### 169. The `#167` guard was written for one repo's heading grammar; generalised before propagation, not after
 
 **Decision:** the placeholder patterns in `scripts/check_governance_placeholders.py` tolerate the
 heading **level** (`^#{2,3}`) while still pinning the heading **form**, and the shared-block
@@ -6496,7 +6496,7 @@ two bullets into one sentence. Truncation announces itself, paraphrase does not,
 is generated from the same surface as the claim. The operative half for Code is in that row: a misaimed
 finding is not a false one — re-derive it against the tree before acting on it **or dismissing it**.
 
-**Also minted here:** `OPEN_QUESTIONS` `Q#NEXT`, for the `@claude` Action's unguarded push path.
+**Also minted here:** `OPEN_QUESTIONS` `Q79`, for the `@claude` Action's unguarded push path.
 `#167` recorded that gap knowingly, but only in its own entry and a `BRANCHES` row — append-only
 history and a row that dies at merge, neither of them a tracked item. So a reader of the store whose
 job is *what is undecided* saw a fully-enforced guard, and the propagation brief's instruction to
@@ -6505,7 +6505,7 @@ instrument reading green over a surface it cannot observe.
 
 **Do not revisit unless:** a third repo joins the project with a heading grammar outside `##`/`###`,
 at which point the honest fix is to derive the pattern from a per-repo declaration rather than widen
-it again; or the `@claude` Action's uncovered push path is closed (`Q#NEXT`), which needs a CI check
+it again; or the `@claude` Action's uncovered push path is closed (`Q79`), which needs a CI check
 and not a hook, and would make the hook the second of two implementations rather than the only one.
 
 ---

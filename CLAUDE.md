@@ -310,9 +310,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Governance rules generalised across repo heading grammars (#169)** - three shared-block anchors were pinned to `health-app`'s own grammar and read empty against `health-connect-app`; propagation now requires verifying the source against the destination first. `FEEDBACK` §24, `OPEN_QUESTIONS` Q79. See DECISIONS_LOG #169.
 - **Whole exercise catalogue shown to the model (#168)** - `#61`'s capability was shipped and never surfaced; the model now sees the catalogue rather than guessing at it. See DECISIONS_LOG #168.
 - **Number-at-merge enforced, not trusted (#167)** - a pre-push ref guard refuses a master push carrying an unresolved `### #NEXT`. See DECISIONS_LOG #167.
-- **Hevy create-response parse fix (#166)** - a 2xx create no longer aborts before list-back; the false-negative-plus-orphan failure is closed, and `FEEDBACK` §23.1 adds the irreversible-write pre-ship gate. See DECISIONS_LOG #166.
 
 ---
 
