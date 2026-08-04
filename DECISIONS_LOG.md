@@ -6470,9 +6470,16 @@ and cannot be: this session is `health-app`-rooted, and loop work in a second re
 HCA-rooted session. Carried in `ROADMAP` NOW as cross-repo debt, now with the generalisation as its
 precondition rather than its follow-up.
 
+**Also minted here:** `OPEN_QUESTIONS` `Q#NEXT`, for the `@claude` Action's unguarded push path.
+`#167` recorded that gap knowingly, but only in its own entry and a `BRANCHES` row — append-only
+history and a row that dies at merge, neither of them a tracked item. So a reader of the store whose
+job is *what is undecided* saw a fully-enforced guard, and the propagation brief's instruction to
+mint an HCA row "mirroring health-app's" had nothing to mirror. Same shape as the defect above: an
+instrument reading green over a surface it cannot observe.
+
 **Do not revisit unless:** a third repo joins the project with a heading grammar outside `##`/`###`,
 at which point the honest fix is to derive the pattern from a per-repo declaration rather than widen
-it again; or the `@claude` Action's uncovered push path is closed, which needs a CI check and not a
-hook, and would make the hook the second of two implementations rather than the only one.
+it again; or the `@claude` Action's uncovered push path is closed (`Q#NEXT`), which needs a CI check
+and not a hook, and would make the hook the second of two implementations rather than the only one.
 
 ---

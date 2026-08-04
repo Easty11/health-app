@@ -2237,3 +2237,21 @@ Candidates, none costed:
 is tuning the instrument to the outcome, and Q45's whole point is that the referent is unknown.
 
 **Resolve by:** the second user onboarding to the CBT-I module, whichever comes first with Q45.
+
+---
+
+## Q#NEXT. The `#167` guard cannot see the `@claude` Action's pushes, and until now that gap lived only in prose
+
+**State:** OPEN. **Related:** `#167` (the guard), `#NEXT` (the cross-repo generalisation), `Q59` (nothing verifies the deployable artifact — adjacent, not the same hole), `ROADMAP` NOW cross-repo row.
+
+`core.hooksPath` is a **per-clone, client-side** setting. It cannot bind a runner. The `@claude` GitHub Action pushes from a checkout that never ran `git config core.hooksPath .githooks`, so every push on that path is unguarded — a placeholder can reach master exactly as it did three sessions running before `#167`, by the one route the guard structurally cannot watch.
+
+**Why this is being minted now rather than at `#167`.** The gap was known and deliberately recorded when `#167` landed — but only inside the decision entry's prose and its `BRANCHES` row. Neither is a tracked item: a decision entry is append-only history, and a `BRANCHES` row dies when the branch merges. So the hole had **no home that would outlive the branch that found it**, and a reader of `OPEN_QUESTIONS` — the store whose entire job is "what is undecided" — would have seen a fully-enforced guard. That is the same shape as the defect `#NEXT` just fixed: an instrument that reads green over a surface it cannot observe. The propagation brief asked for an HCA row "mirroring health-app's" and there was nothing to mirror.
+
+**What closing it requires is a CI check, not a hook.** A workflow step running `python scripts/check_governance_placeholders.py --ref "$GITHUB_SHA"` on pushes to master would cover every path into the ref including the Action's, and the script already exits 0/1/2 with 2 reserved for cannot-run, so it is CI-shaped as written. The open forks are whether it duplicates the hook or replaces it (two implementations of one rule is the failure `#NEXT` names), and whether a branch-protection rule is wanted so the check is required rather than merely reported.
+
+**Blocked by:** nothing — this is buildable now. It is unstarted, not blocked.
+
+**Do not resolve by:** asserting the Action does not push governance files. It merges branches and lands entries; that is the point of it, and "it probably will not" is the class of reasoning `#162` was created by.
+
+**Mirror obligation:** `health-connect-app` inherits this hole verbatim on propagation and must mint the same row. Two repos with the same hole recorded is honest; two repos with the same hole and one of them silent is how it survives another four sessions.
