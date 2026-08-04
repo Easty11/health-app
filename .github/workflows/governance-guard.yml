@@ -1,0 +1,104 @@
+# Governance guard on a surface a client-side hook cannot reach.
+#
+# WHY THIS EXISTS. `#167` put the placeholder guard in `.githooks/pre-push`, installed per
+# clone with `git config core.hooksPath .githooks`. That is client-side by construction, so
+# it cannot bind any ref update GitHub performs on its own server — and this repo's history
+# has five of them: `e62f89f`, `0aa0200`, `f4b538f`, `cb1b58f`, `9f9437c`, all committed by
+# `GitHub <noreply@github.com>`, i.e. the web-UI merge button. `Q79` originally attributed
+# this gap to the `@claude` Action; health-app has no `.github` directory in any commit on
+# any ref, so that agent never existed here. The gap is real, the agent was the merge button.
+#
+# PREVENTION vs DETECTION — read this before trusting the job's green.
+#   * `pull_request` is the PREVENTION arm. It runs before the merge button is live, so a
+#     placeholder can be stopped rather than merely noticed. It only prevents once BRANCH
+#     PROTECTION requires this check — that is GitHub-side repo config, not committable, and
+#     not in this file. Until it is set, this arm is advisory.
+#   * `push: [master]` is the DETECTION backstop, for anything reaching master outside a PR.
+#     By the time it runs the ref has already moved. Worth having; not the mechanism.
+#
+# THE ENFORCEMENT SPANS THREE LAYERS AND ONLY ONE IS VERSIONED. `core.hooksPath` is per
+# clone, branch protection is per repo, and this file is the only piece with a diff. A fresh
+# clone or a settings change removes enforcement silently. Do not read a green run as proof
+# that all three are in place.
+#
+# WHY `ubuntu-latest` IS LOAD-BEARING, NOT INCIDENTAL. Every other control in this project
+# runs on Windows with `core.filemode=false`, and Git for Windows honours a script's shebang
+# regardless of its mode bit. That substrate cannot express a mode defect, so no number of
+# Windows controls could ever have caught `#23` (the propagated hook landing non-executable
+# in `health-connect-app`). Step 2a/2b below are the first surface in either repo on which
+# that class is observable at all.
+
+name: governance-guard
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: placeholder guard (POSIX)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the ref under test
+        uses: actions/checkout@v4
+        with:
+          # The guard reads stores with `git show <ref>:<path>`, and 2b needs origin/master
+          # as a known-clean ref. A shallow clone has neither.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # ── 2a ── assertion: the hook's TRACKED mode, independent of any filesystem ────────
+      # Reads the index, so it is the same answer on any platform — including the Windows
+      # clones where `core.filemode=false` makes the working-tree bit meaningless. This is
+      # the arm that names `#23` in a legible error instead of a mysterious skip.
+      - name: 2a - hook tracked mode is 100755
+        run: |
+          set -euo pipefail
+          entry="$(git ls-files -s .githooks/pre-push)"
+          if [ -z "$entry" ]; then
+            echo "::error::.githooks/pre-push is not tracked. The hook cannot be installed from a file that is not in the index."
+            exit 1
+          fi
+          mode="$(printf '%s' "$entry" | awk '{print $1}')"
+          echo "tracked mode: $mode  ($entry)"
+          if [ "$mode" != "100755" ]; then
+            echo "::error file=.githooks/pre-push::tracked mode is $mode, expected 100755. A non-executable hook is silently skipped by git on POSIX and silently HONOURED on Windows (shebang), so it fails open in exactly one direction. See DECISIONS_LOG #23. Fix: git update-index --chmod=+x .githooks/pre-push"
+            exit 1
+          fi
+
+      # ── 2b ── execution: run the hook the way git runs it, not the way we hope it runs ──
+      # Invoked directly, NOT via `python scripts/...`. On a POSIX runner a mode-100644 hook
+      # dies here with EACCES. 2a explains the failure; this proves it is real. An assertion
+      # without an execution is a claim; an execution without an assertion is a puzzle.
+      - name: 2b - hook executes as git would execute it, on a known-clean ref
+        run: |
+          set -euo pipefail
+          git fetch origin master --quiet
+          clean_sha="$(git rev-parse origin/master)"
+          zero="0000000000000000000000000000000000000000"
+          echo "feeding pre-push stdin for origin/master ($clean_sha)"
+          # stdin contract: <local ref> <local sha> <remote ref> <remote sha>
+          printf 'refs/heads/master %s refs/heads/master %s\n' "$clean_sha" "$zero" \
+            | ./.githooks/pre-push
+          echo "hook executed and exited 0 on a clean ref"
+
+      # ── 2c ── the enforcement itself: the ref that would land ─────────────────────────
+      # On `push` HEAD is the pushed commit. On `pull_request` HEAD is the merge commit
+      # GitHub computed — i.e. the tree that WOULD land, not the branch tip in isolation,
+      # which is the ref the question actually asks about.
+      - name: 2c - placeholder guard against the ref under test
+        run: |
+          set -euo pipefail
+          echo "event: ${{ github.event_name }}   HEAD: $(git rev-parse HEAD)"
+          python scripts/check_governance_placeholders.py --ref HEAD
+          echo "guard exited 0: no unresolved governance placeholder would reach master"

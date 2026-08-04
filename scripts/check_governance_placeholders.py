@@ -11,7 +11,24 @@ WHY A REF CHECK AND NOT A `git land` GUARD. The merge that finally healed it was
 hand — `git checkout master && git merge --ff-only && git push` — not through the `land`
 alias. A guard living only in that alias would not have fired for it, which is the whole
 failure mode: the placeholder reaches master by whichever path is convenient that day.
-So the check runs against the ref being pushed, and the alias calls the same script.
+So the check runs against the ref being pushed.
+
+WHICH SURFACES ACTUALLY RUN THIS. Two, and neither is the `land` alias — an earlier version
+of this docstring claimed "the alias calls the same script" and it never did; the alias body
+is `checkout && merge --ff-only && push && branch -d && push --delete`, with no call to
+anything here (verified 2026-08-04). The real set:
+
+  * `.githooks/pre-push` — client-side, per clone, `git config core.hooksPath .githooks`.
+    Covers pushes from a configured working copy. Cannot bind anything else.
+  * `.github/workflows/governance-guard.yml` — `ubuntu-latest`, on `pull_request` (before
+    the merge button is live) and on `push` to master (backstop). Covers the server-side ref
+    updates a client hook structurally cannot see: this repo's history carries five web-UI
+    merges committed by `GitHub <noreply@github.com>`.
+
+The PR arm only PREVENTS once branch protection requires the check — GitHub-side repo
+config, not committable, not in this tree. Absent that it reports rather than blocks. Two of
+the three enforcement layers are unversioned config; a green run is not evidence they are
+installed.
 
 Exit 0 = clean. Exit 1 = a placeholder would reach master. Exit 2 = the check itself
 could not run (missing file, bad ref) — never silently pass, because a check that cannot
