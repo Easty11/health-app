@@ -6663,6 +6663,16 @@ merge path was never exercised to completion here because nothing was permitted 
 the opposite (remote-only); that assertion is unproven in both directions, and `#41`'s gate is written to be
 correct either way.
 
+**RESOLVED 2026-08-05 — this note postdates the locked entry and closes a recorded unknown; it changes no
+decision.** This entry's own landing supplied the evidence. `gh pr merge 16 --merge --delete-branch` was run
+against PR #16, the PR carrying this entry; immediately afterwards `git branch --show-current` returned
+`master` and `chore/merge-path-pr-migration` was absent from `git branch`. So `--delete-branch` deletes the
+**local** branch and switches to the default branch on the merge path exactly as it does on the close path —
+the brief's remote-only claim is disproven for both. Stated to its actual scope: this is `gh` 2.93.0 run from
+a working copy checked out on the branch being merged; it says nothing about a merge invoked from elsewhere.
+`#41`'s gate needs no change and got none — it was re-read this session and its local arm remains correct,
+because a branch abandoned without a PR still never reaches this path at all.
+
 **Do not revisit unless:** the ruleset is disabled, deleted, or gains a bypass actor — enforcement is
 unversioned and leaves no diff, so this entry is the only in-tree record that it is expected; the job name at
 `jobs.guard.name` changes, which silently unbinds the required context (a context that never reports reads
