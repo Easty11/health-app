@@ -312,8 +312,13 @@ alias means `land` is simply not a command. Run both, then verify:
     git config core.hooksPath .githooks
     git config --local alias.land '!f() { gh pr merge "$(git branch --show-current)" --merge --delete-branch; }; f'
 
-`git config --get core.hooksPath` must return `.githooks`; `git config --get alias.land` must
-return the body above. `stale` is global and comes with the machine, not the clone. The ruleset
+`git config --get core.hooksPath` must return `.githooks`. For the alias the check **must be
+`git config --local --get alias.land`** — with `--local` omitted, `git config --get` reads the
+*merged* config and happily returns the **old global ff-only body**, so an unconfigured clone
+reads as configured while carrying an alias the ruleset refuses. Verified 2026-08-05: the bare
+form returned the global body on a clone where the local alias was absent. A control that
+cannot tell the two apart is not a control (`#103` — discriminate on identity, not function).
+`stale` is global and comes with the machine, not the clone. The ruleset
 is server-side and needs nothing locally — but it is the reason a missing `land` is an
 inconvenience rather than a hazard: without it the merge simply is not made, and the old
 ff-only body would be refused by the server anyway.
