@@ -6601,3 +6601,7 @@ non-Windows dev clone appears, which would make the mode class locally visible a
 to the enforcement half.
 
 ---
+
+### #NEXT. SCRATCH PROBE — must never merge
+
+**Decision:** placeholder probe for ruleset 20414758. Delete this branch.
