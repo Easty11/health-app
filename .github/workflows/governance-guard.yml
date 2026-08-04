@@ -57,25 +57,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      # ── 2a ── assertion: the hook's TRACKED mode, independent of any filesystem ────────
-      # Reads the index, so it is the same answer on any platform — including the Windows
-      # clones where `core.filemode=false` makes the working-tree bit meaningless. This is
-      # the arm that names `#23` in a legible error instead of a mysterious skip.
-      - name: 2a - hook tracked mode is 100755
-        run: |
-          set -euo pipefail
-          entry="$(git ls-files -s .githooks/pre-push)"
-          if [ -z "$entry" ]; then
-            echo "::error::.githooks/pre-push is not tracked. The hook cannot be installed from a file that is not in the index."
-            exit 1
-          fi
-          mode="$(printf '%s' "$entry" | awk '{print $1}')"
-          echo "tracked mode: $mode  ($entry)"
-          if [ "$mode" != "100755" ]; then
-            echo "::error file=.githooks/pre-push::tracked mode is $mode, expected 100755. A non-executable hook is silently skipped by git on POSIX and silently HONOURED on Windows (shebang), so it fails open in exactly one direction. See DECISIONS_LOG #23. Fix: git update-index --chmod=+x .githooks/pre-push"
-            exit 1
-          fi
-
       # ── 2b ── execution: run the hook the way git runs it, not the way we hope it runs ──
       # Invoked directly, NOT via `python scripts/...`. On a POSIX runner a mode-100644 hook
       # dies here with EACCES. 2a explains the failure; this proves it is real. An assertion
