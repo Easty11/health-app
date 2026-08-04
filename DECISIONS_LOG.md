@@ -6601,3 +6601,128 @@ non-Windows dev clone appears, which would make the mode class locally visible a
 to the enforcement half.
 
 ---
+
+### 171. The pull request becomes the sole route to master; `land` rewritten around `gh`
+
+**Decision:** master is reachable only by pull request, gated by the `placeholder guard (POSIX)` required
+status check. Ruleset `master-pr-gated` (id `20414758`) requires a PR, requires that check under a strict
+up-to-date policy, forbids non-fast-forward, and carries **no bypass actors**. The `land` alias is
+**rewritten, not retired** — `git push -u origin <branch>` then `gh pr create --fill --base master` then
+`gh pr merge --merge --delete-branch` — so the whole motion stays in the terminal and in Code's hands; no
+part of it moves to a browser or to a second operator. `--auto` and `--admin` are both excluded by name.
+`stale` is unchanged and stays global; `land` becomes **repo-local** (`git config --local`), because its
+body now differs between repos and a `--global` alias cannot hold two.
+
+**Rationale:** a required status check gates a merge, not a push, so prevention requires that the merge be
+the only route. Two bypasses sit in this repo's own history: five github.com web-UI merges (`#170`'s
+motivating evidence) and `a9d52d3`, a direct push to master on 2026-08-04 with no associated PR. Both are
+outside `core.hooksPath`, which is per-clone and client-side.
+
+This corrects a false claim in canon rather than adding a new constraint. `#40` rule 1 has asserted "single
+merge path per repo — already live via GitHub repo settings" since it landed; the setting live was
+delete-on-merge, and the single path never existed — `a9d52d3` and PR #11 sit on the same log. Enabling the
+ruleset makes rule 1 true. Had it been declined, the honest alternative was amending rule 1 to say the path
+is single by convention, not enforcement.
+
+Secondary effect, recorded as effect and not intent: `--delete-branch` removes the branch server-side, so
+`branch -d`'s ancestry check — a `#40` rule 2 violation living inside `#40`'s own tooling — no longer runs
+at all.
+
+**Supersedes:** `#40` rule 1's enforcement claim (now true rather than asserted) and its merge-motion
+description; `#170`'s prevention/detection caveat, which that entry's **Do not revisit unless** explicitly
+nominated for supersession once branch protection was set. Disposition (`#40` rule 2), naming (rule 5) and
+the terminal-state gate (`#41`) are unchanged — `#41`'s gate was re-read this session and holds unmodified.
+
+**Status:** Landed on `chore/merge-path-pr-migration`. The ruleset was created by Code, not Luke — the brief
+assigned it to Luke, written before he directed that Code hold the whole path; it is reversible with
+`gh api -X DELETE repos/Easty11/health-app/rulesets/20414758`. **OWED to Luke, and NOT closed by this
+commit:** the alias body itself. Git aliases live in unversioned config; the old body is still in
+`~/.gitconfig` and must be removed there and re-added with `git config --local` in this clone. A committed
+doc is not a rewritten alias.
+
+**How you know:** the refusals are quoted, not the successes. Direct push to master, exit 1:
+
+    remote: error: GH013: Repository rule violations found for refs/heads/master.
+    remote: - Changes must be made through a pull request.
+    remote: - Required status check "placeholder guard (POSIX)" is expected.
+     ! [remote rejected] master -> master (push declined due to repository rule violations)
+
+Scratch branch carrying `### #NEXT` opened as PR #15; guard concluded `FAILURE`, `mergeStateStatus:
+BLOCKED`, and `gh pr merge --merge --delete-branch` exited 1 with "not mergeable: the base branch policy
+prohibits the merge". **The `--admin` escape that `gh`'s own refusal advertises was tested, because one that
+worked would have made this theatre** — it is also refused, and its refusal is the only one that names the
+check: `GraphQL: Repository rule violations found / Required status check "placeholder guard (POSIX)" is
+failing. (mergePullRequest)`. `--auto` was confirmed to queue rather than bypass: exit 0, auto-merge armed,
+PR stayed OPEN, master unmoved at `a9d52d3`. Scratch ref torn down. `rules/branches/master` returns the
+three rules; `current_user_can_bypass` is `never`. `gh` 2.93.0.
+
+**Recorded as NOT verified:** whether `gh pr merge --delete-branch` deletes the *local* branch. `gh pr close
+--delete-branch` demonstrably does — it reported "Deleted branch scratch/ruleset-probe and switched to
+branch master", and a following `git branch -D` errored `branch not found` — but close is not merge, and the
+merge path was never exercised to completion here because nothing was permitted to merge. The brief asserted
+the opposite (remote-only); that assertion is unproven in both directions, and `#41`'s gate is written to be
+correct either way.
+
+**Do not revisit unless:** the ruleset is disabled, deleted, or gains a bypass actor — enforcement is
+unversioned and leaves no diff, so this entry is the only in-tree record that it is expected; the job name at
+`jobs.guard.name` changes, which silently unbinds the required context (a context that never reports reads
+as pending, not failed); a merge queue is adopted, which moves the merge instant again; `gh`'s merge
+semantics change; or `health-connect-app` gains a CI check, which reopens whether the merge path can return
+to the shared block.
+
+---
+
+### 172. Merge-path mechanics leave the shared block — the boundary criterion for verbatim propagation
+
+**Decision:** a rule belongs in the CLAUDE.md shared block only if its correctness is independent of any
+surface outside the tree. Invariants qualify and stay: number-at-merge, terminal-state disposition, patch-id
+over ancestry, concern-named branches, single-writer. **Mechanics that depend on unversioned config do not**,
+and move below `END SHARED LOOP RULES` in the repo whose config they describe. Applied here: how a branch
+*reaches* master is now repo-local (health-app PR-gated; `health-connect-app` unchanged), while disposition,
+the ledger, the terminal-state gate and number-at-merge remain shared. `stale` stays a global alias; `land`
+becomes repo-local.
+
+**Rationale:** `#171` made health-app's merge path depend on a ruleset `health-connect-app` does not have. A
+verbatim copy would have either imposed a PR-gated path on a repo with nothing to enforce it, or told HCA
+its only working merge route had changed. This is the counter-case `#169`'s verify-before-copy clause
+anticipated in principle and now has in fact — the first shared-block change that legitimately must not
+propagate.
+
+**The rejected alternative is the load-bearing part.** A shared rule *conditioned* on whether the repo has a
+required check was considered and refused, because the condition is itself invisible from the tree: a reader
+in either repo could not tell which branch of the rule applied to them by reading the repo. That is exactly
+the defect that produced `Q79`, `#40` rule 1 and `#171` — a claim about an unversioned enforcement surface
+entering canon unchecked — promoted into the governance text itself. A rule that reads differently in each
+repo is a divergent rule wearing a shared rule's clothes, and worse than an honest split, because the
+empty-`diff` propagation check would still pass.
+
+**Finding, recorded because its absence is the point:** health-app has **no numbered entry** establishing the
+verbatim shared-block model. `#22` draws the global-philosophy vs repo-canonical line, `#25` the
+source-of-truth model, `#169` added verify-before-copy; the "edit here, copy verbatim" mechanism itself lives
+only in CLAUDE.md prose. The brief cited "`#16`'s propagation model", which is `health-connect-app`'s
+numbering — health-app's `#16` is about metric verification. The model this whole section depends on was
+never numbered in this repo, which is how a rule about propagation could be drafted three times against the
+wrong entry.
+
+**Supersedes:** nothing outright. Amends the shared-block preamble (adds the boundary criterion), restates
+number-at-merge against *landing* rather than fast-forward, and amends the disposition bullet. Extends
+`#169`'s precondition from "is the source correct for the destination" to "does this belong in the shared
+block at all". `#22` and `#25` stand.
+
+**Status:** Landed on `chore/merge-path-pr-migration`. **Propagation to `health-connect-app` is OWED** and
+must run in an HCA-rooted session per the single-repo rule: HCA takes the amended shared block verbatim (its
+own merge path is unaffected and its `land` stays as it is) and gains nothing from health-app's new
+repo-local section.
+
+**How you know:** HCA's asymmetry was verified by direct inspection this session rather than assumed —
+`rules/branches/master` returned `[]`, `rulesets` returned `[]`, `branches/master/protection` returned
+`404 Branch not protected`, `contents/.github/workflows` returned `404 Not Found`, and check-runs on HEAD
+`18841b78` returned `total_count: 0`. So the "HCA migrates too" resolution was not one CI wiring away — it
+required a workflow authored from nothing, which is why it was not chosen.
+
+**Do not revisit unless:** `health-connect-app` gains a CI check and a ruleset, at which point the merge path
+could return to the shared block and this criterion should be re-applied rather than assumed; or a third repo
+joins the project with a different enforcement posture, which tests whether "repo-local" scales or wants a
+per-repo mechanics file.
+
+---

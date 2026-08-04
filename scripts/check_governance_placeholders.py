@@ -2,7 +2,8 @@
 """Refuse to let an unresolved governance placeholder reach master.
 
 Number-at-merge says a new entry is headed `### #NEXT` on a branch and claims its
-integer when the governance commit fast-forwards. Nothing enforced the second half. The
+integer when the governance commit lands on master — stated against landing, not against
+any one merge motion, because the motion is repo-local. Nothing enforced the second half. The
 placeholder rode master for three sessions: `feat/hub-shell` merged with its heading
 still reading `#NEXT`, #163 and #164 were then minted on top of it, and #162 became a
 hole in the canonical store. The fix kept being written on branches that did not merge.
@@ -13,10 +14,12 @@ alias. A guard living only in that alias would not have fired for it, which is t
 failure mode: the placeholder reaches master by whichever path is convenient that day.
 So the check runs against the ref being pushed.
 
-WHICH SURFACES ACTUALLY RUN THIS. Two, and neither is the `land` alias — an earlier version
-of this docstring claimed "the alias calls the same script" and it never did; the alias body
-is `checkout && merge --ff-only && push && branch -d && push --delete`, with no call to
-anything here (verified 2026-08-04). The real set:
+WHICH SURFACES ACTUALLY RUN THIS. Three, and none of them is the `land` alias — an earlier
+version of this docstring claimed "the alias calls the same script" and it never did; the
+alias body at that time was `checkout && merge --ff-only && push && branch -d &&
+push --delete`, with no call to anything here (verified 2026-08-04). That body is now retired
+in favour of a `gh pr create` / `gh pr merge` pair (`#171`), which calls nothing here either
+— the alias has never been a surface that runs this check and is not one now. The real set:
 
   * `.githooks/pre-push` — client-side, per clone, `git config core.hooksPath .githooks`.
     Covers pushes from a configured working copy. Cannot bind anything else.
@@ -24,11 +27,19 @@ anything here (verified 2026-08-04). The real set:
     the merge button is live) and on `push` to master (backstop). Covers the server-side ref
     updates a client hook structurally cannot see: this repo's history carries five web-UI
     merges committed by `GitHub <noreply@github.com>`.
+  * Ruleset `master-pr-gated` (id `20414758`, health-app only) — makes the PR arm binding by
+    requiring the `placeholder guard (POSIX)` check and refusing every non-PR route to
+    master. `bypass_actors` is empty, so it binds the repo owner too.
 
-The PR arm only PREVENTS once branch protection requires the check — GitHub-side repo
-config, not committable, not in this tree. Absent that it reports rather than blocks. Two of
-the three enforcement layers are unversioned config; a green run is not evidence they are
-installed.
+THE PR ARM PREVENTS ONLY BECAUSE OF THE THIRD ITEM, AND THE THIRD ITEM HAS NO DIFF. Before
+2026-08-05 this arm reported rather than blocked, because nothing required the check;
+`#171` set the ruleset and verified the refusal rather than assuming it. Enforcement is now
+three layers of which **two are unversioned config** — `core.hooksPath` is per clone, the
+ruleset is per repo, and this file is the only piece a `git diff` can see. A fresh clone, a
+deleted ruleset, or a `bypass_actors` entry removes enforcement silently and leaves the runs
+green. A green run is evidence this script passed, never evidence the layers are installed;
+check them directly (`gh api repos/Easty11/health-app/rules/branches/master` must be
+non-empty). `health-connect-app` has the hook only — no workflow, no ruleset.
 
 Exit 0 = clean. Exit 1 = a placeholder would reach master. Exit 2 = the check itself
 could not run (missing file, bad ref) — never silently pass, because a check that cannot
@@ -103,7 +114,7 @@ def main() -> int:
           file=sys.stderr)
     print("\n".join(offences), file=sys.stderr)
     print(
-        "\nNumber-at-merge: claim the integer ON THE BRANCH, before the fast-forward,"
+        "\nNumber-at-merge: claim the integer ON THE BRANCH, before it lands,"
         "\nre-reading master's max at that instant. Resolve every token the branch"
         "\nintroduced (#148 — classified, not counted) and leave every token it did not."
         "\n\nAudit after resolving:"

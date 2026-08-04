@@ -36,6 +36,19 @@ shape** — run the regex, count the store, check the paths exist. If the source
 fix it here first and copy after; never fix it in the copy, and never hand-merge the two.
 The verification is a precondition of propagation, not a review of it.*
 
+***What belongs in this block at all — the boundary criterion.*** *A rule belongs here only
+if its correctness is independent of any surface outside the tree. Invariants qualify:
+number-at-merge, terminal-state disposition, patch-id over ancestry, concern-named branches,
+single-writer. **Mechanics that depend on unversioned config do not** — they go below
+`END SHARED LOOP RULES`, in the repo whose config they describe. The rejected alternative was
+a shared rule conditioned on whether the repo has a required status check; that fails on its
+own terms, because the check's existence is invisible from the tree, so a reader could not
+tell which branch of the rule applied to the repo in front of them. A rule that reads
+differently in each repo is a divergent rule wearing a shared rule's clothes — worse than an
+honest split, because the empty-diff check still passes. Earned 2026-08-05, when `health-app`
+adopted a PR-gated merge path and `health-connect-app` had no CI workflow at all to gate one
+with (`#171`, `#172`).*
+
 ### The loop (source-of-truth model)
 
 - The **repo is the single source of truth** for all volatile state.
@@ -118,9 +131,18 @@ Preserve the existing entry format:
   verified search result, or official documentation. "The API has a field for it" is
   insufficient. Founding rule, earned from the HRV pipeline failure.
 - **Number-at-merge.** On a branch, a new entry is headed `### #NEXT`. The integer is
-  claimed only when the governance commit fast-forwards to master (next sequential at that
+  claimed only when the governance commit lands on master (next sequential at that
   instant). Eliminates the two-branches-both-claim-#N collision and the
-  renumber-on-`--ff` dance.
+  renumber-on-`--ff` dance. Stated against *landing*, not against any one merge motion —
+  the motion is repo-local and differs between repos; this rule does not.
+- **Number-at-merge names its window.** Resolving `#NEXT` and landing it are two acts, and
+  master can advance between them. So resolve **immediately before** merging, having re-read
+  master's max at that moment — not at session open, not from a prior report — and if master
+  advances in the interval, **re-resolve before merging**. The window is small, never zero,
+  and an unnamed race is how `#162`'s hole rode four sessions. A repo may have a mechanism
+  that forces a pause when master advances; a forced pause is not an adjudicated number, and
+  the re-read is owed either way. The guard refuses an unresolved *placeholder* reaching
+  master — it has no opinion on whether the integer you resolved to was still free.
 - **Number-at-merge is ENFORCED, not trusted.** `scripts/check_governance_placeholders.py`
   refuses any push to master whose `DECISIONS_LOG.md` still carries `^#{2,3} #NEXT` or whose
   `OPEN_QUESTIONS.md` still carries `^#{2,3} Q#NEXT`. It guards the **ref**, not one command:
@@ -221,8 +243,14 @@ must match it.
   Install once (git `!` aliases run in git's own sh; the invocation is single-line
   PowerShell-safe):
   `git config --global alias.stale '!f() { git fetch origin -q; git cherry origin/master "${1:-HEAD}"; }; f'`
-  `git config --global alias.land '!f() { b="${1:-$(git branch --show-current)}"; git checkout master && git merge --ff-only "$b" && git push origin master && git branch -d "$b" && git push origin --delete "$b"; }; f'`
   `git config core.hooksPath .githooks`  (per clone, not global — the hook is repo-versioned)
+  **`stale` is global because disposition is an invariant — every repo decides it the same
+  way. The merging alias is not here, and is no longer global.** How a branch *reaches*
+  master depends on enforcement config that exists in one repo and not another, so it is
+  repo-local by the boundary criterion above, and a `--global` alias cannot hold two bodies.
+  Each repo defines its own `land` with `git config --local` and documents it below its own
+  `END SHARED LOOP RULES`. Disposition, the ledger, and the terminal-state gate are unchanged
+  by this and remain shared.
 - **Branch naming & reuse.** One branch per concern, concern-named
   (`fix/validatenight-dedup`), reused across sessions until merged. Claude Code
   `claude/<session-hash>` auto-names are banned for in-flight work — they spawn duplicates.
@@ -236,6 +264,42 @@ must match it.
 ---
 
 ## Repo-specific — health-app
+
+### Merge path — PR-gated, terminal-driven (#171)
+
+**The pull request is the only route to master.** Ruleset `master-pr-gated` (id `20414758`)
+requires a PR, requires the `placeholder guard (POSIX)` status check, forbids
+non-fast-forward, and carries **no bypass actors** — `current_user_can_bypass: "never"`, so
+the rule binds the repo owner holding an admin token. Direct `git push origin master` is
+refused server-side. This is the only surface in this project that can *refuse* a bad merge
+rather than report one afterwards.
+
+**Nothing in this section exists in `health-connect-app`**, which has no ruleset, no branch
+protection, and no `.github/workflows` directory at all. That asymmetry is why this section
+sits here and not in the shared block.
+
+- **The motion.** Push the branch, open the PR, then merge — as three acts, not one:
+  `git push -u origin <branch>` → `gh pr create --fill --base master` → `gh pr merge --merge
+  --delete-branch`. Never `--auto`: it queues the merge to fire later, and a merge instant you
+  do not hold cannot satisfy number-at-merge. Never `--admin`: it is advertised in `gh`'s own
+  refusal text and does not work here (verified), so reaching for it only hides the real error.
+- **`--merge`, not `--squash` or `--rebase`.** Not a `git cherry` question — patch-id
+  disposition survives all three, which is why it was chosen. The decider is `BRANCHES.md`,
+  whose rows record landing SHAs: squash and rebase rewrite the branch's commits at merge, so
+  every recorded `DONE <sha>` would point at an object unreachable from master. `--merge`
+  preserves them. The cost, accepted: master is no longer linear.
+- **Strict mode forces a pause, and a pause is not an adjudication.** The required check is
+  strict, so a branch behind master cannot merge — if master advances between resolving
+  `#NEXT` and merging, the merge blocks until the branch is updated and the guard re-runs.
+  That makes the shared rule's window *visible*; it does not tell you the integer you claimed
+  is still free. Re-read master's max and re-resolve. **Mechanically-forced pause, manually-
+  adjudicated resolution.**
+- **The alias is thin on purpose.** `land` is repo-local (`git config --local`), because the
+  global one cannot hold both repos' bodies. Adjudication logic does **not** go in it:
+  `~/.gitconfig` and `.git/config` are unversioned, per-machine, and invisible to review —
+  the least durable surface available, which is the exact property that made the placeholder
+  guard necessary in the first place. Uniqueness-and-gaplessness belongs in the guard, where
+  it binds every path and every clone. `stale` stays global and unchanged.
 
 ### Conventions
 

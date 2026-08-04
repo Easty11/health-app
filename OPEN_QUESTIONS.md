@@ -2263,3 +2263,21 @@ is tuning the instrument to the outcome, and Q45's whole point is that the refer
 **Do not resolve by:** asserting the Action does not push governance files. It merges branches and lands entries; that is the point of it, and "it probably will not" is the class of reasoning `#162` was created by.
 
 **Mirror obligation:** `health-connect-app` inherits this hole verbatim on propagation and must mint the same row. Two repos with the same hole recorded is honest; two repos with the same hole and one of them silent is how it survives another four sessions.
+
+---
+
+## Q80. The guard polices the symptom, not the invariant — nothing checks that decision numbers are unique and gapless
+
+**State:** OPEN. **Related:** `#167` (the guard), `#170` (its CI arm), `#171` (the PR-gated merge path and strict mode), `#172` (the boundary criterion), `#162` (the hole this class produced), `#148` (classified-not-counted renumbering).
+
+**The gap.** `scripts/check_governance_placeholders.py` refuses an unresolved `#NEXT` reaching master. That is the *symptom*. The invariant the placeholder protects is that decision numbers are **unique and gapless** — and nothing checks it. `#162` was a gap; a two-branch collision would be a duplicate. Both pass the guard silently, because both are fully-resolved integers.
+
+**Why it matters more under `#171` than it did before.** The PR-gated path made the resolve→merge window *visible* — strict mode refuses a merge when the branch is behind master, so an advance between resolving `#NEXT` and merging forces a pause. But a forced pause is not an adjudicated number: the pause tells you master moved, not that the integer you claimed is still free. The two halves compose exactly — **strict mode forces the update, a uniqueness-and-gapless arm would adjudicate at that update** — and neither closes the number race alone. With the arm, the race closes mechanically, with the operator sequencing nothing.
+
+**Where it must live, already ruled.** In the guard, not the alias. A draft `land` body carrying the assertion was written and rejected: git aliases live in `~/.gitconfig` or `.git/config` — unversioned, per-machine, uncopyable, invisible to review. Putting adjudication there is enforcement on the least durable surface available, which is the exact property that made the guard necessary. The guard binds every path and every clone; it already reads the file the assertion needs.
+
+**Shape, not yet designed:** assert over `DECISIONS_LOG.md` that the resolved headings form a contiguous run with no duplicates, anchored on the heading form per `#113` and level-agnostic per `#169` so it does not read empty against `health-connect-app`'s grammar. Open sub-questions: whether historical gaps (`#162`) are grandfathered by a floor or by an explicit allow-list — a check that fails on day one on known history gets disabled rather than fixed; and whether the arm runs in the same script or a sibling, given the script's exit-code contract (0 clean / 1 would-reach-master / 2 cannot-run) is already load-bearing.
+
+**Blocked by:** nothing. Buildable now — UNSTARTED rather than blocked, and the reason it is a question rather than a roadmap row is the grandfathering fork above, which wants a ruling before code.
+
+**Do not resolve by:** adding the assertion to the alias after all, or by asserting on a count rather than the heading forms (`#113`: read the matches, never the count).
