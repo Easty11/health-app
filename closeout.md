@@ -3,163 +3,191 @@
 _Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
 `DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
 
-Session date: 2026-08-03. Branch at close: none — `gov/next-resolution-guard` ff-merged to master
-and deleted both sides. Session-open ref: `3fadc96`.
+Session date: 2026-08-05. Branch at close: `master` — all three session branches merged and
+deleted both sides. Session-open ref: `a9d52d3`.
 
-**Number-at-merge is now enforced rather than trusted (`#167`).** A pre-push ref guard refuses any
-push to master carrying an unresolved `### #NEXT` or `## Q#NEXT`.
+Canon at open: DECISIONS max **#170**, OPEN_QUESTIONS max **Q79**.
+Canon at close: DECISIONS max **#172**, OPEN_QUESTIONS max **Q80**.
 
-**Read this before trusting anything below: TWO Code sessions shared this clone today.** Master's
-current state is the product of both. `#166` and `#168` are the other session's; `#167` is this
-one's. The overlap produced one real incident, recorded as `FEEDBACK` §19 rows **17** and **18** and
-summarised in §3. Any state either session reports is stale on arrival while that condition holds.
+**The merge path changed under this session (`#171`).** master is now reachable only by pull
+request, gated by a required status check. `git push origin master` is refused server-side.
 
-## 1. Real commits this session
+---
 
-`git log --oneline 3fadc96..master`, **this session's own** marked ▸:
+## 1 — Real commits this session
 
-```
-e32fd8d governance: resolve #NEXT -> #168 (on-branch, pre-ff)              [other session]
-ad94ee3 feat(chat): #NEXT show the model the whole exercise catalogue       [other session]
-0f996ea governance: resolve #NEXT -> #167 (on-branch, pre-ff)              ▸
-9973a14 governance: BRANCHES row, FEEDBACK §19 rows 17/18, ROADMAP debt    ▸
-672e0ca feat(governance): enforce number-at-merge with a pre-push ref guard ▸
-784763c governance: #166 owed-item (1) discharged — orphan recovered       ▸ (other session's CONTENT)
-11b6b9d governance: #166 landed and deployed                               [other session]
-e438f45 governance: resolve #NEXT -> #166; FEEDBACK §23.1                  [other session]
-23d3e9b fix(hevy): #NEXT create-response parse aborted after the create     [other session]
-```
-
-`784763c` is committed by this session but **authored by the other** — see §3.
-
-Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
+`git log --oneline a9d52d3..HEAD`, before the close-out commit:
 
 ```
-2026-08-03 governance: resolve #NEXT -> #168 (on-branch, pre-ff)
-2026-08-03 feat(chat): #NEXT show the model the whole exercise catalogue — #61's capability, unsurfaced
-2026-08-03 governance: resolve #NEXT -> #167 (on-branch, pre-ff)
-2026-08-03 governance: BRANCHES row, FEEDBACK §19 rows 17/18, ROADMAP propagation debt
-2026-08-03 feat(governance): enforce number-at-merge with a pre-push ref guard
-2026-08-03 governance: #166 owed-item (1) discharged — orphan recovered and resolver-verified
-2026-08-03 governance: #166 landed and deployed — row carries the three owed items
-2026-08-03 governance: resolve #NEXT -> #166; FEEDBACK §23.1 standing gate; CLAUDE convention + landings
-2026-08-03 fix(hevy): #NEXT create-response parse aborted after the create — false negative + orphan
-2026-08-03 governance: record the #165 merge, deploy verification, and the eval-trigger rework
+0a08ee7 Merge pull request #18 from Easty11/gov/forward-ref-and-clone-setup
+ebbb27a fix(governance): the fresh-clone alias check must be --local, or it reads the old global body
+6cc3cea governance: forward-ref sub-question on Q80; per-clone setup documented; closeout names what stood still
+f85b389 Merge pull request #17 from Easty11/gov/merge-path-followup
+485344e governance: close #171's recorded unknown - --delete-branch removes the local branch too
+4308867 Merge pull request #16 from Easty11/chore/merge-path-pr-migration
+113f04a governance: resolve #NEXT -> #171/#172, Q#NEXT -> Q80 (on-branch, pre-merge)
+8191f70 governance: BRANCHES row for chore/merge-path-pr-migration
+f9bea0a governance: PR-gated merge path + boundary criterion entries; Q on the number invariant
+d9f45f3 governance: guard docs name the third enforcement surface (the ruleset)
+56d71bc governance: merge-path mechanics leave the shared block; boundary criterion added
 ```
 
-## 2. Pending-queue reconciliation
+`git log --format="%ad %s" --date=short -10` — the repo's own dated record, which cannot drift
+where a self-reported stamp can:
 
-No `;cc` queue. The input was a directive, not a brief: *build the pre-land `#NEXT` guard now*,
-after it had been parked twice as "when I'm not mid-tangle".
+```
+2026-08-05 Merge pull request #18 from Easty11/gov/forward-ref-and-clone-setup
+2026-08-05 fix(governance): the fresh-clone alias check must be --local, or it reads the old global body
+2026-08-05 governance: forward-ref sub-question on Q80; per-clone setup documented; closeout names what stood still
+2026-08-05 Merge pull request #17 from Easty11/gov/merge-path-followup
+2026-08-05 governance: close #171's recorded unknown - --delete-branch removes the local branch too
+2026-08-05 Merge pull request #16 from Easty11/chore/merge-path-pr-migration
+2026-08-05 governance: resolve #NEXT -> #171/#172, Q#NEXT -> Q80 (on-branch, pre-merge)
+2026-08-05 governance: BRANCHES row for chore/merge-path-pr-migration
+2026-08-05 governance: PR-gated merge path + boundary criterion entries; Q on the number invariant
+2026-08-05 governance: guard docs name the third enforcement surface (the ruleset)
+```
 
-| Item | Outcome |
+**Three merge commits, no fast-forwards.** Every one went through
+`gh pr merge --merge --delete-branch` — PRs #16, #17, #18. This is the first session in this
+repo's history in which nothing reached master by `git push origin master`, because that route
+is now refused.
+
+Backend suite **722 passed**; the guard's own tests **13 passed** after its docstring and
+message string were edited. Governance and documentation only — no `backend/` logic, no
+`frontend/`, no migration, no schema change.
+
+---
+
+## 2 — Pending-queue reconciliation
+
+No `;cc` queue was carried in. The input was a chat brief in three revisions (3 Aug, and two on
+4 Aug), each carrying a proposed `### #NEXT` LOG entry flagged for Code and two hard halts.
+
+| Brief item | Outcome |
 |---|---|
-| Pre-push `#NEXT` guard | **Landed** as `#167`. Script + repo-versioned hook + shared-block rule. |
-| Mechanism fork (land-alias vs ref check) | **Adjudicated to the ref**, on evidence — see §3. |
-| `FEEDBACK` §19 rows | **Landed** — 17 (`COUPLED`) and 18 (`MODEL`), `17 caused 18`. |
-| ROADMAP propagation debt | **Landed** — the shared-block edit owes HCA a byte-identical copy. |
-| `BRANCHES` row | **Landed**, and the branch is now DONE. |
-| `#NEXT` → integer | **#167**, claimed on-branch pre-ff with master re-read at that instant (#166). |
-| HCA propagation itself | **NOT done — owed.** Requires an HCA-rooted session. |
+| Step 0 — verify prevention by observation | **Failed three times, then passed.** Failed 3 Aug and twice more this session: no ruleset, no branch protection, `rules/branches/master` empty. The brief presumed "Luke enables the ruleset" as a precondition; it had not happened. Resolved by Luke's ruling that Code hold the whole path — ruleset then created by Code and **tested rather than trusted**. Landed as `#171`. |
+| Step 1 — rewrite `land` around `gh` | **Repo side landed; the alias itself is OWED.** Merge mode chosen with reason; `gh pr merge` refusal-on-failing-check tested and quoted; `--auto` confirmed to queue not bypass, and excluded anyway; `--admin` tested and refused. The alias **body** is unversioned config and no commit here can close it. |
+| Step 1b — HALT for a ruling on the shared block | **Halted, ruled, executed.** HCA's state verified by inspection. Luke ruled option 1 — mechanics leave the block, invariants stay. Landed as `#172`. |
+| Step 2 — number-at-merge names its window | **Landed** as a new shared-block bullet. Strict mode's forced pause recorded as a pause and explicitly *not* as an adjudication. |
+| Step 3 — verify `#41`'s gate still holds | **Verified unmodified; no change made** — the brief's own stated likely outcome, recorded rather than edited. |
+| Step 4 — sweep `land` / `--ff-only` | **Landed.** Anchored per `#113`, never substring — `land` matches `landed`/`landings` throughout the stores. Remaining hits are historical record or the verb. |
+| The brief's proposed LOG entry | **Superseded by what landed.** Its central claim (that `#40` rule 1 was being corrected) held; its Step 3 claim did not. |
 
-## 3. Cold-resume handoff
+**Three brief claims were false and are corrected in-tree, not worked around.**
 
-### The guard (`#167`)
+1. `--delete-branch` "removes the remote branch but leaves the local one". It removes **both**
+   and switches to master. Recorded as unverified in `#171` while only `gh pr close` had been
+   observed, then closed by `#171`'s own landing (PR #16) as a dated note that postdates the
+   locked entry, scoped to what was actually seen (`gh` 2.93.0, run from a working copy on the
+   branch being merged).
+2. "`#16`'s propagation model" — that is `health-connect-app`'s numbering; health-app's `#16` is
+   about metric verification. health-app has **no numbered entry** for the verbatim-propagation
+   model at all. Recorded inside `#172`, because the absence is the point.
+3. The ruleset was assigned to Luke — written before he directed that Code hold the whole path.
 
-- `scripts/check_governance_placeholders.py` — exits 0 clean, 1 on a placeholder (printing every
-  offending file and line, so matches are **read, not counted**), 2 when it cannot run. A check that
-  could not run must never be indistinguishable from one that passed.
-- `.githooks/pre-push` — refuses a push whose remote ref is `master`/`main`. Branch pushes untouched:
-  a placeholder is *correct* on a branch and only wrong on master.
-- `CLAUDE.md` — the rule, **inside the shared loop block**, plus the `git config core.hooksPath
-  .githooks` install line beside the `land`/`stale` aliases.
+**One error of Code's own, self-caught pre-merge:** the fresh-clone verification line first
+written as `git config --get alias.land` is a false green — `--get` reads *merged* config and
+returns the **old global ff-only body**, so an unconfigured clone reads as configured. Fixed at
+`ebbb27a` to `--local --get`. That is `#103`'s rule failing in text written minutes after `#103`
+was cited. **A `FEEDBACK` §19 row was deliberately not minted:** the prevention it would name is
+`#103`, which already exists, and this session's scaffolding already outruns what it scaffolds.
+Available to mint if wanted.
 
-**Why the ref and not `git land`** — this is the load-bearing choice and it was settled by evidence,
-not preference. The merge that healed `#162` was done **by hand**
-(`checkout master && merge --ff-only && push`), so an alias-only guard would not have fired for it.
-The placeholder reaches master by whichever path is convenient that day.
+---
 
-**Why anchored on the heading** (`#113`) — `CLAUDE.md`'s own rule text, `#148`'s entry and every
-corrected entry legitimately quote the token. A substring match would fire on the files that define
-the convention, get bypassed out of habit, and protect nothing.
+## 3 — Cold-resume handoff
 
-**Controls.** Positive control is the *real defect, not a fixture*: run against `001df4c` — the
-actual `feat/hub-shell` merge that put a live `### #NEXT` on master — and it exits 1 naming
-`DECISIONS_LOG.md:5833`. Negative: clean master exits 0, and the three false-positive shapes are
-asserted explicitly. Hook end-to-end with crafted stdin: master+placeholder REFUSED, same ref to a
-branch ALLOWED, clean master ALLOWED, zero-sha deletion ALLOWED.
+### What changed
 
-**Exercised on its own landing** — the branch push carrying `### #NEXT` was allowed, and the master
-push after resolution was allowed. Both pushes verified by `git ls-remote`, not by exit status.
+**`#171` — the pull request is the sole route to master.** Ruleset `master-pr-gated`
+(id `20414758`): PR required, `placeholder guard (POSIX)` required under a strict up-to-date
+policy, non-fast-forward forbidden, `bypass_actors` empty (`current_user_can_bypass: never`, so
+it binds the owner holding an admin token — tested, `--admin` is refused). Supersedes `#40` rule
+1's enforcement claim, which had asserted a single merge path since the day it landed while
+`a9d52d3` (a direct push, no PR) and PR #11 sat on the same log; and `#170`'s
+prevention/detection caveat, which nominated itself for exactly this.
 
-**Known gap, recorded not papered over:** the `@claude` GitHub Action pushes without a local hook and
-is **not** covered. Closing it means a CI check, not a hook.
+**`#172` — merge-path mechanics leave the shared block.** A rule is shared only if its
+correctness is independent of any surface outside the tree. Invariants stay (number-at-merge,
+terminal-state, patch-id, naming, single-writer); mechanics depending on unversioned config go
+repo-local. The rejected alternative — a shared rule *conditioned* on whether the repo has a
+required check — is recorded with its reason: the condition is invisible from the tree, so a
+reader could not tell which branch of the rule applied to them.
 
-**`core.hooksPath` is per-clone config.** A fresh clone gets the files and no active hook until
-`git config core.hooksPath .githooks` is run. Landing the file does not arm it.
+**`Q80` — the guard polices the symptom, not the invariant.** Three ways a decision number goes
+wrong; the guard set covers two. Unresolved placeholder: caught. Duplicate or gap: would be
+caught by the proposed arm. **A forward reference written as a literal number before the resolve
+is invisible to all of them** — demonstrated here, where nine literal `#171`/`#172` refs held
+only because master happened not to advance, while the three `#NEXT` tokens on the same branch
+were safe by construction.
 
-### The incident — and why it was smaller than first reported
+### Enforcement spans three layers and two have no diff
 
-The other session ran `git add -A` in the shared tree and swept this session's uncommitted guard work
-into a commit (`f64d4bb`) whose message described only its own one-line `BRANCHES.md` edit.
+`core.hooksPath` (per clone) · `.github/workflows/governance-guard.yml` (versioned) · ruleset
+`20414758` (per repo). A fresh clone, a deleted ruleset, or an added bypass actor removes
+enforcement silently and leaves every run green. **`#171` is the only in-tree record that the
+ruleset is expected to exist.** Verify directly, never by a green run:
 
-It was then reported to the operator as *"committed and pushed to master"*, and an A/B/C recovery
-decision was escalated. **Independently verified: the push never landed.** `origin/master` was
-`11b6b9d` throughout and `f64d4bb` reached no remote. All three recovery options were premised on a
-breach that did not happen; the question dissolved rather than being answered.
+    gh api repos/Easty11/health-app/rules/branches/master
 
-Resolution, in the order that mattered:
+### Fresh-clone setup — neither item is cloned, neither fails loudly
 
-1. **Split before push, not after.** The branch tip *was* the mixed commit. Unpushed, the split was a
-   soft reset and path-scoped restage — free. Pushed, it would have cost a force-push on shared
-   history. This is the one place `#98`'s push-early instinct and rewrite-while-cheap genuinely
-   conflict, and the rewrite has to win because the window closes permanently at the push.
-2. **The other session's line was preserved, not re-authored.** Extracted to a patch outside the repo
-   *before* any reset, then committed alone as `784763c` with authorship stated in the body. It is
-   the `#166` orphan-discharge record — resolver-verified — and re-deriving a verified record from
-   memory is how a closed loop silently re-opens.
-3. `FEEDBACK` §19 rows **17** and **18**, `17 caused 18` (`caused_by` derived, never authored).
+    git config core.hooksPath .githooks
+    git config --local alias.land '!f() { gh pr merge "$(git branch --show-current)" --merge --delete-branch; }; f'
 
-Row 17 is **COUPLED**, not `MODEL`: a `MODEL` row types the fix as "the agent should have been more
-careful", which fails on the next tired session. Prevention is two-part — path-scoped staging
-(proximate) and **worktree isolation** (the one that makes the condition unreachable). Row 18 is
-`MODEL` and stands alone: *a push is verified by the remote ref, never by the push command's exit.*
-Not a new principle — it is `#116`/`#121`'s probe-the-artefact rule and `#103`'s
-discriminate-on-identity rule, applied one layer down to git.
+Verify with `git config --get core.hooksPath` and **`git config --local --get alias.land`**. The
+`--local` is load-bearing: without it the check returns the stale global body and passes on an
+unconfigured clone.
 
-### State at close
+### OWED — neither closable by a commit in this repo
 
-- `master` = `e32fd8d`, local == remote (verified by `ls-remote`), working tree clean.
-- Audit: **max 168 · dupes none · gaps none · unnumbered `#NEXT` 0 · Q max 78.**
-- Backend suite **719 passed**. Guard passes against `origin/master` (exit 0).
-- `#162`, which rode master for three sessions, remains healed.
+1. **The `land` alias body (Luke, this machine).** The old ff-only body is still in
+   `~/.gitconfig` and is now *unrunnable* — its `push origin master` is refused by the ruleset.
+   `git config --global --unset alias.land`, then the `--local` form above. `stale` stays global
+   and unchanged.
+2. **Shared-block propagation to `health-connect-app`** — ROADMAP NOW row 4. HCA takes the
+   amended block verbatim and **loses nothing**: its merge path is deliberately unaffected and
+   its `land` stays as it is. health-app's repo-local `### Merge path` section does **not**
+   propagate, by construction. HCA-rooted session, `pwd`-verified first.
 
-### Outstanding (owner: Luke)
+### What was NOT touched — read this before picking up the queue
 
-1. **HCA propagation — the substantive one.** The `CLAUDE.md` change is inside the shared loop block,
-   so `health-connect-app/CLAUDE.md` owes a byte-identical copy: **two** insertions (the enforcement
-   bullet, and the `core.hooksPath` install line beside the aliases), between the `BEGIN`/`END SHARED
-   LOOP RULES` markers. HCA-rooted session only, `pwd`-verified first — the folder picker has opened
-   the wrong repo before. The script and hook do **not** propagate; whether HCA wants its own
-   enforcement is left undecided rather than pre-empted. Recorded in `ROADMAP` NOW per `#112`.
-2. **`feat/cbti-eval-trigger` — rework, do not merge.** Superseded by `#165` before it landed: its
-   7-day offer eligibility and its whole close-refusal path are obsolete, and a trial integration
-   leaves 5 of its 11 tests failing, one semantically. Full checklist on its `BRANCHES.md` row. Its
-   `#NEXT` is now **169** — master has moved twice since that row was written.
-3. **Concurrent sessions in one clone.** The generator of the whole incident. Until sessions are
-   isolated (separate worktrees), every reported state is stale on arrival — this session watched
-   master move under it three times while reporting.
-4. **`#165`'s real verdict is not in the code.** The first genuine 4-night cycle on block 3 decides
-   whether the dither centres or wanders. If it wanders, the entry's revisit clause names the first
-   suspects: the `Q45` nap exclusion and `SE_FLOOR_PCT`.
+**Two consecutive days have gone entirely to instrument, and every artifact this session
+produced points at more instrument.** `Q80`'s follow-on guard arm, the HCA propagation, the
+`#171` alias item — all governance. Nothing here advances the product, and a cold reader infers
+the queue from what is written down. So, explicitly:
 
-### Single next action
+- **`feat/cbti-eval-trigger`** — untouched this session. Local **and** remote, 2 `+` commits vs
+  master (`git cherry`), rowed in `BRANCHES.md`. **BUILT but SUPERSEDED — needs rework, do not
+  force-merge:** built against the 7-night engine, and `#165` then landed the 4-night retune and
+  removed engine-`close`, so its 7-day offer eligibility and its whole close-refusal path are
+  obsolete. A trial integration leaves 5 of its 11 tests failing, one semantically. Rework
+  checklist is on the `BRANCHES.md` row. This is the closest thing to shippable product work in
+  the tree.
+- **`Q45`** — the VA CBT-I diary does not say which day a recorded nap belongs to. **DATED and
+  contaminating capture right now:** `naps_min` is written at PM and the engine reads a night's
+  naps from `date − 1`; that read is correct only if the instrument's nap item refers to the
+  preceding day, which it does not state. Every nap-excluded night currently rests on an
+  unverified attribution. Closes from the VA protocol docs or the administering clinician — not
+  the workbook, searched to exhaustion. Owner: Luke.
+- **`Q78`** — exclude-all starves a frequent napper at the 4-night cadence. Legible now (the
+  HOLD names the tally) but not fixed. Gated by `Q45`.
+- **The block-3 verdict on `#165`'s design** — the 4-night hunting titration has been live since
+  block 3 opened, and neither this session nor the last looked at whether it works. This is the
+  empirical test of a shipped design and the item most likely to be lost: no branch carries it,
+  no question is headed by it, it appears in no OWED row. It exists only in this paragraph.
+- **Lab / interpretation lane** — increments 2 (rephrase), 3 (lever-tap threads) and 5 (go-live)
+  outstanding; `Q54`'s fixture-contract drift still gates the live-wiring increment.
+- **Operator loops on already-merged rows** — several `BRANCHES.md` rows carry post-deploy
+  checks only Luke can run (Railway, authed surfaces). Recorded, not done, and they do not
+  expire.
 
-Discharge the HCA propagation from an HCA-rooted session — it is the only item where delay actively
-degrades something, because master now carries a shared-block edit with nothing mirroring it, which
-is the two-master drift the block exists to prevent.
+**51 questions OPEN · 6 OWED · 23 DONE.** The OPEN count has grown every governance session.
 
-### Governance stores changed this session
+### Single clearest next action
 
-`DECISIONS_LOG.md` · `FEEDBACK.md` · `ROADMAP.md` · `BRANCHES.md` · `CLAUDE.md`
-(`OPEN_QUESTIONS.md` unchanged by this session — `Q78` was the prior one's.)
+**Not more governance.** Either run the two `git config` commands above so the merge path is
+actually runnable in this clone — under a minute, and it closes `#171`'s OWED item — or pick up
+`feat/cbti-eval-trigger`'s rework or `Q45` and let the governance queue wait. `Q80`'s guard arm
+is real but not urgent, and it would be the third instrument in three sessions.
