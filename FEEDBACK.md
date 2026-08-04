@@ -1067,3 +1067,50 @@ fake at the transport layer**. If every test for a connector stubs that connecto
 response-handling code is untested no matter how many tests there are. Mock one level *below*
 the thing under test, never at it. `#164` had 61 passing tests and a live-broken parse for
 exactly this reason.
+
+---
+
+## 24. Chat cannot make verbatim claims about file content — a paraphrase does not announce itself ([[§12]], [[§22]])
+
+**The failure.** A brief opened by stating that both repos' `CLAUDE.md` had been "read whole from
+master this session," and tagged the findings that rested on it **confirmed**. What the fetch surface
+actually returned was a *small model's paraphrase* of the file, shaped like verbatim quotation. The
+paraphrase welded two separate bullets — the guard's and the session-open ritual's — into one
+sentence, and invented a regex the guard does not contain: *"anchors on the heading form
+(`^### [0-9]+`), never substring matching."* The brief then built its whole load-bearing section on
+that sentence, and the section was aimed at the wrong artefact.
+
+**Why this is worse than the truncation already known.** Both failure modes exist on the same
+surface, and they are not equally dangerous:
+
+- **Truncation is loud.** A file that cuts off at `### 56` ends mid-entry. The reader can see the
+  cut, so nobody claims the tail.
+- **Paraphrase is silent.** It reads as clean, complete, and quotable. There is no artefact of the
+  loss — the sentence that was never in the file looks exactly like the sentences that were. It is
+  **structurally unfalsifiable from the chat side**: asking for verbatim and receiving prose shaped
+  like verbatim is indistinguishable, from there, from asking for verbatim and receiving verbatim.
+
+**The rule.** Chat may not assert file content. Not "verbatim," not "read whole," not a quoted regex,
+not a quoted heading form, not a line count, not a max. Any brief containing those is **overclaiming
+by construction**, whatever confidence tag it carries — the tag is generated from the same surface as
+the claim. Chat's legitimate outputs about a file are *hypotheses naming what would settle them*: not
+"the anchor is `^### [0-9]+`" but "I believe the anchor is health-app-pinned; `grep -nE '^### '` in
+each repo settles it."
+
+**How Code applies it.** Treat every quoted artefact in a brief the way [[§12]] treats a declarative
+about an unseeable surface — as an instruction to verify, never a report of fact — and **re-derive it
+against the tree before acting on it or dismissing it.** Dismissal is the half that is easy to skip:
+the brief that produced this row was wrong about *which file* carried the defect and right that a
+defect existed, so "the brief was wrong about the script" would have shipped the real hole intact.
+A misaimed finding is not a false one. Run the check the brief should have named, even when the
+brief's own version of it does not survive contact.
+
+**Why this row and not a project-instruction edit.** It is a rule about what chat may assert, and
+`CLAUDE.md` governs Code — so its natural home is the UI-maintained project instructions, which Code
+cannot write and which are therefore an unseeable surface ([[§12]]) that would carry no evidence of
+having been updated. Landing it here instead keeps it tracked beside the other instrument-honesty
+findings, in a store Code can verify. Operator's call, taken 2026-08-04.
+
+**Earned:** the propagation brief of 2026-08-03, three overclaims in one document. Companion to
+[[§22]] — that row covers citing governance from memory; this one covers citing it from a fetch that
+paraphrases. The instruction "carry the quote" is only safe if the quote is bytes.

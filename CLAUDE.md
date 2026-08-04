@@ -26,6 +26,16 @@ repo in this project. Edit it only here, then copy it verbatim into
 `health-connect-app/CLAUDE.md` and any future repo. Never edit a copy in place — that
 re-creates the two-master drift this whole model exists to kill.*
 
+***Verbatim propagation replicates a defect at full fidelity.*** *Copy-not-hand-merge kills
+drift, and it silently assumes the source is the better copy. It is not always: on
+2026-08-04 the destination's wording of the session-open rule was **generic and correct**
+where `health-app`'s was pinned to `health-app`'s own heading grammar and returned zero
+against the destination's file. Copying would have replaced a correct line with a broken
+one. So before any copy, **verify the source's rule against the destination's actual
+shape** — run the regex, count the store, check the paths exist. If the source is wrong,
+fix it here first and copy after; never fix it in the copy, and never hand-merge the two.
+The verification is a precondition of propagation, not a review of it.*
+
 ### The loop (source-of-truth model)
 
 - The **repo is the single source of truth** for all volatile state.
@@ -132,15 +142,20 @@ Preserve the existing entry format:
 The trigger is not the payload. The payload is defined here; the snippet/command bodies
 must match it.
 
-- **Session open** — at session start, before acting on any brief, Code reports the current
-  `DECISIONS_LOG.md` max decision number — counted with `^### #?[0-9]+`, never
-  `^### [0-9]+\.` and never `^### [0-9]+`. **Period-agnostic** because `health-app` entries
-  `126`–`128` carry no trailing period and a period-requiring sweep undercounts by three and
-  invents phantom gaps (verified 2026-08-02). **Sigil-agnostic** because `health-connect-app`
-  heads every entry `### #21 — …`, which `^### [0-9]+` matches **zero** times — a
-  shared-block rule that reports a max of 0 in one of the repos it governs, and reports it
-  as fact (verified against both trees 2026-08-04). Chat re-aims any brief against it, so a
-  stale project copy never masquerades as canon.
+- **Session open** — at session start, before acting on any brief, Code reports **both**
+  maxima: the `DECISIONS_LOG.md` max decision number, counted with `^### #?[0-9]+`, and the
+  `OPEN_QUESTIONS.md` max question number, counted with `^#{2,3} Q[0-9]+`. Never
+  `^### [0-9]+\.`, never `^### [0-9]+`, never `^## Q[0-9]+`. **Period-agnostic** because
+  `health-app` entries `126`–`128` carry no trailing period and a period-requiring sweep
+  undercounts by three and invents phantom gaps (verified 2026-08-02). **Sigil- and
+  level-agnostic** because `health-connect-app` heads a decision `### #21 — …` and a
+  question `### Q8 — …`, against `health-app`'s `### 166.` and `## Q77.`: the pinned forms
+  return **0 / 78** and **0 / 168** across the two repos (verified against both trees
+  2026-08-04). A sweep that returns zero does not look broken — it looks like an empty
+  store, at the one moment whose entire job is establishing canon. **Both arms are named
+  because only one used to be**, and the missing arm was filled in by analogy to the arm
+  that was there — which is how a health-app-shaped `^## Q` got reached for. Chat re-aims
+  any brief against these, so a stale project copy never masquerades as canon.
 - **Chat close-out (`;cc`)** emits the **pending-commit queue**: canonical-format
   `DECISIONS_LOG` / `OPEN_QUESTIONS` entries for everything decided that session, each
   flagged `PENDING`, ready to paste or file as an issue with zero reformatting. Writes

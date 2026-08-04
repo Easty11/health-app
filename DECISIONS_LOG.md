@@ -6431,6 +6431,13 @@ shared block. Extends `#167`; supersedes nothing.
   can never fire in `health-connect-app`: installed, green, and blind. The decision arm was already
   safe — both repos head a decision `### `, and the placeholder token is `### #NEXT` in both — so
   exactly one of the two arms was broken, which is the shape most likely to be missed.
+- **Session-open question arm — absent, and filled in by analogy.** Caught on challenge before the ff.
+  The ritual named the `DECISIONS_LOG` max and **no question max at all**, so anyone reporting one
+  reached for the shape of the arm that was there and produced `^## Q[0-9]+` — **78** in `health-app`,
+  **0** in `health-connect-app`. Nothing was broken here; something was *missing*, and a missing arm
+  in a rule that has a sibling arm is not neutral — it is a template. The bullet now names both arms
+  explicitly, with `^#{2,3} Q[0-9]+`. The generalisable part is that the two prior arms were found by
+  looking for a pinned pattern; this one was only found by asking *what does the rule not say*.
 
 **The trap was real; its location was not where the brief put it.** The chat brief predicted the
 break in the guard's *integer* anchor, reasoning that `^### [0-9]+` would not match `### #16 —`. The
@@ -6469,6 +6476,25 @@ script copy, install, HCA `DECISIONS_LOG` / `OPEN_QUESTIONS` / `BRANCHES` rows) 
 and cannot be: this session is `health-app`-rooted, and loop work in a second repo requires an
 HCA-rooted session. Carried in `ROADMAP` NOW as cross-repo debt, now with the generalisation as its
 precondition rather than its follow-up.
+
+**Propagation is not unconditionally safe in the source→destination direction, and that is a hole in
+`#16`'s founding mechanism.** `health-connect-app`'s wording of the session-open rule — *"matching the
+file's actual `###` heading format"* — is **generic and correct**. `health-app`'s was pinned to
+`health-app`'s own grammar and returns zero against HCA's file. Verbatim propagation would therefore
+have **replaced a correct line with a defective one**, at full fidelity, with a `diff` of empty as its
+evidence of success. Copy-not-hand-merge kills drift by making the source authoritative; it silently
+assumes the source is the better copy, and here it was not. The shared-block preamble now carries the
+missing clause: **verify the source's rule against the destination's actual shape before copying** —
+run the regex, count the store, check the paths exist — and if the source is wrong, fix it here first
+and copy after. Never fix it in the copy; never hand-merge. This is a precondition of propagation,
+not a review of it, and it is itself a shared-block edit that propagates.
+
+**Also recorded:** `FEEDBACK` **§24** — chat cannot make verbatim claims about file content. The brief
+that prompted this work stated both `CLAUDE.md` files were "read whole from master" and quoted a regex
+the guard does not contain; the fetch surface had returned a paraphrase shaped like verbatim, welding
+two bullets into one sentence. Truncation announces itself, paraphrase does not, and the confidence tag
+is generated from the same surface as the claim. The operative half for Code is in that row: a misaimed
+finding is not a false one — re-derive it against the tree before acting on it **or dismissing it**.
 
 **Also minted here:** `OPEN_QUESTIONS` `Q#NEXT`, for the `@claude` Action's unguarded push path.
 `#167` recorded that gap knowingly, but only in its own entry and a `BRANCHES` row — append-only
