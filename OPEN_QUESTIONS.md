@@ -2242,7 +2242,15 @@ is tuning the instrument to the outcome, and Q45's whole point is that the refer
 
 ## Q79. The `#167` guard cannot see the `@claude` Action's pushes, and until now that gap lived only in prose
 
-**State:** OPEN. **Related:** `#167` (the guard), `#169` (the cross-repo generalisation), `Q59` (nothing verifies the deployable artifact — adjacent, not the same hole), `ROADMAP` NOW cross-repo row.
+**State:** DONE → #170. **Related:** `#167` (the guard), `#169` (the cross-repo generalisation), `Q59` (nothing verifies the deployable artifact — adjacent, not the same hole), `Q12` in `health-connect-app` (**the mirror, still OPEN — owed**), `ROADMAP` NOW cross-repo row.
+
+**THE GAP WAS REAL; THE AGENT NAMED BELOW IS NOT. Corrected at resolution, 2026-08-04.** health-app has **no `.github` directory in any commit on any ref** — the `@claude` Action has never been wired to this repo, so the push path this question was built on does not exist and never did. The question was minted on `#167`'s prose plus the shared block's claim that *"Code — and the `@claude` GitHub Action — is the only writer"*, and nobody checked whether the Action was installed: `FEEDBACK` §12 committed by Code rather than chat. **The real uncovered path was in this repo's own history the whole time** — five merges on master committed by `GitHub <noreply@github.com>` (`e62f89f`, `0aa0200`, `f4b538f`, `cb1b58f`, `9f9437c`), i.e. github.com web-UI merges, which are server-side ref updates. The original text is preserved below unedited, because a question resolved by discovering its own premise was wrong is worth more legible than a question quietly reworded.
+
+**Resolved by `#170`** — `.github/workflows/governance-guard.yml`, `ubuntu-latest`, on `pull_request` + `push: [master]`. **Read the caveat with the close:** the `push` arm is *detection* (it fires after the ref has moved); prevention is the `pull_request` arm **plus branch protection requiring the check**, which is GitHub-side repo config, not committable, and **Luke's action, not Code's**. Until it is set the PR arm reports rather than blocks. `#NEXT` carries the full evidence, including the four control runs.
+
+**Still unverified, deliberately:** whether a GitHub App holds push rights on this repo. GitHub-side, not in the tree — reported unknown rather than assumed either way, which is the mistake this question made in the first place.
+
+**Original text, as minted, uncorrected:**
 
 `core.hooksPath` is a **per-clone, client-side** setting. It cannot bind a runner. The `@claude` GitHub Action pushes from a checkout that never ran `git config core.hooksPath .githooks`, so every push on that path is unguarded — a placeholder can reach master exactly as it did three sessions running before `#167`, by the one route the guard structurally cannot watch.
 

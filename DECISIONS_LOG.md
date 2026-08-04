@@ -6509,3 +6509,95 @@ it again; or the `@claude` Action's uncovered push path is closed (`Q79`), which
 and not a hook, and would make the hook the second of two implementations rather than the only one.
 
 ---
+
+### 170. The placeholder guard gains a CI surface — and with it the first POSIX control surface either repo has ever had
+
+**Decision:** `.github/workflows/governance-guard.yml` runs the placeholder guard on `ubuntu-latest`, on
+`pull_request` targeting master and on `push` to master, asserting in order: **(2a)** `.githooks/pre-push`
+tracked mode is `100755`, **(2b)** the hook *executes* as git would execute it, fed crafted pre-push stdin
+against a known-clean ref, **(2c)** the guard runs against the ref that would land. Extends `#167`'s
+ref-level enforcement to a surface a client-side hook cannot reach. Supersedes nothing. Resolves `Q79`.
+
+**The gap `Q79` named is real. The agent it named is not.** `Q79` said the `@claude` GitHub Action pushes
+from a checkout that never ran `git config core.hooksPath`. health-app has **no `.github` directory in any
+commit on any ref** — the Action has never been wired to this repo, so that push path does not exist and
+never did. The question was minted on `#167`'s prose plus the shared block's claim that *"Code — and the
+`@claude` GitHub Action — is the only writer"*, and nobody checked whether the Action was installed. That is
+`FEEDBACK` §12 committed by Code rather than chat: a declarative about an unseeable surface (GitHub-side app
+installation) carried as fact.
+
+**The real uncovered path was in this repo's own history the whole time.** Five merges on master carry
+committer `GitHub <noreply@github.com>` — `e62f89f`, `0aa0200`, `f4b538f`, `cb1b58f`, `9f9437c` — github.com
+web-UI merges, i.e. **server-side ref updates**. `core.hooksPath` is per-clone and client-side; it can bind
+neither a runner nor a merge button. So the hole is demonstrated, not hypothesised, and its positive control
+needed no construction. The correction is worth more than the close: a gap recorded against the wrong agent
+would have been "closed" by covering a path that does not exist, and the merge button would have stayed open
+behind a green check.
+
+**PREVENTION vs DETECTION — the distinction outcome D forces, and the reason this entry does not claim more
+than it has.** `#167`'s claim is *prevention*. A `push: [master]` job fires **after** the ref has moved: by
+the time it runs, the hole is on master. Against the merge button that is **detection**, not prevention, and
+shipping it as though it were prevention would quietly weaken `#167` while appearing to strengthen it.
+Prevention on this path needs two pieces and only one is a file:
+
+- **`pull_request` targeting master** — runs before the merge button is live. In the tree, versioned, done.
+- **Branch protection requiring the check** — disables the merge button until it passes. **GitHub-side repo
+  config, not committable.** Code cannot land it; it is Luke's action. Until it is set, the PR arm reports
+  and does not block.
+
+`push: [master]` ships anyway as the backstop for anything reaching master outside a PR. The workflow header
+states which arm is which, so a green run cannot be read as more than it is.
+
+**The enforcement now spans three layers and only one is versioned.** `core.hooksPath` is per clone, branch
+protection is per repo, and the workflow file is the only piece with a diff. A fresh clone or a settings
+change removes enforcement with nothing in the history to show for it — the same unseeable-surface problem
+in a new costume. Recorded here rather than rediscovered.
+
+**Why `ubuntu-latest` is load-bearing and not an implementation detail.** `#23` — the propagated hook landing
+non-executable in `health-connect-app` — was **not a coverage failure**. Every control in both repos runs on
+Windows with `core.filemode=false`, and Git for Windows honours a script's shebang regardless of its mode
+bit, so the substrate cannot express the defect. More Windows controls could not have caught it at any
+count. A Linux runner is the first surface in either repo on which the mode-and-permission class is
+observable at all, so siting the enforcement there buys the observability free. That coincidence is the
+reason to build this now rather than when the backlog reaches it.
+
+**Also corrected here, named rather than numbered:** `scripts/check_governance_placeholders.py`'s docstring
+claimed *"the alias calls the same script."* It never did — the `land` alias body is
+`checkout && merge --ff-only && push && branch -d && push --delete`, with no call to anything in `scripts/`
+(read from `git config --global --get alias.land`, 2026-08-04). The docstring is a claim about **which
+surfaces enforce the rule**, and this decision changes that set, so rewriting it to name the true two — the
+hook and CI — is part of the change, not a rider on it. Not a separate decision.
+
+**How you know — four real runs, and the evidence quoted is the failing output, not the passing:**
+
+- **Negative control** — PR `#11`, clean branch, run `30881982823`: **success**.
+- **Positive control, placeholder arm** — PR `#12`, synthetic `### #NEXT` + `## Q#NEXT`, run `30882006064`:
+  **failure at 2c**, naming both offences against the merge commit `91aeccc` (the tree that would land, not
+  the branch tip):
+  `REFUSED: unresolved governance placeholder in HEAD.` /
+  `DECISIONS_LOG.md:6513  ### #NEXT. CONTROL ONLY …` / `OPEN_QUESTIONS.md:2259  ## Q#NEXT. CONTROL ONLY …`
+- **Positive control, mode arm** — PR `#13`, `.githooks/pre-push` at `100644`, run `30882020463`: **failure
+  at 2a** — `tracked mode: 100644  (100644 8cd1001… .githooks/pre-push)`. `#23` reproduced deliberately on a
+  surface that can see it, for the first time.
+- **Positive control, execution arm** — PR `#14`, run `30882100017`. **Minted because the mode control did
+  not prove what it appeared to:** 2a fires first and short-circuits the job, so 2b never ran against the
+  non-executable hook and its behaviour was *argued, not shown*. This branch removed 2a only, keeping mode
+  `100644`, and 2b failed on its own:
+  `./.githooks/pre-push: Permission denied` — **exit 126**. That is the execution proof; without it the
+  workflow header carried a claim in the exact style this project exists to refuse.
+- **Scratch refs torn down** — PRs `#12`/`#13`/`#14` closed, all three remote branches deleted, local
+  branches gone, `git branch -r` back to `master` + `feat/cbti-eval-trigger` + this branch.
+
+**Unverified and recorded as such:** whether a GitHub App holds push rights on this repo. That is GitHub-side
+config, not in the tree, and not readable from Code. Reported as unknown rather than assumed in either
+direction — the mistake `Q79` made in the first place.
+
+**Do not revisit unless:** branch protection is set, at which point the PR arm becomes prevention and this
+entry's prevention/detection caveat should be superseded by a new entry recording it; an `@claude` Action or
+any other automated pusher is installed, which reopens the credential question the original brief posed
+(a default `GITHUB_TOKEN` push does not fire `on: push`, so the trigger would need re-planning); the guard
+gains a third enforcement surface, at which point the docstring's surface list needs updating again; or a
+non-Windows dev clone appears, which would make the mode class locally visible and reduce CI's unique value
+to the enforcement half.
+
+---
