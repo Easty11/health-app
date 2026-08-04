@@ -2255,3 +2255,5 @@ is tuning the instrument to the outcome, and Q45's whole point is that the refer
 **Do not resolve by:** asserting the Action does not push governance files. It merges branches and lands entries; that is the point of it, and "it probably will not" is the class of reasoning `#162` was created by.
 
 **Mirror obligation:** `health-connect-app` inherits this hole verbatim on propagation and must mint the same row. Two repos with the same hole recorded is honest; two repos with the same hole and one of them silent is how it survives another four sessions.
+
+## Q#NEXT. CONTROL ONLY - synthetic placeholder, must be rejected by CI

@@ -6509,3 +6509,5 @@ it again; or the `@claude` Action's uncovered push path is closed (`Q79`), which
 and not a hook, and would make the hook the second of two implementations rather than the only one.
 
 ---
+
+### #NEXT. CONTROL ONLY - synthetic placeholder, must be rejected by CI
