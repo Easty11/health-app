@@ -6602,7 +6602,7 @@ to the enforcement half.
 
 ---
 
-### #NEXT. The pull request becomes the sole route to master; `land` rewritten around `gh`
+### 171. The pull request becomes the sole route to master; `land` rewritten around `gh`
 
 **Decision:** master is reachable only by pull request, gated by the `placeholder guard (POSIX)` required
 status check. Ruleset `master-pr-gated` (id `20414758`) requires a PR, requires that check under a strict
@@ -6672,7 +6672,7 @@ to the shared block.
 
 ---
 
-### #NEXT. Merge-path mechanics leave the shared block — the boundary criterion for verbatim propagation
+### 172. Merge-path mechanics leave the shared block — the boundary criterion for verbatim propagation
 
 **Decision:** a rule belongs in the CLAUDE.md shared block only if its correctness is independent of any
 surface outside the tree. Invariants qualify and stay: number-at-merge, terminal-state disposition, patch-id

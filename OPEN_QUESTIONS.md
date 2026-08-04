@@ -2266,7 +2266,7 @@ is tuning the instrument to the outcome, and Q45's whole point is that the refer
 
 ---
 
-## Q#NEXT. The guard polices the symptom, not the invariant — nothing checks that decision numbers are unique and gapless
+## Q80. The guard polices the symptom, not the invariant — nothing checks that decision numbers are unique and gapless
 
 **State:** OPEN. **Related:** `#167` (the guard), `#170` (its CI arm), `#171` (the PR-gated merge path and strict mode), `#172` (the boundary criterion), `#162` (the hole this class produced), `#148` (classified-not-counted renumbering).
 
