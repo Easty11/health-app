@@ -134,19 +134,28 @@ ruleset is expected to exist.** Verify directly, never by a green run:
 ### Fresh-clone setup — neither item is cloned, neither fails loudly
 
     git config core.hooksPath .githooks
-    git config --local alias.land '!f() { gh pr merge "$(git branch --show-current)" --merge --delete-branch; }; f'
+    git config --local alias.land '!gh pr merge --merge --delete-branch'
 
 Verify with `git config --get core.hooksPath` and **`git config --local --get alias.land`**. The
 `--local` is load-bearing: without it the check returns the stale global body and passes on an
 unconfigured clone.
 
-### OWED — neither closable by a commit in this repo
+### OWED
 
-1. **The `land` alias body (Luke, this machine).** The old ff-only body is still in
-   `~/.gitconfig` and is now *unrunnable* — its `push origin master` is refused by the ruleset.
-   `git config --global --unset alias.land`, then the `--local` form above. `stale` stays global
-   and unchanged.
-2. **Shared-block propagation to `health-connect-app`** — ROADMAP NOW row 4. HCA takes the
+1. ~~**The `land` alias body.**~~ **DISCHARGED 2026-08-05, post-close-out.** `--global --unset`
+   run by Luke; `stale` verified surviving; the `--local` body set and verified with
+   `git config --local --get alias.land`. **The documented body was wrong on first use and is
+   corrected in the same pass:** the `!f() { … "$(git branch --show-current)" … }; f` form
+   Bash-verified at `#171` cannot be entered from PowerShell — embedded double quotes do not
+   survive PowerShell's native-command re-quoting, and `git config` reports it as
+   `error: no action specified`, which names nothing about quoting. The working body is
+   `!gh pr merge --merge --delete-branch`; no subshell is needed because `gh pr merge` already
+   defaults to the current branch's PR. The **standing PowerShell rule in `CLAUDE.md` was
+   sharpened** rather than a new instrument added: PowerShell-safe now explicitly means
+   *no embedded double quotes*, and a command Code emits for Luke must be exercised in
+   PowerShell — Code's Bash tool passes these strings cleanly and structurally cannot
+   reproduce the failure.
+2. **Shared-block propagation to `health-connect-app`** — the one genuinely outstanding item. — ROADMAP NOW row 4. HCA takes the
    amended block verbatim and **loses nothing**: its merge path is deliberately unaffected and
    its `land` stays as it is. health-app's repo-local `### Merge path` section does **not**
    propagate, by construction. HCA-rooted session, `pwd`-verified first.
@@ -187,7 +196,14 @@ the queue from what is written down. So, explicitly:
 
 ### Single clearest next action
 
-**Not more governance.** Either run the two `git config` commands above so the merge path is
-actually runnable in this clone — under a minute, and it closes `#171`'s OWED item — or pick up
-`feat/cbti-eval-trigger`'s rework or `Q45` and let the governance queue wait. `Q80`'s guard arm
-is real but not urgent, and it would be the third instrument in three sessions.
+**Not more governance — and the setup item that used to sit here is done.** The clone is
+configured and verified, so nothing stands between the next session and product work.
+
+Pick up **`feat/cbti-eval-trigger`'s rework** or **`Q45`**. `Q45` is the sharper of the two: it
+is contaminating capture *now*, every nap-excluded night currently rests on an unverified
+attribution, and it closes from a document rather than from code. `feat/cbti-eval-trigger` is
+the larger piece of shippable work but needs the `#165` rework first.
+
+`Q80`'s guard arm and the HCA propagation are both real and neither is urgent. `Q80` would be
+the third instrument in three sessions; let it wait until something has been built for it to
+protect.
