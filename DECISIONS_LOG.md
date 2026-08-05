@@ -6736,3 +6736,91 @@ joins the project with a different enforcement posture, which tests whether "rep
 per-repo mechanics file.
 
 ---
+
+### 173. Deep-confidence and Banister inherit `#71` — device deep-sleep is not a readiness input
+
+**Decision:** Extends `#71` (deep-sleep minutes excluded from the daily readiness term; Samsung Ring
+deep/light discrimination not fit for purpose) to two mechanisms `#71` did not address: the
+`runDeepConfidence` module (`health-connect-app/src/deepSleepConfidence.js`) and Banister load.
+Device-reported deep-sleep is **not** a first-class input to readiness or to Banister.
+`deepSleepConfidence.js` is retained **diagnostic-only** — it surfaces deep-stage artifact
+fragmentation; its tunables (`DELTA_ARTIFACT`, `SPREAD_SPIKE`, `SHORT_MS`, `HR_NADIR_PCT`,
+`MARGIN_MS`) stay uncalibrated **by design** and feed no score, and `runDeepConfidence` is not wired
+into readiness or Banister. No new rationale beyond `#71` — the same unfitness finding, applied to the
+module and to Banister.
+
+**Rationale:** Ring-validation literature generalises `#71`'s finding from one device to the sensing
+class. PPG+accelerometer deep/N3 classification tops ~50–58% per-epoch with large individual-night
+error and proportional under-reporting of deep on high-deep nights; group averages mask per-night
+error. The confidence module can only **subtract** false deep (artifact slivers) — it can never
+recover **under-reported** deep, so it cannot rehabilitate the signal for scoring even in principle.
+That asymmetry, not the accuracy number, is what makes calibration pointless.
+
+**Status:** Landed on `gov/open-questions-sweep` — governance only, no code change. Nothing to
+implement: the decision is that two mechanisms stay unwired, and both are unwired today.
+`deepSleepConfidence.js` lives in `health-connect-app` and is untouched by this entry.
+
+**How you know:** `#71`'s own evidence (complementary two-class confusion signature; MCP/Samsung-app
+exact match proving faithful ingest of a wrong-at-source number) plus Luke's records — low deep
+despite refreshed waking, and ~26 of 30 deep segments under 3 minutes at Gate 2. Literature supplied
+by the 2026-08-03 chat session: Herberger 2025 (Sci Rep); Kainec 2024 (Sensors); Robbins 2024
+(Sensors); de Zambotti 2017 (Behav Sleep Med) — **cited as supplied and not independently retrieved
+from this tree.** Q3's original "precondition cleared, re-run Gate 3" was **falsified** in the same
+session: `collapseSleepSessions()` de-dups sleep **sessions** only, while the HR array
+(`fetchHeartRateData` → `heartRateMapper` → `.flat()`) is never de-duped, so a re-run would likely
+reproduce `hrMedianGapSec: 0`. **That falsification is a `health-connect-app` claim and is not
+verifiable from this tree** (single-repo rule); it is recorded as reported, and it weakens rather
+than carries the decision — the decision stands on `#71` alone.
+
+**Resolves:** Q3 (supersedes its Gate 3 re-run requirement), `Q81`.
+
+**Do not revisit unless:** a validated deep sensor enters the pipeline (EEG headband), or Samsung
+ships a validated N3 algorithm with published per-epoch performance — the same trigger as `#71`,
+deliberately, because this entry adds no independent trigger of its own.
+
+---
+
+### 174. The `/health-connect/sync` field contract is single-named on HCA's mapped names, pinned by a contract test rather than codegen
+
+**Decision:** The `/health-connect/sync` payload is single-named on the mapped JS field names HCA
+emits: `bpm` (HeartRate), `rmssd` (HRV), `date` (Steps), `type` (Exercise), and payload key
+`workouts`. The dual-acceptance `.get_*()` reconcilers and their duplicate fields collapse to these;
+the dead raw-library branches are deleted — `HeartRateRecord.beatsPerMinute`,
+`HRVRecord.heartRateVariabilityMillis`, `StepsRecord.startTime`, `ExerciseRecord.exerciseType`,
+`SyncPayload.exercise`. The stalled workouts→exercise rename is **abandoned**: `workouts` is live and
+stays, `exercise` was never adopted by the client and goes. `.get_kg()` / `.get_meters()` are **out of
+scope** — they unwrap Health Connect's nested `{inKilograms}` / `{inMeters}` shape, which is
+forward-compatibility for record types HCA does not post, not a dual-name contract.
+
+**Rationale:** The tolerance exists only because the contract was never single-sourced, and it costs
+more than it buys: two accepted names for one value means no reader can tell which one production
+sends, and a client-side rename fails silently rather than loudly.
+
+**Not codegen — and that is the deliberate departure from `#24`/`#29`.** The sleep-stage enum is
+generated from the backend spec. This payload is not, and should not be: there is exactly one
+fully-controlled client, and once the dual acceptance is gone a rename 422s in test rather than
+degrading in production. A contract test asserting each backend model's accepted field equals the
+name HCA's mapper emits buys the same guarantee for a fraction of the machinery.
+
+**Status:** **OWED** — the decision is settled, the code is not written. Outstanding: delete the five
+dead branches in `backend/routers/health_connect.py` and add the field-name contract test. Landed on
+`gov/open-questions-sweep` as governance only. `Q5` moves to `DONE → #174` when that lands, not
+before.
+
+**How you know:** The backend half was re-read against master this session: the five branches are
+present and exactly as described — `beatsPerMinute` at `health_connect.py:79`, `.get_bpm()` at `:82`,
+`heartRateVariabilityMillis` at `:98`, `.get_rmssd()` at `:101`, `StepsRecord.startTime`/`date` at
+`:87`/`:89`, `exerciseType`/`type` at `:132`/`:133`, and `SyncPayload.exercise` at `:200` feeding
+`all_exercises()` at `:208`. The client half — that HCA's `src/healthConnect.js` mappers rename
+raw→mapped in the map expression and React Native serializes verbatim, so no build emits raw names —
+was read by the 2026-08-03 chat session and **is not verifiable from this tree** (single-repo rule).
+It is the load-bearing half: if it is wrong, deleting the raw branches breaks production silently on
+the next sync. **The contract test is what converts it from an assumption into an assertion, which is
+why the test is not optional and the deletion must not land without it.** Q5's "capture one real
+on-device sync" precondition is struck as a red herring — source is the contract, not a capture.
+
+**Resolves:** Q5, on the collapse landing.
+
+**Do not revisit unless:** a second `/health-connect/sync` client appears — at which point one
+controlled client no longer holds and codegen becomes the cheaper answer — or HCA changes an emitted
+field name, which is what the contract test fires on.

@@ -15,9 +15,19 @@ on real HR density during sleep, so this must be re-measured after HR is de-dupe
 INCONCLUSIVE — do **not** calibrate `DELTA_ARTIFACT` / `SPREAD_SPIKE` / `SHORT_MS` or wire
 `runDeepConfidence` into readiness/Banister until resolved.
 
-**State:** OPEN — re-run the Gate 3 HR-cadence measurement. **The stated precondition has CLEARED**:
-Q2's `collapseSleepSessions()` de-dup landed on HCA master (`36df9a2`), so HR is de-duped and the
-re-measurement is simply not done. No blocker.
+**State:** `DONE → #173` — **superseded, not answered.** Q3 gated two things: (a) calibrating the
+artifact constants and (b) wiring `runDeepConfidence` into readiness/Banister, both pending a Gate 3
+HR-cadence re-run. `#173` (extending `#71`) decides device deep-minutes will not drive readiness or
+Banister at all, so **(b) is cancelled and (a) is moot** — diagnostic-only use needs no calibration, and
+the re-run is no longer owed by anyone.
+
+Footnote, because the correction matters more than the close: the prior **"the precondition has
+CLEARED"** claim above was itself false. `collapseSleepSessions()` de-dups sleep **sessions** only; the
+HR array is never de-duped on HCA master, so a re-run would likely have reproduced `hrMedianGapSec: 0`.
+Q3 was therefore never actually re-runnable on the stated basis. *(That falsification is a
+`health-connect-app` claim reported by the 2026-08-03 chat session and is **not verifiable from this
+tree** — it is recorded, not attested. It does not carry the close: `#173` does.)* Cross-refs
+`Q81`, `#71`.
 
 ---
 
@@ -33,15 +43,25 @@ date, so HC and scraper rows for the *same physical night* land on different day
 single canonical sleep-date convention (likely wake-date, to match the scraper) and align
 `_aggregate_day`.
 
-**State:** OWED — resolved in code at DECISIONS_LOG #64
+Resolved in code at DECISIONS_LOG #64
 (`fix/hc-sleep-wake-date-attribution`): canonical sleep-date = **local (AEST) wake-date**
 (`endTime`), aligning to the scraper; `_aggregate_day` filter + date-collection loop switched
 to wake-date-only via a tz-aware `_wake_date`, and existing sleep values cleared by migration
 `f4e1a2b3c6d7` for a post-deploy HCA re-sync. G4 (confirm `health_connect_syncs[date]` sleep
 stages match `samsung_hrv_readings[date]` **same-date**, not date+1) is pending the
-operational re-sync against live Railway data — this session could not reach Railway. Outstanding check: G4 — confirm `health_connect_syncs[date]` sleep stages match
-`samsung_hrv_readings[date]` **same-date** against live Railway data after the operational re-sync.
-Owner: Luke. Move to `DONE → #64` once G4 passes.
+operational re-sync against live Railway data — an earlier session could not reach Railway.
+
+**State:** `DONE → #64` — **G4 passed** against live Railway Postgres, 2026-08-03. A same-date join of
+`health_connect_syncs` against `samsung_hrv_readings` (`captured_at = date`) matched 11 of 14 recent
+nights (deep exact, REM/light within ~1–2 min), and the control join at `date + 1 day` returned
+`still_shifted = 0` — the one-day shift is gone, which is precisely what G4 asked. The wake-date
+convention holds in production.
+
+Three nights still undercount, for a cause unrelated to date attribution — split out as `Q82`
+(fragmented sessions) and `Q83` (source-blind selection) rather than left inside a closed
+question. *(The G4 query was run by the 2026-08-03 chat session; the Railway CLI was non-functional in
+the Code session that recorded this close, so the result is carried as reported and reproducible, not
+re-attested here.)* Owner: Luke.
 
 ---
 
@@ -57,9 +77,18 @@ same can be done here: capture one real on-device sync, confirm exactly which fi
 and delete the `.get_*()` reconcilers (this is "Phase 2" of the contract work). Which name to
 keep is unverified until an actual payload is captured.
 
-**State:** OPEN — capture one real on-device sync payload, confirm which field names HCA actually
-posts, pick the canonical name, then collapse the dual acceptance. No blocker: the capture is the first
-step of the work, not a precondition on someone else.
+**State:** OPEN — the **capture precondition is STRUCK**. Master source *is* the emitted contract: HCA's
+mappers rename raw→mapped in the map expression and React Native serializes verbatim, so no build can
+emit the raw names and no on-device capture can tell us anything the source does not. Canonical is
+decided at `#174` = HCA's mapped names (`bpm` / `rmssd` / `date` / `type` / `workouts`).
+
+Next action (CODE): delete the five dead branches — `HeartRateRecord.beatsPerMinute`,
+`HRVRecord.heartRateVariabilityMillis`, `StepsRecord.startTime`, `ExerciseRecord.exerciseType`,
+`SyncPayload.exercise` — and add the field-name contract test. `.get_kg()` / `.get_meters()` are
+**excluded** (forward-compat for unposted record types, not a dual-name contract). The test is not
+optional: the client half of `#174`'s evidence was read cross-repo and is unverifiable from this
+tree, so the test is what converts it from assumption to assertion. → `DONE → #174` when the collapse
+lands. Owner: Luke.
 
 ---
 
@@ -73,8 +102,21 @@ load path before the four-window engine — or even Tier 0 with a strength term 
 trusted. Was tracked as "B2" in an out-of-project session's scheme that never entered the
 repo; recorded here under the canonical Q-series.
 
-**State:** OWED — outstanding check: a Railway Postgres query confirming Hevy strength volume actually
-populates the per-window `load_metrics` rows. Resolves → #28 on that verify. Owner: Luke.
+**State:** OPEN — **re-scoped 2026-08-03: this is unbuilt work, not an unverified one.** The named
+check — a Railway query confirming Hevy strength volume populates per-window `load_metrics` rows — is
+**unrunnable**, because no `load_metrics` table exists. Confirmed three ways: `to_regclass(
+'public.load_metrics')` returned NULL against prod Railway (2026-08-03, chat session); no migration in
+`backend/migrations/` creates it (re-verified against master this session); and `mcp_server.py:578`
+says so in the user-facing output — "Hevy volume load is NOT yet integrated into this calculation
+(aerobic_sessions only)."
+
+`#28` already records the shape: *"Decided, not implemented … Gated on: per-window `load_metrics` at
+ingestion · Hevy strength ingestion (Q6) · Polar zone (#10)."* So the work is: build Hevy strength
+volume-load → Mechanical + Neuromuscular `load_metrics` rows, sequenced after the (also unbuilt)
+`load_metrics` table. **Consequence today:** strength contributes **zero** to the deployed load metric,
+which is the interim aerobic-only ACWR of `#8`. OPEN rather than BLOCKED — nothing prevents building
+it; it simply has not been built. → `DONE → #28` when the ingestion exists **and** a query then shows
+rows landing. Owner: Luke. Cross-refs `#28`, `#32`, `#10`, ROADMAP "Banister build".
 
 ---
 
@@ -94,8 +136,16 @@ missing: the richer three-valued provocative/clear/untested detail per injury th
 `FEEDBACK.md` §5 carries but the current `_INJURY_SEED` schema (`body_part`, `side`,
 `restrictions`, `detail`) does not have a field for.
 
-**State:** OPEN — author the fourth injury (right proximal semimembranosus) into the structured
-ledger, and decide the findings-detail schema jointly with Q20. No blocker named in-row.
+**State:** `DONE → #72` — confirmed live 2026-08-03: a prod Railway query over
+`user_knowledge_entries WHERE key LIKE 'injury_%'` returned **5 active injury rows**, including
+`injury_hamstring_right` (right proximal semimembranosus). Authoring is complete and faithful to
+FEEDBACK §5 — the seed is in fact a **superset**, also carrying `injury_pes_anserine_left`.
+
+The findings-detail half is handed **wholly to Q20** (now decoupled), so it is not a residual here.
+This discharges `#72`'s live-seed OWED. The remaining sliver of `#72`'s OWED — whether
+`get_readiness_snapshot` actually *renders* the injury — is a code-path check, not ledger
+completeness, and is tracked under `#72`, not Q7. *(Railway result carried as reported by the
+2026-08-03 chat session; the Railway CLI was non-functional in the Code session recording this.)*
 
 ---
 
@@ -231,9 +281,14 @@ Positive right slump, S1-pattern referral, frontal-plane deficit have no first-c
 elsewhere too: FEEDBACK §5 documents these findings clinically, but the structured ledger the engine and
 snapshot read does not carry them. Q7 territory.
 
-**State:** OPEN — resolve jointly with Q7 (injury-ledger completeness), not piecemeal. This is a
-sequencing coupling, **not** a blocker: Q7 is itself UNSTARTED and startable, so nothing prevents doing
-both together.
+**State:** OPEN — **decoupled from Q7 (2026-08-03).** The "resolve jointly with Q7 / Q7 is itself
+UNSTARTED" framing is now stale: Q7's authoring is discharged at `#72`, so there is nothing left to
+resolve jointly *with*. Q20 stands alone.
+
+The question is unchanged in substance: give clinical findings — positive slump, S1-pattern referral,
+frontal-plane deficit, "pressing untested" — a first-class structured home in the injury `value` JSON,
+specifically the three-valued **provocative / clear / untested** status that FEEDBACK §5 carries as a
+table column and the ledger does not. No blocker. Owner: Luke.
 
 ---
 
@@ -725,7 +780,8 @@ already been searched to exhaustion.
 
 _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #20.
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
-fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3._
+fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3 (superseded
+`#173` / `Q81`; principle `#71`)._
 
 ## Q46. No column records whether a prescription's `basis_tst` came from device or diary — only its adherence source
 
@@ -2278,8 +2334,120 @@ is tuning the instrument to the outcome, and Q45's whole point is that the refer
 
 **Shape, not yet designed:** assert over `DECISIONS_LOG.md` that the resolved headings form a contiguous run with no duplicates, anchored on the heading form per `#113` and level-agnostic per `#169` so it does not read empty against `health-connect-app`'s grammar. Open sub-questions: whether historical gaps (`#162`) are grandfathered by a floor or by an explicit allow-list — a check that fails on day one on known history gets disabled rather than fixed; and whether the arm runs in the same script or a sibling, given the script's exit-code contract (0 clean / 1 would-reach-master / 2 cannot-run) is already load-bearing.
 
-**Third sub-question — the forward-reference class, which is the one nothing covers.** There are three ways a decision number goes wrong and the guard set covers two. An unresolved placeholder is caught by `#167`'s guard. A duplicate or a gap would be caught by the arm above. **A forward reference written as a literal number before the resolve is invisible to all of them** — `#171` in prose is syntactically perfect and semantically wrong if master moved, and no anchor, count or contiguity check can tell. `#171`'s own landing demonstrated it: nine refs were written as literal `#171`/`#172` ahead of the resolve and held only because master happened not to advance; the three tokens written as `#NEXT` in the same branch were safe by construction. **The cheap fix is a rule, not a check:** never write a resolved-looking number before the resolve — write the token and let the guard enforce it. The open part is what the token looks like when one branch carries two entries, since a bare inline `#NEXT` cannot say *which*; that ambiguity is exactly why the literals were written in the first place, so the rule needs a disambiguating form (`#NEXT+0` / `#NEXT+1`, or per-entry slugs) before it can be stated as binding. Decide the form here, then the rule can go in the shared block as an invariant — it is true regardless of merge path or enforcement surface.
+**Third sub-question — the forward-reference class, which is the one nothing covers.** There are three ways a decision number goes wrong and the guard set covers two. An unresolved placeholder is caught by `#167`'s guard. A duplicate or a gap would be caught by the arm above. **A forward reference written as a literal number before the resolve is invisible to all of them** — `#171` in prose is syntactically perfect and semantically wrong if master moved, and no anchor, count or contiguity check can tell. `#171`'s own landing demonstrated it: nine refs were written as literal `#171`/`#172` ahead of the resolve and held only because master happened not to advance; the three tokens written as `#NEXT` in the same branch were safe by construction. **The cheap fix is a rule, not a check:** never write a resolved-looking number before the resolve — write the token and let the guard enforce it. The open part is what the token looks like when one branch carries two entries, since a bare inline `#NEXT` cannot say *which*; that ambiguity is exactly why the literals were written in the first place, so the rule needs a disambiguating form (`#173` / `#174`, or per-entry slugs) before it can be stated as binding. Decide the form here, then the rule can go in the shared block as an invariant — it is true regardless of merge path or enforcement surface.
 
 **Blocked by:** nothing. Buildable now — UNSTARTED rather than blocked, and the reason it is a question rather than a roadmap row is the grandfathering fork above, which wants a ruling before code.
 
 **Do not resolve by:** adding the assertion to the alias after all, or by asserting on a count rather than the heading forms (`#113`: read the matches, never the count).
+
+---
+
+## Q81. Device deep-sleep-stage validity is too low to drive readiness — deep-confidence is diagnostic, not a score input
+
+PPG+accelerometer sleep trackers (the Samsung Ring class — direct Galaxy-Ring N3 validation is thin, so
+this is class-level evidence plus Samsung-watch data, and is stated at that scope deliberately) classify
+deep/N3 at roughly **50–58% per-epoch at best**. Two documented failure modes match Luke's records:
+
+1. **Misclassification.** Deep sensitivity runs 0.14–0.58 across devices; ~51% epoch agreement (Oura).
+   At near coin-flip per epoch the hypnogram flickers in and out of deep — which is what the Gate 2
+   "~26 of 30 deep segments under 3 minutes" pattern *is*. It is an artifact signature, not physiology.
+2. **Proportional under-report.** Devices under-count deep on exactly the nights with the most of it
+   (Oura ~−20 min N3; Fitbit ~−15; Apple ~−43). "Little deep despite waking refreshed" is this bias.
+
+Group averages mask large individual-night error, so a device that looks acceptable in aggregate can be
+useless for any single night — and a daily readiness term consumes single nights.
+
+**The asymmetry is the load-bearing part.** `deepSleepConfidence.js` can only **subtract** false deep
+(artifact slivers). It can never recover **under-reported** deep — true SWS scored as light — which is
+the dominant error here. So no amount of calibration makes the module a score input; it is structurally
+incapable of correcting in the direction that matters.
+
+**State:** `DONE → #173` — device deep-minutes are not a readiness or Banister input; the
+deep-confidence module is retained diagnostic-only, its constants uncalibrated **by design**, feeding no
+score. Extends `#71` from the daily sleep-score term to the module and to Banister.
+
+Refs (supplied by the 2026-08-03 chat session, **not independently retrieved from this tree**):
+Herberger 2025 (Sci Rep); Kainec 2024 (Sensors); Robbins 2024 (Sensors); de Zambotti 2017 (Behav Sleep
+Med). Cross-refs Q3, `#71`.
+
+---
+
+## Q82. `_aggregate_day` keeps only the longest sleep session — fragmented Samsung nights undercount
+
+Surfaced by the Q4/G4 drill-down (2026-08-03, live Railway). Three nights — wake-dates 2026-07-20,
+-22, -23 — undercount the Samsung scraper across **all** stages, with date attribution correct
+(same-date, `still_shifted = 0`). So this is not a residue of the Q4 shift; it is a separate defect that
+the Q4 fix made visible.
+
+**Mechanism.** Samsung writes a fragmented night as multiple non-overlapping `SleepSession` records.
+`_aggregate_day` (`backend/routers/health_connect.py`, the `best = max(day_sleep, key=...duration())`
+selection) persists **only the longest session and its stages**, discarding the rest of the night.
+Per `health_connect_record_sources` the three undercounting nights carry 2 / 2 / 4 `shealth` sessions
+(7/23 has four: 22:42, 02:14, 02:45, 04:46 AEST).
+
+**Not every multi-session night.** 7/21 had two `shealth` sessions and matched exactly. The undercount
+bites only when the fragments are **balanced** — when one session clearly dominates, `max()` happens to
+pick nearly the whole night and the bug hides. That is why it survived Q4.
+
+The in-code comment above the selection anticipated only **nap displacement** ("a same-day nap cannot
+displace the main night because the max() tiebreak still picks the longest session") — it did not
+anticipate a real night split into several main sessions, which is the case that breaks it.
+
+**Fix:** replace max-only with a **union/merge** of the night's sessions, excluding same-wake-date naps.
+"Which sessions constitute the night" is the design fork and is not yet decided.
+
+**State:** OPEN — no blocker, but **sequenced after `Q83`**: a merge must run *within* the single
+source that question selects, because merging sessions across Samsung and Withings would be incoherent.
+Distinct from Q4 (`DONE → #64`). Owner: Luke. Cross-refs `Q83`, `#35`/`#36`/`#37`.
+
+---
+
+## Q83. HC sleep selection is source-blind — Withings and Samsung are silently blended, and the `#35`/`#36`/`#37` dedup enabler was never wired
+
+Surfaced alongside `Q82` in the Q4/G4 drill-down (2026-08-03). `health_connect_record_sources`
+shows Health Connect carries sleep from **two** writers: Samsung (`com.sec.android.app.shealth`) and
+Withings (`com.withings.wiscale2`).
+
+`_aggregate_day` selects by max-duration across **all sources with no priority**. So on any night a
+Withings session happens to be the longest, the persisted `health_connect_syncs` sleep reflects
+**Withings** staging rather than Samsung — silently. That breaks scraper parity and poisons every
+downstream HC-sleep consumer: `sleep_score`, `_section_health_connect`, the dashboard.
+
+**Designed, enabled, never wired.** `health_connect_record_sources` exists expressly as the
+"source-priority dedup enabler (`#35` F1 / `#36` / `#37`)" — its own migration docstring says so — and
+`_aggregate_day` never consumes it. The table is populated and ignored.
+
+**Unexplained sub-finding** (not part of the fix, recorded so it is not lost): on four nights (7/19,
+7/20, 7/21, 7/23) a Withings record shares an **identical `record_start`** with the Samsung one. That
+smells like an HC re-post or mirror loop rather than two independent measurements, and wants its own
+look before the priority rule is trusted to be doing what it appears to do.
+
+**Fix:** apply source priority — Samsung is scraper-canonical — in `_aggregate_day`'s sleep selection,
+consuming `record_sources` or the payload `source_package`, **before** `Q82`'s fragment-merge runs.
+The device-agnostic-schema rule makes this structural rather than a one-user quirk.
+
+**State:** OPEN — no blocker. **Higher priority than `Q82`, and gates it.** Distinct from Q4
+(`DONE → #64`). Owner: Luke. Cross-refs `Q82`, `#35`/`#36`/`#37`.
+
+---
+
+## Q84. The `/health-connect/sync` backend accepts record types HCA never posts
+
+`_aggregate_day` writes `oxygen_saturation`, `respiratory_rate` and `distance_meters`, and the models
+define `WeightRecord`, `DistanceRecord` and `MindfulnessRecord` — but HCA's `fetchAllData` posts only
+sleep / hrv / heartRate / steps / workouts. So the Health Connect path never fills those columns; SpO2
+and respiratory rate arrive via the Samsung scraper instead, and the HC-side columns sit permanently
+null.
+
+This is **not a bug** — it is schema-wider-than-client, and the backend is tolerant rather than wrong.
+It is recorded because `#174` explicitly parks `.get_kg()` / `.get_meters()` as "out of scope —
+forward-compat for record types HCA does not post", and without this row that exclusion points at
+nothing: a reader of `#174` has no entry explaining why those two reconcilers were left alive when
+the other five branches were deleted. **This question is the home for that exclusion.**
+
+The fork: wire HCA to collect and post the missing record types, or trim the backend surface to what the
+client actually sends. Deciding it also decides whether `.get_kg()` / `.get_meters()` eventually live or
+die.
+
+**State:** OPEN — no blocker. Surfaced by the Q5 drill-down (2026-08-03) and **distinct from Q5**: Q5 is
+two names for one value, this is a name with no sender. Owner: Luke. Cross-refs Q5, `#174`.
