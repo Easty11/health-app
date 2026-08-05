@@ -2417,17 +2417,37 @@ downstream HC-sleep consumer: `sleep_score`, `_section_health_connect`, the dash
 "source-priority dedup enabler (`#35` F1 / `#36` / `#37`)" — its own migration docstring says so — and
 `_aggregate_day` never consumes it. The table is populated and ignored.
 
-**Unexplained sub-finding** (not part of the fix, recorded so it is not lost): on four nights (7/19,
+**The sub-finding is no longer unexplained — it is the cause (2026-08-05).** On four nights (7/19,
 7/20, 7/21, 7/23) a Withings record shares an **identical `record_start`** with the Samsung one. That
-smells like an HC re-post or mirror loop rather than two independent measurements, and wants its own
-look before the priority rule is trusted to be doing what it appears to do.
+is **confirmed as a Withings Health-Mate mirror of Samsung's own sleep**, not an independent sensor —
+a re-post loop. Consequence: **no signal is lost by discarding those rows.** They are a copy of data
+already held, so the choice is not "which of two measurements to trust" but "stop ingesting an echo".
+*(Attested by Luke 2026-08-05; not independently verified from this tree — the Railway CLI was
+non-functional in the recording session and Health Connect writer permissions are a device surface
+neither Code nor chat can read. Recorded as reported.)*
 
-**Fix:** apply source priority — Samsung is scraper-canonical — in `_aggregate_day`'s sleep selection,
-consuming `record_sources` or the payload `source_package`, **before** `Q82`'s fragment-merge runs.
-The device-agnostic-schema rule makes this structural rather than a one-user quirk.
+**This reframes the fix, and the reframe is the point.** "Prefer Samsung" would have worked here by
+coincidence and failed on the next mirroring app to appear:
 
-**State:** OPEN — no blocker. **Higher priority than `Q82`, and gates it.** Distinct from Q4
-(`DONE → #64`). Owner: Luke. Cross-refs `Q82`, `#35`/`#36`/`#37`.
+- **(a) Source-side — the higher-leverage half, and it needs no repo work at all.** Revoke Withings'
+  Health-Connect **write** permission for Sleep. That kills the duplicate *before* ingest, so nothing
+  downstream has to reason about it. It is a phone setting Luke can change immediately, independent of
+  any code below. **Do this first** — it makes (b) a robustness measure rather than a live bug fix.
+- **(b) Code-side — `default-untrust`, not `prefer-Samsung`.** `_aggregate_day` selects from a
+  **registered measuring source** and treats any other writer as **derivative unless explicitly known
+  to be an independent sensor**. An allow-list, not a preference ordering: an unknown future writer is
+  excluded by default rather than silently competing on duration. This survives the next Health-Mate.
+  Runs **before** `Q82`'s fragment-merge, which is why this question gates that one — a merge across a
+  measuring source and its own mirror would double-count the night.
+
+The device-agnostic-schema rule makes this structural rather than a one-user quirk; `record_sources`
+or the payload `source_package` is the input either way.
+
+**State:** OPEN — cause confirmed and direction decided; **the code is not written and no
+`DECISIONS_LOG` entry has been minted for the default-untrust reframe.** That entry is owed if the
+reframe is to bind, since it narrows `#35`/`#36`/`#37` from source *priority* to source *admission*.
+**Higher priority than `Q82`, and gates it.** Distinct from Q4 (`DONE → #64`). Owner: Luke.
+Cross-refs `Q82`, `#35`/`#36`/`#37`.
 
 ---
 
