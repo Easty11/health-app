@@ -415,10 +415,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Device deep-sleep leaves the readiness path, and the HC field contract collapses to one name (#173, #174)** - `#71`'s unfitness finding extends to the deep-confidence module and Banister, so its constants stay uncalibrated by design; `/health-connect/sync` is single-named on HCA's mapped names, pinned by a contract test rather than codegen, and the collapse is OWED until that test exists. `OPEN_QUESTIONS` Q3/Q4/Q7 closed, Q81-Q84 minted. See DECISIONS_LOG #173, #174.
+
 - **The pull request becomes the sole route to master (#171, #172)** - `#40` rule 1 had asserted a single merge path since the day it landed while master had in fact accepted two; a ruleset now refuses every non-PR route, and merge-path mechanics leave the shared block under a new boundary criterion. `OPEN_QUESTIONS` Q80. See DECISIONS_LOG #171, #172.
 
 - **Placeholder guard gains a CI surface (#170)** - the guard now runs on `ubuntu-latest` on `pull_request` + `push`, closing `Q79` - whose named agent turned out not to exist; the real uncovered path is the web-UI merge button. First POSIX control surface either repo has had. See DECISIONS_LOG #170.
-- **Governance rules generalised across repo heading grammars (#169)** - three shared-block anchors were pinned to `health-app`'s own grammar and read empty against `health-connect-app`; propagation now requires verifying the source against the destination first. `FEEDBACK` §24, `OPEN_QUESTIONS` Q79. See DECISIONS_LOG #169.
 
 ---
 
