@@ -6869,6 +6869,22 @@ the `c9b8a7d6e5f4` migration, 2026-06-29 — predates. The two cannot both be cu
 before writing the filter, and make an `'unknown'` admission decision explicitly rather than by
 default.** This does not gate the decision; it gates the code.
 
+*(**Rider, added post-landing on `gov/175-precondition-narrowed` — it narrows the precondition above,
+it does not revise the decision, and the original text is left standing because the history is the
+point.** The contradiction resolved **in the safe direction the same day**: identity **does** arrive,
+and the docstring is the stale artifact. Two facts settle it, both from surfaces this repo cannot read
+and both attested by Luke 2026-08-05 from an HCA-rooted read plus prod data: HCA master's sleep mapper
+and `heartRateMapper` thread `sourcePackage: r.metadata?.dataOrigin ?? null`, so current builds do post
+it; and the live `health_connect_record_sources` rows carry real packages. The docstring predates the
+mapper change that added `sourcePackage`. **So "an allow-list admits nothing" is what WOULD have
+happened had the docstring been true, and it is not** — the fail-closed-on-everything scenario is
+withdrawn. **What survives, narrowed:** the allow-list must not silently drop the `'unknown'` that
+legitimately exists — historical rows written before HCA threaded `dataOrigin`, any record type HCA
+does not tag, and a future build regression all produce it. So `'unknown'` must be a **decided value,
+not a default that means exclude**: admit-with-flag, or fall back to pre-`#175` max-pick for
+unidentified records, or log-and-count coverage per the `#74` fallback-hit-rate pattern. Live detail,
+including the two moves that discharge it, is at `Q83`.)*
+
 **How you know:** The code half was re-read against master this session and is cited by line:
 `_aggregate_day` selects `best = max(day_sleep, key=...duration())` with no reference to any writer
 field; `health_connect_record_sources` is **written** by `_capture_record_sources`
