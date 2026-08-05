@@ -6824,3 +6824,67 @@ on-device sync" precondition is struck as a red herring — source is the contra
 **Do not revisit unless:** a second `/health-connect/sync` client appears — at which point one
 controlled client no longer holds and codegen becomes the cheaper answer — or HCA changes an emitted
 field name, which is what the contract test fires on.
+
+### 175. Source *admission* replaces source *priority* for HC sleep — an allow-list, not a ranking (narrows `#35`/`#36`/`#37`)
+
+**Decision:** `_aggregate_day` admits sleep **only** from an explicit allow-list of **registered
+measuring sources** — Samsung `com.sec.android.app.shealth` today. Any other writer is **excluded by
+default, not ranked**. This narrows `#35`/`#36`/`#37` from source **priority** to source **admission**:
+those decisions rank all comers and let the top-ranked *present* source win; admission means an
+unlisted writer never competes at all.
+
+**Rationale:** The two mechanisms are indistinguishable on a night the canonical source is present, and
+that is what made priority look sufficient. **They separate exactly where it matters: on a night
+Samsung is absent and a mirror or unknown writer is present, priority lets the mirror win on duration
+— silently — while admission excludes it.** The Withings Health-Mate mirror (`Q83`, attested
+2026-08-05) is that case, made real. Priority fails *silent*; admission fails *safe*. For a source
+feeding readiness, fail-safe is the correct default — and this is the same class of silent-edge-case
+defect the surrounding sweep kept turning up (`#173`'s uncalibratable constants, `#174`'s
+silently-breaking deletion).
+
+**The trade, named so it is a chosen property and not a future surprise:** a genuinely new, legitimate
+device — an Oura ring, a Polar watch — writing sleep to Health Connect **contributes nothing until it
+is deliberately admitted**. That is the cost, accepted. Device-agnostic (the project-wide rule) means
+**any device can be admitted, not that any writer is auto-trusted**; the admission step is precisely
+where a new source gets characterised — provenance, units, whether it measures or mirrors — which is
+work that was previously never done at all. The failure mode this creates is *loud and local* ("my new
+ring's sleep is missing") against the one it removes, which is silent and downstream (readiness quietly
+computed from an echo).
+
+**Status:** **OWED** — decided, not implemented. No code is written; `_aggregate_day` still selects by
+max-duration across all writers. Ordering is unchanged from `Q83`: admission runs **before** `Q82`'s
+fragment-merge, because merging across a measuring source and its own mirror would double-count the
+night.
+
+**PRECONDITION ON THE IMPLEMENTATION — an allow-list is only safe if writer identity actually
+arrives.** Read against master this session and unresolved: `WriterIdentity`
+(`backend/routers/health_connect.py:56`) documents itself *"Optional/nullable everywhere: current HCA
+builds send no dataOrigin, so a required field would 422 every live sync (#36). Capture only — no
+filtering."*, and `_capture_record_sources` coalesces a missing identity to the literal `'unknown'`
+before insert. **If identity arrives as `'unknown'` in practice, an allow-list admits nothing and the
+night's sleep vanishes — a fail-closed-on-everything that is worse than the fail-silent it replaces.**
+Against that, `Q83`'s own evidence shows `health_connect_record_sources` carrying real package names
+(`com.sec.android.app.shealth`, `com.withings.wiscale2`) on 2026-08-03, which the docstring — dated to
+the `c9b8a7d6e5f4` migration, 2026-06-29 — predates. The two cannot both be current. **Resolve which
+before writing the filter, and make an `'unknown'` admission decision explicitly rather than by
+default.** This does not gate the decision; it gates the code.
+
+**How you know:** The code half was re-read against master this session and is cited by line:
+`_aggregate_day` selects `best = max(day_sleep, key=...duration())` with no reference to any writer
+field; `health_connect_record_sources` is **written** by `_capture_record_sources`
+(`health_connect.py:314`, called at `:499`) and **never read back** — the grep returns the capture path
+and the endpoint, nothing in the aggregation. Migration `c9b8a7d6e5f4`'s docstring states the table's
+purpose verbatim: *"Backend enabler for source-priority dedup (DECISIONS_LOG #35 F1 / #36 / #37)."* So
+the enabler has been populated and ignored since 2026-06-29. The mirror finding itself is **attested by
+Luke 2026-08-05 and not independently verified from this tree** — the Railway CLI was non-functional in
+the recording session, and Health Connect writer permissions are a device surface neither Code nor chat
+can read.
+
+**Resolves:** the `Q83` OWED note (the entry that the reframe needed in order to bind). `Q83` itself
+moves to `DONE → #175` when the code lands.
+
+**Do not revisit unless:** the allow-list becomes a real maintenance burden across genuinely many
+legitimate measuring devices — at which point admission-plus-characterisation may want to become a
+registry rather than a literal list — or Health Connect gains a native provenance guarantee that
+distinguishes a measuring writer from a mirroring one, which would make the allow-list redundant rather
+than merely narrower.
