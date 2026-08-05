@@ -2443,10 +2443,17 @@ coincidence and failed on the next mirroring app to appear:
 The device-agnostic-schema rule makes this structural rather than a one-user quirk; `record_sources`
 or the payload `source_package` is the input either way.
 
-**State:** OPEN — cause confirmed and direction decided; **the code is not written and no
-`DECISIONS_LOG` entry has been minted for the default-untrust reframe.** That entry is owed if the
-reframe is to bind, since it narrows `#35`/`#36`/`#37` from source *priority* to source *admission*.
-**Higher priority than `Q82`, and gates it.** Distinct from Q4 (`DONE → #64`). Owner: Luke.
+**State:** OPEN — cause confirmed, direction decided, and the reframe now **binds at `#175`**
+(source admission replaces source priority; the OWED entry-note is discharged). What remains is code:
+`_aggregate_day` still selects by max-duration across all writers.
+
+**Carried from `#175`, because it gates the code and not the decision:** an allow-list is only
+safe if writer identity actually arrives. `WriterIdentity` documents *"current HCA builds send no
+dataOrigin"* and `_capture_record_sources` coalesces a missing identity to `'unknown'` — yet this
+question's own evidence shows real package names in `health_connect_record_sources` on 2026-08-03.
+Both cannot be current. Resolve which before writing the filter, and decide `'unknown'` explicitly
+rather than by default, or the fix fails closed on every night. → `DONE → #175` when the code
+lands. **Higher priority than `Q82`, and gates it.** Distinct from Q4 (`DONE → #64`). Owner: Luke.
 Cross-refs `Q82`, `#35`/`#36`/`#37`.
 
 ---
