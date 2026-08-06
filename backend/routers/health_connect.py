@@ -60,8 +60,25 @@ class WriterIdentity(BaseModel):
       dataOrigin.packageName — raw Health Connect shape (#36 wire contract)
       sourcePackage          — flattened alias the JS mapping layer may emit
 
-    Optional/nullable everywhere: current HCA builds send no dataOrigin, so a
-    required field would 422 every live sync (#36). Capture only — no filtering.
+    Optional/nullable everywhere, and it must STAY optional — but not for the
+    reason this docstring used to give. It read "current HCA builds send no
+    dataOrigin", which was true when written (#36, 2026-06-29) and is now
+    STALE: HCA master's mappers thread `sourcePackage: r.metadata?.dataOrigin
+    ?? null`, and the live health_connect_record_sources rows carry real
+    packages (com.sec.android.app.shealth, com.withings.wiscale2, 2026-08-03).
+    Identity DOES arrive. Corrected 2026-08-05 — the stale line had made #175's
+    admission model look like a fail-closed-on-everything risk (Q83).
+
+    It stays optional because identity is not GUARANTEED, which is a different
+    claim: historical rows predating the mapper change, record types HCA does
+    not tag, and any future build regression all yield a missing identity,
+    which _capture_record_sources coalesces to the literal 'unknown'. A
+    required field would still 422 those.
+
+    Capture only — no filtering HERE. #175 adds admission filtering downstream
+    in _aggregate_day, where 'unknown' must be a DECIDED value rather than a
+    default that means exclude, or legitimately-unidentified records are
+    dropped silently (Q83).
     """
     dataOrigin: Optional[DataOrigin] = None   # raw library field
     sourcePackage: Optional[str] = None        # mapped field

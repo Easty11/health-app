@@ -6869,6 +6869,22 @@ the `c9b8a7d6e5f4` migration, 2026-06-29 — predates. The two cannot both be cu
 before writing the filter, and make an `'unknown'` admission decision explicitly rather than by
 default.** This does not gate the decision; it gates the code.
 
+*(**Rider, added post-landing on `gov/175-precondition-narrowed` — it narrows the precondition above,
+it does not revise the decision, and the original text is left standing because the history is the
+point.** The contradiction resolved **in the safe direction the same day**: identity **does** arrive,
+and the docstring is the stale artifact. Two facts settle it, both from surfaces this repo cannot read
+and both attested by Luke 2026-08-05 from an HCA-rooted read plus prod data: HCA master's sleep mapper
+and `heartRateMapper` thread `sourcePackage: r.metadata?.dataOrigin ?? null`, so current builds do post
+it; and the live `health_connect_record_sources` rows carry real packages. The docstring predates the
+mapper change that added `sourcePackage`. **So "an allow-list admits nothing" is what WOULD have
+happened had the docstring been true, and it is not** — the fail-closed-on-everything scenario is
+withdrawn. **What survives, narrowed:** the allow-list must not silently drop the `'unknown'` that
+legitimately exists — historical rows written before HCA threaded `dataOrigin`, any record type HCA
+does not tag, and a future build regression all produce it. So `'unknown'` must be a **decided value,
+not a default that means exclude**: admit-with-flag, or fall back to pre-`#175` max-pick for
+unidentified records, or log-and-count coverage per the `#74` fallback-hit-rate pattern. Live detail,
+including the two moves that discharge it, is at `Q83`.)*
+
 **How you know:** The code half was re-read against master this session and is cited by line:
 `_aggregate_day` selects `best = max(day_sleep, key=...duration())` with no reference to any writer
 field; `health_connect_record_sources` is **written** by `_capture_record_sources`
@@ -6888,3 +6904,47 @@ legitimate measuring devices — at which point admission-plus-characterisation 
 registry rather than a literal list — or Health Connect gains a native provenance guarantee that
 distinguishes a measuring writer from a mirroring one, which would make the allow-list redundant rather
 than merely narrower.
+
+### 176. Governance edits bank to one batched PR per checkpoint; gate by diff shape, not file class (extends `#171`/`#172`)
+
+**Decision:** Governance/docs-only changes (`DECISIONS_LOG`, `OPEN_QUESTIONS`, `BRANCHES`,
+`ROADMAP`, `CLAUDE.md`, `FEEDBACK`, `closeout.md` — no code, no migrations) accumulate on a single
+branch and land as **one PR per checkpoint**; individual items are not taken to their own PR.
+Invariants: **(a)** an entry does not land until its design has settled — unresolved preconditions
+keep it on the open branch, not master; **(b)** housekeeping (terminal `BRANCHES` row,
+Recent-landings pointer) rides the originating branch, resolved at merge; **(c)** a batch is
+guard-gated only if every removed line is inside an explicitly-declared replacement region — any
+removal outside forces human review. Emergent findings append to the open branch. Code/schema always
+take full human review. Extends `#171` (PR sole route to master) and `#172` (merge-path mechanics
+health-app-local); neither is revised.
+
+**Rationale:** The 2026-08-05 `OPEN_QUESTIONS` sweep landed as six sequential PRs (#21–#26) where one
+or two would have sufficed; deciding and landing were interleaved when they should be two phases.
+`#23` existed only to unwind a lying self-row `#22` introduced; `#26` only to reframe a precondition
+`#25` shipped before it was reconciled. The naive form of invariant **(c)** — "governance-only →
+guard-gated" — was falsified in the same session: a `#NEXT` blanket substring-replace corrupted 55
+lines in `BRANCHES.md` and 104 in `DECISIONS_LOG.md` while `check_governance_placeholders.py`
+returned exit 0 throughout, because it anchors on unresolved placeholder headings and cannot see
+content corruption. `Q80` records the neighbouring hole (the guard checks the placeholder symptom,
+not the uniqueness-and-gapless invariant, so a wrong-but-resolved integer also passes green). So the
+gate is scoped to diff shape, not the guard's word.
+
+**Status:** Landed on `gov/175-precondition-narrowed`, batched with the `Q83`/`#175` identity
+reframe — the rule shipping inside the batch that motivated it. In force from this commit, since
+`CLAUDE.md` carries the prose in the same change. **Invariant (c) is a MANUAL check today**, not an
+enforced one: no script asserts "no removed line outside a declared replacement region". That is the
+honest reading of its own rationale — the gate exists precisely because the guard cannot see this
+class — and it is what the revisit trigger below is pointed at.
+
+**How you know:** Observed directly — six PRs, most prose-only, ~$100, zero behaviour shipped; `#22`
+→ `#23` and `#25` → `#26` the two self-inflicted loops; the `#NEXT` corruption and `Q80`'s
+symptom-not-invariant note the two demonstrations that guard-green ≠ correct for governance. The
+corruption figures are from the working tree before it was reverted (no commit was made): a blanket
+`#NEXT` → `#175` replace, against a diff whose surgical redo touches `BRANCHES.md` +1/−0 and
+`DECISIONS_LOG.md` +64/−0.
+
+**Do not revisit unless:** the guard gains content-integrity coverage — `Q80`'s uniqueness-and-gapless
+arm **plus** a removed-lines-outside-declared-region check — at which point invariant (c) can widen
+from manual to guard-enforced and the batch can land unattended; or a governance edit is genuinely
+time-critical (a live-wrong canonical row that will mislead an in-flight session), in which case a
+single hotfix PR is justified and stated as such.

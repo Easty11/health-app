@@ -2447,14 +2447,35 @@ or the payload `source_package` is the input either way.
 (source admission replaces source priority; the OWED entry-note is discharged). What remains is code:
 `_aggregate_day` still selects by max-duration across all writers.
 
-**Carried from `#175`, because it gates the code and not the decision:** an allow-list is only
-safe if writer identity actually arrives. `WriterIdentity` documents *"current HCA builds send no
-dataOrigin"* and `_capture_record_sources` coalesces a missing identity to `'unknown'` — yet this
-question's own evidence shows real package names in `health_connect_record_sources` on 2026-08-03.
-Both cannot be current. Resolve which before writing the filter, and decide `'unknown'` explicitly
-rather than by default, or the fix fails closed on every night. → `DONE → #175` when the code
-lands. **Higher priority than `Q82`, and gates it.** Distinct from Q4 (`DONE → #64`). Owner: Luke.
-Cross-refs `Q82`, `#35`/`#36`/`#37`.
+**The `#175` identity precondition — RESOLVED in the safe direction, and narrowed (2026-08-05).**
+`#175` flagged a contradiction: `WriterIdentity` documents *"current HCA builds send no dataOrigin"*
+while this question's evidence shows real package names in `health_connect_record_sources` on
+2026-08-03. **Identity does arrive; the docstring is the stale artifact** — HCA master's sleep mapper
+and `heartRateMapper` thread `sourcePackage: r.metadata?.dataOrigin ?? null`, and the live table
+carries real packages. The docstring predates the mapper change that added `sourcePackage`. So the
+**"allow-list admits nothing, every night vanishes" scenario is withdrawn** — it was conditional on the
+docstring being true. *(Attested by Luke 2026-08-05 from an HCA-rooted read plus prod data; neither
+surface is readable from this tree.)*
+
+**What survives, and it is the precondition's real content:** the allow-list must not silently drop the
+`'unknown'` that **legitimately exists**. `_capture_record_sources` coalesces missing identity to
+`'unknown'`, and that value arises for real reasons — historical rows written before HCA threaded
+`dataOrigin`, any record type HCA does not tag, and a future build regression. A strict allow-list that
+excludes `'unknown'` fail-closes those **silently**, which is the same defect class `#175` exists to
+remove. So **`'unknown'` must be a decided value, not a default that means exclude**: admit-with-flag,
+fall back to pre-`#175` max-pick for unidentified records, or log-and-count coverage per the `#74`
+fallback-hit-rate pattern. Decide which before the filter is written.
+
+**Two moves discharge it, both cheap:**
+1. **When Railway is reachable**, one bounded query on `health_connect_record_sources`: per-record-type
+   `source_package` coverage — what fraction of sleep rows are `'unknown'` vs real, **split by era**.
+   That quantifies the historical-`'unknown'` exposure and confirms current sleep is fully identified.
+   Measure the gap before trusting the filter.
+2. **Correct the stale `WriterIdentity` docstring** — done on `gov/175-precondition-narrowed`. It was
+   actively misleading, and it is what made a resolved question look like a live fail-closed risk.
+
+→ `DONE → #175` when the code lands. **Higher priority than `Q82`, and gates it.** Distinct from Q4
+(`DONE → #64`). Owner: Luke. Cross-refs `Q82`, `#35`/`#36`/`#37`, `#74`.
 
 ---
 
