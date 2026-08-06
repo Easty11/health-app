@@ -1,209 +1,154 @@
-# closeout — health-app
+# Session close-out — 2026-08-05 → 2026-08-06
 
-_Latest Code session handoff. Overwritten each `/closeout`. Canonical history:
-`DECISIONS_LOG.md` · open forks: `OPEN_QUESTIONS.md` · roadmap: `ROADMAP.md`._
-
-Session date: 2026-08-05. Branch at close: `master` — all three session branches merged and
-deleted both sides. Session-open ref: `a9d52d3`.
-
-Canon at open: DECISIONS max **#170**, OPEN_QUESTIONS max **Q79**.
-Canon at close: DECISIONS max **#172**, OPEN_QUESTIONS max **Q80**.
-
-**The merge path changed under this session (`#171`).** master is now reachable only by pull
-request, gated by a required status check. `git push origin master` is refused server-side.
+Session-open ref: `f68c73c`. Head at close: `ec26319` (pre-close-out commit).
 
 ---
 
 ## 1 — Real commits this session
 
-`git log --oneline a9d52d3..HEAD`, before the close-out commit:
+`git log --oneline f68c73c..HEAD`
 
 ```
-0a08ee7 Merge pull request #18 from Easty11/gov/forward-ref-and-clone-setup
-ebbb27a fix(governance): the fresh-clone alias check must be --local, or it reads the old global body
-6cc3cea governance: forward-ref sub-question on Q80; per-clone setup documented; closeout names what stood still
-f85b389 Merge pull request #17 from Easty11/gov/merge-path-followup
-485344e governance: close #171's recorded unknown - --delete-branch removes the local branch too
-4308867 Merge pull request #16 from Easty11/chore/merge-path-pr-migration
-113f04a governance: resolve #NEXT -> #171/#172, Q#NEXT -> Q80 (on-branch, pre-merge)
-8191f70 governance: BRANCHES row for chore/merge-path-pr-migration
-f9bea0a governance: PR-gated merge path + boundary criterion entries; Q on the number invariant
-d9f45f3 governance: guard docs name the third enforcement surface (the ruleset)
-56d71bc governance: merge-path mechanics leave the shared block; boundary criterion added
+ec26319 Merge pull request #26 from Easty11/gov/175-precondition-narrowed
+61a82ec gov: mint #176 — governance edits bank to one batched PR, gated by diff shape
+95c18da gov: #175's identity precondition resolves safe and narrows; correct the stale docstring
+2e91f15 Merge pull request #25 from Easty11/gov/175-source-admission
+9ef8f73 gov: mint #175 — source admission replaces source priority for HC sleep
+82453b5 Merge pull request #24 from Easty11/gov/q83-mirror-loop-resolution
+84b8644 gov: Q83 — the Withings sub-finding is confirmed as the cause, and it reframes the fix
+e84154c Merge pull request #23 from Easty11/chore/branches-self-row-convention
+89a41ad chore(governance): a branch's own BRANCHES row records its terminal state, not its in-flight state
+9ebd583 Merge pull request #22 from Easty11/chore/post-landing-pointers
+e10e639 chore: refresh Recent landings and close the BRANCHES row for #173/#174
+51f19c1 Merge pull request #21 from Easty11/gov/open-questions-sweep
+9bd31b9 gov: OPEN_QUESTIONS sweep — close Q3/Q4/Q7, re-scope Q5/Q6/Q20, mint Q81–Q84
 ```
 
-`git log --format="%ad %s" --date=short -10` — the repo's own dated record, which cannot drift
-where a self-reported stamp can:
+Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
 
 ```
-2026-08-05 Merge pull request #18 from Easty11/gov/forward-ref-and-clone-setup
-2026-08-05 fix(governance): the fresh-clone alias check must be --local, or it reads the old global body
-2026-08-05 governance: forward-ref sub-question on Q80; per-clone setup documented; closeout names what stood still
-2026-08-05 Merge pull request #17 from Easty11/gov/merge-path-followup
-2026-08-05 governance: close #171's recorded unknown - --delete-branch removes the local branch too
-2026-08-05 Merge pull request #16 from Easty11/chore/merge-path-pr-migration
-2026-08-05 governance: resolve #NEXT -> #171/#172, Q#NEXT -> Q80 (on-branch, pre-merge)
-2026-08-05 governance: BRANCHES row for chore/merge-path-pr-migration
-2026-08-05 governance: PR-gated merge path + boundary criterion entries; Q on the number invariant
-2026-08-05 governance: guard docs name the third enforcement surface (the ruleset)
+2026-08-06 Merge pull request #26 from Easty11/gov/175-precondition-narrowed
+2026-08-06 gov: mint #176 — governance edits bank to one batched PR, gated by diff shape
+2026-08-05 gov: #175's identity precondition resolves safe and narrows; correct the stale docstring
+2026-08-05 Merge pull request #25 from Easty11/gov/175-source-admission
+2026-08-05 gov: mint #175 — source admission replaces source priority for HC sleep
+2026-08-05 Merge pull request #24 from Easty11/gov/q83-mirror-loop-resolution
+2026-08-05 gov: Q83 — the Withings sub-finding is confirmed as the cause, and it reframes the fix
+2026-08-05 Merge pull request #23 from Easty11/chore/branches-self-row-convention
+2026-08-05 chore(governance): a branch's own BRANCHES row records its terminal state, not its in-flight state
+2026-08-05 Merge pull request #22 from Easty11/chore/post-landing-pointers
 ```
 
-**Three merge commits, no fast-forwards.** Every one went through
-`gh pr merge --merge --delete-branch` — PRs #16, #17, #18. This is the first session in this
-repo's history in which nothing reached master by `git push origin master`, because that route
-is now refused.
-
-Backend suite **722 passed**; the guard's own tests **13 passed** after its docstring and
-message string were edited. Governance and documentation only — no `backend/` logic, no
-`frontend/`, no migration, no schema change.
+**Six PRs (#21–#26), six branches, all merged and remote-deleted.** Behaviour shipped: **none** — the only
+non-markdown change all session was a corrected docstring in `backend/routers/health_connect.py`.
 
 ---
 
 ## 2 — Pending-queue reconciliation
 
-No `;cc` queue was carried in. The input was a chat brief in three revisions (3 Aug, and two on
-4 Aug), each carrying a proposed `### #NEXT` LOG entry flagged for Code and two hard halts.
+Carried in from the 2026-08-03 chat close-out as the *OPEN_QUESTIONS sweep* brief. **Every item landed.**
 
-| Brief item | Outcome |
-|---|---|
-| Step 0 — verify prevention by observation | **Failed three times, then passed.** Failed 3 Aug and twice more this session: no ruleset, no branch protection, `rules/branches/master` empty. The brief presumed "Luke enables the ruleset" as a precondition; it had not happened. Resolved by Luke's ruling that Code hold the whole path — ruleset then created by Code and **tested rather than trusted**. Landed as `#171`. |
-| Step 1 — rewrite `land` around `gh` | **Repo side landed; the alias itself is OWED.** Merge mode chosen with reason; `gh pr merge` refusal-on-failing-check tested and quoted; `--auto` confirmed to queue not bypass, and excluded anyway; `--admin` tested and refused. The alias **body** is unversioned config and no commit here can close it. |
-| Step 1b — HALT for a ruling on the shared block | **Halted, ruled, executed.** HCA's state verified by inspection. Luke ruled option 1 — mechanics leave the block, invariants stay. Landed as `#172`. |
-| Step 2 — number-at-merge names its window | **Landed** as a new shared-block bullet. Strict mode's forced pause recorded as a pause and explicitly *not* as an adjudication. |
-| Step 3 — verify `#41`'s gate still holds | **Verified unmodified; no change made** — the brief's own stated likely outcome, recorded rather than edited. |
-| Step 4 — sweep `land` / `--ff-only` | **Landed.** Anchored per `#113`, never substring — `land` matches `landed`/`landings` throughout the stores. Remaining hits are historical record or the verb. |
-| The brief's proposed LOG entry | **Superseded by what landed.** Its central claim (that `#40` rule 1 was being corrected) held; its Step 3 claim did not. |
+| Brief item | Disposition | Commit |
+|---|---|---|
+| A1 — new decision, deep-sleep extends `#71` | Landed as **`#173`** (brief said `#168`) | `9bd31b9` |
+| A2 — new decision, HC field contract | Landed as **`#174`** (brief said `#169`), Status **OWED** | `9bd31b9` |
+| B1 — Q3 → `DONE → #168` | Landed as `DONE → #173` | `9bd31b9` |
+| B2 — Q4 → `DONE → #64` | Landed | `9bd31b9` |
+| B3 — Q5 re-scope, capture precondition struck | Landed, OPEN | `9bd31b9` |
+| B4 — Q6 re-scope (unbuilt, not unverified) | Landed, OPEN | `9bd31b9` |
+| B5 — Q7 → `DONE → #72` | Landed | `9bd31b9` |
+| B6 — Q20 decoupled from Q7 | Landed, OPEN | `9bd31b9` |
+| C1/C2/C3 — three new questions | Landed as **Q81/Q82/Q83** (brief said Q79/Q80/Q81) | `9bd31b9` |
+| D — Gate-3 footnote pointer | Landed | `9bd31b9` |
+| E1 — optional Q82 (schema wider than client) | **Confirmed by operator**, landed as **Q84** | `9bd31b9` |
 
-**Three brief claims were false and are corrected in-tree, not worked around.**
+**Numbering: the brief's only casualty.** It hardcoded `#168`/`#169`/`Q79`/`Q80`; master had claimed all four
+for unrelated content between drafting and this session (`#168` exercise catalogue, `#169` guard heading
+grammar, `Q79` `@claude` Action pushes, `Q80` uniqueness-and-gaplessness). Resolved by writing placeholders
+and adjudicating at merge — master's max was re-read immediately before **every** merge this session.
 
-1. `--delete-branch` "removes the remote branch but leaves the local one". It removes **both**
-   and switches to master. Recorded as unverified in `#171` while only `gh pr close` had been
-   observed, then closed by `#171`'s own landing (PR #16) as a dated note that postdates the
-   locked entry, scoped to what was actually seen (`gh` 2.93.0, run from a working copy on the
-   branch being merged).
-2. "`#16`'s propagation model" — that is `health-connect-app`'s numbering; health-app's `#16` is
-   about metric verification. health-app has **no numbered entry** for the verbatim-propagation
-   model at all. Recorded inside `#172`, because the absence is the point.
-3. The ruleset was assigned to Luke — written before he directed that Code hold the whole path.
+**Emergent items, not in the brief** — all landed:
 
-**One error of Code's own, self-caught pre-merge:** the fresh-clone verification line first
-written as `git config --get alias.land` is a false green — `--get` reads *merged* config and
-returns the **old global ff-only body**, so an unconfigured clone reads as configured. Fixed at
-`ebbb27a` to `--local --get`. That is `#103`'s rule failing in text written minutes after `#103`
-was cited. **A `FEEDBACK` §19 row was deliberately not minted:** the prevention it would name is
-`#103`, which already exists, and this session's scaffolding already outruns what it scaffolds.
-Available to mint if wanted.
+| Item | Disposition | Commit |
+|---|---|---|
+| `BRANCHES` self-row convention (terminal state, not in-flight) | Landed | `89a41ad` |
+| Q83 Withings sub-finding → confirmed mirror loop, fix reframed | Landed | `84b8644` |
+| **`#175`** — source admission replaces source priority | Landed, Status **OWED** | `9ef8f73` |
+| `#175` identity precondition resolved safe + narrowed; stale docstring corrected | Landed | `95c18da` |
+| **`#176`** — batched governance landings, gated by diff shape | Landed | `61a82ec` |
+
+**Nothing is provisional.** No decided-but-uncommitted item remains.
+
+**Banked for the next batch — deliberately NOT actioned** (per `#176`(a): do not spawn a new item at
+close-out): *"A check whose own pattern is unverified is not yet a check."* Three times this session a
+substring/anchor mistake produced a confidently-green wrong answer — the `#NEXT` blanket replace that
+corrupted 55 + 104 lines with the guard at exit 0; the invariant-(c) removal census whose own `^-[^-]`
+pattern could not match a removed markdown bullet; and the guard's own heading-only blind spot that
+motivated `#176`(c). This belongs in governance as a rule. Mint it in the next governance batch, not here.
 
 ---
 
 ## 3 — Cold-resume handoff
 
-### What changed
+### What is canonical now
 
-**`#171` — the pull request is the sole route to master.** Ruleset `master-pr-gated`
-(id `20414758`): PR required, `placeholder guard (POSIX)` required under a strict up-to-date
-policy, non-fast-forward forbidden, `bypass_actors` empty (`current_user_can_bypass: never`, so
-it binds the owner holding an admin token — tested, `--admin` is refused). Supersedes `#40` rule
-1's enforcement claim, which had asserted a single merge path since the day it landed while
-`a9d52d3` (a direct push, no PR) and PR #11 sat on the same log; and `#170`'s
-prevention/detection caveat, which nominated itself for exactly this.
+- **Decisions `#173`–`#176`** on master. `#174` and `#175` are Status **OWED** — decided, not implemented.
+- **Questions `Q81`–`Q84`** minted; **Q3 / Q4 / Q7** closed; **Q5 / Q6 / Q20 / Q83** re-scoped and OPEN.
+- **`CLAUDE.md`** gained *Batched governance landings* (`#176`) in the repo-specific merge-path section —
+  verified outside the shared loop-rules block (markers at lines 20 / 278), so **no HCA mirror is owed for it**.
+- Guard green on master; `#176` unique and contiguous; no branch in limbo.
 
-**`#172` — merge-path mechanics leave the shared block.** A rule is shared only if its
-correctness is independent of any surface outside the tree. Invariants stay (number-at-merge,
-terminal-state, patch-id, naming, single-writer); mechanics depending on unversioned config go
-repo-local. The rejected alternative — a shared rule *conditioned* on whether the repo has a
-required check — is recorded with its reason: the condition is invisible from the tree, so a
-reader could not tell which branch of the rule applied to them.
+### The three live threads (OWED — none blocks closing)
 
-**`Q80` — the guard polices the symptom, not the invariant.** Three ways a decision number goes
-wrong; the guard set covers two. Unresolved placeholder: caught. Duplicate or gap: would be
-caught by the proposed arm. **A forward reference written as a literal number before the resolve
-is invisible to all of them** — demonstrated here, where nine literal `#171`/`#172` refs held
-only because master happened not to advance, while the three `#NEXT` tokens on the same branch
-were safe by construction.
+1. **Q83 / Withings.** Cause confirmed: the identical-`record_start` rows are a **Health-Mate mirror** of
+   Samsung's own sleep, not a second sensor — so discarding them loses no signal.
+   - **(a) Source-side — do this first, needs no repo work at all.** Revoke Withings' Health-Connect
+     **write** permission for Sleep, on the phone. Kills the duplicate *before* ingest and demotes (b) from
+     live bug fix to robustness.
+   - **(b) Code-side — `#175`'s admission filter.** Blocked behind the identity question below.
+2. **`#175` — OWED on implementation.** `_aggregate_day` still selects by max-duration across all writers.
+   Before the filter is written: decide **`'unknown'`'s policy explicitly** (admit-with-flag / fall back to
+   pre-`#175` max-pick / log-and-count per `#74`) — a strict allow-list excluding `'unknown'` fail-closes
+   the legitimately-unidentified rows *silently*, which is the defect class `#175` exists to remove. Plus
+   one bounded `health_connect_record_sources` coverage query when Railway is reachable: `'unknown'` vs
+   real per record type, **split by era**. Admission runs **before** Q82's fragment-merge.
+3. **`#174` — OWED on the field-name contract test.** The five dead-branch deletions in
+   `backend/routers/health_connect.py` **must not ship without it**: the load-bearing half of `#174`'s
+   evidence (what HCA actually posts) is a cross-repo read unverifiable from this tree, so without the test
+   the deletion breaks production **silently** on the next sync.
 
-### Enforcement spans three layers and two have no diff
+### What did NOT move — name it, because it is invisible otherwise
 
-`core.hooksPath` (per clone) · `.github/workflows/governance-guard.yml` (versioned) · ruleset
-`20414758` (per repo). A fresh clone, a deleted ruleset, or an added bypass actor removes
-enforcement silently and leaves every run green. **`#171` is the only in-tree record that the
-ruleset is expected to exist.** Verify directly, never by a green run:
+**This session shipped zero behaviour.** Six PRs, ~all prose, one docstring. It went entirely to the
+*instrument* — the governance stores and the rules governing them — and so did the sessions immediately
+before it (`#169` governance grammars, `#170` guard CI surface, `#171`/`#172` PR-gated merge path). That is
+**four consecutive sessions on the instrument rather than the thing being instrumented**, and it is stated
+here because a close-out that lists only what moved hands the next session more of the same: the queue a
+cold reader infers is the queue that is legible.
 
-    gh api repos/Easty11/health-app/rules/branches/master
+Even this session's substantive decisions (`#173` readiness, `#174` field contract, `#175` source
+admission) are **all decided-not-implemented**. Nothing in the product changed.
 
-### Fresh-clone setup — neither item is cloned, neither fails loudly
+**Standing still, unchanged this session, gated as noted** — from `ROADMAP.md` NOW/NEXT:
 
-    git config core.hooksPath .githooks
-    git config --local alias.land '!gh pr merge --merge --delete-branch'
-
-Verify with `git config --get core.hooksPath` and **`git config --local --get alias.land`**. The
-`--local` is load-bearing: without it the check returns the stale global body and passes on an
-unconfigured clone.
-
-### OWED
-
-1. ~~**The `land` alias body.**~~ **DISCHARGED 2026-08-05, post-close-out.** `--global --unset`
-   run by Luke; `stale` verified surviving; the `--local` body set and verified with
-   `git config --local --get alias.land`. **The documented body was wrong on first use and is
-   corrected in the same pass:** the `!f() { … "$(git branch --show-current)" … }; f` form
-   Bash-verified at `#171` cannot be entered from PowerShell — embedded double quotes do not
-   survive PowerShell's native-command re-quoting, and `git config` reports it as
-   `error: no action specified`, which names nothing about quoting. The working body is
-   `!gh pr merge --merge --delete-branch`; no subshell is needed because `gh pr merge` already
-   defaults to the current branch's PR. The **standing PowerShell rule in `CLAUDE.md` was
-   sharpened** rather than a new instrument added: PowerShell-safe now explicitly means
-   *no embedded double quotes*, and a command Code emits for Luke must be exercised in
-   PowerShell — Code's Bash tool passes these strings cleanly and structurally cannot
-   reproduce the failure.
-2. **Shared-block propagation to `health-connect-app`** — the one genuinely outstanding item. — ROADMAP NOW row 4. HCA takes the
-   amended block verbatim and **loses nothing**: its merge path is deliberately unaffected and
-   its `land` stays as it is. health-app's repo-local `### Merge path` section does **not**
-   propagate, by construction. HCA-rooted session, `pwd`-verified first.
-
-### What was NOT touched — read this before picking up the queue
-
-**Two consecutive days have gone entirely to instrument, and every artifact this session
-produced points at more instrument.** `Q80`'s follow-on guard arm, the HCA propagation, the
-`#171` alias item — all governance. Nothing here advances the product, and a cold reader infers
-the queue from what is written down. So, explicitly:
-
-- **`feat/cbti-eval-trigger`** — untouched this session. Local **and** remote, 2 `+` commits vs
-  master (`git cherry`), rowed in `BRANCHES.md`. **BUILT but SUPERSEDED — needs rework, do not
-  force-merge:** built against the 7-night engine, and `#165` then landed the 4-night retune and
-  removed engine-`close`, so its 7-day offer eligibility and its whole close-refusal path are
-  obsolete. A trial integration leaves 5 of its 11 tests failing, one semantically. Rework
-  checklist is on the `BRANCHES.md` row. This is the closest thing to shippable product work in
-  the tree.
-- **`Q45`** — the VA CBT-I diary does not say which day a recorded nap belongs to. **DATED and
-  contaminating capture right now:** `naps_min` is written at PM and the engine reads a night's
-  naps from `date − 1`; that read is correct only if the instrument's nap item refers to the
-  preceding day, which it does not state. Every nap-excluded night currently rests on an
-  unverified attribution. Closes from the VA protocol docs or the administering clinician — not
-  the workbook, searched to exhaustion. Owner: Luke.
-- **`Q78`** — exclude-all starves a frequent napper at the 4-night cadence. Legible now (the
-  HOLD names the tally) but not fixed. Gated by `Q45`.
-- **The block-3 verdict on `#165`'s design** — the 4-night hunting titration has been live since
-  block 3 opened, and neither this session nor the last looked at whether it works. This is the
-  empirical test of a shipped design and the item most likely to be lost: no branch carries it,
-  no question is headed by it, it appears in no OWED row. It exists only in this paragraph.
-- **Lab / interpretation lane** — increments 2 (rephrase), 3 (lever-tap threads) and 5 (go-live)
-  outstanding; `Q54`'s fixture-contract drift still gates the live-wiring increment.
-- **Operator loops on already-merged rows** — several `BRANCHES.md` rows carry post-deploy
-  checks only Luke can run (Railway, authed surfaces). Recorded, not done, and they do not
-  expire.
-
-**51 questions OPEN · 6 OWED · 23 DONE.** The OPEN count has grown every governance session.
+| Lane | State | Gate |
+|---|---|---|
+| **CBT-I nap day-attribution (Q45)** | DATED, contaminating capture **now** | Close from VA CBT-I protocol docs or the clinician. Every nap-excluded night currently rests on an unverified attribution. |
+| **CBT-I manual evaluation trigger** | Built but **SUPERSEDED — REWORK** | `feat/cbti-eval-trigger` obsolete against `#165`'s 4-night retune; 5 of 11 tests fail. Do **not** force-merge. |
+| **Lab upload pipeline** | Uploading unpaused | Operator decision owed on the junk rows. |
+| **Interpretation layer** | 1b delivered; **2 / 3 / 5 UNSTARTED** | Rephrase pass → lever-tap thread → go-live. Nothing gates increment 2. |
+| **Hub shell (`#150`)** | UNBLOCKED, operator-preferred next pick | Nothing. |
+| **`lab_accession`** | Queued, strongest small alternative | Nothing. |
+| **Appointment brief** | Not started | Lab pipeline + interpretation layer. |
+| **Q82** — fragmented Samsung nights undercount | OPEN | Sequenced after Q83/`#175`. |
+| **Q6** — strength volume-load | OPEN, re-scoped to unbuilt | No `load_metrics` table exists. Strength contributes **zero** to the deployed load metric today. |
+| **Cross-repo propagation ×4** | All **OWED** | HCA-rooted session only, `pwd`-verified. `#172`'s boundary criterion is the newest of the four. |
 
 ### Single clearest next action
 
-**Not more governance — and the setup item that used to sit here is done.** The clone is
-configured and verified, so nothing stands between the next session and product work.
+**Do the Withings Health-Connect write revoke for Sleep, on the phone.** It is free, needs no keyboard, and
+removes a live data-contamination bug **at source** rather than documenting it.
 
-Pick up **`feat/cbti-eval-trigger`'s rework** or **`Q45`**. `Q45` is the sharper of the two: it
-is contaminating capture *now*, every nap-excluded night currently rests on an unverified
-attribution, and it closes from a document rather than from code. `feat/cbti-eval-trigger` is
-the larger piece of shippable work but needs the `#165` rework first.
-
-`Q80`'s guard arm and the HCA propagation are both real and neither is urgent. `Q80` would be
-the third instrument in three sessions; let it wait until something has been built for it to
-protect.
+Then, at a keyboard: the next session should go to a **product lane**, not the instrument. `ROADMAP.md` NOW
+is dated and ordered; **interpretation increment 2 (rephrase pass)** and the **hub shell (`#150`)** are both
+unblocked and need nothing decided first.
