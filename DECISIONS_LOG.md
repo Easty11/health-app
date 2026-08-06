@@ -6951,7 +6951,7 @@ single hotfix PR is justified and stated as such.
 
 ---
 
-### #NEXT
+### 177. The lab-ingest banner discarded list-form 422 `detail`; both catch blocks now render the refused field (Move 1 of 2 — the contract question is held at `Q85`)
 
 **Decision:** Both lab-ingest catch blocks in `frontend/src/pages/Metrics.jsx` — `/labs/extract`
 and `/labs/confirm` — render a **list-form** FastAPI validation `detail` through one shared pure
@@ -6959,7 +6959,7 @@ helper, `frontend/src/lib/apiError.js`. The constant fallback string ("Failed to
 is now reserved for the case where `detail` is genuinely absent, which is the transport case and
 the only one it can honestly describe. This is **Move 1 of two**: the instrument. The contract
 question it was built to answer — whether `FieldConfidence` should tolerate a null `ref` — is
-**NOT decided here** and is held at `Q#NEXT` until the live 422 names its field.
+**NOT decided here** and is held at `Q85` until the live 422 names its field.
 
 **Rationale:** A genuine urine-ACR report (SNP Albumin/Creat Ratio, collected 2026-08-04) could
 not be saved, and the banner said only "Failed to save report". The catch block read

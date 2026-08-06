@@ -2502,12 +2502,12 @@ two names for one value, this is a name with no sender. Owner: Luke. Cross-refs 
 
 ---
 
-## Q#NEXT. Which required field does the live extraction of a ref-less lead row actually drop?
+## Q85. Which required field does the live extraction of a ref-less lead row actually drop?
 
 The SNP Albumin/Creat Ratio report (collected 2026-08-04) is refused by `/labs/confirm` with a
-Pydantic request-validation 422 — established by elimination in `#NEXT`, which excludes both of
+Pydantic request-validation 422 — established by elimination in `#177`, which excludes both of
 `confirm_lab_report`'s own raise sites against the screenshot. **Which field the validator refused
-is not known**, because the banner discarded the `detail` that names it. `#NEXT` Move 1 fixes the
+is not known**, because the banner discarded the `detail` that names it. `#177` Move 1 fixes the
 banner; this question is the fork that fix exists to settle.
 
 The two candidates predict different repairs and are not both fixable by the same change:
@@ -2539,8 +2539,8 @@ banner. Nothing about the reproducer is stored yet — the 422 persists nothing 
 re-attempt exercises the genuine extract → confirm path. Record the verbatim `loc`/`msg`.
 
 **State:** OPEN — no blocker; the instrument that answers it is landing in the same PR. **Move 2 of
-`#NEXT` does not proceed until this is answered.** Owner: Luke (the re-upload needs the operator).
-Cross-refs `#NEXT`, `#58` (unmapped is a signal, not a failure), `#146` (derived, not
+`#177` does not proceed until this is answered.** Owner: Luke (the re-upload needs the operator).
+Cross-refs `#177`, `#58` (unmapped is a signal, not a failure), `#146` (derived, not
 model-reported, confidence), `FEEDBACK` §25.
 
 **Not this question:** adding `R U-Creatinine` / `R U-Albumin` / `R U-Albumin/Creat` to the
