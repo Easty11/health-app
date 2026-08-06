@@ -1114,3 +1114,60 @@ findings, in a store Code can verify. Operator's call, taken 2026-08-04.
 **Earned:** the propagation brief of 2026-08-03, three overclaims in one document. Companion to
 [[§22]] — that row covers citing governance from memory; this one covers citing it from a fetch that
 paraphrases. The instruction "carry the quote" is only safe if the quote is bytes.
+
+---
+
+## 25. A fail-closed contract and a fail-opaque handler compound into an undiagnosable defect ([[§17]], [[§23]])
+
+**What happened.** A genuine urine-ACR report could not be saved. Two independent, individually
+survivable decisions met on the same request path:
+
+1. **The request contract was stricter than the extractor's honest output.** `FieldConfidence`
+   demands a `float` confidence for `ref` on every row, including a row whose reference interval
+   does not exist on the page — a shape the extraction schema itself documents
+   (`LAB_EXTRACTION_SCHEMA §4`, absent-ref). The model has nothing truthful to put there.
+2. **The one field that would have named the mismatch was thrown away.** The banner read
+   `typeof detail === 'string' ? detail : detail?.error`, and a Pydantic 422's `detail` is an array
+   of `{loc, msg, type}` — neither a string nor an object with `.error`. The rejection collapsed to
+   "Failed to save report".
+
+Alone, (1) is a 422 the user reads and reports. Alone, (2) is an opaque banner over faults that are
+mostly self-evident from context. Together they are a document that cannot be ingested and a system
+that cannot say why — and, worse, **every** future extraction failure of any shape presents as the
+same six words.
+
+**Why this is not just "handle the error better".** The two failures sit in different repos-worth of
+concern — a backend Pydantic model and a frontend catch block — reviewed at different times by
+different reasoning, each locally defensible. Strictness in a request schema is normally a virtue;
+a generic fallback banner is normally courtesy. Neither review could see the other. The compounding
+is only visible on the **path**, which is why it survived both.
+
+**Rule going forward — two arms, and the second is the load-bearing one.**
+
+**(a) Validate a request contract against the real extraction corpus edge cases, not against the
+happy row.** A field that is *structurally* optional (`field_confidence` as a whole) but whose
+*sub-fields* are all required is a contract that accepts "I did not assess this row" and rejects
+"I assessed this row and one field honestly has no value". Where a schema documents an edge case
+(`§4`'s absent-ref), the request model must be checked against that case explicitly.
+
+**(b) Never let a catch block collapse a structured error into a constant string.** A fallback
+message is only honest for the case where the response carries **no** structure — transport
+failure, no body. When the server *did* explain itself, discarding that explanation is strictly
+worse than crashing: a crash is investigated, a plausible banner is believed. Reserve the constant
+for genuine absence and render what was actually returned.
+
+**The corollary that made this session tractable.** When a defect's evidence has been eaten by the
+error handler, **fix the handler first and separately** — as its own defect, on its own merits,
+without waiting to know the answer. It is the only move available before the evidence exists, and
+it is what manufactures the evidence. Shipping the *suspected* contract fix alongside would have
+been a guess dressed as a repair, and a green result afterwards could not have distinguished "we
+fixed it" from "we changed something and the model happened to emit a `ref` that run". Hence the
+two-move split: the instrument lands, the contract change is **held** at an `OPEN_QUESTIONS` row
+until the live `loc` scopes it.
+
+**The family this belongs to.** §17's "a check whose failure cannot stop what follows is not a
+check" is the enforcement sibling; this is its *reporting* sibling — **an error whose content
+cannot reach the reader is not an error message.** §23's tested ≠ exercised is the nearest
+relative: there, a fake above the defect could not see it; here, a handler above the defect could
+not report it. Both are cases of the instrument sitting on the wrong side of the thing it exists to
+observe.
