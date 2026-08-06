@@ -342,6 +342,28 @@ is server-side and needs nothing locally — but it is the reason a missing `lan
 inconvenience rather than a hazard: without it the merge simply is not made, and the old
 ff-only body would be refused by the server anyway.
 
+**Batched governance landings (#176).** Governance/docs-only edits — touching only
+`DECISIONS_LOG`, `OPEN_QUESTIONS`, `BRANCHES`, `ROADMAP`, `CLAUDE.md`, `FEEDBACK`, `closeout.md`,
+**no code and no migrations** — bank onto a single branch and land as **one PR per checkpoint**;
+individual items do not get their own PR. Emergent findings append to the open branch, never a new
+PR. Three invariants:
+
+- **(a) Nothing lands until its design has settled.** An entry with unresolved preconditions stays
+  on the open branch, not on master.
+- **(b) Housekeeping rides its originating branch.** The branch writes its own terminal `BRANCHES`
+  row and any Recent-landings pointer *within itself*, resolved at merge — so no merge owes a
+  follow-up PR.
+- **(c) Gate by diff shape, not file class.** A governance batch lands guard-gated **only if every
+  removed line falls inside a region the change explicitly declares it is replacing** (a `State`
+  block, a corrected row). **Any removed line outside a declared replacement region forces human
+  review** — because the guard anchors on placeholder *headings* and cannot see content corruption.
+  Earned 2026-08-05: a `#NEXT` blanket substring-replace corrupted 55 lines in `BRANCHES.md` and 104
+  in `DECISIONS_LOG.md` while `check_governance_placeholders.py` returned exit 0 throughout. The
+  naive form of this invariant — "governance-only, therefore guard-gated" — was falsified by the
+  very session that motivated it.
+
+Code and schema changes always take full human review.
+
 ### Conventions
 
 - **`FEEDBACK.md` §19 is the integrity ledger** (health-app only; a section of `FEEDBACK.md`, not a new store). Append-only rows typed `HUMAN`/`MODEL`/`COUPLED`, `status` mutable (`STANDS`/`STRUCK`); a row exists only if a procedural change would have prevented the failure (`prevention` mandatory, non-null), and `caused_by` is derived from `caused`, never authored. See DECISIONS_LOG #129–#132.
@@ -415,11 +437,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Governance edits bank to one batched PR, gated by diff shape (#176)** - the 2026-08-05 sweep landed as six PRs where one would have done, two of them only unwinding the previous one; the naive "governance-only, therefore guard-gated" carve-out was falsified in the same session by a substring-replace the guard sat green through, so the gate is a batch's removed-line shape, not its file class. See DECISIONS_LOG #176.
+
+- **Source admission replaces source priority for HC sleep (#175)** - a Withings Health-Mate mirror of Samsung's own sleep proved that ranking all comers fails silently whenever the canonical source is absent, so `_aggregate_day` moves to an allow-list of registered measuring sources and excludes unlisted writers by default; the accepted trade is that a genuinely new device contributes nothing until deliberately admitted. `OPEN_QUESTIONS` Q83. See DECISIONS_LOG #175.
+
 - **Device deep-sleep leaves the readiness path, and the HC field contract collapses to one name (#173, #174)** - `#71`'s unfitness finding extends to the deep-confidence module and Banister, so its constants stay uncalibrated by design; `/health-connect/sync` is single-named on HCA's mapped names, pinned by a contract test rather than codegen, and the collapse is OWED until that test exists. `OPEN_QUESTIONS` Q3/Q4/Q7 closed, Q81-Q84 minted. See DECISIONS_LOG #173, #174.
-
-- **The pull request becomes the sole route to master (#171, #172)** - `#40` rule 1 had asserted a single merge path since the day it landed while master had in fact accepted two; a ruleset now refuses every non-PR route, and merge-path mechanics leave the shared block under a new boundary criterion. `OPEN_QUESTIONS` Q80. See DECISIONS_LOG #171, #172.
-
-- **Placeholder guard gains a CI surface (#170)** - the guard now runs on `ubuntu-latest` on `pull_request` + `push`, closing `Q79` - whose named agent turned out not to exist; the real uncovered path is the web-UI merge button. First POSIX control surface either repo has had. See DECISIONS_LOG #170.
 
 ---
 
