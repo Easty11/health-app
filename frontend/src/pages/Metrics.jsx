@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api'
+import { formatApiError } from '../lib/apiError'
 
 const STAGE = { IDLE: 'IDLE', EXTRACTING: 'EXTRACTING', CONFIRM: 'CONFIRM' }
 
@@ -469,8 +470,7 @@ export default function Metrics() {
       setExtraction(res.data)
       setStage(STAGE.CONFIRM)
     } catch (err) {
-      const detail = err.response?.data?.detail
-      setError((typeof detail === 'string' ? detail : detail?.error) || 'Failed to read report')
+      setError(formatApiError(err, 'Failed to read report'))
       setStage(STAGE.IDLE)
     }
   }
@@ -487,8 +487,10 @@ export default function Metrics() {
       reset()
       loadStored() // the just-saved report joins the read-back
     } catch (err) {
-      const detail = err.response?.data?.detail
-      setError((typeof detail === 'string' ? detail : detail?.error) || 'Failed to save report')
+      // A rejection here is frequently a Pydantic 422 raised BEFORE confirm_lab_report
+      // runs, whose `detail` is a list of `{loc, msg, type}` — the shape this used to
+      // discard. `formatApiError` names the refused field; see its header.
+      setError(formatApiError(err, 'Failed to save report'))
     } finally {
       setSaving(false)
     }
