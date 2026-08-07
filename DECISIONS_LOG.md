@@ -7240,3 +7240,55 @@ raw-name collision to investigate), or a real upload trips the §6 guard on a by
 data correction, not a convention change. The analyte-first convention itself is revisited only if a
 future specimen split cannot be expressed as `analyte_specimen` (none foreseen: blood/serum/plasma,
 urine, saliva all suffix cleanly).
+
+---
+
+### #NEXT. The `get_lab_results` MCP tool reuses `routers.labs.get_lab_results` (#59/#47 surface), so the interpretation withhold is inherited, not re-implemented
+
+**Decision:** A seventh MCP tool, `get_lab_results(marker, limit) -> str`, surfaces stored lab
+results to the chat model as a thin text formatter over the **existing** REST read-back
+`routers.labs.get_lab_results` (the #59 consumer, projected to the #47 raw-fields-only
+`StoredResultOut`). It does **not** read `labs_reads.latest_lab_results` or `marker_series`.
+`marker` filters to one analyte and `limit` keeps the most-recent N reports, both applied in the
+tool over the returned Pydantic snapshots — no second query.
+
+**Rationale:** The #47 boundary (raw values / ranges / lab-asserted flags only — no
+`computed_flag`, `confidence`, `is_derived`, deltas, mechanisms, or levers) is enforced at the
+projection in `routers.labs.get_lab_results`. Reusing that function inherits the boundary for free;
+re-querying `LabResult` in the tool would re-implement — and eventually drift from — the withhold.
+`latest_lab_results` (one-row-per-marker-latest) and `marker_series` (trend) are the seams the 4b
+interpretation producer (#49) owns; a raw read-back tool must not reach for either, or it starts
+computing latest/trend, which is interpretation wearing a read-back's clothes. The tool's docstring
+tells the consuming model the same thing in-band ("Not interpreted — no deltas, mechanisms, or
+judgements"), so it does not diagnose off a raw surface.
+
+**One clarification against the brief — the marker matcher.** The brief said to reuse
+`labs_reads.find_marker`'s rule and "don't invent a second matcher; import/mirror that one." Its
+RULE is mirrored exactly — word-boundary, case-insensitive, matched against the raw name or the
+canonical id with underscores read as spaces. But `find_marker` is **directional**: it searches a
+row-name *within a user message* (mention-detection over a sentence), whereas a `marker=` filter
+needs the query searched *within* each row's names. Reusing `find_marker` literally would treat the
+query as the message, return first-match-only, and miss every marker whose name is longer than the
+query — `marker="creatinine"` would not match `R U-Creatinine`. So `_marker_matches` mirrors the
+rule in the filter direction; it does not call `find_marker`. This is a same-rule/opposite-subject
+mirror, which is what "mirror that one" asks for, not a second matching rule.
+
+**Status:** Landed. Seven `@mcp.tool()`s now; the tool is registered and the module imports clean
+(no circular import from the new `routers.labs` dependency — verified).
+
+**How you know:** `tests/test_mcp_lab_results.py`, 10 cases, all green; backend suite **765 passed**
+vs a 755 baseline (+10), frontend untouched (no frontend file changed). The formatting/filter logic
+is extracted to a pure `_format_lab_results` and tested over the **real** read's output
+(seed → `routers.labs.get_lab_results` → format), so the projection is genuinely exercised rather
+than stubbed; the `@mcp.tool()` wrapper adds only `_current_user_id()` + a session, which need a live
+bearer token and are not the logic under test. The #47 withhold has a **string-level** guard on top
+of the projection guarantee (test c): a row stored with `computed_flag="H"` and `confidence=0.40`
+renders byte-identically to a clean row, and neither the field names nor the leaked values (`[H]`,
+`0.4`) appear. Control per `#103`: the suite cannot even import against master (the helper does not
+exist there) — the feature is net-new, so an import-level failure is the honest discrimination.
+
+**Do not revisit unless:** the tool needs latest-per-marker or trend — at which point it is no longer
+a raw read-back and the work belongs to the 4b producer (#49), reading `latest_lab_results` /
+`marker_series`, not this tool widening. Or the REST projection `StoredResultOut` changes shape, in
+which case this tool follows it automatically (that is the point of reusing it) and only the
+formatter's field references need review.
