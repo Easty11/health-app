@@ -437,11 +437,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Writer identity is repo-local evidence, not a shared invariant (#182)** - the shared block's "Code — and the `@claude` GitHub Action — is the only writer" named a per-repo surface, not an invariant: no `@claude` Action exists on any ref of health-app (`.github` holds only `governance-guard.yml`, a `contents: read` CI guard that cannot write), so the claim was false here as in HCA. The shared line collapses to "Code is the only writer"; any Action wiring is stated below `END SHARED LOOP RULES` in the repo that has it. See DECISIONS_LOG #182.
+
 - **Governance edits bank to one batched PR, gated by diff shape (#176)** - the 2026-08-05 sweep landed as six PRs where one would have done, two of them only unwinding the previous one; the naive "governance-only, therefore guard-gated" carve-out was falsified in the same session by a substring-replace the guard sat green through, so the gate is a batch's removed-line shape, not its file class. See DECISIONS_LOG #176.
 
 - **Source admission replaces source priority for HC sleep (#175)** - a Withings Health-Mate mirror of Samsung's own sleep proved that ranking all comers fails silently whenever the canonical source is absent, so `_aggregate_day` moves to an allow-list of registered measuring sources and excludes unlisted writers by default; the accepted trade is that a genuinely new device contributes nothing until deliberately admitted. `OPEN_QUESTIONS` Q83. See DECISIONS_LOG #175.
-
-- **Device deep-sleep leaves the readiness path, and the HC field contract collapses to one name (#173, #174)** - `#71`'s unfitness finding extends to the deep-confidence module and Banister, so its constants stay uncalibrated by design; `/health-connect/sync` is single-named on HCA's mapped names, pinned by a contract test rather than codegen, and the collapse is OWED until that test exists. `OPEN_QUESTIONS` Q3/Q4/Q7 closed, Q81-Q84 minted. See DECISIONS_LOG #173, #174.
 
 ---
 

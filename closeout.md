@@ -1,154 +1,101 @@
-# Session close-out — 2026-08-05 → 2026-08-06
+# Session close-out — 2026-08-07 (health-app)
 
-Session-open ref: `f68c73c`. Head at close: `ec26319` (pre-close-out commit).
-
----
-
-## 1 — Real commits this session
-
-`git log --oneline f68c73c..HEAD`
-
-```
-ec26319 Merge pull request #26 from Easty11/gov/175-precondition-narrowed
-61a82ec gov: mint #176 — governance edits bank to one batched PR, gated by diff shape
-95c18da gov: #175's identity precondition resolves safe and narrows; correct the stale docstring
-2e91f15 Merge pull request #25 from Easty11/gov/175-source-admission
-9ef8f73 gov: mint #175 — source admission replaces source priority for HC sleep
-82453b5 Merge pull request #24 from Easty11/gov/q83-mirror-loop-resolution
-84b8644 gov: Q83 — the Withings sub-finding is confirmed as the cause, and it reframes the fix
-e84154c Merge pull request #23 from Easty11/chore/branches-self-row-convention
-89a41ad chore(governance): a branch's own BRANCHES row records its terminal state, not its in-flight state
-9ebd583 Merge pull request #22 from Easty11/chore/post-landing-pointers
-e10e639 chore: refresh Recent landings and close the BRANCHES row for #173/#174
-51f19c1 Merge pull request #21 from Easty11/gov/open-questions-sweep
-9bd31b9 gov: OPEN_QUESTIONS sweep — close Q3/Q4/Q7, re-scope Q5/Q6/Q20, mint Q81–Q84
-```
-
-Repo's own dated record (`git log --format="%ad %s" --date=short -10`):
-
-```
-2026-08-06 Merge pull request #26 from Easty11/gov/175-precondition-narrowed
-2026-08-06 gov: mint #176 — governance edits bank to one batched PR, gated by diff shape
-2026-08-05 gov: #175's identity precondition resolves safe and narrows; correct the stale docstring
-2026-08-05 Merge pull request #25 from Easty11/gov/175-source-admission
-2026-08-05 gov: mint #175 — source admission replaces source priority for HC sleep
-2026-08-05 Merge pull request #24 from Easty11/gov/q83-mirror-loop-resolution
-2026-08-05 gov: Q83 — the Withings sub-finding is confirmed as the cause, and it reframes the fix
-2026-08-05 Merge pull request #23 from Easty11/chore/branches-self-row-convention
-2026-08-05 chore(governance): a branch's own BRANCHES row records its terminal state, not its in-flight state
-2026-08-05 Merge pull request #22 from Easty11/chore/post-landing-pointers
-```
-
-**Six PRs (#21–#26), six branches, all merged and remote-deleted.** Behaviour shipped: **none** — the only
-non-markdown change all session was a corrected docstring in `backend/routers/health_connect.py`.
+Branch at close: `chore/session-closeout-0807`. Master after Brief A: `236bc47`.
 
 ---
 
-## 2 — Pending-queue reconciliation
+## 1 · Real commits this session
 
-Carried in from the 2026-08-03 chat close-out as the *OPEN_QUESTIONS sweep* brief. **Every item landed.**
+Session-open ref: `6c0f786` (master at open). `git log --oneline 6c0f786..HEAD`:
 
-| Brief item | Disposition | Commit |
-|---|---|---|
-| A1 — new decision, deep-sleep extends `#71` | Landed as **`#173`** (brief said `#168`) | `9bd31b9` |
-| A2 — new decision, HC field contract | Landed as **`#174`** (brief said `#169`), Status **OWED** | `9bd31b9` |
-| B1 — Q3 → `DONE → #168` | Landed as `DONE → #173` | `9bd31b9` |
-| B2 — Q4 → `DONE → #64` | Landed | `9bd31b9` |
-| B3 — Q5 re-scope, capture precondition struck | Landed, OPEN | `9bd31b9` |
-| B4 — Q6 re-scope (unbuilt, not unverified) | Landed, OPEN | `9bd31b9` |
-| B5 — Q7 → `DONE → #72` | Landed | `9bd31b9` |
-| B6 — Q20 decoupled from Q7 | Landed, OPEN | `9bd31b9` |
-| C1/C2/C3 — three new questions | Landed as **Q81/Q82/Q83** (brief said Q79/Q80/Q81) | `9bd31b9` |
-| D — Gate-3 footnote pointer | Landed | `9bd31b9` |
-| E1 — optional Q82 (schema wider than client) | **Confirmed by operator**, landed as **Q84** | `9bd31b9` |
+```
+236bc47 Merge pull request #34 from Easty11/gov/writer-claim-correction
+fb16336 gov: resolve #NEXT -> #182 at land
+073413f gov: DECISIONS_LOG #NEXT — writer identity is repo-local evidence, not a shared invariant
+c7cffa5 gov: FEEDBACK §14 — fifth occurrence (count-the-word, 77 vs 80)
+770e3f1 gov: CLAUDE.md — writer identity is repo-local evidence, not a shared invariant
+```
 
-**Numbering: the brief's only casualty.** It hardcoded `#168`/`#169`/`Q79`/`Q80`; master had claimed all four
-for unrelated content between drafting and this session (`#168` exercise catalogue, `#169` guard heading
-grammar, `Q79` `@claude` Action pushes, `Q80` uniqueness-and-gaplessness). Resolved by writing placeholders
-and adjudicating at merge — master's max was re-read immediately before **every** merge this session.
+The close-out commit itself lands separately on `chore/session-closeout-0807` (this file +
+CLAUDE.md Recent-landings + the two BRANCHES rows), via its own PR — master is PR-gated.
 
-**Emergent items, not in the brief** — all landed:
+One session, one concern: **Brief A — the shared-block writer-claim correction.** No code, no
+migrations; governance/docs only, guard-gated per #176(c) (the single removed line, CLAUDE.md:55,
+sits inside the declared replacement region).
 
-| Item | Disposition | Commit |
-|---|---|---|
-| `BRANCHES` self-row convention (terminal state, not in-flight) | Landed | `89a41ad` |
-| Q83 Withings sub-finding → confirmed mirror loop, fix reframed | Landed | `84b8644` |
-| **`#175`** — source admission replaces source priority | Landed, Status **OWED** | `9ef8f73` |
-| `#175` identity precondition resolved safe + narrowed; stale docstring corrected | Landed | `95c18da` |
-| **`#176`** — batched governance landings, gated by diff shape | Landed | `61a82ec` |
+## 2 · Pending-queue reconciliation
 
-**Nothing is provisional.** No decided-but-uncommitted item remains.
+Input this session was **Brief A executed by Code directly** — not a `;cc` pending-commit-queue
+paste. Each decided item and where it landed:
 
-**Banked for the next batch — deliberately NOT actioned** (per `#176`(a): do not spawn a new item at
-close-out): *"A check whose own pattern is unverified is not yet a check."* Three times this session a
-substring/anchor mistake produced a confidently-green wrong answer — the `#NEXT` blanket replace that
-corrupted 55 + 104 lines with the guard at exit 0; the invariant-(c) removal census whose own `^-[^-]`
-pattern could not match a removed markdown bullet; and the guard's own heading-only blind spot that
-motivated `#176`(c). This belongs in governance as a rule. Mint it in the next governance batch, not here.
+- **CLAUDE.md:55 writer-claim strike** ("Code — and the `@claude` GitHub Action — is the only
+  writer" → "Code is the only writer") — **LANDED** `770e3f1`.
+- **FEEDBACK §14 occurrence 5** (count-the-word, 77 vs 80; confirmed absent beforehand) —
+  **LANDED** `c7cffa5`.
+- **DECISIONS_LOG #182** (writer identity is repo-local evidence, not a shared invariant;
+  reformatted from the brief's HCA-style compact form into health-app's Decision/Rationale/Status/
+  How-you-know structure; rationale amended to Step 2's actual finding — no `@claude` Action exists
+  on any ref here) — **LANDED** `073413f`, resolved `#NEXT → #182` at `fb16336`, merged `236bc47`
+  (PR #34). Placeholder guard green; master max re-read = #181 at merge, so #182 stood.
+- **Q33** (shared-block `parked` word) — **untouched, not provisional**: its subject is
+  `CLAUDE.md:198`, a different line and a different concern than the writer claim (55). Remains
+  **OPEN**. No change was intended, so nothing is left provisional.
+- **Gate 6 ruleset read** — read-only, no commit. Feeds Brief C:
+  `master-pr-gated` (active) requires a PR + strict `placeholder guard (POSIX)` + non-fast-forward.
 
----
+**Handoff artifact for Brief B (HCA re-mirror)** — the shared block on `origin/master` after this
+session, same extraction method (git LF blob, lines 20–278, trailing newline excluded):
 
-## 3 — Cold-resume handoff
+> **259 lines / 18717 bytes / md5 `552728ade81e90edcbc8f12bbbc02a80`**
 
-### What is canonical now
+Independently confirmed on both sides via `raw.githubusercontent.com`; HCA master reads
+`215 / 15132 / 592d95c82b48361c73ad3b65677de529`. Brief B mirrors against the hash, not a description.
 
-- **Decisions `#173`–`#176`** on master. `#174` and `#175` are Status **OWED** — decided, not implemented.
-- **Questions `Q81`–`Q84`** minted; **Q3 / Q4 / Q7** closed; **Q5 / Q6 / Q20 / Q83** re-scoped and OPEN.
-- **`CLAUDE.md`** gained *Batched governance landings* (`#176`) in the repo-specific merge-path section —
-  verified outside the shared loop-rules block (markers at lines 20 / 278), so **no HCA mirror is owed for it**.
-- Guard green on master; `#176` unique and contiguous; no branch in limbo.
+## 3 · Cold-resume handoff
 
-### The three live threads (OWED — none blocks closing)
+### What landed
+- **DECISIONS_LOG #182** — the shared block's writer line was carried into both repos as an
+  invariant but named a per-repo surface. Finding: **no `@claude` Action exists on any ref of
+  health-app** (`.github` holds only `governance-guard.yml`, a `contents: read` CI guard that cannot
+  write); the claim was false here as in HCA. Boundary criterion applied — the shared line now states
+  only "Code is the only writer"; any Action wiring belongs below `END SHARED LOOP RULES`, and
+  health-app has none to state.
+- **FEEDBACK §14** — occurrence 5 (77 vs 80) appended to the count-the-word recurrence log.
 
-1. **Q83 / Withings.** Cause confirmed: the identical-`record_start` rows are a **Health-Mate mirror** of
-   Samsung's own sleep, not a second sensor — so discarding them loses no signal.
-   - **(a) Source-side — do this first, needs no repo work at all.** Revoke Withings' Health-Connect
-     **write** permission for Sleep, on the phone. Kills the duplicate *before* ingest and demotes (b) from
-     live bug fix to robustness.
-   - **(b) Code-side — `#175`'s admission filter.** Blocked behind the identity question below.
-2. **`#175` — OWED on implementation.** `_aggregate_day` still selects by max-duration across all writers.
-   Before the filter is written: decide **`'unknown'`'s policy explicitly** (admit-with-flag / fall back to
-   pre-`#175` max-pick / log-and-count per `#74`) — a strict allow-list excluding `'unknown'` fail-closes
-   the legitimately-unidentified rows *silently*, which is the defect class `#175` exists to remove. Plus
-   one bounded `health_connect_record_sources` coverage query when Railway is reachable: `'unknown'` vs
-   real per record type, **split by era**. Admission runs **before** Q82's fragment-merge.
-3. **`#174` — OWED on the field-name contract test.** The five dead-branch deletions in
-   `backend/routers/health_connect.py` **must not ship without it**: the load-bearing half of `#174`'s
-   evidence (what HCA actually posts) is a cross-repo read unverifiable from this tree, so without the test
-   the deletion breaks production **silently** on the next sync.
+### Current sprint (ROADMAP NOW — unchanged this session)
+- **CBT-I Q45 nap day-attribution** — DATED, contaminating capture live; now also gates a second
+  user at the 4-night cadence. Close from the VA CBT-I protocol docs / clinician, not the workbook.
+- **CBT-I manual witnessed evaluation trigger (#118)** — BUILT but SUPERSEDED on
+  `feat/cbti-eval-trigger`; needs REWORK (5 of 11 tests fail against the 4-night engine, one
+  semantic). Full checklist on `BRANCHES.md` row 76. Do **not** force-merge.
+- **Lab upload pipeline** / **Interpretation layer build** — the medical spine; design Locked,
+  build largely pending (increments 2/3/5 UNSTARTED).
+- **Cross-repo propagation (all OWED, all HCA-rooted)** — number-at-merge enforcement, secret-render
+  prohibition, `#NEXT`-token extension, the #172 boundary criterion + merge-path split. **Now joined
+  by #182's writer-claim strike**: the block Brief B re-mirrors already carries it, so a single whole-
+  block mirror discharges these together against md5 `552728ade81e90edcbc8f12bbbc02a80`.
 
-### What did NOT move — name it, because it is invisible otherwise
+### Open questions of note
+- **Q33 OPEN** — the shared-block `parked` word (struck vocabulary, last surviving site in either
+  repo). Needs its own mirror-first brief; do not drive-by-fix. Once Brief B mirrors the block, Q33
+  becomes a **paired cross-repo obligation** (health-app + HCA), not a health-app-local row — Brief B
+  is to row its HCA mirror and must **not** strike the word.
+- Q45 (nap attribution), Q83 (`'unknown'` HC source policy), Q85/Q86 (lab null-on-sparse-row
+  residuals) — all unchanged this session.
 
-**This session shipped zero behaviour.** Six PRs, ~all prose, one docstring. It went entirely to the
-*instrument* — the governance stores and the rules governing them — and so did the sessions immediately
-before it (`#169` governance grammars, `#170` guard CI surface, `#171`/`#172` PR-gated merge path). That is
-**four consecutive sessions on the instrument rather than the thing being instrumented**, and it is stated
-here because a close-out that lists only what moved hands the next session more of the same: the queue a
-cold reader infers is the queue that is legible.
-
-Even this session's substantive decisions (`#173` readiness, `#174` field contract, `#175` source
-admission) are **all decided-not-implemented**. Nothing in the product changed.
-
-**Standing still, unchanged this session, gated as noted** — from `ROADMAP.md` NOW/NEXT:
-
-| Lane | State | Gate |
-|---|---|---|
-| **CBT-I nap day-attribution (Q45)** | DATED, contaminating capture **now** | Close from VA CBT-I protocol docs or the clinician. Every nap-excluded night currently rests on an unverified attribution. |
-| **CBT-I manual evaluation trigger** | Built but **SUPERSEDED — REWORK** | `feat/cbti-eval-trigger` obsolete against `#165`'s 4-night retune; 5 of 11 tests fail. Do **not** force-merge. |
-| **Lab upload pipeline** | Uploading unpaused | Operator decision owed on the junk rows. |
-| **Interpretation layer** | 1b delivered; **2 / 3 / 5 UNSTARTED** | Rephrase pass → lever-tap thread → go-live. Nothing gates increment 2. |
-| **Hub shell (`#150`)** | UNBLOCKED, operator-preferred next pick | Nothing. |
-| **`lab_accession`** | Queued, strongest small alternative | Nothing. |
-| **Appointment brief** | Not started | Lab pipeline + interpretation layer. |
-| **Q82** — fragmented Samsung nights undercount | OPEN | Sequenced after Q83/`#175`. |
-| **Q6** — strength volume-load | OPEN, re-scoped to unbuilt | No `load_metrics` table exists. Strength contributes **zero** to the deployed load metric today. |
-| **Cross-repo propagation ×4** | All **OWED** | HCA-rooted session only, `pwd`-verified. `#172`'s boundary criterion is the newest of the four. |
+### What was NOT touched — named explicitly
+This was a **pure governance session**. No feature or product code moved: the **lab upload pipeline**,
+the **interpretation layer** (rephrase / lever-tap / go-live, all UNSTARTED), the **CBT-I eval-trigger
+rework**, and the **appointment brief** all stood still. The drift is worth naming: the last several
+sessions have gone to *instrument* — governance sweeps, a prod backfill (#180), MCP read-back plumbing
+(#181), now a shared-block correction (#182) — rather than to the interpretation spine the roadmap
+calls the hero feature. A cold reader inferring the queue from what is written down would see more
+governance; the actual next *feature* pick is interpretation increment 2 (rephrase) or the unblocked
+hub shell (#150), with `lab_accession` as the small alternative.
 
 ### Single clearest next action
-
-**Do the Withings Health-Connect write revoke for Sleep, on the phone.** It is free, needs no keyboard, and
-removes a live data-contamination bug **at source** rather than documenting it.
-
-Then, at a keyboard: the next session should go to a **product lane**, not the instrument. `ROADMAP.md` NOW
-is dated and ordered; **interpretation increment 2 (rephrase pass)** and the **hub shell (`#150`)** are both
-unblocked and need nothing decided first.
+- **Live cross-repo thread (HCA-rooted):** run **Brief B** — re-mirror the shared block into
+  `health-connect-app` against md5 `552728ade81e90edcbc8f12bbbc02a80`, define HCA's repo-local `land`,
+  repair the four stale rows, re-row G1 — then **Brief C**. Not runnable from a health-app session.
+- **Within health-app:** pick up **interpretation increment 2 (rephrase)** or the **CBT-I
+  eval-trigger rework** (`feat/cbti-eval-trigger`, checklist on BRANCHES row 76).
