@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone, timedelta
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -14,6 +15,7 @@ from hevy_format import format_set
 from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
 import models
+from routers.labs import get_lab_results as _read_lab_results
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
@@ -579,3 +581,111 @@ def get_training_load() -> str:
     ]
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Tool 7 — Lab results (raw read-back)
+# ---------------------------------------------------------------------------
+
+def _marker_matches(query: str, r) -> bool:
+    """Does `query` name this row's marker?
+
+    Mirrors `labs_reads.find_marker`'s RULE — word-boundary, case-insensitive,
+    matched against the raw name OR the canonical id with underscores read as spaces
+    — but in the FILTER direction. `find_marker` searches a row-name within a user
+    MESSAGE (mention-detection over a sentence); here the query IS the marker term and
+    is searched within each candidate, so "creatinine" matches "R U-Creatinine" and
+    "creatinine_urine". Same tokenisation rule, opposite subject: calling `find_marker`
+    directly would treat the query as the message, return first-match-only, and miss
+    every marker whose name is longer than the query."""
+    q = query.strip().lower()
+    if not q:
+        return False
+    candidates = {r.marker_name_raw.lower()}
+    if r.marker_canonical:
+        candidates.add(r.marker_canonical.replace("_", " ").lower())
+    return any(re.search(rf"\b{re.escape(q)}\b", c) for c in candidates)
+
+
+def _format_result_line(r) -> str:
+    """One marker line — RAW fields only, exactly the `StoredResultOut` projection (#47).
+    No `computed_flag`/`confidence` (not on the projection, and not surfaced here);
+    exclusivity flags are carried on the model but not decorated, for parity with the
+    REST read-back."""
+    if r.value_num is not None:
+        value = f"{r.value_operator + ' ' if r.value_operator else ''}{r.value_num}"
+    elif r.value_qualitative:
+        value = r.value_qualitative
+    else:
+        value = "—"
+
+    unit = f" {r.unit_canonical}" if r.unit_canonical else ""
+
+    if r.ref_low is not None and r.ref_high is not None:
+        ref = f" (ref {r.ref_low}–{r.ref_high})"
+    elif r.ref_high is not None:
+        ref = f" (ref < {r.ref_high})"
+    elif r.ref_low is not None:
+        ref = f" (ref > {r.ref_low})"
+    else:
+        ref = ""
+
+    # LAB-asserted flag only — never computed_flag (withheld-computed, #47).
+    flag = f" [{r.lab_flag}]" if r.lab_flag else ""
+
+    return f"{r.marker_name_raw}: {value}{unit}{ref}{flag}"
+
+
+def _format_lab_results(reports, marker: str | None = None, limit: int | None = None) -> str:
+    """Pure text formatter over the `StoredReportOut` list from `routers.labs.get_lab_results`.
+
+    Filtering happens HERE over the returned Pydantic snapshots — no second query. `marker`
+    keeps only rows whose name matches (dropping any report left with no rows); `limit` then
+    keeps the most-recent N of the surviving reports (the list arrives newest-first). Filter
+    precedes limit so `marker=x, limit=3` reads as "my last 3 x reports", not "x within my
+    last 3 reports of anything"."""
+    if marker is not None:
+        filtered = []
+        for rep in reports:
+            hits = [r for r in rep.results if _marker_matches(marker, r)]
+            if hits:
+                # A shallow copy carrying only the matching rows — the read is not re-run.
+                filtered.append(rep.model_copy(update={"results": hits}))
+        reports = filtered
+
+    if limit is not None:
+        reports = reports[:limit]
+
+    if not reports:
+        return "No lab results on file."
+
+    lines: list[str] = []
+    for rep in reports:
+        if lines:
+            lines.append("")
+        lines.append(f"=== {rep.panel_name_raw} — {rep.collected_date} ({rep.lab_name}) ===")
+        lines.append(f"source: {rep.source_doc_filename or '—'}")
+        if rep.zero_row_reason and not rep.results:
+            lines.append(f"(no rows ingested: {rep.zero_row_reason})")
+            continue
+        for r in rep.results:
+            lines.append(_format_result_line(r))
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def get_lab_results(marker: str | None = None, limit: int | None = None) -> str:
+    """Raw stored lab values, ranges, and lab-asserted flags, grouped by report, newest
+    first. Not interpreted — no deltas, mechanisms, or judgements.
+
+    Optional `marker` filters to one analyte (word-boundary, case-insensitive, matched on
+    the printed name or canonical id, e.g. "creatinine"). Optional `limit` keeps the most
+    recent N reports."""
+    user_id = _current_user_id()
+    with SessionLocal() as sess:
+        user = sess.get(models.User, user_id)
+        # StoredReportOut is a plain Pydantic snapshot and survives session close, but the
+        # brief's belt-and-suspenders: read and format inside the session.
+        reports = _read_lab_results(current_user=user, db=sess)
+        return _format_lab_results(reports, marker=marker, limit=limit)
