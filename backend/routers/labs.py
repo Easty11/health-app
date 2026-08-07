@@ -9,7 +9,7 @@ from typing import Literal
 import anthropic
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 import models
@@ -64,6 +64,28 @@ class ResultItem(BaseModel):
     flag_agreement: bool | None = None
     marker_comment: str | None = None
     field_confidence: FieldConfidence | None = None
+
+    # A ref-less row nulls these, and a bare `bool` fails closed on it (#177's
+    # instrument caught `results.0.ref_high_exclusive: Input should be a valid boolean`
+    # on `R U-Creatinine`, whose reference interval is printed `—`). The extractor is
+    # not wrong to send null: with no bound, there is nothing to be exclusive ABOUT.
+    #
+    # COERCE, DO NOT LOOSEN. The type stays strictly `bool`, matching the column
+    # (`models.py:622-623`, `nullable=False, server_default=false`) — so nothing
+    # downstream ever sees `None` and no migration is needed. `False` is the correct
+    # value, not a placeholder: it is the column's own server_default, and it is
+    # behaviourally inert on exactly the rows it touches, because every consumer reads
+    # the flag only inside a bound-is-not-None branch (`interpretation/gates.py:108,114`;
+    # `context_builder.py:965-966`).
+    #
+    # BOTH flags, not just the captured one. Which flag the model nulls on a sparse row
+    # is nondeterministic — this report nulled `ref_high` on an absent-ref row, but a
+    # `>x` floor-only row leaves the ceiling absent and a `<x` ceiling row the floor.
+    # Fixing only the field the banner named would re-open this on the next report shape.
+    @field_validator("ref_low_exclusive", "ref_high_exclusive", mode="before")
+    @classmethod
+    def _null_exclusivity_means_not_exclusive(cls, v):
+        return False if v is None else v
 
 
 class ReportPatient(BaseModel):
@@ -255,7 +277,11 @@ Reference interval → `{ref_low, ref_high, ref_low_exclusive, ref_high_exclusiv
 - `a - b`      → ref_low=a, ref_high=b, both inclusive (both exclusive flags false)
 - `<x`         → ref_low=null, ref_high=x, ref_high_exclusive=true
 - `>x`         → ref_low=x, ref_high=null, ref_low_exclusive=true
-- empty/blank  → ref_low=null, ref_high=null (computed_flag will be null)
+- empty/blank  → ref_low=null, ref_high=null, ref_low_exclusive=false,
+                 ref_high_exclusive=false (computed_flag will be null). The
+                 exclusivity flags are ALWAYS booleans, never null: with no bound
+                 there is nothing to be exclusive about, so `false` is correct.
+                 Same on a one-sided interval — the absent side's flag is false.
 
 Value parsing:
 - `28`            → value_num=28.0, value_operator=null
