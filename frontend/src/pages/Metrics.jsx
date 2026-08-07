@@ -2,30 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api'
 import { formatApiError } from '../lib/apiError'
+import { confidencePct, isClinicalFlag, isSuspect, rowTier } from './labRowClassification'
 
 const STAGE = { IDLE: 'IDLE', EXTRACTING: 'EXTRACTING', CONFIRM: 'CONFIRM' }
 
-// ---------- row classification (LAB_EXTRACTION_SCHEMA v0.3 §6) ----------
-
-function isSuspect(r, canonicalMap) {
-  const conf = r.field_confidence
-  if (conf && Object.values(conf).some((v) => v < 0.85)) return true
-  if (r.flag_agreement === false) return true
-  if (!canonicalMap[r.marker_name_raw]) return true // unmapped — no canonical entry
-  const hasUnit = !!(r.unit_canonical || r.unit_raw)
-  if (r.value_num == null && r.value_qualitative == null && hasUnit) return true
-  return false
-}
-
-function isClinicalFlag(r) {
-  return !!(r.lab_flag || r.computed_flag)
-}
-
-function rowTier(r, canonicalMap) {
-  if (isSuspect(r, canonicalMap)) return 0
-  if (isClinicalFlag(r)) return 1
-  return 2
-}
+// ---------- row formatting (LAB_EXTRACTION_SCHEMA v0.3 §6) ----------
+// Classification (isSuspect / isClinicalFlag / rowTier / confidencePct) lives in
+// ./labRowClassification — pure, JSX-free, and unit-tested there.
 
 function formatValue(r) {
   if (r.value_num != null) return `${r.value_operator || ''}${r.value_num}`
@@ -39,13 +22,6 @@ function formatRefRange(r) {
   if (ref_low == null) return `${ref_high_exclusive ? '<' : '≤'}${ref_high}`
   if (ref_high == null) return `${ref_low_exclusive ? '>' : '≥'}${ref_low}`
   return `${ref_low}–${ref_high}`
-}
-
-function confidencePct(r) {
-  const conf = r.field_confidence
-  if (!conf) return null
-  const values = Object.values(conf)
-  return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100)
 }
 
 function formatDate(iso) {

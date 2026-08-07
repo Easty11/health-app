@@ -39,10 +39,23 @@ _CANONICAL_MAP = _load_canonical_map()
 # ---------- schemas (LAB_EXTRACTION_SCHEMA v0.3 §2/§3) ----------
 
 class FieldConfidence(BaseModel):
-    name: float
-    value: float
-    unit: float
-    ref: float
+    """Per-field extraction confidence. Every sub-field is Optional, and `None` means
+    NOT EXPRESSED — the field is absent from the report, so there was no extraction to
+    be confident about (a ref-less row has no `ref` to score).
+
+    LOOSEN, do not coerce — the opposite of `#178`'s exclusivity bools, and for a
+    reason that does not generalise between them. An absent bound has a correct
+    default (`False`: nothing to be exclusive about). A confidence has none. `1.0`
+    would assert high confidence in a field that was never read, hiding a genuinely
+    suspect row; `0.0` would mark it suspect on a field that legitimately does not
+    exist. Both are lies with a direction. `None` is the honest type, and every
+    consumer must treat it as ABSENT rather than as a number — see
+    `confirm_lab_report`'s derivation and `Metrics.jsx`'s `isSuspect`/`confidencePct`,
+    all three of which coerce null to 0 if left unguarded."""
+    name: float | None = None
+    value: float | None = None
+    unit: float | None = None
+    ref: float | None = None
 
 
 class ResultItem(BaseModel):
@@ -302,6 +315,12 @@ the value or the range — set `flag_agreement=false` rather than silently
 picking one.
 
 ## Confidence and suspect-field signalling
+
+A field that is ABSENT from the report has no extraction to be confident about —
+emit `null` for that sub-field, or omit it. The commonest case is a row with no
+reference interval: there is no `ref` to have read, so `ref` confidence is `null`,
+NOT a low number and NOT a high one. Do not invent a score for something that was
+never on the page.
 
 Populate `field_confidence` (0-1 per field: name/value/unit/ref) honestly — this
 drives which rows the human confirmation screen highlights for review. Fields
@@ -626,7 +645,19 @@ def confirm_lab_report(
     # confirm from stored inputs, not reported by the model (#146).
     row_confidences: list[tuple[ResultItem, str | None, float]] = []
     for r, canonical, _established_unit in resolved:
-        confidences = list(r.field_confidence.model_dump().values()) if r.field_confidence else None
+        # Drop not-expressed sub-fields BEFORE min(). `FieldConfidence` sub-fields are
+        # Optional, and `min()` over a list mixing float and None raises TypeError — which
+        # would convert the 422 this loosening removes into a 500, one layer deeper and
+        # after the report row is built. The filter is load-bearing, not defensive.
+        #
+        # An all-None object filters to empty and falls to the same 1.0 as an ABSENT
+        # object, which is deliberate: both mean "no confidence was expressed", and they
+        # should not score differently. Non-empty stays min-over-expressed — §6's rule
+        # that overall propagates the WORST expressed confidence, unchanged.
+        confidences = (
+            [v for v in r.field_confidence.model_dump().values() if v is not None]
+            if r.field_confidence else None
+        )
         row_confidences.append((r, canonical, min(confidences) if confidences else 1.0))
 
     # `skip_indices` indexes `resolved`; the write loop below indexes `row_confidences`.
