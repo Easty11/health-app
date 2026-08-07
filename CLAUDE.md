@@ -52,7 +52,7 @@ with (`#171`, `#172`).*
 ### The loop (source-of-truth model)
 
 - The **repo is the single source of truth** for all volatile state.
-- **Code — and the `@claude` GitHub Action — is the only writer.**
+- **Code is the only writer.**
 - **Chat proposes; chat never commits.** The claude.ai GitHub connector grants chat
   read/attach only. Any instruction that has "chat commits", "chat writes a spec to the
   repo", or "chat files an issue" is wrong on this surface — chat emits text, a human or
