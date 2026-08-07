@@ -579,6 +579,16 @@ occurrence. It has recurred twice more since, which means it was not yet operati
   mean anything. An equality test over two nulls is not evidence of equality; it is evidence the
   extractor ran. Gate the gate.
 
+- **Occurrence 5 (health-connect-app ritual, 2026-07-20).** A brief reported a health-connect-app
+  ritual as **77 lines** where the corrected figure the same brief carries is **80** — a line
+  miscount, the count-instead-of-measure family again, not a status-label miscount but the same
+  root: a number asserted rather than measured against its surface. Like occurrence 2 it surfaced on
+  the HCA side of the 2026-07-20 sweep and is appended here because §14's rule lives in this repo and
+  a recurrence logged only at the far end never reaches it. The `80` is recorded as the brief's own
+  correction, not an independent re-count: a health-app-rooted session cannot read the HCA tree
+  (single-repo scope), which is exactly why the count had to travel as an attested figure rather than
+  be re-derived here — the same reason §14 exists.
+
 **What the third occurrence teaches that the first two did not:** the author of the rule nearly broke
 it, in the very commit that records it, while checking someone else's compliance with it. The
 substitution is not carelessness and does not yield to intent — a full-text search for a label *looks
