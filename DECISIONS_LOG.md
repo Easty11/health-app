@@ -7101,7 +7101,7 @@ would need a third branch.
 
 ---
 
-### #NEXT. `FieldConfidence` sub-fields made Optional; the null-on-sparse-row class is closed for row-level fields (last instance of the `#177`/`#178` family)
+### 179. `FieldConfidence` sub-fields made Optional; the null-on-sparse-row class is closed for row-level fields (last instance of the `#177`/`#178` family)
 
 **Decision:** `FieldConfidence.name/value/unit/ref` become `float | None = None`. Four arms ship
 together, because loosening the contract alone relocates the failure rather than removing it:
