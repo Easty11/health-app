@@ -7243,7 +7243,7 @@ urine, saliva all suffix cleanly).
 
 ---
 
-### #NEXT. The `get_lab_results` MCP tool reuses `routers.labs.get_lab_results` (#59/#47 surface), so the interpretation withhold is inherited, not re-implemented
+### 181. The `get_lab_results` MCP tool reuses `routers.labs.get_lab_results` (#59/#47 surface), so the interpretation withhold is inherited, not re-implemented
 
 **Decision:** A seventh MCP tool, `get_lab_results(marker, limit) -> str`, surfaces stored lab
 results to the chat model as a thin text formatter over the **existing** REST read-back
