@@ -7292,3 +7292,45 @@ a raw read-back and the work belongs to the 4b producer (#49), reading `latest_l
 `marker_series`, not this tool widening. Or the REST projection `StoredResultOut` changes shape, in
 which case this tool follows it automatically (that is the point of reusing it) and only the
 formatter's field references need review.
+
+---
+
+### #NEXT Writer identity is repo-local evidence; the shared block asserted it as an invariant
+
+**Decision:** The shared block's writer line — "Code — and the `@claude` GitHub Action — is the only
+writer" — is reduced to "Code is the only writer." The `@claude` Action clause is struck from the
+verbatim-propagated block. It named a per-repo surface, not an invariant, and a rule earns a place in
+the shared block only if its correctness is independent of any surface outside the tree. Any Action
+wiring is stated below `END SHARED LOOP RULES`, in the repo-specific section of the repo that has it;
+health-app has none to state.
+
+**Rationale:** The clause was carried into both repos as though it were an invariant. It is not one —
+and the specific finding is stronger than "the surface differs per repo": no `@claude` Action exists
+on any ref of health-app. `git ls-tree -r --name-only HEAD -- .github` lists only
+`governance-guard.yml`, a `permissions: contents: read` CI check that cannot write to the repo, and
+`git grep -niE '@claude|anthropic|uses:.*claude' HEAD -- .github` returns a single hit sitting inside
+that file's own prose comment — no `uses:` action reference anywhere. So the claim was false in
+health-app just as in HCA, naming a writer that has never existed in either tree; the server-side
+merges this repo does have were made by the web-UI merge button (`GitHub <noreply@github.com>`), not
+by any agent. HCA's stores recorded the same consequence independently — HCA's `Q12` logged the claim
+used as fact about a push path that never existed there (`git log --all -- .github` empty until HCA's
+`#24`), and HCA's `#170` made the identical correction to HCA's `Q79`. Same class as HCA's `#24`
+header finding: the rule is the invariant, the writer roster is evidence, and evidence does not
+propagate. Resolved by the block's own boundary criterion — the shared line now states only that Code
+is the only writer.
+
+**Status:** Landed. One-line strike to `CLAUDE.md:55`; no repo-specific writer line added, because
+there is no Action wired here to name.
+
+**How you know:** `git ls-tree -r --name-only HEAD -- .github` →
+`.github/workflows/governance-guard.yml` only, which declares `permissions: contents: read`.
+`git grep -niE '@claude|anthropic|uses:.*claude' HEAD -- .github` → one hit, inside a prose comment,
+no action reference. The block was re-measured against its baseline before the edit
+(259 / 18757 / `20722eee1462769531d54d2b28ec2f64`, git LF blob, lines 20–278, trailing newline
+excluded — the surface named per §14) and is re-measured after the edit; the post-merge triple is
+emitted for the HCA re-mirror (Brief B) so it mirrors against a hash, not a description.
+
+**Do not revisit unless:** an `@claude` Action — or any other automated writer — is actually wired
+into health-app. At that point its writer status is stated below `END SHARED LOOP RULES` in the
+repo-specific section, never restored to the shared block; the shared line stays "Code is the only
+writer" regardless, because it is the invariant and the roster is not.
