@@ -6948,3 +6948,75 @@ arm **plus** a removed-lines-outside-declared-region check — at which point in
 from manual to guard-enforced and the batch can land unattended; or a governance edit is genuinely
 time-critical (a live-wrong canonical row that will mislead an in-flight session), in which case a
 single hotfix PR is justified and stated as such.
+
+---
+
+### 177. The lab-ingest banner discarded list-form 422 `detail`; both catch blocks now render the refused field (Move 1 of 2 — the contract question is held at `Q85`)
+
+**Decision:** Both lab-ingest catch blocks in `frontend/src/pages/Metrics.jsx` — `/labs/extract`
+and `/labs/confirm` — render a **list-form** FastAPI validation `detail` through one shared pure
+helper, `frontend/src/lib/apiError.js`. The constant fallback string ("Failed to read/save report")
+is now reserved for the case where `detail` is genuinely absent, which is the transport case and
+the only one it can honestly describe. This is **Move 1 of two**: the instrument. The contract
+question it was built to answer — whether `FieldConfidence` should tolerate a null `ref` — is
+**NOT decided here** and is held at `Q85` until the live 422 names its field.
+
+**Rationale:** A genuine urine-ACR report (SNP Albumin/Creat Ratio, collected 2026-08-04) could
+not be saved, and the banner said only "Failed to save report". The catch block read
+`typeof detail === 'string' ? detail : detail?.error`, which matches neither arm of a Pydantic
+request-validation rejection: that `detail` is an **array** of `{loc, msg, type}`,
+`typeof [] === 'object'`, and an array has no `.error`, so the whole structured rejection
+collapsed to the one string that names nothing. The failure is diagnostically total rather than
+destructive — the confirm write is transactional, so nothing partial persisted — but the user
+could not self-serve, and **every** extraction failure of every shape presented identically.
+
+The reusable shape is in `FEEDBACK` §25: a fail-closed request contract and a fail-opaque error
+handler are each survivable alone and compound into an undiagnosable defect. Fixing the banner is
+therefore not preliminary to the real fix; it is the only move that can be made **before** the
+evidence exists, and it is what produces that evidence.
+
+**Status:** **Move 1 landed. Move 2 HELD, and the live capture is OWED — nobody has yet re-uploaded
+the reproducer.** The offending field is a **hypothesis, not a finding**: `FieldConfidence`
+(`backend/routers/labs.py:41`) requires all four of `name/value/unit/ref` as bare `float`, while a
+ref-less row (`R U-Creatinine`, printed `—`, sited above the results table) gives a model asked for
+a per-field `ref` confidence nothing to be confident about — so it plausibly omits the key or emits
+`null`. It is equally possible the model invented a `ref` and broke instead on
+`report.source_completeness` or `report.panel_name_raw`, both required `str`. Those are different
+defects with different fixes (contract loosening vs an extraction-prompt gap) and the captured
+`loc` discriminates them in one read. **No contract change ships without the live field that
+justifies it.**
+
+**How you know:** Three artifacts, and note what each does *not* establish.
+
+1. *The 422 is a request-validation rejection, by elimination — verified against the tree, not
+   inferred.* `confirm_lab_report` has exactly two `raise HTTPException` sites of its own
+   (`labs.py:514` collected-date, `labs.py:533` over-collapse), both with a **string** `detail`,
+   which would have rendered. Both are independently excluded by the screenshot: the UI shows
+   `Collected: 2026-08-04`, so `dates.collected` parsed; and all three markers are unmapped, so
+   the over-collapse guard — which fires only on a *mapped* marker with a unit mismatch —
+   structurally cannot fire. `grep` confirms no `RequestValidationError` handler anywhere in
+   `backend/`, so FastAPI's default list-form body applies. Unmapped is a response signal (`#58`),
+   never a failure. Only this one report of seven fails, which rules out flaky transport.
+2. *The old code returns exactly the generic banner on the exact payload* — a positive control per
+   `#103`, run rather than reasoned: feeding the G1 fixture to the pre-fix expression in `node`
+   printed `"Failed to save report"`, with `typeof detail` `object` and `detail.error` `undefined`.
+   Without this the new tests would pass without proving they discriminate the fix.
+3. *Ten `vitest` cases pass* (`frontend/src/lib/apiError.test.js`), covering the list form, the
+   multi-entry join, honest truncation, a non-`body` `loc` prefix, and the three previously-handled
+   shapes as anti-regression. Backend suite **722 passed, unchanged from baseline** — this change
+   touches no backend file. Frontend lint is unchanged at 5 pre-existing errors, all in
+   `ChatPanel`/`WorkoutPanel`/`Settings`, none in a file this change touches (measured by stashing).
+
+**What this explicitly does NOT establish:** that the banner renders correctly *in a browser*, and
+that the hypothesised field is the real one. The assertion boundary is the helper plus a
+source-level check that both call sites route through it — the repo had **no** frontend test runner
+before this change (`vitest` is added here, node environment, no jsdom), so a rendered-DOM assertion
+would have meant adding `jsdom` + a component harness to carry one string. The wiring test is the
+substitute and is named as such. The live capture closes both gaps at once and is the gate on Move 2.
+
+**Do not revisit unless:** the captured `loc` lands — at which point Move 2 is scoped by it, not by
+this entry's hypothesis (a `field_confidence.*` hit means `float | None` sub-fields **and** fixing
+the `min()` over a `None`-bearing list at `labs.py:603`, which would raise `TypeError`; anything
+else means an extraction-prompt gap and no contract change). Or: a second consumer needs this
+helper, at which point the truncation cap (5) and the `body`-stripping convention become shared
+policy rather than one banner's formatting and should move behind a named contract.

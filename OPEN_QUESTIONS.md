@@ -2499,3 +2499,50 @@ die.
 
 **State:** OPEN — no blocker. Surfaced by the Q5 drill-down (2026-08-03) and **distinct from Q5**: Q5 is
 two names for one value, this is a name with no sender. Owner: Luke. Cross-refs Q5, `#174`.
+
+---
+
+## Q85. Which required field does the live extraction of a ref-less lead row actually drop?
+
+The SNP Albumin/Creat Ratio report (collected 2026-08-04) is refused by `/labs/confirm` with a
+Pydantic request-validation 422 — established by elimination in `#177`, which excludes both of
+`confirm_lab_report`'s own raise sites against the screenshot. **Which field the validator refused
+is not known**, because the banner discarded the `detail` that names it. `#177` Move 1 fixes the
+banner; this question is the fork that fix exists to settle.
+
+The two candidates predict different repairs and are not both fixable by the same change:
+
+- **`field_confidence.*` (the leading hypothesis).** `FieldConfidence` (`backend/routers/labs.py:41`)
+  requires `name/value/unit/ref` as bare `float`, no defaults, not `Optional`, while
+  `field_confidence` as a whole is optional. The extraction prompt (`labs.py:280`) asks for a
+  confidence "per field: name/value/unit/ref". `R U-Creatinine` has **no reference interval** —
+  printed `—`, and sited above the results table, the most awkward shape in the corpus
+  (`LAB_EXTRACTION_SCHEMA §4` case 3, absent-ref). A model asked to score its confidence in a `ref`
+  that does not exist will plausibly omit the key or emit `null`; either fails validation. If this
+  is it, the request contract is **stricter than the extractor's honest output** for a legitimate
+  report shape, and the repair is `float | None = None` sub-fields.
+- **`report.source_completeness` / `report.panel_name_raw`.** Both required `str` on
+  `ReportEnvelope`. If the model invented a `ref` confidence and instead dropped a top-level field
+  on this layout, the fault is an **extraction-prompt gap**, not a contract that is too strict, and
+  loosening `FieldConfidence` would be a change made against no evidence.
+
+A `field_confidence.*` answer carries a second, latent defect with it: `labs.py:603` does
+`min(list(r.field_confidence.model_dump().values()))`, and `min` over a list mixing `float` and
+`None` raises `TypeError`. Loosening the contract without dropping `None`s first (default `1.0`
+when all-None) converts a 422 into a 500. Same category as the row/confidence alignment `assert`
+already guarded at `labs.py:609`. Note also `Metrics.jsx:11` — `Object.values(conf).some(v => v < 0.85)`
+treats `null` as `0` in JS, so a null `ref` would mark the row suspect; arguably right, but for the
+wrong reason and worth deciding rather than inheriting.
+
+**Resolved by:** re-uploading the same PDF once Move 1 is deployed and reading the `loc` off the
+banner. Nothing about the reproducer is stored yet — the 422 persists nothing — so a clean
+re-attempt exercises the genuine extract → confirm path. Record the verbatim `loc`/`msg`.
+
+**State:** OPEN — no blocker; the instrument that answers it is landing in the same PR. **Move 2 of
+`#177` does not proceed until this is answered.** Owner: Luke (the re-upload needs the operator).
+Cross-refs `#177`, `#58` (unmapped is a signal, not a failure), `#146` (derived, not
+model-reported, confidence), `FEEDBACK` §25.
+
+**Not this question:** adding `R U-Creatinine` / `R U-Albumin` / `R U-Albumin/Creat` to the
+canonical map. Unmapped rows persist fine and return in `unmapped`, so recognition does not affect
+the save and is a separate track.
