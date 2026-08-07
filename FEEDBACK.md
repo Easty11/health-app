@@ -1280,3 +1280,39 @@ settled by reading source, only by capturing the artifact or exhaustively enumer
 So: **reserve chat-side tracing for narrowing the search; let the instrument name the field and the
 tree bound the class.** "Code adjudicates" is load-bearing, not ceremony — it is what turned three
 confident wrong guesses into three correct fixes.
+
+---
+
+## 28. The §7 unit guard held on real over-collapse pressure — a designed-for case finally exercised on data
+
+**What happened.** `#180` added the first specimen-typed markers to the canonical map — three
+urine-ACR analytes that each share a token with a serum marker already mapped (`R U-Creatinine` vs
+`Creatinine`, `R U-Albumin` vs `Albumin`). This is the exact collision `LAB_EXTRACTION_SCHEMA §6/§7`
+built the over-collapse guard for, and until now the guard had only ever been reasoned about, never
+put under real pressure — no two markers in the map had ever actually shared an analyte.
+
+It held, and the test proves it discriminates rather than merely passing: a `R U-Creatinine` row at
+urine `mmol/L` maps and writes; the *same* row at serum `umol/L` is refused with a 422 that names
+both units. Two independent barriers, not one — exact-string keying (different key from the serum
+entry) and the unit guard (different `unit_established`) — so a mis-key alone or a mis-unit alone is
+each caught.
+
+**Why it is worth a ledger note and not just a passing test.** A guard that has never fired on real
+input is a claim, not a control — the same trap as `§8`'s landed≠live and `§23`'s tested≠exercised.
+Design-time confidence in the guard was reasonable but unearned; this is the first time the 1000×-gap
+protection did work on data with a genuine homograph. Recording it converts "the guard should hold"
+into "the guard held, here, on this collision", which is the difference the whole DECISIONS_LOG
+*How-you-know* discipline turns on.
+
+**The transferable rule.** When you add the first instance of a case a guard was written for — the
+first shared analyte, the first duplicate key, the first cross-tenant row — do not treat the guard's
+existence as coverage. **Exercise it in both directions in the same change**: one input that must
+pass, one that must be refused, asserting the refusal names its reason. A guard is only known to
+discriminate once something has actually been on both sides of it.
+
+**The companion caution, carried from `#180`.** The guard's discrimination is only as good as the
+`unit_established` byte-string it compares against. Set that from what the extractor actually stores,
+not from the clinically-correct unit — they are usually the same and occasionally not (case, µ vs u,
+spacing), and a mismatch turns the guard from protection into a false refusal on legitimate data.
+`#180` left that precision check OWED against prod for exactly this reason; the saving grace is that
+`#177` made the resulting 422 legible, so the failure names itself instead of hiding.
