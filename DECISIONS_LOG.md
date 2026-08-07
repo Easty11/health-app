@@ -7023,7 +7023,7 @@ policy rather than one banner's formatting and should move behind a named contra
 
 ---
 
-### #NEXT. A ref-less row nulls a non-Optional exclusivity bool; the contract coerces `null → False` on both flags (cures the `#177` fault, resolves `Q85`)
+### 178. A ref-less row nulls a non-Optional exclusivity bool; the contract coerces `null → False` on both flags (cures the `#177` fault, resolves `Q85`)
 
 **Decision:** `ResultItem.ref_low_exclusive` and `ref_high_exclusive` gain a Pydantic
 `mode="before"` field validator mapping `None → False`. The declared type stays strictly `bool`.

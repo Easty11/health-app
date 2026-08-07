@@ -2553,7 +2553,7 @@ instrument before guessing the fix — see `FEEDBACK` §26.
 non-Optional and are the last members of this class. Left untouched deliberately — they work, and
 changing a working contract on no evidence is the exact error this question's history warns about.
 
-**State:** `DONE → #NEXT` — resolved by the contract coercion (`null → False` on both flags, type
+**State:** `DONE → #178` — resolved by the contract coercion (`null → False` on both flags, type
 kept strictly `bool`, no migration). Cross-refs `#177` (the instrument), `#58` (unmapped is a
 signal, not a failure), `#146` (derived, not model-reported, confidence), `FEEDBACK` §25 and §26.
 
