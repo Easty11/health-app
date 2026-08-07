@@ -7295,7 +7295,7 @@ formatter's field references need review.
 
 ---
 
-### #NEXT Writer identity is repo-local evidence; the shared block asserted it as an invariant
+### 182. Writer identity is repo-local evidence; the shared block asserted it as an invariant
 
 **Decision:** The shared block's writer line — "Code — and the `@claude` GitHub Action — is the only
 writer" — is reduced to "Code is the only writer." The `@claude` Action clause is struck from the
