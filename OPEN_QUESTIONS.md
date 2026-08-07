@@ -2560,3 +2560,38 @@ signal, not a failure), `#146` (derived, not model-reported, confidence), `FEEDB
 **Not this question:** adding `R U-Creatinine` / `R U-Albumin` / `R U-Albumin/Creat` to the
 canonical map. Unmapped rows persist fine and return in `unmapped`, so recognition does not affect
 the save and is a separate track.
+
+---
+
+## Q86. Does any report-LEVEL required scalar ever get nulled by a real extraction?
+
+`#179` closed the null-on-sparse-row class for **row-level** fields (`ResultItem` +
+`FieldConfidence`), and asserted it closed with a `model_fields` walk. It deliberately did **not**
+touch the report-level required scalars — `ReportEnvelope.lab_name`, `panel_name_raw`,
+`source_completeness` — which stay non-Optional by design. This question is that decision's
+watch-point.
+
+**The reasoning for leaving them fail-closed.** A sparse *row* is legitimate (ref-less, censored,
+qualitative), so the contract must tolerate a null there. A *report* missing its lab name or panel
+identity is not a legitimate sparse shape — it is an extraction that went wrong, and it should be
+refused, loudly, now that `#177` makes the refusal readable rather than a blank banner. If one of
+these is ever nulled by a live extraction, the correct fix is in **extraction** (the prompt, or the
+model, or the document handling), NOT in loosening the contract — loosening would swallow a real
+fault the same way the row-level bug bricked a real document.
+
+**Why it is a question and not just a note.** The premise — that these three are always present on a
+real report — is an assumption about model output on awkward inputs, and the whole `#177`→`#179`
+thread is a record of such assumptions being wrong. It is asserted here, not proven. Only a live
+capture settles it: a report whose confirm 422s on `report.lab_name` / `panel_name_raw` /
+`source_completeness` would prove a report-level field can be nulled, and would move this from
+"correctly fail-closed" to "extraction bug to fix upstream". Until then there is nothing to do —
+which is exactly why it is OPEN, not OWED.
+
+**State:** OPEN — no blocker, nothing owed. A pure watch-point resolvable only by a live 422 on a
+report-level field; absent that capture there is no action, and pre-emptively loosening these would
+be the error `#179`'s own rationale warns against. Owner: Luke (a capture needs a real upload).
+Cross-refs `#177`, `#178`, `#179`, `FEEDBACK` §25/§26/§27.
+
+**Not this question:** the row-level class — closed by `#179` and asserted closed. And the urine-ACR
+canonical mapping — a separate data-addition track (`LAB_EXTRACTION_SCHEMA §7`), not a contract
+question.

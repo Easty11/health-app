@@ -1225,3 +1225,58 @@ was looking at, with the "fix" already banked as the explanation. **The instrume
 on the way to the fix; on a failure whose cause is a runtime artifact, it is the only thing that can
 tell you which fix to make.** Reserve tracing for narrowing the search. Let the instrument name the
 field.
+
+---
+
+## 27. The null-on-sparse-row class, closed — the enumeration that says when it is re-opened ([[§25]], [[§26]])
+
+**What happened.** The third and final move against the family §25 and §26 name. `#177` built the
+instrument that made a fail-closed contract legible; `#178` cured the first captured instance
+(exclusivity bools); `#179` closed the last known one (`FieldConfidence` floats) **before** it fired,
+because by then the pattern was proven and the trigger shape was known to exist.
+
+**The enumeration, recorded so a re-opening is recognised as one.** The request contract's non-Optional
+scalars fall into two classes, and only one is a bug when a sparse row nulls it:
+
+- **Row-level (tolerate the sparse row).** `ResultItem` and its nested `FieldConfidence`. A document
+  row is legitimately sparse — ref-less, censored, qualitative, one-sided — so a null here is the
+  extractor being honest, and the contract must accept it. After `#178` + `#179` the only row-level
+  non-Optional scalar left is `ResultItem.marker_name_raw`, which is always present on a row that
+  exists at all. **This class is now closed, and a test asserts it closed** (`model_fields` walk;
+  see `#179`). Adding a new bare-scalar field to `ResultItem` or `FieldConfidence` re-opens it — and
+  trips the test rather than production.
+- **Report-level (fail closed on purpose).** `ReportEnvelope.lab_name`, `panel_name_raw`,
+  `source_completeness`. A report missing its lab name or panel identity is a genuine extraction
+  fault, not a sparse row, and should be refused — loudly, now that `#177` makes the refusal
+  readable. If the extractor ever nulls one, the fix is in extraction, not the contract. This is
+  `Q86`'s standing watch-point.
+
+**The rule.** When adding a required scalar to an extraction-request contract, decide which class it
+is *before* choosing its type. Row-level → Optional (and treat null as absent everywhere it is read).
+Report-level → required (and treat a null as a fault to surface). Getting the class wrong in either
+direction is a defect: a required row-level field bricks legitimate documents; an Optional
+report-level field swallows a real extraction failure.
+
+**Loosen vs coerce, settled across the three moves.** Same class of bug, two correct-but-opposite
+repairs, and the discriminator is whether the absent case has a safe default. Exclusivity bool: yes
+(`False` — nothing to be exclusive about), so coerce and keep the type strict, no migration
+(`#178`). Confidence: no (neither `0` nor `1` is honest), so loosen to `| None` and make every
+consumer treat null as absent (`#179`). "Loosen the contract" is not automatically the fix; it is the
+fix only when the field has no truthful default, and coercion is better when it does.
+
+**The meta-lesson, now demonstrated three times and worth stating plainly.** Across these moves the
+**chat-side field/scope claim was wrong or overstated every time**, and the **tree or the instrument
+was right every time**:
+
+- `#177`'s brief predicted the offending field was `field_confidence.ref`. Wrong.
+- `#178`: `Q85` predicted `field_confidence.*` or `source_completeness`/`panel_name_raw`. All wrong —
+  it was a non-Optional exclusivity bool, in nobody's list. The live banner named it.
+- `#178`'s own brief claimed fixing the exclusivity pair "closes the class completely". Overstated —
+  the tree audit found `FieldConfidence` still open, which is the entire reason `#179` exists.
+
+None of these were careless; each was argued from the code. The point is not that chat reasons badly
+— it is that a hypothesis about a runtime artifact (what the model emits on an awkward row) cannot be
+settled by reading source, only by capturing the artifact or exhaustively enumerating the contract.
+So: **reserve chat-side tracing for narrowing the search; let the instrument name the field and the
+tree bound the class.** "Code adjudicates" is load-bearing, not ceremony — it is what turned three
+confident wrong guesses into three correct fixes.

@@ -7098,3 +7098,77 @@ semantic need arises for a *null* exclusivity flag, meaning "unknown whether the
 exclusive", distinct from `False` meaning "inclusive" — at which point the column's `nullable=False`
 is the thing to revisit first, and this entry's inertness argument no longer holds because consumers
 would need a third branch.
+
+---
+
+### 179. `FieldConfidence` sub-fields made Optional; the null-on-sparse-row class is closed for row-level fields (last instance of the `#177`/`#178` family)
+
+**Decision:** `FieldConfidence.name/value/unit/ref` become `float | None = None`. Four arms ship
+together, because loosening the contract alone relocates the failure rather than removing it:
+(1) the contract, so a ref-less row's `{"ref": null}` validates; (2) the confirm derivation
+(`labs.py`) drops `None` before `min()`, or a null converts the removed 422 into a 500;
+(3) the frontend `isSuspect` and `confidencePct` (now `frontend/src/pages/labRowClassification.js`)
+guard `null`, or JS coerces it to 0 and reports a clean extraction as suspect / understates its
+confidence; (4) the extraction prompt states the not-applicable case. `field_confidence` as a whole
+was already Optional; this is about its sub-fields when the object is present.
+
+**Rationale:** **LOOSEN, do not coerce — the opposite call from `#178`, and the difference is the
+point.** `#178`'s exclusivity bools had a correct default (`False`: an absent bound has nothing to
+be exclusive about), so coercion was honest. A confidence has *no* safe default: `1.0` asserts high
+confidence in a field never read (hides a suspect row), `0.0` marks suspect a field that legitimately
+does not exist. Both are directional lies. `None` = "not expressed" is the only honest type, which
+forces every consumer to treat it as **absent**, not as a number — and three of them would coerce it
+to 0 if left unguarded, which is why arms 2 and 3 are not optional extras but the same fix finishing
+its own consequences.
+
+Arm 2 preserves the existing semantics exactly: an all-`None` object (or an absent object) filters
+to empty and falls to `1.0`, the same as today's absent-object branch, so it does not resurrect
+`#146`'s silent-zero ambiguity. Non-empty stays min-over-expressed — §6's rule that overall
+propagates the worst *expressed* row confidence. Arm 4 is secondary and not the guard; the model is
+nondeterministic, the contract is not.
+
+**Shipped pre-capture, deliberately, and this is the one governance-worthy difference from
+`#177`/`#178`.** Those two fixed a 422 that had actually happened. This one has **not** yet fired in
+production: on the `R U-Creatinine` upload the extractor happened to emit a real `ref` confidence
+rather than null. But whether it scores a `ref` it never read is nondeterministic, the trigger row
+demonstrably exists in the corpus, and the root-cause pattern is the one already proven twice. This
+is closing the *last known instance of an identified class*, which is what the thread's minimalism
+rule licenses — distinct from speculative hardening of a pattern never observed. The distinction is
+recorded because "we fixed it before it broke" is exactly the shape a scope-creep rationalisation
+also takes, and the difference (proven pattern + real trigger shape vs. imagined one) is the test.
+
+**Status:** Landed. `Q86` opened as the residual watch-point (report-level required scalars, left
+fail-closed by design). The row-level null-on-sparse-row class is now closed and asserted closed.
+
+**Scope — enumerated, not asserted.** After this, no row-level non-Optional scalar can be nulled into
+a 422 except `marker_name_raw`, which is always present on a row that exists.
+`test_no_remaining_row_level_scalar_fails_closed_on_null` walks `FieldConfidence.model_fields` and
+`ResultItem.model_fields`, probes each with `None`, and asserts the survivor sets are exactly
+`{}` and `{marker_name_raw}` — so a future bare-scalar field added to either trips in the suite, not
+in production. **This is claimed of row-level fields ONLY.** The report-level required scalars
+(`ReportEnvelope.lab_name`, `panel_name_raw`, `source_completeness`) stay non-Optional **on purpose**:
+a report genuinely missing its lab name or panel identity is an extraction fault to surface — now
+with a readable banner (`#177`) — not a legitimate sparse row to tolerate. Different class, correctly
+left alone; `Q86` is its watch-point.
+
+**How you know:** Four arms, each with a discriminating control per `#103`.
+
+1. *Contract + derivation, against master's `labs.py`:* the null-`ref` cases raise
+   `ValidationError` (`Input should be a valid number [float_type, input=None]`) and the derivation
+   cases fail — the 422 and the latent 500 both reproduced. With the fix: route returns **201**, the
+   stored row confidence is the min over expressed fields (`0.97`, not `0` and not the poisoned
+   mean), and an all-null object scores `1.0` identically to an absent one.
+2. *Frontend, against master's classification logic (exports added but bodies unchanged):* 5 of 10
+   cases fail — the null-suspect cases and, tellingly, `confidencePct` returning **74%** where the
+   guarded version returns **98%** (the mean-poisoning arm, the one easy to miss). The 5
+   genuine-signal cases pass both sides, proving the guard did not flatten the real signal.
+3. *Suite.* Backend **749 passed** vs a 737 baseline (+12); frontend **20 passed** vs 10 (+10). The
+   classification helpers moved to `labRowClassification.js` — a component file may only export
+   components (`react-refresh`), the same split as `lib/apiError.js`; frontend lint is unchanged at
+   the 5 pre-existing errors.
+
+**Do not revisit unless:** a report-level required scalar is nulled by a real extraction — that is
+`Q86`, and the answer would be to fix extraction, not to loosen the contract. Or: a genuine need
+arises to distinguish "confidence not expressed" (`None`) from "expressed as low" (`0.1`) in the
+stored data rather than only at derivation — at which point `overall_confidence`'s all-None→`1.0`
+fold is the thing to revisit, because it deliberately erases that distinction today.
