@@ -2538,10 +2538,24 @@ wrong reason and worth deciding rather than inheriting.
 banner. Nothing about the reproducer is stored yet — the 422 persists nothing — so a clean
 re-attempt exercises the genuine extract → confirm path. Record the verbatim `loc`/`msg`.
 
-**State:** OPEN — no blocker; the instrument that answers it is landing in the same PR. **Move 2 of
-`#177` does not proceed until this is answered.** Owner: Luke (the re-upload needs the operator).
-Cross-refs `#177`, `#58` (unmapped is a signal, not a failure), `#146` (derived, not
-model-reported, confidence), `FEEDBACK` §25.
+**Answered — and by NEITHER candidate above.** The captured banner, read off the deployed `#177`
+instrument, named `results.0.ref_high_exclusive: Input should be a valid boolean`. The offending
+field is a **third mode this question did not contemplate**: a non-Optional exclusivity `bool`
+(`ResultItem.ref_low_exclusive` / `ref_high_exclusive`, declared `bool = False`) nulled by the
+extractor on an absent-ref row — correctly, since with no bound there is nothing to be exclusive
+about. `field_confidence` validated in full on this exact awkward report, so the leading hypothesis
+is **disproven, not merely unconfirmed**, and the `min()`-over-`None` hazard flagged above was
+contingent on that branch and did not occur. Both predicted branches were argued carefully from the
+code and both were wrong; one live extraction settled it. That is the case for building the
+instrument before guessing the fix — see `FEEDBACK` §26.
+
+**Residual, recorded so it is not inherited silently:** `FieldConfidence`'s four floats remain
+non-Optional and are the last members of this class. Left untouched deliberately — they work, and
+changing a working contract on no evidence is the exact error this question's history warns about.
+
+**State:** `DONE → #178` — resolved by the contract coercion (`null → False` on both flags, type
+kept strictly `bool`, no migration). Cross-refs `#177` (the instrument), `#58` (unmapped is a
+signal, not a failure), `#146` (derived, not model-reported, confidence), `FEEDBACK` §25 and §26.
 
 **Not this question:** adding `R U-Creatinine` / `R U-Albumin` / `R U-Albumin/Creat` to the
 canonical map. Unmapped rows persist fine and return in `unmapped`, so recognition does not affect

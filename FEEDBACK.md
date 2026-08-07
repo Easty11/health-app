@@ -1171,3 +1171,57 @@ cannot reach the reader is not an error message.** §23's tested ≠ exercised i
 relative: there, a fake above the defect could not see it; here, a handler above the defect could
 not report it. Both are cases of the instrument sitting on the wrong side of the thing it exists to
 observe.
+
+---
+
+## 26. In a semi-structured extraction target, every non-Optional scalar is a latent fail-closed point — audit them as a class ([[§25]], [[§17]])
+
+**What happened.** The second instance of §25's family, found the same week. A urine ACR report
+could not be ingested: its lead row has no reference interval, the extractor emitted
+`ref_high_exclusive: null` — correctly, since with no bound there is nothing to be exclusive about —
+and `ResultItem` declared a bare `bool`. Pydantic refused the body before the handler ran.
+
+§25's rule ("validate a request contract against the real extraction corpus edge cases") was
+already written and would have caught this had it been *applied as an audit* rather than read as
+advice about the field then under suspicion. It was not applied, and the same class produced a
+second outage on a different field one report later.
+
+**The generalisation, which is the point of this entry.** In a contract that receives a model's
+reading of a semi-structured document, **every non-Optional scalar is a place the request can fail
+closed**, because document rows are sparse in ways the schema author does not enumerate in advance:
+ref-less, censored (`<5`), qualitative, one-sided, unitless. The model is not misbehaving when it
+sends null — it is honestly reporting that the source has nothing there. A contract that treats
+"the source is silent here" as a validation error will refuse genuine documents, and will do it one
+field at a time, each looking like a fresh bug.
+
+**Rule going forward — audit, don't wait.** When a contract parses extracted documents, enumerate
+its non-Optional scalars as a **set** and ask of each: *can a legitimate sparse row have nothing to
+put here?* Fix the whole set in one pass. Then **encode the audit as a test**, so a field added
+later as a bare scalar trips in the suite instead of in production. The mechanical form is cheap —
+walk `model_fields`, probe each with `None`, assert the survivor set is exactly the fields that are
+genuinely always present.
+
+**Prefer coercion to loosening, when a correct default exists.** Where the absent case has a right
+answer (`None` exclusivity means `False`; there is no bound to be exclusive about), coerce in a
+`mode="before"` validator and keep the declared type strict. Loosening the type to `| None`
+propagates the null into storage and buys a migration; coercing keeps the contract honest and the
+column non-nullable. Loosen only when null genuinely *means* something distinct downstream.
+
+**And the reason to check it is inert.** A coercion is safe when the value it invents is never read
+on the rows it touches. Here every consumer reads the flag inside a bound-is-not-None branch, so a
+coerced `False` on a bound-less row changes no behaviour. Verify that; do not assume it. A coercion
+on a field that *is* read is a silent data change wearing a bugfix's clothes.
+
+**The lesson §25 earned, now demonstrated — build the instrument, don't ship the guess.** The
+chat-side hypothesis named the wrong field **twice**: `#177`'s brief predicted
+`field_confidence.ref`, and `Q85` offered `field_confidence.*` or
+`source_completeness`/`panel_name_raw`. Both were argued carefully from the code and both were
+wrong. The actual field — a non-Optional exclusivity bool — appeared in neither list. What settled
+it was one live extraction printing its own `loc` through the banner `#177` fixed.
+
+Had the suspected `FieldConfidence` change shipped alongside `#177`, it would have changed a
+contract that was working, on no evidence, and the retry would still have 422'd — on a field nobody
+was looking at, with the "fix" already banked as the explanation. **The instrument is not overhead
+on the way to the fix; on a failure whose cause is a runtime artifact, it is the only thing that can
+tell you which fix to make.** Reserve tracing for narrowing the search. Let the instrument name the
+field.

@@ -7020,3 +7020,81 @@ the `min()` over a `None`-bearing list at `labs.py:603`, which would raise `Type
 else means an extraction-prompt gap and no contract change). Or: a second consumer needs this
 helper, at which point the truncation cap (5) and the `body`-stripping convention become shared
 policy rather than one banner's formatting and should move behind a named contract.
+
+---
+
+### 178. A ref-less row nulls a non-Optional exclusivity bool; the contract coerces `null → False` on both flags (cures the `#177` fault, resolves `Q85`)
+
+**Decision:** `ResultItem.ref_low_exclusive` and `ref_high_exclusive` gain a Pydantic
+`mode="before"` field validator mapping `None → False`. The declared type stays strictly `bool`.
+The extraction prompt's normalisation block gains the absent-ref case explicitly — empty/blank ref
+sets both flags `false`, and the flags are always booleans, never null. **No migration**, no schema
+change, and `field_confidence` is deliberately untouched.
+
+**Rationale:** **Coerce, do not loosen.** `False` is the semantically correct value, not a
+placeholder: with no bound there is nothing to be exclusive about. It is also exactly what the
+column already wants — `models.py:622-623` is `Boolean, nullable=False, server_default=text("false")`
+— so keeping the Pydantic type `bool` means nothing downstream ever sees `None` and no migration
+follows. Loosening to `bool | None` would have propagated a null into a non-nullable column and
+bought a migration for no gain.
+
+**Both flags, though the capture named only one.** Which side the model nulls is nondeterministic:
+this report nulled the ceiling flag on an absent-ref row, but a `>x` floor-only row leaves the
+ceiling absent and a `<x` ceiling row the floor. Fixing only `ref_high_exclusive` would have
+re-opened the identical fault on the next report shape — a fix scoped to the observed instance
+rather than the class.
+
+**The coercion is behaviourally inert on exactly the rows it touches**, which is why it is safe
+rather than merely convenient: every consumer reads the flag only inside a bound-is-not-None branch
+— `interpretation/gates.py:108,114` and `context_builder.py:965-966` both guard on
+`ref_low is not None` / `ref_high is not None`. A row whose bound is null never consults its flag.
+
+The prompt arm is secondary and is not the guard. `labs.py:254-258` enumerated `a-b`, `<x`, `>x`
+and, for empty/blank, named only `ref_low`/`ref_high` — saying nothing about the exclusivity flags,
+so the model was left to invent and emitted null. Stating the case cuts recurrence at source, but
+the model is nondeterministic, so the contract coercion is the actual guard. Both ship.
+
+**Status:** Landed. `Q85` resolved by this entry. The original fault — the SNP Albumin/Creat Ratio
+report, collected 2026-08-04, un-ingestible since — now saves.
+
+**Scope, and one correction to the brief that carried this work.** The brief stated that fixing the
+pair "closes the null-on-sparse-row class completely". Audited rather than assumed, that is true of
+`ResultItem` and not of the request contract as a whole. Enumerating every non-Optional scalar in
+the confirm path: on `ResultItem` the only survivor is `marker_name_raw`, which is always present on
+a row that exists at all — so the per-row surface a sparse document actually hits IS closed, and
+`test_no_other_resultitem_field_can_be_nulled_into_a_422` asserts it so a future bare-scalar field
+trips in the suite rather than in production. But **`FieldConfidence` still declares four
+non-Optional floats** (`name`/`value`/`unit`/`ref`), nested inside `ResultItem`. They validated on
+this report — which is why they are untouched here, per `#177`'s own lesson about not shipping a
+guess — but they are the remaining members of the class, not absent from it. Recorded so the next
+sparse shape does not find them cold.
+
+**How you know:** Four artifacts.
+
+1. *The captured `loc`, which is the whole reason this entry is scoped the way it is.*
+   `results.0.ref_high_exclusive: Input should be a valid boolean`, read off the deployed `#177`
+   banner (screenshot, SNP Albumin/Creat Ratio, collected 2026-08-04). **Neither predicted branch
+   was right** — `#177`'s brief guessed `field_confidence.ref`; `Q85` offered `field_confidence.*`
+   or `source_completeness`/`panel_name_raw`. All wrong. The live extraction adjudicated what no
+   amount of chat-side tracing could.
+2. *The end-to-end test reproduces the original 422 byte-for-byte against unfixed code.* Reverting
+   `labs.py` to master and re-running yields
+   `{"type":"bool_type","loc":["body","results",0,"ref_high_exclusive"],"msg":"Input should be a
+   valid boolean","input":null}` — the captured banner's field and message exactly. With the fix,
+   201, three rows written, all `unmapped`. It drives the **route**, not the handler: the 422 was
+   raised by Pydantic before `confirm_lab_report`, so a test calling the handler object would
+   construct `ResultItem` in Python, skip request validation, and pass against the broken code
+   (`FEEDBACK` §23, fake below the defect).
+3. *Positive control per `#103`.* Against master's `labs.py`, 4 of the 10 contract tests fail and 5
+   of the 5 end-to-end tests fail; the 6 anti-regression contract cases pass both before and after.
+   The split is the evidence the suite discriminates the fix rather than passing incidentally.
+4. *Suite.* Backend **737 passed** against a 722 baseline (+15: 10 contract, 5 end-to-end).
+   Frontend **10 passed**, unchanged — this change touches no frontend file.
+
+**Do not revisit unless:** a sparse row nulls something inside `FieldConfidence` — the residual
+named under Scope above, which this entry deliberately does not pre-empt; the fix would be the same
+coercion, and the evidence should again be a captured `loc`, not a prediction. Or: a genuine
+semantic need arises for a *null* exclusivity flag, meaning "unknown whether the bound is
+exclusive", distinct from `False` meaning "inclusive" — at which point the column's `nullable=False`
+is the thing to revisit first, and this entry's inertness argument no longer holds because consumers
+would need a third branch.
