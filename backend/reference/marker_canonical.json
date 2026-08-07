@@ -396,6 +396,24 @@
       "marker_canonical": "psa",
       "unit_established": "ug/L",
       "loinc": null
+    },
+    {
+      "marker_name_raw": "R U-Creatinine",
+      "marker_canonical": "creatinine_urine",
+      "unit_established": "mmol/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "R U-Albumin",
+      "marker_canonical": "albumin_urine",
+      "unit_established": "mg/L",
+      "loinc": null
+    },
+    {
+      "marker_name_raw": "R U-Albumin/Creat",
+      "marker_canonical": "albumin_creatinine_ratio_urine",
+      "unit_established": "mg/mmol",
+      "loinc": null
     }
   ]
 }

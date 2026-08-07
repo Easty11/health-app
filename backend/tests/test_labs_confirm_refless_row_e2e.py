@@ -15,9 +15,11 @@ called the handler object would construct `ResultItem` in Python, skip request v
 entirely, and pass against the broken code. Fake below the defect, never at it
 (`FEEDBACK` §23).
 
-The body reproduces the captured report's SHAPE — three unmapped urine-ACR markers, the
-lead row ref-less. It is a faithful reconstruction from the report and the captured
-`loc`, not a byte-copy of the live payload.
+The body reproduces the captured report's SHAPE — three urine-ACR markers, the lead row
+ref-less. It is a faithful reconstruction from the report and the captured `loc`, not a
+byte-copy of the live payload. (Those three markers were unmapped when this file was
+written; #180 added them to the canonical map, so they now resolve — see
+`test_three_rows_written_and_now_mapped`.)
 """
 import models
 import pytest
@@ -122,13 +124,16 @@ def test_the_report_saves_201(saved):
     assert res.status_code == 201, res.text
 
 
-def test_three_rows_written_all_unmapped(saved):
-    """Unmapped is a response signal (#58), never a failure — urine ACR is not in the
-    canonical map and cataloguing it is a separate track. All three rows still persist."""
+def test_three_rows_written_and_now_mapped(saved):
+    """All three rows persist. As of #180 the urine-ACR markers ARE in the canonical
+    map, so they resolve to their canonical keys and `unmapped` is now empty — this
+    assertion was `== [the three raw names]` before the map addition and is updated to
+    the new truth. The rows' units (mmol/L / mg/L / mg/mmol) match the map's
+    `unit_established`, so the §6 over-collapse guard passes."""
     res, _, _ = saved
     body = res.json()
     assert body["result_count"] == 3
-    assert sorted(body["unmapped"]) == ["R U-Albumin", "R U-Albumin/Creat", "R U-Creatinine"]
+    assert body["unmapped"] == []
     assert body["duplicates"] == []
 
 

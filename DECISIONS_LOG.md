@@ -7172,3 +7172,71 @@ left alone; `Q86` is its watch-point.
 arises to distinguish "confidence not expressed" (`None`) from "expressed as low" (`0.1`) in the
 stored data rather than only at derivation — at which point `overall_confidence`'s all-None→`1.0`
 fold is the thing to revisit, because it deliberately erases that distinction today.
+
+---
+
+### 180. Canonical map gains the three urine-ACR markers; analyte-first specimen-suffix is the standing key convention (completes part of `#57`'s deferred list)
+
+**Decision:** `backend/reference/marker_canonical.json` gains three entries —
+`R U-Creatinine` → `creatinine_urine` (mmol/L), `R U-Albumin` → `albumin_urine` (mg/L),
+`R U-Albumin/Creat` → `albumin_creatinine_ratio_urine` (mg/mmol), all `loinc: null`. This is a
+**data addition**; no confirm/read code changed. It sets the map's **first specimen-typed markers**,
+and with them the convention every future urine/serum split inherits: **analyte-first, qualifier-
+suffixed** (`creatinine_urine`, not `urine_creatinine`) — matching the existing `calcium_corrected`
+shape and sorting an analyte's variants adjacently. `#57` deferred "ACR" explicitly; this lands it.
+
+**Rationale:** The three markers were stored raw-and-unmapped from the SNP Albumin/Creat Ratio
+upload; unmapped they never trend (`LAB_EXTRACTION_SCHEMA §7`). They walk directly onto §7's
+over-collapse landmine — each shares an analyte token with a serum marker already in the map
+(`Creatinine`→`creatinine` umol/L, `Albumin`→`albumin` g/L) — and two mechanisms hold them apart,
+both asserted in tests, not assumed: **exact-string keying** (`R U-Creatinine` is a different key
+from `Creatinine`; no fuzzy match exists) and the **§6 unit guard** (a urine row carrying a serum
+unit is refused, not merged). The specimen-first alternative (`urine_creatinine`) reads more
+naturally but scatters an analyte's variants; nothing downstream depends on the string beyond
+exact-match, so the choice is free now and expensive later — hence recording it as the standing
+convention rather than an ad-hoc key.
+
+**Status:** **Map landed. The expansion is NOT YET COMPLETE — the mandatory backfill is OWED against
+prod and has not run.** The `#55`-sibling standing rule (documented in
+`backend/backfill_marker_canonical.py`'s own header) is explicit: a canonical-dict expansion that
+skips the backfill lets the `COALESCE(marker_canonical, marker_name_raw)` reads partition
+double-count the newly-mapped marker — the pre-bump raw-keyed stored row and a post-bump
+canonical-keyed upload read as two series. The three rows are stored with `marker_canonical` NULL
+right now. **This session cannot reach prod** (the Railway CLI has no TTY here, and data
+verification is a Railway Postgres query per `CLAUDE.md`), so the dry-run, the `--apply`, and the
+backend redeploy that reloads `_CANONICAL_MAP` are all handed to the operator. Recording the rule as
+*honoured* would be false; it is honoured only when the backfill lands in prod.
+
+**Two assumptions stated, both with loud failure modes (not silent):**
+1. *Units.* `unit_established` is set to the clinically-standard SNP ASCII forms (mmol/L, mg/L,
+   mg/mmol), consistent with the file's convention (serum `umol/L`, `ug/L`). The brief's precision
+   check — that these byte-match the `unit_canonical` actually stored on the three rows — is **OWED**;
+   it needs the stored rows, which are in prod. If a live extraction's normalised unit differs in
+   byte form, the §6 guard trips on the *next* upload with a message that names both units
+   (`#177` made that banner legible) — a loud, self-diagnosing 422, never silent corruption. Safe to
+   land under the assumption for exactly that reason.
+2. *Backfill row count.* The script is generalised — it binds every raw name in the map with
+   NULL-canonical rows, not only these three — so the "dry-run reports exactly three" gate assumes
+   prod holds no other unmapped-but-mappable rows. A wider count is a signal to investigate before
+   `--apply`, which is what the dry-run-first sequence is for.
+
+**How you know:** Local evidence only; prod verification is owed.
+- `_load_canonical_map` returns 69 entries, all three urine markers keyed by raw name at the tabled
+  canonical/unit; no duplicate `marker_name_raw`; the serum homographs are untouched
+  (`creatinine`/umol/L, `albumin`/g/L). File stays pure ASCII with zero em-dashes, hand-edited per
+  the `#98` reference-JSON guard (no `json.dump` reflow — the diff is +18 lines, one comma changed).
+- Route-level §6 discrimination: a fresh `R U-Creatinine` at `mmol/L` returns 201 and stores
+  `creatinine_urine`; the same marker at serum `umol/L` returns 422 naming the over-collapse guard,
+  both established and mismatched units. This is §7's protection doing real work on real data, not
+  in design — the `FEEDBACK` note records it as the first live exercise.
+- Control per `#103`: all six new tests fail against master's map and pass with the addition. Backend
+  **755 passed** vs a 749 baseline (+6 new; one Move-2 e2e assertion updated in place from
+  "all_unmapped" to mapped, since this change is precisely what makes those rows resolve). Frontend
+  **20**, unchanged — no frontend file touched.
+
+**Do not revisit unless:** the OWED backfill's dry-run reports other than the expected rows (a
+raw-name collision to investigate), or a real upload trips the §6 guard on a byte-form unit mismatch
+(the precision check coming due the loud way) — in either case the fix is a one-line map or a bounded
+data correction, not a convention change. The analyte-first convention itself is revisited only if a
+future specimen split cannot be expressed as `analyte_specimen` (none foreseen: blood/serum/plasma,
+urine, saliva all suffix cleanly).
