@@ -27,7 +27,7 @@ in favour of a `gh pr create` / `gh pr merge` pair (`#171`), which calls nothing
     the merge button is live) and on `push` to master (backstop). Covers the server-side ref
     updates a client hook structurally cannot see: this repo's history carries five web-UI
     merges committed by `GitHub <noreply@github.com>`.
-  * Ruleset `master-pr-gated` (id `20414758`, health-app only) — makes the PR arm binding by
+  * Ruleset `master-pr-gated` (id `20414758`) — makes the PR arm binding by
     requiring the `placeholder guard (POSIX)` check and refusing every non-PR route to
     master. `bypass_actors` is empty, so it binds the repo owner too.
 
@@ -39,7 +39,7 @@ ruleset is per repo, and this file is the only piece a `git diff` can see. A fre
 deleted ruleset, or a `bypass_actors` entry removes enforcement silently and leaves the runs
 green. A green run is evidence this script passed, never evidence the layers are installed;
 check them directly (`gh api repos/Easty11/health-app/rules/branches/master` must be
-non-empty). `health-connect-app` has the hook only — no workflow, no ruleset.
+non-empty).
 
 Exit 0 = clean. Exit 1 = a placeholder would reach master. Exit 2 = the check itself
 could not run (missing file, bad ref) — never silently pass, because a check that cannot
@@ -78,19 +78,38 @@ CHECKS = [
 
 
 def read(path: str, ref: str | None) -> str:
+    # Capture BYTES and decode explicitly here. Never let subprocess decode in text
+    # mode inside a reader thread: a UnicodeDecodeError there kills the thread, leaves
+    # git's returncode at 0, and returns a non-string a returncode check cannot catch.
+    # Route every path that yields no checkable content to exit 2 — the contract above:
+    # a check that cannot run is not a check that passed.
     if ref is None:
         p = Path(path)
         if not p.exists():
             print(f"check-placeholders: cannot read {path}", file=sys.stderr)
             sys.exit(2)
-        return p.read_text(encoding="utf-8")
-    r = subprocess.run(["git", "show", f"{ref}:{path}"],
-                       capture_output=True, text=True, encoding="utf-8")
-    if r.returncode != 0:
-        print(f"check-placeholders: cannot read {path} at {ref}: "
-              f"{r.stderr.strip()}", file=sys.stderr)
+        raw = p.read_bytes()
+        where = path
+    else:
+        r = subprocess.run(["git", "show", f"{ref}:{path}"], capture_output=True)
+        if r.returncode != 0:
+            err = r.stderr.decode("utf-8", "replace").strip()
+            print(f"check-placeholders: cannot read {path} at {ref}: {err}",
+                  file=sys.stderr)
+            sys.exit(2)
+        raw = r.stdout
+        where = f"{path} at {ref}"
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        print(f"check-placeholders: {where} is not valid UTF-8: {e}",
+              file=sys.stderr)
         sys.exit(2)
-    return r.stdout
+    if not text.strip():
+        print(f"check-placeholders: {where} is empty or whitespace-only "
+              f"(a governance store is never legitimately empty)", file=sys.stderr)
+        sys.exit(2)
+    return text
 
 
 def main() -> int:
