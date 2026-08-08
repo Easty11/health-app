@@ -7459,3 +7459,58 @@ on `CLAUDE.md` — the strike only, no whole-file EOL churn (`#176(c)` / Brief D
 **Do not revisit unless:** a fourth cross-repo state claim is written into a non-historical surface —
 struck the same way — or `Q87`'s artefact-parity register is built, at which point the checker /
 `closeout.md` parity drift this sweep re-touched gains a named governing rule instead of ad hoc handling.
+
+---
+
+### 186. Governance contract pruned — the contract's job shifts from auditing to shipping
+
+**Decision:** The session-start governance surface is cut to invariants and live principles.
+`CLAUDE.md`'s shared block is compressed from ~258 lines of rules-plus-provenance to 97 lines
+of invariants only (whole file 453→249, 5,375→2,311 words); the intro essays, number-at-merge
+narratives, and every "Earned…" retelling move **verbatim** into `FEEDBACK_ARCHIVE.md` — nothing
+deleted. `FEEDBACK.md` is rebuilt (1,328→73 lines, 15,950→1,005 words): the 22 verification-rule
+essays (§§7–28) collapse to a one-line index under a new §7; the accreted behavioural corrections
+and preferences (§§1–3) move **verbatim** to the archive; §4 survives as **§1 Project principles**
+(retitled) and six design-relevant items from old §2 survive as **§2 Design principles**
+one-liners (2.1, 2.4, 2.5, 2.6, 2.10, 2.13). §3.5 (Samsung Health package name) is lifted to
+`CLAUDE.md` Tooling as one line. **§5 (injury snapshot)** is removed from the live file and
+archived under a **SUPERSEDED / stale-as-of-Aug-2026 tombstone**: injury truth is the Postgres
+declared-state ledger (`type='injury'`), and its maintained text mirror is project-knowledge
+`Athlete_Profile` (chat-maintained) — the archived copy is a record of what once lived there, not
+consultable state. **§6 (CPAP context)** is removed entirely (near-duplicate of §1.1's CPAP
+specifics, which are preserved in the archive); the canonical clinical facts fold into
+project-knowledge `Clinical_Protocol` per the kill-rule (clinical data never lives in the repo).
+Two new standing rules enter the shared block — a **severity gate on review** and **governance
+batching** (≤1 `gov(...)` commit per session) — and a **moratorium**: no new governance rules,
+hooks, or mechanisms until three product items land from — lab-confirm Brief A, lab-confirm
+Brief B, interpretation producer 4b, Polar wired into the chat handler. Interim defects get one
+condensed `FEEDBACK` line — no essay, no mechanism.
+
+**Rationale:** the session-start read load was ~21,000 words dominated by defect-hunting
+epistemology and accreted behavioural corrections — priming every session toward auditing over
+shipping; governance had become the product. Provenance is not lost, only relocated to a file
+consulted when a rule's origin is disputed. The contract now states the invariants and live
+principles and gets out of the way.
+
+**Status:** Landed on `chore/governance-prune` via the PR-gated path. Gates — **G1**: shared block
+97 (≤150), whole file 249 (≤250). **G2**: `FEEDBACK.md` **73 lines** (≤200, extended target); the
+archive carries all 22 §7–§28 headings verbatim and its §§1–3 (21,689 B) and §§7–28 (75,166 B)
+bodies are **byte-identical** to the 4bd99cc original. **G3**: all 18 shared invariants carried
+(secrets-rule command-form enumeration restored per keep-longer-form). **G4**: the placeholder
+hook fires on `### #NEXT` (exit 1) in both repos, clears when resolved (exit 0). **G5**: the
+extracted shared block is byte-identical across both repos (6,135 B, sha256 `622ae8559e81`).
+**G6**: decision entries in both repos, moratorium verbatim. **Read-load, measured post-delta**:
+`CLAUDE.md` + `FEEDBACK.md`, both read at open, = 2,311 + 1,005 = **3,316 words**, down from
+5,375 + 15,950 = **21,325** (an 84% cut). §§1–6 were condensed under an explicit operator
+disposition after the first pass measured §§1–3 as the dominant remaining load.
+
+**How you know:** `wc -l`/`wc -w` pre/post recorded above; archive↔original byte-equality proven
+by comparing the §§1–3 and §§7–28 slices normalised to LF (21,689 B and 75,166 B, `in`-equal);
+the §7–§28 heading grep count in `FEEDBACK_ARCHIVE.md` = 22; `check_governance_placeholders.py`
+exit codes captured at both the `#NEXT` and resolved states; the extracted BEGIN…END shared block
+diffed byte-identical between the two repos; §6 confirmed absent from both live file and archive
+(grep = 0).
+
+**Do not revisit unless:** a defect class recurs ≥3 times that an archived essay demonstrably
+would have prevented — at which point that essay earns re-promotion to the read-at-open surface,
+and the moratorium is reviewed against the product-landing count.
