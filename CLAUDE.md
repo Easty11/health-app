@@ -437,11 +437,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **A guard could report clean on a store it never read; and a file cannot hold evidence about a repo it cannot see (#183/#184)** - `check_governance_placeholders.py` `read()` returned git's stdout after checking only the return code, so a non-UTF-8 byte (decoded in a subprocess reader thread) or an empty blob passed the guard silently; it now captures bytes and routes every non-run to exit 2, per its own docstring contract. The same commit strikes two docstring sentences asserting another repo's enforcement state — a file has no means to keep a cross-repo claim current. `OPEN_QUESTIONS` Q87. See DECISIONS_LOG #183/#184.
+
 - **Writer identity is repo-local evidence, not a shared invariant (#182)** - the shared block's "Code — and the `@claude` GitHub Action — is the only writer" named a per-repo surface, not an invariant: no `@claude` Action exists on any ref of health-app (`.github` holds only `governance-guard.yml`, a `contents: read` CI guard that cannot write), so the claim was false here as in HCA. The shared line collapses to "Code is the only writer"; any Action wiring is stated below `END SHARED LOOP RULES` in the repo that has it. See DECISIONS_LOG #182.
 
 - **Governance edits bank to one batched PR, gated by diff shape (#176)** - the 2026-08-05 sweep landed as six PRs where one would have done, two of them only unwinding the previous one; the naive "governance-only, therefore guard-gated" carve-out was falsified in the same session by a substring-replace the guard sat green through, so the gate is a batch's removed-line shape, not its file class. See DECISIONS_LOG #176.
-
-- **Source admission replaces source priority for HC sleep (#175)** - a Withings Health-Mate mirror of Samsung's own sleep proved that ranking all comers fails silently whenever the canonical source is absent, so `_aggregate_day` moves to an allow-list of registered measuring sources and excludes unlisted writers by default; the accepted trade is that a genuinely new device contributes nothing until deliberately admitted. `OPEN_QUESTIONS` Q83. See DECISIONS_LOG #175.
 
 ---
 
