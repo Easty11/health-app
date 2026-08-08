@@ -7334,3 +7334,80 @@ emitted for the HCA re-mirror (Brief B) so it mirrors against a hash, not a desc
 into health-app. At that point its writer status is stated below `END SHARED LOOP RULES` in the
 repo-specific section, never restored to the shared block; the shared line stays "Code is the only
 writer" regardless, because it is the invariant and the roster is not.
+
+---
+
+### 183. The placeholder guard could report clean on a store it never read
+
+**Decision:** `read()` in `scripts/check_governance_placeholders.py` now captures the store as
+**bytes** and decodes it explicitly, and every path that yields no checkable content routes to
+**exit 2** — non-zero `git show`, a `UnicodeDecodeError`, and empty/whitespace-only content — on
+both the `--ref` arm and the working-tree arm. This is conformance to the exit contract the
+docstring already states ("Exit 2 = the check itself could not run … never silently pass, because a
+check that cannot run is not a check that passed"), not new policy.
+
+**Rationale:** `read()` returned `r.stdout` after checking only `r.returncode`. Under `text=True`,
+git's blob is decoded inside a subprocess reader thread; a `UnicodeDecodeError` there kills the
+thread, leaves `returncode` at `0`, and yields a non-string — invisible to a `returncode` check.
+`re.finditer(None)` then raised `TypeError`, exiting via an uncaught traceback with code `1` — the
+SAME code as a genuine `REFUSED`, and indistinguishable from one to CI, where the contract reserves
+`2` for a check that could not run. An empty blob reached a quieter silent end: `git show` exits `0`,
+`stdout` is `""`, the `returncode != 0` arm never fires, and `finditer("")` matches nothing → the
+guard returns **exit 0 on a governance store with no content**. The loud path fails closed today only
+because `re.finditer` type-checks its argument — an accident of the regex API, not a property of this
+guard. Fifth member of the class *a check that runs over nothing and returns the expected answer*:
+locally, `FEEDBACK` §14 occurrence 4 and the close-out's own header gate; the same class recorded in
+HCA as `#24` (header evidence), and — per Brief D — `#25` (CRLF) and `#26` (stale figure).
+
+**Status:** Landed. `read()` rewritten (fix commit); the docstring's contract is unchanged because it
+already stated the rule (the docs commit strikes only the two cross-repo sentences — see the next
+entry).
+
+**How you know:** Reproduced against the UNFIXED script on scratch refs (#170). A CP1252 byte (`0x97`)
+committed into `DECISIONS_LOG.md` produced `UnicodeDecodeError` in `Thread-1 (_readerthread)` then
+`TypeError: expected string or bytes-like object, got 'NoneType'` at `finditer`, exit `1`. An empty
+`DECISIONS_LOG.md` blob produced **exit 0** — the demonstrated silent false PASS (step 3 was run, not
+inferred). After the fix, four controls with exit codes asserted and real output read: clean ref → `0`
+(no output); unresolved placeholder → `1` (`REFUSED`, naming `DECISIONS_LOG.md:<line>`); non-UTF-8
+byte → `2` (names path + ref, no traceback); empty blob → `2`. Scratch refs torn down;
+`git ls-remote origin` confirmed none leaked.
+
+**Do not revisit unless:** the exit contract itself changes, or a governance store legitimately
+becomes empty/whitespace-only — which it never should, since both `CHECKS` paths are known non-empty.
+
+---
+
+### 184. A file cannot hold evidence about a repo it cannot see
+
+**Decision:** Two docstring sentences in `scripts/check_governance_placeholders.py` are **struck, not
+corrected**: the exclusivity parenthetical on the ruleset (`, health-app only`) and the sentence
+asserting HCA's enforcement state (`` `health-connect-app` has the hook only — no workflow, no
+ruleset ``). The ruleset id is kept. Cross-repo enforcement state belongs in the command that reads it
+live (`gh api`), not in a file that cannot keep it current.
+
+**Rationale:** Both were true when written and have since gone stale — HCA has wired its own
+governance workflow and a `master-pr-gated` ruleset (recorded in HCA's own stores, per HCA `#24` /
+Brief D; not verifiable from this tree, which is the point). They sat four lines below this file's own
+warning that a green run is never evidence the layers are installed and that they must be checked
+directly. The deeper justification does not depend on the claims' current truth value: **a file has
+no means to keep a claim about another repo current, and no surface here would ever contradict it, so
+it should not originate one** — true or false. HCA `#24` ruled that evidence does not propagate
+between repos; this extends it to origination. The second sentence would have survived a strike aimed
+only at the first, so the strike list came from a grep of the whole docstring, not the one sentence
+first noticed — the transferable point. Same class as `#182` (writer identity is repo-local evidence,
+not a shared invariant).
+
+**Status:** Landed. Docstring-only strike (docs commit); no behaviour change. The `VERIFY` grep of the
+full docstring returned exactly these two cross-repo assertions and no third. Two further HCA
+references remain in the `CHECKS` code-comment — they justify the `{2,3}` heading-level in the regex
+the code actually runs (a rationale that co-varies with the pattern, not a dangling enforcement claim)
+— and are deliberately left.
+
+**How you know:** `ast.get_docstring` + a regex over the docstring returned two matches: the
+`, health-app only` parenthetical (docstring line 29) and the `health-connect-app has the hook only`
+sentence (line 41). Post-strike assertions: `health-app only` absent; exactly one `health-connect-app`
+remains (the code-comment); the module parses (`ast.parse`); pure CRLF preserved.
+
+**Do not revisit unless:** health-app wires its own automated writer or changes its own ruleset in a
+way worth restating — in which case it is stated below `END SHARED LOOP RULES` and checked live, never
+re-entered as a claim about another repo.

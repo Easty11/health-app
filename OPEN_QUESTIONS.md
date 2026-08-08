@@ -2595,3 +2595,36 @@ Cross-refs `#177`, `#178`, `#179`, `FEEDBACK` §25/§26/§27.
 **Not this question:** the row-level class — closed by `#179` and asserted closed. And the urine-ACR
 canonical mapping — a separate data-addition track (`LAB_EXTRACTION_SCHEMA §7`), not a contract
 question.
+
+---
+
+## Q87. Which cross-repo-parity artefacts are governed, and by what rule?
+
+The shared-loop model has exactly one explicit parity mechanism: **G1** governs the verbatim-
+propagated shared block by byte-identity, measured, under `#92`'s paired-obligation protocol. But
+several files OUTSIDE the shared block are also expected to stay in parity across `health-app` and
+`health-connect-app`, and no store enumerates which, under which mechanism, or with what equivalence
+criterion (byte-identity vs behavioural-equivalence). Four such artefacts and their current status
+(cross-repo halves are as reported by Brief D / HCA's own stores — not verifiable from this tree):
+
+| Artefact | Parity status |
+|----------|---------------|
+| shared loop block (`CLAUDE.md`) | **G1-governed** — byte-identity, measured, paired-obligation (`#92`) |
+| `.github/workflows/governance-guard.yml` | mirrored byte-identical, **ad hoc** (HCA `#24`) — under no named rule |
+| `scripts/check_governance_placeholders.py` | **drifted, undeclared** — health-app's copy carried both a `read()` exit-contract defect and two stale cross-repo docstring sentences, fixed this session |
+| `.claude/commands/closeout.md` | **undeclared** — health-app 90 lines (verified here) vs HCA 134 (per Brief D) |
+
+Two of the four are known-drifted, and nothing declares which paths are parity-governed. The checker
+is the sharp case: its own comment says it is *one implementation of one rule across every repo*, yet
+no register names it a parity artefact and nothing checks the two copies against each other — so a fix
+or a docstring correction in one repo silently leaves the other stale, which is exactly the drift this
+session's strike was cleaning up.
+
+**State:** OPEN — no blocker, nothing owed. The fork: build an explicit artefact-parity register
+(each cross-repo file, its governing mechanism, its equivalence criterion) or keep parity ad hoc per
+artefact. Not settled here — Brief D scope is to state the question, not build the register. Owner:
+Luke (a register spans both repos). Cross-refs `#92` (G1 / paired-obligation), `#182` (evidence is
+repo-local, not shared), this session's `#183`/`#184`, HCA `#24` (the workflow mirror).
+
+**Not this question:** the shared block itself (G1-governed, settled) and any single artefact's
+current drift (a data point, not the governance gap).
