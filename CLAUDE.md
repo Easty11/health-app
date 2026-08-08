@@ -290,9 +290,12 @@ the rule binds the repo owner holding an admin token. Direct `git push origin ma
 refused server-side. This is the only surface in this project that can *refuse* a bad merge
 rather than report one afterwards.
 
-**Nothing in this section exists in `health-connect-app`**, which has no ruleset, no branch
-protection, and no `.github/workflows` directory at all. That asymmetry is why this section
-sits here and not in the shared block.
+**This section sits here and not in the shared block by the boundary criterion above:** a
+merge path depends on enforcement configuration — a ruleset, branch protection, a required
+status check — which lives outside the tree and is set per repo, so its correctness is not
+independent of a surface the tree cannot see and it cannot be a shared-block rule. What any
+other repo has or lacks is read live (`gh api`), never asserted here: a file has no means to
+keep a claim about another repo current, so it does not originate one (`#184`).
 
 - **The motion.** Push the branch, open the PR, then merge — as three acts, not one:
   `git push -u origin <branch>` → `gh pr create --fill --base master` → `gh pr merge --merge
