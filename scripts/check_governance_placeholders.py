@@ -78,19 +78,38 @@ CHECKS = [
 
 
 def read(path: str, ref: str | None) -> str:
+    # Capture BYTES and decode explicitly here. Never let subprocess decode in text
+    # mode inside a reader thread: a UnicodeDecodeError there kills the thread, leaves
+    # git's returncode at 0, and returns a non-string a returncode check cannot catch.
+    # Route every path that yields no checkable content to exit 2 — the contract above:
+    # a check that cannot run is not a check that passed.
     if ref is None:
         p = Path(path)
         if not p.exists():
             print(f"check-placeholders: cannot read {path}", file=sys.stderr)
             sys.exit(2)
-        return p.read_text(encoding="utf-8")
-    r = subprocess.run(["git", "show", f"{ref}:{path}"],
-                       capture_output=True, text=True, encoding="utf-8")
-    if r.returncode != 0:
-        print(f"check-placeholders: cannot read {path} at {ref}: "
-              f"{r.stderr.strip()}", file=sys.stderr)
+        raw = p.read_bytes()
+        where = path
+    else:
+        r = subprocess.run(["git", "show", f"{ref}:{path}"], capture_output=True)
+        if r.returncode != 0:
+            err = r.stderr.decode("utf-8", "replace").strip()
+            print(f"check-placeholders: cannot read {path} at {ref}: {err}",
+                  file=sys.stderr)
+            sys.exit(2)
+        raw = r.stdout
+        where = f"{path} at {ref}"
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        print(f"check-placeholders: {where} is not valid UTF-8: {e}",
+              file=sys.stderr)
         sys.exit(2)
-    return r.stdout
+    if not text.strip():
+        print(f"check-placeholders: {where} is empty or whitespace-only "
+              f"(a governance store is never legitimately empty)", file=sys.stderr)
+        sys.exit(2)
+    return text
 
 
 def main() -> int:
