@@ -290,9 +290,12 @@ the rule binds the repo owner holding an admin token. Direct `git push origin ma
 refused server-side. This is the only surface in this project that can *refuse* a bad merge
 rather than report one afterwards.
 
-**Nothing in this section exists in `health-connect-app`**, which has no ruleset, no branch
-protection, and no `.github/workflows` directory at all. That asymmetry is why this section
-sits here and not in the shared block.
+**This section sits here and not in the shared block by the boundary criterion above:** a
+merge path depends on enforcement configuration — a ruleset, branch protection, a required
+status check — which lives outside the tree and is set per repo, so its correctness is not
+independent of a surface the tree cannot see and it cannot be a shared-block rule. What any
+other repo has or lacks is read live (`gh api`), never asserted here: a file has no means to
+keep a claim about another repo current, so it does not originate one (`#184`).
 
 - **The motion.** Push the branch, open the PR, then merge — as three acts, not one:
   `git push -u origin <branch>` → `gh pr create --fill --base master` → `gh pr merge --merge
@@ -437,11 +440,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **A rule enforced only where it was discovered is not enforced — run #184's test repo-wide (#185)** - #184 struck a cross-repo enforcement claim from the checker docstring but its grep was file-scoped, so `CLAUDE.md`'s merge-path section still justified being repo-specific with a present-tense "HCA has no ruleset / branch protection / `.github/workflows`" sentence — all three clauses false (verified `gh api`); struck and replaced with the structural reason. #184's test then swept every tracked `*.md`/`*.py` (263 lines / 17 files): one live claim struck, the rest classified as append-only history, structural grammar, or task-pointers, and fed to `Q87`. Also adds `.gitattributes` (`*.md text`) to foreclose the `BRANCHES.md` `-text` trap. See DECISIONS_LOG #185.
+
 - **A guard could report clean on a store it never read; and a file cannot hold evidence about a repo it cannot see (#183/#184)** - `check_governance_placeholders.py` `read()` returned git's stdout after checking only the return code, so a non-UTF-8 byte (decoded in a subprocess reader thread) or an empty blob passed the guard silently; it now captures bytes and routes every non-run to exit 2, per its own docstring contract. The same commit strikes two docstring sentences asserting another repo's enforcement state — a file has no means to keep a cross-repo claim current. `OPEN_QUESTIONS` Q87. See DECISIONS_LOG #183/#184.
 
 - **Writer identity is repo-local evidence, not a shared invariant (#182)** - the shared block's "Code — and the `@claude` GitHub Action — is the only writer" named a per-repo surface, not an invariant: no `@claude` Action exists on any ref of health-app (`.github` holds only `governance-guard.yml`, a `contents: read` CI guard that cannot write), so the claim was false here as in HCA. The shared line collapses to "Code is the only writer"; any Action wiring is stated below `END SHARED LOOP RULES` in the repo that has it. See DECISIONS_LOG #182.
-
-- **Governance edits bank to one batched PR, gated by diff shape (#176)** - the 2026-08-05 sweep landed as six PRs where one would have done, two of them only unwinding the previous one; the naive "governance-only, therefore guard-gated" carve-out was falsified in the same session by a substring-replace the guard sat green through, so the gate is a batch's removed-line shape, not its file class. See DECISIONS_LOG #176.
 
 ---
 

@@ -2620,6 +2620,15 @@ no register names it a parity artefact and nothing checks the two copies against
 or a docstring correction in one repo silently leaves the other stale, which is exactly the drift this
 session's strike was cleaning up.
 
+**Sweep input (`gov/cross-repo-sweep`, 2026-08-08, `#185`).** `#184`'s test, run repo-wide over every
+tracked `*.md`/`*.py`, enumerated the whole cross-repo reference surface — 263 matching lines across 17
+files — and classified each: **1** struck live state claim (`CLAUDE.md:293`), **1** held for separate
+review (`backend/models.py:224`, wire-contract, `#175`/`Q83`), the rest append-only history / structural
+grammar / task-pointers. This is the enumeration of *instances*, not the *register* this question asks
+for — the register still owes each cross-repo-governed path its governing mechanism and equivalence
+criterion. The two undeclared-parity artefacts named above (`check_governance_placeholders.py`,
+`.claude/commands/closeout.md`) reappeared in the sweep unchanged, still under no named rule.
+
 **State:** OPEN — no blocker, nothing owed. The fork: build an explicit artefact-parity register
 (each cross-repo file, its governing mechanism, its equivalence criterion) or keep parity ad hoc per
 artefact. Not settled here — Brief D scope is to state the question, not build the register. Owner:

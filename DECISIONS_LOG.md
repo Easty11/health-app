@@ -7411,3 +7411,51 @@ remains (the code-comment); the module parses (`ast.parse`); pure CRLF preserved
 **Do not revisit unless:** health-app wires its own automated writer or changes its own ruleset in a
 way worth restating — in which case it is stated below `END SHARED LOOP RULES` and checked live, never
 re-entered as a claim about another repo.
+
+---
+
+### 185. The rule against cross-repo claims was applied to one file, not to the repo
+
+**Decision:** `CLAUDE.md`'s repo-specific merge-path section carried a third instance of the defect
+`#184` struck — a present-tense sentence asserting `health-connect-app`'s enforcement state ("has no
+ruleset, no branch protection, and no `.github/workflows` directory at all") as the justification for
+why the section is repo-specific. It is **struck and replaced with the structural justification**: a
+merge path depends on enforcement configuration, which lives outside the tree and is set per repo, so
+by the shared-block boundary criterion it cannot be a shared rule — no claim about what HCA currently
+has, which would only reset the clock. The same session runs `#184`'s test **repo-wide** rather than
+file-locally: every tracked `*.md` and `*.py` is swept for cross-repo references and each is classified.
+
+**Rationale:** `#184` ruled that a file may not originate evidence about another repo — it has no means
+to keep the claim current and no local surface would ever contradict it — but the grep behind it was
+scoped to the one file where the defect was first seen. A rule enforced only where it was discovered is
+not enforced. The `CLAUDE.md:293` sentence proved it: three false clauses in one sentence, one of them
+("no `.github/workflows` directory at all") **already false when `#184` landed** — the rule was four
+commits old and its violation sat two hundred lines away in the same repo. All three clauses were
+verified false at merge via `gh api` (ruleset `20573455` active; `.github/workflows/governance-guard.yml`
+present) — verified only to justify the strike, never written into the file.
+
+**Status:** Landed. Governance/docs strike plus a new `.gitattributes`. The sweep — 9 tracked `*.md`
+(236 matching lines) and 8 `*.py` (27), 263 lines across 17 files — returned **exactly one** in-scope
+live state claim: the struck sentence. One further live-but-stale claim, `backend/models.py:224`
+("current HCA builds send no dataOrigin"), is a wire-contract claim in a code file, already
+`Q83`/`#175`'s territory with its sibling docstring (`routers/health_connect.py`) already corrected;
+**held for separate human review**, not swept into this governance batch. Every other reference
+classified as append-only history (`DECISIONS_LOG` ×133, `FEEDBACK`, immutable migrations),
+structural/grammatical (the checker's `{2,3}` note `#184` itself kept, `gen_governance_view.py`'s parser
+grammar for reading both repos, heading-form refs), a dated past-tense narration (`CLAUDE.md:48`
+"Earned … had no CI workflow", `HANDOFF`'s event log), or a cross-repo task-pointer / debt row / open
+divergence question (`BRANCHES`, `ROADMAP` §NOW per `#112`, `OPEN_QUESTIONS` Q30/Q32/Q33/Q87) — none
+struck.
+
+**How you know:** `git grep -Eic 'health-connect-app|\bHCA\b'` over tracked `*.md`/`*.py` enumerated
+every reference (263 lines / 17 files); each classified against the three bins. Post-strike,
+`CLAUDE.md:293` asserts nothing about HCA's state; `git diff --cached` showed 6 insertions / 3 deletions
+on `CLAUDE.md` — the strike only, no whole-file EOL churn (`#176(c)` / Brief D signature) — plus a new
+`.gitattributes`. `.gitattributes` verification: `git ls-files --eol BRANCHES.md` now reads
+`i/lf w/crlf`, so the `-text` heuristic no longer trips after `dc023a1`'s heal — `*.md text` is
+**preventive** (forecloses re-tripping on a future long-line edit), not a live fix; `git add
+--renormalize .` staged no `.md` content, confirming every blob was already LF.
+
+**Do not revisit unless:** a fourth cross-repo state claim is written into a non-historical surface —
+struck the same way — or `Q87`'s artefact-parity register is built, at which point the checker /
+`closeout.md` parity drift this sweep re-touched gains a named governing rule instead of ad hoc handling.
