@@ -1,0 +1,9 @@
+# Force LF blobs for Markdown, defeating git's binary/-text heuristic.
+#
+# A very long single line (BRANCHES.md's 4409-char rows) can trip git's
+# `-text` classification, which makes `core.autocrlf` skip the file — so a
+# CRLF working-tree write can flip the blob and leave stray `\r\r\n` joins
+# (the Brief D / close-out 0808 EOL corruption). `text` (not `eol=lf`)
+# guarantees an LF blob while leaving the working tree exactly as
+# core.autocrlf renders it, so no editor sees a change.
+*.md text
