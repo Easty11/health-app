@@ -27,7 +27,7 @@ in favour of a `gh pr create` / `gh pr merge` pair (`#171`), which calls nothing
     the merge button is live) and on `push` to master (backstop). Covers the server-side ref
     updates a client hook structurally cannot see: this repo's history carries five web-UI
     merges committed by `GitHub <noreply@github.com>`.
-  * Ruleset `master-pr-gated` (id `20414758`, health-app only) — makes the PR arm binding by
+  * Ruleset `master-pr-gated` (id `20414758`) — makes the PR arm binding by
     requiring the `placeholder guard (POSIX)` check and refusing every non-PR route to
     master. `bypass_actors` is empty, so it binds the repo owner too.
 
@@ -39,7 +39,7 @@ ruleset is per repo, and this file is the only piece a `git diff` can see. A fre
 deleted ruleset, or a `bypass_actors` entry removes enforcement silently and leaves the runs
 green. A green run is evidence this script passed, never evidence the layers are installed;
 check them directly (`gh api repos/Easty11/health-app/rules/branches/master` must be
-non-empty). `health-connect-app` has the hook only — no workflow, no ruleset.
+non-empty).
 
 Exit 0 = clean. Exit 1 = a placeholder would reach master. Exit 2 = the check itself
 could not run (missing file, bad ref) — never silently pass, because a check that cannot
