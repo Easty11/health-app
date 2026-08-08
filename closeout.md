@@ -1,100 +1,92 @@
-# Close-out — 2026-08-08 (Brief D rev 2: checker exit-contract repair + docstring de-propagation)
+# Close-out — 2026-08-08 (Brief J: strike the third cross-repo claim, sweep repo-wide, add .gitattributes)
 
-Branch at write: `chore/session-closeout-0808`. Master after the session's feature landing: `b4cf1ac` (PR #36).
+Branch at write: `chore/session-closeout-0808b`. Master after the session's landing: `5574afa` (PR #39).
 
 ---
 
 ## 1. Real commits this session
 
-Session-open ref: `73d5cb8` (master at open). Work landed on `gov/checker-exit-contract` via **PR #36** (merge `b4cf1ac`).
+Session-open ref: `dc023a1` (master at open). Work landed on `gov/cross-repo-sweep` via **PR #39** (merge `5574afa`).
 
 ```
-d48956a  fix: check_governance_placeholders — a read that cannot run must exit 2
-ba6d319  docs: check_governance_placeholders — strike two cross-repo enforcement claims
-faecf8b  gov: DECISIONS_LOG #183/#184 + OPEN_QUESTIONS Q87
-b4cf1ac  Merge pull request #36 from Easty11/gov/checker-exit-contract
+f9796d6  gov: strike third cross-repo enforcement claim in merge-path section
+407be6e  chore: add .gitattributes (*.md text) to foreclose -text misclassification
+1f52d34  gov: #185 — apply the no-cross-repo-claims rule repo-wide; feed Q87
+6cf3cc2  gov: self-row + Recent-landings pointer for #185 (housekeeping rides originating branch, #176b)
+5574afa  Merge pull request #39 from Easty11/gov/cross-repo-sweep
 ```
 
-Plus this close-out commit on `chore/session-closeout-0808` (not yet landed at write).
+Plus this close-out commit on `chore/session-closeout-0808b` (not yet landed at write).
 
 Immutable dates (`git log --format="%ad %s" --date=short`):
 
 ```
-2026-08-08  Merge pull request #36 from Easty11/gov/checker-exit-contract
-2026-08-08  gov: DECISIONS_LOG #183/#184 + OPEN_QUESTIONS Q87
-2026-08-08  docs: check_governance_placeholders — strike two cross-repo enforcement claims
-2026-08-08  fix: check_governance_placeholders — a read that cannot run must exit 2
-2026-08-07  Merge pull request #35 from Easty11/chore/session-closeout-0807
-2026-08-07  chore: session close-out
+2026-08-08  Merge pull request #39 from Easty11/gov/cross-repo-sweep
+2026-08-08  gov: self-row + Recent-landings pointer for #185 (housekeeping rides originating branch, #176b)
+2026-08-08  gov: #185 — apply the no-cross-repo-claims rule repo-wide; feed Q87
+2026-08-08  chore: add .gitattributes (*.md text) to foreclose -text misclassification
+2026-08-08  gov: strike third cross-repo enforcement claim in merge-path section
+2026-08-08  Merge pull request #38 from Easty11/fix/branches-eol-lf
 ```
 
 ---
 
 ## 2. Pending-commit queue reconciliation
 
-No chat `;cc` pending-commit queue was carried into this session — the work came from **Brief D (rev 2)**, a Code-executed brief, not a chat close-out handoff. Every deliverable landed on master:
+No chat `;cc` pending-commit queue was carried in — the work came from **Brief J**, a Code-executed brief, not a chat close-out handoff. Every deliverable landed on master via PR #39:
 
-- `read()` exit-contract fix .................. LANDED  `d48956a` (→ #183)
-- docstring de-propagation (two strikes) ...... LANDED  `ba6d319` (→ #184)
-- DECISIONS_LOG #183, #184 ................... LANDED  `faecf8b`
-- OPEN_QUESTIONS Q87 ......................... LANDED  `faecf8b`
-- `#NEXT` → #183/#184, `Q#NEXT` → Q87 ......... resolved at the merge window (master re-read == 182 / Q86, local == origin/master, nothing advanced)
+- CLAUDE.md:293 strike (third cross-repo claim) ..... LANDED  `f9796d6` (→ #185)
+- `.gitattributes` (`*.md text`) ................... LANDED  `407be6e`
+- DECISIONS_LOG #185 + OPEN_QUESTIONS Q87 update ... LANDED  `1f52d34`
+- BRANCHES self-row + Recent-landings #185 ......... LANDED  `6cf3cc2` (#176b — housekeeping on originating branch)
+- `#NEXT` → #185 ................................... resolved at the merge window (master re-read == #184, unchanged since open; #185 free)
 
-Nothing decided-but-uncommitted. Brief E's handoff payload (§3) is *emitted* here, not committed — it is a cross-repo (HCA) input, not a health-app artefact.
+Nothing decided-but-uncommitted. One finding was deliberately **held out** of this batch, not dropped: `backend/models.py:224` (see §3, "What was NOT touched") — flagged as a background task, owner Luke.
 
 ---
 
 ## 3. Cold-resume handoff
 
 ### What landed
-**Checker exit-contract repair + docstring de-propagation (Brief D).** The placeholder guard `scripts/check_governance_placeholders.py` — the surface every other governance control rests on — had a `read()` that returned git's `stdout` after checking only the return code:
+**Repo-wide application of #184's no-cross-repo-claims rule + the `.gitattributes` `-text` foreclosure (Brief J).** #184 struck a cross-repo enforcement claim from the checker docstring and ruled that a repo may not originate evidence about another repo — but its grep was scoped to that one file. `CLAUDE.md:293` carried a **third instance**: a present-tense sentence asserting HCA "has no ruleset, no branch protection, and no `.github/workflows` directory at all" as the justification for why the merge-path section is repo-specific. All three clauses were verified **false** via `gh api` (ruleset `20573455` active; `.github/workflows/governance-guard.yml` present) — and the third ("no workflows at all") was already false when #184 landed four commits earlier. The sentence is **struck and replaced with the structural justification** (enforcement config lives outside the tree and is set per repo, so by the boundary criterion it cannot be a shared rule) — asserting nothing about HCA's current state, which would only reset the clock.
 
-- a **non-UTF-8 byte** was decoded in a subprocess reader thread → the thread dies, `returncode` stays `0`, a non-string is returned → `re.finditer` raises `TypeError`, a traceback exiting **1** (indistinguishable to CI from a genuine `REFUSED`) where the docstring's contract reserves exit **2** for "a check that could not run";
-- an **empty blob** passed silently at **exit 0** — a governance store with no content read as clean.
+The session then ran #184's test **repo-wide**: every tracked `*.md` (9 files / 236 matching lines) and `*.py` (8 / 27) — 263 lines across 17 files — swept for cross-repo references, each classified into three bins:
+- **live state claim → struck:** exactly **1** (`CLAUDE.md:293`).
+- **append-only history / dated past-tense → left:** all `DECISIONS_LOG` (×133), `FEEDBACK` §14/§19, immutable migration comments, `CLAUDE.md:48` "Earned … had no CI workflow", `HANDOFF`'s dated event log.
+- **structural / grammatical → left:** the checker's `{2,3}` heading-grammar note (#184 itself kept it), `gen_governance_view.py`'s parser grammar for reading both repos, `test_governance_placeholder_guard.py`'s heading-form docstrings, `CLAUDE.md`'s `### #21` / `### Q8` grammar refs.
+- **cross-repo task-pointer / debt row / open divergence question → left:** `BRANCHES.md`, `ROADMAP` §NOW (canonical cross-repo-debt home per #112), `OPEN_QUESTIONS` Q30/Q32/Q33/Q87, `closeout.md`, `STACK.md`.
 
-`read()` now captures bytes, decodes explicitly, and routes every non-run to **exit 2** (non-zero git, `UnicodeDecodeError` naming path+ref, empty/whitespace-only content), on both the `--ref` arm and the working-tree arm. Both defects were reproduced on scratch refs against the unfixed script first (#170); after the fix, four controls with exit codes asserted — clean `0`, placeholder `1`, non-UTF-8 `2`, empty blob `2` — and the scratch refs were torn down (`git ls-remote` clean). The same PR struck two docstring sentences asserting another repo's enforcement state; a file has no means to keep a cross-repo claim current, so the state is read live via `gh api`, not held in the file.
+`.gitattributes` (`*.md text`) forecloses the `BRANCHES.md` `-text` trap that corrupted line endings in Brief D. **GATE-4 note:** `ls-files --eol BRANCHES.md` now reads `i/lf w/crlf` — the `-text` heuristic **no longer trips** after `dc023a1`'s heal, so this is **preventive** (it stops the heuristic re-tripping on a future long-line edit), not a live fix; `git add --renormalize .` staged no `.md` content, confirming every blob was already LF.
 
-Decisions: **#183** (guard read exit-contract — conformance to the docstring's own contract, not new policy), **#184** (cross-repo docstring strike — extends #182 / HCA #24: evidence is repo-local, not originated about another repo). Question: **Q87** (which cross-repo-parity artefacts are governed, and by what rule — the checker and `closeout.md` are drifted and undeclared; question *stated*, register **not** built — Brief D scope).
-
-### Cross-repo handoff — Brief E (HCA-rooted, NOT runnable from health-app)
-HCA mirrors the `read()` fix. Anchors from `origin/master` `b4cf1ac` (git LF blob):
-
-- `read()` mirror target: **33 lines**, md5 `154e1871fab988fda9ce72170db4071f`
-- docstring-stripped executable body (dropped through `body[0].end_lineno` = line 51): **97 lines**, md5 `ca648f466a30f6b7a6704e83a2bce490`
-- whole file (LF): **148 lines**, md5 `17391735f209a5526ab364954e20bf5d`
-
-After mirroring `read()`, the two docstring-stripped executable bodies differ by **exactly one hunk** — `main()`'s advisory string (health-app "before it lands"; HCA "before the fast-forward"). Expect **one** hunk, not zero; do **not** expect the executable-body md5 to match HCA's.
+Decision: **#185** (the rule was applied to one file, not the repo). Question: **Q87** — receives the sweep enumeration as **input** and stays **OPEN** (a list of instances is not the register it asks for).
 
 ### Current sprint (ROADMAP NOW — unchanged this session)
-- **CBT-I:** resolve **Q45** nap day-attribution — the engine's `naps_min` `date−1` read is live for block 3 and rests on an unverified attribution. Close from VA CBT-I protocol docs / the administering clinician, not the workbook. DATED / contaminating capture now. Owner: Luke.
+- **CBT-I:** resolve **Q45** nap day-attribution — the engine's `naps_min` `date−1` read is live for block 3 on an unverified attribution. Close from VA CBT-I protocol docs / the administering clinician, not the workbook. DATED / contaminating capture now. Owner: Luke.
 - Cross-repo propagation debt is pinned in ROADMAP NOW per #112.
 
 ### Open questions of note
-- **Q87 (NEW)** — cross-repo-parity artefact register: **OPEN**, owner Luke. Build a register naming each cross-repo file, its governing mechanism, and its equivalence criterion — or keep parity ad hoc. Not built here.
+- **Q87** — cross-repo-parity artefact register: **OPEN**, owner Luke. This session fed it the sweep enumeration (263 lines / 17 files, classified) as input; the register itself — each cross-repo file, its governing mechanism, its equivalence criterion — is still unbuilt.
 - **Q86** — does any report-level required scalar get nulled by a real extraction: **OPEN** watch-point (needs a live 422). Owner: Luke.
-- Q85 → `DONE → #178`; Q83 → HC sleep source admission (#175); Q45 gates NOW.
+- **Q83** — HC sleep source admission (#175); its wire-contract docstring correction is the source of this session's one held finding (below).
 
 ### What was NOT touched (named explicitly, per close-out step 5)
-**This is the second consecutive session to go to the governance/guard instrument rather than to the product** (the 0807 session was the shared-block writer-claim correction; this one the checker). The standing feature/product lanes stood still, and the questions gating them:
+**This is the THIRD consecutive session to go to the governance/meta instrument rather than to the product** — 0807 was the shared-block writer-claim correction (#182), 0808/Brief D the checker exit-contract (#183/#184), and this one (Brief J) the cross-repo-claim sweep (#185). Three landings in a row are all about the loop's own hygiene; no product surface moved. The standing feature/product lanes and the questions gating them:
 
-- **Interpretation layer** — increments 2 (rephrase) → 3 (lever-tap) → 5 (go-live), the sequenced product lane. Not advanced.
-- **`feat/cbti-eval-trigger` rework** — OWED and obsolete against master's 4-night engine (`BRANCHES.md` row); its 5-step rework checklist is unstarted. Owner: Luke.
-- **Interpretation hub shell (#150 / #162)** — merged, but its #116/#121 frontend deploy probe was never run.
+- **Interpretation layer** — increments 2 (rephrase) → 3 (lever-tap) → 5 (go-live), the sequenced product lane. Not advanced in three sessions.
+- **`feat/cbti-eval-trigger` rework** — pre-existing local branch (+2 vs master), OWED and obsolete against master's 4-night engine (`BRANCHES.md` row); its rework checklist is unstarted. Owner: Luke.
 - **CBT-I user surface** — engine built, invisible in-app; gated on **#47** (state-only vs directive) and **Q60**. Untouched.
-- **Banister readiness build** — unblocked (HRV data precondition met) but the model is unbuilt.
-- **Security:** identify the second credential digest (`9688f2…`) in the transcripts — OWED, cheap, unstarted.
-- **Guard:** canonical-surface consistency test (SCHEMA.md vs `models.py`; CLAUDE.md conventions vs DECISIONS_LOG; Samsung-context filter vs call sites) — OWED. Adjacent to Q87: both are "nothing enforces cross-surface / cross-repo consistency."
-- **SCHEMA.md** stale for the entire lab family — OWED doc task.
+- **Banister readiness build** — unblocked (HRV precondition met) but unbuilt.
+- **`backend/models.py:224` held finding** — the sweep found a genuine live-but-stale cross-repo claim ("current HCA builds send no dataOrigin") whose sibling docstring (`routers/health_connect.py:64-70`) was already corrected as stale per #175/Q83. It is a **wire-contract claim in a code file**, so it takes full human review and was held **out** of this governance batch. Flagged as a background task (owner Luke). This is the sweep proving its own thesis — the discovery-scoped fix missed an instance two files away.
+- **Guard:** a canonical-surface consistency test (SCHEMA.md vs `models.py`; CLAUDE.md conventions vs DECISIONS_LOG) — OWED, adjacent to Q87.
+- **SCHEMA.md** stale for the lab family — OWED doc task.
 
 ### Single clearest next action
-Break the instrument-over-product streak. Two candidates by lane:
-- **Cross-repo:** run **Brief E** in HCA — mirror `read()` to md5 `154e1871…` (33 lines), then expect exactly one `main()`-string hunk. (Not runnable from health-app.)
-- **health-app product:** start **interpretation increment 2 (rephrase)**, or the **`feat/cbti-eval-trigger` rework** (BRANCHES row checklist).
+**Break the three-session instrument-over-product streak.** Preferred: start **interpretation increment 2 (rephrase)** or the **`feat/cbti-eval-trigger` rework** (its `BRANCHES.md` row carries the checklist). Cheap governance alternatives if a product lane cannot start: fix the held `models.py:224` claim (human review), or build Q87's parity register.
 
 ### Branch terminal states (gate satisfied)
-- `gov/checker-exit-contract` — **DONE**, merged PR #36 at `b4cf1ac`, local + remote deleted. Self-row was missed on-branch; rowed by this close-out.
-- `chore/session-closeout-0808` — this close-out; **DONE** at land (self-row convention).
-- `feat/cbti-eval-trigger` — **OWED**, pushed `fec0324`, rowed in `BRANCHES.md`, pre-existing and untouched this session.
+- `gov/cross-repo-sweep` — **DONE**, merged PR #39 at `5574afa`, local + remote deleted; self-row written on-branch per #176(b).
+- `chore/session-closeout-0808b` — this close-out; **DONE** at land (self-row convention).
+- `feat/cbti-eval-trigger` — **OWED**, pre-existing local branch (+2 vs master), rowed in `BRANCHES.md`, untouched this session.
 
 ### Governance stores changed this session
-`DECISIONS_LOG.md`, `OPEN_QUESTIONS.md` — both landed via PR #36. `CLAUDE.md` (Recent-landings), `BRANCHES.md`, and `closeout.md` are updated by this close-out.
+`DECISIONS_LOG.md`, `OPEN_QUESTIONS.md` — both landed via PR #39. `CLAUDE.md` (strike + Recent-landings), `BRANCHES.md` (self-row), and new `.gitattributes` also landed in PR #39; `closeout.md` + this close-out's `BRANCHES.md` self-row land via the close-out PR.
