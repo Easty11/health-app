@@ -2477,6 +2477,27 @@ fallback-hit-rate pattern. Decide which before the filter is written.
 → `DONE → #175` when the code lands. **Higher priority than `Q82`, and gates it.** Distinct from Q4
 (`DONE → #64`). Owner: Luke. Cross-refs `Q82`, `#35`/`#36`/`#37`, `#74`.
 
+**Premise corrected against `health_connect_record_sources` (2026-08-09, Brief K).** The
+identity-distribution measurement (`railway connect health-app-DB`, operator-run 2026-08-08; recorded
+in `#188`) falsifies the two-writer sleep premise as written at the top of this question, while
+leaving the selector finding intact:
+
+- **Falsified — the Withings-blending premise.** Withings totals **33 rows across all record types
+  combined**, first seen **2026-07-15** (ten days after the 2026-07-05 identity cutover), is **absent
+  from every contaminated group** (the 11 contaminated sleep groups included), and its Health-Connect
+  write access was **revoked 2026-08-08**. There is no night on which "a Withings session happens to be
+  the longest" — the scenario has no rows behind it. The four identical-`record_start` mirror nights
+  (7/19–7/23) still stand as recorded — an echo, not a rival sensor — but they are not a live blending
+  risk, and Samsung, not Withings, is the sole real sleep writer.
+- **Untouched — whether `_aggregate_day` is source-blind.** A max-duration selector with **no
+  priority** is still source-blind even when only one writer feeds it, and that is a code property this
+  brief has **not read**. The (b) `default-untrust` allow-list remains the design and still gates
+  `Q82`. What changed is only the premise's factual claim about *who* writes sleep — not the selector's
+  behaviour and not this question's severity.
+
+Premise only; **State stays OPEN**. Remaining work unchanged: read `_aggregate_day` against the source
+table and wire the allow-list (→ `#175`).
+
 ---
 
 ## Q84. The `/health-connect/sync` backend accepts record types HCA never posts
