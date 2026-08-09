@@ -143,6 +143,49 @@ def test_the_readback_exposes_filename_and_reason(db_session):
     assert by_reason["no_values_extracted"].results == []
 
 
+# ---------- re-confirm shells are capped at one per identified document ----------
+
+def test_reconfirm_with_filename_dedupes_to_one_shell(db_session):
+    """A document re-confirmed three times mints AT MOST ONE `all_markers_declined` shell.
+    The first re-confirm records the decline event; later ones return that same shell rather
+    than accumulating a new one per submission. Bounds the phantom-shell growth without deleting
+    the decline-history record the upload-history surface reads."""
+    user = _user(db_session, "dedupe@example.com")
+    psa = ResultItem(marker_name_raw="Total PSA", value_num=0.7)
+    populated = _confirm(db_session, user, "PSA", [psa], filename="20260530__PSA.pdf")
+    s1 = _confirm(db_session, user, "PSA", [psa], filename="20260530__PSA.pdf")
+    s2 = _confirm(db_session, user, "PSA", [psa], filename="20260530__PSA.pdf")
+
+    assert s1.result_count == 0 and s2.result_count == 0
+    # both re-confirms resolve to the SAME shell — the second mints nothing new
+    assert s1.lab_report_id == s2.lab_report_id
+    assert s1.lab_report_id != populated.lab_report_id
+    shells = (db_session.query(models.LabReport)
+              .filter(models.LabReport.user_id == user.id,
+                      models.LabReport.zero_row_reason == "all_markers_declined").all())
+    assert len(shells) == 1, "one shell per identified document, not one per re-submission"
+
+
+def test_reconfirm_without_filename_is_not_deduped(db_session):
+    """NULL-filename guard. Without a filename the source document is unidentifiable, so two
+    file-less re-confirms must NOT be folded into one — each records its own shell. Folding
+    them would collapse genuinely-distinct un-named uploads (retain-raw for the case we cannot
+    identify). Asserted as the deliberate non-dedupe so a future 'dedupe on NULL too' change
+    fails here rather than silently eating an upload event."""
+    user = _user(db_session, "nofilename@example.com")
+    psa = ResultItem(marker_name_raw="Total PSA", value_num=0.7)
+    _confirm(db_session, user, "PSA", [psa])            # populated, filename=None
+    s1 = _confirm(db_session, user, "PSA", [psa])       # shell 1
+    s2 = _confirm(db_session, user, "PSA", [psa])       # shell 2 — NOT deduped
+
+    assert s1.result_count == 0 and s2.result_count == 0
+    assert s1.lab_report_id != s2.lab_report_id
+    shells = (db_session.query(models.LabReport)
+              .filter(models.LabReport.user_id == user.id,
+                      models.LabReport.zero_row_reason == "all_markers_declined").all())
+    assert len(shells) == 2, "file-less re-confirms are unidentifiable and each records a shell"
+
+
 def test_the_reason_is_scoped_to_the_user(db_session):
     """#42 — a second user's identical document collides with nothing, so it writes rows and
     carries no reason. The guard's user scoping is what makes this true; asserted here because
