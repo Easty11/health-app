@@ -15,7 +15,8 @@ from hevy_format import format_set
 from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
 import models
-from routers.labs import get_lab_results as _read_lab_results
+from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
+from reads.labs_reads import latest_lab_results
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
@@ -653,6 +654,19 @@ def _format_lab_results(reports, marker: str | None = None, limit: int | None = 
                 filtered.append(rep.model_copy(update={"results": hits}))
         reports = filtered
 
+    # De-noise the chat read-back of hollow re-confirm shells: an `all_markers_declined`
+    # report with no rows is a duplicate-upload record the upload-history surface owns, not a
+    # result. Dropped HERE, before `limit`, so a phantom never spends a most-recent-N slot; and
+    # before the header is emitted (a bare `continue` at the render loop would leave the
+    # `===`/`source:` lines behind — an empty headed block, worse than the shell). Presentation
+    # only: the shared REST projection and its upload-history feed are untouched, nothing is
+    # deleted. A `no_values_extracted` shell is a genuine extraction fault and is KEPT — it
+    # renders its one-line fault below.
+    reports = [
+        rep for rep in reports
+        if not (not rep.results and rep.zero_row_reason == "all_markers_declined")
+    ]
+
     if limit is not None:
         reports = reports[:limit]
 
@@ -674,16 +688,65 @@ def _format_lab_results(reports, marker: str | None = None, limit: int | None = 
     return "\n".join(lines)
 
 
+def _format_latest_levels(rows, marker: str | None = None, limit: int | None = None) -> str:
+    """Flat one-line-per-marker "current levels" view over `labs_reads.latest_lab_results`
+    (the sanctioned one-row-per-marker-latest read — reused so "latest" is defined in ONE
+    place, not re-derived by walking report-grouped rows).
+
+    SECOND #47 ENFORCEMENT POINT. `latest_lab_results` returns `LabRow`, which carries
+    `computed_flag`/`is_derived` for its context_builder consumer — the withhold that
+    `StoredReportOut` gives the report path for free is NOT inherited here. Each row is
+    re-projected to `StoredResultOut` (the #47 field set) before rendering, dropping those two
+    fields structurally. The withhold test covers BOTH this path and the report path, or a
+    field added to one could silently ride the other.
+
+    `all_markers_declined` shells contribute no `LabResult` rows, so this view is naturally
+    shell-free — no interaction with the report path's suppression filter."""
+    if marker is not None:
+        rows = [r for r in rows if _marker_matches(marker, r)]
+    if limit is not None:
+        rows = rows[:limit]
+    if not rows:
+        return "No lab results on file."
+
+    lines = ["=== CURRENT LEVELS (latest per marker) ==="]
+    for r in rows:
+        projected = StoredResultOut(
+            marker_name_raw=r.marker_name_raw,
+            marker_canonical=r.marker_canonical,
+            value_num=r.value_num,
+            value_operator=r.value_operator,
+            value_qualitative=r.value_qualitative,
+            unit_canonical=r.unit_canonical,
+            ref_low=r.ref_low,
+            ref_high=r.ref_high,
+            ref_low_exclusive=r.ref_low_exclusive,
+            ref_high_exclusive=r.ref_high_exclusive,
+            lab_flag=r.lab_flag,
+        )
+        # Per-line collection date: in a deduped view markers genuinely differ in draw date,
+        # and a stale marker's date is the signal.
+        lines.append(f"{_format_result_line(projected)} (collected {r.collected_date})")
+    return "\n".join(lines)
+
+
 @mcp.tool()
-def get_lab_results(marker: str | None = None, limit: int | None = None) -> str:
+def get_lab_results(marker: str | None = None, limit: int | None = None,
+                    latest_only: bool = False) -> str:
     """Raw stored lab values, ranges, and lab-asserted flags, grouped by report, newest
     first. Not interpreted — no deltas, mechanisms, or judgements.
 
     Optional `marker` filters to one analyte (word-boundary, case-insensitive, matched on
     the printed name or canonical id, e.g. "creatinine"). Optional `limit` keeps the most
-    recent N reports."""
+    recent N reports.
+
+    `latest_only=True` returns one row per marker — its most recent draw — flat, with the
+    collection date on each line; default is the report-grouped history above."""
     user_id = _current_user_id()
     with SessionLocal() as sess:
+        if latest_only:
+            return _format_latest_levels(latest_lab_results(user_id, sess),
+                                         marker=marker, limit=limit)
         user = sess.get(models.User, user_id)
         # StoredReportOut is a plain Pydantic snapshot and survives session close, but the
         # brief's belt-and-suspenders: read and format inside the session.

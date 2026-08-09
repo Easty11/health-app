@@ -637,6 +637,42 @@ def confirm_lab_report(
             action="skipped" if on_duplicate == "skip" else "written",
         ))
 
+    # ---------- re-confirm shell dedupe (retain-raw #155, bounded) ----------
+    # An all-collision re-confirm (every resolved row already stored at this date) otherwise
+    # mints a fresh `all_markers_declined` shell on EVERY re-submission of the same document —
+    # they accumulate without bound. Cap them at ONE per identified document: if a shell for
+    # this (user, collected_date, source_doc_filename) already records the event, return it
+    # rather than creating a second. The decline-history record (#155/#157) is preserved, its
+    # unbounded growth is not.
+    #
+    # NULL-FILENAME GUARD. Without a filename the source document is unidentifiable, and folding
+    # two file-less re-confirms into one would collapse genuinely-distinct uploads. So dedupe
+    # only fires when the filename is present; a file-less re-confirm falls through and records
+    # its own shell — retain-raw for the case we cannot identify.
+    #
+    # SCOPE. This is the all-markers-declined path only (`resolved` non-empty, every row
+    # skipped). `no_values_extracted` (empty extraction) is a FAULT, never deduped — each
+    # occurrence is its own event.
+    source_doc_filename = report.source_doc.filename if report.source_doc else None
+    reconfirm_all = bool(resolved) and len(skip_indices) == len(resolved)
+    if reconfirm_all and source_doc_filename is not None:
+        prior_shell = (
+            db.query(models.LabReport)
+            .filter(models.LabReport.user_id == current_user.id,
+                    models.LabReport.collected_date == collected_date,
+                    models.LabReport.source_doc_filename == source_doc_filename,
+                    models.LabReport.zero_row_reason == "all_markers_declined")
+            .order_by(models.LabReport.id)
+            .first()
+        )
+        if prior_shell is not None:
+            return ConfirmResponse(
+                lab_report_id=prior_shell.id,
+                result_count=0,
+                unmapped=unmapped,
+                duplicates=duplicates,
+            )
+
     # Derive each row's confidence ONCE (min over its field_confidences, the per-row
     # rule), then reuse those same values for the row records AND the report's
     # overall_confidence. overall = min(row confidences): it propagates the worst row,
@@ -689,7 +725,7 @@ def confirm_lab_report(
         report_comments=report.report_comments or None,
         source_completeness=report.source_completeness,
         source="file_extraction",
-        source_doc_filename=report.source_doc.filename if report.source_doc else None,
+        source_doc_filename=source_doc_filename,
         page_count=report.source_doc.page_count if report.source_doc else None,
         overall_confidence=overall_confidence,
         extracted_at=report.extraction.extracted_at,

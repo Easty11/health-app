@@ -12,7 +12,8 @@ guard can force a `computed_flag`/`confidence` onto storage and prove they never
 from datetime import date
 
 import models
-from mcp_server import _format_lab_results, _marker_matches
+from mcp_server import _format_lab_results, _marker_matches, _format_latest_levels
+from reads.labs_reads import latest_lab_results
 from routers.labs import get_lab_results as read_lab_results
 
 
@@ -48,6 +49,11 @@ def _result(db, rid, raw, canon=None, value_num=None, value_operator=None,
 def _render(db, u, **kw):
     """Seed → real read → pure format, the path the tool takes minus auth/session glue."""
     return _format_lab_results(read_lab_results(current_user=u, db=db), **kw)
+
+
+def _render_latest(db, u, **kw):
+    """latest_only path: seed → latest_lab_results → flat format, minus auth/session glue."""
+    return _format_latest_levels(latest_lab_results(u.id, db), **kw)
 
 
 # --------------------------------------------------------------------------- #
@@ -171,6 +177,41 @@ def test_empty_is_stated_plainly(db_session):
     assert _render(db_session, u) == "No lab results on file."
 
 
+def test_declined_shell_is_suppressed_while_fault_shell_stays(db_session):
+    """A re-confirm shell (`all_markers_declined`, no rows) is de-noised from the chat
+    read-back; a `no_values_extracted` shell is a genuine fault and still renders; a populated
+    report is untouched. The suppression is keyed on the reason, never on row count — the fault
+    shell is also zero-row, and hiding it too would be absence-as-emptiness one layer along."""
+    u = _user(db_session, "shellfilter@example.com")
+    pop = _report(db_session, u.id, date(2026, 5, 30), panel="PSA", filename="psa.pdf")
+    _result(db_session, pop.id, "Total PSA", "psa", value_num=0.7, unit="ug/L")
+    _report(db_session, u.id, date(2026, 5, 30), panel="PSA", filename="psa.pdf",
+            zero="all_markers_declined")
+    _report(db_session, u.id, date(2026, 5, 30), panel="Graph", filename="graph.pdf",
+            zero="no_values_extracted")
+
+    out = _render(db_session, u)
+
+    assert "all_markers_declined" not in out                 # the re-confirm shell is gone
+    assert "(no rows ingested: no_values_extracted)" in out  # the fault stays visible
+    assert "Total PSA: 0.7 ug/L" in out                      # populated report untouched
+
+
+def test_declined_shell_does_not_consume_a_limit_slot(db_session):
+    """The shell is dropped BEFORE `limit`, so `limit=1` yields the newest REAL report, not a
+    phantom that would otherwise have eaten the slot and shown nothing."""
+    u = _user(db_session, "shelllimit@example.com")
+    # newest by date is the shell; the real report is older
+    _report(db_session, u.id, date(2026, 6, 1), panel="PSA", filename="psa.pdf",
+            zero="all_markers_declined")
+    rep = _report(db_session, u.id, date(2026, 5, 1), panel="Chem")
+    _result(db_session, rep.id, "Sodium", "sodium", value_num=140.0, unit="mmol/L")
+
+    out = _render(db_session, u, limit=1)
+    assert "Sodium: 140.0 mmol/L" in out
+    assert "all_markers_declined" not in out
+
+
 # --------------------------------------------------------------------------- #
 # (c) #47 withhold guard — string level, belt-and-suspenders over projection  #
 # --------------------------------------------------------------------------- #
@@ -200,3 +241,45 @@ def test_computed_flag_and_confidence_never_surface(db_session):
     # The leaked VALUES never surface: no computed [H] flag, no 0.4 confidence number.
     assert "[H]" not in out
     assert "0.4" not in out
+
+
+# --------------------------------------------------------------------------- #
+# latest_only — one row per marker, its most recent draw, flat                 #
+# --------------------------------------------------------------------------- #
+
+def test_latest_only_returns_newest_per_marker_flat(db_session):
+    """Two draws of one marker collapse to the newest value only, rendered flat under the
+    CURRENT LEVELS header with the collection date. 'latest' is reused from
+    labs_reads.latest_lab_results, not re-derived here."""
+    u = _user(db_session, "latest@example.com")
+    old = _report(db_session, u.id, date(2026, 1, 1), panel="Chem")
+    _result(db_session, old.id, "Glucose", "glucose", value_num=5.0, unit="mmol/L")
+    new = _report(db_session, u.id, date(2026, 6, 1), panel="Chem")
+    _result(db_session, new.id, "Glucose", "glucose", value_num=6.2, unit="mmol/L")
+
+    out = _render_latest(db_session, u)
+
+    assert "=== CURRENT LEVELS (latest per marker) ===" in out
+    assert "Glucose: 6.2 mmol/L (collected 2026-06-01)" in out
+    assert "5.0" not in out, "the older draw must not appear in a latest-per-marker view"
+
+
+def test_latest_only_withholds_computed_flag_and_is_derived(db_session):
+    """The SECOND #47 enforcement point. latest_lab_results returns LabRow, which carries
+    computed_flag/is_derived — fields StoredReportOut withholds for the report path but which
+    are NOT inherited here. The re-projection to StoredResultOut must drop them; this asserts
+    it, so a future field added to one withhold path is caught if it rides the other."""
+    u = _user(db_session, "latestwithhold@example.com")
+    rep = _report(db_session, u.id, date(2026, 6, 1), panel="Chem")
+    _result(db_session, rep.id, "Glucose", "glucose", value_num=5.0, unit="mmol/L",
+            computed_flag="H", confidence=0.40)
+    row = db_session.query(models.LabResult).filter_by(lab_report_id=rep.id).one()
+    row.is_derived = True
+    db_session.commit()
+
+    out = _render_latest(db_session, u)
+
+    assert "Glucose: 5.0 mmol/L (collected 2026-06-01)" in out
+    assert "[H]" not in out            # computed_flag never renders as a flag
+    assert "computed_flag" not in out
+    assert "is_derived" not in out
