@@ -171,6 +171,41 @@ def test_empty_is_stated_plainly(db_session):
     assert _render(db_session, u) == "No lab results on file."
 
 
+def test_declined_shell_is_suppressed_while_fault_shell_stays(db_session):
+    """A re-confirm shell (`all_markers_declined`, no rows) is de-noised from the chat
+    read-back; a `no_values_extracted` shell is a genuine fault and still renders; a populated
+    report is untouched. The suppression is keyed on the reason, never on row count — the fault
+    shell is also zero-row, and hiding it too would be absence-as-emptiness one layer along."""
+    u = _user(db_session, "shellfilter@example.com")
+    pop = _report(db_session, u.id, date(2026, 5, 30), panel="PSA", filename="psa.pdf")
+    _result(db_session, pop.id, "Total PSA", "psa", value_num=0.7, unit="ug/L")
+    _report(db_session, u.id, date(2026, 5, 30), panel="PSA", filename="psa.pdf",
+            zero="all_markers_declined")
+    _report(db_session, u.id, date(2026, 5, 30), panel="Graph", filename="graph.pdf",
+            zero="no_values_extracted")
+
+    out = _render(db_session, u)
+
+    assert "all_markers_declined" not in out                 # the re-confirm shell is gone
+    assert "(no rows ingested: no_values_extracted)" in out  # the fault stays visible
+    assert "Total PSA: 0.7 ug/L" in out                      # populated report untouched
+
+
+def test_declined_shell_does_not_consume_a_limit_slot(db_session):
+    """The shell is dropped BEFORE `limit`, so `limit=1` yields the newest REAL report, not a
+    phantom that would otherwise have eaten the slot and shown nothing."""
+    u = _user(db_session, "shelllimit@example.com")
+    # newest by date is the shell; the real report is older
+    _report(db_session, u.id, date(2026, 6, 1), panel="PSA", filename="psa.pdf",
+            zero="all_markers_declined")
+    rep = _report(db_session, u.id, date(2026, 5, 1), panel="Chem")
+    _result(db_session, rep.id, "Sodium", "sodium", value_num=140.0, unit="mmol/L")
+
+    out = _render(db_session, u, limit=1)
+    assert "Sodium: 140.0 mmol/L" in out
+    assert "all_markers_declined" not in out
+
+
 # --------------------------------------------------------------------------- #
 # (c) #47 withhold guard — string level, belt-and-suspenders over projection  #
 # --------------------------------------------------------------------------- #

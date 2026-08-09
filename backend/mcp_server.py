@@ -653,6 +653,19 @@ def _format_lab_results(reports, marker: str | None = None, limit: int | None = 
                 filtered.append(rep.model_copy(update={"results": hits}))
         reports = filtered
 
+    # De-noise the chat read-back of hollow re-confirm shells: an `all_markers_declined`
+    # report with no rows is a duplicate-upload record the upload-history surface owns, not a
+    # result. Dropped HERE, before `limit`, so a phantom never spends a most-recent-N slot; and
+    # before the header is emitted (a bare `continue` at the render loop would leave the
+    # `===`/`source:` lines behind — an empty headed block, worse than the shell). Presentation
+    # only: the shared REST projection and its upload-history feed are untouched, nothing is
+    # deleted. A `no_values_extracted` shell is a genuine extraction fault and is KEPT — it
+    # renders its one-line fault below.
+    reports = [
+        rep for rep in reports
+        if not (not rep.results and rep.zero_row_reason == "all_markers_declined")
+    ]
+
     if limit is not None:
         reports = reports[:limit]
 
