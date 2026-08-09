@@ -1,90 +1,104 @@
-# closeout.md — health-app session handoff (2026-08-09)
+# Session close-out — 2026-08-09 (Briefs A + B: lab-shell dedupe & MCP reads)
 
-## Real commits this session
+## 1 · Real commits this session
 
-Session-open ref: `4bd99cc` (master tip at open).
+Session-open ref: `3095a42` (master tip after PR #42, the earlier 2026-08-09 close-out).
+`git log --oneline 3095a42..HEAD`:
 
-**health-app** (`git log --oneline 4bd99cc..68cb97c`):
+```
+e208663 Merge pull request #43 from Easty11/feat/labs-shell-dedupe-and-mcp-reads
+d733b65 feat(mcp): add latest_only current-levels mode to get_lab_results
+2a40e84 feat(mcp): suppress all_markers_declined shells in lab read-back
+3f63fbb feat(labs): cap re-confirm shells at one per identified document
+```
 
-- `0c719df` gov: prune governance contract to invariants; archive provenance (#NEXT → #186)
-- `68cb97c` Merge pull request #41 from Easty11/chore/governance-prune
+All three feature commits landed on `feat/labs-shell-dedupe-and-mcp-reads` and merged to master
+via **PR #43** (merge `e208663`); branch merged + remote-deleted + local-deleted. Backend sweep
+**168 passed**, 0 failures (`test_labs_zero_row_reason`, `test_labs_confirm_duplicates`,
+`test_mcp_lab_results`, plus the lab/mcp/interpretation/reads `-k` sweep).
 
-**health-connect-app** (propagation, landed via PR #25):
+The governance commit for this close-out (`DECISIONS_LOG` #187, `CLAUDE.md` Recent-landings,
+this file, the `BRANCHES.md` self-row) lands separately on `chore/session-closeout-0809b` per the
+≤1-gov-commit-per-session batching rule.
 
-- `af78a6f` gov: replace shared loop-rules block with health-app's pruned version (#NEXT → #34)
-- merge of PR #25 into HCA master
+## 2 · Pending-queue reconciliation
 
-This close-out branch (`chore/session-closeout-0809`) adds its own commit on top —
-`closeout.md` + its BRANCHES self-row.
+**No `;cc` pending-commit queue was carried into this session.** The work originated from a pasted
+chat brief (Briefs A and B — phantom declined-shell diagnostic + deduped current-levels view),
+diagnosed and landed in-session. Reconciliation of what that brief proposed vs what landed:
 
-## Pending-queue reconciliation
+- **Brief A read-back filter** (suppress `all_markers_declined` shells in MCP read) → LANDED `2a40e84`.
+  Placed in the formatter's *filtering block* (before header + before `limit`), correcting the brief's
+  literal step-2 which would have left an empty headed block.
+- **Brief A write-time fork** — operator chose **(b) skip-creating**, then, after the blast radius was
+  surfaced (it deletes the tested decline-history subsystem, four ratified tests, the frontend
+  upload-history split, #155/#157), re-chose **(d) one-shell-per-document dedupe with a NULL-filename
+  guard** → LANDED `3f63fbb`.
+- **Brief A diagnostic** (the gate) → RUN twice against Railway prod, read-only. Result: 10
+  `all_markers_declined` shells, **all re-confirm duplicates**, 0 genuine declines, 0
+  `no_values_extracted`. First query's filename-keyed twin join gave a false "NO TWIN" on two PSA
+  shells; re-keyed on marker-at-date and confirmed every shell has a populated same-date twin.
+- **Brief B `latest_only`** current-levels mode → LANDED `d733b65`, with the second #47 withhold
+  enforcement point (`LabRow`→`StoredResultOut` re-projection).
+- **`DECISIONS_LOG` #187** — recorded in THIS close-out (was flagged OWED mid-session per the
+  ≤1-gov-commit rule). Nothing else is provisional/uncommitted.
 
-No `;cc` chat pending-commit queue was carried in. The work originated from the
-governance-prune brief and was extended in-session by chat's reviewed §§1–6 disposition (a
-second, adjudicated pass — same operation class as the §§7–28 split). Everything decided
-landed:
+## 3 · Cold-resume handoff
 
-- **health-app `#186`** (Governance contract pruned) — landed at `68cb97c`. Number-at-merge
-  resolved `#NEXT → 186` (master max re-read at land = 185), guard clean (exit 0), CI
-  `placeholder guard (POSIX)` green on PR #41.
-- **HCA `#34`** (shared-block return trip) — landed via PR #25. `#NEXT → 34` (HCA master max
-  re-read = 33), guard clean, CI green.
+### This was a PRODUCT session — the instrument-over-product streak is broken
 
-Gate results (all recorded in `#186`): G1 shared block 97 / whole file 249; G2 `FEEDBACK.md`
-73 lines (≤200), archive carries all 22 §7–§28 headings and its §§1–3 (21,689 B) + §§7–28
-(75,166 B) bodies byte-identical to the 4bd99cc original; G3 all 18 invariants; G4 hook fires
-on `#NEXT` / clears resolved in both repos; G5 shared block byte-identical across both masters;
-G6 both decision entries landed, moratorium verbatim. Nothing deleted — full provenance
-(§§1–3, §5 tombstone, §§7–28, full pre-prune `CLAUDE.md`) preserved in `FEEDBACK_ARCHIVE.md`.
+The last four close-outs each flagged a consecutive instrument-over-product session (governance,
+guards, close-out mechanics). **This session shipped product:** lab-confirm **Brief A** and **Brief B**
+both landed (#187) — **two of the four items #186's moratorium waits on** (lab-confirm Brief A,
+lab-confirm Brief B, interpretation producer 4b, Polar wired into the chat handler). **Two of the
+three needed to lift the moratorium are now in.** One more from {**interpretation producer 4b**,
+**Polar → chat handler**} lifts it. The next session should pick one of those two — they are the
+highest-leverage product picks precisely because they also clear the governance freeze.
 
-**Owed to chat (project-knowledge folds, post-land):** §6 CPAP context → `Clinical_Protocol`
-(surfaced verbatim in-session; near-duplicate of §1.1's CPAP specifics, which are in the
-archive). §5 injury snapshot → `Athlete_Profile`; injury truth is the Postgres declared-state
-ledger (`type='injury'`), the archived copy is a superseded tombstone, not live state.
+### Current sprint (from ROADMAP NOW / the interpretation build-sequence)
 
-## Cold-resume handoff
+- **Interpretation layer** — 1b delivered; sequenced continuation is increments **2 (rephrase)** →
+  **3 (lever-tap thread)** → **5 (go-live)**. Increment **4b producer** is a moratorium item.
+- **CBT-I** — Q45 nap day-attribution still gates nap-excluded nights (dated, contaminating capture);
+  the **manual evaluation trigger** is BUILT-but-SUPERSEDED on `feat/cbti-eval-trigger` (see below).
+- **Lab pipeline** — read-back + ingest-integrity shipped; **`lab_accession` persist** is the strongest
+  small lane (unlocks report identity + a dedupe key above result rows, `Q68`).
 
-**What landed.** The governance contract was pruned from auditing to shipping. Session-start
-read load fell from 21,325 to 3,316 words (84%): `CLAUDE.md` 453→249 lines (shared block 97),
-`FEEDBACK.md` 1328→73 lines. All stripped provenance is in the new `FEEDBACK_ARCHIVE.md`, which
-is **not read at session start**. Two new shared standing rules are now in force:
+### Single clearest next action
 
-- **Severity gate on review** — gate only defects that change an outcome, corrupt data, leak a
-  secret, or block the next step; cosmetic/wording defects batch into a trailing "nits" note.
-- **Governance batching** — ≤1 `gov(...)` commit per session, at close-out; never interleaved
-  with feature work. (This close-out session is exempt — governance WAS the work.)
+**Wire Polar into the chat handler**, or **build interpretation producer increment 4b** — either is a
+moratorium product item and lands the third of three, lifting #186's governance freeze. Polar→chat is
+the smaller of the two. (If a quick win is wanted first, `lab_accession` persist is a clean small lane
+but is *not* a moratorium item.)
 
-**Moratorium (active).** No new governance rules, hooks, or mechanisms until **three product
-items land** from: lab-confirm Brief A, lab-confirm Brief B, interpretation producer 4b, Polar
-wired into the chat handler. Interim defects get one condensed `FEEDBACK` line — no essay, no
-mechanism.
+### Open questions by status (unchanged this session — none touched)
 
-**Open questions.** `OPEN_QUESTIONS.md` max = Q87 (artefact-parity register — OPEN). No question
-was opened or resolved this session.
+- **OPEN (product-gating):** Q45 (VA nap referent — gates CBT-I nap nights), Q60 (CBT-I interim
+  surface — gated on #47), Q35 (same-unit semantic collapse), Q36–Q41 (interpretation 4b package),
+  Q68 (`lab_accession` dedupe key), Q75 (Hevy recurring-sync), Q86 (report-level confidence scalars).
+- **OWED (verification against Railway):** Q13 (HRV absent-vs-unmapped), Q15 (prod-drift trio), Q18
+  (HRV out-of-range sweep), Q83 (`'unknown'` source policy + era-split coverage query), #174
+  (field-name contract test + five dead-branch deletions).
+- **Cross-repo (HCA-rooted only):** the shared-block / guard propagations in ROADMAP NOW (#169/#171/
+  #172/#175), Q42 (12-hour clock parse), Q79/Q12 mirror.
 
-**What was NOT touched — and must be named.** This is the **fourth consecutive
-instrument-over-product session** (the prior close-out named the third). The contract got
-lighter; the product did not move. Standing still, unchanged this session:
+### NOT touched this session — explicitly
 
-- **Interpretation producer lane** — increments **2 (rephrase) → 3 (lever-tap) → 5 (go-live)**
-  (ROADMAP NOW build-sequence). Producer 4b is one of the moratorium's own gating items.
-- **CBT-I manual evaluation trigger** — `feat/cbti-eval-trigger` (#118's unbuilt half), a dated
-  NOW row (~31 Jul); pre-existing local branch, untouched.
-- **#116/#121 frontend deploy probe** — never run (owed since the hub-shell #162 land).
-- **Polar → chat handler wiring** — a moratorium gating item; not started.
-- **Lab-confirm Briefs A and B** — two moratorium gating items; not started.
-
-The moratorium was written precisely so these become the next session's legible queue instead of
-more governance. A governance session hands off governance unless it says otherwise — it is
-saying otherwise here.
-
-**Cross-repo note.** The shared-block propagation this session carried the number-at-merge
-ENFORCEMENT bullet to HCA byte-identically, partially addressing ROADMAP NOW rows 18/20
-(cross-repo shared-block debt). The deeper sub-parts — HCA-rooted adjudication of the
-Python-vs-Node guard decision (row 18) and extending `#NEXT` to code-comment tokens (row 20) —
-remain OWED and were not touched. Reconcile those rows from an HCA-rooted session; do not mark
-them DONE from here.
-
-**Next action (single, clearest).** Pick a product lane, not more governance — the moratorium
-forces it. Strongest single pick: **interpretation increment 2 (rephrase)** or the **CBT-I
-manual evaluation trigger** (dated NOW). Both move a moratorium gating item toward landing.
+- **Interpretation increments 2 / 3 / 5** — stood still. Product lane, unblocked, untouched.
+- **`feat/cbti-eval-trigger`** — BUILT, pushed (`fec0324`), **unmerged, OWED — REWORK, do NOT
+  force-merge** (BRANCHES.md:84). Obsolete against master's 4-night engine (#165 removed engine-`close`);
+  5 of 11 tests fail on trial integration, one semantically. Full rework checklist on its BRANCHES row.
+  Untouched this session.
+- **Deploy verification (#116/#121)** — **OWED.** This session's changes are **backend-only**
+  (`health-app-backend`; no frontend bundle touched), so the #121 served-bundle probe does not cover
+  them. Owed: `railway deployment list --service health-app-backend` → SUCCESS, then a probe that
+  exercises `latest_only` (e.g. `get_lab_results(latest_only=True)` returns the flat CURRENT LEVELS
+  header). Not run this session. Owner: Luke / next session.
+- **The 10 existing `all_markers_declined` shells** — left in the DB by design (retain-raw #155),
+  handled on read by the new suppression filter. An optional one-off backfill to collapse the existing
+  filenamed duplicates (e.g. the two PSA shells → one) was offered and **not** done — it is a delete and
+  needs its own explicit go.
+- **Polar → chat handler** and **interpretation producer 4b** — the two remaining moratorium items —
+  untouched; named above as the next pick.
+- **Banister readiness model, CBT-I user surface, morning-checkin edit/audit-trail, the UI bugs**
+  (session-card click, dual-panel scroll, sleep-duration field swap) — all still queued, untouched.

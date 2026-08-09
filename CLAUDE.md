@@ -233,6 +233,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Re-confirm lab shells bounded and de-noised; flat current-levels read added — Briefs A + B (#187)** - `confirm_lab_report` caps `all_markers_declined` shells at one per identified document (NULL-filename guarded, scopes #155); MCP `get_lab_results` suppresses hollow shells on read and gains a `latest_only` current-levels mode (second #47 withhold point). Two of #186's four moratorium product items. See DECISIONS_LOG #187.
 - **Governance contract pruned — auditing → shipping (#186)** - shared block compressed to
   invariants-only; `FEEDBACK.md` cut to Project + Design principles + a condensed §7 index
   (1328→~70 lines), with §§1–3, §5 and §§7–28 provenance moved to `FEEDBACK_ARCHIVE.md` (not
@@ -240,7 +241,6 @@ test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest han
   `Clinical_Protocol`); two new standing rules (severity gate, governance batching) and a
   moratorium on new governance until three product items land. See DECISIONS_LOG #186.
 - **A rule enforced only where it was discovered is not enforced — run #184's test repo-wide (#185)** - #184's docstring-scoped grep left `CLAUDE.md`'s merge-path section justified by a false present-tense cross-repo claim; struck and replaced with the structural reason, and #184's test swept every tracked `*.md`/`*.py`. Adds `.gitattributes` (`*.md text`). See DECISIONS_LOG #185.
-- **A guard could report clean on a store it never read; a file cannot hold evidence about a repo it cannot see (#183/#184)** - `check_governance_placeholders.py` now captures bytes and routes every non-run to exit 2; the same commit strikes two docstring sentences asserting another repo's enforcement state. See DECISIONS_LOG #183/#184.
 
 ---
 
