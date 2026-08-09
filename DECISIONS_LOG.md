@@ -7514,3 +7514,60 @@ diffed byte-identical between the two repos; §6 confirmed absent from both live
 **Do not revisit unless:** a defect class recurs ≥3 times that an archived essay demonstrably
 would have prevented — at which point that essay earns re-promotion to the read-at-open surface,
 and the moratorium is reviewed against the product-landing count.
+
+---
+
+### 187. Re-confirm lab shells bounded and de-noised; a flat current-levels read added (lab-confirm Briefs A + B)
+
+**Decision:** Three changes land together (PR #43, one branch, three concern-split commits),
+settling lab-confirm Briefs A and B:
+
+- **(A-write) Re-confirm shells are capped at one per identified document.** `confirm_lab_report`
+  no longer mints a fresh `all_markers_declined` shell on every re-submission of a document whose
+  markers are all already stored at that `collected_date`. On the all-collision path (`written==0`
+  and `resolved`), when the source is identifiable by filename, it returns the existing shell for
+  `(user, collected_date, source_doc_filename)` instead of creating a second. **NULL-filename
+  guard:** a file-less re-confirm is unidentifiable and is NOT deduped — folding two would collapse
+  genuinely-distinct un-named uploads. `no_values_extracted` (empty extraction) is a fault, never
+  deduped. This **SCOPES #155 retain-raw** — the document event is still recorded once; only its
+  unbounded repetition is removed, and #155/#157's decline-history record is preserved.
+- **(A-read) The MCP `get_lab_results` read-back suppresses hollow `all_markers_declined` shells**
+  in the formatter's filtering block — before header emission and before `limit`. Presentation
+  only: the shared REST projection (`StoredReportOut`) and its upload-history feed are untouched,
+  nothing is deleted. `no_values_extracted` faults still render their one-line fault.
+- **(B) `get_lab_results` gains `latest_only`** — one row per marker (most recent draw), flat,
+  reusing `labs_reads.latest_lab_results` so "latest" is defined in one place. The latest path
+  re-projects `LabRow`→`StoredResultOut`, a **second #47 withhold enforcement point** (drops
+  `computed_flag`/`is_derived`); the withhold test now covers both paths.
+
+**Rationale:** A production diagnostic (user 1, Railway, read-only) found 10 `all_markers_declined`
+shells, **all re-confirm duplicates** (0 genuine declines, 0 `no_values_extracted`), two of them a
+second shell for the same `PSA.pdf` — the shells accumulate without bound and are pure noise. Chat's
+Brief A proposed suppressing on read; the diagnostic plus a read of the confirm handler confirmed the
+mechanism, and the operator elected to also bound them at write time via the least-destructive option
+(one-shell-per-document dedupe, NULL-filename guarded), **rejecting** the more aggressive "skip
+creating entirely" after its blast radius (four ratified tests, the frontend upload-history split,
+#155/#157) was surfaced. Brief B answers "what are my current levels" in one flat glance, which the
+report-grouped read cannot.
+
+**Status:** Landed on `feat/labs-shell-dedupe-and-mcp-reads` via PR #43 (merge `e208663`), branch
+merged + remote-deleted. Commits `3f63fbb` (write dedupe), `2a40e84` (read suppression), `d733b65`
+(latest_only). Backend sweep **168 passed**, 0 failures. **These are two of the four product items
+#186's moratorium waits on (lab-confirm Brief A, lab-confirm Brief B) — two of the three needed to
+lift it.** Backend deploy probe OWED (see `closeout.md`).
+
+**How you know:** Diagnostic run twice against Railway prod (`railway run --service health-app-DB`,
+read-only SELECT); the second re-keyed on marker-at-date after the first's filename-keyed twin join
+produced a false "NO TWIN" on the two PSA shells — report 1 holds the populated `psa` 0.7 ug/L row
+under `src=NULL`, so a filename join missed it. Every shell's panel then confirmed to have a populated
+same-date twin. Behaviour changes only on the 2nd+ filenamed re-confirm; all pre-existing
+duplicate/zero-row tests unchanged (13 in `test_labs_zero_row_reason.py`, 10 in
+`test_labs_confirm_duplicates.py`). New tests: dedupe + NULL-filename non-dedupe (write);
+reason-keyed suppression + before-limit ordering (read); newest-per-marker + latest-path withhold (B).
+Placeholder guard green on PR #43 (6s).
+
+**Do not revisit unless:** a genuine `all_markers_declined` shell with **no** populated twin appears —
+the read-suppression predicate would then hide a real fault and must tighten beyond
+`reason == 'all_markers_declined'`; or the two #47 withhold enforcement points (report projection +
+latest re-projection) drift — a field added to one and not the other is the failure the shared
+withhold test guards.
