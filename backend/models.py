@@ -221,15 +221,25 @@ class HealthConnectRecordSource(Base):
     granularity to survive aggregation. This is the backend enabler for
     source-priority dedup (F1, #35/#36); it does not itself filter.
 
-    source_package stays column-nullable (the inbound request field is optional —
-    current HCA builds send no dataOrigin), but _capture_record_sources coalesces
-    a missing identity to the literal 'unknown' before insert, so a value always
-    flows. It is part of the unique key: two apps writing the same
+    source_package stays column-nullable, but not for the reason this docstring
+    used to give. It read "current HCA builds send no dataOrigin", which was true
+    when written (#36, 2026-06-29) and is now STALE: Health Connect began sending
+    dataOrigin at 2026-07-05 05:51:53Z — a clean cutover eight minutes after the
+    last identity-less write (05:43:14Z), nothing unattributed since — and the
+    live health_connect_record_sources rows carry real packages. Identity DOES
+    arrive (mirrors the correction at routers/health_connect.py; #188).
+
+    It stays nullable because identity is not GUARANTEED, which is a different
+    claim: 3,533 heart_rate records predate the cutover, carry no identity, and
+    never will, so _capture_record_sources still coalesces a missing identity to
+    the literal 'unknown' before insert — the sentinel stays load-bearing and a
+    value always flows. It is part of the unique key: two apps writing the same
     (type, timestamp) persist as two rows rather than one overwriting the other —
     the multi-writer signal F1 needs (supersedes #37's "natural key collapses
     them" caveat). The 'unknown' sentinel also keeps re-syncs idempotent: a real
     NULL is UNIQUE-distinct on both SQLite and Postgres, so identity-less records
-    would otherwise duplicate every sync.
+    would otherwise duplicate every sync. That same key property is why the
+    cutover forked 10,406 heart_rate rows into 'unknown'/identified twins (#188).
     """
     __tablename__ = "health_connect_record_sources"
     __table_args__ = (
