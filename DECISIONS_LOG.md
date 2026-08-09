@@ -7571,3 +7571,61 @@ the read-suppression predicate would then hide a real fault and must tighten bey
 `reason == 'all_markers_declined'`; or the two #47 withhold enforcement points (report projection +
 latest re-projection) drift — a field added to one and not the other is the failure the shared
 withhold test guards.
+
+### 188. Identity in a uniqueness key means a change of identity forks the record
+
+**Decision:** Record the measured Health-Connect identity cutover and correct the three sites that
+still reasoned from the world before it (`models.py` docstring, migration `c9b8a7d6e5f4` docstring —
+both this session — and, already corrected 2026-08-05, `routers/health_connect.py`). No deletion, no
+migration, no production query is performed by this entry: it is the record, and remediation of the
+existing duplicate rows is deliberately deferred to a separate dry-run-gated change. `active`.
+
+**Rationale:** `uq_hc_record_source` is `(user_id, record_type, record_start, source_package)`. `#37`
+put `source_package` in the key deliberately, so two apps writing the same `(type, timestamp)` persist
+as two rows rather than one overwriting the other — the multi-writer signal `F1` needs — and coalesced
+missing identity to the literal `'unknown'` so that a real `NULL`, being `UNIQUE`-distinct from itself,
+could not duplicate on every re-sync. Both hold: `nulls = 0` across 42,893 rows, and re-syncs are
+idempotent.
+
+What neither anticipated is a change in *what identity is reported*. Health Connect began sending
+`dataOrigin` at 05:51:53Z on 2026-07-05, eight minutes after the last identity-less write at
+05:43:14Z — a clean cutover, nothing unattributed since. The re-sync that carried it re-ingested
+records already stored, now bearing real identity, and the key admitted them as new rows. 10,406
+heart_rate keys hold both an `'unknown'` row and an identified twin; the identified side is Polar 7,319
+/ Samsung 3,094 / healthsync 468, so the pre-cutover block is mostly workout HR arriving unattributed,
+not a Samsung artefact. `healthsync`'s 469 rows all land at a single instant during that sync and are
+third copies — a one-shot bridge import, not a source. Withings appears ten days later, totals 33 rows,
+and is absent from the contamination entirely.
+
+The distortion is confined to heart_rate and is now bounded: 650 groups are genuine multi-writer once
+unknowns are excluded — 6% of the 10,406 a naive `COUNT(DISTINCT source_package) > 1` returns — and
+3,533 heart_rate unknowns have no identified twin and are permanently unattributable, which is why the
+`'unknown'` sentinel stays. `#35` is untouched: its 286 sleep dup-groups were established on distinct
+`dedupe_hash` per app, which a single writer's re-sync cannot produce, and only 11 of them are
+contaminated. `Q83`'s two-writer sleep premise is falsified by the same figures (premise corrected,
+question stays OPEN); the F1 backend-filter gate on `ROADMAP` is discharged.
+
+The rule: an identity column inside a uniqueness key makes every change in identity reporting a fork,
+silently and retroactively. The `'unknown'` sentinel guarantees idempotency across re-syncs; it does
+not survive an identity change, because the two rows differ in the key by design. This recurs the next
+time any writer starts or stops sending `dataOrigin`. Same family as `#184`/`#185`: a claim true when
+written, load-bearing on structure, and false without any surface reporting the change.
+
+**Status:** Landed on `gov/hc-identity-cutover` — four concern-split commits (`models.py` + migration
+docstrings; `Q83` premise; `ROADMAP` F1 gate; this entry). Remediation of the existing ~10,881
+duplicate rows is **not** in this change — it is production health data and needs a dry-run whose
+counts match the figures below before any deletion.
+
+**How you know:** Figures from `railway connect health-app-DB`, operator-run 2026-08-08 (attested
+input, not re-derived here; this session opened no production connection). Two arithmetic
+reconciliations verified against the attested distribution before use: contaminated-group rows
+`21,287 = 10,406 + 7,319 + 3,094 + 468`, and unknowns `13,978 = 10,406 + 3,533 + 5 + 4 + 3 + 27` —
+both reconcile. The stale `'no dataOrigin'` clause was corrected at `models.py` and migration
+`c9b8a7d6e5f4` this session; the backend-wide grep that found the migration site is #185's
+repo-wide-enforcement lesson applied (the 2026-08-05 fix had been file-scoped to
+`routers/health_connect.py`). Guard green on the PR.
+
+**Do not revisit unless:** a second writer starts or stops sending `dataOrigin` — the same fork
+recurs, and the residue/twin counts above go stale; or the deferred remediation runs, at which point
+its dry-run counts must match this entry's figures before any deletion, and a superseding entry
+records the collapse.
