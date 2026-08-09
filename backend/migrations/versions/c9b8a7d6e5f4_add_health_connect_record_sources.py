@@ -8,9 +8,12 @@ Adds health_connect_record_sources — per-record writer identity captured from
 /health-connect/sync BEFORE _aggregate_day collapses the night.
 
 Backend enabler for source-priority dedup (DECISIONS_LOG #35 F1 / #36 / #37).
-source_package stays column-nullable (the inbound request field is optional —
-current HCA builds send no dataOrigin), but _capture_record_sources coalesces a
-missing identity to the literal 'unknown' before insert, so a value always flows.
+source_package stays column-nullable, but not because HCA sends no dataOrigin:
+that was true when written (#36, 2026-06-29) and went STALE at the 2026-07-05
+05:51:53Z cutover, when Health Connect began sending it. It stays nullable
+because identity is not GUARANTEED — 3,533 pre-cutover heart_rate records carry
+none and never will — and _capture_record_sources coalesces a missing identity
+to the literal 'unknown' before insert, so a value always flows (#188).
 The aggregated health_connect_syncs table is unchanged.
 
 uq_hc_record_source spans (user_id, record_type, record_start, source_package):
