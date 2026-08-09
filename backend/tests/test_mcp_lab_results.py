@@ -12,7 +12,8 @@ guard can force a `computed_flag`/`confidence` onto storage and prove they never
 from datetime import date
 
 import models
-from mcp_server import _format_lab_results, _marker_matches
+from mcp_server import _format_lab_results, _marker_matches, _format_latest_levels
+from reads.labs_reads import latest_lab_results
 from routers.labs import get_lab_results as read_lab_results
 
 
@@ -48,6 +49,11 @@ def _result(db, rid, raw, canon=None, value_num=None, value_operator=None,
 def _render(db, u, **kw):
     """Seed → real read → pure format, the path the tool takes minus auth/session glue."""
     return _format_lab_results(read_lab_results(current_user=u, db=db), **kw)
+
+
+def _render_latest(db, u, **kw):
+    """latest_only path: seed → latest_lab_results → flat format, minus auth/session glue."""
+    return _format_latest_levels(latest_lab_results(u.id, db), **kw)
 
 
 # --------------------------------------------------------------------------- #
@@ -235,3 +241,45 @@ def test_computed_flag_and_confidence_never_surface(db_session):
     # The leaked VALUES never surface: no computed [H] flag, no 0.4 confidence number.
     assert "[H]" not in out
     assert "0.4" not in out
+
+
+# --------------------------------------------------------------------------- #
+# latest_only — one row per marker, its most recent draw, flat                 #
+# --------------------------------------------------------------------------- #
+
+def test_latest_only_returns_newest_per_marker_flat(db_session):
+    """Two draws of one marker collapse to the newest value only, rendered flat under the
+    CURRENT LEVELS header with the collection date. 'latest' is reused from
+    labs_reads.latest_lab_results, not re-derived here."""
+    u = _user(db_session, "latest@example.com")
+    old = _report(db_session, u.id, date(2026, 1, 1), panel="Chem")
+    _result(db_session, old.id, "Glucose", "glucose", value_num=5.0, unit="mmol/L")
+    new = _report(db_session, u.id, date(2026, 6, 1), panel="Chem")
+    _result(db_session, new.id, "Glucose", "glucose", value_num=6.2, unit="mmol/L")
+
+    out = _render_latest(db_session, u)
+
+    assert "=== CURRENT LEVELS (latest per marker) ===" in out
+    assert "Glucose: 6.2 mmol/L (collected 2026-06-01)" in out
+    assert "5.0" not in out, "the older draw must not appear in a latest-per-marker view"
+
+
+def test_latest_only_withholds_computed_flag_and_is_derived(db_session):
+    """The SECOND #47 enforcement point. latest_lab_results returns LabRow, which carries
+    computed_flag/is_derived — fields StoredReportOut withholds for the report path but which
+    are NOT inherited here. The re-projection to StoredResultOut must drop them; this asserts
+    it, so a future field added to one withhold path is caught if it rides the other."""
+    u = _user(db_session, "latestwithhold@example.com")
+    rep = _report(db_session, u.id, date(2026, 6, 1), panel="Chem")
+    _result(db_session, rep.id, "Glucose", "glucose", value_num=5.0, unit="mmol/L",
+            computed_flag="H", confidence=0.40)
+    row = db_session.query(models.LabResult).filter_by(lab_report_id=rep.id).one()
+    row.is_derived = True
+    db_session.commit()
+
+    out = _render_latest(db_session, u)
+
+    assert "Glucose: 5.0 mmol/L (collected 2026-06-01)" in out
+    assert "[H]" not in out            # computed_flag never renders as a flag
+    assert "computed_flag" not in out
+    assert "is_derived" not in out
