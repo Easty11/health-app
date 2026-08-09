@@ -2650,6 +2650,20 @@ for — the register still owes each cross-repo-governed path its governing mech
 criterion. The two undeclared-parity artefacts named above (`check_governance_placeholders.py`,
 `.claude/commands/closeout.md`) reappeared in the sweep unchanged, still under no named rule.
 
+**Classifier defect — Brief J mis-classified a migration by its class, not its state (2026-08-09).**
+The same sweep (Brief J) classified `backend/migrations/versions/*.py` as **④ LEAVE**, reason
+*"immutable migrations, never edited post-land"*. Brief K then edited `c9b8a7d6e5f4` **correctly** — its
+own docstring (lines 26–27) declares *"This migration is unreleased (master has not run it); edited in
+place rather than stacked per the no-new-migration directive."* J applied the **rule's wording without
+reading the file's state**: the class label holds in general and was wrong for this member, so the stale
+`no dataOrigin` clause inside that migration sat under a LEAVE verdict and would have survived had Brief
+K not grepped the backend independently. This is the **same defect as `#184`, one generation on** — J's
+sweep was the *fix* for `#184`'s file-scoped grep, yet it under-reported not by missing a file (its
+scope was whole-repo) but by **mis-classifying** one it saw. An enumeration is only as good as its
+classifier — which is this question's strongest argument yet: a parity register that assigns a mechanism
+per path is worth little if the assignment is read off a file's presumed class rather than its declared
+state.
+
 **State:** OPEN — no blocker, nothing owed. The fork: build an explicit artefact-parity register
 (each cross-repo file, its governing mechanism, its equivalence criterion) or keep parity ad hoc per
 artefact. Not settled here — Brief D scope is to state the question, not build the register. Owner:
