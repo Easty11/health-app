@@ -233,14 +233,9 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Read-time cross-source aerobic arbitration; HC exerciseType enum — ingestion held (#189)** - `aerobic_sessions` gains a derived `canonical` flag (`reads/aerobic_reads.py`) marking one row per bout when Polar and Health Connect describe the same session; Polar outranks HC, overlap >= 0.50 of the shorter duration, read-time so order-independent. `ExerciseSessionType` (61 codes) published with x-enum-varnames; unmapped -> sport_name NULL. HC exercise ingestion (steps 2-3) HELD — HCA forwards no exercise identifier, synthetic-key fallback deliberately not invoked. Wired into `GET /integrations/polar/aerobic-sessions`; ACWR untouched. See DECISIONS_LOG #189.
 - **Identity in a uniqueness key forks the record — HC 2026-07-05 cutover measured (#188)** - the re-sync that began carrying `dataOrigin` at 05:51:53Z forked 10,406 heart_rate keys into `'unknown'`/identified twins; true F1 load is 650 genuine conflict groups, 3,533 permanently unattributable (sentinel stays). Corrects the stale `no dataOrigin` docstring at `models.py` + migration `c9b8a7d6e5f4` (routers/health_connect.py already fixed 2026-08-05), falsifies `Q83`'s two-writer sleep premise, discharges the `ROADMAP` F1 gate. Remediation of ~10,881 rows deferred to a dry-run-gated change. See DECISIONS_LOG #188.
 - **Re-confirm lab shells bounded and de-noised; flat current-levels read added — Briefs A + B (#187)** - `confirm_lab_report` caps `all_markers_declined` shells at one per identified document (NULL-filename guarded, scopes #155); MCP `get_lab_results` suppresses hollow shells on read and gains a `latest_only` current-levels mode (second #47 withhold point). Two of #186's four moratorium product items. See DECISIONS_LOG #187.
-- **Governance contract pruned — auditing → shipping (#186)** - shared block compressed to
-  invariants-only; `FEEDBACK.md` cut to Project + Design principles + a condensed §7 index
-  (1328→~70 lines), with §§1–3, §5 and §§7–28 provenance moved to `FEEDBACK_ARCHIVE.md` (not
-  read at session start; §6 CPAP context removed, folds into project-knowledge
-  `Clinical_Protocol`); two new standing rules (severity gate, governance batching) and a
-  moratorium on new governance until three product items land. See DECISIONS_LOG #186.
 ---
 
 _Bootstrap note: this file is committed to the repo by Code (or by you via git) as the
