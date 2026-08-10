@@ -38,6 +38,7 @@ from connectors.polar import (
 )
 from database import get_db
 from encryption import decrypt, encrypt
+from reads.aerobic_reads import arbitrated_sessions
 
 router = APIRouter(prefix="/integrations/polar", tags=["polar"])
 
@@ -249,6 +250,9 @@ class AerobicSessionOut(BaseModel):
     z4_seconds: Optional[int] = None
     z5_seconds: Optional[int] = None
     created_at: datetime
+    # Derived at read time (reads.aerobic_reads), never a stored column: false
+    # when a higher-fidelity session from another source describes the same bout.
+    canonical: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -260,12 +264,11 @@ def get_aerobic_sessions(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """All aerobic sessions — ZIP export history + v4 live sync, one table."""
-    q = (
-        db.query(models.AerobicSession)
-        .filter(models.AerobicSession.user_id == current_user.id)
-        .order_by(models.AerobicSession.session_date.desc())
-    )
-    if since:
-        q = q.filter(models.AerobicSession.session_date >= since)
-    return q.limit(limit).all()
+    """All aerobic sessions — ZIP export history + v4 live sync, one table.
+
+    Each row carries a derived `canonical` flag from read-time cross-source
+    arbitration (Polar outranks Health Connect for the same bout). The flag is
+    computed over the full window before `limit` so a bout's counterpart is
+    never truncated out of the comparison.
+    """
+    return arbitrated_sessions(current_user.id, db, since=since, limit=limit)

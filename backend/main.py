@@ -88,9 +88,27 @@ app.mount("/", _mcp_app)
 # Inject x-enum-varnames into SleepStageType so orval/openapi-generator emits
 # named enum members instead of bare integers. Must run after all routers are
 # included so app.openapi() sees the complete route list.
-from routers.health_connect import SleepStageType as _SleepStageType
+from routers.health_connect import (
+    SleepStageType as _SleepStageType,
+    ExerciseSessionType as _ExerciseSessionType,
+)
 _schema = app.openapi()
 _st = _schema.get("components", {}).get("schemas", {}).get("SleepStageType")
 if _st is not None:
     _st["x-enum-varnames"] = [m.name for m in _SleepStageType]
+
+# ExerciseSessionType is a mapping helper, not a wire field type (the inbound
+# exerciseType stays a lenient int), so FastAPI does not auto-emit its schema.
+# Publish the full component explicitly — with values AND x-enum-varnames — so
+# the companion app can generate a named-constant contract file from the spec.
+_schema.setdefault("components", {}).setdefault("schemas", {})["ExerciseSessionType"] = {
+    "type": "integer",
+    "enum": [m.value for m in _ExerciseSessionType],
+    "x-enum-varnames": [m.name for m in _ExerciseSessionType],
+    "description": (
+        "Health Connect ExerciseSessionRecord.ExerciseType. Mirrored from the "
+        "androidx source; unassigned upstream codes are omitted. An exerciseType "
+        "not listed here persists with sport_name NULL (never guessed)."
+    ),
+}
 app.openapi_schema = _schema
