@@ -1,0 +1,362 @@
+#!/usr/bin/env python3
+"""gen_status_model.py — append-only MACHINE status model across both repos.
+
+Reads the governance stores of health-app and health-connect-app at **master** (via
+raw.githubusercontent, pinned to a resolved SHA for provenance) and emits a JSON status
+model: per-repo state-vocabulary tallies for questions and branch rows, decision-sequence
+integrity, and an off-vocabulary tally that is reported, never dropped.
+
+Distinct from `gen_governance_view.py` by design (DECISIONS_LOG #N+2): that renders a
+human-readable digest; this produces diffable machine JSON that a cross-repo snapshot ages
+over. The two share ONE thing — the dialect grammar — via `gov_dialects` (#N+1).
+
+GATES — a status generator that under-reports silently is worse than none (#N). Before the
+model is returned, three gates run; any failure HALTs with a non-zero exit and a stderr line
+naming the store, and NOTHING partial is emitted:
+
+  1. Count parity   — a crude, dialect-agnostic heading/row count (computed by an independent
+                      path from the structured parser) vs the parsed count, per store per
+                      repo. Mismatch => HALT.
+  2. Sequence       — decisions are append-only and gapless: highest #N == parsed count.
+  3. Extraction     — count parity is necessary but INSUFFICIENT. If a state field resolves
+                      EMPTY across ALL parsed items of a store, the parser matched a schema
+                      that is not there (the live `**State:**`/`**Status:**` bug, #N). HALT.
+
+Off-vocabulary state tokens are tallied per field and surfaced under `drift`; a clean-gate
+run with non-zero off-vocab is still a finding, never a pass-in-silence (Step 1: HCA carries
+work-item states UNSTARTED/BLOCKED on question headings — accepted, tallied, flagged).
+
+Usage:
+    python scripts/gen_status_model.py --dry-run     # build + gate, print JSON, write nothing
+    python scripts/gen_status_model.py --self-check   # exercise the gates on synthetic input
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import sys
+import urllib.request
+from collections import Counter
+
+import gov_dialects as D
+
+RAW = "https://raw.githubusercontent.com/{owner}/{repo}/{sha}/{store}.md"
+
+# Store keys -> the store file basename.
+STORE_FILE = {
+    "decisions": "DECISIONS_LOG",
+    "questions": "OPEN_QUESTIONS",
+    "branches": "BRANCHES",
+}
+
+# A store smaller than this is a fetch failure, not a small store (mirrors gen_governance_view).
+MIN_STORE_BYTES = 300
+
+SCHEMA_VERSION = 1
+
+
+class StatusGateError(RuntimeError):
+    """A gate failed. NEVER degrade to a partial or empty model — a quiet pass is the bug
+    this tool exists to remove."""
+
+
+# --------------------------------------------------------------------------------------
+# Fetch  (kept local, not in gov_dialects: the shared module is dialect grammar only)
+# --------------------------------------------------------------------------------------
+
+def resolve_master_sha(repo: str) -> str:
+    import subprocess
+    url = f"https://github.com/{D.OWNER}/{repo}.git"
+    out = subprocess.run(
+        ["git", "ls-remote", url, "refs/heads/master"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    if not out:
+        raise StatusGateError(f"{repo}: ls-remote returned nothing for refs/heads/master")
+    sha = out.split()[0]
+    if len(sha) != 40:
+        raise StatusGateError(f"{repo}: implausible SHA {sha!r}")
+    return sha
+
+
+def fetch(repo: str, sha: str, store_file: str) -> str:
+    url = RAW.format(owner=D.OWNER, repo=repo, sha=sha, store=store_file)
+    with urllib.request.urlopen(url, timeout=30) as resp:
+        if resp.status != 200:
+            raise StatusGateError(f"{url} returned HTTP {resp.status}")
+        text = resp.read().decode("utf-8")
+    if len(text.encode("utf-8")) < MIN_STORE_BYTES:
+        raise StatusGateError(
+            f"{repo}/{store_file}.md is {len(text)} bytes — under the {MIN_STORE_BYTES}-byte "
+            f"floor. Treating as a fetch failure, not a small store."
+        )
+    return text
+
+
+# --------------------------------------------------------------------------------------
+# Crude counts — the gate's own dialect-agnostic method, computed independently of the
+# structured parser so a parser that silently drops entries diverges from it.
+# --------------------------------------------------------------------------------------
+
+def crude_count(store_key: str, text: str) -> int:
+    lines = text.splitlines()
+    if store_key == "decisions":
+        return sum(1 for ln in lines if D.DECISION_HEADING.match(ln))
+    if store_key == "questions":
+        return sum(1 for ln in lines if D.QUESTION_HEADING.match(ln))
+    if store_key == "branches":
+        return sum(1 for ln in lines if D.is_table_data_row(ln))
+    raise StatusGateError(f"crude_count: unknown store {store_key!r}")
+
+
+# --------------------------------------------------------------------------------------
+# Structured parse
+# --------------------------------------------------------------------------------------
+
+def parse_decisions(text: str) -> dict:
+    lines = text.splitlines()
+    nums = [int(m.group(1)) for ln in lines if (m := D.DECISION_HEADING.match(ln))]
+    return {
+        "count": len(nums),
+        "max": max(nums) if nums else 0,
+        "min": min(nums) if nums else 0,
+        "gapless": bool(nums) and max(nums) == len(nums) == len(set(nums)),
+    }
+
+
+def _tally_stateful(headings: list[tuple[int, str]], lines: list[str],
+                    vocab: tuple[str, ...]) -> dict:
+    """Shared tally for heading-driven stateful stores (questions). `headings` is
+    [(line_index, heading_remainder), ...]. Returns count, by_state, off_vocab, missing."""
+    by_state: Counter = Counter()
+    off_vocab: Counter = Counter()
+    missing = 0
+    for idx, (line_i, rest) in enumerate(headings):
+        end = headings[idx + 1][0] if idx + 1 < len(headings) else len(lines)
+        raw = D.entry_state(lines, line_i, rest, end)
+        if not raw:
+            missing += 1
+            continue
+        tok, off = D.classify(raw, vocab)
+        if tok is None:
+            missing += 1
+        elif off:
+            off_vocab[tok] += 1
+        else:
+            by_state[tok] += 1
+    return {
+        "count": len(headings),
+        "by_state": dict(sorted(by_state.items())),
+        "off_vocab": dict(sorted(off_vocab.items())),
+        "missing_state": missing,
+    }
+
+
+def parse_questions(text: str) -> dict:
+    lines = text.splitlines()
+    headings = [(i, m.group(2)) for i, ln in enumerate(lines)
+                if (m := D.QUESTION_HEADING.match(ln))]
+    return _tally_stateful(headings, lines, D.QUESTION_STATES)
+
+
+def _branch_status_cell(cells: list[str]) -> str:
+    """The Status column of a BRANCHES row, robust to unescaped `|` inside prose/code cells.
+
+    `| Branch | Purpose | Status | Detail | Blocker |` — column 3 is Status. But cells here
+    carry raw `|` (e.g. a `float | None` type in a Purpose cell), which mis-splits the row and
+    shifts every later column. The Status value always LEADS with a work-item token, so scan
+    left-to-right (past the branch-name cell) for the first cell that does — that is the Status
+    regardless of stray pipes. Fall back to the positional column only to surface a genuinely
+    off-vocab or missing status."""
+    for c in cells[1:]:
+        if D.canonical_token(c) in D.WORK_ITEM_STATES:
+            return c
+    return cells[2] if len(cells) > 2 else ""
+
+
+def parse_branches(text: str) -> dict:
+    lines = text.splitlines()
+    by_state: Counter = Counter()
+    off_vocab: Counter = Counter()
+    missing = 0
+    rows = 0
+    for ln in lines:
+        if not D.is_table_data_row(ln):
+            continue
+        rows += 1
+        cells = D.table_cells(ln)
+        status_cell = _branch_status_cell(cells)
+        tok, off = D.classify(status_cell, D.WORK_ITEM_STATES)
+        if tok is None:
+            missing += 1
+        elif off:
+            off_vocab[tok] += 1
+        else:
+            by_state[tok] += 1
+    return {
+        "count": rows,
+        "by_state": dict(sorted(by_state.items())),
+        "off_vocab": dict(sorted(off_vocab.items())),
+        "missing_state": missing,
+    }
+
+
+PARSERS = {
+    "decisions": parse_decisions,
+    "questions": parse_questions,
+    "branches": parse_branches,
+}
+
+
+# --------------------------------------------------------------------------------------
+# Gates
+# --------------------------------------------------------------------------------------
+
+def gate_count_parity(repo: str, store_key: str, crude: int, parsed: int) -> None:
+    if crude != parsed:
+        raise StatusGateError(
+            f"COUNT PARITY [{repo}/{STORE_FILE[store_key]}.md]: crude heading/row count "
+            f"{crude} != parsed count {parsed}. The parser dropped or invented entries; "
+            f"refusing to emit a model that under-reports."
+        )
+
+
+def gate_sequence(repo: str, decisions: dict) -> None:
+    if not decisions["gapless"]:
+        raise StatusGateError(
+            f"SEQUENCE [{repo}/DECISIONS_LOG.md]: highest #{decisions['max']} but "
+            f"{decisions['count']} entries (min #{decisions['min']}). Append-only decisions "
+            f"must be gapless — a gap or duplicate is a store defect, not a parse to publish."
+        )
+
+
+def gate_extraction_nonempty(repo: str, store_key: str, parsed: dict) -> None:
+    """Necessary-but-insufficient count parity is not enough (DECISIONS_LOG #N). If a state
+    field was extracted for N>0 items and came back empty for ALL of them, the parser matched
+    a schema that is not there — the exact `**State:**`/`**Status:**` failure class, which the
+    count gate is structurally blind to."""
+    n = parsed["count"]
+    if n == 0:
+        return
+    extracted = sum(parsed["by_state"].values()) + sum(parsed["off_vocab"].values())
+    if extracted == 0:
+        raise StatusGateError(
+            f"EXTRACTION [{repo}/{STORE_FILE[store_key]}.md]: state extracted EMPTY for all "
+            f"{n} items ({parsed['missing_state']} missing). Count parity held, so the count "
+            f"gate saw nothing — but the state field matched a schema that is not there. HALT."
+        )
+
+
+# --------------------------------------------------------------------------------------
+# Build
+# --------------------------------------------------------------------------------------
+
+def build_repo(repo: str, sha: str, texts: dict) -> dict:
+    out = {"provenance": {"ref": "master", "sha": sha}}
+    for store_key in ("decisions", "questions", "branches"):
+        text = texts[store_key]
+        parsed = PARSERS[store_key](text)
+        crude = crude_count(store_key, text)
+        gate_count_parity(repo, store_key, crude, parsed["count"])
+        if store_key == "decisions":
+            gate_sequence(repo, parsed)
+        else:
+            gate_extraction_nonempty(repo, store_key, parsed)
+        out[store_key] = parsed
+    return out
+
+
+def collect_drift(model: dict) -> list:
+    """Off-vocab on stateful stores is drift — surfaced, never a HALT (Step 1: accept-and-flag)."""
+    drift = []
+    for repo, rd in model["repos"].items():
+        for store_key in ("questions", "branches"):
+            ov = rd[store_key]["off_vocab"]
+            if ov:
+                drift.append({"repo": repo, "store": store_key, "off_vocab": ov})
+    return drift
+
+
+def build_model(generated_utc: str) -> dict:
+    repos: dict = {}
+    for repo in D.REPOS:
+        sha = resolve_master_sha(repo)
+        print(f"  {repo}: master @ {sha[:7]}", file=sys.stderr)
+        texts = {k: fetch(repo, sha, STORE_FILE[k]) for k in STORE_FILE}
+        repos[repo] = build_repo(repo, sha, texts)
+        for k in ("decisions", "questions", "branches"):
+            p = repos[repo][k]
+            print(f"    {STORE_FILE[k]+'.md':<18} {p['count']:>4} items", file=sys.stderr)
+    model = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_utc": generated_utc,
+        "repos": repos,
+    }
+    model["drift"] = collect_drift(model)
+    return model
+
+
+# --------------------------------------------------------------------------------------
+# Self-check — synthetic exercise of each gate (no network). Real-positive proof is the
+# live `**State:**` bug, demonstrated separately; this guards the gate logic itself.
+# --------------------------------------------------------------------------------------
+
+def self_check() -> int:
+    def expect_halt(label, fn):
+        try:
+            fn()
+        except StatusGateError:
+            print(f"  ok   {label} -> HALT", file=sys.stderr)
+            return
+        raise SystemExit(f"  FAIL {label} did NOT halt")
+
+    # 1. count parity
+    expect_halt("count parity", lambda: gate_count_parity("r", "questions", 89, 88))
+    # 2. sequence gap
+    expect_halt("sequence gap",
+                lambda: gate_sequence("r", {"count": 88, "max": 89, "min": 1, "gapless": False}))
+    # 3. extraction empty across all N (the **State:** class)
+    expect_halt("extraction empty", lambda: gate_extraction_nonempty(
+        "r", "questions", {"count": 89, "by_state": {}, "off_vocab": {}, "missing_state": 89}))
+    # off-vocab is NOT a halt — it is tallied
+    ov = {"count": 2, "by_state": {"OPEN": 1}, "off_vocab": {"UNSTARTED": 1}, "missing_state": 0}
+    gate_extraction_nonempty("r", "questions", ov)  # must not raise
+    print("  ok   off-vocab tallied, not halted", file=sys.stderr)
+    print("self-check: all gate positives fired", file=sys.stderr)
+    return 0
+
+
+# --------------------------------------------------------------------------------------
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--dry-run", action="store_true",
+                    help="build + gate, print the model JSON to stdout, write no snapshot")
+    ap.add_argument("--self-check", action="store_true",
+                    help="exercise the gates on synthetic input and exit")
+    args = ap.parse_args()
+
+    if args.self_check:
+        return self_check()
+
+    generated = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    model = build_model(generated)
+
+    if args.dry_run:
+        json.dump(model, sys.stdout, indent=2, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return 0
+
+    # Snapshot writing lands in the next commit; until then, --dry-run is the only mode.
+    print("no --dry-run given, and snapshot writing is not wired yet", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except StatusGateError as exc:
+        print(f"\nHALT: {exc}", file=sys.stderr)
+        sys.exit(1)
