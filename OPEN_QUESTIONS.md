@@ -168,13 +168,16 @@ permanently distinct). Deferred by #44, not urgent. No blocker.
 #35 established the dependency: HC carries no per-second R-R/HR-zone; only AccessLink
 (v3 REST exercise-samples / TCX export) does. #46 specified the exact pathway but it is
 not built. PSL covers Luke's direct solo/gym capture, so the need only bites if the
-HC/companion lane carries a Polar user requiring per-second — currently none (Deb's
-wearable integration deferred, Cooper has no wearable).
+HC/companion lane carries a Polar user requiring per-second — none confirmed (Deb's
+wearable integration is no longer deferred as of 2026-08-10 — see State; Cooper has no wearable).
 
-**State:** OPEN — low priority, deliberately deferred. **Not BLOCKED**: #46 already specified the
-pathway, so nothing prevents building it; there is simply no consumer yet (Deb's wearable integration
-deferred, Cooper has no wearable). Revisit when the Metabolic-load channel is wired to Polar-in-HC data
-for a real consumer.
+**State:** OPEN — low priority. **Not BLOCKED**: #46 already specified the pathway, so nothing
+prevents building it; the trigger is a real consumer, and the one deferral that held it off has lifted.
+**2026-08-10 (Luke, confirmed):** Deb's wearable integration is **no longer deferred**. This does not by
+itself make Q10's consumer real — the pathway bites only if Deb's device delivers Polar-in-HC per-second
+data (R-R / HR-zone), which is not yet established — but it removes the reason this was parked, so Q10
+re-enters live consideration. Revisit when the Metabolic-load channel is wired to a confirmed
+Polar-in-HC consumer.
 
 ---
 
@@ -2672,3 +2675,31 @@ repo-local, not shared), this session's `#183`/`#184`, HCA `#24` (the workflow m
 
 **Not this question:** the shared block itself (G1-governed, settled) and any single artefact's
 current drift (a data point, not the governance gap).
+
+---
+
+## Q88. Empirical calibration of `OVERLAP_THRESHOLD` against real Polar/HC pairs
+
+`reads/aerobic_reads.py` (`#189`) sets `OVERLAP_THRESHOLD = 0.50` of the shorter session's duration as
+the "same physical bout" cutoff for read-time cross-source arbitration — a **proposed default, not a
+measured one**. It has never been tested against real overlapping Polar/HC captures, because none exist
+yet: HC exercise ingestion is held (`#189` Status — HCA forwards no exercise identifier). Set too low,
+the rule merges genuinely separate back-to-back bouts into one and suppresses a real session; set too
+high, it splits one bout whose two sensors clocked slightly different start/stop and double-counts it.
+One tunable constant, one place.
+
+**State:** OPEN — deferred until HC exercise ingestion lands and real Polar/HC pairs exist to measure.
+Cross-refs `#189`, `Q83` (distinct dedup class), `Q89`.
+
+---
+
+## Q89. Do HC auto-detected micro-sessions warrant a minimum-duration floor?
+
+Health Connect can auto-detect short activity bouts (sub-5-minute walks) that Polar never records. If
+ingestion (step 3, held) admits them, they arrive as `aerobic_sessions` rows with no Polar counterpart —
+`canonical` by construction (`#189`) — and could flood the training-load reads with noise the Polar-only
+world never carried. The brief's GUARD is explicit: **STOP and report counts + a duration distribution
+before filtering anything**; a floor is a chat decision, never a silent filter.
+
+**State:** OPEN — decide at HC ingestion (step 3). No floor exists yet; none is to be added without the
+count/distribution evidence first. Cross-refs `#189`, `Q88`.

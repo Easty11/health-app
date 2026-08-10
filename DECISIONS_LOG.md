@@ -7629,3 +7629,63 @@ repo-wide-enforcement lesson applied (the 2026-08-05 fix had been file-scoped to
 recurs, and the residue/twin counts above go stale; or the deferred remediation runs, at which point
 its dry-run counts must match this entry's figures before any deletion, and a superseding entry
 records the collapse.
+
+### 189. Aerobic cross-source arbitration is read-time and derived, not a persisted dedup
+
+**Decision:** Health-Connect exercise sessions and Polar sessions coexist as independent rows in
+`aerobic_sessions`; where two rows describe the same physical bout, exactly one is marked `canonical`
+at READ time by `reads/aerobic_reads.py` — computed per request, never persisted (no column, no
+migration). Polar (`polar_v4` = `polar_flow_export`) outranks `health_connect`; same bout = interval
+overlap >= `OVERLAP_THRESHOLD` (0.50) of the shorter duration; ties break longest -> earliest ->
+lowest-id. A session with no overlapping cross-source counterpart is canonical. HC ingestion is NOT
+built here (see Status). `active`.
+
+**Rationale:** Three things, one decision.
+
+(1) *Coexistence is already assumed by the schema.* `uq_aerobic_session_source` is
+`(user_id, source, source_session_id)` — `source` is IN the key, so a Polar row and an HC row for one
+bout were always going to be two rows, never one overwriting the other. Nothing new is needed to let
+them coexist; what was missing is a rule for which one to trust on read.
+
+(2) *Arbitration is read-time because arrival order is unknowable.* Polar sync and HC sync land in
+unpredictable order. Write-time suppression makes the winner depend on which arrived first, and forces
+retro-suppression when the higher-fidelity source (Polar, carrying `cardio_load` + zone seconds) lands
+second — a wrong row already served, then withdrawn. Computing `canonical` at read is order-independent
+and reversible: the same rows yield the same verdict regardless of sequence, and re-ranking after a late
+Polar sync needs no rewrite. This is the load-bearing reason; a persisted flag is a separate decision,
+deferred until a consumer needs to filter in SQL.
+
+(3) *Distinct class from the #35/#36/#37/#175 admission dedup — do not fold.* That mechanism governs
+MIRRORS: one writer re-posting another writer's record, where the copy carries no new signal, keyed in
+`health_connect_record_sources`. This governs INDEPENDENT CAPTURES: two sensors each recorded one real
+event and BOTH carry signal (Polar: load + zones; HC: duration + type), and the question is which row
+is richer, not whether one is a copy. Different substrate (`aerobic_sessions`), different key, different
+question. `Q83`/F1 admit-or-exclude a mirror; this ranks two originals.
+
+The `exerciseType` mapping ships with it: `ExerciseSessionType` mirrors HC's official enum (61 codes)
+and is published with `x-enum-varnames` for the companion contract; an unmapped code persists with
+`sport_id` retained and `sport_name` NULL — the wire field stays a lenient int, so a code we do not
+recognise never 422-rejects a sync and is never assigned a guessed sport.
+
+**Status:** Landed on `feat/aerobic-arbitration-read`. **Ingestion (brief steps 2-3) is HELD, not
+deferred-by-oversight:** an HCA-rooted read on 2026-08-10 confirmed `workoutMapper` forwards six fields
+and NO record identifier, so `source_session_id` has no key to carry and the upsert is not written. The
+synthetic-key fallback (`{startTime}|{sourcePackage}`) is deliberately NOT invoked — it is licensed for
+"identifier proven absent or unstable", a different state from "producer not yet wired"; collapsing the
+two would bury the finding. The module therefore runs today over Polar-only rows (every row canonical)
+until HC ingestion lands. Consumers: `GET /integrations/polar/aerobic-sessions` is wired through the
+module and surfaces `canonical`; the raw-SQL aggregate consumers (`get_training_load` ACWR, readiness
+`session_stats`) are not clean drop-ins and are deferred with ingestion — ACWR maths untouched.
+
+**How you know:** `pytest` 785 green (771 prior + 14 new). G2 (Polar + fixture HC overlapping -> exactly
+one canonical, the Polar one) proven at the pure, DB, and HTTP layers; G3 (lone + active-recovery HC ->
+canonical) at pure + DB; G4 (unmapped code -> NULL, no exception); G5 existing HC sleep/HRV/steps
+aggregation byte-identical (`_aggregate_day`, `valid_dates` untouched). Enum contract verified against
+`app.openapi()`: `ExerciseSessionType` present with 61 values and index-aligned `x-enum-varnames`,
+`SleepStageType` varnames unregressed. Values mirrored from androidx-main `ExerciseSessionRecord.kt`
+(61 defined in [0,83], gaps unassigned).
+
+**Do not revisit unless:** HC exercise ingestion lands (step 3) — at which point G1 (an HC row appears,
+re-sync idempotent) becomes live and this entry's "Polar-only, all canonical" note goes stale; or a
+consumer needs to filter non-canonical in SQL, the trigger to reconsider persisting the flag; or
+`OVERLAP_THRESHOLD` is recalibrated against real pairs (`Q88`).

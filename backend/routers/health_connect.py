@@ -46,6 +46,100 @@ SLEEP_STAGE_DEEP  = SleepStageType.DEEP
 SLEEP_STAGE_REM   = SleepStageType.REM
 
 
+# Health Connect ExerciseSessionRecord.ExerciseType — the complete official enum,
+# mirrored from the androidx source (androidx.health.connect.client.records
+# .ExerciseSessionRecord, androidx-main): 61 defined values in [0, 83]; the gaps
+# (1, 3, 6, 7, 12, 15, 17-24, 30, 40-43, 45, 49, 67, 77) are unassigned upstream
+# and MUST stay unassigned here. Published with x-enum-varnames in main.py (same
+# mechanism as SleepStageType) so the companion app can generate a contract file.
+#
+# This enum is a MAPPING helper, NOT a wire-validation type: the inbound
+# ExerciseRecord.exerciseType field stays a lenient int, so an integer this enum
+# does not define is accepted and persisted with sport_id retained and sport_name
+# NULL (see sport_name_for) — we never GUESS a sport for an unknown code, and a
+# future upstream addition never 422-rejects a sync.
+class ExerciseSessionType(IntEnum):
+    OTHER_WORKOUT                   = 0
+    BADMINTON                       = 2
+    BASEBALL                        = 4
+    BASKETBALL                      = 5
+    BIKING                          = 8
+    BIKING_STATIONARY               = 9
+    BOOT_CAMP                       = 10
+    BOXING                          = 11
+    CALISTHENICS                    = 13
+    CRICKET                         = 14
+    DANCING                         = 16
+    ELLIPTICAL                      = 25
+    EXERCISE_CLASS                  = 26
+    FENCING                         = 27
+    FOOTBALL_AMERICAN               = 28
+    FOOTBALL_AUSTRALIAN             = 29
+    FRISBEE_DISC                    = 31
+    GOLF                            = 32
+    GUIDED_BREATHING                = 33
+    GYMNASTICS                      = 34
+    HANDBALL                        = 35
+    HIGH_INTENSITY_INTERVAL_TRAINING = 36
+    HIKING                          = 37
+    ICE_HOCKEY                      = 38
+    ICE_SKATING                     = 39
+    MARTIAL_ARTS                    = 44
+    PADDLING                        = 46
+    PARAGLIDING                     = 47
+    PILATES                         = 48
+    RACQUETBALL                     = 50
+    ROCK_CLIMBING                   = 51
+    ROLLER_HOCKEY                   = 52
+    ROWING                          = 53
+    ROWING_MACHINE                  = 54
+    RUGBY                           = 55
+    RUNNING                         = 56
+    RUNNING_TREADMILL               = 57
+    SAILING                         = 58
+    SCUBA_DIVING                    = 59
+    SKATING                         = 60
+    SKIING                          = 61
+    SNOWBOARDING                    = 62
+    SNOWSHOEING                     = 63
+    SOCCER                          = 64
+    SOFTBALL                        = 65
+    SQUASH                          = 66
+    STAIR_CLIMBING                  = 68
+    STAIR_CLIMBING_MACHINE          = 69
+    STRENGTH_TRAINING               = 70
+    STRETCHING                      = 71
+    SURFING                         = 72
+    SWIMMING_OPEN_WATER             = 73
+    SWIMMING_POOL                   = 74
+    TABLE_TENNIS                    = 75
+    TENNIS                          = 76
+    VOLLEYBALL                      = 78
+    WALKING                         = 79
+    WATER_POLO                      = 80
+    WEIGHTLIFTING                   = 81
+    WHEELCHAIR                      = 82
+    YOGA                            = 83
+
+
+def sport_name_for(exercise_type: Optional[int]) -> Optional[str]:
+    """Human-readable sport name for a Health Connect exerciseType code.
+
+    Returns Title Case (e.g. 56 -> "Running", 57 -> "Running Treadmill") for a
+    code ExerciseSessionType defines; returns None for None or any unmapped int.
+    A NULL sport_name is the DECIDED value for "code we do not recognise" — the
+    row still persists with sport_id set to the raw code. Never raises, never
+    guesses a sport for an unknown code (brief GUARD; cf. SleepStageType #20).
+    """
+    if exercise_type is None:
+        return None
+    try:
+        member = ExerciseSessionType(exercise_type)
+    except ValueError:
+        return None
+    return member.name.replace("_", " ").title()
+
+
 # ---------- flexible incoming schemas ----------
 
 class DataOrigin(BaseModel):
