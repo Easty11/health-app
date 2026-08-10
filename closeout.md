@@ -1,75 +1,81 @@
-# Session close-out — 2026-08-10 (Brief: HC exercise → aerobic_sessions + read-time arbitration)
+# Session close-out — 2026-08-10 (Brief: status reporting — parser gate + snapshot baseline, Steps 1–2)
 
 ## 1 · Real commits this session
 
-Session-open ref: `10dc953` (master tip at open). Landed to master via **PR #48**
-(`feat/aerobic-arbitration-read`, merged + branch deleted both sides).
+Session-open ref: `fbc86e9` (master tip at open, Merge PR #49). Landed to master via **PR #50**
+(`status-parser-gate`, merged `--merge --delete-branch`; placeholder guard green 7s; number-at-merge
+re-read held master at #189 / Q89 through the merge instant):
 
-```
-90c7916 Merge pull request #48 from Easty11/feat/aerobic-arbitration-read
-6c491d1 gov: DECISIONS_LOG #189 (read-time aerobic arbitration) + OPEN_QUESTIONS Q88/Q89, Q10 un-defer
-ddfdf5c feat(aerobic): read-time cross-source arbitration + HC exerciseType enum
-```
+- `03e3e68` fix(gov): repair **State:** extraction; single dialect module; extraction gate
+- `0c3b683` feat(status): gated cross-repo status-model parser
+- `06ab88b` feat(status): snapshot writer — baseline flag + per-repo provenance
+- `d52eca5` gov: mint #190-#193, Q90-Q91; resolve number-at-merge placeholders
+- `5aa022e` Merge pull request #50 from Easty11/status-parser-gate
 
-Two concern-split commits (feature, then governance) under one PR. Placeholder guard
-green on the PR; full suite 785 green pre-merge.
+This close-out (`chore/session-closeout-0810`) adds its own commit below.
 
 ## 2 · Pending-queue reconciliation
 
-**No `;cc` pending-commit queue was carried into this session** — it opened from a written
-brief, not a chat close-out. Nothing to reconcile against a queue.
-
-Everything decided this session landed in the commits above (nothing provisional):
-- Feature (steps 4/5/7): `ddfdf5c`.
-- Governance (`#189`, `Q88`, `Q89`, `Q10` un-defer): `6c491d1`.
-
-Working tree carries only pre-existing untracked `dryrun.txt` (not this session's, left
-untouched). Branch gate: `feat/aerobic-arbitration-read` merged+deleted; pre-existing
-`feat/cbti-eval-trigger` (+2) is untouched this session, already rowed OWED in `BRANCHES.md`
-and pushed — no action, not orphaned.
+No `;cc` pending-commit queue was carried into this session — it opened from a standalone chat brief,
+not a chat close-out handoff. Nothing is provisional: every decision reached this session landed on
+master in PR #50 (#190–#193, Q90–Q91). The cross-repo baseline snapshot is DERIVED data that lives
+outside both repos by design (#192) — `Projects/_status/`, unbacked / single-machine, accepted loss
+stated in its README; it is not a repo artifact and does not appear in git.
 
 ## 3 · Cold-resume handoff
 
-### What landed
-`aerobic_sessions` gained **read-time cross-source arbitration** (`backend/reads/aerobic_reads.py`):
-a derived `canonical` flag, computed per read and never persisted (no column, no migration).
-Polar (`polar_v4` = `polar_flow_export`) outranks `health_connect` for the same physical bout;
-same bout = interval overlap ≥ `OVERLAP_THRESHOLD` (0.50) of the shorter duration; ties break
-longest → earliest → lowest-id; no overlapping counterpart → canonical. `ExerciseSessionType`
-(61 codes, androidx-main source) is published in the OpenAPI spec with `x-enum-varnames`;
-`sport_name_for()` maps a code → Title Case, unmapped → NULL (never a guessed sport). Wired into
-`GET /integrations/polar/aerobic-sessions`, which now surfaces `canonical`. `DECISIONS_LOG #189`.
+**What landed.** Steps 1–2 of the status-reporting plan (parser gate + snapshot baseline), scoped
+deliberately — diff engine, ageing backfill, dashboard sections, and scheduling are OUT of scope and
+get their own briefs.
 
-### What was NOT touched — the standing lane
-- **HC exercise INGESTION (brief steps 2–3) is HELD, not done.** This is the point of the
-  feature and it did not move. An HCA-rooted read this session confirmed `workoutMapper` forwards
-  six fields and **no record identifier**, so `source_session_id` has no key and the upsert is not
-  written. The synthetic-key fallback was **deliberately not invoked** (it is for "identifier proven
-  absent/unstable", not "producer not yet wired"). **Consequence to state plainly:** the arbitration
-  engine, enum, and tests are built *ahead of the data they act on* — with ingestion held there are
-  no HC rows, so today every `aerobic_sessions` row is Polar and trivially canonical. The consumer
-  exists; the producer does not. G1 (an HC row appears, re-sync idempotent) is unexercised until
-  ingestion lands.
-- **Aggregate consumers deferred with ingestion:** `get_training_load` (ACWR) and readiness
-  `session_stats` are raw-SQL aggregates, not clean drop-ins; they were left untouched (ACWR maths
-  unchanged) and should route through the arbitration module *when* HC rows can appear.
-- **Untouched elsewhere:** the #116/#121 backend deploy probe (still OWED from the #188 handoff),
-  `feat/cbti-eval-trigger` (pre-existing OWED), and the F1 category-priority-table fork on `ROADMAP`
-  (Luke's call, unrelated to this brief).
+- **The `**State:**` bug — the session's headline finding.** `gen_governance_view._status_from_body`
+  matched `**Status:**` while health-app OPEN_QUESTIONS uses `**State:**`, so all 89 health-app
+  questions rendered blank in the digest; the existing count / parsed-vs-emitted gates were blind to
+  it (heading counts still matched). Fixed by matching either label.
+- **One dialect module (#191).** `scripts/gov_dialects.py` is the single home for both repos'
+  heading/state grammar; `gen_governance_view` and the new `gen_status_model` both import it.
+- **Gated status model (#190).** `scripts/gen_status_model.py` — machine JSON with three gates
+  (count-parity, decision-sequence, non-empty-extraction) and an off-vocab/drift tally. HALTs with
+  non-zero exit + stderr, emits nothing partial. `--self-check` / `--dry-run` modes.
+- **Baseline snapshot (#192/#193).** Snapshot #1 seeded to
+  `Projects/_status/snapshots/2026-08-10T115614Z_model.json`, `baseline:true`, provenance
+  health-app@`fbc86e9` + health-connect-app@`255014a`; `latest.json` byte-identical.
 
-### Open questions from this session
-- **Q88** (OPEN) — `OVERLAP_THRESHOLD = 0.50` is a proposed default, uncalibrated; deferred until
-  real Polar/HC pairs exist (i.e. until ingestion lands).
-- **Q89** (OPEN) — whether HC auto-detected micro-sessions (sub-5-min) need a minimum-duration floor;
-  decide at ingestion, with counts + a duration distribution first (brief GUARD), never a silent filter.
-- **Q10** (OPEN) — un-deferred: Deb's wearable integration is no longer parked (Luke-confirmed
-  2026-08-10), but the per-second Metabolic-load pathway bites only if Deb's device delivers
-  Polar-in-HC data, which is not yet established.
+**Brief premise corrected — own the error.** The brief's motivating diagnosis — a committed generator
+that "returned 0 blocked / 0 owed / 0 unstarted / 0 off-vocab, exit-0" — was falsified at Step 0: no
+such tool exists (the only governance parser, `gen_governance_view`, already halts-on-empty and handles
+both dialects). That 0/0/0/0 was an unverified chat-side ad-hoc parse promoted to a diagnosis. The
+original decision #N was dropped, not patched, and the build proceeded greenfield. Recorded as **Q91**.
 
-### Single clearest next action
-**Advance ingestion from the producer side, in an HCA-rooted session:** add an exercise identifier to
-`workoutMapper` (forward Health Connect `ExerciseSessionRecord.metadata.id`), land it in HCA, then
-return to health-app to build step 3 (upsert keyed on the forwarded id, exercise dates into
-`valid_dates`, `sport_name_for` at write). Until that identifier exists, step 3 stays correctly held —
-do **not** reach for the synthetic key to unblock it. (Owner: Luke; cross-repo, single-repo-scope rules
-apply to each side.)
+**Open questions opened this session.**
+
+- **Q90 (OPEN)** — HCA carries work-item states (`UNSTARTED×6`, `BLOCKED`) on question headings; the
+  shared `### State vocabulary` block is byte-identical across repos (SHA `27337630fca6db03`), so this
+  is drift, not a dialect. The status model accepts + flags it every run. **Resolution is an HCA-side
+  store edit — cross-repo, owner Luke, not actionable from a health-app write session.**
+- **Q91 (OPEN)** — should brief-authoring carry a verify-checkpoint for unseeable-surface claims
+  (structural answer known; whether it warrants a codified ritual is the open fork).
+
+**What this brief did NOT resolve — carried, gating the scheduling brief.**
+
+- **S1 / S2** — scheduling option + cadence for the status model: unstarted, own brief.
+- **S4** — how a HALT reaches Luke when the artifact is the only output surface. The gate reports to
+  stderr + non-zero exit: sufficient for MANUAL runs, explicitly **NOT** sufficient once scheduled — a
+  silent scheduled failure is indistinguishable from a quiet week, the exact failure this system exists
+  to prevent. **Blocker on the scheduling brief, not this one.**
+
+**What stood still — named explicitly.** This was an INSTRUMENT / governance session (tooling that
+watches the stores), not product. The feature lanes untouched, and where they sit:
+
+- **HC exercise ingestion (steps 2–3 of #189)** — HELD: HCA forwards no exercise identifier; the
+  synthetic-key fallback is deliberately not invoked. Gated on an HCA-side wire change (owner Luke).
+- **`feat/cbti-eval-trigger`** — pre-existing branch, 2 unlanded commits, untouched again this session;
+  rowed OWED in `BRANCHES.md`. The CBT-I eval-trigger rework still owes its rebuild.
+- **#116 / #121 backend deploy probe** — still OWED (`railway deployment list --service
+  health-app-backend` SUCCESS; served-bundle grep for the frontend).
+- **Interpretation increments / Polar→chat / Banister** — untouched.
+
+**Single clearest next action.** Land this close-out, then take the scheduling brief (S1/S2) — which
+must resolve **S4** (a HALT must reach Luke off the artifact surface) before the status model is ever
+scheduled, or a quiet failure reads as a quiet week. If instead returning to product: the #116/#121
+deploy probe is the smallest OWED item; HC exercise ingestion is gated on the HCA wire change.
