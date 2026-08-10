@@ -27,6 +27,8 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import gov_dialects as D  # single source of the heading/state grammar (DECISIONS_LOG #N+1)
+
 OWNER = "Easty11"
 REPOS = ("health-app", "health-connect-app")
 STORES = ("DECISIONS_LOG", "OPEN_QUESTIONS", "FEEDBACK", "ROADMAP")
@@ -36,7 +38,7 @@ BLOB = "https://github.com/{owner}/{repo}/blob/{sha}/{store}.md#L{line}"
 
 BANNER = "═" * 60          # ═
 RULE = "─" * 3             # ───
-MIDDOT = "·"               # ·
+MIDDOT = D.MIDDOT          # · — dialect grammar now lives in gov_dialects (#N+1)
 ENDASH = "–"               # –
 
 # A store smaller than this is assumed to be a fetch failure, not a small store.
@@ -118,9 +120,13 @@ def _split_inline_status(rest: str) -> tuple[str, str]:
 
 
 def _status_from_body(lines: list[str], start: int, end: int) -> str:
-    """Pull the first **Status:** line from an entry body and flatten it to one line."""
+    """Pull the first **State:**/**Status:** line from an entry body, flattened to one line.
+
+    Matching EITHER label is the #N fix: health-app puts a question's state in `**State:**`
+    and a decision's in `**Status:**`. The old `**Status:**`-only match extracted empty for
+    every health-app question, and the count gates never saw it (headings still matched)."""
     for raw in lines[start:end]:
-        m = re.match(r"^\*\*Status:\*\*\s*(.+)$", raw)
+        m = D.STATE_LINE.match(raw)
         if m:
             return m.group(1).strip()
     return ""
@@ -169,7 +175,7 @@ def _parse_headed(text: str, pattern: re.Pattern, store: str, repo: str,
 
 def parse_decisions(text: str, repo: str) -> list[Entry]:
     # health-app '### 93. Title' | health-connect-app '### #20 — Title  ·  active'
-    pat = re.compile(r"^###\s+#?(\d+)\s*[.—-]?\s*(.*)$")
+    pat = D.DECISION_HEADING
     entries = _parse_headed(text, pat, "DECISIONS_LOG", repo, "entry")
 
     # Free gap check: for an append-only, sequentially-numbered store, the highest number
@@ -186,7 +192,7 @@ def parse_decisions(text: str, repo: str) -> list[Entry]:
 
 def parse_questions(text: str, repo: str) -> list[Entry]:
     # health-app '## Q33. Title' | health-connect-app '### Q11 — Title  ·  OWED'
-    pat = re.compile(r"^#{2,3}\s+Q(\d+)\s*[.—-]?\s*(.*)$")
+    pat = D.QUESTION_HEADING
     return _parse_headed(text, pat, "OPEN_QUESTIONS", repo, "entry")
 
 
@@ -449,6 +455,17 @@ def main() -> int:
             print(f"    {store}.md: {len(text):>7} B -> {got} entries", file=sys.stderr)
         d["dmax"] = max(int(e.label) for e in d["DECISIONS_LOG"])
         data[repo] = d
+
+    # Extraction gate (#N): count parity is necessary but insufficient. If a state field is
+    # empty across every question in a store, the parser matched a schema that is not there —
+    # the exact `**State:**` bug this file carried, invisible to the heading-count gate.
+    for repo in REPOS:
+        qs = data[repo]["OPEN_QUESTIONS"]
+        if qs and all(not e.status for e in qs):
+            raise GenError(
+                f"{repo}/OPEN_QUESTIONS.md: status extracted empty for all {len(qs)} "
+                f"questions — the state field matched a schema that is not there."
+            )
 
     # Offset-explicit, not name-dependent: Windows renders %Z as "E. Australia Standard
     # Time", and Git Bash silently ignores TZ and mislabels UTC as local. A numeric offset
