@@ -2703,3 +2703,33 @@ before filtering anything**; a floor is a chat decision, never a silent filter.
 
 **State:** OPEN — decide at HC ingestion (step 3). No floor exists yet; none is to be added without the
 count/distribution evidence first. Cross-refs `#189`, `Q88`.
+
+---
+
+## Q90. HCA question headings carry work-item states — vocabulary drift or a deliberate dialect?
+
+`gen_status_model` flags 6 health-connect-app questions headed `· UNSTARTED` (and `BLOCKED` appears
+too) — work-item vocabulary on question headings. The `### State vocabulary` block is byte-identical
+across both repos' `CLAUDE.md` (SHA `27337630fca6db03`, verified 2026-08-10) and restricts question
+state to `OPEN / OWED / DONE → #N`; `UNSTARTED`/`BLOCKED` are the work-item set. Because the vocabulary
+is shared and agreed, this is un-propagated store debt in HCA, not a first-class dialect.
+
+**State:** OPEN — drift, not a decision (Step 1 of the status-parser-gate brief resolved this: blocks
+match ⇒ accept-and-flag). The status model accepts and tallies the tokens as off-vocab `drift`, never
+coercing or dropping them, so the finding surfaces every run. Resolution is an HCA-side store edit
+(re-home those questions' true state, or record why `UNSTARTED` is meant there) — cross-repo, owner
+Luke, not actionable from a health-app write session. Cross-refs `#190`, `#193`.
+
+## Q91. Should brief-authoring carry a verify-checkpoint for unseeable-surface claims?
+
+The `status-parser-gate` brief asserted an existing committed generator "returned 0 blocked / 0 owed /
+0 unstarted / 0 off-vocab, exit-0" — the diagnosis that motivated the whole build. Step 0 falsified it:
+no committed generator produces those buckets; the 0/0/0/0 was a chat-side ad-hoc parse, promoted from
+hypothesis to diagnosis in the brief. The author's own review had flagged that line as "chat inferring
+where Code adjudicates" and tagged it a hypothesis — then the brief promoted it anyway.
+
+**State:** OPEN. The unseeable-surface rule already requires such claims be verified before they land on
+a pushed ref — but that fires at Code time, after the claim has already become a brief's premise. This
+is evidence the same check is owed at brief-AUTHORING time. The structural answer is known; whether it
+warrants a codified checkpoint (a brief-authoring ritual) rather than reliance on the existing rule is
+the open fork — worth a question, not yet a decision. Cross-refs `#190`.

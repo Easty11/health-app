@@ -8,7 +8,7 @@ tools carry independent copies of the dialect knowledge and drift apart unnotice
 is not hypothetical: `gen_governance_view` matched a question's state as `**Status:**` while
 health-app questions use `**State:**`, so every health-app question rendered with an empty
 status and the existing count gates never saw it (heading counts still matched). See
-DECISIONS_LOG #N (extraction gate) and #N+1 (this module).
+DECISIONS_LOG #190 (extraction gate) and #191 (this module).
 
 SCOPE — dialect grammar ONLY: heading regexes, state-line labels, vocabulary sets, and the
 small extractors/classifiers over them. NOT fetch, NOT emit, NOT gates. Fetch and gate logic
@@ -32,14 +32,14 @@ DECISION_HEADING = re.compile(r"^###\s+#?(\d+)\s*[.—–-]?\s*(.*)$")
 # health-app '## Q88. Title'         |  HCA '### Q11 — Title  ·  OWED'
 QUESTION_HEADING = re.compile(r"^#{2,3}\s+Q(\d+)\s*[.—–-]?\s*(.*)$")
 
-# A body state line. Matching EITHER label is the fix for the #N bug: health-app puts a
+# A body state line. Matching EITHER label is the fix for the #190 bug: health-app puts a
 # question's state in '**State:**' and a decision's in '**Status:**'; an entry has one or the
 # other, so accepting both is safe and loses neither.
 STATE_LINE = re.compile(r"^\*\*(?:State|Status):\*\*\s*(.+)$")
 
 # --------------------------------------------------------------------------------------
 # Vocabularies — a token outside the RELEVANT set is OFF-VOCAB: tallied and reported, never
-# coerced into a neighbour (DECISIONS_LOG #N). Questions carry OPEN/OWED/DONE per the
+# coerced into a neighbour (DECISIONS_LOG #190). Questions carry OPEN/OWED/DONE per the
 # byte-identical shared block; a question headed UNSTARTED/BLOCKED is work-item vocabulary
 # bleeding in — store debt, flagged as drift, not a first-class dialect.
 # --------------------------------------------------------------------------------------
