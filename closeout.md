@@ -1,93 +1,75 @@
-# Session close-out — 2026-08-09 (Brief K: HC identity cutover findings)
+# Session close-out — 2026-08-10 (Brief: HC exercise → aerobic_sessions + read-time arbitration)
 
-## Real commits this session
+## 1 · Real commits this session
 
-Session-open ref `054dba2` (master tip at open) → land `3b52c9b`. `git log --oneline 054dba2..HEAD`:
+Session-open ref: `10dc953` (master tip at open). Landed to master via **PR #48**
+(`feat/aerobic-arbitration-read`, merged + branch deleted both sides).
 
-- `221c2f1` docs: models.py + migration — HC identity arrives since the 2026-07-05 cutover
-- `333f74d` gov: Q83 premise corrected against health_connect_record_sources
-- `9270c34` gov: ROADMAP — F1 gate discharged, arbitration load measured
-- `3f499fa` gov: DECISIONS_LOG #188 — identity in a uniqueness key forks the record
-- `3b52c9b` Merge pull request #45 from Easty11/gov/hc-identity-cutover
+```
+90c7916 Merge pull request #48 from Easty11/feat/aerobic-arbitration-read
+6c491d1 gov: DECISIONS_LOG #189 (read-time aerobic arbitration) + OPEN_QUESTIONS Q88/Q89, Q10 un-defer
+ddfdf5c feat(aerobic): read-time cross-source arbitration + HC exerciseType enum
+```
 
-Landed as **PR #45**, branch `gov/hc-identity-cutover` merged + remote-deleted; placeholder guard
-green (7s), `#188` resolved pre-PR against master max `#187`. This close-out commit follows on
-`chore/session-closeout-0809k` (its own PR, master being PR-gated).
+Two concern-split commits (feature, then governance) under one PR. Placeholder guard
+green on the PR; full suite 785 green pre-merge.
 
-Stores changed this session (`git diff --name-only 054dba2..3b52c9b` ∩ governance set):
-`DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`, `ROADMAP.md`. Code: `backend/models.py`,
-`backend/migrations/versions/c9b8a7d6e5f4_add_health_connect_record_sources.py`.
+## 2 · Pending-queue reconciliation
 
-## Pending-queue reconciliation
+**No `;cc` pending-commit queue was carried into this session** — it opened from a written
+brief, not a chat close-out. Nothing to reconcile against a queue.
 
-**No `;cc` pending-commit queue was carried into this session.** The work came from Brief K, a
-chat-authored brief, not a pending queue. Nothing provisional: all four concern-split commits landed
-via PR #45. The brief's five gates were all met:
+Everything decided this session landed in the commits above (nothing provisional):
+- Feature (steps 4/5/7): `ddfdf5c`.
+- Governance (`#189`, `Q88`, `Q89`, `Q10` un-defer): `6c491d1`.
 
-- **Gate 1 (arithmetic):** both reconciliations reported and passed — contaminated-group rows
-  `21,287 = 10,406 + 7,319 + 3,094 + 468`; unknowns `13,978 = 10,406 + 3,533 + 5 + 4 + 3 + 27`.
-- **Gate 2 (models.py):** sibling correction at `routers/health_connect.py:63-76` quoted and mirrored;
-  nullability rationale confirmed intact in the new text; **the backend-wide grep found a THIRD stale
-  site** — migration `c9b8a7d6e5f4` (unreleased, "edited in place"), corrected in the same `docs:`
-  commit per #185's repo-wide-enforcement lesson rather than left file-scoped.
-- **Gate 3 (Q83):** stays OPEN; falsified (Withings-blending premise) vs untouched (`_aggregate_day`
-  source-blindness) stated separately; premise amended, severity and State token untouched.
-- **Gate 4 (ROADMAP):** the "row above" is line 73 — `HCA forwards writer identity (HCA session)` —
-  the HCA-forwarding dependency, confirmed; reported as itself now effectively discharged but left
-  unedited (HCA-repo producer work, unseeable-surface rule).
-- **Gate 5 (#35):** confirmed needs no change and reported, **not written** — `DECISIONS_LOG:489` rests
-  on distinct `dedupe_hash` per app (286/286), which a single writer's re-sync cannot forge; the
-  cutover fork lives in a different table with a different key. #35 untouched.
+Working tree carries only pre-existing untracked `dryrun.txt` (not this session's, left
+untouched). Branch gate: `feat/aerobic-arbitration-read` merged+deleted; pre-existing
+`feat/cbti-eval-trigger` (+2) is untouched this session, already rowed OWED in `BRANCHES.md`
+and pushed — no action, not orphaned.
 
-## Cold-resume handoff
+## 3 · Cold-resume handoff
 
-**What this session was.** A **product-adjacent** session on a real production data defect — not a
-governance-framework session. It records a measured Health-Connect identity cutover (Health Connect
-began sending `dataOrigin` at 2026-07-05 05:51:53Z) and corrects the three sites still reasoning from
-before it. It does **not** trip #186's governance moratorium: `#188` is a decision-log record of a data
-finding plus stale-docstring corrections, not new process. The prior handoffs named four consecutive
-instrument-over-product sessions; #187 (lab Briefs A+B) broke that streak, and this session continues
-on product/data rather than tooling.
+### What landed
+`aerobic_sessions` gained **read-time cross-source arbitration** (`backend/reads/aerobic_reads.py`):
+a derived `canonical` flag, computed per read and never persisted (no column, no migration).
+Polar (`polar_v4` = `polar_flow_export`) outranks `health_connect` for the same physical bout;
+same bout = interval overlap ≥ `OVERLAP_THRESHOLD` (0.50) of the shorter duration; ties break
+longest → earliest → lowest-id; no overlapping counterpart → canonical. `ExerciseSessionType`
+(61 codes, androidx-main source) is published in the OpenAPI spec with `x-enum-varnames`;
+`sport_name_for()` maps a code → Title Case, unmapped → NULL (never a guessed sport). Wired into
+`GET /integrations/polar/aerobic-sessions`, which now surfaces `canonical`. `DECISIONS_LOG #189`.
 
-**Current sprint (from ROADMAP NOW).** Dated live items: CBT-I Q45 nap day-attribution (contaminating
-block-3 capture now); CBT-I manual evaluation trigger (BUILT but SUPERSEDED on `feat/cbti-eval-trigger`
-— needs rework against the 4-night engine, cut a fresh branch from master). Product lanes:
-lab upload pipeline (uploading unpaused; operator decision owed on junk rows), interpretation layer
-build (increments 2 rephrase / 3 lever-tap / 5 go-live all UNSTARTED; 1b delivered), appointment brief.
+### What was NOT touched — the standing lane
+- **HC exercise INGESTION (brief steps 2–3) is HELD, not done.** This is the point of the
+  feature and it did not move. An HCA-rooted read this session confirmed `workoutMapper` forwards
+  six fields and **no record identifier**, so `source_session_id` has no key and the upsert is not
+  written. The synthetic-key fallback was **deliberately not invoked** (it is for "identifier proven
+  absent/unstable", not "producer not yet wired"). **Consequence to state plainly:** the arbitration
+  engine, enum, and tests are built *ahead of the data they act on* — with ingestion held there are
+  no HC rows, so today every `aerobic_sessions` row is Polar and trivially canonical. The consumer
+  exists; the producer does not. G1 (an HC row appears, re-sync idempotent) is unexercised until
+  ingestion lands.
+- **Aggregate consumers deferred with ingestion:** `get_training_load` (ACWR) and readiness
+  `session_stats` are raw-SQL aggregates, not clean drop-ins; they were left untouched (ACWR maths
+  unchanged) and should route through the arbitration module *when* HC rows can appear.
+- **Untouched elsewhere:** the #116/#121 backend deploy probe (still OWED from the #188 handoff),
+  `feat/cbti-eval-trigger` (pre-existing OWED), and the F1 category-priority-table fork on `ROADMAP`
+  (Luke's call, unrelated to this brief).
 
-**The single clearest next action.** Discharge the **`#116`/`#121` backend deploy probe** that has been
-OWED across multiple sessions — `railway deployment list --service health-app-backend` SUCCESS, then
-exercise the shipped `latest_only` lab read against the live image. It is the cheapest open loop and
-unblocks trusting #187's ship. (Second candidate: begin interpretation increment 2, the rephrase pass —
-the first genuinely new product build in the queue.)
+### Open questions from this session
+- **Q88** (OPEN) — `OVERLAP_THRESHOLD = 0.50` is a proposed default, uncalibrated; deferred until
+  real Polar/HC pairs exist (i.e. until ingestion lands).
+- **Q89** (OPEN) — whether HC auto-detected micro-sessions (sub-5-min) need a minimum-duration floor;
+  decide at ingestion, with counts + a duration distribution first (brief GUARD), never a silent filter.
+- **Q10** (OPEN) — un-deferred: Deb's wearable integration is no longer parked (Luke-confirmed
+  2026-08-10), but the per-second Metabolic-load pathway bites only if Deb's device delivers
+  Polar-in-HC data, which is not yet established.
 
-**Open questions by status.**
-- **OPEN (no blocker / watch-points):** Q73 (declared-state block placement), Q75 (Hevy catalogue
-  freshness), Q76 (create-enum drift), Q80 (decision-number uniqueness invariant), Q84 (sync accepts
-  unposted record types), Q86 (report-level required-scalar null watch), Q87 (cross-repo-parity register).
-- **OPEN (blocked/sequenced):** Q74 (feedback precondition evaluability — blocks authoring),
-  Q78 (multi-user nap attribution — blocked by Q45), Q82 (fragmented-night undercount — sequenced after
-  Q83), **Q83 (HC sleep source-blindness — premise corrected THIS session, stays OPEN; remaining work is
-  to read `_aggregate_day` against the source table and wire the `default-untrust` allow-list → #175).**
-- **OWED:** Q77 (live create→list-back round-trip unproven — one genuine create, owner Luke).
-- **DONE → #N (closed):** Q79→#170, Q81→#173, Q85→#178.
-
-**What was NOT touched this session (named explicitly, as the ritual requires).**
-- **The actual HC identity remediation.** This session RECORDED the ~10,881-row fork; it deleted
-  nothing, ran no migration, opened no production connection. The collapse is a separate change gated on
-  a dry-run whose counts must match #188's figures. **Untouched by design, not oversight.**
-- **`_aggregate_day` source-blindness (Q83's live code half).** The premise was corrected; the selector
-  code was not read. A no-priority max-duration selector is still source-blind with one writer. The
-  allow-list (#175) is unbuilt.
-- **CBT-I product lanes.** Q45 nap attribution still contaminates block-3 capture; the evaluation
-  trigger on `feat/cbti-eval-trigger` still needs rework (5 of 11 tests failing against the 4-night
-  engine). No CBT-I code moved.
-- **The whole interpretation build (increments 2/3/5) and the appointment brief.** Stood still. These
-  are the hero consumer features and the largest UNSTARTED lane; nothing about them changed.
-- **The #116/#121 deploy probe** for #187's lab changes — still never run.
-- **Cross-repo shared-block propagation to health-connect-app** (four OWED ROADMAP rows) — untouched;
-  requires an HCA-rooted session.
-
-**Branch state at close.** `gov/hc-identity-cutover` merged + remote-deleted (PR #45).
-`feat/cbti-eval-trigger` pre-existing, untouched, pushed, rowed **OWED** in `BRANCHES.md` (rework
-checklist there). `chore/session-closeout-0809k` carries this close-out; DONE at its own land.
+### Single clearest next action
+**Advance ingestion from the producer side, in an HCA-rooted session:** add an exercise identifier to
+`workoutMapper` (forward Health Connect `ExerciseSessionRecord.metadata.id`), land it in HCA, then
+return to health-app to build step 3 (upsert keyed on the forwarded id, exercise dates into
+`valid_dates`, `sport_name_for` at write). Until that identifier exists, step 3 stays correctly held —
+do **not** reach for the synthetic key to unblock it. (Owner: Luke; cross-repo, single-repo-scope rules
+apply to each side.)
