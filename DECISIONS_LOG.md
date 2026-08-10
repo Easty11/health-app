@@ -7689,3 +7689,106 @@ aggregation byte-identical (`_aggregate_day`, `valid_dates` untouched). Enum con
 re-sync idempotent) becomes live and this entry's "Polar-only, all canonical" note goes stale; or a
 consumer needs to filter non-canonical in SQL, the trigger to reconsider persisting the flag; or
 `OVERLAP_THRESHOLD` is recalibrated against real pairs (`Q88`).
+
+### 190. Status generators gate on extraction, not only on counts
+
+**Decision:** Every governance status generator runs, alongside a crude dialect-agnostic heading/row
+count checked against its own parsed count, an EXTRACTION gate: if a state field resolves empty across
+all N>0 parsed items of a store, it HALTs and emits nothing. Off-vocabulary state tokens are tallied
+per field and reported as drift — never coerced into a neighbouring state, never dropped. Count parity
+is necessary but insufficient. `active`.
+
+**Rationale:** `gen_governance_view._status_from_body` matched a question's state as `**Status:**`
+while health-app `OPEN_QUESTIONS.md` uses `**State:**`, so every one of the 89 health-app questions
+rendered with an empty status. The count and parsed-vs-emitted gates never saw it: heading counts
+still matched, so the parse "succeeded" against a field that was never there. A count gate is
+structurally blind to a field present in form and empty in fact. The extraction gate is the missing
+check.
+
+**Status:** Landed on `status-parser-gate`. Live in `gen_status_model.gate_extraction_nonempty` and in
+`gen_governance_view` (the all-empty question check). The `**State:**` bug is fixed in the same session
+by centralising the state-line grammar to match `**State:**|**Status:**` (`#191`).
+
+**How you know:** `python scripts/gen_status_model.py --self-check` fires all three gate positives
+(count parity, sequence gap, extraction-empty) and confirms off-vocab is tallied not halted. The real
+positive: run over the live health-app `OPEN_QUESTIONS.md` with the buggy `**Status:**`-only matcher,
+the count gate passes (`crude=89 == parsed=89`) and the extraction gate HALTs (`state extracted EMPTY
+for all 89 items`, exit 1). After the fix both generators run clean and every health-app question
+carries a state.
+
+**Do not revisit unless:** a store legitimately introduces a stateless item class (then the all-empty
+gate needs a per-class exemption, not a loosened threshold), or a new governance generator is added
+that does not import the shared gate.
+
+### 191. Store dialect knowledge lives in one module
+
+**Decision:** The heading regexes, state-line labels and state-vocabulary constants for both repos'
+governance stores live in exactly one module — `scripts/gov_dialects.py` — which every governance
+generator imports. No generator carries its own copy of the grammar. Scope is dialect grammar only:
+not fetch, not emit, not gates. `active`.
+
+**Rationale:** The two repos do not share store schemas (health-app `## Q88.` with a `**State:**` body
+line vs HCA `### Q11 — … · OWED` inline; `## N.` vs `### #20 —` decision heads), and more than one tool
+now parses them — the markdown digest (`gen_governance_view`) and the machine model
+(`gen_status_model`). The `**State:**` defect (`#190`) is what independent dialect knowledge looks like
+once one copy goes stale: a single tool's private regex drifted from the store and nothing reconciled
+it. One import site is the structural fix; keeping the module to grammar only bounds its blast radius.
+
+**Status:** Landed on `status-parser-gate`. Both generators import `gov_dialects`; the shared surface is
+the decision/question heading patterns, the `**State:**|**Status:**` line, the vocabulary sets, and the
+extractor/classifier over them.
+
+**How you know:** both generators run green against live master importing the one module; the
+`**State:**` fix applied once in `gov_dialects.STATE_LINE` corrected the digest with no second edit.
+
+**Do not revisit unless:** a store's grammar diverges so far a shared pattern would have to hedge both
+ways — then the module holds two named dialects, still one import site, never a per-tool copy.
+
+### 192. Cross-repo status snapshots live outside both repos; snapshots are derived, not truth
+
+**Decision:** The cross-repo status model writes append-only JSON to `Projects/_status/` — outside both
+repos — as `snapshots/<ISO8601>_model.json` plus `latest.json`. Snapshots are DERIVED observations; the
+governance stores at each repo's master are canonical. Each snapshot records the master SHA it read per
+repo (provenance) and a `baseline` flag for the first snapshot with no predecessor. `active`.
+
+**Rationale:** The cross-repo view cannot live inside one repo without recreating a two-master pattern.
+Deleting the store costs ageing history (the diff baseline), never correctness, since the model
+regenerates from the stores at any time. Accepted loss, stated rather than left implicit: the directory
+is unbacked and single-machine. Baseline flag and per-repo provenance are built in from the first
+snapshot because retrofitting either costs a format migration — a baseline-less first diff reads as "no
+change" instead of "no comparison available"; a provenance-less snapshot is not reproducible.
+
+**Status:** Landed on `status-parser-gate`. Snapshot #1 seeded 2026-08-10 to
+`Projects/_status/snapshots/2026-08-10T115614Z_model.json`, `baseline:true`, provenance
+health-app@`fbc86e9` + health-connect-app@`255014a`; `latest.json` byte-identical; a README in the
+directory records the accepted loss.
+
+**How you know:** the seed run wrote valid JSON, `latest.json` `cmp`-identical to snapshot #1, the
+baseline flag true, both repos' provenance SHAs present, and the one drift finding recorded (HCA
+questions carry `UNSTARTED×6`, `Q90`).
+
+**Do not revisit unless:** the ageing history must survive a machine loss (then the directory needs a
+backing/sync decision — a new decision, since this one accepts the loss), or a consumer needs the
+snapshots inside a repo (re-derive the two-master argument first).
+
+### 193. Status tooling is anchored in health-app; health-connect-app is read-only
+
+**Decision:** Cross-repo status tooling is anchored in health-app, the senior governance store. HCA's
+governance stores are read over `raw.githubusercontent.com` at master, never cloned and never written
+in a status-tooling session. Single-repo-per-session is preserved because the constraint is on writes.
+`active`.
+
+**Rationale:** Cross-repo tooling needs one governance home with a DECISIONS_LOG; health-app is it.
+Reading HCA read-only — the same mechanism `gen_governance_view` and the session-open ritual already use
+— does not breach single-repo scope, which constrains loop-affecting writes, and those stay health-app
+only. The snapshot data still lands outside both repos (`#192`); the code and its decisions live in
+health-app.
+
+**Status:** Landed on `status-parser-gate`. `gen_status_model` resolves each repo's master by
+`ls-remote` and fetches stores by raw URL; no HCA clone, branch, or commit exists in this session.
+
+**How you know:** the session touched only health-app's working tree; HCA content was fetched read-only
+at `255014a`.
+
+**Do not revisit unless:** HCA becomes the senior store (it will not), or a status tool needs to WRITE
+an HCA store — at which point it is no longer a status tool and the single-repo rule bites.
