@@ -8127,3 +8127,41 @@ taxonomy.
 
 **Do not revisit unless:** a passively-observed measure needs the engine to initiate capture (it must
 not), or §E needs a per-side member.
+
+### 207. Unified inline-state reader; per-repo question vocabulary; decisions best-effort, never extraction-gated
+
+**Decision:** Completes `#191`'s centralization. `gen_governance_view` retired its private
+`_split_inline_status`/`_status_from_body` and now consumes the shared `gov_dialects` reader: decisions
+read via `decision_state` (scan-based lowercase `·` channel + `**Status:**` body), questions via
+`entry_state` (caps `·` inline + `**State:**` body). The HCA lowercase decision channel's vocabulary is
+enumerated empirically `{active: 34, held: 1}` across all 35 entries; lineage segments
+(`clarifies`/`supersedes`/`rider`/`repair`, each carrying a `#N`) are never state and are scanned past.
+Question vocabulary is per-repo: HCA `OPEN/OWED/DONE/UNSTARTED`, health-app `OPEN/OWED/DONE`. The shared
+`QUESTION_STATES` tuple is unchanged and the `gov_dialects:44` position — an `UNSTARTED` on a health-app
+question is drift, not a first-class state — is reaffirmed and asserted in `--self-check` both directions
+(G6). Decision state is best-effort: `unstated` where no channel yields state (the 17 health-app decisions
+with no `**Status:**` line, stable id set `#35, #43–#45, #79–#84, #129–#134, #170`; optional-by-convention
+per the 2026-08 census), never a defect. `gate_extraction_nonempty` scope is untouched (questions + branches
+only).
+
+**Rationale:** The two readers had verifiably diverged — the machine model (`gen_status_model`) read HCA
+decisions as *missing* (caps-only, `rsplit`-last), while the digest (`gen_governance_view`) rendered lowercase
+state with lineage junk (`active · clarifies #6`) on the six multi-`·` headings. That is the drift `#191`'s
+single-grammar module exists to prevent, reintroduced because the digest kept a private reader. One reader,
+both tools, closes it. Recognising HCA's `UNSTARTED` via *per-repo* vocab — not the shared tuple — recognises
+the HCA dialect without silencing health-app's drift signal.
+
+**Status:** Landed on `feat/status-reader-channels` via the PR-gated path (`#171`); merge SHA and PR number
+pinned at close-out per number-at-merge. Branch merged + deleted. Three scripts, no store schema change, no
+migration.
+
+**How you know:** Reader agreement verified at master `c65e604` — 0 disagreements across 241 decisions + 116
+questions, both repos; the six multi-`·` HCA decisions (`#8, #11, #14, #19, #23, #25`) render bare `active`.
+Census invariants reproduced: 17 `unstated` (id set above, stable across the 193→206 growth), HCA decisions
+`{active:34, held:1}`, `UNSTARTED×7` clean, drift `[]`, gapless both repos, crude==parsed every cell.
+`--self-check` green including the G6 both-direction drift assertion.
+
+**Do not revisit unless:** the HCA decision inline vocabulary grows beyond `{active, held}` (a new lowercase
+token surfaces as `unstated`, prompting re-enumeration, not silent coercion); or a private state reader is
+reintroduced into either tool (the divergence this closes recurs); or an `UNSTARTED` is authored on a
+health-app question and intended as real state rather than drift (the per-repo split would then be revisited).
