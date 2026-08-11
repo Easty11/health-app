@@ -7792,3 +7792,57 @@ at `255014a`.
 
 **Do not revisit unless:** HCA becomes the senior store (it will not), or a status tool needs to WRITE
 an HCA store — at which point it is no longer a status tool and the single-repo rule bites.
+
+### 194. Interpretation go-live: first live run against the 2026-08-04 draw; assets promoted on human verification; #51 status is convention, not code
+
+**Decision:** Interpretation increment 5 (go-live) is landed. The 2026-08-04 draw — 11 reports, 51
+markers, canonical binding near-total (only `_ROUTINE CHEMISTRY` at 16/18: `Bilirubin conjugated`,
+`CK` unmapped) — is the producer's first real consumer. On Luke's content verification (O2, worksheet
+of 36 authored claims, no issues found), the three reference assets' `_meta.status` and the six levers'
+`draft_status` are promoted `ai_draft → human_verified`. The stale `_deferred.groups.erythroid` ledger
+entry is removed: the group was already promoted into active `groups` (with `mcv` added) and surfaces
+live, so the deferral note contradicted the built state. The four go-live items resolve as: **(a)**
+real-panel confirm — done pre-session via the #187 dedup path, census-confirmed, not re-done here;
+**(b)** asset promotion — done here on O2 verdicts (the erythroid GROUP promotion was already discharged;
+the `trt_erythrocytosis_watch` relation stays `blocked_on_contract`, unrelated to O2); **(c)** view-pointer
+swap — already discharged at #158 (view reads `GET /interpretation` live); **(d)** fixture⇄asset drift —
+none: deterministic regeneration of `interpretationExample.json` is byte-identical.
+
+**Rationale:** Go-live is a promotion event, not new behaviour. Nothing in the producer changed; the
+first live run exercises the already-built path against real data, and the promotion records that a
+human verified the authored content. Layperson-readability is deliberately NOT addressed here: the
+verified base text stays clinically precise, and simplification is increment 2's (rephrase) job — a
+presentation layer over the base text with a hard eval that rephrase-may-not-change-claims. Verifying
+now and simplifying in increment 2 is the intended split, not a contradiction (see ROADMAP refinement
+routing).
+
+**#51 enforcement-locus finding:** No code reads asset `_meta.status` or a lever's `draft_status`. The
+producer reads only `_meta["version"]` (`producer.py` `_meta()`), and the frontend has no status gate.
+#51's "nothing renders Section 3 until `human_verified`" is a **curation convention enforced NOWHERE in
+code**. Recorded here, not mechanised — building an enforcement gate unbidden is exactly what the
+moratorium forbids. Opens **Q92** (gate-in-code vs stay-convention).
+
+**Moratorium (3/3):** #186's three-item moratorium set named "interpretation producer 4b"; 4b actually
+landed #140–#160 on 1 Aug — pre-moratorium. This increment is the lane's next real product step and
+satisfies the third slot in spirit, stated plainly so the count is honest, not gamed.
+
+**Status:** Landed on `feat/interpretation-go-live`. Backend suite **785 passed**. Reference-JSON edit
+guard (#98) re-asserted post-edit on all three files: `isascii()` True, zero literal em-dash, still
+parses; diff is the status fields plus the declared erythroid `_deferred` removal and nothing else.
+Fixture regeneration zero-diff.
+
+**How you know:** First live run captured by mirroring the router (`_panel_for` + `build_foundation`,
+compute-on-read, no writes) against the Railway store via the public proxy. Trigger draw 2026-08-04
+(panel id 44) vs prior 2026-05-30 (panel id 1); output = 3 groups [`hpg_axis`, `hepatocellular`,
+`erythroid`] + 56 ungrouped. Haematocrit 0.50 fires the safety arm at the band boundary by design:
+`safety_gate = {status: in_band, band_key: watch, threshold_value: 0.5, direction: above, contested:
+true, evidence_refs: [10.1002/ajh.70118, 10.1002/ajh.26920, 10.1111/andr.12770], band_change: entered}`;
+`news_gate.basis = [delta_marginal, safety_band_entered]`; `range_gate.is_out_of_range = false`. Rendered
+register is education, not urgency: the view shows a neutral `news` pill + mechanism/relation prose, no
+`BreachIndicator` (0.50 is within ref 0.40–0.54), and surfaces no action directive (G4). MCP surface
+carries no interpretation fields — `mcp_server.py`'s only `interpretation` strings are ACWR; labs are
+"Not interpreted" (#47/#181, G5).
+
+**Do not revisit unless:** Q92 decides status should gate rendering in code (then the convention becomes
+a mechanism and this promotion's meaning changes), or a future draw shows the producer path behaving
+differently on real data than the fixture oracle predicts.
