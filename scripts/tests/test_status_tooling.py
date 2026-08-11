@@ -6,6 +6,7 @@ names offenders, and the pipe-split column-bounding of the branch-status scan.
 import pytest
 
 import gen_status_model as G
+import status_diff as SD
 from gen_status_model import StatusGateError
 
 
@@ -63,3 +64,39 @@ def test_branch_missing_status_is_named_by_branch():
     p = G.parse_branches(text, "health-app")
     assert p["missing_state"] == 1
     assert p["missing_ids"] == ["`feat/nostate`"]
+
+
+# --- diff engine: RENUMBER SURVIVAL (the Step-2 load-bearing contract) ---------------------- #
+
+def test_diff_pure_renumber_survives_as_renumbered_not_close_open():
+    """Q28 -> Q50, title+substance unchanged: identity survives on the title fingerprint, so it
+    is reported as `renumbered`, never as a close + an open."""
+    base = SD.extract_items("questions", "## Q28. A stable question title\n**State:** OPEN\n", "health-app")
+    cur = SD.extract_items("questions", "## Q50. A stable question title\n**State:** DONE\n", "health-app")
+    d = SD.diff_store("questions", base, cur)
+    assert d["opened"] == [] and d["closed"] == []
+    assert len(d["renumbered"]) == 1
+    r = d["renumbered"][0]
+    assert r["from"] == "Q28" and r["to"] == "Q50"
+    assert r["state_change"] == ["OPEN", "DONE"]
+
+
+def test_diff_renumber_with_title_edit_is_reported_not_auto_paired():
+    """When the title is also edited the fingerprint does not survive — the tool must report the
+    closed and the opened separately with a verify-by-hand note, NEVER fuzzy-pair them."""
+    base = SD.extract_items("questions", "## Q28. Original wording here\n**State:** OPEN\n", "health-app")
+    cur = SD.extract_items("questions", "## Q50. Completely rewritten wording\n**State:** OPEN\n", "health-app")
+    d = SD.diff_store("questions", base, cur)
+    assert len(d["opened"]) == 1 and len(d["closed"]) == 1
+    assert d["renumbered"] == []
+    assert "verify by hand" in d["renumber_suspects"].lower()
+
+
+def test_diff_decisions_key_on_number():
+    base = SD.extract_items("decisions", "### 1. First\n**Status:** active\n", "health-app")
+    cur = SD.extract_items("decisions",
+                           "### 1. First\n**Status:** active\n\n### 2. Second\n**Status:** active\n",
+                           "health-app")
+    d = SD.diff_store("decisions", base, cur)
+    assert [o["id"] for o in d["opened"]] == ["#2"]
+    assert d["closed"] == []
