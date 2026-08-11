@@ -110,26 +110,12 @@ def fetch(repo: str, sha: str, store: str) -> str:
 # nothing for the other is the exact failure mode this script is meant to make loud.
 # --------------------------------------------------------------------------------------
 
-def _split_inline_status(rest: str) -> tuple[str, str]:
-    """Split 'Title  ·  STATUS' into (title, status). HCA puts status inline; health-app
-    puts it in a **Status:** line in the body."""
-    parts = re.split(r"\s+" + re.escape(MIDDOT) + r"\s+", rest, maxsplit=1)
-    if len(parts) == 2:
-        return parts[0].strip(), parts[1].strip()
-    return rest.strip(), ""
-
-
-def _status_from_body(lines: list[str], start: int, end: int) -> str:
-    """Pull the first **State:**/**Status:** line from an entry body, flattened to one line.
-
-    Matching EITHER label is the #190 fix: health-app puts a question's state in `**State:**`
-    and a decision's in `**Status:**`. The old `**Status:**`-only match extracted empty for
-    every health-app question, and the count gates never saw it (headings still matched)."""
-    for raw in lines[start:end]:
-        m = D.STATE_LINE.match(raw)
-        if m:
-            return m.group(1).strip()
-    return ""
+# Inline/body state extraction now lives in gov_dialects (#191 unify): the digest's private
+# `_split_inline_status` (a first-'·' split with no vocab gate — it rendered 'active · clarifies
+# #6' junk on multi-'·' HCA headings) and `_status_from_body` are RETIRED. Decisions read via
+# D.decision_state (lowercase '·' scan + '**Status:**' body), questions via D.entry_state (caps
+# '·' inline + '**State:**' body), so the digest and the machine model share ONE reader and
+# cannot drift (the divergence this unification closes).
 
 
 def _first_body_line(lines: list[str], start: int, end: int) -> str:
@@ -142,11 +128,13 @@ def _first_body_line(lines: list[str], start: int, end: int) -> str:
 
 def _parse_headed(text: str, pattern: re.Pattern, store: str, repo: str,
                   status_mode: str) -> list[Entry]:
-    """Generic heading-driven parser shared by DECISIONS_LOG / OPEN_QUESTIONS / FEEDBACK.
+    """Generic heading-driven parser for DECISIONS_LOG / OPEN_QUESTIONS.
 
-    status_mode: 'entry'  -> inline '·' status, else **Status:** from the body
-                 'first'  -> first non-empty body line (FEEDBACK has no status field)
-    """
+    status_mode selects the SHARED gov_dialects reader (#191 unify) — the digest no longer
+    carries its own extractors:
+        'decision' -> D.decision_state  (HCA lowercase '·' scan + '**Status:**' body)
+        'question' -> D.entry_state      (caps '·' inline + '**State:**' body)
+    Title is the pre-'·' segment (state and lineage notes are both '·'-appended annotations)."""
     lines = text.splitlines()
     hits: list[tuple[int, str, str]] = []
     for i, raw in enumerate(lines):
@@ -164,11 +152,11 @@ def _parse_headed(text: str, pattern: re.Pattern, store: str, repo: str,
     entries: list[Entry] = []
     for idx, (line_i, label, rest) in enumerate(hits):
         end = hits[idx + 1][0] if idx + 1 < len(hits) else len(lines)
-        title, inline = _split_inline_status(rest)
-        if status_mode == "first":
-            status = _first_body_line(lines, line_i + 1, end)
-        else:
-            status = inline or _status_from_body(lines, line_i + 1, end)
+        title = rest.split(MIDDOT, 1)[0].strip()
+        if status_mode == "decision":
+            status = D.decision_state(lines, line_i, rest, end)
+        else:  # "question"
+            status = D.entry_state(lines, line_i, rest, end)
         entries.append(Entry(label=label, title=title, status=status, line=line_i + 1))
     return entries
 
@@ -176,7 +164,7 @@ def _parse_headed(text: str, pattern: re.Pattern, store: str, repo: str,
 def parse_decisions(text: str, repo: str) -> list[Entry]:
     # health-app '### 93. Title' | health-connect-app '### #20 — Title  ·  active'
     pat = D.DECISION_HEADING
-    entries = _parse_headed(text, pat, "DECISIONS_LOG", repo, "entry")
+    entries = _parse_headed(text, pat, "DECISIONS_LOG", repo, "decision")
 
     # Free gap check: for an append-only, sequentially-numbered store, the highest number
     # should equal the entry count. A mismatch means a gap or a duplicate — surface it.
@@ -193,7 +181,7 @@ def parse_decisions(text: str, repo: str) -> list[Entry]:
 def parse_questions(text: str, repo: str) -> list[Entry]:
     # health-app '## Q33. Title' | health-connect-app '### Q11 — Title  ·  OWED'
     pat = D.QUESTION_HEADING
-    return _parse_headed(text, pat, "OPEN_QUESTIONS", repo, "entry")
+    return _parse_headed(text, pat, "OPEN_QUESTIONS", repo, "question")
 
 
 def parse_feedback(text: str, repo: str) -> list[Entry]:
@@ -222,7 +210,7 @@ def parse_feedback(text: str, repo: str) -> list[Entry]:
     entries: list[Entry] = []
     for idx, (line_i, label, rest) in enumerate(hits):
         end = hits[idx + 1][0] if idx + 1 < len(hits) else len(lines)
-        title, _ = _split_inline_status(rest)
+        title = rest.split(MIDDOT, 1)[0].strip()
         entries.append(Entry(label=label, title=title,
                              status=_first_body_line(lines, line_i + 1, end),
                              line=line_i + 1))

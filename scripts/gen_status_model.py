@@ -121,14 +121,33 @@ def crude_count(store_key: str, text: str) -> int:
 # Structured parse
 # --------------------------------------------------------------------------------------
 
-def parse_decisions(text: str) -> dict:
+def parse_decisions(text: str, repo: str) -> dict:  # repo unused; uniform parser signature
     lines = text.splitlines()
-    nums = [int(m.group(1)) for ln in lines if (m := D.DECISION_HEADING.match(ln))]
+    heads = [(i, int(m.group(1)), m.group(2))
+             for i, ln in enumerate(lines) if (m := D.DECISION_HEADING.match(ln))]
+    nums = [n for _, n, _ in heads]
+    # Decision state is BEST-EFFORT and NEVER extraction-gated (see gate wiring in build_repo):
+    # a decision with no extractable state is `unstated` — a legitimate optional-by-convention
+    # absence (intent-only / ledger-meta entries), not a defect. `inline_states` surfaces HCA's
+    # lowercase '· active'/'· held' dialect tokens as-authored; health-app decisions state via a
+    # '**Status:**' body line (free prose) and contribute to `stated` without an inline token.
+    inline: Counter = Counter()
+    stated = 0
+    for idx, (line_i, _num, rest) in enumerate(heads):
+        end = heads[idx + 1][0] if idx + 1 < len(heads) else len(lines)
+        if D.decision_state(lines, line_i, rest, end):
+            stated += 1
+            tok = D.decision_inline_state(rest)
+            if tok:
+                inline[tok] += 1
     return {
         "count": len(nums),
         "max": max(nums) if nums else 0,
         "min": min(nums) if nums else 0,
         "gapless": bool(nums) and max(nums) == len(nums) == len(set(nums)),
+        "stated": stated,
+        "unstated": len(nums) - stated,
+        "inline_states": dict(sorted(inline.items())),
     }
 
 
@@ -160,11 +179,13 @@ def _tally_stateful(headings: list[tuple[int, str]], lines: list[str],
     }
 
 
-def parse_questions(text: str) -> dict:
+def parse_questions(text: str, repo: str) -> dict:
     lines = text.splitlines()
     headings = [(i, m.group(2)) for i, ln in enumerate(lines)
                 if (m := D.QUESTION_HEADING.match(ln))]
-    return _tally_stateful(headings, lines, D.QUESTION_STATES)
+    # Per-repo vocab (#191 unify): UNSTARTED is a valid question state for HCA, off-vocab drift
+    # for health-app. Classified against the repo's own tuple, never the shared one.
+    return _tally_stateful(headings, lines, D.question_states(repo))
 
 
 def _branch_status_cell(cells: list[str]) -> str:
@@ -182,7 +203,7 @@ def _branch_status_cell(cells: list[str]) -> str:
     return cells[2] if len(cells) > 2 else ""
 
 
-def parse_branches(text: str) -> dict:
+def parse_branches(text: str, repo: str) -> dict:  # repo unused; uniform parser signature
     lines = text.splitlines()
     by_state: Counter = Counter()
     off_vocab: Counter = Counter()
@@ -263,7 +284,7 @@ def build_repo(repo: str, sha: str, texts: dict) -> dict:
     out = {"provenance": {"ref": "master", "sha": sha}}
     for store_key in ("decisions", "questions", "branches"):
         text = texts[store_key]
-        parsed = PARSERS[store_key](text)
+        parsed = PARSERS[store_key](text, repo)
         crude = crude_count(store_key, text)
         gate_count_parity(repo, store_key, crude, parsed["count"])
         if store_key == "decisions":
@@ -387,10 +408,29 @@ def self_check() -> int:
     # 3. extraction empty across all N (the **State:** class)
     expect_halt("extraction empty", lambda: gate_extraction_nonempty(
         "r", "questions", {"count": 89, "by_state": {}, "off_vocab": {}, "missing_state": 89}))
-    # off-vocab is NOT a halt — it is tallied
-    ov = {"count": 2, "by_state": {"OPEN": 1}, "off_vocab": {"UNSTARTED": 1}, "missing_state": 0}
+    # off-vocab is NOT a halt — it is tallied. (Example token is genuinely off-vocab: UNSTARTED
+    # is now an IN-vocab question state, so it would no longer illustrate the off-vocab path.)
+    ov = {"count": 2, "by_state": {"OPEN": 1}, "off_vocab": {"PARKED": 1}, "missing_state": 0}
     gate_extraction_nonempty("r", "questions", ov)  # must not raise
     print("  ok   off-vocab tallied, not halted", file=sys.stderr)
+
+    # grammar positives for the reader-channel changes (no network).
+    # G6 — per-repo question vocab: UNSTARTED is DRIFT on a health-app question but CLEAN on an
+    # HCA question. BOTH directions asserted; the health-app direction is exactly the drift
+    # signal a shared-tuple edit would have silenced.
+    assert D.classify("UNSTARTED", D.question_states("health-app")) == ("UNSTARTED", True), \
+        "UNSTARTED on a health-app question must classify off-vocab (drift)"
+    assert D.classify("UNSTARTED", D.question_states("health-connect-app")) == ("UNSTARTED", False), \
+        "UNSTARTED on an HCA question must classify clean (in-vocab)"
+    assert D.classify("active", D.question_states("health-connect-app")) == (None, False), \
+        "lowercase 'active' is not a caps token — never a question state, either repo"
+    assert D.decision_inline_state("Title  ·  active  ·  supersedes #10") == "active", \
+        "decision inline reader must SCAN segments, not take the last"
+    assert D.decision_inline_state("Title  ·  held") == "held", "held is an enumerated inline token"
+    assert D.decision_inline_state("### 45. health-app style, no middot") == "", \
+        "no '·' -> no lowercase inline decision state (health-app decisions use **Status:**)"
+    print("  ok   G6 per-repo vocab (UNSTARTED drift@health-app / clean@HCA); decision channel scans",
+          file=sys.stderr)
     print("self-check: all gate positives fired", file=sys.stderr)
     return 0
 
