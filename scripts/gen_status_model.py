@@ -151,22 +151,24 @@ def parse_decisions(text: str, repo: str) -> dict:  # repo unused; uniform parse
     }
 
 
-def _tally_stateful(headings: list[tuple[int, str]], lines: list[str],
+def _tally_stateful(headings: list[tuple[int, str, str]], lines: list[str],
                     vocab: tuple[str, ...]) -> dict:
     """Shared tally for heading-driven stateful stores (questions). `headings` is
-    [(line_index, heading_remainder), ...]. Returns count, by_state, off_vocab, missing."""
+    [(line_index, ident, heading_remainder), ...] — `ident` names the offender when state is
+    missing (#209 gate: questions carry mandatory state, so a missing one is named). Returns
+    count, by_state, off_vocab, missing_state, missing_ids."""
     by_state: Counter = Counter()
     off_vocab: Counter = Counter()
-    missing = 0
-    for idx, (line_i, rest) in enumerate(headings):
+    missing_ids: list[str] = []
+    for idx, (line_i, ident, rest) in enumerate(headings):
         end = headings[idx + 1][0] if idx + 1 < len(headings) else len(lines)
         raw = D.entry_state(lines, line_i, rest, end)
         if not raw:
-            missing += 1
+            missing_ids.append(ident)
             continue
         tok, off = D.classify(raw, vocab)
         if tok is None:
-            missing += 1
+            missing_ids.append(ident)
         elif off:
             off_vocab[tok] += 1
         else:
@@ -175,13 +177,14 @@ def _tally_stateful(headings: list[tuple[int, str]], lines: list[str],
         "count": len(headings),
         "by_state": dict(sorted(by_state.items())),
         "off_vocab": dict(sorted(off_vocab.items())),
-        "missing_state": missing,
+        "missing_state": len(missing_ids),
+        "missing_ids": missing_ids,
     }
 
 
 def parse_questions(text: str, repo: str) -> dict:
     lines = text.splitlines()
-    headings = [(i, m.group(2)) for i, ln in enumerate(lines)
+    headings = [(i, f"Q{m.group(1)}", m.group(2)) for i, ln in enumerate(lines)
                 if (m := D.QUESTION_HEADING.match(ln))]
     # Per-repo vocab (#191 unify): UNSTARTED is a valid question state for HCA, off-vocab drift
     # for health-app. Classified against the repo's own tuple, never the shared one.
@@ -207,7 +210,7 @@ def parse_branches(text: str, repo: str) -> dict:  # repo unused; uniform parser
     lines = text.splitlines()
     by_state: Counter = Counter()
     off_vocab: Counter = Counter()
-    missing = 0
+    missing_ids: list[str] = []
     rows = 0
     for ln in lines:
         if not D.is_table_data_row(ln):
@@ -217,7 +220,7 @@ def parse_branches(text: str, repo: str) -> dict:  # repo unused; uniform parser
         status_cell = _branch_status_cell(cells)
         tok, off = D.classify(status_cell, D.WORK_ITEM_STATES)
         if tok is None:
-            missing += 1
+            missing_ids.append(cells[0] if cells else "?")   # the branch name names the offender
         elif off:
             off_vocab[tok] += 1
         else:
@@ -226,7 +229,8 @@ def parse_branches(text: str, repo: str) -> dict:  # repo unused; uniform parser
         "count": rows,
         "by_state": dict(sorted(by_state.items())),
         "off_vocab": dict(sorted(off_vocab.items())),
-        "missing_state": missing,
+        "missing_state": len(missing_ids),
+        "missing_ids": missing_ids,
     }
 
 
@@ -276,6 +280,21 @@ def gate_extraction_nonempty(repo: str, store_key: str, parsed: dict) -> None:
         )
 
 
+def gate_no_missing_state(repo: str, store_key: str, parsed: dict) -> None:
+    """Questions and branches carry MANDATORY state — unlike decisions, whose `**Status:**` is
+    optional by convention (#209). Any question or branch missing its state is a store defect, so
+    HALT on ANY non-zero missing (no threshold) and NAME the offenders. This is stricter than
+    `gate_extraction_nonempty`, which only fires when ALL N are empty (the #190 schema-mismatch
+    class); a single stateless item slips past that gate but not this one."""
+    missing_ids = parsed.get("missing_ids", [])
+    if missing_ids:
+        ids = ", ".join(missing_ids)
+        raise StatusGateError(
+            f"MISSING STATE [{repo}/{STORE_FILE[store_key]}.md]: {len(missing_ids)} item(s) "
+            f"declare no state: {ids}. Questions and branches must each carry a state (#209); HALT."
+        )
+
+
 # --------------------------------------------------------------------------------------
 # Build
 # --------------------------------------------------------------------------------------
@@ -288,9 +307,11 @@ def build_repo(repo: str, sha: str, texts: dict) -> dict:
         crude = crude_count(store_key, text)
         gate_count_parity(repo, store_key, crude, parsed["count"])
         if store_key == "decisions":
-            gate_sequence(repo, parsed)
+            gate_sequence(repo, parsed)                        # decisions: sequence, not extraction (#209)
         else:
-            gate_extraction_nonempty(repo, store_key, parsed)
+            gate_extraction_nonempty(repo, store_key, parsed)  # #190 all-empty schema-mismatch
+            gate_no_missing_state(repo, store_key, parsed)     # #209 any partial-missing, ids named
+        parsed.pop("missing_ids", None)   # transient — gate consumes it; never persisted (schema stays v1)
         out[store_key] = parsed
     return out
 
@@ -413,6 +434,14 @@ def self_check() -> int:
     ov = {"count": 2, "by_state": {"OPEN": 1}, "off_vocab": {"PARKED": 1}, "missing_state": 0}
     gate_extraction_nonempty("r", "questions", ov)  # must not raise
     print("  ok   off-vocab tallied, not halted", file=sys.stderr)
+
+    # 4. any PARTIAL missing state (#209) — halts and names the offender, no threshold.
+    expect_halt("missing state (partial)", lambda: gate_no_missing_state(
+        "r", "questions", {"count": 3, "by_state": {"OPEN": 2}, "off_vocab": {},
+                           "missing_state": 1, "missing_ids": ["Q42"]}))
+    gate_no_missing_state("r", "branches", {"count": 2, "by_state": {"DONE": 2}, "off_vocab": {},
+                                            "missing_state": 0, "missing_ids": []})  # clean: no raise
+    print("  ok   no-missing-state gate (partial halts + names ids; clean passes)", file=sys.stderr)
 
     # grammar positives for the reader-channel changes (no network).
     # G6 — per-repo question vocab: UNSTARTED is DRIFT on a health-app question but CLEAN on an
