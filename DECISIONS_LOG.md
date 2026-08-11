@@ -8164,3 +8164,74 @@ Census invariants reproduced: 17 `unstated` (id set above, stable across the 193
 token surfaces as `unstated`, prompting re-enumeration, not silent coercion); or a private state reader is
 reintroduced into either tool (the divergence this closes recurs); or an `UNSTARTED` is authored on a
 health-app question and intended as real state rather than drift (the per-repo split would then be revisited).
+
+### 208. The #186 moratorium is lifted and replaced by a mint filter, not a schedule
+
+**Decision:** #186 was a volume brake, minted after a review found the governance layer had over-corrected —
+governance had become the work rather than what enables it. It was reduced and refocused; the brake has
+served. Lifting it. In its place, the standing test: a rule mints only where the session's primary objective
+was product or tooling, the rule was discovered by that work rather than sought, and it is the minimum that
+closes what was found. A session that opens on governance, or that mints beyond the defect it hit, fails the
+test. No scheduled governance review — a recurring review generates rules to justify itself, which is the
+failure this exists to prevent. Instead, the status report surfaces rules unreferenced since mint, and
+pruning happens on that signal at Luke's discretion. #190 and #191, minted while #186 was live, stand under
+this test. Supersedes #186.
+
+**Rationale:** A volume brake is a blunt instrument — it slows good mints and bad alike. A filter keyed on
+provenance (primary objective, discovered-not-sought, minimum-that-closes) discriminates instead of throttling,
+and the unreferenced-since-mint signal turns pruning into evidence-driven housekeeping rather than a scheduled
+ritual that must find work to justify its cadence.
+
+**Status:** active. Supersedes #186.
+
+**How you know:** `mint filter` is absent from `DECISIONS_LOG.md` (0 occurrences, verified 2026-08-12 at
+master `4c02763`); adjudicated LAND-UNCHANGED in this session's Step 0 — the premise is independent of #207.
+
+**Do not revisit unless:** a scheduled or recurring governance review is proposed again, or the status
+report's unreferenced-rule signal proves insufficient to drive pruning in practice.
+
+### 209. The extraction gate covers questions and branches; decisions are governed by sequence
+
+**Decision:** Re-measured 2026-08-12 at master `4c02763` via the post-#207 unified reader
+(`gen_status_model --dry-run`): zero missing state across questions and branches in both repos; **17 of 207**
+health-app decisions carry no state (`unstated` — best-effort, never a defect, the stable id set named in
+#207); and all **35 of 35** HCA decisions carry state in a lowercase inline `·` channel (`{active: 34,
+held: 1}`), which #207's unified reader now reads (HCA decisions `unstated=0`) — the earlier "neither
+generator reads HCA's inline channel" no longer holds. Decision `**Status:**` is optional by convention and
+the two repos' decision dialects differ; extending `gate_extraction_nonempty` to decisions would halt both
+stores permanently while catching nothing. Decisions remain covered by the sequence gate. #207 already holds
+this scope untouched (questions + branches only); this entry formalises that as the ruling.
+
+**Rationale:** The extraction gate exists to catch a MISSING state where state is mandatory. On decisions,
+absence of `**Status:**` is convention (17/207 omit it deliberately, including ledger entries #129–#134), not
+omission — a gate there would fire on the convention, not a defect, and would halt permanently while catching
+nothing real. Sequence, not extraction, is the right guard for decision integrity.
+
+**Status:** active. Confirms and formalises the scope #207 left untouched.
+
+**How you know:** re-measured via the landed reader at `4c02763` — health-app 17 `unstated` / 207 (gapless),
+HCA `unstated=0` (channel now read), `drift []`; adjudicated AMENDED in Step 0 (ruling preserved, premise
+figures updated from the pre-#207 `17/193` and the "neither generator reads" claim to the post-#207 ground).
+
+**Do not revisit unless:** the two repos' decision dialects converge so that state is reliably present on
+every decision (a gate would then catch omissions rather than convention), or the sequence gate proves
+insufficient to catch a genuinely mis-sequenced decision.
+
+### 210. Governance placeholders in code use `#NEXT`, never `#N`
+
+**Decision:** A bulk `#N` → number substitution mangled a docstring where `#N` meant "the highest number."
+Caught by inspection, not by a gate, on a class of edit that recurs every session. `#NEXT` is already the
+store convention and the placeholder guard already scans for it.
+
+**Rationale:** `#N` is ambiguous — it reads as both a placeholder-to-resolve and a literal token meaning
+"some number N" in prose. `#NEXT` is unambiguous, already the convention in the stores, and already gated, so
+a bulk resolve pass can never mistake explanatory prose for a placeholder.
+
+**Status:** active.
+
+**How you know:** the `#N`-meaning-"highest number" mangle was caught by inspection, not a gate; `#NEXT` is
+the store convention and the placeholder guard scans `^### #NEXT` / `^## Q#NEXT`
+(`scripts/check_governance_placeholders.py:75-76`, verified 2026-08-12). LAND-UNCHANGED in Step 0.
+
+**Do not revisit unless:** the placeholder token itself changes, or a gate is added that scans bare `#N`
+directly.
