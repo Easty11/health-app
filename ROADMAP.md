@@ -1,6 +1,6 @@
 # ROADMAP
 
-Last updated: 2026-08-04
+Last updated: 2026-08-11
 
 ---
 
@@ -86,6 +86,7 @@ _Live, undated — no external date orders these; pick by readiness._
 | Dual-panel scroll layout issue | UI bug — scroll behaviour broken in dual-panel view |
 | ~~`mcp_server.get_hevy_workouts` references unimported `Session` type~~ | **DONE** (`feat/frontend-readback`, 2026-07-29) — one-line `from sqlalchemy.orm import Session` added. **Correction:** it did **not** "raise `NameError` at call time" — `db: Session = SessionLocal()` is a LOCAL annotation, which CPython never evaluates at runtime (verified empirically: no NameError), so the tool worked all along. A correctness fix, not a live-bug fix. Struck, not deleted. |
 | Sleep duration displays `total_sleep_time_minutes`, which is the in-bed span, not sleep | **SEMANTIC error, not cosmetic — classification corrected 2026-07-24.** Three sites read `total_sleep_time_minutes` and fall back to `actual_sleep_time_minutes`: `context_builder.py:601`, `routers/recovery.py:67`, `HealthPanel.jsx:92`. Originally filed as a `total_ ?? actual_` *presentation inconsistency with no behavioural effect* — that judgement predated knowing what the fields mean. The CBT-I Step-3 probe settled it: across 31 real `passive_overnight` nights, `total_sleep_time_minutes` sits at the clock window `(wake − bedtime)` (remainder median 0) while `actual_sleep_time_minutes` is scored sleep (window − actual median +35). So `total_` is **time in bed**, and these three sites display TIB **labelled as sleep duration** — inflated by ~30–45 min. The correct field for "sleep duration" is `actual_sleep_time_minutes`; `total_` is a TIB/SE-denominator quantity. Fix is a field swap at three sites (mind the `??`/`or` fallback direction). Does **not** clear the bar to interrupt the CBT-I build; still ROADMAP. Corroboration it matters: tonight's 6h00 prescription was derived from `actual_` — the correct scale; `total_` would have prescribed nothing. Owner: Luke. Recorded here per #112. |
+| **Status tooling: cross-repo diff engine (manually-invokable report)** — continuation of the status-reporting plan | Next step after the reader unification (`#207`) that closed `#191`'s two-reader divergence. `#190`–`#193` landed the parser gate + snapshot baseline (Steps 1–2); `#207` unified the machine model + digest readers (per-repo question vocab, HCA `·` channel, decisions best-effort `unstated`). Remaining: a manually-invokable cross-repo status diff/report over the snapshot model. Chat-brief-driven, not yet a decision; this lane is INSTRUMENT — the product lanes above (interpretation inc-2 rephrase, inc-3 lever-tap, lab-pipeline small lanes) stand ahead of it by readiness. Owner: Luke. |
 
 ---
 
