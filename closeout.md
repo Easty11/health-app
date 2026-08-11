@@ -1,81 +1,89 @@
-# Session close-out — 2026-08-10 (Brief: status reporting — parser gate + snapshot baseline, Steps 1–2)
+# Session close-out — 2026-08-11 (interpretation go-live, increment 5)
 
-## 1 · Real commits this session
+## Real commits this session
 
-Session-open ref: `fbc86e9` (master tip at open, Merge PR #49). Landed to master via **PR #50**
-(`status-parser-gate`, merged `--merge --delete-branch`; placeholder guard green 7s; number-at-merge
-re-read held master at #189 / Q89 through the merge instant):
+Session-open ref: `925a5ac` (master HEAD at open). `git log --oneline 925a5ac..HEAD`:
 
-- `03e3e68` fix(gov): repair **State:** extraction; single dialect module; extraction gate
-- `0c3b683` feat(status): gated cross-repo status-model parser
-- `06ab88b` feat(status): snapshot writer — baseline flag + per-repo provenance
-- `d52eca5` gov: mint #190-#193, Q90-Q91; resolve number-at-merge placeholders
-- `5aa022e` Merge pull request #50 from Easty11/status-parser-gate
+```
+a893f1c Merge pull request #52 from Easty11/feat/interpretation-go-live
+9b61d2e feat(interpretation): go-live increment 5 — promote assets on O2, first live run (#194)
+```
 
-This close-out (`chore/session-closeout-0810`) adds its own commit below.
+Plus this close-out commit (`chore: session close-out`), which carries the governance edits
+made during the ritual: ROADMAP two-marker canonical lane, CLAUDE.md Recent-landings (prepend
+#194, trim to 3-cap dropping #188), and this file.
 
-## 2 · Pending-queue reconciliation
+Feature/asset content (`9b61d2e`): three reference assets' `_meta.status` + six levers'
+`draft_status` promoted `ai_draft → human_verified`; stale `_deferred.groups.erythroid` removed;
+DECISIONS_LOG **#194**; OPEN_QUESTIONS **Q92**; ROADMAP increment-5 → DONE + three refinement
+rows. Backend suite 785 green; #98 reference-JSON guard re-asserted; fixture regeneration zero-diff.
 
-No `;cc` pending-commit queue was carried into this session — it opened from a standalone chat brief,
-not a chat close-out handoff. Nothing is provisional: every decision reached this session landed on
-master in PR #50 (#190–#193, Q90–Q91). The cross-repo baseline snapshot is DERIVED data that lives
-outside both repos by design (#192) — `Projects/_status/`, unbacked / single-machine, accepted loss
-stated in its README; it is not a repo artifact and does not appear in git.
+## Pending-queue reconciliation
 
-## 3 · Cold-resume handoff
+No `;cc` pending-commit queue was carried into this session — it opened from a CHAT→CODE brief
+(interpretation increment 5 go-live), not a chat close-out. Nothing provisional. Every brief item
+reconciled:
 
-**What landed.** Steps 1–2 of the status-reporting plan (parser gate + snapshot baseline), scoped
-deliberately — diff engine, ageing backfill, dashboard sections, and scheduling are OUT of scope and
-get their own briefs.
+- **O1** (are the August draws in the store?) — answered live: the 2026-08-04 draw is present (11
+  reports, 51 markers, near-total binding). Luke confirmed there is **no separate 2026-08-10
+  androgens draw** — the brief's "10 Aug androgens" was a mis-date; the androgens sit at 08-04.
+  Item (a) fully closed.
+- **O2** (human-verify the ai_draft assets) — Luke reviewed the 36-claim worksheet, no content
+  issues. Statuses flipped verbatim in `9b61d2e` (G2 held: only status fields + the declared
+  erythroid removal changed).
+- **Go-live four items** — (a) real-panel confirm done pre-session (#187 path); (b) assets promoted
+  here (erythroid group was already active; `trt_erythrocytosis_watch` stays `blocked_on_contract`);
+  (c) view-pointer already live at #158; (d) fixture⇄asset drift none. Landed as **#194**.
+- **#51 enforcement-locus finding** — confirmed: no code reads asset status; the render-gate is
+  curation convention only. Recorded, not mechanised (moratorium). Opened **Q92**.
 
-- **The `**State:**` bug — the session's headline finding.** `gen_governance_view._status_from_body`
-  matched `**Status:**` while health-app OPEN_QUESTIONS uses `**State:**`, so all 89 health-app
-  questions rendered blank in the digest; the existing count / parsed-vs-emitted gates were blind to
-  it (heading counts still matched). Fixed by matching either label.
-- **One dialect module (#191).** `scripts/gov_dialects.py` is the single home for both repos'
-  heading/state grammar; `gen_governance_view` and the new `gen_status_model` both import it.
-- **Gated status model (#190).** `scripts/gen_status_model.py` — machine JSON with three gates
-  (count-parity, decision-sequence, non-empty-extraction) and an off-vocab/drift tally. HALTs with
-  non-zero exit + stderr, emits nothing partial. `--self-check` / `--dry-run` modes.
-- **Baseline snapshot (#192/#193).** Snapshot #1 seeded to
-  `Projects/_status/snapshots/2026-08-10T115614Z_model.json`, `baseline:true`, provenance
-  health-app@`fbc86e9` + health-connect-app@`255014a`; `latest.json` byte-identical.
+## Cold-resume handoff
 
-**Brief premise corrected — own the error.** The brief's motivating diagnosis — a committed generator
-that "returned 0 blocked / 0 owed / 0 unstarted / 0 off-vocab, exit-0" — was falsified at Step 0: no
-such tool exists (the only governance parser, `gen_governance_view`, already halts-on-empty and handles
-both dialects). That 0/0/0/0 was an unverified chat-side ad-hoc parse promoted to a diagnosis. The
-original decision #N was dropped, not patched, and the build proceeded greenfield. Recorded as **Q91**.
+**What this session was.** A PRODUCT session: the first live run of the interpretation surface
+against real lab data, and the promotion of its authored assets on human verification. It advanced
+the interpretation lane past go-live. This breaks toward product after the status-tooling
+(instrument) session that preceded it.
 
-**Open questions opened this session.**
+**Sprint state (interpretation lane, ROADMAP build sequence).** 1 · 4a · declared-state · 4b-i ·
+4b-ii · **5 (go-live) all DONE**. Remaining increments: **2 (rephrase)**, **3 (lever-tap education
+thread)** — both UNSTARTED.
 
-- **Q90 (OPEN)** — HCA carries work-item states (`UNSTARTED×6`, `BLOCKED`) on question headings; the
-  shared `### State vocabulary` block is byte-identical across repos (SHA `27337630fca6db03`), so this
-  is drift, not a dialect. The status model accepts + flags it every run. **Resolution is an HCA-side
-  store edit — cross-repo, owner Luke, not actionable from a health-app write session.**
-- **Q91 (OPEN)** — should brief-authoring carry a verify-checkpoint for unseeable-surface claims
-  (structural answer known; whether it warrants a codified ritual is the open fork).
+**Single clearest next action.** **Increment 2 (rephrase pass).** Its requirement is no longer
+speculative — the first real user (Luke) found the verified base text clinically correct but too
+complex in register for a layperson. Increment 2 is exactly the layer that simplifies presentation
+over the base text under a rephrase-may-not-change-claims eval. Two small marker_canonical lanes are
+quick alternatives if a smaller pick is wanted (both `marker_canonical.json` additions):
+  - **Bilirubin conjugated + CK binding** — failed canonical binding on the first live draw; CK also
+    unblocks the deferred `ck_muscle_discriminator` relation (it is now ordered: CK 394). Kin to the
+    urine-ACR mapping fix.
+  - **Marker display-name polish (acronym-in-brackets)** — discharges the deferred `producer.py:105`
+    "polished names"; Luke's go-live ask (full name + acronym, e.g. `Aspartate aminotransferase (AST)`).
 
-**What this brief did NOT resolve — carried, gating the scheduling brief.**
+**Open questions (live / relevant), by status.**
+- **Q92 (OPEN, new)** — should asset verification status gate rendering in code, or stay convention?
+  No consumer harmed either way today (live assets all `human_verified`); (b) is a real mechanism
+  with real cost, needs a decision before it is built. Cross-refs #51, #194.
+- **Q90 (OPEN)** — HCA question-heading vocabulary drift; HCA-side store edit, owner Luke, cross-repo.
+- **Q91 (OPEN)** — should brief-authoring carry a verify-checkpoint for unseeable-surface claims?
+- Interpretation-lane forks still parked: **Q64/Q65** (marker-authored fields on ungrouped rows; the
+  other relation kinds' `demotes_when`), **Q62** (axis_verdict has no generated-text consumer).
 
-- **S1 / S2** — scheduling option + cadence for the status model: unstarted, own brief.
-- **S4** — how a HALT reaches Luke when the artifact is the only output surface. The gate reports to
-  stderr + non-zero exit: sufficient for MANUAL runs, explicitly **NOT** sufficient once scheduled — a
-  silent scheduled failure is indistinguishable from a quiet week, the exact failure this system exists
-  to prevent. **Blocker on the scheduling brief, not this one.**
+**What was NOT touched — named explicitly.**
+- **Increment 2 (rephrase)** and **increment 3 (lever-tap thread)** — the interpretation lane's
+  remaining product increments. 2 is now operator-confirmed as the priority; 3 is untouched.
+- **Selectable term definitions / glossary** — new education feature raised in go-live O2; ROADMAP
+  row added, shape undecided, not built.
+- **`feat/cbti-eval-trigger`** — OWED (obsolete against master's 4-night engine per #165; full rework
+  checklist at BRANCHES.md:88). Pre-existing, untouched this session, pushed.
+- **#116/#121 deploy probe** — still OWED as a standing item, but **immaterial to this go-live**: the
+  status flips and the `_deferred` removal change no producer output (nothing reads status; the
+  producer reads active groups + `_meta.version`), so the deployed app's interpretation output is
+  unchanged by #194. The "first live run" was compute-on-read against the real DB, i.e. the real
+  producer on real data; the deployed surface has served this same output since #158. No deploy
+  verification is owed for this change's correctness.
+- **CBT-I user surface, Banister/ACWR product surfaces, `lab_accession`** — untouched, as in prior
+  sessions.
 
-**What stood still — named explicitly.** This was an INSTRUMENT / governance session (tooling that
-watches the stores), not product. The feature lanes untouched, and where they sit:
-
-- **HC exercise ingestion (steps 2–3 of #189)** — HELD: HCA forwards no exercise identifier; the
-  synthetic-key fallback is deliberately not invoked. Gated on an HCA-side wire change (owner Luke).
-- **`feat/cbti-eval-trigger`** — pre-existing branch, 2 unlanded commits, untouched again this session;
-  rowed OWED in `BRANCHES.md`. The CBT-I eval-trigger rework still owes its rebuild.
-- **#116 / #121 backend deploy probe** — still OWED (`railway deployment list --service
-  health-app-backend` SUCCESS; served-bundle grep for the frontend).
-- **Interpretation increments / Polar→chat / Banister** — untouched.
-
-**Single clearest next action.** Land this close-out, then take the scheduling brief (S1/S2) — which
-must resolve **S4** (a HALT must reach Luke off the artifact surface) before the status model is ever
-scheduled, or a quiet failure reads as a quiet week. If instead returning to product: the #116/#121
-deploy probe is the smallest OWED item; HC exercise ingestion is gated on the HCA wire change.
+**Branch terminal-state gate — passed.** `feat/interpretation-go-live` merged + remote-deleted
+(PR #52, #194). `feat/cbti-eval-trigger` OWED in BRANCHES.md:88 (pre-existing, untouched, pushed).
+`master` clean, +0 vs origin.
