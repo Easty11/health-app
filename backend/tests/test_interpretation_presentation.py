@@ -18,6 +18,7 @@ from pathlib import Path
 from interpretation.presentation import (
     BLOCK,
     FRAGMENT,
+    presentation_hash,
     render_base_text,
     serialize,
 )
@@ -129,3 +130,27 @@ def test_movement_fragment_contains_name_and_value():
 def test_render_base_text_is_the_ordered_join():
     frags = serialize(_payload())
     assert render_base_text(frags) == "\n\n".join(f.text for f in frags)
+
+
+def test_flagged_tracks_gate_state():
+    """fsh is below the reference range -> flagged; a normal in-range member is not."""
+    frags = {f.addr: f for f in serialize(_payload())}
+    fsh = next(f for a, f in frags.items() if a.endswith("fsh.movement"))
+    assert fsh.flagged is True
+    normal = next(f for a, f in frags.items()
+                  if a.endswith("testosterone_total.movement"))
+    assert normal.flagged is False
+
+
+def test_presentation_hash_is_stable_and_content_sensitive():
+    p = _payload()
+    h1 = presentation_hash(serialize(p))
+    assert h1 == presentation_hash(serialize(p))          # stable across runs
+    assert len(h1) == 64                                   # sha256 hex
+    # meta.generated_at is NOT hashed: mutating it does not change the hash.
+    p2 = json.loads(json.dumps(p))
+    p2["meta"]["generated_at"] = "1999-01-01T00:00:00+00:00"
+    assert presentation_hash(serialize(p2)) == h1
+    # A change to an actual reading DOES change the hash.
+    p2["groups"][0]["members"][0]["current"]["value_num"] = 999.9
+    assert presentation_hash(serialize(p2)) != h1

@@ -31,6 +31,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 018 — cbti_prescriptions      FK to cbti_blocks (CASCADE) + self (superseded_by) — append-only window ledger
 019 — cbti_isi                FK to cbti_blocks (SET NULL, nullable) — ISI outcome-measure administrations
 020 — capability_observations FK to users (CASCADE) — append-only capability measurement ledger
+021 — interpretation_rephrases  no FK — disposable plain-register overlay + promotion state
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -917,6 +918,29 @@ CREATE INDEX ix_capability_obs_user_date
 _(`capability_state` and `fortification_profiles`, migration `d8e1f2a3b4c5`, predate this document's coverage and are not recorded here.)_
 
 **daily_records diary columns** (migrations `e5f2a9c7b104`, `a7b3f1c8d240`, `b2d5f9e04a17`). Thirteen additive nullable AM-moment columns extend `daily_records` for the CBT-I sleep diary, sparse by design (captured only while an open `cbti_block` exists): `got_into_bed`, `lights_out`, `sleep_latency_min`, `waso_min`, `night_wakings_n`, `final_wake`, `out_of_bed`, `naps_min`, `diary_se_pct`, `diary_tst_min`, and — from `b2d5f9e04a17` — the waking-cause decomposition `wakings_nocturia_n`, `wakings_pain_n`, `wakings_spontaneous_n`. The three waking-cause counts decompose `night_wakings_n` by cause; they are **observational only** (the titration engine must not read them — `grep -rn 'wakings_' backend/cbti/` stays empty) and carry **no sum constraint** to `night_wakings_n` (recall is imperfect; consistency is surfaced, never enforced). Migration `f1a4c7e29b83` adds two nullable `Text` free-text columns, **`am_notes`** and **`pm_notes`** — uncaptured context that doesn't fit a structured field, captured through the AM and PM surfaces respectively. **Separate columns, not one:** the two surfaces submit independently, so a shared column's later write would clobber the earlier. Observational — read by no engine code, and not gated on an open block. `got_into_bed` (phase 2) is the moment you got into bed, **distinct** from `lights_out` (tried to sleep) — sleep efficiency is computed over the `lights_out`→`out_of_bed` window, so only `lights_out` was imported in phase 1 and the 53 historical rows carry `got_into_bed` NULL. `diary_se_pct` / `diary_tst_min` are frozen at AM capture (same contract as `naive_baseline`, never recomputed). `naps_min` is logged PM on date D but belongs to the night terminating on wake-date D+1 — stored at PM on D, the engine reads it from `(date - 1)`. _(The `daily_records` parent table itself predates this document's coverage; only the CBT-I additions are recorded here.)_
+
+### 021 — interpretation_rephrases
+
+Disposable plain-register overlay + its promotion state for interpretation increment 2 (migration `c3f1a8b2d9e4`, DECISIONS_LOG #202). One row is a generated plain-language rephrase of an interpretation presentation, keyed by the base text it was built from (`payload_hash` = sha256 of the serialiser's `addr\ttext`, from `interpretation/presentation.py::presentation_hash`) and the `register`. It is **both** the presentation cache (brief step 4) and the training-wheels promotion record (step 6) — one table, because a promotion must survive a Railway restart, which an in-memory cache would not. Expected at zero rows until the first plain-register request generates one.
+
+**Never the record, always disposable.** The structured payload is the record (#202 clause 2); dropping any row is always safe — a missing row regenerates or renders the template. No `user_id` and no FK: the `payload_hash` is derived from one user's own readings, so a cross-user collision is vanishingly unlikely and, if it occurred, the base text (hence the valid rephrase) would be identical anyway.
+
+**Promotion binds to the text, not the panel.** A new draw or an asset edit changes the base text → a new `payload_hash` → a new row at `ai_draft`. A stale `human_verified` can therefore never attach to changed text — regeneration is a fail-closed demotion, never a wrong promotion. The eligibility gate is **unconditional and server-side**: a plain-register request whose row is not `human_verified` renders the template regardless of the client's toggle (the toggle is a preference; the server decides). There is no auto-retire counter — retiring the gate after a few promoted panels is a later manual call.
+
+```sql
+CREATE TABLE interpretation_rephrases (
+    id            INTEGER PRIMARY KEY,
+    payload_hash  VARCHAR(64) NOT NULL,        -- sha256 of base text (addr+text), NOT of meta.generated_at
+    register      VARCHAR(20) NOT NULL,        -- 'plain' (only the generated overlay is stored)
+    text          TEXT NOT NULL,               -- the assembled plain-register presentation
+    status        VARCHAR(20) NOT NULL DEFAULT 'ai_draft',   -- ai_draft | human_verified (#194 gate vocabulary)
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_interp_rephrase_payload_register UNIQUE (payload_hash, register)
+);
+
+CREATE INDEX ix_interpretation_rephrases_payload_hash
+    ON interpretation_rephrases (payload_hash);
+```
 
 ## Canonical Metric Type Whitelist
 

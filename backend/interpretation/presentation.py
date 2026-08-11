@@ -32,7 +32,8 @@ clause 3) treat each fragment's own `text` as the exact allowed-input set.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import hashlib
+from dataclasses import dataclass
 
 # Granularity constants — the #202 dial.
 FRAGMENT = "fragment"  # gate/verdict-adjacent; order preserved
@@ -53,12 +54,24 @@ class Fragment:
     `censored` — True only on a movement fragment whose delta is censored (#205/#Q70:
                magnitude is not computable). The validator forbids a rephrase of a
                censored fragment from acquiring magnitude or direction language.
+    `flagged`  — True on a movement fragment whose marker is out of range, in a safety
+               band, or news. The validator rejects minimising adverbs on a flagged
+               marker (a simplification may not soften a flag into reassurance).
     """
     addr: str
     text: str
     granularity: str
     censored: bool = False
+    flagged: bool = False
     kind: str = ""  # coarse tag for callers/tests: "header"|"frame"|"movement"|"mechanism"|"stable_rationale"|"lever"
+
+
+def _flagged(row: dict) -> bool:
+    """A marker is flagged if any gate has something to say — out of range, in a safety
+    band, or news. This is the same disjunction `_should_surface` uses per member."""
+    return bool((row.get("range_gate") or {}).get("is_out_of_range")
+                or (row.get("safety_gate") or {}).get("status") == "in_band"
+                or (row.get("news_gate") or {}).get("is_news"))
 
 
 # --------------------------------------------------------------------------- #
@@ -171,6 +184,7 @@ def _member_fragments(base_addr: str, row: dict) -> list[Fragment]:
         text=_movement_text(row),
         granularity=FRAGMENT,
         censored=bool((row.get("delta") or {}).get("censored")),
+        flagged=_flagged(row),
         kind="movement",
     )]
     mech = row.get("mechanism")
@@ -228,6 +242,7 @@ def serialize(payload: dict) -> list[Fragment]:
             text=_movement_text(row),
             granularity=FRAGMENT,
             censored=bool((row.get("delta") or {}).get("censored")),
+            flagged=_flagged(row),
             kind="movement",
         ))
 
@@ -238,3 +253,15 @@ def render_base_text(fragments: list[Fragment]) -> str:
     """The fail-closed full render — fragments joined in order. This is what the view
     shows when the plain register is off or every rephrase failed (#202 clause 4)."""
     return "\n\n".join(f.text for f in fragments)
+
+
+def presentation_hash(fragments: list[Fragment]) -> str:
+    """A stable content hash over the base text — the presentation cache / promotion key.
+
+    Hashes only (addr, text), which are derived from the reviewed assets and the user's
+    readings — NOT `meta.generated_at`, so the same draw yields the same hash on every
+    request and a promoted rephrase keeps applying. A change in any fragment's text (a new
+    draw, an asset edit) changes the hash -> a new cache key -> the rephrase re-enters
+    ai_draft (fail-closed demotion; a stale promotion can never attach to changed text)."""
+    joined = "\n".join(f"{f.addr}\t{f.text}" for f in fragments)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
