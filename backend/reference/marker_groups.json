@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "v0",
-    "status": "ai_draft",
+    "status": "human_verified",
     "binds_to": "marker_canonical.json v0.2 (#57)",
     "contract": "INTERPRETATION_OUTPUT_CONTRACT v0.4 (#63)",
     "authored": "2026-07-06",
@@ -232,18 +232,7 @@
 
   "_deferred": {
     "note": "Deferred entries fall into THREE classes, not one. Only the first is discharged by expanding marker_canonical.json. (1) vocabulary gap \u2014 the marker is on the report but has no canonical id yet; a vocab bump clears it; blocked_on names the exact missing id(s). (2) never ordered \u2014 the marker could be canonical but has never been ordered, so no data arrives until it is; only ordering the test clears it; see _blocked_on_order. (3) lab does not report it \u2014 structurally absent from this provider's output; neither a bump nor an order clears it, so the entry must be re-scoped or retired; see retired. Prior to v0.3 this note claimed all deferrals were class (1). That was true of one of four entries, and made the block read as a single queue awaiting a single event.",
-    "groups": {
-      "erythroid": {
-        "intended_members": [
-          "haemoglobin",
-          "haematocrit",
-          "rbc"
-        ],
-        "blocked_on": [],
-        "carries": "the cross-axis context relation below \u2014 the contract's showcase cross-axis instance is unbuildable until these are canonical.",
-        "status": "ready_to_promote"
-      }
-    },
+    "groups": {},
     "relations": {
       "trt_erythrocytosis_watch": {
         "kind": "context",

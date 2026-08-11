@@ -2733,3 +2733,18 @@ a pushed ref — but that fires at Code time, after the claim has already become
 is evidence the same check is owed at brief-AUTHORING time. The structural answer is known; whether it
 warrants a codified checkpoint (a brief-authoring ritual) rather than reliance on the existing rule is
 the open fork — worth a question, not yet a decision. Cross-refs `#190`.
+
+## Q92. Should asset verification status gate rendering in code, or stay a curation convention?
+
+Go-live (`#194`) confirmed the #51 enforcement-locus finding: no code reads a reference asset's
+`_meta.status` or a lever's `draft_status`. The producer reads only `_meta["version"]` and the frontend
+has no status gate, so #51's "nothing renders Section 3 until `human_verified`" is enforced by curation
+discipline alone — an unverified asset would render identically to a verified one. Nothing was built to
+close this: an enforcement gate is exactly the kind of mechanism the moratorium forbids adding unbidden.
+
+**State:** OPEN. The fork: (a) leave it convention — the promotion event (`ai_draft → human_verified`)
+is provenance, and the operator's O2 discipline is the control; or (b) make the producer/gate refuse to
+surface an entry whose status is not `human_verified`, turning the convention into a runtime invariant.
+(b) is a real mechanism with real cost (a half-verified asset would blank sections mid-review) and needs
+a decision before it is built, not a reflex. No current consumer is harmed either way — the live assets
+are now all `human_verified`. Cross-refs `#51`, `#194`.

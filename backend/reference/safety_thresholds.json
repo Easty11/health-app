@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "v0.1",
-    "status": "ai_draft",
+    "status": "human_verified",
     "binds_to": "marker_canonical.json v0.3",
     "contract": "INTERPRETATION_OUTPUT_CONTRACT v0.4 (#63)",
     "authored": "2026-07-22",

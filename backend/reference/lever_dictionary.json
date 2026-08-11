@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "v0",
-    "status": "ai_draft",
+    "status": "human_verified",
     "binds_to": "marker_canonical.json v0.3 (#95)",
     "contract": "INTERPRETATION_OUTPUT_CONTRACT v0.4 (#63)",
     "authored": "2026-07-06",
@@ -20,7 +20,7 @@
       "evidence_refs": ["10.1016/j.jacc.2018.12.062", "10.1210/jcem.86.6.7520", "10.1210/jcem.78.4.8157711"],
       "actor": "physician",
       "channel": "pharmacologic",
-      "draft_status": "ai_draft"
+      "draft_status": "human_verified"
     },
     "aromatase_inhibition": {
       "declared_factor_keys": [],
@@ -31,7 +31,7 @@
       "evidence_refs": ["10.1111/j.1365-2265.2008.03327.x", "10.1111/andr.12126"],
       "actor": "physician",
       "channel": "pharmacologic",
-      "draft_status": "ai_draft"
+      "draft_status": "human_verified"
     },
     "aromatase_adiposity": {
       "declared_factor_keys": [],
@@ -42,7 +42,7 @@
       "evidence_refs": ["10.1210/clinem/dgaf038", "10.1055/a-0658-7712", "10.1111/cen.13723"],
       "actor": "self",
       "channel": "behavioural",
-      "draft_status": "ai_draft"
+      "draft_status": "human_verified"
     },
     "alcohol": {
       "declared_factor_keys": [],
@@ -53,7 +53,7 @@
       "evidence_refs": ["10.1136/bmjopen-2014-005462"],
       "actor": "self",
       "channel": "behavioural",
-      "draft_status": "ai_draft"
+      "draft_status": "human_verified"
     },
     "exercise_muscle": {
       "declared_factor_keys": [],
@@ -64,7 +64,7 @@
       "evidence_refs": ["10.1002/hep.20548", "10.1177/1941738118764870"],
       "actor": "self",
       "channel": "behavioural",
-      "draft_status": "ai_draft"
+      "draft_status": "human_verified"
     },
     "plasma_volume_status": {
       "declared_factor_keys": [],
@@ -75,7 +75,7 @@
       "evidence_refs": ["10.1152/jappl.1974.37.2.247", "10.14814/phy2.13749", "NBK459198"],
       "actor": "self",
       "channel": "behavioural",
-      "draft_status": "ai_draft"
+      "draft_status": "human_verified"
     }
   },
 
