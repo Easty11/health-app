@@ -118,6 +118,23 @@ which is the interim aerobic-only ACWR of `#8`. OPEN rather than BLOCKED — not
 it; it simply has not been built. → `DONE → #28` when the ingestion exists **and** a query then shows
 rows landing. Owner: Luke. Cross-refs `#28`, `#32`, `#10`, ROADMAP "Banister build".
 
+**Addendum (2026-08-11) — Hevy unit-trustworthiness.** Before Hevy kg feeds `load_metrics`, three
+weight-semantics hazards, operator-confirmed:
+
+1. **Arbitrary-unit rows, bounded:** the M&F 2:1-ratio cable machine's markings are neither kg nor lb —
+   arbitrary units logged as kg, unrecoverable by ratio correction. Scope is historic M&F sessions on that
+   machine only; operator has retired it (alternates exist per machine), so the forward stream is clean by
+   practice, not by mechanism — the affected historic rows are unmarked in-data and need a
+   venue/exercise/date filter at integration time.
+2. **Laterality:** unilateral sets log per-limb load under the same exercise name as bilateral work; the
+   in-data signature is duplicated exercise blocks within a session; `hevy_exercise_templates.laterality`
+   is the schema hook.
+3. **Machine identity:** same exercise name spans machines with different leverage across venues (observed:
+   leg extension 117 kg vs 50 kg equivalent effort). No machine/venue key exists in Hevy data, so the
+   profile's "compare within-machine only" rule is unenforceable at the data layer. Low severity —
+   distorts cross-machine trends, not safety — but any `load_metrics` consumer must treat cross-venue steps
+   in a single exercise's history as suspect. Tag hook analogous to laterality if it ever matters enough.
+
 ---
 
 ## Q7. Structured injury ledger (`user_knowledge_entries`) is missing the right proximal semimembranosus tear
@@ -514,8 +531,10 @@ The two repos are **identical** on this line, so nothing has diverged — the de
 merely tolerable. What is *not* safe is leaving it untracked: after #93 both rituals say `rowed`
 while the document that defines the vocabulary says `parked`.
 
-**State:** OPEN — no blocker; needs a shared-block brief with a mirror-first plan and a G1
-re-fingerprint on both sides. Owner: Luke.
+**State:** DONE → #186/#34. Free closure verified 2026-08-11: `parked` is absent from both CLAUDE.md
+files — health-app pruned at #186, the HCA mirror pruned at HCA #34 ("Shared loop-rules block pruned to
+invariants; health-app return trip"). The shared block moved in lockstep, so the struck vocabulary is
+gone from the generator instruction on both sides and nothing has diverged.
 
 ---
 
@@ -576,8 +595,7 @@ cost of leaving the ambiguity open, and it should be settled by decision rather 
 `plasma_volume_status.target_markers`, i.e. nowhere a renderer can reach it. Should `discriminator`
 become a list?
 
-**State:** OPEN — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q37 (I1 enforcement),
-D3 and PV1. Owner: Luke.
+**State:** DONE → #195. Ruled 2026-08-10: evidence-in-field + list promotion.
 
 ---
 
@@ -607,7 +625,7 @@ Recorded here because it lived only in #95's body and this file is what gets act
 in an append-only entry has nothing pointing at it. Flagged at #95's close-out and again before #96's
 merge, unminted both times.
 
-**State:** OPEN — no blocker. Due **4b**, with Q34, Q36, D3 and PV1. Owner: Luke.
+**State:** DONE → #196. Ruled 2026-08-10: enforce, cite `alt` first; cold-fallback ruling included.
 
 ---
 
@@ -647,8 +665,7 @@ direction-agnostic. EFLM's calculator defaults to one-sided (Z 1.64); the one-si
 with `safety_threshold` (Q34), which is directional. Not an open fork — stated so it is not
 re-derived differently next time.
 
-**State:** OPEN — no blocker. Due **4b**, with Q34 (`safety_threshold`), Q36, Q37, Q39 and Q40.
-Owner: Luke.
+**State:** DONE → #197. Ruled 2026-08-10: two interval bands, erythroid.
 
 ---
 
@@ -671,7 +688,7 @@ Proposal: an `effect_locus` field, `physiology` | `measurement`, defaulting to `
 existing lever is correct without edit. The renderer can then refuse to rank a measurement-locus lever
 alongside physiology-locus ones, or label it distinctly.
 
-**State:** OPEN — no blocker. Due **4b**. Owner: Luke.
+**State:** DONE → #198. Ruled 2026-08-10: ratified as proposed.
 
 ---
 
@@ -691,7 +708,7 @@ asks "is this dangerous now", which has a side. The delta gate is direction-agno
 asymmetry question is whether a direction-agnostic gate can honestly use a statistic that isn't, or
 whether the asymmetric form forces `min_meaningful_delta` to become a pair.
 
-**State:** OPEN — no blocker. Due **4b**, with Q34, Q36, Q37, Q38 and Q39. Owner: Luke.
+**State:** DONE → #199. Ruled 2026-08-10: uniform pair schema, all markers.
 
 ---
 
@@ -1013,10 +1030,10 @@ wires the view to the live producer MUST (a) regenerate `interpretationExample.j
 `build_foundation` output and (b) add an `ungrouped` render section; wiring it against the current fixture
 would silently DROP every ungrouped marker.
 
-**State:** OPEN — no blocker; the view is inert (fixture-driven), so this is owed work, not a live
-defect. **Next action** (at increment 2+, when the `context_builder` AI pointer is swapped to the live
-producer): regenerate the fixture from `build_foundation` output and add an `ungrouped[]` render section.
-Owner: Luke.
+**State:** DONE → #158–#160. Free closure verified 2026-08-11: `frontend/src/fixtures/interpretationExample.json`
+now carries top-level `ungrouped[]`, and `InterpretationView.jsx` renders it via `UngroupedLine.jsx`. The
+view-pointer swap (view reads the live `GET /interpretation`, #158) and the ungrouped render section both
+landed; the drop-every-ungrouped-marker hazard is closed.
 
 ---
 
@@ -1511,10 +1528,13 @@ scope — read-only vs capture — before its route.
 (`passive_sleep_min` / `passive_hrv_ms`) — a silent failure mode, enforced at the projection as the labs
 read-back enforces #47. Real and hard, but display hygiene, not the gate.
 
-**State:** OPEN — no blocker; the engine's outputs exist to read. **Owner:** Luke — resolve #47
-(Fork 1) FIRST; it decides whether an interim surface is state-only or must wait on the regulatory call.
-Scoped in (not "no interim surface until v2 titration") per the 2026-07-29 read-back triage. Numbered
-`Q60` at the `feat/frontend-readback` merge.
+**State:** DONE → #200. Fork 1 resolved by scope ruling 2026-08-10 (CBT-I is not a consumer-facing
+product; verdict may surface). Fork 2 resolved with it: the interim surface is READ-ONLY — prescription
+state, cycle inputs (SE/TST vs gates, nights clean), and the engine's decision with its reason, labelled
+as this platform's titration logic. In-app diary capture is deliberately NOT in scope: a new input path
+that re-opens Q45, which is still unresolved — capture is its own increment, gated on Q45. I1 sensor
+firewall (diary columns only, never passive Samsung sleep) binds at the projection, enforced as the labs
+read-back enforces #47.
 
 ---
 
@@ -1549,17 +1569,15 @@ re-decided on *those* merits, not defended by a mislabel. Candidates to weigh:
 **No code change this session** (verify-only; producer/endpoint build is frozen). Recorded so the
 projection is re-examined on its own merits rather than inheriting "settled by #47."
 
-**State:** OPEN — no blocker; the fields exist on the stored rows, the question is whether the
-raw read-back should carry them and under what rationale. **Owner:** Luke — decide `computed_flag`
-against the #49 seam (not #47) and `confidence` against the misleading-at-a-glance concern, separately.
-Numbered `Q61` on the `gov/readback-riders` branch (pre-ff; max was Q60, no competing branch).
+**State:** DONE → #201. Ruled 2026-08-10 (a): both omitted, rationales corrected — seam for
+`computed_flag`, QA-not-clinical for `confidence`.
 
 ---
 
 ## Q62. How is `#47` enforced structurally for a generated field?
 
-**State:** OPEN. **Blocks:** `axis_verdict.text`, and every future generated interpretation
-field. **Related:** Q60 (the same question for a CBT-I titration verdict).
+**State:** DONE → #202. Ruled 2026-08-10: rephrase-form only, structurally gated, fail-closed to
+template; dial fragment-wise/whole-block; (c) foreclosed.
 
 `#47` says enforcement is *"at the prompt layer **AND** structurally — no
 interpretation-output field expresses a personalised action."* Every field the producer
@@ -1632,8 +1650,8 @@ Numbered `Q63` on the `gov/navigation-model` branch (pre-ff; max was Q62, no com
 
 ## Q64. Do marker-authored member fields belong on `ungrouped[]` rows? `vitamin_d_25oh` gets no explanation today
 
-**State:** OPEN. **Blocks:** nothing — the producer follows a consistent rule today. **Related:**
-`#138` (ungrouped markers render in their own section), `#152` (output shape), I9.
+**State:** DONE → #203. Ruled 2026-08-10 (c): `mechanism` onto ungrouped, `stable_rationale`
+grouped-only.
 
 Two of the emitted member fields are **marker-authored**, not group-authored:
 `stable_rationale` and `mechanism` both project from the flat
@@ -1789,8 +1807,8 @@ Numbered `Q66` on the `gov/two-open-questions` branch (pre-ff; max was Q65, no c
 
 ## Q67. `hpg_substrate_co_movement` is phase-conditional, and no `#154` condition shape expresses it
 
-**State:** OPEN. **Blocks:** the relation branch-condition lane's `co_movement` shape work.
-**Related:** `#154`.
+**State:** DONE → #204. Ruled 2026-08-10 (a): shapes compose; `precondition` is an optional modifier
+on any kind.
 
 **Pointer entry — the case is already named in `#154`, so this is work-tracking, not discovery.**
 `#154`'s do-not-revisit clause ends: *"(`hpg_substrate_co_movement` is the near miss: decomposable,
@@ -2000,10 +2018,8 @@ does not discharge a concern about invisibility.
 
 ## Q70. A censored delta reports `delta_within_min_meaningful` without ever consulting the threshold, so a large suppression reads as quiet
 
-**State:** OPEN. **Blocks:** nothing today — the surfacing verdict is coincidentally correct on the
-live panel (see below), which is precisely why this needs recording rather than fixing in passing.
-**Related:** `#153` (the demotion predicate), `#141` (the precondition object), `Q69` (temporal
-bound), I8.
+**State:** DONE → #205. Ruled 2026-08-10 (a+d): honest token + honest rendering; (c) declined pending
+a live case.
 
 Found by running `build_foundation` over the real series for the first time (1b Step 0).
 
@@ -2062,9 +2078,8 @@ generate prose.
 
 ## Q71. `min_meaningful_delta` has no time dimension, so an 8% move over 40 days and over 154 days are the same event to gate 1
 
-**State:** OPEN. **Blocks:** nothing today. **Related:** `Q69`/`#159` (provenance partitioning,
-which makes the interval visible but not consequential), `Q70` (censored deltas), `#95` (I1 extended
-to read-constants), I1.
+**State:** DONE → #197 (Q38's entry). Same hole as Q38, minted independently; answered by the
+interval-band ruling, not separately.
 
 **Split out of `Q69`, which cited it as evidence for the composite problem. That was wrong.** This
 defect would exist in a perfectly draw-scoped world with irregular draw spacing: it is a property of
@@ -2106,9 +2121,9 @@ move was or was not meaningful.
 
 ## Q72. Sprint max velocity has no home on the v0 axis list, so the one Catapult measure most worth capturing cannot be recorded
 
-**State:** OPEN. **Blocks:** recording `max_velocity_ms` from the GPS unit — and only that; the rest
-of the `capability_observations` battery (`#161`) is seeded and working. **Related:** `#161`
-(the measure registry and the observations table), the deferred Catapult `.gt` backfill.
+**State:** DONE → #206. Ruled 2026-08-11 (Doc-8 shape): `max_velocity_ms` homed in a new
+passively-observed §E region; `per_side`/`needs_norm`/`queue_eligible` all False; the engine reads,
+never initiates.
 
 The proposing brief seeded seven measures and left an eighth — a hamstring velocity proxy,
 `max_velocity_ms`, m/s, from Catapult — with its region marked *TBD*, explicitly instructing that it
@@ -2239,7 +2254,7 @@ This is a live fork rather than settled because (c) is genuinely attractive and 
 
 ## Q77. The live create→list-back round-trip is unproven — the first real custom-exercise creation is the test
 
-**State:** OWED. **Outstanding:** one genuine create on a FRESH movement name reaching `+ Custom exercise ... created in Hevy` (owner Luke). **Related:** `#164` (the block), `#166` (the parse fix the watch-point exposed), `#65` (the create loop), `FEEDBACK` §8 (landed ≠ live).
+**State:** DONE — RESOLVED 2026-08-03. The round-trip completed on a fresh name. `Half-Kneeling Cable Rotation` was created live: with #168 catalogue visibility the model confirmed it absent, `create_and_resolve`'s idempotency pre-check agreed, the POST succeeded, and list-back resolved it within `_CREATE_RESOLVE_ATTEMPTS` → `✓ Custom exercise 'Half-Kneeling Cable Rotation' created in Hevy`. The two claims left unproven after the Copenhagen incident — that the created template surfaces in a follow-up GET, and does so inside the retry bound — are now both settled affirmatively. **How you know:** the live ✓, non-destructive, first end-to-end completion of create→sync→list-back. **Related:** `#164` (the block), `#166` (the parse fix the watch-point exposed), `#65` (the create loop), `FEEDBACK` §8 (landed ≠ live).
 
 Luke chose to land `#164` on the test suite and the enum artifact rather than mint a permanent custom exercise to prove the path. That is a reasonable trade against an API with no delete — but it leaves a named gap, and an unproven path that nobody has written down is the exact `FEEDBACK` §8 shape this project exists to avoid. So it is written down.
 
@@ -2728,11 +2743,14 @@ no committed generator produces those buckets; the 0/0/0/0 was a chat-side ad-ho
 hypothesis to diagnosis in the brief. The author's own review had flagged that line as "chat inferring
 where Code adjudicates" and tagged it a hypothesis — then the brief promoted it anyway.
 
-**State:** OPEN. The unseeable-surface rule already requires such claims be verified before they land on
-a pushed ref — but that fires at Code time, after the claim has already become a brief's premise. This
-is evidence the same check is owed at brief-AUTHORING time. The structural answer is known; whether it
-warrants a codified checkpoint (a brief-authoring ritual) rather than reliance on the existing rule is
-the open fork — worth a question, not yet a decision. Cross-refs `#190`.
+**State:** DONE — resolved 2026-08-11, no rule minted. Brief-authoring gets no verify-checkpoint
+mechanism. The executing side is the only side that can verify at execution time, and the 2026-08-10
+Brief A stop — Code re-verified at session open, found master seven decisions past the brief's anchor,
+found #187 already landed, and halted without re-litigating — is the existence proof the checkpoint
+already operates where it belongs. Authoring-side mitigation is convention, adopted without a rule:
+briefs date their anchors and state that claims yield to the tree (practised in the go-live brief). A
+second enforcement point would be redundant belt-and-braces of the class #186's severity gate exists to
+refuse. Cross-refs `#190`, `#186`.
 
 ## Q92. Should asset verification status gate rendering in code, or stay a curation convention?
 
@@ -2748,3 +2766,101 @@ surface an entry whose status is not `human_verified`, turning the convention in
 (b) is a real mechanism with real cost (a half-verified asset would blank sections mid-review) and needs
 a decision before it is built, not a reflex. No current consumer is harmed either way — the live assets
 are now all `human_verified`. Cross-refs `#51`, `#194`.
+
+---
+
+## Q93. Garmin recovery route: Health Sync bridge vs server-side connector
+
+Garmin does not write HRV to Health Connect (documented withhold list, corroborated by Apple Health
+omission). Two routes to Garmin recovery data:
+
+(a) Health Sync (healthsync.app) — third-party Android app, reads Garmin Connect, writes to Health
+Connect incl. HRV RMSSD (5-min intervals within the sleep window per Fitrockr's account of the Garmin
+Connect mobile path), VO2 Max, respiration, SpO2. No connector to build; credentials go to the vendor,
+not our DB; paid app; their status page documents repeated Garmin-side breakages.
+
+(b) Server-side connector on python-garminconnect — full derived scores (Body Battery, HRV status,
+Training Readiness, VO2 Max, training load). Requires the user's Garmin *password* at first login (no
+OAuth consent flow), stored refresh token, and we own the arms race.
+
+**State:** OPEN — decision deferred pending Deb's first sync (HR sample density, recordingMethod/device
+population for a Garmin writer). Owner: Luke.
+
+---
+
+## Q94. Health Sync as a mirror writer
+
+If route (a) in `Q93` is taken, Garmin Connect and Health Sync both write Garmin-origin records to Health
+Connect under different dataOrigin values. This is the Withings-echo case governed by #35/#36/#37 and the
+#175 admission allow-list. Requires one-writer-per-data-type configuration or the admission list extended
+before Deb syncs, or she double-counts sleep/HR/steps.
+
+**State:** OPEN — contingent on `Q93` taking route (a); must be configured before Deb's first sync or she
+double-counts. Owner: Luke.
+
+---
+
+## Q95. Vendor and transport names where the meaning is a role
+
+Single question, multiple targets, distinct cost tiers:
+
+  - cheap    — GitHub repo name `health-connect-app`; app display name
+  - moderate — `/integrations/polar/aerobic-sessions` (now serves cross-source arbitrated data);
+    `health_connect_syncs`
+  - expensive— `samsung_hrv_readings` / `SamsungHRVReading` / `/samsung-hrv/sync` (migration + every
+    consumer)
+  - one-way  — Android package id `com.anonymous.healthconnectapp` (new app identity: HC grants reset,
+    accessibility service re-enable, AsyncStorage token lost)
+
+Rename at natural touch points, not as a campaign. The recovery substrate is first in the queue
+regardless — Garmin forces it.
+
+**State:** OPEN — rename at natural touch points, not a campaign; the recovery substrate (`Q93`) is first
+in the queue regardless. Owner: Luke.
+
+---
+
+## Q96. `exercise_sessions` is a superseded empty table
+
+Zero rows across all users; `aerobic_sessions` carries the live data (user 1: 32 polar_flow_export, 16
+polar_v4). Still holds a unique constraint, two indexes and an FK. Drop candidate.
+
+**State:** OPEN — drop candidate; zero rows across all users, live data lives in `aerobic_sessions`.
+Owner: Luke.
+
+---
+
+## Q97. No local strength-training store for any user
+
+Hevy workouts are fetched live from the Hevy API and never persisted; only `hevy_exercise_templates`
+exists locally. Consequence: no store to compute strength load trends against, and every view depends on
+Hevy uptime plus a valid token. Sits awkwardly beside `capability_observations` and the already-logged
+Hevy weight-semantics defect (cable-machine markings, per-limb vs bilateral under one exercise name).
+
+**State:** OPEN — no local strength store; every strength view depends on Hevy uptime + a valid token.
+Related: `Q6` (unit-trustworthiness addendum). Owner: Luke.
+
+---
+
+## Q98. HC aerobic rows carry no load
+
+Health Connect exports duration, type and HR but no zone seconds and no cardio_load. Any consumer keying
+on cardio_load will be permanently silent for HC-sourced users, not temporarily sparse. Options: derive a
+TRIMP-style estimate (requires max and resting HR; not comparable to Polar's cardio_load — a parallel
+metric, not a substitute), accept the gap, or take the server-side-connector route in `Q93`.
+
+**State:** OPEN — HC aerobic rows carry no `cardio_load`; consumers keying on it go permanently silent for
+HC-sourced users. Owner: Luke.
+
+---
+
+## Q99. Multi-user paths are unexercised
+
+Three accounts (1 Luke, 4 Deb, 5 Cooper). Every provider path, the HCA sync route, and readiness/recovery
+logic have only ever executed against user_id 1. Readiness baselines are calibrated to user 1. Not
+evidence of a defect — but untested, and Deb's first sync is the first exercise of it. Cooper (ACL
+reconstruction ~18 months post-op, contact rugby) is a third profile with onboarding context and no
+recovery source.
+
+**State:** OPEN — multi-user paths unexercised; Deb's first sync is the first real exercise of them.
+Owner: Luke.

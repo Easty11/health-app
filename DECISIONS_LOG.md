@@ -7846,3 +7846,284 @@ carries no interpretation fields — `mcp_server.py`'s only `interpretation` str
 **Do not revisit unless:** Q92 decides status should gate rendering in code (then the convention becomes
 a mechanism and this promotion's meaning changes), or a future draw shows the producer path behaving
 differently on real data than the fixture oracle predicts.
+
+### 195. `discriminator` names the EVIDENCE, and becomes a list (resolves Q36)
+
+**Decision:** In every `marker_groups.json` relation, `discriminator` names the evidence marker(s);
+`operands` are the markers being explained. The field is promoted from single string to list.
+`bilirubin_isolation` is re-authored to conform (its current field contents are swapped);
+`haemoconcentration_discriminator` gains `protein_total` as its second list member, which until now
+survived nowhere a renderer could reach.
+
+**Rationale:** 2 of 3 authored relations already read evidence-in-field, and the word's plain meaning is
+"the thing that discriminates". The alternative re-authors two relations and renders the haemoconcentration
+artefact-vs-expansion call backwards until done. The list promotion is forced by a live relation with two
+genuine evidence markers, not by speculation.
+
+**Status:** OWED — decided, not implemented. Implementation: asset edit ×2 + schema/renderer contract
+update, own concern-split commit in a product session.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q36; OWED — no implementation artifact yet.
+
+**Do not revisit unless:** the implementing product session lands it (status → landed), or a fourth
+relation contradicts evidence-in-field.
+
+### 196. I1's read-constant extension is ENFORCED; `alt` is cited first (resolves Q37)
+
+**Decision:** `gates.py` reads `evidence_refs` at fallback time: a gate-driving constant with empty refs
+falls back to `_defaults`. Citations become load-bearing at runtime, as #95's extension intended.
+Precondition, Luke-owed per the #98 pattern: pin `alt`'s CVi source to a DOI so 0.45 lands cited and
+enforcement is behaviour-neutral on day one. Fallback ruling, stated now so it needs no second decision:
+if the DOI cannot be pinned, enforcement proceeds anyway and `alt` drops to `_defaults` 0.30 — the
+false-positive direction, which is the safe way to be wrong.
+
+**Rationale:** Narrowing I1 would retroactively make #96's withholding of the haematocrit/haemoglobin
+constants stricter than the rule required; enforcing makes the invariant real and vindicates it. Canon
+and code stop documenting opposite intents.
+
+**Status:** OWED — decided, not implemented. `alt` DOI capture: owner Luke, receipted.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q37; OWED — no implementation artifact
+yet; `alt` DOI is a Luke-owed receipt per the #98 pattern.
+
+**Do not revisit unless:** implementation lands, or the `alt` DOI capture forces the cold-fallback path.
+
+### 197. `min_meaningful_delta` becomes interval-banded (resolves Q38; closes Q71)
+
+**Decision:** Erythroid constants gain a second interval band: gap ≤ ~4 months (one erythrocyte turnover,
+per Coşkun's own stated validity bound) → the landed 0.08-family values; gap > 4 months → 0.15 (Thirup
+2003, the 6-month figure). Interval = delta of `collected_at` between the two draws in the delta. Two
+bands, not a continuous widening factor — the literature anchors exactly two figures, and a function
+would invent precision. Other markers stay single-band until interval-resolved data exists for them.
+
+**Rationale:** This repo's draw cadence is months apart crossing seasons — the wide-interval case is the
+normal case, and the single tight constant was producing the status quo by default rather than by
+decision. Q71 (the same hole, minted independently against gate 1) is answered mechanically by the same
+change and closes to this entry.
+
+**Status:** OWED — decided, not implemented. Composes with the rise/fall pair ruling (#199) into ONE
+schema change: `min_meaningful_delta` = list of bands, each band a `{rise, fall}` pair; see that entry.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q38 and closing Q71; OWED — no
+implementation artifact yet.
+
+**Do not revisit unless:** implementation lands, or interval-resolved data appears for a non-erythroid
+marker (then it too gains bands).
+
+### 198. Levers gain `effect_locus` (resolves Q39)
+
+**Decision:** As proposed in Q39, unmodified: `effect_locus: physiology | measurement` on
+`lever_dictionary` nodes, default `physiology` so every existing lever is correct without edit;
+`plasma_volume_status` is authored `measurement`. The renderer never ranks a measurement-locus lever
+alongside physiology-locus ones — distinct labelling or a separate strip, never one ordered list.
+
+**Rationale:** `plasma_volume_status` changes what the number measures, not what it is; un-flagged it
+renders as a peer of TRT dose and invites chasing an artefact. `channel` cannot carry this (orthogonal
+axis, per #100's explicit decline).
+
+**Status:** OWED — decided, not implemented. Additive; zero edits to existing levers beyond the one
+`measurement` authoring.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q39; OWED — no implementation artifact yet.
+
+**Do not revisit unless:** implementation lands, or a lever needs a third locus value.
+
+### 199. `min_meaningful_delta` is a rise/fall PAIR for all markers (resolves Q40)
+
+**Decision:** The scalar is replaced schema-wide by a `{rise, fall}` pair, derived asymmetrically (Fokkema
+2006, log-normal, two-sided Z = 1.96 per the Q38 convention) from the same CVA/CVI inputs that produced
+each landed scalar. Erythroid pairs will come out near-equal (CVI 0.72–2.82%, inside the convergence
+region) — derived anyway, not copied, so the asset is uniform. Markers whose scalar was NOT
+derivation-backed carry `{rise: x, fall: x}` from the existing value, flagged as symmetric-legacy pending
+derivation. `oestradiol` (CVI ≈14%, the one marker in the divergent region today) gets a genuinely
+asymmetric pair. Gate 1's delta arm compares a rise against `rise` and a fall against `fall`; `abs()`
+comparison is retired.
+
+**Rationale:** Chat's lean was an oestradiol-only pair; overruled by Luke for the uniform schema — one
+shape everywhere beats a special case, and any future high-CV marker (hormonal panel candidates are the
+obvious class) lands into a schema that already expresses it. Composed with the interval-band ruling: the
+unified shape is `min_meaningful_delta: [ {interval_max_days, rise, fall}, … ]`, single-band equal-pair as
+the degenerate case.
+
+**GUARD for the implementing brief:** derive the oestradiol pair from the asset's actual CVA/CVI inputs —
+chat's ~+47%/−32% figures were rough and are NOT to be transcribed. If the inputs behind 0.42 cannot be
+recovered from the asset or its citations, stop and report rather than reconstruct.
+
+**Status:** OWED — decided, not implemented. One schema change shared with the interval-band entry (#197);
+one derivation pass; gate 1 comparison change; I1 applies (pairs are read-constants — citations carry over
+from the scalar's refs where derivation-backed).
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q40; OWED — no implementation artifact yet.
+
+**Do not revisit unless:** implementation lands, or the oestradiol CVA/CVI inputs prove unrecoverable
+(then the GUARD's stop-and-report fires).
+
+### 200. CBT-I is scoped OUT of the consumer product; verdict surfacing cleared (resolves Q60 Fork 1)
+
+**Decision:** The CBT-I module is a personal/household instrument, permanently outside the consumer-facing
+product surface and the commercial path (B2B and consumer). Ruled by Luke 2026-08-10, binding.
+Consequence: #47's regulatory rationale (TGA SaMD, supplied product) does not attach to this module, and
+the engine's MOVE/HOLD verdict may surface plainly on the user surface — the only reader is the author of
+the rules being executed. This is a scope ruling, not a rider on #47: #47 is untouched and continues to
+bind every consumer-facing surface.
+
+**What the ruling settles beyond Fork 1:** (1) The engine's divergence from the VA CBT-I document (#165's
+hunting search, cadence, gates) is unproblematic — bespoke titration logic surfaced to its own author
+needs no external evidence base, only honest labelling. (2) Q55 (four gate constants chosen, not derived)
+is confirmed as a tidy-up, never a gate — un-grounded constants driving directives is an exposure only
+when the verdict reaches someone who didn't choose them, which this ruling forecloses. Annotate, don't
+block. (3) Q78 (multi-user nap attribution) is UNCHANGED — household users are not consumers, so it still
+guards a second household block; priority unaffected.
+
+**Boundary, stated so drift is legible:** if the commercial path ever wants sleep features, that is a NEW
+product decision made then — not an extension of this module, whose scope this entry fixes.
+
+**Status:** active. Unblocks the interim surface — see Q60's closure for its shape.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, binding; a scope ruling, not a code artifact.
+
+**Do not revisit unless:** the commercial product proposes a sleep feature.
+
+### 201. `computed_flag`/`confidence` stay off the raw labs read-back — rationales corrected (resolves Q61)
+
+**Decision:** Both fields remain omitted from `GET /labs/results`, re-decided on honest grounds replacing
+the misapplied #47 label: `computed_flag` is excluded by the #49 raw/interpreted seam — this endpoint's
+provenance is the report (values, ranges, the lab's own `lab_flag`); `computed_flag`'s provenance is our
+derivation, which belongs to the interpretation surface. `confidence` is excluded as extraction QA, not a
+clinical read — its correct audience already has it, at confirm time, on the Brief-B confirm screen;
+per-row at-a-glance display misleads. The two rationales are deliberately separate and independently
+supersedable.
+
+**Rationale:** Q61 established #47's text does not bound a range comparison out of an education surface.
+The omission survives on different merits; the mislabel is retired so no future session inherits "settled
+by #47" for a bound #47 never drew.
+
+**Status:** active. Implementation: docstring/comment relabel in `routers/labs.py` only — no behavioural
+change.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q61; the omission is unchanged behaviour —
+only the recorded rationale changes.
+
+**Do not revisit unless:** either rationale is independently superseded, or a consumer needs
+`computed_flag`/`confidence` on this endpoint.
+
+### 202. Generated prose is permitted in REPHRASE FORM ONLY, structurally gated (resolves Q62)
+
+**Decision:** The interpretation layer may generate prose under exactly one form: rephrase of the
+templated assembly. Structural properties, all mandatory: (1) the generator's input IS the templated
+assembly built from reviewed asset fragments and arithmetic over the user's data — it sees nothing else;
+(2) structured fields remain the record; prose is a discardable overlay, never parsed back, never
+load-bearing; (3) a mechanical validator gates every output — no named entity or numeral absent from the
+input, no directive mood, no priority vocabulary not present in the source; (4) fail-closed to template:
+on any rejection the templated assembly renders — the safe artifact exists independently of generation
+succeeding. Granularity dial: fragment-wise rephrase (order preserved by construction) for anything gate-
+or verdict-adjacent; whole-block rephrase for mechanism/education prose, where emphasis carries no
+prioritisation weight. Training wheels: first 2–3 panels route through the existing `ai_draft →
+human_verified` promotion gate (#194 precedent: `lever_dictionary`, `marker_groups`), dropped once the
+validator earns trust. Prompt-only generation (Q62 option c) is foreclosed permanently — #59 already
+established instructed-against is not structural, and behavioural controls are model-version-variant where
+structural ones are not.
+
+**Rationale:** Rephrase is the one generation class with a checkable contract ("says what the input says"
+is verifiable; "is good and safe" is not), and the one where a reject set stays small, enumerable, and
+mechanical rather than a behavioural rule wearing a schema. The three leak modes — additive drift,
+modality drift, priority-by-emphasis (#47's own "personalised prioritisation = prescription" line) — are
+each addressed structurally: (3) catches the first two; the granularity dial confines the third to where
+ordering cannot imply importance.
+
+**Consistent with:** #47 (structural half restored for generated fields), #59 (the precedent this
+generalises), #152/#154 (structured fields stay the record).
+
+**Status:** active — binds increment 2 (rephrase pass) before it is built. OWED: validator + dial
+implementation land with that increment, not before.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q62; binds increment 2's spec —
+validator/dial are OWED with that increment.
+
+**Do not revisit unless:** increment 2's build finds the validator contract unbuildable as specified, or a
+non-rephrase generation class is proposed.
+
+### 203. `mechanism` projects onto ungrouped rows; `stable_rationale` stays grouped-only (resolves Q64)
+
+**Decision:** Of the two marker-authored member fields, `mechanism` — which explains what the marker is
+and always applies — projects onto `ungrouped[]` rows; `stable_rationale` — gate-adjacent judgement
+annotating a persistently-flagged marker — remains scoped to grouped members. Ruled (c) over chat's weak
+lean (a): the split keys on function, not authorship — an ungrouped marker deserves its explanation;
+whether it also carries not-news judgement stays an open cost until something concrete needs it.
+`vitamin_d_25oh` gains its mechanism.
+
+**Status:** OWED — decided, not implemented. Small producer change + Ungrouped-section view touch (the
+section shipped at 1b on status quo, so this is a follow-up edit, not a rider). Group-derived fields
+(`relations_rendered`, `member_lever_effects`) remain structurally absent from ungrouped rows — by
+construction, unchanged.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q64; OWED — no implementation artifact yet.
+
+**Do not revisit unless:** implementation lands, or a concrete need appears for `stable_rationale` on an
+ungrouped row.
+
+### 204. Relation condition shapes COMPOSE — `precondition` becomes an optional modifier on any kind (resolves Q67)
+
+**Decision:** Any relation, regardless of `kind`, may carry an authored `precondition`;
+`_relations_rendered` resolves it wherever present instead of only on `kind == "feedback"` (retiring the
+hardcoded `precondition_status: "not_applicable"` for other kinds). `feedback_precondition` is thereby a
+modifier, not a peer shape. `hpg_substrate_co_movement` is authored with its phase condition ("stable
+dosing") as the first non-feedback carrier.
+
+**Rationale:** Kind-implies-shape was already falsified by the live asset (`haemoconcentration_discriminator`,
+per #154); composition is the honest generalisation and the smallest change that lets the one
+phase-conditional relation state its condition machine-readably. Splitting the relation (b) would author
+one piece of physiology as two entries; prose-only (c) reintroduces the reader-does-the-branch-work
+problem #154 exists to remove.
+
+**Status:** OWED — decided, not implemented. Producer change + one asset authoring; touches the
+co-movement shape work Q67 was blocking, which is now unblocked.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q67; OWED — no implementation artifact yet.
+
+**Do not revisit unless:** implementation lands, or a relation needs a condition shape that composition
+cannot express.
+
+### 205. Censored deltas stop asserting a comparison that never ran (resolves Q70)
+
+**Decision:** Options (a)+(d). `delta()` on a censored comparison emits a distinct basis token —
+`delta_magnitude_unknown_censored` — never `delta_within_min_meaningful`, which asserted a threshold read
+the code did not perform. The view renders censored deltas as "magnitude not computable". Surfacing
+verdicts are untouched — on the live panel they are correct via the phase relation, and demotion's
+predicate is explicitly NOT widened to reach this case (Q65/#154 own that boundary). Option (c), the
+bound-aware magnitude floor (`|prior − bound|`), is declined unless a real panel turns on it — the phase
+relation answers every live case, and the floor buys precision nobody is currently misled without.
+
+**Rationale:** The invariant was holding by accident — right verdict, wrong route, the #156/#157 shape.
+Honesty of the basis tokens is a precondition for ever showing them to a reader or generating prose from
+them (which #202-rephrase now sanctions), so the fix lands before either consumer exists.
+
+**Status:** OWED — decided, not implemented. Gate/token change + view string; test asserting censored
+pairs never emit the old token.
+
+**How you know:** Operator ruling (Luke), 2026-08-10, resolving Q70; OWED — no implementation artifact yet.
+
+**Do not revisit unless:** implementation lands, or a real panel turns on the declined bound-aware floor
+(option c).
+
+### 206. `max_velocity_ms` is homed in a new passively-observed §E region; the engine may read it, never schedule it (resolves Q72)
+
+**Decision:** Resolves Q72. `max_velocity_ms` enters the capability taxonomy as a new top-level §E region
+with `per_side=False` (trunk-mounted GPS records one figure and cannot attribute it to a leg — instrument
+property, per the per-side-on-Measure correction), `needs_norm=False` (self-referenced against own season
+peak; the quantity of interest is re-attainment fraction, not an external standard), and
+`queue_eligible=False` (Probe must never initiate a maximal sprint onto two velocity-gated hamstrings;
+this flag is what makes the region safe to exist). This creates a new region class — passively-observed:
+data arrives only from match/training GPS capture, the engine reads but never initiates. Distinct from
+§G's norm-blocked exclusion, where observation is suppressed entirely. Future match-derived measures
+(accelerations, collision counts from the same IMU stream) join this class rather than re-deriving it.
+Placement over the Locomotion-fold variant is deliberate: the class deserves a visible home, not a flag
+buried in an axis.
+
+**Status:** active (ruled 2026-08-11, Doc-8 shape). OWED: taxonomy authoring of the §E region.
+
+**How you know:** Operator ruling (Luke), 2026-08-11, resolving Q72; a ruling, not yet authored into the
+taxonomy.
+
+**Do not revisit unless:** a passively-observed measure needs the engine to initiate capture (it must
+not), or §E needs a per-side member.
