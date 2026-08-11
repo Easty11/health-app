@@ -8151,9 +8151,8 @@ single-grammar module exists to prevent, reintroduced because the digest kept a 
 both tools, closes it. Recognising HCA's `UNSTARTED` via *per-repo* vocab — not the shared tuple — recognises
 the HCA dialect without silencing health-app's drift signal.
 
-**Status:** Landed on `feat/status-reader-channels` via the PR-gated path (`#171`); merge SHA and PR number
-pinned at close-out per number-at-merge. Branch merged + deleted. Three scripts, no store schema change, no
-migration.
+**Status:** Landed on `feat/status-reader-channels` via PR #56 (merge `e4c7dba`), PR-gated path (`#171`);
+branch merged + deleted. Three scripts, no store schema change, no migration.
 
 **How you know:** Reader agreement verified at master `c65e604` — 0 disagreements across 241 decisions + 116
 questions, both repos; the six multi-`·` HCA decisions (`#8, #11, #14, #19, #23, #25`) render bare `active`.
