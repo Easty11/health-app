@@ -23,6 +23,12 @@ import GroupCard from '../components/interpretation/GroupCard'
 import GroupCollapsed from '../components/interpretation/GroupCollapsed'
 import UngroupedLine from '../components/interpretation/UngroupedLine'
 import MechanismsIndex from '../components/interpretation/MechanismsIndex'
+import PlainPanel from '../components/interpretation/PlainPanel'
+
+// Register preference (#202). Default clinical — plain does not become the default until the
+// training-wheels window (per-panel human_verified promotion) has been retired, a later manual
+// call. Persisted client-side; the server decides eligibility regardless of this toggle.
+const REGISTER_KEY = 'interpretation_register'
 
 function formatDate(iso) {
   return iso ? iso.slice(0, 10) : '—'
@@ -48,6 +54,14 @@ export default function InterpretationView() {
   const [interpretation, setInterpretation] = useState(null)
   const [status, setStatus] = useState('loading') // loading | ready | empty | error
   const [detail, setDetail] = useState('')
+  const [register, setRegister] = useState(
+    () => localStorage.getItem(REGISTER_KEY) || 'clinical',
+  )
+
+  function chooseRegister(next) {
+    localStorage.setItem(REGISTER_KEY, next)
+    setRegister(next)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -136,6 +150,26 @@ export default function InterpretationView() {
           </svg>
         </Link>
         <span className="text-sm font-bold text-gray-900">Interpretation</span>
+        <div className="ml-auto inline-flex rounded-full border border-gray-200 bg-gray-50 p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => chooseRegister('clinical')}
+            className={`px-3 py-1 rounded-full transition-colors ${
+              register === 'clinical' ? 'bg-white text-gray-900 font-semibold shadow-sm' : 'text-gray-500'
+            }`}
+          >
+            Clinical
+          </button>
+          <button
+            type="button"
+            onClick={() => chooseRegister('plain')}
+            className={`px-3 py-1 rounded-full transition-colors ${
+              register === 'plain' ? 'bg-white text-gray-900 font-semibold shadow-sm' : 'text-gray-500'
+            }`}
+          >
+            Plain
+          </button>
+        </div>
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-6">
@@ -171,6 +205,10 @@ export default function InterpretationView() {
           )}
         </div>
 
+        {register === 'plain' ? (
+          <PlainPanel />
+        ) : (
+        <>
         <section className="space-y-3">
           <h2 className="text-sm font-bold text-gray-900">What Moved</h2>
           {moved.length === 0 ? (
@@ -212,6 +250,8 @@ export default function InterpretationView() {
         </section>
 
         <MechanismsIndex movedGroups={moved} />
+        </>
+        )}
       </div>
     </div>
   )

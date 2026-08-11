@@ -761,3 +761,40 @@ class FortificationProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class InterpretationRephrase(Base):
+    """Disposable plain-register overlay + its promotion state (DECISIONS_LOG #202).
+
+    One row is a generated plain-language rephrase of an interpretation presentation, keyed
+    by the base text it was built from (`payload_hash` from `presentation.presentation_hash`)
+    and the register. It is BOTH the presentation cache (step 4) and the training-wheels
+    promotion record (step 6) — one table, because a promotion must survive a Railway
+    restart, which an in-memory cache would not.
+
+    NEVER THE RECORD, always disposable. Dropping any row is safe: the structured payload is
+    the record (#202 clause 2), and a missing row simply regenerates or renders the template.
+
+    Promotion binds to the TEXT, not the panel. A new draw or an asset edit changes the base
+    text -> a new `payload_hash` -> a new row at `ai_draft`. A stale `human_verified` can
+    therefore never attach to changed text — regeneration is a fail-closed demotion, never a
+    wrong promotion. The eligibility gate is UNCONDITIONAL and server-side: a plain-register
+    request whose row is not `human_verified` renders the template regardless of the client's
+    toggle (the toggle is a preference; the server decides). There is no auto-retire counter —
+    retiring the gate after a few promoted panels is a later manual call.
+    """
+    __tablename__ = "interpretation_rephrases"
+    __table_args__ = (
+        UniqueConstraint("payload_hash", "register", name="uq_interp_rephrase_payload_register"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # sha256 hex of the base text (addr+text), NOT of meta.generated_at — see presentation_hash.
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    register: Mapped[str] = mapped_column(String(20), nullable=False)   # 'plain' (only the overlay is stored)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # ai_draft | human_verified — the #194 promotion-gate vocabulary. NOTE: server_default is a
+    # plain string (SQLAlchemy wraps it as text()) because the column named `text` above shadows
+    # the imported `text()` function inside this class body.
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="'ai_draft'")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
