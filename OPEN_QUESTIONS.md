@@ -2868,3 +2868,33 @@ recovery source.
 
 **State:** OPEN — multi-user paths unexercised; Deb's first sync is the first real exercise of them.
 Owner: Luke.
+
+---
+
+## Q100. User 5's stored Hevy key authenticates to an empty account (0 customs, 0 workouts)
+
+The exercise-template seeder (`sync_hevy_templates.py --user-id 5`) synced clean for Cooper (user 5) but
+recorded `customs_seen = 0`, unlike Luke (50→55) and Deb (10). Read-only investigation against prod
+(2026-08-12), three hypotheses in priority order:
+
+- **H1 — user-id mapping wrong: RULED OUT.** `users.id = 5` is `cooper.eastlake@outlook.com` / Cooper
+  Eastlake; the `user_integrations` row (id 11, provider `hevy`) links to user_id 5. Not a mix-up.
+- **H2 — stored key is a copy of another user's key: RULED OUT.** Decrypted, user 5's key SHA-256
+  (first 12) `b13844046e7d` differs from Luke's `4946bd83a731` and Deb's `2499e2d5b79d`.
+- **The account behind the key is empty.** A live `GET /v1/exercise_templates` with user 5's stored key
+  returns 451 global defaults and **0 customs**; `GET /v1/workouts/count` returns `{"workout_count": 0}`.
+  The key authenticates (200s, defaults returned) but its account holds no workouts and no custom
+  templates.
+
+**Empirical boundary (per the scope note):** these negatives attest only to the account the stored key
+points at — nothing about any other Hevy account Cooper may hold. Two explanations remain
+indistinguishable from our side: (a) the belief that Cooper has customs is stale — this is his account
+and it is simply empty; or (b) the stored key was issued from a different, empty Hevy account than the
+one holding his real training data. The Hevy API exposes no whoami, and with 0 workouts there is no
+in-band identity signal to separate them.
+
+**State:** OPEN — Cooper's stored Hevy key authenticates to an account with 0 customs and 0 workouts;
+H1 (mapping) and the copied-key form of H2 are ruled out. Cannot tell from our side whether the belief is
+stale (a) or the key is for the wrong account (b). Resolution needs Cooper: confirm the key was generated
+from the Hevy account that shows his workouts/customs, and re-issue it from that account if not. Related:
+`Q75` (catalogue-freshness), `Q99` (multi-user paths unexercised). Owner: Luke.
