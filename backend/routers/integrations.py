@@ -12,7 +12,7 @@ from auth import get_current_user
 from connectors.hevy import HevyAuthError, HevyClient, HevyForbiddenError
 from database import get_db
 from encryption import decrypt, encrypt
-from hevy_templates import sync_exercise_templates
+from hevy_templates import refresh_catalogue_if_stale, sync_exercise_templates
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +297,9 @@ async def hevy_workouts(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Q75(c): piggyback a staleness-gated template refresh on the fetch. Self-throttling
+    # (per-user marker) and non-blocking on failure — never fails the workout fetch.
+    await refresh_catalogue_if_stale(db, current_user.id)
     client = _hevy_client(current_user, db)
     try:
         return await client.get_workouts(page=page, page_size=page_size)
@@ -315,6 +318,9 @@ async def hevy_workouts_all(
     "all" requires this server-side page loop. Errors route through the same choke
     point as the other read handlers (connector-auth -> 424, Hevy HTTP -> 502).
     """
+    # Q75(c): same staleness-gated refresh as the paged fetch (idempotent — once one
+    # path refreshes and stamps the marker, the other sees fresh).
+    await refresh_catalogue_if_stale(db, current_user.id)
     client = _hevy_client(current_user, db)
     try:
         return await client.get_all_workouts()

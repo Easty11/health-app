@@ -2217,7 +2217,7 @@ Establish, before any precondition is authored against a currently-`None` key: i
 **Resolve before:** a `feedback` precondition is authored against any factor key outside the currently phase-bearing set.
 ## Q75. The catalogue is now populated on connect, but nothing keeps it fresh — the sync has a trigger, not a schedule
 
-**State:** OPEN. **Blocked by:** nothing — the today-fix (connect-time seed + `POST /integrations/hevy/sync`) is landed and sufficient for a populated substrate; this is unbuilt, not gated. **Related:** `#163` (the wiring decision), `#77`/`FEEDBACK` §8 (landed ≠ live), `#79`/`#81` (logged titles drift from catalogue titles), `#65` (the create-loop's own `sync_one_user` refresh).
+**State:** DONE → #211 (RESOLVED 2026-08-12). Option (c) — sync-on-workout-fetch, staleness-gated on the per-user marker `user_integrations.templates_synced_at` (24h). Resolution note at the end of this item. **Related:** `#163` (the wiring decision), `#77`/`FEEDBACK` §8 (landed ≠ live), `#79`/`#81` (logged titles drift from catalogue titles), `#65` (the create-loop's own `sync_one_user` refresh), and `#211` (the decision).
 
 The connect-time seed populates `hevy_exercise_templates` once, at the moment a key first exists, and the operator endpoint repopulates it whenever someone asks. Neither is a freshness guarantee. The catalogue drifts in three independent ways:
 
@@ -2233,6 +2233,10 @@ Candidates:
 The axis to decide first is **what freshness is actually for**: (b) and (c) keep the catalogue fresh only for the paths that read it, while (a) is the only one that would catch drift before a read needs it. That distinction only becomes load-bearing once a *write* path depends on the store being current — which is exactly what custom-exercise creation is.
 
 **Resolve before:** custom-exercise creation (`<hevy_create_exercise>`) is wired to a user-facing surface. Its idempotency pre-check reads this store, so a stale catalogue there mints duplicate templates rather than merely missing a resolution.
+
+**RESOLVED 2026-08-12 → #211 — option (c).** Catalogue freshness piggybacks a per-user, staleness-gated `sync_one_user` on the workout-fetch path. Options (a) and (b) rejected on their own Q75 trade-offs: (a) a new scheduler is a new failure surface for drift no read has yet needed; (b) a network call on a currently-pure read path lets a Hevy outage degrade reads that today serve from the local store. The 2026-08-05 incident is the discriminating evidence — workouts synced while templates did not (store `max(synced_at)` 2026-08-04; two of the three Aug-5 customs absent), the exact traffic (c) rides. Implemented NOT as the enumerated "resolver checks `synced_at`" (that column is per-row and re-stamped by any user's sync, so an aggregate reads fresh off another user's run) but as a per-user marker `user_integrations.templates_synced_at`, correct under multi-user (4 users live in prod).
+
+Note on the resolve-before condition above: the write path (`<hevy_create_exercise>`) IS now user-facing via chat (`routers/chat.py:748`), and its idempotency pre-check reads this store — so the condition this item named is met. (c) mostly defuses it (an active user's workout fetch refreshes the catalogue in the same session) but does NOT gate the create path; a create with no recent fetch can still race a stale catalogue. That residual — option (a) or a create-time freshness gate — is a separate flag, out of #211's scope.
 
 ## Q76. The create-enum lists live in two places and nothing detects when Hevy adds a member
 

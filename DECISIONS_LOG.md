@@ -8235,3 +8235,48 @@ the store convention and the placeholder guard scans `^### #NEXT` / `^## Q#NEXT`
 
 **Do not revisit unless:** the placeholder token itself changes, or a gate is added that scans bare `#N`
 directly.
+
+### 211. Catalogue freshness is sync-on-workout-fetch, staleness-gated on a per-user marker — Q75 resolved as option (c)
+
+**Decision:** The Hevy template catalogue refreshes by piggybacking a per-user template sync
+(`sync_exercise_templates(only_user_id=…)`, which reuses `sync_one_user` under #77 isolation) on the
+workout-fetch path (`GET /integrations/hevy/workouts[/all]`), gated on the per-user marker
+`user_integrations.templates_synced_at` older than 24h (`_CATALOGUE_STALE_AFTER`, constant). No scheduler
+(option a rejected: a new failure surface for drift no read has yet needed); no sync inside pure read
+paths that don't already imply a live key and a present user (option b rejected: a network call on a
+currently-pure read, so a Hevy outage would degrade reads that today succeed). Sync failure never fails
+the fetch (#77 isolation inherited, and the call additionally wrapped so any escape is logged and swallowed).
+
+**The staleness signal is a per-user marker, NOT an aggregate over `hevy_exercise_templates.synced_at`.**
+That column is per-row and stamped by every upsert; a full `sync_one_user` re-stamps ALL 451 defaults, so
+`MAX(synced_at)` over a user's visible scope reads FRESH the moment ANY user syncs — reporting a current
+catalogue while this user's own customs are stale. Wrong now that multi-user is live (4 users in prod,
+though only user 1 holds customs today). The marker is stamped by `sync_one_user` on a completed pull —
+the one primitive every caller routes through (operator route, connect-seed, create-loop) — so it can
+never claim a freshness no code path produced. Migration `e2d5c7a1b9f3`; NULL (never synced) reads as
+stale and a first fetch syncs (self-healing, no back-fill).
+
+**Rationale:** The 2026-08-05 incident discriminated the axis empirically: workouts synced while templates
+did not (store `max(synced_at)` 2026-08-04, before the incident; two of the three Aug-5 customs absent),
+so the exact traffic option (c) piggybacks was present and would have caught the drift. Customs created
+in-session at a new venue are Q75's second drift vector occurring as predicted, up to and including the
+duplicate-mint offer Q75 warned of.
+
+**Status:** active. Q75 resolved (DONE → #211).
+
+**How you know:** full backend suite green (823) incl. the four Q75 cases (stale/null→sync, fresh→skip,
+sync-raise + failure-summary both serve the fetch, incident fixture: three Aug-5 customs land + marker
+stamped); G3 local before/after proof — a marker aged 25h drove a fetch-path refresh that pulled the
+incident customs and re-stamped the marker fresh. The incident fixture pins the real prod ids read back
+after the 2026-08-12 seeder run (user 1 customs 50→55): `iso-lateral front lat pull down`
+0dd081f1…, `Iso-lateral Wide Chest Press` 1fe04727…, `Iso-lateral Incline Press` f8dccc5a… — all three
+resolve as customs, so the incident was templates lagging workouts, not a built-in mismatch. Live prod
+re-confirmation deferred to post-deploy (#116/#121: verify `alembic upgrade head` ran before trusting the
+marker; the first post-deploy fetch fires one expected redundant sync per user, markers NULL until then).
+
+**Do not revisit unless:** a custom-exercise create needs freshness ahead of any nearby read — Q75's own
+condition. NOTE the write path (`<hevy_create_exercise>`) is ALREADY user-facing via chat
+(`routers/chat.py:748`) and its idempotency pre-check reads this store; (c) covers the common case (an
+active user's workout fetch refreshes the catalogue in the same session) but does NOT gate the create
+path, so a create with no recent fetch can still race a stale catalogue. If that residual bites, option
+(a) or a create-time freshness gate re-enters — flagged, out of this branch's scope.

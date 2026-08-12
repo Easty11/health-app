@@ -33,6 +33,16 @@ class UserIntegration(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    # Per-user catalogue-freshness marker (DECISIONS_LOG #211 / Q75). Stamped by
+    # `sync_one_user` on a completed template pull; read by the staleness gate on the
+    # workout-fetch path. Deliberately per (user, provider) rather than an aggregate
+    # over `hevy_exercise_templates.synced_at`: that column is per-row and its default
+    # rows are re-stamped by ANY user's sync, so an aggregate reads "fresh" off another
+    # user's run while this user's own customs are stale — wrong once multi-user is live.
+    # NULL = never synced -> treated as stale (a first fetch triggers a sync).
+    templates_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class PasswordResetToken(Base):
