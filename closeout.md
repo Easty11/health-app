@@ -1,126 +1,53 @@
-# Close-out — 2026-08-12b (dispatch brief: C4 governance-view regen · §19 ledger row · interpretation training-wheels verify)
+# Session close-out — 2026-08-12 (Hevy user-5 zero-customs investigation → OPEN_QUESTIONS Q100)
 
 ## Real commits this session
 
-Session-open ref: `4256e72` (prior master tip, PR #60). `git log --oneline 4256e72..HEAD`
-before this close-out commit: **empty** — no feature or governance commit landed mid-session.
-This session executed a chat-authored dispatch brief (three items), and the only repo write
-is the one FEEDBACK §19 ledger row, which rides *this* close-out commit.
+Branch cut from `origin/master` `9c36578` (Merge PR #63). `git log --oneline origin/master..HEAD`:
 
-The close-out commit itself (this branch, `chore/session-closeout-0812b`) carries: the
-`FEEDBACK_ARCHIVE.md` §19.6 row id-20 addition, `closeout.md`, the `CLAUDE.md`
-Recent-landings prepend + 3-cap trim, and the `BRANCHES.md` self-row. Governance/docs-only;
-no code, no migration. Guard-gated per #176(c): the §19 row and the BRANCHES self-row are
-pure additions; the `closeout.md` overwrite and the Recent-landings capped-trim are both
-declared replacement regions — no removed line falls outside one. Lands via PR,
-`--merge --delete-branch`.
+- (this commit) — chore: session close-out
+
+**No mid-session commits.** The investigation was read-only (prod probes only — no repo writes); the entire deliverable — `OPEN_QUESTIONS` Q100, the ROADMAP NEXT row strike, the `CLAUDE.md` Recent-landings swap, this `closeout.md`, and the `BRANCHES.md` self-row — rides this single close-out commit. Governance/docs-only; guard-gated per #176(c); no code, no migration, no decision minted. Placeholder guard green locally (exit 0).
 
 ## Pending-queue reconciliation
 
-**No `;cc` PENDING queue carried in.** The three items came from a chat-authored *dispatch
-brief* (never committed), not the pending-commit queue. Each reconciled:
+**No `;cc` PENDING queue carried in.** This session ran one investigation task — the ROADMAP NEXT chip "Hevy: user 5 (Cooper) syncs zero customs" (the #211 follow-up) — not a chat close-out. Disposition:
 
-1. **C4 — governance-view regen: DONE, uncommitted by design.** Ran
-   `python scripts/gen_governance_view.py` against **live master** (`4256e72`; the script
-   resolves master via `git ls-remote` and reads `raw.githubusercontent.com`, not the local
-   tree). Output: `build/CONSOLIDATED_GOVERNANCE_VIEW.md` (gitignored — a derived artifact is
-   never committed). **Count parity confirmed against the store maxima:** health-app
-   DECISIONS_LOG **210 entries = max #210**, OPEN_QUESTIONS **99 = max Q99**; the script's
-   own count/parity/non-empty-extraction gates all passed (health-connect-app read clean at
-   master `1c32c42`). The output path is handed to Luke for the claude.ai project-knowledge
-   placement — his to place via the UI, not committed here.
+- **The chip is discharged into a documented question.** The brief itself said it "should become its own OPEN_QUESTIONS item"; it now lands as **Q100**, and the ROADMAP NEXT row is struck **DONE → Q100**.
+- **No decision minted.** An `OPEN_QUESTIONS` finding, not a `;cc` adjudication — `DECISIONS_LOG` untouched.
 
-2. **Interpretation draft promotion — recorded, NOT owed, NOT a store write.** The promotion
-   is a production DB state change, not a ref: `interpretation_rephrases.status` went
-   `ai_draft → human_verified` via the app's promote action (#202's training-wheels
-   mechanism — the table is the record by design, so there is no SHA and nothing in the tree
-   changes). Verified read-only via `railway connect health-app-DB`:
-   `SELECT id, register, status, created_at FROM interpretation_rephrases;` returns exactly
-   **one row** — `id=1, register=plain, status=human_verified, created_at=2026-08-11
-   19:45:51+00`. **Training-wheels review #1 is complete, verified in-DB.** No governance
-   store records it (correct per #202); this prose line is the anchor.
-
-3. **FEEDBACK §19 ledger row — LANDED, rides this commit.** Row **id 20** added to the
-   §19.6 integrity ledger in `FEEDBACK_ARCHIVE.md` (append-only; ids 11/12/14 are pre-existing
-   expected gaps, last row was 19). Failure-derived, `source=MODEL`, dated **2026-07-22** —
-   the secret-render-during-env-checks incident chain documented at #110/#111 (a
-   presence-check that rendered the value while establishing no credential had been exposed;
-   halt + rotation followed). The row captures the Bash `${VAR:-…}` vector: the expansion
-   prints the value on the missing branch, so presence must be checked by exit code
-   (`test -n "$VAR"`), never by expansion (`:-` vs `:+` is one character between a check and a
-   disclosure); rotate on any render. Implementation guidance under the existing secrets
-   prohibition — **no new rule minted** (the secrets rule already existed). `status=STANDS`.
-   *Date basis is inferred from the #110/#111 incident chain (repo-anchored: #110 landed
-   2026-07-22, "secrets residuals closed" 2026-07-23); if the `${VAR:-}` render was a distinct
-   later episode, correct the row's `date` — §19's mutable-status mechanism is the backstop.*
-
-**Scope guard honoured:** C4 (uncommitted) + one FEEDBACK row + /closeout. No other store
-edits; no decision minted.
+Nothing decided-but-uncommitted. Once this commits, the finding is on master.
 
 ## Cold-resume handoff
 
-**Session class: INSTRUMENT/governance.** This session ran a dispatch brief — regenerated the
-consolidated governance view (uncommitted, Luke-placed), verified one production DB promotion
-read-only, and landed one §19 ledger row. **No product or feature code moved.** As with the
-prior two close-outs, the risk is that a governance handoff begets more governance; the
-product queue below is the real state.
-
 ### What landed
-- **FEEDBACK §19 ledger row id-20** (`FEEDBACK_ARCHIVE.md` §19.6): expansion-based secret
-  presence checks (`${VAR:-}`) render the value; presence checks must be exit-code-based.
-  Implementation guidance under #110/#111; no rule minted.
-- **Governance view regenerated** against master (#210/Q99 parity) — `build/`-only,
-  uncommitted, handed to Luke for the claude.ai UI swap.
-- **Interpretation training-wheels review #1** recorded as complete (verified in-DB, one
-  `human_verified` row) — a production state fact, not a repo change.
+**OPEN_QUESTIONS Q100 — user-5 (Cooper) stored Hevy key authenticates to an empty account.** Read-only prod investigation (2026-08-12), three hypotheses in priority order:
 
-### Maxima at close
-- Decisions max: **#210**. Questions max: **Q99**. (Confirmed by both the direct store grep
-  and the governance-view parity gate: 210 decision entries, 99 question entries.)
+- **H1 (user-id mapping wrong) — RULED OUT.** `users.id = 5` is `cooper.eastlake@outlook.com` / Cooper Eastlake; the `user_integrations` row (id 11, provider `hevy`) links to user_id 5. The key stored "under Cooper" is genuinely on Cooper's row.
+- **H2 (stored key is a copy of another user's key) — RULED OUT.** Decrypted (values never rendered), user 5's key SHA-256 (first 12) `b13844046e7d` is distinct from Luke's `4946bd83a731` and Deb's `2499e2d5b79d`.
+- **The account behind the key is empty.** Live `GET /v1/exercise_templates` with user 5's stored key → 451 global defaults, **0 customs** (re-confirms the seeder's `customs_seen=0`); `GET /v1/workouts/count` → `{"workout_count": 0}`. It authenticates (200s, defaults returned) but holds no workouts and no customs.
 
-### Current sprint — ROADMAP NOW (dated, by external date)
-1. **CBT-I: resolve Q45 nap day-attribution** — DATED, contaminating capture now (`naps_min`
-   date−1 read live for block 3, unverified; also gates a second user at the 4-night cadence,
-   Q78). Close from the VA CBT-I protocol docs / clinician, not the workbook. Owner: Luke.
-   **Dated head of the queue.**
-2. **CBT-I: manual witnessed evaluation trigger** — BUILT but SUPERSEDED, needs REWORK
-   (`feat/cbti-eval-trigger`, OWED — rowed in BRANCHES.md). Do not force-merge.
-3. Lab upload pipeline (uploading unpaused; junk-row operator decision owed).
-4. Interpretation layer build (1b delivered; go-live #194 done; **increment 2 rephrase** is
-   the strongest product pick — increments 3 remain).
-5. Appointment brief (depends on lab pipeline + interpretation).
-6–8. Cross-repo shared-block propagations to `health-connect-app` (all OWED, HCA-rooted).
+### Empirical boundary (per the scope note)
+These negatives attest **only to the account the stored key points at** — nothing about any other Hevy account Cooper may hold. Two explanations remain indistinguishable from our side: **(a)** the belief that Cooper has customs is stale — this is his account and it is simply empty; or **(b)** the stored key was issued from a different, empty Hevy account than the one holding his real training data. Hevy exposes no whoami, and with 0 workouts there is no in-band identity signal to separate them. The 0-workouts result leans (b) up from where it started (an account that supposedly has customs but has zero of everything reads like a fresh/unused account) — a lean, not proof.
 
-### Open questions (grouped)
-- **OPEN, pre-existing, untouched this session:** Q45 (nap attribution — dated head), Q75
-  (Hevy catalogue freshness), Q77 (custom-create round-trip), Q27 (capability-taxonomy v1).
-  None changed.
-- This session opened/closed no questions and minted no decisions.
+### Resolution (needs Cooper — not actionable from Code)
+Confirm the stored API key was generated from the Hevy account that actually shows his workouts + custom exercises; if not, re-issue the key from that account and re-run `sync_hevy_templates.py --user-id 5`. Deb (user 4) already validated the multi-user path (customs 10), so the sync machinery itself is not in doubt.
+
+### What did NOT move this session (named explicitly)
+This was a **read-only multi-user FINDING session** — no product code moved. Every hero lane stood still:
+- **Interpretation layer** — increment **2 (rephrase)** is the strongest post-go-live pick (base text too complex for a layperson, #194 O2), plus **3 (lever-tap)** and the go-live O2 asks (glossary/term-definitions, display-name polish). Untouched.
+- **Lab pipeline** small lanes — `lab_accession` persistence, `Bilirubin conjugated`+`CK` canonical-map, marker display-name polish. Untouched.
+- **CBT-I** — Q45 nap-attribution (dated NOW head, gating block 3's nap exclusions **and** a second user), the `feat/cbti-eval-trigger` REWORK (built against the obsolete 7-night engine; do not force-merge), and the CBT-I user surface (gated on #47). Untouched.
+- **Hevy create-time freshness gate** (ROADMAP NEXT, the #211 follow-up still open) — the create pre-check can still race a stale catalogue. Untouched.
+- **Cross-repo debt** — four OWED ROADMAP NOW rows all await an HCA-rooted session. Untouched.
+- **#116/#121 deploy probe** (from #162 hub-shell) — still never run.
+
+Note the shape: the last several sessions have gone to instrument/governance/findings rather than to the hero product lanes; this one is another. The queue above is what a cold reader should pull from, not more instrument work.
 
 ### Single clearest next action
-**Resolve Q45** (VA nap day-attribution) — dated head of ROADMAP NOW, gates the CBT-I
-eval-trigger rework, and gates a second user. Owner: Luke; closes from the VA CBT-I protocol
-docs or the administering clinician (workbook searched to exhaustion). If the next session is
-free to pick product, the bias points at **interpretation increment 2 (rephrase)**, which
-go-live (#194) surfaced as needed and whose training-wheels review #1 is now complete in-DB.
+**Q45** (dated NOW head): confirm the VA CBT-I nap-timing convention (does the diary's nap item refer to the day preceding the recorded night?) from the VA protocol docs / administering clinician — the engine's `naps_min` date−1 read has been live for block 3 since #122 and every nap-excluded night rests on that unverified attribution. Then interpretation increment 2 (rephrase). (The Q100 finding's own resolution is Cooper's, not Code's — see above.)
 
-### What was NOT touched this session (named explicitly)
-Third-order risk named plainly: this is the third recent INSTRUMENT/governance close-out in a
-row, and the product lanes stood still again. The real queue:
-
-- **Interpretation increment 2 (rephrase)** — UNSTARTED, operator-confirmed *needed* by
-  go-live (#194): the base text is too complex for a layperson. Training-wheels review #1 is
-  now verified complete in-DB, which is the on-ramp for this lane. Untouched.
-- **Interpretation increment 3 (lever-tap → scoped education thread)** — UNSTARTED.
-- **Interpretation small lanes from the go-live census** — `Bilirubin conjugated` + `CK`
-  canonical-map, marker display-name polish, selectable-term glossary, `lab_accession`
-  persist. All UNSTARTED. Untouched.
-- **`feat/cbti-eval-trigger`** — OWED/REWORK (obsolete against master's 4-night engine after
-  #165). Full rework checklist on its BRANCHES.md row. Pushed, unmerged. Untouched.
-- **CBT-I user surface** — invisible in-app; gated on #47 (state-only vs action). Q60.
-- **Banister readiness build** — OWED; data path unblocked, model unbuilt. Untouched.
-- **#116/#121 frontend deploy probe for the hub shell (#162)** — still never run. Untouched.
-- **Cross-repo propagations (health-connect-app)** — three OWED shared-block copies, all
-  HCA-rooted, all untouched (correctly — not landable from a health-app-rooted session).
-
-If free to pick, the product bias points at **interpretation increment 2 (rephrase)**.
+### Branch terminal states
+- `chore/oq-q100-cooper-hevy-empty-account` — **DONE** at land: merged + remote-deleted via PR (#171 motion), self-row in `BRANCHES.md`.
+- `claude/sleepy-hofstadter-8b5c6a` (this worktree's auto-name) — abandoned; carried no unique commits (`git cherry origin/master` empty — ece995b is an ancestor of master), so nothing to land. Auto-name banned for in-flight work, hence the concern-named branch above.
+- `feat/cbti-eval-trigger` — untouched; pushed + rowed **OWED** in `BRANCHES.md` (rework checklist there).
+- `claude/vibrant-khorana-86acde`, `master` — other-worktree checkouts, untouched this session.
