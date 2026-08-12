@@ -1,73 +1,108 @@
-# Session close-out — 2026-08-12 · status-tooling lane (task 5), Steps 0–3
+# Close-out — 2026-08-12 (ROADMAP hygiene: strike Hevy step-2, add adaptive-programming lane)
 
-## 1. Real commits this session
+## Real commits this session
 
-Session-open ref: `4c02763` (master, post-#207 / PR #57). `git log --oneline 4c02763..HEAD`:
+Session-open ref: `71880e2` (prior master tip). `git log --oneline 71880e2..HEAD`:
 
-- `8612a1f` feat(status): cross-repo governance diff engine + invokable report (Steps 2-3)
-- `cc6b2e9` feat(status): extraction gate halts on ANY missing state, names offenders (#209 remainder)
-- `87890b7` gov(status-lane): Step-0 pending-queue adjudication — #208-210; Q-A/Q-B discharged by #207
+```
+2db9b29 Merge pull request #59 from Easty11/chore/roadmap-adaptive-lane
+b24b7c9 chore(roadmap): strike discharged Hevy step-2 row; add adaptive-programming lane to NEXT
+```
 
-Plus this close-out commit (`chore: session close-out`). All on branch `feat/status-diff-engine`,
-pushed as **PR #58 — OPEN, awaiting Luke's review** (code → full human review; not self-merged).
-Nothing from this session is on master yet.
+Diff touched **`ROADMAP.md` only** (3 insertions / 2 deletions). Landed via PR #59,
+`--merge --delete-branch`, fast-forward to `2db9b29`. Placeholder guard (POSIX) passed.
+Both removed lines sat inside declared replacement regions (header date; the struck Hevy
+row), so #176(c) guard-gated landing held.
 
-## 2. Pending-queue reconciliation
+The close-out commit itself follows this write (governance: `CLAUDE.md` Recent-landings
+prepend + 3-cap trim, `closeout.md`, and the BRANCHES self-row).
 
-Task-5 LOG (five items), each adjudicated in Step 0 against the post-#207 tree **before** any
-store edit (G0), disposition recorded with evidence:
+## Pending-queue reconciliation
 
-- **D1 → #208 LANDED** (`87890b7`, LAND-UNCHANGED). #186 moratorium lifted → mint filter; supersedes #186. `mint filter` was 0 occ in the store; premise-independent of #207.
-- **D2 → #209 LANDED** (`87890b7`, AMENDED). Extraction gate = questions+branches; decisions by sequence. Premises re-measured via the landed reader: `17/193 → 17/207` unstated; "neither generator reads HCA's channel" → #207's reader reads it (HCA `unstated=0`). Ruling preserved.
-- **D3 → #210 LANDED** (`87890b7`, LAND-UNCHANGED). Code placeholders use `#NEXT`, never `#N`.
-- **Q-A → DISCHARGED-BY-#207** (not minted). The unified reader reads HCA's lowercase decision channel `{active, held}`; HCA decisions `unstated=0`. "Neither generator reads it" is now false.
-- **Q-B → DISCHARGED-BY-#207** (not minted). #207 states health-app decision `**Status:**` is optional-by-convention, "never a defect" — the formalise-as-optional answer, not backfill.
+**PENDING carried in from `;cc`: none.** The chat close-out reported "PENDING — nothing
+from this session." Both `;cc` adjudications resolve to **no repo write**, confirmed:
 
-Provisional-until-merge: all of the above lives on `feat/status-diff-engine`, **not** on master.
-Numbers `#208–#210` were resolved against master max `#207`; **re-verify at merge** (number-at-merge).
+1. **Mint fork → NO MINT.** No DECISIONS_LOG entry was minted for the adaptive-lane
+   placement. Provenance is row-carried via the NEXT row's citations (#75 frame, Q27,
+   #21, #163/#164/#166). The three-conjunct mint filter fails on conjunct 1 (session
+   objective was governance housekeeping, not product/tooling work). Closed unless Luke
+   overrides. Nothing provisional — the strike and lane are committed on master.
 
-## 3. Cold-resume handoff
+2. **Precision nit → BATCHED, not spun.** The adaptive-lane NEXT row reads
+   "custom-exercise creation live end-to-end (#163/#164/#166)". This overstates #166 by
+   exactly the create→list-back round-trip that **Q77 holds open** (the Copenhagen orphan
+   is confirmed absent from the store — the create fired, ingestion-side proof owed). It
+   does not change the lane's precondition (substantively met either way), so per the
+   severity gate it rides the **next** ROADMAP touch: swap to "wired and live-fired;
+   round-trip proof owed (Q77)". No write this session; Q77 already tracks the underlying
+   debt. **This is the one deliberately-deferred wording correction — apply it on the
+   next ROADMAP edit, do not spin a branch for it alone.**
 
-### Current sprint
-Two product lanes and one instrument lane are in flight, all as open PRs awaiting Luke's review:
-- **Interpretation increment 2 (rephrase pass)** — PR **#55**, branch `feat/interp-inc2-rephrase`. Serialiser + validator + evals + endpoint/cache/promotion table (migration `c3f1a8b2d9e4`) + frontend register toggle. Backend 815 tests green; frontend build clean. **Code+schema, pending review.**
-- **Status-tooling lane (this session)** — PR **#58**, branch `feat/status-diff-engine`. Steps 0–3 above. **Pending review.**
+## Cold-resume handoff
+
+**Session class: INSTRUMENT/governance.** This session moved only `ROADMAP.md` (a
+re-triage: one discharged lane struck, one future lane placed). No product or feature
+code ran. See "What was NOT touched" below — it is the larger part of the state.
+
+### What landed
+- Hevy custom-exercise-creation **step-2** lane struck DONE in ROADMAP (orphan table above
+  LATER): step-1 prod gate closed #163 (494→499), `<hevy_create_exercise>` #164,
+  response-tolerance #166 confirmed a live create. Q75 (catalogue freshness) stays OPEN,
+  **not** closed by the strike.
+- **Adaptive-programming lane** added to ROADMAP NEXT: Plan schema (steps 2–4 of the
+  exercise-catalogue sequence) + capability-taxonomy v1 (Q27), framed by #75 (Plan wraps
+  the Adaptive Exposure Engine — cycle/slots/cardinality Plan-owned, probe/fortify region
+  selection stays engine-side). Target: offseason Block A (~Sep). Its placement now lives
+  on master, closing the memory-only gap.
+
+### Maxima at close
+- Decisions max: **#210**. Questions max: **Q99**. (Note for the record: the `;cc`
+  open-report claimed #206/Q99 from memory; master read #210/Q99 — the re-read-at-open
+  rule caught a four-behind recall. Chat is updating its ledger.)
+
+### Current sprint — ROADMAP NOW (dated, by external date)
+1. **CBT-I: resolve Q45 nap day-attribution** — DATED, contaminating capture now
+   (`naps_min` date−1 read live for block 3, unverified; now also gates a second user at
+   the 4-night cadence, Q78). Close from VA CBT-I protocol docs / clinician, not the
+   workbook. Owner: Luke. **This is the dated head of the queue.**
+2. **CBT-I: manual witnessed evaluation trigger** — BUILT but SUPERSEDED, needs REWORK
+   (`feat/cbti-eval-trigger`, OWED — see below). Do not force-merge.
+3. Lab upload pipeline (uploading unpaused; junk-row operator decision owed).
+4. Interpretation layer build (1b delivered; increments 2/3/5 remain — see below).
+5. Appointment brief (depends on lab pipeline + interpretation).
+6–8. Cross-repo shared-block propagations to `health-connect-app` (all OWED, HCA-rooted).
+
+### Open questions (grouped)
+- **OPEN, pre-existing, untouched this session:** Q45 (nap attribution — dated head),
+  Q75 (Hevy catalogue freshness), Q77 (custom-create round-trip — tracks the batched nit
+  above), Q27 (capability-taxonomy v1). None changed.
+- Full OPEN set unchanged from prior close; this session opened/closed no questions.
 
 ### Single clearest next action
-**Luke: review + merge PR #55 (interpretation inc-2) and PR #58 (status lane).** #55 needs an
-Update-branch first (it reads `BEHIND` — master moved; expected-clean, disjoint surfaces; a
-conflict there is a halt-and-report, not a UI resolve). After #55 merges: post-deploy
-`\d interpretation_rephrases` probe + first plain-draft O2 render (= training-wheels review #1).
+**Resolve Q45** (VA nap day-attribution) — it is the dated head of ROADMAP NOW, gates the
+CBT-I eval-trigger rework, and now gates a second user. Owner: Luke; closes from the VA
+CBT-I protocol docs or the administering clinician (workbook searched to exhaustion).
 
-### Open questions by status (health-app; full text in OPEN_QUESTIONS.md)
-- **OPEN, product-gating:** Q45 (in-app diary capture, gates CBT-I interim surface), Q92 (asset-status-gates-rendering), Q90/Q91 (status dialect / brief verify-checkpoint — Q91 closed-without-rule earlier). The interpretation OWED forks Q36–Q40/Q60–Q70 are **resolved** (#195–#206) but their implementations are OWED.
-- **OPEN, newly minted (prior session):** Q93–Q99 — Garmin recovery route, Health Sync mirror writer, role-vs-name renames, `exercise_sessions` drop, no local strength store, HC rows carry no load, multi-user paths unexercised.
-- **Discharged this session:** Q-A, Q-B (by #207).
+### What was NOT touched this session (named explicitly)
+This was a governance/instrument session — the second-order risk is that the handoff reads
+as governance and the next session does more governance. The **product lanes stood still**
+and are the real queue:
 
-### What was NOT touched (named explicitly — absence is not self-reporting)
-This session, like the governance-consolidation session before it, went to **instrument** (status
-tooling / governance) rather than to the **product** it instruments. Standing still:
-- **Interpretation increment 2 itself** — the actual layperson-register product — sits in PR #55 **unreviewed**. The instrument lane advanced; the thing being instrumented did not merge.
-- **The §E capability write-path (gastroc re-attainment observations)** — the one **time-perishable** lane. `capability_observations` is verified live and empty (prior session), but the write-path that records the gastroc curve is **not built**, and the curve (~5 weeks post-injury now) cannot be backfilled. This has now waited across multiple sessions.
-- **The #195–#199 implementation OWEDs** — `min_meaningful_delta` rise/fall pair + interval bands, I1 read-constant enforcement, `effect_locus`, `discriminator`-as-list — all decided, none implemented.
-- **Interpretation increments 3 (lever-tap) and 5 (further go-live)**; **Block-A / `fortification_profiles`** value change (deferred to Block-A-eve).
-- **HCA lane** — no HCA-rooted session ran; nothing owed there this session (the earlier debt landed as HCA PR #28 / #35 / Q17).
+- **Interpretation increment 2 (rephrase)** — UNSTARTED, and operator-confirmed *needed*
+  by go-live (#194): Luke's O2 said the base text is too complex for a layperson. This is
+  the strongest post-go-live product pick. Untouched.
+- **Interpretation increment 3 (lever-tap → scoped education thread)** — UNSTARTED.
+- **Interpretation small lanes from the go-live census** — `Bilirubin conjugated` + `CK`
+  canonical-map, marker display-name polish, selectable-term glossary, `lab_accession`
+  persist. All UNSTARTED product work. Untouched.
+- **`feat/cbti-eval-trigger`** — OWED/REWORK (obsolete against master's 4-night engine
+  after #165). Full rework checklist in BRANCHES.md row. Pushed `fec0324`, unmerged.
+  Untouched this session.
+- **CBT-I user surface** — invisible in-app; gated on #47 (state-only vs action). Q60.
+- **Banister readiness build** — OWED; data path unblocked, model unbuilt. Untouched.
+- **#116/#121 frontend deploy probe for the hub shell (#162)** — still never run. Untouched.
+- **Cross-repo propagations (health-connect-app)** — three OWED shared-block copies, all
+  HCA-rooted, all untouched (correctly — not landable from a health-app-rooted session).
 
-### S4 design proposal — Step 4, PAPER ONLY (build gated on Luke's ruling)
-Task 5 Step 4 (a scheduled run of the report) is **not built**. Required property: **a halt must be
-louder than a success.** A scheduled run emits into an unwatched session, where stderr + a non-zero
-exit code are invisible — nobody reads the log. So the halt-visibility mechanism must actively leave
-a footprint on halt, not merely set exit state. Options:
-
-1. **Exit-code + log only (status quo — REJECTED as the mechanism).** A cron run's non-zero exit and stderr land in a log nobody reads. Fails "louder than success" by construction — this is the failure mode, not a candidate.
-2. **In-band HALT marker.** On halt, write `Projects/_status/HALT_<utc>.md` describing the failure; the session-open ritual is required to surface and clear it. Pro: no external dependency, survives Railway restarts, in-band with the snapshot dir, inherits the filesystem's own write-loudness. Con: PULL not PUSH — seen only at next session open (latency = until someone next opens a session).
-3. **External push (email/Slack/webhook) on halt.** Genuinely louder than success (success silent, halt pings). Con: needs a notification channel + secret — **out of scope and GUARD-forbidden here**; adds the silent-notifier failure mode (the notifier itself can fail quietly).
-4. **Halt-inverts-cadence (self-escalating).** On halt the job reschedules itself more often until the halt clears, so the failure's footprint grows. Con: needs dynamic rescheduling; halt-storm risk.
-
-**Lean:** (2) as the floor — a durable in-band HALT marker read at every session open, so no halt is
-ever silently lost across restarts (the "louder than success" asymmetry: a success writes a routine
-ignorable snapshot; a halt writes a marker the ritual must clear). Add (3) as an augmentation **only
-when Luke sanctions a notification channel**. Reject (1) as the mechanism and (4) as too clever.
-Design note: the mechanism must itself be fail-loud — (2) inherits the filesystem's loudness (a write
-failure raises); (3)'s notifier-failure is exactly the silent-watcher problem (2) avoids. **Build
-nothing until Luke rules on this.**
+If the next session is free to pick, the product bias points at **interpretation
+increment 2 (rephrase)**, which go-live explicitly surfaced as needed.
