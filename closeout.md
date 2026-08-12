@@ -1,52 +1,53 @@
-# Session close-out — 2026-08-12 (Q75 catalogue freshness → #211)
+# Session close-out — 2026-08-12 (Hevy user-5 zero-customs investigation → OPEN_QUESTIONS Q100)
 
 ## Real commits this session
 
-Session-open ref: `ece995b` (Merge PR #61). `git log --oneline ece995b..HEAD`:
+Branch cut from `origin/master` `9c36578` (Merge PR #63). `git log --oneline origin/master..HEAD`:
 
-- `25877f4` — feat(hevy): staleness-gated catalogue sync on workout fetch (Q75 / #211)
-- `f113c15` — gov(Q75): resolve catalogue freshness as option (c) — #211
-- `eea6fcb` — Merge pull request #62 from Easty11/feat/catalogue-freshness-on-fetch
 - (this commit) — chore: session close-out
 
-Both work commits landed on master via **PR #62** (`--merge --delete-branch`, #171 motion); branch merged + remote-deleted. Full backend suite green (823) at merge; `placeholder guard (POSIX)` PASS.
+**No mid-session commits.** The investigation was read-only (prod probes only — no repo writes); the entire deliverable — `OPEN_QUESTIONS` Q100, the ROADMAP NEXT row strike, the `CLAUDE.md` Recent-landings swap, this `closeout.md`, and the `BRANCHES.md` self-row — rides this single close-out commit. Governance/docs-only; guard-gated per #176(c); no code, no migration, no decision minted. Placeholder guard green locally (exit 0).
 
 ## Pending-queue reconciliation
 
-**No `;cc` PENDING queue carried in.** This session ran a `;build` dispatch brief (resolve Q75 catalogue freshness), not a chat close-out. Every brief step landed or was adjudicated:
+**No `;cc` PENDING queue carried in.** This session ran one investigation task — the ROADMAP NEXT chip "Hevy: user 5 (Cooper) syncs zero customs" (the #211 follow-up) — not a chat close-out. Disposition:
 
-- **Step 0 (incident anchor):** Luke ran the operator seeder in-container for users 1/4/5. User 1 customs 50→55; the two absent 2026-08-05 customs now present and **all three resolve as customs** (owner 1) — ids pinned into the test fixture (`1fe04727…` wide-chest, `f8dccc5a…` incline, `0dd081f1…` front-lat). Landed in `25877f4`.
-- **Steps 1–3 (recon → implement → test):** landed in `25877f4`. **The brief's premise was rejected mid-session (halt-and-redesign):** "single-column read of the user's catalogue `synced_at`" does not exist — `synced_at` is per-row and its defaults are re-stamped by any user's sync, so an aggregate reads fresh off another user's run. Replaced (Luke's call) with a **per-user marker `user_integrations.templates_synced_at`** (migration `e2d5c7a1b9f3`), multi-user-correct.
-- **Step 4 (governance):** Q75 → DONE → #211; DECISIONS_LOG #211. Landed in `f113c15`, concern-split from code. Number minted at land against master max #210.
-- **Step-4 investigation:** `<hevy_create_exercise>` **is** user-facing (`chat.py:748`) — Q75's resolve-before condition is met; recorded honestly, follow-up flagged (see below), not folded in.
+- **The chip is discharged into a documented question.** The brief itself said it "should become its own OPEN_QUESTIONS item"; it now lands as **Q100**, and the ROADMAP NEXT row is struck **DONE → Q100**.
+- **No decision minted.** An `OPEN_QUESTIONS` finding, not a `;cc` adjudication — `DECISIONS_LOG` untouched.
 
-Nothing decided-but-uncommitted. All provisional items are now on master.
+Nothing decided-but-uncommitted. Once this commits, the finding is on master.
 
 ## Cold-resume handoff
 
 ### What landed
-**#211 — catalogue freshness is sync-on-workout-fetch, staleness-gated on a per-user marker (Q75 resolved, option c).** `refresh_catalogue_if_stale` piggybacks a per-user template sync on `GET /integrations/hevy/workouts[/all]` when `user_integrations.templates_synced_at` is NULL or >24h; stamped by `sync_one_user` on a completed pull; non-blocking on failure (#77 isolation + an outer guard). This was the **first product-code session after three consecutive instrument/governance sessions.**
+**OPEN_QUESTIONS Q100 — user-5 (Cooper) stored Hevy key authenticates to an empty account.** Read-only prod investigation (2026-08-12), three hypotheses in priority order:
 
-### Deploy watch-point (post-merge, not yet done)
-Verify Railway ran `alembic upgrade head` before the marker-writing code served (#121: probe the deployed backend, not an in-container assumption). All four users' markers are NULL (the manual seeder runs predate the column), so the first post-deploy workout fetch fires **one expected redundant sync per user** — harmless, one-time.
+- **H1 (user-id mapping wrong) — RULED OUT.** `users.id = 5` is `cooper.eastlake@outlook.com` / Cooper Eastlake; the `user_integrations` row (id 11, provider `hevy`) links to user_id 5. The key stored "under Cooper" is genuinely on Cooper's row.
+- **H2 (stored key is a copy of another user's key) — RULED OUT.** Decrypted (values never rendered), user 5's key SHA-256 (first 12) `b13844046e7d` is distinct from Luke's `4946bd83a731` and Deb's `2499e2d5b79d`.
+- **The account behind the key is empty.** Live `GET /v1/exercise_templates` with user 5's stored key → 451 global defaults, **0 customs** (re-confirms the seeder's `customs_seen=0`); `GET /v1/workouts/count` → `{"workout_count": 0}`. It authenticates (200s, defaults returned) but holds no workouts and no customs.
 
-### Open questions / follow-ups (in the repo, not just chips)
-- **Q75:** now DONE → #211.
-- **Hevy create-time freshness gate** (ROADMAP NEXT + chip): the one window (c) leaves open — a chat-initiated create with no recent workout fetch races a stale catalogue. Lean: call `refresh_catalogue_if_stale` inside the create pre-check. Its own question or the create-loop thread; do not reopen #211.
-- **Hevy user-5 (Cooper) zero-customs** (ROADMAP NEXT + chip): seeder synced his key clean but pulled 0 customs. Hypotheses: id-mapping → wrong-account → stale belief. The negative attests only "user 5's key returns zero customs." Deb (user 4) validated the multi-user path (customs 10).
+### Empirical boundary (per the scope note)
+These negatives attest **only to the account the stored key points at** — nothing about any other Hevy account Cooper may hold. Two explanations remain indistinguishable from our side: **(a)** the belief that Cooper has customs is stale — this is his account and it is simply empty; or **(b)** the stored key was issued from a different, empty Hevy account than the one holding his real training data. Hevy exposes no whoami, and with 0 workouts there is no in-band identity signal to separate them. The 0-workouts result leans (b) up from where it started (an account that supposedly has customs but has zero of everything reads like a fresh/unused account) — a lean, not proof.
+
+### Resolution (needs Cooper — not actionable from Code)
+Confirm the stored API key was generated from the Hevy account that actually shows his workouts + custom exercises; if not, re-issue the key from that account and re-run `sync_hevy_templates.py --user-id 5`. Deb (user 4) already validated the multi-user path (customs 10), so the sync machinery itself is not in doubt.
 
 ### What did NOT move this session (named explicitly)
-The hero product lanes all stood still; this was a small Hevy lane, not a feature push:
+This was a **read-only multi-user FINDING session** — no product code moved. Every hero lane stood still:
 - **Interpretation layer** — increment **2 (rephrase)** is the strongest post-go-live pick (base text too complex for a layperson, #194 O2), plus **3 (lever-tap)** and the go-live O2 asks (glossary/term-definitions, display-name polish). Untouched.
 - **Lab pipeline** small lanes — `lab_accession` persistence, `Bilirubin conjugated`+`CK` canonical-map, marker display-name polish. Untouched.
-- **CBT-I** — Q45 nap-attribution (dated NOW, gating block 3's nap exclusions **and** a second user), the `feat/cbti-eval-trigger` REWORK (built against the obsolete 7-night engine; do not force-merge), and the CBT-I user surface (gated on #47). Untouched.
-- **Cross-repo debt** — four OWED ROADMAP NOW rows (number-at-merge enforcement, shared-block secret rule, `#NEXT` scope extension, boundary-criterion/merge-path split) all await an HCA-rooted session. Untouched.
-- **#116/#121 frontend deploy probe** (from #162 hub-shell) — still never run.
+- **CBT-I** — Q45 nap-attribution (dated NOW head, gating block 3's nap exclusions **and** a second user), the `feat/cbti-eval-trigger` REWORK (built against the obsolete 7-night engine; do not force-merge), and the CBT-I user surface (gated on #47). Untouched.
+- **Hevy create-time freshness gate** (ROADMAP NEXT, the #211 follow-up still open) — the create pre-check can still race a stale catalogue. Untouched.
+- **Cross-repo debt** — four OWED ROADMAP NOW rows all await an HCA-rooted session. Untouched.
+- **#116/#121 deploy probe** (from #162 hub-shell) — still never run.
+
+Note the shape: the last several sessions have gone to instrument/governance/findings rather than to the hero product lanes; this one is another. The queue above is what a cold reader should pull from, not more instrument work.
 
 ### Single clearest next action
-**Q45** (dated NOW head): confirm the VA CBT-I nap-timing convention (does the diary's nap item refer to the day preceding the recorded night?) from the VA protocol docs / administering clinician — the engine's `naps_min` date−1 read has been live for block 3 since #122 and every nap-excluded night rests on that unverified attribution. Then interpretation increment 2 (rephrase).
+**Q45** (dated NOW head): confirm the VA CBT-I nap-timing convention (does the diary's nap item refer to the day preceding the recorded night?) from the VA protocol docs / administering clinician — the engine's `naps_min` date−1 read has been live for block 3 since #122 and every nap-excluded night rests on that unverified attribution. Then interpretation increment 2 (rephrase). (The Q100 finding's own resolution is Cooper's, not Code's — see above.)
 
 ### Branch terminal states
-- `feat/catalogue-freshness-on-fetch` — **DONE**, merged + remote-deleted (`eea6fcb`).
+- `chore/oq-q100-cooper-hevy-empty-account` — **DONE** at land: merged + remote-deleted via PR (#171 motion), self-row in `BRANCHES.md`.
+- `claude/sleepy-hofstadter-8b5c6a` (this worktree's auto-name) — abandoned; carried no unique commits (`git cherry origin/master` empty — ece995b is an ancestor of master), so nothing to land. Auto-name banned for in-flight work, hence the concern-named branch above.
 - `feat/cbti-eval-trigger` — untouched; pushed + rowed **OWED** in `BRANCHES.md` (rework checklist there).
-- `claude/sleepy-hofstadter-8b5c6a`, `claude/vibrant-khorana-86acde` — local-only, untouched, `git cherry` empty vs `origin/master` (no unmerged work).
+- `claude/vibrant-khorana-86acde`, `master` — other-worktree checkouts, untouched this session.
