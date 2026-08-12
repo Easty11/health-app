@@ -8281,7 +8281,7 @@ active user's workout fetch refreshes the catalogue in the same session) but doe
 path, so a create with no recent fetch can still race a stale catalogue. If that residual bites, option
 (a) or a create-time freshness gate re-enters — flagged, out of this branch's scope.
 
-### #NEXT. Create-path catalogue freshness — the stale-catalogue mint window #211 left open is closed by a refresh-before-idempotency gate in the chat create path (Q75 residual)
+### 212. Create-path catalogue freshness — the stale-catalogue mint window #211 left open is closed by a refresh-before-idempotency gate in the chat create path (Q75 residual)
 
 **Decision:** `_process_exercise_actions` (`routers/chat.py`) calls `refresh_catalogue_if_stale(db, user_id)`
 ONCE, after the not-connected early-return and BEFORE the honest-confirmation idempotency pre-check, so a
