@@ -28,6 +28,7 @@ from hevy_templates import (
     catalogue_titles,
     catalogue_titles_by_id,
     create_and_resolve,
+    refresh_catalogue_if_stale,
     resolve_exercise,
     suggest_candidates,
     user_hevy_key,
@@ -231,6 +232,18 @@ async def _process_exercise_actions(
     reporting "created" for something that already existed would be a false confirmation
     about an irreversible act.
 
+    Freshness gate (#212 / follow-up to Q75 #211). Both idempotency reads — the honest-
+    confirmation pre-check below AND `create_and_resolve`'s own — resolve against the LOCAL
+    template store. A chat-initiated create with no recent workout fetch (the path #211
+    guards) can therefore race a stale catalogue: an upstream custom minted since the last
+    sync is invisible to both reads, and the create mints a permanent duplicate against a
+    delete-less API — the 2026-08-05 incident's mint offer. So refresh-if-stale HERE, before
+    the pre-check, not inside `create_and_resolve`: the confirmation's honesty depends on the
+    pre-check below reading a fresh store, and a fresh read here leaves `create_and_resolve`'s
+    read fresh too — one refresh closes both. Staleness-gated (`_CATALOGUE_STALE_AFTER`) and
+    run once per turn, so a recent fetch/create skips the Hevy call; non-blocking on failure,
+    so a Hevy outage degrades to the stale-store behaviour rather than dropping the reply.
+
     Returns (cleaned_reply, actions_taken).
     """
     actions_taken: list[str] = []
@@ -246,6 +259,10 @@ async def _process_exercise_actions(
         cleaned = _EXERCISE_BLOCK_RE.sub("", reply).strip()
         actions_taken.append("⚠️ Custom exercise not created — Hevy is not connected.")
         return cleaned, actions_taken
+
+    # Close the stale-catalogue mint window (see docstring): refresh before either
+    # idempotency read, staleness-gated so the common (fresh) path skips the Hevy call.
+    await refresh_catalogue_if_stale(db, user_id)
 
     cleaned = reply
     for match in matches:

@@ -20,6 +20,7 @@ All Hevy calls are faked — no live POST, and nothing is minted in any real acc
 """
 import asyncio
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -35,10 +36,16 @@ def _run(coro):
 
 
 def _key(db, user_id=1):
-    """A stored Hevy key, so the processor's not-connected pre-check passes."""
+    """A stored Hevy key, so the processor's not-connected pre-check passes.
+
+    Stamped FRESH: these tests are orthogonal to the #212 catalogue-freshness gate, so the
+    user sits in the common recently-synced state and the real gate skips (no Hevy call). The
+    gate's own behaviour is covered by `test_hevy_create_freshness_gate.py`.
+    """
     from encryption import encrypt
     db.add(models.UserIntegration(
-        user_id=user_id, provider="hevy", api_key_encrypted=encrypt("hk_test")))
+        user_id=user_id, provider="hevy", api_key_encrypted=encrypt("hk_test"),
+        templates_synced_at=datetime.now(timezone.utc)))
     db.commit()
 
 

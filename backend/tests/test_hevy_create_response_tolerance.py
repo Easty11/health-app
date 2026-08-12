@@ -19,6 +19,7 @@ distinction that matters: a fake one layer above the defect cannot see it.
 """
 import asyncio
 import json
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -253,7 +254,8 @@ def test_chat_reports_success_not_failure_after_a_bad_body(db_session, monkeypat
     from routers import chat
 
     db_session.add(models.UserIntegration(
-        user_id=USER, provider="hevy", api_key_encrypted=encrypt("fake-key")))
+        user_id=USER, provider="hevy", api_key_encrypted=encrypt("fake-key"),
+        templates_synced_at=datetime.now(timezone.utc)))  # fresh: skip the #212 gate (orthogonal)
     db_session.commit()
     _patch_post(monkeypatch, _response())
 
