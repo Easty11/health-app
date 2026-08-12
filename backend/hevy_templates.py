@@ -14,11 +14,11 @@ Re-runnable CLI:
 import asyncio
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 import models
@@ -48,6 +48,12 @@ _BACKOFF_BASE = 1.0       # seconds; exponential per retry
 # may land in 0.5–0.6; containment-first ranking and `limit` bound the tail.
 _SUGGEST_MIN_RATIO = 0.5
 _CREATE_RESOLVE_ATTEMPTS = 3  # sync+resolve tries after a create (create-visibility latency)
+
+# Q75 option (c): the workout-fetch path refreshes a user's catalogue only once its
+# per-user marker (`user_integrations.templates_synced_at`) is older than this. Bounds
+# how far the catalogue can drift behind Hevy while still skipping a Hevy call on the
+# common (fresh) fetch. Constant, not configurable — a freshness budget, not a knob.
+_CATALOGUE_STALE_AFTER = timedelta(hours=24)
 
 
 class HevyKeyMissingError(Exception):
@@ -313,6 +319,19 @@ async def sync_one_user(db: Session, user_id: int, api_key: str) -> dict:
         page += 1
         await asyncio.sleep(_INTER_PAGE_DELAY)
 
+    # Stamp the per-user freshness marker — this pull COMPLETED (every Hevy page fetch
+    # succeeded; a mid-pull raise unwinds before here and leaves the marker untouched, so
+    # a failed sync never reads as fresh). Stamped in the primitive every sync caller
+    # routes through (operator route, connect-seed, create-loop), so the marker can never
+    # claim a freshness no code path actually produced. Read by `refresh_catalogue_if_stale`.
+    db.execute(
+        update(models.UserIntegration)
+        .where(models.UserIntegration.user_id == user_id)
+        .where(models.UserIntegration.provider == "hevy")
+        .values(templates_synced_at=datetime.now(timezone.utc))
+    )
+    db.commit()
+
     return {
         "rows_processed": rows_processed,
         "defaults_seen": defaults_seen,
@@ -405,6 +424,51 @@ async def sync_exercise_templates(
         {k: v for k, v in summary.items() if k != "per_user"},
     )
     return summary
+
+
+async def refresh_catalogue_if_stale(db: Session, user_id: int) -> dict | None:
+    """Piggyback a template sync on the workout-fetch path when this user's catalogue is
+    stale — Q75 option (c) / DECISIONS_LOG #211.
+
+    Reads the per-user marker `user_integrations.templates_synced_at` (one column, no Hevy
+    call): NULL (never synced) or older than `_CATALOGUE_STALE_AFTER` -> refresh; a marker
+    inside the window returns immediately, so a fetch that doesn't cross the threshold stays
+    pure (no network, no writes).
+
+    NON-BLOCKING ON FAILURE. The refresh runs through `sync_exercise_templates`, which
+    carries the #77 per-user isolation and never raises. This function ALSO wraps the whole
+    body, so anything that could still escape (the marker read, a defect outside the
+    per-user try) is logged loudly and swallowed: a template-sync problem must never fail
+    the workout fetch it rode in on, and a Hevy outage must not degrade a read that would
+    otherwise serve from the local store.
+
+    Returns the sync summary when a refresh ran, else None (fresh -> skipped).
+    """
+    try:
+        marker = db.scalar(
+            select(models.UserIntegration.templates_synced_at)
+            .where(models.UserIntegration.user_id == user_id)
+            .where(models.UserIntegration.provider == "hevy")
+        )
+        if marker is not None:
+            if marker.tzinfo is None:  # SQLite round-trips TIMESTAMPTZ as naive; assume UTC
+                marker = marker.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - marker < _CATALOGUE_STALE_AFTER:
+                return None  # fresh — skip the Hevy call
+
+        summary = await sync_exercise_templates(db, only_user_id=user_id)
+        logger.info(
+            "Catalogue staleness refresh for user %d (marker=%s): %s",
+            user_id, marker,
+            {k: v for k, v in summary.items() if k not in ("per_user", "collisions")},
+        )
+        return summary
+    except Exception as exc:  # noqa: BLE001 — a stale-refresh failure must never fail the fetch
+        logger.warning(
+            "Catalogue staleness refresh FAILED for user %d — %s (workout fetch continues)",
+            user_id, f"{type(exc).__name__}: {exc}",
+        )
+        return None
 
 
 async def create_and_resolve(
