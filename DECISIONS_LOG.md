@@ -8280,3 +8280,47 @@ condition. NOTE the write path (`<hevy_create_exercise>`) is ALREADY user-facing
 active user's workout fetch refreshes the catalogue in the same session) but does NOT gate the create
 path, so a create with no recent fetch can still race a stale catalogue. If that residual bites, option
 (a) or a create-time freshness gate re-enters — flagged, out of this branch's scope.
+
+### #NEXT. Create-path catalogue freshness — the stale-catalogue mint window #211 left open is closed by a refresh-before-idempotency gate in the chat create path (Q75 residual)
+
+**Decision:** `_process_exercise_actions` (`routers/chat.py`) calls `refresh_catalogue_if_stale(db, user_id)`
+ONCE, after the not-connected early-return and BEFORE the honest-confirmation idempotency pre-check, so a
+chat-initiated `<hevy_create_exercise>` with no recent workout fetch resolves its idempotency reads against
+a fresh catalogue. Reuses #211's machinery verbatim — same per-user marker `user_integrations.templates_synced_at`,
+same `_CATALOGUE_STALE_AFTER` (24h) gate, same non-blocking-on-failure wrapper. No new sync primitive, no scheduler.
+
+**Placement is load-bearing — the chat pre-check, NOT inside `create_and_resolve`.** The create path reads
+the local store twice: the honest-confirmation pre-check at `chat.py` (#164 — so the reply can say "created"
+vs "already there" truthfully) and `create_and_resolve`'s own idempotency read (#65). A refresh placed only
+inside `create_and_resolve` would leave the chat pre-check reading the STALE store: it would miss the upstream
+custom, fall through to `create_and_resolve`, which would then refresh, find it, and return its id — and chat
+would report "✓ created" for something that already existed, the exact false confirmation the #164 pre-check
+exists to prevent. Refreshing before the chat pre-check makes that read honest AND leaves `create_and_resolve`'s
+read fresh — one refresh closes both. It runs once per turn (before the block loop), so N blocks consult the gate
+once; and it sits after the not-connected / no-block early returns, so the overwhelmingly common no-block chat
+turn carries zero gate overhead and a keyless user never triggers a sync.
+
+**Rationale:** #211 resolved Q75 as option (c), but its own "Do not revisit unless" flagged this residual
+explicitly: (c) covers an active user's workout fetch refreshing the catalogue in-session, but does NOT gate
+the create path, so a create with no recent fetch can still race a stale catalogue and mint a permanent
+duplicate against Hevy's delete-less API — the 2026-08-05 incident's mint offer. The gate is ~one line because
+#211 already built the staleness-gated per-user sync primitive; option (a)'s scheduler is not needed. No
+double-sync on the common path: a recent fetch (#211) or create leaves a fresh marker, so the gate reads one
+column and skips the Hevy call.
+
+**Status:** active. Closes the create-path residual flagged in #211; Q75 stays DONE → #211 (NOT reopened).
+Lineage: Q75 / #65 (`create_and_resolve`) / #164 (block + honest pre-check) / #211 (fetch-path freshness).
+
+**How you know:** full backend suite green (828 = 823 + 5). New `test_hevy_create_freshness_gate.py` drives the
+REAL gate + REAL pre-check with a faked sync transport: a stale (NULL-marker) store missing an upstream custom
+refreshes, the pre-check then catches it, and NOTHING mints (`create_and_resolve` never called); a fresh marker
+skips the sync entirely while a genuinely-new title still mints; the gate runs once for two blocks and never for
+a no-block or not-connected turn. Two pre-existing chat-path fixtures (`test_hevy_create_exercise_block.py`,
+`test_hevy_create_response_tolerance.py`) reseeded with a fresh marker — orthogonal to freshness, so the real
+gate skips; this also removed swallowed real-network sync attempts the gate would otherwise trigger in those
+fixtures (create-block file 18.9s → 2.5s).
+
+**Do not revisit unless:** a create's own list-back needs to survive a marker that goes stale mid-turn (today the
+gate refreshes once at turn start, and a create whose `sync_one_user` stamps the marker keeps subsequent same-turn
+reads fresh), OR a non-chat caller of `create_and_resolve` appears needing the same gate (chat is the sole caller
+today; the gate lives at the chat layer by design, per the placement rationale above).
