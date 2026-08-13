@@ -2899,7 +2899,7 @@ stale (a) or the key is for the wrong account (b). Resolution needs Cooper: conf
 from the Hevy account that shows his workouts/customs, and re-issue it from that account if not. Related:
 `Q75` (catalogue-freshness), `Q99` (multi-user paths unexercised). Owner: Luke.
 
-## Q#NEXT. The offer surfaces the last elapsed cycle, which a later insufficiency-hold can bury over a fully-logged actionable step
+## Q101. The offer surfaces the last elapsed cycle, which a later insufficiency-hold can bury over a fully-logged actionable step
 
 `evaluate_live_cycle` returns `complete[-1]` — the last cycle whose 4-day span has elapsed, not the last
 *sufficiently-logged* one. On block 2 (`cbti_blocks.id`=2), a fully-logged `compress 390→375`

@@ -8394,7 +8394,7 @@ endpoint must then refuse — call 2 is the surface to re-read, not the engine),
 question (Q48) resolves into an actual gate, at which point eligibility gains a second condition and call 1
 is the surface to re-read, not the engine's sufficiency gate.
 
-### #NEXT. A UI control that performs an irreversible ledger write requires a restating two-step confirm
+### 214. A UI control that performs an irreversible ledger write requires a restating two-step confirm
 
 **Decision:** Any client control whose action mints or mutates an append-only ledger row — a write that
 cannot be undone from the UI — must, before it writes: (1) restate the ACTUAL mutation in the user's terms
@@ -8415,7 +8415,7 @@ the screen, is what stops the same defect recurring on the labs confirm surface,
 is being built next. Cheap to state now, load-bearing before the next mint surface ships.
 
 **Status:** active. Minted from #213's first live run (the accept-confirm defect, filed as a ROADMAP NEXT
-fix-row). The `EvaluationOffer` fix and the labs confirm screen must both satisfy this. Folds into `Q#NEXT`
+fix-row). The `EvaluationOffer` fix and the labs confirm screen must both satisfy this. Folds into `Q101`
 where the accept-may-not-be-acceptable-at-all fork (an insufficiency-hold) further narrows WHEN the control
 should exist.
 
