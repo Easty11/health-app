@@ -8393,3 +8393,37 @@ read; preserves #211/#212's create-path work untouched.
 endpoint must then refuse — call 2 is the surface to re-read, not the engine), or the settling-period
 question (Q48) resolves into an actual gate, at which point eligibility gains a second condition and call 1
 is the surface to re-read, not the engine's sufficiency gate.
+
+### 214. A UI control that performs an irreversible ledger write requires a restating two-step confirm
+
+**Decision:** Any client control whose action mints or mutates an append-only ledger row — a write that
+cannot be undone from the UI — must, before it writes: (1) restate the ACTUAL mutation in the user's terms
+(what row is appended, what state changes, what it costs), and (2) require a distinct second deliberate
+action to commit. The read-only preview/offer that precedes the write carries NO live write control. This is
+a cross-cutting UI invariant, not a property of any one screen: it binds `EvaluationOffer`'s accept (#213),
+the labs confirm-and-store screen (the next mint surface, #48/#52), and every future control that reaches an
+append-only store.
+
+**Rationale:** #166 already requires confirm-before-mint for irreversible writes, but #213's first live run
+showed that invariant is satisfiable in FORM while bypassable in FUNCTION. `EvaluationOffer`'s accept is
+mechanically distinct from the offer (a separate control, a separate endpoint), so #166 reads as met — yet a
+single tap intended to *view* the offer minted `cbti_prescriptions.id`=12, an irreversible ledger append,
+with no restatement of the mutation and no second action. The gap is that "distinct control" is not the same
+as "deliberate, informed second action": a lone button that writes on first tap passes the structural test
+and still fires by accident. Naming the invariant at the level of the WRITE (restate + second action), not
+the screen, is what stops the same defect recurring on the labs confirm surface, which mints on confirm and
+is being built next. Cheap to state now, load-bearing before the next mint surface ships.
+
+**Status:** active. Minted from #213's first live run (the accept-confirm defect, filed as a ROADMAP NEXT
+fix-row). The `EvaluationOffer` fix and the labs confirm screen must both satisfy this. Folds into `Q101`
+where the accept-may-not-be-acceptable-at-all fork (an insufficiency-hold) further narrows WHEN the control
+should exist.
+
+**How you know:** `cbti_prescriptions.id`=12 exists on block 2 in prod (read-only Railway query, 2026-08-13):
+`decision='hold'`, `basis_nights_n=2`, window unchanged 390/22:30, `effective_from`=08-13, superseding rx 11
+(`effective_to`=08-12, `superseded_by`=12) — a real irreversible append produced by #213's accept on its
+first live exercise, which is the concrete artifact this invariant generalises from.
+
+**Do not revisit unless:** a mint surface has a genuinely different reversibility model (e.g. a soft-delete /
+undo window) such that a restating two-step confirm is redundant rather than load-bearing — in which case the
+undo path, not the confirm, is the safety mechanism and this invariant is satisfied by other means.

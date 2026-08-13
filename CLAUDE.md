@@ -174,6 +174,12 @@ Code and schema changes always take full human review.
   derived from `caused` — now lives in `FEEDBACK_ARCHIVE.md` §19 (post-prune). See #129–#132.
 - **Hevy:** canonical creation is `create_workout`, not `create_routine` (custom exercise
   UUIDs do not resolve via the routine endpoint — confirmed API limit). Matrix: `Hevy_Pattern`.
+- **CBT-I block references.** `cbti_blocks.id` is canonical for any operational reference
+  (queries, `--block-id`, scripts). The programme ordinal ("block N") appears only in prose,
+  with its `cbti_blocks.id` in brackets on first mention — never as a bare token that could reach
+  `--block-id`. The ordinal currently runs +1 of the id (programme "block 3" = `cbti_blocks.id` 2;
+  no id=3 row exists), but that offset is NOT a rule to rely on: verify the id against `cbti_blocks`
+  before passing `--block-id`, never trust a store's "block N" as an id.
 - **SCHEMA.md is repo-canonical** (root), the mirror of `backend/migrations/`. Update it in the
   same commit (or an immediately paired governance commit) as any schema-changing migration; it
   must never lag master.
