@@ -8325,7 +8325,7 @@ gate refreshes once at turn start, and a create whose `sync_one_user` stamps the
 reads fresh), OR a non-chat caller of `create_and_resolve` appears needing the same gate (chat is the sole caller
 today; the gate lives at the chat layer by design, per the placement rationale above).
 
-### #NEXT. The PM evaluation trigger, rebuilt on the 4-night hunting engine — offers on elapsed DAYS, replays the whole block, and carries no block-close path at all
+### 213. The PM evaluation trigger, rebuilt on the 4-night hunting engine — offers on elapsed DAYS, replays the whole block, and carries no block-close path at all
 
 **Decision:** #118's PM half — a read-only OFFER (`GET /checkin-v2/cbti/evaluation`) plus a witnessed
 ACCEPT (`POST /checkin-v2/cbti/evaluation/accept`) surfaced in `NightlyCloseOut.jsx` — is built on the
@@ -8368,8 +8368,8 @@ the OWED copy test is written, not deferred.
 
 **Status:** active. Built on `feat/cbti-eval-trigger-v2`, cut fresh from master (the obsolete
 `feat/cbti-eval-trigger @ fec0324` was reference-only, never merged). Resolves and supersedes that branch's
-own unresolved `#NEXT` decision (the 7-night-engine version). Reuses #128's ledger read; preserves #211/#212's
-create-path work untouched.
+own decision, which was left headed `#NEXT` and never landed (the 7-night-engine version). Reuses #128's ledger
+read; preserves #211/#212's create-path work untouched.
 
 **How you know:**
 - 10 new backend tests (`test_cbti_eval_trigger.py`); full backend suite **838 = 828 + 10**, no regressions
