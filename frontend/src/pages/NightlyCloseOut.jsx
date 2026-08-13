@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import DeepSleepLevers from '../components/cbti/DeepSleepLevers'
+import EvaluationOffer from '../components/cbti/EvaluationOffer'
 import { centreBasisNote, convergenceBand, formatMinutes } from '../components/cbti/centreCopy'
 import { useNavigate, Link } from 'react-router-dom'
 import api from '../api'
@@ -179,6 +180,7 @@ export default function NightlyCloseOut() {
             </Link>
           </div>
           <PrescriptionCard cbti={cbti} />
+          <EvaluationOffer />
           <p className="text-xs text-gray-400 mb-6">
             Mindfulness session will be read from Health Connect automatically.
           </p>
@@ -202,6 +204,10 @@ export default function NightlyCloseOut() {
         </div>
 
         <PrescriptionCard cbti={cbti} />
+        {/* #118's witnessed trigger. Sits ABOVE the form and outside it: the offer has
+            its own accept action, and nesting a second button inside the PM form would
+            let it submit the close-out. It self-fetches, so PM submit is untouched. */}
+        <EvaluationOffer />
         {/* Education, and only while a block is open — outside the form so its collapse
             toggle can never submit the close-out. Static content: nothing here reads the
             user's record or ranks anything for them (#47). */}
