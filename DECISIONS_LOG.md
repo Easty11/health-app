@@ -8324,3 +8324,72 @@ fixtures (create-block file 18.9s → 2.5s).
 gate refreshes once at turn start, and a create whose `sync_one_user` stamps the marker keeps subsequent same-turn
 reads fresh), OR a non-chat caller of `create_and_resolve` appears needing the same gate (chat is the sole caller
 today; the gate lives at the chat layer by design, per the placement rationale above).
+
+### #NEXT. The PM evaluation trigger, rebuilt on the 4-night hunting engine — offers on elapsed DAYS, replays the whole block, and carries no block-close path at all
+
+**Decision:** #118's PM half — a read-only OFFER (`GET /checkin-v2/cbti/evaluation`) plus a witnessed
+ACCEPT (`POST /checkin-v2/cbti/evaluation/accept`) surfaced in `NightlyCloseOut.jsx` — is built on the
+4-night hunting engine (`CYCLE_NIGHTS=4`, `MAX_MOVE_MIN=15`), not the 7-night converge-and-close engine
+the original `feat/cbti-eval-trigger` branch was cut against. Both endpoints go through the SAME block
+replay the offline script runs (`cbti.replay.evaluate_live_cycle`, #128's revisit clause), extracted from
+`replay.main` as `load_ledger_rxs`. Three calls, one reworked from the branch:
+
+1. **Eligibility is CALENDAR DAYS elapsed since `effective_from`, not logged nights.** The gate is
+   `days < CYCLE_NIGHTS`. `replay()`'s cycle spans are already calendar-dated (`cycle_start +
+   CYCLE_NIGHTS - 1`), so days is the unit both #118 and the code use. Night COUNT still governs the
+   DECISION, through the engine's own sufficiency gate (`>= MIN_VALID_NIGHTS = 3` valid), which returns a
+   HOLD naming the shortfall rather than withholding the offer. Both quantities are reported.
+
+2. **There is NO block-close path, because the engine emits none.** The hunting engine never returns
+   `close` — a TST plateau is a `converged HOLD` that leaves the block open (#107, the 4-night retune
+   #165). The original branch built a whole close arm — an `acceptable` flag, a 409 refusal in accept, and
+   a dead-control UI arm — to say "a close is surfaced but not actionable". Under the engine that actually
+   ships, that arm is UNREACHABLE, so it is DELETED, not ported. Every eligible decision is a prescription
+   (extend / compress / hold, including a converged HOLD); accept mints it. Block close stays engine-driven
+   and simply has no producer here to refuse.
+
+3. **The trigger runs the FULL block replay, not the live prescription in isolation.** `prior_basis_tst`
+   accumulates across every prior cycle, and the engine needs two of them to detect the plateau
+   (`converged HOLD`). Evaluating the live cycle alone would start that history empty and the engine could
+   never report convergence.
+
+**Rationale:** call 1 is the one with teeth — gating the OFFER on logged nights strands the operator: a
+cycle can never reach `CYCLE_NIGHTS` logged nights once one of its calendar days goes unlogged, so a
+single missed diary entry withholds the evaluation permanently (the cycle's span is in the past). That
+converts a data gap into a silent titration halt — the under-firing failure mode #124 names as the
+observed one. Call 2 is the rework's core: the branch's close arm reasoned about a decision the shipped
+engine cannot produce, so shipping it would have been dead code masquerading as a safety rail; removing it
+is the honest port. This is a FRESH port onto master, not a merge of the stale branch — the branch predated
+several master features and its diffs would have DROPPED them: the `centre_minutes` / `centre_cycles_n` /
+`dither_minutes` estimate fields on `CBTIContextOut` and its `windows` read, and `DeepSleepLevers` + the
+centre estimate in `NightlyCloseOut.jsx`. All preserved; only `EvaluationOffer` was added. The copy module
+(`evaluationCopy.js`) claimed "no frontend test runner in this repo" — false on master (vitest ships), so
+the OWED copy test is written, not deferred.
+
+**Status:** active. Built on `feat/cbti-eval-trigger-v2`, cut fresh from master (the obsolete
+`feat/cbti-eval-trigger @ fec0324` was reference-only, never merged). Resolves and supersedes that branch's
+own unresolved `#NEXT` decision (the 7-night-engine version). Reuses #128's ledger read; preserves #211/#212's
+create-path work untouched.
+
+**How you know:**
+- 10 new backend tests (`test_cbti_eval_trigger.py`); full backend suite **838 = 828 + 10**, no regressions
+  (pre/post measured on fresh master via `.venv`, not derived). Every expected number recomputed from the
+  4-night engine arithmetic, not pasted: a default night tst=420 against a 390 window targets 450, a +60
+  move capped to +15 -> a **405** proposed window; the selected cycle is the last complete 4-night span.
+- **G2 (offer/guard parity)** is pinned by a test: a nap night INSIDE the selected 4-night cycle is
+  excluded by the engine's GATE-1 nap guard (reason `nap`) and the OFFER surfaces exactly that night in
+  `nights_excluded`, with `nights_counted` dropping to 3 — the offer and the guard cannot diverge (Q45/Q78).
+- **#128 reuse** is pinned by a test reproducing a mid-block correction superseding the seed: the basis
+  reports the correction's lights-out and window, not the seed's.
+- **Append-only invariant** asserted by column diff, not inspection — the prior row is re-read after accept
+  and the changed-column set is asserted `== {effective_to, superseded_by}`; the block row is untouched.
+- **Close-path absence** verified by grep across the live-trigger + endpoint + UI paths (clean of `acceptable`
+  and close-decision reasoning; the `close` vocabulary member stays only in `engine.py` and the DB CHECK
+  constraint — block-1 history).
+- 12 new frontend tests (`evaluationCopy.test.js`, vitest); frontend suite green (32).
+- **NOT verified against prod** — no live block-3 read this session; that remains OWED as it was on the branch.
+
+**Do not revisit unless:** a block-close path is built (which would reintroduce a decision the accept
+endpoint must then refuse — call 2 is the surface to re-read, not the engine), or the settling-period
+question (Q48) resolves into an actual gate, at which point eligibility gains a second condition and call 1
+is the surface to re-read, not the engine's sufficiency gate.
