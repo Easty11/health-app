@@ -2898,3 +2898,26 @@ H1 (mapping) and the copied-key form of H2 are ruled out. Cannot tell from our s
 stale (a) or the key is for the wrong account (b). Resolution needs Cooper: confirm the key was generated
 from the Hevy account that shows his workouts/customs, and re-issue it from that account if not. Related:
 `Q75` (catalogue-freshness), `Q99` (multi-user paths unexercised). Owner: Luke.
+
+## Q#NEXT. The offer surfaces the last elapsed cycle, which a later insufficiency-hold can bury over a fully-logged actionable step
+
+`evaluate_live_cycle` returns `complete[-1]` — the last cycle whose 4-day span has elapsed, not the last
+*sufficiently-logged* one. On block 2 (`cbti_blocks.id`=2), a fully-logged `compress 390→375`
+(2026-08-04…08-07, n=4) was superseded by an insufficiency-`hold` (08-08…08-11, n=2 < `MIN_VALID_NIGHTS`);
+accepting the hold buried the compress and reset the cycle clock. Confirmed in the ledger: the accept minted
+`cbti_prescriptions.id`=12 as `decision='hold'`, `basis_nights_n=2`, window unchanged at 390/22:30 (#213's
+first live run).
+
+Two forks:
+
+- **(a) selection.** When the last-elapsed cycle is an insufficiency-hold (a non-decision — the engine could
+  not adjudicate on merits, not a decision-on-merits), should the offer defer to the most recent cycle that
+  clears the sufficiency gate rather than adjudicate on nights that don't meet it?
+- **(b) clock.** Should accepting an insufficiency-hold reset the cycle clock at all, or is "not enough data
+  to decide" a non-event that shouldn't cost ~4 days?
+
+This is how sparse logging compounds: each accepted insufficiency-hold pushes the next look further out while
+the diary stays thin. Mechanical / confirmed against live block-2 data. Neighbours `Q45` (sparse-diary
+attribution).
+
+**State:** OPEN. Owner: Luke.
