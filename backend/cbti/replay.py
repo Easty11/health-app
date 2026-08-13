@@ -89,6 +89,21 @@ class LedgerRx:
     decision: str
 
 
+def _as_date(v):
+    """Normalise a DATE read back through raw SQL.
+
+    psycopg returns `datetime.date`; SQLite hands back the ISO string, because a
+    `text()` query bypasses the ORM's type coercion. Without this the adapter is
+    Postgres-only — the date arithmetic below raises `str - timedelta` — which is why
+    the replay suite could only ever test `replay()` on synthetic Nights and never
+    `load_nights` itself. Pure normalisation: a real date passes through untouched, so
+    nothing about the production read changes.
+    """
+    if v is None or isinstance(v, date):
+        return v
+    return date.fromisoformat(str(v)[:10])
+
+
 def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     # Column-explicit for the same reason the prescription read is: a full ORM
     # load would select got_into_bed / basis_n_* and fail against a database that
@@ -97,14 +112,15 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     # would require applying migrations to prod ahead of master, which is exactly
     # the divergence phase 1 spent a brief undoing.
     rows = db.execute(_NIGHTS_SQL, {"uid": user_id, "d0": d0, "d1": d1}).all()
-    samsung = {r[0]: r[1] for r in db.execute(_SAMSUNG_SQL, {"uid": user_id, "d0": d0, "d1": d1})}
+    samsung = {_as_date(r[0]): r[1] for r in db.execute(_SAMSUNG_SQL, {"uid": user_id, "d0": d0, "d1": d1})}
     # a session on the calendar day BEFORE the wake date constrains that night
-    training = {r[0]: r[1] for r in db.execute(_TRAINING_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
+    training = {_as_date(r[0]): r[1] for r in db.execute(_TRAINING_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
 
     nights = []
     for (d, tst, se, lo, oob, fw, naps, alc) in rows:
         if tst is None:
             continue
+        d = _as_date(d)
         nights.append(Night(
             date=d, tst_min=tst, se_pct=se, lights_out=lo, out_of_bed=oob, final_wake=fw,
             naps_min=naps, alcohol_units=alc,
@@ -182,6 +198,95 @@ def replay(nights: list[Night], prescriptions: list[LedgerRx],
     return series
 
 
+def load_ledger_rxs(db, block_id: int) -> list[LedgerRx]:
+    """The block's prescriptions as the ledger records them, ordered by effective_from.
+
+    Extracted from `main` so the live evaluation trigger (#118) reads prescriptions
+    through the SAME query as the replay. #128's revisit clause makes this a hard
+    boundary: the trigger "must reuse this same read, or the two paths diverge again".
+    """
+    rows = db.execute(_PRESCRIPTIONS_SQL, {"bid": block_id}).all()
+    return [LedgerRx(effective_from=_as_date(ef), effective_to=_as_date(et), lights_out=lo,
+                     wake_anchor=anchor, window_minutes=win, decision=dec)
+            for (ef, et, lo, anchor, win, dec) in rows]
+
+
+@dataclass
+class LiveCycleEval:
+    """The live prescription's most recent COMPLETE cycle, for the #118 PM trigger.
+
+    `eligible` answers only "is there a finished cycle to offer"; the decision itself
+    is the engine's and may still be a HOLD (insufficient nights, adherence, or a
+    converged plateau).
+    """
+    eligible: bool
+    reason: str                      # why not eligible, or "" when it is
+    days_since_effective_from: int
+    nights_since_effective_from: int
+    live_rx: LedgerRx
+    cycle: dict | None               # a `replay()` series entry
+
+
+def evaluate_live_cycle(db, user_id: int, block, today: date) -> LiveCycleEval | None:
+    """Evaluate the open block's LIVE prescription through the replay itself (#128).
+
+    Returns None when the block carries no live prescription at all.
+
+    This runs the FULL block replay rather than evaluating the live prescription in
+    isolation, and that is load-bearing, not convenience: `prior_basis_tst` accumulates
+    across every prior cycle in the block, and the TST-plateau detection needs two of
+    them. Evaluating the live cycle alone would start that history empty, so the engine
+    could never report a `converged HOLD` — the plateau signal that says "the window has
+    settled here, keep watching" — and every cycle would read as a fresh titration with
+    no memory of whether it had already found its level. (The engine emits no
+    block-ending decision under the hunting search; convergence is a HOLD that leaves
+    the block open, #107.)
+
+    ELIGIBILITY IS CALENDAR DAYS, NOT LOGGED NIGHTS. #118 makes the offer once a full
+    cycle has elapsed since the current prescription's effective_from, and `replay()`'s
+    own cycle spans are calendar-dated (`cycle_start + CYCLE_NIGHTS - 1`), so days is the
+    unit that matches both — the gate below is `days < CYCLE_NIGHTS`. Gating on LOGGED
+    nights instead would mean a single unlogged night defers the offer indefinitely — a
+    cycle can never reach CYCLE_NIGHTS logged nights once one of its calendar days is
+    missing — which silently strands the operator mid-titration. Night COUNT still governs
+    the decision, but through the engine's own sufficiency gate (>= MIN_VALID_NIGHTS
+    valid), which returns a HOLD naming the shortfall rather than withholding the offer.
+    Both quantities are reported so the operator sees each.
+    """
+    rxs = load_ledger_rxs(db, block.id)
+    live = next((r for r in rxs if r.effective_to is None), None)
+    if live is None:
+        return None
+
+    nights = load_nights(db, user_id, block.opened_on, today)
+    logged = [n for n in nights if n.date >= live.effective_from]
+    days = (today - live.effective_from).days
+
+    def _out(eligible, reason, cycle):
+        return LiveCycleEval(
+            eligible=eligible, reason=reason, days_since_effective_from=days,
+            nights_since_effective_from=len(logged), live_rx=live, cycle=cycle,
+        )
+
+    if days < CYCLE_NIGHTS:
+        return _out(False, f"cycle_in_progress: day {days} of {CYCLE_NIGHTS}", None)
+
+    series = replay(nights, rxs, last_night=today)
+    # Cycles belonging to the live prescription whose full CYCLE_NIGHTS span has elapsed.
+    # A partial trailing cycle is excluded: adjudicating a decision over a span shorter
+    # than CYCLE_NIGHTS because the operator opened PM mid-cycle would decide an unfinished
+    # cycle. The span test is calendar-based, so a cycle counts as complete once its days
+    # have passed even if a night inside it went unlogged.
+    complete = [s for s in series
+                if s["rx_from"] == live.effective_from
+                and (s["to"] - s["from"]).days == CYCLE_NIGHTS - 1]
+    if not complete:
+        return _out(False, "no_complete_cycle: no nights logged in the elapsed span", None)
+    # The LAST complete cycle, not the first — if the operator let two cycles pass, the
+    # decision due now rests on the week that just ended, not the stale one before it.
+    return _out(True, "", complete[-1])
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--user-id", type=int, required=True)
@@ -191,10 +296,7 @@ def main() -> None:
     db = SessionLocal()
     try:
         block = db.query(models.CBTIBlock).filter_by(id=args.block_id).one()
-        rx_rows = db.execute(_PRESCRIPTIONS_SQL, {"bid": block.id}).all()
-        rxs = [LedgerRx(effective_from=ef, effective_to=et, lights_out=lo,
-                        wake_anchor=anchor, window_minutes=win, decision=dec)
-               for (ef, et, lo, anchor, win, dec) in rx_rows]
+        rxs = load_ledger_rxs(db, block.id)
 
         d1 = block.closed_on or date.today()
         nights = load_nights(db, args.user_id, block.opened_on, d1)
