@@ -219,7 +219,7 @@ competing (less likely) explanation is that HCA posts HRV under a field name nei
 `get_rmssd()` branch maps — the open **Q5** territory. One captured real payload's `hrv[]`
 (or a Railway sync/`health_connect_record_sources` check) disambiguates absent-vs-unmapped.
 
-**State:** `DONE → #NEXT` — **absent-confirmed** against Railway Postgres, 2026-08-16, by a stronger route
+**State:** `DONE → #215` — **absent-confirmed** against Railway Postgres, 2026-08-16, by a stronger route
 than the one this question asked for: instead of capturing a single sync payload,
 `health_connect_record_sources` answers it for all time. `hrv_rmssd` non-null count is **0** across the whole
 table, and the record-type inventory holds only exercise, heart_rate (47,250 rows), sleep and steps — **no
@@ -239,7 +239,7 @@ revision `3497ab483935`: an `exercise_sessions` drop, `samsung_hrv_readings.cont
 `api_key_encrypted` `VARCHAR`→`TEXT`. Confirm each is an intended local/prod difference or
 a real un-migrated delta. Resolve against Railway Postgres, not local.
 
-**State:** `DONE → #NEXT` — resolved against Railway Postgres, 2026-08-16. `alembic_version` reads
+**State:** `DONE → #215` — resolved against Railway Postgres, 2026-08-16. `alembic_version` reads
 `e2d5c7a1b9f3`, identical to local head, so prod is not behind. All three divergences are present in prod
 with their intended types: `exercise_sessions` exists, `samsung_hrv_readings.context` is `varchar`, and
 `user_integrations.api_key_encrypted` is `text`. The `3497ab483935` drift was therefore **local behind
@@ -258,7 +258,7 @@ Postgres**; for any historical violator, null/clamp the offending field (the gua
 writes). If efficiency was unbounded, assume other fields were too — the sweep covers the whole
 numeric schema, not just efficiency.
 
-**State:** `DONE → #NEXT` — swept against Railway Postgres, 2026-08-16. The full 15-field `_BOUNDS`
+**State:** `DONE → #215` — swept against Railway Postgres, 2026-08-16. The full 15-field `_BOUNDS`
 `NOT BETWEEN` sweep ran over all 56 rows of `samsung_hrv_readings` and returned **zero violators**; the
 `2026-06-28` trigger row's `sleep_efficiency_pct` is already NULL. No historical violator existed, so no
 backfill was required and no rows were written. Closes the `BRANCHES.md` `fix/hrv-sleep-integrity` Task 3

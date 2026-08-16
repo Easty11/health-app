@@ -8428,7 +8428,7 @@ first live exercise, which is the concrete artifact this invariant generalises f
 undo window) such that a restating two-step confirm is redundant rather than load-bearing — in which case the
 undo path, not the confirm, is the safety mechanism and this invariant is satisfied by other means.
 
-### #NEXT. Railway prod verification 2026-08-16 closes Q13/Q15/Q18 — schema at head, zero bounds violators, HRV absent at source
+### 215. Railway prod verification 2026-08-16 closes Q13/Q15/Q18 — schema at head, zero bounds violators, HRV absent at source
 
 **Decision:** Three OWED verifications ran against Railway Postgres (dashboard query editor,
 single-statement runs) and all three closed with zero prod writes. **Q15:** `alembic_version` =
@@ -8452,7 +8452,7 @@ conclusion specifically: they corroborate that the pipeline does read Samsung-wr
 Connect records, so the HRV gap cannot be explained by a dead ingest path — the absence is
 upstream, at Samsung, which is what makes it *absent* rather than *unmapped*.
 
-**Status:** active. Q13, Q15 and Q18 all `DONE → #NEXT`; `BRANCHES.md` `fix/hrv-sleep-integrity`
+**Status:** active. Q13, Q15 and Q18 all `DONE → #215`; `BRANCHES.md` `fix/hrv-sleep-integrity`
 moves OWED → DONE. The HRV SPOF is not closed by this — it is transferred, not resolved.
 
 **How you know:** query outputs recorded in the 2026-08-16 operator session, read-only against
