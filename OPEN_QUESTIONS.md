@@ -219,10 +219,16 @@ competing (less likely) explanation is that HCA posts HRV under a field name nei
 `get_rmssd()` branch maps — the open **Q5** territory. One captured real payload's `hrv[]`
 (or a Railway sync/`health_connect_record_sources` check) disambiguates absent-vs-unmapped.
 
-**State:** OWED — root cause is a closed platform finding; what remains is confirmatory. Outstanding
-check: capture one real HC sync payload and confirm `payload.hrv` is empty (absent, not unmapped per Q5).
-Owner: Luke. If absent-confirmed, the residual is the HRV single-point-of-failure risk, tracked to issue #9
-(`health-connect-app` scraper canary). Cross-refs Q5, issue #9.
+**State:** `DONE → #215` — **absent-confirmed** against Railway Postgres, 2026-08-16, by a stronger route
+than the one this question asked for: instead of capturing a single sync payload,
+`health_connect_record_sources` answers it for all time. `hrv_rmssd` non-null count is **0** across the whole
+table, and the record-type inventory holds only exercise, heart_rate (47,250 rows), sleep and steps — **no
+HRV record type has ever arrived**. The 47,250 heart-rate rows are what make this a positive finding rather
+than an inconclusive one: the pipeline demonstrably reads and stores Samsung-written Health Connect records,
+so the empty HRV node is not a dead ingest path. The absence is at source. **Q5's unmapped-field hypothesis
+is therefore eliminated for HRV** — it remains live for other fields. Residual: the scraper is the confirmed
+sole HRV path, so the single point of failure stands — transferred, not closed, to `health-connect-app`
+issue #9 (scraper canary). Zero prod writes. Cross-refs Q5, issue #9.
 
 ---
 
@@ -233,8 +239,12 @@ revision `3497ab483935`: an `exercise_sessions` drop, `samsung_hrv_readings.cont
 `api_key_encrypted` `VARCHAR`→`TEXT`. Confirm each is an intended local/prod difference or
 a real un-migrated delta. Resolve against Railway Postgres, not local.
 
-**State:** OWED — outstanding check: confirm each of the three divergences against **Railway Postgres**
-(not local) as either an intended local/prod difference or a real un-migrated delta. Owner: Luke.
+**State:** `DONE → #215` — resolved against Railway Postgres, 2026-08-16. `alembic_version` reads
+`e2d5c7a1b9f3`, identical to local head, so prod is not behind. All three divergences are present in prod
+with their intended types: `exercise_sessions` exists, `samsung_hrv_readings.context` is `varchar`, and
+`user_integrations.api_key_encrypted` is `text`. The `3497ab483935` drift was therefore **local behind
+prod**, since reconciled by `0f1ac6f33c40` / `e1f2a3b4c5d6` / `a7d4f8e21c93` — not a real un-migrated delta.
+Zero prod writes.
 
 ---
 
@@ -248,9 +258,11 @@ Postgres**; for any historical violator, null/clamp the offending field (the gua
 writes). If efficiency was unbounded, assume other fields were too — the sweep covers the whole
 numeric schema, not just efficiency.
 
-**State:** OWED — outstanding check: run the full-schema `NOT BETWEEN` sweep against Railway Postgres and
-null/clamp any historical violator. Owner: Luke. Independent of Q17. Same loop as `BRANCHES.md`
-`fix/hrv-sleep-integrity` Task 3.
+**State:** `DONE → #215` — swept against Railway Postgres, 2026-08-16. The full 15-field `_BOUNDS`
+`NOT BETWEEN` sweep ran over all 56 rows of `samsung_hrv_readings` and returned **zero violators**; the
+`2026-06-28` trigger row's `sleep_efficiency_pct` is already NULL. No historical violator existed, so no
+backfill was required and no rows were written. Closes the `BRANCHES.md` `fix/hrv-sleep-integrity` Task 3
+loop. Independent of Q17.
 
 ---
 
