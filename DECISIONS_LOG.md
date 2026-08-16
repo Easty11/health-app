@@ -8463,3 +8463,43 @@ recorded as `FEEDBACK.md` §29.
 **Do not revisit unless:** a future migration diverges prod from head again (re-opens Q15's class),
 or an HRV-typed record ever appears in `health_connect_record_sources` — which would reopen Q13's
 absent-vs-unmapped question and put Q5 back in scope for HRV.
+
+### 216. Contraindication block sets revised per the Q23 audit — G-axis twins added, the PC-length screen blocked under radicular, the neural block scoped to spinal body parts
+
+**Decision:** `_RADICULAR_BLOCKS` gains `hip_flexion_pc_length` and `loaded_carry_capacity_bw`;
+`_RA_FLARE_BLOCKS` gains `grip_strength` and `loaded_carry_capacity_bw`; and the radicular/neural
+branch of `is_contraindicated` fires only when the injury's `body_part` matches `_SPINAL_PARTS`
+(or is empty, which degrades to the broader caution). Non-spine neural signals fall through to the
+acute-tissue arm.
+
+**Rationale:** The sets were written against the A–E axis vocabulary and never swept G, and the
+omissions are not arbitrary — each one contradicts the set's own stated reason for existing.
+`_RA_FLARE_BLOCKS` is documented as "base + grip compromised" yet left the grip region itself
+probeable mid-flare; both sets blocked `carry` while leaving `loaded_carry_capacity_bw`, its G-axis
+twin, open. A PC-length screen is functionally a straight-leg raise — a neural provocation test — so
+probing it under an active radicular sign is the literal case the "don't discover your way into a
+flagged nerve" rule exists to forbid. Body-part scoping fixes the opposite error: `_RADICULAR_BLOCKS`
+is a lumbar-shaped stand-down (hinge, rotation, carry, gait), so firing it on anything merely typed
+`neural` lets a peripheral entrapment block a hinge it has no relationship to. Empty degrades to
+firing rather than to permission, because `body_part` is an optional hand-written field and the
+absent case is the one most likely to be a real spinal sign nobody typed.
+
+**Status:** active. Protective, not corrective — **neither named set has ever fired in prod**; all
+five live injury-ledger entries are typed `mechanical`. The live defects the audit surfaced are not
+in these sets but in `restrictions[]` consumption, spawned as `Q102` and deliberately not patched
+here.
+
+**How you know:** audit of 2026-08-16 — taxonomy × confirmed tags × sole-consumer verification
+(`is_contraindicated` is the only runtime reader of either set; the other three repo hits are a
+reference-JSON note and two test docstrings), with the live ledger read read-only from Railway the
+same session. All three new keys resolve via `taxonomy.by_key`, as do all nine pre-existing members.
+Backed by 22 new tests in `backend/tests/test_contraindication_blocks.py`, shown to DISCRIMINATE
+rather than merely pass: against master's `selection.py` the four defect cases return the wrong
+answer (neural@hamstring blocks `hinge`; RA flare leaves `grip_strength` and `loaded_carry_capacity_bw`
+probeable; radicular leaves `hip_flexion_pc_length` probeable) and both preserved behaviours already
+hold — after the change all six are correct. Suite 860 passed, up from an 838 baseline, no regressions.
+
+**Do not revisit unless:** the `restrictions[]` consumption design pass (`Q102`) replaces
+set-membership blocking wholesale — at which point these sets become defaults *under* that layer
+rather than the mechanism — or a cervical / peripheral neural block set is added, which is the
+fall-through this entry deliberately left open.
