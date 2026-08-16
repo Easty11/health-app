@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 # Hevy exercise titles → taxonomy region keys. Keyword-matched, lowercase.
 #
-# DEMOTED to a FALLBACK for untagged templates only (DECISIONS_LOG #NEXT). It is
+# DEMOTED to a FALLBACK for untagged templates only (DECISIONS_LOG #74). It is
 # wrong on live user data — it produces simultaneous false positives and false
 # negatives within a single logged session (substring match, no break on hit,
 # no laterality): "Copenhagen Plank" -> trunk_stability_sagittal (it is frontal);
@@ -79,7 +79,7 @@ def _keyword_regions(title: str) -> set[str]:
 
 def _tags_by_template(db: Session, template_ids: set[str]) -> dict[str, set[str]]:
     """template_id -> {region_key} from the app-owned annotation (DECISIONS_LOG
-    #NEXT). Both `primary` and `secondary` roles count as loaded — the region IS
+    #74). Both `primary` and `secondary` roles count as loaded — the region IS
     loaded regardless of primacy; role governs review/reconciliation, not
     presence. Orphan keys (no matching taxonomy Region) are skipped + warned:
     validation is fail-closed at write, this is defence in depth on read."""

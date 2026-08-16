@@ -4,7 +4,7 @@ Revision ID: b2f1c9a4d7e8
 Revises: f4e1a2b3c6d7
 Create Date: 2026-07-13
 
-App-owned movement-taxonomy annotation (DECISIONS_LOG #NEXT). Two changes, one
+App-owned movement-taxonomy annotation (DECISIONS_LOG #74). Two changes, one
 feature:
 
   1. `exercise_region_tags` — a SEPARATE table (not columns on
