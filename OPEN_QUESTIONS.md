@@ -345,7 +345,7 @@ the radicular rotation-block behave correctly for this user. Other blocks in `se
 tuned against wrong keyword inputs and never noticed — the block sets and the (now-fixed) loaded-region
 inference were never independently validated.
 
-**State:** `DONE → #NEXT` — audit run 2026-08-16: taxonomy × the confirmed tags × sole-consumer
+**State:** `DONE → #216` — audit run 2026-08-16: taxonomy × the confirmed tags × sole-consumer
 verification, with the live injury ledger read read-only from Railway the same session. Three findings,
 all landed on `fix/contra-block-sets`:
 
@@ -363,7 +363,7 @@ all landed on `fix/contra-block-sets`:
 
 **Neither named set has ever fired in prod** — all five live ledger entries are typed `mechanical` — so
 this change is protective, not corrective. The live defects the audit did surface are not in these sets at
-all; they are in how `restrictions[]` is (not) consumed, spawned as **Q#NEXT**.
+all; they are in how `restrictions[]` is (not) consumed, spawned as **Q102**.
 
 ---
 
@@ -2951,7 +2951,7 @@ attribution).
 
 ---
 
-## Q#NEXT. `restrictions[]` is dead data — `is_contraindicated` cannot express the ledger's clinical language
+## Q102. `restrictions[]` is dead data — `is_contraindicated` cannot express the ledger's clinical language
 
 `gather_active_injuries` normalises `restrictions` onto every injury row, and `is_contraindicated` reads it
 for exactly one thing: the `"ra_flare" in restrictions` alias. Every other restriction string the ledger
@@ -2981,4 +2981,4 @@ the very entry whose typing this question argues is unreliable — it belongs to
 one-line set edit.
 
 **State:** OPEN — no blocker; the audit that spawned it is closed. Owner: Luke. Cross-refs `Q23`
-(→ #NEXT), `#NEXT`.
+(→ #216), `#216`.

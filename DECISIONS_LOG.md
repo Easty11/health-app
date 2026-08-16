@@ -8464,7 +8464,7 @@ recorded as `FEEDBACK.md` §29.
 or an HRV-typed record ever appears in `health_connect_record_sources` — which would reopen Q13's
 absent-vs-unmapped question and put Q5 back in scope for HRV.
 
-### #NEXT. Contraindication block sets revised per the Q23 audit — G-axis twins added, the PC-length screen blocked under radicular, the neural block scoped to spinal body parts
+### 216. Contraindication block sets revised per the Q23 audit — G-axis twins added, the PC-length screen blocked under radicular, the neural block scoped to spinal body parts
 
 **Decision:** `_RADICULAR_BLOCKS` gains `hip_flexion_pc_length` and `loaded_carry_capacity_bw`;
 `_RA_FLARE_BLOCKS` gains `grip_strength` and `loaded_carry_capacity_bw`; and the radicular/neural
@@ -8486,7 +8486,7 @@ absent case is the one most likely to be a real spinal sign nobody typed.
 
 **Status:** active. Protective, not corrective — **neither named set has ever fired in prod**; all
 five live injury-ledger entries are typed `mechanical`. The live defects the audit surfaced are not
-in these sets but in `restrictions[]` consumption, spawned as `Q#NEXT` and deliberately not patched
+in these sets but in `restrictions[]` consumption, spawned as `Q102` and deliberately not patched
 here.
 
 **How you know:** audit of 2026-08-16 — taxonomy × confirmed tags × sole-consumer verification
@@ -8499,7 +8499,7 @@ answer (neural@hamstring blocks `hinge`; RA flare leaves `grip_strength` and `lo
 probeable; radicular leaves `hip_flexion_pc_length` probeable) and both preserved behaviours already
 hold — after the change all six are correct. Suite 860 passed, up from an 838 baseline, no regressions.
 
-**Do not revisit unless:** the `restrictions[]` consumption design pass (`Q#NEXT`) replaces
+**Do not revisit unless:** the `restrictions[]` consumption design pass (`Q102`) replaces
 set-membership blocking wholesale — at which point these sets become defaults *under* that layer
 rather than the mechanism — or a cervical / peripheral neural block set is added, which is the
 fall-through this entry deliberately left open.
