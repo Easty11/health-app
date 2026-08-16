@@ -66,8 +66,9 @@ These emerged organically from corrections and should be treated as first-class 
 - §26 In semi-structured extraction, every non-Optional scalar is a latent fail-closed point
 - §27 Null-on-sparse-row class closed — re-open conditions in archive §27
 - §28 The §7 unit guard held under real over-collapse pressure
+- §29 Railway's dashboard editor silently no-ops a multi-statement paste — one statement per prod check
 
 ---
 
-*Full provenance — §§1–3 correction essays, the §5 superseded injury snapshot, and the §§7–28*
+*Full provenance — §§1–3 correction essays, the §5 superseded injury snapshot, and the §§7–29*
 *verification-rule essays — is in `FEEDBACK_ARCHIVE.md` (not read at session start).*

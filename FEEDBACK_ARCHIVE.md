@@ -1303,6 +1303,34 @@ spacing), and a mismatch turns the guard from protection into a false refusal on
 
 ---
 
+## 29. Railway's dashboard query editor silently no-ops a multi-statement paste — one statement per prod check ([[§10]], [[§11]])
+
+**What happened.** The 2026-08-16 operator session ran three OWED prod verifications through the Railway
+dashboard's query editor. The Q18 sweep was pasted as a multi-statement block — the natural shape for a
+15-field `NOT BETWEEN` check — and came back with **no rows**. Read at face value that is exactly the
+answer Q18 wanted: zero out-of-range rows, sweep clean, close it. The close was nearly written on that
+basis. What actually happened is that the editor executes a multi-statement paste as a silent no-op: it
+returns 0 rows and no error. The tell was `SELECT current_database()`, pasted alongside another statement,
+which also returned nothing — a query that cannot legitimately return zero rows. Re-run one statement at a
+time, the sweep returned its real result (also zero violators, as it happens) and the schema and record-type
+checks returned their real contents.
+
+**Why the right answer by luck is still an instrument failure.** Q18's true result and the false-negative
+result were the same string: zero rows. Had a violator existed, the multi-statement paste would have
+reported clean, the sweep would have been recorded as run, and a corrupt row would have survived a check
+whose entire purpose was to find it. The finding is worth recording precisely because the outcome was
+benign — the mechanism is not. This is `§10`'s false-green instrument in its purest form (an unsound
+measurement reporting zero) compounded by `§11` (a probe that presumes its own answer and does not fail
+loudly when it never reaches the subject).
+
+**The transferable rule.** **One statement per run for any prod check through the Railway dashboard editor.**
+And more generally: when an instrument's clean result is byte-identical to its failure result, the instrument
+needs a positive control that cannot return the clean value — here, a `SELECT current_database()` or a
+`count(*)` known to be non-zero, run through the same path. If the control comes back empty, the measurement
+did not happen, whatever the subject query appeared to say.
+
+---
+
 ## CLAUDE.md provenance (pre-prune, master @ 4bd99cc, 2026-08-09)
 
 The full pre-prune `CLAUDE.md`, verbatim. The governance-prune session compressed the shared

@@ -8427,3 +8427,39 @@ first live exercise, which is the concrete artifact this invariant generalises f
 **Do not revisit unless:** a mint surface has a genuinely different reversibility model (e.g. a soft-delete /
 undo window) such that a restating two-step confirm is redundant rather than load-bearing — in which case the
 undo path, not the confirm, is the safety mechanism and this invariant is satisfied by other means.
+
+### #NEXT. Railway prod verification 2026-08-16 closes Q13/Q15/Q18 — schema at head, zero bounds violators, HRV absent at source
+
+**Decision:** Three OWED verifications ran against Railway Postgres (dashboard query editor,
+single-statement runs) and all three closed with zero prod writes. **Q15:** `alembic_version` =
+`e2d5c7a1b9f3` = local head; `exercise_sessions`, `samsung_hrv_readings.context` (varchar) and
+`user_integrations.api_key_encrypted` (text) are all present with their intended types — the
+`3497ab483935` drift was local-behind-prod, reconciled by `0f1ac6f33c40` / `e1f2a3b4c5d6` /
+`a7d4f8e21c93`, not a real un-migrated delta. **Q18:** the full 15-field `_BOUNDS` `NOT BETWEEN`
+sweep over all 56 prod rows returned zero violators; the `2026-06-28` trigger row's
+`sleep_efficiency_pct` is already NULL, so `fix/hrv-sleep-integrity` Task 3 is satisfied with no
+backfill and no writes. **Q13:** `hrv_rmssd` non-null count is 0 all-time, and
+`health_connect_record_sources` holds only exercise / heart_rate (47,250 rows) / sleep / steps —
+no HRV record type has ever arrived. HRV is absent at source, not unmapped; Q5's unmapped
+hypothesis is eliminated for HRV; the scraper is the confirmed sole HRV path and the
+single-point-of-failure residual transfers to `health-connect-app` issue #9.
+
+**Rationale:** All three items were blocked on the same surface — production Postgres, unreachable
+from the dev SQLite the local `DATABASE_URL` points at — and had aged 34–38 days for that single
+reason. Batching them into one operator session cleared the whole surface at once rather than
+paying the Railway-access setup cost three times. The 47,250 heart-rate rows matter to Q13's
+conclusion specifically: they corroborate that the pipeline does read Samsung-written Health
+Connect records, so the HRV gap cannot be explained by a dead ingest path — the absence is
+upstream, at Samsung, which is what makes it *absent* rather than *unmapped*.
+
+**Status:** active. Q13, Q15 and Q18 all `DONE → #NEXT`; `BRANCHES.md` `fix/hrv-sleep-integrity`
+moves OWED → DONE. The HRV SPOF is not closed by this — it is transferred, not resolved.
+
+**How you know:** query outputs recorded in the 2026-08-16 operator session, read-only against
+Railway Postgres via the dashboard query editor. The multi-statement no-op footgun that nearly
+produced a false Q18 close — the editor silently returns 0 rows for a multi-statement paste — is
+recorded as `FEEDBACK.md` §29.
+
+**Do not revisit unless:** a future migration diverges prod from head again (re-opens Q15's class),
+or an HRV-typed record ever appears in `health_connect_record_sources` — which would reopen Q13's
+absent-vs-unmapped question and put Q5 back in scope for HRV.
