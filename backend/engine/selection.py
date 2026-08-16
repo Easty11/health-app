@@ -235,11 +235,21 @@ def infer_loaded_regions(
 _RADICULAR_BLOCKS = frozenset({
     "hinge", "rotation", "carry", "deceleration_landing",
     "change_of_direction", "single_leg_hop", "gait_load_carriage",
+    # A PC-length screen is functionally a straight-leg raise — a neural
+    # provocation test — so probing it under an active radicular sign is the
+    # literal case "don't discover your way into a flagged nerve" forbids.
+    # `loaded_carry_capacity_bw` is the G-axis twin of `carry`, which was
+    # already blocked here; the sets were swept for A–E only and never G.
+    "hip_flexion_pc_length", "loaded_carry_capacity_bw",
 })
 # RA flare = both-ends stand-down (base + grip compromised).
 _RA_FLARE_BLOCKS = frozenset({
     "carry", "anti_lateral_flexion", "gait_load_carriage", "terrain_perturbation",
     "single_leg_hop", "change_of_direction", "deceleration_landing",
+    # This set's own rationale says grip is compromised, yet it left the grip
+    # region itself probeable mid-flare. Same G-axis omission as above for the
+    # carry twin.
+    "grip_strength", "loaded_carry_capacity_bw",
 })
 # Acute tissue → time-limited exclusion of the provoking range, by body part.
 _ACUTE_TISSUE_BLOCKS: dict[str, frozenset[str]] = {
@@ -252,6 +262,16 @@ _ACUTE_TISSUE_BLOCKS: dict[str, frozenset[str]] = {
     "ankle": frozenset({"single_leg_hop", "change_of_direction", "terrain_perturbation"}),
     "knee": frozenset({"single_leg_hop", "change_of_direction", "deceleration_landing"}),
 }
+# Body parts whose neural/radicular signal implicates the spine. `_RADICULAR_BLOCKS`
+# is a lumbar-shaped stand-down — hinge, rotation, carry, gait — so firing it on any
+# entry merely typed "neural" makes a peripheral entrapment (cubital tunnel, say)
+# block a hinge it has nothing to do with. Non-spine neural signals fall through to
+# the acute-tissue arm below; dedicated cervical / peripheral block sets are Q102
+# territory, not this change.
+_SPINAL_PARTS = (
+    "spine", "back", "lumbar", "sacral", "sciatic", "si joint",
+    "l4", "l5", "s1",
+)
 
 
 def gather_active_injuries(db: Session, user_id: int) -> list[dict[str, Any]]:
@@ -278,6 +298,18 @@ def gather_active_injuries(db: Session, user_id: int) -> list[dict[str, Any]]:
             "raw": val,
         })
     return out
+
+
+def _is_spinal(body_part: str) -> bool:
+    """Does this body part implicate the spine, for `_RADICULAR_BLOCKS` scoping?
+
+    An EMPTY body part returns True: unknown degrades to the broader caution, never
+    to permission. Ledger entries are hand-written and `body_part` is optional, so
+    the absent case is the one most likely to be a real spinal sign nobody typed.
+    """
+    if not body_part:
+        return True
+    return any(part in body_part for part in _SPINAL_PARTS)
 
 
 def _side_conflict(injury_side: str, region_side: str) -> bool:
@@ -309,8 +341,14 @@ def is_contraindicated(
     for inj in active_injuries:
         if not _side_conflict(inj["side"], side):
             continue
-        # Radicular/neural sign → hard stop on the provoking pattern.
-        if inj["signal_type"] in ("radicular", "neural") and region.key in _RADICULAR_BLOCKS:
+        # Radicular/neural sign → hard stop on the provoking pattern, scoped to
+        # spinal (or unknown) body parts so a peripheral neural entry does not
+        # trigger a lumbar-shaped stand-down. See `_SPINAL_PARTS`.
+        if (
+            inj["signal_type"] in ("radicular", "neural")
+            and _is_spinal(inj["body_part"])
+            and region.key in _RADICULAR_BLOCKS
+        ):
             return True, f"radicular sign ({inj['body_part'] or 'spine'}) — provoking pattern"
         # RA flare → both-ends stand-down.
         if inj["ra_flare"] and region.key in _RA_FLARE_BLOCKS:

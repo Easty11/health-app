@@ -345,10 +345,25 @@ the radicular rotation-block behave correctly for this user. Other blocks in `se
 tuned against wrong keyword inputs and never noticed — the block sets and the (now-fixed) loaded-region
 inference were never independently validated.
 
-**State:** OPEN — **the stated precondition has CLEARED**: active-window tags were human-confirmed
-and seeded in prod on 2026-07-14 (`seed_exercise_region_tags.py 1 --confirm` → 37 tag rows, 56/56 titles
-resolved; see `BRANCHES.md` `fix/exercise-tag-coverage`). The audit of `_RADICULAR_BLOCKS` /
-`_RA_FLARE_BLOCKS` has simply not been run. No blocker.
+**State:** `DONE → #NEXT` — audit run 2026-08-16: taxonomy × the confirmed tags × sole-consumer
+verification, with the live injury ledger read read-only from Railway the same session. Three findings,
+all landed on `fix/contra-block-sets`:
+
+1. **Over-block direction is clean** against the confirmed tags — no region a confirmed tag reaches is
+   wrongly blocked. The question's stated worry does not reproduce.
+2. **Membership was swept for the A–E vocabulary and never for G.** `_RADICULAR_BLOCKS` gains
+   `hip_flexion_pc_length` (a PC-length screen is functionally an SLR — a neural provocation test, so
+   probing it under an active radicular sign is the literal case the "don't discover your way into a
+   flagged nerve" rule forbids) and `loaded_carry_capacity_bw`; `_RA_FLARE_BLOCKS` gains `grip_strength`
+   (its own rationale reads "grip compromised", yet it left the grip region itself probeable mid-flare)
+   and `loaded_carry_capacity_bw`. Both sets blocked `carry` while leaving its G-axis twin open.
+3. **The radicular arm was unscoped by body part**, so a peripheral neural entry (cubital tunnel, say)
+   would trigger a lumbar-shaped stand-down. Now gated on `_SPINAL_PARTS`, with an empty `body_part`
+   degrading to the broader caution rather than to permission.
+
+**Neither named set has ever fired in prod** — all five live ledger entries are typed `mechanical` — so
+this change is protective, not corrective. The live defects the audit did surface are not in these sets at
+all; they are in how `restrictions[]` is (not) consumed, spawned as **Q#NEXT**.
 
 ---
 
@@ -2933,3 +2948,37 @@ the diary stays thin. Mechanical / confirmed against live block-2 data. Neighbou
 attribution).
 
 **State:** OPEN. Owner: Luke.
+
+---
+
+## Q#NEXT. `restrictions[]` is dead data — `is_contraindicated` cannot express the ledger's clinical language
+
+`gather_active_injuries` normalises `restrictions` onto every injury row, and `is_contraindicated` reads it
+for exactly one thing: the `"ra_flare" in restrictions` alias. Every other restriction string the ledger
+carries is inert. Blocking is driven entirely by `signal_type` + set membership + a `body_part` substring
+match, and that vocabulary cannot express what the entries actually say. Evidence, from the live ledger
+(read-only Railway, 2026-08-16):
+
+- **Entry 29 — the typing is load-bearing and deliberately wrong.** A documented neural sign is typed
+  `mechanical` because typing it `neural` would block its own desensitisation lane: the loaded hinge is
+  tolerated and *wanted*, and the aggravator is passive end-range tension. The vocabulary forces a choice
+  between an honest `signal_type` and a workable plan, and the entry chose the plan. Any audit that trusts
+  `signal_type` as clinical truth is reading a field that has been bent to route around the blocker.
+- **Entries 18/29 — a live over-block, and no time limit.** `lunge_single_leg` is contraindicated
+  bilaterally via `_ACUTE_TISSUE_BLOCKS["hamstring"]` against a region the user is actively training, and
+  nothing expires it — despite the map's own docstring promising a "time-limited" exclusion.
+- **Entry 30 — the substring match misses.** `"pes anserine"` does not contain `knee`, so it never reaches
+  `_ACUTE_TISSUE_BLOCKS`; its restriction `"deep-flexion unilateral"` enforces nothing.
+- **Entry 16 — plain dead text.** `"heavy gripping"` restricts nothing at all.
+
+Design pass owed: a restriction-vocabulary → region-key mapping, plus either a `signal_type` refinement or
+per-entry overrides, so an entry can say "neural, but this lane is the treatment" without lying about its
+type.
+
+**Explicitly NOT patched on `fix/contra-block-sets`:** the live `lunge_single_leg` over-block stays in
+place. Removing it ad hoc trades a known over-block for an unknown under-protection, and it originates in
+the very entry whose typing this question argues is unreliable — it belongs to the design pass, not to a
+one-line set edit.
+
+**State:** OPEN — no blocker; the audit that spawned it is closed. Owner: Luke. Cross-refs `Q23`
+(→ #NEXT), `#NEXT`.
