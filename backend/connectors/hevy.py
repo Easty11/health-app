@@ -189,7 +189,7 @@ class HevyClient:
 
         Returns the raw response, e.g. {"id": 123}. The spec types this `id` as an
         INTEGER, distinct from the canonical string-UUID returned by GET — callers
-        must not trust it as the store key; resolve by list-back instead (#NEXT).
+        must not trust it as the store key; resolve by list-back instead (#65).
 
         Raises HevyCustomExerciseLimitError on 403 (exceeds-custom-exercise-limit)
         and HevyBadRequestError on 400 (invalid body), so callers see typed errors

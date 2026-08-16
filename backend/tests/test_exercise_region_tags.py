@@ -1,4 +1,4 @@
-"""Exercise catalogue taxonomy tagging (DECISIONS_LOG #NEXT).
+"""Exercise catalogue taxonomy tagging (DECISIONS_LOG #74).
 
 Pins the four documented `_LOADED_KEYWORDS` failures (plus the empirically
 strongest live case — Shoulder Rotation falsely loading a radicular-blocked

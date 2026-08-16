@@ -485,7 +485,7 @@ async def create_and_resolve(
     The canonical id is read by list-back (create -> sync -> resolve within the
     user's custom subset), never trusted from the POST response body — the create
     response carries an integer id, distinct from the canonical string UUID the
-    store keys on (#NEXT / resolves Q14).
+    store keys on (#65 / resolves Q14).
 
     Order is load-bearing:
       1. Idempotency pre-check (`resolve_exercise`, default-wins): a same-titled

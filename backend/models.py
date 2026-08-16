@@ -682,7 +682,7 @@ class HevyExerciseTemplate(Base):
     synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    # App-owned annotation (DECISIONS_LOG #NEXT): exercise-level laterality, NOT
+    # App-owned annotation (DECISIONS_LOG #74): exercise-level laterality, NOT
     # derivable from the region taxonomy and load-bearing for plan↔log
     # reconciliation (a unilateral movement is logged as two sided Hevy entries).
     # bilateral | unilateral | alternating | NULL(untagged). Deliberately NOT
@@ -700,7 +700,7 @@ class HevyExerciseTemplate(Base):
 
 
 class ExerciseRegionTag(Base):
-    """App-owned exercise→taxonomy-region annotation (DECISIONS_LOG #NEXT).
+    """App-owned exercise→taxonomy-region annotation (DECISIONS_LOG #74).
 
     Deliberately a SEPARATE table from `hevy_exercise_templates`, which is
     upsert-from-Hevy-sync (`_upsert_template`) and clobber-exposed on every

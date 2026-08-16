@@ -1,5 +1,5 @@
 """Seed exercise_region_tags + laterality from the proposal reference
-(DECISIONS_LOG #NEXT).
+(DECISIONS_LOG #74).
 
 Mirrors the labs extract -> confirm -> canonicalise flow: `reference/
 exercise_region_tags_v0.json` is the LLM-PROPOSED map; a human confirms it, then

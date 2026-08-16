@@ -1,4 +1,4 @@
-"""create_and_resolve — app-originated custom exercise, resolved by list-back (#NEXT).
+"""create_and_resolve — app-originated custom exercise, resolved by list-back (#65).
 
 Canonical id is read create -> sync -> resolve within the user's custom subset,
 never trusted from the POST body (which returns an int, not the canonical UUID):
