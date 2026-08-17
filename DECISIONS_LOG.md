@@ -8504,7 +8504,7 @@ set-membership blocking wholesale — at which point these sets become defaults 
 rather than the mechanism — or a cervical / peripheral neural block set is added, which is the
 fall-through this entry deliberately left open.
 
-### #NEXT. Cystatin C mapped to `cystatin_c` and the stored row bound by the standing backfill
+### 217. Cystatin C mapped to `cystatin_c` and the stored row bound by the standing backfill
 
 **Decision:** `backend/reference/marker_canonical.json` gains one entry — raw `Cystatin C` ->
 `cystatin_c`, `unit_established` `mg/L`, `loinc` null (69 -> 70 entries, all keys unique) — and the

@@ -2983,7 +2983,7 @@ one-line set edit.
 **State:** OPEN — no blocker; the audit that spawned it is closed. Owner: Luke. Cross-refs `Q23`
 (→ #216), `#216`.
 
-## Q#NEXT. `lab_results.is_derived` is write-dead — no production path ever sets it true
+## Q103. `lab_results.is_derived` is write-dead — no production path ever sets it true
 
 Found while tracing what writes `is_derived = true`, commissioned as the last open input to Brief
 B's placement fork. Nothing does.
@@ -3012,4 +3012,4 @@ stored nowhere, so they fit neither `is_derived` channel. That is precisely what
 placement fork onto a producer output slot of its own rather than a reused flag.
 
 **State:** OPEN — no blocker; the trace that spawned it is complete. Owner: Luke. Cross-refs `#58`
-(the column's origin), `#NEXT` (the session that found it), Brief B's placement fork.
+(the column's origin), `#217` (the session that found it), Brief B's placement fork.

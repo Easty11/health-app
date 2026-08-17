@@ -25,7 +25,7 @@ not this session's to dispose of.
 This session opened on a two-part chat brief, not a `;cc` PENDING queue.
 
 - **Brief A — canonical-map expansion (Cystatin C).** **LANDED.** `2b2f91d`, merged `c71e497`
-  via PR #72; prod backfill applied the same session. Recorded as `DECISIONS_LOG #NEXT`
+  via PR #72; prod backfill applied the same session. Recorded as `DECISIONS_LOG #217`
   (integer resolved at this branch's merge).
 - **Brief B — renal derived metrics.** **NOT BUILT, deliberately.** Spec-only by its own
   header. Its precondition — a mapped `cystatin_c` — was unmet at session open and is met now.
@@ -108,7 +108,7 @@ than produce more governance.
 
 ### Open questions minted this session
 
-- **`Q#NEXT` — `lab_results.is_derived` is write-dead.** No production path sets it true, which
+- **`Q103` — `lab_results.is_derived` is write-dead.** No production path sets it true, which
   makes `context_builder.py`'s stale-derived suffix branch unreachable in prod. Corrupts
   nothing, gates nothing; raised so nobody later debugs it as a mystery. The fork is whether the
   column is dead-by-design (and should be removed rather than left as a trap) or was always
