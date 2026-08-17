@@ -59,10 +59,30 @@ _TRAINING_SQL = text(
 
 _NIGHTS_SQL = text(
     "SELECT date, diary_tst_min, diary_se_pct, lights_out, out_of_bed, final_wake, "
-    "       naps_min, alcohol_units "
+    "       alcohol_units "
     "FROM daily_records "
     "WHERE user_id = :uid AND date BETWEEN :d0 AND :d1 "
     "ORDER BY date"
+)
+
+# Naps are read on their OWN row but attributed to the night they PRECEDE, so they cannot
+# ride the night query — they need a different date window and a different null contract.
+#
+#   * Different window: Night(d0) reads the nap recorded on d0-1, one day outside the
+#     night range. Sharing the query would silently give the first night of every cycle
+#     no nap at all — an off-by-one that reads as clean data.
+#   * Different null contract: the night query drops rows with no `diary_tst_min`
+#     (`continue` below). A day can carry a logged nap and no diary entry — legitimately,
+#     since naps are captured at PM and the diary at AM — and folding the two would
+#     discard that nap rather than attribute it.
+#
+# `naps_min IS NOT NULL` keeps the 0-vs-absent distinction the engine's `is not None`
+# guard depends on: a missing key and a null both mean UNKNOWN (pre-capture), while a
+# stored 0 means "asked, no nap". `.get()` collapsing both to None is correct here.
+_NAPS_SQL = text(
+    "SELECT date, naps_min FROM daily_records "
+    "WHERE user_id = :uid AND naps_min IS NOT NULL "
+    "AND date BETWEEN :d0 AND :d1"
 )
 
 # Column-explicit for the same reason load_nights is: a full ORM load would select
@@ -115,15 +135,20 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     samsung = {_as_date(r[0]): r[1] for r in db.execute(_SAMSUNG_SQL, {"uid": user_id, "d0": d0, "d1": d1})}
     # a session on the calendar day BEFORE the wake date constrains that night
     training = {_as_date(r[0]): r[1] for r in db.execute(_TRAINING_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
+    # likewise a nap on the calendar day BEFORE the wake date is the one that discharged
+    # this night's sleep pressure — Night(W) reads the nap recorded on W-1 (Q45 -> #219).
+    # This is the read `models.DailyRecord.naps_min` has documented as the contract since
+    # the column was created; until now the engine took the nap off the night's own row.
+    naps = {_as_date(r[0]): r[1] for r in db.execute(_NAPS_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
 
     nights = []
-    for (d, tst, se, lo, oob, fw, naps, alc) in rows:
+    for (d, tst, se, lo, oob, fw, alc) in rows:
         if tst is None:
             continue
         d = _as_date(d)
         nights.append(Night(
             date=d, tst_min=tst, se_pct=se, lights_out=lo, out_of_bed=oob, final_wake=fw,
-            naps_min=naps, alcohol_units=alc,
+            naps_min=naps.get(d - timedelta(days=1)), alcohol_units=alc,
             samsung_bedtime=samsung.get(d),
             training_end=training.get(d - timedelta(days=1)),
         ))

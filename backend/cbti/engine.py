@@ -96,7 +96,19 @@ ADHERENCE_FAIL_N = 2          # >= this many failures in the cycle -> HOLD — C
 # adopted engagement-first, paired with the smaller MAX_MOVE_MIN so that 4-night noise
 # cannot move the window far. CHOSEN, not derived (unattested; Q55).
 CYCLE_NIGHTS = 4
-NAP_EXCLUDE_MIN = 0           # Q45: ANY nap-flagged night is excluded, not >20
+# 0 -> 30 (Q45 closed -> #219). 0 was never a threshold, it was the absence of one: while
+# the nap's day-referent was unknown, excluding EVERY nap-flagged night was the only policy
+# that could not attribute a nap to the wrong night. The referent is now fixed by operator
+# determination — a nap attributes to the night it precedes — so the question becomes which
+# naps are large enough to matter, and that needs a real floor rather than a placeholder.
+# 30 minutes is a CHOSEN floor, not a derived one (same standing as CYCLE_NIGHTS and
+# ADHERENCE_TOL_MIN above): it is the conventional short-nap boundary, below which a nap is
+# unlikely to reach slow-wave sleep and so discharges little enough sleep pressure that the
+# following night still measures what the titration is titrating. Sub-threshold naps are
+# still RECORDED, only not excluded — the data to test the floor accumulates either way.
+# The cost of the old policy was concrete at a 4-night cadence: two nap nights of any
+# duration starved a cycle outright (Q78's frequent-napper stall).
+NAP_EXCLUDE_MIN = 30
 TRAINING_RECOVERY_MIN = 90    # constrained night floor = session end + 90 min
 
 # UNVALIDATED BY THE OBSERVED BLOCK. Not derived from data; the observed
@@ -267,8 +279,14 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
     if night.alcohol_units is not None and night.alcohol_units > 0:
         return NightVerdict(night, False, "alcohol")
 
-    # naps: Q45 — the VA instrument does not say which day a recorded nap belongs
-    # to, so nap-flagged nights are excluded entirely rather than attributed.
+    # naps: Q45 closed -> #219. A nap ATTRIBUTES to the night it precedes, so a nap
+    # reaching this Night is the daytime nap that discharged its sleep pressure — the
+    # contamination is upstream of the measurement, which is what makes exclusion the
+    # right response rather than annotation. `replay.load_nights` performs the
+    # attribution (row W-1 -> Night W); this guard only judges the amount.
+    # `is not None` is load-bearing and unchanged: a null is UNKNOWN, not clean, and
+    # zero is "asked, no nap" — collapsing them would silently disable the exclusion
+    # for every night predating PM capture.
     if night.naps_min is not None and night.naps_min > NAP_EXCLUDE_MIN:
         return NightVerdict(night, False, "nap")
 
@@ -423,12 +441,14 @@ def evaluate_cycle(
     # ── GATE 1: sufficiency ───────────────────────────────────────────────────
     # The reason NAMES WHAT WAS EXCLUDED, not just the shortfall. At a 4-night cadence
     # with a 3-night threshold the margin is one night, so exclusions starve a cycle far
-    # more readily than they did at 7/5 — two nap nights is now enough to stall
-    # titration outright. Q45 excludes ANY nap-flagged night (the instrument does not say
-    # which day a nap belongs to), so a frequent napper can stall repeatedly while the
-    # surface says only "insufficient". Naming the tally makes a stall diagnosable
-    # instead of mysterious. This is SURFACING ONLY — no threshold moves, NAP_EXCLUDE_MIN
-    # is untouched, and Q45 stays open.
+    # more readily than they did at 7/5 — two excluded nights is enough to stall titration
+    # outright, so a stall must be diagnosable from the surface rather than mysterious.
+    # Q45's closure (#219) eased the nap half of this without touching the gate: naps now
+    # exclude only above NAP_EXCLUDE_MIN, so a trivial nap no longer spends the cycle's
+    # one-night margin. It did NOT eliminate the stall — two naps OVER the threshold still
+    # starve a cycle, which is precisely what Q78 (frequent napper, exclude-vs-attribute at
+    # this cadence) remains open on. Naming the tally is still SURFACING ONLY: no gate
+    # threshold moves here, and MIN_VALID_NIGHTS is untouched.
     if len(valid) < MIN_VALID_NIGHTS:
         tally = Counter(excluded.values())
         detail = ", ".join(f"{reason} x{n}" for reason, n in sorted(tally.items()))

@@ -161,8 +161,8 @@ describe('an insufficiency offer is information-only (Q101)', () => {
     expect(screen.getByText(/Not enough logged nights to evaluate/i)).toBeTruthy()
     expect(screen.getByText(/insufficient_nights: 2 valid of 4, need 3/)).toBeTruthy()
     expect(screen.getByText(/Nights counted/i)).toBeTruthy()
-    // Q45's exclusions panel is preserved on this card too — nap exclusions on the
-    // unverified date-1 attribution are the likeliest cause of the shortfall
+    // the exclusions panel is preserved on this card too — exclusions are the likeliest
+    // cause of the shortfall, so they are what make an insufficiency finding diagnosable
     expect(screen.getByText(/2 nights excluded from the basis/i)).toBeTruthy()
     expect(screen.getByText(/2026-08-14 — nap/)).toBeTruthy()
   })
