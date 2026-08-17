@@ -41,6 +41,37 @@ export function decisionHeadline(decision, basis) {
   return `${verb} by ${delta > 0 ? '+' : ''}${delta} min`
 }
 
+// The engine reached no decision at all (server `sufficient: false`, #218). The headline
+// must not borrow a decision verb: "Hold the window" reads as a titration outcome the
+// operator could reasonably accept, and that misreading is what #214 turned into a real
+// ledger write. This states the finding instead, and the card carrying it offers no
+// accept control — the server refuses such a cycle with a 409 regardless.
+export function insufficiencyHeadline() {
+  return 'Not enough logged nights to evaluate'
+}
+
+// The #214 confirmation restates THE ACTUAL WRITE, not the decision the operator has
+// already read above it. Returned as lines rather than a sentence so each consequence is
+// separately visible — the buried one in the block-2 harm event was the clock reset, which
+// no summary of "accept the decision" ever mentions.
+//
+// `cycleNights` mirrors `nextEvaluationNote`'s default for the same reason: there is no
+// shared JS constant module, and the engine's CYCLE_NIGHTS is 4.
+export function confirmationLines(basis, cycleNights = 4) {
+  const b = basis ?? {}
+  const lines = []
+  if (b.window_minutes_current != null || b.window_minutes_proposed != null) {
+    lines.push(`Window ${formatMinutes(b.window_minutes_current)} → ${formatMinutes(b.window_minutes_proposed)}`)
+  }
+  if (b.lights_out_current != null || b.lights_out_proposed != null) {
+    lines.push(`Lights out ${b.lights_out_current ?? '—'} → ${b.lights_out_proposed ?? '—'}`)
+  }
+  // Always present: this is the consequence the operator is least likely to have in mind,
+  // and it is the one that cannot be undone by prescribing again tomorrow.
+  lines.push(`Closes the current cycle and resets the evaluation clock (~${cycleNights} days)`)
+  return lines
+}
+
 // "1 night dropped" reads as incidental; the operator needs to know the decision was
 // computed WITHOUT those nights. Q45 is open, so some exclusions rest on an unverified
 // nap attribution and must stay visible rather than being summarised away.

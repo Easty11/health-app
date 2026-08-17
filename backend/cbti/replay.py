@@ -190,6 +190,11 @@ def replay(nights: list[Night], prescriptions: list[LedgerRx],
                 "lo_sd": d.lights_out_sd_min, "wk_sd": d.wake_time_sd_min,
                 "ema": d.ema_count, "capped": d.move_capped,
                 "converged": d.converged,
+                # The decision-class discriminator (#218). False only where the engine's
+                # sufficiency gate fired; every decision-on-merits is True. Carried verbatim
+                # from the engine — NEVER re-derived here from `n` against MIN_VALID_NIGHTS,
+                # which would put the threshold in two places and let them drift.
+                "sufficient": d.sufficient,
                 "nse": d.nights_since_effective_from,
             })
             if d.basis_tst_min is not None:
@@ -252,6 +257,14 @@ def evaluate_live_cycle(db, user_id: int, block, today: date) -> LiveCycleEval |
     the decision, but through the engine's own sufficiency gate (>= MIN_VALID_NIGHTS
     valid), which returns a HOLD naming the shortfall rather than withholding the offer.
     Both quantities are reported so the operator sees each.
+
+    THE OFFER IS STILL MADE, BUT SUCH A CYCLE IS NOT ACCEPTABLE (#218). `eligible` and
+    `sufficient` are different questions: eligible says a cycle has elapsed and there is
+    something to SHOW; the cycle's `sufficient` flag says whether what is shown is a
+    decision at all. An insufficiency HOLD is a finding, so the accept path refuses it
+    (409) and the client renders it information-only. Selection is untouched — still
+    `complete[-1]`; deferring to an older sufficient cycle would resurrect a decision
+    the staleness rule says has expired.
     """
     rxs = load_ledger_rxs(db, block.id)
     live = next((r for r in rxs if r.effective_to is None), None)

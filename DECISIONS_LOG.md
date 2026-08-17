@@ -8562,3 +8562,63 @@ on the named line, then `--apply`, then a post-apply re-read.
 is a NEW entry, never an edit to this one, since exact-string keying means the old label must keep
 resolving for the stored history — or the extractor's `unit_canonical` normalisation changes form,
 which would trip the §6 guard on this marker and require the map to follow the stored string again.
+
+---
+
+### 218. Q101 resolved — an insufficiency-hold is not an acceptable event; accept gains the #214 restating confirm
+
+**Decision:** The evaluation offer's accept is gated on DECISION CLASS. An insufficiency-hold — the
+engine's GATE 1 firing because fewer than `MIN_VALID_NIGHTS` of the cycle's nights are valid — mints
+nothing, resets nothing, and renders information-only, enforced SERVER-SIDE (409 on
+`POST /checkin-v2/cbti/evaluation/accept`) rather than merely hidden client-side. Selection stays
+`complete[-1]`. A converged HOLD remains acceptable — it is a decision-on-merits, and recording it is
+the block's memory of its found level. Accept now runs the #214 two-step: a confirmation restating the
+actual ledger write, then a second deliberate action; the offer preview carries no live accept control.
+
+The discriminator is STRUCTURAL, not a string match. `CycleDecision.sufficient: bool` is minted at the
+sufficiency gate in `cbti/engine.py` — the only path that sets it False — threaded verbatim through
+`replay()`'s series dict and surfaced on `CBTIEvaluationOut`. Before this the `insufficient_nights:`
+reason PREFIX was the only carrier, which would have made an irreversible write's refusal rest on the
+wording of a diagnostic sentence. It mirrors `converged`, the field that already exists for exactly this
+job: distinguishing "held because a gate failed" from "held because the window is where it belongs".
+
+That distinction is the whole reason the rule is not the simpler "a HOLD is not acceptable". The engine
+returns `decision="hold"` on three unlike grounds — insufficiency (no conclusion), adherence (a
+conclusion: the window was not run, so its sleep is not evidence about it), and convergence (a
+conclusion, and the one most worth recording, since #107 left the engine with no other block-ending
+signal). Only the first is a non-decision. A verb-level rule would be wrong in two cases of three.
+
+**Rationale:** Prescriptions are prescriptive acts; "could not adjudicate" is a finding. Minting one
+cost block 2 (`cbti_blocks.id`=2) a buried fully-logged `compress 390->375` plus ~4 days of clock
+(`cbti_prescriptions.id`=12, #213's first live run) — and the harm event was itself the #214 defect
+firing, a single tap on a live `Accept and prescribe` intended to view the offer. One landing therefore
+closes both: the class gate removes the acceptability, the two-step removes the single tap. The
+confirmation restates the CLOCK RESET explicitly, because that is the consequence the decision's own
+numbers never mention and the one that cannot be undone by prescribing again tomorrow.
+
+Fork (a) — deferring selection to an older sufficient cycle — was REJECTED: it violates the staleness
+principle the selection encodes; an unaccepted elapsed decision expires rather than resurrects.
+Answering fork (b) makes (a) moot in practice, since with no accept on the non-decision nothing buries
+anything. `cbti_prescriptions.id`=12 is let stand: the ledger is append-only and the row faithfully
+records what was accepted, so reversing it is an operator matter (a corrective prescription), never a
+migration.
+
+The client reads the flag STRICTLY — only an explicit `false` suppresses the accept control — so a
+server that predates the field keeps the two-step accept rather than silently going read-only through a
+rolling deploy. And the information-only card carries no control at all rather than a disabled one: a
+greyed button still reads as an action that could be taken.
+
+**Status:** active. **How you know:** block-2 ledger evidence in Q101 (read-only Railway, rx 12
+`hold`/n=2/390/22:30, rx 11 `superseded_by`=12); enforcement tested BOTH directions in
+`tests/test_cbti_accept_decision_class.py` — 409 with the ledger asserted untouched (`effective_to`
+still None, i.e. the clock did NOT restart) on an insufficiency fixture, 200 on compress and
+converged-hold fixtures, discriminator asserted on all four engine paths. Backend 869 -> 877, zero
+regressions. Frontend vitest 32 -> 41: the repo's first COMPONENT tests, because #214 was a wiring
+defect (a button bound straight to the POST) and no pure-function test can fail when someone rebinds
+it — first tap fires no POST, POST only after the confirm, cancel fires nothing, an insufficiency card
+renders zero buttons. jsdom + `@testing-library/react` added as devDeps, environment declared per-file
+so the existing node suites pay nothing.
+
+**Do not revisit unless:** the engine gains night-pooling across sparse cycles, which changes what
+"insufficient" means — a pooled cycle could clear the gate on nights drawn from outside its own span,
+and the flag would then have to say WHICH nights it rests on, not merely that it has enough.

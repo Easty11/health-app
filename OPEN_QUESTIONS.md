@@ -2947,7 +2947,33 @@ This is how sparse logging compounds: each accepted insufficiency-hold pushes th
 the diary stays thin. Mechanical / confirmed against live block-2 data. Neighbours `Q45` (sparse-diary
 attribution).
 
-**State:** OPEN. Owner: Luke.
+**Resolution.** Both forks answered by ONE rule, taken at fork (b) rather than (a): **an insufficiency-hold is
+not an acceptable event.** It mints nothing, resets nothing, and renders information-only. "Not enough data to
+decide" is a finding, not a decision, so there is no event to record and nothing that should cost ~4 days.
+
+- **Fork (b) — the clock: no.** Accepting a non-decision closes the current cycle and restarts the evaluation
+  clock, which is what buried the compress. Removing the accept removes the reset; the cycle simply continues
+  under the prescription already in force, and the next elapsed cycle is adjudicated on whatever nights exist
+  by then.
+- **Fork (a) — selection: unchanged, `complete[-1]` stands.** Deferring to an older sufficient cycle was
+  rejected: it violates the staleness principle the selection encodes. An unaccepted elapsed decision EXPIRES;
+  it does not sit waiting to be resurrected once a later cycle fails to adjudicate. Answering (b) makes (a)
+  moot in practice — with no accept on the non-decision, nothing buries anything.
+- **Carve-out — a converged HOLD remains acceptable.** The rule discriminates on decision CLASS, not on the
+  `hold` verb. An adherence HOLD and a converged HOLD are decisions-on-merits; the converged one in particular
+  is the block's memory of the level it found, and the engine emits no other block-ending signal (#107), so
+  refusing it would make that level unrecordable. Only the sufficiency gate's HOLD is a non-decision.
+- **Enforced server-side (409), not merely hidden client-side.** A UI that omits a control is not an
+  enforcement. The engine gained a structural discriminator (`CycleDecision.sufficient`) rather than leaving
+  the `insufficient_nights:` reason PREFIX as the carrier, so nothing downstream adjudicates by string match.
+- **`cbti_prescriptions.id`=12 is let stand.** The ledger is append-only and the row is a faithful record of
+  what was accepted. Reversing it is an operator matter (a corrective prescription), not a migration.
+
+The harm event was itself the #214 defect firing — a single tap on a live `Accept and prescribe` — so the
+same landing installs #214's two-step confirm restating the actual write. See #218; cross-refs #213 (the
+first live run), #214 (the confirm defect).
+
+**State:** DONE → #218.
 
 ---
 
