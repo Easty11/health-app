@@ -1,179 +1,184 @@
 # Session close-out
 
-_Session of 2026-08-17. Opened at `1e6cf0c`, maxima **#217 / Q103** — the brief expected
-#216 / Q102, which had already been passed by the Cystatin C landing (`47c4dc1`); the brief
-was re-aimed against the actual maxima at open. Master closed at `e2b46cc`. Both fresh-clone
-settings verified present at open (`core.hooksPath` = `.githooks`, local `alias.land`)._
+Session of 2026-08-17 (second of the day). Session-open maxima read **#218 / Q103** and
+were unmoved from the brief's expectation. Master max now **#219 / Q103** — this session
+minted one decision and closed one question; it opened none.
+
+The work: land the nap-attribution change reworked onto current master, close Q45, and
+discharge an orphan branch that had been carrying the first attempt invisibly.
+
+---
 
 ## 1. Real commits this session
 
+`git log --oneline ad7d96a..HEAD`:
+
 ```
-2e53619 fix(cbti): gate accept on decision class and put a restating confirm in front of the mint
-2ece39c gov: resolve #NEXT -> #218 (master max re-read #217/Q103 at this instant)
-950e90a Merge pull request #75 from Easty11/fix/cbti-accept-confirm
-75dfe82 gov: strike three discharged cross-repo ROADMAP rows, re-scope the fourth
-e2b46cc Merge pull request #76 from Easty11/chore/crossrepo-rows-reconcile
+a8546b7 Merge pull request #78 from Easty11/fix/q45-nap-attribution-rework
+ff50c03 gov: resolve #NEXT -> #219 at merge (master max re-read #218/Q103)
+bba06ea gov: close Q45 on operator determination (#NEXT), re-premise Q78, retire the dated ROADMAP row
+cca3def fix(cbti): attribute naps to the night they precede, raise NAP_EXCLUDE_MIN 0->30
+7964b46 gov: row the orphan fix/q45-nap-attribution before touching it
 ```
 
-Plus this close-out commit.
+Five commits, all landed on master via PR #78. Nothing is provisional; the working tree is
+clean.
 
-**Branch terminal-state gate: PASS.** Both branches touched this session —
-`fix/cbti-accept-confirm` and `chore/crossrepo-rows-reconcile` — are merged and deleted,
-local and remote (`git fetch --prune` confirmed; neither appears in `git branch -a`).
+**Deviation from the one-gov-commit-per-session rule, deliberate and ordered by the brief.**
+`7964b46` is a `gov:` commit made FIRST, before any code was touched, because the brief made
+the orphan's `BRANCHES.md` row a gate on touching it at all — the row had to exist before the
+work it describes began. That is three `gov:` commits this session rather than one batched at
+close-out. The batching rule exists to stop governance interleaving with feature work
+mid-session; here the ordering was the point. Flagged rather than silently absorbed.
 
-Pre-existing branches enumerated by the gate, none touched this session:
-
-- Three `claude/*` auto-named branches carry **zero** unique commits vs `origin/master`
-  (`git cherry` returns neither `+` nor `-`), so none triggers the push-or-row requirement.
-  They are the auto-name form `CLAUDE.md` bans for in-flight work and are safe to delete;
-  left alone as not this session's to dispose of.
-- **`fix/q45-nap-attribution` carries real unmerged work** (`git cherry origin/master` →
-  `+ 4f77679`). It is pushed, so it satisfies the gate's push-or-row-or-discard clause, but
-  it has **no `BRANCHES.md` row**. Pre-existing debt, not created here — flagged rather than
-  silently passed. It is the branch behind the Q45 lane named in §3.
-
-**Suites at close, both green with zero regressions.** Backend **869 → 877** (baseline taken
-before any edit; the brief's "last known 860" was stale). Frontend vitest **32 → 41**.
-Frontend lint carries 6 pre-existing errors in four files this session did not touch
-(`ChatPanel`, `WorkoutPanel`, `PlainPanel`, `Settings`); nothing in `cbti/`.
-
-**Deploy verified after settling, both services that deploy from this repo (#116/#121).**
-`health-app-backend` deployment `f93368db` SUCCESS 20:31:48 and `health-app-frontend`
-`15414a74` SUCCESS 20:31:47, checked in `railway deployment list` before trusting any answer
-from the running image. Discriminating probes, not version strings:
-
-- **Backend** — live `/openapi.json` shows `CBTIEvaluationOut.sufficient`
-  (`boolean`, default `true`). The field exists only in the new image.
-- **Frontend** — served bundle `/assets/index-MPczDSNr.js` (417,863 bytes) carries
-  `Review and accept`, `Confirm — record prescription`, `resets the evaluation clock` and
-  `Not enough logged nights to evaluate`, one hit each — and **zero** hits for the old
-  `Accept and prescribe`. The negative is the discriminator: a cached prior bundle would
-  still carry it.
+---
 
 ## 2. Pending-queue reconciliation
 
-This session opened on a two-branch dispatch brief, not a `;cc` PENDING queue.
+**No pending-commit queue was carried into this session.** The brief was delivered directly
+and carried no `PENDING` items from a chat close-out (`;cc`). Nothing to reconcile.
 
-- **Branch 1 — `fix/cbti-accept-confirm`.** **LANDED.** `2e53619`, resolved `2ece39c`, merged
-  `950e90a` via PR #75. All five steps executed: engine discriminator, server 409, confirm
-  flow, tests both directions, governance. Recorded as `DECISIONS_LOG #218`; **Q101 → DONE →
-  #218**; the ROADMAP NEXT accept-confirm row struck to DONE.
-- **Branch 2 — `chore/crossrepo-rows-reconcile`.** **LANDED.** `75dfe82`, merged `e2b46cc`
-  via PR #76, guard green, docs-only, cut from post-merge master. Three cross-repo NOW rows
-  struck; the fourth re-scoped and left OWED.
+Every item the brief itself specified landed:
 
-**Two adjudications where Code departed from the brief's proposed shape, both reported:**
+| Brief step | Landed in | Status |
+|---|---|---|
+| 1 · Row the orphan before touching it | `7964b46` | DONE |
+| 2 · Report the three VERIFY findings before staging | reported pre-edit, no commit | DONE |
+| 3 · Rework the engine (re-derive, not replay) | `cca3def` | DONE |
+| 4 · Tests re-derived onto master | `cca3def` | DONE |
+| 5 · Close Q45, re-premise Q78, retire the ROADMAP row | `bba06ea` | DONE |
+| 6 · Land per ritual, resolve `#NEXT`, deploy probe | `ff50c03`, `a8546b7` | DONE |
 
-- **The discriminator's emission point.** The brief proposed threading `sufficient` in
-  `backend/cbti/replay.py`. The sufficiency gate is **not there** — it is GATE 1 in
-  `backend/cbti/engine.py:422`; `replay.py` only re-exports `d.reason`. The field is minted
-  at the gate on `CycleDecision` and threaded verbatim through `replay()`, mirroring
-  `converged`, which already exists for exactly this job. Re-deriving it in `replay.py` from
-  `n` against `MIN_VALID_NIGHTS` was rejected: it would put the threshold in two places.
-  The brief's VERIFY was answered as it asked — no existing structural discriminator for
-  insufficiency; the reason PREFIX was the sole carrier.
-- **One test's premise was wrong and was corrected, not forced.** A test asserting the
-  insufficiency 409 is distinct from the *idempotency* 409 could not reach the idempotency
-  branch: a successor's own cycle begins today, so a second accept is refused by the
-  **eligibility** gate at "day 0 of 4" long before the superseded-row check. Rewritten to
-  assert what is actually reachable — two distinct refusals, neither carrying the nights
-  message — with the unreachability documented in the test itself.
-
-**One deviation from an invariant, recorded rather than left unwritten.** Under #176(b)
-housekeeping rides its originating branch, so the `#218` Recent-landings pointer in
-`CLAUDE.md` should have ridden branch 1. It did not; it was carried on branch 2 with the
-block trimmed back to its 3-row cap. No content was lost — the displaced `#216` line remains
-in `DECISIONS_LOG.md`, its canonical home.
-
-**Test dependencies added.** `jsdom` and `@testing-library/react` (+ `@testing-library/dom`)
-as frontend devDeps, with the environment declared per-file via a `@vitest-environment`
-docblock rather than in `vite.config.js`, so the existing node-environment suites pay
-nothing. CI does not run the frontend suite, so this changes no pipeline.
-
-Nothing decided this session is uncommitted. No provisional state carries forward.
+---
 
 ## 3. Cold-resume handoff
 
 ### What landed
 
-`#218` closes the live #214 defect and Q101 together, because they were one event: block 2's
-buried compress was a single tap on a live "Accept and prescribe" recording a decision the
-engine had not reached. An insufficiency-hold is now a non-event — mints nothing, resets
-nothing, information-only, refused **server-side** with a 409 rather than merely hidden. The
-discriminator is structural (`CycleDecision.sufficient`), so an irreversible write's refusal
-no longer rests on a reason-string prefix. A converged HOLD stays acceptable. Selection
-unchanged (`complete[-1]`). `cbti_prescriptions.id`=12 let stand — an operator matter.
+**`DECISIONS_LOG` #219 — naps attribute to the night they precede; Q45 closed on operator
+determination.** `cbti.replay.load_nights` now reads Night(W)'s `naps_min` from row **W-1**,
+and `NAP_EXCLUDE_MIN` rises **0 → 30**. The prior logic — exclude any nap-flagged night,
+because the instrument does not say which day a nap belongs to — is reversed.
 
-Cross-repo parity is now **evidenced, not assumed**: both repos' `BEGIN…END SHARED LOOP
-RULES` spans are byte-identical, SHA-256
-`5790ae3d527e0a3b7f5a8c0cfebcc560d6ff3e0c96b6b6ce8f111eb8ca737130`, 97 lines / 6039 bytes
-LF-normalised; HCA master carries all three enforcement artefacts. Three ROADMAP NOW rows
-discharged on that evidence.
+The close is the substance, not the constant. Which night a nap belongs to is a **modelling
+convention the operator is entitled to set**, not a fact awaiting clinical provenance. Q45's
+prior bar ("confirm from VA protocol docs or the administering clinician") is superseded as
+the wrong gate. Two things that close deliberately did **not** do: it did not answer the
+question Q45 originally asked — the workbook's scoped-null search stands and is **not**
+re-run — and it did not resolve Q78.
+
+**Re-derived, never replayed.** The orphan `fix/q45-nap-attribution` (`4f77679`) predated
+#218 and would not fast-forward. `git cherry origin/master` confirmed by patch-id that **no
+commit of `4f77679` reached master**.
+
+### Three findings worth carrying forward
+
+1. **#218 had independently added a Q45 comment site the orphan never saw.** The stale-site
+   count was seven, not the orphan's three — `models.py`, `checkin_v2.py` (×2) and
+   `import_cbti_block.py` were never in the orphan's diff at all. A repo-wide anchored sweep
+   found them; the orphan's hunk list would not have.
+2. **`models.DailyRecord.naps_min` has documented this exact `date−1` read since the column
+   was created**, as a live DB column comment, while the engine read the nap off the night's
+   own row. A documented contract the code never honoured, flagged silent-when-wrong in the
+   model itself. #219 makes them agree.
+3. **The PM hint's word "tonight" was wrong before and is literal only now.** Under the old
+   same-row read, a nap excluded the night that had already ended that morning.
+
+### Verification standard met
+
+- Backend **877 → 882** (+5), frontend **41** unchanged. Zero regressions.
+- #218's `test_cbti_accept_decision_class.py` run in isolation under the change: **8/8 green**.
+- **Non-vacuity control:** with the reworked tests in place against master's `replay.py`, all
+  five attribution assertions **fail** — they discriminate the new read, not the new threshold.
+- **Deploy probe (#116/#121), both services, identity-pinned (#103).** Both `health-app-backend`
+  and `health-app-frontend` report SUCCESS with `commitHash a8546b7451ef…`. Backend in-container:
+  `NAP_EXCLUDE_MIN = 30`, the new attribution comment present, `_NAPS_SQL` live in `replay.py`,
+  and the reversed claim absent. Frontend served bundle `index-C9Bh0iPd.js`: the new literal
+  present, the old literal absent.
+- One `grep -c` returned a count that looked alarming (4 hits for `instrument`); reading the
+  matches per #113 showed all four were unrelated pre-existing text, identical local and
+  deployed. Counts were not trusted as evidence anywhere in this session.
 
 ### The single clearest next action
 
-**`rx 12` is an operator decision, not a code task, and it is the only thing this landing
-deliberately left undone.** The row is a faithful append-only record of what was accepted;
-the fix, if wanted, is a corrective prescription entered by the operator — never a
-migration. Decide it or explicitly let it stand.
+**Nothing in the CBT-I nap lane. Pick a product lane — the lab upload pipeline.** The
+CBT-I titration engine is now in a settled state: #213 landed the trigger, #218 the accept
+gate, #219 the nap attribution. Three consecutive sessions have gone to it. It has no dated
+NOW row left open.
 
-After that, the largest queued lane with a met precondition is **Brief B (renal derived
-metrics)** — unblocked by `#217`, its placement fork already closed, spec amended, not built.
+`ROADMAP` NOW's remaining product rows are **lab upload pipeline** (PDF/photo → Vision
+extraction → confirmation → stored; first stage of the medical spine, consumer hero-feature
+dependency, design Locked at #48/#50 and **still not implemented**), **interpretation layer
+build** (design Locked at #49, producer complete, build pending), and **appointment brief**.
 
 ### Open questions
 
-**52 OPEN, 0 OWED.** Q101 left the OPEN set this session (→ `#218`). No question was minted
-this session. The two newest remain the live ones from the preceding two sessions:
+**51 OPEN, 0 OWED.** Q45 moved to DONE → #219 this session; no new question was minted.
 
-- **`Q102`** — `restrictions[]` is dead data; `is_contraindicated` cannot express the
-  ledger's clinical language. Has a matching ROADMAP NEXT row (the contraindication design
-  pass). Live defects, deliberately unpatched at `#216`.
-- **`Q103`** — `lab_results.is_derived` is write-dead; no production path sets it true.
-- **`Q45`** — nap day-attribution, still OPEN and still gating: every nap-excluded night
-  rests on an unverified date−1 attribution, and at the 4-night cadence two nap nights starve
-  a cycle. `#218` makes that stall *safe* (it can no longer be accepted into the ledger) but
-  does not make it *correct*. See the branch note in §1.
+Directly touched:
+- **Q45** — DONE → #219. Its original question paragraph is preserved unreworded, per the
+  Q79 precedent that a superseded premise is worth more legible than quietly rewritten.
+- **Q78** — stays **OPEN**, and is now **unblocked by Q45 rather than gated on it**. Its
+  premises were false the moment #219 landed (it asserted `NAP_EXCLUDE_MIN = 0` and
+  exclude-all) and were corrected in the same commit. The residue is real: two
+  **over-threshold** nap nights still starve a 4-night cycle at a one-night margin. It was
+  always a data-consequence fork, never a referent one — which is why it survived the close.
+  Its "do not resolve by loosening `NAP_EXCLUDE_MIN`" caution still stands, with a note
+  recording why #219 did not cross it.
+
+Adjacent and untouched: **Q103** (`lab_results.is_derived` write-dead, minted by #217),
+**Q102** (`restrictions[]` dead data), **Q60** (CBT-I user surface, gated on #47).
 
 ### What was NOT touched — read this before choosing the next session
 
-This session went to **the instrument, not the thing being instrumented**, and it is the
-second consecutive session to do so: `#216` was a protective revision to block sets that have
-never fired in prod, and `#218` is a guard rail on a write path plus a governance
-reconciliation. Both were correct and both were asked for. Neither moved a product lane.
+**This was a single-lane session and the lane is now closed.** The whole session went to one
+question in the CBT-I titration engine. Nothing else moved.
 
-Standing still, unchanged, and unmentioned anywhere else in this file:
+**The product lanes stood still, again.** The lab upload pipeline and the interpretation
+layer build have both been design-Locked and unimplemented across every recent session
+(#215 prod verification, #217 Cystatin C, #218 accept-gating, #219 nap attribution). The lab
+pipeline is the **first stage of the medical spine and a consumer hero-feature dependency**,
+and it has not been started. Its design has been Locked since #48/#50 — that is a long time
+for a Locked design to wait, and it is the single largest piece of unbuilt product value in
+the repo.
 
-- **Lab upload pipeline / interpretation layer / appointment brief** — the medical spine and
-  the hero consumer feature. Design Locked at `#48`/`#49`/`#50`; the interpretation producer
-  is complete and delivered, the hub shell is BUILT but **held for review** and has an
-  `#116`/`#121` deploy probe that was never run.
-- **Brief B — renal derived metrics.** Precondition met since `#217`, fork closed, spec
-  amended by chat. Still not built. It has now been "next session" for two sessions.
-- **Readiness / Banister build.** OWED. The HRV data precondition has been met since
-  2026-07-29; `model_forecast` and `model_confidence` exist on the response and the model
-  behind them is unbuilt.
-- **CBT-I beyond the trigger.** The user surface (interim) and module phase 2 (engine +
-  surfaces + ISI) are both untouched. This session hardened the accept path; nobody has yet
-  built the surface that path serves.
-- **Multi-user paths (`Q99`) and `Q100`** — Cooper's key authenticates to an empty account.
-  Blocked on Cooper, not on code, and has been for five days.
+**Read the pattern honestly:** #217 and #219 were both *unblocking* work on the medical and
+sleep spines, and #215 and #218 were verification and safety-gating. All four were worth
+doing. But four consecutive sessions have gone to correctness, verification and governance
+around existing surfaces rather than to building the next product surface. The queue this
+close-out points at is not more of the same. **Do not let the legibility of governance work
+choose the next session** — it is easier to write, easier to verify, and it is not what the
+platform is short of.
 
-The cross-repo governance lane is now **nearly empty** — three of its four rows discharged
-today — so it will not supply the next session's work by default. That is the point of
-naming this list: the queue a reader would infer from this document is governance, and the
-queue that actually matters is above.
+**Also standing still:** the CBT-I user surface (**Q60**), which is gated on **#47** —
+show-state-only vs show-the-action. #47 is an unresolved *design* fork, not a build task,
+and it blocks a whole module's visibility in the app. The titration engine is now three
+decisions deep and remains invisible to the user. That gap is widening with every engine
+session.
+
+**Cross-repo:** one shared-block edit remains owed on `ROADMAP` NOW — extend the `#NEXT` /
+number-at-merge rule to cover more than DECISIONS entries. Untouched this session.
+
+### Local-disk state (unseeable to chat — verify, do not trust this line)
+
+- **Branch gate: PASSED.** `origin` carries **only `master`**. Both branches this session
+  touched are terminal: `fix/q45-nap-attribution-rework` merged (`a8546b7`) and deleted;
+  `fix/q45-nap-attribution` deleted from origin **and** locally, rowed in `BRANCHES.md` as
+  DONE-superseded.
+- **Pre-existing local debt, not created and not touched this session:** three local
+  `claude/*` auto-named branches (`cranky-haslett-8c636a`, `sleepy-hofstadter-8b5c6a`,
+  `stoic-mendel-68febe`). All three carry **0 unlanded commits by patch-id**, so they trip no
+  gate and are safe to delete — but the auto-name form is banned for in-flight work by
+  `CLAUDE.md`, and two of the three are unrowed. Worth a one-line cleanup next session.
+- **Stray worktree directories** under `.claude/worktrees/`: `vibrant-khorana-86acde` (held
+  the orphan; **deregistered from git this session**, but the directory itself would not
+  delete — Windows permission denied — so a dead folder remains on disk),
+  `hopeful-raman-df98df` (never registered), and `sleepy-hofstadter-8b5c6a` (still
+  registered, detached HEAD at `bbe627e`). None affect the repo; all are local tooling
+  residue.
 
 ### Still-owed governance, so it is not re-derived
 
-The one surviving cross-repo row — extend the `#NEXT` rule beyond DECISIONS entries — stays
-OWED with a **mechanical**, not editorial, blocker. The orphaning is structural: the guard
-anchors on store headings (`^### #NEXT` / `^## Q#NEXT`) and the claim step's file scope is
-the stores, so a `#NEXT` written into a docstring is invisible to **both** and lands green.
-The fix is (a) a claim-time sweep outside the stores and (b) an allowlist for the guard's own
-fixtures, which legitimately contain placeholder tokens.
-
-Branch 1 exercised (a) by hand and the asymmetry is worth keeping: **13 sites — 4 anchored
-per-site in the stores, 9 swept from six source files.** Anchoring is non-optional in the
-stores because all three carry pre-existing `#NEXT` tokens belonging to other branches, which
-is precisely the PR #71 corruption (55 lines, `#175`); the source files carried only this
-branch's, verified by count, so a scoped replace was provably complete there.
+Nothing owed from this session. The `#219` entry carries its own How-you-know, `BRANCHES.md`
+carries both branch rows in terminal state, the `ROADMAP` NOW row is retired, and
+`CLAUDE.md`'s Recent-landings block is trimmed to three pointers with `#215` aged out.
