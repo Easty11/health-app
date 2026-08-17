@@ -75,7 +75,7 @@ def test_no_duplicate_raw_names_in_the_whole_file():
     data = json.loads(path.read_text(encoding="utf-8"))
     names = [e["marker_name_raw"] for e in data["entries"]]
     assert len(names) == len(set(names)), "duplicate marker_name_raw"
-    assert len(names) == 69
+    assert len(names) == 70
 
 
 # ---------- §6 guard: urine vs serum-unit mis-entry ----------
