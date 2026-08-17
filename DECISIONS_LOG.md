@@ -8623,7 +8623,7 @@ so the existing node suites pay nothing.
 "insufficient" means — a pooled cycle could clear the gate on nights drawn from outside its own span,
 and the flag would then have to say WHICH nights it rests on, not merely that it has enough.
 
-### #NEXT. Nap nights attribute to the night they precede — Q45 closed on operator determination, exclusion logic reversed
+### 219. Nap nights attribute to the night they precede — Q45 closed on operator determination, exclusion logic reversed
 
 **Decision:** A recorded nap attributes to the night it **precedes** — the nap logged on day D belongs
 to the night terminating on the morning of D+1 — implemented as the `naps_min` date-1 read in
