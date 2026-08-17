@@ -251,7 +251,7 @@ export default function NightlyCloseOut() {
           </div>
 
           {/* Nap capture — only while a titration block is open. A blank submits 0
-              ("no nap today"), never null; any nap excludes the night from titration. */}
+              ("no nap today"), never null; a nap over 30 min excludes tonight from titration. */}
           {cbti?.block_open && (
             <div className="space-y-1 border-t border-gray-100 pt-5">
               <label className="text-sm font-medium text-gray-700">Naps today (minutes)</label>
@@ -264,7 +264,7 @@ export default function NightlyCloseOut() {
                 onChange={e => setNapsMin(e.target.value)}
                 className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
               />
-              <p className="text-[10px] text-gray-400">Leave blank for no nap. Any nap excludes tonight from the titration window.</p>
+              <p className="text-[10px] text-gray-400">Leave blank for no nap. Naps over 30 min exclude tonight from the titration window.</p>
             </div>
           )}
 

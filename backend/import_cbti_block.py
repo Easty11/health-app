@@ -31,12 +31,13 @@ Field mapping (daily_records <- sheet column):
                           Beyond the 9 diary fields; imported because the engine's
                           exclusion (alcohol_units > 0) needs it and rows are created now.
 
-NAP NOTE (silent-when-wrong): the engine reads naps for the night terminating
-on wake-date W from daily_records.date = W-1. This import stores each nap on the
-same row-date the source recorded it against; it does NOT shift by a day. Whether
-the VA diary's nap item refers to naps preceding vs following the recorded night
-must be confirmed against the instrument before the engine relies on the date-1
-read. Only 2 nights carry naps in this block.
+NAP NOTE: the engine reads naps for the night terminating on wake-date W from
+daily_records.date = W-1 (Q45 closure — this read is now live). This import stores
+each nap on the same row-date the source recorded it against; it does NOT shift by a
+day. The date-1 read is pinned by the APP's PM instrument (naps recorded against their
+own calendar day); whether the VA workbook's nap item follows the same convention is
+not established — but it is moot here, as this block is discarded for outcome claims
+and no live verdict is minted on it. Only 2 nights carry naps in this block.
 
 Usage:
     python backend/import_cbti_block.py --xlsx "<path>" --user-id 1            # dry-run (default)

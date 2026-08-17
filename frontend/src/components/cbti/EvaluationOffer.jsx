@@ -115,8 +115,8 @@ export default function EvaluationOffer({ onAccepted }) {
         </p>
       )}
 
-      {/* Q45 is open: some exclusions rest on the unverified date-1 nap attribution, so
-          which nights were dropped is part of the basis, not a footnote. */}
+      {/* Which nights the decision dropped is part of the basis, not a footnote — an
+          exclusion (nap or alcohol) changes what the window rests on. */}
       {excluded && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
           <p className="text-[11px] font-medium text-amber-800">{excluded}</p>

@@ -1,15 +1,17 @@
-"""PM nap capture (Step A-C) — naps_min stored at PM, default 0 not null, and the
-engine's nap exclusion becomes live for block 3.
+"""PM nap capture (Step A-C) — naps_min stored at PM, default 0 not null, the engine's
+nap exclusion live for an open block, and the Q45 attribution (naps read from W-1).
 
 The load-bearing property is that a blank submits 0, never null: engine.classify_night
-excludes any night with naps_min > 0, guarded on `is not None`, so a null silently
-disables the exclusion. Without PM capture every block-3 night is null and the
-exclusion is structurally dead — this test pins both halves.
+excludes a night whose nap clears NAP_EXCLUDE_MIN (30 min, Q45 closed), guarded on
+`is not None`, so a null silently disables the exclusion. Without PM capture every
+open-block night is null and the exclusion is structurally dead — this test pins that,
+the 30-min threshold, and the day-of-nap -> following-night attribution.
 """
-from datetime import date
+from datetime import date, timedelta
 
 import models
 from cbti.engine import Night, classify_night
+from cbti.replay import load_nights
 from routers.checkin_v2 import AMCheckInIn, NightlyCloseOutIn, TodayOut, submit_pm
 
 
@@ -64,8 +66,8 @@ def _night(naps_min):
                  lights_out="23:45")
 
 
-def test_any_nap_excludes_the_night(db_session=None):
-    v = classify_night(_night(30), "23:45")
+def test_nap_over_threshold_excludes_the_night(db_session=None):
+    v = classify_night(_night(45), "23:45")
     assert v.valid is False and v.reason == "nap"
 
 
@@ -81,3 +83,33 @@ def test_null_nap_is_silently_kept_which_is_the_bug_this_fixes():
     exclusion able to fire at all."""
     v = classify_night(_night(None), "23:45")
     assert v.valid is True     # kept — not because it's clean, but because it's unknown
+
+
+# ── Q45 attribution: naps read from W-1 (the day-of-nap -> following-night off-by-one) ──
+
+def _rec(db, uid, d, *, naps_min):
+    db.add(models.DailyRecord(
+        user_id=uid, date=d, diary_tst_min=380, diary_se_pct=90.0,
+        lights_out="22:30", out_of_bed="05:00", final_wake="05:00",
+        naps_min=naps_min, alcohol_units=0,
+    ))
+    db.commit()
+
+
+def test_load_nights_attributes_a_nap_to_the_following_night(db_session):
+    """Q45 off-by-one: a nap recorded on day D discharged Process S for the night ending
+    the NEXT morning (Night D+1), not the night that ended on D. load_nights reads
+    Night(W).naps_min from row W-1 — the same day-before-the-wake-date shape training uses."""
+    u = _user(db_session, "loadnights@x.io")
+    d0 = date(2026, 7, 24)
+    _rec(db_session, u.id, d0, naps_min=0)
+    _rec(db_session, u.id, d0 + timedelta(days=1), naps_min=60)   # nap recorded on the middle day
+    _rec(db_session, u.id, d0 + timedelta(days=2), naps_min=0)
+
+    nights = {n.date: n for n in load_nights(db_session, u.id, d0, d0 + timedelta(days=2))}
+    # the nap lands on the night AFTER the day it was recorded...
+    assert nights[d0 + timedelta(days=2)].naps_min == 60
+    # ...and NOT on the night that ended the morning of the nap day (the old off-by-one)
+    assert nights[d0 + timedelta(days=1)].naps_min == 0
+    # the first night has no W-1 row, so its nap is unknown (None), not a spurious 0
+    assert nights[d0].naps_min is None

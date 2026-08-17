@@ -42,8 +42,8 @@ export function decisionHeadline(decision, basis) {
 }
 
 // "1 night dropped" reads as incidental; the operator needs to know the decision was
-// computed WITHOUT those nights. Q45 is open, so some exclusions rest on an unverified
-// nap attribution and must stay visible rather than being summarised away.
+// computed WITHOUT those nights, so the exclusions stay visible rather than being
+// summarised away.
 export function exclusionNote(nightsExcluded) {
   const n = Object.keys(nightsExcluded ?? {}).length
   if (n === 0) return null

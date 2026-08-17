@@ -59,10 +59,23 @@ _TRAINING_SQL = text(
 
 _NIGHTS_SQL = text(
     "SELECT date, diary_tst_min, diary_se_pct, lights_out, out_of_bed, final_wake, "
-    "       naps_min, alcohol_units "
+    "       alcohol_units "
     "FROM daily_records "
     "WHERE user_id = :uid AND date BETWEEN :d0 AND :d1 "
     "ORDER BY date"
+)
+
+# Naps are attributed to the night they PRECEDE, not the row they were recorded on (Q45
+# closure). The app's PM instrument records "naps today" on the nap's own calendar day D
+# (via _today_aest); the night that nap discharges Process S for is the one ending the
+# NEXT morning — Night(D+1). So Night(W) reads the nap recorded on W-1, the same
+# day-before-the-wake-date shape the training-end join already uses. Fetched one day wide
+# at the start so the first night can see its W-1; `naps_min IS NOT NULL` keeps the
+# 0-vs-null distinction (0 = asked/no-nap, absent = pre-capture/unknown).
+_NAPS_SQL = text(
+    "SELECT date, naps_min FROM daily_records "
+    "WHERE user_id = :uid AND naps_min IS NOT NULL "
+    "AND date BETWEEN :d0 AND :d1"
 )
 
 # Column-explicit for the same reason load_nights is: a full ORM load would select
@@ -115,15 +128,18 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     samsung = {_as_date(r[0]): r[1] for r in db.execute(_SAMSUNG_SQL, {"uid": user_id, "d0": d0, "d1": d1})}
     # a session on the calendar day BEFORE the wake date constrains that night
     training = {_as_date(r[0]): r[1] for r in db.execute(_TRAINING_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
+    # a nap on the calendar day BEFORE the wake date is the daytime nap that discharged
+    # sleep pressure for THIS night — Night(W) reads naps from W-1 (Q45 closure)
+    naps = {_as_date(r[0]): r[1] for r in db.execute(_NAPS_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
 
     nights = []
-    for (d, tst, se, lo, oob, fw, naps, alc) in rows:
+    for (d, tst, se, lo, oob, fw, alc) in rows:
         if tst is None:
             continue
         d = _as_date(d)
         nights.append(Night(
             date=d, tst_min=tst, se_pct=se, lights_out=lo, out_of_bed=oob, final_wake=fw,
-            naps_min=naps, alcohol_units=alc,
+            naps_min=naps.get(d - timedelta(days=1)), alcohol_units=alc,
             samsung_bedtime=samsung.get(d),
             training_end=training.get(d - timedelta(days=1)),
         ))

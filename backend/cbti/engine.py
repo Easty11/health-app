@@ -96,7 +96,17 @@ ADHERENCE_FAIL_N = 2          # >= this many failures in the cycle -> HOLD — C
 # adopted engagement-first, paired with the smaller MAX_MOVE_MIN so that 4-night noise
 # cannot move the window far. CHOSEN, not derived (unattested; Q55).
 CYCLE_NIGHTS = 4
-NAP_EXCLUDE_MIN = 0           # Q45: ANY nap-flagged night is excluded, not >20
+# Q45 CLOSED (see DECISIONS_LOG): naps OVER 30 min exclude the FOLLOWING night. 0 was a
+# placeholder chosen while the nap's day-referent was unknown — exclude-any was the safe,
+# over-broad policy. The app's PM "naps today" instrument now pins the referent to the day
+# the nap happened (stored via _today_aest), and replay.load_nights attributes each nap to
+# the night it precedes (row W-1 -> Night W). With attribution pinned, 30 is the threshold:
+# sub-30-min naps rarely reach slow-wave sleep, so Process-S discharge is small and the next
+# night's measurement survives. Sub-threshold naps are recorded, not discarded, so block 3+
+# accumulates the data to test whether <=30-min naps shift subsequent-night SE (population-
+# level, Q48-style; per-night outcome adjudication is circular — the contamination is
+# invisible in the metric you'd adjudicate with).
+NAP_EXCLUDE_MIN = 30
 TRAINING_RECOVERY_MIN = 90    # constrained night floor = session end + 90 min
 
 # UNVALIDATED BY THE OBSERVED BLOCK. Not derived from data; the observed
@@ -257,8 +267,11 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
     if night.alcohol_units is not None and night.alcohol_units > 0:
         return NightVerdict(night, False, "alcohol")
 
-    # naps: Q45 — the VA instrument does not say which day a recorded nap belongs
-    # to, so nap-flagged nights are excluded entirely rather than attributed.
+    # naps: Q45 CLOSED. The app's PM instrument pins the nap to its calendar day and
+    # replay.load_nights attributes it to the night it precedes, so a nap reaching this
+    # night is the daytime nap that discharged Process S BEFORE it — excluded when it
+    # clears the slow-wave threshold (NAP_EXCLUDE_MIN). A null is unknown, not clean, so
+    # the `is not None` guard passes it through.
     if night.naps_min is not None and night.naps_min > NAP_EXCLUDE_MIN:
         return NightVerdict(night, False, "nap")
 
@@ -413,12 +426,10 @@ def evaluate_cycle(
     # ── GATE 1: sufficiency ───────────────────────────────────────────────────
     # The reason NAMES WHAT WAS EXCLUDED, not just the shortfall. At a 4-night cadence
     # with a 3-night threshold the margin is one night, so exclusions starve a cycle far
-    # more readily than they did at 7/5 — two nap nights is now enough to stall
-    # titration outright. Q45 excludes ANY nap-flagged night (the instrument does not say
-    # which day a nap belongs to), so a frequent napper can stall repeatedly while the
-    # surface says only "insufficient". Naming the tally makes a stall diagnosable
-    # instead of mysterious. This is SURFACING ONLY — no threshold moves, NAP_EXCLUDE_MIN
-    # is untouched, and Q45 stays open.
+    # more readily than they did at 7/5. Q45's closure RAISED NAP_EXCLUDE_MIN 0 -> 30, which
+    # eases this directly: a sub-30-min nap no longer excludes, so only a genuine (>30 min)
+    # nap night spends a cycle's one-night margin. Naming the tally still makes a stall
+    # diagnosable instead of mysterious when a real exclusion does land.
     if len(valid) < MIN_VALID_NIGHTS:
         tally = Counter(excluded.values())
         detail = ", ".join(f"{reason} x{n}" for reason, n in sorted(tally.items()))

@@ -130,14 +130,14 @@ def test_centre_is_distinct_from_the_current_window():
 # ── nap over-exclusion is named, not silent (Q45 interaction) ────────────────
 
 def test_two_nap_nights_starve_a_four_night_cycle_and_the_reason_says_so():
-    """At 4/3 the margin is a single night, so two nap-flagged nights stall titration
-    outright. Q45 excludes ANY nap night (the instrument does not say which day a nap
-    belongs to), so a frequent napper can stall repeatedly — the HOLD must name the
-    cause or the stall is undiagnosable from the surface.
+    """At 4/3 the margin is a single night, so two genuine (>30 min) nap nights stall
+    titration outright. Q45's exclusion still names the cause on the HOLD, or the stall is
+    undiagnosable from the surface — the threshold only changed which naps count, not the
+    surfacing.
     """
     nights = cycle()
     for n in nights[:2]:
-        n.naps_min = 30
+        n.naps_min = 45
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
 
     assert d.decision == "hold"
@@ -150,7 +150,7 @@ def test_two_nap_nights_starve_a_four_night_cycle_and_the_reason_says_so():
 
 def test_the_starvation_reason_distinguishes_mixed_causes():
     nights = cycle()
-    nights[0].naps_min = 30
+    nights[0].naps_min = 45
     nights[1].alcohol_units = 3
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert "insufficient_nights" in d.reason
@@ -161,15 +161,16 @@ def test_one_nap_night_still_leaves_a_decidable_cycle():
     """Non-vacuity for the guard: one exclusion is survivable at 4/3, so the guard is
     reporting a real edge rather than firing on everything."""
     nights = cycle()
-    nights[0].naps_min = 30
+    nights[0].naps_min = 45
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert "insufficient" not in d.reason
     assert d.basis_nights_n == CYCLE_NIGHTS - 1
 
 
-def test_the_guard_does_not_change_the_nap_predicate():
-    """Surfacing only — Q45 stays open and exclude-all stands. A nap night is still
-    excluded outright, at any duration."""
+def test_the_nap_predicate_is_the_thirty_minute_threshold():
+    """Q45 closed: the predicate is a >30-min threshold, not exclude-all. A sub-threshold
+    nap is kept as data; only a genuine nap (>30 min) is excluded."""
     from cbti.engine import NAP_EXCLUDE_MIN, classify_night
-    assert NAP_EXCLUDE_MIN == 0
-    assert classify_night(night(1, naps=1), RX).reason == "nap"
+    assert NAP_EXCLUDE_MIN == 30
+    assert classify_night(night(1, naps=30), RX).valid          # 30 exactly — kept
+    assert classify_night(night(1, naps=31), RX).reason == "nap"

@@ -162,30 +162,31 @@ def test_adjudicates_against_the_effective_prescription_not_the_seed(db_session)
     assert out.decision == "extend"                     # not a false adherence HOLD
 
 
-def test_excluded_nights_are_surfaced_not_just_counted(db_session):
-    """Q45/Q78 stay open, so the operator must be able to see WHICH nights the decision
-    dropped and why — a count alone hides that some exclusions rest on the unverified
-    date-1 nap attribution. This also pins offer/guard parity (G2): the night the offer
-    surfaces as excluded is EXACTLY the night the engine's GATE-1 nap guard removed from
-    the 4-night window, so the two can never diverge on the cadence that made it matter.
+def test_excluded_nights_are_surfaced_and_attributed_to_the_following_night(db_session):
+    """Offer/guard parity (G2) plus the Q45 attribution: a nap recorded on a calendar day
+    excludes the FOLLOWING night — the one whose Process S it discharged — not the night that
+    already ended that morning. The offer must surface EXACTLY the night the engine's GATE-1
+    nap guard removed, so the two can never diverge on the cadence that made it matter.
     """
     u = _user(db_session)
     start = date.today() - timedelta(days=4)
     b = _block(db_session, u.id, opened=start)
     _rx(db_session, b.id, eff=start)
     _nights(db_session, u.id, start, 4)
-    # a nap night INSIDE the selected 4-night cycle — the guard excludes it (Q45), leaving
-    # 3 valid, still >= MIN_VALID_NIGHTS so a decision is still reached.
+    # A >30-min nap recorded on day start+1. Q45 attributes it to the night it precedes,
+    # Night(start+2), which is inside the selected 4-night cycle — leaving 3 valid, still
+    # >= MIN_VALID_NIGHTS so a decision is still reached.
     napped = db_session.query(models.DailyRecord).filter_by(
         user_id=u.id, date=start + timedelta(days=1)).one()
-    napped.naps_min = 30
+    napped.naps_min = 45
     db_session.commit()
 
     out = get_cbti_evaluation(current_user=u, db=db_session)
-    key = (start + timedelta(days=1)).isoformat()
-    assert out.basis.nights_excluded                       # a dict, date -> reason
-    assert out.basis.nights_excluded.get(key) == "nap"     # the guard's night, surfaced
-    assert out.basis.nights_counted == 3                   # and removed from the basis
+    excluded_key = (start + timedelta(days=2)).isoformat()   # the night AFTER the nap day
+    nap_day_key = (start + timedelta(days=1)).isoformat()    # the nap's own day — NOT excluded
+    assert out.basis.nights_excluded.get(excluded_key) == "nap"   # the following night, surfaced
+    assert nap_day_key not in out.basis.nights_excluded           # off-by-one is fixed
+    assert out.basis.nights_counted == 3                          # one night removed from the basis
 
 
 # ── accept: the witnessed act ────────────────────────────────────────────────
