@@ -8622,3 +8622,60 @@ so the existing node suites pay nothing.
 **Do not revisit unless:** the engine gains night-pooling across sparse cycles, which changes what
 "insufficient" means — a pooled cycle could clear the gate on nights drawn from outside its own span,
 and the flag would then have to say WHICH nights it rests on, not merely that it has enough.
+
+### #NEXT. Nap nights attribute to the night they precede — Q45 closed on operator determination, exclusion logic reversed
+
+**Decision:** A recorded nap attributes to the night it **precedes** — the nap logged on day D belongs
+to the night terminating on the morning of D+1 — implemented as the `naps_min` date-1 read in
+`cbti.replay.load_nights`, and `NAP_EXCLUDE_MIN` rises 0 -> 30 so a sub-30-minute nap no longer
+excludes a night. The attribution convention is **operator-set (2026-08-17), not clinically sourced**;
+Q45's prior bar — confirm the referent from VA protocol documentation or the administering clinician —
+is superseded as the wrong gate for a modelling convention. The previous logic (exclude any
+nap-flagged night, because the instrument does not say which day a nap belongs to) is reversed, and
+every comment asserting that rationale is rewritten to match.
+
+**Rationale:** Which night a nap belongs to is a modelling choice the operator is entitled to make,
+not a fact requiring clinical provenance. The preceding-night attribution is the natural reading of a
+PM-captured nap, and it is the reading the app's own instrument already enforces: `_today_aest`
+records "naps today" against the nap's own calendar day, so for every night live titration runs on the
+referent is fixed by the capture surface rather than inferred from a workbook. A 30-minute floor stops
+trivial naps from stalling titration; it is a CHOSEN floor with the same standing as `CYCLE_NIGHTS`
+and `ADHERENCE_TOL_MIN`, recorded as chosen rather than dressed as derived. Holding the close hostage
+to a VA-protocol citation that may not exist would have stranded a sound convention indefinitely — and
+left the store asserting a provenance it never had.
+
+Two things this decision did NOT do, because both would overclaim. It does not answer the question
+Q45 originally asked: the workbook's scoped-null search stands, is not re-run, and the VA instrument's
+wording still does not settle the referent — this decision says that question no longer *gates* the
+engine. And it does not resolve **Q78**, which stays OPEN: two over-threshold nap nights still starve
+a 4-night cycle at a one-night margin. Q78 was never blocked on the referent but on that data
+consequence, which is why it survives a close that unblocks it.
+
+**Status:** active. **How you know:** reworked onto current master from the orphan branch
+`fix/q45-nap-attribution` (`4f77679`, based on `1e6cf0c`), **re-derived rather than replayed** — the
+orphan predated #218 and would not fast-forward. Backend suite **877 -> 882**, zero regressions;
+frontend **41**, unchanged. #218's accept-confirm suite (`test_cbti_accept_decision_class.py`) was run
+in isolation under the change and is green at 8/8, so the decision-class work is undisturbed. The five
+attribution assertions were **controlled for non-vacuity**: run against master's `replay.py` with the
+reworked tests in place, all five fail — they discriminate the new read, not merely the new threshold.
+Coverage pins the attribution positively and negatively (the nap lands on the night it preceded AND
+not on its own night, so the old same-row read cannot pass), the floor at 30/31 in both directions,
+the read reaching one day OUTSIDE the requested window (the off-by-one that would silently blank the
+first night of every cycle), and a nap on a day carrying no diary row still attributing forward.
+
+The corroborating artifact is that `models.DailyRecord.naps_min` has carried the column comment
+*"Logged PM on date D; belongs to night terminating D+1. Engine reads from (date-1)"* since the column
+was created, while the engine read the nap off the night's own row — a documented contract the code
+never honoured, flagged silent-when-wrong in the model itself. This change makes them agree. Seven
+stale comment sites were found and rewritten, not the three the orphan carried: #218 had independently
+added a fourth Q45 site, and `models.py`, `checkin_v2.py` (x2) and `import_cbti_block.py` were never
+in the orphan's diff at all. One user-facing string changed — the PM hint now reads "Naps over 30 min
+exclude tonight"; note "tonight" was *wrong* under the old same-row read (the nap excluded the night
+that had already ended that morning) and is literal only now.
+
+**Do not revisit unless:** Q78 resolves the frequent-napper exclude-vs-attribute fork in a way that
+changes attribution (not merely exclusion cadence or per-user cadence), or a real VA-protocol
+statement on nap-day attribution surfaces and contradicts the convention. A different value for
+`NAP_EXCLUDE_MIN` is a tuning question inside Q78, not a revisit of this decision — with the standing
+caution that raising it to buy a decidable cycle is tuning the instrument to the outcome.
+
