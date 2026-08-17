@@ -2982,3 +2982,34 @@ one-line set edit.
 
 **State:** OPEN — no blocker; the audit that spawned it is closed. Owner: Luke. Cross-refs `Q23`
 (→ #216), `#216`.
+
+## Q#NEXT. `lab_results.is_derived` is write-dead — no production path ever sets it true
+
+Found while tracing what writes `is_derived = true`, commissioned as the last open input to Brief
+B's placement fork. Nothing does.
+
+- Only two non-test constructions of `LabResult` exist: `routers/labs.py` (the confirm endpoint) and
+  `scripts/gen_interpretation_fixture.py` (fixture generation, not a prod path).
+- The confirm construction **omits `is_derived` entirely**, so every row written takes the column
+  default `false`.
+- `is_derived` is absent from the extraction schema, so the model is never asked for it — there is
+  no inbound path even in principle.
+- The only `true` settings anywhere are three tests assigning the ORM attribute directly.
+
+**The visible consequence:** `context_builder.py`'s stale-derived branch — which appends
+`" (stale — derived, carried from an earlier panel)"` when a derived row predates the latest panel —
+is unreachable in production. It corrupts nothing and is not a gate. It is recorded so nobody later
+debugs it as a mystery, or "fixes" a suffix that never appears by changing something else.
+
+**The fork.** Either the column is dead-by-design — lab-derived markers such as
+`testosterone_free_calculated` are ordinary stored rows whose derived-ness is already carried as
+reference metadata in `marker_groups.json`, which would make the column redundant and better removed
+than left as a trap — or the confirm path was always meant to set it and the wiring was never done.
+Nothing in `#58` settles which, and the two answers point opposite ways.
+
+Not urgent, and explicitly not a blocker on Brief B: B's metrics are computed at read time and
+stored nowhere, so they fit neither `is_derived` channel. That is precisely what closed B's
+placement fork onto a producer output slot of its own rather than a reused flag.
+
+**State:** OPEN — no blocker; the trace that spawned it is complete. Owner: Luke. Cross-refs `#58`
+(the column's origin), `#NEXT` (the session that found it), Brief B's placement fork.
