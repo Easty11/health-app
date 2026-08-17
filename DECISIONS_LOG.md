@@ -8503,3 +8503,62 @@ hold — after the change all six are correct. Suite 860 passed, up from an 838 
 set-membership blocking wholesale — at which point these sets become defaults *under* that layer
 rather than the mechanism — or a cervical / peripheral neural block set is added, which is the
 fall-through this entry deliberately left open.
+
+### 217. Cystatin C mapped to `cystatin_c` and the stored row bound by the standing backfill
+
+**Decision:** `backend/reference/marker_canonical.json` gains one entry — raw `Cystatin C` ->
+`cystatin_c`, `unit_established` `mg/L`, `loinc` null (69 -> 70 entries, all keys unique) — and the
+`#55`-sibling backfill rider was run against prod, binding the single row stored unmapped from the
+SNP draw of 2026-08-04. Data only; no code path changed. `unit_established` is set from the STORED
+`unit_canonical`, not the printed form.
+
+**Rationale:** The row sat with `marker_canonical` NULL, which is what raised the app's "not a known
+marker" banner. While it stays NULL the reads' `COALESCE(marker_canonical, marker_name_raw)`
+partition key treats the raw-keyed row and any future canonical-keyed row for the same analyte as
+two distinct series — the double-count the standing rider exists to prevent, which is why the
+backfill is mandatory on a dictionary expansion rather than a judgement call.
+
+Taking the unit from the STORED string is the whole point of the precision check. The §6
+over-collapse guard is a byte equality (`r.unit_canonical != established_unit`), so a case or form
+variant in the map would have refused the NEXT upload of this marker with a 422 — loud rather than
+silent, but a self-inflicted outage on a marker that had only just been mapped. No §7 homograph
+exists: no other entry shares a token with `Cystatin C`. The `mg/L` shared with `R U-Albumin`
+(`albumin_urine`) is a shared UNIT, not a shared key, and is pinned in the tests so it is not later
+"fixed".
+
+**Status:** active. Landed `2b2f91d`, merged `c71e497` via PR #72; branch merged+deleted. Prod
+backfill applied the same session. Unblocks Brief B (renal derived metrics), whose input marker this
+is; B's placement fork was closed by the same session's `is_derived` trace and is recorded in B's
+spec, not here.
+
+**How you know:** the precision check ran against prod BEFORE the entry was written — row id 220,
+`marker_name_raw` `Cystatin C` at 10 bytes, `unit_canonical` `mg/L`, both byte-exact,
+`marker_canonical` NULL, exactly one row; the unique constraint
+`uq_lab_result_report_marker_raw (lab_report_id, marker_name_raw)` makes the one-row expectation
+constraint-protected rather than merely empirical. Post-deploy (Railway deployment `188c8050`,
+status SUCCESS at commit `c71e497`, prior image `REMOVED`), the backfill dry-run inside the
+container reported the NAMED line `'Cystatin C' -> 'cystatin_c': 1 row(s) would update` with a
+file-wide total of 1 across **70** known mappings — the "70" doubling as the `#116`
+image-discriminating probe, since the prior image would report 69 and print no Cystatin C line at
+all. `--apply` returned `Committed. 1 row(s) backfilled.`; the same dry-run re-run post-apply
+returned 0 rows, so no `Cystatin C` row carries a NULL canonical any longer.
+
+**What this entry does NOT carry:** a direct `SELECT` projection of row 220 post-apply. The written
+literal is `cystatin_c` by construction — the UPDATE binds `:canonical` from the same map lookup the
+dry-run printed — and the post-apply 0-row read proves the NULL is gone, but the row was not
+separately read back. Recorded rather than glossed, per empirical specificity.
+
+Suite 869 passed, up from an 860 baseline (`#216`), on 9 new tests in
+`backend/tests/test_canonical_cystatin_c.py` written to discriminate rather than merely pass: the §6
+refusal is asserted at three wrong units including the case variant `MG/L`, and a null-unit row is
+asserted to PASS — fixing the guard's meaning as unit-CONFLICT, not unit-REQUIRED.
+`test_canonical_urine_acr.py`'s whole-file count assertion moved 69 -> 70; it exists to force that
+notice on every expansion and did.
+
+**Standing-rule compliance:** the `#55`-sibling backfill rider was honoured in full — dry-run gated
+on the named line, then `--apply`, then a post-apply re-read.
+
+**Do not revisit unless:** a future SNP report prints this marker under a different raw label — which
+is a NEW entry, never an edit to this one, since exact-string keying means the old label must keep
+resolving for the stored history — or the extractor's `unit_canonical` normalisation changes form,
+which would trip the §6 guard on this marker and require the map to follow the stored string again.
