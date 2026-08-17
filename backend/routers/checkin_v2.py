@@ -659,6 +659,13 @@ class CBTIEvaluationOut(BaseModel):
     nights_since_effective_from: Optional[int] = None
     decision: Optional[str] = None
     decision_reason: Optional[str] = None
+    # The offered cycle's DECISION CLASS (#NEXT), surfaced so the client need never parse
+    # `decision_reason` to tell a finding from a prescription. False means the engine's
+    # sufficiency gate fired — too few valid nights to adjudicate — and the accept path
+    # will refuse this cycle with a 409. True on every decision-on-merits, converged
+    # HOLDs included. Defaults True so a response carrying no cycle at all (no open
+    # block, cycle in progress) does not read as an insufficiency.
+    sufficient: bool = True
     basis: Optional[CBTIEvaluationBasisOut] = None
 
 
@@ -722,6 +729,7 @@ def get_cbti_evaluation(
     if ev.cycle is not None:
         out.decision = ev.cycle["decision"]
         out.decision_reason = ev.cycle["reason"]
+        out.sufficient = ev.cycle["sufficient"]
         out.basis = _basis_from(ev.cycle, ev.live_rx)
     return out
 
@@ -739,15 +747,32 @@ def accept_cbti_evaluation(
 
     Appends one row and applies the ledger's only two permitted UPDATEs to the prior one
     — `effective_to` and `superseded_by`. The block row is not touched: block close stays
-    engine-driven (#118). Under the hunting engine every eligible decision is a
-    prescription (extend / compress / hold, including a converged HOLD), never a
-    block-ending act, so the successor is always safe to mint.
+    engine-driven (#118). Under the hunting engine every eligible decision-on-merits is a
+    prescription (extend / compress / adherence HOLD / converged HOLD), never a
+    block-ending act, so those successors are always safe to mint.
+
+    NOT every eligible cycle, though. An INSUFFICIENCY HOLD is refused (#NEXT): the engine
+    reached no decision, so there is nothing to record. See the gate below.
     """
     block, ev = _live_evaluation(current_user.id, db)
     if block is None or ev is None:
         raise HTTPException(status_code=409, detail="No open CBT-I block with a live prescription.")
     if not ev.eligible or ev.cycle is None:
         raise HTTPException(status_code=409, detail=f"No cycle to accept: {ev.reason}")
+
+    # An insufficiency HOLD is a FINDING, not a decision (#NEXT, resolving Q101). The
+    # engine could not adjudicate, so there is nothing to prescribe: minting one would
+    # write a prescription whose basis is "we do not know", close the current cycle, and
+    # reset the ~4-day evaluation clock — which is exactly what cost block 2 a fully
+    # logged compress. SERVER-SIDE, not merely hidden client-side: the client's confirm
+    # step (#214) is a deliberation aid, and a UI that omits a control is not an
+    # enforcement. Sits BEFORE the mint and before the idempotency check, which is
+    # untouched — the two 409s answer different questions and neither subsumes the other.
+    if not ev.cycle["sufficient"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Not enough logged nights to adjudicate; nothing to accept.",
+        )
 
     prior = (
         db.query(models.CBTIPrescription)

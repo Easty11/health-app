@@ -201,6 +201,16 @@ class CycleDecision:
     # which are opposite messages. Replaces the `close` decision this branch used to
     # return; the block no longer exits on it.
     converged: bool = False
+    # STRUCTURAL DISCRIMINATOR, not a diagnostic. False on exactly one path — GATE 1,
+    # where the cycle had too few valid nights to adjudicate at all — and True on every
+    # decision-on-merits (extend / compress / adherence HOLD / converged HOLD). The
+    # distinction is not cosmetic: an insufficiency HOLD is a FINDING ("could not
+    # adjudicate"), not a prescription, and #214/#NEXT make it unacceptable server-side.
+    # Before this field the `insufficient_nights:` reason PREFIX was the only carrier,
+    # which made the accept path's correctness rest on string matching — the same class
+    # of coupling `converged` exists to avoid. Mirror `converged`: set at its own gate,
+    # threaded verbatim through `replay()`'s series dict, never recomputed downstream.
+    sufficient: bool = True
     # INSTRUMENTED, NOT GATED. Mean TIB over the basis nights minus the prescribed
     # window: how far the window was over-run in practice. Recorded because it
     # cannot yet be adjudicated — see the TIB-gate note above. Mean-based and so
@@ -424,6 +434,10 @@ def evaluate_cycle(
         detail = ", ".join(f"{reason} x{n}" for reason, n in sorted(tally.items()))
         return CycleDecision(
             decision="hold",
+            # THE ONLY sufficient=False path in the engine. Anything that reads this
+            # flag is asking "is this a decision, or a failure to reach one" — keep the
+            # answer minted here, at the gate that knows.
+            sufficient=False,
             reason=(f"insufficient_nights: {len(valid)} valid of {len(nights)}, "
                     f"need {MIN_VALID_NIGHTS}"
                     + (f" ({len(excluded)} excluded: {detail})" if excluded else "")),
