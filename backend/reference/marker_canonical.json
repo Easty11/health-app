@@ -68,6 +68,12 @@
       "loinc": null
     },
     {
+      "marker_name_raw": "Cystatin C",
+      "marker_canonical": "cystatin_c",
+      "unit_established": "mg/L",
+      "loinc": null
+    },
+    {
       "marker_name_raw": "Glucose fasting",
       "marker_canonical": "glucose_fasting",
       "unit_established": "mmol/L",
