@@ -794,7 +794,7 @@ closed by tonight's gate.
 
 ---
 
-## Q45. The VA CBT-I diary does not say which day a recorded nap belongs to — so the engine excludes nap nights rather than attributing them
+## Q45. Which day a recorded nap belongs to — settled by operator determination, not by the instrument
 
 `daily_records.naps_min` is silent when wrong. The titration engine reads naps for the night
 terminating on wake-date W from `date = W-1`, which is only correct if the instrument's nap item refers
@@ -813,15 +813,43 @@ The detector demonstrably finds temporal qualifiers in this instrument and found
 nap item. Per #110 clause 1, that is the difference between "the wording does not settle it" and
 "nobody looked". **Do not re-run this search.**
 
-**Resolution, adopted:** the engine **excludes nap-flagged nights entirely**, recording them in
-`cbti_prescriptions.excluded_nights` with reason `nap`, rather than attributing them to a date. Two of
-the imported block's 53 nights carry naps, so exclusion costs almost nothing while a wrong attribution
-is silent. This is the standing behaviour until the question is answered, not a placeholder.
+**Former resolution, superseded 2026-08-17:** the engine excluded nap-flagged nights entirely
+(`NAP_EXCLUDE_MIN = 0`), recording them in `cbti_prescriptions.excluded_nights` with reason `nap`,
+rather than attributing them to a date. That was the conservative reading of an ambiguous instrument,
+and it was correct while the referent was genuinely undetermined.
 
-**State:** OPEN — no blocker; the engine's exclusion path is the interim answer. Owner: Luke.
-**Next action to close it:** establish the nap item's referent from the VA CBT-I protocol
-documentation or by asking the clinician who administered the block — not from the workbook, which has
-already been searched to exhaustion.
+**Resolution, adopted 2026-08-17 — OPERATOR DETERMINATION.** A nap attributes to the night it
+**precedes**: the nap recorded on day D belongs to the night terminating on the morning of D+1.
+`cbti.replay.load_nights` performs that read (Night(W) reads row W-1), and `NAP_EXCLUDE_MIN` rises
+0 -> 30, so a sub-30-minute nap no longer excludes.
+
+**The closing bar changed, and that is the substance of this close.** The prior next-action —
+establish the referent from VA CBT-I protocol documentation or the administering clinician — was
+never the right gate. Which night a nap belongs to is a **modelling convention**, not a fact about the
+world awaiting discovery: the operator is entitled to define it, and defining it is what makes the
+stored data interpretable at all. Holding the close hostage to a citation that may not exist would
+have stranded a sound convention indefinitely, and left the store asserting a clinical provenance it
+never had. The convention is also the natural reading of the app's own PM instrument, which records
+"naps today" against the nap's own calendar day (`_today_aest`) — so for every night live titration
+actually runs on, the referent is fixed by the capture surface rather than inferred.
+
+**The scoped null STANDS and is not re-run.** The workbook search recorded above is untouched by this
+close; it remains the record that the VA instrument's wording does not settle the question. This close
+says that question no longer gates the engine — not that it was answered.
+
+**Corollary — a contract finally honoured.** `models.DailyRecord.naps_min` has carried the column
+comment *"Logged PM on date D; belongs to night terminating D+1. Engine reads from (date-1)"* since the
+column was created, while the engine read the nap off the night's own row. The two disagreed, and the
+model's own comment flagged the disagreement silent-when-wrong. This close makes the code match the
+contract the schema always declared.
+
+**Scope of the determination.** It governs app-captured naps, which is every night live titration runs
+on. It does NOT retroactively establish the VA workbook's convention; `import_cbti_block.py` records
+that limit, and it is moot there because the imported block is historical and mints no live verdict.
+
+**State:** DONE → #219. Owner: Luke. **Related:** **Q78** (frequent-napper exclude-vs-attribute at the
+4-night cadence) stays **OPEN** — it was never blocked on the referent, but on the data consequence of
+losing nights at a one-night margin, which the 30-minute floor eases without resolving.
 
 ---
 
@@ -2307,22 +2335,26 @@ Luke chose to land `#164` on the test suite and the enum artifact rather than mi
 
 ---
 
-## Q78. Exclude-all starves a frequent napper at a 4-night cadence — multi-user nap attribution needs solving before anyone else runs a block
+## Q78. Nap exclusion still starves a frequent napper at a 4-night cadence — needs solving before anyone else runs a block
 
-**State:** OPEN. **Blocked by:** Q45 (the nap referent is unknown, so there is nothing to attribute
-*to* yet). **Blocks:** any second user on the CBT-I module.
+**State:** OPEN. **No longer blocked by Q45** (closed → #219, 2026-08-17): the referent is now
+operator-determined, so candidate (a) below is unblocked and (b) is partly taken. **Blocks:** any
+second user on the CBT-I module.
 
-Q45 leaves the VA diary's nap referent unknown, and the engine's response is to exclude ANY
-nap-flagged night outright (`NAP_EXCLUDE_MIN = 0`) rather than attribute it. At the old 7-night
-cadence with a 5-night sufficiency threshold that cost a cycle only when three nights were lost. At
-**4 nights with a 3-night threshold the margin is a single night**: two nap-flagged nights in a cycle
-starve it, and the engine HOLDs.
+**Premise updated 2026-08-17 — the numbers below moved, the fork did not.** The engine no longer
+excludes ANY nap-flagged night; it excludes naps over `NAP_EXCLUDE_MIN`, now **30**, and attributes
+each nap to the night it precedes. At the old 7-night cadence with a 5-night sufficiency threshold a
+lost night cost a cycle only when three were lost. At **4 nights with a 3-night threshold the margin
+is a single night**: two OVER-THRESHOLD nap nights in a cycle still starve it, and the engine HOLDs.
 
-For the current single user (Luke, an infrequent napper) this is tolerable and exclude-all stands —
-it is the conservative reading of an ambiguous instrument, and a wrong attribution corrupts the
-adherence basis silently, where an exclusion only costs a cycle. For a **frequent napper** it is not:
-they would stall indefinitely, and — before this session — silently, with the surface saying only
-"insufficient".
+So #219 eased this question without answering it. It removed the trivial-nap stalls — the ones that
+cost a whole cycle for a 15-minute nap — but a genuine frequent napper, who by definition takes real
+naps, still stalls. That residue is a **data-consequence** fork, not a referent one: it was always
+about what losing nights costs at a one-night margin, which is exactly why it did not close with Q45.
+
+For the current single user (Luke, an infrequent napper) the current setting is tolerable. For a
+**frequent napper** it is not: they would stall repeatedly — though no longer silently, since the
+HOLD names the tally.
 
 **Partially mitigated, not resolved (this session).** The HOLD reason now names the tally
 (`insufficient_nights: 2 valid of 4, need 3 (2 excluded: nap x2)`), so a stall is diagnosable rather
@@ -2330,18 +2362,22 @@ than mysterious. That makes the failure *legible*; it does not make titration *w
 
 Candidates, none costed:
 
-- **(a) Attribute the nap** once Q45's referent is known — the principled fix, wholly gated on Q45.
-- **(b) A duration threshold** (`NAP_EXCLUDE_MIN > 0`) so short naps stop disqualifying a night.
-  Cheap, but picks a number with no more evidence behind it than the current 0.
+- **(a) Attribute the nap** — **TAKEN (#219)**, and it was the principled fix. No longer a candidate;
+  it is the current behaviour. It did not by itself resolve this question.
+- **(b) A duration threshold** (`NAP_EXCLUDE_MIN > 0`) — **PARTLY TAKEN (#219)**, set to 30. Still a
+  live lever, but raising it further to buy a decidable cycle is what the do-not-resolve-by below
+  forbids. The floor moved because the referent was settled, not because a cycle needed saving.
 - **(c) Per-user cadence** — a napper runs a longer cycle, restoring the margin without touching the
   nap predicate at all.
 - **(d) Degrade rather than exclude** — admit the night with a recorded caveat, which trades a clean
   basis for a decidable one.
 
-**Do not resolve by:** loosening `NAP_EXCLUDE_MIN` for the single user to make a cycle decidable. That
-is tuning the instrument to the outcome, and Q45's whole point is that the referent is unknown.
+**Do not resolve by:** loosening `NAP_EXCLUDE_MIN` further to make a cycle decidable. That is tuning
+the instrument to the outcome. **This still stands after #219, and #219 did not cross it:** the floor
+moved because the referent was determined and an amount question replaced a presence question — not
+because a cycle needed rescuing. The justification is the test, not the direction of travel.
 
-**Resolve by:** the second user onboarding to the CBT-I module, whichever comes first with Q45.
+**Resolve by:** the second user onboarding to the CBT-I module. Q45 is no longer a co-condition.
 
 ---
 

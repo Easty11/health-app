@@ -162,30 +162,38 @@ def test_adjudicates_against_the_effective_prescription_not_the_seed(db_session)
     assert out.decision == "extend"                     # not a false adherence HOLD
 
 
-def test_excluded_nights_are_surfaced_not_just_counted(db_session):
-    """Q45/Q78 stay open, so the operator must be able to see WHICH nights the decision
-    dropped and why — a count alone hides that some exclusions rest on the unverified
-    date-1 nap attribution. This also pins offer/guard parity (G2): the night the offer
-    surfaces as excluded is EXACTLY the night the engine's GATE-1 nap guard removed from
-    the 4-night window, so the two can never diverge on the cadence that made it matter.
+def test_excluded_nights_are_surfaced_and_attributed_to_the_following_night(db_session):
+    """The operator must see WHICH nights the decision dropped and why — a count alone
+    hides which night the basis actually rests on. This pins offer/guard parity (G2): the
+    night the offer surfaces as excluded is EXACTLY the night the engine's GATE-1 nap
+    guard removed from the 4-night window, so the two can never diverge on the cadence
+    that made it matter.
+
+    It also pins the Q45 -> #219 attribution end-to-end, through the real router rather
+    than through `load_nights` alone: a nap recorded on day D excludes the night ending
+    the NEXT morning, D+1, not the night that had already ended on the morning of D.
     """
     u = _user(db_session)
     start = date.today() - timedelta(days=4)
     b = _block(db_session, u.id, opened=start)
     _rx(db_session, b.id, eff=start)
     _nights(db_session, u.id, start, 4)
-    # a nap night INSIDE the selected 4-night cycle — the guard excludes it (Q45), leaving
-    # 3 valid, still >= MIN_VALID_NIGHTS so a decision is still reached.
+    # A >30-min nap recorded on day start+1. It attributes forward to Night(start+2),
+    # inside the selected 4-night cycle, leaving 3 valid — still >= MIN_VALID_NIGHTS, so
+    # a decision is reached and the exclusion is visible on a real decision rather than
+    # only on an insufficiency finding.
     napped = db_session.query(models.DailyRecord).filter_by(
         user_id=u.id, date=start + timedelta(days=1)).one()
-    napped.naps_min = 30
+    napped.naps_min = 45
     db_session.commit()
 
     out = get_cbti_evaluation(current_user=u, db=db_session)
-    key = (start + timedelta(days=1)).isoformat()
-    assert out.basis.nights_excluded                       # a dict, date -> reason
-    assert out.basis.nights_excluded.get(key) == "nap"     # the guard's night, surfaced
-    assert out.basis.nights_counted == 3                   # and removed from the basis
+    excluded_key = (start + timedelta(days=2)).isoformat()   # the night the nap PRECEDED
+    nap_day_key = (start + timedelta(days=1)).isoformat()    # the nap's own row-date
+    assert out.basis.nights_excluded                              # a dict, date -> reason
+    assert out.basis.nights_excluded.get(excluded_key) == "nap"   # the guard's night, surfaced
+    assert nap_day_key not in out.basis.nights_excluded           # and NOT the nap's own night
+    assert out.basis.nights_counted == 3                          # one night off the basis
 
 
 # ── accept: the witnessed act ────────────────────────────────────────────────

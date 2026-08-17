@@ -158,7 +158,9 @@ class DailyRecord(Base):
     out_of_bed: Mapped[str | None] = mapped_column(String(5), nullable=True)          # "05:10"
     # naps_min is logged at PM on date D but belongs to the night terminating on
     # wake-date D+1. Stored at PM on D; the titration engine reads it from (date - 1).
-    # Silent when wrong — the attribution lives here, not only in the engine.
+    # LIVE as of #219 — `cbti.replay.load_nights` now performs that read, so this is a
+    # description of the code rather than an unhonoured contract. It was silent-when-wrong
+    # for as long as the two disagreed; keep them in step.
     naps_min: Mapped[int | None] = mapped_column(
         Integer, nullable=True,
         comment="Logged PM on date D; belongs to night terminating D+1. Engine reads from (date-1).",

@@ -1,15 +1,23 @@
-"""PM nap capture (Step A-C) — naps_min stored at PM, default 0 not null, and the
-engine's nap exclusion becomes live for block 3.
+"""PM nap capture (Step A-C) — naps_min stored at PM, default 0 not null, the engine's
+nap exclusion live for an open block, and the Q45 -> #219 attribution.
 
-The load-bearing property is that a blank submits 0, never null: engine.classify_night
-excludes any night with naps_min > 0, guarded on `is not None`, so a null silently
-disables the exclusion. Without PM capture every block-3 night is null and the
-exclusion is structurally dead — this test pins both halves.
+Two load-bearing properties, both silent when broken:
+
+  * A blank submits 0, never null. `engine.classify_night` guards on `is not None`, so a
+    null silently disables the exclusion — every night would look clean rather than
+    unknown. Without PM capture the exclusion is structurally dead.
+  * A nap is attributed to the night it PRECEDES. `replay.load_nights` reads Night(W)'s
+    nap from row W-1. Get this backwards and the engine excludes a night the nap could
+    not have affected while keeping the one it did — a wrong answer that looks like a
+    right one, since both nights are real and both verdicts are well-formed.
+
+This file pins both, plus the 30-minute floor in both directions.
 """
-from datetime import date
+from datetime import date, timedelta
 
 import models
-from cbti.engine import Night, classify_night
+from cbti.engine import NAP_EXCLUDE_MIN, Night, classify_night
+from cbti.replay import load_nights
 from routers.checkin_v2 import AMCheckInIn, NightlyCloseOutIn, TodayOut, submit_pm
 
 
@@ -64,9 +72,18 @@ def _night(naps_min):
                  lights_out="23:45")
 
 
-def test_any_nap_excludes_the_night(db_session=None):
-    v = classify_night(_night(30), "23:45")
+def test_a_nap_over_the_threshold_excludes_the_night(db_session=None):
+    v = classify_night(_night(45), "23:45")
     assert v.valid is False and v.reason == "nap"
+
+
+def test_the_threshold_floor_is_inclusive_and_sub_threshold_naps_are_kept():
+    """The floor is a chosen boundary, so pin it on both sides. A nap AT the threshold
+    is kept (the guard is `>`), and a sub-threshold nap is recorded-but-not-excluded —
+    which is what lets the data accumulate to test the floor later."""
+    assert classify_night(_night(NAP_EXCLUDE_MIN), "23:45").valid is True
+    assert classify_night(_night(NAP_EXCLUDE_MIN - 1), "23:45").valid is True
+    assert classify_night(_night(NAP_EXCLUDE_MIN + 1), "23:45").valid is False
 
 
 def test_zero_nap_is_not_excluded():
@@ -81,3 +98,75 @@ def test_null_nap_is_silently_kept_which_is_the_bug_this_fixes():
     exclusion able to fire at all."""
     v = classify_night(_night(None), "23:45")
     assert v.valid is True     # kept — not because it's clean, but because it's unknown
+
+
+# ── Q45 -> #219 attribution: Night(W) reads the nap recorded on W-1 ───────────────
+
+def _rec(db, uid, d, *, naps_min, tst=380):
+    db.add(models.DailyRecord(
+        user_id=uid, date=d, diary_tst_min=tst, diary_se_pct=90.0,
+        lights_out="22:30", out_of_bed="05:00", final_wake="05:00",
+        naps_min=naps_min, alcohol_units=0,
+    ))
+    db.commit()
+
+
+def test_load_nights_attributes_a_nap_to_the_night_it_precedes(db_session):
+    """A nap recorded on day D discharged the sleep pressure for the night ending the
+    NEXT morning, so it lands on Night(D+1) — not on Night(D), which had already ended
+    that morning. Asserts the positive AND the negative: the old same-row read would
+    still satisfy a test that only checked some night carried the nap."""
+    u = _user(db_session, "loadnights@x.io")
+    d0 = date(2026, 7, 24)
+    _rec(db_session, u.id, d0, naps_min=0)
+    _rec(db_session, u.id, d0 + timedelta(days=1), naps_min=60)   # the nap day
+    _rec(db_session, u.id, d0 + timedelta(days=2), naps_min=0)
+
+    nights = {n.date: n for n in load_nights(db_session, u.id, d0, d0 + timedelta(days=2))}
+    assert nights[d0 + timedelta(days=2)].naps_min == 60   # the night the nap preceded
+    assert nights[d0 + timedelta(days=1)].naps_min == 0    # NOT the nap's own night
+    # the first night has no W-1 row in range, so its nap is unknown, not a spurious 0
+    assert nights[d0].naps_min is None
+
+
+def test_the_attribution_reads_one_day_before_the_window_not_just_inside_it(db_session):
+    """The W-1 read must reach OUTSIDE the requested range. If the nap query shared the
+    night query's window, the first night of every cycle would silently carry no nap —
+    an off-by-one that reads as clean data on exactly the night a cycle starts."""
+    u = _user(db_session, "napwindow@x.io")
+    d0 = date(2026, 7, 24)
+    _rec(db_session, u.id, d0 - timedelta(days=1), naps_min=90)   # OUTSIDE the range below
+    _rec(db_session, u.id, d0, naps_min=0)
+
+    nights = {n.date: n for n in load_nights(db_session, u.id, d0, d0)}
+    assert nights[d0].naps_min == 90
+
+
+def test_a_nap_on_a_day_with_no_diary_row_still_attributes_forward(db_session):
+    """Naps are captured at PM and the diary at AM, so a day can legitimately carry a nap
+    and no `diary_tst_min`. The night query drops such rows; the nap read must not, or a
+    real contaminant vanishes because the napper skipped one morning's diary."""
+    u = _user(db_session, "napnodiary@x.io")
+    d0 = date(2026, 7, 24)
+    _rec(db_session, u.id, d0, naps_min=75, tst=None)      # no diary -> not itself a Night
+    _rec(db_session, u.id, d0 + timedelta(days=1), naps_min=0)
+
+    nights = {n.date: n for n in load_nights(db_session, u.id, d0, d0 + timedelta(days=1))}
+    assert d0 not in nights                                # dropped as a Night, as before
+    assert nights[d0 + timedelta(days=1)].naps_min == 75   # but its nap still attributed
+
+
+def test_attribution_and_threshold_compose_into_the_verdict(db_session):
+    """End-to-end through both halves: the nap crosses a day boundary AND clears the
+    floor before a night is excluded. Pins that neither half alone produces the verdict."""
+    u = _user(db_session, "napcompose@x.io")
+    d0 = date(2026, 7, 24)
+    _rec(db_session, u.id, d0, naps_min=NAP_EXCLUDE_MIN + 15)   # over the floor
+    _rec(db_session, u.id, d0 + timedelta(days=1), naps_min=NAP_EXCLUDE_MIN - 15)  # under
+    _rec(db_session, u.id, d0 + timedelta(days=2), naps_min=0)
+
+    nights = {n.date: n for n in load_nights(db_session, u.id, d0, d0 + timedelta(days=2))}
+    # day d0's over-floor nap excludes the night it precedes
+    assert classify_night(nights[d0 + timedelta(days=1)], "22:30").reason == "nap"
+    # day d0+1's under-floor nap does not exclude the night it precedes
+    assert classify_night(nights[d0 + timedelta(days=2)], "22:30").valid is True

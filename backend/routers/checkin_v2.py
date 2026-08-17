@@ -191,8 +191,9 @@ class NightlyCloseOutIn(BaseModel):
     # PM nap capture (present only while a block is open). The frontend sends 0 for a
     # blank field when a block is open ("asked, no nap") and never null — null means
     # "not asked", which after this only applies to nights before capture existed.
-    # `engine.py` excludes any night with naps_min > 0 (Q45); its guard is
-    # `is not None`, so a null silently leaves the nap exclusion un-firable.
+    # `engine.py` excludes a night whose nap exceeds NAP_EXCLUDE_MIN (30 min, Q45 -> #219),
+    # and the nap recorded here on day D is attributed to the night terminating D+1. Its
+    # guard is `is not None`, so a null silently leaves the nap exclusion un-firable.
     naps_min: Optional[int] = Field(None, ge=0)
     pm_notes: Optional[str] = None      # free-text; observational, not block-gated
 
@@ -641,9 +642,10 @@ class CBTIEvaluationBasisOut(BaseModel):
     n_diary: int = 0
     n_samsung: int = 0
     n_alcohol_unknown: int = 0
-    # date -> exclusion reason. Rendered, not merely counted: some of these are nap
-    # exclusions resting on the UNVERIFIED date-1 nap attribution (Q45, open), so the
-    # operator must be able to see which nights the decision dropped and why.
+    # date -> exclusion reason. Rendered, not merely counted: the operator must be able
+    # to see which nights the decision dropped and why, because an exclusion changes what
+    # the window rests on. Note a nap exclusion is keyed by the night EXCLUDED — the one
+    # the nap preceded — not by the day the nap was recorded (Q45 -> #219).
     nights_excluded: dict[str, str] = Field(default_factory=dict)
     ema_count: int = 0
     move_capped: bool = False

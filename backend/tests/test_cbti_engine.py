@@ -68,13 +68,17 @@ def test_alcohol_unknown_is_distinguishable_from_recorded_zero():
     assert unknown.alcohol_unknown is True and zero.alcohol_unknown is False
 
 
-def test_any_nap_excludes_the_night_per_Q45():
-    """Q45: the instrument does not say which day a nap belongs to, so nap nights
-    are excluded rather than attributed. Not a >20min threshold — any nap."""
-    assert not classify_night(night(1, naps=15), RX).valid
-    assert classify_night(night(1, naps=15), RX).reason == "nap"
+def test_the_nap_predicate_is_a_thirty_minute_threshold_per_Q45():
+    """Q45 -> #219: naps attribute to the night they precede, so the predicate is an
+    AMOUNT question rather than a presence question. Pins the boundary in both
+    directions — the old policy excluded at any duration, so a regression to it would
+    still pass an over-threshold-only assertion."""
+    assert classify_night(night(1, naps=15), RX).valid           # sub-threshold — kept
+    assert classify_night(night(1, naps=30), RX).valid           # exactly 30 — kept, guard is `>`
+    assert not classify_night(night(1, naps=31), RX).valid       # over — excluded
+    assert classify_night(night(1, naps=31), RX).reason == "nap"
     assert not classify_night(night(1, naps=120), RX).valid
-    assert classify_night(night(1, naps=0), RX).valid
+    assert classify_night(night(1, naps=0), RX).valid            # asked, no nap
 
 
 def test_travel_or_match_excluded():
@@ -265,7 +269,7 @@ def test_ema_is_counted_and_never_compresses():
 def test_excluded_nights_are_reason_tagged():
     nights = cycle()
     nights[0].alcohol_units = 3
-    nights[1].naps_min = 30
+    nights[1].naps_min = 45          # over NAP_EXCLUDE_MIN, so this is a real exclusion
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.excluded_nights[nights[0].date.isoformat()] == "alcohol"
     assert d.excluded_nights[nights[1].date.isoformat()] == "nap"

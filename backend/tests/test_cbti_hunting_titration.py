@@ -127,17 +127,17 @@ def test_centre_is_distinct_from_the_current_window():
     assert windows[-1] != centre_estimate(windows)
 
 
-# ── nap over-exclusion is named, not silent (Q45 interaction) ────────────────
+# ── nap exclusion is named, not silent (Q45 -> #219; Q78 interaction) ────────
 
 def test_two_nap_nights_starve_a_four_night_cycle_and_the_reason_says_so():
-    """At 4/3 the margin is a single night, so two nap-flagged nights stall titration
-    outright. Q45 excludes ANY nap night (the instrument does not say which day a nap
-    belongs to), so a frequent napper can stall repeatedly — the HOLD must name the
-    cause or the stall is undiagnosable from the surface.
+    """At 4/3 the margin is a single night, so two excluded nights stall titration
+    outright. Q45's closure (#219) raised the bar to >30 min but did not remove the
+    stall — a frequent napper can still stall repeatedly, which is what Q78 stays open
+    on — so the HOLD must name the cause or the stall is undiagnosable from the surface.
     """
     nights = cycle()
     for n in nights[:2]:
-        n.naps_min = 30
+        n.naps_min = 45
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
 
     assert d.decision == "hold"
@@ -150,7 +150,7 @@ def test_two_nap_nights_starve_a_four_night_cycle_and_the_reason_says_so():
 
 def test_the_starvation_reason_distinguishes_mixed_causes():
     nights = cycle()
-    nights[0].naps_min = 30
+    nights[0].naps_min = 45
     nights[1].alcohol_units = 3
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert "insufficient_nights" in d.reason
@@ -161,15 +161,18 @@ def test_one_nap_night_still_leaves_a_decidable_cycle():
     """Non-vacuity for the guard: one exclusion is survivable at 4/3, so the guard is
     reporting a real edge rather than firing on everything."""
     nights = cycle()
-    nights[0].naps_min = 30
+    nights[0].naps_min = 45
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert "insufficient" not in d.reason
     assert d.basis_nights_n == CYCLE_NIGHTS - 1
 
 
-def test_the_guard_does_not_change_the_nap_predicate():
-    """Surfacing only — Q45 stays open and exclude-all stands. A nap night is still
-    excluded outright, at any duration."""
+def test_the_guard_surfaces_but_does_not_set_the_nap_predicate():
+    """The GATE-1 tally is surfacing only: it reports whatever classify_night excluded
+    and owns no threshold of its own. Q45's closure moved the predicate (0 -> 30) without
+    touching this guard, which is the separation this test pins — read the constant from
+    the engine so the two can never drift into agreeing by coincidence."""
     from cbti.engine import NAP_EXCLUDE_MIN, classify_night
-    assert NAP_EXCLUDE_MIN == 0
-    assert classify_night(night(1, naps=1), RX).reason == "nap"
+    assert NAP_EXCLUDE_MIN == 30
+    assert classify_night(night(1, naps=NAP_EXCLUDE_MIN), RX).valid
+    assert classify_night(night(1, naps=NAP_EXCLUDE_MIN + 1), RX).reason == "nap"
