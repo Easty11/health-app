@@ -659,7 +659,7 @@ class CBTIEvaluationOut(BaseModel):
     nights_since_effective_from: Optional[int] = None
     decision: Optional[str] = None
     decision_reason: Optional[str] = None
-    # The offered cycle's DECISION CLASS (#NEXT), surfaced so the client need never parse
+    # The offered cycle's DECISION CLASS (#218), surfaced so the client need never parse
     # `decision_reason` to tell a finding from a prescription. False means the engine's
     # sufficiency gate fired — too few valid nights to adjudicate — and the accept path
     # will refuse this cycle with a 409. True on every decision-on-merits, converged
@@ -751,7 +751,7 @@ def accept_cbti_evaluation(
     prescription (extend / compress / adherence HOLD / converged HOLD), never a
     block-ending act, so those successors are always safe to mint.
 
-    NOT every eligible cycle, though. An INSUFFICIENCY HOLD is refused (#NEXT): the engine
+    NOT every eligible cycle, though. An INSUFFICIENCY HOLD is refused (#218): the engine
     reached no decision, so there is nothing to record. See the gate below.
     """
     block, ev = _live_evaluation(current_user.id, db)
@@ -760,7 +760,7 @@ def accept_cbti_evaluation(
     if not ev.eligible or ev.cycle is None:
         raise HTTPException(status_code=409, detail=f"No cycle to accept: {ev.reason}")
 
-    # An insufficiency HOLD is a FINDING, not a decision (#NEXT, resolving Q101). The
+    # An insufficiency HOLD is a FINDING, not a decision (#218, resolving Q101). The
     # engine could not adjudicate, so there is nothing to prescribe: minting one would
     # write a prescription whose basis is "we do not know", close the current cycle, and
     # reset the ~4-day evaluation clock — which is exactly what cost block 2 a fully

@@ -205,7 +205,7 @@ class CycleDecision:
     # where the cycle had too few valid nights to adjudicate at all — and True on every
     # decision-on-merits (extend / compress / adherence HOLD / converged HOLD). The
     # distinction is not cosmetic: an insufficiency HOLD is a FINDING ("could not
-    # adjudicate"), not a prescription, and #214/#NEXT make it unacceptable server-side.
+    # adjudicate"), not a prescription, and #214/#218 make it unacceptable server-side.
     # Before this field the `insufficient_nights:` reason PREFIX was the only carrier,
     # which made the accept path's correctness rest on string matching — the same class
     # of coupling `converged` exists to avoid. Mirror `converged`: set at its own gate,

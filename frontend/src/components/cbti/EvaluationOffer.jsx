@@ -97,7 +97,7 @@ export default function EvaluationOffer({ onAccepted }) {
 
   const b = ev.basis
   const excluded = exclusionNote(b?.nights_excluded)
-  // The server's decision-class flag, never a parse of `decision_reason` (#NEXT). Read
+  // The server's decision-class flag, never a parse of `decision_reason` (#218). Read
   // strictly: only an explicit `false` suppresses the accept control, so an older server
   // that omits the field keeps the two-step accept rather than silently going read-only.
   const acceptable = ev.sufficient !== false

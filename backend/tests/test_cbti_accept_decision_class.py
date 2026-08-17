@@ -1,4 +1,4 @@
-"""The accept path discriminates on DECISION CLASS, not on a reason string (#NEXT, Q101).
+"""The accept path discriminates on DECISION CLASS, not on a reason string (#218, Q101).
 
 `test_cbti_eval_trigger.py` pins the OFFER half of #118 — that an insufficiency cycle is
 still offered rather than withheld. This module pins the ACCEPT half, which is the

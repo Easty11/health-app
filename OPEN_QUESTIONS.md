@@ -2970,10 +2970,10 @@ decide" is a finding, not a decision, so there is no event to record and nothing
   what was accepted. Reversing it is an operator matter (a corrective prescription), not a migration.
 
 The harm event was itself the #214 defect firing — a single tap on a live `Accept and prescribe` — so the
-same landing installs #214's two-step confirm restating the actual write. See #NEXT; cross-refs #213 (the
+same landing installs #214's two-step confirm restating the actual write. See #218; cross-refs #213 (the
 first live run), #214 (the confirm defect).
 
-**State:** DONE → #NEXT.
+**State:** DONE → #218.
 
 ---
 

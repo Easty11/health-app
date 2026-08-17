@@ -8565,7 +8565,7 @@ which would trip the §6 guard on this marker and require the map to follow the 
 
 ---
 
-### #NEXT. Q101 resolved — an insufficiency-hold is not an acceptable event; accept gains the #214 restating confirm
+### 218. Q101 resolved — an insufficiency-hold is not an acceptable event; accept gains the #214 restating confirm
 
 **Decision:** The evaluation offer's accept is gated on DECISION CLASS. An insufficiency-hold — the
 engine's GATE 1 firing because fewer than `MIN_VALID_NIGHTS` of the cycle's nights are valid — mints

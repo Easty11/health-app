@@ -41,7 +41,7 @@ export function decisionHeadline(decision, basis) {
   return `${verb} by ${delta > 0 ? '+' : ''}${delta} min`
 }
 
-// The engine reached no decision at all (server `sufficient: false`, #NEXT). The headline
+// The engine reached no decision at all (server `sufficient: false`, #218). The headline
 // must not borrow a decision verb: "Hold the window" reads as a titration outcome the
 // operator could reasonably accept, and that misreading is what #214 turned into a real
 // ledger write. This states the finding instead, and the card carrying it offers no
