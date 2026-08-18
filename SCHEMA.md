@@ -945,7 +945,7 @@ CREATE INDEX ix_interpretation_rephrases_payload_hash
 
 ### 022 — marker_canonical_entries
 
-The canonical marker map, runtime-mutable (migration `a7c3f19d5e28`, DECISIONS_LOG #NEXT, fulfilling #50). Was a module-level dict loaded from `backend/reference/marker_canonical.json` at import; that file is now **only this table's migration seed**. The move exists because #50's "confirmation-populated" half is not buildable against a static repo file — a runtime bind cannot edit a file the app loaded at startup. Seeded at 70 rows (`source='seed'`), with the migration self-checking the inserted count against the JSON's entry count.
+The canonical marker map, runtime-mutable (migration `a7c3f19d5e28`, DECISIONS_LOG #220, fulfilling #50). Was a module-level dict loaded from `backend/reference/marker_canonical.json` at import; that file is now **only this table's migration seed**. The move exists because #50's "confirmation-populated" half is not buildable against a static repo file — a runtime bind cannot edit a file the app loaded at startup. Seeded at 70 rows (`source='seed'`), with the migration self-checking the inserted count against the JSON's entry count.
 
 **`marker_name_raw` is the exact-string lookup key.** No fuzzy matching, no case folding, no normalisation (#50) — a near-match that silently binds is how two different analytes become one series, and the damage only surfaces much later as a trend that never happened. Rows are **global, not per-user**: canonical identity is a property of the marker, not of the reader.
 

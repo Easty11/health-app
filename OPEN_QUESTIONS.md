@@ -3075,3 +3075,45 @@ placement fork onto a producer output slot of its own rather than a reused flag.
 
 **State:** OPEN — no blocker; the trace that spawned it is complete. Owner: Luke. Cross-refs `#58`
 (the column's origin), `#217` (the session that found it), Brief B's placement fork.
+
+
+---
+
+## Q104. `gates.py`/`rephrase.py` read `marker_canonical.json` directly; post-cutover the JSON is a seed snapshot, stale for any runtime-bound marker
+
+After #220 the canonical map lives in `marker_canonical_entries` and is runtime-mutable via
+`POST /labs/canonical/bind`. `backend/interpretation/gates.py` and
+`backend/interpretation/rephrase.py` still load `backend/reference/marker_canonical.json` at
+import. That file is now the table's migration SEED, so it is stale for every marker bound at
+runtime, and these two readers are the only remaining consumers of the stale copy.
+
+**A bound marker does reach them** — this was tested, not assumed, and the phasing rationale
+originally offered (that interpretation only covers grouped markers) is false.
+`producer._ungrouped()` emits every non-grouped panel marker as a flat row and
+`presentation.py:237` builds rephrase fragments from those rows.
+
+**Verified degrades-safe at #220, which is why phasing is disciplined rather than lazy:**
+
+- `rephrase._KNOWN_ENTITIES` is a **detector** allowlist — `rephrase_validator.py` iterates
+  the vocabulary and flags only a word that is IN the set and appears in candidate-but-not-source.
+  A marker absent from the stale set is never tested, so staleness narrows hallucination
+  coverage (a missed detection) but never causes a false rejection.
+- `gates._UNIT_ESTABLISHED` is consulted only for markers authored in `safety_thresholds.json`,
+  which a freshly-bound marker is not, and the absent case falls back to `value_plausibility`
+  (weaker, not wrong).
+
+**The safe-degradation stops holding only if downstream changes:** `_KNOWN_ENTITIES` inverted
+to a permit-list, or `_resolve_band` made to hard-require `_UNIT_ESTABLISHED`. Either change
+must migrate these readers to the DB in the same stroke.
+
+**Migration cost is asymmetric** and is what decided the phasing: `generate_plain` is called
+from an endpoint already holding a `db` and already accepts a `known_entities=` injection param,
+so rephrase is nearly free; `_resolve_band` sits ~4 levels below `build_foundation` inside the
+pure #86 producer, reached via two paths, with no injection param for the unit map — it needs
+a session threaded through ~6 signatures in contract-sensitive machinery.
+
+Resolve by migrating both readers to the DB, or by formalising the JSON as their governed
+snapshot and binding those two downstream changes to this question.
+
+**State:** OPEN — blocks nothing today. Owner: Luke. Cross-refs #220 (the cutover), #50
+(the guard's origin), #86 (the producer pipeline), #202 (the rephrase validator).

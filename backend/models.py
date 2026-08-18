@@ -650,7 +650,7 @@ class LabResult(Base):
 
 
 class MarkerCanonicalEntry(Base):
-    """The canonical marker map, runtime-mutable (DECISIONS_LOG #NEXT, fulfilling #50).
+    """The canonical marker map, runtime-mutable (DECISIONS_LOG #220, fulfilling #50).
 
     Was a startup-loaded dict over `reference/marker_canonical.json`; that file is now
     only this table's migration seed. The move exists so #50's "confirmation-populated"

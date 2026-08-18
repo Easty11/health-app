@@ -29,7 +29,7 @@ function formatDate(iso) {
   return iso.slice(0, 10)
 }
 
-// ---------- inline canonical bind (#NEXT, fulfilling #50) ----------
+// ---------- inline canonical bind (#220, fulfilling #50) ----------
 // The affordance is PRE-write, at CONFIRM. It used to be post-write flat text in
 // `SaveOutcome`, which named the problem after the moment it could be fixed — the row was
 // already stored with a null canonical, and fixing it meant a hand-edited JSON plus a

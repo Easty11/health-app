@@ -38,7 +38,7 @@ from auth import get_current_user
 from database import get_db
 from routers import labs
 
-# The map is a DB table now (#NEXT); this file asserts over the JSON that SEEDS it, which
+# The map is a DB table now (#220); this file asserts over the JSON that SEEDS it, which
 # is the artefact these data-addition tests were always really about. Reading the seed
 # directly keeps the assertions honest about what the migration will insert.
 _CANONICAL_MAP = {

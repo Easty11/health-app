@@ -1,6 +1,6 @@
 """marker_canonical_entries — the canonical marker map becomes a table
 
-DECISIONS_LOG #NEXT (fulfils #50). The map was a startup-loaded dict over
+DECISIONS_LOG #220 (fulfils #50). The map was a startup-loaded dict over
 `backend/reference/marker_canonical.json`; it becomes a runtime-mutable table so a
 confirmation-screen bind can write an entry. The JSON is retained as this migration's
 seed (and as the interpretation layer's snapshot — see Q104), not deleted.

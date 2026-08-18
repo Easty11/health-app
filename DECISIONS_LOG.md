@@ -725,7 +725,7 @@ vs free-T pmol/L both "Testosterone"). Confirmation-population + unit-guard make
 structurally hard. LOINC-from-day-one front-loads interop not needed in proof phase; the internal dict
 is its substrate.
 
-**Status:** Locked (drafted PENDING in LAB_EXTRACTION_SCHEMA §7). Not implemented.
+**Status:** Locked (drafted PENDING in LAB_EXTRACTION_SCHEMA §7). ~~Not implemented.~~ Superseded by #220: fully implemented. The unit-guard landed earlier at confirm (this status line had gone stale against it); the confirmation-populated half landed at #220, where the map became a table and gained a guarded runtime bind. `loinc` remains a carried, dormant column.
 
 **Provenance:** Drafted in chat, marked "carry to Code," never landed. Folded into this pass as
 adjacent drift — logged here rather than separately since both surfaced in the same drift review.
@@ -8679,3 +8679,67 @@ statement on nap-day attribution surfaces and contradicts the convention. A diff
 `NAP_EXCLUDE_MIN` is a tuning question inside Q78, not a revisit of this decision — with the standing
 caution that raising it to buy a decidable cycle is tuning the instrument to the outcome.
 
+
+### 220. Canonical marker map is DB-backed and runtime-mutable via a confirmation-screen bind — #50 fully implemented
+
+**Decision:** The canonical marker map moves from a startup-loaded `marker_canonical.json`
+dict to a `marker_canonical_entries` table, seeded from that JSON. The confirm path and
+`GET /labs/canonical-map` read the table per request; a new `POST /labs/canonical/bind`
+writes an entry and backfills that marker's historical unmapped `LabResult` rows. Bind
+inherits #50's protections — no fuzzy matching, and an over-collapse unit-guard refusing a
+raw->canonical bind (or a historical backfill) whose unit disagrees with the canonical's
+established unit. Binding is offered at the confirm screen but optional; an unbound marker
+still stores null (retain-raw, #58/#155). The JSON becomes the migration seed. This
+implements #50's confirmation-populated half; the over-collapse guard was already live, so
+#50 is now fully realised and its "Not implemented" status is superseded.
+
+**Rationale:** #50's "confirmation-populated" was never buildable against a static repo file
+— a runtime bind cannot edit a file the app loaded at startup. Making the map a table is the
+only architecture that fulfils #50's own word, and it ends the recurring
+hand-edit-JSON-plus-backfill chore (PSA, conjugated bilirubin, CK, Cystatin C were each done
+that way). Bind-triggers-backfill is what makes a bind worth doing — it promotes history,
+not just future uploads (#159). The unit-guard is carried into the bind and the backfill
+because that is where over-collapse would newly enter once identity is mutable at runtime.
+
+**Scope correction — the interpretation readers are PHASED, and the brief's reason for
+phasing them was wrong.** Two readers outside `labs.py` keep reading the JSON
+(`interpretation/gates.py`, `interpretation/rephrase.py`). The brief proposed phasing them on
+the hypothesis that interpretation only covers grouped markers, so a freshly-bound-ungrouped
+marker could never reach them. That hypothesis is FALSE and was tested rather than assumed:
+`producer._ungrouped()` emits every non-grouped panel marker as a flat row and
+`presentation.py:237` builds rephrase fragments from them, so a bound-ungrouped marker does
+reach `rephrase`. Phasing is still correct, on a different and narrower mechanism — both
+readers degrade SAFE, and the migration cost is asymmetric:
+
+- `rephrase._KNOWN_ENTITIES` is a **detector** allowlist, not a permit-list
+  (`rephrase_validator.py` iterates the vocabulary and rejects only a word that is IN the set
+  and appears in candidate-but-not-source). A marker absent from the stale set is never
+  tested, so staleness narrows hallucination coverage — a missed detection — and can never
+  cause a false rejection.
+- `gates._UNIT_ESTABLISHED` is consulted only inside `_resolve_band`, reachable only when
+  `safety_gate` finds the marker authored in `safety_thresholds.json`, which a freshly-bound
+  marker is not; and the absent case already falls back to `value_plausibility` — weaker, not
+  wrong.
+- Migration cost decided the split: `generate_plain` is called from an endpoint already
+  holding a `db` and already takes a `known_entities=` injection param, so rephrase could
+  migrate almost free. `_resolve_band` sits ~4 levels below `build_foundation` inside the pure
+  #86 producer, reached by two paths, with no injection param for the unit map — migrating it
+  means threading a session through ~6 signatures in contract-sensitive machinery. Since
+  either reader needing that threading disqualifies the cheap path, both stay on JSON and the
+  hazard is tracked as Q104, which names the two downstream changes that would end the
+  safe degradation.
+
+**Status:** active.
+
+**How you know:** migration seeds the 70 current entries and self-checks the inserted count
+against the JSON (verified by replaying it in isolation on a scratch SQLite — the full chain
+cannot replay there, an older unrelated migration uses Postgres-only `ALTER ... DROP DEFAULT`);
+over-collapse refusal proven at confirm (pre-existing tests, still green) and at bind, both
+bind-time and backfill-time, with the refused bind promoting zero rows; a bound marker
+resolves at the very next confirm with no restart; an unbound marker still stores null.
+Backend 882 -> 890, frontend 41 -> 47.
+
+**Do not revisit unless:** the map needs per-user scoping (it is global by design — canonical
+identity is not user-specific), or LOINC leaves dormancy at B2B.
+
+---

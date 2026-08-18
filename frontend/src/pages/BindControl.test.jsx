@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The confirmation-screen canonical bind (#NEXT, fulfilling #50).
+// The confirmation-screen canonical bind (#220, fulfilling #50).
 //
 // Like `EvaluationOffer.test.jsx`, the assertions here are mostly about the NETWORK: what
 // gets posted, and what the operator is shown when the server refuses. Two properties are

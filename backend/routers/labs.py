@@ -27,7 +27,7 @@ def _canonical_map(db: Session) -> dict[str, dict]:
     """The canonical marker map, read from `marker_canonical_entries` per request.
 
     Was a module-level dict loaded from `reference/marker_canonical.json` at import.
-    It is a per-request query now (#NEXT) because the map is runtime-mutable: a bind
+    It is a per-request query now (#220) because the map is runtime-mutable: a bind
     writes a row, and a cached dict would serve the pre-bind map to the very confirm
     the operator just bound for. No cache is warranted at this volume either — a panel
     is ~20 rows and confirms are rare — so freshness costs one indexed scan of ~70 rows.
@@ -360,7 +360,7 @@ def get_canonical_map(
     return _canonical_map(db)
 
 
-# ---------- POST /labs/canonical/bind (#NEXT, fulfilling #50) ----------
+# ---------- POST /labs/canonical/bind (#220, fulfilling #50) ----------
 
 class CanonicalBindIn(BaseModel):
     """One raw->canonical binding, supplied EXACTLY by the operator.

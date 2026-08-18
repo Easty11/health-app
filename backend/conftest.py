@@ -32,7 +32,7 @@ _SEED_PATH = Path(__file__).resolve().parent / "reference" / "marker_canonical.j
 
 
 def _seed_canonical_entries(session) -> None:
-    """Seed `marker_canonical_entries` exactly as the migration does (#NEXT).
+    """Seed `marker_canonical_entries` exactly as the migration does (#220).
 
     `create_all` builds the table but not its contents, while in production the map
     arrives via the migration's seed. Without this, every confirm-path test would see an
