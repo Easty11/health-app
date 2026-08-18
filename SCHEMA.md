@@ -32,6 +32,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 019 — cbti_isi                FK to cbti_blocks (SET NULL, nullable) — ISI outcome-measure administrations
 020 — capability_observations FK to users (CASCADE) — append-only capability measurement ledger
 021 — interpretation_rephrases  no FK — disposable plain-register overlay + promotion state
+022 — marker_canonical_entries  FK to users (created_by_user_id, SET NULL, nullable) — runtime-mutable canonical marker map
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -941,6 +942,38 @@ CREATE TABLE interpretation_rephrases (
 CREATE INDEX ix_interpretation_rephrases_payload_hash
     ON interpretation_rephrases (payload_hash);
 ```
+
+### 022 — marker_canonical_entries
+
+The canonical marker map, runtime-mutable (migration `a7c3f19d5e28`, DECISIONS_LOG #NEXT, fulfilling #50). Was a module-level dict loaded from `backend/reference/marker_canonical.json` at import; that file is now **only this table's migration seed**. The move exists because #50's "confirmation-populated" half is not buildable against a static repo file — a runtime bind cannot edit a file the app loaded at startup. Seeded at 70 rows (`source='seed'`), with the migration self-checking the inserted count against the JSON's entry count.
+
+**`marker_name_raw` is the exact-string lookup key.** No fuzzy matching, no case folding, no normalisation (#50) — a near-match that silently binds is how two different analytes become one series, and the damage only surfaces much later as a trend that never happened. Rows are **global, not per-user**: canonical identity is a property of the marker, not of the reader.
+
+**`unit_established` is legitimately nullable** (4 of the 70 seed rows) — a unitless marker (eGFR, a ratio) has no established unit. Null means NOT ESTABLISHED, which the over-collapse guard reads as "no unit claim to contradict", never as a mismatch.
+
+**Read per request, not cached.** `labs.py::_canonical_map` queries on every confirm and every `/labs/canonical-map`. A cached dict would serve the pre-bind map to the very confirm the operator just bound for. At ~70 rows with rare confirms the freshness costs one indexed scan.
+
+**`loinc` is dormant** (#50's B2B field, carried, never read). **`display_name` is column-only and unwired** — present so the queued display-name lane needs no second migration.
+
+```sql
+CREATE TABLE marker_canonical_entries (
+    id                 INTEGER PRIMARY KEY,
+    marker_name_raw    VARCHAR(100) NOT NULL,       -- exact-string lookup key
+    marker_canonical   VARCHAR(100),                -- nullable: a declared-novel entry may bind later
+    unit_established   VARCHAR(50),                 -- nullable: unitless markers, per §6
+    loinc              VARCHAR(20),                 -- dormant, #50 B2B
+    display_name       VARCHAR(100),                -- column only, unwired
+    source             VARCHAR(10) NOT NULL,        -- 'seed' | 'bind'
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT uq_marker_canonical_entries_raw UNIQUE (marker_name_raw)
+);
+
+CREATE INDEX ix_marker_canonical_entries_marker_name_raw  ON marker_canonical_entries (marker_name_raw);
+CREATE INDEX ix_marker_canonical_entries_marker_canonical ON marker_canonical_entries (marker_canonical);
+```
+
+**Writes.** `POST /labs/canonical/bind` is the only runtime writer (`source='bind'`). It refuses 409 on an already-mapped raw name (a mapped marker is not unmapped; binding it is a category error, not an update) and 422 on over-collapse — at bind time (the canonical already established at a different unit) and at backfill time (a historical `lab_results` row carrying a disagreeing unit). A bind promotes that marker's historical rows where `marker_canonical IS NULL`; a refused bind promotes **nothing**, since a half-migrated series is harder to see and harder to undo than a refusal.
 
 ## Canonical Metric Type Whitelist
 

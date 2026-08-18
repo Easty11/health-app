@@ -3,7 +3,6 @@ import json
 import os
 import re
 from datetime import date, datetime
-from pathlib import Path
 from typing import Literal
 
 import anthropic
@@ -24,16 +23,27 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
 router = APIRouter(prefix="/labs", tags=["labs"])
 
-_CANONICAL_PATH = Path(__file__).resolve().parent.parent / "reference" / "marker_canonical.json"
+def _canonical_map(db: Session) -> dict[str, dict]:
+    """The canonical marker map, read from `marker_canonical_entries` per request.
 
+    Was a module-level dict loaded from `reference/marker_canonical.json` at import.
+    It is a per-request query now (#NEXT) because the map is runtime-mutable: a bind
+    writes a row, and a cached dict would serve the pre-bind map to the very confirm
+    the operator just bound for. No cache is warranted at this volume either — a panel
+    is ~20 rows and confirms are rare — so freshness costs one indexed scan of ~70 rows.
 
-def _load_canonical_map() -> dict[str, dict]:
-    with open(_CANONICAL_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return {entry["marker_name_raw"]: entry for entry in data["entries"]}
-
-
-_CANONICAL_MAP = _load_canonical_map()
+    The returned shape is the one `/canonical-map`'s frontend consumers already read:
+    `{marker_name_raw: {marker_name_raw, marker_canonical, unit_established, loinc}}`.
+    """
+    return {
+        e.marker_name_raw: {
+            "marker_name_raw": e.marker_name_raw,
+            "marker_canonical": e.marker_canonical,
+            "unit_established": e.unit_established,
+            "loinc": e.loinc,
+        }
+        for e in db.query(models.MarkerCanonicalEntry).all()
+    }
 
 
 # ---------- schemas (LAB_EXTRACTION_SCHEMA v0.3 §2/§3) ----------
@@ -343,10 +353,137 @@ fences, no commentary — the response body must be valid JSON and nothing else.
 @router.get("/canonical-map")
 def get_canonical_map(
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Read-only lookup so the confirmation screen can flag unmapped markers
     client-side, before /labs/confirm does the authoritative resolution."""
-    return _CANONICAL_MAP
+    return _canonical_map(db)
+
+
+# ---------- POST /labs/canonical/bind (#NEXT, fulfilling #50) ----------
+
+class CanonicalBindIn(BaseModel):
+    """One raw->canonical binding, supplied EXACTLY by the operator.
+
+    Nothing is guessed. #50 refused fuzzy matching because a near-match that silently
+    binds is how two different analytes become one series, and the damage is only
+    visible much later as a trend that never happened."""
+    marker_name_raw: str
+    marker_canonical: str
+    unit_established: str | None = None
+
+
+class CanonicalBindOut(BaseModel):
+    marker_name_raw: str
+    marker_canonical: str
+    unit_established: str | None
+    backfilled_rows: int
+
+
+@router.post("/canonical/bind", status_code=status.HTTP_201_CREATED, response_model=CanonicalBindOut)
+def bind_canonical_marker(
+    body: CanonicalBindIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Bind an unmapped raw marker name to a canonical id, and promote its history.
+
+    Backfill is the point of binding. Without it a bind only helps future uploads, while
+    every already-stored row of that marker stays `marker_canonical IS NULL` and the reads'
+    `COALESCE(marker_canonical, marker_name_raw)` partition keeps them in a separate series
+    — the marker becomes a live series the moment it is promoted (#159), not at the next draw.
+
+    Two refusals, both the over-collapse guard (§6, the reason #50 exists) at the two
+    points where identity newly becomes mutable at runtime:
+
+      * bind-time — the canonical already exists on another row with an established unit
+        that disagrees. This is total-T nmol/L vs free-T pmol/L caught before it merges.
+      * backfill-time — a historical row of this raw name carries a unit that disagrees
+        with the unit being established. Same fault, surfacing from history instead of
+        from the map, and it refuses the WHOLE bind rather than promoting a mismatched
+        unit into a shared series. Partial promotion would be the worse outcome: half a
+        series migrated is harder to see, and harder to undo, than a refused bind.
+    """
+    existing = (
+        db.query(models.MarkerCanonicalEntry)
+        .filter(models.MarkerCanonicalEntry.marker_name_raw == body.marker_name_raw)
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"'{body.marker_name_raw}' is already mapped to "
+                f"'{existing.marker_canonical}' — binding an already-mapped marker is not "
+                f"an update path. Change it via a governed map edit, not a bind."
+            ),
+        )
+
+    # Over-collapse guard, bind-time.
+    if body.unit_established:
+        clash = (
+            db.query(models.MarkerCanonicalEntry)
+            .filter(
+                models.MarkerCanonicalEntry.marker_canonical == body.marker_canonical,
+                models.MarkerCanonicalEntry.unit_established.isnot(None),
+                models.MarkerCanonicalEntry.unit_established != body.unit_established,
+            )
+            .first()
+        )
+        if clash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Over-collapse guard: canonical '{body.marker_canonical}' is already "
+                    f"established in unit '{clash.unit_established}' (via "
+                    f"'{clash.marker_name_raw}'), but this bind establishes "
+                    f"'{body.unit_established}' — refusing to merge two analytes into one series."
+                ),
+            )
+
+    historical = (
+        db.query(models.LabResult)
+        .filter(
+            models.LabResult.marker_name_raw == body.marker_name_raw,
+            models.LabResult.marker_canonical.is_(None),
+        )
+        .all()
+    )
+
+    # Over-collapse guard, backfill-time — validate every row before promoting any.
+    if body.unit_established:
+        for row in historical:
+            if row.unit_canonical and row.unit_canonical != body.unit_established:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Over-collapse guard: stored result id={row.id} for "
+                        f"'{body.marker_name_raw}' carries unit '{row.unit_canonical}', but "
+                        f"this bind establishes '{body.unit_established}' — refusing the bind "
+                        f"rather than promoting a mismatched unit into '{body.marker_canonical}'."
+                    ),
+                )
+
+    entry = models.MarkerCanonicalEntry(
+        marker_name_raw=body.marker_name_raw,
+        marker_canonical=body.marker_canonical,
+        unit_established=body.unit_established,
+        loinc=None,
+        display_name=None,
+        source="bind",
+        created_by_user_id=current_user.id,
+    )
+    db.add(entry)
+    for row in historical:
+        row.marker_canonical = body.marker_canonical
+    db.commit()
+
+    return CanonicalBindOut(
+        marker_name_raw=body.marker_name_raw,
+        marker_canonical=body.marker_canonical,
+        unit_established=body.unit_established,
+        backfilled_rows=len(historical),
+    )
 
 
 # ---------- GET /labs/results (#59 read-back consumer) ----------
@@ -563,9 +700,10 @@ def confirm_lab_report(
 
     unmapped: list[str] = []
     resolved: list[tuple[ResultItem, str | None, str | None]] = []
+    canonical_map = _canonical_map(db)
 
     for r in body.results:
-        entry = _CANONICAL_MAP.get(r.marker_name_raw)
+        entry = canonical_map.get(r.marker_name_raw)
         if entry:
             resolved.append((r, entry["marker_canonical"], entry.get("unit_established")))
         else:

@@ -649,6 +649,32 @@ class LabResult(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class MarkerCanonicalEntry(Base):
+    """The canonical marker map, runtime-mutable (DECISIONS_LOG #NEXT, fulfilling #50).
+
+    Was a startup-loaded dict over `reference/marker_canonical.json`; that file is now
+    only this table's migration seed. The move exists so #50's "confirmation-populated"
+    half is buildable at all — a runtime bind cannot edit a file the app loaded at import.
+
+    `marker_name_raw` is the exact-string lookup key (no fuzzy matching, #50). Rows are
+    global, not per-user: canonical identity is a property of the marker, not the reader.
+    `unit_established` is legitimately nullable — a unitless marker (eGFR, ratios) has no
+    established unit, and null means NOT ESTABLISHED, which the over-collapse guard reads
+    as "no unit claim to contradict" rather than as a mismatch.
+    """
+    __tablename__ = "marker_canonical_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    marker_name_raw: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    marker_canonical: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    unit_established: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    loinc: Mapped[str | None] = mapped_column(String(20), nullable=True)  # #50's dormant B2B field
+    display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)  # column only, unwired
+    source: Mapped[str] = mapped_column(String(10), nullable=False)  # 'seed' | 'bind'
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
 class HevyExerciseTemplate(Base):
     """Synced Hevy exercise templates — defaults + per-user customs (DECISIONS_LOG #61).
 

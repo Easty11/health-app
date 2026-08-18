@@ -11,6 +11,14 @@ distinct series — double-counting one marker as two in the latest-per-marker
 partition. Generalised (not hardcoded to #57's four) so it also serves the
 next vocab bump without a code change.
 
+BULK-ONLY as of #NEXT. Per-marker binding is now a runtime path — POST /labs/canonical/bind
+writes the canonical entry AND promotes that marker's history in one transaction, guarded,
+from the confirmation screen. This script is not rebuilt on top of the new
+`marker_canonical_entries` table: it still reads marker_canonical.json, which survives as
+that table's migration seed, so it remains correct for a BULK re-run over the seeded
+vocabulary. It does not see runtime-bound entries. Reach for it when you have edited the
+JSON en masse; reach for the endpoint when you are binding one marker.
+
 Usage:
     python backend/backfill_marker_canonical.py            # dry run (default)
     python backend/backfill_marker_canonical.py --apply     # write
