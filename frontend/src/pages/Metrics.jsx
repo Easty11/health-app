@@ -29,9 +29,115 @@ function formatDate(iso) {
   return iso.slice(0, 10)
 }
 
+// ---------- inline canonical bind (#220, fulfilling #50) ----------
+// The affordance is PRE-write, at CONFIRM. It used to be post-write flat text in
+// `SaveOutcome`, which named the problem after the moment it could be fixed — the row was
+// already stored with a null canonical, and fixing it meant a hand-edited JSON plus a
+// backfill script run. Binding here promotes the marker's history too, so the series is
+// whole the moment the operator presses confirm.
+//
+// Binding stays OPTIONAL. An unbound row still stores its raw name with a null canonical
+// (#58/#155 retain-raw) — making a bind mandatory to confirm would turn a "we don't know
+// this marker yet" into a blocked upload.
+
+export function BindControl({ rawName, onBound }) {
+  const [open, setOpen] = useState(false)
+  const [canonical, setCanonical] = useState('')
+  const [unit, setUnit] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [bound, setBound] = useState(null)
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!canonical.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api.post('/labs/canonical/bind', {
+        marker_name_raw: rawName,
+        marker_canonical: canonical.trim(),
+        // Empty means NOT ESTABLISHED, which is a real state for a unitless marker (§6) —
+        // so it is sent as null, never as an empty string the guard would compare against.
+        unit_established: unit.trim() || null,
+      })
+      setBound(res.data)
+      await onBound()
+    } catch (err) {
+      // The guard refusals (409 already-mapped, 422 over-collapse) carry a string `detail`
+      // that names the exact clash. It must reach the operator intact — a generic "bind
+      // failed" would hide the one thing that makes the refusal actionable.
+      setError(formatApiError(err, 'Could not bind this marker — the server gave no reason.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (bound) {
+    return (
+      <div className="mt-1 text-xs text-emerald-700">
+        Bound to <span className="font-mono font-medium">{bound.marker_canonical}</span>
+        {bound.backfilled_rows > 0 && ` — ${bound.backfilled_rows} historical ${bound.backfilled_rows === 1 ? 'row' : 'rows'} promoted`}
+      </div>
+    )
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 text-xs text-amber-700 underline hover:text-amber-900"
+      >
+        Not a known marker — bind it
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-2 space-y-1">
+      <input
+        autoFocus
+        value={canonical}
+        onChange={(e) => setCanonical(e.target.value)}
+        placeholder="canonical id (e.g. lipoprotein_a)"
+        aria-label={`Canonical name for ${rawName}`}
+        className="w-full rounded border border-gray-300 px-2 py-1 text-xs font-mono"
+      />
+      <input
+        value={unit}
+        onChange={(e) => setUnit(e.target.value)}
+        placeholder="established unit (blank if unitless)"
+        aria-label={`Established unit for ${rawName}`}
+        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+      />
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={busy || !canonical.trim()}
+          className="rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+        >
+          {busy ? 'Binding…' : 'Bind'}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setOpen(false); setError(null) }}
+          className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="rounded bg-red-50 px-2 py-1 text-xs text-red-700">{error}</p>
+      )}
+    </form>
+  )
+}
+
+
 // ---------- row component ----------
 
-function ResultRow({ r, canonicalMap }) {
+function ResultRow({ r, canonicalMap, onBound }) {
   const suspect = isSuspect(r, canonicalMap)
   const flagged = !suspect && isClinicalFlag(r)
   const rowClass = suspect
@@ -43,7 +149,12 @@ function ResultRow({ r, canonicalMap }) {
 
   return (
     <tr className={rowClass}>
-      <td className="px-3 py-2 text-sm text-gray-800">{r.marker_name_raw}</td>
+      <td className="px-3 py-2 text-sm text-gray-800">
+        {r.marker_name_raw}
+        {!canonicalMap[r.marker_name_raw] && (
+          <BindControl rawName={r.marker_name_raw} onBound={onBound} />
+        )}
+      </td>
       <td className="px-3 py-2 text-sm font-medium text-gray-900 tabular-nums">{formatValue(r)}</td>
       <td className="px-3 py-2 text-xs text-gray-500">{r.unit_canonical || r.unit_raw || '—'}</td>
       <td className="px-3 py-2 text-xs text-gray-500 tabular-nums">{formatRefRange(r)}</td>
@@ -422,8 +533,15 @@ export default function Metrics() {
     api.get('/labs/results').then((res) => setStoredReports(res.data)).catch(() => setStoredReports([]))
   }
 
+  // Named (not inlined in the effect) because a successful bind must re-read it: the row
+  // the operator just bound has to resolve BEFORE they press confirm, or confirm writes
+  // the null they were trying to avoid.
+  function loadCanonicalMap() {
+    return api.get('/labs/canonical-map').then((res) => setCanonicalMap(res.data)).catch(() => {})
+  }
+
   useEffect(() => {
-    api.get('/labs/canonical-map').then((res) => setCanonicalMap(res.data)).catch(() => {})
+    loadCanonicalMap()
     loadStored()
   }, [])
 
@@ -610,7 +728,7 @@ export default function Metrics() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {sortedResults.map((r, i) => (
-                        <ResultRow key={i} r={r} canonicalMap={canonicalMap} />
+                        <ResultRow key={i} r={r} canonicalMap={canonicalMap} onBound={loadCanonicalMap} />
                       ))}
                     </tbody>
                   </table>

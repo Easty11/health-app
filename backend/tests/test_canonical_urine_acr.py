@@ -37,7 +37,17 @@ from starlette.testclient import TestClient
 from auth import get_current_user
 from database import get_db
 from routers import labs
-from routers.labs import _CANONICAL_MAP
+
+# The map is a DB table now (#220); this file asserts over the JSON that SEEDS it, which
+# is the artefact these data-addition tests were always really about. Reading the seed
+# directly keeps the assertions honest about what the migration will insert.
+_CANONICAL_MAP = {
+    e["marker_name_raw"]: e
+    for e in json.loads(
+        (Path(labs.__file__).resolve().parent.parent / "reference" / "marker_canonical.json")
+        .read_text(encoding="utf-8")
+    )["entries"]
+}
 
 COLLECTED_ISO = "2026-08-04T08:35:00+10:00"
 
