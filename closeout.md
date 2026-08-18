@@ -1,184 +1,152 @@
-# Session close-out
-
-Session of 2026-08-17 (second of the day). Session-open maxima read **#218 / Q103** and
-were unmoved from the brief's expectation. Master max now **#219 / Q103** — this session
-minted one decision and closed one question; it opened none.
-
-The work: land the nap-attribution change reworked onto current master, close Q45, and
-discharge an orphan branch that had been carrying the first attempt invisibly.
-
----
+# closeout — 2026-08-18 (canonical marker map → DB-backed, confirmation-screen bind)
 
 ## 1. Real commits this session
 
-`git log --oneline ad7d96a..HEAD`:
+Session-open ref `b0093d3`. `git log --oneline b0093d3..HEAD`:
 
 ```
-a8546b7 Merge pull request #78 from Easty11/fix/q45-nap-attribution-rework
-ff50c03 gov: resolve #NEXT -> #219 at merge (master max re-read #218/Q103)
-bba06ea gov: close Q45 on operator determination (#NEXT), re-premise Q78, retire the dated ROADMAP row
-cca3def fix(cbti): attribute naps to the night they precede, raise NAP_EXCLUDE_MIN 0->30
-7964b46 gov: row the orphan fix/q45-nap-attribution before touching it
+bef724a Merge pull request #80 from Easty11/feat/canonical-map-db-bind
+3e6ffbe gov: DECISIONS_LOG #220, OPEN_QUESTIONS Q104, #50 status superseded, BRANCHES row
+2c4b0fa feat(metrics): inline canonical bind on the confirmation screen
+93cd187 feat(labs): canonical marker map becomes a DB table with a guarded runtime bind
 ```
 
-Five commits, all landed on master via PR #78. Nothing is provisional; the working tree is
-clean.
+One branch, `feat/canonical-map-db-bind`, landed via PR #80. Schema + backend + frontend
+were one concern (the bind feature) split into three commits internally.
 
-**Deviation from the one-gov-commit-per-session rule, deliberate and ordered by the brief.**
-`7964b46` is a `gov:` commit made FIRST, before any code was touched, because the brief made
-the orphan's `BRANCHES.md` row a gate on touching it at all — the row had to exist before the
-work it describes began. That is three `gov:` commits this session rather than one batched at
-close-out. The batching rule exists to stop governance interleaving with feature work
-mid-session; here the ordering was the point. Flagged rather than silently absorbed.
+**Numbers claimed at merge:** `#NEXT` → **#220**, `Q#NEXT` → **Q104**, against master's max
+re-read immediately before merging (**#219 / Q103** — unchanged between resolve and merge, so
+strict mode forced no pause).
 
----
+**Suites:** backend **882 → 890** (+8), frontend **41 → 47** (+6). Both baselined before edits
+and re-run after; zero regressions. The interpretation-layer tests — the canary for the
+step-1(b) decision — stayed green throughout.
+
+**Deploy verified on both services (#116/#121), after SUCCESS on the deploy:**
+- Backend, discriminating probe: `/openapi.json` lists `/labs/canonical/bind`, a path only
+  the new image carries.
+- Prod DB (read-only query via `railway run`, no secret rendered): `alembic_version` =
+  `a7c3f19d5e28`, `marker_canonical_entries` holds **70 rows, all `source='seed'`**, 4 null
+  units, `Cystatin C → ('cystatin_c', 'mg/L')`.
+- Frontend, served bundle `assets/index-D1nSJ_7O.js`: carries `Not a known marker`,
+  `canonical/bind`, `established unit` — all new-code-only strings.
 
 ## 2. Pending-queue reconciliation
 
-**No pending-commit queue was carried into this session.** The brief was delivered directly
-and carried no `PENDING` items from a chat close-out (`;cc`). Nothing to reconcile.
+**No `PENDING` items were carried in.** This session ran from a dispatch brief, not a `;cc`
+pending-commit queue. Nothing decided this session is uncommitted — the three commits above
+plus this close-out are the whole of it.
 
-Every item the brief itself specified landed:
+Two items the brief specified that landed as specified: the migration self-check on the seed
+count, and the over-collapse guard at both bind-time and backfill-time.
 
-| Brief step | Landed in | Status |
-|---|---|---|
-| 1 · Row the orphan before touching it | `7964b46` | DONE |
-| 2 · Report the three VERIFY findings before staging | reported pre-edit, no commit | DONE |
-| 3 · Rework the engine (re-derive, not replay) | `cca3def` | DONE |
-| 4 · Tests re-derived onto master | `cca3def` | DONE |
-| 5 · Close Q45, re-premise Q78, retire the ROADMAP row | `bba06ea` | DONE |
-| 6 · Land per ritual, resolve `#NEXT`, deploy probe | `ff50c03`, `a8546b7` | DONE |
-
----
+One item the brief specified that landed **differently, on a corrected finding** — see §3's
+scope note. Nothing was dropped.
 
 ## 3. Cold-resume handoff
 
 ### What landed
 
-**`DECISIONS_LOG` #219 — naps attribute to the night they precede; Q45 closed on operator
-determination.** `cbti.replay.load_nights` now reads Night(W)'s `naps_min` from row **W-1**,
-and `NAP_EXCLUDE_MIN` rises **0 → 30**. The prior logic — exclude any nap-flagged night,
-because the instrument does not say which day a nap belongs to — is reversed.
+`#220` — the canonical marker map is a DB table, runtime-mutable. `labs.py` lost
+`_CANONICAL_MAP`/`_load_canonical_map`; the confirm resolution and `GET /labs/canonical-map`
+now query `marker_canonical_entries` per request (no cache: a cached dict would serve the
+pre-bind map to the very confirm the operator just bound for). `POST /labs/canonical/bind`
+writes an entry and promotes that marker's historical `marker_canonical IS NULL` rows.
+`marker_canonical.json` survives as the migration seed. This fulfils `#50`'s
+confirmation-populated half and supersedes its stale "Not implemented" status line in place.
 
-The close is the substance, not the constant. Which night a nap belongs to is a **modelling
-convention the operator is entitled to set**, not a fact awaiting clinical provenance. Q45's
-prior bar ("confirm from VA protocol docs or the administering clinician") is superseded as
-the wrong gate. Two things that close deliberately did **not** do: it did not answer the
-question Q45 originally asked — the workbook's scoped-null search stands and is **not**
-re-run — and it did not resolve Q78.
+The over-collapse unit-guard — the reason `#50` exists — is carried to both new points where
+identity became mutable at runtime: bind-time (canonical already established at a disagreeing
+unit) and backfill-time (a stored row carrying a disagreeing unit). A refused bind promotes
+**zero** rows, asserted; a half-migrated series is harder to see and harder to undo than a
+refusal. Binding stays optional — an unbound row still stores null (`#58`/`#155` retain-raw).
 
-**Re-derived, never replayed.** The orphan `fix/q45-nap-attribution` (`4f77679`) predated
-#218 and would not fast-forward. `git cherry origin/master` confirmed by patch-id that **no
-commit of `4f77679` reached master**.
+### The scope correction — read this before touching the interpretation layer
 
-### Three findings worth carrying forward
+The brief proposed leaving `interpretation/gates.py` and `interpretation/rephrase.py` on the
+JSON, on the hypothesis that interpretation only covers grouped markers so a
+freshly-bound-ungrouped marker could never reach them. **That hypothesis is false**, and it was
+tested rather than assumed: `producer._ungrouped()` emits every non-grouped panel marker as a
+flat row and `presentation.py:237` builds rephrase fragments from those rows. A bound-ungrouped
+marker *does* reach `rephrase`.
 
-1. **#218 had independently added a Q45 comment site the orphan never saw.** The stale-site
-   count was seven, not the orphan's three — `models.py`, `checkin_v2.py` (×2) and
-   `import_cbti_block.py` were never in the orphan's diff at all. A repo-wide anchored sweep
-   found them; the orphan's hunk list would not have.
-2. **`models.DailyRecord.naps_min` has documented this exact `date−1` read since the column
-   was created**, as a live DB column comment, while the engine read the nap off the night's
-   own row. A documented contract the code never honoured, flagged silent-when-wrong in the
-   model itself. #219 makes them agree.
-3. **The PM hint's word "tonight" was wrong before and is literal only now.** Under the old
-   same-row read, a nap excluded the night that had already ended that morning.
+Phasing was still the right call, on a narrower mechanism, and that mechanism is what `Q104`
+now carries:
 
-### Verification standard met
-
-- Backend **877 → 882** (+5), frontend **41** unchanged. Zero regressions.
-- #218's `test_cbti_accept_decision_class.py` run in isolation under the change: **8/8 green**.
-- **Non-vacuity control:** with the reworked tests in place against master's `replay.py`, all
-  five attribution assertions **fail** — they discriminate the new read, not the new threshold.
-- **Deploy probe (#116/#121), both services, identity-pinned (#103).** Both `health-app-backend`
-  and `health-app-frontend` report SUCCESS with `commitHash a8546b7451ef…`. Backend in-container:
-  `NAP_EXCLUDE_MIN = 30`, the new attribution comment present, `_NAPS_SQL` live in `replay.py`,
-  and the reversed claim absent. Frontend served bundle `index-C9Bh0iPd.js`: the new literal
-  present, the old literal absent.
-- One `grep -c` returned a count that looked alarming (4 hits for `instrument`); reading the
-  matches per #113 showed all four were unrelated pre-existing text, identical local and
-  deployed. Counts were not trusted as evidence anywhere in this session.
-
-### The single clearest next action
-
-**Nothing in the CBT-I nap lane. Pick a product lane — the lab upload pipeline.** The
-CBT-I titration engine is now in a settled state: #213 landed the trigger, #218 the accept
-gate, #219 the nap attribution. Three consecutive sessions have gone to it. It has no dated
-NOW row left open.
-
-`ROADMAP` NOW's remaining product rows are **lab upload pipeline** (PDF/photo → Vision
-extraction → confirmation → stored; first stage of the medical spine, consumer hero-feature
-dependency, design Locked at #48/#50 and **still not implemented**), **interpretation layer
-build** (design Locked at #49, producer complete, build pending), and **appointment brief**.
+- `rephrase._KNOWN_ENTITIES` is a **detector** allowlist, not a permit-list. The validator
+  iterates the vocabulary and flags only a word that is IN the set and appears in
+  candidate-but-not-source. A marker absent from the stale set is never tested — staleness
+  narrows hallucination coverage (a missed detection) and can never cause a false rejection.
+- `gates._UNIT_ESTABLISHED` is consulted only inside `_resolve_band`, reachable only when the
+  marker is authored in `safety_thresholds.json`, which a freshly-bound marker is not; the
+  absent case already falls back to `value_plausibility` — weaker, not wrong.
+- Migration cost decided the split: `generate_plain` is called from an endpoint already holding
+  a `db` and already takes a `known_entities=` param, so `rephrase` could migrate almost free.
+  `_resolve_band` sits ~4 levels below `build_foundation` inside the pure `#86` producer,
+  reached via two paths, with no injection param for the unit map — it needs a session threaded
+  through ~6 signatures of contract-sensitive machinery.
 
 ### Open questions
 
-**51 OPEN, 0 OWED.** Q45 moved to DONE → #219 this session; no new question was minted.
+- **Q104 (new, OPEN, blocks nothing).** The two readers above still load the JSON, which is now
+  only a seed snapshot. The safe-degradation stops holding if `_KNOWN_ENTITIES` is inverted to a
+  permit-list, or `_resolve_band` is made to hard-require `_UNIT_ESTABLISHED`. Either change must
+  migrate both readers in the same stroke.
+- **Q103** (`lab_results.is_derived` write-dead), **Q102** (`restrictions[]` dead data),
+  **Q78** (multi-user nap attribution — unblocked by `#219`, not resolved), **Q101** closed at
+  `#218`. `Q36`–`Q41` remain the 4b package.
 
-Directly touched:
-- **Q45** — DONE → #219. Its original question paragraph is preserved unreworded, per the
-  Q79 precedent that a superseded premise is worth more legible than quietly rewritten.
-- **Q78** — stays **OPEN**, and is now **unblocked by Q45 rather than gated on it**. Its
-  premises were false the moment #219 landed (it asserted `NAP_EXCLUDE_MIN = 0` and
-  exclude-all) and were corrected in the same commit. The residue is real: two
-  **over-threshold** nap nights still starve a 4-night cycle at a one-night margin. It was
-  always a data-consequence fork, never a referent one — which is why it survived the close.
-  Its "do not resolve by loosening `NAP_EXCLUDE_MIN`" caution still stands, with a note
-  recording why #219 did not cross it.
+### A control that fired, and the gate that did not
 
-Adjacent and untouched: **Q103** (`lab_results.is_derived` write-dead, minted by #217),
-**Q102** (`restrictions[]` dead data), **Q60** (CBT-I user surface, gated on #47).
+A blanket `#NEXT` → `#220` substitution corrupted **31 lines of pre-existing `#NEXT` prose in
+`DECISIONS_LOG.md`, 3 in `OPEN_QUESTIONS.md`, 1 in `SCHEMA.md`** — the identical failure mode as
+PR #71 (`#175`, 55 lines), in a session that had already read the ROADMAP row describing it.
 
-### What was NOT touched — read this before choosing the next session
+It was caught **before commit**, and only by auditing the diff's REMOVED lines for `#176(c)`.
+**The placeholder guard passed clean the whole time** — every corrupted line was prose that no
+longer matched `^### #NEXT`, so the guard had nothing to see. Recovery: `git checkout --` on the
+two stores, a one-line restore in `SCHEMA.md`, then re-applying the additions with literals;
+pre-existing `#NEXT` counts were then re-verified equal to HEAD's (31 / 4).
 
-**This was a single-lane session and the lane is now closed.** The whole session went to one
-question in the CBT-I titration engine. Nothing else moved.
+The ROADMAP's cross-repo `#NEXT` row has been updated with this as second evidence, and with the
+two lessons for the fix's shape: the count-verified scoped replace should be mandatory rather
+than advisory, and the removed-line audit — the only control that actually caught this — belongs
+in the close-out ritual rather than being a `#176(c)` side effect.
 
-**The product lanes stood still, again.** The lab upload pipeline and the interpretation
-layer build have both been design-Locked and unimplemented across every recent session
-(#215 prod verification, #217 Cystatin C, #218 accept-gating, #219 nap attribution). The lab
-pipeline is the **first stage of the medical spine and a consumer hero-feature dependency**,
-and it has not been started. Its design has been Locked since #48/#50 — that is a long time
-for a Locked design to wait, and it is the single largest piece of unbuilt product value in
-the repo.
+### What was NOT touched
 
-**Read the pattern honestly:** #217 and #219 were both *unblocking* work on the medical and
-sleep spines, and #215 and #218 were verification and safety-gating. All four were worth
-doing. But four consecutive sessions have gone to correctness, verification and governance
-around existing surfaces rather than to building the next product surface. The queue this
-close-out points at is not more of the same. **Do not let the legibility of governance work
-choose the next session** — it is easier to write, easier to verify, and it is not what the
-platform is short of.
+This session was **feature work on the lab spine**, not instrumentation — but it moved one lane
+and left the rest standing, and the standing ones are the product:
 
-**Also standing still:** the CBT-I user surface (**Q60**), which is gated on **#47** —
-show-state-only vs show-the-action. #47 is an unresolved *design* fork, not a build task,
-and it blocks a whole module's visibility in the app. The titration engine is now three
-decisions deep and remains invisible to the user. That gap is widening with every engine
-session.
+- **Interpretation layer, increments 3 and 5-follow-on.** Increment **3 (lever tap → scoped
+  education thread) is UNSTARTED** and has been for several sessions. Increment 2 (rephrase)
+  landed at `#202`, go-live at `#194`. Nothing in increment 3 moved today, and nothing here
+  blocks it.
+- **Appointment brief** — the hero consumer feature ("never waste a medical appointment again").
+  Untouched. Still gated on the lab pipeline plus the interpretation layer, and today's work
+  advanced the former.
+- **Hub shell (`#150`)** — unblocked, operator-preferred next pick as of the 2026-08-02
+  reconciliation. Untouched today. **`lab_accession`** remains the strongest small alternative.
+- **CBT-I** — untouched this session. `Q78` (two over-threshold nap nights starving a cycle for
+  a second user) is still OPEN and unblocked; rx 12 still stands pending Luke's decision on
+  whether to correct it.
+- **The four cross-repo ROADMAP rows** — three discharged 2026-08-17; the fourth (extend
+  `#NEXT`/number-at-merge beyond DECISIONS entries) is **still OWED**, needs an HCA-rooted
+  session for the propagation half, and this session produced fresh evidence for why it matters.
+- **The junk-row operator decision** on the ten zero-result `lab_reports` (`#157`) is still owed
+  and was not revisited.
 
-**Cross-repo:** one shared-block edit remains owed on `ROADMAP` NOW — extend the `#NEXT` /
-number-at-merge rule to cover more than DECISIONS entries. Untouched this session.
+Honest framing: the previous two sessions went to governance and to CBT-I; this one went to the
+lab spine. The consumer-facing lanes — appointment brief, lever-tap threads, hub shell — have now
+been queued and unmoved across all three.
 
-### Local-disk state (unseeable to chat — verify, do not trust this line)
+### Single clearest next action
 
-- **Branch gate: PASSED.** `origin` carries **only `master`**. Both branches this session
-  touched are terminal: `fix/q45-nap-attribution-rework` merged (`a8546b7`) and deleted;
-  `fix/q45-nap-attribution` deleted from origin **and** locally, rowed in `BRANCHES.md` as
-  DONE-superseded.
-- **Pre-existing local debt, not created and not touched this session:** three local
-  `claude/*` auto-named branches (`cranky-haslett-8c636a`, `sleepy-hofstadter-8b5c6a`,
-  `stoic-mendel-68febe`). All three carry **0 unlanded commits by patch-id**, so they trip no
-  gate and are safe to delete — but the auto-name form is banned for in-flight work by
-  `CLAUDE.md`, and two of the three are unrowed. Worth a one-line cleanup next session.
-- **Stray worktree directories** under `.claude/worktrees/`: `vibrant-khorana-86acde` (held
-  the orphan; **deregistered from git this session**, but the directory itself would not
-  delete — Windows permission denied — so a dead folder remains on disk),
-  `hopeful-raman-df98df` (never registered), and `sleepy-hofstadter-8b5c6a` (still
-  registered, detached HEAD at `bbe627e`). None affect the repo; all are local tooling
-  residue.
+**Bind a real unmapped marker through the live confirmation screen**, against the next lab
+upload. Every layer is proven except the operator's own path end-to-end in prod: the endpoint is
+deployed, the table is seeded at 70, the guards are proven in tests, and the bundle carries the
+control — but no marker has been bound through the UI against real data yet, and the backfill is
+the half that touches stored history.
 
-### Still-owed governance, so it is not re-derived
-
-Nothing owed from this session. The `#219` entry carries its own How-you-know, `BRANCHES.md`
-carries both branch rows in terminal state, the `ROADMAP` NOW row is retired, and
-`CLAUDE.md`'s Recent-landings block is trimmed to three pointers with `#215` aged out.
+If no upload is due, the strongest alternative is the **hub shell (`#150`)** — unblocked,
+operator-preferred, and one of the consumer-facing lanes named above as standing still.
