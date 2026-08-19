@@ -3197,7 +3197,7 @@ without an explicit operator action carrying a `basis`.
 **State:** OPEN — blocks nothing; resolution is reachable today via the endpoint. Owner: Luke.
 Cross-refs #223 (nothing auto-resolves), #222 (the write), #72 (the check-in's scope), Q108.
 
-## Q108. Should `resolved_by: "clinician"` carry identity, and should the answer bind both stores?
+## Q108. Should the `clinician` authority tier carry identity? (Both stores now exist)
 
 `resolved_by` accepts `"user"` or `"clinician"`. It records the CLASS of assertor, not the
 assertor: a clinician-resolved injury and a self-resolved one are distinguishable, but which
@@ -3214,12 +3214,21 @@ box, self-asserted, with no verification path. A field that LOOKS like provenanc
 unverified is worse than an honest free-text `basis` — the #133 reasoning about inputs the app
 cannot verify applies to the assertor as much as to the assertion.
 
-**Resolve once, for both stores.** Brief B raises the same question for profile assertions. The
-two should not diverge: an identity convention that holds for an injury resolution and not for a
-profile assertion is drift, and whichever store answers first will set the precedent by accident.
+**The second store now exists, and half of this question is answered.** #227 added `asserted_by`
+to profile `hard_stops` and `live_signals`, and it did NOT invent a second vocabulary: the two
+authority fields are aligned, differing by exactly one member — `engine`, which can assert but
+must never resolve (#223) — and that alignment is pinned by a test rather than left to convention.
+So the "should the answer bind both stores" half is settled: yes, and the mechanism that makes it
+bind is a gate, not a note.
 
-**State:** OPEN — blocks nothing today. Owner: Luke. Cross-refs #222/#223 (where `resolved_by`
-is written), #133 (unverifiable-input reasoning), and Brief B's profile-assertion lane.
+**What remains open is only the identity question itself**, and neither store forces it yet. Both
+briefs reached the same conclusion independently — a second user with an opinion is what forces
+it, and there isn't one. When it is answered it changes `resolved_by` (#222) and `asserted_by`
+(#227) in the same change, or it is drift.
+
+**State:** OPEN — narrowed, not resolved; blocks nothing today. Owner: Luke. Cross-refs #222/#223
+(where `resolved_by` is written), #227 (where `asserted_by` is written and the vocabularies were
+aligned), #133 (unverifiable-input reasoning), Q110 (the other answer-once-for-both-stores pair).
 
 
 ## Q109. `review_when` supports only the soreness metric, so an injury whose real exit criterion is a different observable has prose and trigger disagreeing
@@ -3264,3 +3273,33 @@ surfacing-only means a wrong flag costs a prompt, not a write.
 evaluating what an entry's prose claims. Owner: Luke. Cross-refs #72 (trajectory's scope), #223
 (surfacing-only containment), #226 (the other input-quality residual), #224/#225 (the prefill
 that feeds the soreness series).
+
+
+## Q110. What surfaces a due review to the user, and does it share a home with Q107's resolve prompt?
+
+`review_on` (#227) records a date to ask again, and #228 guarantees that date does nothing on its
+own. Nothing reads it. There is no surface that says "these three assertions are due for review",
+so a `review_on` written today is a note to a person who will never be shown it.
+
+The candidate surfaces are the same three Q107 weighs for injury resolve prompts, and that is the
+point of raising this here rather than separately:
+
+- **AM check-in** — highest attention, but #72 scoped it to monitoring rather than renegotiation,
+  and a due-review prompt is a renegotiation invitation.
+- **Interpretation / decision-support surface** — matches the register (revisit a standing
+  decision), keeps the check-in read-only, costs a navigation step.
+- **A standing profile view** — the most honest home, since `GET /engine/profile` already returns
+  every entry with its block; a due review becomes a badge on a row rather than an interruption.
+
+**Answer this with Q107, not after it.** Q107 asks where an injury `review` flag should surface a
+resolve prompt; this asks where a profile `review_on` should surface a review prompt. Same
+question, two stores, and answering them independently produces two review surfaces with
+different conventions — the same drift Q108 exists to prevent for vocabulary. If one surface
+serves both, that is a design decision worth taking deliberately rather than discovering.
+
+Constraint on any answer: the prompt stays a PROMPT. #228 is unconditional, so no surface may
+retire an entry without an explicit operator write carrying a basis.
+
+**State:** OPEN — blocks nothing; `review_on` is recorded and inert by design. Owner: Luke.
+Cross-refs #227/#228 (the field and its guard), Q107 (the same question for injury resolve
+prompts), #72 (the check-in's scope), Q108 (the vocabulary precedent for answering once).
