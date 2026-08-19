@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,11 @@ class KnowledgeEntryOut(BaseModel):
     expires_at: date | None
     active: bool
     notes: str | None
+    # Exposed so the two terminal states stay distinguishable through the API and
+    # not only in the table: a SUPERSEDED row carries the id of the statement that
+    # replaced it, a RESOLVED row carries null. Both read `active=False`, so
+    # without this field the history surface cannot tell them apart.
+    superseded_by: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -205,6 +210,37 @@ def get_schedule(
         .order_by(models.UserKnowledgeEntry.added_at.desc())
         .all()
     )
+
+
+@router.get("/injuries", response_model=list[KnowledgeEntryOut])
+def list_injuries(
+    include_resolved: bool = Query(
+        False,
+        description=(
+            "Also return inactive injury rows (resolved or superseded), so history "
+            "is inspectable. Default false — active constraints only."
+        ),
+    ),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The user's injury entries — the read half of the resolution loop.
+
+    Nothing can be retired that cannot first be seen: `gather_active_injuries` and
+    `is_contraindicated` have consumed these rows since #72, but no endpoint listed
+    them, so a healed injury kept suppressing regions with nothing to show the user
+    what to retire.
+
+    Each row's `value` is returned UNMODIFIED, so an entry's `trajectory` block (#72)
+    rides along untouched — this surface reads the ledger, it does not reinterpret it.
+    """
+    q = db.query(models.UserKnowledgeEntry).filter_by(
+        user_id=current_user.id, type="injury",
+    )
+    if not include_resolved:
+        q = q.filter_by(active=True)
+    return q.order_by(models.UserKnowledgeEntry.added_at.desc(),
+                      models.UserKnowledgeEntry.id.desc()).all()
 
 
 @router.post("/entry", response_model=KnowledgeEntryOut, status_code=status.HTTP_201_CREATED)
