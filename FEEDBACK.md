@@ -67,6 +67,7 @@ These emerged organically from corrections and should be treated as first-class 
 - §27 Null-on-sparse-row class closed — re-open conditions in archive §27
 - §28 The §7 unit guard held under real over-collapse pressure
 - §29 Railway's dashboard editor silently no-ops a multi-statement paste — one statement per prod check
+- §30 Backend `application/json` carries no `charset`; PowerShell 5.1 falls back to ISO-8859-1 and mojibakes every non-ASCII byte in an API response — the garbling is the CLIENT's, so never "fix" data that reads fine over HTTP elsewhere
 
 ---
 

@@ -3220,3 +3220,47 @@ profile assertion is drift, and whichever store answers first will set the prece
 
 **State:** OPEN — blocks nothing today. Owner: Luke. Cross-refs #222/#223 (where `resolved_by`
 is written), #133 (unverifiable-input reasoning), and Brief B's profile-assertion lane.
+
+
+## Q109. `review_when` supports only the soreness metric, so an injury whose real exit criterion is a different observable has prose and trigger disagreeing
+
+An injury entry's `trajectory.review_when` is written with a `metric` key —
+`{"metric": "soreness", "op": "<=", "threshold": 1, "sustained_days": 3}`. **That key is never
+read.** Verified in-tree this session: `metric` appears in `injury_trajectory.py` exactly once,
+in the module docstring's example, and `_review_message` takes `review_when` and the soreness
+series only. Whatever `metric` says, the evaluator watches the generic soreness item for that
+injury key.
+
+So `metric` is decorative, and an entry can carry a machine-readable trigger that disagrees with
+its own prose without anything detecting the disagreement.
+
+**The reported instance — NOT verified in this session.** The brief that raised this states that
+entry id 30 (`injury_pes_anserine_left`) declares in its `detail` that review is gated on point
+tenderness, while its `review_when` watches the generic soreness item. That is a live
+`user_knowledge_entries` row and is not readable from a Code session; it is recorded here as a
+claim to check, not as a finding. Settling it is a read-only prod query for that row's `value`,
+via `railway run --service health-app-DB` reading `DATABASE_PUBLIC_URL` (per the secrets rule —
+print the row, never the URL).
+
+**The fork, which is live regardless of what row 30 says:**
+
+- **Make `metric` real.** `review_when` gains support for observables other than soreness, which
+  means naming what they are and where they are captured. Point tenderness is not a
+  `daily_records` column and has no capture surface, so this is a capture-schema change wearing a
+  trajectory-evaluation costume.
+- **Delete `metric` and correct the prose.** Honest about what the evaluator does, and cheap. The
+  cost is that an injury whose genuine exit criterion is not soreness has no machine-readable
+  exit criterion at all — its trajectory shape becomes surfacing-only in a weaker sense than #72
+  intended.
+- **Keep `metric` but validate it.** Refuse an entry whose `metric` is anything but `soreness`,
+  so the field stops being able to lie. Smallest change that removes the disagreement, and it
+  makes the limitation visible at write time instead of never.
+
+Related but distinct: #226's residual (a defaulted `3` is indistinguishable from a stated one)
+also degrades what a `review_when` evaluation is worth. Both are contained by #223 —
+surfacing-only means a wrong flag costs a prompt, not a write.
+
+**State:** OPEN — blocks nothing; the evaluator behaves consistently, it just may not be
+evaluating what an entry's prose claims. Owner: Luke. Cross-refs #72 (trajectory's scope), #223
+(surfacing-only containment), #226 (the other input-quality residual), #224/#225 (the prefill
+that feeds the soreness series).
