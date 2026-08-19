@@ -8743,3 +8743,79 @@ Backend 882 -> 890, frontend 41 -> 47.
 identity is not user-specific), or LOINC leaves dormancy at B2B.
 
 ---
+
+### 221. The weekly template carries capacity quotas, never sport or position labels
+
+**Decision:** `fortification_profiles.weekly_template` holds a capacity-quota microcycle —
+`{"slots": [{capacity, sessions_per_week, minutes}]}` — where `capacity` is a member of the
+`engine.taxonomy.Capacity` enum. There is no `sport` field, no `position` field, and no
+exercise names; the shape refuses unknown keys at either level, so adding one is a schema
+change rather than a convention drift. Sport-specificity is expressed entirely through fields
+that already exist and are already upsertable: `vehicle_bias`, `horizon` and `primary_target`.
+Two users with identical templates and different `vehicle_bias` get different programmes. That
+is the design, not a gap. `select_next(..., capacity=)` and `GET /engine/next?capacity=`
+consume one slot's capacity to constrain the probe candidate set; nothing yet resolves WHICH
+slot is due.
+
+**Rationale:** the template answers "how much of which capacity, how often, for how long".
+That question is sport-independent — a netball centre and a marathoner both need a number of
+stability sessions a week — while the answer to "which regions fill the slot" is not, and the
+engine already has the machinery to answer it per-user. A `sport` label would put the same
+information in two places with no arbiter between them, and every consumer would then have to
+decide which one wins. Worse, it would invite a lookup table of sport -> programme, which is
+precisely the hardcoded-string architecture the fortification profile replaced (spec §9): the
+engine's whole claim is that it generalises from a profile, not from a taxonomy of sports. The
+temptation will recur — it reads as the obvious missing field — so the refusal is recorded here
+and enforced by the validator rather than left to reviewer memory.
+
+**Sub-decision — the slot filter is a subset operation, not an ordering.** The brief asked that
+contraindication and hard-stop filtering "run first" so the slot filter never overrides a stop.
+In this tree those filters do not live in `select_next` at all: `compute_probe_queue` applies
+them while building the queue, and `select_next` receives the result already ranked. The slot
+filter is therefore implemented as a narrowing of that already-stop-filtered queue, which makes
+the guarantee STRUCTURAL rather than a convention about statement order — a function that only
+ever removes candidates cannot re-admit one a stop removed. Asserted end-to-end at both the
+engine and HTTP layers, and separately as a subset property over every capacity, rather than by
+reading the filter order off the source.
+
+**Sub-decision — the Fortify target is not filtered by the slot.** A slot constrains the
+SELECTION; the Fortify target is a declared profile field, not a ranked candidate. Dropping it
+when its capacity disagrees with the requested slot would be scheduler policy — the lane this
+work deliberately defers — and silently serving a mismatched target would be worse. The
+response reports `slot.fortify_target_matches_slot` instead, so the disagreement is visible to
+whatever eventually resolves it.
+
+**Sub-decision — validated at write, stored verbatim.** Unknown capacity, duplicate capacity
+across slots, `sessions_per_week` outside 0-14, `minutes` outside 5-180, non-integer or boolean
+counts, missing fields and unknown fields all 422. Validation runs BEFORE the session is
+touched, because `upsert_profile` calls `db.add` before its field loop — a mid-loop raise would
+leave a pending INSERT for any caller sharing the session. The stored value is NOT
+canonicalised: `PUT` then `GET` is byte-identical, so a slot written `"STABILITY"` reads back
+`"STABILITY"`. That honours the round-trip contract at the cost of pushing normalisation onto
+consumers, which `taxonomy.resolve_capacity` absorbs by accepting the enum name or its value
+case-insensitively. The trade is live rather than settled — raised as Q105.
+
+**Status:** active.
+
+**How you know:** 55 tests (`backend/tests/test_weekly_template.py`) covering all six brief
+gates at BOTH the engine and HTTP layers — round-trip compared on serialised JSON and on the
+raw wire substring `"capacity":"STABILITY"`, not on dict equality, which would pass a silent
+re-casing; unknown capacity 422 with `GET /engine/profile` still returning a null profile
+afterwards; `GET /engine/next` with no parameter returning the same region as the unconstrained
+call AND carrying no `slot` key, so the absent-parameter response shape is unchanged;
+`?capacity=STABILITY` returning only stability-tagged regions across every enum member; and the
+hard-stop gate proven by before/after — the region a STABILITY slot DOES select, then stopped,
+then absent. The refusal battery carries negative controls (four templates the validator must
+accept) so a validator that refused everything could not report green. Migration verified by
+stamping the prior head and upgrading one step on a scratch SQLite, then downgrading to confirm
+the column is removed. The head was `a7c3f19d5e28`, not `e2d5c7a1b9f3`: a first pass chained
+onto the wrong revision because the head-detection regex required the annotated
+`revision: str =` form while `a7c3f19d5e28` uses bare `revision =` — caught by `alembic heads`
+reporting two heads before anything was committed (the #113 lesson — read the matches, do not
+trust the pattern). Backend 890 -> 945.
+
+**Do not revisit unless:** the consuming lane needs a slot to carry something a capacity and a
+dose cannot express — in which case add a field to the SLOT, not a sport label to the template
+— or `minutes` acquires a defined effect on the prescription (Q106).
+
+---
