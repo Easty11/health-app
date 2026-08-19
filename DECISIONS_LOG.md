@@ -8819,3 +8819,100 @@ dose cannot express — in which case add a field to the SLOT, not a sport label
 — or `minutes` acquires a defined effect on the prescription (Q106).
 
 ---
+
+### 222. Resolution and supersession are distinct terminal states; only supersession names a successor
+
+**Decision:** A `user_knowledge_entries` row can reach `active=False` two ways, and they mean
+different things. SUPERSESSION means "replaced by a newer statement about the same thing" — it
+is written by `upsert_knowledge_entry` when a new entry arrives on the same key, and it sets
+`superseded_by` to the successor's id. RESOLUTION means "no longer true" — it is written by
+`POST /knowledge/injuries/{id}/resolve`, sets `active=False`, adds a `resolution` block
+(`resolved_on`, `basis`, `resolved_by`) to the row's JSON `value`, and leaves `superseded_by`
+NULL, because there is no successor. `superseded_by` is now exposed on `KnowledgeEntryOut` so
+the distinction survives the trip through the API rather than living only in the table.
+
+**Rationale:** collapsing the two is the obvious simplification — both set one boolean, and a
+future reader will see two code paths writing the same field and want to merge them. But
+`superseded_by` is the ONLY signal separating a healed hamstring from a re-worded one, and the
+two demand opposite treatment: a superseded row's meaning is carried forward by its successor
+and reading it in isolation is a mistake, while a resolved row's meaning is complete and its
+absence from the active set is the point. Merging them would silently make every resolved
+injury indistinguishable from an amended one at exactly the moment someone wants injury
+history — which is the reason the ledger is append-only in the first place. Recorded because
+the merge will look like tidying, not like data loss.
+
+**Sub-decision — the write is a reassignment, not an in-place mutation.** `value` is a plain
+`JSON` column, not a `MutableDict`, so `entry.value["resolution"] = ...` is invisible to the
+unit of work and is dropped at commit with no error. The endpoint rebuilds and reassigns the
+dict. This is a silent-failure class, so it is tested by re-reading the row from a fresh query
+with the identity map expired — asserting on the response body alone passes either way.
+
+**Sub-decision — the route is scoped to the caller AND to `type='injury'`.** A non-injury entry
+and another user's entry are both 404, so the resolve route cannot retire a `schedule_item`,
+and probing someone else's entry id learns nothing about whether it exists.
+
+**Status:** active.
+
+**How you know:** 35 tests (`backend/tests/test_injury_resolution.py`). The load-bearing gate
+names a SPECIFIC region — `single_leg_hop` on the right, suppressed by an active right-hamstring
+entry through `_ACUTE_TISSUE_BLOCKS` — and asserts it contraindicated before the resolve and
+selectable after, with no other input changed; a second gate re-runs it one layer out through
+`compute_probe_queue`, which is what `/engine/next` actually consumes; a third proves the lift
+is SCOPED by leaving a second live injury's block standing. Asserting only that the injury list
+shrank would have passed even if suppression never lifted. Gates mutation-tested against four
+seeded defects, each caught by the intended gate and no other: removing the `active` flip fails
+the region gates; mutating `value` in place fails ONLY the persistence gate (the region gate
+correctly still passes, since `active=False` still lands); setting `superseded_by` fails the two
+distinguishability gates; dropping the user scope fails the cross-user gate. Backend 945 -> 980.
+
+**Do not revisit unless:** a third terminal state is genuinely needed — at which point add it
+alongside, and do not express it by overloading `superseded_by`.
+
+---
+
+### 223. Injury resolution is an explicit operator write; `injury_trajectory` stays surfacing-only
+
+**Decision:** Nothing auto-resolves an injury. No date, no soreness threshold, and no
+trajectory flag may set `active=False` on its own. `injury_trajectory.evaluate()` remains what
+#72 made it — divergence and symptom-gated review flags that SURFACE and change nothing. It
+identifies resolution candidates; `POST /knowledge/injuries/{id}/resolve` is where the operator
+puts the answer. This restates #72 rather than assuming it carries, because this brief is the
+first thing built that could plausibly erode it.
+
+**Rationale:** #72 settled that restrictions are set at injury onset and the check-in monitors
+rather than renegotiates. Giving the system a resolution mechanism creates the obvious next
+step — the review flag already knows the injury "looks resolved", so why not let it resolve?
+Because that inverts #72 with no operator in the loop: an injury constraint that lifts itself
+because a `resolve_by` date passed, or because self-reported soreness sat at 1 for three days,
+is a safety failure whose whole cost lands on the user. The exit condition is a PROMPT to
+revisit, not a verdict — the same asymmetry #133 fixes for clearance, where stronger evidence
+for early loading sharpens the boundary rather than eroding it. And this endpoint is not the
+app clearing anyone: it interprets nothing, it records an assertion and stamps who made it
+(`resolved_by`), which is why `basis` is mandatory — a resolution with no stated grounds is
+what later reads as an accident.
+
+**Sub-decision — `expire-stale` is untouched and is not resolution.** It flips only rows whose
+`expires_at` was predicted at creation, and it writes no `resolution` block, so an expired row
+stays distinguishable from a resolved one. It was one of the three inadequate routes this brief
+exists to replace, not a mechanism to extend.
+
+**Status:** active. Restates and reinforces #72; consistent with #133.
+
+**How you know:** three GUARD tests plus a structural one. A trajectory whose `resolve_by`
+(2026-08-01) is well past, with a soreness series that keeps the divergence flag firing — exact
+message pinned — leaves `active` True and the region still suppressed. A soreness series sitting
+at the declared exit condition for the full sustained window raises the review flag, the
+strongest "this looks resolved" signal the system produces, and still resolves nothing. Both
+flags are pinned EXACTLY for an untouched fixture so a drift in `evaluate()` fails loudly rather
+than being absorbed. The structural gate greps `injury_trajectory`'s own source and asserts it
+contains no `.active =` assignment at all, so a later edit adding a write fails even if no test
+exercises it. One drafting correction is recorded because it proves the pin is tight: the first
+version asserted a divergence for a series ending at soreness 1, and the source refused it —
+`resolving_by` diverges only while the last reading is >1, so a series at 1 means the injury DID
+resolve by its date and only the review arm fires. The expectation was wrong, not the code.
+
+**Do not revisit unless:** the app gains a verified, objective load-response input that a
+practitioner would accept as resolution evidence — the same premise-change #133 names, not a
+loosening of this rule.
+
+---

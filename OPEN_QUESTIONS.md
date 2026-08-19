@@ -3168,3 +3168,55 @@ lane. The field is validated and stored so the consuming lane needs no migration
 
 **State:** OPEN — blocks the weekly-resolver lane, nothing else. Owner: Luke. Cross-refs #221
 (the declaration), #18 (the load model the first reading depends on), Q105.
+
+
+## Q107. Should a `review` flag surface a resolve prompt, and on which surface?
+
+`injury_trajectory.evaluate()` raises a symptom-gated `review` flag when soreness reaches an
+injury's declared exit condition — "looks resolved, review the restriction". As of #222/#223
+there is somewhere to put the answer (`POST /knowledge/injuries/{id}/resolve`), but nothing
+connects the two: the flag surfaces in `get_readiness_snapshot` and the operator must navigate
+to the resolve call themselves.
+
+The open part is not WHETHER to connect them but WHERE, and the surfaces are not equivalent:
+
+- **AM check-in.** Closest to the soreness capture that raised the flag, and the operator is
+  already answering questions. But the check-in is a two-minute ritual and #72 was explicit that
+  it monitors rather than renegotiates — putting a state-changing control there is the exact
+  shape of drift that decision guards against.
+- **Interpretation / decision-support surface.** Matches the flag's actual register (a prompt to
+  revisit a plan, not a daily data point) and keeps the check-in read-only. Costs a navigation
+  step at the moment the user is least motivated to take one.
+- **A standing "injuries" view over `GET /knowledge/injuries`.** The most honest home — the list
+  exists now, and a review flag becomes a badge on a row rather than an interruption. Slowest to
+  reach, so a stale injury could sit flagged for weeks.
+
+Whichever wins, the prompt must stay a PROMPT: #223 is unconditional, so no surface may resolve
+without an explicit operator action carrying a `basis`.
+
+**State:** OPEN — blocks nothing; resolution is reachable today via the endpoint. Owner: Luke.
+Cross-refs #223 (nothing auto-resolves), #222 (the write), #72 (the check-in's scope), Q108.
+
+## Q108. Should `resolved_by: "clinician"` carry identity, and should the answer bind both stores?
+
+`resolved_by` accepts `"user"` or `"clinician"`. It records the CLASS of assertor, not the
+assertor: a clinician-resolved injury and a self-resolved one are distinguishable, but which
+clinician, when consulted, and on what basis beyond the free-text `basis` field are not.
+
+**Why it might matter:** the two classes carry different evidential weight, and a resolution is
+the moment an engine constraint lifts. If a resolution is later questioned — a re-injury in the
+same region — "clinician" with no attribution is close to unfalsifiable. The `basis` field
+absorbs this in practice today, since it is free text and mandatory, but it is prose and nothing
+reads it.
+
+**Why it might not:** this is a single-operator platform; identity would be a name typed into a
+box, self-asserted, with no verification path. A field that LOOKS like provenance but is
+unverified is worse than an honest free-text `basis` — the #133 reasoning about inputs the app
+cannot verify applies to the assertor as much as to the assertion.
+
+**Resolve once, for both stores.** Brief B raises the same question for profile assertions. The
+two should not diverge: an identity convention that holds for an injury resolution and not for a
+profile assertion is drift, and whichever store answers first will set the precedent by accident.
+
+**State:** OPEN — blocks nothing today. Owner: Luke. Cross-refs #222/#223 (where `resolved_by`
+is written), #133 (unverifiable-input reasoning), and Brief B's profile-assertion lane.
