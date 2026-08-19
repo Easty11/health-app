@@ -65,6 +65,19 @@ class KnowledgeEntryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+RESOLVED_BY_VALUES = ("user", "clinician")
+
+
+class InjuryResolutionIn(BaseModel):
+    """The operator's answer to "is this still true?". `basis` is mandatory and
+    free text: a resolution with no stated grounds is the thing that later reads as
+    an accident. `resolved_on` defaults to today rather than being required, since
+    the common case is resolving something as of now."""
+    basis: str
+    resolved_by: str
+    resolved_on: date | None = None
+
+
 # ---------- helpers ----------
 
 def _validate_category(category: str) -> str:
@@ -261,3 +274,76 @@ def expire_stale(
     """Expire all entries whose expires_at is in the past."""
     count = expire_stale_entries(current_user.id, db)
     return {"expired": count}
+
+
+@router.post("/injuries/{entry_id}/resolve", response_model=KnowledgeEntryOut)
+def resolve_injury(
+    entry_id: int,
+    body: InjuryResolutionIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retire one injury entry: it is no longer true.
+
+    RESOLUTION IS NOT SUPERSESSION. Both terminal states set `active=False`, but
+    supersession means "replaced by a newer statement about the same thing" and
+    names its successor in `superseded_by`; resolution means "no longer true" and
+    has no successor, so `superseded_by` stays null. Collapsing the two would read
+    as a simplification later and would destroy the only signal distinguishing a
+    healed injury from a re-worded one.
+
+    ALWAYS AN EXPLICIT OPERATOR WRITE. Nothing auto-resolves — not a passing
+    `resolve_by` date, not a soreness series at its exit condition, not a live
+    `review` flag from `injury_trajectory.evaluate()`. That module stays
+    surfacing-only (#72): it identifies candidates, this endpoint is where the
+    operator puts the answer. A constraint that lifted itself would invert #72 with
+    no operator in the loop. Nor is this the app clearing anyone (#133) — the app
+    interprets nothing here; it records an assertion and stamps who made it.
+
+    NEVER DELETES. The row is retained with its `resolution` block; a resolved
+    hamstring tear is still a fact about the user and still context for the next one.
+    """
+    if body.resolved_by not in RESOLVED_BY_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"resolved_by must be one of: {', '.join(RESOLVED_BY_VALUES)}",
+        )
+    if not body.basis.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="basis is required — a resolution must state its grounds",
+        )
+
+    # Scoped to the caller AND to type='injury': another user's row and a
+    # non-injury row are both 404 here, so this route cannot retire a
+    # schedule_item, and a probe for someone else's entry id learns nothing.
+    entry = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(id=entry_id, user_id=current_user.id, type="injury")
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Injury entry not found")
+    if not entry.active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Injury entry is already inactive — resolving twice is an error, not a no-op",
+        )
+
+    # REASSIGN, never mutate in place: the column is a plain `JSON`, not a
+    # `MutableDict`, so an in-place `entry.value["resolution"] = ...` is not seen by
+    # the unit of work and is silently dropped at commit. Tested by reading the row
+    # back from a fresh query rather than from the in-session identity map.
+    entry.value = {
+        **(entry.value or {}),
+        "resolution": {
+            "resolved_on": str(body.resolved_on or date.today()),
+            "basis": body.basis,
+            "resolved_by": body.resolved_by,
+        },
+    }
+    entry.active = False
+    # `superseded_by` is deliberately left untouched — see the docstring.
+    db.commit()
+    db.refresh(entry)
+    return entry
