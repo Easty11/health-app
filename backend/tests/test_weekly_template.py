@@ -259,7 +259,10 @@ def test_hard_stopped_region_is_excluded_even_when_its_capacity_matches(db_sessi
     # Stop that exact region on every side it can be read on.
     region = taxonomy.by_key(victim["region_key"])
     p = profile_mod.upsert_profile(db_session, u.id, {"hard_stops": [
-        {"region_key": region.key, "side": side, "reason": "test stop"}
+        # Provenance is required on any hard_stop WRITE as of #227 — these were
+        # written before that contract existed.
+        {"region_key": region.key, "side": side, "reason": "test stop",
+         "asserted_by": "user", "asserted_on": "2026-08-19"}
         for side in region.sides() + [SIDE_BILATERAL]
     ]})
 
@@ -460,7 +463,10 @@ def test_http_next_hard_stop_beats_a_matching_slot(db_session):
 
     region = taxonomy.by_key(victim["region_key"])
     c.put("/engine/profile", json={"hard_stops": [
-        {"region_key": region.key, "side": side, "reason": "test stop"}
+        # Provenance is required on any hard_stop WRITE as of #227 — these were
+        # written before that contract existed.
+        {"region_key": region.key, "side": side, "reason": "test stop",
+         "asserted_by": "user", "asserted_on": "2026-08-19"}
         for side in region.sides() + [SIDE_BILATERAL]
     ]})
 
