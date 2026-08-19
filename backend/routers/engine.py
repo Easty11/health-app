@@ -62,6 +62,10 @@ class ProfileIn(BaseModel):
     live_signals: list[dict[str, Any]] | None = None
     hard_stops: list[dict[str, Any]] | None = None
     vehicle_bias: list[str] | None = None
+    # {"slots": [{capacity, sessions_per_week, minutes}]} — validated in
+    # `profile_mod.validate_weekly_template`, not by pydantic: the capacity set is
+    # the taxonomy's, and the errors need field-located messages (#221).
+    weekly_template: dict[str, Any] | None = None
     probe_budget: float | None = None
     notes: str | None = None
 
@@ -162,7 +166,12 @@ def put_profile(
             data["horizon_date"] = _date.fromisoformat(data["horizon_date"])
         except ValueError:
             raise HTTPException(status_code=422, detail="horizon_date must be ISO YYYY-MM-DD")
-    p = profile_mod.upsert_profile(db, current_user.id, data)
+    try:
+        p = profile_mod.upsert_profile(db, current_user.id, data)
+    except ValueError as exc:
+        # Fail-closed: the validator runs before the session is touched, so a
+        # refused template leaves no row behind (#221).
+        raise HTTPException(status_code=422, detail=str(exc))
     return {"profile": profile_mod.profile_to_dict(p)}
 
 

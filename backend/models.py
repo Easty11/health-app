@@ -792,6 +792,13 @@ class FortificationProfile(Base):
     live_signals: Mapped[list | None] = mapped_column(JSON, nullable=True)   # [{signal, side, branch_param, status}]
     hard_stops: Mapped[list | None] = mapped_column(JSON, nullable=True)     # [{region_key|pattern, side, reason}]
     vehicle_bias: Mapped[list | None] = mapped_column(JSON, nullable=True)   # ranked vehicle keys for the target
+    # Weekly dose allocation — {"slots": [{capacity, sessions_per_week, minutes}]}.
+    # Sport-agnostic BY CONSTRUCTION (DECISIONS_LOG #221): a slot names a taxonomy
+    # Capacity and a quota, never a sport, position, or exercise. What makes a given
+    # user's template netball-shaped or marathon-shaped is which regions `select_next`
+    # picks to fill each slot — driven by `vehicle_bias`, `horizon` and
+    # `primary_target`. NULL is a valid state (no template), not a degraded one.
+    weekly_template: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # standing Probe allocation — never drops to zero (spec §2)
     probe_budget: Mapped[float] = mapped_column(Float, nullable=False, server_default=text("0.25"))
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
