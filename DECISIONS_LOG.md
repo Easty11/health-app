@@ -8916,3 +8916,132 @@ practitioner would accept as resolution evidence — the same premise-change #13
 loosening of this rule.
 
 ---
+
+### 224. AM soreness prefill carries the last reported value, bounded by a lookback window
+
+**Decision:** `derive_soreness_items` prefills each active injury's soreness item with that
+injury key's most recent reported value from `daily_records`, provided it falls within
+`_PREFILL_LOOKBACK_DAYS` (7) of today. Beyond the window nothing is carried. The most recent
+record CONTAINING the key wins, not the most recent record — a key absent from an intervening
+day does not reset the carry. One query resolves every key; a per-key lookup would be an N+1 on
+a route in the daily path.
+
+**Rationale:** the previous prefill was a hardcoded `1`, and `1` is the scale FLOOR, so every
+morning opened at "asymptomatic" regardless of yesterday. For a genuinely sore injury the
+operator had to re-enter the same value daily or the record understated it, and an unedited day
+silently reported recovery — the check-in's own capture was biased toward improvement. Carrying
+the last stated value makes the common case (unchanged since yesterday) the zero-effort one,
+which is the correct default for a daily ritual measured in seconds.
+
+**Why the window is bounded at all:** a carried value is a claim the operator did not make
+today. Within a week that is a reasonable inference; beyond it, it is a confident statement
+about a body that has had seven days to change, and it arrives pre-agreed — the operator must
+notice it to correct it. A stale value is worse than a stated unknown, so the carry expires
+rather than persisting indefinitely. Seven days is one training microcycle and is a named
+constant, not an inline literal, so moving it is a decision rather than an edit.
+
+**Sub-decision — out-of-range does NOT clamp to the nearest bound.** A stored 9 resolves to the
+fallback, not to 5. It is corrupt data, not an emphatic reading, and manufacturing a plausible
+number from it is how bad data stops looking bad. `bool` is rejected explicitly, since it is an
+`int` subclass and `True` would otherwise read as a valid 1 — the exact value this change exists
+to stop arriving unasked. A key present-but-unusable ends that key's search rather than reaching
+past it to an older valid value, which would silently substitute a number the operator never
+re-stated.
+
+**Status:** active. Prefill only — no change to submit, to the readiness formula, or to
+`injury_trajectory`.
+
+**How you know:** 38 tests (`backend/tests/test_soreness_prefill_carry.py`). The window boundary
+is asserted at exactly 7 days (carried) and exactly 8 days (not carried) using a carried value
+of **2**, deliberately not the fallback 3 — a boundary test whose expected value equals the
+fallback cannot distinguish "carried correctly" from "fell through", and would pass a window
+that failed open. Query count is asserted as a comparison between a 1-injury and an 8-injury
+user rather than against a magic number. Prefill's read-only nature is asserted by a SQLAlchemy
+statement spy (no INSERT/UPDATE/DELETE reaches the database) as well as by row-count and stored
+payload comparison, including for a user with no `daily_records` row at all. Gates
+mutation-tested against four seeded defects, each caught by the intended gate and no other:
+widening the window to 8 fails only the boundary and constant gates; discarding a key on the
+most recent RECORD rather than the most recent record containing it fails both carry-gap gates;
+removing the `bool` guard fails only the `True` case; and a per-key N+1 query fails ONLY the
+query-count gate — correctly, since its behaviour is identical. Backend 980 -> 1018.
+
+**Do not revisit unless:** the carry needs to distinguish a reported value from a defaulted one
+— see #226, where that was considered and declined.
+
+---
+
+### 225. The soreness prefill's absence fallback is 3, not 1 — aligning it with the readiness scorer
+
+**Decision:** when there is nothing to carry (a new injury, or nothing in the lookback window),
+the prefill is `3`, not `1`. `3` is already this module's no-information value: `calc_naive_baseline`
+computes `soreness_raw = max(vals) if vals else 3`. The prefill now agrees with the scorer it
+feeds instead of contradicting it.
+
+**Rationale:** `1` was doing double duty — it is both the scale floor ("None") and, formerly,
+the value that arrived unasked. Those are incompatible jobs. Because the floor arrived by
+default, the system could not tell a deliberate "no soreness" from an untouched form, and an
+untouched form scored as full recovery. Making the default the neutral midpoint separates the
+two: the floor is now reachable only by entering it.
+
+**Recorded consequence, which is the point rather than a side effect:** a `review_when` exit
+condition of `soreness <= 1 sustained 3 days` can now only be satisfied by the operator actively
+entering `1` on three separate days. Under the old default it could be satisfied by three days
+of not touching the form — an injury could clear its own exit condition through inattention.
+That flag is surfacing-only (#223), so the old behaviour produced a weakly-earned prompt rather
+than a write, but a prompt earned by silence is still noise in the one place the system asks the
+operator to think.
+
+**Second recorded consequence:** for a user with a new injury and no history, an untouched
+submission now carries `3` where it carried `1`, lowering `naive_baseline` by exactly 1.0 point
+(the soreness term is weighted 0.20 over a 0-10 scale, and `(3-1)*2.5 = 5`). That is the intended
+effect of a more honest input, not a regression, and it is pinned as an explicit test rather than
+left in prose. Historical `naive_baseline` values are frozen at capture and are NOT recomputed,
+so no stored score moves.
+
+**Status:** active.
+
+**How you know:** the fallback is asserted against the scorer's own behaviour, not a duplicated
+literal — `calc_naive_baseline` with `soreness={}` and with `soreness={key: 3}` return the same
+value. The new-injury case is asserted explicitly as a behaviour change from `1`. A carried `1`
+is asserted to survive as `1`: the fallback applies to absence, never to a low reading, or the
+exit condition above would be unreachable. The 1.0-point cost is asserted as an arithmetic
+identity. The formula itself is pinned twice on a fixed payload — once against a literal and
+once against the weighting spelled out term by term, so a weighting change cannot be absorbed by
+adjusting the literal.
+
+**Do not revisit unless:** the scale itself changes, in which case the no-information value and
+`calc_naive_baseline`'s fallback must move together — they are now one decision in two places.
+
+---
+
+### 226. A reported-vs-defaulted flag was considered and declined
+
+**Decision:** the system does not record whether a submitted soreness value was stated by the
+operator or arrived as a prefill. No `touched` flag, no per-item provenance, no parallel
+structure alongside `daily_records.soreness`.
+
+**Rationale:** the flag's purpose would be to stop an untouched item from being read as a
+reported one. The `3` fallback (#225) addresses the same failure more cheaply and at the point
+of origin: an untouched item no longer RESEMBLES a recovered one, because the value it carries is
+the neutral midpoint rather than the floor. A flag would add a field, a migration, a wire-format
+change, and a second thing every reader must consult and can forget to consult — to recover a
+distinction the fallback already makes operationally invisible.
+
+**Residual, stated plainly so this reads as a decision later and not an oversight:** the system
+still cannot distinguish a deliberate `3` from an untouched `3`. A divergence arm reading a flat
+series at `3` is reading defaults, and will describe them as a stable trajectory. This is
+contained rather than solved, and what contains it is #223: `injury_trajectory` is
+surfacing-only, so a weakly-earned flag yields a prompt to a human, never a write. The
+containment is structural, not incidental — if trajectory ever gains authority over state, this
+residual becomes load-bearing and the flag must be reconsidered in the same change.
+
+**Status:** active. Declined, not deferred — revisit on the trigger below, not on preference.
+
+**How you know:** no schema change, no migration, and no new field ships with #224/#225; the
+carry is computed from `daily_records.soreness` as it already exists.
+
+**Do not revisit unless:** `injury_trajectory` gains the power to change state (which #223
+forbids), or a consumer appears that must act on the reported/defaulted distinction rather than
+surface it. Preference for completeness is not a trigger.
+
+---

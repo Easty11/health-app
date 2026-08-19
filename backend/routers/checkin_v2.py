@@ -70,20 +70,108 @@ def calc_naive_baseline(
 
 # ── soreness items ← active injuries (FEEDBACK 2.6) ─────────────────────────────
 
-def derive_soreness_items(user_id: int, db: Session) -> dict[str, int]:
+# How far back a soreness value may be carried into the prefill. The bound exists
+# because a stale value is worse than a stated unknown: beyond a week, a carried
+# number is a confident claim about a body that has had seven days to change, and
+# it arrives pre-agreed — the operator has to notice it to correct it.
+_PREFILL_LOOKBACK_DAYS = 7
+
+# The no-information value on the 1-5 scale. Matches `calc_naive_baseline`'s own
+# `max(vals) if vals else 3` fallback above, so the prefill stops contradicting the
+# scorer it feeds. Prefilling 1 — the scale FLOOR — made every morning open at
+# "asymptomatic" and let an untouched item silently report recovery.
+_SORENESS_NO_INFO = 3
+
+_SORENESS_MIN, _SORENESS_MAX = 1, 5
+
+
+def _reported_soreness(raw: Any) -> int | None:
+    """A stored soreness value if it can be trusted, else None.
+
+    `bool` is rejected explicitly: it is an `int` subclass, so `True` would
+    otherwise read as a valid 1 — the very value this change exists to stop
+    arriving unasked. Out-of-range does NOT clamp to the nearest bound: a stored 9
+    is a corrupt value, not an emphatic 5, and inventing a plausible number from it
+    is how bad data stops looking bad.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return None
+    return raw if _SORENESS_MIN <= raw <= _SORENESS_MAX else None
+
+
+def _last_reported_soreness(
+    user_id: int, keys: set[str], db: Session, today: date
+) -> dict[str, int]:
+    """Most recent in-window reported value per key.
+
+    ONE query for every key, resolved in Python. A per-key query would be an N+1 on
+    a route in the daily path, scaling with the user's active injury count.
+
+    A key ABSENT from a record (or explicitly null, the shape
+    `injury_trajectory._soreness_series` already skips) does not end that key's
+    search — the most recent record CONTAINING the key wins, not the most recent
+    record. A key PRESENT but unusable does end it, resolving to the caller's
+    fallback: reaching past a corrupt entry to an older one silently substitutes
+    data the operator never re-stated.
+    """
+    if not keys:
+        return {}
+    cutoff = today - timedelta(days=_PREFILL_LOOKBACK_DAYS)
+    rows = (
+        db.query(models.DailyRecord.date, models.DailyRecord.soreness)
+        .filter(
+            models.DailyRecord.user_id == user_id,
+            models.DailyRecord.soreness.isnot(None),
+            models.DailyRecord.date >= cutoff,
+            models.DailyRecord.date <= today,
+        )
+        .order_by(models.DailyRecord.date.desc())
+        .all()
+    )
+
+    out: dict[str, int] = {}
+    remaining = set(keys)
+    for _record_date, soreness in rows:
+        if not remaining:
+            break
+        for key in list(remaining):
+            raw = (soreness or {}).get(key)
+            if raw is None:
+                continue                      # absent here — keep looking back
+            remaining.discard(key)
+            value = _reported_soreness(raw)
+            if value is not None:
+                out[key] = value
+    return out
+
+
+def derive_soreness_items(
+    user_id: int, db: Session, today: date | None = None
+) -> dict[str, int]:
     """AM soreness items derived from the active injury ledger — one item per active
-    `type='injury'` entry, defaulted to 1 (=None on the 1-5 scale). Replaces the
-    hardcoded {shoulder, hamstring}. Empty when no active injuries."""
+    `type='injury'` entry, prefilled with that injury's last reported value within
+    `_PREFILL_LOOKBACK_DAYS`, falling back to `_SORENESS_NO_INFO` when there is
+    nothing to carry. Empty when no active injuries.
+
+    Formerly hardcoded to 1. Since 1 is the scale FLOOR, every morning opened at
+    "asymptomatic" regardless of yesterday: a genuinely sore injury had to be
+    re-entered daily or the record understated it, and an unedited day silently
+    reported recovery. Carrying the last stated value forward makes the common case
+    (unchanged since yesterday) the zero-effort one.
+
+    READ ONLY. This builds a suggestion for the form; it writes nothing and creates
+    no `daily_records` row. The value becomes real only when the operator submits.
+    """
+    today = today or _today_aest()
     rows = (
         db.query(models.UserKnowledgeEntry)
         .filter_by(user_id=user_id, type="injury", active=True)
         .order_by(models.UserKnowledgeEntry.added_at.desc())
         .all()
     )
-    items: dict[str, int] = {}
-    for r in rows:
-        items[injury_soreness_key(r.value or {})] = 1
-    return items
+    keys = [injury_soreness_key(r.value or {}) for r in rows]
+    carried = _last_reported_soreness(user_id, set(keys), db, today)
+    return {key: carried.get(key, _SORENESS_NO_INFO) for key in keys}
 
 
 # ── CBT-I diary freeze ──────────────────────────────────────────────────────────
