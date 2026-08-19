@@ -487,6 +487,7 @@ def select_next(
     profile: models.FortificationProfile | None,
     probe_queue: list[dict[str, Any]],
     readiness_hint: int | None = None,
+    capacity: "taxonomy.Capacity | str | None" = None,
 ) -> dict[str, Any]:
     """
     The explore/exploit split (§2). Returns BOTH a Fortify recommendation and a
@@ -495,8 +496,29 @@ def select_next(
     Mode heuristic (deterministic): while untested probe-priority regions remain
     — the comfort-cluster blind spot — bias to Probe; once exhausted, bias
     Fortify. A system that stops exploring stops discovering (§2).
+
+    `capacity` constrains the selection to one weekly-template slot (#221). It is
+    a SUBSET filter over a queue `compute_probe_queue` has already stop-filtered,
+    which is what makes "the slot filter never overrides a stop" structural rather
+    than an ordering convention: this function only ever REMOVES candidates, so no
+    contraindicated region can re-enter through a matching slot. Absent, behaviour
+    and response shape are exactly as before.
     """
     probe_budget = float(profile.probe_budget) if profile and profile.probe_budget is not None else 0.25
+
+    # Normalise once. A caller that hands an unresolvable token gets a loud
+    # failure here rather than a silently empty slot — the router 422s first, so
+    # reaching this is a programming error, not user input.
+    slot_capacity: str | None = None
+    if capacity is not None:
+        resolved = capacity if isinstance(capacity, taxonomy.Capacity) else taxonomy.resolve_capacity(capacity)
+        if resolved is None:
+            raise ValueError(
+                f"unknown capacity {capacity!r} — one of {taxonomy.capacity_tokens()}"
+            )
+        slot_capacity = resolved.value
+        # Queue entries carry `capacity` as `Region.capacity.value` (lowercase).
+        probe_queue = [c for c in probe_queue if c.get("capacity") == slot_capacity]
 
     probe = probe_queue[0] if probe_queue else None
     has_priority = any(c.get("probe_priority") for c in probe_queue)
@@ -547,16 +569,38 @@ def select_next(
             "Low subjective readiness — biasing toward recovery vehicles "
             "(switch window, not skip). This is a re-rank, never a gate."
         )
-    if probe is None:
+    if probe is None and slot_capacity is None:
         notes.append(
             "Probe queue is empty under current filters — either the map is well "
             "sampled or active hard-stops are excluding the candidates."
         )
+    elif probe is None:
+        notes.append(
+            f"No untested {slot_capacity} region is available for this slot — the "
+            "capacity is well sampled, already loaded, or its candidates are "
+            "hard-stopped. An empty slot is a valid result, not an error."
+        )
 
-    return {
+    out = {
         "mode_recommended": mode,
         "budget": {"probe": probe_budget, "fortify": round(1.0 - probe_budget, 4)},
         "fortify": fortify_block,
         "probe": probe_block,
         "notes": notes,
     }
+    if slot_capacity is not None:
+        # Only present when a slot was requested, so the no-parameter response is
+        # byte-identical to before this change.
+        #
+        # The Fortify target is NOT filtered by the slot: it is a DECLARED profile
+        # field, not a ranked candidate, and dropping it when the slot disagrees
+        # would be scheduler policy — the lane this brief explicitly defers. The
+        # disagreement is surfaced instead of being silently served or silently
+        # dropped.
+        out["slot"] = {
+            "capacity": slot_capacity,
+            "fortify_target_matches_slot": bool(
+                target_region is not None and target_region.capacity.value == slot_capacity
+            ),
+        }
+    return out

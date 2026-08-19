@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 # Matches the companion doc Capability_Taxonomy_v0.md. Bump when the axis list
 # changes so capability_state rows can record which version scored them.
@@ -268,6 +269,33 @@ def all_regions() -> tuple[Region, ...]:
 
 def by_key(key: str) -> Region | None:
     return _BY_KEY.get(key)
+
+
+def capacity_tokens() -> list[str]:
+    """The accepted spellings, for error messages. Uppercase because that is the
+    form the weekly-template and the `?capacity=` query parameter are written in."""
+    return [c.name for c in Capacity]
+
+
+def resolve_capacity(token: Any) -> "Capacity | None":
+    """Resolve a caller-supplied capacity token, or None if it is not one.
+
+    Accepts either the enum NAME ("STABILITY", the form templates and query
+    parameters are written in) or its VALUE ("stability", the form
+    `Region.capacity.value` and the probe-queue entries carry), case-insensitively.
+    Both spellings collapse because `name.lower() == value` holds for every member
+    — asserted in `tests/test_weekly_template.py` so a later member that breaks the
+    identity cannot land silently.
+
+    Returns None rather than raising: callers turn it into their own refusal
+    (422 at the router, ValueError inside the engine).
+    """
+    if not isinstance(token, str):
+        return None
+    try:
+        return Capacity(token.strip().lower())
+    except ValueError:
+        return None
 
 
 def measures_for(region_key: str) -> tuple[Measure, ...]:

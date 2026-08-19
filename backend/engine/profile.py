@@ -40,6 +40,9 @@ def profile_to_dict(p: models.FortificationProfile | None) -> dict[str, Any] | N
         "live_signals": p.live_signals or [],
         "hard_stops": p.hard_stops or [],
         "vehicle_bias": p.vehicle_bias or [],
+        # Returned VERBATIM, not normalised — the round-trip is byte-identical by
+        # contract, and None stays None ("no template" is distinct from an empty one).
+        "weekly_template": p.weekly_template,
         "probe_budget": p.probe_budget,
         "notes": p.notes,
     }
@@ -48,11 +51,93 @@ def profile_to_dict(p: models.FortificationProfile | None) -> dict[str, Any] | N
 _UPSERTABLE = (
     "floor", "ceiling", "horizon", "horizon_date", "primary_target",
     "primary_target_note", "live_signals", "hard_stops", "vehicle_bias",
-    "probe_budget", "notes",
+    "weekly_template", "probe_budget", "notes",
 )
 
 
+# --------------------------------------------------------------------------- #
+# Weekly template — the capacity-quota microcycle (DECISIONS_LOG #221).        #
+# --------------------------------------------------------------------------- #
+
+# Bounds. `sessions_per_week` allows 0 (a declared-but-dormant slot, distinct from
+# an absent one) and tops out at twice-daily. `minutes` is a session length, not a
+# weekly total: below 5 nothing useful is dosed, above 180 it is not one session.
+_MAX_SESSIONS_PER_WEEK = 14
+_MIN_SLOT_MINUTES = 5
+_MAX_SLOT_MINUTES = 180
+
+_SLOT_FIELDS = ("capacity", "sessions_per_week", "minutes")
+
+
+def _slot_int(slot: dict[str, Any], field: str, lo: int, hi: int, i: int) -> None:
+    """Range-check one integer slot field. `bool` is rejected explicitly: it is an
+    `int` subclass, so `True` would otherwise pass as `sessions_per_week=1`."""
+    if field not in slot:
+        raise ValueError(f"weekly_template.slots[{i}]: missing required field {field!r}")
+    v = slot[field]
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise ValueError(
+            f"weekly_template.slots[{i}].{field} must be an integer, got {type(v).__name__}"
+        )
+    if not (lo <= v <= hi):
+        raise ValueError(f"weekly_template.slots[{i}].{field} must be {lo}-{hi}, got {v}")
+
+
+def validate_weekly_template(value: Any) -> dict[str, Any]:
+    """Validate a weekly template, raising ValueError with a field-located message.
+
+    Fail-closed on unknown capacity strings rather than storing them: the template
+    is read by `select_next` to constrain a candidate set, and a capacity nothing
+    matches would silently select nothing — a wrong-but-quiet programme rather than
+    a loud refusal. Same reasoning as the `measure_key` registry (#161): declaring
+    the set and validating at write is what stops a synonym pile forming.
+
+    The value is returned UNCHANGED, never canonicalised. `PUT`-then-`GET` is
+    byte-identical by contract, so a template written as "STABILITY" reads back as
+    "STABILITY". Consumers resolve through `taxonomy.resolve_capacity`, which
+    accepts either spelling — see Q105 for whether that stays the right trade.
+    """
+    if not isinstance(value, dict):
+        raise ValueError("weekly_template must be an object with a 'slots' list")
+    extra = sorted(set(value) - {"slots"})
+    if extra:
+        raise ValueError(f"weekly_template: unknown field(s) {extra}")
+    slots = value.get("slots")
+    if not isinstance(slots, list):
+        raise ValueError("weekly_template.slots must be a list")
+
+    seen: dict[taxonomy.Capacity, int] = {}
+    for i, slot in enumerate(slots):
+        if not isinstance(slot, dict):
+            raise ValueError(f"weekly_template.slots[{i}] must be an object")
+        extra = sorted(set(slot) - set(_SLOT_FIELDS))
+        if extra:
+            raise ValueError(f"weekly_template.slots[{i}]: unknown field(s) {extra}")
+        cap = taxonomy.resolve_capacity(slot.get("capacity"))
+        if cap is None:
+            raise ValueError(
+                f"weekly_template.slots[{i}].capacity: unknown capacity "
+                f"{slot.get('capacity')!r} — one of {taxonomy.capacity_tokens()}"
+            )
+        if cap in seen:
+            raise ValueError(
+                f"weekly_template.slots[{i}].capacity: duplicate capacity "
+                f"{cap.name} (already declared at slots[{seen[cap]}])"
+            )
+        seen[cap] = i
+        _slot_int(slot, "sessions_per_week", 0, _MAX_SESSIONS_PER_WEEK, i)
+        _slot_int(slot, "minutes", _MIN_SLOT_MINUTES, _MAX_SLOT_MINUTES, i)
+
+    return value
+
+
 def upsert_profile(db: Session, user_id: int, data: dict[str, Any]) -> models.FortificationProfile:
+    # Validate BEFORE touching the session. A refused template must leave no row
+    # behind, and `db.add` below runs before the field loop — so a mid-loop raise
+    # would leave a pending INSERT for a caller that shares the session.
+    if data.get("weekly_template") is not None:
+        validate_weekly_template(data["weekly_template"])
+
     p = get_profile(db, user_id)
     if p is None:
         p = models.FortificationProfile(user_id=user_id)

@@ -3117,3 +3117,54 @@ snapshot and binding those two downstream changes to this question.
 
 **State:** OPEN — blocks nothing today. Owner: Luke. Cross-refs #220 (the cutover), #50
 (the guard's origin), #86 (the producer pipeline), #202 (the rephrase validator).
+
+
+## Q105. `weekly_template` stores capacity tokens verbatim, so the same slot can be spelled two ways
+
+`validate_weekly_template` accepts either the `Capacity` enum NAME (`"STABILITY"`) or its VALUE
+(`"stability"`), case-insensitively, and stores whichever the client sent. That was a deliberate
+read of #221's round-trip gate — `PUT` then `GET` byte-identical — but it means the column can
+hold `"STABILITY"` for one user and `"stability"` for another, both valid, and every consumer
+must go through `taxonomy.resolve_capacity` rather than comparing strings.
+
+**Why it is not obviously wrong:** the repo's own `measure_key` reasoning (#161) says declare
+the set and validate at write, which this does — the set is closed and a non-member is refused.
+What is left open is only the SPELLING, and the resolver is the single point that absorbs it.
+
+**Why it may still be wrong:** the risk is a consumer written against the wrong half. A
+`slot["capacity"] == region.capacity.value` comparison looks correct and silently never matches
+a template written in uppercase. Nothing in the type system prevents that; only the convention
+of routing through `resolve_capacity` does. `select_next` already normalises internally for
+exactly this reason.
+
+Resolve by either (a) canonicalising on write and downgrading the round-trip gate to
+"semantically identical", or (b) keeping verbatim storage and adding a test that no consumer
+compares a slot capacity to a string directly.
+
+**State:** OPEN — blocks nothing today; one consumer exists (`select_next`) and it normalises.
+Owner: Luke. Cross-refs #221 (the decision), #161 (the declare-the-set precedent).
+
+## Q106. How a slot's `minutes` reaches the prescription is undefined
+
+A `weekly_template` slot declares `minutes` (5-180, a session length rather than a weekly
+total). Nothing reads it. Region dosing comes from `selection._dosing(capacity, probe=...)`,
+which names the physiological windows a recommendation deposits load into and explicitly does
+NOT fabricate a quantitative dose — that plugs into the designed-but-unbuilt Banister Form load
+model (#18).
+
+Three readings are open and they are not equivalent:
+
+- **`minutes` scales set volume** — the slot's duration drives how much work is prescribed
+  within the selected region. Needs the load model, or a cruder volume heuristic that would then
+  be hard to retire.
+- **`minutes` caps region count per session** — a 15-minute slot fits one region, a 45-minute
+  slot three. Buildable today, but it silently couples session length to breadth, which is a
+  programming opinion the engine has not otherwise taken.
+- **`minutes` is advisory text only** — surfaced to the user, read by nothing. Honest about the
+  current state, and the cheapest to reverse.
+
+Deliberately out of scope at #221: the template is a declaration, and consuming it is a separate
+lane. The field is validated and stored so the consuming lane needs no migration.
+
+**State:** OPEN — blocks the weekly-resolver lane, nothing else. Owner: Luke. Cross-refs #221
+(the declaration), #18 (the load model the first reading depends on), Q105.

@@ -975,6 +975,33 @@ CREATE INDEX ix_marker_canonical_entries_marker_canonical ON marker_canonical_en
 
 **Writes.** `POST /labs/canonical/bind` is the only runtime writer (`source='bind'`). It refuses 409 on an already-mapped raw name (a mapped marker is not unmapped; binding it is a category error, not an update) and 422 on over-collapse — at bind time (the canonical already established at a different unit) and at backfill time (a historical `lab_results` row carrying a disagreeing unit). A bind promotes that marker's historical rows where `marker_canonical IS NULL`; a refused bind promotes **nothing**, since a half-migrated series is harder to see and harder to undo than a refusal.
 
+### 023 — fortification_profiles.weekly_template
+
+One additive nullable `JSON` column on the pre-existing `fortification_profiles` table (migration `b7c3e91f2a48`, DECISIONS_LOG #221). The parent table predates this document's coverage (see the note under 020); only this column is recorded here.
+
+Holds the capacity-quota microcycle — how much of which capacity, how often, for how long:
+
+```json
+{"slots": [
+  {"capacity": "ENDURANCE", "sessions_per_week": 2, "minutes": 30},
+  {"capacity": "STABILITY", "sessions_per_week": 2, "minutes": 15},
+  {"capacity": "POWER",     "sessions_per_week": 2, "minutes": 15},
+  {"capacity": "STRENGTH",  "sessions_per_week": 3, "minutes": 45}
+]}
+```
+
+**Sport-agnostic by construction.** A slot names a taxonomy `Capacity` and a dose — never a sport, a position, or an exercise. There is no `sport` column and the shape admits none. Sport-specificity is expressed through fields that already exist (`vehicle_bias`, `horizon`, `primary_target`), so two users with identical templates and different bias get different programmes.
+
+**Validated at write, stored verbatim.** `engine/profile.py::validate_weekly_template` rejects (422) an unknown `capacity`, a duplicate capacity across slots, `sessions_per_week` outside 0-14, `minutes` outside 5-180, and any unknown field. Validation runs *before* the session is touched, so a refused template leaves no row. The value is **not canonicalised** — `PUT` then `GET` is byte-identical, so a slot written `"STABILITY"` reads back `"STABILITY"`; consumers resolve through `taxonomy.resolve_capacity`, which accepts the enum name or its value case-insensitively (open trade: Q105).
+
+**NULL is a valid state, not a degraded one** — a user with no template behaves exactly as before this column existed. `upsert_profile` cannot write NULL back (the shared `is not None` guard, same as `hard_stops` / `live_signals` / every other field), so retirement is expressed as the empty-slot sentinel `{"slots": []}` rather than a clear.
+
+```sql
+ALTER TABLE fortification_profiles ADD COLUMN weekly_template JSON;
+```
+
+**Readers.** `select_next(..., capacity=)` filters the probe candidate set to one slot's capacity; `GET /engine/next?capacity=` passes it through. Nothing yet resolves *which* slot is due — the template is a declaration, and the consuming lane (weekly resolver) is `ROADMAP` NEXT. How a slot's `minutes` reaches the prescription is deliberately unresolved (Q106).
+
 ## Canonical Metric Type Whitelist
 
 ```python
