@@ -2,8 +2,8 @@
 
 *Load this at session start. Repo-canonical (health-app); the Claude.ai project-knowledge*
 *copy is a refreshed mirror, not the master. Full provenance — the behavioural-correction*
-*essays (§§1–3), the superseded injury snapshot (§5), and the 22 verification-rule essays*
-*(§§7–28) — lives in `FEEDBACK_ARCHIVE.md`, which is NOT read at session start.*
+*essays (§§1–3), the superseded injury snapshot (§5), and the 24 verification-rule essays*
+*(§§7–30) — lives in `FEEDBACK_ARCHIVE.md`, which is NOT read at session start.*
 *Last updated: 9 August 2026.*
 
 ---
@@ -72,5 +72,5 @@ These emerged organically from corrections and should be treated as first-class 
 
 ---
 
-*Full provenance — §§1–3 correction essays, the §5 superseded injury snapshot, and the §§7–29*
+*Full provenance — §§1–3 correction essays, the §5 superseded injury snapshot, and the §§7–30*
 *verification-rule essays — is in `FEEDBACK_ARCHIVE.md` (not read at session start).*
