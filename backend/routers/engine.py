@@ -169,8 +169,9 @@ def put_profile(
     try:
         p = profile_mod.upsert_profile(db, current_user.id, data)
     except ValueError as exc:
-        # Fail-closed: the validator runs before the session is touched, so a
-        # refused template leaves no row behind (#221).
+        # Fail-closed: every validator (weekly_template #221, assertion provenance
+        # #227) runs before the session is touched, so a refused PUT leaves no row
+        # behind and mutates no existing one.
         raise HTTPException(status_code=422, detail=str(exc))
     return {"profile": profile_mod.profile_to_dict(p)}
 

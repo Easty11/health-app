@@ -9045,3 +9045,122 @@ forbids), or a consumer appears that must act on the reported/defaulted distinct
 surface it. Preference for completeness is not a trigger.
 
 ---
+
+### 227. Assertion provenance lives inside the JSON entry; writes require it, reads tolerate its absence
+
+**Decision:** each entry in `fortification_profiles.hard_stops` and `live_signals` carries a
+provenance block as KEYS INSIDE the entry — `asserted_by` (`user` | `engine` | `clinician`),
+`asserted_on` (ISO date), `basis` (free text), `review_on` (ISO date or null). Not a side table,
+not a parallel list. `upsert_profile` refuses (422) an entry missing `asserted_by` or
+`asserted_on`, or carrying an unrecognised tier; `profile_to_dict` backfills entries that lack a
+block with `asserted_by: "user"`, `asserted_on: null`, `review_on: null`, and passes entries that
+carry one through VERBATIM. No migration.
+
+**Rationale — inside the entry:** an assertion and its attribution are one fact. A side table
+makes them two rows that can disagree, and every reader must then join or forget to. Both columns
+are already JSON lists of free-form dicts, so keys are addable without a migration, and the
+precedent is one tier down: `POST /engine/response` already carries a `source` alongside the
+response it describes rather than beside it.
+
+**Rationale — writes require, reads tolerate:** these are the two halves of a change-management
+rule, not an inconsistency. Making reads strict would 422 every existing profile, which is a
+migration by another name. Making writes lenient would let provenance stay optional forever, so
+the store would never actually fill in. Requiring it at the write boundary means a legacy entry
+survives untouched and acquires provenance the moment someone next edits it — which is exactly
+when the operator knows the answer.
+
+**Recorded consequence, pinned as a test rather than left in prose:** a legacy entry read back
+carries `asserted_on: null`, and re-sending that verbatim is refused, so GET -> PUT of a
+pre-provenance profile is not a no-op. The refusal message names the fix (state the date rather
+than re-sending null). This is the intended friction; recording it stops it being read later as a
+bug.
+
+**Sub-decision — only the provenance keys are validated.** Entries stay free-form domain dicts:
+`hard_stops` carry `pattern`/`region_key`/`scope`/`side`/`reason`, `live_signals` carry
+`signal`/`branch_param`/`status`/`self_triage`, and an unknown key passes. Deliberately unlike
+`validate_weekly_template` (#221), whose slots are a closed shape by design — freezing these
+shapes is not this brief's business, and doing it by accident would be the kind of scope creep
+that only surfaces when someone cannot add a field.
+
+**Sub-decision — `asserted_by` is a new key, not a rename of `source`, and its vocabulary is
+aligned deliberately.** The stores already carry `source` (`onboarding | chat | system` on
+`user_knowledge_entries`, `probe` on `/engine/response`, `self_report | catapult | hevy | polar`
+on `capability_observations`) and `method`, plus a `hard: true|false` on schedule items. Those
+answer different questions: `source` is the CHANNEL or INSTRUMENT an entry arrived through,
+`method` the capture protocol, `hard` a commitment strength. `asserted_by` is an AUTHORITY tier —
+who is making the claim — and it is orthogonal to all of them: an entry can arrive via `chat`
+while being asserted by a `clinician`, and today every knowledge row reads `source: "chat"`,
+which is precisely why the channel axis carries no authority information. Collapsing them would
+lose one axis to record the other. The vocabulary IS aligned where it should be: with #222's
+`resolved_by` (`user | clinician`), the other authority field in the tree. The two differ by
+exactly one member — `engine` — because an engine can assert (a probe response is an inference
+the engine made) but must never resolve (#223: nothing auto-resolves). Both the disjointness from
+the channel words and the exact one-member difference from `resolved_by` are asserted as tests, so
+a later merge of the vocabularies has to argue with a gate rather than look like tidying.
+
+**Sub-decision — `weekly_template` takes no provenance block.** It is a DECLARATION (a capacity
+quota the user is choosing), not an ASSERTION about the world. Provenance answers "who claimed
+this is true"; a template has no truth value to attribute. Recorded because `weekly_template`
+joined `_UPSERTABLE` and `profile_to_dict` in #221, one commit before this, and its absence from
+`_PROVENANCED_FIELDS` will otherwise read as an oversight.
+
+**Status:** active.
+
+**How you know:** 51 tests (`backend/tests/test_assertion_provenance.py`). THE regression gate
+runs the same hard stop in BOTH shapes — with and without provenance — through the real
+`is_contraindicated` path in one comparison, asserting the same verdict AND the same reason
+string; a second runs `compute_probe_queue` -> `select_next` for two users whose profiles differ
+only in the presence of provenance keys and asserts identical selection. Running both shapes in
+one test is what makes it a comparison rather than an assumption that added keys are inert. The
+seed gained provenance this session and its selection is separately pinned. The backfill is
+asserted not to write: the stored column keeps the legacy shape after a read. The refusal battery
+carries negative controls (all three tiers accepted). Gates mutation-tested against three seeded
+defects, each caught by the intended gate: a backfill that clobbers real provenance fails the
+verbatim, mixed-profile and round-trip gates; skipping `live_signals` validation fails only the
+`live_signals` arm of the parametrised refusals; and treating `review_on` as an expiry fails all
+four guard gates (see #228). Two #221 tests were updated — they wrote `hard_stops` without
+provenance, which the new write contract refuses. Backend 1018 -> 1069.
+
+**Do not revisit unless:** a second store gains an authority field, in which case it aligns with
+these values rather than inventing a third vocabulary — or `asserted_by: "clinician"` is made to
+carry identity, which is Q108 and binds both stores at once.
+
+---
+
+### 228. `review_on` is a prompt, never an expiry — nothing auto-retires
+
+**Decision:** `review_on` on a `hard_stop` or `live_signal` means ASK AGAIN on this date. It does
+not, and must not, cause `gather_active_injuries`, `is_contraindicated`, or `compute_probe_queue`
+to skip the entry. A `review_on` in the past still blocks, exactly as it did the day it was
+written. `null` means standing until explicitly retired. Retirement is always an explicit write.
+
+**Rationale:** a hard stop that quietly stops applying because a date passed is a safety failure
+with no operator in the loop, and it is the precise inversion of what provenance is for — the
+brief exists because stale entries silently constrain, and an auto-expiry would replace that with
+stale entries silently UN-constraining, which is worse: an un-applied safety rule fails open. The
+asymmetry is deliberate. A stop that outlives its usefulness costs a conservative recommendation
+the operator can notice and retire; a stop that expires itself costs a recommendation into a
+region the operator still needs protected, and nothing surfaces that it happened.
+
+**This restates #223 in a second store rather than assuming it carries.** #223 settled that
+nothing auto-resolves an injury; this settles that nothing auto-expires a profile assertion. They
+are the same rule about different objects, and the temptation is identical — the date is right
+there, and using it looks like the obvious feature. Both are recorded because the next thing
+built near either one will be a review surface, and a review surface that resolves is one
+refactor away from a review surface that expires.
+
+**Status:** active. Same rule as #223, different store.
+
+**How you know:** four guard gates, one of them structural. `is_contraindicated` blocks a stop
+whose `review_on` is 2020-01-01; `compute_probe_queue` still excludes the region; past, future,
+null and absent `review_on` are asserted to produce IDENTICAL verdicts in one comparison, so an
+edit that reads the field at all fails; and a source-level gate asserts `engine/selection.py`
+contains no reference to `review_on` whatsoever, which catches a future filter even if no
+behavioural test covers its shape. Mutation-tested: seeding an expiry check into
+`is_contraindicated` fails all four, including the structural one.
+
+**Do not revisit unless:** a retirement mechanism is built — in which case it is an explicit
+operator write, like #222's resolve endpoint, and this entry is its constraint rather than its
+obstacle.
+
+---
