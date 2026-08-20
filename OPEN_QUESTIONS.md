@@ -3392,3 +3392,32 @@ explicit rather than by picking whichever word reads well against row 75.
 **State:** OPEN — blocks nothing; four rows are mislabelled and legible. Owner: Luke. Cross-refs
 §31 (the audit that missed this), #227 (the `asserted_by` authority axis and the audit in
 question), Q108 (vocabulary bound across stores), #222 (`resolved_by`, the other authority field).
+
+
+## Q#NEXT. Should `FEEDBACK.md` get a `CHECKS` arm, and should it guard placeholders or collisions?
+
+`scripts/check_governance_placeholders.py` pins two arms: `DECISIONS_LOG.md` for `#NEXT` and
+`OPEN_QUESTIONS.md` for `Q#NEXT`. `FEEDBACK.md` has none. A `§N` written on one branch has nothing
+catching a collision with a `§N` written on another, and nothing catching an unresolved token either.
+Surfaced by `§31` in this batch, which is safe only because `§30` is still master's max and this branch
+is the only writer.
+
+**The fork is not simply "add the missing arm".** The two stores differ in shape, and the uniform answer
+may be the wrong one:
+
+- **Adopt `§NEXT` placeholders and add a placeholder arm** — uniform with the other two stores, one
+  mechanism to understand, and the guard already knows how to say it. Costs another token to resolve on
+  every FEEDBACK-touching branch, on a store whose entries are usually a single line.
+- **Keep concrete numbers and add a collision arm instead** — `FEEDBACK.md` is a sorted one-per-line
+  list, so a duplicate `§31` is visible on sight in a way an unresolved placeholder in a 700-line
+  DECISIONS entry is not. The store's shape already does half the work a placeholder does elsewhere, and a
+  collision check catches the failure that can actually reach master here.
+
+Answering it means deciding whether the guard enforces one convention across three stores or the right
+convention per store — and the second is more work to maintain but is the honest reading of why the arms
+were written differently in the first place.
+
+**State:** OPEN — blocks nothing today; `§31` is uncontested and this branch resolves before it lands.
+Owner: Luke. Cross-refs `§20` (hardcoded governance numbers accrue renumber debt), `#162` (the hole an
+unseen placeholder rode through, and the reason the guard exists), `#113` (anchored match, not substring
+— either arm must anchor on the heading form).
