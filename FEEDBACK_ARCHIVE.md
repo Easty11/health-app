@@ -1,7 +1,7 @@
 # FEEDBACK_ARCHIVE.md
 
 Full provenance for the condensed `FEEDBACK.md`. Covers §§1–3 (behavioural corrections and
-preferences, verbatim), §5 (a superseded injury snapshot, tombstoned), and §§7–28 (the
+preferences, verbatim), §5 (a superseded injury snapshot, tombstoned), and §§7–30 (the
 verification-rule essays, verbatim), plus the pre-prune `CLAUDE.md`. **Not read at session
 start.** Consult only when a rule's origin or scope is disputed. Section numbering matches the
 pre-prune `FEEDBACK.md`.
@@ -1328,6 +1328,41 @@ And more generally: when an instrument's clean result is byte-identical to its f
 needs a positive control that cannot return the clean value — here, a `SELECT current_database()` or a
 `count(*)` known to be non-zero, run through the same path. If the control comes back empty, the measurement
 did not happen, whatever the subject query appeared to say.
+
+---
+
+## 30. A symptom observed on one direction of a channel is not a finding about the channel ([[§17]], [[§23]], [[§12]])
+
+**What happened.** `§30` was minted from a read-side observation: a `GET` response containing an em-dash
+rendered as `â` in a PowerShell 5.1 console, because the backend's `application/json` carries no
+`charset` and 5.1 falls back to ISO-8859-1. The diagnosis was correct and the entry closed with an
+instruction — *the garbling is the CLIENT's, so never "fix" data that reads fine over HTTP elsewhere*
+(superseded text, carried verbatim from the `0a` verification, `FEEDBACK.md:70` at `6094088`).
+
+The instruction was right about the pathway it was drawn from and wrong about every other one. The same
+missing `charset` governs the request body: PowerShell 5.1 encodes the outbound payload as ISO-8859-1 before
+it leaves the machine. Four operator writes to `POST /knowledge/entry` (ids 75–78) persisted their
+em-dashes as plain hyphens. That is loss at rest, not display, and the entry's own closing clause is
+precisely the sentence that tells a reader to stop looking.
+
+**Why the generalisation was invisible.** A read-side test that reproduces the mojibake is a complete,
+passing, honest test of the read path. Nothing about it announces that the write path was never exercised
+— `§23`'s distinction, arriving here as tested ≠ exercised on the opposite leg of the same channel.
+The symptom also arrived in the harmless direction first, which is the worst ordering: the harmless case
+supplied a satisfying mechanism, and the mechanism was then trusted past the evidence that produced it.
+
+**The rule the em-dashes let us survive.** Nothing was lost that mattered. An em-dash degrading to a hyphen
+is legible. The channel's actual traffic is lab and imaging notation — `µg/L`, `°`, `×` —
+where the same silent downgrade is not legible, and where a value that reads plausibly after corruption is
+indistinguishable from one that was never corrupted. The finding is cheap only because it landed on the one
+character class that shows its own damage.
+
+**What amends it.** The rule now names both directions, states which one is display and which is at rest,
+and carries the row ids so a reader cannot take the read half as the whole. The fix — `charset=utf-8` on
+the default response class — is not landed and is gated behind a live `µ` round-trip, per `§8`: a
+response header that looks correct in a diff has not been shown to change 5.1's behaviour.
+
+See `DECISIONS_LOG` #229 for the amend-in-place convention this entry is the first instance of.
 
 ---
 

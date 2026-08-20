@@ -9164,3 +9164,36 @@ operator write, like #222's resolve endpoint, and this entry is its constraint r
 obstacle.
 
 ---
+
+### 229. A FEEDBACK entry proven wrong in scope is amended in place, not superseded by a new §
+
+**Decision:** when a `FEEDBACK.md` entry is found to be wrong in scope, its line is REWRITTEN. A
+correcting entry is not appended beneath it and the wrong text is not left standing. This is the
+opposite convention to `DECISIONS_LOG`, and the difference is deliberate: a decision is a record of
+what was decided and when, so supersession preserves the reasoning trail; FEEDBACK is a live
+instruction set, so the trail belongs in `FEEDBACK_ARCHIVE.md` and git history, never in the
+instruction itself.
+
+**Rationale:** FEEDBACK is read at session start as a set of standing instructions, not as history.
+A superseded entry left in place keeps instructing until the reader reaches its replacement, and a
+reader who acts on the first thing they read has already acted. §30 is the case that shows the
+cost. It told a reader never to "fix" data that reads fine over HTTP elsewhere — correct for the
+read path, and actively suppressing on the write path, where the loss is real and at rest. A wrong
+rule sitting above its correction is a rule that still fires.
+
+**Status:** active. Applies to `FEEDBACK.md` only. `DECISIONS_LOG` supersession is unchanged, as is
+`OPEN_QUESTIONS`, where a superseded item carries an explicit `**State:**` a reader cannot miss.
+
+**How you know:** the superseded §30 text is recoverable via `git log -p -- FEEDBACK.md`, so
+amending in place destroys nothing. The amended line names BOTH directions and the evidence
+(em-dashes persisted as hyphens, `POST /knowledge/entry` ids 75-78), so a reader cannot take the
+read-half as the whole rule. The convention had no precedent before this entry: across 39 commits
+touching `FEEDBACK.md`, no `- §N` line has ever been deleted — `git log -p --follow --
+FEEDBACK.md` matched against the anchored form `^-- §[0-9]+` returns nothing, so every deletion in
+the store's history is essay prose, a footer metadata line, or the 2026-08-09 prune, never a rule's
+text.
+
+**Do not revisit unless:** FEEDBACK stops being read at session start, at which point the
+live-instruction argument no longer holds and the store becomes history like the others.
+
+---

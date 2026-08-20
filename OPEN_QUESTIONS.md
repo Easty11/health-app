@@ -3303,3 +3303,121 @@ retire an entry without an explicit operator write carrying a basis.
 **State:** OPEN — blocks nothing; `review_on` is recorded and inert by design. Owner: Luke.
 Cross-refs #227/#228 (the field and its guard), Q107 (the same question for injury resolve
 prompts), #72 (the check-in's scope), Q108 (the vocabulary precedent for answering once).
+
+
+## Q111. Should the store represent that two injury entries are one presentation, and if so how?
+
+`injury_pes_anserine_left` (75) and `injury_calf_left` (76) are two rows describing one thing. The
+medial gastrocnemius origin sits on the medial femoral condyle, so calf mechanics drive medial knee
+loading and the pes anserine is stalled downstream of the calf rather than alongside it. Treating
+them as independent gets the sequencing wrong: the knee will not settle while the calf that loads
+it is still the live constraint.
+
+The store holds that relationship only as prose in two `detail` fields, where nothing reads it.
+`is_contraindicated` evaluates each row independently, so clearing one entry says nothing about the
+other, and the coupling survives exactly as long as the operator remembers it.
+
+**Fourth instance of the same shape** — the store records facts, not relationships. Cf. the
+duplicated schedule items, the weekly-store split, and the absent phase concept (the next question
+in this batch). Each was survivable alone; four of them says the omission is structural rather than
+incidental.
+
+The fork:
+
+- **An explicit `coupled_with` key** — names the relationship where an evaluator could read it,
+  at the cost of a schema addition and a direction convention (does the calf point at the knee, the
+  knee at the calf, or both?).
+- **Leave it as prose** — correct if the coupling is genuinely operator knowledge that no code
+  should act on; the cost is that it stays unreadable and dies with the memory of it.
+- **A group id** — cheapest to write, weakest to query: it asserts that these belong together
+  without saying which one drives the other, and the direction is the half that matters here.
+
+**State:** OPEN — blocks nothing today; both entries are active and independently correct, and
+the wrong answer is only reachable through a plan that clears the knee while the calf still loads
+it. Owner: Luke. Cross-refs #222/#223 (injury resolution, surfacing-only), the phase question below
+(the same missing-relationship shape one layer up), Q109 (an entry whose prose outruns what code
+reads).
+
+
+## Q112. Does the engine need a phase concept, or is a deliberate settle the operator's to hold outside the system?
+
+The profile carries `horizon=life` and `ceiling=breadth` — a standing statement of intent, and a
+true one. The engine reads it and recommends a probe at 0.25 budget. Meanwhile the operator is
+holding a deliberate settle across a linked left-leg cluster with running restricted: a temporary
+posture that contradicts nothing about the standing intent and everything about what this week
+should look like.
+
+**The back-off is entirely outside the system.** Nothing in the store separates what the operator
+is building toward from what the operator is doing right now, so the engine cannot be wrong about
+the phase — it has no phase to be wrong about. The gap is absorbed by ignoring the
+recommendation, which is the failure mode where the engine quietly stops being consulted at all.
+
+`schedule_item` id 9 already carries a `phases` block that nothing reads. That is either the start
+of the answer or evidence the concept was reached for once and left unfinished.
+
+**Partly blocked by `upsert_profile`'s null-guard.** A phase that cannot be cleanly unset is worse
+than no phase: a settle outliving its reason becomes a standing restriction nobody chose, which is
+the failure #228 names for `review_on` in the store next door. Answering this means either changing
+the null-guard or accepting that a phase can be overwritten and never cleared.
+
+**State:** OPEN — blocks nothing mechanically; the cost is a recommendation the operator
+overrides by hand, and an engine that earns less trust each time. Owner: Luke. Cross-refs the injury
+coupling question above (the same missing-relationship shape), #228 (an un-clearable standing
+value), Q105/Q106 (the weekly-store ownership questions this sits beside).
+
+
+## Q113. Which `source` value names an operator write made directly against the API?
+
+Rows 75–78 were written by the operator, from PowerShell, against `POST /knowledge/entry`. They
+carry `source: "chat"`, which is false — no chat turn produced them. The value was never chosen;
+it is the default, and the default was the only member the vocabulary had that could absorb them.
+
+Two candidates, and they are not the same kind of answer:
+
+- **`api`** — names the channel the write arrived on, which is what `onboarding | chat | system`
+  already enumerates. Consistent with the existing axis; says nothing about who was behind it.
+- **`operator`** — names the writer, which is an authority claim — the axis #227 introduced
+  separately as `asserted_by` (`user | engine | clinician`). Says who; says nothing about how the
+  write arrived.
+
+**Picking one silently decides which axis `source` is.** Today it is a channel field whose members
+happen to imply an author, and that ambiguity is why a PowerShell write had nowhere honest to land.
+Adding `operator` resolves these four rows and makes `source` a mixed axis; adding `api` keeps the
+axis clean and leaves authority to `asserted_by`, at the cost of `source` never answering "who".
+
+Cross-ref Q108, which binds `asserted_by` across two stores: whichever way this is answered sets the
+same kind of precedent for the next store that adopts it, so answer it with the axis question
+explicit rather than by picking whichever word reads well against row 75.
+
+**State:** OPEN — blocks nothing; four rows are mislabelled and legible. Owner: Luke. Cross-refs
+§31 (the audit that missed this), #227 (the `asserted_by` authority axis and the audit in
+question), Q108 (vocabulary bound across stores), #222 (`resolved_by`, the other authority field).
+
+
+## Q114. Should `FEEDBACK.md` get a `CHECKS` arm, and should it guard placeholders or collisions?
+
+`scripts/check_governance_placeholders.py` pins two arms: `DECISIONS_LOG.md` for `#NEXT` and
+`OPEN_QUESTIONS.md` for `Q#NEXT`. `FEEDBACK.md` has none. A `§N` written on one branch has nothing
+catching a collision with a `§N` written on another, and nothing catching an unresolved token either.
+Surfaced by `§31` in this batch, which is safe only because `§30` is still master's max and this branch
+is the only writer.
+
+**The fork is not simply "add the missing arm".** The two stores differ in shape, and the uniform answer
+may be the wrong one:
+
+- **Adopt `§NEXT` placeholders and add a placeholder arm** — uniform with the other two stores, one
+  mechanism to understand, and the guard already knows how to say it. Costs another token to resolve on
+  every FEEDBACK-touching branch, on a store whose entries are usually a single line.
+- **Keep concrete numbers and add a collision arm instead** — `FEEDBACK.md` is a sorted one-per-line
+  list, so a duplicate `§31` is visible on sight in a way an unresolved placeholder in a 700-line
+  DECISIONS entry is not. The store's shape already does half the work a placeholder does elsewhere, and a
+  collision check catches the failure that can actually reach master here.
+
+Answering it means deciding whether the guard enforces one convention across three stores or the right
+convention per store — and the second is more work to maintain but is the honest reading of why the arms
+were written differently in the first place.
+
+**State:** OPEN — blocks nothing today; `§31` is uncontested and this branch resolves before it lands.
+Owner: Luke. Cross-refs `§20` (hardcoded governance numbers accrue renumber debt), `#162` (the hole an
+unseen placeholder rode through, and the reason the guard exists), `#113` (anchored match, not substring
+— either arm must anchor on the heading form).

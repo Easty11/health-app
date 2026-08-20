@@ -2,8 +2,8 @@
 
 *Load this at session start. Repo-canonical (health-app); the Claude.ai project-knowledge*
 *copy is a refreshed mirror, not the master. Full provenance — the behavioural-correction*
-*essays (§§1–3), the superseded injury snapshot (§5), and the 22 verification-rule essays*
-*(§§7–28) — lives in `FEEDBACK_ARCHIVE.md`, which is NOT read at session start.*
+*essays (§§1–3), the superseded injury snapshot (§5), and the 24 verification-rule essays*
+*(§§7–30) — lives in `FEEDBACK_ARCHIVE.md`, which is NOT read at session start.*
 *Last updated: 9 August 2026.*
 
 ---
@@ -67,9 +67,10 @@ These emerged organically from corrections and should be treated as first-class 
 - §27 Null-on-sparse-row class closed — re-open conditions in archive §27
 - §28 The §7 unit guard held under real over-collapse pressure
 - §29 Railway's dashboard editor silently no-ops a multi-statement paste — one statement per prod check
-- §30 Backend `application/json` carries no `charset`; PowerShell 5.1 falls back to ISO-8859-1 and mojibakes every non-ASCII byte in an API response — the garbling is the CLIENT's, so never "fix" data that reads fine over HTTP elsewhere
+- §30 Backend `application/json` carries no `charset`; PowerShell 5.1 falls back to ISO-8859-1 in BOTH directions — READ mojibakes the response (client-side, display only), WRITE downgrades the request body before it is sent, so non-ASCII is lost at rest (em-dashes persisted as hyphens, `POST /knowledge/entry` ids 75–78); a client-side read symptom does not license "the data is fine", and this entry asserted exactly that until the write half was found
+- §31 Auditing a vocabulary's members does not audit its coverage — the channel axis (`onboarding | chat | system`) was audited in #227 and one day later took four writes it has no member for, all silently defaulted to `chat`
 
 ---
 
-*Full provenance — §§1–3 correction essays, the §5 superseded injury snapshot, and the §§7–29*
+*Full provenance — §§1–3 correction essays, the §5 superseded injury snapshot, and the §§7–30*
 *verification-rule essays — is in `FEEDBACK_ARCHIVE.md` (not read at session start).*
