@@ -9165,7 +9165,7 @@ obstacle.
 
 ---
 
-### #NEXT. A FEEDBACK entry proven wrong in scope is amended in place, not superseded by a new §
+### 229. A FEEDBACK entry proven wrong in scope is amended in place, not superseded by a new §
 
 **Decision:** when a `FEEDBACK.md` entry is found to be wrong in scope, its line is REWRITTEN. A
 correcting entry is not appended beneath it and the wrong text is not left standing. This is the

@@ -3305,7 +3305,7 @@ Cross-refs #227/#228 (the field and its guard), Q107 (the same question for inju
 prompts), #72 (the check-in's scope), Q108 (the vocabulary precedent for answering once).
 
 
-## Q#NEXT. Should the store represent that two injury entries are one presentation, and if so how?
+## Q111. Should the store represent that two injury entries are one presentation, and if so how?
 
 `injury_pes_anserine_left` (75) and `injury_calf_left` (76) are two rows describing one thing. The
 medial gastrocnemius origin sits on the medial femoral condyle, so calf mechanics drive medial knee
@@ -3339,7 +3339,7 @@ it. Owner: Luke. Cross-refs #222/#223 (injury resolution, surfacing-only), the p
 reads).
 
 
-## Q#NEXT. Does the engine need a phase concept, or is a deliberate settle the operator's to hold outside the system?
+## Q112. Does the engine need a phase concept, or is a deliberate settle the operator's to hold outside the system?
 
 The profile carries `horizon=life` and `ceiling=breadth` — a standing statement of intent, and a
 true one. The engine reads it and recommends a probe at 0.25 budget. Meanwhile the operator is
@@ -3366,7 +3366,7 @@ coupling question above (the same missing-relationship shape), #228 (an un-clear
 value), Q105/Q106 (the weekly-store ownership questions this sits beside).
 
 
-## Q#NEXT. Which `source` value names an operator write made directly against the API?
+## Q113. Which `source` value names an operator write made directly against the API?
 
 Rows 75–78 were written by the operator, from PowerShell, against `POST /knowledge/entry`. They
 carry `source: "chat"`, which is false — no chat turn produced them. The value was never chosen;
@@ -3394,7 +3394,7 @@ explicit rather than by picking whichever word reads well against row 75.
 question), Q108 (vocabulary bound across stores), #222 (`resolved_by`, the other authority field).
 
 
-## Q#NEXT. Should `FEEDBACK.md` get a `CHECKS` arm, and should it guard placeholders or collisions?
+## Q114. Should `FEEDBACK.md` get a `CHECKS` arm, and should it guard placeholders or collisions?
 
 `scripts/check_governance_placeholders.py` pins two arms: `DECISIONS_LOG.md` for `#NEXT` and
 `OPEN_QUESTIONS.md` for `Q#NEXT`. `FEEDBACK.md` has none. A `§N` written on one branch has nothing

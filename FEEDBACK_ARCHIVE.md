@@ -1362,7 +1362,7 @@ and carries the row ids so a reader cannot take the read half as the whole. The 
 the default response class — is not landed and is gated behind a live `µ` round-trip, per `§8`: a
 response header that looks correct in a diff has not been shown to change 5.1's behaviour.
 
-See `DECISIONS_LOG` #NEXT for the amend-in-place convention this entry is the first instance of.
+See `DECISIONS_LOG` #229 for the amend-in-place convention this entry is the first instance of.
 
 ---
 
