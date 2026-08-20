@@ -85,12 +85,14 @@ def test_current_state_excludes_superseded_entry(db_session):
 
     first = upsert_knowledge_entry(
         user.id,
-        KnowledgeEntryIn(type="schedule_item", key="physio_2026_07", value={"activity": "physio v1"}),
+        KnowledgeEntryIn(type="schedule_item", key="physio_2026_07",
+                         value={"activity": "physio v1"}, source="chat"),
         db_session,
     )
     second = upsert_knowledge_entry(
         user.id,
-        KnowledgeEntryIn(type="schedule_item", key="physio_2026_07", value={"activity": "physio v2"}),
+        KnowledgeEntryIn(type="schedule_item", key="physio_2026_07",
+                         value={"activity": "physio v2"}, source="chat"),
         db_session,
     )
 
