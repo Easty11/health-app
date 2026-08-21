@@ -3194,8 +3194,13 @@ The open part is not WHETHER to connect them but WHERE, and the surfaces are not
 Whichever wins, the prompt must stay a PROMPT: #223 is unconditional, so no surface may resolve
 without an explicit operator action carrying a `basis`.
 
-**State:** OPEN — blocks nothing; resolution is reachable today via the endpoint. Owner: Luke.
-Cross-refs #223 (nothing auto-resolves), #222 (the write), #72 (the check-in's scope), Q108.
+**State:** DONE → #232. The standing view over `GET /knowledge/injuries` wins: a review flag
+becomes a badge on a row, and decision-support carries a count pointer into that view rather than
+a resolve control. The AM check-in is refused on #72's scope. Answered as ONE decision with Q110 —
+same question, two stores — so the two prompts share a convention instead of drifting into two.
+#232 decides WHERE, not what gets built; it authorises no UI work by itself. **Related:** `#223`
+(nothing auto-resolves — unconditional, and #232 inherits it), `#222` (the write), `#72` (the
+check-in's scope), `Q110` (answered with this), `Q108`.
 
 ## Q108. Should the `clinician` authority tier carry identity? (Both stores now exist)
 
@@ -3226,9 +3231,14 @@ briefs reached the same conclusion independently — a second user with an opini
 it, and there isn't one. When it is answered it changes `resolved_by` (#222) and `asserted_by`
 (#227) in the same change, or it is drift.
 
-**State:** OPEN — narrowed, not resolved; blocks nothing today. Owner: Luke. Cross-refs #222/#223
-(where `resolved_by` is written), #227 (where `asserted_by` is written and the vocabularies were
-aligned), #133 (unverifiable-input reasoning), Q110 (the other answer-once-for-both-stores pair).
+**State:** DONE → #231. No. Both fields record a CLASS, not an identity; `basis` — mandatory free
+text — absorbs attribution and stays prose. #133's reasoning decides it: a self-asserted,
+unverified name field looks like provenance and isn't, which is worse than honest prose, because a
+later reader trusts the structured field and reads past the free text. The binding half was already
+closed by #227 (aligned vocabularies, pinned by a test), so #231 closes only the identity question.
+**Related:** `#222`/`#223` (where `resolved_by` is written), `#227` (where `asserted_by` is written
+and the vocabularies were aligned), `#133` (unverifiable-input reasoning), `Q110`/`Q107` (the other
+answer-once-for-both-stores pair, closed by `#232`).
 
 
 ## Q109. `review_when` supports only the soreness metric, so an injury whose real exit criterion is a different observable has prose and trigger disagreeing
@@ -3300,9 +3310,14 @@ serves both, that is a design decision worth taking deliberately rather than dis
 Constraint on any answer: the prompt stays a PROMPT. #228 is unconditional, so no surface may
 retire an entry without an explicit operator write carrying a basis.
 
-**State:** OPEN — blocks nothing; `review_on` is recorded and inert by design. Owner: Luke.
-Cross-refs #227/#228 (the field and its guard), Q107 (the same question for injury resolve
-prompts), #72 (the check-in's scope), Q108 (the vocabulary precedent for answering once).
+**State:** DONE → #232. A due `review_on` surfaces as a badge on its row in `GET /engine/profile`
+— the standing view for this store — with decision-support carrying a count pointer into it and no
+retire control. Answered in the same decision as Q107, which was the point of raising it here: one
+convention applied to two stores. #228 is inherited unchanged — the prompt stays a PROMPT, and
+nothing retires without an explicit operator write carrying a `basis`. **Related:** `#227`/`#228`
+(the field and its guard), `Q107` (the same question for injury resolve prompts, closed by the same
+entry), `#72` (the check-in's scope), `Q108` (the vocabulary precedent for answering once, closed
+by `#231`).
 
 
 ## Q111. Should the store represent that two injury entries are one presentation, and if so how?
@@ -3389,9 +3404,15 @@ Cross-ref Q108, which binds `asserted_by` across two stores: whichever way this 
 same kind of precedent for the next store that adopts it, so answer it with the axis question
 explicit rather than by picking whichever word reads well against row 75.
 
-**State:** OPEN — blocks nothing; four rows are mislabelled and legible. Owner: Luke. Cross-refs
-§31 (the audit that missed this), #227 (the `asserted_by` authority axis and the audit in
-question), Q108 (vocabulary bound across stores), #222 (`resolved_by`, the other authority field).
+**State:** DONE → #230. `api`, not `operator` — `source` is a CHANNEL axis and stays one, with
+authority left to `asserted_by` (#227) and `resolved_by` (#222). The set is now declared and
+validated at write, and the `"chat"` default is REMOVED, which is the load-bearing half: the four
+rows were not a wrong choice but no choice, so a member without the removal would leave a caller
+free to mislabel by silence. Stated cost: `source` will never answer "who". **Rows 75–78 are not
+corrected by that landing** — relabelling them is a prod write against live data and is the
+operator's, per `§8`. **Related:** `§31` (the audit that missed this), `#227` (the `asserted_by`
+authority axis), `Q108` (vocabulary bound across stores, closed by `#231`), `#222` (`resolved_by`,
+the other authority field).
 
 
 ## Q114. Should `FEEDBACK.md` get a `CHECKS` arm, and should it guard placeholders or collisions?

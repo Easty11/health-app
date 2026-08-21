@@ -84,7 +84,9 @@ class UserKnowledgeEntry(Base):
     # unique identifier within type+user, e.g. "physio_2026_06", "weekly_split"
     key: Mapped[str] = mapped_column(String(255), nullable=False)
     value: Mapped[dict] = mapped_column(JSON, nullable=False)
-    # onboarding | chat | system
+    # Declared set: onboarding | chat | system | api. A CHANNEL axis -- how did
+    # this arrive -- never who was behind it; authority lives in `asserted_by`
+    # (#227). Validated at write against `SOURCE_VALUES` in routers/knowledge.py.
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     added_at: Mapped[date] = mapped_column(Date, nullable=False, server_default=text("CURRENT_DATE"))
     expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)

@@ -9197,3 +9197,116 @@ text.
 live-instruction argument no longer holds and the store becomes history like the others.
 
 ---
+
+### 230. `source` is a channel axis; authority lives in `asserted_by`
+
+**Decision:** `source` on `user_knowledge_entries` answers HOW DID THIS ARRIVE, never who was
+behind it. The vocabulary is declared and validated at write — `onboarding | chat | system | api`
+— and `api` names a direct operator write against the API. The `"chat"` default is removed, so a
+caller must state the channel. `operator` is refused: naming the writer is an authority claim, and
+authority already has a field.
+
+**Rationale:** `operator` reads well against rows 75–78 precisely because those rows are an
+operator's, and that is the trap. Adding it would make `source` a mixed axis — some members
+naming a channel, one naming an author — and duplicate `asserted_by` (#227, `user | engine |
+clinician`), the field introduced for exactly this question one store over. Two fields answering
+"who", disagreeing eventually, is worse than one field that declines to. The cost is stated rather
+than hidden: **`source` will never answer "who"**, and that is the correct shape, not a
+limitation to route around later.
+
+**Removing the default is the load-bearing half.** Adding `api` while `"chat"` still filled itself
+in would leave the vocabulary complete and the defect untouched: the four rows were not a
+validation failure, they were a validation that never ran, and a caller that says nothing would
+still be labelled `chat`. The member without the removal is a dictionary nobody has to open.
+
+**Status:** active. Landed with the validator; the four existing rows are untouched.
+
+**How you know:** `SOURCE_VALUES` is asserted as a closed four-member tuple; unknown literals are
+refused, and the refusal battery includes `user`, `clinician`, `engine` and `operator` — the
+axis-mixing case is a test, not a comment. Two negative controls carry the rest: every declared
+member is accepted (a validator refusing everything would otherwise report green), and an omitted
+`source` is refused, which is the assertion this entry exists for. Widening
+`test_provenance_is_a_different_axis_from_the_capture_source` to include `api` keeps #227's
+disjointness claim honest, and that test now carries a comment recording what it does NOT prove:
+two disjoint word lists are not a guarantee the axes stay separate — a future `source` member
+naming an author would be disjoint from `ASSERTED_BY_VALUES` and still collapse them. Backend
+1069 → 1083.
+
+**Rows 75–78 are NOT corrected here.** Relabelling them is a write against live prod data, and it
+waits on the member existing. It is the operator's, per §8.
+
+**Do not revisit unless:** a write arrives through a channel none of the four names — in which
+case the answer is a fifth channel word, and this entry is the constraint on choosing it.
+
+---
+
+### 231. `resolved_by` and `asserted_by` record a class, not an identity
+
+**Decision:** neither authority field carries an assertor's identity. `resolved_by` (#222) stays
+`user | clinician`; `asserted_by` (#227) stays `user | engine | clinician`. Attribution beyond the
+class is absorbed by `basis` — mandatory free text — and stays prose.
+
+**Rationale:** #133's reasoning about inputs the app cannot verify applies to the assertor as much
+as to the assertion. On a single-operator platform an identity field is a name typed into a box,
+self-asserted, with no verification path; a field that LOOKS like provenance and isn't is worse
+than honest prose, because a later reader trusts the structured field and reads past the free
+text. The evidential asymmetry the identity question was raised to capture — a clinician-resolved
+injury versus a self-resolved one — is already captured, by the class.
+
+**The binding half of the question was already settled and is not re-decided here.** #227 aligned
+the two vocabularies and pinned the alignment with a test rather than a convention: they differ by
+exactly `engine`, which can assert but must never resolve (#223). So "does an answer bind both
+stores" is closed — yes, by a gate. What this entry closes is only the identity question itself.
+
+**Status:** active. No code change; this records a declined addition, like #226.
+
+**How you know:** `test_the_authority_vocabulary_agrees_with_the_resolution_store` asserts
+`set(RESOLVED_BY_VALUES) < set(ASSERTED_BY_VALUES)` and that the difference is exactly `{engine}`,
+so a later edit that adds an identity member to one store and not the other fails loudly instead
+of looking like tidying.
+
+**Do not revisit unless:** a second asserting user exists — at which point the change lands on
+`resolved_by` (#222) and `asserted_by` (#227) in the same stroke, or it is drift.
+
+---
+
+### 232. Standing views own review and resolve prompts; decision-support carries a pointer, not a control
+
+**Decision:** one convention, two stores. A due `review_on` (#227) and an injury `review` flag
+(#222/#223) both surface the same way — as a badge on a row in that store's own standing view:
+`GET /engine/profile` for profile assertions, `GET /knowledge/injuries` for injuries. The
+decision-support surface carries a COUNT POINTER only — "N items due for review", linking into
+those views. It holds no resolve control and no retire control. The AM check-in is unchanged and
+stays read-only.
+
+**Rationale:** the standing view is the honest home because the list already exists and already
+returns every entry with its block, so the prompt is a rendering rather than a new mechanism. Its
+known weakness is real — a flag can sit unseen for weeks — and the answer to that is visibility,
+not interruption: the pointer costs a navigation step at a moment the operator is already
+reviewing, which is the register the prompt belongs to. Putting a state-changing control in the
+check-in is refused on #72's scope: the check-in monitors, it does not renegotiate, and a
+due-review prompt is a renegotiation invitation dressed as a data point.
+
+**Answered as one question across two stores, deliberately.** Q107 asked where an injury `review`
+flag surfaces; Q110 asked where a profile `review_on` surfaces. Answering them independently
+produces two review surfaces with two conventions — the same drift #227's aligned vocabularies
+exist to prevent one layer down. One convention, applied twice, is the decision.
+
+**Constraint inherited, not restated:** #223 and #228 are unconditional. No surface named here
+resolves or retires anything. Every state change remains an explicit operator write carrying a
+`basis`.
+
+**Status:** active as a constraint on future work. **This entry decides WHERE, not WHAT GETS
+BUILT** — it authorises no UI work by itself. A later brief that builds the badge or the pointer
+cites this entry as its constraint.
+
+**How you know:** the two endpoints exist and already return what a badge needs — `GET
+/knowledge/injuries` returns injury rows including resolved ones behind `include_resolved`, and
+`GET /engine/profile` returns `hard_stops`/`live_signals` with the provenance block #227 added,
+`review_on` included. No new read is required to render either prompt, which is the property that
+made the standing view the cheap answer as well as the honest one.
+
+**Do not revisit unless:** a flag is demonstrably missed with the pointer in place — in which case
+the fork reopens at the check-in, and #72 is the entry that has to be argued with, not this one.
+
+---

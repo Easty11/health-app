@@ -22,6 +22,7 @@ from datetime import date
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import models
 from auth import get_current_user
@@ -102,7 +103,16 @@ def test_provenance_is_a_different_axis_from_the_capture_source():
     chat while being asserted by a clinician — which is why this adds a key rather
     than reusing one. Asserted as a disjointness property so a later merge of the
     two vocabularies has to argue with a test."""
-    channel_words = {"onboarding", "chat", "system", "probe", "self_report", "manual"}
+    # `api` (#NEXT-source-api) joins the knowledge store's channel set. Widening
+    # this literal is what keeps the disjointness claim honest as the channel
+    # vocabulary grows -- but NOTE WHAT THIS ASSERTION DOES NOT DO: disjointness of
+    # two word lists is not a guarantee that the axes stay separate. A future
+    # `source` member naming an AUTHOR rather than a channel (`operator`, `physio`)
+    # would be disjoint from ASSERTED_BY_VALUES and still collapse the two axes into
+    # one. That the axes stay clean is a design commitment carried by
+    # #NEXT-source-api and by the comment on SOURCE_VALUES, not by this test.
+    channel_words = {"onboarding", "chat", "system", "api",
+                     "probe", "self_report", "manual"}
     assert channel_words.isdisjoint(set(profile_mod.ASSERTED_BY_VALUES))
 
 
@@ -438,3 +448,45 @@ def test_no_selection_code_reads_review_on(db_session):
         assert "review_on" not in inspect.getsource(module), (
             f"{module.__name__} references review_on — retirement must stay an "
             "explicit write (#228)")
+
+
+# -- the capture-channel vocabulary (#NEXT-source-api) ------------------------
+
+def test_source_is_a_closed_four_member_channel_set():
+    from routers.knowledge import SOURCE_VALUES
+
+    assert SOURCE_VALUES == ("onboarding", "chat", "system", "api")
+
+
+@pytest.mark.parametrize("bad", ["operator", "powershell", "CHAT", "", "user",
+                                 "clinician", "engine", "hevy"])
+def test_an_unknown_source_literal_is_refused(bad):
+    """The authority words are in this list deliberately: `user`/`clinician`/`engine`
+    belong to `asserted_by`, and a write that reaches for one of them here is the
+    axis-mixing #NEXT-source-api refuses."""
+    from routers.knowledge import KnowledgeEntryIn
+
+    with pytest.raises(ValidationError, match="unknown source"):
+        KnowledgeEntryIn(type="schedule_item", key="k", value={}, source=bad)
+
+
+@pytest.mark.parametrize("good", ["onboarding", "chat", "system", "api"])
+def test_each_declared_channel_is_accepted(good):
+    """Negative control for the refusal battery above -- a validator that refused
+    everything would satisfy every `pytest.raises` and report green."""
+    from routers.knowledge import KnowledgeEntryIn
+
+    assert KnowledgeEntryIn(type="schedule_item", key="k", value={},
+                            source=good).source == good
+
+
+def test_an_omitted_source_is_refused():
+    """The second negative control, and the one this change exists for. `source` had
+    a `"chat"` default, so an operator write that never chose a channel was silently
+    labelled as one -- the four mislabelled rows were not a validation failure, they
+    were a validation that never ran. Adding `api` while leaving the default in place
+    would have left the defect exactly where it was."""
+    from routers.knowledge import KnowledgeEntryIn
+
+    with pytest.raises(ValidationError):
+        KnowledgeEntryIn(type="schedule_item", key="k", value={})

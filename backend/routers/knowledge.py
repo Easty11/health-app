@@ -2,7 +2,7 @@ from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 import models
@@ -37,13 +37,37 @@ class KnowledgeOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# Through which CHANNEL did this entry arrive. A closed, declared set validated at
+# write, not a comment on the column that anything could contradict.
+#
+# `source` answers HOW, never WHO. Authority is a separate axis and lives in
+# `asserted_by` (#227, `user | engine | clinician`) and `resolved_by` (#222) --
+# which is why `api` names the channel of a direct operator write rather than
+# `operator` naming the writer. Adding an authority word here would make this a
+# mixed axis and duplicate a field that already exists.
+SOURCE_VALUES = ("onboarding", "chat", "system", "api")
+
+
 class KnowledgeEntryIn(BaseModel):
     type: str
     key: str
     value: dict[str, Any]
-    source: str = "chat"
+    # No default. The default WAS the defect: four operator writes made from
+    # PowerShell against this endpoint persisted as `source: "chat"` because
+    # `chat` was both the fallback and the only member that could absorb them.
+    # A caller that will not say how a write arrived is refused.
+    source: str
     expires_at: date | None = None
     notes: str | None = None
+
+    @field_validator("source")
+    @classmethod
+    def _known_source(cls, v: str) -> str:
+        if v not in SOURCE_VALUES:
+            raise ValueError(
+                f"unknown source {v!r} -- one of {list(SOURCE_VALUES)}"
+            )
+        return v
 
 
 class KnowledgeEntryOut(BaseModel):
