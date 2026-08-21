@@ -520,7 +520,12 @@ def _process_knowledge_updates(
                         type=data.get("type", "schedule_item"),
                         key=key,
                         value=data.get("value", {}),
-                        source=data.get("source", "chat"),
+                        # Not `data.get("source", ...)`. This block was parsed out
+                        # of an assistant turn by `_KNOWLEDGE_BLOCK_RE`, so it arrived
+                        # via chat BY CONSTRUCTION OF THIS ROUTER -- there is no case
+                        # where the model knows the channel better than the call site.
+                        # A model-supplied `source` is ignored, not trusted (#230).
+                        source="chat",
                         expires_at=expires_at,
                         notes=data.get("notes"),
                     )

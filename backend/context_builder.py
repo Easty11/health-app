@@ -101,7 +101,6 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         '    "same_day_training": false,\n'
         '    "duration_weeks": null\n'
         "  },\n"
-        '  "source": "chat",\n'
         '  "expires_at": null,\n'
         '  "notes": "[raw text from user]"\n'
         "}\n"

@@ -219,4 +219,30 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         **common_kwargs,
     )
 
+    # NARROWED AGAIN (#230): `_section_user_profile`'s `<knowledge_update>`
+    # template no longer teaches a `"source"` field, because `chat.py` now writes
+    # the channel itself and a prompt showing the field would assert a contract the
+    # code does not hold. That is a change BY INTENT, so — exactly as with the #82
+    # narrowing above — this guard's question ("did the #43 refactor drift?") is no
+    # longer answerable for that line: old==new can never hold again, and
+    # PRE_REFACTOR_SHA cannot move.
+    #
+    # Excised surgically rather than by dropping the section: this is ONE LINE of a
+    # ~2000-char section, and excising the whole section to dodge it would retire
+    # far more parity coverage than the change costs. Measured: the old section is
+    # 2047 chars, the new 2027, and the 20-char delta is this line and nothing else
+    # (verified by diffing both renderings, not asserted from the source edit).
+    #
+    # The removal is pinned by
+    # tests/test_chat_knowledge_channel.py::test_the_prompt_no_longer_teaches_a_source_field.
+    _DROPPED = '  "source": "chat",\n'
+    assert _DROPPED in old_prompt, (
+        "the excised line is gone from the pre-refactor prompt too — this narrowing "
+        "has become a no-op and would now hide real drift"
+    )
+    assert _DROPPED not in new_prompt, (
+        "the current prompt teaches `source` again — see #230"
+    )
+    old_prompt = old_prompt.replace(_DROPPED, "", 1)
+
     assert old_prompt == new_prompt
