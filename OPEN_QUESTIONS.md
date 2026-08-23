@@ -3442,3 +3442,105 @@ were written differently in the first place.
 Owner: Luke. Cross-refs `§20` (hardcoded governance numbers accrue renumber debt), `#162` (the hole an
 unseen placeholder rode through, and the reason the guard exists), `#113` (anchored match, not substring
 — either arm must anchor on the heading form).
+
+
+## Q115. Supramaximal / repeated-sprint work routes Metabolic-only under `#28` — the neuromuscular cost is discarded
+
+`#28` fixes the four-window load routing:
+
+> strength volume-load → Mechanical + Neuromuscular · HR/zone-derived load → **Metabolic** ·
+> sRPE / subjective-vs-objective divergence → Psychological
+
+Strength dual-routes. Nothing else does. So an all-out interval session — 6 × 30 s, or a rugby
+match's repeated accelerations — is HR/zone-derived and lands in **Metabolic alone**, in the same
+channel as steady-state aerobic work.
+
+Two consequences, both from `#32`'s per-window τ pairs:
+
+| | Assigned | Plausible |
+|---|---|---|
+| Sprint session recovery constant | Metabolic τ ≈ 4 d | Neuromuscular τ ≈ 6 d, or longer |
+| Neuromuscular fatigue accrued | **zero** | substantial |
+
+The cost is not merely mis-weighted, it is **absent from the channel that should carry it**, and
+what does get recorded is assigned a faster recovery constant than the tissue takes. **Likely** —
+first-principles from the routing rule and the declared τ priors, not measured.
+
+**This is discoverable pre-implementation.** `#32` confirms no Banister/four-window code exists;
+the only load computation is `get_training_load()` (ACWR) in `backend/mcp_server.py`, already
+recorded as tech-debt retiring on Tier 0. Correcting the routing now costs a spec amendment.
+Correcting it after Tier 0 lands costs a migration of computed history.
+
+### What this is not
+
+**Not a fifth window.** `#32`'s revisit clause orders the levers: τ is tuned first, and the
+four-window split is reconsidered only after — governed by `#28`'s own revisit clause. This
+question proposes a **routing amendment** in the existing taxonomy, mirroring the dual-route
+strength already uses. It does not touch the split.
+
+**Not a weighting claim from the proteomics.** The prompting evidence (Olsen et al.,
+Cell Rep Med 2026;102988 · PMID 42594877 — 714 of 2,884 plasma proteins moved by three minutes of
+sprinting vs 7 by 90 minutes of moderate cycling) is a **stimulus-quality** finding, not a cost
+finding, and it confounds intensity with modality, duration, and sampling window — the moderate
+session was slower rather than inert, with fatty-acid and liver-derived responses appearing hours
+later. Load is a cost currency. Importing an adaptation finding into a fatigue model is the same
+category error as conflating `hard` with `expected_load`. The proteomics motivated the look; it is
+not the argument. **Source not independently verified — supplied to chat, not retrieved.**
+
+The load argument stands on the routing rule and the τ priors alone.
+
+### The hard part — the discriminator
+
+Correcting the routing requires the ingestion path to distinguish supramaximal/intermittent work
+from continuous work. **Average HR cannot do it.** Six 30-second efforts with recovery produce an
+unremarkable session mean — which is the same blindness `get_training_load()`'s `hr_avg` has today,
+and the reason the defect is invisible in the current metric.
+
+Candidate discriminators, unranked:
+
+- **Catapult SPT3** (`.gt`; 100 Hz IMU, 10 Hz GNSS) — resolves individual accelerations and sprint
+  efforts. The only currently-owned instrument that measures the thing directly. Strengthens the
+  case for the `.gt` ingestion path independent of field-session capture.
+- **Polar zone-time distribution** rather than mean HR — time above a high zone as a proxy for
+  intermittency. Cheaper, coarser, already retrievable per `#17` (AccessLink v4) and `#46`
+  (per-second exercise-HR).
+- **Session-type declaration** at ingestion — honest, zero-inference, but pushes the judgement onto
+  the user and is exactly the kind of self-report the platform prefers to instrument around.
+
+*Cross-ref defect, recorded here because this is where the design pass hits it:* `#28`'s Status line
+cites **"Polar zone retrieval (#10)"**, but `#10` is *Annotate confounds, don't discount scores* —
+Polar retrieval is `#17` / `#46`. The draft of this question inherited the wrong pointer and it was
+corrected here before landing; `#28`'s own line is locked append-only text, so **the correction
+rides with the routing amendment this question schedules** rather than costing a decision entry of
+its own.
+
+No recommendation. The discriminator choice is the substance of the design pass.
+
+### Live impact
+
+The operator plays rugby union in contact and coaches/attends conditioning built on repeated
+running efforts. Match play and Tuesday conditioning are both intermittent by nature, so under the
+current routing **most of his high-intensity exposure would accrue no neuromuscular fatigue at
+all** while carrying a right proximal semimembranosus rupture (full-thickness, partial-width),
+a left hamstring provoked specifically by striding and sprinting, and bilateral L5 pars defects.
+
+Neuromuscular is the channel that would otherwise flag accumulating sprint exposure against a
+hamstring that is known to fail at exactly that stimulus. That is the concrete cost of the gap.
+
+### Related
+
+- `#28` — four-window taxonomy and routing. This question targets the routing clause only.
+- `#32` — per-window independent τ pairs; revisit ordering (τ before split).
+- ΔLoad primitive — per-window acute spike detection, carved out to survive ACWR's retirement.
+  Sprint work is the spike-prone stimulus that justifies it; a Metabolic-only route sends the
+  spike to the wrong window too.
+
+**State:** OPEN — **NOT blocking.** No Banister code exists, so nothing is currently computing a
+wrong number; this is a correction to a spec before it is built. **Next action:** design pass on
+the discriminator, then a routing amendment to `#28` (supersede-not-amend, per the append-only
+rule). Do not open it as part of the Banister implementation itself — the amendment should land
+first so the implementation is built to a corrected spec. **That amendment also carries the `#10`
+cross-ref correction recorded above** — it is the reason no separate entry was minted for it. Per
+`#123` closed questions leave the scan surface, so if this question closes *before*
+the routing amendment lands, the cross-ref correction loses its only live home and needs relocating
+at that moment. Owner: Luke.
