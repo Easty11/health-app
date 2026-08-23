@@ -1002,6 +1002,61 @@ ALTER TABLE fortification_profiles ADD COLUMN weekly_template JSON;
 
 **Readers.** `select_next(..., capacity=)` filters the probe candidate set to one slot's capacity; `GET /engine/next?capacity=` passes it through. Nothing yet resolves *which* slot is due — the template is a declaration, and the consuming lane (weekly resolver) is `ROADMAP` NEXT. How a slot's `minutes` reaches the prescription is deliberately unresolved (Q106).
 
+### 024 — user_knowledge_entries.schedule_item
+
+No migration. `user_knowledge_entries.value` is `sa.JSON()` (Postgres `json`, not `jsonb`) and holds a different shape per `type`; this section records the shape for `type='schedule_item'` only. The parent table predates this document's coverage (see the note under 020). Shape declared and validated at DECISIONS_LOG #233.
+
+**Ownership.** `schedule_item` owns **WHEN**. `fortification_profiles.weekly_template` (023) owns **HOW MUCH OF WHAT KIND**. Stores own facts; the resolver composes them. Any further axis resolves into an existing vocabulary rather than minting a store. `sessions_per_week` appears in both and means different things by design — here it is a calendar fact (*how often this commitment happens*), there a capacity quota (*how many doses of this capacity*).
+
+```json
+{
+  "activity": "Rugby Training — Seniors (conditioning)",
+  "days": ["tuesday"],
+  "sessions_per_week": null,
+  "hard": true,
+  "expected_load": "moderate",
+  "time_of_day": "evening",
+  "time_range": "6:00pm - 7:30/8:00pm",
+  "same_day_training": true,
+  "same_day_note": "gym earlier the same day is fine if it is upper body",
+  "duration_weeks": null,
+  "season_end": "2026-09-05",
+  "supersedes": null
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `activity` | str | yes | free text — the user's own naming |
+| `days[]` | weekday names, lowercase | conditional | closed set: monday…sunday |
+| `sessions_per_week` | int 1–14 | conditional | at least one of `days` / `sessions_per_week` must be present |
+| `hard` | bool | yes | strict — a truthy string is refused |
+| `expected_load` | `light` \| `moderate` \| `heavy` | on write | nullable **in store** for pre-validator rows |
+| `time_of_day` | `morning` \| `afternoon` \| `evening` \| `unknown` | yes | |
+| `time_range` | str | no | advisory display only, read by nothing |
+| `same_day_training` | bool | yes | strict |
+| `same_day_note` | str | no | the prose that was overloading the bool |
+| `duration_weeks` | int \| null | yes | |
+| `season_end` | date \| null | yes | |
+| `supersedes` | int \| null | conditional | see the overlap rule below |
+| any other key | — | — | **REFUSED** |
+
+`distinct_from: [<id>, …]` is accepted at write and **never stored** — an acknowledgement token for one write, not a relationship.
+
+**`hard` and `expected_load` are two axes, not one.** `hard` is a *scheduling* fact (immovable in the calendar); `expected_load` is a *cost* fact. Saturday rugby and Thursday set piece are both `hard`, and only one wants the day before scaled back. Conflating them was the original error.
+
+**A multi-day row asserts uniform `expected_load`.** Where load differs by day, the row splits.
+
+**Validated at write, stored verbatim.** `routers/knowledge.py::validate_schedule_item` refuses (422) an unknown key, a non-weekday in `days`, a truthy-string boolean, `sessions_per_week` outside 1–14, a missing required field, and an `expected_load` outside the closed set. Validation runs inside `upsert_knowledge_entry` — the shared write path for `POST /knowledge/entry`, the chat channel, and `routers/health.py` — *before* the session is touched, so a refused write leaves no row. Direct ORM construction is deliberately unvalidated: that is the backfill's path.
+
+**The overlap rule — `supersedes` triggers on day overlap alone.** A write that lands on a day any active row of the same user already holds is refused **409**, regardless of `activity`, naming every overlapping row (id, activity, days, time_of_day). The retry must acknowledge *every* named row via `supersedes: <id>` (replaces it) or `distinct_from: [<id>, …]` (a separate commitment sharing a day). Matching on `activity` was considered and rejected: it is string equality over LLM-generated free text, so a near-miss fails **open** and produces the silent duplicate it was meant to prevent. This refuses more often, including on genuinely distinct same-day commitments — the failure moves from silent to visible, and the caller states which it is.
+
+**Expiry precedence — nothing auto-flips `active`.** Three fields bound a row in time: `season_end` (a calendar fact about the commitment), `duration_weeks` (a duration from `added_at`), and `expires_at` (an absolute date on the row, for one-off overlays). A passed bound is a **badge** in the view and a prompt to the operator, never a state change (#228). Where more than one is set, the **earliest** governs the badge. They are not interchangeable and no validator derives one from another.
+
+**Readers.** `context_builder.py` renders the weekly schedule table and the hard-commitment flags; `GET /knowledge/schedule` (`routers/knowledge.py`) returns active rows unmodified and interprets no shape — it is the calendar view's data source, and its shape-agnosticism is load-bearing. No `engine/` module reads this type. A day name the builder cannot place is now **reported** in THIS WEEK FLAGS rather than silently skipped; it was previously dropped by two separate mechanisms.
+
+**Pre-existing rows were NOT backfilled in this run.** The validator is live at write; the 18 active rows carrying the legacy shape (prose in `same_day_training`, quota values in `days[]`, a `minimum_days` key, duplicate pairs, three stale-active rows) are untouched, because this session had no route to the production database. Validation is at write, so those rows read back unchanged and are not refused on read. The outstanding backfill, the five unperformed prod assertions, and the unexecuted live-row stop-condition are carried in `OPEN_QUESTIONS` Q116.
+
 ## Canonical Metric Type Whitelist
 
 ```python
