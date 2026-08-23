@@ -1,152 +1,169 @@
-# closeout — 2026-08-18 (canonical marker map → DB-backed, confirmation-screen bind)
+# Session close-out — 2026-08-23
+
+Session-open ref: `b9b1dc5` (master at open). Close ref: `e315fbc`.
+Maxima at close: decisions **#233** · questions **Q117** · feedback **§32**.
+
+---
 
 ## 1. Real commits this session
 
-Session-open ref `b0093d3`. `git log --oneline b0093d3..HEAD`:
+`git log --oneline b9b1dc5..HEAD` — 15 commits, 5 merges, 5 branches all merged+deleted.
 
 ```
-bef724a Merge pull request #80 from Easty11/feat/canonical-map-db-bind
-3e6ffbe gov: DECISIONS_LOG #220, OPEN_QUESTIONS Q104, #50 status superseded, BRANCHES row
-2c4b0fa feat(metrics): inline canonical bind on the confirmation screen
-93cd187 feat(labs): canonical marker map becomes a DB table with a guarded runtime bind
+e315fbc Merge pull request #93 from Easty11/feat/schedule-item-schema
+ed3fb91 feat(schedule): validated schedule_item shape at write; close both read-path drops
+3715108 chore(handoff): CHAT→CODE receipt for the schedule_item schema brief (v2)
+aca2363 Merge pull request #92 from Easty11/governance/feedback-crossref-propagation
+6ad4feb governance: FEEDBACK §32 — a cross-ref in an append-only entry is a propagation source
+205566f Merge pull request #91 from Easty11/governance/roadmap-84-below-fold-crossref
+14b2a1e governance: ROADMAP row 84 cites #123, not #112
+1d028d5 Merge pull request #90 from Easty11/governance/oq-fold-divider-crossref
+63efeba governance: OPEN_QUESTIONS fold divider cites #123, not #112
+e834cc3 Merge pull request #89 from Easty11/governance/q115-sprint-load-routing
+3f4ee10 governance: rename branch to its concern name; BRANCHES row OWED -> DONE
+49514c1 governance: correct Q115's Polar cross-ref to #17/#46; record #28's own wrong pointer
+8a1d025 governance: BRANCHES row for the Q115 routing-question branch
+3b65d0e governance: resolve Q#NEXT -> Q115 (master max re-read Q114/#232)
+17d48ef governance: open question — supramaximal work routes Metabolic-only under #28
 ```
 
-One branch, `feat/canonical-map-db-bind`, landed via PR #80. Schema + backend + frontend
-were one concern (the bind feature) split into three commits internally.
+Suites at close: backend **1113** (open baseline 1087), frontend **47**. Zero regressions.
 
-**Numbers claimed at merge:** `#NEXT` → **#220**, `Q#NEXT` → **Q104**, against master's max
-re-read immediately before merging (**#219 / Q103** — unchanged between resolve and merge, so
-strict mode forced no pause).
+Branch terminal-state gate: **PASSES.** `git branch` and `refs/remotes/origin` both hold
+`master` only. Every branch touched this session is merged + remote-deleted:
+`claude/neuromuscular-sprint-routing-16u397` (renamed, then deleted by the operator after this
+session's git transport refused every ref-deletion form),
+`governance/q115-sprint-load-routing`, `governance/oq-fold-divider-crossref`,
+`governance/roadmap-84-below-fold-crossref`, `governance/feedback-crossref-propagation`,
+`feat/schedule-item-schema`.
 
-**Suites:** backend **882 → 890** (+8), frontend **41 → 47** (+6). Both baselined before edits
-and re-run after; zero regressions. The interpretation-layer tests — the canary for the
-step-1(b) decision — stayed green throughout.
-
-**Deploy verified on both services (#116/#121), after SUCCESS on the deploy:**
-- Backend, discriminating probe: `/openapi.json` lists `/labs/canonical/bind`, a path only
-  the new image carries.
-- Prod DB (read-only query via `railway run`, no secret rendered): `alembic_version` =
-  `a7c3f19d5e28`, `marker_canonical_entries` holds **70 rows, all `source='seed'`**, 4 null
-  units, `Cystatin C → ('cystatin_c', 'mg/L')`.
-- Frontend, served bundle `assets/index-D1nSJ_7O.js`: carries `Not a known marker`,
-  `canonical/bind`, `established unit` — all new-code-only strings.
+---
 
 ## 2. Pending-queue reconciliation
 
-**No `PENDING` items were carried in.** This session ran from a dispatch brief, not a `;cc`
-pending-commit queue. Nothing decided this session is uncommitted — the three commits above
-plus this close-out are the whole of it.
+**No `;cc` PENDING queue was handed to this session.** Chat→Code crossings were two drafts and
+one brief, each transcribed rather than queued. Reconciled individually:
 
-Two items the brief specified that landed as specified: the migration self-check on the seed
-count, and the over-collapse guard at both bind-time and backfill-time.
+| Chat-side item | Landed | Where |
+|---|---|---|
+| `OPEN_QUESTIONS` draft — supramaximal work routes Metabolic-only | YES | `17d48ef` / `3b65d0e`, merged `e834cc3` → **Q115** |
+| Ruling — amend Q115's `#10` cross-ref, do not mint a `#28` supersession | YES | `49514c1` |
+| Ruling — rename the branch off the banned `claude/<hash>` form | YES | `3f4ee10` |
+| Ruling — correct `OPEN_QUESTIONS.md:1123` to `#123` | YES | `63efeba`, merged `1d028d5` |
+| Ruling — same treatment for `ROADMAP.md:84` | YES | `14b2a1e`, merged `205566f` |
+| `FEEDBACK` draft — a cross-ref in an append-only entry is a propagation source | YES | `6ad4feb`, merged `aca2363` → **§32** |
+| `schedule_item` schema brief (v2), steps 1/2/3/5/6 | YES | `ed3fb91`, merged `e315fbc` → **#233**, `SCHEMA.md` 024, **Q116**/**Q117** |
+| `schedule_item` brief, step 4 (backfill) + GATE 4 (prod assertions) | **NO** | Not runnable — no DB route from this session. Carried in **Q116**, not provisional: it is a recorded open question with its own next action. |
 
-One item the brief specified that landed **differently, on a corrected finding** — see §3's
-scope note. Nothing was dropped.
+**Nothing decided this session is uncommitted.** The one piece of scope that did not land is
+step 4, and it did not land because it was not executable here — recorded, not forgotten.
+
+---
 
 ## 3. Cold-resume handoff
 
-### What landed
+### What this session changed
 
-`#220` — the canonical marker map is a DB table, runtime-mutable. `labs.py` lost
-`_CANONICAL_MAP`/`_load_canonical_map`; the confirm resolution and `GET /labs/canonical-map`
-now query `marker_canonical_entries` per request (no cache: a cached dict would serve the
-pre-bind map to the very confirm the operator just bound for). `POST /labs/canonical/bind`
-writes an entry and promotes that marker's historical `marker_canonical IS NULL` rows.
-`marker_canonical.json` survives as the migration seed. This fulfils `#50`'s
-confirmation-populated half and supersedes its stale "Not implemented" status line in place.
+`schedule_item` gained a **closed, validated shape at write** (#233). `validate_schedule_item`
+refuses 422 on an unknown key, a non-weekday in `days`, a truthy-string boolean,
+`sessions_per_week` outside 1–14, a missing required field, an out-of-set
+`expected_load`/`time_of_day`; an unacknowledged day overlap is a structured 409 naming every
+clashing row. It sits inside `upsert_knowledge_entry` — the shared path for
+`POST /knowledge/entry`, chat, and `routers/health.py` — **not** only on the route the brief
+named, because chat does not write through that route and Step 2's whole objective was the chat
+writer seeing a rejection. `hard` (scheduling) and `expected_load` (cost) are separated as two
+axes; any future cost axis resolves into `expected_load`'s vocabulary rather than minting a
+parallel one. `supersedes` triggers on **day overlap alone**. Both `context_builder` silent-drop
+sites for unknown weekday names are closed and now report into THIS WEEK FLAGS.
 
-The over-collapse unit-guard — the reason `#50` exists — is carried to both new points where
-identity became mutable at runtime: bind-time (canonical already established at a disagreeing
-unit) and backfill-time (a stored row carrying a disagreeing unit). A refused bind promotes
-**zero** rows, asserted; a half-migrated series is harder to see and harder to undo than a
-refusal. Binding stays optional — an unbound row still stores null (`#58`/`#155` retain-raw).
+Four governance corrections also landed: **Q115** (the neuromuscular routing question), and the
+`#112`→`#123` cross-reference propagation in two mutable stores plus **§32**, the rule that a
+cross-reference in an append-only entry is a propagation source rather than a leaf.
 
-### The scope correction — read this before touching the interpretation layer
+### Immediate next action — one thing, and it is the operator's
 
-The brief proposed leaving `interpretation/gates.py` and `interpretation/rephrase.py` on the
-JSON, on the hypothesis that interpretation only covers grouped markers so a
-freshly-bound-ungrouped marker could never reach them. **That hypothesis is false**, and it was
-tested rather than assumed: `producer._ungrouped()` emits every non-grouped panel marker as a
-flat row and `presentation.py:237` builds rephrase fragments from those rows. A bound-ungrouped
-marker *does* reach `rephrase`.
+**Run `Q116`: the `schedule_item` backfill.** Route is `railway connect health-app-DB` from
+PowerShell, **one statement per run** (`FEEDBACK` §29 — the dashboard editor silently returns
+zero rows on a multi-statement paste). Order is fixed and the first step is not the backfill:
 
-Phasing was still the right call, on a narrower mechanism, and that mechanism is what `Q104`
-now carries:
+1. **GUARD stop-condition first** — verify the live row set against the 2026-08-23 read
+   (25 rows, 18 active, 4 users, the duplicate pairs, the three stale-active rows). **If it has
+   moved, the row table in Q116 is a hypothesis: re-derive, do not apply.**
+2. Backfill — 3 retire, 5 correct (user 1), 10 conform (users 5/7/8).
+3. The five GATE-4 assertions, each paired with a positive control (`FEEDBACK` §17).
+4. Q116 closes.
 
-- `rephrase._KNOWN_ENTITIES` is a **detector** allowlist, not a permit-list. The validator
-  iterates the vocabulary and flags only a word that is IN the set and appears in
-  candidate-but-not-source. A marker absent from the stale set is never tested — staleness
-  narrows hallucination coverage (a missed detection) and can never cause a false rejection.
-- `gates._UNIT_ESTABLISHED` is consulted only inside `_resolve_band`, reachable only when the
-  marker is authored in `safety_thresholds.json`, which a freshly-bound marker is not; the
-  absent case already falls back to `value_plausibility` — weaker, not wrong.
-- Migration cost decided the split: `generate_plain` is called from an endpoint already holding
-  a `db` and already takes a `known_entities=` param, so `rephrase` could migrate almost free.
-  `_resolve_band` sits ~4 levels below `build_foundation` inside the pure `#86` producer,
-  reached via two paths, with no injection param for the unit map — it needs a session threaded
-  through ~6 signatures of contract-sensitive machinery.
+`Health_app_data` does **not** unblock this: its tools are read-only scoped health readers with
+no arbitrary SQL and no `schedule_item` reader. The backfill is operator-side regardless.
 
-### Open questions
+### Open questions, grouped
 
-- **Q104 (new, OPEN, blocks nothing).** The two readers above still load the JSON, which is now
-  only a seed snapshot. The safe-degradation stops holding if `_KNOWN_ENTITIES` is inverted to a
-  permit-list, or `_resolve_band` is made to hard-require `_UNIT_ESTABLISHED`. Either change must
-  migrate both readers in the same stroke.
-- **Q103** (`lab_results.is_derived` write-dead), **Q102** (`restrictions[]` dead data),
-  **Q78** (multi-user nap attribution — unblocked by `#219`, not resolved), **Q101** closed at
-  `#218`. `Q36`–`Q41` remain the 4b package.
+- **Loop-closes owed from this session:** **Q116** (the backfill above — the one live gap
+  between master and correct data), **Q117** (`expected_load` granularity; not actionable until
+  a second between-levels session appears).
+- **Gating the next two lanes:** **Q105** (capacity-token spelling), **Q106** (how a slot's
+  `minutes` reaches the prescription) — both belong to the weekly resolver.
+- **Design-pass questions, unblocked but unstarted:** **Q115** (routing amendment to `#28`,
+  which also carries the `#10`→`#17`/`#46` correction), **Q102** (`restrictions[]` is dead
+  data), **Q109**, **Q111**, **Q112** (appended this session; its cited `phases` evidence goes
+  with Q116's row-9 correction), **Q114** (`FEEDBACK` has no `CHECKS` arm — a live instance
+  occurred this session and was resolved by hand).
+- 121 `**State:** OPEN` markers across the store; the above are the ones with live consequences.
 
-### A control that fired, and the gate that did not
+### NOT TOUCHED — read this before planning the next session
 
-A blanket `#NEXT` → `#220` substitution corrupted **31 lines of pre-existing `#NEXT` prose in
-`DECISIONS_LOG.md`, 3 in `OPEN_QUESTIONS.md`, 1 in `SCHEMA.md`** — the identical failure mode as
-PR #71 (`#175`, 55 lines), in a session that had already read the ROADMAP row describing it.
+**Four of five merges this session were governance.** One feature lane moved (`schedule_item`).
+That is a better ratio than a pure-instrument session, but the pull is visible and worth naming:
+three of the five branches existed only to correct cross-references between governance entries.
+The corrections were real and one of them (`§32`) generalises — but a reader inferring the queue
+from what is written down would conclude this project's work is governance, and it is not.
 
-It was caught **before commit**, and only by auditing the diff's REMOVED lines for `#176(c)`.
-**The placeholder guard passed clean the whole time** — every corrupted line was prose that no
-longer matched `^### #NEXT`, so the guard had nothing to see. Recovery: `git checkout --` on the
-two stores, a one-line restore in `SCHEMA.md`, then re-applying the additions with literals;
-pre-existing `#NEXT` counts were then re-verified equal to HEAD's (31 / 4).
+Standing still, with nothing about them changed this session:
 
-The ROADMAP's cross-repo `#NEXT` row has been updated with this as second evidence, and with the
-two lessons for the fix's shape: the count-verified scoped replace should be mandatory rather
-than advisory, and the removed-line audit — the only control that actually caught this — belongs
-in the close-out ritual rather than being a `#176(c)` side effect.
+- **Calendar view** — next in the queue and **not brief-ready**. It needs a chat design pass
+  first: `GET /knowledge/schedule` (`routers/knowledge.py:238–249`) returns raw rows and
+  interprets no shape, so a view built on it renders `schedule_item` directly and gets rewritten
+  when the resolver lands — or it waits for the resolver. That is an ordering decision about the
+  resolver, not a view detail. Do **not** open it as a brief until settled.
+- **Weekly resolver** (`ROADMAP` NEXT, the lane #221 deferred) — untouched, gated on Q105/Q106.
+  `weekly_template` has been a declaration with no consumer since #221.
+- **Hevy set store** — queued behind both of the above; no work this session.
+- **Injury-ledger backfill audit** (the lane #222/#223 deferred) — untouched.
+- **Interpretation hub shell (#150)** — still BUILT, held for review. Unchanged for multiple
+  sessions.
+- **CBT-I** — no work this session. Q78 (two over-threshold nap nights starving a cycle) still
+  OPEN and now unblocked rather than gated.
+- **The cross-repo shared-block edit** (`ROADMAP` NOW, OWED) — the `#NEXT` rule still names
+  `DECISIONS` entries only, and the tree still carries ~20 `#NEXT` tokens in `.py`/`.jsx` that
+  no guard can see. This session hand-executed the count-verified scoped replace that row
+  prescribes; it remains unencoded.
 
-### What was NOT touched
+### Carried, deliberately not minted
 
-This session was **feature work on the lab spine**, not instrumentation — but it moved one lane
-and left the rest standing, and the standing ones are the product:
+- **Clone-depth dependency.** `test_context_builder_output_unchanged_pre_post_refactor` shells
+  out to `git show 3360ed5:backend/context_builder.py`. On a **fresh shallow clone** that object
+  is absent and the test fails, so master reports red until `git fetch --unshallow`. Nothing
+  declares the dependency. A `FEEDBACK` candidate; not minted here because `§32` already landed
+  off this session and two entries from a schema session fails the moratorium filter.
+- **`#112` has now been mis-cited three independent times** — `OPEN_QUESTIONS.md:1123`,
+  `ROADMAP.md:84`, and an earlier brief that resolved it to `#115` (recorded at
+  `BRANCHES.md:84`). `§32` covers the mechanism; the specific number attracting errors is the
+  observation. Stronger `FEEDBACK` candidate than the branch-name gap below if either is minted.
+- **Brief-writing-path gap.** A session brief specified a branch name `CLAUDE.md` bans and
+  nothing caught it until PR review. One instance; `FEEDBACK` only if it recurs.
+- **The origin of the `#112` miscitation is unfixable in place.** `#123`'s own Rationale
+  (`DECISIONS_LOG.md:3938`) carries it, and `DECISIONS_LOG` is append-only. `§32` is where a
+  reader tracing the pattern lands instead.
 
-- **Interpretation layer, increments 3 and 5-follow-on.** Increment **3 (lever tap → scoped
-  education thread) is UNSTARTED** and has been for several sessions. Increment 2 (rephrase)
-  landed at `#202`, go-live at `#194`. Nothing in increment 3 moved today, and nothing here
-  blocks it.
-- **Appointment brief** — the hero consumer feature ("never waste a medical appointment again").
-  Untouched. Still gated on the lab pipeline plus the interpretation layer, and today's work
-  advanced the former.
-- **Hub shell (`#150`)** — unblocked, operator-preferred next pick as of the 2026-08-02
-  reconciliation. Untouched today. **`lab_accession`** remains the strongest small alternative.
-- **CBT-I** — untouched this session. `Q78` (two over-threshold nap nights starving a cycle for
-  a second user) is still OPEN and unblocked; rx 12 still stands pending Luke's decision on
-  whether to correct it.
-- **The four cross-repo ROADMAP rows** — three discharged 2026-08-17; the fourth (extend
-  `#NEXT`/number-at-merge beyond DECISIONS entries) is **still OWED**, needs an HCA-rooted
-  session for the propagation half, and this session produced fresh evidence for why it matters.
-- **The junk-row operator decision** on the ten zero-result `lab_reports` (`#157`) is still owed
-  and was not revisited.
+### Method notes worth carrying
 
-Honest framing: the previous two sessions went to governance and to CBT-I; this one went to the
-lab spine. The consumer-facing lanes — appointment brief, lever-tap threads, hub shell — have now
-been queued and unmoved across all three.
+Three defects this session were caught by **reading the cited source before relying on it**,
+not by any guard: the `#10` cross-ref in the Q115 draft, the `#112` cross-ref in two stores
+(including one in the ruling that commissioned the fix), and — the near-miss — the `#NEXT`
+resolution that asserted 9 tokens in the appended region and found 8, the ninth sitting in the
+`Q112` edit above it. A blanket replace would have taken the pre-existing prose with it, which
+is `#175`/`#220` exactly. The count-invariant worked **because it was an assertion rather than
+a sweep**.
 
-### Single clearest next action
-
-**Bind a real unmapped marker through the live confirmation screen**, against the next lab
-upload. Every layer is proven except the operator's own path end-to-end in prod: the endpoint is
-deployed, the table is seeded at 70, the guards are proven in tests, and the bundle carries the
-control — but no marker has been bound through the UI against real data yet, and the backfill is
-the half that touches stored history.
-
-If no upload is due, the strongest alternative is the **hub shell (`#150`)** — unblocked,
-operator-preferred, and one of the consumer-facing lanes named above as standing still.
+`Q114` is live and was demonstrated: `CHECKS` has no `FEEDBACK` arm, so nothing mechanical would
+have caught a `§#NEXT` reaching master in `6ad4feb`. It was resolved by hand.
