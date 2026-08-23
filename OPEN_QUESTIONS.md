@@ -1120,7 +1120,7 @@ once more than one live block exists — do not tune against the single discarde
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
-deciding `DECISIONS_LOG` entry. Per #112 closed questions are not scanned for live work — they
+deciding `DECISIONS_LOG` entry. Per #123 closed questions are not scanned for live work — they
 sit below the fold so the live list above is the scan surface. Nothing is deleted; only moved._
 
 ---
