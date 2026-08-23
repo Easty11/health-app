@@ -1,7 +1,7 @@
 # FEEDBACK_ARCHIVE.md
 
 Full provenance for the condensed `FEEDBACK.md`. Covers §§1–3 (behavioural corrections and
-preferences, verbatim), §5 (a superseded injury snapshot, tombstoned), and §§7–30 (the
+preferences, verbatim), §5 (a superseded injury snapshot, tombstoned), and §§7–30 and §32 (the
 verification-rule essays, verbatim), plus the pre-prune `CLAUDE.md`. **Not read at session
 start.** Consult only when a rule's origin or scope is disputed. Section numbering matches the
 pre-prune `FEEDBACK.md`.
@@ -1363,6 +1363,20 @@ the default response class — is not landed and is gated behind a live `µ` rou
 response header that looks correct in a diff has not been shown to change 5.1's behaviour.
 
 See `DECISIONS_LOG` #229 for the amend-in-place convention this entry is the first instance of.
+
+---
+
+## 32. A cross-reference in an append-only entry is a propagation source, not a leaf ([[§13]], [[§17]], [[§22]])
+
+Two mutable stores were found citing `#112` for the below-the-fold rule, which is `#123`. Both were corrected (`1d028d5`, `205566f`). Neither was an independent slip: `#123`'s own **Rationale** (`DECISIONS_LOG.md:3938`) miscites `#112` for the same claim, and both copies were faithfully echoing it. A third instance is recorded at `BRANCHES.md:84`, where a prior brief resolved `#112` to a different wrong target (`#115`).
+
+**The behaviour:** when a wrong cross-reference is found in a mutable store, trace it to its deciding entry before treating it as isolated. Correcting copies while the origin stands leaves it seeding new ones.
+
+**What does not catch this:** existence-checking. `#112` exists and resolves; the defect is semantic — right format, real target, wrong entry. The placeholder guard works because `#NEXT` is mechanically detectable. This isn't. What caught it twice in one session was reading the cited entry in full before relying on it.
+
+**Named residual:** `DECISIONS_LOG.md:3938` is append-only and stays wrong. A superseding decision whose entire content is "a Rationale's cross-ref is wrong" is heavier than the defect. This entry is where a reader tracing the pattern lands instead.
+
+**Not generalised:** `ROADMAP.md:85/86/94` cite `#112` for why known work belongs in `ROADMAP` rather than `OPEN_QUESTIONS` — a defensible extension of its rationale, read individually and deliberately left. Rows 9/18/19/20/21 and `DECISIONS_LOG.md:3929/3931/7447` cite it correctly for cross-repo debt.
 
 ---
 

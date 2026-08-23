@@ -2,8 +2,8 @@
 
 *Load this at session start. Repo-canonical (health-app); the Claude.ai project-knowledge*
 *copy is a refreshed mirror, not the master. Full provenance — the behavioural-correction*
-*essays (§§1–3), the superseded injury snapshot (§5), and the 24 verification-rule essays*
-*(§§7–30) — lives in `FEEDBACK_ARCHIVE.md`, which is NOT read at session start.*
+*essays (§§1–3), the superseded injury snapshot (§5), and the 25 verification-rule essays*
+*(§§7–30, §32) — lives in `FEEDBACK_ARCHIVE.md`, which is NOT read at session start.*
 *Last updated: 9 August 2026.*
 
 ---
@@ -69,8 +69,9 @@ These emerged organically from corrections and should be treated as first-class 
 - §29 Railway's dashboard editor silently no-ops a multi-statement paste — one statement per prod check
 - §30 Backend `application/json` carries no `charset`; PowerShell 5.1 falls back to ISO-8859-1 in BOTH directions — READ mojibakes the response (client-side, display only), WRITE downgrades the request body before it is sent, so non-ASCII is lost at rest (em-dashes persisted as hyphens, `POST /knowledge/entry` ids 75–78); a client-side read symptom does not license "the data is fine", and this entry asserted exactly that until the write half was found
 - §31 Auditing a vocabulary's members does not audit its coverage — the channel axis (`onboarding | chat | system`) was audited in #227 and one day later took four writes it has no member for, all silently defaulted to `chat`
+- §32 A cross-reference in an append-only entry is a propagation source, not a leaf — `#123`'s own Rationale (`DECISIONS_LOG.md:3938`) miscites `#112` for the below-the-fold rule, and both mutable copies (`OPEN_QUESTIONS.md:1123`, `ROADMAP.md:84`) were faithfully echoing it rather than slipping independently; trace a wrong cross-ref to its deciding entry before treating it as isolated, because existence-checking cannot catch it — the target is real and resolves, it is simply the wrong entry (`1d028d5`, `205566f`; the origin is append-only and stays wrong)
 
 ---
 
 *Full provenance — §§1–3 correction essays, the §5 superseded injury snapshot, and the §§7–30*
-*verification-rule essays — is in `FEEDBACK_ARCHIVE.md` (not read at session start).*
+*and §32 verification-rule essays — is in `FEEDBACK_ARCHIVE.md` (not read at session start).*
