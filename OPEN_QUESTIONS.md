@@ -3444,7 +3444,7 @@ unseen placeholder rode through, and the reason the guard exists), `#113` (ancho
 — either arm must anchor on the heading form).
 
 
-## Q#NEXT. Supramaximal / repeated-sprint work routes Metabolic-only under `#28` — the neuromuscular cost is discarded
+## Q115. Supramaximal / repeated-sprint work routes Metabolic-only under `#28` — the neuromuscular cost is discarded
 
 `#28` fixes the four-window load routing:
 
