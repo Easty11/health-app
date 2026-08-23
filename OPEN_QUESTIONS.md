@@ -3502,9 +3502,17 @@ Candidate discriminators, unranked:
   efforts. The only currently-owned instrument that measures the thing directly. Strengthens the
   case for the `.gt` ingestion path independent of field-session capture.
 - **Polar zone-time distribution** rather than mean HR — time above a high zone as a proxy for
-  intermittency. Cheaper, coarser, already retrievable per `#10`.
+  intermittency. Cheaper, coarser, already retrievable per `#17` (AccessLink v4) and `#46`
+  (per-second exercise-HR).
 - **Session-type declaration** at ingestion — honest, zero-inference, but pushes the judgement onto
   the user and is exactly the kind of self-report the platform prefers to instrument around.
+
+*Cross-ref defect, recorded here because this is where the design pass hits it:* `#28`'s Status line
+cites **"Polar zone retrieval (#10)"**, but `#10` is *Annotate confounds, don't discount scores* —
+Polar retrieval is `#17` / `#46`. The draft of this question inherited the wrong pointer and it was
+corrected here before landing; `#28`'s own line is locked append-only text, so **the correction
+rides with the routing amendment this question schedules** rather than costing a decision entry of
+its own.
 
 No recommendation. The discriminator choice is the substance of the design pass.
 
@@ -3531,4 +3539,8 @@ hamstring that is known to fail at exactly that stimulus. That is the concrete c
 wrong number; this is a correction to a spec before it is built. **Next action:** design pass on
 the discriminator, then a routing amendment to `#28` (supersede-not-amend, per the append-only
 rule). Do not open it as part of the Banister implementation itself — the amendment should land
-first so the implementation is built to a corrected spec. Owner: Luke.
+first so the implementation is built to a corrected spec. **That amendment also carries the `#10`
+cross-ref correction recorded above** — it is the reason no separate entry was minted for it. Per
+`#123` closed questions leave the scan surface, so if this question closes *before*
+the routing amendment lands, the cross-ref correction loses its only live home and needs relocating
+at that moment. Owner: Luke.
