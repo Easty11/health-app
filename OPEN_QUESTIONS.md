@@ -3370,6 +3370,13 @@ recommendation, which is the failure mode where the engine quietly stops being c
 `schedule_item` id 9 already carries a `phases` block that nothing reads. That is either the start
 of the answer or evidence the concept was reached for once and left unfinished.
 
+**The cited evidence is scheduled for removal, and this question does NOT resolve with it (#233).**
+`phases` is not a member of the validated `schedule_item` shape, so id 9's block is struck when the
+backfill runs — its content is June rehab ("hamstring grade 1 strain"), long overtaken, and nothing
+reads it. What that removes is a dead field, not the question: whether the engine needs a phase
+concept is unchanged by deleting one unread instance of a half-reached-for one. Recorded here so the
+question stops pointing at data that will not exist. The backfill itself is outstanding — see Q116.
+
 **Partly blocked by `upsert_profile`'s null-guard.** A phase that cannot be cleanly unset is worse
 than no phase: a settle outliving its reason becomes a standing restriction nobody chose, which is
 the failure #228 names for `review_on` in the store next door. Answering this means either changing
@@ -3544,3 +3551,119 @@ cross-ref correction recorded above** — it is the reason no separate entry was
 `#123` closed questions leave the scan surface, so if this question closes *before*
 the routing amendment lands, the cross-ref correction loses its only live home and needs relocating
 at that moment. Owner: Luke.
+
+
+## Q116. The `schedule_item` validator is live and the 18 active rows were never backfilled
+
+`#233` landed the validated shape at write. **The live rows were not corrected**, because the
+session that landed it had no route to the production database: no Railway CLI, and every
+credential path closed by `#111` (no `railway variables` in any form, no `env`, no reading `.env`).
+The split was ruled deliberately rather than discovered — implementation and backfill divided along
+a real capability boundary — and this question is the half that did not run.
+
+**Nothing is broken by the gap.** Validation is at write, so the legacy rows read back unchanged
+and are refused nothing. What is true is that master now carries a validator with 18 non-conforming
+rows behind it, and without this entry that fact lives only in two chat sessions.
+
+### The stop-condition was never executed
+
+The row table below is a **2026-08-23 chat read carried forward unverified**. Before any backfill:
+confirm the live row set still matches it, and **STOP and report the delta** if it does not. Nothing
+in this session confirmed it against the actual table.
+
+### Retire — 3 rows (`active=false`, reason in `notes`)
+
+| id | key | why |
+|---|---|---|
+| 2 | `rugby_u8s_coaching_2026` | U8s coaching finished; no finals, no scores recorded |
+| 7 | `rugby_u8s_2026` | duplicate of 2, same retirement |
+| 79 | `physio_202608` | written 2026-08-21 as `active: true` / "Ongoing"; had already finished |
+
+### Correct — 5 rows (user 1)
+
+ids 1 and 6 were duplicates on `[tuesday, thursday]`; they **split by day** rather than merging,
+because the two sessions carry different content.
+
+| id | days | activity | load | `season_end` |
+|---|---|---|---|---|
+| 1 | `[tuesday]` | Rugby Training — Seniors (conditioning) | `moderate` | 2026-09-05 |
+| 6 | `[thursday]` | Rugby Training — Seniors (set piece / team run) | `moderate` | 2026-09-05 |
+| 8 | `[saturday]` | Rugby — 3rds (primary) + 2nds (fringe) | `heavy` | 2026-09-05 |
+| 5 | `[mon…fri]` | Work — Instrument Fitter | `light` | null |
+| 9 | `[tuesday]` | Optional accessory / rehab / sprint | `light` | null |
+
+Also on these rows: ids 1, 2 hold constraint **prose** in `same_day_training` — move the text to
+`same_day_note`, set the bool `true`. id 1 retains `time_range` `"6:00pm - 7:30/8:00pm"`; copy to
+id 6 (same session block). id 9 — **strip the `phases` block** (June rehab content, long overtaken,
+read by nothing; `phases` is not a member of the validated shape). Q112 already records that its
+cited evidence goes with it and that it does **not** resolve on that removal.
+
+**ids 1 and 9 both land on Tuesday for user 1.** Under the day-overlap trigger these overlap. The
+backfill writes directly and is not subject to the write-path validator, but this pair is a
+**legitimate same-day distinct** case — the first chat write touching either must not read it as a
+duplicate.
+
+### Conform only — 10 rows (users 5, 7, 8), `expected_load: null`
+
+| id | user | from | to |
+|---|---|---|---|
+| 66 | 7 | `days: ["flexible"]` | `sessions_per_week: 1`, no `days` |
+| 74 | 8 | `days: ["flexible"]` | `sessions_per_week: 1`, no `days` |
+| 65 | 7 | `days: [monday, wednesday, "flexible_third_day"]` | `days: [monday, wednesday]`, `sessions_per_week: 3` |
+| 72 | 8 | `days: [mon, wed, fri]` + `minimum_days: 2` | `days: [mon, wed, fri]`, `sessions_per_week: 2` — the note is the truth ("minimum 2, usually 3"); `minimum_days` was the workaround for a missing field |
+
+**id 23 (user 5) stays a single row.** Its note names three different intensities across tue/thu/sat,
+so it violates the uniform-load rule — but with `expected_load: null` no load is asserted, so nothing
+is wrong yet. It splits when that user's next chat conversation supplies values. Do not split it
+speculatively.
+
+The 7 inactive rows are **not touched** — they are history, correctly superseded.
+
+### The five prod assertions, all unperformed
+
+Read-only, **one statement per run** (`FEEDBACK` §29 — Railway's dashboard editor silently returns
+zero rows on a multi-statement paste), each paired with a positive control (`FEEDBACK` §17):
+
+1. active `schedule_item` count is **15** (18 − 3 retired), across 4 users
+2. zero active rows carry a key outside the declared set
+3. zero active rows carry a non-boolean `same_day_training`
+4. zero active rows carry a `days` value outside the weekday set
+5. user 1's active count is **5**, and Thursday resolves to **1** entry (id 6), down from 4
+
+**State:** OPEN — **the loop-close for `#233`'s landed half.** Not blocking: the validator is live
+and correct, and nothing miscomputes while the legacy rows sit. Owner: Luke, or any session with
+database access. **Next action:** run the stop-condition check first, then the backfill, then the
+five assertions. Cross-refs `#233` (the shape), `Q112` (the `phases` block struck by row 9's
+correction), `Q117` (`expected_load` granularity), `FEEDBACK` `§29`/`§17`.
+
+
+## Q117. Are three `expected_load` levels enough, and what does a between-levels session do?
+
+`#233` declares `expected_load` as `light` | `moderate` | `heavy`. The set was earned in-session
+and immediately strained: Tuesday seniors was described as **"moderate to heavy"** and landed
+between levels.
+
+It was assigned `moderate`, on a specific ground rather than a coin toss — `heavy`'s only v1
+consumer marks the **prior day** for scale-back, so `heavy` on Tuesday would shadow Monday gym,
+which the operator would reject. That is a defensible call for one row and an uncomfortable one as
+a rule: the level was chosen by what the consumer would do with it, not by what the session costs.
+
+**Do not widen the set now.** It is the cheapest thing in this design to reverse, and the right
+granularity is learned by use, not by argument. A fourth level added before there is evidence of
+where the boundary actually falls would be a vocabulary decision made on one data point.
+
+**Widening later touches more than one axis.** `#233` states that any future axis expressing
+training cost — including a training-goal axis — resolves into **this** vocabulary rather than
+minting a parallel one. So a fourth level is not a local edit to one field's enum; it changes the
+shared cost vocabulary and every consumer that reads it. That is an argument for waiting, not for
+never.
+
+The open fork is narrower than "three or four": **what should a genuinely between-levels session
+do?** Round toward the consumer's cheaper action (what happened here), round toward caution, or
+carry the ambiguity explicitly rather than resolving it at write.
+
+**State:** OPEN — not blocking; three levels are live and one row is knowingly rounded. Owner:
+Luke. **Next action:** none until a second between-levels session appears — two instances make a
+boundary, one makes an anecdote. Cross-refs `#233` (the vocabulary and the resolve-into rule),
+`Q116` (the backfill that writes the first real load values), `#221` (`weekly_template`, the other
+store whose vocabulary a cost axis must not fork).

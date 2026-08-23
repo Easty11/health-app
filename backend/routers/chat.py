@@ -35,7 +35,12 @@ from hevy_templates import (
 )
 from engine import adaptation, selection
 from reads.labs_reads import find_marker
-from routers.knowledge import KnowledgeEntryIn, expire_stale_entries, upsert_knowledge_entry
+from routers.knowledge import (
+    KnowledgeEntryIn,
+    ScheduleItemOverlap,
+    expire_stale_entries,
+    upsert_knowledge_entry,
+)
 
 load_dotenv()
 
@@ -181,6 +186,32 @@ _CREATE_ENUM_BY_FIELD = {
     "muscle_group": _CREATE_MUSCLE_GROUPS,
     "other_muscles": _CREATE_MUSCLE_GROUPS,
 }
+
+
+def _format_schedule_overlap(key: str, overlapping: list[dict]) -> str:
+    """Render an unacknowledged day overlap as an instruction the next turn can act on.
+
+    Names every overlapping row rather than reporting a count, for the same reason
+    `_format_exercise_rejection` echoes valid values: a bare "that clashes" leaves the
+    model guessing which row it clashed with, and guessing is what produced the
+    duplicate pairs in the first place.
+
+    The model must NOT resolve the ambiguity itself. Whether a second commitment on a
+    shared day replaces the first or sits beside it is the operator's call; inventing
+    an answer is the failure this refusal exists to make visible.
+    """
+    rows = "; ".join(
+        f"id {o['id']} — {o.get('activity') or '?'} on "
+        f"{', '.join(o.get('days') or [])}"
+        + (f" ({o['time_of_day']})" if o.get("time_of_day") else "")
+        for o in overlapping
+    )
+    return (
+        f"✗ Schedule entry NOT saved: {key} — it lands on a day already held by: {rows}. "
+        f"Ask the user whether this REPLACES those rows or is a separate commitment on "
+        f"the same day, then retry with `supersedes: <id>` or `distinct_from: [<id>, ...]`. "
+        f"Do not choose for them."
+    )
 
 
 def _format_exercise_rejection(title: str, detail: str) -> str:
@@ -529,8 +560,22 @@ def _process_knowledge_updates(
                         expires_at=expires_at,
                         notes=data.get("notes"),
                     )
-                    upsert_knowledge_entry(user_id, entry_in, db)
-                    actions_taken.append(f"✓ Schedule entry saved: {key}")
+                    # A refused write is REPORTED, never swallowed. The user said the
+                    # thing out loud; dropping it silently is worse than the unvalidated
+                    # mess this replaces, because nothing downstream can tell the
+                    # difference between "not said" and "said and lost".
+                    try:
+                        upsert_knowledge_entry(user_id, entry_in, db)
+                        actions_taken.append(f"✓ Schedule entry saved: {key}")
+                    except ScheduleItemOverlap as exc:
+                        db.rollback()
+                        actions_taken.append(_format_schedule_overlap(key, exc.overlapping))
+                    except ValueError as exc:
+                        db.rollback()
+                        actions_taken.append(
+                            f"✗ Schedule entry NOT saved: {key} — {exc}. "
+                            f"State this back to the user and retry with a corrected block."
+                        )
 
             else:
                 # Legacy format → UserKnowledge (free-text categories)

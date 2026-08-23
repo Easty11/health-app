@@ -78,11 +78,14 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         "\n"
         "STEP 1 — ASK BEFORE WRITING\n"
         "Do not write a knowledge entry until clarified. Ask targeted questions to establish:\n"
-        "- Specific days (or is it flexible?)\n"
+        "- Specific days, or how many sessions a week if it floats\n"
         "- Time of day and whether same-day training is affected\n"
         "- Whether it replaces existing sessions or adds to them\n"
         "- Duration: ongoing / fixed weeks / unknown\n"
         "- Hard (fixed time) or soft (preference)\n"
+        "- Expected load: light / moderate / heavy. ASK — never guess. This is a COST\n"
+        "  fact and is separate from `hard`, which is only about immovability in the\n"
+        "  calendar. A hard commitment can be light; a soft one can be heavy.\n"
         "\n"
         "Keep questions brief — max 3-4, conversational, not a form. Ask them together in one message.\n"
         "\n"
@@ -96,15 +99,43 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         '  "value": {\n'
         '    "activity": "[name]",\n'
         '    "days": ["monday", "thursday"],\n'
+        '    "sessions_per_week": null,\n'
         '    "hard": true,\n'
+        '    "expected_load": "moderate",\n'
         '    "time_of_day": "morning",\n'
+        '    "time_range": null,\n'
         '    "same_day_training": false,\n'
-        '    "duration_weeks": null\n'
+        '    "same_day_note": null,\n'
+        '    "duration_weeks": null,\n'
+        '    "season_end": null,\n'
+        '    "supersedes": null\n'
         "  },\n"
         '  "expires_at": null,\n'
         '  "notes": "[raw text from user]"\n'
         "}\n"
         "</knowledge_update>\n"
+        "\n"
+        "THE SHAPE IS VALIDATED AND CLOSED. A block that does not conform is REFUSED,\n"
+        "not stored, and you will be told why. Rules:\n"
+        "- No key outside the list above. If a fact has no field, say so — do not\n"
+        "  invent a key for it (that is how `minimum_days` came to exist).\n"
+        "- `days` holds weekday names only: monday…sunday, lowercase. A frequency like\n"
+        '  "flexible" is NOT a day — it belongs in `sessions_per_week` (1-14).\n'
+        "- At least one of `days` or `sessions_per_week` must be present.\n"
+        "- `hard` and `same_day_training` are strict booleans. Constraint prose goes in\n"
+        "  `same_day_note`, never in the boolean.\n"
+        '- `expected_load` is required: "light", "moderate" or "heavy". Ask the user.\n'
+        "- A multi-day row asserts ONE load for every day it names. If Tuesday is\n"
+        "  moderate and Thursday is heavy, write TWO rows, not one.\n"
+        "- `season_end` is YYYY-MM-DD or null. Nothing retires itself: a passed date is\n"
+        "  a prompt to the user, never an automatic change of state.\n"
+        "\n"
+        "IF A WRITE IS REFUSED FOR OVERLAPPING AN EXISTING DAY\n"
+        "You will be told which rows it clashes with, by id. Do NOT pick for the user.\n"
+        "State the clash back to them in plain terms, ask whether this REPLACES those\n"
+        "rows or is a separate commitment on the same day, then retry with either\n"
+        '`"supersedes": <id>` or `"distinct_from": [<id>, ...]` in the value. Guessing\n'
+        "is what produced duplicate rows for a single commitment.\n"
         "\n"
         "STEP 3 — SYNTHESISE IMPACT\n"
         "After writing, immediately state:\n"
@@ -803,6 +834,9 @@ def _section_schedule(entries: list[Any], now: datetime) -> str:
     # Build day → list of (activity, hard, source) mapping
     day_map: dict[str, list[str]] = {d: [] for d in _DAY_ORDER}
     hard_days: set[str] = set()
+    # (activity, raw day string) for every day name this builder could not place.
+    # Surfaced below rather than dropped -- see the two `unplaceable` appends.
+    unplaceable: list[tuple[str, str]] = []
 
     for e in schedule_items:
         val = _v(e, "value") or {}
@@ -819,6 +853,14 @@ def _section_schedule(entries: list[Any], now: datetime) -> str:
                 day_map[d_lower].append(f"{activity} ({tag}){source_note}")
                 if hard:
                     hard_days.add(d_lower)
+            else:
+                # NOT silently skipped. The write path validates weekdays against a
+                # closed set, so this is unreachable for anything written after that
+                # landed -- but it stays reachable for rows written before it and for
+                # any future writer that does not pass through `upsert_knowledge_entry`.
+                # A day the schedule cannot place is a commitment the user stated and
+                # the context never mentions, which reads downstream as a free day.
+                unplaceable.append((activity, d))
 
     for day in _DAY_ORDER:
         items = day_map[day]
@@ -855,7 +897,12 @@ def _section_schedule(entries: list[Any], now: datetime) -> str:
                             f"{shadow.strftime('%A %d %b')} (day before {activity})"
                         )
             except (ValueError, IndexError):
-                pass
+                # Second drop site, and a different mechanism from the day-map loop
+                # above: that one skips a day it cannot place, this one swallows the
+                # `_DAY_ORDER.index()` miss. Both made an unknown weekday vanish, so
+                # both report now — a hard commitment that cannot be dated is exactly
+                # the one worth naming.
+                unplaceable.append((activity, d))
 
     # Active load_context entries
     for e in load_contexts:
@@ -872,6 +919,14 @@ def _section_schedule(entries: list[Any], now: datetime) -> str:
         restrictions = val.get("restrictions", [])
         r_str = f" (avoid: {', '.join(restrictions)})" if restrictions else ""
         flags.append(f"Injury: {body_part}{r_str}")
+
+    # Unplaceable day names, deduped — a hard commitment trips both drop sites, and
+    # reporting it twice would read as two separate faults.
+    for activity, raw_day in dict.fromkeys(unplaceable):
+        flags.append(
+            f"Schedule not shown: {activity} lists {raw_day!r}, which is not a weekday "
+            f"— this commitment is MISSING from the weekly schedule above"
+        )
 
     if flags:
         lines.append("\nTHIS WEEK FLAGS")

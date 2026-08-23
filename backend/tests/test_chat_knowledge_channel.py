@@ -37,8 +37,21 @@ def _only_entry(db, user_id):
     return rows[0]
 
 
+# Conforms to the validated `schedule_item` shape (#233). These tests are about the
+# CHANNEL a write lands under, not about the shape -- but the write path now refuses a
+# non-conforming value, so a minimal-but-invalid fixture would fail here for a reason
+# that has nothing to do with what is under test.
 BASE = {"type": "schedule_item", "key": "physio_2026_08",
-        "value": {"activity": "physio"}}
+        "value": {
+            "activity": "physio",
+            "days": ["monday"],
+            "hard": True,
+            "expected_load": "light",
+            "time_of_day": "morning",
+            "same_day_training": False,
+            "duration_weeks": None,
+            "season_end": None,
+        }}
 
 
 def test_a_model_supplied_source_is_ignored_not_honoured(db_session):

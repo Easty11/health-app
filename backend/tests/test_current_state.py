@@ -83,16 +83,27 @@ def test_current_state_returns_active_declared_state(db_session):
 def test_current_state_excludes_superseded_entry(db_session):
     user = _make_user(db_session)
 
+    # Conforms to the validated shape (#233). What is under test is supersede-by-key,
+    # not the shape — but `upsert_knowledge_entry` now refuses a non-conforming
+    # `schedule_item`, so the fixture has to be a real one. Same key both times, so the
+    # overlap check correctly does not make the second write acknowledge the first.
+    def _physio(name: str) -> dict:
+        return {
+            "activity": name, "days": ["monday"], "hard": True,
+            "expected_load": "light", "time_of_day": "morning",
+            "same_day_training": False, "duration_weeks": None, "season_end": None,
+        }
+
     first = upsert_knowledge_entry(
         user.id,
         KnowledgeEntryIn(type="schedule_item", key="physio_2026_07",
-                         value={"activity": "physio v1"}, source="chat"),
+                         value=_physio("physio v1"), source="chat"),
         db_session,
     )
     second = upsert_knowledge_entry(
         user.id,
         KnowledgeEntryIn(type="schedule_item", key="physio_2026_07",
-                         value={"activity": "physio v2"}, source="chat"),
+                         value=_physio("physio v2"), source="chat"),
         db_session,
     )
 
@@ -244,5 +255,43 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the current prompt teaches `source` again — see #230"
     )
     old_prompt = old_prompt.replace(_DROPPED, "", 1)
+
+    # NARROWED AGAIN (#233): the SCHEDULE INTELLIGENCE clarify-and-write span is
+    # rewritten BY INTENT — `schedule_item` now has a closed, validated shape, so the
+    # template teaches every field, the closed weekday set, the two-axis distinction
+    # between `hard` and `expected_load`, and what to do when a write is refused for
+    # overlapping an existing day. Same reasoning as the #82 and #230 narrowings: for
+    # this span the guard's question ("did the #43 refactor drift?") is no longer
+    # answerable, old==new can never hold again, and PRE_REFACTOR_SHA cannot move.
+    #
+    # Excised BETWEEN ANCHORS rather than by dropping `_section_user_profile`: the
+    # change is confined to STEP 1 and STEP 2, so STEP 3, TRIGGER PHRASES, TEMPORAL
+    # EVENTS and CONTRADICTION HANDLING all stay under parity — dropping the whole
+    # section would retire far more coverage than the change costs.
+    #
+    # The new span is pinned by tests/test_schedule_item_schema.py.
+    _SPAN_START = "STEP 1 — ASK BEFORE WRITING\n"
+    _SPAN_END = "STEP 3 — SYNTHESISE IMPACT\n"
+
+    def _excise_span(prompt: str, label: str) -> str:
+        start = prompt.find(_SPAN_START)
+        end = prompt.find(_SPAN_END)
+        assert start != -1 and end != -1 and start < end, (
+            f"the {label} prompt no longer carries both narrowing anchors in order — "
+            f"this excision would silently remove the wrong region"
+        )
+        return prompt[:start] + prompt[end:]
+
+    old_span = old_prompt[old_prompt.find(_SPAN_START):old_prompt.find(_SPAN_END)]
+    new_span = new_prompt[new_prompt.find(_SPAN_START):new_prompt.find(_SPAN_END)]
+    # Positive control, in the register of the `_DROPPED` assertion above: if the two
+    # spans ever match, this narrowing has become a no-op that hides real drift.
+    assert old_span != new_span, (
+        "the excised span is identical on both sides — this narrowing is now a no-op "
+        "and should be removed rather than left hiding drift"
+    )
+
+    old_prompt = _excise_span(old_prompt, "pre-refactor")
+    new_prompt = _excise_span(new_prompt, "current")
 
     assert old_prompt == new_prompt
