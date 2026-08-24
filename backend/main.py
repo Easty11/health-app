@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from cors_errors import add_cors_error_handler
+from hc_sync_diagnostics import add_hc_sync_validation_diagnostics
+from routers.health_connect import SyncPayload
 from database import Base, engine
 from routers import auth as auth_router
 from routers import integrations as integrations_router
@@ -60,6 +62,10 @@ app.add_middleware(
 
 # Global 500 guard that carries CORS headers (see cors_errors / #66).
 add_cors_error_handler(app, _allowed_origins)
+
+# Shape-only diagnostics for a rejected /health-connect/sync payload (#235). Logs
+# key names + counts, NEVER health values; stock 422 body on every other route.
+add_hc_sync_validation_diagnostics(app, known_keys=set(SyncPayload.model_fields))
 
 app.include_router(auth_router.router)
 app.include_router(password_reset_router.router)
