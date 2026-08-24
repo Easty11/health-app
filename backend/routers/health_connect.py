@@ -142,75 +142,55 @@ def sport_name_for(exercise_type: Optional[int]) -> Optional[str]:
 
 # ---------- flexible incoming schemas ----------
 
-class DataOrigin(BaseModel):
-    """Health Connect Record.metadata.dataOrigin — the writing app's identity."""
-    packageName: Optional[str] = None
-
-
 class WriterIdentity(BaseModel):
     """Per-record writer identity, mixed into every HC record model.
 
-    Dual-field per the #24 house pattern (raw library field + mapped alias):
-      dataOrigin.packageName — raw Health Connect shape (#36 wire contract)
-      sourcePackage          — flattened alias the JS mapping layer may emit
+    `sourcePackage` is the single canonical field: HCA's mappers thread
+    `sourcePackage: r.metadata?.dataOrigin ?? null` from the library shape, so
+    the flattened string is what arrives on the wire. The raw nested
+    `dataOrigin.packageName` acceptance and its reconciler were removed at #234
+    (the /health-connect/sync contract collapse) — one client, one mapped name.
 
-    Optional/nullable everywhere, and it must STAY optional — but not for the
-    reason this docstring used to give. It read "current HCA builds send no
-    dataOrigin", which was true when written (#36, 2026-06-29) and is now
-    STALE: HCA master's mappers thread `sourcePackage: r.metadata?.dataOrigin
-    ?? null`, and the live health_connect_record_sources rows carry real
-    packages (com.sec.android.app.shealth, com.withings.wiscale2, 2026-08-03).
-    Identity DOES arrive. Corrected 2026-08-05 — the stale line had made #175's
-    admission model look like a fail-closed-on-everything risk (Q83).
-
-    It stays optional because identity is not GUARANTEED, which is a different
-    claim: historical rows predating the mapper change, record types HCA does
-    not tag, and any future build regression all yield a missing identity,
-    which _capture_record_sources coalesces to the literal 'unknown'. A
-    required field would still 422 those.
+    It stays OPTIONAL because identity is not GUARANTEED: historical rows
+    predating the mapper change, record types HCA does not tag, and any future
+    build regression all yield a missing identity, which
+    _capture_record_sources coalesces to the literal 'unknown'. A required
+    field would 422 those. (This is distinct from the canonical value fields
+    #234 makes required — bpm/rmssd/date/type — where absence IS the rename
+    signal; a missing writer is a known-tolerated state, not a broken contract.)
 
     Capture only — no filtering HERE. #175 adds admission filtering downstream
     in _aggregate_day, where 'unknown' must be a DECIDED value rather than a
     default that means exclude, or legitimately-unidentified records are
     dropped silently (Q83).
     """
-    dataOrigin: Optional[DataOrigin] = None   # raw library field
-    sourcePackage: Optional[str] = None        # mapped field
-
-    def get_source_package(self) -> Optional[str]:
-        if self.sourcePackage:
-            return self.sourcePackage
-        if self.dataOrigin:
-            return self.dataOrigin.packageName
-        return None
+    sourcePackage: Optional[str] = None
 
 
 class HeartRateRecord(WriterIdentity):
     time: str
-    beatsPerMinute: Optional[int] = None   # raw library field
-    bpm: Optional[int] = None               # mapped field
+    bpm: Optional[int] = None               # mapped canonical field
 
-    def get_bpm(self) -> Optional[int]:
-        return self.bpm or self.beatsPerMinute
+    # `beatsPerMinute` (raw) and `get_bpm()` removed at #234 — read `.bpm`.
 
 
 class StepsRecord(WriterIdentity):
-    startTime: Optional[str] = None
     endTime: Optional[str] = None
-    date: Optional[str] = None              # mapped field (date: r.startTime)
+    date: Optional[str] = None              # mapped canonical field
     count: int
 
-    def get_start(self) -> Optional[str]:
-        return self.startTime or self.date
+    # `startTime` (raw) and `get_start()` removed at #234 — read `.date`. HCA's
+    # stepsMapper emits a pre-resolved `date`, never a steps `startTime`, so the
+    # substitution is value-identical on the live payload. `endTime` is neither
+    # half of the dual name and no reader touches it; left as-is (not this
+    # branch's concern), the same rule that keeps get_kg()/get_meters().
 
 
 class HRVRecord(WriterIdentity):
     time: str
-    heartRateVariabilityMillis: Optional[float] = None  # raw library field
-    rmssd: Optional[float] = None                        # mapped field
+    rmssd: Optional[float] = None           # mapped canonical field
 
-    def get_rmssd(self) -> Optional[float]:
-        return self.rmssd or self.heartRateVariabilityMillis
+    # `heartRateVariabilityMillis` (raw) and `get_rmssd()` removed at #234.
 
 
 class SleepStage(BaseModel):
@@ -240,8 +220,10 @@ class SleepSession(WriterIdentity):
 class ExerciseRecord(WriterIdentity):
     startTime: str
     endTime: str
-    exerciseType: Optional[int] = None
-    type: Optional[Any] = None              # mapped field (type: r.exerciseType)
+    # `exerciseType` (raw) removed at #234. No runtime path read it —
+    # `sport_name_for` is the only consumer of the enum and is test-only, so
+    # this is forward-protection for #189's ingestion lane, not a live path.
+    type: Optional[Any] = None              # mapped canonical field
     title: Optional[str] = None
     durationMinutes: Optional[int] = None
 
@@ -307,8 +289,7 @@ class SyncPayload(BaseModel):
     hrv: list[HRVRecord] = []
     heartRate: list[HeartRateRecord] = []
     steps: list[StepsRecord] = []
-    workouts: list[ExerciseRecord] = []     # old field name
-    exercise: list[ExerciseRecord] = []     # new field name
+    workouts: list[ExerciseRecord] = []     # canonical envelope key (HCA sends `workouts`)
     oxygenSaturation: list[OxygenSaturationRecord] = []
     respiratoryRate: list[RespiratoryRateRecord] = []
     weight: list[WeightRecord] = []
@@ -316,8 +297,11 @@ class SyncPayload(BaseModel):
     mindfulness: list[MindfulnessRecord] = []
     errors: list[str] = []
 
-    def all_exercises(self) -> list[ExerciseRecord]:
-        return self.workouts + self.exercise
+    # `exercise` (the dual envelope key) and `all_exercises()` removed at #234.
+    # The helper existed solely to reconcile `workouts` + `exercise`; with one
+    # key it is dead, and — reading the deleted field — it would be a NameError
+    # in waiting if left. Deleted because the collapse breaks it, which is a
+    # different rule from dead-code cleanup: get_kg()/sport_name_for stay.
 
 
 # ---------- output schemas ----------
@@ -411,9 +395,8 @@ def _reject_pre2020(payload: SyncPayload) -> int:
     payload.sleep = _filter(payload.sleep, lambda r: r.startTime)
     payload.hrv = _filter(payload.hrv, lambda r: r.time)
     payload.heartRate = _filter(payload.heartRate, lambda r: r.time)
-    payload.steps = _filter(payload.steps, lambda r: r.get_start())
+    payload.steps = _filter(payload.steps, lambda r: r.date)
     payload.workouts = _filter(payload.workouts, lambda r: r.startTime)
-    payload.exercise = _filter(payload.exercise, lambda r: r.startTime)
     payload.oxygenSaturation = _filter(payload.oxygenSaturation, lambda r: r.time)
     payload.respiratoryRate = _filter(payload.respiratoryRate, lambda r: r.time)
     payload.weight = _filter(payload.weight, lambda r: r.time)
@@ -445,14 +428,13 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
         for r in items:
             t = ts(r)
             if t:
-                captured.append((rtype, t, r.get_source_package() or "unknown"))
+                captured.append((rtype, t, r.sourcePackage or "unknown"))
 
     _add(payload.sleep, "sleep", lambda r: r.startTime)
     _add(payload.hrv, "hrv", lambda r: r.time)
     _add(payload.heartRate, "heart_rate", lambda r: r.time)
-    _add(payload.steps, "steps", lambda r: r.get_start())
+    _add(payload.steps, "steps", lambda r: r.date)
     _add(payload.workouts, "exercise", lambda r: r.startTime)
-    _add(payload.exercise, "exercise", lambda r: r.startTime)
     _add(payload.oxygenSaturation, "oxygen_saturation", lambda r: r.time)
     _add(payload.respiratoryRate, "respiratory_rate", lambda r: r.time)
     _add(payload.weight, "weight", lambda r: r.time)
@@ -521,10 +503,10 @@ def _sleep_score(deep: int, rem: int, total: int) -> Optional[int]:
 def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
     row: dict[str, Any] = {"date": day}
 
-    # Steps — sum all records on this date (accept both startTime and date fields)
+    # Steps — sum all records on this date
     day_steps = [
         r for r in payload.steps
-        if r.get_start() and _parse_date(r.get_start()) == day
+        if r.date and _parse_date(r.date) == day
     ]
     if day_steps:
         row["steps"] = sum(r.count for r in day_steps)
@@ -532,16 +514,16 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
     # Heart rate — median bpm for the day
     day_hr = [
         r for r in payload.heartRate
-        if r.get_bpm() is not None and _parse_date(r.time) == day
+        if r.bpm is not None and _parse_date(r.time) == day
     ]
     if day_hr:
-        bpms = sorted(r.get_bpm() for r in day_hr)
+        bpms = sorted(r.bpm for r in day_hr)
         row["resting_heart_rate"] = float(bpms[len(bpms) // 2])
 
     # HRV — average rmssd for the day
-    day_hrv = [r for r in payload.hrv if _parse_date(r.time) == day and r.get_rmssd() is not None]
+    day_hrv = [r for r in payload.hrv if _parse_date(r.time) == day and r.rmssd is not None]
     if day_hrv:
-        row["hrv_rmssd"] = round(sum(r.get_rmssd() for r in day_hrv) / len(day_hrv), 1)
+        row["hrv_rmssd"] = round(sum(r.rmssd for r in day_hrv) / len(day_hrv), 1)
 
     # Sleep — longest session whose LOCAL wake-date (endTime) is this day.
     # Wake-date only (Q4): the former startTime/bed-date clause split one
@@ -612,9 +594,8 @@ def sync(
     # Collect all unique dates across all record types
     dates: set[date] = set()
     for r in payload.steps:
-        s = r.get_start()
-        if s:
-            dates.add(_parse_date(s))
+        if r.date:
+            dates.add(_parse_date(r.date))
     for r in payload.heartRate:
         dates.add(_parse_date(r.time))
     for r in payload.hrv:
