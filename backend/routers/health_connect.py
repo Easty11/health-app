@@ -15,7 +15,7 @@ import re
 import pytz
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 import models
@@ -54,10 +54,12 @@ SLEEP_STAGE_REM   = SleepStageType.REM
 # mechanism as SleepStageType) so the companion app can generate a contract file.
 #
 # This enum is a MAPPING helper, NOT a wire-validation type: the inbound
-# ExerciseRecord.exerciseType field stays a lenient int, so an integer this enum
-# does not define is accepted and persisted with sport_id retained and sport_name
-# NULL (see sport_name_for) — we never GUESS a sport for an unknown code, and a
-# future upstream addition never 422-rejects a sync.
+# ExerciseRecord.type field is a REQUIRED but lenient int (#234), so an integer
+# this enum does not define is accepted and persisted with sport_id retained and
+# sport_name NULL (see sport_name_for) — we never GUESS a sport for an unknown
+# code, and a future upstream addition never 422-rejects a sync. Required-int
+# rejects a missing or null `type` (the rename signal) without rejecting an
+# unknown code; that is why the field is `int`, not `Any`.
 class ExerciseSessionType(IntEnum):
     OTHER_WORKOUT                   = 0
     BADMINTON                       = 2
@@ -163,37 +165,39 @@ class WriterIdentity(BaseModel):
     in _aggregate_day, where 'unknown' must be a DECIDED value rather than a
     default that means exclude, or legitimately-unidentified records are
     dropped silently (Q83).
+
+    extra="allow" (#234): a key a newer client adds is RETAINED in model_extra
+    rather than dropped, so it is loggable on a rejected sibling record and
+    never silently discarded. Inherited by every record subclass below — see
+    SyncPayload and SleepStage, which set it independently (not WriterIdentity
+    subclasses).
     """
+    model_config = ConfigDict(extra="allow")
+
     sourcePackage: Optional[str] = None
 
 
 class HeartRateRecord(WriterIdentity):
     time: str
-    bpm: Optional[int] = None               # mapped canonical field
-
-    # `beatsPerMinute` (raw) and `get_bpm()` removed at #234 — read `.bpm`.
+    bpm: int                                # canonical, REQUIRED (#234) — typed int rejects null natively
 
 
 class StepsRecord(WriterIdentity):
-    endTime: Optional[str] = None
-    date: Optional[str] = None              # mapped canonical field
+    endTime: Optional[str] = None           # neither half of a dual name; unread, left as-is
+    date: str                               # canonical, REQUIRED (#234)
     count: int
-
-    # `startTime` (raw) and `get_start()` removed at #234 — read `.date`. HCA's
-    # stepsMapper emits a pre-resolved `date`, never a steps `startTime`, so the
-    # substitution is value-identical on the live payload. `endTime` is neither
-    # half of the dual name and no reader touches it; left as-is (not this
-    # branch's concern), the same rule that keeps get_kg()/get_meters().
 
 
 class HRVRecord(WriterIdentity):
     time: str
-    rmssd: Optional[float] = None           # mapped canonical field
-
-    # `heartRateVariabilityMillis` (raw) and `get_rmssd()` removed at #234.
+    rmssd: float                            # canonical, REQUIRED (#234) — typed float rejects null natively
 
 
 class SleepStage(BaseModel):
+    # extra="allow" (#234): `stages` receives library-raw objects, the likeliest
+    # place a newer client legitimately adds a key; retain rather than drop.
+    model_config = ConfigDict(extra="allow")
+
     stage: SleepStageType
     startTime: str
     endTime: str
@@ -220,12 +224,23 @@ class SleepSession(WriterIdentity):
 class ExerciseRecord(WriterIdentity):
     startTime: str
     endTime: str
-    # `exerciseType` (raw) removed at #234. No runtime path read it —
-    # `sport_name_for` is the only consumer of the enum and is test-only, so
+    # canonical, REQUIRED (#234). `int`, not `Any`: a required Any accepts an
+    # explicit null (key-present-but-null passes), and this is the one field
+    # the collapse hardens whose native type would not reject it. `int`
+    # preserves the enum's documented leniency (:57) — that defends unknown
+    # CODES, not non-integer types, and `int` admits every unknown code exactly
+    # as `Any` did. No runtime path reads it (sport_name_for is test-only), so
     # this is forward-protection for #189's ingestion lane, not a live path.
-    type: Optional[Any] = None              # mapped canonical field
+    type: int
     title: Optional[str] = None
     durationMinutes: Optional[int] = None
+    # Health Connect record metadata (#234, Q118): declared Optional so they are
+    # first-class attributes rather than model_extra, accept-and-drop. Persisting
+    # them (id as the dedup UUID; recordingMethod/device for #175 admission) is
+    # Q118. Samsung leaves recordingMethod/device at sentinel 0.
+    id: Optional[str] = None
+    recordingMethod: Optional[int] = None
+    device: Optional[Any] = None
 
 
 class OxygenSaturationRecord(WriterIdentity):
@@ -283,13 +298,27 @@ class MindfulnessRecord(WriterIdentity):
 
 
 class SyncPayload(BaseModel):
+    # extra="allow" (#234): the LOAD-BEARING one. An unknown TOP-LEVEL key is
+    # retained in model_extra (the additive-key tolerance) and is what Step 4
+    # logs on a rejected body. Set independently — SyncPayload is not a
+    # WriterIdentity subclass and does not inherit its config.
+    model_config = ConfigDict(extra="allow")
+
     syncedAt: Optional[str] = None
     periodDays: int = 7
-    sleep: list[SleepSession] = []
-    hrv: list[HRVRecord] = []
-    heartRate: list[HeartRateRecord] = []
-    steps: list[StepsRecord] = []
-    workouts: list[ExerciseRecord] = []     # canonical envelope key (HCA sends `workouts`)
+
+    # The five streams HCA ALWAYS posts are REQUIRED but emptyable (#234): no
+    # default, so an omitted key 422s, while `[]` is valid. Envelope-required is
+    # what catches a `workouts` -> `exercise` rename that required record fields
+    # alone would not — a renamed list key would default to [] and report success.
+    sleep: list[SleepSession]
+    hrv: list[HRVRecord]
+    heartRate: list[HeartRateRecord]
+    steps: list[StepsRecord]
+    workouts: list[ExerciseRecord]          # canonical envelope key (HCA sends `workouts`, never `exercise`)
+
+    # The five HCA NEVER posts stay optional-defaulted — absence is normal, not a
+    # rename signal.
     oxygenSaturation: list[OxygenSaturationRecord] = []
     respiratoryRate: list[RespiratoryRateRecord] = []
     weight: list[WeightRecord] = []
