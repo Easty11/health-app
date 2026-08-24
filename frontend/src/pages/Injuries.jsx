@@ -227,6 +227,13 @@ function ActiveRow({ row, onRecord, onDone }) {
   const value = row.value || {}
   const key = sorenessKey(value)
   const restrictions = Array.isArray(value.restrictions) ? value.restrictions : []
+  // signal_type is what decides whether the engine's radicular block can ever fire, so it belongs
+  // on screen. HAZARD, do NOT "correct" the data to match the prose: the right-hamstring row's
+  // `detail` states the current limiter is NEURAL while signal_type reads "mechanical". That
+  // mismatch is deliberate and documented in seed_engine.py — typing it "neural" fires the
+  // radicular block across hinge/rotation/carry/gait and removes the SL-RDL that IS the
+  // desensitisation lane, silently deleting the treatment. This field is displayed, never asserted
+  // to gate anything (whether a row contraindicates is a server-side computation absent here).
   const signalType = String(value.signal_type || 'mechanical').toLowerCase()
 
   return (
@@ -241,13 +248,17 @@ function ActiveRow({ row, onRecord, onDone }) {
         {row.expires_at && <Chip tone="amber">expires {fmtDate(row.expires_at)}</Chip>}
       </div>
 
-      {/* Effect readout — the point of the row. "There is an injury row" is not actionable; what
-          it DOES is: it contraindicates training regions, and it puts an item in every morning
-          check-in. No prefill number — that series lives server-side, not here. */}
+      {/* Effect readout. The one thing every active row DOES that is true of it as it stands: it
+          puts an item in every morning check-in. It does NOT unconditionally contraindicate — that
+          is a server-side computation over engine tables (_ACUTE_TISSUE_BLOCKS etc.), absent from
+          this payload and false for rows like pes anserine and finger that match no block key, so
+          the view asserts it neither way. Reproducing those tables here is the same drift hazard as
+          _review_message. `restrictions[]` is free text surfaced to session context (mcp_server.py
+          prints "(avoid: …)"); it gates nothing, and is labelled as such. */}
       <div className="rounded-lg bg-gray-50 px-3 py-2 space-y-1.5">
         <p className="text-xs text-gray-700">
-          <span className="font-medium">Contraindicates training regions</span>
-          <span className="text-gray-500"> · signal: {signalType}</span>
+          <span className="font-medium">Signal type</span>
+          <span className="text-gray-500"> · {signalType}</span>
           {value.ra_flare ? <span className="text-gray-500"> · RA flare</span> : null}
         </p>
         <p className="text-xs text-gray-700">
@@ -255,8 +266,11 @@ function ActiveRow({ row, onRecord, onDone }) {
           <code className="text-[11px] bg-white border border-gray-200 rounded px-1 py-0.5">{key}</code>
         </p>
         {restrictions.length > 0 && (
-          <div className="flex flex-wrap gap-1 pt-0.5">
-            {restrictions.map((r) => <Chip key={r}>{r}</Chip>)}
+          <div className="pt-0.5">
+            <p className="text-[11px] text-gray-400 mb-1">Surfaced to sessions, not enforced</p>
+            <div className="flex flex-wrap gap-1">
+              {restrictions.map((r) => <Chip key={r}>{r}</Chip>)}
+            </div>
           </div>
         )}
       </div>

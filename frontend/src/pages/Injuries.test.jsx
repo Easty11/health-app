@@ -42,7 +42,8 @@ const ROWS = [
     value: { body_part: 'pes anserine', side: 'left', signal_type: 'mechanical' } },
   { id: 75, type: 'injury', key: 'injury_pes_anserine_left', source: 'api', added_at: '2026-08-20',
     expires_at: null, active: true, notes: null, superseded_by: null,
-    value: { body_part: 'pes anserine', side: 'left', signal_type: 'mechanical' } },
+    value: { body_part: 'pes anserine', side: 'left', signal_type: 'mechanical',
+      restrictions: ['adductor tension (Copenhagens)', 'deep-flexion unilateral'] } },
   { id: 17, type: 'injury', key: 'injury_shoulder_right', source: 'system', added_at: '2026-06-22',
     expires_at: null, active: false, notes: null, superseded_by: 78,
     value: { body_part: 'shoulder', side: 'right', signal_type: 'mechanical' } },
@@ -106,15 +107,29 @@ describe('on record since is the chain-earliest added_at, never the raw row date
 })
 
 
-describe('each active row states its effect (AC#3)', () => {
-  test('contraindication, soreness key, on-record-since and source all show', async () => {
+describe('each active row states only what is true of it (AC#3)', () => {
+  test('signal type, soreness key, on-record-since and source all show', async () => {
     await renderView()
     const c = within(card('Finger (left)'))
-    expect(c.getByText(/Contraindicates training regions/)).toBeTruthy()
+    expect(c.getByText(/Signal type/)).toBeTruthy()
     // The SORENESS key derived from value (finger_left), not the entry key (injury_finger_left).
     expect(c.getByText('finger_left')).toBeTruthy()
     expect(c.getByText(/On record since/)).toBeTruthy()
     expect(c.getByText(/· api/)).toBeTruthy()
+  })
+
+  test('the view never claims a row contraindicates — that rule is not the frontend’s to hold', async () => {
+    // Unconditional "Contraindicates training regions" was false for pes anserine and finger
+    // (no _ACUTE_TISSUE_BLOCKS key). is_contraindicated is a server-side computation absent from
+    // the payload, so the view asserts it neither way. Durable form: no "contraindicat*" anywhere.
+    await renderView()
+    expect(screen.queryByText(/contraindicat/i)).toBeNull()
+  })
+
+  test('restrictions are labelled surfaced-not-enforced, not as blocks', async () => {
+    await renderView()
+    // pes anserine carries restrictions in the fixture below; the label denies enforcement.
+    expect(screen.getAllByText(/surfaced to sessions, not enforced/i).length).toBeGreaterThan(0)
   })
 })
 
