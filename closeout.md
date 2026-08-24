@@ -1,139 +1,90 @@
-# Session close-out — 2026-08-24 (post-deploy OWED discharge)
+# closeout — /injuries operator view (#100) + banked follow-ups
 
-Session-open ref: `004da34` (master at open). Close ref: this close-out commit on `master`.
-Maxima at close: decisions **#236** · questions **Q119** · feedback **§32** (all unchanged — nothing minted).
+## Real commits this session
 
-This was a **single-purpose governance session**: discharge the one OWED the prior session
-(`feat/hc-sync-contract-collapse`, PR #95) left standing — the `§8`-class post-deploy real-sync
-verification recorded in `#235` Status and the hc-sync `BRANCHES` row. The operator ran the sync
-(2026-08-24, PASS) and reported the evidence; this session recorded the discharge and one structural
-finding it surfaced. No code, no schema, no migration, no tests.
+Two branches, both off the same master tip (`bca7e89`).
 
----
+**`claude/injuries-operator-view-lbxyvf`** — PR #100 (draft, open, NOT merged), code, full human review:
 
-## 1. Real commits this session
+    5e31321 fix(injuries): stop asserting contraindication; label restrictions as surfaced-not-enforced
+    ba6d6cf fix(injuries): state the record-age date positively, never via onset/age
+    57345b0 feat(injuries): /injuries operator view over the #222/#223 endpoints
 
-`git log --oneline 004da34..HEAD` — 2 commits (1 on `gov/hc-sync-post-deploy-discharge` + the merge).
+Frontend suite **57 passed** (10 in `Injuries.test.jsx`); `npm run lint` at the pre-existing
+6-error baseline (all in untouched files); `npm run build` clean. Reviewed by Luke: "Verified at
+`5e31321`. All three edits landed as specified."
 
-```
-636c612 Merge pull request #98 from Easty11/gov/hc-sync-post-deploy-discharge
-fc7dfa0 gov: discharge #235 post-deploy sync verification OWED (2026-08-24 PASS)
-```
+**`gov/injuries-followups-closeout`** — governance batch (#176), docs-only, guard-gated. Carries the
+`OPEN_QUESTIONS`/`ROADMAP`/`BRANCHES` edits below plus this `closeout.md`. Commit hash is the
+`chore: session close-out …` commit that adds this file (self-referential; not quotable from within
+itself). Removed-line audit (`git diff | grep '^-'`) run clean pre-commit — every removed line is an
+in-place replacement of a declared region (ROADMAP row rewrite, this file's overwrite); appends
+elsewhere.
 
-Governance stores touched (`git diff --name-only 004da34..636c612`): **`DECISIONS_LOG.md`**,
-**`BRANCHES.md`** — plus `CLAUDE.md` (Recent-landings) and `closeout.md` in this close-out commit.
+## Pending-queue reconciliation
 
-Branch terminal-state gate: **PASSES.** `git branch` and `refs/remotes/origin` (post-prune) both hold
-`master` only. The one branch touched, `gov/hc-sync-post-deploy-discharge`, is merged (`636c612`) +
-remote-deleted; `git cherry origin/master` reports nothing unmerged on any local branch.
+No `;cc` pending-commit queue was carried in — this session ran from a build brief, not a chat
+close-out. The reconciled items are the four governance follow-ups the review surfaced:
 
----
+1. **LANDED (gov branch)** — `OPEN_QUESTIONS` **Q120**: the injury value shape has no onset field;
+   `/injuries`'s "on record since" is a compensation for that absence, recorded so it does not later
+   read as a design preference.
+2. **LANDED (gov branch)** — `ROADMAP` backfill-audit lane **reframed**: the five live rows are all
+   current and cross-referenced; observed drift lives in `restrictions[]`/`detail`, not the `active`
+   flag; every maintenance event in evidence is a restatement, not a retirement. Justification changed
+   from "stale rows suppress regions" (which the data and `is_contraindicated`'s logic both refute) to
+   "the active set has never been operator-reviewed against current truth."
+3. **LANDED (gov branch)** — `ROADMAP` new NEXT lane: an **edit-and-supersede path** is the next
+   injury-ledger build, ahead of the #232 review badge (which renders nothing today — no active row
+   carries `review_when`).
+4. **HELD, deliberately** — the `DECISIONS_LOG` **#100 stub**. It is a decision entry *for PR #100*,
+   and #100 is a draft. Numbers are minted at merge, never in advance (number-at-merge); landing the
+   stub now would either invent a number or land a numberless entry, and would assert as decided a
+   thing not yet merged. It lands when #100 merges — re-read master's max, mint `#N`, write the DONE
+   row + Recent-landings pointer in the same stroke. Its content is settled: motivation is that the
+   ledger is **write-only** (chat/api/system all write injury rows, no route retires them); it carries
+   **no** stale-row-suppression claim (the five row bodies refute it).
 
-## 2. Pending-queue reconciliation
+Provisional until their branches merge: everything above is on unmerged branches. Both PRs are draft;
+neither has reached master.
 
-**No `;cc` PENDING queue was handed to this session.** The work was a direct operator instruction —
-"discharge the post-deploy OWED, evidence attached" — adjudicated and landed in one commit. Nothing is
-provisional.
+## Cold-resume handoff
 
-| Item | Landed | Where |
-|---|---|---|
-| `#235` Status: post-deploy `§8` verification marked DISCHARGED (2026-08-24 PASS), evidence quoted | YES | `fc7dfa0` (pure insertion, 13 lines) |
-| `BRANCHES` hc-sync row: OWED item (3) → DISCHARGED; (1) done-at-merge; (2) still OWED session-2 | YES | `fc7dfa0` (declared OWED-cell replacement) |
-| Structural HRV finding recorded as a cross-ref to `#236`/`Q83` (no new question minted) | YES | `fc7dfa0` (#235 Status + BRANCHES) |
+**What this session did.** Built the `/injuries` operator view (frontend-only, PR #100) — the
+reachable half of the #222/#223 resolution loop — then corrected its effect readout to stop asserting
+contraindication (a server-side computation absent from the payload) and to label `restrictions[]` as
+surfaced-not-enforced. Banked three governance follow-ups (Q120 + two ROADMAP edits) on a separate
+gov branch; held the #100 decision stub for merge.
 
-`#176`(c) audit: `DECISIONS_LOG` is a pure insertion (0 removed); the single `BRANCHES` removal is the
-declared OWED-cell replacement of the hc-sync row. Placeholder guard green (local hook + `placeholder
-guard (POSIX)` on PR #98). No numbers minted — master maxima unchanged at **#236 / Q119**, so nothing to
-re-resolve at the merge instant (base stayed `004da34` through merge).
+**Single clearest next action.** Review and merge **draft PR #100** (`claude/injuries-operator-view-lbxyvf`,
+head `5e31321`). On merge: mint the `DECISIONS_LOG` number, write the `#N` DONE row in `BRANCHES.md`,
+add the Recent-landings pointer, and land the held #100 stub (governance item 4). Then merge the
+`gov/injuries-followups-closeout` PR (independent; guard-gated). Neither is to be self-merged without
+Luke — both are draft by instruction.
 
-**Recent-landings note:** this session's landing completes the immediately-prior pointer's own "still
-owed" tail, so that line was **amended** to its current truth (post-deploy verified 2026-08-24) rather
-than prepended as a near-duplicate feature line — pointer-only and non-contradictory, no new decision to
-add.
+**Open questions touched / added.**
+- **Q120 (new, OPEN)** — injury value shape has no onset field; `/injuries` compensates read-side,
+  asserts nothing false; no consumer needs true onset yet.
+- **Q102 (OPEN, unchanged)** — `restrictions[]` is dead data in `is_contraindicated`; this session's
+  readout fix is consistent with it (the view now states `restrictions[]` gates nothing).
+- Maxima at open: decisions **#236**, questions **Q119** (Q120 added this session).
 
----
+**What was NOT touched — named so the queue does not read as empty.** This was a small frontend
+lane plus its governance; the substantive product lanes stood still and are where the next real work
+is, not more injury-ledger polish:
+- **Interpretation layer** increments 2 (rephrase) → 3 (lever-tap) → 5 (go-live) — the sequenced NOW
+  continuation, untouched this session.
+- **CBT-I user surface** — engine built, still invisible in-app; gated on **#47** (state-only vs
+  action) and **Q60**, neither moved.
+- **Lab upload pipeline** — the medical-spine hero feature; `SCHEMA.md` lab-family staleness (OWED)
+  and `lab_accession` persistence still open.
+- **`weekly_template` resolver** (#221 lane, Q105/Q106) and the **cross-repo `#NEXT` sweep** (ROADMAP
+  NOW, OWED) — both untouched.
+- Injury-ledger specifically: the reframe above means the next injury build is the **edit-and-supersede
+  path**, not the backfill audit (now a human-recall exercise) and not the #232 badge (renders nothing
+  today). But none of these should crowd out the interpretation/CBT-I/lab lanes above, which are the
+  product, not the instrument.
 
-## 3. Cold-resume handoff
-
-### What this session changed
-
-The `/health-connect/sync` post-deploy verification is **done**. One real sync ran 2026-08-24 10:43:37Z
-against the deployed, now-stricter endpoint. **PASS** — eight in-window dates upserted, pre-window
-`synced_at` untouched (non-destructive upsert), no 422 and no `HC sync rejected` shape-log, `unattributed
-== 0` across `exercise` 75 / `sleep` 129 / `steps` 78 / `heart_rate` 49311. The `heartRateMapper`
-`undefined`→dropped-`bpm` risk `#235` named did not fire on real data. The hc-sync contract collapse
-(`#234`/`#235`/`#236`) is now **verified live end-to-end** — the loop the prior close-out named as the
-immediate next action is closed.
-
-### The one new finding — structural, carried as a cross-ref, NOT a new question
-
-`health_connect_syncs.hrv_rmssd` has **never** been populated (`COUNT WHERE NOT NULL = 0` over the
-table's life) and no `hrv` `record_type` has ever reached `record_sources`: **Samsung Health does not
-write HRV to Health Connect.** The scraper path (`samsung_hrv_readings`, the `passive_overnight` stream
-that already feeds `daily_records.passive_hrv_ms`) is the **sole** HRV source. This is upstream of the
-sync contract — the contract is sound; the HRV gap is a source-availability fact — and it is exactly the
-multi-writer HRV-source arbitration `#236`/`Q83` already own. It is recorded in `#235` Status and the
-BRANCHES row as a cross-ref; **no new Q was minted** (operator instruction), and `Q119` stays OPEN at its
-current priority. When the `#236` E3 lane / `Q83` device-switch arbitration is picked up, this is a
-load-bearing input: any HRV-source blend must treat Health Connect as carrying **no** Samsung HRV.
-
-### Immediate next action
-
-With the hc-sync loop closed, the most concrete owed item in the repo is once again **`Q116` — the
-`schedule_item` backfill** (18 active rows behind a live validator, never backfilled; needs
-`railway connect health-app-DB`, operator-side; the GUARD stop-condition runs FIRST). It has been the
-standing "one live gap between master and correct data" for two sessions and did not move here.
-
-### Open questions, grouped (62 OPEN; the ones with live consequences)
-
-- **Owed loop-closes from prior sessions:** **Q116** (`schedule_item` backfill — the one live master↔data
-  gap, needs DB access), **Q117** (`expected_load` granularity).
-- **The hc-sync session's forks, all OPEN, none blocking:** **Q118** (HC record metadata persistence —
-  `id`/`recordingMethod`/`device` accepted-and-dropped; `id`-as-dedup-key is a `#36`/`#37` ruling),
-  **Q119** (windowed backfill recovery path — sharpened, not gated, by this PASS: a break that outlives
-  the ~7-day fetch window is still permanent-by-default; only becomes urgent if a real sync FAILS and the
-  repair outruns the window).
-- **Gating the E3 lane (`#236`):** **Q83** (HC sleep/HRV selection is source-blind — the multi-writer
-  blend that gates a device switch; **now carrying this session's finding that HC holds no Samsung HRV**),
-  **Q105**/**Q106** (weekly-resolver vocabulary), and the baseline/confidence/arbitration design lane
-  named inside `#236` itself.
-
-### NOT TOUCHED this session — read before planning the next
-
-This was a **one-line governance discharge**, the second consecutive governance-class session after the
-hc-sync product run. The product/feature lanes that stood still (unchanged from the prior close-out, and
-named again because absence is not self-reporting):
-
-- **`schedule_item` backfill (Q116)** — untouched. Still the one place master carries a live validator
-  with 18 non-conforming rows behind it. Needs DB access, operator-side. The most concrete owed item.
-- **The E3 lane (`#236`)** — ruled as a *design*, not built. Order: recovery-derivation design first
-  (baseline/confidence/arbitration), adapter work after, session-2 HCA conformance at the tail. This
-  session's HRV finding feeds directly into it.
-- **HCA mapper de-dup + O3 client conformance** — session-2 work behind `#236`, still OWED on the hc-sync
-  BRANCHES row (item 2); `SyncScreen.js` still discards the sync response, so the new per-stream counts
-  reach no client yet (Q118 metadata likewise).
-- **Interpretation lane** — increments **2 (rephrase, #202) done**; **3 (lever-tap) UNSTARTED**;
-  **5 (go-live) done (#194)**. Increment 3 is the next sequenced product pick.
-- **Weekly resolver (`ROADMAP` NEXT, `#221` deferred)** — untouched; gated on Q105/Q106.
-- **Interpretation hub shell (#150)** — BUILT, held for review; unchanged for several sessions.
-- **CBT-I** — no work; **Q83** (sleep/HRV source-blindness) and Q78 (nap-night starvation) both OPEN.
-- **Injury-ledger backfill audit** (`#222`/`#223` deferred), **Banister build (OWED)**, the
-  `restrictions[]` contraindication design pass (**Q102**) — all untouched.
-- **Cross-repo shared-block edit** (`ROADMAP` NOW, OWED) — the `#NEXT` rule still names DECISIONS entries
-  only; source still carries `#NEXT` tokens no guard sees. Unencoded.
-
-### Operator-side items that decay if not captured (kill-rule keeps them out of the repo)
-
-- **Ring-intermittency start date** — the approximate date the Galaxy Ring's HRV intermittency began.
-  Now doubly relevant: this session confirmed the *only* HRV that reaches the model is the scraper's
-  `passive_overnight` stream, so a corrupted-baseline span there has no HC fallback to cross-check against.
-- **Samsung warranty status** — decides whether the Garmin / HRV-arbitration question (`Q83`) is live
-  procurement or contingency.
-
-### Method note worth carrying
-
-The discharge followed the `feat/cbti-eval-trigger-v2` precedent (a merged branch's row updated in place
-once the live check ran) and the irreversible-write pre-ship discipline (`#166`/`§23`): the OWED existed
-precisely because `#235`'s How-you-know admitted an unexercised live write path, and the live probe — not
-the golden fixture — was the gate. The probe also surfaced a finding the fixture could not (the
-never-populated HRV column), which is the reason the gate was a real gate and not a formality.
+**Branch states (see `BRANCHES.md`).** `claude/injuries-operator-view-lbxyvf` → **OWED** (PR #100
+draft, merge + mint-number owed). `gov/injuries-followups-closeout` → **OWED** (gov PR draft, merge
+owed). No branch merged or deleted this session.
