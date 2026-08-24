@@ -71,6 +71,7 @@ export default function Dashboard() {
           <Tile to="/metrics" icon="🧪" label="Labs" detail="Blood panels and marker history" />
           <InterpretationTile />
           <Tile to="/checkin-history" icon="📅" label="History" detail="Past check-ins" />
+          <Tile to="/injuries" icon="🩹" label="Injuries" detail="Active injury ledger and resolution" />
           <Tile to="/settings" icon="⚙️" label="Settings" detail="Integrations and account" />
         </div>
       </div>
