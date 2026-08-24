@@ -1,57 +1,55 @@
-# Session close-out — 2026-08-24
+# Session close-out — 2026-08-24 (post-deploy OWED discharge)
 
-Session-open ref: `0ae21a7` (master at open). Close ref: `cd1d042`.
-Maxima at close: decisions **#236** · questions **Q119** · feedback **§32**.
+Session-open ref: `004da34` (master at open). Close ref: this close-out commit on `master`.
+Maxima at close: decisions **#236** · questions **Q119** · feedback **§32** (all unchanged — nothing minted).
 
-This was a **PRODUCT session**, not a governance one: a multi-turn chat brief (Q5, the
-`/health-connect/sync` contract collapse) driven turn-by-turn with operator adjudication, landed as
-one code PR (#95) across eight concern-split commits plus the merge.
+This was a **single-purpose governance session**: discharge the one OWED the prior session
+(`feat/hc-sync-contract-collapse`, PR #95) left standing — the `§8`-class post-deploy real-sync
+verification recorded in `#235` Status and the hc-sync `BRANCHES` row. The operator ran the sync
+(2026-08-24, PASS) and reported the evidence; this session recorded the discharge and one structural
+finding it surfaced. No code, no schema, no migration, no tests.
 
 ---
 
 ## 1. Real commits this session
 
-`git log --oneline 0ae21a7..HEAD` — 9 commits (8 on `feat/hc-sync-contract-collapse` + the merge).
+`git log --oneline 004da34..HEAD` — 2 commits (1 on `gov/hc-sync-post-deploy-discharge` + the merge).
 
 ```
-cd1d042 Merge pull request #95 from Easty11/feat/hc-sync-contract-collapse
-9c934f0 gov: Q119 — a windowed/manual backfill path for /health-connect/sync (recovery, not detection)
-0670793 gov: move Q5 below the fold (#123); record the post-deploy sync verification OWED
-e86aa15 gov: #234/#235/#236, Q118, Q5 -> DONE; supersede #174 (hc-sync contract collapse)
-ca2ef2d feat(hc-sync): per-stream ingest accounting in the sync response (#235)
-0e47999 feat(hc-sync): shape-only diagnostics for a rejected sync payload (#235)
-ab88849 feat(hc-sync): loudness — required canonical fields, extra="allow", type: int
-579ca32 refactor(hc-sync): collapse the six dual-name branches to HCA's mapped names
-7ac3083 test(hc-sync): golden fixture transcribed from HCA master 7a63b15, with provenance
+636c612 Merge pull request #98 from Easty11/gov/hc-sync-post-deploy-discharge
+fc7dfa0 gov: discharge #235 post-deploy sync verification OWED (2026-08-24 PASS)
 ```
 
-Suites at close: backend **1137** (open baseline 1113), frontend **47**. Zero unadjudicated changes.
+Governance stores touched (`git diff --name-only 004da34..636c612`): **`DECISIONS_LOG.md`**,
+**`BRANCHES.md`** — plus `CLAUDE.md` (Recent-landings) and `closeout.md` in this close-out commit.
 
-Branch terminal-state gate: **PASSES.** `git branch` and `refs/remotes/origin` both hold `master` only.
-The one branch touched, `feat/hc-sync-contract-collapse`, is merged (`cd1d042`) + remote-deleted.
-`git cherry origin/master` reports nothing unmerged on any local branch.
+Branch terminal-state gate: **PASSES.** `git branch` and `refs/remotes/origin` (post-prune) both hold
+`master` only. The one branch touched, `gov/hc-sync-post-deploy-discharge`, is merged (`636c612`) +
+remote-deleted; `git cherry origin/master` reports nothing unmerged on any local branch.
 
 ---
 
 ## 2. Pending-queue reconciliation
 
-**No `;cc` PENDING queue was handed to this session.** The work was a live chat brief adjudicated
-turn-by-turn, not a queued handoff. Everything decided landed in a commit; nothing is provisional:
+**No `;cc` PENDING queue was handed to this session.** The work was a direct operator instruction —
+"discharge the post-deploy OWED, evidence attached" — adjudicated and landed in one commit. Nothing is
+provisional.
 
 | Item | Landed | Where |
 |---|---|---|
-| Golden fixture, machine-verified against HCA `7a63b15` | YES | `7ac3083` |
-| Collapse the six dual-name branches (pure removal) | YES | `579ca32` |
-| Loudness: required fields + `extra="allow"` + `type:int` | YES | `ab88849` |
-| Shape-only reject diagnostic (`main.py` crossing) | YES | `0e47999` |
-| Per-stream `received`/`aggregated`/`unattributed` counts | YES | `ca2ef2d` |
-| `#234`/`#235`/`#236`, `Q118`, `Q5 → DONE`, `#174` superseded | YES | `e86aa15` |
-| Q5 below the fold (`#123`); post-deploy OWED recorded | YES | `0670793` |
-| `Q119` (backfill recovery path) | YES | `9c934f0` |
-| **The post-deploy real-sync verification** | **NO — not runnable here** | OWED in `#235` Status + `BRANCHES` row; operator-side, after deploy |
+| `#235` Status: post-deploy `§8` verification marked DISCHARGED (2026-08-24 PASS), evidence quoted | YES | `fc7dfa0` (pure insertion, 13 lines) |
+| `BRANCHES` hc-sync row: OWED item (3) → DISCHARGED; (1) done-at-merge; (2) still OWED session-2 | YES | `fc7dfa0` (declared OWED-cell replacement) |
+| Structural HRV finding recorded as a cross-ref to `#236`/`Q83` (no new question minted) | YES | `fc7dfa0` (#235 Status + BRANCHES) |
 
-Number-at-merge: master was re-read at the merge instant (still `#233`/`Q117`), so the literals
-`#234/#235/#236/Q118/Q119` were correct with no renumber.
+`#176`(c) audit: `DECISIONS_LOG` is a pure insertion (0 removed); the single `BRANCHES` removal is the
+declared OWED-cell replacement of the hc-sync row. Placeholder guard green (local hook + `placeholder
+guard (POSIX)` on PR #98). No numbers minted — master maxima unchanged at **#236 / Q119**, so nothing to
+re-resolve at the merge instant (base stayed `004da34` through merge).
+
+**Recent-landings note:** this session's landing completes the immediately-prior pointer's own "still
+owed" tail, so that line was **amended** to its current truth (post-deploy verified 2026-08-24) rather
+than prepended as a near-duplicate feature line — pointer-only and non-contradictory, no new decision to
+add.
 
 ---
 
@@ -59,77 +57,83 @@ Number-at-merge: master was re-read at the merge instant (still `#233`/`Q117`), 
 
 ### What this session changed
 
-`/health-connect/sync` collapsed from dual-name acceptance to HCA's mapped names alone, and a name
-break now **fails loud** (`#234` supersedes `#174`). Six dual-name branches deleted; required canonical
-fields + `extra="allow"` (missing→422, surplus→retained); `type: int` (a required `Any` accepts null);
-a **shape-only** reject diagnostic that logs field/key names and counts but **never health values**
-(`hc_sync_diagnostics.py`, wired in `main.py`); and per-stream `received`/`aggregated`/`unattributed`
-counts on the response. `#236` rules the E3 target: a source-neutral ingestion contract carrying metric
-*identity* (HealthKit SDNN ≠ HC RMSSD, no conversion — Q17), normalise the output never the metric.
-`Q5` closed at 62 days.
+The `/health-connect/sync` post-deploy verification is **done**. One real sync ran 2026-08-24 10:43:37Z
+against the deployed, now-stricter endpoint. **PASS** — eight in-window dates upserted, pre-window
+`synced_at` untouched (non-destructive upsert), no 422 and no `HC sync rejected` shape-log, `unattributed
+== 0` across `exercise` 75 / `sleep` 129 / `steps` 78 / `heart_rate` 49311. The `heartRateMapper`
+`undefined`→dropped-`bpm` risk `#235` named did not fire on real data. The hc-sync contract collapse
+(`#234`/`#235`/`#236`) is now **verified live end-to-end** — the loop the prior close-out named as the
+immediate next action is closed.
 
-### Immediate next action — operator-side, and it is the loop-close
+### The one new finding — structural, carried as a cross-ref, NOT a new question
 
-**Deploy master to Railway, then run one real sync from the device.** This is the `§8`-class prod
-verification recorded in `#235`'s Status and the `BRANCHES` row. The golden fixture is what HCA
-*should* send; the first real sync is what proves it, against a now-stricter endpoint.
-- **PASS** = HTTP 200, the three maps present with sane counts, `unattributed == 0` (or explained).
-- **FAIL** = a 422 whose Step-4 shape-log names the exact field — the system working — then a fix from
-  real data. The live risk is `heartRateMapper` emitting `bpm: s.beatsPerMinute`: an `undefined` sample
-  drops the key and a required `bpm` 422s the whole batch.
-- **Per `Q119`:** if a FAIL takes longer than the ~7-day fetch window to repair, the gap is
-  permanent-by-default — that is when the windowed-backfill question turns urgent.
+`health_connect_syncs.hrv_rmssd` has **never** been populated (`COUNT WHERE NOT NULL = 0` over the
+table's life) and no `hrv` `record_type` has ever reached `record_sources`: **Samsung Health does not
+write HRV to Health Connect.** The scraper path (`samsung_hrv_readings`, the `passive_overnight` stream
+that already feeds `daily_records.passive_hrv_ms`) is the **sole** HRV source. This is upstream of the
+sync contract — the contract is sound; the HRV gap is a source-availability fact — and it is exactly the
+multi-writer HRV-source arbitration `#236`/`Q83` already own. It is recorded in `#235` Status and the
+BRANCHES row as a cross-ref; **no new Q was minted** (operator instruction), and `Q119` stays OPEN at its
+current priority. When the `#236` E3 lane / `Q83` device-switch arbitration is picked up, this is a
+load-bearing input: any HRV-source blend must treat Health Connect as carrying **no** Samsung HRV.
 
-### Open questions, grouped (62 OPEN total; the ones with live consequences)
+### Immediate next action
 
-- **Owed loop-closes from prior sessions:** **Q116** (the `schedule_item` backfill — still the one live
-  gap between master and correct data, needs DB access), **Q117** (`expected_load` granularity).
-- **This session's forks, all OPEN, none blocking:** **Q118** (HC record metadata persistence —
-  `id`/`recordingMethod`/`device` accepted-and-dropped; `id` as exact dedup key is a `#36`/`#37`
-  ruling), **Q119** (windowed backfill recovery path).
-- **Gating the E3 lane (`#236`):** **Q83** (HC sleep selection is source-blind — the multi-writer HRV
-  blend that gates a device switch), **Q105**/**Q106** (weekly-resolver vocabulary), and the parked
-  baseline/confidence/arbitration design lane named inside `#236` itself.
+With the hc-sync loop closed, the most concrete owed item in the repo is once again **`Q116` — the
+`schedule_item` backfill** (18 active rows behind a live validator, never backfilled; needs
+`railway connect health-app-DB`, operator-side; the GUARD stop-condition runs FIRST). It has been the
+standing "one live gap between master and correct data" for two sessions and did not move here.
+
+### Open questions, grouped (62 OPEN; the ones with live consequences)
+
+- **Owed loop-closes from prior sessions:** **Q116** (`schedule_item` backfill — the one live master↔data
+  gap, needs DB access), **Q117** (`expected_load` granularity).
+- **The hc-sync session's forks, all OPEN, none blocking:** **Q118** (HC record metadata persistence —
+  `id`/`recordingMethod`/`device` accepted-and-dropped; `id`-as-dedup-key is a `#36`/`#37` ruling),
+  **Q119** (windowed backfill recovery path — sharpened, not gated, by this PASS: a break that outlives
+  the ~7-day fetch window is still permanent-by-default; only becomes urgent if a real sync FAILS and the
+  repair outruns the window).
+- **Gating the E3 lane (`#236`):** **Q83** (HC sleep/HRV selection is source-blind — the multi-writer
+  blend that gates a device switch; **now carrying this session's finding that HC holds no Samsung HRV**),
+  **Q105**/**Q106** (weekly-resolver vocabulary), and the baseline/confidence/arbitration design lane
+  named inside `#236` itself.
 
 ### NOT TOUCHED this session — read before planning the next
 
-This session was **product** (a live contract hardened), which is a change of gear from the recent
-governance-heavy run — but naming what stood still still matters, because the next session infers the
-queue from what is legible here:
+This was a **one-line governance discharge**, the second consecutive governance-class session after the
+hc-sync product run. The product/feature lanes that stood still (unchanged from the prior close-out, and
+named again because absence is not self-reporting):
 
 - **`schedule_item` backfill (Q116)** — untouched. Still the one place master carries a live validator
-  with 18 non-conforming rows behind it. Needs `railway connect health-app-DB`, operator-side. This is
-  the most concrete owed item in the repo and it did not move this session.
-- **The E3 lane (`#236`)** — ruled as a *design*, not built. The order is recovery-derivation design
-  first (the baseline/confidence/arbitration problem, parked as one lane), adapter work after, session-2
-  HCA conformance check at the tail. Nothing was implemented; the entry is the spec.
-- **Weekly resolver (`ROADMAP` NEXT, `#221` deferred)** — untouched; still gated on Q105/Q106.
-  `weekly_template` has had no consumer since `#221`.
-- **Interpretation hub shell (#150)** — still BUILT, held for review; unchanged for several sessions.
-- **CBT-I** — no work; **Q83**'s sleep-source-blindness and Q78 (nap-night starvation) both still OPEN.
-- **Injury-ledger backfill audit** (`#222`/`#223` deferred), **Hevy set store**, the `restrictions[]`
-  contraindication design pass — all untouched.
-- **Cross-repo shared-block edit** (`ROADMAP` NOW, OWED) — the `#NEXT` rule still names DECISIONS
-  entries only; the tree still carries `#NEXT` tokens in source that no guard sees. Unencoded.
+  with 18 non-conforming rows behind it. Needs DB access, operator-side. The most concrete owed item.
+- **The E3 lane (`#236`)** — ruled as a *design*, not built. Order: recovery-derivation design first
+  (baseline/confidence/arbitration), adapter work after, session-2 HCA conformance at the tail. This
+  session's HRV finding feeds directly into it.
+- **HCA mapper de-dup + O3 client conformance** — session-2 work behind `#236`, still OWED on the hc-sync
+  BRANCHES row (item 2); `SyncScreen.js` still discards the sync response, so the new per-stream counts
+  reach no client yet (Q118 metadata likewise).
+- **Interpretation lane** — increments **2 (rephrase, #202) done**; **3 (lever-tap) UNSTARTED**;
+  **5 (go-live) done (#194)**. Increment 3 is the next sequenced product pick.
+- **Weekly resolver (`ROADMAP` NEXT, `#221` deferred)** — untouched; gated on Q105/Q106.
+- **Interpretation hub shell (#150)** — BUILT, held for review; unchanged for several sessions.
+- **CBT-I** — no work; **Q83** (sleep/HRV source-blindness) and Q78 (nap-night starvation) both OPEN.
+- **Injury-ledger backfill audit** (`#222`/`#223` deferred), **Banister build (OWED)**, the
+  `restrictions[]` contraindication design pass (**Q102**) — all untouched.
+- **Cross-repo shared-block edit** (`ROADMAP` NOW, OWED) — the `#NEXT` rule still names DECISIONS entries
+  only; source still carries `#NEXT` tokens no guard sees. Unencoded.
 
 ### Operator-side items that decay if not captured (kill-rule keeps them out of the repo)
 
 - **Ring-intermittency start date** — the approximate date the Galaxy Ring's HRV intermittency began.
-  Cheap to note now, impossible to reconstruct later; it is what lets the corrupted-baseline span be
-  quarantined when the recovery-derivation lane (`#236`) builds.
+  Now doubly relevant: this session confirmed the *only* HRV that reaches the model is the scraper's
+  `passive_overnight` stream, so a corrupted-baseline span there has no HC fallback to cross-check against.
 - **Samsung warranty status** — decides whether the Garmin / HRV-arbitration question (`Q83`) is live
   procurement or contingency.
 
-### Method notes worth carrying
+### Method note worth carrying
 
-Four brief/spec assertions were falsified in-tree this session and are recorded in `#234`'s How-you-know
-as evidence the working model (chat infers, the tree adjudicates) is operating as designed: `#174`'s own
-line anchors (~110 lines stale); GATE 1's "five streams" wording (four reach `DailyRecord`, five reach
-`record_sources`; `_aggregate_day` never reads workouts — held at `#189`); the "six 422s" claim (it is
-five plus one — the writer-identity branch degrades to `'unknown'`, optional by design); and GATE 4's
-requirement, which the diagnostic first met only halfway until its own test caught a loc-parse bug. Each
-was reported and adjudicated before landing, never worked around.
-
-No `FEEDBACK` entry this session — nothing cleared the three-conjunct filter; the two candidate rules
-(reject-diagnostics-log-shape-not-values; a fixture must not carry in-band metadata once the model
-retains unknown keys) are housed in `#235` as consequences of its extra-policy. `§32` stays max.
+The discharge followed the `feat/cbti-eval-trigger-v2` precedent (a merged branch's row updated in place
+once the live check ran) and the irreversible-write pre-ship discipline (`#166`/`§23`): the OWED existed
+precisely because `#235`'s How-you-know admitted an unexercised live write path, and the live probe — not
+the golden fixture — was the gate. The probe also surfaced a finding the fixture could not (the
+never-populated HRV column), which is the reason the gate was a real gate and not a formality.
