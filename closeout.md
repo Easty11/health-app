@@ -1,62 +1,57 @@
-# Session close-out — 2026-08-23
+# Session close-out — 2026-08-24
 
-Session-open ref: `b9b1dc5` (master at open). Close ref: `e315fbc`.
-Maxima at close: decisions **#233** · questions **Q117** · feedback **§32**.
+Session-open ref: `0ae21a7` (master at open). Close ref: `cd1d042`.
+Maxima at close: decisions **#236** · questions **Q119** · feedback **§32**.
+
+This was a **PRODUCT session**, not a governance one: a multi-turn chat brief (Q5, the
+`/health-connect/sync` contract collapse) driven turn-by-turn with operator adjudication, landed as
+one code PR (#95) across eight concern-split commits plus the merge.
 
 ---
 
 ## 1. Real commits this session
 
-`git log --oneline b9b1dc5..HEAD` — 15 commits, 5 merges, 5 branches all merged+deleted.
+`git log --oneline 0ae21a7..HEAD` — 9 commits (8 on `feat/hc-sync-contract-collapse` + the merge).
 
 ```
-e315fbc Merge pull request #93 from Easty11/feat/schedule-item-schema
-ed3fb91 feat(schedule): validated schedule_item shape at write; close both read-path drops
-3715108 chore(handoff): CHAT→CODE receipt for the schedule_item schema brief (v2)
-aca2363 Merge pull request #92 from Easty11/governance/feedback-crossref-propagation
-6ad4feb governance: FEEDBACK §32 — a cross-ref in an append-only entry is a propagation source
-205566f Merge pull request #91 from Easty11/governance/roadmap-84-below-fold-crossref
-14b2a1e governance: ROADMAP row 84 cites #123, not #112
-1d028d5 Merge pull request #90 from Easty11/governance/oq-fold-divider-crossref
-63efeba governance: OPEN_QUESTIONS fold divider cites #123, not #112
-e834cc3 Merge pull request #89 from Easty11/governance/q115-sprint-load-routing
-3f4ee10 governance: rename branch to its concern name; BRANCHES row OWED -> DONE
-49514c1 governance: correct Q115's Polar cross-ref to #17/#46; record #28's own wrong pointer
-8a1d025 governance: BRANCHES row for the Q115 routing-question branch
-3b65d0e governance: resolve Q#NEXT -> Q115 (master max re-read Q114/#232)
-17d48ef governance: open question — supramaximal work routes Metabolic-only under #28
+cd1d042 Merge pull request #95 from Easty11/feat/hc-sync-contract-collapse
+9c934f0 gov: Q119 — a windowed/manual backfill path for /health-connect/sync (recovery, not detection)
+0670793 gov: move Q5 below the fold (#123); record the post-deploy sync verification OWED
+e86aa15 gov: #234/#235/#236, Q118, Q5 -> DONE; supersede #174 (hc-sync contract collapse)
+ca2ef2d feat(hc-sync): per-stream ingest accounting in the sync response (#235)
+0e47999 feat(hc-sync): shape-only diagnostics for a rejected sync payload (#235)
+ab88849 feat(hc-sync): loudness — required canonical fields, extra="allow", type: int
+579ca32 refactor(hc-sync): collapse the six dual-name branches to HCA's mapped names
+7ac3083 test(hc-sync): golden fixture transcribed from HCA master 7a63b15, with provenance
 ```
 
-Suites at close: backend **1113** (open baseline 1087), frontend **47**. Zero regressions.
+Suites at close: backend **1137** (open baseline 1113), frontend **47**. Zero unadjudicated changes.
 
-Branch terminal-state gate: **PASSES.** `git branch` and `refs/remotes/origin` both hold
-`master` only. Every branch touched this session is merged + remote-deleted:
-`claude/neuromuscular-sprint-routing-16u397` (renamed, then deleted by the operator after this
-session's git transport refused every ref-deletion form),
-`governance/q115-sprint-load-routing`, `governance/oq-fold-divider-crossref`,
-`governance/roadmap-84-below-fold-crossref`, `governance/feedback-crossref-propagation`,
-`feat/schedule-item-schema`.
+Branch terminal-state gate: **PASSES.** `git branch` and `refs/remotes/origin` both hold `master` only.
+The one branch touched, `feat/hc-sync-contract-collapse`, is merged (`cd1d042`) + remote-deleted.
+`git cherry origin/master` reports nothing unmerged on any local branch.
 
 ---
 
 ## 2. Pending-queue reconciliation
 
-**No `;cc` PENDING queue was handed to this session.** Chat→Code crossings were two drafts and
-one brief, each transcribed rather than queued. Reconciled individually:
+**No `;cc` PENDING queue was handed to this session.** The work was a live chat brief adjudicated
+turn-by-turn, not a queued handoff. Everything decided landed in a commit; nothing is provisional:
 
-| Chat-side item | Landed | Where |
+| Item | Landed | Where |
 |---|---|---|
-| `OPEN_QUESTIONS` draft — supramaximal work routes Metabolic-only | YES | `17d48ef` / `3b65d0e`, merged `e834cc3` → **Q115** |
-| Ruling — amend Q115's `#10` cross-ref, do not mint a `#28` supersession | YES | `49514c1` |
-| Ruling — rename the branch off the banned `claude/<hash>` form | YES | `3f4ee10` |
-| Ruling — correct `OPEN_QUESTIONS.md:1123` to `#123` | YES | `63efeba`, merged `1d028d5` |
-| Ruling — same treatment for `ROADMAP.md:84` | YES | `14b2a1e`, merged `205566f` |
-| `FEEDBACK` draft — a cross-ref in an append-only entry is a propagation source | YES | `6ad4feb`, merged `aca2363` → **§32** |
-| `schedule_item` schema brief (v2), steps 1/2/3/5/6 | YES | `ed3fb91`, merged `e315fbc` → **#233**, `SCHEMA.md` 024, **Q116**/**Q117** |
-| `schedule_item` brief, step 4 (backfill) + GATE 4 (prod assertions) | **NO** | Not runnable — no DB route from this session. Carried in **Q116**, not provisional: it is a recorded open question with its own next action. |
+| Golden fixture, machine-verified against HCA `7a63b15` | YES | `7ac3083` |
+| Collapse the six dual-name branches (pure removal) | YES | `579ca32` |
+| Loudness: required fields + `extra="allow"` + `type:int` | YES | `ab88849` |
+| Shape-only reject diagnostic (`main.py` crossing) | YES | `0e47999` |
+| Per-stream `received`/`aggregated`/`unattributed` counts | YES | `ca2ef2d` |
+| `#234`/`#235`/`#236`, `Q118`, `Q5 → DONE`, `#174` superseded | YES | `e86aa15` |
+| Q5 below the fold (`#123`); post-deploy OWED recorded | YES | `0670793` |
+| `Q119` (backfill recovery path) | YES | `9c934f0` |
+| **The post-deploy real-sync verification** | **NO — not runnable here** | OWED in `#235` Status + `BRANCHES` row; operator-side, after deploy |
 
-**Nothing decided this session is uncommitted.** The one piece of scope that did not land is
-step 4, and it did not land because it was not executable here — recorded, not forgotten.
+Number-at-merge: master was re-read at the merge instant (still `#233`/`Q117`), so the literals
+`#234/#235/#236/Q118/Q119` were correct with no renumber.
 
 ---
 
@@ -64,106 +59,77 @@ step 4, and it did not land because it was not executable here — recorded, not
 
 ### What this session changed
 
-`schedule_item` gained a **closed, validated shape at write** (#233). `validate_schedule_item`
-refuses 422 on an unknown key, a non-weekday in `days`, a truthy-string boolean,
-`sessions_per_week` outside 1–14, a missing required field, an out-of-set
-`expected_load`/`time_of_day`; an unacknowledged day overlap is a structured 409 naming every
-clashing row. It sits inside `upsert_knowledge_entry` — the shared path for
-`POST /knowledge/entry`, chat, and `routers/health.py` — **not** only on the route the brief
-named, because chat does not write through that route and Step 2's whole objective was the chat
-writer seeing a rejection. `hard` (scheduling) and `expected_load` (cost) are separated as two
-axes; any future cost axis resolves into `expected_load`'s vocabulary rather than minting a
-parallel one. `supersedes` triggers on **day overlap alone**. Both `context_builder` silent-drop
-sites for unknown weekday names are closed and now report into THIS WEEK FLAGS.
+`/health-connect/sync` collapsed from dual-name acceptance to HCA's mapped names alone, and a name
+break now **fails loud** (`#234` supersedes `#174`). Six dual-name branches deleted; required canonical
+fields + `extra="allow"` (missing→422, surplus→retained); `type: int` (a required `Any` accepts null);
+a **shape-only** reject diagnostic that logs field/key names and counts but **never health values**
+(`hc_sync_diagnostics.py`, wired in `main.py`); and per-stream `received`/`aggregated`/`unattributed`
+counts on the response. `#236` rules the E3 target: a source-neutral ingestion contract carrying metric
+*identity* (HealthKit SDNN ≠ HC RMSSD, no conversion — Q17), normalise the output never the metric.
+`Q5` closed at 62 days.
 
-Four governance corrections also landed: **Q115** (the neuromuscular routing question), and the
-`#112`→`#123` cross-reference propagation in two mutable stores plus **§32**, the rule that a
-cross-reference in an append-only entry is a propagation source rather than a leaf.
+### Immediate next action — operator-side, and it is the loop-close
 
-### Immediate next action — one thing, and it is the operator's
+**Deploy master to Railway, then run one real sync from the device.** This is the `§8`-class prod
+verification recorded in `#235`'s Status and the `BRANCHES` row. The golden fixture is what HCA
+*should* send; the first real sync is what proves it, against a now-stricter endpoint.
+- **PASS** = HTTP 200, the three maps present with sane counts, `unattributed == 0` (or explained).
+- **FAIL** = a 422 whose Step-4 shape-log names the exact field — the system working — then a fix from
+  real data. The live risk is `heartRateMapper` emitting `bpm: s.beatsPerMinute`: an `undefined` sample
+  drops the key and a required `bpm` 422s the whole batch.
+- **Per `Q119`:** if a FAIL takes longer than the ~7-day fetch window to repair, the gap is
+  permanent-by-default — that is when the windowed-backfill question turns urgent.
 
-**Run `Q116`: the `schedule_item` backfill.** Route is `railway connect health-app-DB` from
-PowerShell, **one statement per run** (`FEEDBACK` §29 — the dashboard editor silently returns
-zero rows on a multi-statement paste). Order is fixed and the first step is not the backfill:
+### Open questions, grouped (62 OPEN total; the ones with live consequences)
 
-1. **GUARD stop-condition first** — verify the live row set against the 2026-08-23 read
-   (25 rows, 18 active, 4 users, the duplicate pairs, the three stale-active rows). **If it has
-   moved, the row table in Q116 is a hypothesis: re-derive, do not apply.**
-2. Backfill — 3 retire, 5 correct (user 1), 10 conform (users 5/7/8).
-3. The five GATE-4 assertions, each paired with a positive control (`FEEDBACK` §17).
-4. Q116 closes.
+- **Owed loop-closes from prior sessions:** **Q116** (the `schedule_item` backfill — still the one live
+  gap between master and correct data, needs DB access), **Q117** (`expected_load` granularity).
+- **This session's forks, all OPEN, none blocking:** **Q118** (HC record metadata persistence —
+  `id`/`recordingMethod`/`device` accepted-and-dropped; `id` as exact dedup key is a `#36`/`#37`
+  ruling), **Q119** (windowed backfill recovery path).
+- **Gating the E3 lane (`#236`):** **Q83** (HC sleep selection is source-blind — the multi-writer HRV
+  blend that gates a device switch), **Q105**/**Q106** (weekly-resolver vocabulary), and the parked
+  baseline/confidence/arbitration design lane named inside `#236` itself.
 
-`Health_app_data` does **not** unblock this: its tools are read-only scoped health readers with
-no arbitrary SQL and no `schedule_item` reader. The backfill is operator-side regardless.
+### NOT TOUCHED this session — read before planning the next
 
-### Open questions, grouped
+This session was **product** (a live contract hardened), which is a change of gear from the recent
+governance-heavy run — but naming what stood still still matters, because the next session infers the
+queue from what is legible here:
 
-- **Loop-closes owed from this session:** **Q116** (the backfill above — the one live gap
-  between master and correct data), **Q117** (`expected_load` granularity; not actionable until
-  a second between-levels session appears).
-- **Gating the next two lanes:** **Q105** (capacity-token spelling), **Q106** (how a slot's
-  `minutes` reaches the prescription) — both belong to the weekly resolver.
-- **Design-pass questions, unblocked but unstarted:** **Q115** (routing amendment to `#28`,
-  which also carries the `#10`→`#17`/`#46` correction), **Q102** (`restrictions[]` is dead
-  data), **Q109**, **Q111**, **Q112** (appended this session; its cited `phases` evidence goes
-  with Q116's row-9 correction), **Q114** (`FEEDBACK` has no `CHECKS` arm — a live instance
-  occurred this session and was resolved by hand).
-- 121 `**State:** OPEN` markers across the store; the above are the ones with live consequences.
+- **`schedule_item` backfill (Q116)** — untouched. Still the one place master carries a live validator
+  with 18 non-conforming rows behind it. Needs `railway connect health-app-DB`, operator-side. This is
+  the most concrete owed item in the repo and it did not move this session.
+- **The E3 lane (`#236`)** — ruled as a *design*, not built. The order is recovery-derivation design
+  first (the baseline/confidence/arbitration problem, parked as one lane), adapter work after, session-2
+  HCA conformance check at the tail. Nothing was implemented; the entry is the spec.
+- **Weekly resolver (`ROADMAP` NEXT, `#221` deferred)** — untouched; still gated on Q105/Q106.
+  `weekly_template` has had no consumer since `#221`.
+- **Interpretation hub shell (#150)** — still BUILT, held for review; unchanged for several sessions.
+- **CBT-I** — no work; **Q83**'s sleep-source-blindness and Q78 (nap-night starvation) both still OPEN.
+- **Injury-ledger backfill audit** (`#222`/`#223` deferred), **Hevy set store**, the `restrictions[]`
+  contraindication design pass — all untouched.
+- **Cross-repo shared-block edit** (`ROADMAP` NOW, OWED) — the `#NEXT` rule still names DECISIONS
+  entries only; the tree still carries `#NEXT` tokens in source that no guard sees. Unencoded.
 
-### NOT TOUCHED — read this before planning the next session
+### Operator-side items that decay if not captured (kill-rule keeps them out of the repo)
 
-**Four of five merges this session were governance.** One feature lane moved (`schedule_item`).
-That is a better ratio than a pure-instrument session, but the pull is visible and worth naming:
-three of the five branches existed only to correct cross-references between governance entries.
-The corrections were real and one of them (`§32`) generalises — but a reader inferring the queue
-from what is written down would conclude this project's work is governance, and it is not.
-
-Standing still, with nothing about them changed this session:
-
-- **Calendar view** — next in the queue and **not brief-ready**. It needs a chat design pass
-  first: `GET /knowledge/schedule` (`routers/knowledge.py:238–249`) returns raw rows and
-  interprets no shape, so a view built on it renders `schedule_item` directly and gets rewritten
-  when the resolver lands — or it waits for the resolver. That is an ordering decision about the
-  resolver, not a view detail. Do **not** open it as a brief until settled.
-- **Weekly resolver** (`ROADMAP` NEXT, the lane #221 deferred) — untouched, gated on Q105/Q106.
-  `weekly_template` has been a declaration with no consumer since #221.
-- **Hevy set store** — queued behind both of the above; no work this session.
-- **Injury-ledger backfill audit** (the lane #222/#223 deferred) — untouched.
-- **Interpretation hub shell (#150)** — still BUILT, held for review. Unchanged for multiple
-  sessions.
-- **CBT-I** — no work this session. Q78 (two over-threshold nap nights starving a cycle) still
-  OPEN and now unblocked rather than gated.
-- **The cross-repo shared-block edit** (`ROADMAP` NOW, OWED) — the `#NEXT` rule still names
-  `DECISIONS` entries only, and the tree still carries ~20 `#NEXT` tokens in `.py`/`.jsx` that
-  no guard can see. This session hand-executed the count-verified scoped replace that row
-  prescribes; it remains unencoded.
-
-### Carried, deliberately not minted
-
-- **Clone-depth dependency.** `test_context_builder_output_unchanged_pre_post_refactor` shells
-  out to `git show 3360ed5:backend/context_builder.py`. On a **fresh shallow clone** that object
-  is absent and the test fails, so master reports red until `git fetch --unshallow`. Nothing
-  declares the dependency. A `FEEDBACK` candidate; not minted here because `§32` already landed
-  off this session and two entries from a schema session fails the moratorium filter.
-- **`#112` has now been mis-cited three independent times** — `OPEN_QUESTIONS.md:1123`,
-  `ROADMAP.md:84`, and an earlier brief that resolved it to `#115` (recorded at
-  `BRANCHES.md:84`). `§32` covers the mechanism; the specific number attracting errors is the
-  observation. Stronger `FEEDBACK` candidate than the branch-name gap below if either is minted.
-- **Brief-writing-path gap.** A session brief specified a branch name `CLAUDE.md` bans and
-  nothing caught it until PR review. One instance; `FEEDBACK` only if it recurs.
-- **The origin of the `#112` miscitation is unfixable in place.** `#123`'s own Rationale
-  (`DECISIONS_LOG.md:3938`) carries it, and `DECISIONS_LOG` is append-only. `§32` is where a
-  reader tracing the pattern lands instead.
+- **Ring-intermittency start date** — the approximate date the Galaxy Ring's HRV intermittency began.
+  Cheap to note now, impossible to reconstruct later; it is what lets the corrupted-baseline span be
+  quarantined when the recovery-derivation lane (`#236`) builds.
+- **Samsung warranty status** — decides whether the Garmin / HRV-arbitration question (`Q83`) is live
+  procurement or contingency.
 
 ### Method notes worth carrying
 
-Three defects this session were caught by **reading the cited source before relying on it**,
-not by any guard: the `#10` cross-ref in the Q115 draft, the `#112` cross-ref in two stores
-(including one in the ruling that commissioned the fix), and — the near-miss — the `#NEXT`
-resolution that asserted 9 tokens in the appended region and found 8, the ninth sitting in the
-`Q112` edit above it. A blanket replace would have taken the pre-existing prose with it, which
-is `#175`/`#220` exactly. The count-invariant worked **because it was an assertion rather than
-a sweep**.
+Four brief/spec assertions were falsified in-tree this session and are recorded in `#234`'s How-you-know
+as evidence the working model (chat infers, the tree adjudicates) is operating as designed: `#174`'s own
+line anchors (~110 lines stale); GATE 1's "five streams" wording (four reach `DailyRecord`, five reach
+`record_sources`; `_aggregate_day` never reads workouts — held at `#189`); the "six 422s" claim (it is
+five plus one — the writer-identity branch degrades to `'unknown'`, optional by design); and GATE 4's
+requirement, which the diagnostic first met only halfway until its own test caught a loc-parse bug. Each
+was reported and adjudicated before landing, never worked around.
 
-`Q114` is live and was demonstrated: `CHECKS` has no `FEEDBACK` arm, so nothing mechanical would
-have caught a `§#NEXT` reaching master in `6ad4feb`. It was resolved by hand.
+No `FEEDBACK` entry this session — nothing cleared the three-conjunct filter; the two candidate rules
+(reject-diagnostics-log-shape-not-values; a fixture must not carry in-band metadata once the model
+retains unknown keys) are housed in `#235` as consequences of its extra-policy. `§32` stays max.
