@@ -267,7 +267,7 @@ function ActiveRow({ row, onRecord, onDone }) {
           <p className="text-sm font-medium text-gray-800">
             {fmtDate(onRecord)} <span className="text-xs font-normal text-gray-400">· {row.source}</span>
           </p>
-          <p className="text-[11px] text-gray-400">record age floor — not injury onset</p>
+          <p className="text-[11px] text-gray-400">earliest date on the ledger for this injury</p>
         </div>
         <ResolvePanel row={row} onDone={onDone} />
       </div>

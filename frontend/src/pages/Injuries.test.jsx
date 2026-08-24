@@ -94,12 +94,13 @@ describe('on record since is the chain-earliest added_at, never the raw row date
     expect(within(card('Calf (left)')).getByText(/Aug\b.*2026|2026.*Aug\b/)).toBeTruthy()
   })
 
-  test('no date carries an onset or age label', async () => {
+  test('neither "onset" nor "age" appears anywhere in the view', async () => {
     await renderView()
-    // The clarifier "record age floor — not injury onset" denies both labels; what must be absent
-    // is a bare "Onset"/"Age" LABEL on a date, so anchor the match.
-    expect(screen.queryByText(/^onset$/i)).toBeNull()
-    expect(screen.queryByText(/^age$/i)).toBeNull()
+    // The label is "On record since" and the clarifier states positively what the date IS
+    // ("earliest date on the ledger for this injury") — the words onset and age are not raised
+    // at all, which is stronger than raising a misleading concept only to deny it.
+    expect(screen.queryByText(/onset/i)).toBeNull()
+    expect(screen.queryByText(/\bage\b/i)).toBeNull()
     expect(screen.getAllByText(/On record since/)).toHaveLength(5) // one per active row
   })
 })
