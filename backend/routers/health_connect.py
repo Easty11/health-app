@@ -449,15 +449,26 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     filtering, and the aggregated row is untouched (#36/#37).
 
     Records with no primary timestamp are skipped (they carry no usable key and
-    aggregation already ignores them). Returns the number of NEW rows inserted.
+    aggregation already ignores them).
+
+    Returns (new_rows_inserted, unattributed): the second is the count of captured
+    records this sync whose writer degraded to 'unknown' (#234/#235). It is tallied
+    HERE, over the same pass, so the two numbers share one iteration and cannot
+    disagree about what was captured. Attribution is an axis orthogonal to value:
+    a record counts here whether or not it also aggregated into a DailyRecord.
     """
     captured: list[tuple[str, str, str]] = []
+    unattributed = 0
 
     def _add(items, rtype: str, ts) -> None:
+        nonlocal unattributed
         for r in items:
             t = ts(r)
             if t:
-                captured.append((rtype, t, r.sourcePackage or "unknown"))
+                pkg = r.sourcePackage or "unknown"
+                if pkg == "unknown":
+                    unattributed += 1
+                captured.append((rtype, t, pkg))
 
     _add(payload.sleep, "sleep", lambda r: r.startTime)
     _add(payload.hrv, "hrv", lambda r: r.time)
@@ -471,7 +482,7 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     _add(payload.mindfulness, "mindfulness", lambda r: r.startTime)
 
     if not captured:
-        return 0
+        return 0, unattributed
 
     # One query for this user's existing keys; upsert in memory (dialect-agnostic —
     # local is SQLite, prod Postgres). At personal/family scale this table is small.
@@ -501,7 +512,7 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
                 synced_at=now,
             ))
             inserted += 1
-    return inserted
+    return inserted, unattributed
 
 
 def _stage_minutes(stages: list[SleepStage], stage_type: int) -> int:
@@ -608,6 +619,17 @@ def sync(
     # "future". Lower bound stays UTC-wide so no backfill day is narrowed.
     today_local = _now_aest_date()
 
+    # `received` is counted AS POSTED — before _reject_pre2020 mutates the payload
+    # in place — so the accounting reconciles: received = what arrived, and the
+    # pre-2020 drops surface separately as rejected_pre_2020 (#235).
+    received = {
+        "sleep": len(payload.sleep),
+        "hrv": len(payload.hrv),
+        "heartRate": len(payload.heartRate),
+        "steps": len(payload.steps),
+        "workouts": len(payload.workouts),
+    }
+
     # F2 — reject pre-2020 (epoch-zero) records before any aggregation (#35).
     rejected_pre_2020 = _reject_pre2020(payload)
     if rejected_pre_2020:
@@ -618,7 +640,7 @@ def sync(
 
     # Capture per-record writer identity before _aggregate_day collapses the
     # night — the backend enabler for source-priority dedup (#36/#37).
-    sources_captured = _capture_record_sources(payload, current_user.id, db)
+    sources_captured, unattributed = _capture_record_sources(payload, current_user.id, db)
 
     # Collect all unique dates across all record types
     dates: set[date] = set()
@@ -639,6 +661,21 @@ def sync(
         dates.add(_parse_date(r.startTime))
 
     valid_dates = {d for d in dates if since <= d <= max(today, today_local)}
+
+    # `aggregated` = records (post pre-2020 reject) whose date falls on a synced
+    # date, i.e. that fed _aggregate_day for a persisted row (#235). Distinct from
+    # `received`: an in-window-but-out-of-range record is received, not aggregated.
+    # `workouts` is honestly 0 — HC exercise is source-captured, NOT ingested into
+    # DailyRecord; that ingestion is deliberately held at #189, so a 0 here is a
+    # decided hold, not a silent drop. (Naming it `ingested` would have implied a
+    # defect on every sync forever; see GATE 1.)
+    aggregated = {
+        "sleep": sum(1 for r in payload.sleep if _wake_date(r.endTime) in valid_dates),
+        "hrv": sum(1 for r in payload.hrv if _parse_date(r.time) in valid_dates),
+        "heartRate": sum(1 for r in payload.heartRate if _parse_date(r.time) in valid_dates),
+        "steps": sum(1 for r in payload.steps if r.date and _parse_date(r.date) in valid_dates),
+        "workouts": 0,  # source-captured only; DailyRecord ingestion held at #189
+    }
 
     synced_dates = []
     for day in sorted(valid_dates):
@@ -689,6 +726,14 @@ def sync(
         "dates": synced_dates,
         "rejected_pre_2020": rejected_pre_2020,
         "sources_captured": sources_captured,
+        # Per-stream accounting (#235): what arrived vs what reached a DailyRecord,
+        # plus the count whose writer degraded to 'unknown'. Additive — the four
+        # fields above are unchanged. NOTE (landed != live): no client consumes
+        # these yet — SyncScreen.js discards the sync response at 7a63b15; the
+        # operator surface is logs and direct inspection until HCA reads them.
+        "received": received,
+        "aggregated": aggregated,
+        "unattributed": unattributed,
     }
 
 
