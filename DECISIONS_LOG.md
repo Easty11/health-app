@@ -9471,6 +9471,19 @@ present with sane counts, `unattributed == 0` or explained; FAIL = a 422 whose S
 exact field, which is the system working — followed by a fix informed by real data. Either outcome
 closes the loop; only not running it leaves it open.
 
+**DISCHARGED 2026-08-24 (post-deploy, owner Luke — the `§8` prod verification this line owed):** one real
+sync ran against the deployed, now-stricter endpoint at `2026-08-24 10:43:37Z`. **PASS** — all eight
+in-window dates upserted; the pre-window `synced_at` was left untouched (the upsert is non-destructive, the
+property the *Do not revisit* clause below assumes); **no 422 and no `HC sync rejected` shape-log line**; and
+`unattributed == 0` on every stream (`exercise` 75 / `sleep` 129 / `steps` 78 / `heart_rate` 49311;
+`last_capture` 10:43:37). The `heartRateMapper` `undefined`→dropped-`bpm` risk this line named did not fire
+on real data. **Structural finding, carried as a cross-ref, not a new question:** `health_connect_syncs.hrv_rmssd`
+has never been populated (`COUNT WHERE NOT NULL = 0` over the table's life) and no `hrv` `record_type` has ever
+reached `record_sources` — **Samsung Health does not write HRV to Health Connect**; the scraper path
+(`samsung_hrv_readings`) is the sole HRV source. That gap is upstream of this contract and is exactly the
+multi-writer HRV-source arbitration `#236`/`Q83` already own — the sync contract is sound, so `Q119` stays
+OPEN at its current priority and no repair is owed here.
+
 **How you know:** GATE 3 — fixture parses and populates identically to GATE 1 (value-identical); five
 required-field renames 422, the writer-identity rename degrades to `'unknown'`, `type=null` 422s with
 `int_type` (distinct from `missing`), additive top-level and record keys retained in `model_extra`.
