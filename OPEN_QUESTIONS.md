@@ -65,33 +65,6 @@ re-attested here.)* Owner: Luke.
 
 ---
 
-## Q5. Backend `/health-connect/sync` dual-field acceptance — collapse after confirming what mobile posts
-
-`routers/health_connect.py` accepts both the raw Health Connect library field names and the
-mapped JS names for the same value — `HeartRateRecord.beatsPerMinute`/`bpm` (`.get_bpm()`),
-`HRVRecord.heartRateVariabilityMillis`/`rmssd` (`.get_rmssd()`), `StepsRecord.startTime`/`date`
-(`.get_start()`) — the "intentionally flexible" tolerance that exists only because the contract
-was not single-sourced. With the sleep-stage enum now single-sourced (DECISIONS_LOG #24), the
-same can be done here: capture one real on-device sync, confirm exactly which field names
-`health-connect-app` actually posts, pick the canonical name, then collapse the dual acceptance
-and delete the `.get_*()` reconcilers (this is "Phase 2" of the contract work). Which name to
-keep is unverified until an actual payload is captured.
-
-**State:** OPEN — the **capture precondition is STRUCK**. Master source *is* the emitted contract: HCA's
-mappers rename raw→mapped in the map expression and React Native serializes verbatim, so no build can
-emit the raw names and no on-device capture can tell us anything the source does not. Canonical is
-decided at `#174` = HCA's mapped names (`bpm` / `rmssd` / `date` / `type` / `workouts`).
-
-Next action (CODE): delete the five dead branches — `HeartRateRecord.beatsPerMinute`,
-`HRVRecord.heartRateVariabilityMillis`, `StepsRecord.startTime`, `ExerciseRecord.exerciseType`,
-`SyncPayload.exercise` — and add the field-name contract test. `.get_kg()` / `.get_meters()` are
-**excluded** (forward-compat for unposted record types, not a dual-name contract). The test is not
-optional: the client half of `#174`'s evidence was read cross-repo and is unverifiable from this
-tree, so the test is what converts it from assumption to assertion. → `DONE → #174` when the collapse
-lands. Owner: Luke.
-
----
-
 ## Q6. Strength volume-load not yet ingested into daily training load
 
 Decision 28 routes strength volume-load → the Mechanical + Neuromuscular windows as a
@@ -1117,6 +1090,41 @@ once more than one live block exists — do not tune against the single discarde
 
 ---
 
+## Q119. A windowed/manual backfill path for `/health-connect/sync`, so a contract break outliving the rolling fetch window is still recoverable
+
+`#235` accepts whole-batch rejection as the cost of loudness on the ground that a break is a **gap,
+not corruption** — HCA re-reads a rolling window every sync and the upsert never overwrites a stored
+value with null, so the next good sync backfills it. That reasoning has a hard edge `#235` records as an
+exposure but does not fix: **the self-heal only reaches back as far as the fetch window.** `fetchAllData`
+posts `periodDays` (default 7) and the sync handler bounds aggregation to `[today - periodDays, today]`.
+A break — the post-deploy `bpm`-`undefined` 422 in `#235`'s OWED is the live candidate — that takes
+**longer than the window to repair** leaves a permanent-by-default hole: by the time the fix ships, the
+days lost are already outside every subsequent fetch.
+
+`#235`'s mitigations are all **detection** — the Step-4 shape log, the per-stream counts, `unattributed`.
+None of them **recovers** the lost span. The missing piece is a **recovery** path: a sync variant with a
+caller-supplied window (or explicit date range), so a one-off backfill can re-fetch and re-post an
+arbitrary historical span after a break is fixed, independent of the 7-day default.
+
+**The fork — this is why it is a question, not queued work:**
+- **Shape.** A `periodDays`/`since` override on the existing `/sync` (smallest surface, but widens a
+  hot endpoint's contract), a separate operator-only `/health-connect/backfill` endpoint (clean scope,
+  more surface), or a one-off script run against Railway (no endpoint, but no client path and manual).
+- **Timing.** Build it **now** (pre-first-break insurance, but speculative — the break may never come and
+  the window may always suffice), or **after** the first real break proves the gap reachable (cheaper if
+  it never fires, but that is precisely when the permanent-by-default hole is already forming).
+- **Auth.** Operator-only by construction — a caller-supplied window is a re-post primitive and must not
+  be a general client capability.
+
+**State:** OPEN — **not blocking the merge.** It sharpens `#235`'s post-deploy OWED rather than gating
+it: run the real sync first; this question only becomes urgent if that sync 422s **and** the repair
+outruns the window. Owner: Luke. Cross-refs `#235` (the exposure and the detection mitigations this
+recovers from), `#235`'s post-deploy verification OWED, `#189`/`#175` (the ingestion/admission context a
+backfill re-post would flow through), `#236` (a source-neutral contract would give the re-post a stable
+target).
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
@@ -1156,6 +1164,31 @@ range. Until then `runDeepConfidence` output is not trustworthy.
 **State:** DONE — fixed in `health-connect-app` `36df9a2` (confirmed patch-present
 on HCA master): `collapseSleepSessions()` de-duplicates the overlapping SleepSession
 records before downstream consumers, behaviorally verified 9/9.
+
+---
+
+## Q5. Backend `/health-connect/sync` dual-field acceptance — collapse after confirming what mobile posts
+
+`routers/health_connect.py` accepts both the raw Health Connect library field names and the
+mapped JS names for the same value — `HeartRateRecord.beatsPerMinute`/`bpm` (`.get_bpm()`),
+`HRVRecord.heartRateVariabilityMillis`/`rmssd` (`.get_rmssd()`), `StepsRecord.startTime`/`date`
+(`.get_start()`) — the "intentionally flexible" tolerance that exists only because the contract
+was not single-sourced. With the sleep-stage enum now single-sourced (DECISIONS_LOG #24), the
+same can be done here: capture one real on-device sync, confirm exactly which field names
+`health-connect-app` actually posts, pick the canonical name, then collapse the dual acceptance
+and delete the `.get_*()` reconcilers (this is "Phase 2" of the contract work). Which name to
+keep is unverified until an actual payload is captured.
+
+**State:** `DONE → #234`. The collapse landed as **six** branches (the fifth-plus-`dataOrigin`), with
+loudness built rather than assumed — required canonical fields + `extra="allow"`, `type: int`, a
+shape-only reject diagnostic, and per-stream ingest counts. Backend-only golden fixture
+(machine-verified against HCA `7a63b15`) plus the negative battery close Q5 without the on-device
+capture its own text once demanded — the capture precondition was struck, and source proved to be the
+contract. **Pointer-integrity note (cross-reference class):** this question's own text and `#174`
+predicted `DONE → #174`; the work landed under `#234`, which **supersedes** `#174` (deletion alone
+delivered no loudness; the collapse was six branches). Resolving to `#234`, not `#174`, and recording
+the divergence here rather than leaving a reader to reconcile the two pointers. The client-side
+conformance check (`#174`'s O3) is deferred behind `#236`'s source-neutral contract. Owner: Luke.
 
 ---
 
@@ -3667,3 +3700,23 @@ Luke. **Next action:** none until a second between-levels session appears — tw
 boundary, one makes an anecdote. Cross-refs `#233` (the vocabulary and the resolve-into rule),
 `Q116` (the backfill that writes the first real load values), `#221` (`weekly_template`, the other
 store whose vocabulary a cost axis must not fork).
+
+
+## Q118. Health Connect record metadata (`id` / `recordingMethod` / `device`) is forwarded by HCA and accepted-but-dropped by the backend
+
+`workoutMapper` forwards `metadata.id`, `metadata.recordingMethod` and `metadata.device`;
+`ExerciseRecord` declared none of them, so Pydantic dropped them. `#234` declares them `Optional`
+accept-and-drop so they are first-class attributes rather than `model_extra` (and so `extra="allow"`
+does not mask them). **Persistence is the open part.**
+
+Two consumers make them load-bearing. **(1)** `id` is the Health Connect record UUID and would make
+`health_connect_record_sources` dedup exact, replacing the synthesized
+`(record_type, record_start, source_package)` key — that substitution changes a uniqueness key and is a
+`#36`/`#37` ruling, not a schema task, which is why it did not ride a contract-collapse commit.
+**(2)** `recordingMethod` (0 UNKNOWN / 1 ACTIVELY_RECORDED / 2 AUTO / 3 MANUAL) and `device` are how a
+new writer gets characterised at admission — `#175`'s unimplemented step, and structural under `#236`'s
+multi-source contract. Samsung leaves both at sentinel 0 today; Garmin and Apple may not, which is when
+the fields start carrying information.
+
+**State:** OPEN — no blocker; the fields are accepted-and-dropped, so nothing is lost that was persisted
+before, and nothing yet reads them. Owner: Luke. Cross-refs `#36`, `#37`, `#175`, `#234`, `#236`.

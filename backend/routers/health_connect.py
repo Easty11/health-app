@@ -15,7 +15,7 @@ import re
 import pytz
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 import models
@@ -54,10 +54,12 @@ SLEEP_STAGE_REM   = SleepStageType.REM
 # mechanism as SleepStageType) so the companion app can generate a contract file.
 #
 # This enum is a MAPPING helper, NOT a wire-validation type: the inbound
-# ExerciseRecord.exerciseType field stays a lenient int, so an integer this enum
-# does not define is accepted and persisted with sport_id retained and sport_name
-# NULL (see sport_name_for) — we never GUESS a sport for an unknown code, and a
-# future upstream addition never 422-rejects a sync.
+# ExerciseRecord.type field is a REQUIRED but lenient int (#234), so an integer
+# this enum does not define is accepted and persisted with sport_id retained and
+# sport_name NULL (see sport_name_for) — we never GUESS a sport for an unknown
+# code, and a future upstream addition never 422-rejects a sync. Required-int
+# rejects a missing or null `type` (the rename signal) without rejecting an
+# unknown code; that is why the field is `int`, not `Any`.
 class ExerciseSessionType(IntEnum):
     OTHER_WORKOUT                   = 0
     BADMINTON                       = 2
@@ -142,78 +144,60 @@ def sport_name_for(exercise_type: Optional[int]) -> Optional[str]:
 
 # ---------- flexible incoming schemas ----------
 
-class DataOrigin(BaseModel):
-    """Health Connect Record.metadata.dataOrigin — the writing app's identity."""
-    packageName: Optional[str] = None
-
-
 class WriterIdentity(BaseModel):
     """Per-record writer identity, mixed into every HC record model.
 
-    Dual-field per the #24 house pattern (raw library field + mapped alias):
-      dataOrigin.packageName — raw Health Connect shape (#36 wire contract)
-      sourcePackage          — flattened alias the JS mapping layer may emit
+    `sourcePackage` is the single canonical field: HCA's mappers thread
+    `sourcePackage: r.metadata?.dataOrigin ?? null` from the library shape, so
+    the flattened string is what arrives on the wire. The raw nested
+    `dataOrigin.packageName` acceptance and its reconciler were removed at #234
+    (the /health-connect/sync contract collapse) — one client, one mapped name.
 
-    Optional/nullable everywhere, and it must STAY optional — but not for the
-    reason this docstring used to give. It read "current HCA builds send no
-    dataOrigin", which was true when written (#36, 2026-06-29) and is now
-    STALE: HCA master's mappers thread `sourcePackage: r.metadata?.dataOrigin
-    ?? null`, and the live health_connect_record_sources rows carry real
-    packages (com.sec.android.app.shealth, com.withings.wiscale2, 2026-08-03).
-    Identity DOES arrive. Corrected 2026-08-05 — the stale line had made #175's
-    admission model look like a fail-closed-on-everything risk (Q83).
-
-    It stays optional because identity is not GUARANTEED, which is a different
-    claim: historical rows predating the mapper change, record types HCA does
-    not tag, and any future build regression all yield a missing identity,
-    which _capture_record_sources coalesces to the literal 'unknown'. A
-    required field would still 422 those.
+    It stays OPTIONAL because identity is not GUARANTEED: historical rows
+    predating the mapper change, record types HCA does not tag, and any future
+    build regression all yield a missing identity, which
+    _capture_record_sources coalesces to the literal 'unknown'. A required
+    field would 422 those. (This is distinct from the canonical value fields
+    #234 makes required — bpm/rmssd/date/type — where absence IS the rename
+    signal; a missing writer is a known-tolerated state, not a broken contract.)
 
     Capture only — no filtering HERE. #175 adds admission filtering downstream
     in _aggregate_day, where 'unknown' must be a DECIDED value rather than a
     default that means exclude, or legitimately-unidentified records are
     dropped silently (Q83).
-    """
-    dataOrigin: Optional[DataOrigin] = None   # raw library field
-    sourcePackage: Optional[str] = None        # mapped field
 
-    def get_source_package(self) -> Optional[str]:
-        if self.sourcePackage:
-            return self.sourcePackage
-        if self.dataOrigin:
-            return self.dataOrigin.packageName
-        return None
+    extra="allow" (#234): a key a newer client adds is RETAINED in model_extra
+    rather than dropped, so it is loggable on a rejected sibling record and
+    never silently discarded. Inherited by every record subclass below — see
+    SyncPayload and SleepStage, which set it independently (not WriterIdentity
+    subclasses).
+    """
+    model_config = ConfigDict(extra="allow")
+
+    sourcePackage: Optional[str] = None
 
 
 class HeartRateRecord(WriterIdentity):
     time: str
-    beatsPerMinute: Optional[int] = None   # raw library field
-    bpm: Optional[int] = None               # mapped field
-
-    def get_bpm(self) -> Optional[int]:
-        return self.bpm or self.beatsPerMinute
+    bpm: int                                # canonical, REQUIRED (#234) — typed int rejects null natively
 
 
 class StepsRecord(WriterIdentity):
-    startTime: Optional[str] = None
-    endTime: Optional[str] = None
-    date: Optional[str] = None              # mapped field (date: r.startTime)
+    endTime: Optional[str] = None           # neither half of a dual name; unread, left as-is
+    date: str                               # canonical, REQUIRED (#234)
     count: int
-
-    def get_start(self) -> Optional[str]:
-        return self.startTime or self.date
 
 
 class HRVRecord(WriterIdentity):
     time: str
-    heartRateVariabilityMillis: Optional[float] = None  # raw library field
-    rmssd: Optional[float] = None                        # mapped field
-
-    def get_rmssd(self) -> Optional[float]:
-        return self.rmssd or self.heartRateVariabilityMillis
+    rmssd: float                            # canonical, REQUIRED (#234) — typed float rejects null natively
 
 
 class SleepStage(BaseModel):
+    # extra="allow" (#234): `stages` receives library-raw objects, the likeliest
+    # place a newer client legitimately adds a key; retain rather than drop.
+    model_config = ConfigDict(extra="allow")
+
     stage: SleepStageType
     startTime: str
     endTime: str
@@ -240,10 +224,23 @@ class SleepSession(WriterIdentity):
 class ExerciseRecord(WriterIdentity):
     startTime: str
     endTime: str
-    exerciseType: Optional[int] = None
-    type: Optional[Any] = None              # mapped field (type: r.exerciseType)
+    # canonical, REQUIRED (#234). `int`, not `Any`: a required Any accepts an
+    # explicit null (key-present-but-null passes), and this is the one field
+    # the collapse hardens whose native type would not reject it. `int`
+    # preserves the enum's documented leniency (:57) — that defends unknown
+    # CODES, not non-integer types, and `int` admits every unknown code exactly
+    # as `Any` did. No runtime path reads it (sport_name_for is test-only), so
+    # this is forward-protection for #189's ingestion lane, not a live path.
+    type: int
     title: Optional[str] = None
     durationMinutes: Optional[int] = None
+    # Health Connect record metadata (#234, Q118): declared Optional so they are
+    # first-class attributes rather than model_extra, accept-and-drop. Persisting
+    # them (id as the dedup UUID; recordingMethod/device for #175 admission) is
+    # Q118. Samsung leaves recordingMethod/device at sentinel 0.
+    id: Optional[str] = None
+    recordingMethod: Optional[int] = None
+    device: Optional[Any] = None
 
 
 class OxygenSaturationRecord(WriterIdentity):
@@ -301,14 +298,27 @@ class MindfulnessRecord(WriterIdentity):
 
 
 class SyncPayload(BaseModel):
+    # extra="allow" (#234): the LOAD-BEARING one. An unknown TOP-LEVEL key is
+    # retained in model_extra (the additive-key tolerance) and is what Step 4
+    # logs on a rejected body. Set independently — SyncPayload is not a
+    # WriterIdentity subclass and does not inherit its config.
+    model_config = ConfigDict(extra="allow")
+
     syncedAt: Optional[str] = None
     periodDays: int = 7
-    sleep: list[SleepSession] = []
-    hrv: list[HRVRecord] = []
-    heartRate: list[HeartRateRecord] = []
-    steps: list[StepsRecord] = []
-    workouts: list[ExerciseRecord] = []     # old field name
-    exercise: list[ExerciseRecord] = []     # new field name
+
+    # The five streams HCA ALWAYS posts are REQUIRED but emptyable (#234): no
+    # default, so an omitted key 422s, while `[]` is valid. Envelope-required is
+    # what catches a `workouts` -> `exercise` rename that required record fields
+    # alone would not — a renamed list key would default to [] and report success.
+    sleep: list[SleepSession]
+    hrv: list[HRVRecord]
+    heartRate: list[HeartRateRecord]
+    steps: list[StepsRecord]
+    workouts: list[ExerciseRecord]          # canonical envelope key (HCA sends `workouts`, never `exercise`)
+
+    # The five HCA NEVER posts stay optional-defaulted — absence is normal, not a
+    # rename signal.
     oxygenSaturation: list[OxygenSaturationRecord] = []
     respiratoryRate: list[RespiratoryRateRecord] = []
     weight: list[WeightRecord] = []
@@ -316,8 +326,11 @@ class SyncPayload(BaseModel):
     mindfulness: list[MindfulnessRecord] = []
     errors: list[str] = []
 
-    def all_exercises(self) -> list[ExerciseRecord]:
-        return self.workouts + self.exercise
+    # `exercise` (the dual envelope key) and `all_exercises()` removed at #234.
+    # The helper existed solely to reconcile `workouts` + `exercise`; with one
+    # key it is dead, and — reading the deleted field — it would be a NameError
+    # in waiting if left. Deleted because the collapse breaks it, which is a
+    # different rule from dead-code cleanup: get_kg()/sport_name_for stay.
 
 
 # ---------- output schemas ----------
@@ -411,9 +424,8 @@ def _reject_pre2020(payload: SyncPayload) -> int:
     payload.sleep = _filter(payload.sleep, lambda r: r.startTime)
     payload.hrv = _filter(payload.hrv, lambda r: r.time)
     payload.heartRate = _filter(payload.heartRate, lambda r: r.time)
-    payload.steps = _filter(payload.steps, lambda r: r.get_start())
+    payload.steps = _filter(payload.steps, lambda r: r.date)
     payload.workouts = _filter(payload.workouts, lambda r: r.startTime)
-    payload.exercise = _filter(payload.exercise, lambda r: r.startTime)
     payload.oxygenSaturation = _filter(payload.oxygenSaturation, lambda r: r.time)
     payload.respiratoryRate = _filter(payload.respiratoryRate, lambda r: r.time)
     payload.weight = _filter(payload.weight, lambda r: r.time)
@@ -437,22 +449,32 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     filtering, and the aggregated row is untouched (#36/#37).
 
     Records with no primary timestamp are skipped (they carry no usable key and
-    aggregation already ignores them). Returns the number of NEW rows inserted.
+    aggregation already ignores them).
+
+    Returns (new_rows_inserted, unattributed): the second is the count of captured
+    records this sync whose writer degraded to 'unknown' (#234/#235). It is tallied
+    HERE, over the same pass, so the two numbers share one iteration and cannot
+    disagree about what was captured. Attribution is an axis orthogonal to value:
+    a record counts here whether or not it also aggregated into a DailyRecord.
     """
     captured: list[tuple[str, str, str]] = []
+    unattributed = 0
 
     def _add(items, rtype: str, ts) -> None:
+        nonlocal unattributed
         for r in items:
             t = ts(r)
             if t:
-                captured.append((rtype, t, r.get_source_package() or "unknown"))
+                pkg = r.sourcePackage or "unknown"
+                if pkg == "unknown":
+                    unattributed += 1
+                captured.append((rtype, t, pkg))
 
     _add(payload.sleep, "sleep", lambda r: r.startTime)
     _add(payload.hrv, "hrv", lambda r: r.time)
     _add(payload.heartRate, "heart_rate", lambda r: r.time)
-    _add(payload.steps, "steps", lambda r: r.get_start())
+    _add(payload.steps, "steps", lambda r: r.date)
     _add(payload.workouts, "exercise", lambda r: r.startTime)
-    _add(payload.exercise, "exercise", lambda r: r.startTime)
     _add(payload.oxygenSaturation, "oxygen_saturation", lambda r: r.time)
     _add(payload.respiratoryRate, "respiratory_rate", lambda r: r.time)
     _add(payload.weight, "weight", lambda r: r.time)
@@ -460,7 +482,7 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     _add(payload.mindfulness, "mindfulness", lambda r: r.startTime)
 
     if not captured:
-        return 0
+        return 0, unattributed
 
     # One query for this user's existing keys; upsert in memory (dialect-agnostic —
     # local is SQLite, prod Postgres). At personal/family scale this table is small.
@@ -490,7 +512,7 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
                 synced_at=now,
             ))
             inserted += 1
-    return inserted
+    return inserted, unattributed
 
 
 def _stage_minutes(stages: list[SleepStage], stage_type: int) -> int:
@@ -521,10 +543,10 @@ def _sleep_score(deep: int, rem: int, total: int) -> Optional[int]:
 def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
     row: dict[str, Any] = {"date": day}
 
-    # Steps — sum all records on this date (accept both startTime and date fields)
+    # Steps — sum all records on this date
     day_steps = [
         r for r in payload.steps
-        if r.get_start() and _parse_date(r.get_start()) == day
+        if r.date and _parse_date(r.date) == day
     ]
     if day_steps:
         row["steps"] = sum(r.count for r in day_steps)
@@ -532,16 +554,16 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
     # Heart rate — median bpm for the day
     day_hr = [
         r for r in payload.heartRate
-        if r.get_bpm() is not None and _parse_date(r.time) == day
+        if r.bpm is not None and _parse_date(r.time) == day
     ]
     if day_hr:
-        bpms = sorted(r.get_bpm() for r in day_hr)
+        bpms = sorted(r.bpm for r in day_hr)
         row["resting_heart_rate"] = float(bpms[len(bpms) // 2])
 
     # HRV — average rmssd for the day
-    day_hrv = [r for r in payload.hrv if _parse_date(r.time) == day and r.get_rmssd() is not None]
+    day_hrv = [r for r in payload.hrv if _parse_date(r.time) == day and r.rmssd is not None]
     if day_hrv:
-        row["hrv_rmssd"] = round(sum(r.get_rmssd() for r in day_hrv) / len(day_hrv), 1)
+        row["hrv_rmssd"] = round(sum(r.rmssd for r in day_hrv) / len(day_hrv), 1)
 
     # Sleep — longest session whose LOCAL wake-date (endTime) is this day.
     # Wake-date only (Q4): the former startTime/bed-date clause split one
@@ -597,6 +619,17 @@ def sync(
     # "future". Lower bound stays UTC-wide so no backfill day is narrowed.
     today_local = _now_aest_date()
 
+    # `received` is counted AS POSTED — before _reject_pre2020 mutates the payload
+    # in place — so the accounting reconciles: received = what arrived, and the
+    # pre-2020 drops surface separately as rejected_pre_2020 (#235).
+    received = {
+        "sleep": len(payload.sleep),
+        "hrv": len(payload.hrv),
+        "heartRate": len(payload.heartRate),
+        "steps": len(payload.steps),
+        "workouts": len(payload.workouts),
+    }
+
     # F2 — reject pre-2020 (epoch-zero) records before any aggregation (#35).
     rejected_pre_2020 = _reject_pre2020(payload)
     if rejected_pre_2020:
@@ -607,14 +640,13 @@ def sync(
 
     # Capture per-record writer identity before _aggregate_day collapses the
     # night — the backend enabler for source-priority dedup (#36/#37).
-    sources_captured = _capture_record_sources(payload, current_user.id, db)
+    sources_captured, unattributed = _capture_record_sources(payload, current_user.id, db)
 
     # Collect all unique dates across all record types
     dates: set[date] = set()
     for r in payload.steps:
-        s = r.get_start()
-        if s:
-            dates.add(_parse_date(s))
+        if r.date:
+            dates.add(_parse_date(r.date))
     for r in payload.heartRate:
         dates.add(_parse_date(r.time))
     for r in payload.hrv:
@@ -629,6 +661,21 @@ def sync(
         dates.add(_parse_date(r.startTime))
 
     valid_dates = {d for d in dates if since <= d <= max(today, today_local)}
+
+    # `aggregated` = records (post pre-2020 reject) whose date falls on a synced
+    # date, i.e. that fed _aggregate_day for a persisted row (#235). Distinct from
+    # `received`: an in-window-but-out-of-range record is received, not aggregated.
+    # `workouts` is honestly 0 — HC exercise is source-captured, NOT ingested into
+    # DailyRecord; that ingestion is deliberately held at #189, so a 0 here is a
+    # decided hold, not a silent drop. (Naming it `ingested` would have implied a
+    # defect on every sync forever; see GATE 1.)
+    aggregated = {
+        "sleep": sum(1 for r in payload.sleep if _wake_date(r.endTime) in valid_dates),
+        "hrv": sum(1 for r in payload.hrv if _parse_date(r.time) in valid_dates),
+        "heartRate": sum(1 for r in payload.heartRate if _parse_date(r.time) in valid_dates),
+        "steps": sum(1 for r in payload.steps if r.date and _parse_date(r.date) in valid_dates),
+        "workouts": 0,  # source-captured only; DailyRecord ingestion held at #189
+    }
 
     synced_dates = []
     for day in sorted(valid_dates):
@@ -679,6 +726,14 @@ def sync(
         "dates": synced_dates,
         "rejected_pre_2020": rejected_pre_2020,
         "sources_captured": sources_captured,
+        # Per-stream accounting (#235): what arrived vs what reached a DailyRecord,
+        # plus the count whose writer degraded to 'unknown'. Additive — the four
+        # fields above are unchanged. NOTE (landed != live): no client consumes
+        # these yet — SyncScreen.js discards the sync response at 7a63b15; the
+        # operator surface is logs and direct inspection until HCA reads them.
+        "received": received,
+        "aggregated": aggregated,
+        "unattributed": unattributed,
     }
 
 

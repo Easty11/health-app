@@ -57,7 +57,12 @@ def test_wake_date_strips_nanosecond_fraction():
 
 def test_midnight_spanning_night_attributes_to_wake_date_only():
     # Bed 23:00 AEST 08 Jul (13:00Z) → wake 06:30 AEST 09 Jul (20:30Z prev day).
-    payload = SyncPayload(sleep=[_night("2026-07-08T13:00:00Z", "2026-07-08T20:30:00Z")])
+    # The four other streams HCA always sends are required-but-emptyable (#234);
+    # this test is about sleep aggregation, so they are supplied empty.
+    payload = SyncPayload(
+        sleep=[_night("2026-07-08T13:00:00Z", "2026-07-08T20:30:00Z")],
+        hrv=[], heartRate=[], steps=[], workouts=[],
+    )
 
     woke = _aggregate_day(date(2026, 7, 9), payload)
     bed = _aggregate_day(date(2026, 7, 8), payload)
@@ -72,7 +77,7 @@ def test_same_day_nap_does_not_displace_main_night():
     # Main night wakes 09 Jul; a 40-min afternoon nap also wakes 09 Jul (AEST).
     night = _night("2026-07-08T13:00:00Z", "2026-07-08T20:30:00Z")   # 450 min
     nap = _night("2026-07-09T04:00:00Z", "2026-07-09T04:40:00Z")     # 40 min, wakes 09 Jul AEST
-    payload = SyncPayload(sleep=[nap, night])
+    payload = SyncPayload(sleep=[nap, night], hrv=[], heartRate=[], steps=[], workouts=[])
 
     woke = _aggregate_day(date(2026, 7, 9), payload)
 
@@ -83,7 +88,10 @@ def test_same_day_nap_does_not_displace_main_night():
 def test_naive_local_night_still_lands_on_wake_date():
     # Even if HCA were to send local-naive timestamps, a morning wake attributes
     # to its own local date (naive treated as UTC only shifts within the day).
-    payload = SyncPayload(sleep=[_night("2026-07-08T23:00:00", "2026-07-09T06:30:00")])
+    payload = SyncPayload(
+        sleep=[_night("2026-07-08T23:00:00", "2026-07-09T06:30:00")],
+        hrv=[], heartRate=[], steps=[], workouts=[],
+    )
 
     assert _aggregate_day(date(2026, 7, 9), payload).get("sleep_duration_minutes") == 450
     assert "sleep_duration_minutes" not in _aggregate_day(date(2026, 7, 8), payload)

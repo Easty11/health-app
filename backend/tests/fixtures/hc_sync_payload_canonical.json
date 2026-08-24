@@ -1,0 +1,70 @@
+{
+  "syncedAt": "2026-08-23T20:15:00.000Z",
+  "periodDays": 7,
+  "sleep": [
+    {
+      "startTime": "2026-08-22T22:15:00.000+10:00",
+      "endTime": "2026-08-23T06:30:00.000+10:00",
+      "stages": [
+        { "stage": 4, "startTime": "2026-08-22T22:15:00.000+10:00", "endTime": "2026-08-23T00:05:00.000+10:00" },
+        { "stage": 5, "startTime": "2026-08-23T00:05:00.000+10:00", "endTime": "2026-08-23T01:40:00.000+10:00" },
+        { "stage": 6, "startTime": "2026-08-23T01:40:00.000+10:00", "endTime": "2026-08-23T02:55:00.000+10:00" },
+        { "stage": 4, "startTime": "2026-08-23T02:55:00.000+10:00", "endTime": "2026-08-23T05:10:00.000+10:00" },
+        { "stage": 1, "startTime": "2026-08-23T05:10:00.000+10:00", "endTime": "2026-08-23T05:25:00.000+10:00" },
+        { "stage": 4, "startTime": "2026-08-23T05:25:00.000+10:00", "endTime": "2026-08-23T06:30:00.000+10:00" }
+      ],
+      "durationMinutes": 495,
+      "sourcePackage": "com.sec.android.app.shealth"
+    }
+  ],
+  "hrv": [
+    {
+      "time": "2026-08-23T01:12:00.000+10:00",
+      "rmssd": 38.4,
+      "sourcePackage": "com.sec.android.app.shealth"
+    },
+    {
+      "time": "2026-08-23T03:48:00.000+10:00",
+      "rmssd": 44.6,
+      "sourcePackage": "com.sec.android.app.shealth"
+    }
+  ],
+  "heartRate": [
+    {
+      "time": "2026-08-23T02:30:00.000+10:00",
+      "bpm": 51,
+      "sourcePackage": "com.sec.android.app.shealth"
+    },
+    {
+      "time": "2026-08-23T04:00:00.000+10:00",
+      "bpm": 49,
+      "sourcePackage": "com.sec.android.app.shealth"
+    },
+    {
+      "time": "2026-08-23T05:30:00.000+10:00",
+      "bpm": 55,
+      "sourcePackage": "com.sec.android.app.shealth"
+    }
+  ],
+  "steps": [
+    {
+      "date": "2026-08-23",
+      "count": 8432,
+      "sourcePackage": "com.sec.android.app.shealth"
+    }
+  ],
+  "workouts": [
+    {
+      "startTime": "2026-08-23T17:00:00.000+10:00",
+      "endTime": "2026-08-23T18:30:00.000+10:00",
+      "type": 70,
+      "title": "Rugby Training — Seniors",
+      "durationMinutes": 90,
+      "sourcePackage": "com.sec.android.app.shealth",
+      "id": "6f1c2a94-3d5e-4b17-9a08-2c7e5d1f4b83",
+      "recordingMethod": 0,
+      "device": 0
+    }
+  ],
+  "errors": []
+}
