@@ -239,7 +239,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **`/health-connect/sync` collapsed to HCA's mapped names and made to fail loud; `#174` superseded (#234/#235/#236)** - See DECISIONS_LOG #234/#235/#236. Post-deploy verification still owed (a real sync from the device), and Q116/Q118/Q119: `closeout.md`.
+- **`/health-connect/sync` collapsed to HCA's mapped names and made to fail loud; `#174` superseded; post-deploy sync verified 2026-08-24 (#234/#235/#236)** - See DECISIONS_LOG #234/#235/#236 (#235 Status carries the post-deploy discharge and the never-populated-HRV structural finding). Q116/Q118/Q119 and handoff: `closeout.md`.
 
 - **`schedule_item` is a closed validated shape at write; a cross-ref in an append-only entry is a propagation source (#233, `§32`)** - See DECISIONS_LOG #233 and `SCHEMA.md` 024. Session handoff, including the backfill still owed (Q116): `closeout.md`.
 
