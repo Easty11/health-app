@@ -9459,7 +9459,17 @@ free-standing corrections):**
 **Status:** Implemented on this branch. **LANDED ≠ LIVE:** the counts are emitted and consumed by **no
 client** — `SyncScreen.js` discards the sync response at HCA `7a63b15` — so the operator surface is
 Railway logs and direct DB inspection until an HCA update reads them. Consuming them is session-2-or-
-later work.
+later work. **OWED — the §8-class prod verification this line points at (owner: Luke, after merge +
+Railway deploy):** one real sync from the operator's own device. The golden fixture is a transcription
+of what HCA *should* send, not a capture of what the device *does* — and this session made a live
+endpoint stricter. Concrete risk: `heartRateMapper` emits `bpm: s.beatsPerMinute`; if any real sample
+ever carries `undefined`, JS drops the key and a required `bpm` 422s the whole batch. The SDK types say
+it cannot (Likely) — but "the SDK types say" is the exact claim class this session falsified four times.
+Whole-batch rejection was accepted here *because it is loud and diagnosable* (the Step-4 shape log names
+the field), and the first real sync is what exercises that acceptance. PASS = 200, the three maps
+present with sane counts, `unattributed == 0` or explained; FAIL = a 422 whose Step-4 log names the
+exact field, which is the system working — followed by a fix informed by real data. Either outcome
+closes the loop; only not running it leaves it open.
 
 **How you know:** GATE 3 — fixture parses and populates identically to GATE 1 (value-identical); five
 required-field renames 422, the writer-identity rename degrades to `'unknown'`, `type=null` 422s with

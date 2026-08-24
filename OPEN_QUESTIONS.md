@@ -65,31 +65,6 @@ re-attested here.)* Owner: Luke.
 
 ---
 
-## Q5. Backend `/health-connect/sync` dual-field acceptance — collapse after confirming what mobile posts
-
-`routers/health_connect.py` accepts both the raw Health Connect library field names and the
-mapped JS names for the same value — `HeartRateRecord.beatsPerMinute`/`bpm` (`.get_bpm()`),
-`HRVRecord.heartRateVariabilityMillis`/`rmssd` (`.get_rmssd()`), `StepsRecord.startTime`/`date`
-(`.get_start()`) — the "intentionally flexible" tolerance that exists only because the contract
-was not single-sourced. With the sleep-stage enum now single-sourced (DECISIONS_LOG #24), the
-same can be done here: capture one real on-device sync, confirm exactly which field names
-`health-connect-app` actually posts, pick the canonical name, then collapse the dual acceptance
-and delete the `.get_*()` reconcilers (this is "Phase 2" of the contract work). Which name to
-keep is unverified until an actual payload is captured.
-
-**State:** `DONE → #234`. The collapse landed as **six** branches (the fifth-plus-`dataOrigin`), with
-loudness built rather than assumed — required canonical fields + `extra="allow"`, `type: int`, a
-shape-only reject diagnostic, and per-stream ingest counts. Backend-only golden fixture
-(machine-verified against HCA `7a63b15`) plus the negative battery close Q5 without the on-device
-capture its own text once demanded — the capture precondition was struck, and source proved to be the
-contract. **Pointer-integrity note (cross-reference class):** this question's own text and `#174`
-predicted `DONE → #174`; the work landed under `#234`, which **supersedes** `#174` (deletion alone
-delivered no loudness; the collapse was six branches). Resolving to `#234`, not `#174`, and recording
-the divergence here rather than leaving a reader to reconcile the two pointers. The client-side
-conformance check (`#174`'s O3) is deferred behind `#236`'s source-neutral contract. Owner: Luke.
-
----
-
 ## Q6. Strength volume-load not yet ingested into daily training load
 
 Decision 28 routes strength volume-load → the Mechanical + Neuromuscular windows as a
@@ -1154,6 +1129,31 @@ range. Until then `runDeepConfidence` output is not trustworthy.
 **State:** DONE — fixed in `health-connect-app` `36df9a2` (confirmed patch-present
 on HCA master): `collapseSleepSessions()` de-duplicates the overlapping SleepSession
 records before downstream consumers, behaviorally verified 9/9.
+
+---
+
+## Q5. Backend `/health-connect/sync` dual-field acceptance — collapse after confirming what mobile posts
+
+`routers/health_connect.py` accepts both the raw Health Connect library field names and the
+mapped JS names for the same value — `HeartRateRecord.beatsPerMinute`/`bpm` (`.get_bpm()`),
+`HRVRecord.heartRateVariabilityMillis`/`rmssd` (`.get_rmssd()`), `StepsRecord.startTime`/`date`
+(`.get_start()`) — the "intentionally flexible" tolerance that exists only because the contract
+was not single-sourced. With the sleep-stage enum now single-sourced (DECISIONS_LOG #24), the
+same can be done here: capture one real on-device sync, confirm exactly which field names
+`health-connect-app` actually posts, pick the canonical name, then collapse the dual acceptance
+and delete the `.get_*()` reconcilers (this is "Phase 2" of the contract work). Which name to
+keep is unverified until an actual payload is captured.
+
+**State:** `DONE → #234`. The collapse landed as **six** branches (the fifth-plus-`dataOrigin`), with
+loudness built rather than assumed — required canonical fields + `extra="allow"`, `type: int`, a
+shape-only reject diagnostic, and per-stream ingest counts. Backend-only golden fixture
+(machine-verified against HCA `7a63b15`) plus the negative battery close Q5 without the on-device
+capture its own text once demanded — the capture precondition was struck, and source proved to be the
+contract. **Pointer-integrity note (cross-reference class):** this question's own text and `#174`
+predicted `DONE → #174`; the work landed under `#234`, which **supersedes** `#174` (deletion alone
+delivered no loudness; the collapse was six branches). Resolving to `#234`, not `#174`, and recording
+the divergence here rather than leaving a reader to reconcile the two pointers. The client-side
+conformance check (`#174`'s O3) is deferred behind `#236`'s source-neutral contract. Owner: Luke.
 
 ---
 
