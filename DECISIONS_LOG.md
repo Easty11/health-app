@@ -6805,7 +6805,11 @@ name HCA's mapper emits buys the same guarantee for a fraction of the machinery.
 **Status:** **OWED** — the decision is settled, the code is not written. Outstanding: delete the five
 dead branches in `backend/routers/health_connect.py` and add the field-name contract test. Landed on
 `gov/open-questions-sweep` as governance only. `Q5` moves to `DONE → #174` when that lands, not
-before.
+before. **SUPERSEDED by #234** (2026-08-24): the collapse is six branches not five (`dataOrigin`/
+`.get_source_package()` in scope), and the loudness this entry claimed for the deletion — "a rename
+422s in test rather than degrading in production" — was assumed, not built (extra-`ignore` +
+`Optional`-`None` defaults would have discarded a raw name silently). `#234` supersedes the grounds;
+`#235` builds the loudness. Q5 resolved `DONE → #234`, not `#174`.
 
 **How you know:** The backend half was re-read against master this session: the five branches are
 present and exactly as described — `beatsPerMinute` at `health_connect.py:79`, `.get_bpm()` at `:82`,
@@ -9334,5 +9338,207 @@ the fork reopens at the check-in, and #72 is the entry that has to be argued wit
 **How you know:** Backend suite 1087 → 1113, zero regressions, both suites green. The validator is proven **by mutation, not by passing** (`FEEDBACK` §18): eight mutations were applied one at a time and every one was caught — notably the v1 activity-matching rule, which fails 4 tests including `test_overlap_is_refused_even_when_activity_differs`, the specific regression it would have shipped. Positive controls are paired with every negative (`FEEDBACK` §17): a conforming write is asserted accepted and stored verbatim, a non-overlapping second row asserted accepted, and cross-user isolation asserted, so the refusals cannot be a validator that refuses everything. The two `context_builder` silent-drop sites were read in the source, not inferred: the day-map loop's `if d_lower in day_map:` with no `else`, and the bare `except (ValueError, IndexError): pass` — both now report into THIS WEEK FLAGS.
 
 **Do not revisit unless:** the overlap refusal proves noisy enough in real use that the operator stops reading it — the failure mode this decision trades for, and the only one that would argue for narrowing the trigger back toward `activity`.
+
+---
+
+### 234. `#174` superseded — the `/health-connect/sync` collapse is six branches, and deletion alone does not make a name break loud
+
+**Decision:** `#174` is superseded on two counts. **(1) Six dual-name branches, not five.**
+`WriterIdentity.dataOrigin` / `.get_source_package()` is the same dual-name pattern on a live path and
+is in scope (operator ruling, 2026-08-24); `.get_kg()` / `.get_meters()` remain out of scope, because
+they unwrap Health Connect's nested `{inKilograms}` / `{inMeters}` shape for record types HCA does not
+post — forward-compatibility, a different construction from a dual name. **(2) The deletion `#174`
+specified does not deliver the loudness it claims.** `#174`'s rationale states that once dual
+acceptance is gone "a rename 422s in test rather than degrading in production." That was false as
+specified: no payload model set an extra-field policy (Pydantic v2 defaults to `ignore`) and every
+canonical field was `Optional` with a `None` default — so a raw name would have been silently
+discarded, the canonical field left null, and the handler would have returned `{"synced": N}` with no
+error and no data. The load-bearing property was assumed, not built; `#235` builds it.
+
+**The deletion rule, stated so three untouched dead surfaces do not read as a judgement call:** the
+line is *the collapse breaks it*, not *dead code gets deleted*. `all_exercises()` was deleted because
+branch 5 removes `SyncPayload.exercise`, which it reads — leaving it would ship a `NameError` in
+waiting. `.get_kg()`, `.get_meters()` and `sport_name_for` are equally unreferenced-or-test-only and
+are **untouched**, because dead-code cleanup is not this branch's concern. Deletion here is scoped to
+references the collapse breaks.
+
+**Why the premise failed rather than the reasoning:** `#174` chose a conformance test over codegen on
+the ground of "exactly one fully-controlled client." That was true when written and is no longer — a
+second client class (iOS/HealthKit) is a near-term proposition, the exact condition `#174`'s own *Do
+not revisit unless* clause named.
+
+**On the codegen ground specifically (a distinct correction, not a disturbance of the grounds above):**
+`#174` rejected codegen *for the field-name contract*, but codegen already existed and was in use for
+`SleepStageType` (`gen:contract` → `src/contract/sleepStages.generated.js`, `#24`). So the
+machinery-cost argument for preferring a conformance test was weaker than it appeared — the field-name
+arm would have been an **extension of an existing generator, not new machinery**. This does not disturb
+`#234`'s grounds (six branches; absent loudness), which stand independently; it corrects `#174`'s cost
+reasoning.
+
+**Status:** Backend half implemented on `feat/hc-sync-contract-collapse` (this entry's branch). The
+client-side conformance check (`#174`'s O3) is **deferred** behind the source-neutral contract ruled in
+`#236`, so `Q5` closes on the backend golden fixture plus the negative battery — the half that is
+hermetic and does not expire.
+
+**How you know:** Suite 1113 → 1137, zero unadjudicated changes, both suites green. Fixture provenance:
+**machine-verified against `health-connect-app` `7a63b15f91e33f6e508302d2054d36a760486c1c`**,
+transcribed from the `fetchAllData` INLINE mappers (the sync path; the standalone `fetchSleepData` /
+`fetchHRVData` copies are content-identical there but off-path — see `#236`). GATE 1, restated because
+its own brief wording was falsified in-tree: the fixture populates **four** streams into `DailyRecord`
+(steps, heartRate, hrv, sleep) and **five** into `health_connect_record_sources`; `_aggregate_day`
+(`backend/routers/health_connect.py`) **never reads `workouts`** — HC exercise ingestion into the daily
+row is deliberately held at `#189`, so the gap is held, not overlooked. The branch-4 negative
+(`type ← exerciseType`) proves the **validator fires**, not that a live behavioural break was prevented:
+there is **zero runtime read of `ExerciseRecord.type`**, a claim that rests on `sport_name_for` being
+test-only (stated so it fails loudly if someone later wires it into production). Loudness proof is
+`#235`. **Four brief/spec assertions were falsified in-tree this session** — `#174`'s own `:79`-style
+line anchors (stale by ~110 lines), GATE 1's "five streams" wording, the "six 422s" claim (it is five;
+see `#235`), and GATE 4's requirement, which the diagnostic first met only halfway until its own test
+caught a loc-parse bug. Carried as evidence that the working model (chat infers, the tree adjudicates)
+is operating as designed, not as a defect count.
+
+**Do not revisit unless:** a second client lands on this endpoint before the source-neutral contract
+(`#236`) exists, at which point the required-field coupling in `#235` binds two fleets and needs
+re-ruling.
+
+---
+
+### 235. Loudness comes from required canonical fields with `extra="allow"`; the response accounts for what arrived, aggregated, and lost its writer
+
+**Decision:** canonical record fields (`bpm`, `rmssd`, `date`, `type`) and the five envelope lists HCA
+always sends (`sleep`, `hrv`, `heartRate`, `steps`, `workouts`) are **required** (lists emptyable, `[]`
+valid); payload models set `extra="allow"`; a rejected body is diagnosed by SHAPE, never values.
+`extra="forbid"` is **rejected**.
+
+**The loudness table — three directions, three treatments:**
+- **Canonical value absent → FATAL (422).** A missing `bpm`/`rmssd`/`date`/`type`, or a renamed envelope
+  key (a renamed list defaults to `[]` and would report success, which is why envelope-required is
+  needed on top of record-required).
+- **Unknown surplus → INERT and RETAINED.** An additive key from a client that shipped ahead of the
+  backend is kept in `model_extra`, not dropped and not fatal. `forbid` cannot tell this from a rename;
+  required-plus-allow gives exactly that discrimination — absence fatal, surplus inert.
+- **Attribution absent → TOLERATED and COUNTED.** The writer-identity branch is the one collapse branch
+  whose rename does **not** 422: **five required-field renames 422; the writer-identity rename degrades
+  to the documented `'unknown'`.** `sourcePackage` is optional by design (the `WriterIdentity` docstring;
+  `#175`/Q83 — identity is not guaranteed, and a required field would 422 every legitimately-untagged
+  record). So a `dataOrigin`-instead-of-`sourcePackage` payload parses and its writer coalesces to
+  `'unknown'` at capture — silent loss of *attribution*, not of a *value*. It is made observable rather
+  than left silent by the `unattributed` count below.
+
+**`type: int`, not `Any` — the asymmetry named:** `bpm`/`rmssd`/`date` are typed (`int`/`float`/`str`)
+and reject `null` natively; `type` was `Optional[Any]`, and a required `Any` accepts an explicit `null`.
+`int` closes that, and preserves the enum's documented leniency (`ExerciseSessionType` header comment),
+which defends unknown **codes**, not non-integer types — `int` admits every unknown code exactly as
+`Any` did.
+
+**`aggregated`, not `ingested`.** The per-stream response gains `received` (records as posted),
+`aggregated` (records on a date that produced a `DailyRecord` row), and `unattributed` (writers degraded
+to `'unknown'`). `aggregated.workouts` is honestly **0** — HC exercise is source-captured, its
+`DailyRecord` ingestion held at `#189` — so the map is named `aggregated`: under the brief's `ingested`
+the same 0 would have implied a permanent defect on every sync, the GATE 1 misread baked into a response
+contract that outlives this session. `received` is counted **before** `_reject_pre2020` mutates the
+payload, so the accounting reconciles; `unattributed` is tallied inside `_capture_record_sources`'s
+existing pass, so the two counts cannot disagree about what was captured.
+
+**Worked example of "absence becomes fatal":** `_reject_pre2020`'s dateless-steps path went from
+*silently discarded* to *rejects the batch at validation* (a steps record with no `date` now 422s before
+`_reject_pre2020` runs). Intended, not a regression; no test exercised it, so nothing moved.
+
+**Two rules that live here, not in `FEEDBACK` (consequences of this decision's extra-policy, not
+free-standing corrections):**
+- **Reject diagnostics log SHAPE, never values.** Health data does not enter logs. The endpoint now
+  carries more than one person's data; a rejected payload is a week of someone's heart rate, sleep and
+  HRV, and logging the body would put it in Railway logs on every client defect, unbounded and
+  unaudited. The diagnostic needs the shape (field paths, error types, key names, counts), never the
+  values — a rename is fully diagnosable from names alone.
+- **A fixture must not carry metadata in-band once the model under test retains unknown keys.** With
+  `extra="allow"`, an in-band `_provenance` key would be retained in `model_extra` and contaminate the
+  additive-unknown-key control; the golden fixture keeps provenance in a sibling file so it can stand as
+  a clean "no unknown keys present" negative.
+
+**Status:** Implemented on this branch. **LANDED ≠ LIVE:** the counts are emitted and consumed by **no
+client** — `SyncScreen.js` discards the sync response at HCA `7a63b15` — so the operator surface is
+Railway logs and direct DB inspection until an HCA update reads them. Consuming them is session-2-or-
+later work.
+
+**How you know:** GATE 3 — fixture parses and populates identically to GATE 1 (value-identical); five
+required-field renames 422, the writer-identity rename degrades to `'unknown'`, `type=null` 422s with
+`int_type` (distinct from `missing`), additive top-level and record keys retained in `model_extra`.
+GATE 3-M — four mutations, each caught by its intended gate and **no other**, including `type:int→Any`
+failing **only** the null negative (proving the tightening has independent coverage) and a fifth harness
+mutation that was a silent no-op, caught by the battery's own zero-failures check rather than passing as
+green. GATE 4 — a raw-name payload yields a 422 and a shape-only log naming the missing canonical key
+**and** the unknown key that replaced it; the requirement was first met only halfway (the unknown key
+was absent) until the diagnostic's own test caught a loc-parse bug (FastAPI prefixes validation locs with
+`body`); a sentinel value on the failing record is asserted **absent** from the log; a validation failure
+on an unrelated route is byte-identical to a captured stock 422 (the handler delegates the response to
+FastAPI's default on every path, logging only on the sync path); the handler is asserted wired onto the
+real app **by identity** (FastAPI ships a default `RequestValidationError` handler, so presence is not
+proof — `landed ≠ live`, `§8`). GATE 5 — `received` non-zero for all five streams, `aggregated` for
+four with `workouts` 0 by design, an empty stream reads 0 and still 200, `unattributed` > 0 on the
+branch-6 payload and 0 on the fully-attributed fixture, and a crafted three-record steps stream
+reconciles each count individually (`received` 3, `rejected_pre_2020` 1, `aggregated` 1) rather than
+asserting a brittle sum identity.
+
+**Do not revisit unless:** the sync window stops being re-read on every sync (today a break is a
+self-healing gap, not corruption, because HCA re-reads a rolling window and the upsert never overwrites
+a stored value with null) — at which point a gap stops being self-healing and the required-field
+coupling's cost calculus changes.
+
+---
+
+### 236. The wearable ingestion contract is source-neutral and carries metric identity; `/health-connect/sync` is an adapter behind it
+
+**Decision:** the target architecture (E3) is a **source-neutral ingestion contract** that both the
+Android/Health Connect client and any future client map into as adapters — not a shared
+`/health-connect/sync` (whose name is false, HC being Android-only) and not per-source endpoints
+duplicating aggregation, dedup and admission.
+
+**The contract carries metric IDENTITY, not metric-named fields.** HealthKit exposes **SDNN**, not
+RMSSD; Health Connect exposes **RMSSD**. They are different quantities and no coefficient converts them
+— this repo already convicted that idea once (**Q17**: the RMSSD→SDNN ≈1.7× ratio, withdrawn as
+coincidence). A payload field literally named `rmssd` receiving SDNN is the same silent-wrong-data class
+this whole thread exists to close.
+
+**Normalise the OUTPUT, never the metric.** Each `(user, source, metric)` stream carries its own
+baseline; the recovery output is a position relative to that stream's own baseline, comparable across
+metrics precisely because absolute scale cancels. Derivation lives downstream of ingestion so adapters
+stay dumb and a fourth source stays cheap. Vendor indices are ingested and surfaced as **labelled
+secondary signals**; the headline number is always own-derived, so no user gets a primary metric another
+user structurally cannot have.
+
+**Scope:** this branch is E3's **precondition**, not E3. A contract accepting two names per value cannot
+be cleanly migrated — the adapter must know which name is real, and today the code said "either."
+
+**Deferral, repriced (the earlier estimate was wrong and is corrected here so session 2 scopes from the
+right one):** session 2 is **not** "build a conformance harness in a repo with no test runner." The
+generator exists (`#24`), the direction (backend canonical → client conforms) is already right, and the
+field-name arm is an extension. The generator **survives E3**; only the generated *content* expires (it
+would assert HC-shaped field names against mappers E3 rewrites). Wasted content, not wasted machinery —
+a real but smaller cost than first claimed.
+
+**De-duplication is a named precondition of the adapter extraction.** HCA's sleep and HRV mappers exist
+**twice** — standalone (`fetchSleepData` / `fetchHRVData`) and inline in `fetchAllData` — content-
+identical at `7a63b15` but only the `fetchAllData` copies on the sync path. The E3 adapter extraction
+must **de-duplicate, not move**, or the conformance surface binds a copy production does not execute.
+
+**Also unaddressed here, and larger than this branch:** `_aggregate_day` averages HRV across **all**
+writers with no source filter and no arbitration, and `#175`'s admission allow-list is referenced in a
+docstring but not implemented. A second HRV writer therefore blends two devices — and, post-E3, two
+metrics — into one mean. That gates a device switch, not just a second user. **Parked as one design
+lane, not three questions:** the baseline specification (window, statistic, minimum sample count), the
+confidence-tag composition, and multi-source arbitration are one problem — "take the higher-confidence
+source" is circular until the tag is defined, and "if they match" is undefined until baselines exist,
+since raw RMSSD and SDNN from the same night never match by construction. Operator ruling stands that a
+degraded output ships with an honest confidence tag rather than being withheld.
+
+**Status:** Design ruling; no code here beyond the precondition this branch lands. E3 is a horizon lane.
+
+**How you know:** Design decision, chat-settled 2026-08-24, grounded on the collapse this branch
+implements and on HCA source read at `7a63b15`. The metric-identity argument is anchored by Q17's
+already-recorded withdrawal of the RMSSD↔SDNN conversion.
+
+**Do not revisit unless:** a second source lands and forces the baseline/arbitration lane before it is
+designed — the parked problem becomes blocking rather than horizon.
 
 ---

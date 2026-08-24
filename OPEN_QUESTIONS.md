@@ -77,18 +77,16 @@ same can be done here: capture one real on-device sync, confirm exactly which fi
 and delete the `.get_*()` reconcilers (this is "Phase 2" of the contract work). Which name to
 keep is unverified until an actual payload is captured.
 
-**State:** OPEN — the **capture precondition is STRUCK**. Master source *is* the emitted contract: HCA's
-mappers rename raw→mapped in the map expression and React Native serializes verbatim, so no build can
-emit the raw names and no on-device capture can tell us anything the source does not. Canonical is
-decided at `#174` = HCA's mapped names (`bpm` / `rmssd` / `date` / `type` / `workouts`).
-
-Next action (CODE): delete the five dead branches — `HeartRateRecord.beatsPerMinute`,
-`HRVRecord.heartRateVariabilityMillis`, `StepsRecord.startTime`, `ExerciseRecord.exerciseType`,
-`SyncPayload.exercise` — and add the field-name contract test. `.get_kg()` / `.get_meters()` are
-**excluded** (forward-compat for unposted record types, not a dual-name contract). The test is not
-optional: the client half of `#174`'s evidence was read cross-repo and is unverifiable from this
-tree, so the test is what converts it from assumption to assertion. → `DONE → #174` when the collapse
-lands. Owner: Luke.
+**State:** `DONE → #234`. The collapse landed as **six** branches (the fifth-plus-`dataOrigin`), with
+loudness built rather than assumed — required canonical fields + `extra="allow"`, `type: int`, a
+shape-only reject diagnostic, and per-stream ingest counts. Backend-only golden fixture
+(machine-verified against HCA `7a63b15`) plus the negative battery close Q5 without the on-device
+capture its own text once demanded — the capture precondition was struck, and source proved to be the
+contract. **Pointer-integrity note (cross-reference class):** this question's own text and `#174`
+predicted `DONE → #174`; the work landed under `#234`, which **supersedes** `#174` (deletion alone
+delivered no loudness; the collapse was six branches). Resolving to `#234`, not `#174`, and recording
+the divergence here rather than leaving a reader to reconcile the two pointers. The client-side
+conformance check (`#174`'s O3) is deferred behind `#236`'s source-neutral contract. Owner: Luke.
 
 ---
 
@@ -3667,3 +3665,23 @@ Luke. **Next action:** none until a second between-levels session appears — tw
 boundary, one makes an anecdote. Cross-refs `#233` (the vocabulary and the resolve-into rule),
 `Q116` (the backfill that writes the first real load values), `#221` (`weekly_template`, the other
 store whose vocabulary a cost axis must not fork).
+
+
+## Q118. Health Connect record metadata (`id` / `recordingMethod` / `device`) is forwarded by HCA and accepted-but-dropped by the backend
+
+`workoutMapper` forwards `metadata.id`, `metadata.recordingMethod` and `metadata.device`;
+`ExerciseRecord` declared none of them, so Pydantic dropped them. `#234` declares them `Optional`
+accept-and-drop so they are first-class attributes rather than `model_extra` (and so `extra="allow"`
+does not mask them). **Persistence is the open part.**
+
+Two consumers make them load-bearing. **(1)** `id` is the Health Connect record UUID and would make
+`health_connect_record_sources` dedup exact, replacing the synthesized
+`(record_type, record_start, source_package)` key — that substitution changes a uniqueness key and is a
+`#36`/`#37` ruling, not a schema task, which is why it did not ride a contract-collapse commit.
+**(2)** `recordingMethod` (0 UNKNOWN / 1 ACTIVELY_RECORDED / 2 AUTO / 3 MANUAL) and `device` are how a
+new writer gets characterised at admission — `#175`'s unimplemented step, and structural under `#236`'s
+multi-source contract. Samsung leaves both at sentinel 0 today; Garmin and Apple may not, which is when
+the fields start carrying information.
+
+**State:** OPEN — no blocker; the fields are accepted-and-dropped, so nothing is lost that was persisted
+before, and nothing yet reads them. Owner: Luke. Cross-refs `#36`, `#37`, `#175`, `#234`, `#236`.
