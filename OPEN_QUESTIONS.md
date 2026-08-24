@@ -1090,6 +1090,41 @@ once more than one live block exists — do not tune against the single discarde
 
 ---
 
+## Q119. A windowed/manual backfill path for `/health-connect/sync`, so a contract break outliving the rolling fetch window is still recoverable
+
+`#235` accepts whole-batch rejection as the cost of loudness on the ground that a break is a **gap,
+not corruption** — HCA re-reads a rolling window every sync and the upsert never overwrites a stored
+value with null, so the next good sync backfills it. That reasoning has a hard edge `#235` records as an
+exposure but does not fix: **the self-heal only reaches back as far as the fetch window.** `fetchAllData`
+posts `periodDays` (default 7) and the sync handler bounds aggregation to `[today - periodDays, today]`.
+A break — the post-deploy `bpm`-`undefined` 422 in `#235`'s OWED is the live candidate — that takes
+**longer than the window to repair** leaves a permanent-by-default hole: by the time the fix ships, the
+days lost are already outside every subsequent fetch.
+
+`#235`'s mitigations are all **detection** — the Step-4 shape log, the per-stream counts, `unattributed`.
+None of them **recovers** the lost span. The missing piece is a **recovery** path: a sync variant with a
+caller-supplied window (or explicit date range), so a one-off backfill can re-fetch and re-post an
+arbitrary historical span after a break is fixed, independent of the 7-day default.
+
+**The fork — this is why it is a question, not queued work:**
+- **Shape.** A `periodDays`/`since` override on the existing `/sync` (smallest surface, but widens a
+  hot endpoint's contract), a separate operator-only `/health-connect/backfill` endpoint (clean scope,
+  more surface), or a one-off script run against Railway (no endpoint, but no client path and manual).
+- **Timing.** Build it **now** (pre-first-break insurance, but speculative — the break may never come and
+  the window may always suffice), or **after** the first real break proves the gap reachable (cheaper if
+  it never fires, but that is precisely when the permanent-by-default hole is already forming).
+- **Auth.** Operator-only by construction — a caller-supplied window is a re-post primitive and must not
+  be a general client capability.
+
+**State:** OPEN — **not blocking the merge.** It sharpens `#235`'s post-deploy OWED rather than gating
+it: run the real sync first; this question only becomes urgent if that sync 422s **and** the repair
+outruns the window. Owner: Luke. Cross-refs `#235` (the exposure and the detection mitigations this
+recovers from), `#235`'s post-deploy verification OWED, `#189`/`#175` (the ingestion/admission context a
+backfill re-post would flow through), `#236` (a source-neutral contract would give the re-post a stable
+target).
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
