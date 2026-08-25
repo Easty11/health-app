@@ -3788,3 +3788,30 @@ discipline. Whether onset is even worth capturing depends on what reads it: noth
 Luke. **Next action:** none until a consumer needs true onset (the backfill-audit lane below is the
 first candidate — it is a human-recall exercise precisely because this field is absent). Cross-refs
 `#100`, `#222`/`#223`, `#233` (supersession-by-key as a propagation/rewrite source).
+
+---
+
+## Q#NEXT. Tier-0 load transform modelling gaps — weighted-bodyweight, non-rep NM, half-point RIR
+
+The gate-2 `load_events` transform (`formula_version 'tier0-v1'`, DECISIONS_LOG the gate-2 entry)
+ships three deliberate Tier-0 simplifications. Each is **surfaced, not hidden**, and each is a
+recompute away (bump `formula_version`) once a Tier-1 answer exists — none is a defect in the
+landed transform.
+
+- **Weighted-bodyweight undercount.** `effective_weight = weight_kg` when a plate is logged, else
+  `BODYWEIGHT_KG` (102). A weighted pull-up (+20 kg) therefore scores on 20 kg, not ~122 kg — the
+  body is the load and the plate is the increment, but Tier 0 has no per-template bodyweight-movement
+  flag to know that. A pure-bodyweight set (no plate) correctly uses `BODYWEIGHT_KG`; a barbell lift
+  correctly uses the bar load. Only the *weighted-bodyweight* case undercounts. Fix needs a
+  per-template "adds bodyweight" tag (a template annotation, like `laterality`).
+- **Non-rep NM = 0.** Carries/sleds and timed holds bridge into Mechanical (D-D `K_dist`/`K_time`)
+  but contribute **zero** Neuromuscular. Flagged arguable in D-D for maximal sled efforts, which
+  carry a real velocity/RFD demand a flat 0 discards.
+- **Half-point RIR banding.** RIR = round-half-up(10 − RPE); RPE 8.5 → RIR 1.5 → 2. The m()/f()
+  tables are integer-keyed, so a half point is rounded rather than interpolated. Deterministic and
+  documented, but a Tier-1 transform may interpolate f/m across the half.
+
+**State:** OPEN — not blocking; the transform is correct and honest at Tier 0, and `provenance`
+records where each gap bit. **Next action:** none until Tier 1; the weighted-bodyweight tag is the
+first candidate (it needs the same operator-annotation path `laterality` uses). Owner: Luke.
+Cross-refs the gate-2 DECISIONS_LOG entry, `#28`/`#32` (D-A/D-C/D-D), `#74`/`#76` (template tags).
