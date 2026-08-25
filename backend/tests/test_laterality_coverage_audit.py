@@ -26,6 +26,7 @@ def _tmpl(db, id_, title, laterality=None, is_custom=False, owner=None):
 
 def _workout(db, hevy_id, uid, template_ids):
     db.add(models.HevyWorkout(hevy_id=hevy_id, user_id=uid, raw={}))
+    db.flush()   # parent before children — the FK-enforced session mirrors prod
     for block, tid in enumerate(template_ids):
         db.add(models.HevySet(
             workout_id=hevy_id, exercise_template_id=tid,
