@@ -1,90 +1,91 @@
-# closeout — /injuries operator view (#100) + banked follow-ups
+# Session close-out — Q6 gate 1 (Hevy strength persistence), landed + live-verified
 
-## Real commits this session
+## 1. Real commits this session
 
-Two branches, both off the same master tip (`bca7e89`).
+`git log --oneline 5ae8a07..HEAD` (session-open ref `5ae8a07`, before the close-out commit):
 
-**`claude/injuries-operator-view-lbxyvf`** — PR #100 (draft, open, NOT merged), code, full human review:
+```
+d5875a3 Merge pull request #105 from Easty11/claude/hevy-strength-persistence-24nkkj
+cb28231 test(substrate): enforce SQLite FKs suite-wide + seed FK-blind fixtures (#239)
+b42e32a Merge pull request #104 from Easty11/claude/hevy-strength-persistence-24nkkj
+433a1f2 fix(hevy): flush parent before sets in workout ingest — FK ordering (#239 follow-up)
+215435f Merge pull request #103 from Easty11/claude/hevy-strength-persistence-24nkkj
+d86aadc gov: resolve #NEXT -> #239 at merge (master max 238 verified this instant)
+52db768 gov: Q6 four-window load — record persistence + Tier-0 design (D-A..D-G)
+5551c3d feat(hevy): persist Hevy workouts + sets — Q6 four-window load, gate 1
+```
 
-    5e31321 fix(injuries): stop asserting contraindication; label restrictions as surfaced-not-enforced
-    ba6d6cf fix(injuries): state the record-age date positively, never via onset/age
-    57345b0 feat(injuries): /injuries operator view over the #222/#223 endpoints
+Plus this close-out commit (`chore: session close-out`).
 
-Frontend suite **57 passed** (10 in `Injuries.test.jsx`); `npm run lint` at the pre-existing
-6-error baseline (all in untouched files); `npm run build` clean. Reviewed by Luke: "Verified at
-`5e31321`. All three edits landed as specified."
+Three PRs, all merged with merge commits, branch remote-deleted after each:
+- **#103** `215435f` — persistence layer + governance (`#239`, D-A..D-G). Contained the schema
+  migration `f9a2c1d40b73`; opened held per `#238`, merged on explicit operator instruction.
+- **#104** `b42e32a` — the FK-ordering ingest fix (no schema; merge-on-green).
+- **#105** `d5875a3` — suite-wide FK-enforced test substrate + 71 seeded fixtures (tests-only;
+  merge-on-green).
 
-**`gov/injuries-followups-closeout`** — governance batch (#176), docs-only, guard-gated. Carries the
-`OPEN_QUESTIONS`/`ROADMAP`/`BRANCHES` edits below plus this `closeout.md`. Commit hash is the
-`chore: session close-out …` commit that adds this file (self-referential; not quotable from within
-itself). Removed-line audit (`git diff | grep '^-'`) run clean pre-commit — every removed line is an
-in-place replacement of a declared region (ROADMAP row rewrite, this file's overwrite); appends
-elsewhere.
+## 2. Pending-queue reconciliation
 
-## Pending-queue reconciliation
+No `;cc` pending-commit queue was carried into this session — it opened from a task brief, not a
+chat close-out. Nothing provisional is outstanding. Every decision reached this session landed in
+a commit above:
+- Q6 four-gate re-scope, D-A..D-G design, Q115 annotation → `52db768`/`d86aadc` (in `#103`).
+- FK-ordering fix → `433a1f2` (in `#104`). Test-substrate hardening → `cb28231` (in `#105`).
+- Gate-1 DONE mark, `#240`, FEEDBACK §33, ROADMAP transform agenda, BRANCHES DONE row,
+  CLAUDE.md Recent-landings → this close-out commit.
 
-No `;cc` pending-commit queue was carried in — this session ran from a build brief, not a chat
-close-out. The reconciled items are the four governance follow-ups the review surfaced:
+## 3. Cold-resume handoff
 
-1. **LANDED (gov branch)** — `OPEN_QUESTIONS` **Q120**: the injury value shape has no onset field;
-   `/injuries`'s "on record since" is a compensation for that absence, recorded so it does not later
-   read as a design preference.
-2. **LANDED (gov branch)** — `ROADMAP` backfill-audit lane **reframed**: the five live rows are all
-   current and cross-referenced; observed drift lives in `restrictions[]`/`detail`, not the `active`
-   flag; every maintenance event in evidence is a restatement, not a retirement. Justification changed
-   from "stale rows suppress regions" (which the data and `is_contraindicated`'s logic both refute) to
-   "the active set has never been operator-reviewed against current truth."
-3. **LANDED (gov branch)** — `ROADMAP` new NEXT lane: an **edit-and-supersede path** is the next
-   injury-ledger build, ahead of the #232 review badge (which renders nothing today — no active row
-   carries `review_when`).
-4. **HELD, deliberately** — the `DECISIONS_LOG` **#100 stub**. It is a decision entry *for PR #100*,
-   and #100 is a draft. Numbers are minted at merge, never in advance (number-at-merge); landing the
-   stub now would either invent a number or land a numberless entry, and would assert as decided a
-   thing not yet merged. It lands when #100 merges — re-read master's max, mint `#N`, write the DONE
-   row + Recent-landings pointer in the same stroke. Its content is settled: motivation is that the
-   ledger is **write-only** (chat/api/system all write injury rows, no route retires them); it carries
-   **no** stale-row-suppression claim (the five row bodies refute it).
+### What landed and is live
+Q6 **gate 1 is DONE and live-verified.** `hevy_workouts` + `hevy_sets` on prod (migration
+applied, deploy `9b6ad5de` SUCCESS on `d5875a3`). Backfill re-run on the fixed code:
 
-Provisional until their branches merge: everything above is on unmerged branches. Both PRs are draft;
-neither has reached master.
+- 56 workouts / 1710 sets; span **2026-04-05 → 2026-08-24** — the entire Hevy history fits inside
+  180 d, so the store is **complete**, not merely a 180-day window.
+- Dedup flagged exactly the two known same-day pairs (16/17 Jun VO2+Upper, 01 Jul Upper ×2).
+  Operator excluded the planned-routine-artifact copy of each (`excluded_at`, larger set count +
+  zero RPE) → **effective store 54 workouts / 1609 sets**.
+- RPE coverage is ~100% of RPE-capable sets from the **mid-May 2026 epoch**; April is a bounded
+  pre-RPE era. The raw 68.6% conflates that with the now-excluded artifacts (90 sets) and 34
+  structurally RPE-incapable non-rep sets — record the corrected reading, not 68.6%.
 
-## Cold-resume handoff
+### Current sprint / NOW
+Q6 **gate 2 — the `load_events` transform** (next session; spec review precedes build). Agenda,
+chat-settled (full detail in ROADMAP "Banister build"):
+1. Missing-RPE rule — rep-based sets before the operator-set mid-May-2026 epoch band by reps
+   alone; after it, full (reps, RPE) banding; non-rep sets per D-D. No RPE imputation ever; e1RM
+   fitted from RPE-present sets only (RPE-absent sets consume, never update).
+2. D-C coefficients + band table; D-D bridging constant (kg·m / kg·s → kg·reps).
+3. The transform reads `excluded_at` from day one.
+4. **Fix `_rpe_coverage`** — denominator must be `reps IS NOT NULL` + excluded-aware, not
+   `type='normal' AND weight_kg NOT NULL`; as-is it misreports every future sync (a real carried
+   code defect, deferred here deliberately).
+5. Candidate hardening — Hevy planned-vs-performed artifact dedup by signature (0-RPE post-epoch
+   rep-based workout, usually a same-day full-RPE partner).
 
-**What this session did.** Built the `/injuries` operator view (frontend-only, PR #100) — the
-reachable half of the #222/#223 resolution loop — then corrected its effect readout to stop asserting
-contraindication (a server-side computation absent from the payload) and to label `restrictions[]` as
-surfaced-not-enforced. Banked three governance follow-ups (Q120 + two ROADMAP edits) on a separate
-gov branch; held the #100 decision stub for merge.
+### Open questions by status
+- **Q6** — OPEN; gate 1 DONE, gates 2–4 sequenced. Closes `DONE → #28` when gate 2 lands and
+  gate 4's query shows strength volume non-zero in per-window `load_metrics`.
+- **Q115** — OPEN (supramaximal routing amendment); D-B removed its migration-cost urgency, the
+  discriminator design pass remains its substance.
+- **Q116 / Q118 / Q119 / Q120** — OPEN, untouched this session (HC-sync backfill/metadata; the
+  schedule-item backfill; the injuries edit-supersede lane).
 
-**Single clearest next action.** Review and merge **draft PR #100** (`claude/injuries-operator-view-lbxyvf`,
-head `5e31321`). On merge: mint the `DECISIONS_LOG` number, write the `#N` DONE row in `BRANCHES.md`,
-add the Recent-landings pointer, and land the held #100 stub (governance item 4). Then merge the
-`gov/injuries-followups-closeout` PR (independent; guard-gated). Neither is to be self-merged without
-Luke — both are draft by instruction.
+### Single clearest next action
+Before the transform can compute load: **operator tags Kneeling Leg Curl laterality and clears the
+`audit_laterality_coverage` worklist** (forward operator items, gate the first load computation).
+Then open the gate-2 transform session against the ROADMAP agenda.
 
-**Open questions touched / added.**
-- **Q120 (new, OPEN)** — injury value shape has no onset field; `/injuries` compensates read-side,
-  asserts nothing false; no consumer needs true onset yet.
-- **Q102 (OPEN, unchanged)** — `restrictions[]` is dead data in `is_contraindicated`; this session's
-  readout fix is consistent with it (the view now states `restrictions[]` gates nothing).
-- Maxima at open: decisions **#236**, questions **Q119** (Q120 added this session).
-
-**What was NOT touched — named so the queue does not read as empty.** This was a small frontend
-lane plus its governance; the substantive product lanes stood still and are where the next real work
-is, not more injury-ledger polish:
-- **Interpretation layer** increments 2 (rephrase) → 3 (lever-tap) → 5 (go-live) — the sequenced NOW
-  continuation, untouched this session.
-- **CBT-I user surface** — engine built, still invisible in-app; gated on **#47** (state-only vs
-  action) and **Q60**, neither moved.
-- **Lab upload pipeline** — the medical-spine hero feature; `SCHEMA.md` lab-family staleness (OWED)
-  and `lab_accession` persistence still open.
-- **`weekly_template` resolver** (#221 lane, Q105/Q106) and the **cross-repo `#NEXT` sweep** (ROADMAP
-  NOW, OWED) — both untouched.
-- Injury-ledger specifically: the reframe above means the next injury build is the **edit-and-supersede
-  path**, not the backfill audit (now a human-recall exercise) and not the #232 badge (renders nothing
-  today). But none of these should crowd out the interpretation/CBT-I/lab lanes above, which are the
-  product, not the instrument.
-
-**Branch states (see `BRANCHES.md`).** `claude/injuries-operator-view-lbxyvf` → **OWED** (PR #100
-draft, merge + mint-number owed). `gov/injuries-followups-closeout` → **OWED** (gov PR draft, merge
-owed). No branch merged or deleted this session.
+### NOT touched this session — name the standing lanes
+This session and the two before it were **instrument, not product**: persistence + its test
+substrate, following `#237` (an operator *view*) and `#234–236` (a sync *contract*). The health
+*intelligence* — the thing being instrumented — has not moved in three sessions:
+- **The four-window load engine itself** (gates 2–4) is still entirely unbuilt. Gate 1 only
+  stores the substrate; no strength load is computed, and `mcp_server.get_training_load` is still
+  aerobic-only ACWR (`#8`).
+- **The Banister fitness-fatigue model** (this ROADMAP row's original subject) is unbuilt; only
+  `naive_baseline` is displayed.
+- **CBT-I user surface** (Q60/Q47) — engine built, still invisible in the app; no route/page/nav.
+- **Injuries edit-supersede lane** (Q120) and the readiness model behind `model_forecast` remain
+  spec-only.
+The next session that isn't the gate-2 transform should be a product lane, not another instrument.

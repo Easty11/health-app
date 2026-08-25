@@ -9728,3 +9728,39 @@ from `hevy_sets.exercise_template_id` to the catalogue, auto-correcting weights,
 duplicates) reintroduces exactly the failure modes D-F/D-G/#79 forbid.
 
 ---
+
+### 240. Q6 gate 1 verified live; the FK-ordering ingest defect; the test engine now enforces prod's constraints
+
+**Decision.** Q6 gate 1 (the `#239` persistence layer) is landed AND live-verified, and two
+corrections ride with it. (a) The first prod backfill raised a `hevy_sets_workout_id_fkey`
+ForeignKeyViolation at `sync_one_user`'s single commit: `SessionLocal` runs `autoflush=False`
+and the models carry FK columns but no `relationship()`, so the unit of work emitted the
+`hevy_sets` batch before its parent `hevy_workouts` rows. Fixed by an explicit `db.flush()` in
+`_upsert_workout` (parent before children; covers first-ingest and the resync delete-then-insert)
+— `#104`. (b) The suite never caught it because SQLite ships FK enforcement OFF: the test engine
+was FK-blind. **Standing policy: the test engine now runs prod-faithful — `PRAGMA foreign_keys=ON`
+AND `autoflush=False` (conftest) — and every fixture seeds its referenced parents** (`#105`, 71
+fixtures across 12 files fixed; no constraint relaxed; tests-only). A future session must not
+relax the test engine back toward SQLite defaults to make a fixture pass.
+
+**Rationale.** An integrity constraint the test substrate does not enforce is a constraint that
+is only tested in production. The FK-ordering bug was invisible to a green suite and cost a
+rolled-back first backfill; the cheapest place to catch that class is the test engine matching
+what Postgres enforces. The store shape itself (`#239`) was sound — the defect was in the write
+ORDER and in the substrate that failed to check it, not the schema.
+
+**Status.** Locked. `#103` (215435f), `#104` (b42e32a), `#105` (d5875a3) merged; backend deploy
+`9b6ad5de` SUCCESS on d5875a3; backfill re-run clean.
+
+**How you know.** Prod psql this session: `hevy_workouts` COUNT 56, span 2026-04-05 10:15 →
+2026-08-24 17:58, `hevy_sets` COUNT 1710, `dedup_flag` rows exactly 4 (the two known pairs);
+operator adjudication excluded the two planned-routine-artifact copies → effective 54/1609. The
+FK-ordering regression reproduces the exact IntegrityError on an FK-enforced + autoflush=False
+engine pre-fix and passes post-fix; full suite green (1164) but for the pre-existing
+`test_context_builder_output_unchanged_pre_post_refactor` shallow-clone artifact.
+
+**Do not revisit unless.** A fixture genuinely needs a row with no real parent (none found this
+session) — then model the parent, never drop FK enforcement. Reintroducing an FK-blind or
+autoflush=True default reopens exactly the gap `#104` was shipped green through.
+
+---
