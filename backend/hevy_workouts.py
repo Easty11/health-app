@@ -31,7 +31,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 import models
@@ -300,7 +300,7 @@ async def sync_one_user(
     flagged = _recompute_dedup(db, user_id)
     db.commit()
 
-    rpe = _rpe_coverage(in_window)
+    rpe = _rpe_coverage(db, user_id, cutoff)
     return {
         "fetched_total": len(all_workouts),
         "in_window": len(in_window),
@@ -311,23 +311,36 @@ async def sync_one_user(
     }
 
 
-def _rpe_coverage(workouts: list[dict[str, Any]]) -> dict[str, Any]:
-    """RPE coverage over NORMAL WEIGHTED sets — the backfill quality number the brief
-    asks be reported (not eyeballed). A normal weighted set is `type == 'normal'`
-    (or unset) with a non-null `weight_kg`; warmups/dropsets/failures and non-weight
-    sets are out of scope for the Neuromuscular RPE channel."""
-    total = 0
-    with_rpe = 0
-    for w in workouts:
-        for s in _iter_sets(w):
-            set_type = s.get("type") or "normal"
-            if set_type != "normal" or s.get("weight_kg") is None:
-                continue
-            total += 1
-            if s.get("rpe") is not None:
-                with_rpe += 1
+def _rpe_coverage(db: Session, user_id: int, cutoff: datetime) -> dict[str, Any]:
+    """RPE coverage over REP-BASED sets — the backfill quality number the brief asks be
+    reported (not eyeballed). Corrected denominator (gate-2 agenda, ROADMAP "Banister
+    build" item 4): every set with `reps IS NOT NULL`, over NON-excluded workouts in the
+    window — NOT the old `type == 'normal' AND weight_kg IS NOT NULL`, which misreported
+    every sync (it dropped bodyweight rep sets that carry no `weight_kg`, and hinged on a
+    frequently-null `type`; both demonstrated by prod data 2026-08-25).
+
+    Queried from the persisted store AFTER upsert so it is `excluded_at`-aware (a
+    dedup-adjudicated artifact never counts) — a raw-payload count could not see the
+    operator's exclusion mark. Warmups/failures with a rep count are IN the denominator:
+    the metric measures how much of the rep-based history could carry an RPE and does.
+    """
+    rows = db.execute(
+        select(models.HevySet.rpe)
+        .join(models.HevyWorkout, models.HevySet.workout_id == models.HevyWorkout.hevy_id)
+        .where(
+            models.HevyWorkout.user_id == user_id,
+            models.HevyWorkout.excluded_at.is_(None),
+            models.HevySet.reps.isnot(None),
+            or_(
+                models.HevyWorkout.start_time.is_(None),
+                models.HevyWorkout.start_time >= cutoff,
+            ),
+        )
+    ).all()
+    total = len(rows)
+    with_rpe = sum(1 for r in rows if r.rpe is not None)
     pct = round(100.0 * with_rpe / total, 1) if total else None
-    return {"normal_weighted_sets": total, "with_rpe": with_rpe, "pct": pct}
+    return {"rep_sets": total, "with_rpe": with_rpe, "pct": pct}
 
 
 async def sync_workouts(
