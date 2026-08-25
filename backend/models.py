@@ -1,7 +1,15 @@
 from datetime import date, datetime
 from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
+
+# Raw-payload columns want JSONB on Postgres (the deployed engine — indexable,
+# binary-stored) but must still build on the SQLite the test suite runs against
+# (conftest `create_all` on an in-memory engine). `JSON().with_variant(...)`
+# renders JSONB under Postgres and generic JSON everywhere else — one column type,
+# both engines, no per-test dialect branching.
+_JSONB = JSON().with_variant(JSONB, "postgresql")
 
 
 class User(Base):
@@ -845,3 +853,100 @@ class InterpretationRephrase(Base):
     # the imported `text()` function inside this class body.
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="'ai_draft'")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class HevyWorkout(Base):
+    """Persisted Hevy workout header — the append-only substrate the Q6 four-window
+    load path is built on (DECISIONS_LOG #28/#32, the persistence-first lane).
+
+    Keyed on the Hevy workout `id` (PK), so ingestion is a PK-upsert: a resync of the
+    same 180-day window re-reads unchanged rows and cannot mint duplicates (D-G:
+    dedup is flag-and-adjudicate, NOT delete). The full untouched Hevy payload is kept
+    in `raw` (JSONB on Postgres) so a later transform version can recompute load from
+    source without a re-fetch — the two-level store of D-B (`load_events` derive from
+    this; corrections are recomputes, never migrations of history).
+
+    Two app-owned columns the sync path NEVER writes, mirroring the
+    `hevy_exercise_templates.laterality`/`adjudicated_at` convention (a resync must not
+    clobber an operator annotation):
+
+      * `excluded_at` — the D-G exclusion mark. An adjudicated-out duplicate is marked,
+        never deleted; load consumers filter `excluded_at IS NULL`. Set by operator
+        adjudication, not by ingestion.
+      * `exclusion_reason` — free text paired with the mark.
+
+    `dedup_flag` / `dedup_partner_ids` ARE sync-derived (recompute-safe): each sync
+    re-derives which same-day high-similarity workouts a row pairs with. Flag, never
+    drop — the operator adjudicates, then sets `excluded_at`.
+    """
+    __tablename__ = "hevy_workouts"
+    __table_args__ = (
+        Index("ix_hevy_workouts_user_id", "user_id"),
+        Index("ix_hevy_workouts_start_time", "start_time"),
+        Index("ix_hevy_workouts_user_start", "user_id", "start_time"),
+    )
+
+    hevy_id: Mapped[str] = mapped_column(String(64), primary_key=True)  # Hevy workout id (UUID string)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The full raw Hevy workout object, verbatim — source of truth for any recompute.
+    raw: Mapped[dict] = mapped_column(_JSONB, nullable=False)
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Sync-derived dedup signal (D-G). Recompute-safe: overwritten every sync.
+    dedup_flag: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
+    dedup_partner_ids: Mapped[list | None] = mapped_column(_JSONB, nullable=True)
+    # App/operator-owned exclusion mark (D-G). Sync NEVER assigns it, so a resync
+    # preserves an adjudication. NULL = in-scope for load; NOT NULL = adjudicated out.
+    excluded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    exclusion_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class HevySet(Base):
+    """One persisted Hevy set — the per-set grain the Mechanical/Neuromuscular
+    transform (D-C) reads (weight_kg × reps, RPE/RIR, set type).
+
+    Hevy sets carry no stable id of their own in the workout payload (only a
+    positional `index`), so the PK is synthetic and identity is the natural key
+    (workout_id, block_index, set_index) — a re-ingest of the same workout replaces
+    its sets in place rather than appending. `block_index` is the exercise's position
+    in the workout; `set_index` the set's position in the exercise.
+
+    Keyed on `exercise_template_id` (#79), NEVER the logged title: a workout stores a
+    title snapshot from when it was logged and Hevy renames its default templates, so
+    a title key drifts. DELIBERATELY NOT an FK to `hevy_exercise_templates`: a logged
+    template id can be absent from the local catalogue (#79/#81, and the very
+    default-template hole the usage-joined laterality audit exists to surface). A hard
+    FK would reject the ingest of exactly the rows the audit must find. The audit
+    LEFT-joins instead.
+
+    Set fields are the live-verified snake_case shape (hevy_format.py, #68):
+    `type`, `weight_kg`, `reps`, `duration_seconds`, `distance_meters`, `rpe`.
+    """
+    __tablename__ = "hevy_sets"
+    __table_args__ = (
+        UniqueConstraint("workout_id", "block_index", "set_index", name="uq_hevy_set_position"),
+        Index("ix_hevy_sets_workout_id", "workout_id"),
+        Index("ix_hevy_sets_exercise_template_id", "exercise_template_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workout_id: Mapped[str] = mapped_column(
+        ForeignKey("hevy_workouts.hevy_id", ondelete="CASCADE"), nullable=False
+    )
+    exercise_template_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    block_index: Mapped[int] = mapped_column(Integer, nullable=False)   # exercise position in workout
+    set_index: Mapped[int] = mapped_column(Integer, nullable=False)     # set position in exercise
+    type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # normal|warmup|dropset|failure
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rpe: Mapped[float | None] = mapped_column(Float, nullable=True)      # half-point decimals preserved

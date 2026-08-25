@@ -33,6 +33,8 @@ Ordering is determined by FK dependencies. Do not reorder.
 020 — capability_observations FK to users (CASCADE) — append-only capability measurement ledger
 021 — interpretation_rephrases  no FK — disposable plain-register overlay + promotion state
 022 — marker_canonical_entries  FK to users (created_by_user_id, SET NULL, nullable) — runtime-mutable canonical marker map
+025 — hevy_workouts            FK to users (CASCADE) — persisted Hevy workout headers (Q6 load lane)
+026 — hevy_sets                FK to hevy_workouts (CASCADE) — per-set grain; exercise_template_id NOT an FK (#79/#81)
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1056,6 +1058,54 @@ No migration. `user_knowledge_entries.value` is `sa.JSON()` (Postgres `json`, no
 **Readers.** `context_builder.py` renders the weekly schedule table and the hard-commitment flags; `GET /knowledge/schedule` (`routers/knowledge.py`) returns active rows unmodified and interprets no shape — it is the calendar view's data source, and its shape-agnosticism is load-bearing. No `engine/` module reads this type. A day name the builder cannot place is now **reported** in THIS WEEK FLAGS rather than silently skipped; it was previously dropped by two separate mechanisms.
 
 **Pre-existing rows were NOT backfilled in this run.** The validator is live at write; the 18 active rows carrying the legacy shape (prose in `same_day_training`, quota values in `days[]`, a `minimum_days` key, duplicate pairs, three stale-active rows) are untouched, because this session had no route to the production database. Validation is at write, so those rows read back unchanged and are not refused on read. The outstanding backfill, the five unperformed prod assertions, and the unexecuted live-row stop-condition are carried in `OPEN_QUESTIONS` Q116.
+
+### 025 — hevy_workouts
+
+Persisted Hevy workout headers — the append-only substrate the Q6 four-window strength-load lane is built on (DECISIONS_LOG #28/#32; persistence-first session). Keyed on the Hevy workout `id` (PK), so ingestion is a PK-upsert: a resync of the same 180-day window re-reads unchanged rows and cannot mint duplicates. `raw` keeps the untouched Hevy payload (JSONB on Postgres, generic JSON on the SQLite test engine) so a later transform version recomputes load from source without a re-fetch — the two-level store (`load_events` derive from this; corrections are recomputes, never migrations of computed history). `dedup_flag` / `dedup_partner_ids` are **sync-derived and recompute-safe** (re-derived each sync). `excluded_at` / `exclusion_reason` are the **operator-owned adjudication mark the sync path never writes** — mirrors the `hevy_exercise_templates.laterality` convention: a resync must not clobber an operator annotation. Load consumers filter `excluded_at IS NULL`. Dedup is flag-and-adjudicate, never auto-delete.
+
+```sql
+CREATE TABLE hevy_workouts (
+    hevy_id            VARCHAR(64) PRIMARY KEY,        -- Hevy workout id (UUID string)
+    user_id            INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    start_time         TIMESTAMPTZ,
+    end_time           TIMESTAMPTZ,
+    title              VARCHAR,
+    raw                JSONB NOT NULL,                 -- full untouched Hevy workout object
+    synced_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    dedup_flag         BOOLEAN NOT NULL DEFAULT FALSE, -- sync-derived (D-G); recompute-safe
+    dedup_partner_ids  JSONB,                          -- sync-derived list of same-day similar workout ids
+    excluded_at        TIMESTAMPTZ,                    -- operator-owned exclusion mark; sync NEVER assigns it
+    exclusion_reason   VARCHAR
+);
+
+CREATE INDEX ix_hevy_workouts_user_id     ON hevy_workouts (user_id);
+CREATE INDEX ix_hevy_workouts_start_time  ON hevy_workouts (start_time);
+CREATE INDEX ix_hevy_workouts_user_start  ON hevy_workouts (user_id, start_time);
+```
+
+### 026 — hevy_sets
+
+Per-set grain (weight_kg × reps, rpe, set type) the Tier-0 Mechanical/Neuromuscular transform reads. Synthetic integer PK; identity is the natural key `(workout_id, block_index, set_index)` — a re-ingest of the same workout replaces its sets in place. `block_index` is the exercise's position in the workout, `set_index` the set's position in the exercise. Keyed on `exercise_template_id` (#79), **NEVER** the logged title (a workout stores a title snapshot that drifts as Hevy renames templates). **Deliberately NOT an FK to `hevy_exercise_templates`:** a logged template id can be absent from the local catalogue (#79/#81) — exactly the default-template hole the usage-joined laterality audit exists to surface — and a hard FK would reject the ingest of the very rows the audit must find. The audit LEFT-joins. Set fields are the live-verified snake_case shape (`hevy_format.py`, #68).
+
+```sql
+CREATE TABLE hevy_sets (
+    id                    SERIAL PRIMARY KEY,
+    workout_id            VARCHAR(64) NOT NULL REFERENCES hevy_workouts(hevy_id) ON DELETE CASCADE,
+    exercise_template_id  VARCHAR(64) NOT NULL,        -- keyed on id (#79); NO FK by design
+    block_index           INT NOT NULL,                -- exercise position in workout
+    set_index             INT NOT NULL,                -- set position in exercise
+    type                  VARCHAR(20),                 -- normal|warmup|dropset|failure
+    weight_kg             DOUBLE PRECISION,
+    reps                  INT,
+    duration_seconds      INT,
+    distance_meters       DOUBLE PRECISION,
+    rpe                   DOUBLE PRECISION,             -- half-point decimals preserved
+    CONSTRAINT uq_hevy_set_position UNIQUE (workout_id, block_index, set_index)
+);
+
+CREATE INDEX ix_hevy_sets_workout_id            ON hevy_sets (workout_id);
+CREATE INDEX ix_hevy_sets_exercise_template_id  ON hevy_sets (exercise_template_id);
+```
 
 ## Canonical Metric Type Whitelist
 
