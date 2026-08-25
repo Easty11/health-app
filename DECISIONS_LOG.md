@@ -9565,3 +9565,55 @@ already-recorded withdrawal of the RMSSD↔SDNN conversion.
 designed — the parked problem becomes blocking rather than horizon.
 
 ---
+
+### 237. `/injuries` operator view — the reachable half of the #222/#223 resolution loop
+
+**Decision:** ship a frontend-only `/injuries` surface over the existing #222/#223 endpoints: a
+route in `App.jsx` + a hub `Tile` on `Dashboard.jsx`, a single `GET /knowledge/injuries?include_resolved=true`
+fetch on load, an active list ordered by chain-earliest `added_at`, a display-only history toggle that
+distinguishes **resolved** (`superseded_by` null, `resolution` block shown verbatim) from **superseded**
+(names the successor id), and a per-row resolve gated on a human-authored `basis` (≥15-char client floor
+over the server's non-empty floor) and a `resolved_by` tier. One row, one basis, one human — no bulk
+resolve, no auto-resolve, no canned bases, no staleness heuristic (#223/#228). Cites #232 as its
+constraint.
+
+**Rationale — the ledger is write-only, NOT that a stale row corrupts readiness.** Chat (`source='chat'`),
+the API (`source='api'`) and onboarding (`source='system'`) all write injury rows and no route retired
+any, so the operator could add but not remove. That is the justification. The stale-row-suppresses-readiness
+argument is explicitly NOT made: the five live rows for user 1 are all current and cross-referenced (the
+finger row reads "Managed, not resolved"), and `is_contraindicated` never reads `restrictions[]` — it
+fires only via a `body_part` substring against `_ACUTE_TISSUE_BLOCKS` plus the radicular/ra_flare arms,
+so `pes anserine` and `finger` suppress nothing regardless of staleness. Accordingly the effect readout
+asserts **no** contraindication (a server-side computation absent from the payload) and labels
+`restrictions[]` "surfaced to sessions, not enforced".
+
+**Corrects #232's "no new read required" for the injury store, and defers the badge:** the review flag
+is derived by `injury_trajectory.evaluate()`, exposed only through `mcp_server.py`, absent from
+`GET /knowledge/injuries` (which returns `value` unmodified) — and moot today, since no active row carries
+`review_when`, so zero flags could fire. Re-implementing `_review_message`/`_divergence_message`
+client-side is refused (a second copy drifts from the one #222's gates pin). Badge deferred until
+`review_when` is populated, which is itself operator work.
+
+**Surfaced, not fixed:** `added_at` was rewritten for ids 75–78 by a `source` backfill routed through
+`upsert_knowledge_entry` (supersede-by-key mints a new row); `trajectory.declared_on` carries the same
+artefact. The value shape has no onset field, so `/injuries` shows chain-earliest `added_at` as "on
+record since" — a record-age floor, a compensation for the absent field, never labelled onset or age.
+Logged as **Q120**. Two ROADMAP consequences banked the same session: the injury-ledger backfill-audit
+lane is reframed (the active set has never been operator-reviewed against current truth; it is a
+human-recall exercise, not a stale-row sweep), and the next injury-ledger build is an **edit-and-supersede
+path** ahead of the #232 badge.
+
+**Status:** DONE — landed via PR #100, merge `8098e63` (feature tip `5e31321`); branch merged + deleted.
+Frontend suite **57 passed** (10 in `Injuries.test.jsx`); `npm run lint` at the pre-existing 6-error
+baseline; `npm run build` clean.
+
+**How you know:** merged to master — the `/injuries` route is present on `master:frontend/src/App.jsx`;
+`placeholder guard (POSIX)` completed success on the head; reviewed by the operator ("Verified at
+`5e31321`. All three edits landed as specified."). The chain walk is pinned by a scoped test: `injury_finger_left`
+(id 77) renders its ancestor's June date and not its own August date.
+
+**Do not revisit unless:** the value shape gains an onset field (Q120 decided), or the edit-and-supersede
+path supersedes the resolve-only exit, or `review_when` begins being populated (at which point the #232
+badge becomes a live surfacing-only read, not a client-side rule copy).
+
+---

@@ -3720,3 +3720,34 @@ the fields start carrying information.
 
 **State:** OPEN — no blocker; the fields are accepted-and-dropped, so nothing is lost that was persisted
 before, and nothing yet reads them. Owner: Luke. Cross-refs `#36`, `#37`, `#175`, `#234`, `#236`.
+
+
+## Q120. The injury value shape has no onset field — "on record since" is a compensation for that absence, not a design preference
+
+The `type='injury'` value dict carries `body_part`, `side`, `signal_type`, `restrictions[]`, optional
+`detail`/`trajectory`/`resolution` — and **no field for when the injury actually began.** `declared_on`
+inside `trajectory` is a divergence-timing baseline, not onset, and it is not even reliably that: for the
+four api-sourced rows (ids 75–78) it reads `2026-08-19`, an import artefact. `added_at` is no better —
+it was **rewritten** for ids 75–78 by a `source` backfill routed through `upsert_knowledge_entry`, which
+supersedes by key and mints a NEW row rather than updating in place, so the row's `added_at` is the
+backfill date, not first-record date (verified: id 29's `declared_on` 2026-07-13 sits against an
+August-2025 right hamstring; id 76's dates sit against a mid-July calf event).
+
+`/injuries` (#100) shows the **chain-earliest `added_at`** — walked back through `superseded_by` to the
+root — labelled **"on record since"**, and explicitly NOT "onset" or "age". That is the least-wrong
+recoverable value: a record-age floor ("the ledger has held this at least this long"), not onset. **This
+is a compensation for the missing field, not a design choice** — recorded here so it does not later read
+as a deliberate preference once the context is gone. Three of five active rows recover a real earlier
+date via the chain (finger/shoulder to 2026-06-22, pes anserine to 2026-07-13); calf and right hamstring
+do not, and no row recovers true onset.
+
+**The fork:** adding an `onset`/`injured_on` field to the value shape is a **value-shape change with a
+backfill of its own** — every historical row would need an onset supplied (operator recall, since no
+field holds it), and the backfill would route through the same `upsert_knowledge_entry` supersession
+path that destroyed the age information in the first place, so it needs the #103/#116 verify-then-write
+discipline. Whether onset is even worth capturing depends on what reads it: nothing does today.
+
+**State:** OPEN — not blocking; `/injuries` compensates read-side and asserts nothing false. Owner:
+Luke. **Next action:** none until a consumer needs true onset (the backfill-audit lane below is the
+first candidate — it is a human-recall exercise precisely because this field is absent). Cross-refs
+`#100`, `#222`/`#223`, `#233` (supersession-by-key as a propagation/rewrite source).
