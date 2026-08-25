@@ -37,6 +37,19 @@ repo-specific and live below END SHARED LOOP RULES in their own repo.
 - Kill-rule: decisions, open questions, roadmap, task state never live in project
   knowledge — orientation docs only.
 
+### Merge disposition
+- **Code merges its own PRs.** The merge path's three acts are one motion: push, create,
+  merge. PRs open **ready-for-review, never draft**, and Code merges as soon as every
+  required check is green — no confirmation request, no waiting on the operator, and no
+  scheduled check-in re-reporting a clean `mergeable_state`. A green PR left unmerged is a
+  defect, not caution.
+- **One exception:** a PR containing a schema migration holds for explicit operator
+  instruction. So does anything the session was explicitly told to hold.
+- Number-at-merge is unaffected: it resolves from master's max immediately before the merge
+  Code itself performs.
+- This is deliberate. A future session finding Code self-merging must not reinstate a human
+  gate as a fix — see DECISIONS_LOG.
+
 ### The unseeable-surface rule
 Chat can verify only what is on a pushed ref. Any brief statement about a surface chat
 cannot read (UI knowledge files, unpushed branches, local disk, Railway state) is an
@@ -239,11 +252,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The human merge gate is removed — Code merges its own PRs on green; a green PR left unmerged is a defect (#238)** - See DECISIONS_LOG #238. New `### Merge disposition` subsection in `CLAUDE.md`'s shared loop block: PRs open ready-for-review never draft, sole hold is a schema migration or an explicit told-to-hold; propagated verbatim to `health-connect-app`. Handoff: `closeout.md`.
+
 - **`/injuries` operator view — the reachable half of the #222/#223 resolution loop; the injury ledger was write-only from the UI (#237)** - See DECISIONS_LOG #237. Effect readout asserts no contraindication (a server-side computation absent from the payload); `restrictions[]` labelled surfaced-not-enforced; badge deferred (no `review_when` today). Follow-ups Q120 + the ROADMAP reframe / edit-supersede lane, and handoff: `closeout.md`.
 
 - **`/health-connect/sync` collapsed to HCA's mapped names and made to fail loud; `#174` superseded; post-deploy sync verified 2026-08-24 (#234/#235/#236)** - See DECISIONS_LOG #234/#235/#236 (#235 Status carries the post-deploy discharge and the never-populated-HRV structural finding). Q116/Q118/Q119 and handoff: `closeout.md`.
-
-- **`schedule_item` is a closed validated shape at write; a cross-ref in an append-only entry is a propagation source (#233, `§32`)** - See DECISIONS_LOG #233 and `SCHEMA.md` 024. Session handoff, including the backfill still owed (Q116): `closeout.md`.
 
 ---
 
