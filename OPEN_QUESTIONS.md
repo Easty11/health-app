@@ -100,8 +100,8 @@ each the substrate of the next:
 the interim aerobic-only ACWR of `#8` (`mcp_server.get_training_load` still aerobic-only). OPEN
 rather than BLOCKED — nothing prevents building the gates; they simply are not yet all built.
 → `DONE → #28` when Gate 2 lands (the transform exists) **and** Gate 4's query shows rows
-landing. Owner: Luke. Cross-refs `#28`, `#32`, `#10`, `#33`, the persistence+Tier-0 design
-decision (this lane), ROADMAP "Banister build".
+landing. Owner: Luke. Cross-refs `#28`, `#32`, `#10`, `#33`, `#239` (the
+persistence + Tier-0 design decision), ROADMAP "Banister build".
 
 **Region-tag note (2026-08-25):** all 57 custom templates remain region-unadjudicated. This
 blocks a future region-DISTRIBUTED Mechanical channel (per-region load) but NOT the systemic

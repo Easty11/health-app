@@ -9650,7 +9650,7 @@ of a defect; it is this decision working.
 
 ---
 
-### #NEXT. Hevy strength → four-window load: persistence layer + Tier-0 design (Q6)
+### 239. Hevy strength → four-window load: persistence layer + Tier-0 design (Q6)
 
 **Decision.** Land the persistence substrate the Q6 four-window load lane rests on, and
 record the chat-settled Tier-0 design it will be built to (`#28` taxonomy/routing, `#32`
