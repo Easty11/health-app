@@ -12,20 +12,27 @@ band, and bridging constant below is a REASONED PRIOR (#32) tagged with
 not edit landed rows. `compute_load_events` is therefore delete-and-reinsert per
 (user, `FORMULA_VERSION`) and idempotent on re-run.
 
-Two hard rules carried from the chat-settled gate-2 agenda (ROADMAP "Banister build"):
+Three rules from the brief's BUILD-step-2 supersessions (these GOVERN over the older
+ROADMAP row-79 agenda wording, which was stale):
 
-  * NO RPE imputation, ever. A set's RPE is either usable (present AND its session is
-    on/after `EPOCH_RPE_COMPLETE`, the operator's date at which RPE logging became
-    complete) or it is not. Pre-epoch sets band by reps alone even if they carry an
-    `rpe` value — pre-epoch RPE is not trusted (D-C provenance).
-  * e1RM is fitted from RPE-usable sets ONLY (rolling 60 d, per template). An
-    RPE-absent set may CONSUME a fitted e1RM for its intensity but never UPDATES the
-    fit.
+  * RPE is a PER-SET fact, date-independent. A set with an `rpe` bands on (reps, RPE)
+    whatever its date; a set without one takes the reps-band prior. NO imputation, ever.
+  * e1RM is fitted from ALL RPE-present working sets, ANY date (rolling 60 d, per
+    template). An RPE-absent set may CONSUME a fit but never UPDATES it.
+  * LOAD SUMS SETS AS LOGGED. Unilateral work is genuine work — 3 sets/leg of 40kg×10
+    is 2400 kg·reps, at parity with the bilateral equivalent — so the D-E laterality
+    pairing NEVER discounts cost (its supersession narrows halving to the
+    movement-count / asymmetry instrument). Pairing and indeterminate-tag detection are
+    retained in `provenance` only, surfaced for that instrument, never applied to load.
 
-The mechanism is pure functions over normalized sets (`compute_set_load`, `fit_e1rm`,
-`rolling_e1rm`); the DB orchestrator only reads sessions, applies the D-E laterality
-halving, and persists. The transform reads `excluded_at` from day one — a
-dedup-adjudicated artifact (D-G) never enters load.
+`EPOCH_RPE_COMPLETE` survives for exactly one, DIAGNOSTIC use: a rep-based workout on or
+after it that carries no RPE at all is a planned-vs-performed artifact signature (D-G
+hardening candidate), flagged in `provenance`. It appears in NO cost or e1RM code path.
+
+The mechanism is pure functions over normalized sets (`compute_set_load`,
+`epley_with_rir`, `rolling_e1rm`); the DB orchestrator only reads sessions and persists.
+The transform reads `excluded_at` from day one — a dedup-adjudicated artifact (D-G)
+never enters load.
 
 Re-runnable CLI:
     python backend/load_events.py                # recompute all keyed users
@@ -53,9 +60,10 @@ logger = logging.getLogger(__name__)
 
 FORMULA_VERSION = "tier0-v1"
 
-# Operator input (brief): the date RPE logging became complete. A set on/after this
-# date with an `rpe` is RPE-usable; before it, RPE is not trusted and the set bands by
-# reps alone. NO imputation — this is a trust boundary, not a fill.
+# Operator input (brief): the date from which RPE logging is complete. DIAGNOSTIC ONLY —
+# a rep-based workout on/after this date carrying no RPE at all is a planned-vs-performed
+# artifact signature (D-G hardening candidate), surfaced in provenance. It gates NO cost
+# and NO e1RM path: RPE is a per-set fact and bands on (reps, RPE) whatever the date.
 EPOCH_RPE_COMPLETE = date(2026, 5, 11)
 
 # Operator input (brief): used as the effective load for a PURE bodyweight movement
@@ -154,14 +162,14 @@ class SetLoad:
 def compute_set_load(
     s: dict[str, Any],
     *,
-    rpe_usable: bool,
     e1rm: float | None,
 ) -> SetLoad:
     """Score one normalized set (keys: type, weight_kg, reps, duration_seconds,
     distance_meters, rpe — the live snake_case shape, #68).
 
-    `rpe_usable` is the caller's epoch decision for this set's session. `e1rm` is the
-    template's fitted e1RM as of the session (None → h(I)=0.5). Pure and deterministic.
+    RPE is per-set and date-independent: a set with an `rpe` bands on (reps, RPE); one
+    without takes the reps-band prior (no imputation). `e1rm` is the template's fitted
+    e1RM as of the session (None → h(I)=0.5). Pure and deterministic.
     """
     set_type = (s.get("type") or "normal").lower()
     is_warmup = set_type == "warmup"
@@ -193,11 +201,11 @@ def compute_set_load(
 
     eff_w = _effective_weight(weight)
 
-    # RIR: a failure set is RIR 0 by definition (a set-type fact, epoch-independent, no
-    # `rpe` needed). Otherwise RIR comes from a usable RPE, else it is unknown.
+    # RIR: a failure set is RIR 0 by definition (a set-type fact, no `rpe` needed).
+    # Otherwise RIR comes from a present RPE (any date), else it is unknown.
     if is_failure:
         rir: int | None = 0
-    elif rpe_usable and rpe is not None:
+    elif rpe is not None:
         rir = _rir_from_rpe(float(rpe))
     else:
         rir = None
@@ -251,12 +259,13 @@ def epley_with_rir(weight_kg: float, reps: int, rir: float) -> float:
 
 
 def e1rm_samples(sessions: list["Session_"]) -> list[E1rmSample]:
-    """Every RPE-usable, weighted rep set → an e1RM estimate. RPE-usable = the
-    session is on/after the epoch AND the set carries an `rpe` (failure sets, which
-    have no `rpe`, do NOT fit e1RM — 'fitted from RPE-present sets only')."""
+    """Every RPE-present, weighted rep set → an e1RM estimate, ANY date (failure sets,
+    which carry no `rpe`, do NOT fit e1RM — 'fitted from RPE-present sets only'). An
+    undated session cannot be placed in a rolling window, so it is skipped for
+    sampling."""
     out: list[E1rmSample] = []
     for sess in sessions:
-        if sess.when is None or sess.when < EPOCH_RPE_COMPLETE:
+        if sess.when is None:
             continue
         for block_index, template_id, s in sess.sets:
             rpe = s.get("rpe")
@@ -355,13 +364,19 @@ def compute_session_events(
 ) -> dict[str, dict[str, Any]]:
     """Two window aggregates ({window: {load, unit, provenance}}) for one session.
 
-    D-E laterality halving: a `unilateral` template appearing in >=2 blocks is one
-    movement double-logged — its sets' load (both windows) is halved. An UNTAGGED
-    template in >=2 blocks is INDETERMINATE: surfaced in provenance, NEVER halved
-    (fail-closed, D-E — the transform must not guess laterality).
+    LOAD SUMS SETS AS LOGGED — the D-E laterality pairing NEVER discounts cost
+    (unilateral work is genuine work). `detect_session_pairing` is retained for
+    provenance only: `paired_templates` (a `unilateral` template in >=2 blocks — the
+    movement-count / asymmetry signal) and `indeterminate_laterality` (an untagged
+    template in >=2 blocks — surfaced, never guessed) both travel in the blob and feed
+    the asymmetry instrument, not the load sum.
+
+    Epoch DIAGNOSTIC (`post_epoch_zero_rpe`): a session on/after `EPOCH_RPE_COMPLETE`
+    whose working (non-warmup) rep sets carry no RPE at all is a planned-vs-performed
+    artifact signature (D-G hardening candidate). Diagnostic only — it changes no load.
     """
     pairing = detect_session_pairing(sess.blocks, laterality_by_template)
-    halved_templates = set(pairing.paired.keys())
+    paired_templates = sorted(pairing.paired.keys())
     indeterminate_templates = sorted(pairing.indeterminate.keys())
 
     mech_load = 0.0
@@ -372,18 +387,17 @@ def compute_session_events(
         "non_rep_excluded_sets": 0,
         "e1rm_fit_templates": set(), "e1rm_fallback_templates": set(),
     }
-
-    rpe_usable = sess.when is not None and sess.when >= EPOCH_RPE_COMPLETE
+    working_rep_sets = 0        # non-warmup rep sets — the diagnostic's denominator
+    working_rep_with_rpe = 0
 
     for block_index, template_id, s in sess.sets:
-        sl = compute_set_load(s, rpe_usable=rpe_usable, e1rm=e1rm_by_template.get(template_id))
+        sl = compute_set_load(s, e1rm=e1rm_by_template.get(template_id))
         if sl.skip:
             continue
-        halve = template_id in halved_templates
-        factor = 0.5 if halve else 1.0
 
-        mech_load += sl.mechanical * factor
-        nm_load += sl.neuromuscular * factor
+        # Load sums as logged — no laterality factor.
+        mech_load += sl.mechanical
+        nm_load += sl.neuromuscular
 
         # Mechanical provenance
         mech_p["sets"] += 1
@@ -391,13 +405,16 @@ def compute_session_events(
             mech_p["warmup_sets"] += 1
         if sl.is_non_rep:
             mech_p["non_rep_sets"] += 1
-            mech_p["non_rep_load"] += sl.non_rep_mech * factor
+            mech_p["non_rep_load"] += sl.non_rep_mech
             nm_p["non_rep_excluded_sets"] += 1
             continue  # non-rep contributes nothing to NM (D-D)
 
         # Neuromuscular provenance (rep sets only)
         if sl.is_warmup:
             continue  # warmup excluded from NM
+        working_rep_sets += 1
+        if s.get("rpe") is not None or sl.is_failure:
+            working_rep_with_rpe += 1  # a failure tag is explicit effort data, not a bare artifact
         nm_p["sets"] += 1
         if sl.is_failure:
             nm_p["failure_sets"] += 1
@@ -410,9 +427,13 @@ def compute_session_events(
         elif sl.e1rm_used is False:
             nm_p["e1rm_fallback_templates"].add(template_id)
 
-    lat_prov = {
-        "halved_templates": sorted(halved_templates),
+    post_epoch = sess.when is not None and sess.when >= EPOCH_RPE_COMPLETE
+    post_epoch_zero_rpe = post_epoch and working_rep_sets > 0 and working_rep_with_rpe == 0
+
+    shared_prov = {
+        "paired_templates": paired_templates,
         "indeterminate_laterality": indeterminate_templates,
+        "post_epoch_zero_rpe": post_epoch_zero_rpe,
     }
     mech_p["non_rep_load"] = round(mech_p["non_rep_load"], 6)
     nm_p["e1rm_fit_templates"] = sorted(nm_p["e1rm_fit_templates"])
@@ -422,12 +443,12 @@ def compute_session_events(
         WINDOW_MECHANICAL: {
             "load": round(mech_load, 6),
             "unit": UNIT_MECHANICAL,
-            "provenance": {**mech_p, **lat_prov},
+            "provenance": {**mech_p, **shared_prov},
         },
         WINDOW_NEUROMUSCULAR: {
             "load": round(nm_load, 6),
             "unit": UNIT_NEUROMUSCULAR,
-            "provenance": {**nm_p, **lat_prov},
+            "provenance": {**nm_p, **shared_prov},
         },
     }
 
@@ -486,6 +507,7 @@ def compute_load_events(
     e1rm_fit_sessions = 0
     reps_banded_sessions = 0
     indeterminate_sessions = 0
+    artifact_signature_sessions = 0
     for sess in sessions:
         e1rm_by_template = {
             tid: rolling_e1rm(samples, tid, sess.when)
@@ -517,6 +539,8 @@ def compute_load_events(
             reps_banded_sessions += 1
         if nm_prov["indeterminate_laterality"]:
             indeterminate_sessions += 1
+        if nm_prov["post_epoch_zero_rpe"]:
+            artifact_signature_sessions += 1
 
     db.commit()
     return {
@@ -526,6 +550,7 @@ def compute_load_events(
         "sessions_with_e1rm_fit": e1rm_fit_sessions,
         "sessions_reps_banded": reps_banded_sessions,
         "sessions_indeterminate_laterality": indeterminate_sessions,
+        "sessions_artifact_signature": artifact_signature_sessions,
     }
 
 

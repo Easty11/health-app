@@ -976,8 +976,10 @@ class LoadEvent(Base):
 
     `provenance` records the transform's GAPS at row grain (D-C/D-D coverage): which
     sets were RPE-banded vs reps-banded, whether h(I) used a fitted e1RM or the 0.5
-    fallback, non-rep bridging contribution, laterality halving, and untagged-repeated
-    templates that were surfaced-not-halved. It is diagnostic, not consumed by load.
+    fallback, non-rep bridging contribution, the laterality `paired_templates` /
+    `indeterminate_laterality` surfacing (for the asymmetry instrument, never cost), and
+    the `post_epoch_zero_rpe` artifact-signature flag. It is diagnostic, not consumed by
+    load — **load sums sets as logged**; the D-E pairing never discounts it.
     """
     __tablename__ = "load_events"
     __table_args__ = (
