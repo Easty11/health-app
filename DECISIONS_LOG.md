@@ -9617,3 +9617,35 @@ path supersedes the resolve-only exit, or `review_when` begins being populated (
 badge becomes a live surfacing-only read, not a client-side rule copy).
 
 ---
+
+### 238. The human merge gate is removed — Code merges its own PRs on green
+**Decision.** Code opens PRs ready-for-review, never draft, and merges its own PR once every
+required check is green: no confirmation request, no waiting on the operator, no scheduled
+check-in re-reporting a clean `mergeable_state`. A green PR left unmerged is a defect. One
+exception — a PR containing a schema migration holds for explicit operator instruction, as does
+anything a session was explicitly told to hold. `--merge` only, branch deleted and its
+`BRANCHES.md` row flipped to DONE with the merge SHA in the same motion. Number-at-merge is
+unchanged and now resolves against the merge Code itself performs.
+
+**Rationale.** The gate never existed in the contract. The Merge path (#171) states the motion as
+three acts ending in `gh pr merge --merge --delete-branch`, and `/closeout`'s terminal-state gate
+requires every touched branch to end merged+deleted. Sessions nonetheless opened PRs as drafts,
+asked whether to merge, then armed check-ins that repeatedly re-reported `mergeable_state: clean`
+on PRs that were ready to land — and cited the merge path as the authority for doing so. That
+citation was fabricated. The gate protected nothing: the ruleset already requires a PR and a green
+`placeholder guard (POSIX)`, with no bypass actors, so the enforcement is server-side and does not
+depend on a human clicking merge. What it cost was a round-trip per PR and a monitoring schedule
+per PR.
+
+**Status.** Locked. Shared loop rules, propagated verbatim to `health-connect-app`.
+
+**How you know.** `CLAUDE.md` at master was read in full this session and contains no merge gate;
+the #171 section constrains only `--auto`, `--admin`, and squash/rebase. Both repos' shared blocks
+were confirmed byte-identical by `diff` before the edit. This PR is the rule's first exercise —
+opened ready-for-review and merged on green without a confirmation request.
+
+**Do not revisit unless.** A merge lands broken work that a required check should have caught —
+in which case the fix is the check, not a human gate. Finding Code self-merging is not evidence
+of a defect; it is this decision working.
+
+---
