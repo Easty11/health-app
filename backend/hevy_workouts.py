@@ -195,6 +195,16 @@ def _upsert_workout(db: Session, w: dict[str, Any], user_id: int, now: datetime)
     row.synced_at = now
     # excluded_at / exclusion_reason: deliberately untouched.
 
+    # Parent-before-child, made EXPLICIT (#239 follow-up). `SessionLocal` runs
+    # autoflush=False and these models carry FK columns but no `relationship()`, so
+    # the unit of work does NOT order the workout INSERT ahead of its set INSERTs on
+    # its own: at a single end-of-loop commit it can emit the `hevy_sets` batch while
+    # parent `hevy_workouts` rows are still pending, tripping
+    # `hevy_sets_workout_id_fkey`. (Masked on SQLite until PRAGMA foreign_keys=ON.)
+    # Flushing the parent here guarantees it exists before any child row is inserted,
+    # and also anchors the delete-then-insert set replacement on resync.
+    db.flush()
+
     # Replace sets in place.
     db.execute(delete(models.HevySet).where(models.HevySet.workout_id == hevy_id))
     for s in _iter_sets(w):

@@ -70,6 +70,68 @@ def test_upsert_persists_header_and_sets(db_session):
     assert sets[0].weight_kg == 100.0 and sets[0].reps == 5 and sets[0].rpe == 8.0
 
 
+def _prod_faithful_session():
+    """A session that mirrors prod's `SessionLocal` for the FK-ordering regression:
+    autoflush=False (so the unit of work does not incidentally flush parents early)
+    AND SQLite FK enforcement ON (SQLite ships it OFF, which is why the default test
+    engine never caught this). This is deliberately local — the shared `db_session`
+    stays FK-blind so the rest of the suite is untouched by this one guard."""
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    import database
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(engine, "connect")
+    def _fk_on(dbapi_conn, _rec):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.close()
+
+    database.Base.metadata.create_all(engine)
+    return sessionmaker(autoflush=False, bind=engine)()
+
+
+def test_many_workouts_single_commit_respects_fk_order():
+    """Regression (#239 follow-up): many workouts + a SINGLE end-of-loop commit must
+    not trip `hevy_sets_workout_id_fkey`.
+
+    Reproduces the first-prod-backfill failure exactly: with `SessionLocal`'s
+    autoflush=False and no `relationship()` between the models, the unit of work emitted
+    the `hevy_sets` INSERT batch while parent `hevy_workouts` rows were still pending.
+    On the prod-faithful (FK-enforced, autoflush=False) session below, this raised
+    IntegrityError before the `db.flush()` fix in `_upsert_workout`; after it, every
+    workout and its sets land under one commit — the exact shape `sync_one_user` uses.
+    """
+    db = _prod_faithful_session()
+    try:
+        db.add(models.User(id=1, email="luke@example.com", hashed_password="x"))
+        db.commit()
+        now = datetime(2026, 8, 25, tzinfo=timezone.utc)
+        for i in range(6):
+            w = _wk(f"w{i}", "2026-08-24T10:00:00Z", "Upper",
+                    [_ex("BENCH", [{"type": "normal", "weight_kg": 100.0, "reps": 5, "rpe": 8.0}])])
+            hw._upsert_workout(db, w, 1, now)
+        db.commit()   # the single commit that used to raise IntegrityError
+
+        assert db.query(models.HevyWorkout).count() == 6
+        assert db.query(models.HevySet).count() == 6
+        orphans = (
+            db.query(models.HevySet)
+            .outerjoin(models.HevyWorkout, models.HevySet.workout_id == models.HevyWorkout.hevy_id)
+            .filter(models.HevyWorkout.hevy_id.is_(None))
+            .count()
+        )
+        assert orphans == 0
+    finally:
+        db.close()
+
+
 def test_reingest_is_idempotent(db_session):
     _user(db_session)
     now = datetime(2026, 8, 25, tzinfo=timezone.utc)
