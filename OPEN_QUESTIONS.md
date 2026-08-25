@@ -81,12 +81,22 @@ unrunnable because the whole chain below it was unbuilt: nothing persisted Hevy 
 no transform, no `load_metrics` table. The work decomposes into four gates, built in order,
 each the substrate of the next:
 
-- **Gate 1 — persistence (LANDS this session).** `hevy_workouts` + `hevy_sets` store
-  (PK-upsert, raw payload kept), 180-day backfill, dedup flag-and-adjudicate (D-G), and a
-  usage-joined laterality-coverage audit (`audit_laterality_coverage`) that closes the
-  default-template hole found 2026-08-25. The laterality session-pairing mechanism (D-E)
-  lands with it. **HELD PR** per `#238` schema-migration exception; prod row-count / 180-day /
-  known-dedup-pairs assertion is the post-deploy operator gate ("landed ≠ live").
+- **Gate 1 — persistence — DONE 2026-08-25, live-verified (#239, #240).** `hevy_workouts` +
+  `hevy_sets` store (PK-upsert, raw payload kept), backfill, dedup flag-and-adjudicate (D-G),
+  usage-joined laterality-coverage audit (`audit_laterality_coverage`), laterality
+  session-pairing mechanism (D-E). Landed as `#103`/`#104`/`#105`. **Live backfill assertions
+  (prod, post-#104 fix):** 56 workouts / 1710 sets; span 2026-04-05 → 2026-08-24 (entire Hevy
+  history fits inside 180 d, so backfill depth is moot — the store is COMPLETE, not merely
+  180-day). Dedup flagged exactly the two known same-day pairs (16/17 Jun VO2+Upper, 01 Jul
+  Upper ×2); the planned-routine-artifact copy of each (larger set count, zero RPE) was
+  operator-`excluded_at` → effective store **54 workouts / 1609 sets**. RPE coverage is ~100%
+  of RPE-CAPABLE sets from the mid-May 2026 epoch (April is a bounded pre-RPE era); the raw
+  68.6% conflates that with the now-excluded artifacts and 34 structurally RPE-incapable
+  non-rep sets. Two carried defects (transform session, not now): `_rpe_coverage`'s denominator
+  is `type='normal' AND weight_kg NOT NULL` and must become `reps NOT NULL` + excluded-aware;
+  and Hevy planned-vs-performed artifact duplicates (signature: 0-RPE post-epoch rep-based
+  workout, usually a same-day full-RPE partner) — dedup half-catches them, a signature check is
+  candidate hardening. Both in ROADMAP "Banister build".
 - **Gate 2 — transform (`load_events`).** Per-set Tier-0 Mechanical + Neuromuscular per D-C
   (RPE/RIR-dominant, intensity-modified) and D-D (non-rep work in via a named bridging
   constant). Append-only, `formula_version`-tagged. Reads Gate 1's `hevy_sets`.

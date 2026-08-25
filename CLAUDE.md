@@ -252,11 +252,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q6 gate 1 — Hevy strength → four-window load persistence, landed and live-verified; the first-backfill FK-ordering defect fixed and the test engine made prod-faithful (#239/#240)** - See DECISIONS_LOG #239 (persistence + Tier-0 design D-A..D-G) and #240 (FK-ordering fix + standing FK-enforced test substrate + live-backfill verification). Q6 gate 1 DONE, gates 2–4 sequenced; transform agenda in ROADMAP "Banister build". Handoff: `closeout.md`.
+
 - **The human merge gate is removed — Code merges its own PRs on green; a green PR left unmerged is a defect (#238)** - See DECISIONS_LOG #238. New `### Merge disposition` subsection in `CLAUDE.md`'s shared loop block: PRs open ready-for-review never draft, sole hold is a schema migration or an explicit told-to-hold; propagated verbatim to `health-connect-app`. Handoff: `closeout.md`.
 
 - **`/injuries` operator view — the reachable half of the #222/#223 resolution loop; the injury ledger was write-only from the UI (#237)** - See DECISIONS_LOG #237. Effect readout asserts no contraindication (a server-side computation absent from the payload); `restrictions[]` labelled surfaced-not-enforced; badge deferred (no `review_when` today). Follow-ups Q120 + the ROADMAP reframe / edit-supersede lane, and handoff: `closeout.md`.
-
-- **`/health-connect/sync` collapsed to HCA's mapped names and made to fail loud; `#174` superseded; post-deploy sync verified 2026-08-24 (#234/#235/#236)** - See DECISIONS_LOG #234/#235/#236 (#235 Status carries the post-deploy discharge and the never-populated-HRV structural finding). Q116/Q118/Q119 and handoff: `closeout.md`.
 
 ---
 
