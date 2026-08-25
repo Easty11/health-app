@@ -9784,26 +9784,35 @@ routing, exactly as built:
   `f(RIR) · h(I)`, RPE-dominant, `I = effective_weight / e1RM`. Bands m/f from RIR = 10 − RPE.
   `m`: RIR≥4→1.0, 2–3→1.15, 0–1→1.30. `f`: ≥5→0, 4→.25, 3→.5, 2→.75, 1→.9, 0→1.0.
   `h(I) = 0.25 + 0.75·clamp((I−0.40)/0.45, 0, 1)`; **no e1RM fit → h = 0.5**.
-- **Epoch gate (the missing-RPE rule).** A set's RPE is usable **only if its session is on/after
-  `EPOCH_RPE_COMPLETE`** — pre-epoch RPE is not trusted and the set bands by reps alone even when
-  it carries an `rpe`. **No imputation, ever.** RPE-absent (or pre-epoch) rep set: Mechanical
-  `m = 1.0`; Neuromuscular = the reps-band prior (reps≤5→0.6, 6–11→0.35, ≥12→0.15), no h(I).
+- **Missing-RPE rule — PER-SET, date-independent.** A set with an `rpe` bands on (reps, RPE)
+  **whatever its date**; a set without one takes the reps-band prior. **No imputation, ever.**
+  RPE-absent rep set: Mechanical `m = 1.0`; Neuromuscular = the reps-band prior (reps≤5→0.6,
+  6–11→0.35, ≥12→0.15), no h(I). (This supersedes the brief's/ROADMAP's older "pre-epoch RPE
+  bands by reps alone" wording — "pre-epoch RPE is not trusted" appears in no decision and is
+  removed; the epoch is diagnostic-only, below.)
 - **e1RM.** Per-template Epley-with-RIR `w·(1 + (reps + RIR)/30)`, RIR the continuous 10−RPE,
-  rolling 60 d, **fitted from RPE-usable sets only** (failure sets, which carry no `rpe`, do not
-  fit it). An RPE-absent set may CONSUME a fit but never UPDATES it; a session's own top set may
-  set its own intensity reference (window is `≤ as_of`).
+  rolling 60 d, **fitted from ALL RPE-present working sets, ANY date** (failure sets, which carry
+  no `rpe`, do not fit it). An RPE-absent set may CONSUME a fit but never UPDATES it; a session's
+  own top set may set its own intensity reference (window is `≤ as_of`).
 - **Warmups** ×0.5 Mechanical, **excluded from NM**. **Failure type = RIR 0** by definition (a
-  set-type fact, epoch-independent, needs no `rpe`).
+  set-type fact, needs no `rpe`).
 - **Non-rep work (D-D).** Carries/sleds and timed holds bridge into the Mechanical kg·reps
   series: Mechanical `+= effective_weight × distance_m × K_dist` (`K_dist = 0.3`) and
   `+= effective_weight × duration_s × K_time` (`K_time = 0.05`). **NM from non-rep = 0** at Tier 0.
 - **Bodyweight.** `effective_weight = weight_kg` when present and > 0, else `BODYWEIGHT_KG` (pure
   bodyweight). Weighted-bodyweight (an added plate) uses the plate alone at Tier 0 — a known
   undercount, **surfaced** (new OPEN_QUESTIONS Tier-0-gaps item), never silently corrected.
-- **Laterality halving (D-E).** A `unilateral` template in ≥2 blocks of one session is halved
-  (both windows). An UNTAGGED template in ≥2 blocks is INDETERMINATE — surfaced in `provenance`,
-  **never halved** (fail-closed; the transform must not guess laterality). Uses the existing
-  `laterality.detect_session_pairing`, template tag governing, never note parsing.
+- **Laterality — LOAD SUMS SETS AS LOGGED (D-E supersession).** Unilateral work is genuine work
+  (3 sets/leg of 40kg×10 = 2400 kg·reps, at parity with the bilateral equivalent), so the D-E
+  pairing **NEVER discounts cost** — the halving is narrowed to the movement-count / asymmetry
+  instrument. `laterality.detect_session_pairing` is retained for **`provenance` only**:
+  `paired_templates` (unilateral in ≥2 blocks) and `indeterminate_laterality` (untagged in ≥2
+  blocks) are both surfaced for that instrument, applied to no load sum. (Supersedes `#239` D-E's
+  "the halving itself is the transform's" for the load path.)
+- **Epoch — DIAGNOSTIC ONLY.** `EPOCH_RPE_COMPLETE` gates no cost and no e1RM path. Its one use:
+  a rep-based workout **on/after** it whose working sets carry no RPE at all is a
+  planned-vs-performed artifact signature (D-G hardening candidate), flagged `post_epoch_zero_rpe`
+  in `provenance`.
 - **Dedup respected from day one (D-G).** The transform reads `excluded_at IS NULL` — an
   adjudicated-out artifact never enters load.
 - **RIR banding of half-point RPE.** RIR = round-half-up(10 − RPE), clamped ≥ 0 — a deterministic
@@ -9821,8 +9830,10 @@ events keyed on `(source, source_ref, window, formula_version)` makes a coeffici
 delete-and-reinsert of one `formula_version` — landed history for other versions is untouched, and
 the daily rollup (gate 3) reads whichever version it is pinned to. Recording the transform's gaps
 in `provenance` (RPE- vs reps-banded counts, e1RM fit vs 0.5 fallback, non-rep contribution,
-laterality halving, indeterminate templates) means the coverage of a computed value travels with
-it — the "gap recording" the brief names — instead of being re-derived downstream.
+`paired_templates` / `indeterminate_laterality` surfacing, `post_epoch_zero_rpe`) means the
+coverage of a computed value travels with it — the "gap recording" the brief names — instead of
+being re-derived downstream. Load itself sums sets as logged; laterality and the epoch inform the
+asymmetry and dedup instruments, not cost.
 
 **Status.** Built and test-proven; not yet live. **PR HELD for operator per `#238`'s
 schema-migration exception** (adds `load_events`, migration `c7d9e2f14a86`). The live recompute
@@ -9830,24 +9841,27 @@ schema-migration exception** (adds `load_events`, migration `c7d9e2f14a86`). The
 provenance spot-check against the 54/1609 gate-1 substrate) is the post-deploy gate — landed ≠ live.
 Gate 3 (the `load_metrics` + Banister daily rollup, reading these events) is the next lane.
 
-**How you know.** `backend/tests/test_load_events.py` (33 cases: band tables + every routing
-branch mutation-proofed, e1RM rolling fit, epoch gating flips banding, D-E halving vs
-indeterminate-surfaced, `excluded_at` skipped, idempotent per-`formula_version` recompute,
-provenance gaps) and the two rewritten `test_hevy_workouts_ingestion.py` coverage cases pass; full
-backend suite green (1195 passed) but for five failures that reproduce identically on the clean
-tree pre-change (four date-sensitive: `test_capability_observations`, three `test_cbti_eval_trigger`;
-plus the `#240` `test_context_builder_output_unchanged_pre_post_refactor` shallow-clone artifact).
+**How you know.** `backend/tests/test_load_events.py` (37 cases: band tables + every routing branch
+mutation-proofed; **RPE-is-per-set-any-date** — a discarded pre-epoch RPE FAILS; **load-sums-as-logged**
+— a halved unilateral cost FAILS; e1RM fits pre-epoch RPE too; the `post_epoch_zero_rpe` diagnostic;
+`excluded_at` skipped; idempotent per-`formula_version` recompute; provenance gaps) and the two
+rewritten `test_hevy_workouts_ingestion.py` coverage cases pass; full backend suite green (1197
+passed) but for five failures that reproduce identically on the clean tree pre-change (four
+date-sensitive: `test_capability_observations`, three `test_cbti_eval_trigger`; plus the `#240`
+`test_context_builder_output_unchanged_pre_post_refactor` shallow-clone artifact).
 `load_events` renders valid Postgres DDL under the `postgresql` dialect and builds on the
 FK-enforced SQLite test engine via the `_JSONB` variant. Migration `c7d9e2f14a86` chains
 `f9a2c1d40b73` → head (the pre-existing second head `e2d5c7a1b9f3` predates this branch on master
 and is untouched — a separate governance matter, flagged not fixed).
 
-**Do not revisit unless.** A coefficient, band, bridging constant, or the epoch date is corrected —
-that is a **recompute under a new `formula_version`**, not a change to `load_events`' shape and not
-an edit to the constants above (supersede by a new entry). Reopening the store shape (a hard FK on
-`source_ref`, per-window separate tables, or dropping `formula_version` from the natural key)
-reintroduces exactly the recompute-as-migration coupling D-B forbids. The known Tier-0 modelling
-gaps (weighted-bodyweight undercount, non-rep NM = 0, half-point RIR banding) are logged as an
-OPEN_QUESTIONS item for Tier-1, not a defect in this entry.
+**Do not revisit unless.** A coefficient, band, or bridging constant is corrected — that is a
+**recompute under a new `formula_version`**, not a change to `load_events`' shape and not an edit to
+the constants above (supersede by a new entry). Do **not** reinstate epoch-gated RPE or laterality
+halving in the load path — both were review-rejected here (`#238`-gate PR): RPE is per-set and
+date-independent, load sums sets as logged, and the epoch is diagnostic-only. Reopening the store
+shape (a hard FK on `source_ref`, per-window separate tables, or dropping `formula_version` from the
+natural key) reintroduces exactly the recompute-as-migration coupling D-B forbids. The known Tier-0
+modelling gaps (weighted-bodyweight undercount, non-rep NM = 0, half-point RIR banding) are logged
+as an OPEN_QUESTIONS item for Tier-1, not a defect in this entry.
 
 ---
