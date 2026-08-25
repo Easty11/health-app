@@ -75,21 +75,38 @@ load path before the four-window engine — or even Tier 0 with a strength term 
 trusted. Was tracked as "B2" in an out-of-project session's scheme that never entered the
 repo; recorded here under the canonical Q-series.
 
-**State:** OPEN — **re-scoped 2026-08-03: this is unbuilt work, not an unverified one.** The named
-check — a Railway query confirming Hevy strength volume populates per-window `load_metrics` rows — is
-**unrunnable**, because no `load_metrics` table exists. Confirmed three ways: `to_regclass(
-'public.load_metrics')` returned NULL against prod Railway (2026-08-03, chat session); no migration in
-`backend/migrations/` creates it (re-verified against master this session); and `mcp_server.py:578`
-says so in the user-facing output — "Hevy volume load is NOT yet integrated into this calculation
-(aerobic_sessions only)."
+**State:** OPEN — **re-scoped 2026-08-25 into four sequenced gates.** The original single
+check (a Railway query showing strength volume in per-window `load_metrics` rows) was
+unrunnable because the whole chain below it was unbuilt: nothing persisted Hevy workouts,
+no transform, no `load_metrics` table. The work decomposes into four gates, built in order,
+each the substrate of the next:
 
-`#28` already records the shape: *"Decided, not implemented … Gated on: per-window `load_metrics` at
-ingestion · Hevy strength ingestion (Q6) · Polar zone (#10)."* So the work is: build Hevy strength
-volume-load → Mechanical + Neuromuscular `load_metrics` rows, sequenced after the (also unbuilt)
-`load_metrics` table. **Consequence today:** strength contributes **zero** to the deployed load metric,
-which is the interim aerobic-only ACWR of `#8`. OPEN rather than BLOCKED — nothing prevents building
-it; it simply has not been built. → `DONE → #28` when the ingestion exists **and** a query then shows
-rows landing. Owner: Luke. Cross-refs `#28`, `#32`, `#10`, ROADMAP "Banister build".
+- **Gate 1 — persistence (LANDS this session).** `hevy_workouts` + `hevy_sets` store
+  (PK-upsert, raw payload kept), 180-day backfill, dedup flag-and-adjudicate (D-G), and a
+  usage-joined laterality-coverage audit (`audit_laterality_coverage`) that closes the
+  default-template hole found 2026-08-25. The laterality session-pairing mechanism (D-E)
+  lands with it. **HELD PR** per `#238` schema-migration exception; prod row-count / 180-day /
+  known-dedup-pairs assertion is the post-deploy operator gate ("landed ≠ live").
+- **Gate 2 — transform (`load_events`).** Per-set Tier-0 Mechanical + Neuromuscular per D-C
+  (RPE/RIR-dominant, intensity-modified) and D-D (non-rep work in via a named bridging
+  constant). Append-only, `formula_version`-tagged. Reads Gate 1's `hevy_sets`.
+- **Gate 3 — rollup (`load_metrics` + Banister).** Daily per-window derived rollup, and the
+  fitness-fatigue model (ROADMAP "Banister build"). Recomputable from `load_events` (D-B), so
+  coefficient/routing corrections are recomputes, never migrations of computed history.
+- **Gate 4 — verified at the machine.** The original Q6 check: a Postgres query showing
+  strength volume landing in per-window `load_metrics` rows, non-zero.
+
+**Consequence today (unchanged):** strength contributes **zero** to the deployed load metric —
+the interim aerobic-only ACWR of `#8` (`mcp_server.get_training_load` still aerobic-only). OPEN
+rather than BLOCKED — nothing prevents building the gates; they simply are not yet all built.
+→ `DONE → #28` when Gate 2 lands (the transform exists) **and** Gate 4's query shows rows
+landing. Owner: Luke. Cross-refs `#28`, `#32`, `#10`, `#33`, `#239` (the
+persistence + Tier-0 design decision), ROADMAP "Banister build".
+
+**Region-tag note (2026-08-25):** all 57 custom templates remain region-unadjudicated. This
+blocks a future region-DISTRIBUTED Mechanical channel (per-region load) but NOT the systemic
+Tier-0 Mechanical of D-C, which is region-agnostic. No action this lane; recorded so Gate 2's
+region variant does not read the empty tag coverage as "no regions loaded".
 
 **Addendum (2026-08-11) — Hevy unit-trustworthiness.** Before Hevy kg feeds `load_metrics`, three
 weight-semantics hazards, operator-confirmed:
@@ -3584,6 +3601,16 @@ cross-ref correction recorded above** — it is the reason no separate entry was
 `#123` closed questions leave the scan surface, so if this question closes *before*
 the routing amendment lands, the cross-ref correction loses its only live home and needs relocating
 at that moment. Owner: Luke.
+
+**Annotation (2026-08-25) — D-B removes the migration-cost urgency, not the substance.** This
+question's urgency framing was "correct the routing now or pay a migration of computed history
+later." The two-level store settled this lane (D-B: `load_events` append-only → `load_metrics`
+derived and recomputable) removes that cost: a routing amendment after Tier 0 lands is a recompute
+against `load_events`, not a migration. So the *when* relaxes — the amendment no longer has to beat
+the transform to master. What does NOT relax is the **substance**: the discriminator that
+distinguishes supramaximal/intermittent from continuous work (average HR cannot do it) still has to
+be designed, and the routing amendment to `#28` still has to be authored. Recompute-cheap is not
+built-for-free. Still OPEN; still owned by the discriminator design pass.
 
 
 ## Q116. The `schedule_item` validator is live and the 18 active rows were never backfilled
