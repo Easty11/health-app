@@ -64,13 +64,22 @@ def _patch_post(monkeypatch, response):
     return sent
 
 
+def _ensure_user(db, uid):
+    """Seed the referenced user so the FK-enforced test engine (#239) accepts the row."""
+    if uid is not None and db.get(models.User, uid) is None:
+        db.add(models.User(id=uid, email=f"u{uid}@test", hashed_password="x"))
+        db.flush()
+
+
 def _tmpl(db, id_, title, is_custom, owner=None):
+    _ensure_user(db, owner)
     db.add(models.HevyExerciseTemplate(
         id=id_, title=title, type="duration", is_custom=is_custom, owner_user_id=owner))
     db.commit()
 
 
 def _seed_key(db, user_id=USER):
+    _ensure_user(db, user_id)
     db.add(models.UserIntegration(
         user_id=user_id, provider="hevy", api_key_encrypted=encrypt("fake-key")))
     db.commit()
@@ -253,6 +262,7 @@ def test_chat_reports_success_not_failure_after_a_bad_body(db_session, monkeypat
     """
     from routers import chat
 
+    _ensure_user(db_session, USER)   # FK-enforced engine (#239) needs the owning user
     db_session.add(models.UserIntegration(
         user_id=USER, provider="hevy", api_key_encrypted=encrypt("fake-key"),
         templates_synced_at=datetime.now(timezone.utc)))  # fresh: skip the #212 gate (orthogonal)

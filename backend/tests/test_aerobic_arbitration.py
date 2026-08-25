@@ -78,6 +78,9 @@ def test_g2_polar_and_hc_overlap_exactly_one_canonical_polar():
 
 
 def test_g2_holds_via_db_read(db_session):
+    # Seed user 1 (the _session default owner) for the FK-enforced engine (#239).
+    db_session.add(models.User(id=1, email="u1@test", hashed_password="x"))
+    db_session.commit()
     db_session.add_all([
         _session("polar_v4", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0)),
         _session("health_connect", _utc(2026, 8, 1, 6, 5), _utc(2026, 8, 1, 6, 55)),
@@ -107,6 +110,9 @@ def test_g3_hc_active_recovery_survives_alongside_unrelated_polar():
 
 
 def test_g3_holds_via_db_read(db_session):
+    # Seed user 1 (the _session default owner) for the FK-enforced engine (#239).
+    db_session.add(models.User(id=1, email="u1@test", hashed_password="x"))
+    db_session.commit()
     db_session.add(_session("health_connect", _utc(2026, 8, 2, 6, 0), _utc(2026, 8, 2, 6, 30)))
     db_session.commit()
     rows = arbitrated_sessions(1, db_session)

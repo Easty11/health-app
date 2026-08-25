@@ -30,6 +30,10 @@ from hevy_templates import catalogue_titles
 
 
 def _tmpl(db, tid, title, *, is_custom=False, owner=None):
+    # Seed the owning user so the FK-enforced test engine (#239) accepts custom rows.
+    if owner is not None and db.get(models.User, owner) is None:
+        db.add(models.User(id=owner, email=f"u{owner}@test", hashed_password="x"))
+        db.flush()
     db.add(models.HevyExerciseTemplate(
         id=tid, title=title, is_custom=is_custom, owner_user_id=owner))
     db.commit()

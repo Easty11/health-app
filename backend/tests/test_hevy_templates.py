@@ -12,7 +12,16 @@ USER_A = 1
 USER_B = 2
 
 
+def _ensure_user(db, uid):
+    """Seed the owning user so the FK-enforced test engine (#239) accepts a custom
+    template. Idempotent — safe to call for every template in a test."""
+    if uid is not None and db.get(models.User, uid) is None:
+        db.add(models.User(id=uid, email=f"u{uid}@test", hashed_password="x"))
+        db.flush()
+
+
 def _tmpl(db, id_, title, is_custom, owner=None, type_="weight_reps"):
+    _ensure_user(db, owner)
     row = models.HevyExerciseTemplate(
         id=id_, title=title, type=type_, is_custom=is_custom, owner_user_id=owner,
     )

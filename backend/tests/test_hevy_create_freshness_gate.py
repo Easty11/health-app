@@ -33,6 +33,10 @@ def _run(coro):
 
 def _integration(db, *, marker, user_id=1):
     """A stored (decryptable) Hevy key with a chosen freshness marker."""
+    # Seed the owning user so the FK-enforced test engine (#239) accepts the integration.
+    if db.get(models.User, user_id) is None:
+        db.add(models.User(id=user_id, email=f"u{user_id}@test", hashed_password="x"))
+        db.flush()
     db.add(models.UserIntegration(
         user_id=user_id, provider="hevy",
         api_key_encrypted=encrypt("hk_test"), templates_synced_at=marker))

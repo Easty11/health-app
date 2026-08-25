@@ -21,6 +21,7 @@ def _seed_template(db, tid, title, laterality=None, is_custom=True, adjudicated=
         owner_user_id=None, laterality=laterality,
         adjudicated_at=datetime.now(timezone.utc) if adjudicated else None,
     ))
+    db.flush()   # parent template before any ExerciseRegionTag references it (FK-enforced, #239)
 
 
 def _tag(db, tid, region_key, role="primary", source="human_confirmed"):

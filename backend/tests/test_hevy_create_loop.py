@@ -26,7 +26,15 @@ USER = 7
 NEW_UUID = "aaaaaaaa-1111-2222-3333-444444444444"
 
 
+def _ensure_user(db, uid):
+    """Seed the referenced user so the FK-enforced test engine (#239) accepts the row."""
+    if uid is not None and db.get(models.User, uid) is None:
+        db.add(models.User(id=uid, email=f"u{uid}@test", hashed_password="x"))
+        db.flush()
+
+
 def _tmpl(db, id_, title, is_custom, owner=None, type_="weight_reps"):
+    _ensure_user(db, owner)
     db.add(models.HevyExerciseTemplate(
         id=id_, title=title, type=type_, is_custom=is_custom, owner_user_id=owner,
     ))
@@ -34,6 +42,7 @@ def _tmpl(db, id_, title, is_custom, owner=None, type_="weight_reps"):
 
 
 def _seed_key(db, user_id=USER):
+    _ensure_user(db, user_id)
     db.add(models.UserIntegration(
         user_id=user_id, provider="hevy", api_key_encrypted=encrypt("fake-key"),
     ))
