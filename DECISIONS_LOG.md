@@ -9765,7 +9765,7 @@ autoflush=True default reopens exactly the gap `#104` was shipped green through.
 
 ---
 
-### #NEXT. Q6 gate 2 — the Tier-0 `load_events` transform (D-C/D-D), `formula_version` 'tier0-v1'
+### 241. Q6 gate 2 — the Tier-0 `load_events` transform (D-C/D-D), `formula_version` 'tier0-v1'
 
 **Decision.** The four-window load transform is built and lands to spec: `hevy_workouts.raw`
 (gate 1, source of truth) → `backend/load_events.py` (Tier-0 D-C/D-D) → the new `load_events`
@@ -9801,7 +9801,7 @@ routing, exactly as built:
   `+= effective_weight × duration_s × K_time` (`K_time = 0.05`). **NM from non-rep = 0** at Tier 0.
 - **Bodyweight.** `effective_weight = weight_kg` when present and > 0, else `BODYWEIGHT_KG` (pure
   bodyweight). Weighted-bodyweight (an added plate) uses the plate alone at Tier 0 — a known
-  undercount, **surfaced** (new OPEN_QUESTIONS Tier-0-gaps item), never silently corrected.
+  undercount, **surfaced** (OPEN_QUESTIONS Q121, Tier-0-gaps item), never silently corrected.
 - **Laterality — LOAD SUMS SETS AS LOGGED (D-E supersession).** Unilateral work is genuine work
   (3 sets/leg of 40kg×10 = 2400 kg·reps, at parity with the bilateral equivalent), so the D-E
   pairing **NEVER discounts cost** — the halving is narrowed to the movement-count / asymmetry
@@ -9816,7 +9816,7 @@ routing, exactly as built:
 - **Dedup respected from day one (D-G).** The transform reads `excluded_at IS NULL` — an
   adjudicated-out artifact never enters load.
 - **RIR banding of half-point RPE.** RIR = round-half-up(10 − RPE), clamped ≥ 0 — a deterministic
-  Tier-0 choice, flagged for Tier-1 review (same OPEN_QUESTIONS item).
+  Tier-0 choice, flagged for Tier-1 review (OPEN_QUESTIONS Q121).
 
 Gate-2 agenda item 4 rides here: **`hevy_workouts._rpe_coverage` is corrected** — denominator is
 now `reps IS NOT NULL` over non-excluded, in-window workouts (DB-queried, `excluded_at`-aware),
@@ -9862,6 +9862,6 @@ date-independent, load sums sets as logged, and the epoch is diagnostic-only. Re
 shape (a hard FK on `source_ref`, per-window separate tables, or dropping `formula_version` from the
 natural key) reintroduces exactly the recompute-as-migration coupling D-B forbids. The known Tier-0
 modelling gaps (weighted-bodyweight undercount, non-rep NM = 0, half-point RIR banding) are logged
-as an OPEN_QUESTIONS item for Tier-1, not a defect in this entry.
+as OPEN_QUESTIONS Q121 for Tier-1, not a defect in this entry.
 
 ---

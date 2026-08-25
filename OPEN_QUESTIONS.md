@@ -3791,9 +3791,9 @@ first candidate — it is a human-recall exercise precisely because this field i
 
 ---
 
-## Q#NEXT. Tier-0 load transform modelling gaps — weighted-bodyweight, non-rep NM, half-point RIR
+## Q121. Tier-0 load transform modelling gaps — weighted-bodyweight, non-rep NM, half-point RIR
 
-The gate-2 `load_events` transform (`formula_version 'tier0-v1'`, DECISIONS_LOG the gate-2 entry)
+The gate-2 `load_events` transform (`formula_version 'tier0-v1'`, DECISIONS_LOG #241)
 ships three deliberate Tier-0 simplifications. Each is **surfaced, not hidden**, and each is a
 recompute away (bump `formula_version`) once a Tier-1 answer exists — none is a defect in the
 landed transform.
@@ -3814,4 +3814,4 @@ landed transform.
 **State:** OPEN — not blocking; the transform is correct and honest at Tier 0, and `provenance`
 records where each gap bit. **Next action:** none until Tier 1; the weighted-bodyweight tag is the
 first candidate (it needs the same operator-annotation path `laterality` uses). Owner: Luke.
-Cross-refs the gate-2 DECISIONS_LOG entry, `#28`/`#32` (D-A/D-C/D-D), `#74`/`#76` (template tags).
+Cross-refs `#241` (the gate-2 entry), `#28`/`#32` (D-A/D-C/D-D), `#74`/`#76` (template tags).
