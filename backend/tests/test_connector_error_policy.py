@@ -106,6 +106,9 @@ def test_polar_refresh_failure_returns_424(db_session, monkeypatch):
         "access_token": "old", "refresh_token": "refresh-me",
         "expires_at": expired, "scope": None, "token_type": "bearer",
     })
+    # Seed the owning user so the FK-enforced test engine (#239) accepts the integration.
+    db_session.add(models.User(id=user_id, email=f"u{user_id}@test", hashed_password="x"))
+    db_session.flush()
     db_session.add(models.UserIntegration(
         user_id=user_id, provider="polar", api_key_encrypted=encrypt(payload),
     ))

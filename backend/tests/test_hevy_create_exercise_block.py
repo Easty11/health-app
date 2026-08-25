@@ -35,6 +35,13 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+def _ensure_user(db, uid):
+    """Seed the referenced user so the FK-enforced test engine (#239) accepts the row."""
+    if uid is not None and db.get(models.User, uid) is None:
+        db.add(models.User(id=uid, email=f"u{uid}@test", hashed_password="x"))
+        db.flush()
+
+
 def _key(db, user_id=1):
     """A stored Hevy key, so the processor's not-connected pre-check passes.
 
@@ -43,6 +50,7 @@ def _key(db, user_id=1):
     gate's own behaviour is covered by `test_hevy_create_freshness_gate.py`.
     """
     from encryption import encrypt
+    _ensure_user(db, user_id)
     db.add(models.UserIntegration(
         user_id=user_id, provider="hevy", api_key_encrypted=encrypt("hk_test"),
         templates_synced_at=datetime.now(timezone.utc)))
@@ -50,6 +58,7 @@ def _key(db, user_id=1):
 
 
 def _template(db, tid, title, *, is_custom=False, owner=None):
+    _ensure_user(db, owner)
     db.add(models.HevyExerciseTemplate(
         id=tid, title=title, is_custom=is_custom, owner_user_id=owner))
     db.commit()

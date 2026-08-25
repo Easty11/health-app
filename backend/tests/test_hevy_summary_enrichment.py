@@ -72,6 +72,9 @@ WORKOUT = {
 
 
 def _install(monkeypatch, db_session, workout=WORKOUT):
+    # Seed the owning user so the FK-enforced test engine (#239) accepts the integration.
+    db_session.add(models.User(id=USER, email=f"u{USER}@test", hashed_password="x"))
+    db_session.flush()
     db_session.add(models.UserIntegration(
         user_id=USER, provider="hevy", api_key_encrypted=encrypt("fake-key"),
     ))

@@ -29,6 +29,10 @@ CATALOGUE = [
 
 
 def _seed(db, is_custom=False, owner=None):
+    # Seed the owning user so the FK-enforced test engine (#239) accepts custom rows.
+    if owner is not None and db.get(models.User, owner) is None:
+        db.add(models.User(id=owner, email=f"u{owner}@test", hashed_password="x"))
+        db.flush()
     for tid, title in CATALOGUE:
         db.add(models.HevyExerciseTemplate(
             id=tid, title=title, type="weight_reps",

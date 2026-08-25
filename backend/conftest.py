@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -10,16 +10,37 @@ import database
 import models  # noqa: F401 — registers all tables on database.Base.metadata
 
 
+def _enforce_sqlite_fks(dbapi_connection, _connection_record):
+    """Turn ON `PRAGMA foreign_keys` for every SQLite connection.
+
+    SQLite ships FK enforcement OFF by default, so the suite historically ran
+    FK-BLIND — a child row could be inserted with no parent and pass. That masked a
+    real ordering bug in the Hevy ingest path (autoflush=False + no `relationship()`
+    let the unit of work emit `hevy_sets` before its parent `hevy_workouts`; on
+    Postgres this is `hevy_sets_workout_id_fkey`, DECISIONS_LOG #239 follow-up).
+    Enforcing FKs here makes the test substrate match Postgres so that class of bug is
+    caught in CI, not on first prod run.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 @pytest.fixture()
 def db_session():
-    """Isolated in-memory SQLite session per test — never touches the dev/prod DB."""
+    """Isolated in-memory SQLite session per test — never touches the dev/prod DB.
+
+    Prod-faithful on both axes so referential-integrity and flush-ordering bugs surface
+    here rather than in production: FK enforcement ON (see `_enforce_sqlite_fks`) and
+    `autoflush=False`, mirroring `database.SessionLocal`."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    event.listen(engine, "connect", _enforce_sqlite_fks)
     database.Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine)()
+    session = sessionmaker(autoflush=False, bind=engine)()
     _seed_canonical_entries(session)
     try:
         yield session

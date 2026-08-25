@@ -20,6 +20,7 @@ def _seed_template(db, tid, title, adjudicated=False):
         id=tid, title=title, is_custom=False, owner_user_id=None,
         adjudicated_at=NOW if adjudicated else None,
     ))
+    db.flush()   # parent template before any ExerciseRegionTag references it (FK-enforced, #239)
 
 
 def _tag(db, tid, region_key):
