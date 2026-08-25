@@ -9649,3 +9649,82 @@ in which case the fix is the check, not a human gate. Finding Code self-merging 
 of a defect; it is this decision working.
 
 ---
+
+### #NEXT. Hevy strength → four-window load: persistence layer + Tier-0 design (Q6)
+
+**Decision.** Land the persistence substrate the Q6 four-window load lane rests on, and
+record the chat-settled Tier-0 design it will be built to (`#28` taxonomy/routing, `#32`
+independent per-window τ, `#33` ΔLoad, `#79` key-on-template-id). The transform
+(`load_events`) and the daily rollup (`load_metrics` + Banister) are sequenced AFTER, built
+to this design. Seven sub-decisions, labelled D-A..D-G:
+
+- **D-A · Window-native units.** Per `#32`'s independent channels, load units need no
+  cross-channel commensurability — only internal consistency over time. Mechanical /
+  Neuromuscular ship strength-native; Metabolic ships TRIMP-native. The first within-channel
+  bridging decision triggers only when a second source enters a channel (Q115 is the expected
+  trigger for Neuromuscular). SPEC — no unit code lands this session.
+- **D-B · Two-level store.** `load_events` (append-only, per session-window, source refs +
+  `formula_version`) → `load_metrics` (daily rollup, derived, recomputable). Coefficient and
+  routing corrections are recomputes, never migrations of computed history. `hevy_workouts.raw`
+  keeps the untouched payload so any transform version recomputes from source without a
+  re-fetch. This removes Q115's stated migration-cost urgency. Store LANDED (`hevy_workouts`,
+  `hevy_sets`); `load_events`/`load_metrics` are the next lanes.
+- **D-C · Transform v1 (Tier 0, systemic).** Per normal set: Mechanical = weight_kg × reps ×
+  mech(band); Neuromuscular = f(RIR)·h(I), RPE-dominant, intensity I = weight/e1RM as a bounded
+  modifier (velocity-mandate proxy per `#32` — RPE/RIR is proximity-to-failure, the measurable
+  correlate of velocity loss). Bands from (reps, RPE). All coefficients REASONED PRIOR,
+  provenance-labelled per `#32`. Warmups excluded from NM, included in Mechanical at reduced
+  band weight; failure sets are RIR 0 by definition. SPEC — the transform is a later session.
+- **D-D · Non-rep sets are IN at Tier 0** (operator ruling 2026-08-25). Carries/sleds =
+  weight × distance; timed holds = load × seconds. One named bridging constant maps kg·m and
+  kg·s into the Mechanical kg·reps series — REASONED PRIOR, `formula_version`-tagged,
+  recompute-cheap. NM from non-rep work = 0 at Tier 0 (flagged arguable for maximal sled
+  efforts). SPEC. The store already persists `distance_meters` / `duration_seconds` for it.
+- **D-E · Laterality session rule.** Template tag + paired same-template blocks in one session
+  → one movement; halve the system-level double-count. Forward-stream convention (routine-creation
+  enforcement via the `#13`/`#14` interception path): unilateral exercises are two blocks,
+  sequenced left-then-right, side in note — yielding side identity for the asymmetry instrument.
+  BACKFILL uses side-agnostic pairing only. One-block both-limbs entries and alternating
+  single-blocks: template tag governs, never note parsing. LANDED as the data mechanism
+  (`laterality.detect_session_pairing`): unilateral + ≥2 blocks → paired; untagged + ≥2 blocks →
+  indeterminate (surfaced, never guessed); the halving itself is the transform's.
+- **D-F · Step detection flags, never auto-corrects.** Within-exercise weight discontinuities
+  (venue/machine change) are flagged for operator annotation + recompute, never auto-corrected.
+  In-data evidence: Face Pull 2:1 note 21 Jul, Hip Thrust leverage note 10 Aug, Leg Extension
+  117→55 (bilateral→unilateral machine — a laterality change presenting as a scale step, which
+  is exactly why auto-correction is forbidden). SPEC — detection is a transform-adjacent lane.
+- **D-G · Dedup is flag-and-adjudicate.** PK-upsert on the Hevy workout id; same-window
+  high-similarity pairs flagged for operator adjudication, NEVER auto-dropped. Adjudicated-out
+  workouts leave load via an exclusion mark (`excluded_at`), not deletion. LANDED
+  (`hevy_workouts.detect_duplicate_pairs` + `_recompute_dedup`): sync-derived
+  `dedup_flag`/`dedup_partner_ids` recomputed each run; `excluded_at`/`exclusion_reason`
+  operator-owned and never touched by sync.
+
+**Rationale.** Q6's DONE condition — "a query shows strength volume landing in the load path" —
+was unrunnable because nothing persisted Hevy workouts at all (`to_regclass('public.load_metrics')`
+NULL; `mcp_server.get_training_load` aerobic-only). The design was fully settled in chat but had
+no substrate to be built on or verified against. Persistence-first makes the transform buildable
+and its DONE condition a real query. Splitting store from transform follows D-B: computed history
+is a recompute, so the expensive, revisable part (coefficients, routing, bridging constants) never
+becomes a migration. The two mechanisms that ARE fully determined by the data shape rather than by
+tunable priors — laterality pairing (D-E) and dedup (D-G) — land now with the store, because they
+are read off block structure and workout identity, not off a coefficient anyone will revise.
+
+**Status.** Store + D-E + D-G LANDED and test-proven (pairing positive/negative/mutation-proofed;
+dedup positive/negative/fail-closed; idempotent re-ingest; exclusion mark survives resync).
+D-A/D-C/D-D/D-F are SPEC for the sequenced transform lanes. PR HELD for operator per `#238`'s
+schema-migration exception (this lane adds `hevy_workouts`/`hevy_sets`).
+
+**How you know.** `backend/tests/test_laterality_pairing.py`,
+`test_hevy_workouts_ingestion.py`, `test_laterality_coverage_audit.py` pass (28 tests); the
+migration compiles to valid Postgres DDL under the `postgresql` dialect and the models build on
+the SQLite test engine via a `JSON().with_variant(JSONB, "postgresql")` column. The prod
+assertions (row counts > 0, 180-day span, the two known dedup pairs listed) are the post-deploy
+gate the operator runs after landing — "landed ≠ live".
+
+**Do not revisit unless.** A coefficient/routing correction is proposed — that is a recompute
+against `load_events`, not a change to this store (D-B). Reopening the store shape (adding an FK
+from `hevy_sets.exercise_template_id` to the catalogue, auto-correcting weights, or auto-deleting
+duplicates) reintroduces exactly the failure modes D-F/D-G/#79 forbid.
+
+---
