@@ -950,3 +950,57 @@ class HevySet(Base):
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     rpe: Mapped[float | None] = mapped_column(Float, nullable=True)      # half-point decimals preserved
+
+
+class LoadEvent(Base):
+    """One derived per-session-window load contribution — the recomputable middle
+    layer of the Q6 four-window store (DECISIONS_LOG #28/#32, D-B/D-C/D-D; gate 2).
+
+    The Tier-0 transform (`backend/load_events.py`) reads `hevy_workouts.raw`
+    (source of truth, gate 1) and writes one row per (session, window) here; the
+    daily `load_metrics` + Banister rollup (gate 3) reads these. Per D-B this is the
+    DERIVED tier: a coefficient/routing correction is a recompute — bump
+    `formula_version` and re-derive — never a migration of computed history. So the
+    transform is delete-and-reinsert per (user, `formula_version`); a re-run of the
+    same version is idempotent (the `uq_load_event_session_window_version` natural
+    key), and a new version's rows coexist beside the old until the rollup switches.
+
+    Source-neutral (parallels the wearable ingestion contract, #236):
+    `(source, source_ref)` names the originating session generically, with NO hard FK
+    to `hevy_workouts`. The strength transform emits Mechanical / Neuromuscular from
+    Hevy, but this same store will later hold Metabolic (aerobic) and Psychological
+    (sRPE) events whose `source_ref` points elsewhere — a hard FK would reject them.
+    `user_id` IS a hard FK (CASCADE). Rows orphaned by a hard-deleted or
+    adjudicated-out (`excluded_at`) source session are cleared by the next recompute,
+    which skips those sessions and rewrites the user's rows.
+
+    `provenance` records the transform's GAPS at row grain (D-C/D-D coverage): which
+    sets were RPE-banded vs reps-banded, whether h(I) used a fitted e1RM or the 0.5
+    fallback, non-rep bridging contribution, laterality halving, and untagged-repeated
+    templates that were surfaced-not-halved. It is diagnostic, not consumed by load.
+    """
+    __tablename__ = "load_events"
+    __table_args__ = (
+        UniqueConstraint("source", "source_ref", "window", "formula_version",
+                         name="uq_load_event_session_window_version"),
+        Index("ix_load_events_user_id", "user_id"),
+        Index("ix_load_events_user_window", "user_id", "window"),
+        Index("ix_load_events_user_occurred", "user_id", "occurred_at"),
+        Index("ix_load_events_formula_version", "formula_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(20), nullable=False)        # 'hevy'
+    source_ref: Mapped[str] = mapped_column(String(64), nullable=False)   # session id (soft ref)
+    window: Mapped[str] = mapped_column(String(20), nullable=False)       # 'mechanical' | 'neuromuscular'
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    load: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(20), nullable=False)         # 'kg_reps' | 'nm_au'
+    formula_version: Mapped[str] = mapped_column(String(20), nullable=False)  # 'tier0-v1'
+    provenance: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

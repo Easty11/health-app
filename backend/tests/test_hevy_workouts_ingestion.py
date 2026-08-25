@@ -7,7 +7,7 @@ Covers the persistence-layer guarantees the Q6 load lane rests on (D-B / D-G):
   * dedup flags same-window high-similarity pairs — positive, negative, and
     FAIL-CLOSED (a missing timestamp never lets a same-title pair slip through as
     unique), and NEVER auto-deletes;
-  * RPE coverage over normal weighted sets is reported as a number.
+  * RPE coverage over rep-based, non-excluded sets is reported as a number.
 """
 import asyncio
 from datetime import datetime, timezone
@@ -250,17 +250,32 @@ def test_window_filter_and_missing_start_kept():
     assert hw._in_window(nostart, cutoff) is True   # kept — never silently dropped
 
 
-def test_rpe_coverage_counts_only_normal_weighted_sets():
+def test_rpe_coverage_counts_rep_sets_excluded_aware(db_session):
+    """Denominator = every rep-based set over NON-excluded, in-window workouts
+    (gate-2 fix): bodyweight rep sets (no weight_kg) and warmups WITH reps are IN;
+    non-rep sets (duration/distance only) and excluded workouts are OUT."""
+    _user(db_session)
+    now = datetime(2026, 8, 25, tzinfo=timezone.utc)
+    cutoff = now - __import__("datetime").timedelta(days=180)
     w = _wk("w", "2026-08-24T10:00:00Z", "Upper", [
         _ex("BENCH", [
-            {"type": "normal", "weight_kg": 100.0, "reps": 5, "rpe": 8.0},   # counted, has rpe
-            {"type": "normal", "weight_kg": 100.0, "reps": 5},               # counted, no rpe
-            {"type": "warmup", "weight_kg": 60.0, "reps": 5, "rpe": 5.0},    # excluded (warmup)
+            {"type": "normal", "weight_kg": 100.0, "reps": 5, "rpe": 8.0},   # rep set, has rpe
+            {"type": "normal", "weight_kg": 100.0, "reps": 5},               # rep set, no rpe
+            {"type": "warmup", "weight_kg": 60.0, "reps": 5, "rpe": 5.0},    # rep set (warmup), has rpe
         ]),
-        _ex("PLANK", [{"type": "normal", "duration_seconds": 60}]),          # excluded (no weight)
+        _ex("PULLUP", [{"type": "normal", "reps": 8, "rpe": 9.0}]),          # bodyweight rep set, has rpe
+        _ex("PLANK", [{"type": "normal", "duration_seconds": 60}]),          # non-rep — OUT
     ])
-    cov = hw._rpe_coverage([w])
-    assert cov == {"normal_weighted_sets": 2, "with_rpe": 1, "pct": 50.0}
+    hw._upsert_workout(db_session, w, 1, now)
+    db_session.commit()
+    # 4 rep sets, 3 with rpe → 75.0
+    assert hw._rpe_coverage(db_session, 1, cutoff) == {"rep_sets": 4, "with_rpe": 3, "pct": 75.0}
+
+    # Adjudicate the workout out → excluded-aware coverage drops it entirely.
+    wo = db_session.get(models.HevyWorkout, "w")
+    wo.excluded_at = now
+    db_session.commit()
+    assert hw._rpe_coverage(db_session, 1, cutoff) == {"rep_sets": 0, "with_rpe": 0, "pct": None}
 
 
 # ── End-to-end sync with a stubbed client (backfill window + summary) ────────
@@ -287,6 +302,6 @@ def test_sync_one_user_backfills_window_and_reports(db_session, monkeypatch):
     assert result["fetched_total"] == 2
     assert result["in_window"] == 1
     assert result["workouts_upserted"] == 1
-    assert result["rpe_coverage"] == {"normal_weighted_sets": 1, "with_rpe": 1, "pct": 100.0}
+    assert result["rpe_coverage"] == {"rep_sets": 1, "with_rpe": 1, "pct": 100.0}
     assert db_session.query(models.HevyWorkout).count() == 1     # out-of-window not stored
     assert db_session.get(models.HevyWorkout, "a") is not None

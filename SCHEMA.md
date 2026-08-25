@@ -35,6 +35,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 022 — marker_canonical_entries  FK to users (created_by_user_id, SET NULL, nullable) — runtime-mutable canonical marker map
 025 — hevy_workouts            FK to users (CASCADE) — persisted Hevy workout headers (Q6 load lane)
 026 — hevy_sets                FK to hevy_workouts (CASCADE) — per-set grain; exercise_template_id NOT an FK (#79/#81)
+027 — load_events              FK to users (CASCADE) — derived per-session-window load; source_ref soft (no FK), source-neutral (Q6 gate 2)
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1105,6 +1106,32 @@ CREATE TABLE hevy_sets (
 
 CREATE INDEX ix_hevy_sets_workout_id            ON hevy_sets (workout_id);
 CREATE INDEX ix_hevy_sets_exercise_template_id  ON hevy_sets (exercise_template_id);
+```
+
+### 027 — load_events
+
+The **derived, recomputable** middle layer of the two-level load store (DECISIONS_LOG #28/#32, D-B/D-C/D-D; Q6 gate 2). The Tier-0 transform (`backend/load_events.py`) reads `hevy_workouts.raw` (source of truth, gate 1) and writes one **Mechanical** and one **Neuromuscular** row per session in window-native units (D-A); the daily `load_metrics` + Banister rollup (gate 3) reads these, never the raw payload. Per D-B a coefficient/routing correction is a **recompute, never a migration**: every constant is a REASONED-PRIOR (#32) tagged by `formula_version`, so the transform is delete-and-reinsert per `(user, formula_version)` — a re-run is idempotent on the `uq_load_event_session_window_version` natural key, and a new version's rows coexist beside the old until the rollup switches. **Source-neutral** (parallels the wearable ingestion contract #236): `(source, source_ref)` names the originating session generically with **NO hard FK** to `hevy_workouts` — the same store will later hold Metabolic (aerobic) and Psychological (sRPE) events whose `source_ref` points elsewhere, which a hard FK would reject. `user_id` **is** a hard FK (CASCADE). Rows orphaned by a hard-deleted or adjudicated-out (`excluded_at`, D-G) source session are cleared by the next recompute, which skips those sessions. `provenance` records the transform's **gaps** at row grain (RPE-banded vs reps-banded set counts, e1RM fit vs the 0.5 fallback, non-rep bridging contribution, laterality halving, and untagged-repeated templates surfaced-not-halved) — diagnostic, not consumed by load.
+
+```sql
+CREATE TABLE load_events (
+    id               SERIAL PRIMARY KEY,
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    source           VARCHAR(20) NOT NULL,        -- 'hevy'
+    source_ref       VARCHAR(64) NOT NULL,        -- session id (soft ref; NO FK — source-neutral)
+    window           VARCHAR(20) NOT NULL,        -- 'mechanical' | 'neuromuscular'
+    occurred_at      TIMESTAMPTZ,                 -- session start; NULL if the source session is undated
+    load             DOUBLE PRECISION NOT NULL,   -- window-native (D-A)
+    unit             VARCHAR(20) NOT NULL,        -- 'kg_reps' | 'nm_au'
+    formula_version  VARCHAR(20) NOT NULL,        -- 'tier0-v1'
+    provenance       JSONB,                       -- gap-recording blob (diagnostic)
+    computed_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_load_event_session_window_version UNIQUE (source, source_ref, window, formula_version)
+);
+
+CREATE INDEX ix_load_events_user_id           ON load_events (user_id);
+CREATE INDEX ix_load_events_user_window       ON load_events (user_id, window);
+CREATE INDEX ix_load_events_user_occurred     ON load_events (user_id, occurred_at);
+CREATE INDEX ix_load_events_formula_version   ON load_events (formula_version);
 ```
 
 ## Canonical Metric Type Whitelist
