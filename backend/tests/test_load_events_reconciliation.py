@@ -27,7 +27,11 @@ convention change, so this fixture always states the live convention with its ar
 RPE → RIR(floor) → m , f :   6→4→1.00,.25 · 7→3→1.15,.50 · 7.5→2→1.15,.75 · 8→2→1.15,.75
                              8.5→1→1.30,.90 · 9→1→1.30,.90 · 9.5→0→1.30,1.0 · 10→0→1.30,1.0
 
-───────────────────────────── MECHANICAL ORACLE = 36,458.575 ──────────────────────────
+─── MECHANICAL ORACLE — 36,458.575 untagged (×1.0 bodyweight); 26,207.575 with WDB@0.25 (#245) ───
+The per-block table below prices the two dead-bug 0 kg sets at BODYWEIGHT_KG 102 (untagged /
+NULL fraction) → 36,458.575. Tagging Weighted Dead Bug with bw_fraction 0.25 reprices those two
+sets 102→25.5, dropping mechanical by 10,251 to 26,207.575 (see the b17 line and the delta test).
+Every logged-weight set is untouched by bw_fraction.
 Per block (Σ eff_w×reps×m ; warmup ×0.5):
   b0  SALP   31.25·10·1.15 + 32.5·10·1.15 + 32.5·10·1.15               = 359.375+373.75+373.75   = 1106.875
   b1  SALP   (identical to b0)                                                                    = 1106.875
@@ -113,8 +117,22 @@ SETS = [
 # fall through to H_NO_E1RM = 0.5.
 E1RM_BY_TEMPLATE = {t: (60.0 if t == "SHP" else None) for (_, t, *_rest) in SETS}
 
-EXPECTED_MECHANICAL = 36458.575          # three-way agreed (operator + fraction + code)
-EXPECTED_NEUROMUSCULAR = round(14557 / 720, 6)   # 20.218056
+# bw_fraction map (#245). Only "Weighted Dead Bug" (WDB) is bodyweight-class here; its two
+# 0 kg sets reprice at eff_w = 102 × 0.25 = 25.5. 0.25 is the REASONED-PRIOR dead-bug value
+# (guidance, not gospel — the operator's prod tagging pass assigns the live value; this test
+# proves the mechanism, and its expected updates in the SAME commit as any fraction change).
+# Every other template is NULL (not bodyweight-class) → its 0/NULL-weight sets stay ×1.0, and
+# every logged-weight set is untouched by bw_fraction regardless of tag.
+BW_FRACTION_BY_TEMPLATE = {t: (0.25 if t == "WDB" else None) for (_, t, *_rest) in SETS}
+
+# Untagged (NULL fraction) — the pre-#245 value under floor RIR; ≡ ×1.0 bodyweight.
+EXPECTED_MECHANICAL_UNTAGGED = 36458.575        # three-way agreed (operator + fraction + code)
+# Live (WDB tagged 0.25): the two dead-bug 0 kg sets drop 102→25.5, i.e.
+#   old 102·60·1.15 + 102·50·1.30 = 7038 + 6630 = 13668  →  new 25.5·60·1.15 + 25.5·50·1.30
+#   = 1759.5 + 1657.5 = 3417  →  delta −10251  →  36458.575 − 10251 = 26207.575.
+EXPECTED_MECHANICAL = 26207.575
+EXPECTED_NEUROMUSCULAR = round(14557 / 720, 6)   # 20.218056 — WDB has no e1RM (h=0.5), so
+                                                 # bw_fraction leaves NM unchanged.
 
 
 def _session():
@@ -150,7 +168,8 @@ def _expected_nm_from_first_principles() -> float:
 
 
 def test_13jul_session_reconciles_mechanical_and_nm_to_the_cent():
-    """The class-closer: real 56-set session, hand-derived oracle, both windows to the cent."""
+    """The class-closer: real 56-set session, hand-derived oracle, both windows to the cent —
+    with WDB tagged bw_fraction 0.25 (the live convention)."""
     assert len(SETS) == 56
     # the NM oracle equals its first-principles recomputation (guards a typo in the constant)
     assert _expected_nm_from_first_principles() == pytest.approx(14557 / 720, abs=1e-12)
@@ -159,6 +178,7 @@ def test_13jul_session_reconciles_mechanical_and_nm_to_the_cent():
         _session(),
         laterality_by_template={},                 # untagged; load sums as logged regardless (#242)
         e1rm_by_template=E1RM_BY_TEMPLATE,
+        bw_fraction_by_template=BW_FRACTION_BY_TEMPLATE,
     )
     assert ev["mechanical"]["load"] == pytest.approx(EXPECTED_MECHANICAL, abs=1e-4)
     assert ev["neuromuscular"]["load"] == pytest.approx(EXPECTED_NEUROMUSCULAR, abs=1e-4)
@@ -166,8 +186,32 @@ def test_13jul_session_reconciles_mechanical_and_nm_to_the_cent():
     assert ev["mechanical"]["load"] != pytest.approx(35367.5125, abs=1e-4)
 
 
+def test_13jul_null_fraction_equals_the_untagged_value():
+    """NULL bw_fraction ≡ the prior ×1.0 behaviour — bw_fraction is opt-in per template, so
+    an all-untagged session is unchanged by #245 (mutation-proof: if a NULL fraction ever
+    scaled anything, mechanical would drift off 36458.575)."""
+    ev = compute_session_events(
+        _session(),
+        laterality_by_template={},
+        e1rm_by_template=E1RM_BY_TEMPLATE,
+        bw_fraction_by_template=None,              # nothing tagged
+    )
+    assert ev["mechanical"]["load"] == pytest.approx(EXPECTED_MECHANICAL_UNTAGGED, abs=1e-4)
+    assert ev["neuromuscular"]["load"] == pytest.approx(EXPECTED_NEUROMUSCULAR, abs=1e-4)
+
+
 def test_13jul_floor_delta_is_the_four_rpe_85_sets():
-    """Pins the floor-vs-round delta to exactly the four RPE-8.5 sets (raw 7273.75 × 0.15)."""
+    """Pins the floor-vs-round delta to exactly the four RPE-8.5 sets (raw 7273.75 × 0.15),
+    against the UNTAGGED (×1.0 bodyweight) value."""
     rpe85_raw = 8.75 * 12 + 72.5 * 10 + 53.75 * 25 + 102 * 50   # SALR, CPM, CC, WDB(0→102)
     assert rpe85_raw == pytest.approx(7273.75)
-    assert 35367.5125 + rpe85_raw * (1.30 - 1.15) == pytest.approx(EXPECTED_MECHANICAL)
+    assert 35367.5125 + rpe85_raw * (1.30 - 1.15) == pytest.approx(EXPECTED_MECHANICAL_UNTAGGED)
+
+
+def test_13jul_bw_fraction_delta_is_the_two_dead_bug_sets():
+    """The #245 delta is exactly the two WDB 0 kg sets repricing 102→25.5 (−10251); every
+    logged-weight set is untouched."""
+    old = 102 * 60 * 1.15 + 102 * 50 * 1.30     # 13668
+    new = 25.5 * 60 * 1.15 + 25.5 * 50 * 1.30   # 3417  (102 × 0.25 = 25.5)
+    assert new - old == pytest.approx(-10251.0)
+    assert EXPECTED_MECHANICAL_UNTAGGED + (new - old) == pytest.approx(EXPECTED_MECHANICAL)

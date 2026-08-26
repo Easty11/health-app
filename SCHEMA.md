@@ -753,7 +753,8 @@ CREATE TABLE hevy_exercise_templates (
     secondary_muscle_groups  JSON,                      -- landed as JSON (file convention elsewhere is JSONB)
     synced_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     laterality               VARCHAR(20),               -- bilateral|unilateral|alternating|NULL — app-owned; _upsert_template never assigns it
-    adjudicated_at           TIMESTAMPTZ                -- three-state coverage (#76): NULL=unlooked; NOT NULL + tags=tagged; NOT NULL + 0 tags=no-pattern. App-owned; _upsert_template never assigns it
+    adjudicated_at           TIMESTAMPTZ,               -- three-state coverage (#76): NULL=unlooked; NOT NULL + tags=tagged; NOT NULL + 0 tags=no-pattern. App-owned; _upsert_template never assigns it
+    bw_fraction              DOUBLE PRECISION           -- fraction of bodyweight moved per rep for a bodyweight-class movement (#245). NULL = not bodyweight-class. Read ONLY for rep sets with weight_kg NULL/0: eff_w = BODYWEIGHT_KG × COALESCE(bw_fraction,1.0). App-owned; _upsert_template never assigns it
 );
 
 CREATE INDEX ix_hevy_exercise_templates_owner_user_id
