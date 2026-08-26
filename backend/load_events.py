@@ -122,12 +122,16 @@ def _nm_reps_prior(reps: int) -> float:
 
 
 def _rir_from_rpe(rpe: float) -> int:
-    """RIR = 10 − RPE, banded to the nearest integer (half-up), clamped to >= 0.
+    """RIR = 10 − RPE, banded DOWN (floor) to an integer, clamped to >= 0.
 
     Hevy logs RPE in half points, so RIR lands on halves; the m()/f() tables are keyed
-    at integers. Half-up rounding (RIR 1.5 → 2) is the documented Tier-0 banding — a
-    deterministic choice, flagged for Tier-1 review (module OPEN_QUESTIONS gap)."""
-    return max(0, math.floor((10.0 - rpe) + 0.5))
+    at integers. **`floor` is the minted Tier-0 convention** (RPE 8.5 → RIR 1.5 → band 1
+    → m 1.30): a half point that is "not quite N reps in reserve" is treated as the harder
+    (N−1) band, never rounded up to the easier one. The banding convention was unspecified
+    at gate 2 and `round()`/half-up filled it silently — surfaced by the operator's 13 Jul
+    reconciliation and pinned here (DECISIONS_LOG #244; a convention choice, not a defect).
+    Tier-1 may interpolate f/m across the half instead of banding (OPEN_QUESTIONS Q121)."""
+    return max(0, math.floor(10.0 - rpe))
 
 
 def _effective_weight(weight_kg: float | None) -> float:
