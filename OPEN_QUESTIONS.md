@@ -128,6 +128,12 @@ blocks a future region-DISTRIBUTED Mechanical channel (per-region load) but NOT 
 Tier-0 Mechanical of D-C, which is region-agnostic. No action this lane; recorded so Gate 2's
 region variant does not read the empty tag coverage as "no regions loaded".
 
+**Region-distribution quirks list (started 2026-08-26):** movements whose load will misassign under
+single-region attribution, to handle when the region-distributed Mechanical channel is built:
+- **Weighted Dead Bug is a COMPOSITE.** Its logged weight loads the shoulder girdle / serratus (the
+  overhead hold), while its `bw_fraction` (#245) loads the trunk / hip flexors (the leg-lower). Attributing
+  the whole movement to one region misassigns it — the two load components belong to different regions.
+
 **Addendum (2026-08-11) — Hevy unit-trustworthiness.** Before Hevy kg feeds `load_metrics`, three
 weight-semantics hazards, operator-confirmed:
 
@@ -3818,7 +3824,12 @@ priors remain below.
   per-template "adds bodyweight" tag (a template annotation, like `laterality`).
 - **Flat bodyweight fraction — RESOLVED `#245` (2026-08-26).** Built as `hevy_exercise_templates.bw_fraction`:
   a rep set with `weight_kg` NULL/0 scores `BODYWEIGHT_KG × COALESCE(bw_fraction, 1.0)`; a logged weight
-  is never scaled. The additive weighted-bodyweight case (bodyweight + plate) is NOT covered by `#245` and
+  is never scaled. **Tagging amendments (2026-08-26, operator):** Weighted Dead Bug `bw_fraction` revised
+  **0.25 → 0.1** (undercount-preferred for the unweighted pattern; logged-weight sets unchanged — that load
+  is the overhead hold). Effective at the next recompute; no recompute forced now. The 13 Jul reconciliation
+  fixture is **unaffected** — it embeds `0.25` as a test convention to guard the formula, not a prod tag.
+  Data provenance: the 13 Jul `0kg×60` / `0kg×50` dead-bug sets are **confirmed genuine reps** (operator),
+  so the fixture's rep interpretation is confirmed, not assumed. The additive weighted-bodyweight case (bodyweight + plate) is NOT covered by `#245` and
   remains the **weighted-bodyweight** gap above (it needs the e1RM fit to read the same coalesced load —
   a `formula_version` consideration, and the Hevy assisted-set sign is still UNVERIFIED). Original note
   kept for provenance: `_effective_weight` priced every pure-bodyweight
