@@ -10009,3 +10009,56 @@ reading an `e1rm`-derived quantity into the mechanical path, is exactly what thi
 forbid.
 
 ---
+
+### #NEXT. `bw_fraction` — the per-template bodyweight fraction, promoted build-now ahead of gate 3
+
+**Decision.** Promote the flat-bodyweight-fraction gap (OPEN_QUESTIONS Q121 gap 4) from Tier-1 to
+**build-now**, landing it **before** gate 3 so the ×1.0-bodyweight distortion never enters the EWMA
+history the Banister engine builds on. New operator-owned column
+`hevy_exercise_templates.bw_fraction FLOAT NULL` (migration `d4a1f8c609e2`); the Tier-0 transform
+reads it ONLY for rep-based sets with `weight_kg` NULL or 0:
+`eff_w = BODYWEIGHT_KG × COALESCE(bw_fraction, 1.0)`. **A logged `weight_kg > 0` is never scaled by
+it** — `bw_fraction` touches no real load. `NULL` fraction ≡ the prior ×1.0 behaviour, so the change
+is opt-in per template and an untagged catalogue is unchanged. `formula_version` stays **`tier0-v1`**
+(a modelling refinement inside the frozen convention set, applied by recompute — D-B; not a version
+bump). The weighted-bodyweight ADDITIVE case (bodyweight + plate) stays the parked Tier-1 limitation,
+unchanged.
+
+**Fraction semantics.** `bw_fraction` is the fraction of bodyweight moved per rep for a
+bodyweight-CLASS movement — no separate leverage axis (Hevy already splits elevated/decline/ring
+variants into distinct templates). REASONED-PRIOR priors, **guidance not gospel** (biomechanics
+literature ballpark; the operator assigns the live values in the tagging pass): chin/pull-up ~1.0,
+dip ~1.0, push-up ~0.65, BW squat/lunge ~0.85, Nordic ~0.9, dead bug ~0.25; plank-class is N/A
+(non-rep, already zero by D-D). Operator-owned like `laterality`: `_upsert_template` never assigns
+it, so a Hevy resync preserves it. The tagging surface is `audit_bodyweight_templates.py` — every
+in-use template that has ever logged a 0/NULL-weight rep-based set, with usage counts (catalogued vs
+uncatalogued); nothing else needs a tag.
+
+**Validation carried.** Retrospective **face-validity passed 5/5** on the post-`#244` rankings
+(operator, 2026-08-26). With that, the **`tier0-v1` constants are frozen under the `#244`
+conventions** (floor RIR, 0-falsy bodyweight, load-sums-as-logged, non-rep skip, `formula_version`
+recompute-not-migrate) — `bw_fraction` is a per-template data annotation on top, not a constant change.
+
+**Status.** Built + test-proven. **PR HELD for operator per `#238`'s schema-migration exception**
+(adds the `bw_fraction` column). On release, Code executes the full land; then the operator runs the
+tagging pass + recompute + ranking re-read, and gate 3 (`load_metrics` + Banister) follows.
+**Q121 gap 4 → RESOLVED** by this entry (the flat-fraction gap is closed; the additive
+weighted-bodyweight case remains, noted in Q121).
+
+**How you know.** `test_load_events.py`: NULL fraction ≡ ×1.0, a fractional template scales only
+0/NULL-weight sets, and a logged-weight set is provably untouched (mutation-proof); DB test drives
+`bw_fraction` off the templates table on the FK-enforced substrate. The 13 Jul reconciliation fixture
+updated **in the same commit** per its standing rule: with Weighted Dead Bug tagged `0.25`, its two
+0 kg sets reprice 102→25.5 → Mechanical **26,207.575** (untagged stays **36,458.575**; delta −10,251
+is exactly those two sets), NM unchanged (WDB has no e1RM). `audit_bodyweight_templates.py` tests
+surface catalogued-untagged vs uncatalogued and exclude weighted/non-rep/excluded. Migration
+`d4a1f8c609e2` adds one nullable FLOAT and chains `c7d9e2f14a86` → head (the pre-existing second head
+`e2d5c7a1b9f3` untouched). Full suite green but for the `#240` shallow-clone artifact.
+
+**Do not revisit unless.** The additive weighted-bodyweight case (bodyweight + plate) is modelled —
+that is the remaining Q121 item and needs the e1RM fit to read the same coalesced load (a
+`formula_version` consideration), not a second column. Never let `bw_fraction` scale a logged
+`weight_kg > 0` — that is exactly the "never scales a real load" invariant the mutation-proof test
+guards.
+
+---
