@@ -9956,3 +9956,53 @@ assert weighted non-rep still bridges. 39 transform cases pass; full suite green
 NM=0 remain the `Q121` Tier-0 gaps.
 
 ---
+
+### 244. The "fourth defect" was not one — the mechanical formula is spec-correct; RIR banding is pinned to `floor`
+
+**Decision.** A reported fourth transform defect — "mechanical priced off the Epley factor, e1RM leaked
+into the mech path" — was **investigated at the line and disconfirmed**. The mechanical path is
+`eff_w × reps × m(RIR)` in **every committed version** (`dd7193c` gate 2, `2dc23e1` `#243`); `epley_with_rir`
+is called **only** inside `e1rm_samples`, which feeds the Neuromuscular `h(I)` — never the mechanical
+sum. A runtime probe confirmed the code computes `eff_w × reps × m` even when a non-null `e1rm` is
+passed (an Epley leak would have used it). No code defect exists in the mechanical formula.
+
+**Reconciliation of the anomaly.** The operator's 13 Jul Upper-A stored Mechanical (35,367.5125) exceeded
+a hand oracle (22,790.575) by ~55%. The gap is **two committed conventions**, not a bug:
+- **0-falsy `_effective_weight`** — two sets logged at `weight_kg = 0` (a logging dead-bug) fall through
+  the `weight > 0` test to `BODYWEIGHT_KG` (102). **Deliberate and correct**: a 0/NULL-weight rep set is a
+  bodyweight movement. Kept.
+- **RIR banding convention** — the hand oracle used fractional RIR; the code banded RIR to an integer
+  before the `m()`/`f()` tables. The banding rule was **unspecified at gate 2** and `round()`/half-up
+  filled it silently (RPE 8.5 → RIR 1.5 → 2 → m 1.15).
+
+**Minted convention.** RIR = **`floor(10 − RPE)`**, clamped ≥ 0 (RPE 8.5 → RIR 1 → m 1.30). A half point
+that is "not quite N reps in reserve" bands to the harder (N−1) tier, never rounds up to the easier one.
+This is a **convention choice, not a defect fix** — it changes only half-point-RPE sets. `formula_version`
+stays **`tier0-v1`** (the spec was never wrong; an unspecified corner is now specified); the recompute
+replaces same-version rows by natural key (D-B), so the operator reruns recompute + rankings after deploy.
+
+**The regression fixture is the class-closer.** A single-session reconciliation test over the real 13 Jul
+workout (56 sets embedded) asserts the session's Mechanical **and** Neuromuscular totals to the cent
+against a **hand-computed arithmetic oracle in comments** under the live convention (`floor` RIR; 0-falsy
+bodyweight; warmup ×0.5 after `m`). The oracle is arithmetic, not code — it cannot pass by implementing the
+wrong spec, which is how defects 1, 2, `#243`, and this convention gap all survived a green suite. The
+third and fourth findings came from **external reconciliation, not the suite**; this fixture is what
+changes that. "Looks sane" is retired as evidence — NM had looked sane twice while Mechanical looked sane
+once.
+
+**Status.** Convention change + tests landed; the reconciliation fixture rides the same PR (the operator's
+prod-verified 56-set data is its input). Prior recompute rankings are **void** pending the post-`#244`
+recompute. No schema change → merge-on-green per `#238`.
+
+**How you know.** `git show dd7193c:backend/load_events.py` and `2dc23e1:…` both carry
+`mech = eff_w * float(reps) * m`; `epley_with_rir` appears only at the `e1rm_samples` call site. Runtime
+probe: `compute_set_load({w:100,reps:8,rpe:8}, e1rm=133.33).mechanical == 100*8*1.15` (919.99), not the
+Epley-leak 1226.67. `test_rir_from_rpe_floor_and_clamped` pins 8.5→1 / 7.5→2 (mutation-proof vs half-up);
+the 13 Jul reconciliation fixture asserts both window totals to the cent.
+
+**Do not revisit unless.** Tier 1 replaces integer RIR banding with f/m interpolation across the half
+(OPEN_QUESTIONS Q121) — a `formula_version` bump, not an edit here. Reintroducing `round()`/half-up, or
+reading an `e1rm`-derived quantity into the mechanical path, is exactly what this entry and the fixture
+forbid.
+
+---

@@ -46,10 +46,15 @@ def test_f_rir_table(rir, f):
     assert le._f_rir(rir) == f
 
 
-def test_rir_from_rpe_half_up_and_clamped():
-    assert le._rir_from_rpe(8.0) == 2
+def test_rir_from_rpe_floor_and_clamped():
+    """Minted convention (#244): RIR = floor(10 − RPE), clamped >= 0. A half point bands
+    DOWN to the harder tier. MUTATION-PROOF against a return of half-up rounding: 8.5→1
+    (half-up would give 2), 7.5→2 (half-up would give 3)."""
+    assert le._rir_from_rpe(8.0) == 2      # integer RPE unchanged
     assert le._rir_from_rpe(10.0) == 0
-    assert le._rir_from_rpe(8.5) == 2      # RIR 1.5 → half-up → 2
+    assert le._rir_from_rpe(8.5) == 1      # RIR 1.5 → floor → 1  (half-up would be 2)
+    assert le._rir_from_rpe(7.5) == 2      # RIR 2.5 → floor → 2  (half-up would be 3)
+    assert le._rir_from_rpe(9.5) == 0      # RIR 0.5 → floor → 0
     assert le._rir_from_rpe(11.0) == 0     # clamp >= 0
 
 

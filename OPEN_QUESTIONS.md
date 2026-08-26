@@ -3834,9 +3834,10 @@ leaking into the non-rep branch — already fixed in-version; these four are hon
 - **Non-rep NM = 0.** Carries/sleds and timed holds bridge into Mechanical (D-D `K_dist`/`K_time`)
   but contribute **zero** Neuromuscular. Flagged arguable in D-D for maximal sled efforts, which
   carry a real velocity/RFD demand a flat 0 discards.
-- **Half-point RIR banding.** RIR = round-half-up(10 − RPE); RPE 8.5 → RIR 1.5 → 2. The m()/f()
-  tables are integer-keyed, so a half point is rounded rather than interpolated. Deterministic and
-  documented, but a Tier-1 transform may interpolate f/m across the half.
+- **Half-point RIR banding.** RIR = **`floor`(10 − RPE)** (pinned `#244`; RPE 8.5 → RIR 1 → m 1.30) —
+  a half point bands DOWN to the harder tier. The m()/f() tables are integer-keyed, so a half point is
+  banded rather than interpolated. Deterministic and documented, but a Tier-1 transform may interpolate
+  f/m across the half instead (a `formula_version` bump).
 
 **State:** OPEN — not blocking; the transform is correct and honest at Tier 0, and `provenance`
 records where each gap bit. **Next action:** none until Tier 1; the per-template annotation carrying
