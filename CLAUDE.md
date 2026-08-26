@@ -245,6 +245,9 @@ Code and schema changes always take full human review.
     re-run the setup on any new machine.
 - **Samsung Health package name** is `com.sec.android.app.shealth`, not `com.samsung.health`
   — the latter returns zero records in Health Connect queries.
+- **Prod psql route.** `psql` is absent from the `health-app-backend` image; `railway connect`
+  to the `health-app-DB` service is the operator's psql route for prod queries (the #242 closing
+  query ran this way). Transform recomputes run in-container via `python backend/load_events.py`.
 
 ### Recent landings
 
@@ -252,7 +255,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Q6 gate 2 — the Tier-0 `load_events` transform (D-C/D-D), landed after a review round; per-set date-independent RPE, load-sums-as-logged (laterality never discounts cost), epoch diagnostic-only (#241)** - See DECISIONS_LOG #241. Derived recomputable `load_events` store (`formula_version 'tier0-v1'`), `_rpe_coverage` fix, gap-recording provenance; two review-caught defects (epoch-gated RPE, laterality halving) fixed before land. Tier-0 modelling gaps in Q121; gate 3 = `load_metrics` + Banister rollup. Live recompute is the post-deploy gate. Handoff: `closeout.md`.
+- **Q6 gate 2 — the Tier-0 `load_events` transform (D-C/D-D), landed + live-verified; per-set date-independent RPE, load-sums-as-logged (laterality never discounts cost), epoch diagnostic-only; Q6's DONE condition met (#241/#242)** - See DECISIONS_LOG #241 (transform) and #242 (live-verify + Q6 DONE). Derived recomputable `load_events` store (`formula_version 'tier0-v1'`), `_rpe_coverage` fix, gap-recording provenance; two review-caught defects (epoch-gated RPE, laterality halving) fixed before land. Q6 DONE, gate 3 (`load_metrics` + Banister) next; Tier-0 gaps in Q121. Handoff: `closeout.md`.
 
 - **Q6 gate 1 — Hevy strength → four-window load persistence, landed and live-verified; the first-backfill FK-ordering defect fixed and the test engine made prod-faithful (#239/#240)** - See DECISIONS_LOG #239 (persistence + Tier-0 design D-A..D-G) and #240 (FK-ordering fix + standing FK-enforced test substrate + live-backfill verification). Q6 gate 1 DONE, gates 2–4 sequenced; transform agenda in ROADMAP "Banister build". Handoff: `closeout.md`.
 
