@@ -134,12 +134,18 @@ def _rir_from_rpe(rpe: float) -> int:
     return max(0, math.floor(10.0 - rpe))
 
 
-def _effective_weight(weight_kg: float | None) -> float:
-    """External load if present and positive, else the operator bodyweight. See
-    `BODYWEIGHT_KG` for the weighted-bodyweight caveat."""
+def _effective_weight(weight_kg: float | None, bw_fraction: float | None = None) -> float:
+    """External load if present and positive, else the bodyweight-class effective load.
+
+    A logged `weight_kg > 0` is returned as-is — `bw_fraction` NEVER scales a real load
+    (#245). For a bodyweight set (weight NULL or 0), the effective load is
+    `BODYWEIGHT_KG × COALESCE(bw_fraction, 1.0)`: the fraction of bodyweight the movement
+    actually moves per rep (push-up ~0.65 … chin/dip ~1.0). NULL fraction ≡ the prior
+    ×1.0 behaviour, so an untagged template is unchanged. The weighted-bodyweight additive
+    case (bodyweight + plate) stays the parked Tier-1 limitation (OPEN_QUESTIONS Q121)."""
     if weight_kg is not None and weight_kg > 0:
         return float(weight_kg)
-    return BODYWEIGHT_KG
+    return BODYWEIGHT_KG * (1.0 if bw_fraction is None else float(bw_fraction))
 
 
 # ---------------------------------------------------------------------------
@@ -167,13 +173,16 @@ def compute_set_load(
     s: dict[str, Any],
     *,
     e1rm: float | None,
+    bw_fraction: float | None = None,
 ) -> SetLoad:
     """Score one normalized set (keys: type, weight_kg, reps, duration_seconds,
     distance_meters, rpe — the live snake_case shape, #68).
 
     RPE is per-set and date-independent: a set with an `rpe` bands on (reps, RPE); one
     without takes the reps-band prior (no imputation). `e1rm` is the template's fitted
-    e1RM as of the session (None → h(I)=0.5). Pure and deterministic.
+    e1RM as of the session (None → h(I)=0.5). `bw_fraction` is the template's bodyweight
+    fraction (#245), applied ONLY to a rep set with `weight_kg` NULL or 0; a logged
+    weight > 0 is untouched. Pure and deterministic.
     """
     set_type = (s.get("type") or "normal").lower()
     is_warmup = set_type == "warmup"
@@ -213,7 +222,7 @@ def compute_set_load(
     if reps is None:
         return SetLoad(skip=True)
 
-    eff_w = _effective_weight(weight)
+    eff_w = _effective_weight(weight, bw_fraction)
 
     # RIR: a failure set is RIR 0 by definition (a set-type fact, no `rpe` needed).
     # Otherwise RIR comes from a present RPE (any date), else it is unknown.
@@ -375,6 +384,7 @@ def compute_session_events(
     *,
     laterality_by_template: dict[str, str | None],
     e1rm_by_template: dict[str, float | None],
+    bw_fraction_by_template: dict[str, float | None] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Two window aggregates ({window: {load, unit, provenance}}) for one session.
 
@@ -403,9 +413,14 @@ def compute_session_events(
     }
     working_rep_sets = 0        # non-warmup rep sets — the diagnostic's denominator
     working_rep_with_rpe = 0
+    bwf = bw_fraction_by_template or {}
 
     for block_index, template_id, s in sess.sets:
-        sl = compute_set_load(s, e1rm=e1rm_by_template.get(template_id))
+        sl = compute_set_load(
+            s,
+            e1rm=e1rm_by_template.get(template_id),
+            bw_fraction=bwf.get(template_id),
+        )
         if sl.skip:
             continue
 
@@ -480,6 +495,15 @@ def _laterality_map(db: Session) -> dict[str, str | None]:
     return {r.id: r.laterality for r in rows}
 
 
+def _bw_fraction_map(db: Session) -> dict[str, float | None]:
+    """template id → bodyweight fraction (#245), across all templates. NULL for a template
+    that is not bodyweight-class → the transform prices its 0/NULL-weight sets at ×1.0."""
+    rows = db.execute(
+        select(models.HevyExerciseTemplate.id, models.HevyExerciseTemplate.bw_fraction)
+    ).all()
+    return {r.id: r.bw_fraction for r in rows}
+
+
 def compute_load_events(
     db: Session,
     user_id: int,
@@ -496,6 +520,7 @@ def compute_load_events(
     """
     now = now or datetime.now(timezone.utc)
     lat_map = _laterality_map(db)
+    bwf_map = _bw_fraction_map(db)
 
     rows = db.execute(
         select(models.HevyWorkout)
@@ -531,6 +556,7 @@ def compute_load_events(
             sess,
             laterality_by_template=lat_map,
             e1rm_by_template=e1rm_by_template,
+            bw_fraction_by_template=bwf_map,
         )
         for window, agg in windows.items():
             db.add(models.LoadEvent(

@@ -3804,10 +3804,11 @@ first candidate — it is a human-recall exercise precisely because this field i
 ## Q121. Tier-0 load transform modelling gaps — weighted-bodyweight, flat BW fraction, non-rep NM, half-point RIR
 
 The gate-2 `load_events` transform (`formula_version 'tier0-v1'`, DECISIONS_LOG #241)
-ships four deliberate Tier-0 simplifications. Each is **surfaced, not hidden**, and each is a
-recompute away (bump `formula_version`) once a Tier-1 answer exists — none is a defect in the
-landed transform. (Distinct from `#243`, which was a genuine defect — the bodyweight coalesce
-leaking into the non-rep branch — already fixed in-version; these four are honest priors.)
+shipped four deliberate Tier-0 simplifications. Each is **surfaced, not hidden** — none is a
+defect in the landed transform. (Distinct from `#243`, a genuine defect — the bodyweight coalesce
+leaking into the non-rep branch — already fixed in-version.) **Gap 4 (flat bodyweight fraction) is
+now RESOLVED — built as `#245` (`bw_fraction`), promoted build-now ahead of gate 3.** Three honest
+priors remain below.
 
 - **Weighted-bodyweight undercount.** `effective_weight = weight_kg` when a plate is logged, else
   `BODYWEIGHT_KG` (102). A weighted pull-up (+20 kg) therefore scores on 20 kg, not ~122 kg — the
@@ -3815,7 +3816,12 @@ leaking into the non-rep branch — already fixed in-version; these four are hon
   flag to know that. A pure-bodyweight set (no plate) correctly uses `BODYWEIGHT_KG`; a barbell lift
   correctly uses the bar load. Only the *weighted-bodyweight* case undercounts. Fix needs a
   per-template "adds bodyweight" tag (a template annotation, like `laterality`).
-- **Flat bodyweight fraction (added 2026-08-26).** `_effective_weight` prices every pure-bodyweight
+- **Flat bodyweight fraction — RESOLVED `#245` (2026-08-26).** Built as `hevy_exercise_templates.bw_fraction`:
+  a rep set with `weight_kg` NULL/0 scores `BODYWEIGHT_KG × COALESCE(bw_fraction, 1.0)`; a logged weight
+  is never scaled. The additive weighted-bodyweight case (bodyweight + plate) is NOT covered by `#245` and
+  remains the **weighted-bodyweight** gap above (it needs the e1RM fit to read the same coalesced load —
+  a `formula_version` consideration, and the Hevy assisted-set sign is still UNVERIFIED). Original note
+  kept for provenance: `_effective_weight` priced every pure-bodyweight
   REP set at `BODYWEIGHT_KG × 1.0`, but the loaded fraction is class-dependent: force-plate data puts
   it at ~0.65 for horizontal push/row (push-up ~0.64 top / ~0.75 bottom; the coaching "85%" is not
   supported), ~0.9 lower-body BW (shanks unloaded), ~0.95 hanging (pull-up/dip), ~0.5

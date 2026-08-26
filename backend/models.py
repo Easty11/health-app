@@ -735,6 +735,15 @@ class HevyExerciseTemplate(Base):
     # by the --confirm seed. Like `laterality`, never assigned by
     # `_upsert_template`, so a resync preserves it.
     adjudicated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Per-template bodyweight fraction (DECISIONS_LOG #245): the fraction of bodyweight
+    # moved per rep for a bodyweight-CLASS movement (push-up ~0.65, chin/dip ~1.0, BW
+    # squat/lunge ~0.85, Nordic ~0.9, dead bug ~0.25). NULL = NOT bodyweight-class → the
+    # Tier-0 transform prices the set on `weight_kg` as logged. Read ONLY for rep-based
+    # sets with `weight_kg` NULL or 0: eff_w = BODYWEIGHT_KG × COALESCE(bw_fraction, 1.0);
+    # a set with a logged weight > 0 is never scaled by it. Operator-owned like
+    # `laterality`/`adjudicated_at` — never assigned by `_upsert_template`, so a resync
+    # preserves it.
+    bw_fraction: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class ExerciseRegionTag(Base):

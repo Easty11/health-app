@@ -155,6 +155,35 @@ def test_empty_set_skipped():
     assert compute_set_load({"type": "normal"}, e1rm=None).skip is True
 
 
+# ── bw_fraction (#245) ─────────────────────────────────────────────────────────
+
+def test_bw_fraction_null_equals_full_bodyweight():
+    """NULL bw_fraction ≡ the prior ×1.0 behaviour — an untagged template is unchanged."""
+    st = {"reps": 10, "rpe": 9.0}                      # 0/NULL-weight bodyweight rep set
+    a = compute_set_load(st, e1rm=None, bw_fraction=None)
+    b = compute_set_load(st, e1rm=None)                # default None
+    assert a.mechanical == pytest.approx(BODYWEIGHT_KG * 10 * 1.30)   # RIR1 → m 1.30
+    assert a.mechanical == b.mechanical
+
+
+def test_bw_fraction_scales_only_bodyweight_sets():
+    """A fractional template scales a 0/NULL-weight rep set: eff_w = 102 × fraction."""
+    push = compute_set_load({"reps": 10, "rpe": 9.0}, e1rm=None, bw_fraction=0.65)
+    assert push.mechanical == pytest.approx(BODYWEIGHT_KG * 0.65 * 10 * 1.30)  # 66.3 × 10 × 1.30
+    # a weight_kg == 0 set is bodyweight too (0-falsy), so the fraction applies
+    zero = compute_set_load({"weight_kg": 0.0, "reps": 20, "rpe": 7.0}, e1rm=None, bw_fraction=0.25)
+    assert zero.mechanical == pytest.approx(BODYWEIGHT_KG * 0.25 * 20 * 1.15)  # 25.5 × 20 × 1.15
+
+
+def test_bw_fraction_never_scales_a_logged_weight():
+    """MUTATION-PROOF: bw_fraction must NEVER touch a set with a logged weight > 0 — the
+    mechanical is identical with and without the fraction, and equals the plain weight×reps×m."""
+    st = {"weight_kg": 72.5, "reps": 12, "rpe": 7.5}
+    with_frac = compute_set_load(st, e1rm=None, bw_fraction=0.25)
+    without = compute_set_load(st, e1rm=None, bw_fraction=None)
+    assert with_frac.mechanical == without.mechanical == pytest.approx(72.5 * 12 * 1.15)
+
+
 # ── e1RM fit ────────────────────────────────────────────────────────────────
 
 def test_epley_with_rir():
@@ -303,6 +332,27 @@ def test_compute_writes_two_windows_per_session(db_session):
     # its own post-epoch top set fits the e1RM → h(I) used a real fit
     assert windows["neuromuscular"].provenance["e1rm_fit_templates"] == ["BENCH"]
     assert summary["sessions_with_e1rm_fit"] == 1
+
+
+def _tmpl(db, id_, bw_fraction=None):
+    db.add(models.HevyExerciseTemplate(id=id_, title=id_, bw_fraction=bw_fraction))
+    db.commit()
+
+
+def test_compute_applies_bw_fraction_from_templates(db_session):
+    """Orchestrator reads bw_fraction off the templates table (FK-enforced substrate): a
+    tagged bodyweight template scales its 0 kg sets; an untagged one stays ×1.0."""
+    _user(db_session)
+    _tmpl(db_session, "PUSHUP", bw_fraction=0.65)   # bodyweight-class
+    _tmpl(db_session, "PLANKROW", bw_fraction=None)  # untagged → ×1.0
+    _workout(db_session, "w1", 1, "2026-06-01T10:00:00Z", [
+        _ex("PUSHUP", [{"type": "normal", "reps": 10, "rpe": 8.0}]),      # 0/NULL weight
+        _ex("PLANKROW", [{"type": "normal", "reps": 10, "rpe": 8.0}]),    # 0/NULL weight, untagged
+    ])
+    compute_load_events(db_session, 1)
+    mech = db_session.query(models.LoadEvent).filter_by(window="mechanical").one()
+    # PUSHUP 102×0.65×10×1.15 = 762.45 ; PLANKROW 102×1.0×10×1.15 = 1173.0
+    assert mech.load == pytest.approx(762.45 + 1173.0)
 
 
 def test_excluded_workout_yields_no_events(db_session):
