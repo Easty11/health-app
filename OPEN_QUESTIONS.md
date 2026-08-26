@@ -3801,12 +3801,13 @@ first candidate — it is a human-recall exercise precisely because this field i
 
 ---
 
-## Q121. Tier-0 load transform modelling gaps — weighted-bodyweight, non-rep NM, half-point RIR
+## Q121. Tier-0 load transform modelling gaps — weighted-bodyweight, flat BW fraction, non-rep NM, half-point RIR
 
 The gate-2 `load_events` transform (`formula_version 'tier0-v1'`, DECISIONS_LOG #241)
-ships three deliberate Tier-0 simplifications. Each is **surfaced, not hidden**, and each is a
+ships four deliberate Tier-0 simplifications. Each is **surfaced, not hidden**, and each is a
 recompute away (bump `formula_version`) once a Tier-1 answer exists — none is a defect in the
-landed transform.
+landed transform. (Distinct from `#243`, which was a genuine defect — the bodyweight coalesce
+leaking into the non-rep branch — already fixed in-version; these four are honest priors.)
 
 - **Weighted-bodyweight undercount.** `effective_weight = weight_kg` when a plate is logged, else
   `BODYWEIGHT_KG` (102). A weighted pull-up (+20 kg) therefore scores on 20 kg, not ~122 kg — the
@@ -3814,6 +3815,22 @@ landed transform.
   flag to know that. A pure-bodyweight set (no plate) correctly uses `BODYWEIGHT_KG`; a barbell lift
   correctly uses the bar load. Only the *weighted-bodyweight* case undercounts. Fix needs a
   per-template "adds bodyweight" tag (a template annotation, like `laterality`).
+- **Flat bodyweight fraction (added 2026-08-26).** `_effective_weight` prices every pure-bodyweight
+  REP set at `BODYWEIGHT_KG × 1.0`, but the loaded fraction is class-dependent: force-plate data puts
+  it at ~0.65 for horizontal push/row (push-up ~0.64 top / ~0.75 bottom; the coaching "85%" is not
+  supported), ~0.9 lower-body BW (shanks unloaded), ~0.95 hanging (pull-up/dip), ~0.5
+  kneeling/regressed. So Mechanical **over**counts push-up-class work by ~45%, lower-body BW by
+  ~10–15%, hanging by ~5%. **NM is unaffected** — the per-template e1RM is fitted from the same
+  coalesce, so the fraction cancels in `I = effective_weight / e1RM`. Within-class precision sits
+  inside `m()`/`K_dist`/`K_time` prior noise once smoothed through the ~10 d Mechanical τ (`#32`); the
+  *class-level* 1.0-vs-0.65 gap does not. **Shares the weighted-bodyweight remedy:** one per-template
+  annotation carrying both "adds bodyweight" and a `bw_fraction` (3–4 class defaults,
+  operator-overridable; no separate leverage axis — Hevy already splits elevated/decline/ring
+  variants into distinct templates). Weighted: `BW × fraction + weight_kg`; assisted:
+  `BW × fraction − weight_kg` (the sign convention on Hevy's assisted set types is **UNVERIFIED** —
+  read it off `hevy_workouts.raw` before coding). `#243` already scoped the coalesce to REP sets only
+  (weight-NULL non-rep skips), so a `bw_fraction` added to `_effective_weight` touches only rep-based
+  bodyweight — confirmed this session.
 - **Non-rep NM = 0.** Carries/sleds and timed holds bridge into Mechanical (D-D `K_dist`/`K_time`)
   but contribute **zero** Neuromuscular. Flagged arguable in D-D for maximal sled efforts, which
   carry a real velocity/RFD demand a flat 0 discards.
@@ -3822,6 +3839,9 @@ landed transform.
   documented, but a Tier-1 transform may interpolate f/m across the half.
 
 **State:** OPEN — not blocking; the transform is correct and honest at Tier 0, and `provenance`
-records where each gap bit. **Next action:** none until Tier 1; the weighted-bodyweight tag is the
-first candidate (it needs the same operator-annotation path `laterality` uses). Owner: Luke.
-Cross-refs `#241` (the gate-2 entry), `#28`/`#32` (D-A/D-C/D-D), `#74`/`#76` (template tags).
+records where each gap bit. **Next action:** none until Tier 1; the per-template annotation carrying
+both "adds bodyweight" and `bw_fraction` is the first candidate — it resolves the weighted-bodyweight
+undercount and the flat-fraction overcount in one operator-annotation path (like `laterality`), and
+verify the Hevy assisted-type sign against `hevy_workouts.raw` before coding it. Owner: Luke.
+Cross-refs `#241` (the gate-2 entry), `#243` (the coalesce non-rep-leak fix — scoped it to rep sets),
+`#28`/`#32` (D-A/D-C/D-D), `#74`/`#76` (template tags).
