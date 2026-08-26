@@ -9910,3 +9910,49 @@ single linear head, or an `alembic upgrade head` (singular) path, will trip `Mul
 revisions`; resolve it with a merge migration when that lane is picked up, not here.
 
 ---
+
+### 243. Tier0-v1 defect — the bodyweight COALESCE leaked into the non-rep branch and priced Hevy cardio as mechanical work
+
+**Decision.** Fix a correctness defect in the `#241`/`#242` `load_events` transform, same
+`formula_version 'tier0-v1'` (the spec was right; the implementation was wrong — D-B: a correction
+is a recompute that replaces same-version rows by natural key, never a version bump). `_effective_weight`'s
+bodyweight COALESCE (102 kg) was applied in the **non-rep** branch of `compute_set_load`, but the
+brief's bodyweight fallback is **rep-based only**. A weight-NULL non-rep set must score **zero both
+windows** — that zero is the mechanism that excludes Hevy cardio (treadmill/bike/row distance- and
+duration-only entries carry no `weight_kg`) **without a template denylist**. As built, a 5 km
+treadmill entry scored 102 × 5000 × `K_dist` 0.3 = **153,000 `kg_reps`**, so Flush/Recovery and
+physio (bodyweight-hold) sessions topped the Mechanical ranking and the top-10 was all April–May.
+
+**Fix.** In the non-rep branch, `weight_kg is None → SetLoad(skip=True)`. Weighted carries / sleds /
+timed holds (weight present) bridge exactly as before via `K_dist` / `K_time`. Bodyweight timed
+holds (planks, Copenhagens) score zero at Tier 0 — the named, accepted D-D limitation. No schema
+change → merged on green per `#238`.
+
+**Rationale.** The zero-for-bodyweight-non-rep rule is not an omission but a load-bearing exclusion:
+it is *how* the systemic Mechanical channel keeps aerobic/cardio work out of a strength-volume series
+that has no commensurability with it (D-A window-native units), with no per-template denylist to
+maintain. Pricing cardio distance at bodyweight silently routed the largest-magnitude non-strength
+entries into the channel and inverted the ranking.
+
+**Status.** Locked. Fixed + test-proven; `formula_version` unchanged.
+
+**Defect window.** Prod `load_events` (tier0-v1) written by the `#242` post-`#107` recompute carried
+the inflated Mechanical for weight-NULL non-rep entries until the post-`#243` recompute. Because the
+recompute replaces the same `(source, source_ref, window, formula_version)` rows, the operator's
+post-deploy rerun overwrites them cleanly — **the `#242` closing number (Mechanical 3,056,351.056
+`kg_reps`) is defect-affected and superseded by that rerun**; Neuromuscular (480.818 `nm_au`) is
+unaffected (non-rep NM was already 0). Q6 stays DONE — strength volume is in the per-window path;
+only the Mechanical magnitude was wrong.
+
+**How you know.** `backend/tests/test_load_events.py`: `test_non_rep_weight_null_distance_skips`
+(mutation-proof — a bodyweight-priced 5 km cardio set FAILS) and `test_non_rep_weight_null_timed_hold_skips`
+assert skip; `test_non_rep_weighted_distance_bridged_nm_zero` / `test_non_rep_weighted_timed_hold_bridged`
+assert weighted non-rep still bridges. 39 transform cases pass; full suite green but for the `#240`
+`test_context_builder_output_unchanged_pre_post_refactor` shallow-clone artifact.
+
+**Do not revisit unless.** Tier 1 gives bodyweight timed holds / bodyweight cardio a real load model
+(then a `formula_version` bump, not a re-COALESCE in the non-rep branch — reintroducing
+`_effective_weight` there is exactly this defect). The weighted-bodyweight-rep undercount and non-rep
+NM=0 remain the `Q121` Tier-0 gaps.
+
+---
