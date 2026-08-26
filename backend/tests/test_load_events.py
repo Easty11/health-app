@@ -109,17 +109,35 @@ def test_failure_is_rir_zero_without_rpe():
     assert sl.is_failure and not sl.reps_banded
 
 
-def test_non_rep_distance_bridged_nm_zero():
+def test_non_rep_weighted_distance_bridged_nm_zero():
+    """A weighted sled/carry bridges via K_dist; NM=0."""
     sl = compute_set_load({"weight_kg": 40.0, "distance_meters": 20.0}, e1rm=None)
     assert sl.mechanical == pytest.approx(40.0 * 20.0 * 0.3)  # 240
     assert sl.neuromuscular == 0.0
     assert sl.is_non_rep
 
 
-def test_non_rep_timed_hold_bodyweight():
-    sl = compute_set_load({"duration_seconds": 60}, e1rm=None)
-    assert sl.mechanical == pytest.approx(BODYWEIGHT_KG * 60 * 0.05)  # 306
+def test_non_rep_weighted_timed_hold_bridged():
+    """A weighted timed hold bridges via K_time; NM=0."""
+    sl = compute_set_load({"weight_kg": 30.0, "duration_seconds": 60}, e1rm=None)
+    assert sl.mechanical == pytest.approx(30.0 * 60 * 0.05)  # 90
     assert sl.is_non_rep and sl.neuromuscular == 0.0
+
+
+def test_non_rep_weight_null_distance_skips():
+    """MUTATION-PROOF: a weight-NULL distance set (Hevy cardio — treadmill/bike/row) scores
+    ZERO both windows via skip, NOT a bodyweight-priced bridge. If the 102 kg COALESCE were
+    reapplied here (102 × 5000 × 0.3 = 153,000 kg·reps) this FAILS — that inflation is the
+    exact defect this guards. The zero is the cardio-exclusion mechanism (no denylist)."""
+    sl = compute_set_load({"distance_meters": 5000.0}, e1rm=None)
+    assert sl.skip is True
+
+
+def test_non_rep_weight_null_timed_hold_skips():
+    """Bodyweight timed hold (plank/Copenhagen) scores zero at Tier 0 — accepted limitation.
+    Mutation-proof against the bodyweight COALESCE returning in the non-rep branch."""
+    sl = compute_set_load({"duration_seconds": 60}, e1rm=None)
+    assert sl.skip is True
 
 
 def test_bodyweight_rep_set_uses_operator_weight():

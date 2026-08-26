@@ -41,9 +41,12 @@ close-out. Nothing provisional is outstanding. Every decision reached this sessi
 Q6 **gate 2 is DONE and live-verified** (`#241` transform, `#242` live-verify). The Tier-0
 `load_events` transform derives per-session-window Mechanical + Neuromuscular load from
 `hevy_workouts.raw` (`formula_version 'tier0-v1'`), recompute-not-migrate (D-B), source-neutral
-store, gap-recording `provenance`. **Prod closing query (54 non-excluded sessions): Mechanical
-3,056,351.056 `kg_reps`, Neuromuscular 480.818 `nm_au`** — strength volume non-zero in the
-per-window load path for the first time since Q6 was filed. Recompute diagnostics: 36 sessions
+store, gap-recording `provenance`. **Prod closing query (54 non-excluded sessions): Neuromuscular 480.818 `nm_au`** (unaffected) —
+strength volume non-zero in the per-window load path for the first time since Q6 was filed. The
+first **Mechanical** sum (3,056,351.056 `kg_reps`) was **defect-affected** and is superseded by the
+operator's post-`#243` recompute: `#243` fixed a bodyweight-COALESCE leak that priced weight-NULL
+Hevy cardio (treadmill/bike/row) as mechanical work. Q6 stays DONE (strength is in the path); only
+the Mechanical magnitude was wrong. Recompute diagnostics: 36 sessions
 e1RM-fit, 24 reps-banded (pre-epoch tail), 0 indeterminate-laterality, 0 artifact-signature.
 
 Two rules carried in the governance, both now canonical:

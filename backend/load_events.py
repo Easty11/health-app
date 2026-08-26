@@ -182,12 +182,22 @@ def compute_set_load(
 
     # ── Non-rep work (carries/sleds, timed holds): D-D bridging, NM = 0 ──────────
     if reps is None and (dist is not None or dur is not None):
-        eff_w = _effective_weight(weight)
+        # The bodyweight fallback is REP-BASED-ONLY (brief). A weight-NULL non-rep set
+        # scores ZERO both windows — that zero is exactly the mechanism that excludes
+        # Hevy cardio (treadmill/bike/row distance/duration entries carry no weight_kg)
+        # without a template denylist. Bodyweight timed holds (planks, Copenhagens) also
+        # score zero at Tier 0 — the named, accepted limitation. Only a set with a real
+        # external load bridges. (Applying `_effective_weight`'s 102 kg COALESCE here was
+        # the defect: a 5 km treadmill entry priced at 102 × 5000 × 0.3 = 153,000 kg·reps
+        # topped the Mechanical ranking — recompute-corrected, `formula_version` unchanged.)
+        if weight is None:
+            return SetLoad(skip=True)
+        w = float(weight)
         mech = 0.0
         if dist is not None:
-            mech += eff_w * float(dist) * K_DIST
+            mech += w * float(dist) * K_DIST
         if dur is not None:
-            mech += eff_w * float(dur) * K_TIME
+            mech += w * float(dur) * K_TIME
         if is_warmup:
             mech *= 0.5
         return SetLoad(
