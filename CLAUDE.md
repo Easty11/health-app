@@ -255,11 +255,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q6 tier0-v1 load refinements — `#243` non-rep cardio-exclusion fix, `#244` RIR `floor` convention + 13 Jul reconciliation fixture, `#245` per-template `bw_fraction` (bodyweight-class scaling), all landed** - See DECISIONS_LOG #243/#244/#245. `formula_version` stays `tier0-v1` (recompute, not migration); the fourth "defect" was disconfirmed at the line; post-#244 rankings passed operator face-validity 5/5, constants frozen. bw_fraction worklist `audit_bodyweight_templates.py`; operator tagging pass + recompute, then gate 3. Handoff: `closeout.md`.
+
 - **Q6 gate 2 — the Tier-0 `load_events` transform (D-C/D-D), landed + live-verified; per-set date-independent RPE, load-sums-as-logged (laterality never discounts cost), epoch diagnostic-only; Q6's DONE condition met (#241/#242)** - See DECISIONS_LOG #241 (transform) and #242 (live-verify + Q6 DONE). Derived recomputable `load_events` store (`formula_version 'tier0-v1'`), `_rpe_coverage` fix, gap-recording provenance; two review-caught defects (epoch-gated RPE, laterality halving) fixed before land. Q6 DONE, gate 3 (`load_metrics` + Banister) next; Tier-0 gaps in Q121. Handoff: `closeout.md`.
 
 - **Q6 gate 1 — Hevy strength → four-window load persistence, landed and live-verified; the first-backfill FK-ordering defect fixed and the test engine made prod-faithful (#239/#240)** - See DECISIONS_LOG #239 (persistence + Tier-0 design D-A..D-G) and #240 (FK-ordering fix + standing FK-enforced test substrate + live-backfill verification). Q6 gate 1 DONE, gates 2–4 sequenced; transform agenda in ROADMAP "Banister build". Handoff: `closeout.md`.
-
-- **The human merge gate is removed — Code merges its own PRs on green; a green PR left unmerged is a defect (#238)** - See DECISIONS_LOG #238. New `### Merge disposition` subsection in `CLAUDE.md`'s shared loop block: PRs open ready-for-review never draft, sole hold is a schema migration or an explicit told-to-hold; propagated verbatim to `health-connect-app`. Handoff: `closeout.md`.
 
 ---
 

@@ -10010,7 +10010,7 @@ forbid.
 
 ---
 
-### #NEXT. `bw_fraction` — the per-template bodyweight fraction, promoted build-now ahead of gate 3
+### 245. `bw_fraction` — the per-template bodyweight fraction, promoted build-now ahead of gate 3
 
 **Decision.** Promote the flat-bodyweight-fraction gap (OPEN_QUESTIONS Q121 gap 4) from Tier-1 to
 **build-now**, landing it **before** gate 3 so the ×1.0-bodyweight distortion never enters the EWMA
