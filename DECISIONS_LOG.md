@@ -9990,9 +9990,12 @@ third and fourth findings came from **external reconciliation, not the suite**; 
 changes that. "Looks sane" is retired as evidence — NM had looked sane twice while Mechanical looked sane
 once.
 
-**Status.** Convention change + tests landed; the reconciliation fixture rides the same PR (the operator's
-prod-verified 56-set data is its input). Prior recompute rankings are **void** pending the post-`#244`
-recompute. No schema change → merge-on-green per `#238`.
+**Status.** Convention change + reconciliation fixture landed together. The 13 Jul fixture
+(`test_load_events_reconciliation.py`, 56 sets embedded, hevy_id `6d8b2f4d…`) reconciles both windows
+**three ways in exact agreement**: Mechanical **36,458.575 `kg_reps`** (operator hand derivation =
+fraction-exact hand derivation = code) and Neuromuscular **14557/720 ≈ 20.218056 `nm_au`** under an
+embedded e1RM map (`SHP → 60`, h computed; rest → `H_NO_E1RM` 0.5). Prior recompute rankings are
+**void** pending the post-`#244` recompute. No schema change → merge-on-green per `#238`.
 
 **How you know.** `git show dd7193c:backend/load_events.py` and `2dc23e1:…` both carry
 `mech = eff_w * float(reps) * m`; `epley_with_rir` appears only at the `e1rm_samples` call site. Runtime
