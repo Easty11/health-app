@@ -9865,3 +9865,48 @@ modelling gaps (weighted-bodyweight undercount, non-rep NM = 0, half-point RIR b
 as OPEN_QUESTIONS Q121 for Tier-1, not a defect in this entry.
 
 ---
+
+### 242. Q6 gate 2 verified live; Q6's DONE condition met — strength volume in the per-window load path
+
+**Decision.** Q6 gate 2 (the `#241` `load_events` transform) is landed AND live-verified on prod,
+and Q6's standing DONE condition — a real query showing strength volume landing non-zero in
+per-window load rows — is **MET for the first time since Q6 was filed**. The merge (`c36825d`, PR
+#107) deployed clean: backend deploy SUCCESS, boot log
+`Running upgrade f9a2c1d40b73 -> c7d9e2f14a86, add_load_events` then `Application startup complete`;
+the dual-head signature (`Multiple head revisions`) did NOT fire.
+
+**How you know.** Prod recompute (`compute_load_events`, `formula_version 'tier0-v1'`): sessions 54,
+events_written 108, sessions_with_e1rm_fit 36, sessions_reps_banded 24 (April/early-May, the bounded
+pre-RPE-epoch era — as designed), sessions_indeterminate_laterality 0, sessions_artifact_signature 0.
+Q6 closing query (prod, per-window `load_events` sums over 54 non-excluded sessions):
+**Mechanical 3,056,351.056 `kg_reps`; Neuromuscular 480.818 `nm_au`** — both non-zero, one row per
+window per session. The zero indeterminate-laterality and zero artifact-signature counts confirm the
+current store needs no laterality adjudication and carries no post-epoch 0-RPE planned-routine
+artifact; the 24 reps-banded sessions are the pre-epoch tail banding by reps alone (per-set rule,
+not an epoch gate). The rows are in `load_events` (the transform output); the `load_metrics` daily
+rollup is gate 3 (unbuilt) — Q6's DONE bar is strength volume demonstrably in the per-window load
+path, which these rows satisfy.
+
+**Status.** Q6 DONE. Gate 3 (`load_metrics` + Banister fitness-fatigue per `#32`) is the next lane
+(ROADMAP "Banister build" NOW). Two carried notes recorded here so they survive the session:
+
+- **Standing correction (process) — a held PR is held for the RELEASE DECISION only.** On release,
+  Code executes the ENTIRE land end-to-end: resolve `#NEXT` at the re-read master max → push →
+  confirm the guard green → un-draft → merge (merge commit) → delete branch → verify the Railway
+  deploy reaches SUCCESS and the migration applied in the boot logs. The operator's residue is the
+  release decision itself, prod-credentialed execution, and data-judgement calls — nothing
+  mechanical. Full rule in `FEEDBACK.md` §1. This refines `#238` (which removed the human *merge*
+  gate; this clarifies that a `#238` schema-migration hold gates the release decision, not the
+  mechanical land that follows it).
+- **Container-tooling note.** `psql` is absent from the current `health-app-backend` image;
+  `railway connect` (to the `health-app-DB` service) is the operator's psql route for prod queries
+  like the closing query above. Recorded so a future session does not assume an in-container `psql`.
+
+**Do not revisit unless.** The recompute numbers above are superseded by a `formula_version` bump
+(then re-verify live and supersede by a new entry). The parked pre-existing second alembic head
+`e2d5c7a1b9f3` (predates the Q6 lane; `#241`) is a **latent hazard for whoever owns it** — gate-1
+and gate-2 deploys both booted clean with both heads present, but a future migration that needs a
+single linear head, or an `alembic upgrade head` (singular) path, will trip `Multiple head
+revisions`; resolve it with a merge migration when that lane is picked up, not here.
+
+---

@@ -75,11 +75,13 @@ load path before the four-window engine — or even Tier 0 with a strength term 
 trusted. Was tracked as "B2" in an out-of-project session's scheme that never entered the
 repo; recorded here under the canonical Q-series.
 
-**State:** OPEN — **re-scoped 2026-08-25 into four sequenced gates.** The original single
-check (a Railway query showing strength volume in per-window `load_metrics` rows) was
-unrunnable because the whole chain below it was unbuilt: nothing persisted Hevy workouts,
-no transform, no `load_metrics` table. The work decomposes into four gates, built in order,
-each the substrate of the next:
+**State:** DONE → #242 (gate 2 landed + live-verified 2026-08-25; strength volume is non-zero
+in the per-window load path — Q6's DONE bar). Gates 3–4 (the `load_metrics` + Banister rollup)
+continue as ROADMAP forward engineering, no longer an open question. **Re-scoped 2026-08-25 into
+four sequenced gates.** The original single check (a Railway query showing strength volume in
+per-window load rows) was unrunnable because the whole chain below it was unbuilt: nothing
+persisted Hevy workouts, no transform, no load store. The work decomposes into four gates, built
+in order, each the substrate of the next:
 
 - **Gate 1 — persistence — DONE 2026-08-25, live-verified (#239, #240).** `hevy_workouts` +
   `hevy_sets` store (PK-upsert, raw payload kept), backfill, dedup flag-and-adjudicate (D-G),
@@ -97,21 +99,29 @@ each the substrate of the next:
   and Hevy planned-vs-performed artifact duplicates (signature: 0-RPE post-epoch rep-based
   workout, usually a same-day full-RPE partner) — dedup half-catches them, a signature check is
   candidate hardening. Both in ROADMAP "Banister build".
-- **Gate 2 — transform (`load_events`).** Per-set Tier-0 Mechanical + Neuromuscular per D-C
-  (RPE/RIR-dominant, intensity-modified) and D-D (non-rep work in via a named bridging
-  constant). Append-only, `formula_version`-tagged. Reads Gate 1's `hevy_sets`.
-- **Gate 3 — rollup (`load_metrics` + Banister).** Daily per-window derived rollup, and the
+- **Gate 2 — transform (`load_events`) — DONE 2026-08-25, live-verified (#241, #242).** Per-set
+  Tier-0 Mechanical + Neuromuscular per D-C (RPE/RIR-dominant, intensity-modified) and D-D (non-rep
+  work in via a named bridging constant), recomputable + `formula_version`-tagged (`tier0-v1`),
+  reading Gate 1's `hevy_workouts.raw`. Review corrected two defects before land (epoch-gated RPE
+  and laterality halving in the load path → per-set date-independent RPE, load-sums-as-logged,
+  epoch diagnostic-only). **Prod closing query (54 non-excluded sessions):** Mechanical
+  **3,056,351.056 `kg_reps`**, Neuromuscular **480.818 `nm_au`** — non-zero, one row per window per
+  session. This is Q6's DONE bar met.
+- **Gate 3 — rollup (`load_metrics` + Banister) — NEXT.** Daily per-window derived rollup, and the
   fitness-fatigue model (ROADMAP "Banister build"). Recomputable from `load_events` (D-B), so
   coefficient/routing corrections are recomputes, never migrations of computed history.
-- **Gate 4 — verified at the machine.** The original Q6 check: a Postgres query showing
-  strength volume landing in per-window `load_metrics` rows, non-zero.
+- **Gate 4 — the machine check** (original Q6 wording: a query showing strength volume in
+  per-window rows, non-zero) is **satisfied at the `load_events` layer** by the gate-2 closing
+  query above; its `load_metrics` form lands with gate 3.
 
-**Consequence today (unchanged):** strength contributes **zero** to the deployed load metric —
-the interim aerobic-only ACWR of `#8` (`mcp_server.get_training_load` still aerobic-only). OPEN
-rather than BLOCKED — nothing prevents building the gates; they simply are not yet all built.
-→ `DONE → #28` when Gate 2 lands (the transform exists) **and** Gate 4's query shows rows
-landing. Owner: Luke. Cross-refs `#28`, `#32`, `#10`, `#33`, `#239` (the
-persistence + Tier-0 design decision), ROADMAP "Banister build".
+**Consequence today:** strength volume now lands non-zero in the per-window `load_events` path
+(gate 2), but the **deployed** user-facing load metric is still the interim aerobic-only ACWR of
+`#8` (`mcp_server.get_training_load` unchanged) — the strength term reaches a consumed metric only
+once gate 3 (`load_metrics` + Banister) wires it. Q6's own bar (strength demonstrably in the
+per-window load path) is met; the Banister engine that reads it is forward work.
+Resolved **DONE → #242** (gate 2 landed + live-verified; closing query shows rows landing).
+Owner: Luke. Cross-refs `#28`, `#32`, `#10`, `#33`, `#239`/`#240` (gate 1), `#241`/`#242` (gate 2),
+ROADMAP "Banister build".
 
 **Region-tag note (2026-08-25):** all 57 custom templates remain region-unadjudicated. This
 blocks a future region-DISTRIBUTED Mechanical channel (per-region load) but NOT the systemic

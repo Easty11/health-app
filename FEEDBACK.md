@@ -26,6 +26,7 @@ These emerged organically from corrections and should be treated as first-class 
 | Regulatory line: explain mechanisms, list evidence-ranked levers, stop there. Never connect levers to specific recommended actions for an individual. Education is permitted; prescription is not. | Commercial direction session, June 2026 |
 | Repo is the single source of truth for volatile state (decisions, open questions, roadmap, tasks). Code/`@claude` Action is the only writer; chat proposes, never commits. Volatile state is never saved to project knowledge; stable orientation docs stay there. Full model in CLAUDE.md. | Source-of-truth consolidation, June 2026 |
 | Device agnosticism is an architecture constraint from day one. Source field abstracts hardware. Algorithm never references device-specific schema. New devices are integration problems, not algorithm problems. | Architecture session, June 2026 |
+| A held PR is held for the RELEASE DECISION only. On release, Code executes the entire land end-to-end — resolve `#NEXT` at the re-read master max → push → confirm guard green → un-draft → merge (merge commit) → delete branch → verify the Railway deploy reaches SUCCESS and the migration applied in boot logs. The operator's residue is the release decision, prod-credentialed execution, and data-judgement calls; nothing mechanical. Refines `#238`. | Q6 gate 2 land, `#242` |
 
 ---
 
