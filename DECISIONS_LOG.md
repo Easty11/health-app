@@ -9960,8 +9960,10 @@ NM=0 remain the `Q121` Tier-0 gaps.
 identical to `#242` (sessions 54 / events 108 / e1rm_fit 36 / reps_banded 24 / indeterminate 0 /
 artifact 0):
 
-- **Mechanical 924,082.523 `kg_reps`** (was the defect-affected 3,056,351.056). The expected drop —
-  cardio inflation removed by this entry's fix.
+- **Mechanical 924,082.523 `kg_reps`** (was the defect-affected 3,056,351.056). The headline drop is
+  this entry's cardio exclusion; `#244`'s floor also nudges the mechanical band up for RPE-8.5 and
+  RPE-6.5 boundary sets (`m` 1.15→1.30 / 1.0→1.15), and `#245` contributes exactly 0 (all
+  `bw_fraction` NULL, below), so this figure is `#243`+`#244`, not `#243` alone.
 - **Neuromuscular 522.480 `nm_au`** (the `#242` number was 480.818).
 - **Ranking pass.** Mechanical top-10 is strength sessions Apr–Aug, no Flush/Recovery or physio,
   no April–May cluster — the inversion this entry fixed is gone.
@@ -9981,16 +9983,16 @@ accounts for it:
 - **(b) — `#244`'s RIR floor — is the cause.** The diff window is `git diff c36825d..ec02436 --
   backend/load_events.py` (`c36825d` = `#242`'s merge, the 480.818 baseline; `ec02436` = current
   master), and it holds only `#243`/`#244`/`#245`. Of those three: `#243` is NM-neutral (above);
-  `#245` `bw_fraction` scales `eff_w` for bodyweight rep sets by a fraction ≤ 1.0 (push-up ~0.65 …
-  chin/dip 1.0; NULL ≡ ×1.0), so it can only **lower** `h(I)=eff_w/e1RM` and thus NM, and for
-  bodyweight-class templates with no weighted set it hits the `h=0.5` fallback and is inert; `#244`'s
-  floor is the only change that **raises** NM. Mechanism confirmed on the pure functions: floor lowers
-  the banded RIR by 1 for every half-integer `10 − RPE`, raising `f(RIR)` by +0.10…+0.25 (×`h`) per
-  half-point-RPE working set (e.g. RPE 8.5 → RIR 1.5 → band 1 not 2 → `f` 0.9 not 0.75), and leaves
-  every whole-number-RPE set exactly unchanged (`floor(x)=floor(x+0.5)` for integer `x`). Net + with
-  `#245` pushing −, so `#244` more than accounts for +41.66 on its own. (The gross floor effect is
-  larger still: the 480.818 baseline had no `bw_fraction`, so the observed +41.66 is `#244` net of
-  `#245`'s reduction.)
+  `#245` `bw_fraction` contributes **exactly 0** to this recompute: every template's `bw_fraction` was
+  still NULL (≡ ×1.0; operator-confirmed, the tagging pass is pending — so the ×1.0 bodyweight overcount
+  `#245` exists to remove is still live in prod, and these figures pre-date the tagging). So `#244`'s
+  floor **owns the entire +41.66 outright**, not "net of two effects". (Once templates are tagged,
+  `bw_fraction ≤ 1.0` — push-up ~0.65 … chin/dip 1.0 — could only *lower* `h(I)=eff_w/e1RM` and thus NM,
+  and would be inert wherever a bodyweight-class template with no weighted set hits the `h=0.5` fallback;
+  that is the direction of the next recompute, not this one.) Mechanism confirmed on the pure functions:
+  floor lowers the banded RIR by 1 for every half-integer `10 − RPE`, raising `f(RIR)` by +0.10…+0.25
+  (×`h`) per half-point-RPE working set (e.g. RPE 8.5 → RIR 1.5 → band 1 not 2 → `f` 0.9 not 0.75), and
+  leaves every whole-number-RPE set exactly unchanged (`floor(x)=floor(x+0.5)` for integer `x`).
 - **(c) — a `hevy_workouts.raw` re-sync with revised RPEs — is ruled out by the recompute's own
   diagnostic shape.** The ANCHOR reports counts identical to `#242` (54 / 108 / 36 / 24 / 0 / 0); a
   re-sync that changed RPEs or session/set composition would move `reps_banded` / `e1rm_fit` /
@@ -10003,15 +10005,18 @@ a governance-only recording, not a concern-split fix.
 `git show 2dc23e1 -- backend/load_events.py` touches only the non-rep mechanical branch; `e1rm_samples`
 carries the `reps/weight` filter that makes candidate (a) impossible; the `_rir_from_rpe` half-up→floor
 grid over `_f_rir` shows a strictly non-negative per-set NM delta (positive only on half-point RPEs,
-zero on whole RPEs); `_effective_weight`'s `bw_fraction ≤ 1.0` makes `#245`'s NM delta ≤ 0; the ANCHOR's
-identical diagnostic shape closes (c).
+zero on whole RPEs); `#245`'s NM delta was exactly 0 in this recompute (every `bw_fraction` NULL,
+operator-confirmed; `≤ 0` in general since `bw_fraction ≤ 1.0`); the ANCHOR's identical diagnostic shape
+closes (c).
 
-**Open item (surfaced, for Code to decide — step 5).** `window` is a Postgres reserved word and the
-`load_events.window` column already needs quoting in hand queries. Before Gate 3's `load_metrics`
-rollup inherits `window` (it reads `load_events` per D-B), the fork is: **rename the column** (a schema
-migration — holds for explicit operator instruction per `#238`/CLAUDE.md merge-disposition) **vs.
-live with quoting** every reference. Recorded here, not decided; no new Q unless it becomes a design
-question.
+**Open item — RESOLVED by operator (2026-08-27).** `window` is a Postgres reserved word and the
+`load_events.window` column already needs quoting in hand queries. The fork was: **rename the column**
+(a schema migration — holds for explicit operator instruction per `#238`/CLAUDE.md merge-disposition)
+**vs. live with quoting** every reference. **Operator's call: rename now**, to `load_window` (keeping the
+D-A window vocabulary), while `load_events` is the sole 108-row table carrying the name and the rename is
+trivially reversible — before Gate 3's `load_metrics` inherits it and the name is two tables plus every
+rollup query. Executed as its own concern-split migration PR, **held for the operator's release decision**
+per `#238`; the decision and its migration are recorded in that PR's DECISIONS_LOG entry, not here.
 
 ---
 
