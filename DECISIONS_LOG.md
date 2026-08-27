@@ -10125,3 +10125,42 @@ that is the remaining Q121 item and needs the e1RM fit to read the same coalesce
 guards.
 
 ---
+
+### 246. `load_events.window` renamed to `load_window` — `window` is a Postgres reserved word
+
+**Decision.** Rename the `load_events` window column from `window` to `load_window` (migration
+`1341a2cf6938`, chained on the single head `d4a1f8c609e2`), keeping the D-A "window" vocabulary.
+Column-rename only; no data change — a rename preserves every row and the natural key.
+
+**Rationale.** `window` is a Postgres reserved word: every hand query against the store already had to
+quote `"window"` (recorded in the `#243` closing-figures append and the CLAUDE.md prod-tooling block), and
+gate 3's `load_metrics` rollup was about to inherit that quoting into every EWMA query. Renaming now —
+while `load_events` is the sole 108-row table carrying the name and the rename is trivially reversible —
+costs one `ALTER TABLE ... RENAME COLUMN`; renaming after gate 3 is two tables plus every rollup query.
+This resolves the `#243` open item, adjudicated by the operator 2026-08-27 (rename, not live-with-quoting).
+
+**Scope kept minimal.** The unique constraint `uq_load_event_session_window_version` and the index
+`ix_load_events_user_window` keep their names — Postgres `RENAME COLUMN` rewrites their *definitions* to
+reference `load_window` automatically, and the names never appear in a query, so renaming them would add
+drop/recreate risk on a constraint over live data for zero query-surface benefit.
+
+**Status.** HELD for the operator's release decision per `#238` (schema migration) — built + statically
+consistent on `feat/load-window-rename`, not landed. `#246` resolved against master max `#245` at
+authoring; re-read master's max and re-resolve at the release-merge if it advanced. On release: land
+guard-green, apply the migration on prod (Postgres — the boot `alembic upgrade` reaches head
+`1341a2cf6938`); a recompute is **not** required (structural rename, not a `formula_version` change — rows
+and natural key untouched).
+
+**How you know.** After the rename a tree-wide grep for a `LoadEvent` `window` attribute
+(`backend`/`frontend`) returns zero — the model attribute, the `load_events.py` insert kwarg, all six
+`test_load_events.py` sites, and the SCHEMA.md DDL read `load_window`; the migration is a pure
+`op.alter_column(new_column_name=…)` with a symmetric downgrade. Tests build the schema from the model via
+`Base.metadata.create_all` (`conftest.py`), so the model rename is what the suite exercises (the suite was
+not run in the authoring sandbox — sqlalchemy absent — so it is validated statically here and by the
+operator on land). The single migration head is `d4a1f8c609e2` (the `#242`-era parked second head
+`e2d5c7a1b9f3` has since been linearized into the main chain), so this migration adds no new head.
+
+**Do not revisit unless.** Another load column later collides with a reserved word (same fix, its own
+migration). Reintroducing a bare `window` identifier on any load table is exactly this defect.
+
+---

@@ -323,8 +323,8 @@ def test_compute_writes_two_windows_per_session(db_session):
     summary = compute_load_events(db_session, 1)
 
     assert summary["sessions"] == 1 and summary["events_written"] == 2
-    rows = db_session.query(models.LoadEvent).order_by(models.LoadEvent.window).all()
-    windows = {r.window: r for r in rows}
+    rows = db_session.query(models.LoadEvent).order_by(models.LoadEvent.load_window).all()
+    windows = {r.load_window: r for r in rows}
     assert set(windows) == {"mechanical", "neuromuscular"}
     assert windows["mechanical"].load == pytest.approx(575.0)
     assert windows["mechanical"].formula_version == FORMULA_VERSION
@@ -350,7 +350,7 @@ def test_compute_applies_bw_fraction_from_templates(db_session):
         _ex("PLANKROW", [{"type": "normal", "reps": 10, "rpe": 8.0}]),    # 0/NULL weight, untagged
     ])
     compute_load_events(db_session, 1)
-    mech = db_session.query(models.LoadEvent).filter_by(window="mechanical").one()
+    mech = db_session.query(models.LoadEvent).filter_by(load_window="mechanical").one()
     # PUSHUP 102×0.65×10×1.15 = 762.45 ; PLANKROW 102×1.0×10×1.15 = 1173.0
     assert mech.load == pytest.approx(762.45 + 1173.0)
 
@@ -371,11 +371,11 @@ def test_recompute_is_idempotent(db_session):
     _workout(db_session, "w1", 1, "2026-06-01T10:00:00Z",
              [_ex("BENCH", [{"weight_kg": 100.0, "reps": 5, "rpe": 8.0}])])
     compute_load_events(db_session, 1)
-    first = {(r.window, r.load) for r in db_session.query(models.LoadEvent).all()}
+    first = {(r.load_window, r.load) for r in db_session.query(models.LoadEvent).all()}
     compute_load_events(db_session, 1)          # re-run
     second_rows = db_session.query(models.LoadEvent).all()
     assert len(second_rows) == 2                # not appended
-    assert {(r.window, r.load) for r in second_rows} == first
+    assert {(r.load_window, r.load) for r in second_rows} == first
 
 
 def test_other_formula_version_coexists(db_session):
@@ -384,7 +384,7 @@ def test_other_formula_version_coexists(db_session):
              [_ex("BENCH", [{"weight_kg": 100.0, "reps": 5}])])
     # a landed row from a different (older) formula version
     db_session.add(models.LoadEvent(
-        user_id=1, source="hevy", source_ref="w1", window="mechanical",
+        user_id=1, source="hevy", source_ref="w1", load_window="mechanical",
         occurred_at=None, load=1.0, unit="kg_reps", formula_version="tier0-v0",
     ))
     db_session.commit()
@@ -401,6 +401,6 @@ def test_indeterminate_laterality_surfaced_in_summary(db_session):
     ])
     summary = compute_load_events(db_session, 1)
     assert summary["sessions_indeterminate_laterality"] == 1
-    mech = db_session.query(models.LoadEvent).filter_by(window="mechanical").one()
+    mech = db_session.query(models.LoadEvent).filter_by(load_window="mechanical").one()
     assert mech.load == pytest.approx(1000.0)            # not halved
     assert mech.provenance["indeterminate_laterality"] == ["UNT"]
