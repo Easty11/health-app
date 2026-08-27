@@ -9955,6 +9955,64 @@ assert weighted non-rep still bridges. 39 transform cases pass; full suite green
 `_effective_weight` there is exactly this defect). The weighted-bodyweight-rep undercount and non-rep
 NM=0 remain the `Q121` Tier-0 gaps.
 
+**Closing figures (operator recompute 2026-08-27, deploy `9583a992`, in-container
+`/opt/venv/bin/python load_events.py`).** User 1, `tier0-v1`, 54 non-excluded sessions — shape
+identical to `#242` (sessions 54 / events 108 / e1rm_fit 36 / reps_banded 24 / indeterminate 0 /
+artifact 0):
+
+- **Mechanical 924,082.523 `kg_reps`** (was the defect-affected 3,056,351.056). The expected drop —
+  cardio inflation removed by this entry's fix.
+- **Neuromuscular 522.480 `nm_au`** (the `#242` number was 480.818).
+- **Ranking pass.** Mechanical top-10 is strength sessions Apr–Aug, no Flush/Recovery or physio,
+  no April–May cluster — the inversion this entry fixed is gone.
+
+**The NM movement is real, and it is NOT this entry's.** The "Neuromuscular (480.818 `nm_au`) is
+unaffected" claim above is correct **as scoped to `#243`** — but the operator's single recompute at
+`9583a992` carries `#243`+`#244`+`#245` together, so its closing NM is 522.480, not 480.818. The
++41.66 `nm_au` is caused by **`#244`** (the `floor(10 − RPE)` RIR convention), the only NM-path change
+in the recompute window that raises NM. Traced against the brief's candidate order (a)→(b)→(c); (b)
+accounts for it:
+
+- **(a) — the non-rep skip shifting the per-template e1RM fit — is impossible, not merely absent.**
+  `e1rm_samples` filters `rpe is None or reps is None or weight is None or weight <= 0`, so a
+  weight-NULL **non-rep** set (reps None, weight None) was NEVER in the e1RM fit, before or after this
+  entry; and `2dc23e1` touched only the non-rep **mechanical** branch (which already returned
+  `neuromuscular=0.0`). `#243` moves NM by exactly 0.
+- **(b) — `#244`'s RIR floor — is the cause.** The diff window is `git diff c36825d..ec02436 --
+  backend/load_events.py` (`c36825d` = `#242`'s merge, the 480.818 baseline; `ec02436` = current
+  master), and it holds only `#243`/`#244`/`#245`. Of those three: `#243` is NM-neutral (above);
+  `#245` `bw_fraction` scales `eff_w` for bodyweight rep sets by a fraction ≤ 1.0 (push-up ~0.65 …
+  chin/dip 1.0; NULL ≡ ×1.0), so it can only **lower** `h(I)=eff_w/e1RM` and thus NM, and for
+  bodyweight-class templates with no weighted set it hits the `h=0.5` fallback and is inert; `#244`'s
+  floor is the only change that **raises** NM. Mechanism confirmed on the pure functions: floor lowers
+  the banded RIR by 1 for every half-integer `10 − RPE`, raising `f(RIR)` by +0.10…+0.25 (×`h`) per
+  half-point-RPE working set (e.g. RPE 8.5 → RIR 1.5 → band 1 not 2 → `f` 0.9 not 0.75), and leaves
+  every whole-number-RPE set exactly unchanged (`floor(x)=floor(x+0.5)` for integer `x`). Net + with
+  `#245` pushing −, so `#244` more than accounts for +41.66 on its own. (The gross floor effect is
+  larger still: the 480.818 baseline had no `bw_fraction`, so the observed +41.66 is `#244` net of
+  `#245`'s reduction.)
+- **(c) — a `hevy_workouts.raw` re-sync with revised RPEs — is ruled out by the recompute's own
+  diagnostic shape.** The ANCHOR reports counts identical to `#242` (54 / 108 / 36 / 24 / 0 / 0); a
+  re-sync that changed RPEs or session/set composition would move `reps_banded` / `e1rm_fit` /
+  `sessions`. Not needed to explain an increase the code change already forces.
+
+No code defect exposed — `#244`'s floor is a deliberate convention, working as designed — so this stays
+a governance-only recording, not a concern-split fix.
+
+**How you know.** `git diff c36825d..ec02436 -- backend/load_events.py` = `#243`/`#244`/`#245` only;
+`git show 2dc23e1 -- backend/load_events.py` touches only the non-rep mechanical branch; `e1rm_samples`
+carries the `reps/weight` filter that makes candidate (a) impossible; the `_rir_from_rpe` half-up→floor
+grid over `_f_rir` shows a strictly non-negative per-set NM delta (positive only on half-point RPEs,
+zero on whole RPEs); `_effective_weight`'s `bw_fraction ≤ 1.0` makes `#245`'s NM delta ≤ 0; the ANCHOR's
+identical diagnostic shape closes (c).
+
+**Open item (surfaced, for Code to decide — step 5).** `window` is a Postgres reserved word and the
+`load_events.window` column already needs quoting in hand queries. Before Gate 3's `load_metrics`
+rollup inherits `window` (it reads `load_events` per D-B), the fork is: **rename the column** (a schema
+migration — holds for explicit operator instruction per `#238`/CLAUDE.md merge-disposition) **vs.
+live with quoting** every reference. Recorded here, not decided; no new Q unless it becomes a design
+question.
+
 ---
 
 ### 244. The "fourth defect" was not one — the mechanical formula is spec-correct; RIR banding is pinned to `floor`

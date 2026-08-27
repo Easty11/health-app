@@ -247,7 +247,11 @@ Code and schema changes always take full human review.
   — the latter returns zero records in Health Connect queries.
 - **Prod psql route.** `psql` is absent from the `health-app-backend` image; `railway connect`
   to the `health-app-DB` service is the operator's psql route for prod queries (the #242 closing
-  query ran this way). Transform recomputes run in-container via `python backend/load_events.py`.
+  query ran this way). Transform recomputes run in-container: `railway ssh --service
+  health-app-backend` → `cd /app` → `/opt/venv/bin/python load_events.py`. Use the venv interpreter
+  and `cd /app` explicitly — bare `python` is the system interpreter (no sqlalchemy), and the cwd is
+  `/app`, not `/app/backend`. `load_events.window` is a Postgres reserved word — quote it (`"window"`)
+  in hand queries. Windows psql needs `\encoding UTF8` for session titles to render.
 
 ### Recent landings
 
