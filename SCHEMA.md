@@ -1111,7 +1111,7 @@ CREATE INDEX ix_hevy_sets_exercise_template_id  ON hevy_sets (exercise_template_
 
 ### 027 — load_events
 
-The **derived, recomputable** middle layer of the two-level load store (DECISIONS_LOG #28/#32, D-B/D-C/D-D; Q6 gate 2). The Tier-0 transform (`backend/load_events.py`) reads `hevy_workouts.raw` (source of truth, gate 1) and writes one **Mechanical** and one **Neuromuscular** row per session in window-native units (D-A); the daily `load_metrics` + Banister rollup (gate 3) reads these, never the raw payload. Per D-B a coefficient/routing correction is a **recompute, never a migration**: every constant is a REASONED-PRIOR (#32) tagged by `formula_version`, so the transform is delete-and-reinsert per `(user, formula_version)` — a re-run is idempotent on the `uq_load_event_session_window_version` natural key, and a new version's rows coexist beside the old until the rollup switches. **Source-neutral** (parallels the wearable ingestion contract #236): `(source, source_ref)` names the originating session generically with **NO hard FK** to `hevy_workouts` — the same store will later hold Metabolic (aerobic) and Psychological (sRPE) events whose `source_ref` points elsewhere, which a hard FK would reject. `user_id` **is** a hard FK (CASCADE). Rows orphaned by a hard-deleted or adjudicated-out (`excluded_at`, D-G) source session are cleared by the next recompute, which skips those sessions. `provenance` records the transform's **gaps** at row grain (RPE-banded vs reps-banded set counts, e1RM fit vs the 0.5 fallback, non-rep bridging contribution, the laterality `paired_templates` / `indeterminate_laterality` surfacing for the asymmetry instrument, and the `post_epoch_zero_rpe` artifact-signature flag) — diagnostic, not consumed by load. **Load sums sets as logged** — the D-E laterality pairing never discounts cost.
+The **derived, recomputable** middle layer of the two-level load store (DECISIONS_LOG #28/#32, D-B/D-C/D-D; Q6 gate 2). The Tier-0 transform (`backend/load_events.py`) reads `hevy_workouts.raw` (source of truth, gate 1) and writes one **Mechanical** and one **Neuromuscular** row per session in window-native units (D-A); the daily `load_metrics` + Banister rollup (gate 3) reads these, never the raw payload. Per D-B a coefficient/routing correction is a **recompute, never a migration**: every constant is a REASONED-PRIOR (#32) tagged by `formula_version`, so the transform is delete-and-reinsert per `(user, formula_version)` — a re-run is idempotent on the `uq_load_event_session_window_version` natural key, and a new version's rows coexist beside the old until the rollup switches. **Source-neutral** (parallels the wearable ingestion contract #236): `(source, source_ref)` names the originating session generically with **NO hard FK** to `hevy_workouts` — the same store will later hold Metabolic (aerobic) and Psychological (sRPE) events whose `source_ref` points elsewhere, which a hard FK would reject. `user_id` **is** a hard FK (CASCADE). Rows orphaned by a hard-deleted or adjudicated-out (`excluded_at`, D-G) source session are cleared by the next recompute, which skips those sessions. `provenance` records the transform's **gaps** at row grain (RPE-banded vs reps-banded set counts, e1RM fit vs the 0.5 fallback, non-rep bridging contribution, the laterality `paired_templates` / `indeterminate_laterality` surfacing for the asymmetry instrument, and the `post_epoch_zero_rpe` artifact-signature flag) — diagnostic, not consumed by load. **Load sums sets as logged** — the D-E laterality pairing never discounts cost. The window column is **`load_window`** (migration `1341a2cf6938`, #246) — `window` is a Postgres reserved word that forced quoting in every hand query and would have forced it in gate 3's `load_metrics`; the unique-constraint and index NAMES keep their `…window…` form (they reference the renamed column and never appear in a query, so renaming them would add drop/recreate risk for no benefit).
 
 ```sql
 CREATE TABLE load_events (
@@ -1119,18 +1119,18 @@ CREATE TABLE load_events (
     user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     source           VARCHAR(20) NOT NULL,        -- 'hevy'
     source_ref       VARCHAR(64) NOT NULL,        -- session id (soft ref; NO FK — source-neutral)
-    window           VARCHAR(20) NOT NULL,        -- 'mechanical' | 'neuromuscular'
+    load_window      VARCHAR(20) NOT NULL,        -- 'mechanical' | 'neuromuscular' (`window` is a PG reserved word — renamed #246)
     occurred_at      TIMESTAMPTZ,                 -- session start; NULL if the source session is undated
     load             DOUBLE PRECISION NOT NULL,   -- window-native (D-A)
     unit             VARCHAR(20) NOT NULL,        -- 'kg_reps' | 'nm_au'
     formula_version  VARCHAR(20) NOT NULL,        -- 'tier0-v1'
     provenance       JSONB,                       -- gap-recording blob (diagnostic)
     computed_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT uq_load_event_session_window_version UNIQUE (source, source_ref, window, formula_version)
+    CONSTRAINT uq_load_event_session_window_version UNIQUE (source, source_ref, load_window, formula_version)
 );
 
 CREATE INDEX ix_load_events_user_id           ON load_events (user_id);
-CREATE INDEX ix_load_events_user_window       ON load_events (user_id, window);
+CREATE INDEX ix_load_events_user_window       ON load_events (user_id, load_window);
 CREATE INDEX ix_load_events_user_occurred     ON load_events (user_id, occurred_at);
 CREATE INDEX ix_load_events_formula_version   ON load_events (formula_version);
 ```

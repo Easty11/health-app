@@ -992,10 +992,10 @@ class LoadEvent(Base):
     """
     __tablename__ = "load_events"
     __table_args__ = (
-        UniqueConstraint("source", "source_ref", "window", "formula_version",
+        UniqueConstraint("source", "source_ref", "load_window", "formula_version",
                          name="uq_load_event_session_window_version"),
         Index("ix_load_events_user_id", "user_id"),
-        Index("ix_load_events_user_window", "user_id", "window"),
+        Index("ix_load_events_user_window", "user_id", "load_window"),
         Index("ix_load_events_user_occurred", "user_id", "occurred_at"),
         Index("ix_load_events_formula_version", "formula_version"),
     )
@@ -1006,7 +1006,7 @@ class LoadEvent(Base):
     )
     source: Mapped[str] = mapped_column(String(20), nullable=False)        # 'hevy'
     source_ref: Mapped[str] = mapped_column(String(64), nullable=False)   # session id (soft ref)
-    window: Mapped[str] = mapped_column(String(20), nullable=False)       # 'mechanical' | 'neuromuscular'
+    load_window: Mapped[str] = mapped_column(String(20), nullable=False)  # 'mechanical' | 'neuromuscular' (`window` is a PG reserved word, #246)
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     load: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(20), nullable=False)         # 'kg_reps' | 'nm_au'

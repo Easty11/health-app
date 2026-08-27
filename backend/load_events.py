@@ -563,7 +563,7 @@ def compute_load_events(
                 user_id=user_id,
                 source="hevy",
                 source_ref=sess.hevy_id,
-                window=window,
+                load_window=window,
                 occurred_at=sess.occurred_at,
                 load=agg["load"],
                 unit=agg["unit"],
