@@ -10144,12 +10144,15 @@ This resolves the `#243` open item, adjudicated by the operator 2026-08-27 (rena
 reference `load_window` automatically, and the names never appear in a query, so renaming them would add
 drop/recreate risk on a constraint over live data for zero query-surface benefit.
 
-**Status.** HELD for the operator's release decision per `#238` (schema migration) — built + statically
-consistent on `feat/load-window-rename`, not landed. `#246` resolved against master max `#245` at
-authoring; re-read master's max and re-resolve at the release-merge if it advanced. On release: land
-guard-green, apply the migration on prod (Postgres — the boot `alembic upgrade` reaches head
-`1341a2cf6938`); a recompute is **not** required (structural rename, not a `formula_version` change — rows
-and natural key untouched).
+**Status.** LANDED + live-verified. Held for the `#238` schema-migration gate, then released by explicit
+operator instruction (2026-08-27) and landed end-to-end per `#242`'s standing correction: merged via PR
+#116 (merge commit `7bed138`, `--merge`, branch deleted), `#246` re-read against master max `#245` at the
+merge instant (no advance). Backend deploy `7fa6a32e` reached **SUCCESS** and the boot log carries
+`INFO [alembic.runtime.migration] Running upgrade d4a1f8c609e2 -> 1341a2cf6938, rename
+load_events.window to load_window` followed by `Application startup complete` — the migration applied on a
+single head (no `Multiple head revisions`). No recompute run (structural rename, not a `formula_version`
+change — rows and natural key untouched); the full pytest suite was not run in the authoring sandbox
+(sqlalchemy absent) and is owed on the next local/CI pass (`backend/tests/test_load_events.py`).
 
 **How you know.** After the rename a tree-wide grep for a `LoadEvent` `window` attribute
 (`backend`/`frontend`) returns zero — the model attribute, the `load_events.py` insert kwarg, all six
