@@ -10167,3 +10167,51 @@ operator on land). The single migration head is `d4a1f8c609e2` (the `#242`-era p
 migration). Reintroducing a bare `window` identifier on any load table is exactly this defect.
 
 ---
+
+### 247. Correction to `#243`'s closing figures — `bw_fraction` was live at the 27 Aug recompute, so `#245` is NOT zero
+
+**Decision.** Supersede the claim in `#243`'s closing-figures block that "`#245` contributes exactly 0
+(all `bw_fraction` NULL at recompute time)". It is **wrong**. The 17-template `bw_fraction` tagging pass was
+already live at the 27 Aug recompute (`audit_bodyweight_templates.py --strict` exit 0 — 0 templates need a
+tag), so **both closing figures — Mechanical 924,082.5234 `kg_reps` and Neuromuscular 522.480 `nm_au` —
+reflect `#243`+`#244`+`#245`**, not `#243`+`#244` with `#245`=0. Per the DECISIONS supersede-not-amend rule
+this appends; `#243`'s block is left as-landed and corrected here. The two figures themselves are unchanged —
+only their attribution is.
+
+**What changes.**
+- **Mechanical** is `#243` (cardio exclusion) + `#244` (floor band at RPE 8.5/6.5) + **`#245`**
+  (bodyweight-class scaling) — not "`#243` alone" and not "`#243`+`#244`". `#245`'s Mechanical effect is
+  measured, not argued: nulling Push Up (`392887AA`) and recomputing **raised** Mechanical
+  924,082.5234 → 924,903.6234 (**+821.1**); restoring the tag returned it exactly — a reversible prod
+  experiment (operator, 2026-08-28).
+- **Neuromuscular** attribution to `#244` **stands directionally** (the floor is still the only NM-*raising*
+  change in the `c36825d..ec02436` window), but its **magnitude is net of `#245`'s effect through
+  `I = eff_w/e1RM`** on mixed-logging templates: a `bw_fraction < 1` lowers `eff_w`, hence `I`, hence
+  `h(I)`, hence NM — but only where a bodyweight set consumes a fitted e1RM from the same template's
+  weighted sets; a pure-bodyweight template hits the `h=0.5` fallback and is unaffected. `#245`'s NM
+  contribution is therefore ≤ 0, so record the movement as **"≥ +41.66 `nm_au` from `#244`"**, not
+  "exactly +41.66" — `#244`'s gross contribution is at least the observed net.
+
+**Rationale (the process failure).** The "all `bw_fraction` NULL" claim was **inferred from `#245`'s
+closeout** ("tagging pass not yet done") **without a prod read** — an adjacent attestation stood in for a
+measurement. This is exactly `FEEDBACK` **§18** (*state inferred from an adjacent attestation is not
+measured state*): the adjacent fact was genuinely written, which is what made the inference feel safe, but
+only a prod read (`audit --strict`, or the Push Up experiment) could measure it — and it said the opposite.
+The tagging pass had gone live between `#245`'s closeout and the 27 Aug recompute; the closeout was true
+when written and stale by the time it was cited.
+
+**Status.** Locked. Corrects `#243`'s closing-figures block (its Mechanical bullet, the (b) NM bullet, and
+the how-you-know's "`#245`'s NM delta was exactly 0" line) and the CLAUDE.md Recent-landings pointer
+(updated to reference this entry). The `#243`/`#242` figures (924,082.5234 / 522.480) are unchanged.
+
+**How you know.** Operator's reversible prod experiment (2026-08-28): `bw_fraction` set NULL on Push Up
+(`392887AA`) → recompute → Mechanical 924,082.5234 → 924,903.6234 (+821.1); restore → exact return.
+`audit_bodyweight_templates.py --strict` exit 0 (0 templates need a tag) confirms the 17-template pass was
+live at the 27 Aug recompute. `#245`'s NM direction (≤ 0) follows from `_effective_weight`'s
+`bw_fraction ≤ 1.0` lowering `I` into the monotone `h(I)`.
+
+**Do not revisit unless.** A `formula_version` bump re-derives the figures (then supersede with the new
+recompute). The general rule this instance is filed under — never attest a prod figure or state from a
+closeout or adjacent doc; measure it (a prod read) — is `FEEDBACK` §18.
+
+---
