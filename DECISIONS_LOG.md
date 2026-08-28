@@ -10338,3 +10338,53 @@ the full stack at session start, weigh the cold-start tax the #122/#250 split de
 precisely so it need not be.
 
 ---
+
+### 251. Metabolic window derivation — Edwards zone-weighted TRIMP (`metab-v1`, `trimp_edw_au`)
+
+**Decision:** The Metabolic window of the four-window `load_events` store is derived from
+`aerobic_sessions` by a NEW sibling transform (`backend/load_events_metabolic.py`), one Metabolic
+row per qualifying session, in Edwards (1993) zone-weighted TRIMP:
+`trimp = Σ_z (zone_z_seconds / 60) × weight_z`, weights `{z1:1, z2:2, z3:3, z4:4, z5:5}` — a reasoned
+prior (#32), literature-standard, needing no individual physiological constant. `formula_version =
+"metab-v1"`, `unit = "trimp_edw_au"`, `load_window = "metabolic"` (lowercase — the `load_metrics`
+fatigue-τ allowlist already provisions `metabolic` τ=4, so the daily rollup lights up unchanged).
+Source linkage is source-neutral: `source = "aerobic_sessions"`, `source_ref = str(id)` (the stable
+internal id — `source_session_id` is nullable and untrustworthy as a key). `occurred_at` prefers
+`start_time`, else UTC-midnight of the always-present `session_date` (the rollup drops NULL-`occurred_at`
+rows). Recompute is delete-and-reinsert scoped to `(user, "metab-v1")` ONLY — the strength transform's
+`tier0-v1` rows are never touched — and idempotent on the natural key.
+
+Three sub-rulings: **(a) fail-closed coverage (INV-7).** A session with no usable zone data — every
+`z*_seconds` NULL, or a zero zone-sum — emits NO row and is counted in `sessions_skipped_no_zones`; no
+imputation. **(b) no fallback formula (INV-2 unit-lock).** There is NO Banister-TRIMP (HR-based) fallback
+in v1 — mixing formulas inside one window's series would break within-window comparability. Zone-less
+sessions wait for a v2 ruling (Q123), they are not silently HR-mapped. **(c) `cardio_load` excluded as a
+load input.** Polar's proprietary `cardio_load` is device-locked and non-recomputable (violates #32
+provenance discipline); it appears only as a convergent-sanity TRIMP-vs-`cardio_load` correlation in the
+transform summary, never as magnitude. Windows are orthogonal: a session captured by both Hevy
+(→ Mechanical / Neuromuscular) and Polar (→ Metabolic) deposits into DIFFERENT windows by design — not
+double-counting.
+
+**Rationale.** Closes the §3.1 ledger gap: the Governor (S2) was blind to the dominant in-season
+chronic-tax vector because the Metabolic window was schema-present but compute-absent. This transform is
+the trigger #249 named for reassessing the legacy aerobic acute-spike ratio's retirement (#8/#28) — that
+reassessment is downstream governance, NOT part of this change.
+
+**Status.** BUILT + test-proven; PR open, held for human review (code change — CLAUDE.md merge
+disposition: code changes always take full human review; not self-merged). No schema migration — the
+`load_window`/`unit`/`formula_version` columns already accept these string values, so SCHEMA.md does not
+move.
+
+**How you know.** `backend/tests/test_load_events_metabolic.py` runs green (19 tests): G1 exact Edwards
+sum, mutation-proofed against a flat unweighted sum (600s z1 + 300s z2 + 120s z5 → 10+10+10 = 30, not
+17); G2 fail-closed (all-NULL and all-zero → zero rows, skip counted); G3 idempotency (double-run →
+identical row set); G4 isolation (a landed `tier0-v1` row survives byte-identical). Full `test_load_events.py`
+strength suite stays green (62 passed together). No `metabolic` load-event writer existed before this
+(grep-confirmed — the token appeared only as rollup provisioning and docstrings).
+
+**Do not revisit unless.** Zone-less aerobic sessions must be scored rather than skipped (Q123 — a
+`formula_version` bump to a calibrated HR-based v2), a non-Polar zone source with a different zone model
+is ingested into `aerobic_sessions` (Q124), or the Edwards weights are recalibrated (a `metab-v1`→`v2`
+recompute, never an edit of landed rows).
+
+---

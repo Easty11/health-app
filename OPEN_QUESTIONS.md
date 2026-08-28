@@ -3875,3 +3875,31 @@ is built; until then the window is schema-present, compute-absent (fail-closed �
 `load_metrics.py` has no `psychological` key, so a psychological load_event produces no metric row).
 
 **State:** OPEN
+
+## Q123. Zone-less aerobic sessions — calibrated Banister-TRIMP mapping vs permanent skip
+
+The Metabolic transform (`#251`, `metab-v1`) is fail-closed (INV-7): a session with no usable HR-zone
+breakdown — every `z*_seconds` NULL, or a zero zone-sum — emits no `load_events` row and is counted in
+`sessions_skipped_no_zones`. Edwards TRIMP needs zone seconds, and v1 deliberately admits NO fallback
+formula (INV-2 unit-lock: a Banister-TRIMP `duration × avg_HR` row mixed into the same window's series
+would break within-window comparability). Open: should a zone-less session that DOES carry `hr_avg` +
+`duration_minutes` (Health Connect sessions often do; some Polar exports lack the zone split) be scored
+by a calibrated Banister-TRIMP mapped onto the Edwards scale, or stay a permanent skip? A mapping needs a
+per-athlete HR-reserve calibration (resting/max HR) to be commensurable with the zone-weighted units, and
+lands as a `formula_version` bump (`metab-v1`→`v2`), never an in-place edit. Data prerequisite:
+`sessions_skipped_no_zones` volume from a live recompute tells us how much coverage is actually at stake.
+
+**State:** OPEN
+
+## Q124. Field-session (Catapult/GPS) ingestion into `aerobic_sessions`
+
+`#251`'s transform scores whatever rows exist in `aerobic_sessions`, today seeded from Polar Flow export
+(HR-zone based) and provisioned for Health Connect. Field sessions instrumented by GPS/accelerometer
+units (e.g. Catapult) carry an external-load model (PlayerLoad, high-speed-running distance) that is NOT
+HR-zone based and would not populate `z*_seconds`, so an Edwards TRIMP cannot see them. Open: is field-
+session external load a fourth ingestion into `aerobic_sessions` (with a distinct sub-formula and its own
+`formula_version`), a separate source table, or out of the Metabolic window entirely (a different load
+axis)? Out of S1 scope — recorded so the ledger gap is named, not silently narrowed to HR-only aerobic
+work.
+
+**State:** OPEN
