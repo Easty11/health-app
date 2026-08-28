@@ -10218,7 +10218,7 @@ closeout or adjacent doc; measure it (a prod read) — is `FEEDBACK` §18.
 
 ---
 
-### #NEXT. Gate 3 — load_metrics daily rollup: per-window Banister Fitness/Fatigue/Form
+### 248. Gate 3 — load_metrics daily rollup: per-window Banister Fitness/Fatigue/Form
 
 **Decision:** Gate 3 materialises `load_metrics`, a per-(user, day, load_window, formula_version,
 metrics_version) daily rollup of `load_events`. `daily_load` is the sum of that window's events on
@@ -10232,12 +10232,12 @@ light up when fed, no re-architecting. Units are window-native (kg_reps, nm_au) 
 
 Day grain buckets by user-local Australia/Brisbane (UTC+10, no DST) date from occurred_at. The concrete
 conversion is `_local_day = astimezone(Australia/Brisbane).date()` (mirroring `health_connect._wake_date`,
-which treats an ingested health timestamp as UTC and converts). **S1 RELEASE-GATE:** this is correct IFF
-`load_events.occurred_at` (= `hevy_workouts.start_time`) is a TRUE UTC INSTANT; the code alone cannot
-disambiguate a true instant from a naive-local wall-clock coerced to UTC, so before release one real
-stored `start_time` is checked against a known training time — if local-wall-clock, `_local_day` flips to
-`occurred_at.date()` directly (a one-line change plus the near-midnight oracle expectation). UTC-date
-bucketing is rejected either way — it misplaces early-morning AEST sessions onto the prior training day.
+which treats an ingested health timestamp as UTC and converts). **S1 CONFIRMED (operator, 2026-08-28):**
+raw `start_time` carries an explicit `+00:00` offset with plausible AEST session times (12:40 / 18:17 /
+17:38); a naive-local reading would put one session at 02:40, ruled out against the 5:45 am wake anchor —
+so Hevy emits true UTC instants and `_local_day = astimezone` is correct as built (no flip, oracle
+unchanged). UTC-date bucketing was rejected either way — it misplaces early-morning AEST sessions onto the
+prior training day.
 
 Maturity flag per row (annotate-never-suppress, #10/#28): 'low' until ≥42d continuous history for the
 window, else 'ok'. Undated load_events (occurred_at NULL) are excluded from the curve, mirroring the
@@ -10245,13 +10245,14 @@ e1RM undated-skip. Extends D-B (recompute, never migrate) with a second axis, me
 the τ-set that governs the stored stocks: a τ tune is a metrics_version bump + delete-and-reinsert per
 (user, formula_version, metrics_version), not an edit. Implements #28/#32 gate 3.
 
-**Status.** HELD for the operator's release decision per `#238` (schema migration `334526269006`,
-`load_metrics`, chained on the single head `1341a2cf6938`). Built + statically consistent on
-`feat/q6-gate3-load-metrics`; the alembic scratch upgrade/downgrade and the full pytest suite are owed on
-a local/CI pass (sqlalchemy/alembic absent in the authoring sandbox) — the reconciliation oracle's
-constants were computed offline. Standing operator sequence after any `bw_fraction` or template change:
-BOTH recomputes in order — `load_events` first, then `load_metrics` — because the rollup reads a derived
-store, not raw.
+**Status.** RELEASED by the operator (2026-08-28) after S1 confirmed; landed via PR #121, migration
+`334526269006` (`load_metrics`) chained on the single head `1341a2cf6938`. Gates discharged with real
+execution (deps installed in a venv): full backend suite **1225 passed / 1 skipped** (the sole failure is
+the pre-existing `3360ed5` shallow-clone artifact, unrelated); the `load_metrics` tests incl. the
+reconciliation oracle **54 passed**; the alembic scratch **upgrade `1341a2cf6938 → 334526269006` +
+downgrade** ran clean with `load_window` present and no bare `window` column. Standing operator sequence
+after any `bw_fraction` or template change: BOTH recomputes in order — `load_events` first, then
+`load_metrics` — because the rollup reads a derived store, not raw.
 
 **How you know.** `backend/load_metrics.py` reads `models.LoadEvent` only (no `hevy_workouts.raw` access
 — grep-clean); `test_load_metrics_reconciliation.py` asserts fitness/fatigue/form and the ΔLoad ratio to
@@ -10259,12 +10260,13 @@ the cent on named days over a dated series with a rest gap and a near-midnight b
 `test_load_metrics.py` pins fail-closed psychological (no metric row), metabolic-provisioned, the undated
 skip, idempotent recompute, the AEST boundary, unit isolation, and formula_version scope.
 
-**Do not revisit unless.** A τ tune (metrics_version bump + recompute) or the S1 day-rule flips on the
-release check. A k change is a form-column refresh, not this.
+**Do not revisit unless.** A τ tune (metrics_version bump + recompute). The S1 day-rule is settled
+(true UTC → astimezone); revisit only if Hevy's timestamp contract changes. A k change is a form-column
+refresh, not this.
 
 ---
 
-### #NEXT+1. ΔLoad instantiated (#33) — per-window acute:chronic over daily_load
+### 249. ΔLoad instantiated (#33) — per-window acute:chronic over daily_load
 
 **Decision:** #33's ΔLoad primitive is instantiated on the load_metrics daily row as a per-window
 acute:chronic ratio over daily_load — acute = trailing-7d mean, chronic = trailing-28d mean (rest days
@@ -10276,9 +10278,9 @@ This does NOT retire ACWR (#8/#28): ACWR is aerobic-only and this ΔLoad covers 
 (mechanical, neuromuscular). ACWR stays live until a Metabolic→load_events transform feeds the metabolic
 window, or aerobic acute-spike detection is lost. Retirement is downstream of that transform, not gate 3.
 
-**Status.** HELD with the gate-3 rollup (same branch/PR, `#238` schema hold). `load_ratio` is NULL while
+**Status.** RELEASED + landed with the gate-3 rollup (`#248`, same PR #121). `load_ratio` is NULL while
 chronic is 0 (mutation-proof in the reconciliation oracle: divergent ratios 0.761905 and 1.210084 on
-named days).
+named days, both asserted green in the executed suite).
 
 **How you know.** The reconciliation oracle asserts acute/chronic/ratio to the cent; `load_ratio` NULL
 on a zero-chronic day is asserted by construction (the ratio column is nullable and set only when
