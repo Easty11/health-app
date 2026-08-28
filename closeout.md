@@ -1,92 +1,92 @@
-# Session close-out — SQLAlchemy/Alembic tooling SessionStart hook (PR #122), landed + merged
+# Close-out — SessionStart hook install hardening (#250, PR #125)
 
 ## 1. Real commits this session
 
-Session-open ref `e081717` (Merge PR #120, the tip at session start). `git log --oneline e081717..HEAD`
-on the work branch showed this session's own commit plus the master commits pulled in by an
-update-merge — the session authored exactly **one** commit; the rest are #121/#123's gate-3 work that
-already lived on master and were merged into the branch to clear a `behind` state.
+Session-open master: `460e179` (PR #124 — the SQLAlchemy/Alembic tooling hook close-out).
+
+Feature branch `claude/hook-install-hardening-1yood5` (merged + deleted):
 
 ```
-89e1368 build: add SessionStart hook installing sqlalchemy/alembic tooling for web sessions
-b88d352 Merge remote-tracking branch 'origin/master' into claude/sqlalchemy-alembic-setup-r0jkcn
+1b78096 build(hooks): harden SessionStart tooling install — manifest, fail-loud, on-demand full stack
+7dadb2e Merge pull request #125 from Easty11/claude/hook-install-hardening-1yood5
 ```
 
-- **`89e1368`** — the only authored change: `.claude/hooks/session-start.sh` (new) + `.claude/settings.json`
-  (registers `hooks.SessionStart`; existing `permissions.deny` untouched). Merged via **PR #122**
-  (`--merge`, merge commit **`27a9990`** on master), branch remote-deleted on merge.
-- **`b88d352`** — update-merge of `origin/master` into the branch to clear the `behind` state after
-  #121/#123 landed; no authored content, no conflicts. Rode into master under the same PR #122 merge.
+- `1b78096` — the single feature commit. Five files, concern-split, staged by name (no `git add -A`):
+  `.claude/hooks/session-start.sh` (modified), `.claude/requirements-tooling.txt` (new manifest),
+  `.claude/scripts/install-full-stack.sh` (new, +x), `scripts/check_tooling_pins.py` (new check),
+  `scripts/tests/test_tooling_pins.py` (new test). `.claude/`-only plus the manifest/check under
+  `scripts/`; no backend, migration, or app code; `settings.json permissions.deny` byte-identical.
+- `7dadb2e` — merge commit (`--merge`, not squash/rebase; operator-authorised). GitHub auto-deleted the
+  remote branch on merge; local deleted.
 
-Plus this close-out commit (`chore: session close-out`) on a fresh branch `gov/closeout-sqlalchemy-hook`
-cut from `origin/master` (the merged work branch is gone) → a docs-only governance PR (no code, no schema).
+Governance/close-out commit (this ritual) rides `gov/250-hook-install-hardening`:
+`DECISIONS_LOG` #250, two `BRANCHES` rows (feature DONE + this governance self-row), the CLAUDE.md
+Recent-landings pointer (cap-3 roll), and this `closeout.md`. Its own SHA is written at merge — a row
+riding its own branch cannot name its landing SHA.
 
 ## 2. Pending-queue reconciliation
 
-No `;cc` pending-commit queue was carried in — the session ran from a bare build directive
-("install sqlalchemy/alembic tooling"), not a chat close-out. Nothing provisional is outstanding.
+No pending-commit queue was carried into this session — it opened from a task brief (PR-1: B + C + D
+on the hook install logic), not a chat `;cc` handoff. Nothing provisional is left uncommitted: the
+feature landed in `1b78096`/`7dadb2e`; the governance is in this branch's commit.
 
-The directive resolved not to a package install (transient in an ephemeral container) but to a durable
-**SessionStart hook** that reinstalls the tooling every web session — landed in `89e1368` / PR #122.
-Validation exercised before merge: hook runs clean (remote installs, non-remote no-ops via the
-`CLAUDE_CODE_REMOTE` guard); `alembic heads` resolves a single head; a DB-backed test
-(`backend/tests/test_bodyweight_audit.py`) passed 3/3 on the SQLAlchemy `create_all` + ORM path.
+Task LOG items, discharged:
+- **DECISIONS entry** — minted `#250` (master max re-read `#249` on fresh master this session, no
+  advance). grep→manifest + consistency check; fail-loud; full stack on-demand via venv, not at
+  SessionStart.
+- **BRANCHES row → DONE with merge SHA** — `claude/hook-install-hardening-1yood5` rowed DONE with
+  merge `7dadb2e`.
 
 ## 3. Cold-resume handoff
 
-### Governance maxima (session-open == session-close; no store entries added this session)
-- `DECISIONS_LOG.md` max decision **#249**; `OPEN_QUESTIONS.md` max **Q122**. This session added no
-  DECISIONS/OPEN_QUESTIONS entries — the hook is infra tooling; its canonical home is this `closeout.md`
-  (per the Recent-landings "or closeout.md" allowance), not a decision.
+### What landed this session
+`.claude/hooks/session-start.sh` hardened three ways (DECISIONS_LOG #250):
+- **C — grep→manifest.** Tooling pins now come from committed `.claude/requirements-tooling.txt`, not a
+  run-time grep of `backend/requirements.txt`. `scripts/check_tooling_pins.py`
+  (+ `scripts/tests/test_tooling_pins.py`, 6 cases) holds the manifest in lockstep with
+  `backend/requirements.txt`, closing both version and membership drift. The canonical tooling name-set
+  lives in the check.
+- **D — fail-loud.** `set -euo pipefail` kept; silent-skip escape hatches removed (missing manifest →
+  `exit 1`; empty-grep / `grep || true` gone). A broken install aborts session start rather than
+  surfacing as a mid-task `ModuleNotFoundError`. `CLAUDE_CODE_REMOTE` guard + no-op-when-unset unchanged.
+- **B — on-demand full stack.** `.claude/scripts/install-full-stack.sh` builds an isolated `.venv`
+  (gitignored) for the full `backend/requirements.txt`; venv isolation sidesteps the python-jose→PyJWT
+  block from #122. Deliberately NOT wired into SessionStart (no cold-start tax).
 
-### What landed and is live
-- **SQLAlchemy/Alembic tooling SessionStart hook** — `.claude/hooks/session-start.sh`, on master via PR #122.
-  Installs `sqlalchemy`, `alembic`, `psycopg2-binary`, `python-dotenv`, `pytest` with versions grep'd from
-  `backend/requirements.txt` (single source of truth, no drift). Synchronous, remote-only, idempotent.
-  Deliberately **scoped to the DB tooling** rather than the full `requirements.txt`: the full install trips
-  a distro-managed `python-jose` → `PyJWT 2.7.0` uninstall pip cannot complete (`RECORD file not found`).
-  Effect: every future Claude Code **web** session boots with alembic + the ORM importable; previously the
-  fresh container shipped no Python packages and `alembic upgrade head` / any `sqlalchemy`/`models` import
-  failed cold.
+All gates ran green in a live web container (`CLAUDE_CODE_REMOTE=true`); full evidence in DECISIONS_LOG
+#250. `alembic heads` single (`334526269006`). No schema, no migration, no prod write.
 
-### Current sprint / NOW (from ROADMAP NOW — unchanged by this session)
-- **Gate 3 — `load_metrics` daily rollup + Banister fitness-fatigue model** landed on master independently of
-  this session (PRs #121/#123; `LoadMetric` model + Banister transform + migration `334526269006_add_load_metrics`;
-  deploy verified per DECISIONS_LOG **#248**). Confirm against `DECISIONS_LOG.md`/`ROADMAP.md` — not this
-  session's work, named here only so the handoff reflects real current master.
-- **Operator (prod-credentialed), possibly still owed:** the `#245` `bw_fraction` **tagging pass**
-  (`python backend/audit_bodyweight_templates.py`) + **post-`#245` recompute + ranking re-read**. The prior
-  close-out named these as owed; #248's gate-3 verification may have subsumed the recompute — **verify against
-  the stores before assuming discharged.**
-- **CBT-I dated NOW row** — the manual/witnessed evaluation trigger work continues per ROADMAP NOW (DONE→#213
-  for #118's PM-offer half; follow-ups Q101 + accept-confirm UI defect / #214). Unchanged this session.
+### Current sprint (unchanged — nothing product-facing moved this session)
+This was an infrastructure/tooling session on the web-session substrate; no ROADMAP NOW/NEXT lane
+advanced. The dated/active work stands where it was:
+- **CBT-I titration** — the in-app manual evaluation trigger is DONE/verified (#213); follow-ups **Q101**
+  (elapsed-vs-sufficient selection) and the accept-confirm UI defect (#214) remain; rx 12 pends Luke's
+  correction decision.
+- **Interpretation layer** — sequenced increments **2 (rephrase) → 3 (lever-tap) → 5 (go-live)** queued;
+  not started.
+- **Adaptive programming** — Plan schema (steps 2–4) + capability-taxonomy v1 (Q27); target offseason
+  Block A (~Sep).
 
-### Open questions by status (from OPEN_QUESTIONS max Q122; unchanged this session)
-- **OPEN, load-adjacent:** `Q121` (remaining Tier-0 gaps: additive weighted-bodyweight, non-rep NM=0,
-  half-point RIR banding now `floor`), `Q117` (three `expected_load` levels enough?).
-- **OPEN, unrelated to load:** `Q120` (injury-onset field — gates the injury-ledger backfill audit),
-  `Q118` (Health Connect record metadata dropped), `Q116` (`schedule_item` validator backfill).
-- No question was opened, closed, or moved this session.
+### Open questions (unchanged this session)
+- **OPEN:** Q101 (CBT-I selection basis), Q117 (three `expected_load` levels), Q118 (HC record metadata
+  dropped), Q120 (injury value shape has no onset field), Q121 (Tier-0 load modelling gaps), Q122
+  (psychological window τ / criterion).
+- **Cross-repo OWED (ROADMAP NOW):** propagate the shared-block `#NEXT`/number-at-merge rule and its
+  extension to non-DECISIONS placeholders + source-comment refs to `health-connect-app` — landable only
+  from an HCA-rooted session. The claim-time tree-wide `#NEXT` sweep + guard-fixture allowlist is still
+  owed and has bitten twice (PR #71, #220); the removed-line diff audit remains the only control that
+  catches it.
+
+### What was NOT touched — named explicitly
+No product or interpretation work moved. This session, like the two before it (#122 the tooling hook,
+then its close-out), went to the **instrument** — the web-session substrate that lets Code run
+migrations and tests at all — not to the thing being instrumented. The substrate is now solid (tooling
+installs from a guarded manifest, fails loud, full stack reachable on demand), which removes the excuse:
+the next session has no tooling blocker and should go to a **product lane** — the interpretation-layer
+increments (2→3→5) or the CBT-I follow-ups (Q101 / the #214 accept-confirm UI defect) — not more
+`.claude/` hardening. The cross-repo propagation debt also remains legible and un-actionable from here
+(needs an HCA-rooted session); it is not this repo's to close.
 
 ### Single clearest next action
-Land this governance close-out PR (`gov/closeout-sqlalchemy-hook`, docs-only, merge-on-green). Then the
-next session picks a **product** lane from ROADMAP (see "not touched" below) — or, if operator follow-ups
-for `#245` remain (verify against the stores), run the `bw_fraction` tagging pass + recompute first.
-
-### What was NOT touched this session (name the standing lanes)
-This session went entirely to **infra/tooling** — a build-environment hook — not to any product surface or
-governance decision. This continues the pattern the last several close-outs flagged: sustained work on the
-**instrument and its scaffolding** (load transform, then its refinements, now the tooling that runs them),
-with **no user-facing product moved.** Standing still, explicitly:
-- **CBT-I user surface (interim)** — titration engine (`cbti/`) built but invisible in the app: no
-  route/page/nav. Gated on `#47` + the diary-capture fork. Untouched.
-- **The `#116`/`#121` frontend deploy probe** — the served-bundle grep that would confirm a frontend deploy,
-  owed from earlier sessions; still never run.
-- **Medical Protocol and Decision Support modules** — the other two of the three platform modules; no work
-  this arc (Fitness/load lane only, and this session not even that).
-- **`Q120` injury-onset** and the ROADMAP injury-ledger backfill audit / edit-supersede lane — untouched.
-- **Parked latent hazard (status update):** the prior close-out flagged a second alembic head
-  `e2d5c7a1b9f3` alongside the live one. On current master `alembic heads` reports a **single** head
-  `334526269006` — the two-head signature **did not reproduce** here. Not investigated this session (out of
-  scope); next migration-lane session should confirm whether the gate-3 chain resolved it or it is merely
-  masked before relying on `alembic upgrade head` (singular).
+Pick a **product lane** and cut a fresh branch from master: interpretation increment 2 (rephrase), or
+the CBT-I #214 accept-confirm UI defect. The tooling substrate is no longer a blocker for either.

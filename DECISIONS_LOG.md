@@ -10295,3 +10295,46 @@ chronic > 0).
 7:28 shape moves to EWMA-ACWR (Tier 3).
 
 ---
+
+### 250. SessionStart tooling install — grep→manifest, fail-loud, on-demand full stack via venv
+
+**Decision.** Three concern-adjacent hardenings to `.claude/hooks/session-start.sh`, the web-session
+SessionStart hook that installs the DB tooling into the ephemeral container (established #122). (a) **grep→manifest
+(C):** the hook no longer greps the five tooling pins out of `backend/requirements.txt` at run time; it installs
+`-r .claude/requirements-tooling.txt`, a committed, reviewable manifest (`sqlalchemy`, `alembic`, `psycopg2-binary`,
+`python-dotenv`, `pytest`). `scripts/check_tooling_pins.py` keeps the manifest in lockstep with
+`backend/requirements.txt` — the *source of truth for pin values* — closing BOTH drift modes: **version** (a pin bumped
+on one side only) and **membership** (a canonical tooling package dropped from, or a non-tooling package added to, the
+manifest). The canonical tooling name-set is named in the check (it was the hook's old grep alternation), so a dropped
+package fails the check rather than resurfacing as a mid-session `ModuleNotFoundError`. Without this check C only swaps
+grep-fragility for silent drift, so the check is part of the change, not polish. (b) **fail-loud (D):** `set -euo
+pipefail` retained, and the silent-skip escape hatches removed — a missing manifest now `exit 1` (was `exit 0` on a
+missing `requirements.txt`), and the empty-grep / `grep || true` skips are gone; a failed `pip` line propagates
+non-zero under `set -e`. A half-install aborts session start visibly instead of surfacing later as a mid-task
+`ModuleNotFoundError`. The `CLAUDE_CODE_REMOTE` guard and its no-op-when-unset behaviour are unchanged. (c) **on-demand
+full stack (B):** `.claude/scripts/install-full-stack.sh` builds a throwaway venv (`.venv`, gitignored) and installs
+the full `backend/requirements.txt` into it. A fresh venv is isolated from the distro site-packages, so the
+python-jose→PyJWT conflict that blocked a full *system* install in #122 does not arise. Design call: tooling
+fast-and-always in system Python; full stack **on request**, isolated — NOT wired into SessionStart, so it never taxes
+cold start.
+
+**Status.** LANDED. Feature via **PR #125** (merge commit `7dadb2e`; `--merge`, branch deleted). Governance (this entry
++ BRANCHES rows + closeout + Recent-landings) rides `gov/250-hook-install-hardening` per #176(b). `.claude/`-only plus
+the manifest/check under `scripts/`; no backend, migration, or app code; `settings.json permissions.deny`
+byte-identical.
+
+**How you know.** Gates run for real in a web container (`CLAUDE_CODE_REMOTE=true`): remote mode installs the five
+pins clean; `CLAUDE_CODE_REMOTE` unset → clean no-op (exit 0, no output). Fail-loud both paths: missing manifest →
+exit 1; an injected bogus pin → pip errors, hook exits non-zero. Consistency check passes on the tree; a hand-desynced
+`sqlalchemy` pin (2.0.50→2.0.49) makes it fail with a named message, restore → passes; `scripts/tests/test_tooling_pins.py`
+6/6 (live lockstep + injected version/membership drift both bite). `install-full-stack.sh` runs clean (~22s); afterward
+`jose` (python-jose) and `jwt` (PyJWT) coexist and the previously-#122-blocked pytz/app-stack tests collect and run —
+`test_canonical_title_render.py` 9 passed, the sole failure across the broader run being the known `3360ed5`
+shallow-clone git artifact (unrelated to packaging). `alembic heads` resolves a single head (`334526269006`).
+
+**Do not revisit unless.** The tooling set changes (add the package to BOTH `CANONICAL_TOOLING` in
+`scripts/check_tooling_pins.py` and the manifest, in one change — the check enforces this). If a future session wants
+the full stack at session start, weigh the cold-start tax the #122/#250 split deliberately avoided; the venv path exists
+precisely so it need not be.
+
+---
