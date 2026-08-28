@@ -10152,7 +10152,9 @@ merge instant (no advance). Backend deploy `7fa6a32e` reached **SUCCESS** and th
 load_events.window to load_window` followed by `Application startup complete` — the migration applied on a
 single head (no `Multiple head revisions`). No recompute run (structural rename, not a `formula_version`
 change — rows and natural key untouched); the full pytest suite was not run in the authoring sandbox
-(sqlalchemy absent) and is owed on the next local/CI pass (`backend/tests/test_load_events.py`).
+(sqlalchemy absent) and was owed on the next local/CI pass. **Suite discharged (operator, 2026-08-28, on
+`8c6b04e`): `test_load_events.py` 43 passed; full backend suite 1216 passed, 0 failed** — the rename is
+green, owed line closed.
 
 **How you know.** After the rename a tree-wide grep for a `LoadEvent` `window` attribute
 (`backend`/`frontend`) returns zero — the model attribute, the `load_events.py` insert kwarg, all six
