@@ -1015,3 +1015,60 @@ class LoadEvent(Base):
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class LoadMetric(Base):
+    """One derived per-(user, day, load_window) daily load rollup — the recomputable
+    top layer of the Q6 four-window store (DECISIONS_LOG #28/#32, D-B; gate 3).
+
+    The Banister transform (`backend/load_metrics.py`) reads `load_events` (gate 2's
+    derived store, source of `daily_load`) and writes one row per (user, day, window)
+    here; it never reads the raw Hevy payload. Per D-B this is a RECOMPUTE, never a
+    migration: `fitness`/`fatigue` are EWMA stocks over a continuous daily series whose
+    identity is pinned by TWO version axes — `formula_version` (inherited from the
+    load_events transform) and `metrics_version` (this layer's τ-set / EWMA identity). A
+    τ tune bumps `metrics_version` and delete-and-reinserts per
+    `(user, formula_version, metrics_version)`; a `form` k-change is a form-column refresh
+    from the stored stocks alone, neither a stock recompute nor a version bump.
+
+    `fitness` = EWMA(daily_load, τ=42d, all windows); `fatigue` = EWMA(daily_load, τ per
+    #32 — mechanical 10, neuromuscular 6, metabolic 4); `form` = fitness − k·fatigue (k=1).
+    ΔLoad (#33): `acute_load` trailing-7d mean, `chronic_load` trailing-28d mean,
+    `load_ratio` = acute/chronic (NULL if chronic 0). `maturity` = 'low' until ≥42d
+    continuous history for the window, else 'ok' (annotate-never-suppress, #10/#28).
+
+    Windows are computed only where `load_events` supply rows (today: mechanical,
+    neuromuscular); the machinery is window-generic, so Metabolic/Psychological light up
+    when fed. Units are window-native (kg_reps, nm_au) and never crossed. The window column
+    is `load_window` — NOT `window` (#246 renamed that reserved word out of `load_events`;
+    this table must not reintroduce it).
+    """
+    __tablename__ = "load_metrics"
+    __table_args__ = (
+        UniqueConstraint("user_id", "day", "load_window", "formula_version", "metrics_version",
+                         name="uq_load_metric_day_window_version"),
+        Index("ix_load_metrics_user_window", "user_id", "load_window"),
+        Index("ix_load_metrics_user_day", "user_id", "day"),
+        Index("ix_load_metrics_metrics_version", "metrics_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    day: Mapped[date] = mapped_column(Date, nullable=False)               # user-local (AEST) calendar day
+    load_window: Mapped[str] = mapped_column(String(20), nullable=False)  # 'mechanical' | 'neuromuscular'
+    daily_load: Mapped[float] = mapped_column(Float, nullable=False)      # Σ load_events.load that day
+    fitness: Mapped[float] = mapped_column(Float, nullable=False)         # Banister EWMA τ=42
+    fatigue: Mapped[float] = mapped_column(Float, nullable=False)         # Banister EWMA τ per #32
+    form: Mapped[float] = mapped_column(Float, nullable=False)            # fitness − k·fatigue (k=1)
+    acute_load: Mapped[float] = mapped_column(Float, nullable=False)      # #33 trailing-7d mean
+    chronic_load: Mapped[float] = mapped_column(Float, nullable=False)    # #33 trailing-28d mean
+    load_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)  # acute/chronic; NULL if chronic 0
+    unit: Mapped[str] = mapped_column(String(20), nullable=False)         # 'kg_reps' | 'nm_au'
+    maturity: Mapped[str] = mapped_column(String(8), nullable=False)      # 'low' | 'ok'
+    formula_version: Mapped[str] = mapped_column(String(20), nullable=False)  # load_events transform version
+    metrics_version: Mapped[str] = mapped_column(String(20), nullable=False)  # 'banister-v1'
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
