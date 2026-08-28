@@ -3875,3 +3875,52 @@ is built; until then the window is schema-present, compute-absent (fail-closed �
 `load_metrics.py` has no `psychological` key, so a psychological load_event produces no metric row).
 
 **State:** OPEN
+
+## Q123. Zone-less aerobic sessions — calibrated Banister-TRIMP mapping vs permanent skip
+
+The Metabolic transform (`#251`, `metab-v1`) is fail-closed (INV-7): a session with no usable HR-zone
+breakdown — every `z*_seconds` NULL, or a zero zone-sum — emits no `load_events` row and is counted in
+`sessions_skipped_no_zones`. Edwards TRIMP needs zone seconds, and v1 deliberately admits NO fallback
+formula (INV-2 unit-lock: a Banister-TRIMP `duration × avg_HR` row mixed into the same window's series
+would break within-window comparability). Open: should a zone-less session that DOES carry `hr_avg` +
+`duration_minutes` (Health Connect sessions often do; some Polar exports lack the zone split) be scored
+by a calibrated Banister-TRIMP mapped onto the Edwards scale, or stay a permanent skip? A mapping needs a
+per-athlete HR-reserve calibration (resting/max HR) to be commensurable with the zone-weighted units, and
+lands as a `formula_version` bump (`metab-v1`→`v2`), never an in-place edit. Data prerequisite:
+`sessions_skipped_no_zones` volume from a live recompute tells us how much coverage is actually at stake.
+
+**State:** OPEN
+
+## Q124. Field-session (Catapult/GPS) ingestion into `aerobic_sessions`
+
+`#251`'s transform scores whatever rows exist in `aerobic_sessions`, today seeded from Polar Flow export
+(HR-zone based) and provisioned for Health Connect. Field sessions instrumented by GPS/accelerometer
+units (e.g. Catapult) carry an external-load model (PlayerLoad, high-speed-running distance) that is NOT
+HR-zone based and would not populate `z*_seconds`, so an Edwards TRIMP cannot see them. Open: is field-
+session external load a fourth ingestion into `aerobic_sessions` (with a distinct sub-formula and its own
+`formula_version`), a separate source table, or out of the Metabolic window entirely (a different load
+axis)? Out of S1 scope — recorded so the ledger gap is named, not silently narrowed to HR-only aerobic
+work.
+
+**State:** OPEN
+
+## Q125. Does the web-task harness's draft / no-self-merge constraint conflict with CLAUDE.md's self-merge disposition?
+
+The web-task harness opens PRs as **draft** and does not self-merge them (operator merges). CLAUDE.md's
+merge disposition says Code merges its own PRs, ready-for-review, on green. Prior chat framing called this
+a contradiction. Is it?
+
+RESOLVED (by convention; no ruling required). No conflict — two non-overlapping PR classes: **(1)**
+harness-originated feature PRs open **draft, operator-merged**; **(2)** Code-originated PRs open
+**ready-for-review, self-merged on green**. The disposition already scopes to Code's own PRs ("Code merges
+its own PRs"), so a harness-originated draft is simply the other lane, not a violation of it. Evidence in
+this repo's own history: the feature lane — PR #122, PR #125 (drafted, operator-merged); the
+Code/governance lane — PR #124, PR #126 (ready-for-review, self-merged on green). Framing corrected from
+"contradiction" to "two lanes."
+
+Not recorded as a DECISIONS entry — this is a clarification, not a decision (a third copy would be
+triple-recording). No CLAUDE.md edit: the disposition block already reads "Code merges its own PRs", so it
+is already scoped to Code-originated PRs and the conditional carry-forward clause was a no-op (dropped per
+its own GUARD; see closeout).
+
+**State:** DONE — resolved by convention (mint-then-close; no DECISIONS entry, no CLAUDE.md change).

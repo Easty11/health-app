@@ -259,11 +259,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Metabolic derivation into `load_events` (`#251`, PR #128), landed + merged** - new sibling transform `backend/load_events_metabolic.py` derives the Metabolic window from `aerobic_sessions` via Edwards zone-weighted TRIMP (`metab-v1`, `trimp_edw_au`); fail-closed on missing zones, no fallback formula, `cardio_load` excluded as input; lights up the provisioned `load_metrics` metabolic τ. See DECISIONS_LOG #251. Handoff: `closeout.md`.
+
 - **SessionStart hook install hardening (`#250`, PR #125), landed + merged** - `.claude/hooks/session-start.sh` now installs the DB tooling from the committed manifest `.claude/requirements-tooling.txt` (run-time grep retired), guarded against drift with `backend/requirements.txt` by `scripts/check_tooling_pins.py`; fail-loud on a broken install (missing manifest / failed pip → non-zero); the full app-stack is installable on-demand via an isolated venv (`.claude/scripts/install-full-stack.sh`), never at session start. See DECISIONS_LOG #250. Handoff: `closeout.md`.
 
 - **SQLAlchemy/Alembic tooling SessionStart hook (PR #122), landed + merged** - `.claude/hooks/session-start.sh` installs the DB tooling (sqlalchemy/alembic/psycopg2-binary/python-dotenv/pytest) on every Claude Code web session; the ephemeral container ships no Python packages, so `alembic upgrade head` and any `sqlalchemy`/`models` import previously failed cold. Scoped to the tooling — the full `requirements.txt` trips a distro-managed PyJWT uninstall. Handoff: `closeout.md`.
-
-- **`load_events.window` → `load_window` rename (`#246`), landed + live-verified** - `window` is a Postgres reserved word; renamed before gate 3's `load_metrics` inherits it (resolves the `#243` open item; operator-released `#238` hold). Column-only migration `1341a2cf6938` on the single head — boot log confirms `d4a1f8c609e2 -> 1341a2cf6938` then `Application startup complete`; no recompute (structural rename). See DECISIONS_LOG #246. Handoff: `closeout.md`.
 
 ---
 
