@@ -11,8 +11,17 @@
 # driver, python-dotenv (read by database.py / migrations/env.py) and pytest.
 # Installing the full backend/requirements.txt is avoided because it drags in
 # distro-managed packages (python-jose -> PyJWT) that pip cannot cleanly replace
-# in this image. Versions are grep'd out of backend/requirements.txt so the pins
-# here never drift from the single source of truth.
+# in this image; for the full stack on demand, use the isolated venv path in
+# .claude/scripts/install-full-stack.sh (not wired here — it must not tax cold start).
+#
+# Pins come from the committed manifest .claude/requirements-tooling.txt, kept in
+# lockstep with backend/requirements.txt by scripts/check_tooling_pins.py. (This
+# replaced grepping requirements.txt at run time: the manifest is reviewable and
+# cannot pick up a package requirements.txt happens to add.)
+#
+# Fail loud (set -euo pipefail): a missing manifest or a failed pip line exits the
+# hook non-zero so session start aborts visibly, rather than proceeding into a
+# mid-task ModuleNotFoundError from a half-install.
 #
 # Synchronous by design: the tooling is guaranteed present before the agent loop
 # runs a migration or a test. Switch to async mode (emit
@@ -26,22 +35,18 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-REQ="${CLAUDE_PROJECT_DIR:-.}/backend/requirements.txt"
-if [ ! -f "$REQ" ]; then
-  echo "session-start: $REQ not found; skipping tooling install" >&2
-  exit 0
-fi
-
-# Pull the exact pins from requirements.txt so this hook stays in lockstep with it.
-PKGS=$(grep -iE '^(sqlalchemy|alembic|psycopg2-binary|python-dotenv|pytest)==' "$REQ" || true)
-if [ -z "$PKGS" ]; then
-  echo "session-start: no sqlalchemy/alembic tooling pins found in $REQ" >&2
-  exit 0
+MANIFEST="${CLAUDE_PROJECT_DIR:-.}/.claude/requirements-tooling.txt"
+if [ ! -f "$MANIFEST" ]; then
+  echo "session-start: tooling manifest $MANIFEST not found — cannot install DB tooling" >&2
+  exit 1
 fi
 
 # pip install is idempotent — a fast no-op once satisfied, and the post-hook
-# container cache holds the installed packages for the session.
-python -m pip install --quiet --disable-pip-version-check $PKGS
+# container cache holds the installed packages for the session. A non-zero exit
+# here propagates under set -e and aborts session start.
+python -m pip install --quiet --disable-pip-version-check -r "$MANIFEST"
 
-echo "session-start: sqlalchemy/alembic tooling installed:" >&2
-echo "$PKGS" | sed 's/^/  /' >&2
+echo "session-start: sqlalchemy/alembic tooling installed from $MANIFEST:" >&2
+# Informational echo of the installed pins — must never fail the hook (pipefail),
+# so tolerate grep's exit 1 on a hypothetical all-comment manifest.
+{ grep -vE '^\s*(#|$)' "$MANIFEST" || true; } | sed 's/^/  /' >&2
