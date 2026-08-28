@@ -1,0 +1,12 @@
+# DB tooling for Claude Code on the web — installed by .claude/hooks/session-start.sh.
+#
+# Pin source of truth: backend/requirements.txt. These five packages are the DB
+# tooling the ephemeral web container needs so `alembic upgrade head` and any
+# `sqlalchemy`/`models` import work cold. Keep every pin in lockstep with
+# backend/requirements.txt; drift (a bump here or there, a dropped package) is
+# caught by scripts/check_tooling_pins.py (test: scripts/tests/test_tooling_pins.py).
+sqlalchemy==2.0.50
+alembic==1.18.4
+psycopg2-binary==2.9.12
+python-dotenv==1.2.2
+pytest==9.1.1
