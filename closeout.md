@@ -1,92 +1,77 @@
-# Close-out — SessionStart hook install hardening (#250, PR #125)
+# Code session close-out — S1 Metabolic derivation into `load_events`
 
-## 1. Real commits this session
+## Real commits this session
 
-Session-open master: `460e179` (PR #124 — the SQLAlchemy/Alembic tooling hook close-out).
+Session-open ref: `1257e54` (master merge of PR #126). Branch: `claude/metabolic-load-events-kwftk5`.
 
-Feature branch `claude/hook-install-hardening-1yood5` (merged + deleted):
+    bd3b1c3  feat(load): Metabolic derivation into load_events — Edwards zone-weighted TRIMP (S1)
+    2e94735  gov(load): mint #251 Metabolic derivation + Q123/Q124; BRANCHES row (S1)
+    01b78f4  Merge remote-tracking branch 'origin/master' into claude/metabolic-load-events-kwftk5
 
-```
-1b78096 build(hooks): harden SessionStart tooling install — manifest, fail-loud, on-demand full stack
-7dadb2e Merge pull request #125 from Easty11/claude/hook-install-hardening-1yood5
-```
+(`411a985`/`a3db244` in `1257e54..HEAD` are origin's PR #127 ROADMAP-sync merge, pulled in by
+`01b78f4` — not authored this session.) The close-out commit (`chore: session close-out`) carries this
+file plus the Q125 mint, the CLAUDE.md Recent-landings roll, and the BRANCHES DONE-flip; it cannot cite
+its own hash.
 
-- `1b78096` — the single feature commit. Five files, concern-split, staged by name (no `git add -A`):
-  `.claude/hooks/session-start.sh` (modified), `.claude/requirements-tooling.txt` (new manifest),
-  `.claude/scripts/install-full-stack.sh` (new, +x), `scripts/check_tooling_pins.py` (new check),
-  `scripts/tests/test_tooling_pins.py` (new test). `.claude/`-only plus the manifest/check under
-  `scripts/`; no backend, migration, or app code; `settings.json permissions.deny` byte-identical.
-- `7dadb2e` — merge commit (`--merge`, not squash/rebase; operator-authorised). GitHub auto-deleted the
-  remote branch on merge; local deleted.
+Merge: PR #128 merged to master on green (`placeholder guard (POSIX)` success, `mergeable_state: clean`),
+operator-authorised, `--merge` (merge commit), branch deleted.
 
-Governance/close-out commit (this ritual) rides `gov/250-hook-install-hardening`:
-`DECISIONS_LOG` #250, two `BRANCHES` rows (feature DONE + this governance self-row), the CLAUDE.md
-Recent-landings pointer (cap-3 roll), and this `closeout.md`. Its own SHA is written at merge — a row
-riding its own branch cannot name its landing SHA.
+## Pending-queue reconciliation
 
-## 2. Pending-queue reconciliation
+No `;cc` pending-commit queue was carried into this session (the session opened directly on the S1
+implementation brief, not a chat close-out handoff). Everything landed is in the commits above.
 
-No pending-commit queue was carried into this session — it opened from a task brief (PR-1: B + C + D
-on the hook install logic), not a chat `;cc` handoff. Nothing provisional is left uncommitted: the
-feature landed in `1b78096`/`7dadb2e`; the governance is in this branch's commit.
+Governance carry-forward (operator, this session) reconciled:
+- **Q125 minted-then-closed** — the web-task harness draft/no-self-merge vs CLAUDE.md self-merge
+  disposition is TWO non-overlapping lanes, not a contradiction (RESOLVED by convention; no DECISIONS
+  entry — a clarification, not a decision). Landed in `OPEN_QUESTIONS.md`.
+- **CLAUDE.md merge-disposition clause: DROPPED (no-op), not applied.** The conditional carry-forward said
+  append a "scope: applies to Code-originated PRs" clause only if the block was unscoped. The block reads
+  **"Code merges its own PRs"** — already scoped to Code-originated PRs — so per the carry-forward's own
+  GUARD the clause was a no-op and dropped. Recorded here rather than added as a no-op edit. Number
+  re-verified against fresh master (max Q122 → this mints Q125, since the branch already holds Q123/Q124).
 
-Task LOG items, discharged:
-- **DECISIONS entry** — minted `#250` (master max re-read `#249` on fresh master this session, no
-  advance). grep→manifest + consistency check; fail-loud; full stack on-demand via venv, not at
-  SessionStart.
-- **BRANCHES row → DONE with merge SHA** — `claude/hook-install-hardening-1yood5` rowed DONE with
-  merge `7dadb2e`.
+## Cold-resume handoff
 
-## 3. Cold-resume handoff
+**What landed.** S1 — the Metabolic window derivation (`DECISIONS_LOG #251`). New sibling transform
+`backend/load_events_metabolic.py`: one Metabolic `load_events` row per qualifying `aerobic_sessions`
+row via Edwards (1993) zone-weighted TRIMP — `Σ (zone_seconds/60) × weight`, weights {z1:1..z5:5};
+`formula_version "metab-v1"`, `unit "trimp_edw_au"`, `load_window "metabolic"` (lowercase — lights up the
+`load_metrics` fatigue-τ the rollup already provisions at τ=4). Source-neutral linkage
+(`source="aerobic_sessions"`, `source_ref=str(id)`); delete-and-reinsert scoped to `(user, "metab-v1")`
+only (tier0-v1 untouched); fail-closed on missing zones (INV-7, `sessions_skipped_no_zones`); no fallback
+formula (INV-2); `cardio_load` excluded as a load input (#32) — kept only as a convergent-sanity
+correlation. Windows orthogonal (Hevy→Mechanical/NM and Polar→Metabolic is not double-counting). No schema
+migration — the store's string columns already accept the new values; SCHEMA.md unmoved. Tests
+`backend/tests/test_load_events_metabolic.py` (19) cover G1 exact sum (mutation-proofed), G2 fail-closed,
+G3 idempotency, G4 tier0 isolation; full `test_load_events.py` strength suite stays green (62 together).
 
-### What landed this session
-`.claude/hooks/session-start.sh` hardened three ways (DECISIONS_LOG #250):
-- **C — grep→manifest.** Tooling pins now come from committed `.claude/requirements-tooling.txt`, not a
-  run-time grep of `backend/requirements.txt`. `scripts/check_tooling_pins.py`
-  (+ `scripts/tests/test_tooling_pins.py`, 6 cases) holds the manifest in lockstep with
-  `backend/requirements.txt`, closing both version and membership drift. The canonical tooling name-set
-  lives in the check.
-- **D — fail-loud.** `set -euo pipefail` kept; silent-skip escape hatches removed (missing manifest →
-  `exit 1`; empty-grep / `grep || true` gone). A broken install aborts session start rather than
-  surfacing as a mid-task `ModuleNotFoundError`. `CLAUDE_CODE_REMOTE` guard + no-op-when-unset unchanged.
-- **B — on-demand full stack.** `.claude/scripts/install-full-stack.sh` builds an isolated `.venv`
-  (gitignored) for the full `backend/requirements.txt`; venv isolation sidesteps the python-jose→PyJWT
-  block from #122. Deliberately NOT wired into SessionStart (no cold-start tax).
+**Current sprint (ROADMAP NOW/row-79, Q6 four-window load).** Gates 1–3 are landed. S1 here supplies the
+**Metabolic→load_events transform** that ROADMAP row-79 and `#249` both name as the trigger to reassess
+retirement of the legacy aerobic acute-spike ratio (#8/#28) — that reassessment is now UNBLOCKED but was
+NOT done this session (downstream governance). The single clearest **next action:** operator runs the
+in-container Metabolic recompute (`railway ssh --service health-app-backend` → `cd /app` →
+`/opt/venv/bin/python load_events_metabolic.py`) then the `load_metrics` rollup, and reads the coverage
+stats + TRIMP-vs-`cardio_load` correlation — those numbers feed Q123 (how much zone-less coverage is
+actually at stake).
 
-All gates ran green in a live web container (`CLAUDE_CODE_REMOTE=true`); full evidence in DECISIONS_LOG
-#250. `alembic heads` single (`334526269006`). No schema, no migration, no prod write.
+**Open questions (this lane).**
+- **Q123 OPEN** — zone-less aerobic sessions: calibrated Banister-TRIMP (HR-based) mapping vs permanent
+  skip. Gated on the live `sessions_skipped_no_zones` volume.
+- **Q124 OPEN** — Catapult/GPS field-session ingestion into `aerobic_sessions` (no HR-zone model).
+- **Q125 DONE** — merge-disposition two-lane clarification (above).
+- **Q122 OPEN** — Psychological window (EWMA-stock vs divergence-criterion); untouched, still the last
+  unlit window.
 
-### Current sprint (unchanged — nothing product-facing moved this session)
-This was an infrastructure/tooling session on the web-session substrate; no ROADMAP NOW/NEXT lane
-advanced. The dated/active work stands where it was:
-- **CBT-I titration** — the in-app manual evaluation trigger is DONE/verified (#213); follow-ups **Q101**
-  (elapsed-vs-sufficient selection) and the accept-confirm UI defect (#214) remain; rx 12 pends Luke's
-  correction decision.
-- **Interpretation layer** — sequenced increments **2 (rephrase) → 3 (lever-tap) → 5 (go-live)** queued;
-  not started.
-- **Adaptive programming** — Plan schema (steps 2–4) + capability-taxonomy v1 (Q27); target offseason
-  Block A (~Sep).
+**What was NOT touched (named explicitly).** No feature/product movement on the thing the load
+instrument ultimately serves: the **Banister readiness score integration** (ROADMAP row-79 — the
+per-window model is built but its integration into a consumed readiness score with RMSSD/sleep/RHR, and
+the Gate-4 machine check, remain OWED) did not move. The **S2 Governor** and the **acute-spike-ratio
+retirement reassessment** are unblocked by S1 but unstarted. S6 Psychological derivation (Q122), S3
+criterion wiring, and S7 (`EPOCH_RPE_COMPLETE` / bodyweight de-hardcoding) were out of S1 scope and
+untouched. This session, like its recent predecessors, went to the INSTRUMENT (deriving load) rather than
+to the readiness score the instrument exists to feed — the next session should weigh picking up the
+consumed-score integration rather than adding another derivation lane.
 
-### Open questions (unchanged this session)
-- **OPEN:** Q101 (CBT-I selection basis), Q117 (three `expected_load` levels), Q118 (HC record metadata
-  dropped), Q120 (injury value shape has no onset field), Q121 (Tier-0 load modelling gaps), Q122
-  (psychological window τ / criterion).
-- **Cross-repo OWED (ROADMAP NOW):** propagate the shared-block `#NEXT`/number-at-merge rule and its
-  extension to non-DECISIONS placeholders + source-comment refs to `health-connect-app` — landable only
-  from an HCA-rooted session. The claim-time tree-wide `#NEXT` sweep + guard-fixture allowlist is still
-  owed and has bitten twice (PR #71, #220); the removed-line diff audit remains the only control that
-  catches it.
-
-### What was NOT touched — named explicitly
-No product or interpretation work moved. This session, like the two before it (#122 the tooling hook,
-then its close-out), went to the **instrument** — the web-session substrate that lets Code run
-migrations and tests at all — not to the thing being instrumented. The substrate is now solid (tooling
-installs from a guarded manifest, fails loud, full stack reachable on demand), which removes the excuse:
-the next session has no tooling blocker and should go to a **product lane** — the interpretation-layer
-increments (2→3→5) or the CBT-I follow-ups (Q101 / the #214 accept-confirm UI defect) — not more
-`.claude/` hardening. The cross-repo propagation debt also remains legible and un-actionable from here
-(needs an HCA-rooted session); it is not this repo's to close.
-
-### Single clearest next action
-Pick a **product lane** and cut a fresh branch from master: interpretation increment 2 (rephrase), or
-the CBT-I #214 accept-confirm UI defect. The tooling substrate is no longer a blocker for either.
+**Trailing nit.** The `AerobicSession` docstring's legacy aerobic-ratio wording (#8/#28) was left
+untouched by scope discipline — retire it in a later governance pass.

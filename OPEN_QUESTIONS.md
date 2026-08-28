@@ -3903,3 +3903,24 @@ axis)? Out of S1 scope — recorded so the ledger gap is named, not silently nar
 work.
 
 **State:** OPEN
+
+## Q125. Does the web-task harness's draft / no-self-merge constraint conflict with CLAUDE.md's self-merge disposition?
+
+The web-task harness opens PRs as **draft** and does not self-merge them (operator merges). CLAUDE.md's
+merge disposition says Code merges its own PRs, ready-for-review, on green. Prior chat framing called this
+a contradiction. Is it?
+
+RESOLVED (by convention; no ruling required). No conflict — two non-overlapping PR classes: **(1)**
+harness-originated feature PRs open **draft, operator-merged**; **(2)** Code-originated PRs open
+**ready-for-review, self-merged on green**. The disposition already scopes to Code's own PRs ("Code merges
+its own PRs"), so a harness-originated draft is simply the other lane, not a violation of it. Evidence in
+this repo's own history: the feature lane — PR #122, PR #125 (drafted, operator-merged); the
+Code/governance lane — PR #124, PR #126 (ready-for-review, self-merged on green). Framing corrected from
+"contradiction" to "two lanes."
+
+Not recorded as a DECISIONS entry — this is a clarification, not a decision (a third copy would be
+triple-recording). No CLAUDE.md edit: the disposition block already reads "Code merges its own PRs", so it
+is already scoped to Code-originated PRs and the conditional carry-forward clause was a no-op (dropped per
+its own GUARD; see closeout).
+
+**State:** DONE — resolved by convention (mint-then-close; no DECISIONS entry, no CLAUDE.md change).
