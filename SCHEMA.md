@@ -1135,6 +1135,36 @@ CREATE INDEX ix_load_events_user_occurred     ON load_events (user_id, occurred_
 CREATE INDEX ix_load_events_formula_version   ON load_events (formula_version);
 ```
 
+### 028 — load_metrics
+
+The **derived, recomputable** top layer of the two-level load store (DECISIONS_LOG #28/#32, D-B; Q6 gate 3). The Banister transform (`backend/load_metrics.py`) reads `load_events` (gate 2's derived store) — never the raw Hevy payload — and rolls it to one per-(user, day, load_window) row: `daily_load` (Σ that window's events on the user-local day), the Banister `fitness` (τ=42d, all windows) / `fatigue` (τ per #32 — mechanical 10, neuromuscular 6, metabolic 4) EWMAs over a continuous daily series (rest days decay, seed 0), `form = fitness − k·fatigue` (k=1, read-time-refreshable), and the #33 ΔLoad `acute_load` (trailing-7d mean) / `chronic_load` (trailing-28d mean) / `load_ratio` (acute/chronic, NULL if chronic 0). Two recompute axes pin a row's identity: `formula_version` (inherited from the load_events transform) and `metrics_version` (this layer's τ-set / EWMA identity, `banister-v1`); a τ tune bumps `metrics_version` + delete-and-reinserts per `(user, formula_version, metrics_version)`, never edits. `day` is the user-local (Australia/Brisbane) calendar date of `occurred_at` (see the gate-3 decision's S1 day-boundary note). `maturity` is `'low'` until ≥42d continuous history for the window, else `'ok'` (annotate-never-suppress, #10/#28). Windows are computed only where `load_events` supply rows (today mechanical, neuromuscular); the fatigue-τ table has **no `psychological` key** so that window is fail-closed (Q122), while `metabolic` carries a τ and lights up when fed. Units are window-native (`kg_reps`, `nm_au`) and never crossed. The window column is **`load_window`** — never `window` (#246).
+
+```sql
+CREATE TABLE load_metrics (
+    id               SERIAL PRIMARY KEY,
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day              DATE NOT NULL,               -- user-local (AEST) calendar day
+    load_window      VARCHAR(20) NOT NULL,        -- 'mechanical' | 'neuromuscular'
+    daily_load       DOUBLE PRECISION NOT NULL,   -- Σ load_events.load on that day (window-native)
+    fitness          DOUBLE PRECISION NOT NULL,   -- Banister EWMA, τ=42d
+    fatigue          DOUBLE PRECISION NOT NULL,   -- Banister EWMA, τ per #32
+    form             DOUBLE PRECISION NOT NULL,   -- fitness − k·fatigue (k=1)
+    acute_load       DOUBLE PRECISION NOT NULL,   -- #33 trailing-7d mean daily_load
+    chronic_load     DOUBLE PRECISION NOT NULL,   -- #33 trailing-28d mean daily_load
+    load_ratio       DOUBLE PRECISION,            -- acute/chronic; NULL if chronic 0
+    unit             VARCHAR(20) NOT NULL,        -- 'kg_reps' | 'nm_au' (window-native)
+    maturity         VARCHAR(8) NOT NULL,         -- 'low' (<42d history) | 'ok'
+    formula_version  VARCHAR(20) NOT NULL,        -- load_events transform version ('tier0-v1')
+    metrics_version  VARCHAR(20) NOT NULL,        -- τ-set / EWMA identity ('banister-v1')
+    computed_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_load_metric_day_window_version UNIQUE (user_id, day, load_window, formula_version, metrics_version)
+);
+
+CREATE INDEX ix_load_metrics_user_window        ON load_metrics (user_id, load_window);
+CREATE INDEX ix_load_metrics_user_day           ON load_metrics (user_id, day);
+CREATE INDEX ix_load_metrics_metrics_version    ON load_metrics (metrics_version);
+```
+
 ## Canonical Metric Type Whitelist
 
 ```python

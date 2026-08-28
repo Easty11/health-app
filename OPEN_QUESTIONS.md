@@ -3863,3 +3863,15 @@ undercount and the flat-fraction overcount in one operator-annotation path (like
 verify the Hevy assisted-type sign against `hevy_workouts.raw` before coding it. Owner: Luke.
 Cross-refs `#241` (the gate-2 entry), `#243` (the coalesce non-rep-leak fix — scoped it to rep sets),
 `#28`/`#32` (D-A/D-C/D-D), `#74`/`#76` (template tags).
+
+## Q122. Psychological window — EWMA-stock or divergence-criterion, and its τ
+
+Psychological (#28: sRPE / subjective-vs-objective divergence) is provisioned in the `load_metrics`
+window-set but computed by nothing — no sRPE ingestion exists and #32 assigns it no τ. Open: is
+Psychological a Banister EWMA stock (needing a τ prior it lacks) or a divergence criterion
+(criterion-not-input, no τ, echoing the L4/L5-tension check-in pattern)? Data prerequisite either way:
+per-session sRPE captured alongside objective load — a check-in-lane field. Resolve when sRPE ingestion
+is built; until then the window is schema-present, compute-absent (fail-closed — the fatigue-τ table in
+`load_metrics.py` has no `psychological` key, so a psychological load_event produces no metric row).
+
+**State:** OPEN
