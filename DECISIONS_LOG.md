@@ -10250,8 +10250,13 @@ the τ-set that governs the stored stocks: a τ tune is a metrics_version bump +
 execution (deps installed in a venv): full backend suite **1225 passed / 1 skipped** (the sole failure is
 the pre-existing `3360ed5` shallow-clone artifact, unrelated); the `load_metrics` tests incl. the
 reconciliation oracle **54 passed**; the alembic scratch **upgrade `1341a2cf6938 → 334526269006` +
-downgrade** ran clean with `load_window` present and no bare `window` column. Standing operator sequence
-after any `bw_fraction` or template change: BOTH recomputes in order — `load_events` first, then
+downgrade** ran clean with `load_window` present and no bare `window` column. **Live-verified:** merged via
+PR #121 (merge commit `e289c12`); backend deploy `bfc1a5e2` reached SUCCESS and the boot log carries
+`INFO [alembic.runtime.migration] Running upgrade 1341a2cf6938 -> 334526269006, add_load_metrics` then
+`Application startup complete` — single head applied, clean boot. The `load_metrics` **rollup** itself
+(populating rows) is operator-run post-deploy in-container (`railway ssh --service health-app-backend` →
+`cd /app` → `/opt/venv/bin/python load_metrics.py`), then face-validity the curves. Standing operator
+sequence after any `bw_fraction` or template change: BOTH recomputes in order — `load_events` first, then
 `load_metrics` — because the rollup reads a derived store, not raw.
 
 **How you know.** `backend/load_metrics.py` reads `models.LoadEvent` only (no `hevy_workouts.raw` access
