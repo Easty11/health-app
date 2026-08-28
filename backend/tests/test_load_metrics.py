@@ -164,8 +164,11 @@ def test_local_day_uses_aest_boundary(db_session):
         occurred_at=_utc("2026-06-05T16:00:00Z"))
     compute_load_metrics(db_session, 1, as_of=_d.date(2026, 6, 6))
     by_day = {r.day.isoformat(): r.daily_load for r in _rows(db_session)}
-    assert by_day.get("2026-06-06") == pytest.approx(100.0)   # landed on the local day
-    assert by_day.get("2026-06-05") == pytest.approx(0.0)     # NOT the UTC day
+    # astimezone(AEST): the only load day is 06-06, so the continuous calendar starts there
+    # and 06-05 has no row at all. Mutation-proof vs a `.date()` rule, which would place the
+    # load on 06-05 (making 06-06 a rest row with load 0) — both assertions would then flip.
+    assert by_day == {"2026-06-06": pytest.approx(100.0)}     # landed on the local day, sole row
+    assert "2026-06-05" not in by_day                         # NOT the UTC day
 
 
 def test_units_are_window_native_not_crossed(db_session):
