@@ -1,77 +1,49 @@
-# Code session close-out — S1 Metabolic derivation into `load_events`
+# Code session close-out — Polar Ingest Automation, Phase 1 (`#252`)
 
 ## Real commits this session
 
-Session-open ref: `1257e54` (master merge of PR #126). Branch: `claude/metabolic-load-events-kwftk5`.
+Session-open ref: `39da0cf` (master = merge of PR #128). Branch: `claude/polar-ingest-automation-p1-yjve43` (merged + remote-deleted).
 
-    bd3b1c3  feat(load): Metabolic derivation into load_events — Edwards zone-weighted TRIMP (S1)
-    2e94735  gov(load): mint #251 Metabolic derivation + Q123/Q124; BRANCHES row (S1)
-    01b78f4  Merge remote-tracking branch 'origin/master' into claude/metabolic-load-events-kwftk5
+    e9f79e4  feat(polar): Flow-export upload endpoint + per-user metabolic cascade + zone-coverage flag (Phase 1)
+    0b62413  gov(polar): mint #252 aerobic-ingest cascade; BRANCHES row (Phase 1)
 
-(`411a985`/`a3db244` in `1257e54..HEAD` are origin's PR #127 ROADMAP-sync merge, pulled in by
-`01b78f4` — not authored this session.) The close-out commit (`chore: session close-out`) carries this
-file plus the Q125 mint, the CLAUDE.md Recent-landings roll, and the BRANCHES DONE-flip; it cannot cite
-its own hash.
+Concern-split per `#G5`: feature (code + tests) then governance (`DECISIONS_LOG` #252 · BRANCHES row), staged by name, no `git add -A`.
 
-Merge: PR #128 merged to master on green (`placeholder guard (POSIX)` success, `mergeable_state: clean`),
-operator-authorised, `--merge` (merge commit), branch deleted.
+Merge: **PR #129** merged to master on green (`placeholder guard (POSIX)` success, `mergeable_state: clean`), **operator-authorised** ("merge and then close out"), `--merge` (merge commit `44245a3`), branch remote-deleted. The web-task harness draft/no-self-merge lane (Q125) held the PR as a draft until that explicit instruction; this session did not self-merge.
+
+The close-out commit (`chore: session close-out`) lands on `gov/252-polar-ingest-closeout` and carries this file plus the CLAUDE.md Recent-landings roll and the BRANCHES DONE-flip; it cannot cite its own hash.
 
 ## Pending-queue reconciliation
 
-No `;cc` pending-commit queue was carried into this session (the session opened directly on the S1
-implementation brief, not a chat close-out handoff). Everything landed is in the commits above.
+No `;cc` pending-commit queue was carried into this session (the work came from a standalone brief, not a chat close-out). Nothing provisional is left uncommitted:
 
-Governance carry-forward (operator, this session) reconciled:
-- **Q125 minted-then-closed** — the web-task harness draft/no-self-merge vs CLAUDE.md self-merge
-  disposition is TWO non-overlapping lanes, not a contradiction (RESOLVED by convention; no DECISIONS
-  entry — a clarification, not a decision). Landed in `OPEN_QUESTIONS.md`.
-- **CLAUDE.md merge-disposition clause: DROPPED (no-op), not applied.** The conditional carry-forward said
-  append a "scope: applies to Code-originated PRs" clause only if the block was unscoped. The block reads
-  **"Code merges its own PRs"** — already scoped to Code-originated PRs — so per the carry-forward's own
-  GUARD the clause was a no-op and dropped. Recorded here rather than added as a no-op edit. Number
-  re-verified against fresh master (max Q122 → this mints Q125, since the branch already holds Q123/Q124).
+- **Feature + tests** — landed in `e9f79e4` (endpoint, shared `import_flow_export`, `run_metabolic_cascade`, `zone_coverage`/`coverage_notice`, `test_polar_import_export.py`).
+- **DECISIONS_LOG #252 + BRANCHES row** — landed in `0b62413`; BRANCHES row flipped to DONE-with-SHA in this close-out commit (lifecycle recording).
+- **No new OPEN_QUESTIONS** (per the brief). **No schema migration** (existing tables/columns; SCHEMA.md unmoved). **No `mcp_server.py` diff** (the retirement PR owns that file).
 
 ## Cold-resume handoff
 
-**What landed.** S1 — the Metabolic window derivation (`DECISIONS_LOG #251`). New sibling transform
-`backend/load_events_metabolic.py`: one Metabolic `load_events` row per qualifying `aerobic_sessions`
-row via Edwards (1993) zone-weighted TRIMP — `Σ (zone_seconds/60) × weight`, weights {z1:1..z5:5};
-`formula_version "metab-v1"`, `unit "trimp_edw_au"`, `load_window "metabolic"` (lowercase — lights up the
-`load_metrics` fatigue-τ the rollup already provisions at τ=4). Source-neutral linkage
-(`source="aerobic_sessions"`, `source_ref=str(id)`); delete-and-reinsert scoped to `(user, "metab-v1")`
-only (tier0-v1 untouched); fail-closed on missing zones (INV-7, `sessions_skipped_no_zones`); no fallback
-formula (INV-2); `cardio_load` excluded as a load input (#32) — kept only as a convergent-sanity
-correlation. Windows orthogonal (Hevy→Mechanical/NM and Polar→Metabolic is not double-counting). No schema
-migration — the store's string columns already accept the new values; SCHEMA.md unmoved. Tests
-`backend/tests/test_load_events_metabolic.py` (19) cover G1 exact sum (mutation-proofed), G2 fail-closed,
-G3 idempotency, G4 tier0 isolation; full `test_load_events.py` strength suite stays green (62 together).
+### What landed
+Aerobic ingest is now recompute-triggering (`DECISIONS_LOG #252`). New authenticated endpoint `POST /integrations/polar/import-export` (multipart Flow-export ZIP, fail-closed hygiene: non-ZIP→400, `training-session_*.json`-only, member/size caps 5 000 / 10 MiB / 200 MiB→400) ingests into `aerobic_sessions` via a shared `import_flow_export(db, user_id, zip, dry_run)` extracted from `import_polar.py` (`_parse_session` verbatim; CLI retained as ops/backfill, `--email` CLI-only). Both aerobic routes (this endpoint + existing `/sync`) fire one named per-user callable `run_metabolic_cascade(db, user_id)` (`backend/metabolic_cascade.py`: metabolic transform `metab-v1` → `load_metrics` rollup, per-user, idempotent, `tier0-v1` untouched). Zone-coverage flag `zone_coverage`/`coverage_notice` (`reads/aerobic_reads.py`; `stale_zoneless`, `ZONELESS_STALE_DAYS=7`) surfaced in both ingest responses. Full backend suite 1255 passed (1244 baseline + 11 new); sole failure is the pre-existing `test_current_state` `3360ed5` shallow-clone git artifact (environment-only, unrelated).
 
-**Current sprint (ROADMAP NOW/row-79, Q6 four-window load).** Gates 1–3 are landed. S1 here supplies the
-**Metabolic→load_events transform** that ROADMAP row-79 and `#249` both name as the trigger to reassess
-retirement of the legacy aerobic acute-spike ratio (#8/#28) — that reassessment is now UNBLOCKED but was
-NOT done this session (downstream governance). The single clearest **next action:** operator runs the
-in-container Metabolic recompute (`railway ssh --service health-app-backend` → `cd /app` →
-`/opt/venv/bin/python load_events_metabolic.py`) then the `load_metrics` rollup, and reads the coverage
-stats + TRIMP-vs-`cardio_load` correlation — those numbers feed Q123 (how much zone-less coverage is
-actually at stake).
+### Current sprint (from ROADMAP NOW / this brief's phasing)
+Load-governor trajectory continues. Metabolic window is now both derived (`#251`) and ingest-automated (`#252`). The four-window `load_events` → `load_metrics` stack feeds the S2 Governor, which is the downstream consumer still to be built.
 
-**Open questions (this lane).**
-- **Q123 OPEN** — zone-less aerobic sessions: calibrated Banister-TRIMP (HR-based) mapping vs permanent
-  skip. Gated on the live `sessions_skipped_no_zones` volume.
-- **Q124 OPEN** — Catapult/GPS field-session ingestion into `aerobic_sessions` (no HR-zone model).
-- **Q125 DONE** — merge-disposition two-lane clarification (above).
-- **Q122 OPEN** — Psychological window (EWMA-stock vs divergence-criterion); untouched, still the last
-  unlit window.
+### Open questions gating the adjacent work
+- **Q123 (OPEN)** — zone-less aerobic sessions: calibrated Banister-TRIMP mapping vs permanent skip. **This is the Phase-2 gate** for v4 zone-enrichment (a `metab-v1`→`v2` formula bump), not started.
+- **Q124 (OPEN)** — field-session (Catapult/GPS) ingestion into `aerobic_sessions`.
+- **Q122 (OPEN)** — psychological window τ prior (that window stays fail-closed until minted).
+- **Q88 (OPEN)** — empirical calibration of `OVERLAP_THRESHOLD` for read-time cross-source arbitration.
+- **Q125** — the harness draft/no-self-merge vs CLAUDE.md self-merge: two non-overlapping lanes, resolved by convention (mint-then-close, PR #128); exercised again this session (operator merged on instruction).
 
-**What was NOT touched (named explicitly).** No feature/product movement on the thing the load
-instrument ultimately serves: the **Banister readiness score integration** (ROADMAP row-79 — the
-per-window model is built but its integration into a consumed readiness score with RMSSD/sleep/RHR, and
-the Gate-4 machine check, remain OWED) did not move. The **S2 Governor** and the **acute-spike-ratio
-retirement reassessment** are unblocked by S1 but unstarted. S6 Psychological derivation (Q122), S3
-criterion wiring, and S7 (`EPOCH_RPE_COMPLETE` / bodyweight de-hardcoding) were out of S1 scope and
-untouched. This session, like its recent predecessors, went to the INSTRUMENT (deriving load) rather than
-to the readiness score the instrument exists to feed — the next session should weigh picking up the
-consumed-score integration rather than adding another derivation lane.
+### Single clearest next action
+Build the **frontend upload UI** for `POST /integrations/polar/import-export` — the named follow-on now that the backend contract has landed (a file picker on the Settings/Polar surface posting the multipart ZIP, rendering the `import` + `cascade` + `coverage`/`notice` response). Immediate post-merge check first: verify the `health-app-backend` deploy settles against merge `44245a3` (per `#116`/`#121`) and the new route answers; no migration, so no `alembic` gate.
 
-**Trailing nit.** The `AerobicSession` docstring's legacy aerobic-ratio wording (#8/#28) was left
-untouched by scope discipline — retire it in a later governance pass.
+### What was NOT touched (explicit — infer the queue from here)
+- **Phase 2 — v4 zone-enrichment** (AccessLink v3 per-exercise zones onto `polar_v4` rows so the cascade scores them). Blocked behind **Q123**. The `/sync` cascade is deliberately harmless-today / correct-after by design; nothing more built.
+- **Phase 3 — Polar webhook** (new-exercise notification → sync). `run_metabolic_cascade` is its anticipated third caller; no subscription or handler built.
+- **Frontend upload UI** — named follow-on (see next action); backend-only this session.
+- **MCP exposure of the coverage flag** — deliberately not wired into `mcp_server.py` this brief (retirement PR owns that file); a one-line follow-on after both merge.
+- **The aerobic-ratio retirement brief** (the "prior brief") — **not landed and not open** as of this session (closed PRs #121–128, none touch `mcp_server.py`). Its arbitration OQ is therefore not in master; Phase-2 references **Q123** instead. That retirement work, and the arbitration refactor it carries, still stands still.
+- **S2 Governor** — the downstream consumer of the now-complete metabolic `load_metrics` series; unbuilt.
+- **Live Polar smoke** — no real Flow-export ZIP was uploaded against prod this session (no prod DB access from the web container); the endpoint is test-proven on the SQLite substrate only. First real upload is the operator's live probe.
