@@ -23,12 +23,13 @@ Follows the labs_reads.py shape: a query-only helper plus a pure core, no schema
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 import models
+from load_events_metabolic import compute_metabolic_load
 
 
 # Two cross-source sessions describe the same physical bout when their intervals
@@ -147,3 +148,81 @@ def arbitrated_sessions(
     if limit is not None:
         rows = rows[:limit]
     return rows
+
+
+# ── zone coverage (the "transport-starved sessions are visible, not silent" flag) ──
+
+# A zoneless `polar_v4` session older than this many days is STALE: the v4 list
+# endpoint never carries the HR-zone split, so its zones only ever arrive via a
+# fresh Flow-export re-download — past this horizon that refresh is overdue. A
+# reasoned prior (constant, tunable); the failure mode it surfaces is the 17
+# zoneless v4 sessions that sat silent for two months.
+ZONELESS_STALE_DAYS = 7
+
+
+def _has_usable_zones(session) -> bool:
+    """True iff the session carries zone data the metabolic transform can score.
+
+    Uses the SAME qualifying predicate as the transform's INV-7 fail-closed rule
+    (`load_events_metabolic.compute_metabolic_load`): at least one `z*_seconds`
+    non-NULL AND a positive zone-sum. A session that fails this emits no metabolic
+    `load_events` row — which is exactly the silence this flag makes visible."""
+    return compute_metabolic_load({
+        1: session.z1_seconds, 2: session.z2_seconds, 3: session.z3_seconds,
+        4: session.z4_seconds, 5: session.z5_seconds,
+    }).qualifying
+
+
+def zone_coverage(
+    user_id: int,
+    db: Session,
+    *,
+    now: Optional[datetime] = None,
+) -> dict:
+    """Per-user HR-zone coverage over `aerobic_sessions`.
+
+    Counts zone-carrying vs zoneless sessions overall and by source, plus
+    `stale_zoneless` — zoneless `polar_v4` sessions older than `ZONELESS_STALE_DAYS`
+    (the ones a fresh Flow-export would backfill; `polar_flow_export` rows already
+    carry zones and `health_connect` never does via this path). A read-only helper
+    (no schema), following the module's query-helper shape.
+    """
+    now = now or datetime.now(timezone.utc)
+    stale_before = now.date() - timedelta(days=ZONELESS_STALE_DAYS)
+
+    rows = (
+        db.query(models.AerobicSession)
+        .filter(models.AerobicSession.user_id == user_id)
+        .all()
+    )
+
+    with_zones = zoneless = stale_zoneless = 0
+    by_source: dict[str, dict[str, int]] = {}
+    for s in rows:
+        bucket = by_source.setdefault(s.source, {"with_zones": 0, "zoneless": 0})
+        if _has_usable_zones(s):
+            with_zones += 1
+            bucket["with_zones"] += 1
+        else:
+            zoneless += 1
+            bucket["zoneless"] += 1
+            if s.source == "polar_v4" and s.session_date < stale_before:
+                stale_zoneless += 1
+
+    return {
+        "total": len(rows),
+        "with_zones": with_zones,
+        "zoneless": zoneless,
+        "stale_zoneless": stale_zoneless,
+        "stale_zoneless_days": ZONELESS_STALE_DAYS,
+        "by_source": by_source,
+    }
+
+
+def coverage_notice(coverage: dict) -> Optional[str]:
+    """A user-facing nudge when zoneless `polar_v4` sessions have gone stale, else
+    None. Surfaced verbatim in the Polar ingest responses."""
+    n = coverage["stale_zoneless"]
+    if n > 0:
+        return f"{n} sessions awaiting zone data — refresh export"
+    return None
