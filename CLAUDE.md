@@ -259,11 +259,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Polar Ingest Automation Phase 1 (`#252`, PR #129), landed + merged** - in-app Flow-export ZIP upload endpoint (`POST /integrations/polar/import-export`, authenticated user) + one per-user metabolic cascade callable (`run_metabolic_cascade`) fired by both upload and v4 sync + a zone-coverage flag (`stale_zoneless`, 7-day) surfaced in both ingest responses; recompute-on-ingest is automatic. `import_polar.py` core extracted to a shared `import_flow_export`, CLI retained as ops/backfill. See DECISIONS_LOG #252. Handoff: `closeout.md`.
+
 - **Metabolic derivation into `load_events` (`#251`, PR #128), landed + merged** - new sibling transform `backend/load_events_metabolic.py` derives the Metabolic window from `aerobic_sessions` via Edwards zone-weighted TRIMP (`metab-v1`, `trimp_edw_au`); fail-closed on missing zones, no fallback formula, `cardio_load` excluded as input; lights up the provisioned `load_metrics` metabolic τ. See DECISIONS_LOG #251. Handoff: `closeout.md`.
 
 - **SessionStart hook install hardening (`#250`, PR #125), landed + merged** - `.claude/hooks/session-start.sh` now installs the DB tooling from the committed manifest `.claude/requirements-tooling.txt` (run-time grep retired), guarded against drift with `backend/requirements.txt` by `scripts/check_tooling_pins.py`; fail-loud on a broken install (missing manifest / failed pip → non-zero); the full app-stack is installable on-demand via an isolated venv (`.claude/scripts/install-full-stack.sh`), never at session start. See DECISIONS_LOG #250. Handoff: `closeout.md`.
-
-- **SQLAlchemy/Alembic tooling SessionStart hook (PR #122), landed + merged** - `.claude/hooks/session-start.sh` installs the DB tooling (sqlalchemy/alembic/psycopg2-binary/python-dotenv/pytest) on every Claude Code web session; the ephemeral container ships no Python packages, so `alembic upgrade head` and any `sqlalchemy`/`models` import previously failed cold. Scoped to the tooling — the full `requirements.txt` trips a distro-managed PyJWT uninstall. Handoff: `closeout.md`.
 
 ---
 
