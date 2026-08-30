@@ -26,8 +26,8 @@
 import { useEffect, useState } from 'react'
 import api from '../../api'
 import {
-  confirmationLines, decisionHeadline, exclusionNote, formatMinutes,
-  insufficiencyHeadline, nextEvaluationNote,
+  basisLine, confirmationLines, decisionHeadline, exclusionNote, formatMinutes,
+  insufficiencyHeadline, nextEvaluationNote, reasonLabel, statusChipClass, statusLabel,
 } from './evaluationCopy'
 
 function Row({ label, value }) {
@@ -36,6 +36,51 @@ function Row({ label, value }) {
       <span className="text-gray-500">{label}</span>
       <span className="text-gray-800 font-medium text-right tabular-nums">{value}</span>
     </>
+  )
+}
+
+function StatusChip({ status }) {
+  return (
+    <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border
+      shrink-0 ${statusChipClass(status)}`}>
+      {statusLabel(status)}
+    </span>
+  )
+}
+
+// The per-night ledger under the "N valid of M" line (#253 / Brief B step 6). One tappable
+// row per evaluated night — date, sleep efficiency, status chip, reason — expanding to the
+// evidence behind it. Mobile-first: a stack of rows, never a table; the evidence is a tap
+// away rather than a column, so a phone width shows every night without horizontal scroll.
+function LedgerRows({ rows }) {
+  const [open, setOpen] = useState(null)
+  if (!rows?.length) return null
+  return (
+    <ul className="space-y-0.5">
+      {rows.map((r) => {
+        const isOpen = open === r.date
+        const eff = r.sleep_efficiency != null ? `${r.sleep_efficiency}%` : '—'
+        return (
+          <li key={r.date}>
+            <button
+              type="button"
+              onClick={() => setOpen(isOpen ? null : r.date)}
+              aria-expanded={isOpen}
+              className="w-full flex items-center gap-2 py-1.5 text-left"
+            >
+              <span className="text-[11px] text-gray-700 tabular-nums w-[4.75rem] shrink-0">{r.date}</span>
+              <span className="text-[11px] text-gray-500 tabular-nums w-9 shrink-0 text-right">{eff}</span>
+              <StatusChip status={r.status} />
+              <span className="text-[11px] text-gray-500 truncate flex-1">{reasonLabel(r.reason)}</span>
+              {r.evidence && <span className="text-gray-300 text-[10px] shrink-0">{isOpen ? '▲' : '▾'}</span>}
+            </button>
+            {isOpen && r.evidence && (
+              <p className="text-[11px] text-gray-500 leading-snug pl-[4.75rem] pb-1.5">{r.evidence}</p>
+            )}
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -114,7 +159,9 @@ export default function EvaluationOffer({ onAccepted }) {
 
         <div className="grid grid-cols-2 gap-y-1.5 text-xs border-t border-gray-100 pt-2">
           <Row label="Nights counted" value={b?.nights_counted ?? '—'} />
-          <Row label="Nights logged this cycle" value={ev.nights_since_effective_from ?? '—'} />
+          {/* The CYCLE-CLIPPED count (Brief B step 4), not nights-since-effective-from,
+              which overruns the cycle window and rendered as "6 of 4" on this very card. */}
+          <Row label="Nights logged this cycle" value={b?.nights_logged ?? '—'} />
           <Row label="Cycle" value={`${b?.cycle_from ?? '—'} → ${b?.cycle_to ?? '—'}`} />
         </div>
 
@@ -168,11 +215,22 @@ export default function EvaluationOffer({ onAccepted }) {
       </div>
 
       <div className="grid grid-cols-2 gap-y-1.5 text-xs border-t border-gray-100 pt-2">
-        <Row label="Nights counted" value={b?.nights_counted ?? '—'} />
         <Row label="Mean TST" value={formatMinutes(b?.tst_min)} />
         <Row label="Mean SE" value={b?.se_pct != null ? `${b.se_pct}%` : '—'} />
+        <Row label="Nights logged this cycle" value={b?.nights_logged ?? '—'} />
         <Row label="Cycle" value={`${b?.cycle_from ?? '—'} → ${b?.cycle_to ?? '—'}`} />
       </div>
+
+      {/* The per-night ledger under the "N valid of M" line — why each night was counted,
+          flagged, or dropped (#253 / Brief B step 6). */}
+      {b?.ledger?.length > 0 && (
+        <div className="border-t border-gray-100 pt-2">
+          <p className="text-[11px] font-medium text-gray-600 mb-0.5">
+            {basisLine(b.nights_counted, b.nights_logged)}
+          </p>
+          <LedgerRows rows={b.ledger} />
+        </div>
+      )}
 
       {/* The engine's own sentence, not a paraphrase — a HOLD names the first gate that
           failed, and that is the whole content of the decision. */}

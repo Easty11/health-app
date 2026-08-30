@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  decisionHeadline, exclusionNote, formatMinutes, nextEvaluationNote,
+  basisLine, decisionHeadline, exclusionNote, formatMinutes, nextEvaluationNote,
+  reasonLabel, statusChipClass, statusLabel,
 } from './evaluationCopy'
 
 const basis = (over = {}) => ({
@@ -75,5 +76,52 @@ describe('nextEvaluationNote', () => {
   it('null days yields no note', () => {
     expect(nextEvaluationNote(null)).toBe(null)
     expect(nextEvaluationNote(undefined)).toBe(null)
+  })
+})
+
+// ── per-night ledger copy (Brief B) ──────────────────────────────────────────
+
+describe('basisLine', () => {
+  it('reads "N valid of M nights", flagged counting as valid', () => {
+    expect(basisLine(3, 3)).toBe('3 valid of 3 nights')
+    expect(basisLine(2, 4)).toBe('2 valid of 4 nights')
+  })
+  it('singular for a one-night window', () => {
+    expect(basisLine(1, 1)).toBe('1 valid of 1 night')
+  })
+  it('falls back to the counted total when no logged count is sent', () => {
+    expect(basisLine(3)).toBe('3 valid of 3 nights')
+  })
+})
+
+describe('statusLabel', () => {
+  it('humanises the closed three-state status', () => {
+    expect(statusLabel('included')).toBe('Included')
+    expect(statusLabel('flagged')).toBe('Flagged')
+    expect(statusLabel('excluded')).toBe('Excluded')
+  })
+  it('an unrecognised status renders as itself, never coerced', () => {
+    expect(statusLabel('future_state')).toBe('future_state')
+    expect(statusLabel(undefined)).toBe('—')
+  })
+})
+
+describe('reasonLabel', () => {
+  it('humanises each closed reason code', () => {
+    expect(reasonLabel('alcohol')).toBe('Alcohol')
+    expect(reasonLabel('nap')).toBe('Nap over threshold')
+    expect(reasonLabel('unknown')).toBe('Unclassified')
+    expect(reasonLabel('ok')).toBe('Clean night')
+  })
+  it('an unknown code falls through to itself, not a fabricated phrase', () => {
+    expect(reasonLabel('some_new_code')).toBe('some_new_code')
+  })
+})
+
+describe('statusChipClass', () => {
+  it('gives flagged a distinct look from included and excluded', () => {
+    const flagged = statusChipClass('flagged')
+    expect(flagged).not.toBe(statusChipClass('included'))
+    expect(flagged).not.toBe(statusChipClass('excluded'))
   })
 })

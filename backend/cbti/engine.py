@@ -149,6 +149,37 @@ assert MIN_VALID_NIGHTS < CYCLE_NIGHTS, (
 Decision = Literal["adopt", "extend", "hold", "compress", "close"]
 AdherenceSource = Literal["samsung", "diary", "none"]
 
+# ── ruleset version ───────────────────────────────────────────────────────────
+# Frozen identifier for the adjudication ruleset the per-night ledger is produced
+# under. ANY change to a threshold, an exclusion/excusal predicate, a ledger status
+# or reason code, or the outcome policy MUST bump this in the same commit, so a
+# ledger persisted at close-out stays reproducible against the rules that produced it
+# (it is snapshotted onto the successor prescription, never recomputed at render).
+# `2026-08-30.1` is minted for the #253 alcohol reclass and this ledger producer.
+RULESET_VERSION = "cbti-basis/2026-08-30.1"
+
+# ── per-night ledger (closed enums) ───────────────────────────────────────────
+# The ledger row's three-state status and its reason code. BOTH ARE CLOSED SETS: a
+# new status or reason is a governance decision, not an implementation detail (Brief
+# B gate). `flagged` is #253's excusable class — a night that stays in the basis but
+# is marked (today, only a recorded-alcohol night); `excluded` is dropped from the
+# basis; `included` counts cleanly. `unknown` is the single catch-all reason for a
+# night that cannot be assigned a known classification: it guarantees every evaluated
+# night gets a row and there is never an "other" bucket or a silently dropped night.
+LedgerStatus = Literal["included", "flagged", "excluded"]
+LedgerReason = Literal[
+    "ok",                     # included — a clean valid night
+    "alcohol",                # flagged (in basis, #253) or excluded (the capped 2nd+ drink night)
+    "incomplete",             # excluded — tst/se missing
+    "nap",                    # excluded — nap over the threshold
+    "travel_or_match",        # excluded — off-protocol night
+    "training_constrained",   # excluded — session ended too late for the prescription
+    "unknown",                # excluded — no assignable classification (catch-all; never dropped)
+]
+_KNOWN_EXCLUSION_REASONS = frozenset(
+    {"incomplete", "nap", "travel_or_match", "training_constrained", "alcohol"}
+)
+
 
 # ── inputs ────────────────────────────────────────────────────────────────────
 
@@ -168,6 +199,7 @@ class Night:
     final_wake: str | None = None
     naps_min: int | None = None
     alcohol_units: int | None = None      # None means NOT RECORDED, not zero
+    alcohol_finish_time: str | None = None  # "19:30" — the diary's last-drink clock, for ledger evidence only
     samsung_bedtime: str | None = None    # passive_overnight only
     training_end: datetime | None = None
     travel_or_match: bool = False
@@ -182,6 +214,11 @@ class NightVerdict:
     adherence_delta_min: int | None = None
     adherent: bool | None = None
     alcohol_unknown: bool = False         # admitted, but not verified clean
+    # #253: a RECORDED-alcohol night is EXCUSED, not excluded — it stays a valid basis
+    # night (status `flagged`) rather than being dropped. Set only on a valid verdict;
+    # the per-cycle cap (evaluate_cycle) may demote a second excused night back to a
+    # plain `alcohol` exclusion, at which point this is False and `valid` is False.
+    excused: bool = False
 
 
 @dataclass
@@ -241,6 +278,98 @@ class CycleDecision:
     # CORRECT here (no prescription context — replay/tests) and must stay inert: do NOT
     # convert to a gate by analogy to #122, where naps' 0-not-null WAS load-bearing.
     nights_since_effective_from: int | None = None
+    # ── per-night ledger (Brief B) ────────────────────────────────────────────
+    # One row per EVALUATED night in the cycle window, most-recent-agnostic order
+    # (as classified). Every night the cycle considered gets a row — included,
+    # flagged, or excluded — so a close-out can state why each night was counted or
+    # dropped without re-deriving it. Missing calendar nights are not evaluated and
+    # so carry no row (the basis window is the nights the engine saw); `unknown` is
+    # the closed-enum catch-all for an evaluated night with no assignable reason.
+    basis_ledger: list[dict] = field(default_factory=list)
+    # Basis nights that are `flagged` (in the basis, #253) rather than clean-included.
+    # Today only recorded-alcohol excused nights. <= basis_nights_n.
+    basis_n_flagged: int = 0
+    # Nights LOGGED in this cycle window (= len(basis_ledger)), clipped to the cycle by
+    # construction (nights are capped to CYCLE_NIGHTS). This is the "nights logged this
+    # cycle" the surface renders — NOT `nights_since_effective_from`, which counts every
+    # night since the prescription took effect and overruns the cycle window.
+    basis_nights_logged: int = 0
+    # The ruleset the ledger was produced under, snapshotted so a persisted ledger is
+    # reproducible against the rules that made it. Frozen; bumped on any rule change.
+    ruleset_version: str = RULESET_VERSION
+
+
+# ── per-night ledger ──────────────────────────────────────────────────────────
+
+def _ledger_status_reason(v: "NightVerdict") -> tuple[str, str]:
+    """Map a verdict to the ledger's closed (status, reason). `flagged` is #253's
+    excused class; a valid non-excused night is `included`; anything not valid is
+    `excluded`, keyed by its exclusion reason, with `unknown` as the catch-all so a
+    future engine reason can never silently become an untracked code or a dropped row.
+    """
+    if v.valid:
+        return ("flagged", "alcohol") if v.excused else ("included", "ok")
+    reason = v.reason if v.reason in _KNOWN_EXCLUSION_REASONS else "unknown"
+    return "excluded", reason
+
+
+def _ledger_evidence(v: "NightVerdict", status: str, reason: str) -> str:
+    """The human string behind a row — what a tap-to-expand shows. Data-only; never a
+    recommendation. Alcohol rows carry the units and finish time (`2u @ 19:30`), the
+    whole point of #253's audit trail; a clean night carries its TST and efficiency.
+    """
+    n = v.night
+    if reason == "alcohol":
+        units = n.alcohol_units
+        stem = f"{units}u" if units is not None else "alcohol"
+        if n.alcohol_finish_time:
+            stem += f" @ {n.alcohol_finish_time}"
+        # a capped 2nd+ drink night is excluded, not flagged — say why it did not count
+        return stem if status == "flagged" else f"{stem} (2nd drink night this cycle; capped, excluded)"
+    if status == "included":
+        eff = f", {n.se_pct:g}% efficiency" if n.se_pct is not None else ""
+        return f"{n.tst_min} min asleep{eff}" if n.tst_min is not None else "clean night"
+    if reason == "incomplete":
+        return "no diary TST or efficiency for this night"
+    if reason == "nap":
+        return f"nap {n.naps_min} min over the {NAP_EXCLUDE_MIN} min threshold"
+    if reason == "travel_or_match":
+        return "off-protocol night (travel or match)"
+    if reason == "training_constrained":
+        return "session ended too late to reach the prescribed lights-out"
+    return "no assignable classification"
+
+
+Outcome = Literal["extend", "compress", "hold", "converged", "no_decision"]
+
+
+def outcome_of(decision: str, sufficient: bool, converged: bool) -> str:
+    """The cycle's outcome as a CLOSED, non-overloaded state (Brief B step 5).
+
+    The engine emits `decision="hold"` for four different situations — an insufficiency
+    HOLD (no decision was reached), an adherence HOLD, a converged plateau HOLD, and a
+    genuine titrate-to-hold. The first is NOT a decision and must never render as one
+    (the #214 harm event). This collapses the overload into one field a surface can
+    switch on without re-deriving: `no_decision` and `converged` are split out; every
+    other hold stays `hold`; extend/compress pass through.
+    """
+    if not sufficient:
+        return "no_decision"
+    if converged:
+        return "converged"
+    return decision
+
+
+def _ledger_row(v: "NightVerdict") -> dict:
+    status, reason = _ledger_status_reason(v)
+    return {
+        "date": v.night.date.isoformat(),
+        "status": status,
+        "reason": reason,
+        "sleep_efficiency": v.night.se_pct,
+        "total_sleep": v.night.tst_min,
+        "evidence": _ledger_evidence(v, status, reason),
+    }
 
 
 # ── exclusions ────────────────────────────────────────────────────────────────
@@ -261,23 +390,14 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
     if night.tst_min is None or night.se_pct is None:
         return NightVerdict(night, False, "incomplete")
 
-    # ALCOHOL. Only a RECORDED non-zero night is excluded. An unrecorded night is
-    # admitted and flagged (`alcohol_unknown`), so the basis records how much of it
-    # rested on nights assumed clean rather than verified clean.
-    #
-    # RATIONALE (first-principles): alcohol alters sleep architecture, so a drink
-    # night is evidence about a DIFFERENT physiological state than the one being
-    # titrated — structurally the same argument as the adherence gate (a night not
-    # run to prescription is evidence about a different window). Excluded on that
-    # ground, not on any block-2 measurement (the block that once supplied the
-    # TST/adjacency figures here is discarded for outcome claims).
-    #
-    # PENDING POLICY (not implemented): a policy revision would reclass this
-    # exclusion as EXCUSABLE rather than DISQUALIFYING. Those classes do not exist
-    # in code and the revision is not ratified, so this stays a plain exclusion —
-    # building the split now would be constructing against an unratified spec.
-    if night.alcohol_units is not None and night.alcohol_units > 0:
-        return NightVerdict(night, False, "alcohol")
+    # ALCOHOL is no longer an exclusion here. It is EXCUSED at the valid path below
+    # (#253): a recorded-alcohol night stays a valid basis night tagged `excused`
+    # (ledger status `flagged`) rather than being dropped. The reclass moved alcohol
+    # AFTER the hard exclusions — a night that is both a drink night and, say, an
+    # over-threshold nap is still excluded by the nap, because a nap is contamination
+    # upstream of the measurement, whereas a cleared pre-bed drink barely moves the SE
+    # the gate reads (#253 rationale). The per-cycle cap (evaluate_cycle) demotes a
+    # SECOND excused night in the same window back to a plain `alcohol` exclusion.
 
     # naps: Q45 closed -> #219. A nap ATTRIBUTES to the night it precedes, so a nap
     # reaching this Night is the daytime nap that discharged its sleep pressure — the
@@ -321,7 +441,8 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
         delta = clock_delta_minutes(prescribed_lights_out, night.lights_out)
     adherent = None if delta is None else abs(delta) <= ADHERENCE_TOL_MIN
     return NightVerdict(night, True, None, source, delta, adherent,
-                        alcohol_unknown=night.alcohol_units is None)
+                        alcohol_unknown=night.alcohol_units is None,
+                        excused=night.alcohol_units is not None and night.alcohol_units > 0)
 
 
 # ── diagnostics (computed, never gating) ──────────────────────────────────────
@@ -410,8 +531,25 @@ def evaluate_cycle(
     """
     nights = sorted(nights, key=lambda n: n.date)[-CYCLE_NIGHTS:]
     verdicts = [classify_night(n, prescribed_lights_out) for n in nights]
+
+    # ── GUARD (a), #253: cap excused (flagged) nights at ONE per cycle ──────────
+    # The reclass keeps a recorded-alcohol night in the basis, but a cycle must never
+    # be built predominantly on compromised nights. The FIRST excused night by date is
+    # kept flagged; every later one is demoted back to a plain `alcohol` exclusion, so
+    # a second drink night stops counting toward the basis exactly as it did before.
+    excused_seen = False
+    for i, v in enumerate(verdicts):
+        if v.valid and v.excused:
+            if excused_seen:
+                verdicts[i] = NightVerdict(v.night, False, "alcohol")
+            else:
+                excused_seen = True
+
     valid = [v for v in verdicts if v.valid]
     excluded = {v.night.date.isoformat(): v.reason for v in verdicts if not v.valid}
+    # Per-night ledger: one row per evaluated night, in date order (Brief B step 1).
+    basis_ledger = [_ledger_row(v) for v in sorted(verdicts, key=lambda x: x.night.date)]
+    n_flagged = sum(1 for v in valid if v.excused)
 
     n_samsung = sum(1 for v in valid if v.adherence_source == "samsung")
     n_diary = sum(1 for v in valid if v.adherence_source == "diary")
@@ -427,6 +565,10 @@ def evaluate_cycle(
         basis_window_start=nights[0].date if nights else None,
         basis_window_end=nights[-1].date if nights else None,
         excluded_nights=excluded,
+        basis_ledger=basis_ledger,
+        basis_n_flagged=n_flagged,
+        basis_nights_logged=len(basis_ledger),
+        ruleset_version=RULESET_VERSION,
         basis_tib_over_run_min=_mean_tib_over_run(valid, current_window_min),
         lights_out_sd_min=_sd_minutes([v.night.lights_out for v in valid]),
         wake_time_sd_min=_sd_minutes([v.night.final_wake for v in valid]),
@@ -520,6 +662,34 @@ def evaluate_cycle(
         decision, verb = "compress", "compressed"
     else:
         decision, verb = "hold", "unchanged"
+
+    # ── GUARD (b), #253: an excused night may not by itself move the window ─────
+    # The reclass admits a compromised night to the basis (guard a caps it at one), but
+    # a single excused night must not be what TIPS a cycle into an extend or compress.
+    # The move only stands if it is ROBUST to that night — i.e. the clean-only nights
+    # (valid, non-excused) reach the same direction on their own. If they are too few to
+    # adjudicate (< MIN_VALID_NIGHTS) or would not move the window the same way, the
+    # cycle HOLDs on its merits (sufficient=True — this is a decision, not an
+    # insufficiency): the excused night keeps the cycle evaluable without driving it.
+    if decision in ("extend", "compress") and n_flagged:
+        clean = [v for v in valid if not v.excused]
+        held_why = None
+        if len(clean) < MIN_VALID_NIGHTS:
+            held_why = (f"only {len(clean)} clean of {len(valid)} valid nights — the "
+                        f"{decision} rests on the excused night")
+        else:
+            mean_tst_clean = round(statistics.mean(v.night.tst_min for v in clean))
+            move_clean = max(FLOOR_MIN, mean_tst_clean + BUFFER_MIN) - current_window_min
+            same_dir = (move_clean > 0) == (move > 0) and move_clean != 0
+            if not same_dir:
+                held_why = (f"clean-only basis (mean TST {mean_tst_clean}, "
+                            f"{len(clean)} nights) would not {decision}")
+        if held_why is not None:
+            return CycleDecision(
+                decision="hold",
+                reason=f"excused_guard: {held_why}; window held (#253)",
+                window_minutes=current_window_min, **base,
+            )
 
     anchor_min = clock_to_minutes(wake_anchor)
     # minutes_to_clock wraps internally; no modulo needed at the call site

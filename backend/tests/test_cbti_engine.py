@@ -51,9 +51,13 @@ def cycle(**kw) -> list[Night]:
 
 # ── exclusions ────────────────────────────────────────────────────────────────
 
-def test_alcohol_recorded_nonzero_is_excluded():
+def test_alcohol_recorded_nonzero_is_EXCUSED_not_excluded():
+    """#253: a recorded-alcohol night reclasses from DISQUALIFYING to EXCUSABLE — it
+    stays a VALID basis night tagged `excused` (ledger status `flagged`) rather than
+    being dropped. Supersedes the old 'recorded non-zero is excluded' behaviour, a
+    change ratified in DECISIONS_LOG #253 before this code landed."""
     v = classify_night(night(1, alcohol=2), RX)
-    assert not v.valid and v.reason == "alcohol"
+    assert v.valid is True and v.excused is True and v.reason is None
 
 
 def test_alcohol_unknown_is_distinguishable_from_recorded_zero():
@@ -103,7 +107,7 @@ def test_insufficient_valid_nights_holds():
     nights = cycle()
     n_excluded = CYCLE_NIGHTS - MIN_VALID_NIGHTS + 1      # one short of sufficiency
     for n in nights[:n_excluded]:
-        n.alcohol_units = 2
+        n.travel_or_match = True                         # a real exclusion (alcohol now excuses, #253)
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold"
     assert "insufficient_nights" in d.reason
@@ -116,7 +120,7 @@ def test_sufficiency_failure_short_circuits_before_adherence():
     gates would fail; the reason must be sufficiency."""
     nights = cycle(lights_out="01:00")            # wildly non-adherent (by diary)
     for n in nights[:CYCLE_NIGHTS - MIN_VALID_NIGHTS + 1]:
-        n.alcohol_units = 2                      # RECORDED drinks -> excluded
+        n.travel_or_match = True                 # a real exclusion (alcohol now excuses, #253)
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold" and "insufficient_nights" in d.reason
     assert "adherence" not in d.reason
@@ -268,10 +272,10 @@ def test_ema_is_counted_and_never_compresses():
 
 def test_excluded_nights_are_reason_tagged():
     nights = cycle()
-    nights[0].alcohol_units = 3
-    nights[1].naps_min = 45          # over NAP_EXCLUDE_MIN, so this is a real exclusion
+    nights[0].travel_or_match = True   # a real exclusion (alcohol now excuses, #253)
+    nights[1].naps_min = 45            # over NAP_EXCLUDE_MIN, so this is a real exclusion
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
-    assert d.excluded_nights[nights[0].date.isoformat()] == "alcohol"
+    assert d.excluded_nights[nights[0].date.isoformat()] == "travel_or_match"
     assert d.excluded_nights[nights[1].date.isoformat()] == "nap"
     assert d.basis_nights_n == CYCLE_NIGHTS - 2
 
@@ -298,13 +302,14 @@ def test_recorded_zero_is_admitted_and_NOT_flagged():
     assert v.valid is True and v.alcohol_unknown is False
 
 
-def test_recorded_nonzero_is_still_excluded():
-    """Still excluded — but as a NON-ADHERENCE proxy, not as suppressed sleep.
-    Drink nights carry the block's HIGHEST TST (430 vs 370 for recorded-zero),
-    i.e. more time in bed, so the original 'alcohol suppresses TST' rationale is
-    refuted by the data it described."""
+def test_recorded_nonzero_is_excused_and_stays_in_the_basis():
+    """#253: a recorded-alcohol night is EXCUSED (flagged), not excluded. Drink nights
+    carry the block's HIGHEST TST (430 vs 370 for recorded-zero), so the original
+    'alcohol suppresses TST' rationale never held; and with a 3-of-4 sufficiency gate,
+    excluding the drink night starved cycles into no-decision HOLDs. It now counts,
+    flagged, and the per-cycle cap (below) stops it from being stacked."""
     v = classify_night(night(1, alcohol=2), RX)
-    assert not v.valid and v.reason == "alcohol"
+    assert v.valid is True and v.excused is True and v.alcohol_unknown is False
 
 
 def test_alcohol_unknown_count_reaches_the_basis():

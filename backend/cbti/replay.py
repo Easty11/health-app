@@ -39,7 +39,7 @@ from datetime import date, timedelta
 from sqlalchemy import text
 
 import models
-from cbti.engine import CYCLE_NIGHTS, MAX_MOVE_MIN, Night, evaluate_cycle
+from cbti.engine import CYCLE_NIGHTS, MAX_MOVE_MIN, Night, evaluate_cycle, outcome_of
 from database import SessionLocal
 
 # The ONLY permitted Samsung read. A second query path around this allowlist is
@@ -59,7 +59,7 @@ _TRAINING_SQL = text(
 
 _NIGHTS_SQL = text(
     "SELECT date, diary_tst_min, diary_se_pct, lights_out, out_of_bed, final_wake, "
-    "       alcohol_units "
+    "       alcohol_units, alcohol_finish_time "
     "FROM daily_records "
     "WHERE user_id = :uid AND date BETWEEN :d0 AND :d1 "
     "ORDER BY date"
@@ -142,13 +142,14 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     naps = {_as_date(r[0]): r[1] for r in db.execute(_NAPS_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
 
     nights = []
-    for (d, tst, se, lo, oob, fw, alc) in rows:
+    for (d, tst, se, lo, oob, fw, alc, alc_finish) in rows:
         if tst is None:
             continue
         d = _as_date(d)
         nights.append(Night(
             date=d, tst_min=tst, se_pct=se, lights_out=lo, out_of_bed=oob, final_wake=fw,
             naps_min=naps.get(d - timedelta(days=1)), alcohol_units=alc,
+            alcohol_finish_time=alc_finish,
             samsung_bedtime=samsung.get(d),
             training_end=training.get(d - timedelta(days=1)),
         ))
@@ -210,8 +211,17 @@ def replay(nights: list[Night], prescriptions: list[LedgerRx],
                 "n": d.basis_nights_n, "n_samsung": d.basis_n_samsung,
                 "n_diary": d.basis_n_diary,
                 "n_alc_unk": d.basis_n_alcohol_unknown,
+                "n_flagged": d.basis_n_flagged,
                 "tib_over": d.basis_tib_over_run_min,
                 "excluded": d.excluded_nights,
+                # Brief B: the per-night ledger the surface renders, the ruleset it was
+                # produced under (snapshotted at accept, never recomputed at render), the
+                # cycle-scoped logged count (clipped, not `nse`), and the non-overloaded
+                # outcome that splits a no-decision HOLD from a merits HOLD.
+                "ledger": d.basis_ledger,
+                "ruleset_version": d.ruleset_version,
+                "nights_logged": d.basis_nights_logged,
+                "outcome": outcome_of(d.decision, d.sufficient, d.converged),
                 "lo_sd": d.lights_out_sd_min, "wk_sd": d.wake_time_sd_min,
                 "ema": d.ema_count, "capped": d.move_capped,
                 "converged": d.converged,

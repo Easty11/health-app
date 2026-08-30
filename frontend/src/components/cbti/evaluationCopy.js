@@ -90,3 +90,48 @@ export function nextEvaluationNote(daysSince, cycleNights = 4) {
   if (left <= 0) return null
   return `Next evaluation in ${left} night${left === 1 ? '' : 's'}`
 }
+
+// ── per-night ledger (Brief B) ───────────────────────────────────────────────
+// The headline over the ledger rows: N valid of M nights, where a FLAGGED night counts
+// as valid (it stays in the basis, #253) but is still marked in its own row. `nightsLogged`
+// is the cycle-clipped count the server sends, never nights-since-effective-from.
+export function basisLine(nightsCounted, nightsLogged) {
+  const n = nightsCounted ?? 0
+  const m = nightsLogged ?? n
+  return `${n} valid of ${m} night${m === 1 ? '' : 's'}`
+}
+
+// The three-state status is a CLOSED set (server enum). An unrecognised value renders as
+// itself rather than being coerced, so a future status can never silently read as one of
+// these three.
+const STATUS_LABEL = { included: 'Included', flagged: 'Flagged', excluded: 'Excluded' }
+export function statusLabel(status) {
+  return STATUS_LABEL[status] ?? status ?? '—'
+}
+
+// Reason codes are a CLOSED enum (server). The label humanises each; an unknown code
+// falls through to the code itself, never to a fabricated phrase.
+const REASON_LABEL = {
+  ok: 'Clean night',
+  alcohol: 'Alcohol',
+  incomplete: 'Incomplete data',
+  nap: 'Nap over threshold',
+  travel_or_match: 'Travel or match',
+  training_constrained: 'Late training',
+  unknown: 'Unclassified',
+}
+export function reasonLabel(reason) {
+  return REASON_LABEL[reason] ?? reason ?? '—'
+}
+
+// Tailwind classes per status — kept here so the chip's look is unit-checkable alongside
+// its wording rather than buried in JSX. Flagged is amber (in the basis, but marked);
+// included green; excluded a muted rose so a dropped night reads as dropped, not neutral.
+const STATUS_CLASS = {
+  included: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  flagged: 'bg-amber-50 text-amber-800 border-amber-200',
+  excluded: 'bg-rose-50 text-rose-700 border-rose-200',
+}
+export function statusChipClass(status) {
+  return STATUS_CLASS[status] ?? 'bg-gray-50 text-gray-600 border-gray-200'
+}

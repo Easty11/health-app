@@ -738,6 +738,22 @@ class CBTIEvaluationBasisOut(BaseModel):
     ema_count: int = 0
     move_capped: bool = False
     tib_over_run_min: Optional[float] = None
+    # ── per-night ledger (Brief B) ─────────────────────────────────────────────
+    # One row per evaluated night: {date, status(included|flagged|excluded), reason,
+    # sleep_efficiency, total_sleep, evidence}. This is the render source for the
+    # "N valid of M" rows; the live offer computes it, and accept snapshots it onto the
+    # prescription so a later read is the stored ledger, never a recompute (#253/step 2).
+    ledger: list[dict] = Field(default_factory=list)
+    ruleset_version: Optional[str] = None
+    # Nights LOGGED in this cycle window, clipped to the cycle — NOT nights-since-
+    # effective-from, which overruns it. This is what the surface labels "nights logged
+    # this cycle" (Brief B step 4).
+    nights_logged: int = 0
+    # Basis nights FLAGGED (excused, in the basis) rather than clean-included (#253).
+    nights_flagged: int = 0
+    # The non-overloaded cycle outcome (Brief B step 5): a no-decision insufficiency HOLD
+    # is `no_decision`, a plateau is `converged`, and neither renders as a plain `hold`.
+    outcome: Optional[str] = None
 
 
 class CBTIEvaluationOut(BaseModel):
@@ -791,6 +807,9 @@ def _basis_from(cycle: dict, live_rx) -> CBTIEvaluationBasisOut:
         nights_excluded=cycle["excluded"],
         ema_count=cycle["ema"], move_capped=cycle["capped"],
         tib_over_run_min=cycle["tib_over"],
+        ledger=cycle["ledger"], ruleset_version=cycle["ruleset_version"],
+        nights_logged=cycle["nights_logged"], nights_flagged=cycle["n_flagged"],
+        outcome=cycle["outcome"],
     )
 
 
@@ -892,6 +911,12 @@ def accept_cbti_evaluation(
         basis_n_samsung=cycle["n_samsung"],
         basis_n_diary=cycle["n_diary"],
         basis_n_alcohol_unknown=cycle["n_alc_unk"],
+        # Brief B step 2: snapshot the per-night ledger, its flagged count, and the
+        # ruleset it was produced under, so the close-out is read back rather than
+        # recomputed against a since-moved ruleset. Frozen at authorship like basis_*.
+        basis_n_flagged=cycle["n_flagged"],
+        basis_ledger=cycle["ledger"],
+        ruleset_version=cycle["ruleset_version"],
     )
     db.add(successor)
     db.flush()

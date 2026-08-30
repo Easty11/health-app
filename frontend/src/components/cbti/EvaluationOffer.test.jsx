@@ -61,6 +61,25 @@ const INSUFFICIENT = {
   },
 }
 
+// The brief's acceptance render: a sufficient cycle whose basis carries the per-night
+// ledger — three rows, one the flagged alcohol night with evidence "2u @ 19:30".
+const WITH_LEDGER = {
+  ...EXTEND,
+  basis: {
+    ...EXTEND.basis,
+    cycle_from: '2026-08-20', cycle_to: '2026-08-23',
+    nights_counted: 3, nights_logged: 3, nights_flagged: 1, outcome: 'hold',
+    ledger: [
+      { date: '2026-08-20', status: 'included', reason: 'ok',
+        sleep_efficiency: 90, total_sleep: 420, evidence: '420 min asleep, 90% efficiency' },
+      { date: '2026-08-22', status: 'flagged', reason: 'alcohol',
+        sleep_efficiency: 91, total_sleep: 430, evidence: '2u @ 19:30' },
+      { date: '2026-08-23', status: 'included', reason: 'ok',
+        sleep_efficiency: 89, total_sleep: 415, evidence: '415 min asleep, 89% efficiency' },
+    ],
+  },
+}
+
 async function renderOffer(data) {
   api.get.mockResolvedValue({ data })
   await act(async () => { render(<EvaluationOffer />) })
@@ -140,6 +159,36 @@ describe('an acceptable offer takes two deliberate acts (#214)', () => {
     await click(/confirm — record prescription/i)
 
     expect(screen.getByText(/Evaluation recorded/i)).toBeTruthy()
+  })
+})
+
+
+describe('the per-night ledger renders under the offer (Brief B step 6)', () => {
+  test('the "N valid of M" line and one row per evaluated night', async () => {
+    await renderOffer(WITH_LEDGER)
+    expect(screen.getByText(/3 valid of 3 nights/)).toBeTruthy()
+    // the acceptance: three rows, and the alcohol night is coded flagged, not excluded
+    expect(screen.getByText('2026-08-20')).toBeTruthy()
+    expect(screen.getByText('2026-08-22')).toBeTruthy()
+    expect(screen.getByText('2026-08-23')).toBeTruthy()
+    expect(screen.getByText('Flagged')).toBeTruthy()
+    expect(screen.getAllByText('Included')).toHaveLength(2)
+  })
+
+  test('a row is collapsed until tapped, then shows its evidence', async () => {
+    await renderOffer(WITH_LEDGER)
+    // evidence is behind the tap, not a column — nothing on screen until expanded
+    expect(screen.queryByText('2u @ 19:30')).toBeNull()
+    await act(async () => { screen.getByText('2026-08-22').closest('button').click() })
+    expect(screen.getByText('2u @ 19:30')).toBeTruthy()
+  })
+
+  test('"nights logged this cycle" is the clipped count, not a running total', async () => {
+    // nights_since_effective_from is 4 here; the rendered value must be the cycle-scoped 3.
+    await renderOffer(WITH_LEDGER)
+    expect(screen.getByText('Nights logged this cycle')).toBeTruthy()
+    const row = screen.getByText('Nights logged this cycle').parentElement
+    expect(row.textContent).toMatch(/Nights logged this cycle\s*3/)
   })
 })
 
