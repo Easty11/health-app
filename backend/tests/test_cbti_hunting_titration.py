@@ -149,12 +149,15 @@ def test_two_nap_nights_starve_a_four_night_cycle_and_the_reason_says_so():
 
 
 def test_the_starvation_reason_distinguishes_mixed_causes():
+    """The GATE-1 tally names each exclusion cause separately. Uses two REAL exclusions
+    (nap + travel) — alcohol no longer starves a cycle, it is excused into the basis
+    (#253), so a mixed-cause stall is now nap/travel/training/incomplete, not alcohol."""
     nights = cycle()
     nights[0].naps_min = 45
-    nights[1].alcohol_units = 3
+    nights[1].travel_or_match = True
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert "insufficient_nights" in d.reason
-    assert "alcohol x1" in d.reason and "nap x1" in d.reason
+    assert "travel_or_match x1" in d.reason and "nap x1" in d.reason
 
 
 def test_one_nap_night_still_leaves_a_decidable_cycle():

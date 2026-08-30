@@ -351,6 +351,17 @@ class CBTIPrescription(Base):
     basis_window_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     basis_window_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     excluded_nights: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # reason-tagged: {"2026-04-02":"alcohol",...}
+    # Basis nights FLAGGED (in the basis, not dropped) — today only #253's excused
+    # recorded-alcohol nights. <= basis_nights_n; written at authorship, never backfilled.
+    basis_n_flagged: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The per-night ledger, snapshotted at accept: one row per evaluated night in the
+    # cycle window — {date, status(included|flagged|excluded), reason, sleep_efficiency,
+    # total_sleep, evidence}. Persisted so a close-out states why each night was counted
+    # or dropped WITHOUT recomputing against a since-moved ruleset (Brief B step 2).
+    basis_ledger: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # The ruleset the ledger above was produced under (cbti/engine.RULESET_VERSION),
+    # frozen on the row so a stored ledger stays reproducible against its own rules.
+    ruleset_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
     rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
     superseded_by: Mapped[int | None] = mapped_column(
         ForeignKey("cbti_prescriptions.id", ondelete="SET NULL"), nullable=True   # UPDATE-once when superseded
