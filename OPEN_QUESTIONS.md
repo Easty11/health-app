@@ -3924,3 +3924,18 @@ is already scoped to Code-originated PRs and the conditional carry-forward claus
 its own GUARD; see closeout).
 
 **State:** DONE — resolved by convention (mint-then-close; no DECISIONS entry, no CLAUDE.md change).
+
+## Q126. `_sleep_score` has no total-sleep-adequacy or awakening term — it clamps to 10 on a badly-disrupted night
+
+`_sleep_score(deep, rem, total)` (`backend/routers/health_connect.py`) is purely a quality ratio,
+`1 + round((deep + rem) / total / 0.35 * 9)`, clamped to [1, 10]. It reads no total-sleep-adequacy term
+(a 402-min night and a 240-min night with the same deep+rem proportion score identically) and no awakening
+/ WASO term. On the verified 2026-08-30 back-pain night — ~2 h awake — it returns 10 both **pre- and
+post-#254**: post-union, deep 15 + rem 158 over TST 402 still pegs the `(deep+rem)/total ÷ 0.35` clamp.
+The #254 union fix corrected the TST the score divides by, but did **not** touch the formula, so the
+clamp behaviour is unchanged by design. The score feeds the same MCP (`actual_sleep_time_minutes`
+siblings) and AI-context readers as the duration, so a 10 on a wrecked night misinforms both surfaces.
+Separate ticket from #254 (value-fix only, GUARD: do not touch `_sleep_score`). A fix adds a
+total-adequacy and/or awakening term; the exact form (and whether it stays a 1–10 clamp) is undecided.
+
+**State:** OPEN

@@ -54,9 +54,14 @@ def test_the_canonical_fixture_parses_and_aggregates():
     assert row["steps"] == 8432
     assert row["resting_heart_rate"] == 51.0
     assert row["hrv_rmssd"] == 41.5
-    assert row["sleep_duration_minutes"] == 495
+    # F3a (#254): sleep_duration_minutes is now TST = the union of asleep
+    # (LIGHT/DEEP/REM) stage-intervals, excluding the 15-min mid-night AWAKE
+    # (05:10-05:25) that the old longest-session duration() counted. 495-min
+    # time-in-bed span → 480-min true total sleep time. deep/rem/score unchanged.
+    assert row["sleep_duration_minutes"] == 480
     assert row["deep_sleep_minutes"] == 95
     assert row["rem_sleep_minutes"] == 75
+    assert row["light_sleep_minutes"] == 310
     assert row["sleep_score"] == 10
 
 
