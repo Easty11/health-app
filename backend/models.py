@@ -413,7 +413,9 @@ class CBTIISI(Base):
 
 
 class AerobicSession(Base):
-    """Aerobic sessions for ACWR load tracking — seeded from Polar Flow export, future HC."""
+    """Aerobic sessions — the metabolic-window load source (Edwards TRIMP → load_events →
+    Banister, #251); seeded from Polar Flow export, future HC. (Formerly the legacy ACWR
+    input; that readout was retired #255.)"""
     __tablename__ = "aerobic_sessions"
     __table_args__ = (
         UniqueConstraint("user_id", "source", "source_session_id", name="uq_aerobic_session_source"),
@@ -432,7 +434,7 @@ class AerobicSession(Base):
     hr_avg: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hr_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     calories: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    cardio_load: Mapped[float | None] = mapped_column(Float, nullable=True)        # Polar cardio load (ACWR proxy)
+    cardio_load: Mapped[float | None] = mapped_column(Float, nullable=True)        # Polar-native cardio load
     muscle_load: Mapped[float | None] = mapped_column(Float, nullable=True)
     recovery_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     z1_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)

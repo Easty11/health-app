@@ -3889,7 +3889,15 @@ per-athlete HR-reserve calibration (resting/max HR) to be commensurable with the
 lands as a `formula_version` bump (`metab-v1`→`v2`), never an in-place edit. Data prerequisite:
 `sessions_skipped_no_zones` volume from a live recompute tells us how much coverage is actually at stake.
 
-**State:** OPEN
+**State:** DONE → #255. Ruled a **transport gap**, not a scoring gap: the Polar v4
+`/training-sessions/list` endpoint omits `trainingLoadReport`/zones (`backend/connectors/polar.py:196`
+— `z*_seconds` null on live-sync, zones ZIP-only), so the fail-closed metabolic transform (INV-7)
+correctly skips those rows. Resolved by the Flow (ZIP) export refresh, which carries the zone split
+(operator-run 2026-08-29; operator-reported `load_events` 30→47, residual skips = v4 twins + 2 no-HR
+one-offs + 1 blip — device-side, not verified against Railway this session). **No fallback formula,
+permanently** (INV-2 unit-lock: a `duration × avg_HR` row mixed into one window's series breaks
+within-window comparability). The calibrated zone-less-mapping option stays a future `formula_version`
+bump (`metab-v1`→`v2`), never an in-place fallback — folded into this closure, not a live open fork.
 
 ## Q124. Field-session (Catapult/GPS) ingestion into `aerobic_sessions`
 
@@ -3937,5 +3945,28 @@ clamp behaviour is unchanged by design. The score feeds the same MCP (`actual_sl
 siblings) and AI-context readers as the duration, so a 10 on a wrecked night misinforms both surfaces.
 Separate ticket from #254 (value-fix only, GUARD: do not touch `_sleep_score`). A fix adds a
 total-adequacy and/or awakening term; the exact form (and whether it stays a 1–10 clamp) is undecided.
+
+**State:** OPEN
+
+## Q127. Route `load_events_metabolic.py` through the same-bout arbitration in `reads/aerobic_reads.py`
+
+The Metabolic transform (`backend/load_events_metabolic.py`) reads `AerobicSession` **raw**
+(`select(models.AerobicSession).where(user_id == …)`, line 164) — it does **not** route through
+`reads/aerobic_reads.arbitrated_sessions` / `arbitrate`, the read-time cross-source same-bout
+arbitration (Polar vs Health Connect, interval overlap ≥ `OVERLAP_THRESHOLD` of the shorter bout →
+higher-fidelity source is canonical). Today single-emission of the metabolic series is guaranteed only
+**accidentally**: a Polar v4 (`polar_v4`) row and its Flow-export (`polar_flow_export`) twin describe the
+same bout, but the v4 row is zoneless (v4 list endpoint omits zones, #255/Q123), so the fail-closed
+transform (INV-7) skips it — the skip is doing arbitration's deduplication job by side effect, not by
+design. Open: should the transform consume `arbitrated_sessions` (emit only from the canonical row of
+each same-bout cluster) so single-emission is a *guaranteed* property rather than a coverage artifact?
+
+**Ordering constraint (state verbatim, load-bearing):** this OQ **BLOCKS any Polar v4 zone-enrichment
+work; enriching v4 rows before arbitration lands double-emits every dual-lane bout.** Once a v4 row
+carries zones, both it and its Flow-export twin qualify (INV-7 no longer skips the v4 row) and both emit
+a metabolic `load_event` for the same bout — a double-count in every window the pair touches. So the
+arbitration-routing here must land *before* any v4 zone-enrichment (which is itself the `metab-v1`→`v2`
+fork noted in Q123/#255). Out of scope for #255, which retired the ACWR readout only and did not touch
+the transform's source query.
 
 **State:** OPEN
