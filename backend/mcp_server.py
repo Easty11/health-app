@@ -496,92 +496,76 @@ def get_readiness_snapshot() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 6 — Training load / ACWR
+# Tool 6 — Metabolic training load (Banister)
 # ---------------------------------------------------------------------------
+
+# The metabolic lane of load_metrics: the Metabolic→load_events transform (#251,
+# `metab-v1`, Edwards zone-weighted TRIMP) rolled up under the Banister τ-set
+# (`banister-v1`). This readout replaced the legacy aerobic acute:chronic ratio (ACWR)
+# surface, retired in #255 once that transform landed — the revisit trigger #249 named.
+_METAB_FORMULA_VERSION = "metab-v1"
+_METAB_METRICS_VERSION = "banister-v1"
+_METAB_WINDOW = "metabolic"
+
+
+def _format_training_load(rows: list[dict]) -> str:
+    """Format the metabolic-window load readout from `load_metrics` rows (latest day
+    first). Serves the Banister metabolic lane — window-native Edwards TRIMP plus the
+    acute/chronic trace values — with NO acute:chronic ratio and NO sweet-spot band
+    verdict. The legacy aerobic ACWR readout was retired (#255) after the
+    Metabolic→load_events transform landed (#251); dosing never used ACWR (#18) and the
+    readout no longer does — the readout≠dosing boundary closes with the readout gone."""
+    if not rows:
+        return "\n".join([
+            "=== METABOLIC TRAINING LOAD (Banister) ===\n",
+            "No metabolic load metrics yet.",
+            "The metabolic window lights up once zone-tagged aerobic sessions are ingested",
+            f"and the load_events → load_metrics rollup runs ({_METAB_FORMULA_VERSION} / {_METAB_METRICS_VERSION}).",
+        ])
+    latest = rows[0]
+    unit = latest["unit"]
+    return "\n".join([
+        "=== METABOLIC TRAINING LOAD (Banister) ===\n",
+        f"As of:              {latest['day']}",
+        f"Daily load (TRIMP): {latest['daily_load']:.1f} {unit}",
+        f"Fitness (τ42):      {latest['fitness']:.1f} {unit}",
+        f"Fatigue (τ4):       {latest['fatigue']:.1f} {unit}",
+        f"Form:               {latest['form']:.1f} {unit}",
+        f"Acute (7d mean):    {latest['acute_load']:.1f} {unit}",
+        f"Chronic (28d mean): {latest['chronic_load']:.1f} {unit}",
+        f"Maturity:           {latest['maturity']}",
+        "",
+        f"Source: load_metrics metabolic lane ({_METAB_FORMULA_VERSION} / {_METAB_METRICS_VERSION}),",
+        "Edwards zone-weighted TRIMP. Acute/chronic are trace values, not a dosing ratio (#18/#255).",
+    ])
+
 
 @mcp.tool()
 def get_training_load() -> str:
-    """Calculate acute:chronic workload ratio (ACWR) from 28 days of sessions.
-    Acute = last 7 days. Chronic = 28-day rolling daily average.
-    ACWR sweet spot: 0.8–1.3. Above 1.5 = elevated injury risk."""
+    """Metabolic training-load readout: the Banister fitness/fatigue/form curves and the
+    acute/chronic trace over the metabolic window (Edwards zone-weighted TRIMP), read from
+    the `load_metrics` metabolic lane (metab-v1 / banister-v1). No acute:chronic ratio and
+    no sweet-spot verdict — the legacy aerobic ACWR readout was retired (#255) after the
+    Metabolic→load_events transform landed (#251)."""
     user_id = _current_user_id()
 
     rows = _db_rows(
         """
-        SELECT start_time, (duration_minutes * 60)::int AS duration_seconds, hr_avg AS avg_hr
-        FROM aerobic_sessions
+        SELECT day, daily_load, fitness, fatigue, form,
+               acute_load, chronic_load, maturity, unit
+        FROM load_metrics
         WHERE user_id = :user_id
-          AND start_time >= CURRENT_DATE - 28
-        ORDER BY start_time DESC
+          AND formula_version = :fv
+          AND metrics_version = :mv
+          AND load_window = :win
+        ORDER BY day DESC
+        LIMIT 1
         """,
-        {"user_id": user_id},
+        {"user_id": user_id, "fv": _METAB_FORMULA_VERSION,
+         "mv": _METAB_METRICS_VERSION, "win": _METAB_WINDOW},
     )
 
-    first_row = _db_rows(
-        """
-        SELECT MIN(start_time) AS first_session
-        FROM aerobic_sessions
-        WHERE user_id = :user_id
-        """,
-        {"user_id": user_id},
-    )
-
-    data_from = first_row[0]["first_session"] if first_row and first_row[0]["first_session"] else "unknown"
-
-    now = datetime.now(timezone.utc)
-    cutoff_7 = now - timedelta(days=7)
-
-    acute_load = 0.0
-    chronic_load = 0.0
-    count_7 = 0
-    count_28 = len(rows)
-
-    for r in rows:
-        dur_min = (r["duration_seconds"] or 0) / 60
-        avg_hr = r["avg_hr"]
-        load = (dur_min * avg_hr) if avg_hr is not None else dur_min
-
-        chronic_load += load
-        try:
-            st = datetime.fromisoformat(str(r["start_time"]).replace("Z", "+00:00"))
-            if st.tzinfo is None:
-                st = st.replace(tzinfo=timezone.utc)
-        except Exception:
-            st = now - timedelta(days=14)
-
-        if st >= cutoff_7:
-            acute_load += load
-            count_7 += 1
-
-    chronic_weekly_avg = chronic_load / 4
-
-    if chronic_weekly_avg > 0:
-        acwr = acute_load / chronic_weekly_avg
-        acwr_str = f"{acwr:.2f}"
-        if acwr < 0.8:
-            interpretation = "Underloading — below stimulus threshold"
-        elif acwr <= 1.3:
-            interpretation = "Sweet spot — proceed with planned training"
-        elif acwr <= 1.5:
-            interpretation = "Caution — consider load reduction"
-        else:
-            interpretation = "Elevated injury risk — reduce load"
-    else:
-        acwr_str = "N/A (no chronic baseline)"
-        interpretation = "Insufficient data for ACWR calculation"
-
-    lines = [
-        "=== TRAINING LOAD / ACWR ===\n",
-        f"Acute load (7 days):    {acute_load:.0f} load units ({count_7} sessions)",
-        f"Chronic weekly avg:     {chronic_weekly_avg:.0f} load units/week ({count_28} sessions over 28 days)",
-        f"ACWR:                   {acwr_str}",
-        f"Interpretation:         {interpretation}",
-        f"\nLoad metric: TRIMP proxy (duration_min × avg_hr) where HR available; duration_min otherwise.",
-        f"Data from: {data_from}",
-        f"Note: Hevy volume load is NOT yet integrated into this calculation (aerobic_sessions only).",
-    ]
-
-    return "\n".join(lines)
+    return _format_training_load(rows)
 
 
 # ---------------------------------------------------------------------------
