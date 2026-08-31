@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api'
+import { formatApiError } from '../lib/apiError'
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -390,6 +391,10 @@ export default function WorkoutPanel({ onFeedback }) {
   const [hevyWorkouts, setHevyWorkouts] = useState([])
   const [polarSessions, setPolarSessions] = useState([])
   const [polarSyncing, setPolarSyncing] = useState(false)
+  const [polarImporting, setPolarImporting] = useState(false)
+  const [polarImportResult, setPolarImportResult] = useState(null)  // { import, notice } | null
+  const [polarImportError, setPolarImportError] = useState('')
+  const polarImportInputRef = useRef(null)
 
   const loadList = useCallback(async () => {
     setLoading(true)
@@ -460,6 +465,34 @@ export default function WorkoutPanel({ onFeedback }) {
     finally { setPolarSyncing(false) }
   }
 
+  async function handlePolarImport(e) {
+    const file = e.target.files?.[0]
+    // Reset the input so re-picking the same file fires onChange again.
+    if (polarImportInputRef.current) polarImportInputRef.current.value = ''
+    if (!file) return
+    setPolarImporting(true)
+    setPolarImportError('')
+    setPolarImportResult(null)
+    try {
+      // Let axios set the multipart boundary — never hand-set Content-Type.
+      const form = new FormData()
+      form.append('file', file)
+      const res = await api.post('/integrations/polar/import-export', form)
+      setPolarImportResult({ import: res.data.import, notice: res.data.notice })
+      // Re-fetch so imported bouts appear (same pattern as post-Sync).
+      const list = await api.get('/integrations/polar/aerobic-sessions?limit=200').catch(() => ({ data: [] }))
+      const norm = list.data.map(normalizePolar)
+      setPolarSessions(norm)
+      if (norm.length) setLatestPolar(norm[0])
+    } catch (err) {
+      // 4xx caps are fail-closed; show the server's `detail` verbatim. The fallback
+      // only ever describes the transport case (network / 5xx with no detail body).
+      setPolarImportError(formatApiError(err, 'Import failed — please try again.'))
+    } finally {
+      setPolarImporting(false)
+    }
+  }
+
   // ── hevy detail ──
   if (view === 'hevy-detail' && selectedWorkout) {
     return (
@@ -510,12 +543,39 @@ export default function WorkoutPanel({ onFeedback }) {
             <h2 className="text-sm font-semibold text-gray-800">Polar History</h2>
             <p className="text-xs text-gray-400 mt-0.5">{polarSessions.length} sessions</p>
           </div>
-          <button onClick={handlePolarSync} disabled={polarSyncing}
-            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40 mt-5">
-            {polarSyncing ? 'Syncing…' : 'Sync'}
-          </button>
+          <div className="flex items-center gap-3 mt-5">
+            <input
+              ref={polarImportInputRef}
+              type="file"
+              accept=".zip"
+              className="hidden"
+              onChange={handlePolarImport}
+            />
+            <button onClick={() => polarImportInputRef.current?.click()} disabled={polarImporting || polarSyncing}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40">
+              {polarImporting ? 'Importing…' : 'Import export ZIP'}
+            </button>
+            <button onClick={handlePolarSync} disabled={polarSyncing || polarImporting}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40">
+              {polarSyncing ? 'Syncing…' : 'Sync'}
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+          {polarImportError && (
+            <div className="bg-red-50 text-red-700 text-xs rounded-lg px-3 py-2">{polarImportError}</div>
+          )}
+          {polarImportResult && (
+            <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 space-y-1">
+              <p className="text-xs font-semibold text-indigo-800">Import complete</p>
+              <p className="text-xs text-indigo-700">
+                Found {polarImportResult.import.found} · Inserted {polarImportResult.import.inserted} · Skipped {polarImportResult.import.skipped} · Already present {polarImportResult.import.pre_existing} · Errors {polarImportResult.import.errors}
+              </p>
+              {polarImportResult.notice && (
+                <p className="text-xs text-amber-700">{polarImportResult.notice}</p>
+              )}
+            </div>
+          )}
           {polarSessions.length === 0
             ? <p className="text-xs text-gray-400 text-center py-6">No sessions yet — tap Sync.</p>
             : polarSessions.map(s => (
