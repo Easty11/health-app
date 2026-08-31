@@ -3970,3 +3970,20 @@ fork noted in Q123/#255). Out of scope for #255, which retired the ACWR readout 
 the transform's source query.
 
 **State:** OPEN
+
+## Q128. Union-total sleep permissiveness — 429 (union) vs Samsung 402 (+27): track or tighten
+
+The #254 union rule computes TST as the union of **all** asleep stage-intervals across the wake-date's
+session set — "any session says asleep at minute *t* → *t* is asleep." On the verified 2026-08-30 night
+this yielded `sleep_duration_minutes = 429` vs Samsung's own consolidated total of **402** (+27), because
+the union is strictly **more permissive** than Samsung's internal merge: where Samsung dropped a contested
+seam minute to AWAKE/OUT-OF-BED, a single overlapping session still labelling it asleep pulls it back into
+the union. This is a property of the **total**, distinct from the breakdown-coherence fix (#256, which is
+total-invariant by design and left this untouched) and from Q126 (`_sleep_score`'s missing adequacy term,
+which reads whatever TST this decides). Open: is the union total's permissiveness acceptable as-is (it is
+already reference-only — titration scores off the diary, #256 scope note), or should the total tighten
+toward a majority/consensus or a source-preferred merge? A tightening is a **new ticket touching the total**
+(GUARD on #256: do not fold total changes into the breakdown fix) — it would revisit #254's union rule, not
+#256's partition. No code owed here yet; this is the watch-point #256 promised.
+
+**State:** OPEN
