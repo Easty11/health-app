@@ -385,6 +385,25 @@ def _wake_date(iso: str) -> date:
     return dt.astimezone(_AEST).date()
 
 
+def _parse_dt(iso: Optional[str]) -> Optional[datetime]:
+    """Parse an HC ISO timestamp to a UTC-aware datetime for interval maths.
+
+    Same normalisation as _wake_date (strip Android nanosecond fraction, map a
+    trailing 'Z' to +00:00, treat a naive timestamp as UTC) so every segment is
+    globally comparable regardless of the shape it arrived in. Returns None on a
+    missing or unparseable value — the caller drops that segment rather than
+    guessing a span (cf. F2 pre-2020 reject: a bad timestamp is never repaired)."""
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(_FRAC_SECONDS.sub("", iso).replace("Z", "+00:00"))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _now_aest_date() -> date:
     return datetime.now(_AEST).date()
 
@@ -515,6 +534,80 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     return inserted, unattributed
 
 
+# F3a — sleep aggregated as the UNION of asleep stage-intervals over the
+# wake-date's session set, not the longest single session (DECISIONS_LOG #254).
+# The asleep stages (LIGHT/DEEP/REM) that count toward total sleep time; AWAKE
+# (in-bed or otherwise) and the non-asleep codes are excluded from TST.
+_ASLEEP_STAGES = frozenset({
+    int(SLEEP_STAGE_LIGHT), int(SLEEP_STAGE_DEEP), int(SLEEP_STAGE_REM),
+})
+
+# A gap wider than this (minutes) between a running period's coverage-end and the
+# next segment's start opens a NEW sleep period. Within-night WASO/nocturia gaps
+# are far below this; a night-vs-daytime-nap gap is far above it — so a same
+# wake-date nap stays its own period and never merges into the night (the one
+# thing the old longest-session selector got right, preserved).
+SLEEP_PERIOD_GAP_MINUTES = 120
+
+
+def _union_minutes(intervals) -> int:
+    """Total minutes covered by the union of [start, end) intervals.
+
+    Overlapping and exactly-adjacent intervals merge, so overlapping sessions
+    collapse to real covered time instead of summing (double-counting). Floors
+    once at the end over the merged total — never per-segment, which would zero
+    every sub-minute sliver (the DEEP-sliver fault _stage_minutes fixed, #20)."""
+    spans = sorted((a, b) for a, b in intervals if b > a)
+    if not spans:
+        return 0
+    total = timedelta()
+    cur_start, cur_end = spans[0]
+    for a, b in spans[1:]:
+        if a <= cur_end:                       # overlap or touch → extend coverage
+            if b > cur_end:
+                cur_end = b
+        else:
+            total += cur_end - cur_start
+            cur_start, cur_end = a, b
+    total += cur_end - cur_start
+    return int(total.total_seconds() // 60)
+
+
+def _cluster_periods(
+    segments: list[tuple[datetime, datetime, int, str]],
+) -> list[list[tuple[datetime, datetime, int, str]]]:
+    """Split stage segments into sleep periods by coverage continuity.
+
+    Sort by start; a gap wider than SLEEP_PERIOD_GAP_MINUTES between the running
+    coverage-end and the next segment's start opens a new period. Clustering uses
+    ALL segments (asleep and awake) for coverage — an intra-night AWAKE bridges a
+    WASO gap — while period SELECTION and TST count asleep only (see below)."""
+    periods: list[list[tuple[datetime, datetime, int, str]]] = []
+    cur: list[tuple[datetime, datetime, int, str]] = []
+    cov_end: Optional[datetime] = None
+    gap = timedelta(minutes=SLEEP_PERIOD_GAP_MINUTES)
+    for seg in sorted(segments, key=lambda x: x[0]):
+        start, end = seg[0], seg[1]
+        if cur and cov_end is not None and start - cov_end > gap:
+            periods.append(cur)
+            cur = []
+            cov_end = None
+        cur.append(seg)
+        cov_end = end if cov_end is None else max(cov_end, end)
+    if cur:
+        periods.append(cur)
+    return periods
+
+
+def _asleep_union_minutes(
+    period: list[tuple[datetime, datetime, int, str]],
+) -> int:
+    """Union minutes of the asleep (LIGHT/DEEP/REM) segments in a period = TST."""
+    return _union_minutes(
+        (a, b) for (a, b, stg, _src) in period if stg in _ASLEEP_STAGES
+    )
+
+
 def _stage_minutes(stages: list[SleepStage], stage_type: int) -> int:
     # Sum total seconds across matching segments, then floor once. The previous
     # per-segment int() floor zeroed every sub-minute sliver — and deep sleep is
@@ -565,25 +658,80 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
     if day_hrv:
         row["hrv_rmssd"] = round(sum(r.rmssd for r in day_hrv) / len(day_hrv), 1)
 
-    # Sleep — longest session whose LOCAL wake-date (endTime) is this day.
-    # Wake-date only (Q4): the former startTime/bed-date clause split one
-    # physical night across two rows. A same-day nap cannot displace the main
-    # night because the max() tiebreak below still picks the longest session.
+    # Sleep — UNION of asleep stage-intervals over the wake-date's session set
+    # (F3a, DECISIONS_LOG #254). Replaces longest-single-session selection: a
+    # fragmented night (multiple overlapping/adjacent sessions) now reports true
+    # total sleep time — the union of LIGHT/DEEP/REM intervals — instead of one
+    # fragment's self-reported duration(). Computed from stage segments, never
+    # from session.duration() (self-reported, overlaps its neighbours on a
+    # fragmented night). Wake-date-only grouping is unchanged (Q4).
     day_sleep = [
         s for s in payload.sleep
         if _wake_date(s.endTime) == day
     ]
     if day_sleep:
-        best = max(day_sleep, key=lambda s: s.duration())
-        deep = _stage_minutes(best.stages, SLEEP_STAGE_DEEP)
-        rem = _stage_minutes(best.stages, SLEEP_STAGE_REM)
-        light = _stage_minutes(best.stages, SLEEP_STAGE_LIGHT)
-        total = best.duration()
-        row["sleep_duration_minutes"] = total
-        row["deep_sleep_minutes"] = deep
-        row["rem_sleep_minutes"] = rem
-        row["light_sleep_minutes"] = light
-        row["sleep_score"] = _sleep_score(deep, rem, total)
+        # Flatten every session to stage segments (start, end, stage, source).
+        # A session with no stages contributes its whole span as one best-effort
+        # LIGHT segment — no stage detail, so assume asleep (edge, noted).
+        segments: list[tuple[datetime, datetime, int, str]] = []
+        for s in day_sleep:
+            src = s.sourcePackage or "unknown"
+            if s.stages:
+                for st in s.stages:
+                    a, b = _parse_dt(st.startTime), _parse_dt(st.endTime)
+                    if a and b and b > a:
+                        segments.append((a, b, int(st.stage), src))
+            else:
+                a, b = _parse_dt(s.startTime), _parse_dt(s.endTime)
+                if a and b and b > a:
+                    segments.append((a, b, int(SLEEP_STAGE_LIGHT), src))
+
+        if segments:
+            # Cluster into periods by coverage continuity; the main period is the
+            # one with the largest asleep-union (a tiny night + long nap could
+            # invert this — rare, and the diary is authoritative; note, not guard).
+            periods = _cluster_periods(segments)
+            main = max(periods, key=_asleep_union_minutes)
+            tst = _asleep_union_minutes(main)
+
+            sources = {seg[3] for seg in main}
+            if len(sources) > 1:
+                # Multi-source main period: the union TST is safe (overlaps
+                # collapse across sources too). Full cross-source stage resolution
+                # defers to F1; ship the breakdown from the DOMINANT source (most
+                # asleep-minutes) and flag it via log — no schema column, no
+                # persisted marker. [DECISION — Luke: option (a).]
+                dominant = max(
+                    sources,
+                    key=lambda pkg: _union_minutes(
+                        (a, b) for (a, b, stg, s) in main
+                        if s == pkg and stg in _ASLEEP_STAGES
+                    ),
+                )
+                breakdown = [seg for seg in main if seg[3] == dominant]
+                logger.info(
+                    "HC sleep F3a multi-source night day=%s sources=%s dominant=%s "
+                    "tst=%d — stage breakdown single-source-derived (F1)",
+                    day, sorted(sources), dominant, tst,
+                )
+            else:
+                breakdown = main
+
+            deep = _union_minutes(
+                (a, b) for (a, b, stg, _s) in breakdown if stg == SLEEP_STAGE_DEEP
+            )
+            rem = _union_minutes(
+                (a, b) for (a, b, stg, _s) in breakdown if stg == SLEEP_STAGE_REM
+            )
+            light = _union_minutes(
+                (a, b) for (a, b, stg, _s) in breakdown if stg == SLEEP_STAGE_LIGHT
+            )
+
+            row["sleep_duration_minutes"] = tst
+            row["deep_sleep_minutes"] = deep
+            row["rem_sleep_minutes"] = rem
+            row["light_sleep_minutes"] = light
+            row["sleep_score"] = _sleep_score(deep, rem, tst)
 
     # Oxygen saturation — average for the day
     day_spo2 = [r for r in payload.oxygenSaturation if r.percentage and _parse_date(r.time) == day]
