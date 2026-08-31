@@ -550,6 +550,53 @@ _ASLEEP_STAGES = frozenset({
 SLEEP_PERIOD_GAP_MINUTES = 120
 
 
+def _merge_intervals(
+    intervals,
+) -> list[tuple[datetime, datetime]]:
+    """Merge overlapping/exactly-adjacent [start, end) intervals into a sorted
+    list of disjoint (start, end) tuples. Empty and reversed spans are dropped."""
+    spans = sorted((a, b) for a, b in intervals if b > a)
+    merged: list[tuple[datetime, datetime]] = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1]:      # overlap or touch → extend coverage
+            if b > merged[-1][1]:
+                merged[-1] = (merged[-1][0], b)
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def _interval_seconds(intervals) -> float:
+    """Total seconds spanned by (start, end) intervals — no merge, so callers pass
+    disjoint intervals (e.g. the output of _merge_intervals) to avoid double-count."""
+    return sum((b - a).total_seconds() for a, b in intervals)
+
+
+def _subtract_intervals(
+    base, claimed,
+) -> list[tuple[datetime, datetime]]:
+    """Coverage of `base` minus coverage of `claimed`, as disjoint (start, end)
+    tuples. Both sides are merged first; the result is what `base` covers that
+    `claimed` does not."""
+    claimed_m = _merge_intervals(claimed)
+    result: list[tuple[datetime, datetime]] = []
+    for a, b in _merge_intervals(base):
+        cur = a
+        for ca, cb in claimed_m:
+            if cb <= cur:                      # claimed piece entirely before cursor
+                continue
+            if ca >= b:                        # claimed piece past this base span
+                break
+            if ca > cur:                       # gap before the claimed piece is ours
+                result.append((cur, ca))
+            cur = max(cur, cb)                 # skip over the claimed piece
+            if cur >= b:
+                break
+        if cur < b:
+            result.append((cur, b))
+    return result
+
+
 def _union_minutes(intervals) -> int:
     """Total minutes covered by the union of [start, end) intervals.
 
@@ -557,20 +604,7 @@ def _union_minutes(intervals) -> int:
     collapse to real covered time instead of summing (double-counting). Floors
     once at the end over the merged total — never per-segment, which would zero
     every sub-minute sliver (the DEEP-sliver fault _stage_minutes fixed, #20)."""
-    spans = sorted((a, b) for a, b in intervals if b > a)
-    if not spans:
-        return 0
-    total = timedelta()
-    cur_start, cur_end = spans[0]
-    for a, b in spans[1:]:
-        if a <= cur_end:                       # overlap or touch → extend coverage
-            if b > cur_end:
-                cur_end = b
-        else:
-            total += cur_end - cur_start
-            cur_start, cur_end = a, b
-    total += cur_end - cur_start
-    return int(total.total_seconds() // 60)
+    return int(_interval_seconds(_merge_intervals(intervals)) // 60)
 
 
 def _cluster_periods(
@@ -606,6 +640,56 @@ def _asleep_union_minutes(
     return _union_minutes(
         (a, b) for (a, b, stg, _src) in period if stg in _ASLEEP_STAGES
     )
+
+
+# Precedence for resolving a wall-clock minute that overlapping sessions label with
+# different asleep stages: deeper / more-specific wins (DECISIONS_LOG #256, Luke's
+# ruling — option (i) [DEEP, REM, LIGHT]). Applied source-agnostically; AWAKE sits
+# below all asleep stages (excluded here, so any minute with an asleep segment
+# resolves asleep — TST is untouched).
+_STAGE_PRECEDENCE: tuple[int, ...] = (
+    int(SLEEP_STAGE_DEEP), int(SLEEP_STAGE_REM), int(SLEEP_STAGE_LIGHT),
+)
+
+
+def _resolve_breakdown(
+    period: list[tuple[datetime, datetime, int, str]],
+    order: tuple[int, ...] = _STAGE_PRECEDENCE,
+) -> dict[int, int]:
+    """Partition the period's asleep coverage into one stage per wall-clock minute
+    by precedence, so the deep/rem/light breakdown sums to the asleep union (== TST)
+    by construction — never above it (the independent-per-stage-union fault, #256).
+
+    Every minute covered by >=1 asleep segment is assigned to exactly one stage: the
+    earliest in `order` whose segments claim it. A minute two overlapping sessions
+    label differently (LIGHT in one, REM in another) goes to whichever stage precedes
+    the other in `order`, so it is counted once, not in both buckets. Source-agnostic
+    — a cross-source stage disagreement at a session seam resolves by the same
+    precedence, so no dominant-source pick is needed.
+
+    Coherence is structural: the stage intervals are an exact disjoint partition of
+    the asleep union, and a cumulative floor over `order` makes the per-stage minute
+    counts sum to floor(total asleep seconds / 60) exactly — matching
+    _asleep_union_minutes regardless of sub-minute segment boundaries. Independent
+    per-stage floors could drop a minute on such a boundary and reopen the very
+    incoherence this resolves."""
+    claimed: list[tuple[datetime, datetime]] = []
+    stage_intervals: dict[int, list[tuple[datetime, datetime]]] = {}
+    for stage in order:
+        ivs = [(a, b) for (a, b, stg, _src) in period if stg == stage]
+        unclaimed = _subtract_intervals(ivs, claimed)
+        stage_intervals[stage] = unclaimed
+        claimed = _merge_intervals(claimed + unclaimed)
+
+    result: dict[int, int] = {}
+    cum_seconds = 0.0
+    prev_floor = 0
+    for stage in order:
+        cum_seconds += _interval_seconds(stage_intervals[stage])
+        cur_floor = int(cum_seconds // 60)
+        result[stage] = cur_floor - prev_floor
+        prev_floor = cur_floor
+    return result
 
 
 def _stage_minutes(stages: list[SleepStage], stage_type: int) -> int:
@@ -694,38 +778,18 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
             main = max(periods, key=_asleep_union_minutes)
             tst = _asleep_union_minutes(main)
 
-            sources = {seg[3] for seg in main}
-            if len(sources) > 1:
-                # Multi-source main period: the union TST is safe (overlaps
-                # collapse across sources too). Full cross-source stage resolution
-                # defers to F1; ship the breakdown from the DOMINANT source (most
-                # asleep-minutes) and flag it via log — no schema column, no
-                # persisted marker. [DECISION — Luke: option (a).]
-                dominant = max(
-                    sources,
-                    key=lambda pkg: _union_minutes(
-                        (a, b) for (a, b, stg, s) in main
-                        if s == pkg and stg in _ASLEEP_STAGES
-                    ),
-                )
-                breakdown = [seg for seg in main if seg[3] == dominant]
-                logger.info(
-                    "HC sleep F3a multi-source night day=%s sources=%s dominant=%s "
-                    "tst=%d — stage breakdown single-source-derived (F1)",
-                    day, sorted(sources), dominant, tst,
-                )
-            else:
-                breakdown = main
-
-            deep = _union_minutes(
-                (a, b) for (a, b, stg, _s) in breakdown if stg == SLEEP_STAGE_DEEP
-            )
-            rem = _union_minutes(
-                (a, b) for (a, b, stg, _s) in breakdown if stg == SLEEP_STAGE_REM
-            )
-            light = _union_minutes(
-                (a, b) for (a, b, stg, _s) in breakdown if stg == SLEEP_STAGE_LIGHT
-            )
+            # Stage breakdown: partition the main period's asleep coverage into one
+            # stage per wall-clock minute by precedence (DEEP > REM > LIGHT), so
+            # deep + rem + light == tst by construction (DECISIONS_LOG #256,
+            # supersedes #254's independent per-stage unions). Source-agnostic — a
+            # cross-source stage conflict at a session seam resolves by the same
+            # precedence, retiring #254's dominant-source branch. The union TST is
+            # unchanged (AWAKE sits below all asleep stages, so every asleep minute
+            # still resolves asleep).
+            bd = _resolve_breakdown(main, _STAGE_PRECEDENCE)
+            deep = bd[int(SLEEP_STAGE_DEEP)]
+            rem = bd[int(SLEEP_STAGE_REM)]
+            light = bd[int(SLEEP_STAGE_LIGHT)]
 
             row["sleep_duration_minutes"] = tst
             row["deep_sleep_minutes"] = deep

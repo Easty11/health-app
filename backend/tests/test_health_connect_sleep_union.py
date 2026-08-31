@@ -9,8 +9,7 @@ is self-reported and overlaps its neighbours on a fragmented night.
 
 Timestamps carry an explicit +10:00 (AEST) offset so wake-date is unambiguous.
 """
-import logging
-from datetime import date
+from datetime import date, datetime
 
 from routers.health_connect import (
     SleepSession,
@@ -153,13 +152,17 @@ def test_single_source_breakdown_is_per_stage_union_excluding_awake():
     assert row["sleep_score"] == 9
 
 
-# ---------- multi-source breakdown: union total, dominant-source breakdown + flag ----------
+# ---------- multi-source breakdown: precedence-resolved across sources, no dominant pick ----------
 
-def test_multi_source_total_is_full_union_breakdown_is_dominant_source():
+def test_multi_source_breakdown_resolves_by_precedence_not_dominant():
     """A main period stitched from two sources: the union TST spans BOTH sources
-    (overlaps collapse), but the deep/rem/light breakdown is taken from the
-    dominant source by asleep-minutes (Samsung, 420 > Garmin's 150) and a flag is
-    logged. Garmin's overlapping LIGHT does NOT inflate the LIGHT breakdown."""
+    (overlaps collapse), and the deep/rem/light breakdown is now resolved by stage
+    precedence (DEEP > REM > LIGHT) across ALL segments regardless of source —
+    #254's dominant-source pick is retired (#256). Garmin's LIGHT (23:30-02:00)
+    overlaps Samsung's REM (23:00-01:00) and Samsung's own LIGHT (01:00-05:00):
+    the 23:30-01:00 slice resolves to REM (higher precedence), the 01:00-02:00
+    slice is already Samsung LIGHT — so Garmin's LIGHT inflates nothing, and the
+    breakdown partitions the 420-min union exactly."""
     samsung = _sess(
         "2026-08-29T22:00:00+10:00", "2026-08-30T05:00:00+10:00", source=_SAMSUNG,
         stages=[
@@ -175,29 +178,175 @@ def test_multi_source_total_is_full_union_breakdown_is_dominant_source():
         ],
     )
 
-    handler_records = []
-
-    class _Capture(logging.Handler):
-        def emit(self, record):
-            handler_records.append(record.getMessage())
-
-    logger = logging.getLogger("routers.health_connect")
-    h = _Capture()
-    logger.addHandler(h)
-    prev_level = logger.level
-    logger.setLevel(logging.INFO)
-    try:
-        row = _aggregate_day(_DAY, _payload(samsung, garmin))
-    finally:
-        logger.removeHandler(h)
-        logger.setLevel(prev_level)
+    row = _aggregate_day(_DAY, _payload(samsung, garmin))
 
     # Total = union across BOTH sources (Samsung already covers 22:00-05:00).
     assert row["sleep_duration_minutes"] == 420
-    # Breakdown from the dominant source (Samsung) only — Garmin's 150-min LIGHT
-    # is NOT unioned in (that would give 330).
+    # Precedence resolution: DEEP 60, REM 120, LIGHT 240. Garmin's 150-min LIGHT
+    # is absorbed by higher-precedence REM (23:30-01:00) and existing LIGHT
+    # (01:00-02:00) — it adds nothing (an independent union would have given 330).
     assert row["deep_sleep_minutes"] == 60
     assert row["rem_sleep_minutes"] == 120
     assert row["light_sleep_minutes"] == 240
-    # Flag: a multi-source night is logged for F1 follow-up.
-    assert any("multi-source night" in m for m in handler_records)
+    # Coherence: the breakdown partitions the union exactly.
+    assert (
+        row["deep_sleep_minutes"]
+        + row["rem_sleep_minutes"]
+        + row["light_sleep_minutes"]
+        == row["sleep_duration_minutes"]
+    )
+
+
+# ---------- coherence: breakdown partitions the union; contested minute resolves by precedence ----------
+
+def test_conflicting_overlap_breakdown_sums_to_tst_and_resolves_by_precedence():
+    """Two sessions label the overlap 01:30-02:00 differently: LIGHT 01:00-02:00 in
+    one, REM 01:30-02:30 in the other. The old independent per-stage unions counted
+    that contested half-hour in BOTH light and rem, so deep+rem+light exceeded TST.
+    Precedence resolution assigns each minute once: REM (precedence over LIGHT) wins
+    01:30-02:00, so REM = 01:30-02:30 = 60, LIGHT = 01:00-01:30 = 30, union TST =
+    01:00-02:30 = 90, and the parts sum to the whole."""
+    a = _sess(
+        "2026-08-30T01:00:00+10:00", "2026-08-30T02:00:00+10:00",
+        stages=[_stage(SleepStageType.LIGHT, "2026-08-30T01:00:00+10:00", "2026-08-30T02:00:00+10:00")],
+    )
+    b = _sess(
+        "2026-08-30T01:30:00+10:00", "2026-08-30T02:30:00+10:00",
+        stages=[_stage(SleepStageType.REM, "2026-08-30T01:30:00+10:00", "2026-08-30T02:30:00+10:00")],
+    )
+
+    row = _aggregate_day(_DAY, _payload(a, b))
+
+    assert row["sleep_duration_minutes"] == 90        # union 01:00-02:30
+    assert row["rem_sleep_minutes"] == 60             # 01:30-02:30, wins the contest
+    assert row["light_sleep_minutes"] == 30           # 01:00-01:30 only
+    assert row["deep_sleep_minutes"] == 0
+    # Coherence — the whole point of #256:
+    assert (
+        row["deep_sleep_minutes"]
+        + row["rem_sleep_minutes"]
+        + row["light_sleep_minutes"]
+        == row["sleep_duration_minutes"]
+    )
+
+
+# ---------- total-invariant: the fix does not move TST ----------
+
+def test_breakdown_fix_is_total_invariant():
+    """The precedence resolution touches the breakdown only — TST stays exactly the
+    asleep union it was under #254. Uses the conflicting-overlap night: whatever the
+    breakdown, the stored total equals the independent asleep union of the segments."""
+    from routers.health_connect import (
+        SLEEP_STAGE_LIGHT, SLEEP_STAGE_REM, _asleep_union_minutes,
+    )
+    from datetime import datetime
+
+    def dt(s):
+        return datetime.fromisoformat(s)
+
+    # Same night as the coherence test, expressed as segment tuples for the union.
+    main = [
+        (dt("2026-08-30T01:00:00+10:00"), dt("2026-08-30T02:00:00+10:00"), int(SLEEP_STAGE_LIGHT), _SAMSUNG),
+        (dt("2026-08-30T01:30:00+10:00"), dt("2026-08-30T02:30:00+10:00"), int(SLEEP_STAGE_REM), _SAMSUNG),
+    ]
+    a = _sess(
+        "2026-08-30T01:00:00+10:00", "2026-08-30T02:00:00+10:00",
+        stages=[_stage(SleepStageType.LIGHT, "2026-08-30T01:00:00+10:00", "2026-08-30T02:00:00+10:00")],
+    )
+    b = _sess(
+        "2026-08-30T01:30:00+10:00", "2026-08-30T02:30:00+10:00",
+        stages=[_stage(SleepStageType.REM, "2026-08-30T01:30:00+10:00", "2026-08-30T02:30:00+10:00")],
+    )
+
+    row = _aggregate_day(_DAY, _payload(a, b))
+
+    assert row["sleep_duration_minutes"] == _asleep_union_minutes(main)
+
+
+# ---------- clean night (no conflict): each stage unchanged, still sums exactly ----------
+
+def test_clean_night_no_conflict_stages_unchanged_and_coherent():
+    """A single non-overlapping stage sequence (the #254 clean-control shape): no
+    contested minutes, so every stage equals its own span and the breakdown already
+    summed to TST. Precedence resolution must leave each stage exactly as an
+    independent union would — deep 27, rem 60, light 247, TST 334."""
+    sess = _sess(
+        "2026-08-29T23:00:00+10:00", "2026-08-30T04:34:00+10:00",
+        stages=[
+            _stage(SleepStageType.LIGHT, "2026-08-29T23:00:00+10:00", "2026-08-30T01:00:00+10:00"),  # 120
+            _stage(SleepStageType.DEEP,  "2026-08-30T01:00:00+10:00", "2026-08-30T01:27:00+10:00"),  # 27
+            _stage(SleepStageType.REM,   "2026-08-30T01:27:00+10:00", "2026-08-30T02:27:00+10:00"),  # 60
+            _stage(SleepStageType.LIGHT, "2026-08-30T02:27:00+10:00", "2026-08-30T04:34:00+10:00"),  # 127
+        ],
+    )
+
+    row = _aggregate_day(_DAY, _payload(sess))
+
+    assert row["deep_sleep_minutes"] == 27
+    assert row["rem_sleep_minutes"] == 60
+    assert row["light_sleep_minutes"] == 247          # 120 + 127
+    assert row["sleep_duration_minutes"] == 334
+    assert (
+        row["deep_sleep_minutes"]
+        + row["rem_sleep_minutes"]
+        + row["light_sleep_minutes"]
+        == row["sleep_duration_minutes"]
+    )
+
+
+# ---------- the failing night: single-source Samsung self-overlap inflated LIGHT ----------
+
+def test_single_source_self_overlap_no_longer_inflates_breakdown():
+    """Reproduces the 2026-08-30 fault shape: one source (Samsung) writes multiple
+    overlapping records whose stage labels disagree at the seams. The old
+    independent per-stage unions double-booked the contested minutes, pushing
+    deep+rem+light ABOVE TST and inflating LIGHT most. Three overlapping records
+    below; assert the new breakdown partitions the union exactly and that LIGHT is
+    strictly below what an independent per-stage union would have reported."""
+    from routers.health_connect import _union_minutes, SLEEP_STAGE_LIGHT as _L
+
+    r1 = _sess(
+        "2026-08-29T22:00:00+10:00", "2026-08-30T02:00:00+10:00",
+        stages=[
+            _stage(SleepStageType.LIGHT, "2026-08-29T22:00:00+10:00", "2026-08-29T22:45:00+10:00"),
+            _stage(SleepStageType.DEEP,  "2026-08-29T22:45:00+10:00", "2026-08-29T23:03:00+10:00"),  # 18-min deep sliver
+            _stage(SleepStageType.REM,   "2026-08-29T23:03:00+10:00", "2026-08-30T00:30:00+10:00"),
+            _stage(SleepStageType.LIGHT, "2026-08-30T00:30:00+10:00", "2026-08-30T02:00:00+10:00"),
+        ],
+    )
+    r2 = _sess(  # overlaps r1; labels the same wall-clock minutes differently
+        "2026-08-29T23:30:00+10:00", "2026-08-30T03:15:00+10:00",
+        stages=[
+            _stage(SleepStageType.LIGHT, "2026-08-29T23:30:00+10:00", "2026-08-30T01:15:00+10:00"),  # overlaps r1's REM
+            _stage(SleepStageType.REM,   "2026-08-30T01:15:00+10:00", "2026-08-30T02:00:00+10:00"),
+            _stage(SleepStageType.LIGHT, "2026-08-30T02:00:00+10:00", "2026-08-30T03:15:00+10:00"),
+        ],
+    )
+    r3 = _sess(
+        "2026-08-30T01:00:00+10:00", "2026-08-30T03:45:00+10:00",
+        stages=[
+            _stage(SleepStageType.LIGHT, "2026-08-30T01:00:00+10:00", "2026-08-30T03:00:00+10:00"),  # overlaps r2's REM
+            _stage(SleepStageType.REM,   "2026-08-30T03:00:00+10:00", "2026-08-30T03:45:00+10:00"),
+        ],
+    )
+
+    row = _aggregate_day(_DAY, _payload(r1, r2, r3))
+    deep, rem, light = (
+        row["deep_sleep_minutes"], row["rem_sleep_minutes"], row["light_sleep_minutes"]
+    )
+    tst = row["sleep_duration_minutes"]
+
+    # Coherence: parts sum to the whole (the 120%-of-the-night bug is gone).
+    assert deep + rem + light == tst
+
+    # LIGHT no longer double-books contested minutes: the resolved LIGHT is strictly
+    # below the old independent per-stage LIGHT union over the same segments.
+    all_segs = []
+    for s in (r1, r2, r3):
+        for st in s.stages:
+            all_segs.append((st.startTime, st.endTime, int(st.stage)))
+    old_light = _union_minutes(
+        (datetime.fromisoformat(a), datetime.fromisoformat(b))
+        for (a, b, stg) in all_segs if stg == int(_L)
+    )
+    assert light < old_light
