@@ -3933,6 +3933,8 @@ its own GUARD; see closeout).
 
 **State:** DONE — resolved by convention (mint-then-close; no DECISIONS entry, no CLAUDE.md change).
 
+**Superseded by DECISIONS #257** — the operative "two non-overlapping PR classes" convention is retired (origin creates no lane; one disposition, one hold for un-ratified decisions). The question stays DONE and append-only; only its convention is superseded, not the question.
+
 ## Q126. `_sleep_score` has no total-sleep-adequacy or awakening term — it clamps to 10 on a badly-disrupted night
 
 `_sleep_score(deep, rem, total)` (`backend/routers/health_connect.py`) is purely a quality ratio,
