@@ -43,8 +43,18 @@ repo-specific and live below END SHARED LOOP RULES in their own repo.
   required check is green — no confirmation request, no waiting on the operator, and no
   scheduled check-in re-reporting a clean `mergeable_state`. A green PR left unmerged is a
   defect, not caution.
-- **One exception:** a PR containing a schema migration holds for explicit operator
-  instruction. So does anything the session was explicitly told to hold.
+- **Origin creates no lane; draft is not a hold.** When the harness opens a PR as draft,
+  flip it ready-for-review and self-merge on green the same turn. A PR merged in-turn ends
+  its own subscription, so no check-in is scheduled. Session origin (harness vs local) never
+  justifies an operator hand-off or a merge-watch. (Supersedes the Q125 two-lane convention.)
+- **Holds — do not self-merge, wait for explicit operator instruction:** a PR containing a
+  schema migration; anything the session was told to hold.
+- **Un-ratified decisions route to chat — the one warranted merge-time friction.** If a PR
+  embeds a call chat did not ratify (a resolved OPEN_QUESTION, a minted constraint/ordering
+  rule, or a data-meaning default), hold it, surface the *decision* — not the diff — for
+  ratification, and end the turn; a later session lands and closes it out. Implementing a
+  chat-approved brief with no new judgment is already ratified: self-merge. Raising a new
+  question needs no hold; resolving one does.
 - Number-at-merge is unaffected: it resolves from master's max immediately before the merge
   Code itself performs.
 - This is deliberate. A future session finding Code self-merging must not reinstate a human
