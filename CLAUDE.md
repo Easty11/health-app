@@ -259,11 +259,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Polar Flow-export upload UI (`#252`, PR #138), landed + merged** - frontend-only: an "Import export ZIP" control beside Sync in `WorkoutPanel`'s polar-history view uploads a Flow-export ZIP (multipart `FormData` through the shared `api`, boundary left to axios) to the existing `POST /integrations/polar/import-export`, renders the import block (found/inserted/skipped/pre_existing/errors), surfaces the coverage `notice` inline, and re-fetches the session list. 4xx `detail` shown verbatim via `formatApiError`. Collapses the `import_polar.py` runbook to a button; no backend/contract/schema change. Handoff: `closeout.md`.
+
 - **Sleep stage breakdown coherence (`#256`, PR #136), landed + merged** - `_aggregate_day`'s deep/rem/light breakdown is now one precedence-resolved partition (`_resolve_breakdown`, order DEEP > REM > LIGHT) instead of three independent per-stage unions, so `deep + rem + light == TST` by construction; #254's multi-source dominant-source branch retired (precedence resolves cross-source seams too, no F1 dependency); total-invariant — TST unchanged. See DECISIONS_LOG #256. Handoff: `closeout.md`.
 
 - **Legacy aerobic ACWR readout retired (`#255`, PR #135), landed + merged** - `get_training_load` no longer computes acute:chronic from `aerobic_sessions`; it serves the metabolic Banister lane (`metab-v1`/`banister-v1`) — fitness/fatigue/form curves + acute/chronic trace in Edwards TRIMP, no ratio, no sweet-spot band. Q123 closed (zone-less = transport gap; Flow ZIP export carries the zones, no fallback formula). See DECISIONS_LOG #255. Handoff: `closeout.md`.
-
-- **Sleep union aggregation, F3a re-spec (`#254`, PR #133), landed + merged** - `sleep_duration_minutes` is the union of asleep (LIGHT/DEEP/REM) stage-intervals over the wake-date's session set, not the longest single session; AWAKE excluded (true TST, not time-in-bed), computed from stage segments never `session.duration()`; a same-wake-date nap stays its own period. See DECISIONS_LOG #254. Handoff: `closeout.md`.
 
 ---
 
