@@ -1,49 +1,47 @@
-# Code session close-out — Polar Ingest Automation, Phase 1 (`#252`)
+# Code session close-out — Sleep union aggregation, F3a re-spec (`#254`)
 
 ## Real commits this session
 
-Session-open ref: `39da0cf` (master = merge of PR #128). Branch: `claude/polar-ingest-automation-p1-yjve43` (merged + remote-deleted).
+Session-open ref: `d67f8f7` (master = merge of PR #132, `#253`). Branch: `claude/sleep-aggregation-union-albfee` (merged + remote-deleted).
 
-    e9f79e4  feat(polar): Flow-export upload endpoint + per-user metabolic cascade + zone-coverage flag (Phase 1)
-    0b62413  gov(polar): mint #252 aerobic-ingest cascade; BRANCHES row (Phase 1)
+    9bf5ad2  feat(hc-sleep): aggregate sleep as union of asleep stage-intervals (F3a, #254)
+    de64156  gov(#254): supersede F3a — union-of-asleep-stage-intervals sleep aggregation; open Q126 (_sleep_score adequacy)
 
-Concern-split per `#G5`: feature (code + tests) then governance (`DECISIONS_LOG` #252 · BRANCHES row), staged by name, no `git add -A`.
+Concern-split: feature (code + tests) then governance (`DECISIONS_LOG` #254 · `OPEN_QUESTIONS` Q126 · BRANCHES row), staged by name. The governance commit was amended once to fold in the BRANCHES row before merge (own unmarked branch, force-with-lease).
 
-Merge: **PR #129** merged to master on green (`placeholder guard (POSIX)` success, `mergeable_state: clean`), **operator-authorised** ("merge and then close out"), `--merge` (merge commit `44245a3`), branch remote-deleted. The web-task harness draft/no-self-merge lane (Q125) held the PR as a draft until that explicit instruction; this session did not self-merge.
+Merge: **PR #133** merged to master on green (`placeholder guard (POSIX)` success, `mergeable_state: clean`), **operator-authorised** ("merge #133"), `--merge` (merge commit `99440b8`), branch remote-deleted. The Q125 draft/operator-merged lane held the PR as a draft until that explicit instruction; this session did not self-merge the feature PR.
 
-The close-out commit (`chore: session close-out`) lands on `gov/252-polar-ingest-closeout` and carries this file plus the CLAUDE.md Recent-landings roll and the BRANCHES DONE-flip; it cannot cite its own hash.
+This close-out commit (`gov(#254): close-out`) lands on `gov/254-sleep-union-closeout` (Code/governance self-merge lane, Q125) and carries this file plus the `DECISIONS_LOG` #254 close-out addendum and the BRANCHES DONE-flip; it cannot cite its own hash.
 
 ## Pending-queue reconciliation
 
 No `;cc` pending-commit queue was carried into this session (the work came from a standalone brief, not a chat close-out). Nothing provisional is left uncommitted:
 
-- **Feature + tests** — landed in `e9f79e4` (endpoint, shared `import_flow_export`, `run_metabolic_cascade`, `zone_coverage`/`coverage_notice`, `test_polar_import_export.py`).
-- **DECISIONS_LOG #252 + BRANCHES row** — landed in `0b62413`; BRANCHES row flipped to DONE-with-SHA in this close-out commit (lifecycle recording).
-- **No new OPEN_QUESTIONS** (per the brief). **No schema migration** (existing tables/columns; SCHEMA.md unmoved). **No `mcp_server.py` diff** (the retirement PR owns that file).
+- **Feature + tests** — landed in `9bf5ad2` (`_aggregate_day` union rewrite, helpers `_parse_dt`/`_union_minutes`/`_cluster_periods`/`_asleep_union_minutes`, `test_health_connect_sleep_union.py` 5 tests, `test_hc_sync_contract` 495→480 TST).
+- **DECISIONS_LOG #254 + OPEN_QUESTIONS Q126 + BRANCHES row** — landed in `de64156`; BRANCHES row flipped BLOCKED→DONE-with-SHA and #254 given its close-out addendum in this close-out commit (lifecycle recording).
+- **No schema migration** (value-fix; existing columns; SCHEMA.md unmoved). **No `_sleep_score` / CBT-I engine change** (brief GUARD).
 
 ## Cold-resume handoff
 
 ### What landed
-Aerobic ingest is now recompute-triggering (`DECISIONS_LOG #252`). New authenticated endpoint `POST /integrations/polar/import-export` (multipart Flow-export ZIP, fail-closed hygiene: non-ZIP→400, `training-session_*.json`-only, member/size caps 5 000 / 10 MiB / 200 MiB→400) ingests into `aerobic_sessions` via a shared `import_flow_export(db, user_id, zip, dry_run)` extracted from `import_polar.py` (`_parse_session` verbatim; CLI retained as ops/backfill, `--email` CLI-only). Both aerobic routes (this endpoint + existing `/sync`) fire one named per-user callable `run_metabolic_cascade(db, user_id)` (`backend/metabolic_cascade.py`: metabolic transform `metab-v1` → `load_metrics` rollup, per-user, idempotent, `tier0-v1` untouched). Zone-coverage flag `zone_coverage`/`coverage_notice` (`reads/aerobic_reads.py`; `stale_zoneless`, `ZONELESS_STALE_DAYS=7`) surfaced in both ingest responses. Full backend suite 1255 passed (1244 baseline + 11 new); sole failure is the pre-existing `test_current_state` `3360ed5` shallow-clone git artifact (environment-only, unrelated).
+Sleep day-aggregation is re-spec'd (`DECISIONS_LOG #254`, supersedes #35's F3a). `_aggregate_day` now computes `sleep_duration_minutes` as the **union of asleep (LIGHT/DEEP/REM) stage-intervals** over the wake-date's session set — from stage segments, never `session.duration()` — so a fragmented night reports true total sleep time instead of the longest single fragment. Segments cluster into periods by coverage continuity (`SLEEP_PERIOD_GAP_MINUTES=120`) so a same-wake-date nap stays a separate period; AWAKE is excluded from TST; a multi-source main period yields a full-source union total plus a dominant-source stage breakdown with an INFO flag (operator ruling a). Verified fix: the 2026-08-30 fragmented night moves 305→~402. Full backend suite 1273 passed, 1 skipped (sole failure is the pre-existing `test_current_state` `3360ed5` shallow-clone git artifact, environment-only, unrelated).
 
-### Current sprint (from ROADMAP NOW / this brief's phasing)
-Load-governor trajectory continues. Metabolic window is now both derived (`#251`) and ingest-automated (`#252`). The four-window `load_events` → `load_metrics` stack feeds the S2 Governor, which is the downstream consumer still to be built.
+### Deploy + cutover (confirmed, not assumed)
+Backend deploy `c152b31a` (commit `99440b8`) reached `SUCCESS` (02:18→02:19 UTC 2026-08-31); prior image `d67f8f7`/#132 is `REMOVED`, so the union code is the live serving instance (#116). Backend-only change → no frontend probe needed (#121). **Series-discontinuity cutover date = 2026-08-31** (deploy = merge date). **Recent-tail heal left to organic rolling-window re-aggregation** — not manually performed (needs a device-side companion sync; no server-side re-pull). The operator can force immediate heal with one companion sync; the ~7-day seam is a method-artifact that self-closes on the rolling window.
 
-### Open questions gating the adjacent work
-- **Q123 (OPEN)** — zone-less aerobic sessions: calibrated Banister-TRIMP mapping vs permanent skip. **This is the Phase-2 gate** for v4 zone-enrichment (a `metab-v1`→`v2` formula bump), not started.
-- **Q124 (OPEN)** — field-session (Catapult/GPS) ingestion into `aerobic_sessions`.
-- **Q122 (OPEN)** — psychological window τ prior (that window stays fail-closed until minted).
-- **Q88 (OPEN)** — empirical calibration of `OVERLAP_THRESHOLD` for read-time cross-source arbitration.
-- **Q125** — the harness draft/no-self-merge vs CLAUDE.md self-merge: two non-overlapping lanes, resolved by convention (mint-then-close, PR #128); exercised again this session (operator merged on instruction).
+### P1 evidence (for any future re-scope)
+The ingestion-time union is only sound because HCA sends the full night per sync. Verified in `Easty11/health-connect-app@12844925`, `src/healthConnect.js`: `fetchAllData(days=7)` reads `SleepSession` with a `between` filter over `daysAgo(7)`→now — a rolling 7-day window, no changes-token/cursor/delta anywhere in `src/`. If HCA ever moves to a changes-token/delta read, the ingestion-time union under-counts and F3a must move to per-session persistence.
+
+### Open questions gating adjacent work
+- **Q126 (OPEN)** — `_sleep_score` has no total-sleep-adequacy or awakening term; clamps to 10 on a 2h-awake night both pre- and post-union. Separate ticket; do not fold into F3a. Feeds the same MCP/AI-context readers as the duration.
+- **F1 (cross-source stage resolution)** — the multi-source stage breakdown ships dominant-source-derived + flagged; full cross-source resolution defers to F1, at which point the INFO flag can retire. (F1 backend enforcement was BLOCKED at #35 on the wire-contract; writer identity is now captured in `health_connect_record_sources`, so re-check whether it is unblocked.)
 
 ### Single clearest next action
-Build the **frontend upload UI** for `POST /integrations/polar/import-export` — the named follow-on now that the backend contract has landed (a file picker on the Settings/Polar surface posting the multipart ZIP, rendering the `import` + `cascade` + `coverage`/`notice` response). Immediate post-merge check first: verify the `health-app-backend` deploy settles against merge `44245a3` (per `#116`/`#121`) and the new route answers; no migration, so no `alembic` gate.
+Q126 — add a total-sleep-adequacy and/or awakening term to `_sleep_score` (it now divides by an accurate TST after #254, so the fix is well-founded). Scoped as its own ticket; decide whether it stays a 1–10 clamp.
 
-### What was NOT touched (explicit — infer the queue from here)
-- **Phase 2 — v4 zone-enrichment** (AccessLink v3 per-exercise zones onto `polar_v4` rows so the cascade scores them). Blocked behind **Q123**. The `/sync` cascade is deliberately harmless-today / correct-after by design; nothing more built.
-- **Phase 3 — Polar webhook** (new-exercise notification → sync). `run_metabolic_cascade` is its anticipated third caller; no subscription or handler built.
-- **Frontend upload UI** — named follow-on (see next action); backend-only this session.
-- **MCP exposure of the coverage flag** — deliberately not wired into `mcp_server.py` this brief (retirement PR owns that file); a one-line follow-on after both merge.
-- **The aerobic-ratio retirement brief** (the "prior brief") — **not landed and not open** as of this session (closed PRs #121–128, none touch `mcp_server.py`). Its arbitration OQ is therefore not in master; Phase-2 references **Q123** instead. That retirement work, and the arbitration refactor it carries, still stands still.
-- **S2 Governor** — the downstream consumer of the now-complete metabolic `load_metrics` series; unbuilt.
-- **Live Polar smoke** — no real Flow-export ZIP was uploaded against prod this session (no prod DB access from the web container); the endpoint is test-proven on the SQLite substrate only. First real upload is the operator's live probe.
+### What was NOT touched (explicit)
+- **`_sleep_score`** — deliberately untouched (brief GUARD); its clamp behaviour is unchanged by #254 and is the Q126 ticket.
+- **CBT-I engine** — does not read `sleep_duration_minutes` (diary-sourced); untouched.
+- **Multi-source cross-source stage resolution** — deferred to F1; only the total is cross-source-safe today.
+- **No historical backfill** — impossible (raw sessions discarded); the rolling window self-heals the recent tail, older rows keep the old method (documented cutover, no marker column).
+- **Live prod verification of a real fragmented night** — the fix is test-proven on fixtures; the first real post-deploy fragmented night is the operator's live confirmation.
