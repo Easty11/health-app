@@ -3971,7 +3971,15 @@ arbitration-routing here must land *before* any v4 zone-enrichment (which is its
 fork noted in Q123/#255). Out of scope for #255, which retired the ACWR readout only and did not touch
 the transform's source query.
 
-**State:** OPEN
+**State:** DONE → #260. The transform now sources rows through `arbitrated_sessions` and emits
+only canonical + qualifying rows. The precondition check (per the brief) surfaced that the
+"flow_export twin is non-canonical" premise did NOT hold as written: `_SOURCE_RANK` tied
+`polar_v4 == polar_flow_export`, so a byte-identical twin fell through to the id tie-break and
+the earlier-ingested (zoneless) v4 row could win canonical — dropping the bout, not a no-op.
+Resolved (operator-ratified) by ranking `polar_flow_export` (3) > `polar_v4` (2) > `health_connect`
+(1): the export row is strictly richer than the list-sourced v4 twin, so it is deterministically
+canonical. Single-emission is now a guaranteed property. The one intended output change is a zoned
+cross-source overlap collapsing from two emissions to one.
 
 ## Q128. Union-total sleep permissiveness — 429 (union) vs Samsung 402 (+27): track or tighten
 

@@ -155,16 +155,26 @@ def compute_metabolic_load_events(
 
     REPLACES the user's rows for `FORMULA_VERSION_METABOLIC` (delete-then-insert —
     idempotent recompute, D-B); the strength transform's `tier0-v1` rows are untouched.
-    Non-qualifying sessions (INV-7) emit no row and are counted in
-    `sessions_skipped_no_zones`. Returns per-user coverage counts plus a convergent-sanity
-    TRIMP-vs-`cardio_load` correlation (`cardio_load` is NOT a load input)."""
+    Rows are sourced through read-time cross-source arbitration (#260/Q127): a row emits
+    only if it is BOTH canonical (the winning row of its same-bout cluster) and qualifying
+    (INV-7). Non-canonical rows are counted in `sessions_skipped_non_canonical`;
+    non-qualifying rows in `sessions_skipped_no_zones`. Returns per-user coverage counts
+    plus a convergent-sanity TRIMP-vs-`cardio_load` correlation (`cardio_load` is NOT a
+    load input)."""
     now = now or datetime.now(timezone.utc)
 
-    rows = db.execute(
-        select(models.AerobicSession)
-        .where(models.AerobicSession.user_id == user_id)
-        .order_by(models.AerobicSession.session_date, models.AerobicSession.id)
-    ).scalars().all()
+    # Source rows through read-time cross-source arbitration (#260/Q127) rather
+    # than a raw select: each row carries a derived `.canonical` flag, and the
+    # emit loop below emits ONLY the canonical row of each same-bout cluster, so
+    # single-emission of the metabolic series is a guaranteed property, not the
+    # accidental side effect of the fail-closed skip (INV-7) landing on a zoneless
+    # v4 twin. Lazy import — aerobic_reads imports compute_metabolic_load from this
+    # module, so a top-level import here would be circular. `arbitrated_sessions`
+    # with no since/limit returns the user's FULL session set (arbitration sees
+    # every session, never a window) ordered session_date desc.
+    from reads.aerobic_reads import arbitrated_sessions
+
+    rows = arbitrated_sessions(user_id, db)
 
     # Replace this version's rows for the user (idempotent recompute; tier0-v1 untouched).
     db.execute(
@@ -176,8 +186,17 @@ def compute_metabolic_load_events(
 
     events_written = 0
     sessions_skipped_no_zones = 0
+    sessions_skipped_non_canonical = 0
     corr_pairs: list[tuple[float, float]] = []
     for row in rows:
+        # Emit only from the canonical row of each same-bout cluster (#260/Q127).
+        # A non-canonical row is a cross-source duplicate of a bout emitted from
+        # its richer twin; skipping it here makes single-emission guaranteed. The
+        # richer twin always outranks (aerobic_reads._SOURCE_RANK: flow_export >
+        # v4 > health_connect), so the canonical row is the zoned one.
+        if not row.canonical:
+            sessions_skipped_non_canonical += 1
+            continue
         ml = compute_metabolic_load({
             1: row.z1_seconds, 2: row.z2_seconds, 3: row.z3_seconds,
             4: row.z4_seconds, 5: row.z5_seconds,
@@ -213,6 +232,7 @@ def compute_metabolic_load_events(
         "sessions": len(rows),
         "events_written": events_written,
         "sessions_skipped_no_zones": sessions_skipped_no_zones,
+        "sessions_skipped_non_canonical": sessions_skipped_non_canonical,
         "cardio_load_pairs": len(corr_pairs),
         "trimp_cardio_load_pearson_r": _pearson(corr_pairs),
     }
