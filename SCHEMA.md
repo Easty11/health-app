@@ -36,6 +36,8 @@ Ordering is determined by FK dependencies. Do not reorder.
 025 — hevy_workouts            FK to users (CASCADE) — persisted Hevy workout headers (Q6 load lane)
 026 — hevy_sets                FK to hevy_workouts (CASCADE) — per-set grain; exercise_template_id NOT an FK (#79/#81)
 027 — load_events              FK to users (CASCADE) — derived per-session-window load; source_ref soft (no FK), source-neutral (Q6 gate 2)
+029 — hrv_readings             FK to users (CASCADE) — source-agnostic nightly HRV summary; unique (user, night, source)
+030 — hrv_samples              FK to hrv_readings (CASCADE) — 5-min RMSSD series; Garmin-populated
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1163,6 +1165,47 @@ CREATE TABLE load_metrics (
 CREATE INDEX ix_load_metrics_user_window        ON load_metrics (user_id, load_window);
 CREATE INDEX ix_load_metrics_user_day           ON load_metrics (user_id, day);
 CREATE INDEX ix_load_metrics_metrics_version    ON load_metrics (metrics_version);
+```
+
+### 029 — hrv_readings
+
+**Source-agnostic** nightly HRV store (DECISIONS_LOG — Garmin HRV server-side ingestion). One row per **(user, night, source)**. Deliberately **not** a generalisation of `samsung_hrv_readings`, which conflates HRV with Samsung sleep architecture — this table carries only HRV: the nightly RMSSD average (`rmssd_ms`) plus the Garmin-richer fields (`status` band, `baseline_low`/`baseline_high` balanced range, `weekly_avg`) that nightly-only sources leave NULL. `source` tags provenance (`'garmin'`, later `'samsung'`); the unique key is per (user, night, source) so two sources on the same night **coexist**, and read-time arbitration (`reads/recovery_reads.py`, mirroring `reads/aerobic_reads.py`) marks exactly one canonical — a **derived, never-persisted** flag, so there is **no `canonical` column**. Idempotent upsert on `uq_hrv_reading_user_date_source`; a re-pull of a night overwrites the summary and replaces its child `hrv_samples`. Garmin populates now; Samsung migration into this store + the `recovery.py` HRV-read rewire is the deferred consumption follow-on (OPEN_QUESTIONS).
+
+```sql
+CREATE TABLE hrv_readings (
+    id            SERIAL PRIMARY KEY,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    captured_at   DATE NOT NULL,                 -- the night
+    source        VARCHAR(50) NOT NULL,          -- 'garmin', later 'samsung'
+    rmssd_ms      DOUBLE PRECISION,              -- nightly average RMSSD
+    status        VARCHAR(30),                   -- Garmin-richer: 'BALANCED' | 'LOW' | …
+    baseline_low  DOUBLE PRECISION,              -- Garmin-richer: balanced-range lower bound
+    baseline_high DOUBLE PRECISION,              -- Garmin-richer: balanced-range upper bound
+    weekly_avg    DOUBLE PRECISION,              -- Garmin-richer
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_hrv_reading_user_date_source UNIQUE (user_id, captured_at, source)
+);
+
+CREATE INDEX ix_hrv_readings_id           ON hrv_readings (id);
+CREATE INDEX ix_hrv_readings_user_id      ON hrv_readings (user_id);
+CREATE INDEX ix_hrv_readings_captured_at  ON hrv_readings (captured_at);
+```
+
+### 030 — hrv_samples
+
+The **5-min RMSSD series** for one `hrv_readings` night — source-agnostic. Garmin populates it from the raw `hrvReadings[]`; nightly-only sources (Samsung) leave it empty. **Children replace-on-reingest**: a re-pull of a night clears and rewrites its samples, so the series never accumulates duplicates. `ON DELETE CASCADE` ties the series' lifetime to its parent night. Unique on `(hrv_reading_id, reading_time)`.
+
+```sql
+CREATE TABLE hrv_samples (
+    id              SERIAL PRIMARY KEY,
+    hrv_reading_id  INTEGER NOT NULL REFERENCES hrv_readings(id) ON DELETE CASCADE,
+    reading_time    TIMESTAMPTZ NOT NULL,        -- sample timestamp
+    rmssd_ms        DOUBLE PRECISION,            -- 5-min RMSSD value
+    CONSTRAINT uq_hrv_sample_reading_time UNIQUE (hrv_reading_id, reading_time)
+);
+
+CREATE INDEX ix_hrv_samples_id              ON hrv_samples (id);
+CREATE INDEX ix_hrv_samples_hrv_reading_id  ON hrv_samples (hrv_reading_id);
 ```
 
 ## Canonical Metric Type Whitelist

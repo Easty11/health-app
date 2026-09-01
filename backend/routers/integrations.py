@@ -195,6 +195,7 @@ def list_integrations(
     return [
         IntegrationOut(provider="hevy", connected="hevy" in connected),
         IntegrationOut(provider="polar", connected="polar" in connected),
+        IntegrationOut(provider="garmin", connected="garmin" in connected),
     ]
 
 

@@ -3989,3 +3989,56 @@ toward a majority/consensus or a source-preferred merge? A tightening is a **new
 #256's partition. No code owed here yet; this is the watch-point #256 promised.
 
 **State:** OPEN
+
+## Q129. Garmin sleep source — pull server-side or leave on HC?  [PARKED]
+
+Garmin sleep currently reaches the platform only via the companion app → Health Connect →
+`health_connect_syncs`, coupling it to the Samsung-purposed companion app and the phone chain the
+garth pull otherwise escapes. Option A: leave on HC (official, resilient, but companion-app-coupled).
+Option B: pull sleep via garth and extend arbitration to sleep (severs the coupling, richer
+Garmin-native sleep, but widens the fragile garth dependency to a commodity signal and requires
+building sleep source-arbitration — none exists today). Household tolerates A; B2B goes fully
+server-side/official and moots it. Decide on its own merits; do NOT build either way inside the
+ingestion lane (#258/#259).
+
+**State:** OPEN
+
+## Q130. Samsung HRV unification into `hrv_readings` + recovery.py rewire  [DEFERRED]
+
+Migrate existing Samsung HRV from `samsung_hrv_readings` into `hrv_readings` (`source='samsung'`,
+`rmssd_ms=hrv_ms`), repoint the scraper's HRV write, and rewire `recovery.py`'s HRV read to
+`recovery_reads.canonical_hrv`. Until done: HRV is transitionally split (Garmin in `hrv_readings`,
+Samsung in `samsung_hrv_readings`) and `recovery.py`'s user-facing HRV read is unchanged.
+`samsung_hrv_readings` then becomes the Samsung sleep store. This is the consumption/unification
+follow-on to the ingestion lane (#258/#259).
+
+**State:** OPEN
+
+## Q131. HRV `_SOURCE_RANK` is currently unexercised  [WATCH]
+
+`recovery_reads._SOURCE_RANK` ranks garmin > samsung, but per-user overlap is nil today (Deb=Garmin,
+Luke=Samsung), so no night is actually contested. Revisit the ranking only if a single user acquires
+both sources.
+
+**State:** OPEN
+
+## Q132. Garmin garth refresh-token re-login cadence  [WATCH]
+
+Observe how often Garmin invalidates the refresh token (forcing a manual `garmin_login.py` re-run).
+Informs whether silent re-auth is tolerable or needs an operator nudge/alert on the "reconnect Garmin"
+424 state.
+
+**State:** OPEN
+
+## Q133. garth is deprecated upstream — durability of the Garmin HRV lane  [WATCH]
+
+Discovered during #258 implementation: `garth` (0.8.0, the OAuth engine under `python-garminconnect`)
+prints a deprecation notice ("Garth is deprecated and no longer maintained") pointing to a GitHub
+discussion. The lane is deliberately fragile-by-design and household/operator-only (#258), and the deps
+are pinned EXACT, so a passive break is guarded against. But a deprecated auth engine is a standing risk:
+Garmin auth changes will eventually not be tracked upstream. Watch for a maintained fork or an alternate
+transport; if the lane goes dark and no fix exists, it degrades to the clean "reconnect Garmin" state
+(costing only HRV, not the HC-sourced commodity signals — the resilience rationale of #258). No code owed
+now; this is the durability watch-point.
+
+**State:** OPEN

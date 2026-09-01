@@ -479,6 +479,60 @@ class SamsungHRVReading(Base):
     context: Mapped[str] = mapped_column(String(30), nullable=False, server_default=text("'passive_overnight'"))
 
 
+class HrvReading(Base):
+    """Source-agnostic nightly HRV summary — one row per (user, night, source).
+
+    Deliberately NOT a generalisation of `samsung_hrv_readings`, which conflates HRV
+    with Samsung sleep architecture (see DECISIONS_LOG — Garmin HRV ingestion). This
+    table carries only HRV: the nightly RMSSD average plus the Garmin-richer fields
+    (status band + baseline range + weekly average) that Samsung does not supply and
+    which stay NULL for nightly-only sources. The 5-min RMSSD series lives in the
+    child `hrv_samples` (Garmin populates it; Samsung populates none).
+
+    `source` tags provenance ('garmin', later 'samsung'); the unique key is per
+    (user, night, source) so two sources on the same night coexist and read-time
+    arbitration (`reads/recovery_reads.py`) picks the canonical one — the same
+    order-independent, never-persisted pattern as `reads/aerobic_reads.py`.
+    """
+    __tablename__ = "hrv_readings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "captured_at", "source", name="uq_hrv_reading_user_date_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    captured_at: Mapped[date] = mapped_column(Date, nullable=False, index=True)   # the night
+    source: Mapped[str] = mapped_column(String(50), nullable=False)               # 'garmin', later 'samsung'
+    rmssd_ms: Mapped[float | None] = mapped_column(Float)                         # nightly average RMSSD
+    # Garmin-richer, nullable for nightly-only sources.
+    status: Mapped[str | None] = mapped_column(String(30))                        # e.g. 'BALANCED', 'LOW'
+    baseline_low: Mapped[float | None] = mapped_column(Float)                     # balanced-range lower bound
+    baseline_high: Mapped[float | None] = mapped_column(Float)                    # balanced-range upper bound
+    weekly_avg: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class HrvSample(Base):
+    """The 5-min RMSSD series for one `hrv_readings` night — source-agnostic.
+
+    Garmin populates this from `hrvReadings[]`; nightly-only sources (Samsung) leave
+    it empty. Children replace-on-reingest: a re-pull of a night clears and rewrites
+    its samples, so the series never accumulates duplicates. ON DELETE CASCADE ties
+    the series' lifetime to its parent night.
+    """
+    __tablename__ = "hrv_samples"
+    __table_args__ = (
+        UniqueConstraint("hrv_reading_id", "reading_time", name="uq_hrv_sample_reading_time"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    hrv_reading_id: Mapped[int] = mapped_column(
+        ForeignKey("hrv_readings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reading_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    rmssd_ms: Mapped[float | None] = mapped_column(Float)
+
+
 class CapabilityState(Base):
     """
     Adaptive Exposure Engine — "map contents" (spec §3, v2.1 split).
