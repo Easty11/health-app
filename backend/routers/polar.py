@@ -44,6 +44,7 @@ from connectors.polar import (
 from database import get_db
 from encryption import decrypt, encrypt
 from import_polar import import_flow_export
+from load_events_metabolic import compute_metabolic_load
 from metabolic_cascade import run_metabolic_cascade
 from reads.aerobic_reads import arbitrated_sessions, coverage_notice, zone_coverage
 
@@ -188,14 +189,27 @@ def sync_polar_sessions(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Pull v4 training sessions over the last `days` and upsert into aerobic_sessions,
-    then fire the per-user metabolic cascade (transform + rollup).
+    """Pull v4 training sessions over the last `days`, upsert into aerobic_sessions,
+    ENRICH the zoneless v4 rows in the window with per-exercise HR zones, then fire the
+    per-user metabolic cascade (transform + rollup).
 
-    Aerobic ingest is recompute-triggering: every ingest cascades automatically, no
-    manual recompute step. The cascade on a v4 sync is harmless today — v4 list rows
-    carry no HR-zone split, so they fail-closed skip the metabolic transform (INV-7)
-    and contribute nothing — and becomes correct unchanged after Phase 2 enriches v4
-    sessions with per-exercise zones.
+    Two-pass ingest:
+      1. Summary list/upsert (`list_training_sessions_chunked`) — the v4 summary
+         transport omits the HR-zone split (#255/Q123), so these rows land zoneless.
+      2. Zone enrichment — the v4 *feature* mode DOES surface zones
+         (`features='zones'`, one-day window cap; DECISIONS_LOG — v4 zone-enrichment),
+         in the same schema the ZIP export carries. For exactly the dates that have a
+         zoneless polar_v4 row in the window, fetch zones and merge `z*_seconds` onto
+         those rows by `source_session_id`.
+
+    Aerobic ingest is recompute-triggering: the on-ingest cascade then recomputes
+    metab-v1 with the newly-qualifying bouts — no manual recompute, no formula bump.
+    Enriching a v4 twin never flips a dual-lane bout's canonical source: flow_export
+    outranks v4 (#260), so its richer row stays canonical and the bout still emits once.
+
+    Scope: enrichment covers the SYNC WINDOW only. Zoneless v4 rows older than `days`
+    stay zoneless until a wider sync touches them — a one-time wide-window sync backfills
+    history; ongoing syncs keep it current.
     """
     client = _valid_client(current_user.id, db)
     today = datetime.now(timezone.utc).date()
@@ -231,15 +245,79 @@ def sync_polar_sessions(
 
     db.commit()
 
+    enriched = _enrich_v4_zones(client, current_user.id, start, db)
+
     cascade = run_metabolic_cascade(db, current_user.id)
     coverage = zone_coverage(current_user.id, db)
     return {
         "synced": stored,
+        "enriched": enriched,
         "available": len(raw_sessions),
         "cascade": cascade,
         "coverage": coverage,
         "notice": coverage_notice(coverage),
     }
+
+
+def _row_zone_seconds(row) -> dict[int, int | None]:
+    return {i: getattr(row, f"z{i}_seconds") for i in range(1, 6)}
+
+
+def _enrich_v4_zones(client, user_id: int, window_start: date, db: Session) -> int:
+    """Backfill `z*_seconds` on this user's zoneless `polar_v4` rows dated on/after
+    `window_start`, using the v4 zone-feature fetch. Returns the number of rows enriched.
+
+    "Zoneless" is the transform's own INV-7 predicate — NOT qualifying (every zone
+    NULL/0, so the zone-sum is 0) — because a summary-synced v4 row stores `z*_seconds`
+    as 0 (the column default), never NULL. The fetch is scoped to exactly the dates
+    those rows fall on, so a sync where every v4 row already carries zones makes no extra
+    API calls. A row is overwritten only when its fetched session carries a QUALIFYING
+    zone split (positive sum); once enriched it is no longer a target, so re-syncs are
+    idempotent. `polar_flow_export` rows are never touched; a v4 twin enriched here stays
+    non-canonical behind its flow_export twin (#260), so single-emission holds."""
+    v4_rows = (
+        db.query(models.AerobicSession)
+        .filter(
+            models.AerobicSession.user_id == user_id,
+            models.AerobicSession.source == "polar_v4",
+            models.AerobicSession.session_date >= window_start,
+        )
+        .all()
+    )
+    targets = [r for r in v4_rows if not compute_metabolic_load(_row_zone_seconds(r)).qualifying]
+    if not targets:
+        return 0
+
+    days = sorted({r.session_date for r in targets})
+    try:
+        zoned_raw = client.list_zoned_sessions(days)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Polar v4 zone fetch error: {exc}")
+
+    # Map source_session_id → z*_seconds, but only for sessions whose fetched split is
+    # itself qualifying (skips a fetch that came back with no usable zones — leaves the
+    # row as-is rather than writing zeros over zeros).
+    z_by_sid: dict[str, list] = {}
+    for raw in zoned_raw:
+        fields = PolarV4Client.parse_session(raw)
+        sid = (fields or {}).get("source_session_id")
+        if not sid:
+            continue
+        zsecs = [fields.get(f"z{i}_seconds") for i in range(1, 6)]
+        if compute_metabolic_load(dict(zip(range(1, 6), zsecs))).qualifying:
+            z_by_sid[sid] = zsecs
+
+    enriched = 0
+    for row in targets:
+        zsecs = z_by_sid.get(row.source_session_id)
+        if not zsecs:
+            continue
+        row.z1_seconds, row.z2_seconds, row.z3_seconds, row.z4_seconds, row.z5_seconds = zsecs
+        enriched += 1
+
+    if enriched:
+        db.commit()
+    return enriched
 
 
 @router.post("/import-export")

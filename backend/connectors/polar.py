@@ -151,11 +151,29 @@ class PolarV4Client:
     # v4 rejects date windows beyond ~a quarter (108d → 400; 90d ok).
     MAX_WINDOW_DAYS = 90
 
-    def list_training_sessions(self, from_dt: str, to_dt: str) -> list[dict[str, Any]]:
+    # v4 feature token that surfaces the per-exercise HR-zone split
+    # (exercises[].zones[ZONE_TYPE_HEART_RATE]) the summary list omits. LOWERCASE and
+    # case-sensitive — an unrecognised value is silently ignored (no zones, HTTP 200);
+    # the correct token forces feature mode, which caps `to - from` at ONE day (a wider
+    # window → 400 "must not exceed 1 day(s) when feature parameter is given"). Both the
+    # token and the cap are live-probe-confirmed against the v4 API (see DECISIONS_LOG —
+    # v4 zone-enrichment). The returned zone schema is byte-identical to the Flow ZIP
+    # export, so `_parse_session` reads it verbatim.
+    ZONE_FEATURE = "zones"
+    FEATURE_WINDOW_DAYS = 1
+
+    def list_training_sessions(
+        self, from_dt: str, to_dt: str, *, features: str | None = None
+    ) -> list[dict[str, Any]]:
         """GET /training-sessions/list for a single window. `from`/`to` are ISO
         *datetimes without a timezone* (e.g. 2026-06-01T00:00:00); a trailing 'Z'
-        is rejected (400). Returns the list under the 'trainingSessions' key."""
+        is rejected (400). With `features` set the response carries that feature's
+        payload (e.g. `features='zones'` adds the per-exercise HR-zone split) but the
+        window must not exceed FEATURE_WINDOW_DAYS. Returns the list under the
+        'trainingSessions' key."""
         params = {"from": from_dt, "to": to_dt}
+        if features:
+            params["features"] = features
         with httpx.Client(timeout=60) as client:
             resp = client.get(
                 f"{DATA_BASE}/training-sessions/list", headers=self.headers, params=params
@@ -167,6 +185,27 @@ class PolarV4Client:
         if isinstance(data, dict):
             return data.get("trainingSessions") or []
         return data if isinstance(data, list) else []
+
+    def list_zoned_sessions(self, days) -> list[dict[str, Any]]:
+        """Fetch training sessions WITH the per-exercise HR-zone split for each date in
+        `days` (an iterable of `date` objects). Feature mode caps the window at one day,
+        so this issues ONE `features='zones'` request per date. Returns raw session
+        dicts, deduped by `identifier.id` (a date's window is [day 00:00, day+1 00:00),
+        so a session can only surface under its own date — dedup is belt-and-braces)."""
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for day in days:
+            window_end = day + timedelta(days=self.FEATURE_WINDOW_DAYS)
+            for s in self.list_training_sessions(
+                f"{day}T00:00:00", f"{window_end}T00:00:00", features=self.ZONE_FEATURE
+            ):
+                sid = (s.get("identifier") or {}).get("id")
+                if sid and sid in seen:
+                    continue
+                if sid:
+                    seen.add(sid)
+                out.append(s)
+        return out
 
     def list_training_sessions_chunked(self, start, end) -> list[dict[str, Any]]:
         """List sessions across an arbitrary range by splitting into windows the
