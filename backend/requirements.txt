@@ -19,4 +19,9 @@ starlette==1.2.0
 uvicorn[standard]==0.48.0
 mcp[cli]==1.28.1
 openpyxl==3.1.5
+# Garmin server-side HRV pull (unofficial, ToS-grey; household/operator only). Pinned
+# EXACT — a passive bump can silently break the auth/pull lane (garth is deprecated
+# upstream). See DECISIONS_LOG — Garmin HRV server-side ingestion.
+garminconnect==0.3.2
+garth==0.8.0
 pytest==9.1.1
