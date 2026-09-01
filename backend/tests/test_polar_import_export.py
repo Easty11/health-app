@@ -253,11 +253,15 @@ def test_full_path_rows_events_metrics_all_scoped_to_user(db_session):
 # ── cascade on /sync (harmless zoneless skip; both routes wired) ──────────────────
 
 class _FakeClient:
-    def __init__(self, raws):
+    def __init__(self, raws, zoned=None):
         self._raws = raws
+        self._zoned = zoned or []
 
     def list_training_sessions_chunked(self, start, end):
         return self._raws
+
+    def list_zoned_sessions(self, days):
+        return self._zoned
 
 
 def test_sync_route_fires_cascade_and_surfaces_stale_notice(db_session, monkeypatch):
@@ -275,6 +279,8 @@ def test_sync_route_fires_cascade_and_surfaces_stale_notice(db_session, monkeypa
     body = resp.json()
 
     assert body["synced"] == 2
+    # no zone feed available in this fake → rows stay zoneless, nothing enriched
+    assert body["enriched"] == 0
     rows = db_session.query(models.AerobicSession).filter_by(source="polar_v4").all()
     assert len(rows) == 2
     # cascade fired but every v4 row fail-closed skipped → no metabolic events
