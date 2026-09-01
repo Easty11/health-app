@@ -88,11 +88,12 @@ def _user(db, uid=1):
 
 
 def _aerobic(db, uid, sid, session_date, zones, *, source="polar_flow_export",
-             start_time=None, cardio_load=None, sport_name="Running", hr_avg=None):
+             start_time=None, stop_time=None, cardio_load=None, sport_name="Running", hr_avg=None):
     z = dict(zip((1, 2, 3, 4, 5), zones))
     db.add(models.AerobicSession(
         user_id=uid, source=source, source_session_id=sid, session_date=session_date,
-        start_time=start_time, sport_name=sport_name, hr_avg=hr_avg, cardio_load=cardio_load,
+        start_time=start_time, stop_time=stop_time, sport_name=sport_name, hr_avg=hr_avg,
+        cardio_load=cardio_load,
         z1_seconds=z[1], z2_seconds=z[2], z3_seconds=z[3], z4_seconds=z[4], z5_seconds=z[5],
     ))
     db.commit()
@@ -188,6 +189,80 @@ def test_correlation_pairs_collected_only_where_cardio_load_present(db_session):
     assert summary["events_written"] == 3
     assert summary["cardio_load_pairs"] == 2
     assert summary["trimp_cardio_load_pearson_r"] == pytest.approx(1.0, abs=APPROX)
+
+
+# ── Arbitration routing (#260/Q127): emit only the canonical row per bout ────────
+
+def test_v4_flow_export_twin_is_noop_zoned_row_emits(db_session):
+    """The v4/flow_export twin case is a no-op on output: the zoneless v4 row
+    self-skips today (INV-7) and is non-canonical tomorrow (flow_export outranks
+    it); the SAME zoned flow_export row emits either way. Exactly one row, from the
+    flow_export twin. v4 is inserted first so it holds the LOWER id — the ingest
+    order that, under the old equal-rank tie, made the zoneless v4 canonical and
+    dropped the bout."""
+    _user(db_session)
+    start = datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc)
+    stop = datetime(2026, 6, 1, 7, 0, tzinfo=timezone.utc)
+    # v4 twin: zoneless (list endpoint omits zones), lower id (synced first).
+    _aerobic(db_session, 1, "bout1", date(2026, 6, 1), (None, None, None, None, None),
+             source="polar_v4", start_time=start, stop_time=stop)
+    # flow_export twin: same bout, carries zones.
+    _aerobic(db_session, 1, "bout1", date(2026, 6, 1), (600, 300, None, None, 120),
+             source="polar_flow_export", start_time=start, stop_time=stop)
+
+    summary = compute_metabolic_load_events(db_session, 1)
+
+    assert summary["sessions"] == 2
+    assert summary["events_written"] == 1
+    assert summary["sessions_skipped_non_canonical"] == 1   # the zoneless v4 twin
+    assert summary["sessions_skipped_no_zones"] == 0        # never reached for v4
+    row = db_session.query(models.LoadEvent).one()
+    assert row.provenance["zone_source"] == "polar_flow_export"
+    assert row.load == pytest.approx(30.0, abs=APPROX)
+
+
+def test_zoned_cross_source_overlap_collapses_to_one_emission(db_session):
+    """The one intended output change: two ZONED cross-source rows for the same
+    bout (synthetic Polar-vs-HC, both carrying zones) collapse from two emissions
+    to one — a correction. Arbitration keeps the higher-rank flow_export row
+    canonical; the HC twin is skipped as non-canonical. Before arbitration routing
+    both qualified and both emitted (a double-count in every window the bout
+    touched)."""
+    _user(db_session)
+    start = datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc)
+    stop = datetime(2026, 6, 1, 7, 0, tzinfo=timezone.utc)
+    _aerobic(db_session, 1, "hc1", date(2026, 6, 1), (600, 300, None, None, 120),
+             source="health_connect", start_time=start, stop_time=stop)
+    _aerobic(db_session, 1, "fe1", date(2026, 6, 1), (600, 300, None, None, 120),
+             source="polar_flow_export", start_time=start, stop_time=stop)
+
+    summary = compute_metabolic_load_events(db_session, 1)
+
+    assert summary["sessions"] == 2
+    assert summary["events_written"] == 1
+    assert summary["sessions_skipped_non_canonical"] == 1
+    row = db_session.query(models.LoadEvent).one()
+    assert row.provenance["zone_source"] == "polar_flow_export"
+
+
+def test_non_overlapping_zoned_sessions_both_emit(db_session):
+    """Guard the correction's blast radius: two zoned sessions that do NOT overlap
+    (different bouts) are both canonical and both emit — arbitration only collapses
+    genuine same-bout clusters, never distinct sessions on the same day."""
+    _user(db_session)
+    _aerobic(db_session, 1, "am", date(2026, 6, 1), (600, None, None, None, None),
+             source="polar_flow_export",
+             start_time=datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc),
+             stop_time=datetime(2026, 6, 1, 7, 0, tzinfo=timezone.utc))
+    _aerobic(db_session, 1, "pm", date(2026, 6, 1), (900, None, None, None, None),
+             source="health_connect",
+             start_time=datetime(2026, 6, 1, 17, 0, tzinfo=timezone.utc),
+             stop_time=datetime(2026, 6, 1, 18, 0, tzinfo=timezone.utc))
+
+    summary = compute_metabolic_load_events(db_session, 1)
+
+    assert summary["events_written"] == 2
+    assert summary["sessions_skipped_non_canonical"] == 0
 
 
 def test_only_this_users_sessions_are_transformed(db_session):

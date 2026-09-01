@@ -141,19 +141,47 @@ def test_at_threshold_is_same_bout_hc_suppressed():
     assert hc.canonical is False
 
 
-# ---------- tie-breaks (equal rank: the two Polar transports) ----------
+# ---------- source rank: flow_export > v4 (#260/Q127) ----------
+
+def test_flow_export_outranks_v4_twin_identical_interval():
+    """A same-bout v4/flow_export twin with a byte-identical interval (the real
+    shape — both parse via import_polar._parse_session) resolves to the flow_export
+    row canonical, regardless of ingest order / id. This is the guarantee the
+    metabolic transform relies on: the zoned export row wins, never the zoneless
+    v4 twin. Ingest order here puts v4 at the LOWER id (synced first) — the case
+    that, under the old equal-rank tie, left the zoneless v4 canonical and dropped
+    the bout."""
+    v4 = _session("polar_v4", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), sid=1)
+    export = _session("polar_flow_export", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), sid=2)
+    arbitrate([v4, export])
+    assert export.canonical is True
+    assert v4.canonical is False
+
+
+def test_v4_outranks_health_connect_twin():
+    v4 = _session("polar_v4", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), sid=1)
+    hc = _session("health_connect", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), sid=2)
+    arbitrate([v4, hc])
+    assert v4.canonical is True
+    assert hc.canonical is False
+
+
+# ---------- tie-breaks (equal rank: exercised via two unknown sources) ----------
+# No two KNOWN sources share a rank any more (flow_export 3 > v4 2 > hc 1), so the
+# duration/start/id tie-break tiers are exercised with distinct unknown sources
+# (both rank 0) — the residual path _win_key still relies on for future sources.
 
 def test_tie_same_rank_longest_duration_wins():
-    short = _session("polar_v4", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 6, 40), sid=1)
-    long = _session("polar_flow_export", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), sid=2)
+    short = _session("garmin", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 6, 40), sid=1)
+    long = _session("wahoo", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), sid=2)
     arbitrate([short, long])
     assert long.canonical is True
     assert short.canonical is False
 
 
 def test_tie_equal_duration_earliest_start_wins():
-    early = _session("polar_v4", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), sid=1)
-    late = _session("polar_flow_export", _utc(2026, 8, 1, 6, 10), _utc(2026, 8, 1, 7, 10), sid=2)
+    early = _session("garmin", _utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), sid=1)
+    late = _session("wahoo", _utc(2026, 8, 1, 6, 10), _utc(2026, 8, 1, 7, 10), sid=2)
     arbitrate([early, late])
     assert early.canonical is True
     assert late.canonical is False
