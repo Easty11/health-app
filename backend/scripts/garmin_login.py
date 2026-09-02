@@ -3,7 +3,7 @@ Out-of-band interactive Garmin login → token blob (GUARD: the platform never s
 or receives the Garmin password).
 
 The operator runs this LOCALLY. It prompts for email, password (never echoed), and
-the MFA code, performs the Garth OAuth login, and prints ONLY the resulting token
+the MFA code, performs the garminconnect (curl_cffi) OAuth login, and prints ONLY the resulting token
 JSON to stdout. Everything else — prompts, status, errors — goes to stderr, so the
 stdout capture is exactly the blob to POST to /integrations/garmin/token.
 

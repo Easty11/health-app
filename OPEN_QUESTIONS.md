@@ -4055,4 +4055,18 @@ transport; if the lane goes dark and no fix exists, it degrades to the clean "re
 (costing only HRV, not the HC-sourced commodity signals — the resilience rationale of #258). No code owed
 now; this is the durability watch-point.
 
-**State:** OPEN
+**Reframe + resolution (#263).** The framing understated it: garth was not merely *deprecated*, its
+mobile-app auth was *server-side blocked* — Garmin's March-2026 Cloudflare TLS fingerprinting rejects
+the pre-curl_cffi handshake, so new garth logins fail outright (not a future risk; a live break). "Pin
+EXACT" had frozen the broken version rather than mitigating it. Resolved by moving to
+garminconnect==0.3.11, which rebuilt auth on curl_cffi (Chrome JA3 TLS impersonation) and dropped garth
+entirely; garth removed from requirements. The token/exception surface is unchanged, so no connector
+logic changed — dependency fix only (#263).
+
+**Residual watch (unchanged in kind).** This is a cat-and-mouse lane: Garmin is actively hardening (TLS
+fingerprinting now, OAuth 1.0a retiring end-2026). When the next tightening lands, the fix is to bump
+the pin *forward* to the next working garminconnect release — never freeze backward on a version broken
+server-side. The durable, B2B-viable channel remains the self-fronting aggregator, outside the
+consumer-auth arms race.
+
+**State:** DONE → #263 (residual cat-and-mouse watch continues — bump the pin forward when Garmin next tightens)

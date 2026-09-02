@@ -7,28 +7,30 @@ training readiness to Android Health Connect by design (confirmed empirically �
 first Garmin→HC sync landed HR + sleep + steps with `hrv_rmssd` null every day, no
 HRV record type; corroborated by Garmin's published HC data list). The HC path is
 structurally incapable of carrying it. So HRV comes via the unofficial
-`python-garminconnect` library (Garth OAuth + MFA) — the Garmin analogue of the
+`python-garminconnect` library (curl_cffi OAuth + MFA) — the Garmin analogue of the
 Samsung accessibility scraper.
 
 Scope is the WITHHELD metrics only. Garmin sleep / steps / HR are NOT pulled here —
 they already arrive via the official Garmin→HC feed into `health_connect_syncs`.
 Concentrating those commodity signals behind a fragile unofficial auth is the
-opposite of resilient: garth breaks on Garmin auth changes, so keep it carrying ONLY
-what the official channel refuses, and a garth outage then costs HRV, not everything.
+opposite of resilient: the unofficial auth lane breaks on Garmin auth changes, so keep
+it carrying ONLY what the official channel refuses, and an outage then costs HRV, not
+everything.
 
-Credentials: the platform stores only the Garth token blob (Fernet-encrypted, in
+Credentials: the platform stores only the garminconnect token blob (Fernet-encrypted, in
 `UserIntegration(provider="garmin")`), never the Garmin password. Interactive login
 with MFA is out-of-band (`scripts/garmin_login.py`); this connector authenticates
 from the token blob alone. The refresh token IS persistent account access — a secret.
 
-Library mechanism (garminconnect 0.3.2 / garth 0.8.0, read from source):
-  * `Garmin().login(tokenstore)` — a tokenstore string longer than 512 chars is
-    loaded inline via `client.loads` (no path, no password). It proactively refreshes
-    the DI token if it is expiring, so the blob we hold back may be newer than the one
-    we loaded — hence the refresh-writeback contract (see `dump_token`).
-  * `get_hrv_data(cdate)` — ONE day. garminconnect 0.3.2 has NO `get_hrv_data_range`
-    (the brief assumed one; the live lib does not expose it), so a range is a per-day
-    loop.
+Library mechanism (garminconnect 0.3.11, curl_cffi-era, read from source):
+  * `Garmin().login(tokenstore)` — an inline JSON tokenstore string is loaded inline via
+    `client.loads` (no path, no password). It proactively refreshes the DI token if it is
+    expiring, so the blob we hold back may be newer than the one we loaded — hence the
+    refresh-writeback contract (see `dump_token`).
+  * `get_hrv_data(cdate)` — ONE day. 0.3.11 also exposes `get_hrv_data_range`, but this
+    connector keeps the per-day loop so each night is normalised / bounds-checked and
+    empty days dropped individually (see `get_hrv_range`); the range call is not adopted
+    here — deliberately, not for want of an endpoint.
   * `client.dumps()` — serialise the (possibly refreshed) token blob for writeback.
   * A dead/expired token with no password raises `GarminConnectAuthenticationError`
     (login falls through to the credentials branch and finds none) — surfaced here as
@@ -170,7 +172,7 @@ class GarminClient:
 
     @classmethod
     def from_token(cls, token_json: str) -> "GarminClient":
-        """Authenticate from an inline Garth token blob (no password).
+        """Authenticate from an inline garminconnect token blob (no password).
 
         A blob that can no longer authenticate raises GarminReconnectError; a
         transient connection/rate-limit failure is re-raised as-is for a 502/503 path.
@@ -197,8 +199,9 @@ class GarminClient:
     def get_hrv_range(self, start: date, end: date) -> list[dict]:
         """Normalised HRV for each day in [start, end] inclusive that has data.
 
-        Per-day loop — garminconnect 0.3.2 exposes no range endpoint. Days Garmin has
-        no HRV for are silently absent from the result (not an error).
+        Per-day loop (deliberate): 0.3.11 exposes `get_hrv_data_range`, but looping keeps
+        per-day normalisation / bounds and lets days Garmin has no HRV for be silently
+        absent from the result (not an error), rather than adopting the range call.
         """
         out: list[dict] = []
         cur = start

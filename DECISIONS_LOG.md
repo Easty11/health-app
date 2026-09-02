@@ -10602,3 +10602,54 @@ specific napper cadence value is a tuning question inside the build, not a revis
 fork.
 
 ---
+
+### 263. Garmin auth: track curl_cffi-era garminconnect (0.3.11), drop garth
+
+**Decision.** The Garmin HRV lane moves from `garminconnect==0.3.2` + `garth==0.8.0` to
+`garminconnect==0.3.11`, and garth is removed from `backend/requirements.txt`. curl_cffi
+(0.16.2) arrives transitively; nothing imports garth. The connector's token/exception
+surface — `login(<inline JSON>)` (loaded via `client.loads`), `client.dumps()`,
+`Garmin(prompt_mfa=…, return_on_mfa=…)`, `GarminConnectAuthenticationError` and the
+connection/rate-limit siblings — is unchanged across 0.3.2→0.3.11, so the connector logic is
+untouched: this is a dependency fix, plus doc-only comment corrections (the blob is
+garminconnect-native, not a "Garth token"; 0.3.11 now exposes `get_hrv_data_range`, so the
+connector's per-day loop is deliberate, not forced).
+
+**Rationale.** The 0.3.2 + garth 0.8.0 pair is the pre-curl_cffi combination Garmin's
+March-2026 Cloudflare TLS fingerprinting broke server-side: garth's mobile-app auth handshake
+is rejected, so new logins fail — a live break, not the mere upstream *deprecation* Q133
+originally framed. "Pin EXACT" (from the #258/#259 ingestion decision) froze the broken version
+rather than mitigating it. 0.3.11 rebuilt auth on curl_cffi (Chrome JA3 TLS impersonation,
+multi-strategy login, MFA callback) and no longer depends on garth. Pin-strategy nuance:
+exact-pinning serves reproducibility, but pinning a version broken server-side just freezes the
+breakage; for a cat-and-mouse unofficial dependency, pin to the *fixed* version and track it —
+do not freeze the dead one. The unofficial lane stays household/operator-only and inherently
+brittle (Garmin is actively hardening — TLS fingerprinting now, OAuth 1.0a retiring end-2026);
+the durable and B2B-viable channel remains the self-fronting aggregator, outside the
+consumer-auth arms race.
+
+**Status.** LANDED (dependency + doc-only). 0.3.11 requires Python ≥3.12; production builds on
+3.12 (verified live from the Railway backend build — cp312 wheel tags), so the pin resolves in
+prod. Dropping garth also sheds its logfire/opentelemetry/oauthlib subtree from the image. The
+live-login proof (`scripts/garmin_login.py` minting a token against Garmin) is the operator's
+post-merge step — Code holds no Garmin credentials and the platform never handles the Garmin
+password; Code's evidence stops at deps-correct, connector-verified-compatible, tests-green.
+
+**How you know.** Against the installed 0.3.11: `Garmin.__init__` accepts `prompt_mfa` and
+`return_on_mfa`; `login(tokenstore)` loads an inline JSON blob via `self.client.loads`;
+`Client.dumps()`/`Client.loads()` exist; `GarminConnect{Authentication,Connection,
+TooManyRequests}Error` all present; package METADATA requires `curl_cffi>=0.15.0` and does not
+reference garth. `pip install -r backend/requirements.txt` into a clean 3.12 venv resolves with
+`garminconnect 0.3.11` + `curl_cffi 0.16.2` and **no** garth. Full suite: 1307 passed, 1 skipped
+(1 pre-existing environmental failure — a shallow-clone `git show` of an unreachable SHA in
+`test_current_state.py`, unrelated to this change); `backend/tests/test_garmin_hrv.py` 16 passed,
+file unchanged. `grep -rE 'import garth|from garth' backend/` = 0.
+
+**Do not revisit unless.** Garmin tightens again and 0.3.11 itself is found blocked — then the fix
+is to move *forward* to the next working garminconnect release, never to pin backward to a
+server-side-broken version; or the household lane is retired in favour of the aggregator channel.
+
+Supersedes the dependency pin recorded in the Garmin HRV server-side ingestion decision (#259);
+resolves Q133.
+
+---

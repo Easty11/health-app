@@ -20,8 +20,13 @@ uvicorn[standard]==0.48.0
 mcp[cli]==1.28.1
 openpyxl==3.1.5
 # Garmin server-side HRV pull (unofficial, ToS-grey; household/operator only). Pinned
-# EXACT — a passive bump can silently break the auth/pull lane (garth is deprecated
-# upstream). See DECISIONS_LOG — Garmin HRV server-side ingestion.
-garminconnect==0.3.2
-garth==0.8.0
+# to the curl_cffi-era FIXED version, not frozen at the broken one: garminconnect 0.3.2 +
+# garth 0.8.0 was the pre-curl_cffi combination Garmin's March-2026 Cloudflare TLS
+# fingerprinting broke server-side (garth's mobile-app auth is blocked; new logins fail).
+# 0.3.11 rebuilt auth on curl_cffi (Chrome JA3 impersonation) and dropped garth entirely
+# (curl_cffi arrives transitively; nothing imports garth). Cat-and-mouse lane: when Garmin
+# next tightens, bump the pin forward to the next working release — never freeze backward.
+# Requires Python >=3.12 (prod builds on 3.12 — verified). See DECISIONS_LOG — "Garmin auth:
+# track curl_cffi-era garminconnect (0.3.11), drop garth".
+garminconnect==0.3.11
 pytest==9.1.1

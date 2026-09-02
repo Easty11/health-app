@@ -150,7 +150,7 @@ def connect_garmin_token(
 ):
     """Store the token blob minted out-of-band by `scripts/garmin_login.py`.
 
-    The platform never receives the Garmin password — only this Garth token blob,
+    The platform never receives the Garmin password — only this garminconnect token blob,
     stored Fernet-encrypted in UserIntegration(provider="garmin"), upserted on
     uq_user_provider. Mirrors the Hevy register path; no migration.
     """
