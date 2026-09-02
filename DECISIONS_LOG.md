@@ -10548,3 +10548,57 @@ recompute, never an edit of landed rows).
 **Do not revisit unless.** Polar changes the v4 feature contract (token, the one-day cap, or the zone schema — all probe-pinned, re-probe if a sync starts landing zoneless rows that a Flow export would zone); or Q123's `metab-v1`→`v2` zone-less-mapping fork is adopted (a separate formula-version decision, still not triggered by transport enrichment); or a persisted-canonical model supersedes read-time arbitration (would change how the twin is suppressed).
 
 ---
+
+### 262. Q78 adjudicated to per-user cadence (fork c) — build deferred to second-user CBT-I onboarding, no engine change
+
+**Decision:** The frequent-napper stall (Q78) resolves by **fork (c), per-user cadence**:
+`CYCLE_NIGHTS` and `MIN_VALID_NIGHTS` become per-user, and a frequent napper runs a longer
+cycle so the one-night exclusion margin is restored, with the invariant
+`MIN_VALID_NIGHTS < CYCLE_NIGHTS` preserved at every setting. The nap predicate is not
+touched. (a) attribute-the-nap is the shipped #219 behaviour; (b) raising `NAP_EXCLUDE_MIN`
+is forbidden by Q78's own do-not-resolve-by; (d) degrade-not-exclude is rejected (below).
+**No code lands now.** Engine constants (`CYCLE_NIGHTS 4` / `MIN_VALID_NIGHTS 3` /
+`NAP_EXCLUDE_MIN 30`, re-verified on master at record time), `RULESET_VERSION`
+(`cbti-basis/2026-08-30.1`), and GATE 1 are all unchanged by this decision.
+
+**Rationale.**
+Why (c): it is surgical. A single non-napping user is untouched — the cadence stays 4/3 —
+and the machinery engages only for the user who needs it. The trade it asks of that user
+(slower titration in exchange for a decidable cycle) is honest and is borne by exactly the
+user it applies to.
+Why not (d): admitting a nap night into the basis degrades what the titration titrates — a
+post-nap night has discharged sleep pressure, so its TST/SE measure a different thing, which
+is the *reason* the night is excluded. It also collides with **#253**, which caps excused
+(`flagged`) nights at ONE per cycle precisely so a cycle is never built predominantly on
+compromised nights. A frequent napper's two nap nights either breach that cap or demand a
+parallel cap — and a parallel cap returns to starving. (c) breaks no existing invariant; (d)
+either breaks #253 or reintroduces the stall.
+Why defer the build: Q78's resolve-by is second-user onboarding, and there is no second
+user — no napping user at all. Standing up per-user cadence machinery now is building ahead
+of the trigger the item itself names; the single non-napping user cannot exercise the path.
+
+**Disposition.** Q78 the *question* (which fork?) is resolved. The *build obligation* —
+make `CYCLE_NIGHTS`/`MIN_VALID_NIGHTS` per-user, invariant preserved, defaulting to the
+current 4/3 — is a **precondition on second-user CBT-I onboarding**, captured here. Q78's
+"Blocks: any second user" persists in substance: a frequent second-user napper still stalls
+until (c) is built. What changed is that the block is now a *build*, not an undecided fork.
+
+**Status:** active (adjudication). **How you know:** chat-adjudicated against master
+`backend/cbti/engine.py` at `RULESET_VERSION cbti-basis/2026-08-30.1`; no branch, no suite
+delta — nothing was built, by design. Re-verified after #254–261 landed: none of those touch
+the CBT-I engine, constants, or the nap/cadence logic, so the fork calculus is undisturbed.
+The reasoning is the artifact: (a) is shipped #219, (b) is forbidden by Q78's own bar, (d) is
+eliminated on the #253 collision, leaving (c) as the sole surviving surgical option.
+
+**Carried note (not part of the decision):** the gate-order docstring block at
+`engine.py:~15–16` still describes the old 7-night regime — "SUFFICIENCY >= 5 valid nights"
+(now 3) and adherence "failing on >= 3 of 7" (now >= 2 of 4). Harmless — the code reads the
+constants — but it misleads a future reader adjudicating this area. Fix opportunistically
+when Code next touches the file; not worth its own PR.
+
+**Do not revisit unless:** a real napping user onboards (that is the build trigger, not a
+revisit), or a source surfaces that contradicts per-user cadence as the mechanism. The
+specific napper cadence value is a tuning question inside the build, not a revisit of the
+fork.
+
+---

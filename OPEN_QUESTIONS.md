@@ -2413,9 +2413,15 @@ Luke chose to land `#164` on the test suite and the enum artifact rather than mi
 
 ## Q78. Nap exclusion still starves a frequent napper at a 4-night cadence — needs solving before anyone else runs a block
 
-**State:** OPEN. **No longer blocked by Q45** (closed → #219, 2026-08-17): the referent is now
-operator-determined, so candidate (a) below is unblocked and (b) is partly taken. **Blocks:** any
-second user on the CBT-I module.
+**State:** DECIDED → #262 (2026-09-02) — fork **(c) per-user cadence** chosen. **BUILD
+DEFERRED** to second-user CBT-I onboarding. **Not DONE:** no code lands, and the
+frequent-napper stall persists in the engine until (c) is built. **No longer an open fork**
+— the question (which candidate?) is answered; only the implementation waits, on a trigger
+that does not yet exist. **Blocks:** any *frequent-napper* second user on the CBT-I module,
+until (c) ships — now a build dependency, not an undecided design question. **No longer
+blocked by Q45** (closed → #219, 2026-08-17).
+
+**Original text, as it stood at decision, preserved below:**
 
 **Premise updated 2026-08-17 — the numbers below moved, the fork did not.** The engine no longer
 excludes ANY nap-flagged night; it excludes naps over `NAP_EXCLUDE_MIN`, now **30**, and attributes
