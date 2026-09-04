@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 import models
 from auth import get_current_user
 from database import get_db
+from reads.recovery_reads import canonical_hrv
 
 router = APIRouter(prefix="/recovery", tags=["recovery"])
 
@@ -79,6 +80,36 @@ def get_summary(
     baseline_mean = round(mean(rmssd_values), 1) if rmssd_values else None
     baseline_sd = round(pstdev(rmssd_values), 1) if len(rmssd_values) >= 2 else None
 
+    # ----- Source-agnostic HRV: canonical nightly readings (Q130) -----
+    # Sourced from reads.recovery_reads.canonical_hrv over hrv_readings (Garmin +,
+    # after the Samsung unification, Samsung). Additive sibling of the device blocks —
+    # `samsung` and `health_connect` above are left exactly as they are.
+    hrv_week = [r for r in canonical_hrv(current_user.id, db, since=week_start) if r.canonical]
+    # Fall back to the newest canonical night even if older than 7 days (mirrors the
+    # samsung block's fallback), so a user who hasn't synced this week still sees `latest`.
+    if hrv_week:
+        hrv_latest_row = hrv_week[0]  # canonical_hrv returns captured_at desc
+    else:
+        hrv_latest_row = next(
+            (r for r in canonical_hrv(current_user.id, db) if r.canonical), None
+        )
+
+    hrv_latest = None
+    if hrv_latest_row is not None:
+        hrv_latest = {
+            "captured_at": hrv_latest_row.captured_at,
+            "rmssd_ms": hrv_latest_row.rmssd_ms,
+            "source": hrv_latest_row.source,
+            "status": hrv_latest_row.status,
+            "baseline_low": hrv_latest_row.baseline_low,
+            "baseline_high": hrv_latest_row.baseline_high,
+        }
+
+    hrv_trend = [{"date": r.captured_at, "rmssd": r.rmssd_ms} for r in hrv_week]
+    hrv_values = [r.rmssd_ms for r in hrv_week if r.rmssd_ms is not None]
+    hrv_baseline_mean = round(mean(hrv_values), 1) if hrv_values else None
+    hrv_baseline_sd = round(pstdev(hrv_values), 1) if len(hrv_values) >= 2 else None
+
     # ----- Health Connect: latest daily-aggregate sync -----
     hc_latest = (
         db.query(models.HealthConnectSync)
@@ -113,5 +144,12 @@ def get_summary(
             "baseline_n": len(rmssd_values),
         },
         "health_connect": health_connect,
+        "hrv": {
+            "latest": hrv_latest,
+            "trend": hrv_trend,
+            "baseline_mean": hrv_baseline_mean,
+            "baseline_sd": hrv_baseline_sd,
+            "baseline_n": len(hrv_values),
+        },
         "has_data": bool(samsung_today or health_connect),
     }

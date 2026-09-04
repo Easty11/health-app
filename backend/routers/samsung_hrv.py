@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
+from connectors.garmin import _bounded_rmssd
 from database import get_db
+from routers.garmin import _upsert_hrv_day
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,31 @@ class HRVReadingIn(BaseModel):
         return self
 
 
+def _mirror_passive_overnight_hrv(db: Session, user_id: int, r: "HRVReadingIn") -> None:
+    """Dual-write a Samsung nightly HRV value into the source-agnostic `hrv_readings`
+    store (source='samsung') so `reads.recovery_reads.canonical_hrv` sees it (Q130).
+
+    Only the `passive_overnight` reading is a nightly HRV value; `calibration`/`session`
+    are not mirrored. `hrv_ms` is revalidated through the connector's shared RMSSD bounds
+    guard (a None/out-of-range value is skipped — the pydantic layer already nulls out-of
+    range, this is belt-and-suspenders and the single reuse point). Samsung is nightly-only
+    → `samples=[]`; `status`/`baseline`/`weekly_avg` stay NULL (Samsung supplies none).
+
+    Additive: the `samsung_hrv_readings` write is unchanged. `_upsert_hrv_day` upserts the
+    night in place, so a re-scrape updates the value without duplicating — and because a
+    Samsung night carries no samples, the replace-on-reingest of samples has nothing to lose.
+    """
+    if r.context != "passive_overnight":
+        return
+    rmssd = _bounded_rmssd(r.hrv_ms, cdate=r.captured_at.isoformat(), field="samsung.hrv_ms")
+    if rmssd is None:
+        return
+    _upsert_hrv_day(
+        db, user_id, "samsung",
+        {"captured_at": r.captured_at, "reading": {"rmssd_ms": rmssd}, "samples": []},
+    )
+
+
 class SyncRequest(BaseModel):
     readings: List[HRVReadingIn]
 
@@ -109,6 +136,9 @@ def sync_readings(
             )
         )
         db.execute(stmt)
+        # Dual-write the nightly HRV into the source-agnostic store (Q130). Additive —
+        # the samsung_hrv_readings write above is unchanged.
+        _mirror_passive_overnight_hrv(db, current_user.id, r)
 
     db.commit()
     return {"synced": len(body.readings)}

@@ -4017,7 +4017,7 @@ ingestion lane (#258/#259).
 
 **State:** OPEN
 
-## Q130. Samsung HRV unification into `hrv_readings` + recovery.py rewire  [DEFERRED]
+## Q130. Samsung HRV unification into `hrv_readings` + recovery.py rewire  [DONE]
 
 Migrate existing Samsung HRV from `samsung_hrv_readings` into `hrv_readings` (`source='samsung'`,
 `rmssd_ms=hrv_ms`), repoint the scraper's HRV write, and rewire `recovery.py`'s HRV read to
@@ -4026,7 +4026,15 @@ Samsung in `samsung_hrv_readings`) and `recovery.py`'s user-facing HRV read is u
 `samsung_hrv_readings` then becomes the Samsung sleep store. This is the consumption/unification
 follow-on to the ingestion lane (#258/#259).
 
-**State:** OPEN
+**Resolution (#265/#266).** Unification done: `samsung_hrv.py` dual-writes each `passive_overnight`
+reading into `hrv_readings` and a held Alembic backfill (`c1d2e3f4a5b6`) migrates existing rows
+(insert-only). Consumption done ADDITIVELY: `/recovery/summary` gains a source-agnostic `hrv` block
+built from `canonical_hrv` — Garmin and (post-unification) Samsung are now read, not just stored. The
+`recovery.py` "rewire" was scoped to ADDING the block, not repointing the existing `samsung` block: the
+FULL restructure (retire the samsung-block HRV duplication + a source-agnostic sleep read) is deferred
+to Q134, and dropping `samsung_hrv_readings.hrv_ms` to Q135.
+
+**State:** DONE → #265/#266 (residual full restructure → Q134; `hrv_ms` drop → Q135)
 
 ## Q131. HRV `_SOURCE_RANK` is currently unexercised  [WATCH]
 
@@ -4070,3 +4078,42 @@ server-side. The durable, B2B-viable channel remains the self-fronting aggregato
 consumer-auth arms race.
 
 **State:** DONE → #263 (residual cat-and-mouse watch continues — bump the pin forward when Garmin next tightens)
+
+## Q134. Full `/recovery/summary` restructure — retire the Samsung-block HRV duplication + source-agnostic sleep read  [DEFERRED]
+
+#265 added an `hrv` block additively and left the device-shaped `samsung` and `health_connect` blocks
+byte-for-byte, because repointing them breaks the current frontend contract. The follow-on: once the
+frontend reads the `hrv` block, retire the `samsung` block's HRV duplication (its `hrv_ms`/`trend`/
+`baseline_*` overlap the new block) and introduce a source-agnostic SLEEP read across HC + Samsung
+(sleep still lives only in `samsung_hrv_readings`). Also decide `has_data` semantics at that point —
+whether it should reflect the `hrv` block (a Garmin-only user currently reads `has_data=false` despite a
+populated `hrv` block). Requires a coordinated frontend change (health-connect-app), so it is a
+cross-surface restructure, not a backend-only edit.
+
+**State:** DEFERRED (blocks on frontend readiness to consume the `hrv` block)
+
+## Q135. Drop `samsung_hrv_readings.hrv_ms` once dual-write is proven and the frontend reads the `hrv` block  [DEFERRED]
+
+#266 retains `samsung_hrv_readings.hrv_ms` (dual-write, not move) so the `samsung` block keeps working
+and no destructive column drop rides this brief. Once (a) the dual-write is proven live (new Samsung
+nights present in both tables) and the backfill has run, and (b) the frontend reads HRV from the `hrv`
+block rather than the `samsung` block, `hrv_ms` becomes redundant and can be dropped — `samsung_hrv_readings`
+then holds sleep only. Gated on Q134 (the frontend read-path move) and on the live parity check.
+
+**State:** DEFERRED (gated on Q134 + live dual-write/backfill parity)
+
+## Q136. `SamsungHRVReading` model constraint drift — declares `uq_samsung_hrv_user_date`, live is `uq_samsung_hrv_user_date_context`  [OPEN]
+
+`models.SamsungHRVReading` still declares `UniqueConstraint("user_id", "captured_at",
+name="uq_samsung_hrv_user_date")`, but migration `e1f2a3b4c5d6` DROPPED that key and ADDED
+`uq_samsung_hrv_user_date_context` (user_id, captured_at, context). The model was never updated. Two
+live consequences: (1) `routers/samsung_hrv.py` upserts with `constraint="uq_samsung_hrv_user_date_context"`
+— a name that does NOT exist in the create_all'd SQLite test DB, so the `/samsung-hrv/sync` endpoint's
+DB path is untestable on the test substrate (only the pydantic bounds validator is covered today); (2) a
+fresh clone's tests enforce a 2-column uniqueness prod does not have (and vice-versa), so the substrate
+disagrees with prod on how many rows a (user, night) can hold. Fix: update the model's `UniqueConstraint`
+to `(user_id, captured_at, context)` to match the live schema (no migration — the DB is already correct).
+Found while building the Q130 backfill (the collapse logic depends on which constraint is live); flagged,
+not fixed, to keep this brief scoped.
+
+**State:** OPEN
