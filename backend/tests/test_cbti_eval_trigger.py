@@ -20,13 +20,17 @@ LAST complete 4-night span of the live prescription.
 
 SYNTHETIC data only; no real rows (both repos are public).
 """
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from fastapi import HTTPException
 
 import models
-from routers.checkin_v2 import accept_cbti_evaluation, get_cbti_evaluation
+from routers.checkin_v2 import (
+    _today_aest,
+    accept_cbti_evaluation,
+    get_cbti_evaluation,
+)
 
 
 def _user(db, email="trig@x.io"):
@@ -75,9 +79,9 @@ def _nights(db, uid, start, n, *, lo="22:30", tst=420, se=90.0, wake="05:00", sk
 
 def test_no_offer_before_the_cycle_has_elapsed(db_session):
     u = _user(db_session)
-    b = _block(db_session, u.id, opened=date.today() - timedelta(days=3))
-    _rx(db_session, b.id, eff=date.today() - timedelta(days=3))
-    _nights(db_session, u.id, date.today() - timedelta(days=3), 3)
+    b = _block(db_session, u.id, opened=_today_aest() - timedelta(days=3))
+    _rx(db_session, b.id, eff=_today_aest() - timedelta(days=3))
+    _nights(db_session, u.id, _today_aest() - timedelta(days=3), 3)
 
     out = get_cbti_evaluation(current_user=u, db=db_session)
     assert out.block_open is True
@@ -88,7 +92,7 @@ def test_no_offer_before_the_cycle_has_elapsed(db_session):
 
 def test_offer_once_a_full_cycle_has_elapsed_carries_decision_and_basis(db_session):
     u = _user(db_session)
-    start = date.today() - timedelta(days=4)
+    start = _today_aest() - timedelta(days=4)
     b = _block(db_session, u.id, opened=start)
     _rx(db_session, b.id, eff=start, win=390)
     _nights(db_session, u.id, start, 4, tst=420)
@@ -113,7 +117,7 @@ def test_eligibility_is_calendar_days_not_logged_nights(db_session):
     behind them, so its logged count can never rise to 4.
     """
     u = _user(db_session)
-    start = date.today() - timedelta(days=4)
+    start = _today_aest() - timedelta(days=4)
     b = _block(db_session, u.id, opened=start)
     _rx(db_session, b.id, eff=start)
     _nights(db_session, u.id, start, 4, skip=(1,))
@@ -127,7 +131,7 @@ def test_eligibility_is_calendar_days_not_logged_nights(db_session):
 
 def test_insufficient_nights_holds_rather_than_withholding_the_offer(db_session):
     u = _user(db_session)
-    start = date.today() - timedelta(days=4)
+    start = _today_aest() - timedelta(days=4)
     b = _block(db_session, u.id, opened=start)
     _rx(db_session, b.id, eff=start)
     _nights(db_session, u.id, start, 4, skip=(1, 2))   # 2 logged, need 3
@@ -146,8 +150,8 @@ def test_adjudicates_against_the_effective_prescription_not_the_seed(db_session)
     lights-out would read them as adherence failures — the false GATE-2 HOLD Q49 names.
     """
     u = _user(db_session)
-    seed_from = date.today() - timedelta(days=8)
-    corr_from = date.today() - timedelta(days=4)
+    seed_from = _today_aest() - timedelta(days=8)
+    corr_from = _today_aest() - timedelta(days=4)
     b = _block(db_session, u.id, opened=seed_from)
     _rx(db_session, b.id, eff=seed_from, to=corr_from - timedelta(days=1), lo="23:45", win=360)
     _rx(db_session, b.id, eff=corr_from, lo="22:30", win=390, decision="extend")
@@ -174,7 +178,7 @@ def test_excluded_nights_are_surfaced_and_attributed_to_the_following_night(db_s
     the NEXT morning, D+1, not the night that had already ended on the morning of D.
     """
     u = _user(db_session)
-    start = date.today() - timedelta(days=4)
+    start = _today_aest() - timedelta(days=4)
     b = _block(db_session, u.id, opened=start)
     _rx(db_session, b.id, eff=start)
     _nights(db_session, u.id, start, 4)
@@ -199,7 +203,7 @@ def test_excluded_nights_are_surfaced_and_attributed_to_the_following_night(db_s
 # ── accept: the witnessed act ────────────────────────────────────────────────
 
 def _eligible_block(db, u):
-    start = date.today() - timedelta(days=4)
+    start = _today_aest() - timedelta(days=4)
     b = _block(db, u.id, opened=start)
     prior = _rx(db, b.id, eff=start, win=390)
     _nights(db, u.id, start, 4, tst=420)
@@ -227,7 +231,7 @@ def test_accept_appends_one_row_and_moves_only_the_two_permitted_columns(db_sess
     assert prior.superseded_by == rows[1].id
 
     successor = rows[1]
-    assert successor.effective_from == date.today()
+    assert successor.effective_from == _today_aest()
     assert successor.window_minutes == 405
     assert successor.wake_anchor == prior.wake_anchor
     assert successor.basis_nights_n == 4
@@ -249,9 +253,9 @@ def test_double_accept_does_not_mint_a_second_successor(db_session):
 
 def test_accept_refused_before_the_cycle_elapses(db_session):
     u = _user(db_session)
-    b = _block(db_session, u.id, opened=date.today() - timedelta(days=2))
-    _rx(db_session, b.id, eff=date.today() - timedelta(days=2))
-    _nights(db_session, u.id, date.today() - timedelta(days=2), 2)
+    b = _block(db_session, u.id, opened=_today_aest() - timedelta(days=2))
+    _rx(db_session, b.id, eff=_today_aest() - timedelta(days=2))
+    _nights(db_session, u.id, _today_aest() - timedelta(days=2), 2)
 
     with pytest.raises(HTTPException) as e:
         accept_cbti_evaluation(current_user=u, db=db_session)
