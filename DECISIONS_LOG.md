@@ -10689,3 +10689,67 @@ a real run, and an idempotent re-run end-to-end.
 blind full-range re-run - that reintroduces the sample-wipe. Supersedes the one-off
 chat-generated deb_garmin_hrv_backfill.sql, which used ON CONFLICT DO UPDATE and would
 have touched existing rows.
+
+---
+
+### 265. HRV consumption is additive — new source-agnostic /summary block, device blocks preserved
+GET /recovery/summary gains an "hrv" block sourced from recovery_reads.canonical_hrv
+(latest canonical night, weekly trend, baseline mean/sd/n over canonical rmssd_ms). The
+existing device-shaped "samsung" and "health_connect" blocks are left byte-for-byte -
+adding, not restructuring, preserves the frontend contract. This is the consumption
+payoff: Garmin HRV (and, after the unification below, Samsung HRV) is now read, not just
+stored. Retiring the samsung block's HRV duplication and a source-agnostic sleep read is
+the full-restructure follow-on, deferred (Q134). The has_data key is left keyed on the
+device blocks (samsung/health_connect) - unchanged, to avoid minting an unratified
+data-meaning default; whether it should reflect the hrv block rides the Q134 restructure.
+
+**Status.** DONE - routers/recovery.py hrv block on feat/hrv-consumption (feature commit
+f7ff6e8). Additive; the samsung/health_connect/has_data keys are unchanged.
+
+**How you know.** tests/test_hrv_consumption.py: a Garmin-only user (no Samsung) sees a
+populated hrv block; a Samsung user sees it populated from the unified rows; a night with
+both sources shows the canonical (higher-ranked, garmin) source in hrv.latest and exactly
+one trend entry (exercises arbitration); and the samsung + health_connect blocks are
+asserted equal to an explicit pre-change snapshot. Full suite 1323 passed (3.12 venv).
+No frontend consumer of /summary exists in the tree, so the added key strands nothing.
+
+**Do not revisit unless.** The full /summary restructure (Q134) lands - at which point the
+samsung-block HRV duplication and has_data semantics are reconsidered together.
+
+---
+
+### 266. Samsung HRV unified into hrv_readings (dual-write + held insert-only backfill), not a read-time union
+So canonical_hrv is source-complete, Samsung nightly HRV is written into hrv_readings
+(source='samsung', rmssd_ms=hrv_ms, status/baseline NULL): a held Alembic data-migration
+(c1d2e3f4a5b6) backfills existing rows (insert-only, NOT EXISTS guard, one nightly row per
+user/date via context='passive_overnight'), and samsung_hrv.py dual-writes new overnight
+readings via _upsert_hrv_day. samsung_hrv_readings and its hrv_ms column are retained (sleep
+still lives there) - no schema change to that table; dropping hrv_ms is a later cleanup
+(Q135). A read-time union of hrv_readings + samsung_hrv_readings in canonical_hrv was
+rejected: it would make the abstracted read helper touch a device-specific table, violating
+the source-abstraction the store exists to provide.
+
+The collapse to one nightly value per (user, night) is context='passive_overnight', NOT
+context != 'session': the live unique constraint is uq_samsung_hrv_user_date_context
+(migration e1f2a3b4c5d6 dropped the old (user_id, captured_at) key), so a night can hold
+both a passive_overnight and a calibration row. The stale SamsungHRVReading model still
+declares the 2-column constraint - carried as Q136.
+
+**Status.** HELD (migration) + DONE (dual-write). The backfill migration holds for explicit
+operator release (prod data write); the scraper dual-write and the hrv block are additive
+and self-merge on green. Resolves Q130 (residual full restructure → Q134).
+
+**How you know.** tests/test_hrv_consumption.py: the dual-write helper mirrors a
+passive_overnight reading into hrv_readings (source='samsung', rmssd=hrv_ms, status/baseline
+NULL, no samples), skips session/calibration/null/out-of-range, and a re-scrape updates
+without duplicating; the exact BACKFILL_SQL (imported from the migration) inserts only
+passive_overnight rows with a non-null hrv_ms, leaves a pre-existing row untouched
+(insert-only), and inserts 0 on a second run (idempotent). Reuse verified: canonical_hrv,
+_upsert_hrv_day, _bounded_rmssd imported, nothing re-implemented. Full suite 1323 passed.
+GUARD: Code runs nothing against prod - the live backfill release and the live parity check
+(Samsung nightly rows fully mirrored) are the operator's ordered pre-release steps; Code's
+evidence stops at fixtures.
+
+**Do not revisit unless.** Never weaken insert-only + NOT-EXISTS to an update or a blind
+full re-copy - that risks touching live-synced/dual-written rows. Dropping hrv_ms (Q135) or
+the full read-path restructure (Q134) are the sanctioned next moves.
