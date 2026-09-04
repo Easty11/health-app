@@ -10653,3 +10653,39 @@ Supersedes the dependency pin recorded in the Garmin HRV server-side ingestion d
 resolves Q133.
 
 ---
+
+### 264. Historical Garmin HRV backfilled from the account data export (nightly-only, status NULL, insert-only)
+Garmin HRV before the live-sync floor is unreachable via get_hrv_range (a ~7-day rolling
+window). The Garmin account data export carries nightly HRV further back - in
+DI-Connect-Wellness/*healthStatusData.json as metrics[type="HRV"].value plus baseline
+limits - but NOT the 5-min series (for Deb/user 4 the export's HRV begins 2026-05-19).
+scripts/garmin_backfill.py loads it, reusing the connector's RMSSD bounds guard,
+_upsert_hrv_day, and SessionLocal. It is INSERT-ONLY: any night already present is
+skipped, never updated - because _upsert_hrv_day replaces a night's samples on reingest
+and the export has none, so updating a live-synced night would wipe its 5-min series.
+Decisions embodied: (a) backfill is nightly-only - hrv_samples remains a going-forward
+artifact of the live sync; (b) status is left NULL for export-sourced rows - the export
+vocabulary (IN_RANGE/BELOW/ONBOARDING) differs from the live API's (BALANCED/...), and
+rmssd_ms is the unambiguous signal, so mixing vocabularies or guessing a mapping was
+rejected. The script is a reusable operator tool (any user's export), run out-of-band
+against prod; Code writes and tests it against a fixture and never runs it live. No
+schema change (hrv_readings pre-exists) - no migration.
+
+**Status.** DONE - scripts/garmin_backfill.py + tests/test_garmin_backfill.py landed on
+feat/garmin-hrv-backfill (feature commit b94fb94). The live prod backfill run is the
+operator's out-of-band step, not Code's.
+
+**How you know.** Fixture tests against a synthetic *healthStatusData.json + in-memory
+SQLite: parse-vs-oracle (4 records -> 2 inserted, 2 dropped for out-of-range/null; status
+and weekly_avg NULL, 0.0 baselines -> NULL, samples empty); the mandatory insert-only
+safety gate (a pre-seeded live-synced night with a 5-min sample is skipped, its rmssd and
+its sample survive unchanged - proving the sample-wipe cannot happen); idempotency (a
+second run inserts 0); and dry-run-writes-nothing. Reuse verified by diff: the script
+imports SessionLocal, _bounded_rmssd, and _upsert_hrv_day and re-implements no engine,
+bounds, or upsert. Full suite 1314 passed (3.12 venv). A CLI smoke exercised --dry-run,
+a real run, and an idempotent re-run end-to-end.
+
+**Do not revisit unless.** Never weaken insert-only + skip-existing to an update or a
+blind full-range re-run - that reintroduces the sample-wipe. Supersedes the one-off
+chat-generated deb_garmin_hrv_backfill.sql, which used ON CONFLICT DO UPDATE and would
+have touched existing rows.
