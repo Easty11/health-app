@@ -1,90 +1,69 @@
-# Session close-out — Garmin auth: curl_cffi-era garminconnect 0.3.11, drop garth (#263, PR #147)
+# Session close-out — Garmin HRV historical backfill from the account data export (#264, PR #149)
 
 ## Real commits this session
 
-Session-open ref: `8fc514e` (origin/master at open). Feature branch `fix/garmin-curl-cffi-pin`
-cut off it; governance close-out on `gov/263-garmin-curl-cffi-closeout`.
+Session-open ref: `24236bc` (origin/master at open). Feature branch `feat/garmin-hrv-backfill`
+cut off it; governance close-out on `gov/264-garmin-backfill-closeout`.
 
 ```
-git log --oneline 8fc514e..HEAD   (feature+merge, pre-closeout)
-6d756c0 Merge pull request #147 from Easty11/fix/garmin-curl-cffi-pin
-7f3e1d2 gov(garmin): resolve Q133, log #263 — curl_cffi-era garminconnect, drop garth
-7dd022a fix(garmin): move to curl_cffi-era garminconnect 0.3.11, drop garth
+git log --oneline 24236bc..HEAD   (feature branch, merged)
+e7596cf Merge pull request #149 from Easty11/feat/garmin-hrv-backfill
+c304f5a gov: DECISIONS #264 - Garmin HRV export backfill (insert-only, nightly-only, status NULL)
+b94fb94 feat(garmin): historical HRV backfill from account data export
 ```
 
-- `7dd022a` **fix** — `backend/requirements.txt` (`garminconnect` 0.3.2→0.3.11; `garth==0.8.0`
-  line removed; pin rationale rewritten to "track the fixed version, don't freeze the broken
-  one", Python ≥3.12 noted) + doc-only comment/docstring corrections in
-  `backend/connectors/garmin.py`, `backend/routers/garmin.py`, `backend/scripts/garmin_login.py`
-  (blob is garminconnect-native, not a "Garth token"; 0.3.11 exposes `get_hrv_data_range`, so
-  the per-day loop is deliberate, not forced). Connector diff is comments/docstrings only — zero
-  logic change.
-- `7f3e1d2` **governance** — `OPEN_QUESTIONS.md` Q133 reframed + resolved (DONE → #263, residual
-  cat-and-mouse watch carried), `DECISIONS_LOG.md` #263 appended. Committed separately from the fix.
-- `6d756c0` **merge** — PR #147 to master via `--merge`, remote branch auto-deleted.
+- `b94fb94` **feature** — `backend/scripts/garmin_backfill.py` (new) + `backend/tests/test_garmin_backfill.py`
+  (new). Loads nightly Garmin HRV from an account data export (`*healthStatusData.json`,
+  `metrics[type="HRV"].value` + baseline limits) into `hrv_readings`. Reuses `SessionLocal`
+  (`database`), `_bounded_rmssd` (`connectors.garmin`), `_upsert_hrv_day` (`routers.garmin`) —
+  no engine/bounds/upsert re-implemented. INSERT-ONLY + skip-existing safety contract; nightly-only
+  (samples always empty); `status`/`weekly_avg` NULL; `0.0` baselines → NULL; out-of-range/null
+  HRV dropped + logged. CLI `--export`/`--user-id`/`--source`/`--dry-run`. No schema change,
+  no migration.
+- `c304f5a` **governance** — `DECISIONS_LOG.md` #264 appended (decision + How-you-know + do-not-revisit).
+  Committed separately from the feature, per the concern-split convention.
+- `e7596cf` **merge** — PR #149 to master via `--merge`; remote branch auto-deleted, local deleted.
 
 The close-out commit (`chore: session close-out`) lands `closeout.md`, the CLAUDE.md
-Recent-landings roll, the `BRANCHES.md` DONE row, on `gov/263-garmin-curl-cffi-closeout`.
+Recent-landings roll (#264 on, #258 off — cap-3), and the `BRANCHES.md` DONE row, on
+`gov/264-garmin-backfill-closeout`.
 
 ## Pending-queue reconciliation
 
-No `;cc` pending-commit queue was carried in — the session ran directly from the chat proposal
-(the Garmin curl_cffi brief). Every brief line landed:
-
-- Requirements pin (0.3.11, garth dropped) → `7dd022a`. **Landed.**
-- Connector compatibility (STEP-3 VERIFY) → confirmed against installed 0.3.11; no logic change,
-  doc-only edits → `7dd022a`. **Landed.**
-- Tests unchanged, green on 0.3.11 → verified (full suite 1307 passed / 1 skipped; the 1 failure
-  is the pre-existing `3360ed5` shallow-clone `test_current_state` artifact, unrelated;
-  `test_garmin_hrv.py` 16 passed, file unchanged). **Verified, no commit needed.**
-- Governance Q133 + DECISIONS #263, separate commit → `7f3e1d2`. **Landed.**
-- Deploy verified live: backend deploy `18f0db72` **SUCCESS** — installs `garminconnect-0.3.11`
-  + `curl_cffi-0.16.2`, garth gone; prod on Python 3.12 (cp312 wheels), satisfying 0.3.11's
-  `Requires-Python >=3.12`; no migration ran. **Verified.**
-
-Nothing provisional. Two brief assumptions were corrected in-flight (both verified, neither a
-blocker): 0.3.11 requires Python ≥3.12 (prod is on 3.12); 0.3.11 *added* `get_hrv_data_range`
-(0.3.2 lacked it — docstrings corrected, per-day loop kept as deliberate). `curl_cffi` was NOT
-pinned explicitly (no general transitive-pinning convention in the repo — `pydantic-core` reads
-as a version-lock special case); flag for the operator if a freeze is wanted.
+No `;cc` pending-commit queue was carried into this session — the work came in as a direct
+chat brief (Garmin HRV historical backfill), not a chat close-out queue. Nothing provisional
+is left uncommitted: the script, its tests, and DECISIONS #264 all landed on master (PR #149,
+merge `e7596cf`); the governance housekeeping (this file, CLAUDE.md pointer, BRANCHES row)
+lands with the close-out commit. Number-at-merge for #264 was resolved against master max #263
+(re-read at the merge instant, no advance).
 
 ## Cold-resume handoff
 
-**What this was.** A single dependency + governance fix. Garmin's March-2026 Cloudflare TLS
-fingerprinting broke the pre-curl_cffi `garth` auth server-side, so `garmin_login.py` could not
-authenticate. Moved to `garminconnect==0.3.11` (rebuilt on curl_cffi, garth-free); garth removed
-from requirements. Connector logic untouched (token/exception surface unchanged 0.3.2→0.3.11).
+**What this session was.** An OPERATOR-TOOL / instrumentation session on the Garmin HRV lane —
+the fourth consecutive Garmin/HRV-adjacent session (auth #263, Polar zones #261, ingestion
+#258, now this backfill). It shipped a reusable script and its fixture tests; it moved no
+product/consumption code and touched no UI.
 
-**Single clearest next action (operator, out-of-band — Code cannot do this):** run
-`backend/scripts/garmin_login.py` locally (email / password / MFA; prints only the token blob,
-password never leaves the machine) → POST the blob to `POST /integrations/garmin/token` →
-trigger `POST /integrations/garmin/sync` (or `scripts/garmin_sync.py` via `railway run`). Then
-confirm `hrv_readings` rows for the target user (Deb) — nightly `rmssd_ms` + `hrv_samples` 5-min
-series. **This live login is the real proof-point** — it is where curl_cffi either defeats
-Garmin's fingerprinting or does not. If it fails (Garmin tightened again), the fix is to move
-*forward* to the next working `garminconnect` release, never to pin backward (Q133 residual watch).
+**Garmin/HRV lane state (canonical: `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`).**
+- Server-side ingestion (#258/#259) — LIVE (store `hrv_readings`/`hrv_samples`, migration applied to prod).
+- Auth on curl_cffi-era `garminconnect` 0.3.11, garth dropped (#263) — LIVE (deploy verified); live-login proof is the operator's step.
+- Historical backfill tool (#264, this session) — LANDED. **The live prod backfill run is the operator's out-of-band step, not Code's** (GUARD): set `$env:DATABASE_URL` to the prod public proxy URL (Railway `health-app-DB`, NOT the internal `*.railway.internal` host), run `python -m scripts.garmin_backfill --export <export dir> --user-id 4 --dry-run` first, then without `--dry-run`. Insert-only + skip-existing must never be weakened to an update or a blind full-range re-run — that reintroduces the sample-wipe. Supersedes the one-off `deb_garmin_hrv_backfill.sql` (ON CONFLICT DO UPDATE, unsafe).
 
-**Open questions (Garmin-adjacent).**
-- **Q133 — DONE → #263.** garth durability resolved (garth dropped; server-side block, not mere
-  deprecation). Residual: cat-and-mouse watch — bump the pin forward when Garmin next tightens
-  (TLS fingerprinting now, OAuth 1.0a retiring end-2026).
-- **Q130 — OPEN.** HRV *consumption* is still deferred: Samsung HRV migration into `hrv_readings`
-  + the `recovery.py` HRV-read rewire onto `reads/recovery_reads.canonical_hrv`. The store and
-  read-time arbitration exist (#259) but nothing reads them yet. This is the next real Garmin/HRV
-  build, and it did not move this session.
-- **Q131 — contingent.** `_SOURCE_RANK` (garmin>samsung) re-tuning, only once a single user has
-  both sources.
+**Open questions (by status, lane-relevant).**
+- **Q130 — Samsung HRV unification into `hrv_readings` + `recovery.py` rewire** — DEFERRED. This is the CONSUMPTION half of the HRV lane: `hrv_readings` is now populated by three routes (live sync, plus this export backfill) but nothing downstream reads it yet — `recovery.py` still reads the old Samsung path. This is the lane that has stood still while the ingestion side was built out four sessions running.
+- **Q133 — garth deprecated / durability of the Garmin HRV lane** — WATCH (resolved to #263 for the auth move; residual cat-and-mouse watch: bump the pin forward when Garmin next tightens, never freeze backward).
+- Full list and other lanes' questions: `OPEN_QUESTIONS.md` (canonical).
 
-**What was NOT touched (name the standing lanes).** This session, like the two before it in the
-Garmin lane, went to the *transport* (auth/deps), not to the *use* of the data. Untouched:
-- **HRV consumption (Q130)** — `recovery.py` still does not read `canonical_hrv`; the HRV pair is
-  populated-but-unconsumed. This is the load-bearing follow-on and has now been deferred across
-  #258/#259 and #263.
-- **CBT-I (Q78)** — per-user nap-cadence over-threshold starvation, OPEN and unblocked (by #219)
-  but unbuilt; no engine change this session.
-- **Frontend / product surface** — no change. The Garmin lane has no UI (operator-run scripts +
-  endpoints only).
+**What was NOT touched — name it so the next session doesn't infer more of the same.**
+Four consecutive sessions have gone to *instrumenting* the HRV lane rather than to the thing
+being instrumented. The product lanes that stood still this session:
+- **HRV consumption (Q130)** — the read-side rewire that would make any of the ingested/backfilled HRV actually reach recovery scoring. This is the natural next pick for the lane.
+- **Interpretation layer increment 2 (rephrase) → 3 (lever-tap) → 5 (go-live)** — the sequenced continuation in ROADMAP NEXT; untouched.
+- **Hub shell (#150)** — ROADMAP NEXT's operator-preferred pick; untouched. `lab_accession` is the named small alternative.
+- **Banister curves consumption / face-validity** (operator-run recomputes) — untouched.
 
-The next session that opens on "Garmin" should resist doing more transport: the durable next step
-is Q130 (consume the HRV that now flows), not further auth hardening — unless the operator's live
-login (above) fails, in which case it is a pin-forward bump, not a redesign.
+**Clearest next action.** `ROADMAP.md` NOW/NEXT is the canonical "what's next". Within the lane
+this session extended, the highest-leverage move is **Q130 — turn `hrv_readings` from a
+written-only store into a read one** (`recovery.py` rewire + Samsung migration), so the four
+sessions of ingestion work start paying out. Otherwise ROADMAP NEXT's operator-preferred pick
+is the **hub shell (#150)**, or **interpretation increment 2 (rephrase)**.
