@@ -1,71 +1,96 @@
-# Session close-out — Q130 HRV consumption MERGED (#265/#266, PR #151)
+# Session close-out — CBT-I eval-trigger test tz-skew fix MERGED (PR #154)
 
 ## Real commits this session
 
-This session's action was **merge + closeout** of the previously-held Q130 HRV consumption
-work, on the operator's explicit instruction ("merge and closeout"). The feature/migration/
-governance commits were authored in the prior turn (branch `feat/hrv-consumption`); this
-turn merged them and lands the housekeeping.
+Session-open ref: `02708d9` (master at session start — PR #153 merge). The fix was authored,
+pushed, and self-merged this session on branch `fix/cbti-eval-tz-skew` (concern-named per
+CLAUDE.md; the harness-assigned `claude/cbti-eval-trigger-tz-skew-3oo23x` was not used — it
+carried no commits and was deleted).
 
 ```
-git log --oneline (feat/hrv-consumption, merged via PR #151 → master)
-21dcee5 Merge pull request #151 from Easty11/feat/hrv-consumption
-510296c Merge branch 'master' into feat/hrv-consumption   (strict-mode branch update)
-1f12df6 gov(hrv): DECISIONS #265/#266, resolve Q130, raise Q134/Q135/Q136
-f7ff6e8 feat(hrv): source-agnostic /recovery/summary hrv block + Samsung dual-write
-07a1bf8 migrate(hrv): backfill Samsung nightly HRV into hrv_readings (Q130 Stage A)
+git log --oneline 02708d9..HEAD  (master, after the fix merge)
+846b439 Merge pull request #154 from Easty11/fix/cbti-eval-tz-skew
+2deb3a1 test(cbti): anchor eval-trigger fixtures on the engine's AEST clock
 ```
 
-- `07a1bf8` **migration** — `c1d2e3f4a5b6`, insert-only idempotent Samsung→`hrv_readings` backfill (data-only, no DDL). Runs against prod on the post-merge deploy.
-- `f7ff6e8` **feature** — `samsung_hrv.py` dual-write mirror, `recovery.py` `hrv` block, `tests/test_hrv_consumption.py`.
-- `1f12df6` **governance** — `DECISIONS_LOG` #265/#266, `OPEN_QUESTIONS` Q130→DONE + Q134/Q135/Q136, `SCHEMA.md` prose.
-- `510296c` **strict-mode update** — merged `origin/master` (the #152 closeout advance, docs-only) into the branch so the guard could re-run on the up-to-date head before merge.
-- `21dcee5` **merge** — PR #151 → master, `--merge`, branch deleted.
+- `2deb3a1` **test-only fix** — `backend/tests/test_cbti_eval_trigger.py` only (`git diff --stat`:
+  1 file, +20/-16). Imports `_today_aest` from `routers.checkin_v2` and anchors every fixture
+  date and the `successor.effective_from` assertion on it instead of naive `date.today()`; drops
+  the now-unused `date` import. No change under `routers/`, no engine change, no schema, no
+  migration.
+- `846b439` **merge** — PR #154 → master, `--merge`, branch auto-deleted on merge (required check
+  `placeholder guard (POSIX)` green; `mergeable_state: clean`; base unchanged from branch point,
+  so no strict-mode re-resolve needed). Test-only + no un-ratified decision → self-merged on
+  green per CLAUDE.md merge disposition.
 
-This close-out commit (`chore: session close-out`) lands `closeout.md`, flips the `BRANCHES.md`
-`feat/hrv-consumption` row OWED→DONE (merge `21dcee5`), and prepends #265/#266 to `CLAUDE.md`
-Recent-landings (cap-3, dropping #261), on `gov/q130-hrv-merge-closeout` (docs-only, self-merges).
+A separate governance commit (`chore: session close-out`, branch `gov/cbti-tz-skew-closeout`)
+lands this `closeout.md`, appends `OPEN_QUESTIONS` Q137, and prepends the CLAUDE.md Recent-landings
+pointer (cap-3, dropping the Garmin-auth #263 line). Docs-only → guard-gated self-merge.
 
 ## Pending-queue reconciliation
 
-No `;cc` queue. Everything the Q130 brief asked for is now LANDED on master (merge `21dcee5`):
-DECISIONS #265/#266, the `hrv` block, the Samsung dual-write, and the held backfill migration
-(now released to run on deploy). Master decision max is **266**. Nothing provisional remains in
-the repo. The one thing NOT done here — and it is not a repo write — is the **live prod
-verification**, which is the operator's step (see next section); Code holds no prod access.
+No `;cc` queue carried in. The brief was a chat proposal; everything it asked for is LANDED on
+master (merge `846b439`):
+
+- **Diagnosis verified before editing** (STEP 2 gate) — reproduced the off-by-one pre-fix (3
+  failed / 7 passed at ambient TZ, this container already skewed: AEST 2026-09-05 vs local
+  2026-09-04) and deterministically under a forced skew (`TZ=Pacific/Honolulu`, UTC−10: 3 failed).
+  The failures were exactly the day-count / `effective_from == today` assertions — the tz
+  off-by-one, not something else. Diagnosis correct; fix applies.
+- **Fix landed** — 10/10 CBT-I eval-trigger tests pass post-fix at ambient TZ, under
+  `TZ=Pacific/Honolulu`, `TZ=UTC`, and `TZ=Pacific/Kiritimati` (UTC+14). Tz-sensitivity is gone,
+  not merely aligned by today's date.
+- **Full suite** — 1282 passed, 1 skipped (with the 4 `garminconnect`-dependent modules ignored:
+  the dep requires Py≥3.12 and this container is Py3.11 — environmental, not the diff). Three
+  non-passing items are all independent of this change and reproduce identically on clean master:
+  `test_the_real_app_registers_this_handler` (+ the 4 ignored modules) fail on the `garminconnect`
+  import; `test_a_future_measurement_date_is_refused` and
+  `test_context_builder_output_unchanged_pre_post_refactor` fail on clean master with the fix
+  stashed (proven). Zero new failures from this change.
+- **Optional OPEN_QUESTIONS note** — taken up as **Q137** (OPEN): sweep other tests for the same
+  naive-`date.today()`-vs-AEST anchoring; `test_a_future_measurement_date_is_refused` flagged as a
+  concrete (unconfirmed) candidate. Deliberately NOT chased in PR #154 — separate sweep.
+
+Nothing provisional remains in the repo. No `DECISIONS_LOG` entry — the fix embodies no new
+decision (align the test clock to the engine's existing AEST clock); decision max stays **266**,
+questions max now **137**.
 
 ## Cold-resume handoff
 
-**What landed.** Q130 HRV consumption — the read-side payoff of four sessions of HRV ingestion.
-`GET /recovery/summary` now serves a source-agnostic `hrv` block from `canonical_hrv`; Samsung
-HRV is unified into `hrv_readings` via scraper dual-write + a released insert-only backfill.
-Additive — device blocks untouched.
+**What landed this session.** A test-correctness fix, nothing more. `test_cbti_eval_trigger.py`
+now shares the engine's single AEST clock (`_today_aest()`) for its fixtures and its one
+`effective_from` assertion, so the CBT-I eval-trigger suite no longer reddens whenever CI runs
+during AEST early morning (when the container's naive local date lags the AEST date). The engine
+was already correct — AEST is the user's calendar — and was not touched.
 
-**Operator verification still owed (not a code task — prod only):**
-1. Confirm the backend deploy applied migration `c1d2e3f4a5b6` (boot log `Running upgrade … c1d2e3f4a5b6` + `Application startup complete`, per #116/#121).
-2. Verify **parity** — every Samsung `passive_overnight` non-null `hrv_ms` now has a matching `hrv_readings` row (`source='samsung'`, equal `rmssd_ms`). Dry-count SQL is in the migration docstring. The migration is insert-only + idempotent, so the deploy-run is safe (worst case inserts 0).
+**Current sprint (unchanged — this session did not advance it).** The Q130 HRV consumption work
+merged last session (`#265`/`#266`, PR #151) still owns the open follow-on lane. Its live
+verification is the operator's post-merge step and remains outstanding: run the backfill migration
+`c1d2e3f4a5b6` on deploy and confirm Samsung nights mirror into `hrv_readings`. See ROADMAP NOW/NEXT.
 
-**⚠ Pre-existing red on master — NOT from this change, flagged for a follow-up.**
-`backend/tests/test_cbti_eval_trigger.py` has ~3–4 **date-dependent** failures that reproduce on
-clean `origin/master` (files identical to master; verified via a throwaway worktree). They are
-time-bomb fixtures whose hardcoded dates have expired relative to today (2026-09-04) — e.g.
-`test_eligibility_is_calendar_days_not_logged_nights`, `test_no_offer_before_the_cycle_has_elapsed`,
-`test_accept_appends_one_row_and_moves_only_the_two_permitted_columns`. The required CI check is
-only the placeholder guard, so this never blocked a merge, but master's pytest suite is not fully
-green today. **Next action candidate:** make these CBT-I fixtures relative-to-now (or freeze time),
-so the suite stops rotting with the calendar. Not minted as a Q — a test-hygiene fix, not a fork.
+**Open questions by status (post-session).**
+- **OPEN:** Q136 (`SamsungHRVReading` model constraint drift — model declares
+  `uq_samsung_hrv_user_date`, live is `uq_samsung_hrv_user_date_context`; model-only fix, no
+  migration). Q137 (new — audit tests for naive-`date.today()`-vs-AEST anchoring; lead:
+  `test_a_future_measurement_date_is_refused`).
+- **DEFERRED:** Q134 (full `/recovery/summary` restructure + `has_data` semantics — gated on
+  frontend reading the `hrv` block). Q135 (drop `samsung_hrv_readings.hrv_ms` — gated on Q134 +
+  live dual-write/backfill parity).
+- **DONE (recent):** Q130 → #265/#266, Q133 → #263.
 
-**Open questions raised by this lane (see `OPEN_QUESTIONS.md`).**
-- **Q134** — full `/recovery/summary` restructure (retire samsung-block HRV duplication + source-agnostic sleep read; decide `has_data` semantics). DEFERRED, blocks on a coordinated frontend change.
-- **Q135** — drop `samsung_hrv_readings.hrv_ms` once dual-write proven live + frontend reads the `hrv` block. DEFERRED.
-- **Q136** — `SamsungHRVReading` model constraint drift (declares `uq_samsung_hrv_user_date`, live is `uq_samsung_hrv_user_date_context`). OPEN; model-only fix, no migration.
+**Single clearest next action.** Pick one:
+1. **Q136** — smallest self-contained code fix: update `models.SamsungHRVReading`'s
+   `UniqueConstraint` to `(user_id, captured_at, context)` to match live (no migration; unblocks
+   testing the `/samsung-hrv/sync` DB path). A clean next code session.
+2. **Q137** — the tz-anchoring sweep this session's fix motivated; start by confirming whether
+   `test_a_future_measurement_date_is_refused`'s master failure is the same naive-date bug or a
+   genuine pre-existing defect.
 
-**What was NOT touched — named so the next session doesn't infer more of the same.**
-- **The frontend** — this remains backend-only; the consumption payoff isn't user-visible until health-connect-app reads the `hrv` block (Q134), which is the natural cross-surface follow-on.
-- **Interpretation layer increment 2 (rephrase) → 3 → 5** — ROADMAP NEXT; untouched.
-- **Hub shell (#150)** — ROADMAP NEXT's operator-preferred pick; untouched.
-- **Banister curves consumption / face-validity** — untouched.
-
-**Clearest next action.** Operator: verify the deploy + parity (above). Then, for the next build
-lane, `ROADMAP.md` NOW/NEXT is canonical — the HRV lane's remaining debt is the frontend read-path
-(Q134) plus the small cleanups (Q135, Q136); the CBT-I test-date rot above is a quick hygiene win.
+**What was NOT touched — named explicitly.** This was a one-file test fix; no product/feature
+work moved. The health-intelligence lanes stood still: no Fitness, Medical-Protocol, or
+Decision-Support feature work; no schema or migration; no connector or ingestion work; the Q130
+follow-on restructure (Q134/Q135) and the live HRV backfill verification did not advance. Two of
+the last few sessions have gone to instrumentation and test/governance correctness (this one; the
+Q130 merge/closeout before it) rather than to new product surface — the next session has an open
+runway for feature work if the operator wants to break that pattern, with Q136 as the low-friction
+code re-entry point.

@@ -4117,3 +4117,24 @@ Found while building the Q130 backfill (the collapse logic depends on which cons
 not fixed, to keep this brief scoped.
 
 **State:** OPEN
+
+## Q137. Audit other tests for naive `date.today()` anchoring against AEST-computing code  [OPEN]
+
+The CBT-I eval-trigger fix (PR #154) found `tests/test_cbti_eval_trigger.py` seeding fixtures on naive
+`date.today()` (container-local, ≈UTC in CI) while the engine counts elapsed days against AEST
+(`_today_aest()` = `datetime.now(Australia/Brisbane).date()`, `routers/checkin_v2.py`), so day-count and
+`effective_from` assertions went off-by-one whenever the local date lagged the AEST date — the suite
+reddened on the calendar, not on a code change. The same anti-pattern may recur wherever a test anchors
+its "now" on naive `date.today()`/`datetime.now()` but exercises code that computes "today" in AEST.
+
+Concrete lead: `tests/test_capability_observations.py::test_a_future_measurement_date_is_refused` fails on
+clean master ("DID NOT RAISE ValueError") — a future-date guard whose seed may be computed naive against an
+AEST refusal boundary (UNCONFIRMED; could also be a genuine pre-existing bug unrelated to tz). Verify before
+assuming tz.
+
+The sweep: grep tests for naive `date.today()`/`datetime.now()` used as the "now" anchor, cross-check
+against whether the exercised code uses `_today_aest()` (or otherwise computes AEST), and repoint the test
+to the engine's clock — as PR #154 did. Do NOT "fix" the engine to UTC: AEST is the user's calendar, the
+engine is correct. Scoped out of PR #154 deliberately (test-only, single concern).
+
+**State:** OPEN
