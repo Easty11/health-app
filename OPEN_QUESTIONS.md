@@ -2413,7 +2413,7 @@ Luke chose to land `#164` on the test suite and the enum artifact rather than mi
 
 ## Q78. Nap exclusion still starves a frequent napper at a 4-night cadence — needs solving before anyone else runs a block
 
-**State:** DECIDED → #262 (2026-09-02) — fork **(c) per-user cadence** chosen. **BUILD
+**State:** OWED → #262 (2026-09-02) — fork **(c) per-user cadence** chosen. **BUILD
 DEFERRED** to second-user CBT-I onboarding. **Not DONE:** no code lands, and the
 frequent-napper stall persists in the engine until (c) is built. **No longer an open fork**
 — the question (which candidate?) is answered; only the implementation waits, on a trigger
@@ -4090,7 +4090,7 @@ whether it should reflect the `hrv` block (a Garmin-only user currently reads `h
 populated `hrv` block). Requires a coordinated frontend change (health-connect-app), so it is a
 cross-surface restructure, not a backend-only edit.
 
-**State:** DEFERRED (blocks on frontend readiness to consume the `hrv` block)
+**State:** OPEN (deferred — blocks on frontend readiness to consume the `hrv` block)
 
 ## Q135. Drop `samsung_hrv_readings.hrv_ms` once dual-write is proven and the frontend reads the `hrv` block  [DEFERRED]
 
@@ -4100,7 +4100,7 @@ nights present in both tables) and the backfill has run, and (b) the frontend re
 block rather than the `samsung` block, `hrv_ms` becomes redundant and can be dropped — `samsung_hrv_readings`
 then holds sleep only. Gated on Q134 (the frontend read-path move) and on the live parity check.
 
-**State:** DEFERRED (gated on Q134 + live dual-write/backfill parity)
+**State:** OPEN (deferred — gated on Q134 + live dual-write/backfill parity)
 
 ## Q136. `SamsungHRVReading` model constraint drift — declares `uq_samsung_hrv_user_date`, live is `uq_samsung_hrv_user_date_context`  [OPEN]
 
