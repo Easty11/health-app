@@ -1,96 +1,72 @@
-# Session close-out — CBT-I eval-trigger test tz-skew fix MERGED (PR #154)
+# Code session close-out — psychological window (S4 §3), 2026-09-08
 
-## Real commits this session
+## 1. Real commits this session
 
-Session-open ref: `02708d9` (master at session start — PR #153 merge). The fix was authored,
-pushed, and self-merged this session on branch `fix/cbti-eval-tz-skew` (concern-named per
-CLAUDE.md; the harness-assigned `claude/cbti-eval-trigger-tz-skew-3oo23x` was not used — it
-carried no commits and was deleted).
+Session-open ref: `8ab5e62` (master at session start). `git log --oneline 8ab5e62..c1ad46b`:
 
 ```
-git log --oneline 02708d9..HEAD  (master, after the fix merge)
-846b439 Merge pull request #154 from Easty11/fix/cbti-eval-tz-skew
-2deb3a1 test(cbti): anchor eval-trigger fixtures on the engine's AEST clock
+c1ad46b Merge pull request #160 from Easty11/claude/psych-window-residual-nxsiyk
+3e9485e fix(psych-window): pair each predictor window with its producing formula_version
+92d06a3 gov(s4): record #267 (Q122 resolved) + §3.6/§3.4 handoff corrections
+eebbab4 feat(psych-window): residual producer + down-only life-load modulator (S4 §3, Q122)
 ```
 
-- `2deb3a1` **test-only fix** — `backend/tests/test_cbti_eval_trigger.py` only (`git diff --stat`:
-  1 file, +20/-16). Imports `_today_aest` from `routers.checkin_v2` and anchors every fixture
-  date and the `successor.effective_from` assertion on it instead of naive `date.today()`; drops
-  the now-unused `date` import. No change under `routers/`, no engine change, no schema, no
-  migration.
-- `846b439` **merge** — PR #154 → master, `--merge`, branch auto-deleted on merge (required check
-  `placeholder guard (POSIX)` green; `mergeable_state: clean`; base unchanged from branch point,
-  so no strict-mode re-resolve needed). Test-only + no un-ratified decision → self-merged on
-  green per CLAUDE.md merge disposition.
+All landed on `master` via PR #160 (merge commit `c1ad46b`); branch
+`claude/psych-window-residual-nxsiyk` merged + remote-deleted; stale local ref deleted.
+Terminal-state gate: clean — no `BRANCHES.md` row required.
 
-A separate governance commit (`chore: session close-out`, branch `gov/cbti-tz-skew-closeout`)
-lands this `closeout.md`, appends `OPEN_QUESTIONS` Q137, and prepends the CLAUDE.md Recent-landings
-pointer (cap-3, dropping the Garmin-auth #263 line). Docs-only → guard-gated self-merge.
+## 2. Pending-queue reconciliation
 
-## Pending-queue reconciliation
+No pending-commit queue was carried in — this session ran from the S4 §3 Code brief, not
+a chat `;cc` handoff. Nothing is provisional: every artifact is on `master`.
 
-No `;cc` queue carried in. The brief was a chat proposal; everything it asked for is LANDED on
-master (merge `846b439`):
+- Feature code (`backend/reads/psychological_reads.py`, `engine/selection.py`,
+  `routers/engine.py`) + tests (`backend/tests/test_psychological_window.py`, 19 tests) —
+  landed (`eebbab4`, `3e9485e`).
+- Governance: DECISIONS_LOG **#267** (Q122 resolved to the divergence/residual horn +
+  the §3.6 guard-1 void and §3.4 over-claim corrections), OPEN_QUESTIONS **Q122 → DONE →
+  #267** — landed (`92d06a3`). Number-at-merge honoured: master max was #266 at merge
+  instant (re-read immediately before merging; master had not advanced), so #267 stands.
 
-- **Diagnosis verified before editing** (STEP 2 gate) — reproduced the off-by-one pre-fix (3
-  failed / 7 passed at ambient TZ, this container already skewed: AEST 2026-09-05 vs local
-  2026-09-04) and deterministically under a forced skew (`TZ=Pacific/Honolulu`, UTC−10: 3 failed).
-  The failures were exactly the day-count / `effective_from == today` assertions — the tz
-  off-by-one, not something else. Diagnosis correct; fix applies.
-- **Fix landed** — 10/10 CBT-I eval-trigger tests pass post-fix at ambient TZ, under
-  `TZ=Pacific/Honolulu`, `TZ=UTC`, and `TZ=Pacific/Kiritimati` (UTC+14). Tz-sensitivity is gone,
-  not merely aligned by today's date.
-- **Full suite** — 1282 passed, 1 skipped (with the 4 `garminconnect`-dependent modules ignored:
-  the dep requires Py≥3.12 and this container is Py3.11 — environmental, not the diff). Three
-  non-passing items are all independent of this change and reproduce identically on clean master:
-  `test_the_real_app_registers_this_handler` (+ the 4 ignored modules) fail on the `garminconnect`
-  import; `test_a_future_measurement_date_is_refused` and
-  `test_context_builder_output_unchanged_pre_post_refactor` fail on clean master with the fix
-  stashed (proven). Zero new failures from this change.
-- **Optional OPEN_QUESTIONS note** — taken up as **Q137** (OPEN): sweep other tests for the same
-  naive-`date.today()`-vs-AEST anchoring; `test_a_future_measurement_date_is_refused` flagged as a
-  concrete (unconfirmed) candidate. Deliberately NOT chased in PR #154 — separate sweep.
+## 3. Cold-resume handoff
 
-Nothing provisional remains in the repo. No `DECISIONS_LOG` entry — the fix embodies no new
-decision (align the test clock to the engine's existing AEST clock); decision max stays **266**,
-questions max now **137**.
+**What landed.** The psychological window (S4 §3) as a read-time **residual producer** +
+down-only **life-load modulator**, resolving Q122. Migration-free; the `load_metrics`
+fail-closed psychological guard is untouched and green. Predictors read each physical
+window under its producing `formula_version` as a (window, version) pair
+(mechanical/neuromuscular=`tier0-v1`, metabolic=`metab-v1`). Life-load is wired as a
+sibling to `readiness_hint` into the existing selection re-rank — never a gate, never
+dosing. Full detail: DECISIONS_LOG #267.
 
-## Cold-resume handoff
+**Deferred follow-ons from #267 (not bugs — designed deferrals).**
+- Residual→block-level-plan **consumer** is not wired — it depends on the S4 §1
+  phase-timeline surface, which is unbuilt. The producer emits its smoothed value now.
+- Confidence-weighted cold-start ramp: build only if the N=15 hard flip proves jumpy (§5).
+- Graded (non-boolean) life-load severity: build only if the binary proves jumpy.
+- Residual→readiness promotion stays parked (§3.6 guard 2, data-gated).
 
-**What landed this session.** A test-correctness fix, nothing more. `test_cbti_eval_trigger.py`
-now shares the engine's single AEST clock (`_today_aest()`) for its fixtures and its one
-`effective_from` assertion, so the CBT-I eval-trigger suite no longer reddens whenever CI runs
-during AEST early morning (when the container's naive local date lags the AEST date). The engine
-was already correct — AEST is the user's calendar — and was not touched.
+**Discovered, out of scope — needs an operator call (tag: Likely a real gap).**
+`load_metrics.compute_load_metrics` rolls up a SINGLE `formula_version` (default
+`tier0-v1`). Metabolic `load_events` are written under `metab-v1`, so the metabolic
+Banister window is not populated by a default rollup run — the same single-version blind
+spot just fixed in the psych producer. Whether this is a defect or an intended
+"run-the-rollup-once-per-version, union at read" design depends on how load_metrics
+consumers read across formula_versions — unverified this session. Worth an OPEN_QUESTION
+if confirmed. Not touched here.
 
-**Current sprint (unchanged — this session did not advance it).** The Q130 HRV consumption work
-merged last session (`#265`/`#266`, PR #151) still owns the open follow-on lane. Its live
-verification is the operator's post-merge step and remains outstanding: run the backfill migration
-`c1d2e3f4a5b6` on deploy and confirm Samsung nights mirror into `hrv_readings`. See ROADMAP NOW/NEXT.
+**What was NOT touched (named so the queue isn't misread).** This session was one
+feature + its governance; the product lanes stood still and none of their gates moved:
+- **S4 remainder** — §1 (phase timeline) and §2 (shear/depth sub-track, gated on the
+  external Aubrey knee + provisional to training-chat scope). Separable, own briefs.
+- **Interpretation layer** (increments 2 rephrase → 3 lever-tap → 5 go-live) — ROADMAP NOW.
+- **Lab upload pipeline** (Vision extraction → confirmation → store) — hero consumer dep.
+- **Hub shell (#150)** — unblocked, the operator-preferred next pick.
+- **Appointment brief** — depends on lab pipeline + interpretation layer.
 
-**Open questions by status (post-session).**
-- **OPEN:** Q136 (`SamsungHRVReading` model constraint drift — model declares
-  `uq_samsung_hrv_user_date`, live is `uq_samsung_hrv_user_date_context`; model-only fix, no
-  migration). Q137 (new — audit tests for naive-`date.today()`-vs-AEST anchoring; lead:
-  `test_a_future_measurement_date_is_refused`).
-- **DEFERRED:** Q134 (full `/recovery/summary` restructure + `has_data` semantics — gated on
-  frontend reading the `hrv` block). Q135 (drop `samsung_hrv_readings.hrv_ms` — gated on Q134 +
-  live dual-write/backfill parity).
-- **DONE (recent):** Q130 → #265/#266, Q133 → #263.
+**Session-open maxima → now:** decisions #266 → **#267**; questions Q138 max, **Q122
+closed** (no new question opened). No FEEDBACK edits this session.
 
-**Single clearest next action.** Pick one:
-1. **Q136** — smallest self-contained code fix: update `models.SamsungHRVReading`'s
-   `UniqueConstraint` to `(user_id, captured_at, context)` to match live (no migration; unblocks
-   testing the `/samsung-hrv/sync` DB path). A clean next code session.
-2. **Q137** — the tz-anchoring sweep this session's fix motivated; start by confirming whether
-   `test_a_future_measurement_date_is_refused`'s master failure is the same naive-date bug or a
-   genuine pre-existing defect.
-
-**What was NOT touched — named explicitly.** This was a one-file test fix; no product/feature
-work moved. The health-intelligence lanes stood still: no Fitness, Medical-Protocol, or
-Decision-Support feature work; no schema or migration; no connector or ingestion work; the Q130
-follow-on restructure (Q134/Q135) and the live HRV backfill verification did not advance. Two of
-the last few sessions have gone to instrumentation and test/governance correctness (this one; the
-Q130 merge/closeout before it) rather than to new product surface — the next session has an open
-runway for feature work if the operator wants to break that pattern, with Q136 as the low-friction
-code re-entry point.
+**Single clearest next action:** pick up the **hub shell (#150)** — the operator-preferred
+next lane on ROADMAP NEXT — or, if confirming the load_metrics metabolic-rollup gap
+above is preferred first, verify how load_metrics consumers read across formula_versions
+and raise an OPEN_QUESTION.
