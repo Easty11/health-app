@@ -3452,12 +3452,12 @@ recommendation, which is the failure mode where the engine quietly stops being c
 `schedule_item` id 9 already carries a `phases` block that nothing reads. That is either the start
 of the answer or evidence the concept was reached for once and left unfinished.
 
-**The cited evidence is scheduled for removal, and this question does NOT resolve with it (#233).**
-`phases` is not a member of the validated `schedule_item` shape, so id 9's block is struck when the
+**The cited evidence has been struck (2026-09-08, Q116 backfill DONE), and this question does NOT resolve with it (#233).**
+`phases` is not a member of the validated `schedule_item` shape, so id 9's block was struck when the
 backfill runs — its content is June rehab ("hamstring grade 1 strain"), long overtaken, and nothing
 reads it. What that removes is a dead field, not the question: whether the engine needs a phase
 concept is unchanged by deleting one unread instance of a half-reached-for one. Recorded here so the
-question stops pointing at data that will not exist. The backfill itself is outstanding — see Q116.
+question no longer points at data that exists. The phase-concept design question stands; the backfill ran under Q116 (DONE 2026-09-08).
 
 **Partly blocked by `upsert_profile`'s null-guard.** A phase that cannot be cleanly unset is worse
 than no phase: a settle outliving its reason becomes a standing restriction nobody chose, which is
@@ -3722,9 +3722,9 @@ zero rows on a multi-statement paste), each paired with a positive control (`FEE
 4. zero active rows carry a `days` value outside the weekday set
 5. user 1's active count is **5**, and Thursday resolves to **1** entry (id 6), down from 4
 
-**State:** OPEN — **the loop-close for `#233`'s landed half.** Not blocking: the validator is live
+**State:** DONE — executed 2026-09-08 (operator via `railway ssh` into health-app-backend; scripts drafted chat-side, no repo writes from chat); **GATE 4 satisfied.** Stage 1 stop-condition PASS (live table matched the 2026-08-23 read exactly: 18 active across users 1:8/5:1/7:4/8:5, dup ids 1/6 on [tuesday,thursday], id 23 single, nothing added since id 79). Stage 2 backfill COMMITTED — 22 changes, **SEASON_MODE=retire** (season_end 2026-09-05 had passed by run date, so rows 1/6/8 were corrected for history then retired), single commit with an inline abort-on-delta re-check on the exact 18-id set; end-state **12 active, not the spec's 15** (retired 2/7/79 per spec + 1/6/8 season-over; conformed 10 rows across users 5/7/8; `phases` stripped from id 9, discharging Q112's cited evidence; `same_day_training`→`same_day_note` prose on 1/2). Stage 3 five assertions PASS, each with a positive control (controls fired on inactive ids 14/4 and a synthetic 'flexible'); **A5 re-derived** — the "user1 thursday = 0" predicate was mis-specified (id 5 work mon–fri legitimately includes thursday); the correct printed result holds: user1 active == {5, 9}, thursday active == [5], all rugby/physio thursday rows (1/2/6/7/79) retired — the pile-up A5 existed to catch is gone. The historical framing below (loop-close for #233's landed half; "Not blocking"; the Next-action plan) is superseded by this execution. **[Original framing follows.]** — **the loop-close for `#233`'s landed half.** Not blocking: the validator is live
 and correct, and nothing miscomputes while the legacy rows sit. Owner: Luke, or any session with
-database access. **Next action:** run the stop-condition check first, then the backfill, then the
+database access. **Next action (executed 2026-09-08 — see the DONE record above):** run the stop-condition check first, then the backfill, then the
 five assertions. Cross-refs `#233` (the shape), `Q112` (the `phases` block struck by row 9's
 correction), `Q117` (`expected_load` granularity), `FEEDBACK` `§29`/`§17`.
 
@@ -4138,3 +4138,8 @@ to the engine's clock — as PR #154 did. Do NOT "fix" the engine to UTC: AEST i
 engine is correct. Scoped out of PR #154 deliberately (test-only, single concern).
 
 **State:** OPEN
+
+
+## Q138. Session-close should sweep OWED/BLOCKED BRANCHES rows against merge/ref reality
+
+**State:** OPEN — On 2026-09-08 a session-close sweep found **6 of 10** OWED `BRANCHES` rows were stale: the named branch had a master merge commit (work long since landed) or no remote ref at all, yet the row still read OWED with an unrun loop. `feat/hub-shell` was the sharp case — OWED "NOT merged" while `001df4c` had merged it on 2026-08-02 and `#162`/`Q63` were resolved on master. The fruit/ageing scan reads the questions store only; it does not cross-check branch rows against `git`. **The ask:** a close-out check that, for every OWED (and BLOCKED) `BRANCHES` row, flags rows whose named branch (a) is absent from `origin` and (b) has its work on master — patch-id via `git cherry origin/master`, or the row's cited SHA an ancestor of master — so a landed-but-unflipped row surfaces automatically instead of waiting for a manual sweep. Not blocking; a governance-hygiene detector, kin to `scripts/check_governance_placeholders.py` but for branch-row staleness. Owner: Luke / a tooling session. Cross-refs `#123` (below-the-fold scan surface), the `stale`/`land` patch-id disposition in `CLAUDE.md`.
