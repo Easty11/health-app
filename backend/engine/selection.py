@@ -487,6 +487,7 @@ def select_next(
     profile: models.FortificationProfile | None,
     probe_queue: list[dict[str, Any]],
     readiness_hint: int | None = None,
+    life_load_bias: bool = False,
     capacity: "taxonomy.Capacity | str | None" = None,
 ) -> dict[str, Any]:
     """
@@ -543,8 +544,14 @@ def select_next(
 
     # Fortify recommendation: the primary target, with ranked vehicles.
     vehicle_bias = list(profile.vehicle_bias) if (profile and profile.vehicle_bias) else []
-    if readiness_hint is not None and readiness_hint <= 4:
-        # Re-rank toward recovery vehicles — never a gate (DECISIONS_LOG #8).
+    low_readiness = readiness_hint is not None and readiness_hint <= 4
+    # Down-side OR: two INDEPENDENT triggers into the one recovery re-rank — subjective
+    # morning readiness and the psychological-window life-load flag (S4 §3, D1). Neither
+    # reads the other; life_load_bias is a SIBLING to readiness_hint, never folded into
+    # the readiness scalar (that would inject into the readiness signal, which D1
+    # forbids). Like readiness, this only re-ranks vehicles — never a gate, never dosing
+    # (DECISIONS_LOG #8).
+    if low_readiness or life_load_bias:
         recovery = ["swim", "pilates_clinical", "hike"]
         vehicle_bias = (
             [v for v in vehicle_bias if v in recovery]
@@ -564,10 +571,17 @@ def select_next(
     }
 
     notes: list[str] = []
-    if readiness_hint is not None and readiness_hint <= 4:
+    # Both triggers surface their own reason when they fire, so the operator sees WHICH
+    # signal drove the re-rank (both, if both fired).
+    if low_readiness:
         notes.append(
             "Low subjective readiness — biasing toward recovery vehicles "
             "(switch window, not skip). This is a re-rank, never a gate."
+        )
+    if life_load_bias:
+        notes.append(
+            "Elevated life-load — pre-emptively biasing toward recovery vehicles "
+            "(switch window, not skip). Re-rank, never a gate."
         )
     if probe is None and slot_capacity is None:
         notes.append(
