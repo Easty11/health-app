@@ -10831,3 +10831,68 @@ data-gated — stays parked). Never mint a psychological Banister τ / write psy
 load_events into the rollup. Build the confidence-weighted cold-start ramp only if the N=15
 flip proves jumpy; the graded (non-boolean) life-load severity only if the binary proves jumpy.
 Wire the residual into a block prescription only once the §1 phase-timeline surface lands.
+
+---
+
+### 268. Interpretation increment 3 — lever-tap → scoped ephemeral education thread (backend spine)
+
+**Decision.** A surfaced lever in the interpretation view opens a scoped, ephemeral education
+thread, architecturally distinct from general chat, seeded with the #49 lock (marker +
+mechanism + why-surfaced + `current_state`) and fail-closed against personalised action (#47).
+Backend spine only this landing; the frontend tap surface (build-sequence step 5) is a follow-on
+(Q139), because it is a surface chat cannot verify (the unseeable-surface rule).
+
+Shape. Three seams, all under `interpretation/`, none touching `routers/chat.py`:
+- **Seed** (`education_seed.build_education_seed`) is READ from the built `build_foundation`
+  payload, never recomputed: the marker's own delta/gates (the "What Moved" reason) and the
+  per-member lever effect are the producer's fields; protocol context is
+  `meta.protocol_context_snapshot` (the single panel-dated `current_state` query, #43).
+  Tappability is STRUCTURAL — a seed builds only if the lever is I1-cited (`_citable_lever`
+  resolves), the marker's group surfaces, and the lever is in that group's `shared_levers` AND
+  acts on the tapped marker. Any miss is a structural refusal (422), never a bare thread. The
+  seed's top-level key set is frozen (`SEED_KEYS`) and asserted at construction, so a future
+  context-widening is caught by the `seed-is-scoped` eval.
+- **Thread** (`education_thread.answer_education`) is stateless (Fork A): the client holds the
+  turn history and re-sends it, so nothing persists and the thread structurally cannot reach
+  general chat history (gate 2). The model client is injected (#166), faked at transport in
+  tests. With no key or on a transport error it fails closed to the lever's authored
+  `mechanism_summary` — deterministic education.
+- **Output guard** (Fork B) is the fail-closed backstop: `contains_directive` — extracted as a
+  single shared detector from the rephrase validator's `_IMPERATIVE_VERBS`/`_DIRECTIVE_PATTERNS`
+  so the two #47 boundaries cannot drift — runs on model output; any directive/imperative is
+  replaced by a fixed deflection template, never served. The detector gained a narrow
+  leading-discourse-marker arm ("Yes, lower your dose") so an imperative behind an affirmation
+  is caught too.
+
+`POST /interpretation/education-thread` wires it, user-scoped through the same `_resolve_payload`
+as `GET /interpretation`, roles constrained to user/assistant so a request cannot inject a system
+turn. No migration (Fork A stateless) → migration-free.
+
+**Rationale.** The boundary is regulatory (#47), so it does not rest on prompt-trust: prompt
+scope carries most of it, the mechanical guard is the structural line. Stateless makes gate 2
+(distinct from chat) structural rather than a discipline. Reading the seed from the producer,
+not recomputing, keeps the surfacing reason honest and the seed narrow (#49).
+
+**Status.** Backend spine landed. Frontend tap surface deferred (Q139).
+
+**How you know.** Six new test files, all green in a py3.12 venv against the pinned requirements
+(35 targeted + 1363 full-suite pass; the single full-suite failure,
+`test_context_builder_output_unchanged_pre_post_refactor`, is a shallow-clone artifact — it
+`git show`s an absent historical blob, unrelated to this diff). The three named evals mirror
+increment 2's: `education-thread-may-not-emit-personalised-action` (directive outputs deflected,
+faithful mechanism passes), `deflection-fires-on-personalised-action-question` (a dose question
+with a directive model answer yields the deflection), `seed-is-scoped` (exact `SEED_KEYS`, no
+other marker's canonical key, factors carry only snapshot fields, no `value_num`). The guard is
+faked at transport per #166; the seed/endpoint tests build a real HPG payload through the DB.
+
+**Recorded limitation.** The directive guard was built for a single deterministic fragment; over
+a free-form multi-turn thread it is a fail-closed backstop, not a complete guarantee (same
+posture as rephrase, looser surface). Prompt scope + short mechanism-only answers carry most of
+the boundary. `current_state` in the seed makes the education stack-aware, which sharpens rather
+than loosens the line — "explain the mechanism in your stack context" must never tip into "change
+your stack," and the deflection guard is what enforces that.
+
+**Do not revisit unless.** Do not give the education thread any action capability, persistent
+history, or general-context sweep — those are general chat, and the distinction is the point of
+the increment. Add an input-side classifier only if the output guard proves leaky in practice
+(Fork B v2). Do not widen the seed beyond the #49 lock.

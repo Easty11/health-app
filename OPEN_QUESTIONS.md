@@ -4147,3 +4147,18 @@ engine is correct. Scoped out of PR #154 deliberately (test-only, single concern
 ## Q138. Session-close should sweep OWED/BLOCKED BRANCHES rows against merge/ref reality
 
 **State:** OPEN — On 2026-09-08 a session-close sweep found **6 of 10** OWED `BRANCHES` rows were stale: the named branch had a master merge commit (work long since landed) or no remote ref at all, yet the row still read OWED with an unrun loop. `feat/hub-shell` was the sharp case — OWED "NOT merged" while `001df4c` had merged it on 2026-08-02 and `#162`/`Q63` were resolved on master. The fruit/ageing scan reads the questions store only; it does not cross-check branch rows against `git`. **The ask:** a close-out check that, for every OWED (and BLOCKED) `BRANCHES` row, flags rows whose named branch (a) is absent from `origin` and (b) has its work on master — patch-id via `git cherry origin/master`, or the row's cited SHA an ancestor of master — so a landed-but-unflipped row surfaces automatically instead of waiting for a manual sweep. Not blocking; a governance-hygiene detector, kin to `scripts/check_governance_placeholders.py` but for branch-row staleness. Owner: Luke / a tooling session. Cross-refs `#123` (below-the-fold scan surface), the `stale`/`land` patch-id disposition in `CLAUDE.md`.
+
+
+## Q139. Interpretation increment 3 — frontend tap-to-thread surface (build-sequence step 5)
+
+**State:** OPEN — The backend spine of increment 3 landed (`#268`): `POST /interpretation/education-thread`,
+the scoped seed builder, the fail-closed output guard, and the three evals. What remains to make the
+feature user-complete is the increment-3 brief's **STEP 5** (the frontend; not increment 5/go-live, which is DONE): make the surfaced lever nodes in the interpretation
+view tappable, open a scoped thread panel/route distinct from general chat, POST the client-held turn
+history (Fork A stateless — re-send each call, hold no persistent history), and render the returned
+`text`/`source`/`deflected`. Deliberately split out because the frontend is a surface chat cannot verify
+(the unseeable-surface rule) — it needs its own verification against the served bundle (`#121`), not a
+backend-test green. The contract is fixed by the endpoint: `{lever_key, marker_canonical, messages[]}` in,
+a 422 structural refusal for an untappable lever, `{text, source, deflected}` out. Owner: Luke / a frontend
+session. Cross-refs `#49` (design lock), `#47` (education boundary), `#268` (the spine), and the
+"Selectable term definitions / glossary" ROADMAP row (kin surface, possible fold-in).
