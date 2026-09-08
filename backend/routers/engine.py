@@ -131,6 +131,14 @@ def _readiness_hint(db: Session, user_id: int) -> int | None:
     return None
 
 
+def _life_load_bias(db: Session, user_id: int) -> bool:
+    """Psychological-window life-load flag — a SIBLING to `_readiness_hint`, fed to the
+    same recovery re-rank (S4 §3, D1). Reads the fast life-load modulator; fail-closed
+    to False on absent data. Never gates, never touches dosing (DECISIONS_LOG #8)."""
+    from reads.psychological_reads import life_load_bias
+    return life_load_bias(user_id, db)
+
+
 # --------------------------------------------------------------------------- #
 # Routes                                                                       #
 # --------------------------------------------------------------------------- #
@@ -246,6 +254,7 @@ async def get_next(
     return selection.select_next(
         db, current_user.id, profile=p, probe_queue=queue,
         readiness_hint=_readiness_hint(db, current_user.id),
+        life_load_bias=_life_load_bias(db, current_user.id),
         capacity=capacity,
     )
 
