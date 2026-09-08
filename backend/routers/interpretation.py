@@ -17,15 +17,19 @@ the isolation against a second seeded user rather than asserting the filters exi
 """
 import os
 from datetime import date
+from typing import Literal
 
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
 from database import get_db
+from interpretation.education_seed import build_education_seed
+from interpretation.education_thread import answer_education
 from interpretation.presentation import presentation_hash, render_base_text, serialize
 from interpretation.producer import build_foundation
 from interpretation.rephrase import generate_plain
@@ -140,6 +144,59 @@ def get_presentation(
     draft = ({"id": row.id, "status": row.status, "text": row.text} if row else None)
     return {"register_requested": "plain", "register_served": "clinical",
             "payload_hash": payload_hash, "text": base_text, "draft": draft}
+
+
+class _Turn(BaseModel):
+    """One client-held thread turn. `role` is constrained to user/assistant so the request
+    can never inject a `system` turn — the system prompt is server-authored from the seed."""
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class _EducationThreadRequest(BaseModel):
+    """Increment 3, Fork A (stateless): the client holds the thread and re-sends every turn.
+    Nothing is persisted, so the thread structurally cannot reach general chat history."""
+    lever_key: str = Field(min_length=1)
+    marker_canonical: str = Field(min_length=1)
+    messages: list[_Turn] = Field(min_length=1)
+
+
+@router.post("/education-thread")
+def post_education_thread(
+    body: _EducationThreadRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Increment 3 (#49) — a scoped, ephemeral education thread for one tapped lever,
+    architecturally distinct from general chat (`routers/chat.py`): no action processors, no
+    general-context sweep, no persistent history. It explains the lever's mechanism in the
+    user's stack context and deflects personalised-action questions (#47).
+
+    The seed is the #49 lock — marker + mechanism + why-surfaced + `current_state` — read
+    from the user's own built interpretation payload. An uncited/absent lever, or one not
+    surfaced under the tapped marker, is not tappable: a 422 structural refusal, never a
+    thread. The output guard is fail-closed to a fixed deflection (`education_thread`).
+
+    Fail-closed on the model too (#202 posture): a missing `ANTHROPIC_API_KEY` or a transport
+    error serves the lever's authored mechanism — deterministic education, always safe.
+    """
+    payload = _resolve_payload(db, current_user)  # user-scoped, same read as GET /interpretation
+    result = build_education_seed(payload, body.lever_key, body.marker_canonical)
+    if not result.ok:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=result.refusal)
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    client = anthropic.Anthropic(api_key=api_key) if api_key else None
+    answer = answer_education(
+        result.seed, [t.model_dump() for t in body.messages], client=client
+    )
+    return {
+        "lever_key": body.lever_key,
+        "marker_canonical": body.marker_canonical,
+        "text": answer["text"],
+        "source": answer["source"],
+        "deflected": answer["deflected"],
+    }
 
 
 @router.post("/presentation/{rephrase_id}/promote")

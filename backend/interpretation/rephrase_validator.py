@@ -47,6 +47,12 @@ _IMPERATIVE_VERBS = {
     "check", "ask", "talk", "contact", "discuss", "speak", "try", "use", "get", "book",
     "schedule", "supplement", "eat", "drink", "exercise", "rest",
 }
+# A leading affirmation/discourse marker before an imperative — "Yes, lower your dose." The
+# imperative is not at the raw sentence start, so it is stripped before the sentence-start
+# check. Deliberately NARROW (a fixed marker + comma) so it never fires on a mid-clause
+# adjective like "Your level, lower than before, ...".
+_LEADING_DISCOURSE = re.compile(
+    r"^(?:yes|no|sure|ok|okay|well|so|right|absolutely|definitely|certainly)\s*,\s*", re.I)
 _DIRECTIVE_PATTERNS = [
     re.compile(r"\byou\s+(should|must|need to|ought to|had better|may want to|might want to)\b", re.I),
     re.compile(r"\b(consult|see|contact|talk to|speak to|ask|call)\s+(your\s+|a\s+)?"
@@ -129,6 +135,36 @@ def _numerals(text: str) -> set[float]:
     return out
 
 
+def _directive_hit(text: str) -> str | None:
+    """The single directive detector shared by `validate_rephrase` (check e) and the
+    education-thread output guard (increment 3). Returns a human-readable reason on the
+    first hit, else None, so both callers derive their boolean and their message from ONE
+    lexicon pass — the vocabulary (`_IMPERATIVE_VERBS` / `_DIRECTIVE_PATTERNS`) cannot drift
+    between the two boundaries it enforces.
+
+    A hit is either a sentence that OPENS with an imperative verb (an instruction) or any
+    advice/recommendation construction anywhere in the text. This is #47's line: no
+    personalised action.
+    """
+    for sentence in _SENTENCE_SPLIT.split(text.strip()):
+        stripped = _LEADING_DISCOURSE.sub("", sentence.strip())
+        first = (_words(stripped)[:1] or [""])[0].lower()
+        if first in _IMPERATIVE_VERBS:
+            return f"imperative-mood sentence: {sentence.strip()!r}"
+    for pat in _DIRECTIVE_PATTERNS:
+        if pat.search(text):
+            return f"directive construction: {pat.pattern!r}"
+    return None
+
+
+def contains_directive(text: str) -> bool:
+    """True iff `text` carries an imperative-mood instruction or an advice/recommendation
+    construction — the reusable boolean seam over `_directive_hit`. The education thread's
+    fail-closed output guard (increment 3, #47) calls this on free-form model output and,
+    on True, serves a fixed deflection instead of the model's text."""
+    return _directive_hit(text) is not None
+
+
 def _lexicon_hits(text: str, terms: set[str]) -> set[str]:
     low = text.lower()
     hits = set()
@@ -194,16 +230,10 @@ def validate_rephrase(source: str, candidate: str, *, censored: bool = False,
     if src_neg and not src_pos and cand_pos:
         rej.append(f"status flipped out-of-range -> in-range: {sorted(cand_pos)}")
 
-    # e. directive mood
-    for sentence in _SENTENCE_SPLIT.split(candidate.strip()):
-        first = (_words(sentence)[:1] or [""])[0].lower()
-        if first in _IMPERATIVE_VERBS:
-            rej.append(f"imperative-mood sentence: {sentence.strip()!r}")
-            break
-    for pat in _DIRECTIVE_PATTERNS:
-        if pat.search(candidate):
-            rej.append(f"directive construction: {pat.pattern!r}")
-            break
+    # e. directive mood (shared detector — see `_directive_hit`)
+    directive = _directive_hit(candidate)
+    if directive:
+        rej.append(directive)
 
     # f. priority / significance-inflation not in source
     extra_priority = sorted(_lexicon_hits(candidate, _PRIORITY_TERMS) - _lexicon_hits(source, _PRIORITY_TERMS))
