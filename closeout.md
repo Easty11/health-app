@@ -1,76 +1,105 @@
-# Code session close-out — psychological window (S4 §3), 2026-09-08
+# Code session close-out — interpretation increment 3, lever-tap education thread (backend spine), 2026-09-08
 
 ## 1. Real commits this session
 
-Session-open ref: `8ab5e62` (master at session start). `git log --oneline 8ab5e62..c1ad46b`:
+Session-open ref: `78ba22e` (master at session start). The work landed on `master` via
+PR #163 (merge commit `a20d3be`). The three commits authored this session:
 
 ```
-c1ad46b Merge pull request #160 from Easty11/claude/psych-window-residual-nxsiyk
-3e9485e fix(psych-window): pair each predictor window with its producing formula_version
-92d06a3 gov(s4): record #267 (Q122 resolved) + §3.6/§3.4 handoff corrections
-eebbab4 feat(psych-window): residual producer + down-only life-load modulator (S4 §3, Q122)
+7187d82 Merge remote-tracking branch 'origin/master' into claude/increment-3-lever-tap-thread-v12i4b
+f2bbc7b gov(interpretation): record increment 3 spine — #268, Q139, ROADMAP + landings
+3f66340 feat(interpretation): increment 3 backend spine — lever-tap scoped education thread
 ```
 
-All landed on `master` via PR #160 (merge commit `c1ad46b`); branch
-`claude/psych-window-residual-nxsiyk` merged + remote-deleted; stale local ref deleted.
-Terminal-state gate: clean — no `BRANCHES.md` row required.
+`7187d82` is the base-catch-up merge: master advanced from `78ba22e` to `eba212f` (PR #162
++ a closeout chore, both governance/closeout only) mid-session, so `origin/master` was merged
+into the branch before landing — clean, no conflicts (only `closeout.md` came in). Master's
+maxima were re-read at that point and again immediately before the merge (decisions #267,
+questions Q138, unchanged), so `#268`/`Q139` were resolved without collision.
+
+Merge path (#171): draft flipped ready-for-review, then `gh`-equivalent `--merge` (GitHub MCP
+`merge_pull_request`, method `merge`) pinned to head `7187d82`. Branch merged + remote-deleted;
+stale local ref discarded this close-out. Terminal-state gate: clean — `git cherry origin/master`
+empty, no `BRANCHES.md` row required.
 
 ## 2. Pending-queue reconciliation
 
-No pending-commit queue was carried in — this session ran from the S4 §3 Code brief, not
+No pending-commit queue was carried in — this session ran from the increment-3 Code brief, not
 a chat `;cc` handoff. Nothing is provisional: every artifact is on `master`.
 
-- Feature code (`backend/reads/psychological_reads.py`, `engine/selection.py`,
-  `routers/engine.py`) + tests (`backend/tests/test_psychological_window.py`, 19 tests) —
-  landed (`eebbab4`, `3e9485e`).
-- Governance: DECISIONS_LOG **#267** (Q122 resolved to the divergence/residual horn +
-  the §3.6 guard-1 void and §3.4 over-claim corrections), OPEN_QUESTIONS **Q122 → DONE →
-  #267** — landed (`92d06a3`). Number-at-merge honoured: master max was #266 at merge
-  instant (re-read immediately before merging; master had not advanced), so #267 stands.
+- Feature code — `backend/interpretation/education_seed.py`, `education_thread.py`,
+  the `contains_directive` extraction in `rephrase_validator.py`, and
+  `POST /interpretation/education-thread` in `routers/interpretation.py`, with six test files
+  (three named evals + transport-faked unit + DB-backed seed/endpoint) — landed (`3f66340`).
+- Governance — DECISIONS_LOG **#268** (increment-3 spine; Forks A/B, #49 lock, recorded guard
+  limitation), OPEN_QUESTIONS **Q139** (frontend tap surface deferred), ROADMAP increment-3 row
+  (spine DONE / frontend deferred), CLAUDE.md Recent-landings pointer — landed (`f2bbc7b`).
+  Number-at-merge honoured: #267/Q138 was master's max at the merge instant, so #268/Q139 stand.
+
+Operator action mid-session: Luke said "merge" — resolving the merge-posture fork (see §3) in
+favour of landing this PR. Not a standing ruling; the fork itself is still open.
 
 ## 3. Cold-resume handoff
 
-**What landed.** The psychological window (S4 §3) as a read-time **residual producer** +
-down-only **life-load modulator**, resolving Q122. Migration-free; the `load_metrics`
-fail-closed psychological guard is untouched and green. Predictors read each physical
-window under its producing `formula_version` as a (window, version) pair
-(mechanical/neuromuscular=`tier0-v1`, metabolic=`metab-v1`). Life-load is wired as a
-sibling to `readiness_hint` into the existing selection re-rank — never a gate, never
-dosing. Full detail: DECISIONS_LOG #267.
+**What landed.** The **backend spine** of interpretation build-sequence increment 3 (#268):
+a surfaced lever opens a scoped, ephemeral education thread, architecturally distinct from
+general chat, seeded with the #49 lock (marker + mechanism + why-surfaced + `current_state`)
+and fail-closed against personalised action (#47). Three seams under `interpretation/`, none
+touching `routers/chat.py`:
+- **`education_seed.py`** — seed READ from the built `build_foundation` payload, never
+  recomputed. Tappability is structural (I1-cited lever via `_citable_lever`, surfaced group,
+  lever acts on the tapped marker) → else a 422 structural refusal. `SEED_KEYS` frozen and
+  asserted at construction.
+- **`education_thread.py`** — stateless (Fork A: client holds turns, re-sends each call →
+  gate 2 structural, migration-free), injected client faked at transport (#166), fail-closed to
+  the authored `mechanism_summary` on no-key/transport-error and to a fixed deflection on a
+  directive hit.
+- **`rephrase_validator.contains_directive`** — one shared #47 directive detector extracted
+  from `_IMPERATIVE_VERBS`/`_DIRECTIVE_PATTERNS` (+ a narrow leading-discourse-marker arm,
+  "Yes, lower your dose"), so the two boundaries can't drift.
+- **`POST /interpretation/education-thread`** — user-scoped through the same `_resolve_payload`
+  as `GET /interpretation`; request roles constrained to user/assistant. Full detail: #268.
 
-**Deferred follow-ons from #267 (not bugs — designed deferrals).**
-- Residual→block-level-plan **consumer** is not wired — it depends on the S4 §1
-  phase-timeline surface, which is unbuilt. The producer emits its smoothed value now.
-- Confidence-weighted cold-start ramp: build only if the N=15 hard flip proves jumpy (§5).
-- Graded (non-boolean) life-load severity: build only if the binary proves jumpy.
-- Residual→readiness promotion stays parked (§3.6 guard 2, data-gated).
+Tests: 35 targeted green + 1363 full-suite in a py3.12 venv against pinned requirements. The
+one full-suite failure, `test_context_builder_output_unchanged_pre_post_refactor`, is a
+**shallow-clone artifact** — it `git show`s absent commit `3360ed5`; unrelated to this diff,
+green in CI with full history.
 
-**Discovered, then VERIFIED as NOT a gap (2026-09-08).** An earlier draft of this
-handoff flagged `load_metrics.compute_load_metrics`'s single-`formula_version` rollup as
-a possible metabolic blind spot. Traced end to end — it is not. The single-version
-rollup is the intended per-version design: `metabolic_cascade.run_metabolic_cascade`
-(fired on every aerobic ingest — Polar import-export + sync) calls
-`compute_load_metrics(..., formula_version='metab-v1')`, rolling metabolic into its own
-`(metab-v1 / banister-v1)` `load_metrics` rows — idempotent, never touching the
-`tier0-v1` strength series — and the consumer `mcp_server.get_training_load` reads that
-lane by its own `(formula_version, metrics_version, load_window)`. Metabolic is populated
-AND consumed, end to end. No OPEN_QUESTION, no action. The psych producer's
-`(window, version)` pairing was still the right fix THERE and only there: it fuses all
-three windows into one ridge in a single read, so it alone must span both versions;
-`load_metrics` keeps the lanes separate by design.
+**Current sprint (ROADMAP interpretation lane).** Build sequence `2 → 3 → 5`: increment 2
+(rephrase) DONE #202, increment 5 (go-live) DONE #194, increment 3 spine DONE #268. The
+interpretation lane's remaining piece is **increment 3's frontend** (Q139).
 
-**What was NOT touched (named so the queue isn't misread).** This session was one
-feature + its governance; the product lanes stood still and none of their gates moved:
-- **S4 remainder** — §1 (phase timeline) and §2 (shear/depth sub-track, gated on the
-  external Aubrey knee + provisional to training-chat scope). Separable, own briefs.
-- **Interpretation layer** (increments 2 rephrase → 3 lever-tap → 5 go-live) — ROADMAP NOW.
-- **Lab upload pipeline** (Vision extraction → confirmation → store) — hero consumer dep.
-- **Hub shell (#150)** — unblocked, the operator-preferred next pick.
-- **Appointment brief** — depends on lab pipeline + interpretation layer.
+**Open questions (grouped).**
+- **OWED-shaped / next-action:** **Q139** — increment-3 frontend tap-to-thread surface (the
+  brief's STEP 5, not increment 5/go-live). Endpoint contract is fixed; needs served-bundle
+  verification of its own (unseeable-surface rule, #121). This is the single clearest next
+  action to make the feature user-complete.
+- **OPEN (interpretation-adjacent):** the "Selectable term definitions / glossary" ROADMAP row
+  (Luke's go-live O2 ask; kin to Q139, possible fold-in).
+- **OPEN (unrelated lanes, untouched this session):** Q136 (Samsung HRV constraint drift),
+  Q137 (naive-`date.today()`-vs-AEST test sweep), Q138 (session-close BRANCHES-row staleness
+  detector).
 
-**Session-open maxima → now:** decisions #266 → **#267**; questions Q138 max, **Q122
-closed** (no new question opened). No FEEDBACK edits this session.
+**Single clearest next action.** Build increment-3's frontend (Q139): make surfaced lever nodes
+in the interpretation view tappable, open a scoped thread panel distinct from general chat, POST
+the client-held turn history to `/interpretation/education-thread`, render `{text, source,
+deflected}`. Verify against the served bundle, not backend tests alone.
 
-**Single clearest next action:** pick up the **hub shell (#150)** — the operator-preferred
-next lane on ROADMAP NEXT. (The load_metrics metabolic-rollup question raised in an
-earlier draft is resolved above: verified not a gap, no action.)
+**What was NOT touched (named explicitly).**
+- **Increment-3 frontend (Q139)** — the feature is NOT user-complete; the backend spine has no
+  UI. This is the deliberate split, but it means a real user still cannot tap a lever.
+- **Fitness / Medical-Protocol / Decision-Support product lanes** — the hub shell (#150),
+  `lab_accession`, the CBT-I user surface (Q60), and the psychological-window block-plan consumer
+  (the deferred S4 §1 surface) all stood still. None moved this session.
+- **Governance debt untouched:** Q136, Q137, Q138 remain OPEN with no progress.
+- **The merge-posture fork is unresolved and load-bearing.** CLAUDE.md's shared merge disposition
+  says Code self-merges green PRs; repo-specific #176 says "code and schema changes always take
+  full human review." They read opposite for a code PR. This session did NOT self-merge — it held
+  for Luke, who then said "merge." That resolved THIS PR, not the rule. The next Code session will
+  re-face the same fork on the next code PR unless a one-line DECISIONS_LOG ruling settles it. Flag
+  it to chat for ratification rather than deciding it in-code.
+
+**Altitude note (instrument vs product).** This session went to product (a shipped feature), not
+instrument — a change from the recent run. But it shipped only the backend half; the user-facing
+half (Q139) is now the legible next step. Do not let the next session read "increment 3 DONE" off
+the Recent-landings line and skip the frontend — the line says *spine*, and Q139 is the rest.
