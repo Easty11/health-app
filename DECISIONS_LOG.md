@@ -10753,3 +10753,75 @@ evidence stops at fixtures.
 **Do not revisit unless.** Never weaken insert-only + NOT-EXISTS to an update or a blind
 full re-copy - that risks touching live-synced/dual-written rows. Dropping hrv_ms (Q135) or
 the full read-path restructure (Q134) are the sanctioned next moves.
+
+
+---
+
+### 267. Q122 resolved — psychological window is a RESIDUAL (divergence criterion), not a Banister stock; readiness re-ranks and never gates
+Q122 asked whether the psychological window is a Banister EWMA fitness/fatigue stock or a
+divergence criterion. RESOLVED to the divergence horn (S4 §3). The window is a read-time
+RESIDUAL producer plus a fast LIFE-LOAD modulator, in `backend/reads/psychological_reads.py`
+(mirrors recovery_reads/aerobic_reads: query helper + pure core, no schema, derived-never-
+persisted). It builds NO psychological Banister pair — the load_metrics fail-closed guard
+(no `psychological` fatigue-τ key) STAYS, and psychological load_events are never a predictor
+of their own residual (exclusivity).
+
+Construction. actual_sRPE(day) = session_rpe × duration_min (duration resolved at read from
+aerobic_sessions.duration_minutes + hevy_workouts end−start, summed per AEST day — no new
+column, migration-free, D4). predicted_sRPE = ridge over the day's per-window `daily_load`
+IMPULSE (mechanical/metabolic/neuromuscular sum of that day's load_events — the acute impulse
+that feeds Banister, NOT the fitness/fatigue stocks: regressing out the stock would erase the
+decoupling the residual exists to catch, D3). residual = actual − predicted (positive = felt
+harder than objective load predicts). One τ on the residual (~7 d EWMA); no fitness/fatigue τ
+pair anywhere. Cold-start HARD FLIP at N=15 paired days (session_rpe present AND duration
+resolvable); below → life-load-only mode, no residual; no confidence-weighted ramp. Per-day
+grain (D2); a multi-session day is flagged (`multi_session_days`), never averaged under one
+RPE (gate 5). RIDGE, not OLS (collinear predictors), closed form on standardised predictors
+with an unpenalised intercept, λ=1.0.
+
+Life-load modulator. A down-only boolean `life_load_bias` — EWMA (fast, days-τ) of a combined
+psychosocial-stress (daily_records.life_load) + poor-sleep (canonical TST = daily_records.
+passive_sleep_min, the frozen #254 true-TST snapshot; read once, no second estimate, never
+fed to a physical window) severity, True above a threshold constant, FAIL-CLOSED to False on
+absent data. Routed (D1, ratified 2026-09-08) as a SIBLING to `readiness_hint` into the
+EXISTING selection re-rank (`engine/selection.select_next`): a down-side OR fires the recovery-
+vehicle reorder on `readiness_hint ≤ 4` OR `life_load_bias`; neither reads the other, and
+`life_load_bias` never mutates the readiness scalar nor touches `_dosing`. Residual→block-plan
+consumer is DEFERRED (that surface, S4 §1, is unbuilt) — the producer emits its smoothed value
+and stubs no fake consumer.
+
+Two handoff corrections recorded so the rewrite is on the record (S4 ANCHOR). (a) §3.6 guard-1
+is VOID: it assumed objective sleep reaches readiness via the recovery path, so life-load's
+sleep would double-count. FALSE against master — `calc_naive_baseline` is pure self-report
+(sleep_quality/fatigue/soreness/motivation); objective HRV/sleep are displayed and fed to the
+coaching LLM as narrative, never as score terms. There is no objective sleep in the readiness
+score to double-count. (b) §3.4 over-claims: readiness NEVER gates (DECISIONS_LOG #8) —
+`_readiness_hint` only re-ranks vehicles toward recovery when ≤4. So the window's realisable
+daily lever is the re-rank / down-bias path, not gating prescribed load. Also corrected: the
+brief assumed numpy "already used by the load transforms"; it is NOT a repo dependency
+(load_metrics uses `math`), so the 3-predictor ridge is pure Python — no new dependency (gate 4).
+
+**Status.** DONE (code) — `reads/psychological_reads.py` (producer + modulator), the
+`life_load_bias` sibling param + note in `engine/selection.py`, and the `_life_load_bias`
+caller in `routers/engine.py`. Migration-free (no schema), so the S4 merge-gate exception
+applies; this remote-harness PR still takes full human review. Resolves Q122.
+
+**How you know.** tests/test_psychological_window.py (18 tests, all green): ridge centres
+residuals on a linear signal and flags a decoupled high-RPE/low-load day with a positive
+residual; zero-variance column no-ops; time-aware EWMA weights recency across gaps; cold-start
+returns None below 15 and residual on at 15; an unpaired (no-duration) rpe day is excluded;
+GATE 2 — a psychological load_event does not move the residual while a mechanical one on the
+identically-seeded control does; GATE 5 — a two-session day lands in multi_session_days;
+life_load_bias fails closed to False with no data, fires on sustained high stress + poor sleep,
+reads canonical sleep alone when stress is absent; the selection re-rank fires on life_load_bias
+independently of readiness, surfaces both reasons when both fire, is a byte-identical no-op when
+False (down-only), and leaves dosing untouched. Full suite 1301 passed (2 pre-existing garmin-
+env failures unrelated: garminconnect 0.3.11 needs py3.12, absent in the local py3.11 venv).
+The load_metrics fail-closed guard (test_fail_closed_psychological_window_never_computed) stays
+green — this producer touches neither load_metrics nor the Banister rollup.
+
+**Do not revisit unless.** Never promote the residual to the readiness score (§3.6 guard 2,
+data-gated — stays parked). Never mint a psychological Banister τ / write psychological
+load_events into the rollup. Build the confidence-weighted cold-start ramp only if the N=15
+flip proves jumpy; the graded (non-boolean) life-load severity only if the binary proves jumpy.
+Wire the residual into a block prescription only once the §1 phase-timeline surface lands.

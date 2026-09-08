@@ -3880,7 +3880,11 @@ per-session sRPE captured alongside objective load — a check-in-lane field. Re
 is built; until then the window is schema-present, compute-absent (fail-closed — the fatigue-τ table in
 `load_metrics.py` has no `psychological` key, so a psychological load_event produces no metric row).
 
-**State:** OPEN
+**State:** DONE → #267. Resolved to the divergence-criterion horn: a read-time residual producer
+(ridge of actual sRPE = session_rpe×duration vs the per-day per-window `daily_load` impulse; one ~7 d
+τ on the residual, cold-start hard flip at N=15) plus a down-only life-load modulator wired as a
+sibling to `readiness_hint` in the selection re-rank. No Banister τ; the `load_metrics` fail-closed
+guard stays. `sRPE` ingestion prerequisite met by `daily_records.session_rpe`. See DECISIONS_LOG #267.
 
 ## Q123. Zone-less aerobic sessions — calibrated Banister-TRIMP mapping vs permanent skip
 
