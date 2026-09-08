@@ -10777,7 +10777,10 @@ pair anywhere. Cold-start HARD FLIP at N=15 paired days (session_rpe present AND
 resolvable); below → life-load-only mode, no residual; no confidence-weighted ramp. Per-day
 grain (D2); a multi-session day is flagged (`multi_session_days`), never averaged under one
 RPE (gate 5). RIDGE, not OLS (collinear predictors), closed form on standardised predictors
-with an unpenalised intercept, λ=1.0.
+with an unpenalised intercept, λ=1.0. Each window is read under its PRODUCING formula_version
+as a (window, version) pair — mechanical/neuromuscular under tier0-v1 (load_events.FORMULA_
+VERSION), metabolic under metab-v1 (load_events_metabolic.FORMULA_VERSION_METABOLIC) — never a
+single-version filter (which silently drops metabolic) and never a cross-version sum.
 
 Life-load modulator. A down-only boolean `life_load_bias` — EWMA (fast, days-τ) of a combined
 psychosocial-stress (daily_records.life_load) + poor-sleep (canonical TST = daily_records.
@@ -10806,17 +10809,20 @@ brief assumed numpy "already used by the load transforms"; it is NOT a repo depe
 caller in `routers/engine.py`. Migration-free (no schema), so the S4 merge-gate exception
 applies; this remote-harness PR still takes full human review. Resolves Q122.
 
-**How you know.** tests/test_psychological_window.py (18 tests, all green): ridge centres
+**How you know.** tests/test_psychological_window.py (19 tests, all green): ridge centres
 residuals on a linear signal and flags a decoupled high-RPE/low-load day with a positive
 residual; zero-variance column no-ops; time-aware EWMA weights recency across gaps; cold-start
 returns None below 15 and residual on at 15; an unpaired (no-duration) rpe day is excluded;
 GATE 2 — a psychological load_event does not move the residual while a mechanical one on the
-identically-seeded control does; GATE 5 — a two-session day lands in multi_session_days;
-life_load_bias fails closed to False with no data, fires on sustained high stress + poor sleep,
-reads canonical sleep alone when stress is absent; the selection re-rank fires on life_load_bias
-independently of readiness, surfaces both reasons when both fire, is a byte-identical no-op when
-False (down-only), and leaves dosing untouched. Full suite 1301 passed (2 pre-existing garmin-
-env failures unrelated: garminconnect 0.3.11 needs py3.12, absent in the local py3.11 venv).
+identically-seeded control does; a metabolic load_event under metab-v1 both surfaces in
+_daily_load_by_window and moves the residual vs a metabolic-free control (the version-pairing
+regression — a single tier0-v1 filter returned 0 metabolic rows, proven before/after); GATE 5 —
+a two-session day lands in multi_session_days; life_load_bias fails closed to False with no
+data, fires on sustained high stress + poor sleep, reads canonical sleep alone when stress is
+absent; the selection re-rank fires on life_load_bias independently of readiness, surfaces both
+reasons when both fire, is a byte-identical no-op when False (down-only), and leaves dosing
+untouched. Full suite 1302 passed (2 pre-existing garmin-env failures unrelated: garminconnect
+0.3.11 needs py3.12, absent in the local py3.11 venv).
 The load_metrics fail-closed guard (test_fail_closed_psychological_window_never_computed) stays
 green — this producer touches neither load_metrics nor the Banister rollup.
 

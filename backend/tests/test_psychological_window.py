@@ -201,6 +201,42 @@ def test_gate2_psychological_load_event_is_never_a_predictor(db_session):
     assert r2.latest_residual != pytest.approx(control.latest_residual, abs=1e-6)
 
 
+def test_metabolic_under_metab_v1_enters_the_fit(db_session):
+    """Regression (review): metabolic load_events are written under
+    FORMULA_VERSION_METABOLIC ('metab-v1') — NOT the tier0-v1 that mechanical/
+    neuromuscular carry. A single-version filter dropped the metabolic predictor
+    entirely (its column stayed all-zero). Prove (a) the (window, version) pairing
+    surfaces metabolic load, and (b) it actually enters the ridge — the residual moves
+    versus an identically-seeded, metabolic-free control."""
+    from reads.psychological_reads import _daily_load_by_window
+    from load_events_metabolic import FORMULA_VERSION_METABOLIC, WINDOW_METABOLIC
+
+    _user(db_session, uid=1)
+    _user(db_session, uid=2, email="ctl@x.com")
+    for uid in (1, 2):
+        _seed_paired_days(db_session, 15, uid=uid, rpe_of=lambda i: 4.0 + i * 0.1,
+                          load_of=lambda i: 60.0 + i * 4.0)
+    last = date.fromordinal(date(2026, 6, 1).toordinal() + 14)
+    # A metabolic load_event under metab-v1 on user 1's latest paired day only.
+    db_session.add(models.LoadEvent(
+        user_id=1, source="aerobic", source_ref="aero-last", load_window=WINDOW_METABOLIC,
+        occurred_at=_utc_noon(last), load=400.0, unit="au",
+        formula_version=FORMULA_VERSION_METABOLIC,
+    ))
+    db_session.commit()
+
+    # (a) the pairing surfaces it (the pre-fix single-version filter returned nothing).
+    by_day = _daily_load_by_window(db_session, 1)
+    assert by_day[last].get("metabolic") == 400.0
+
+    # (b) it enters the fit — user 1's latest residual differs from the metabolic-free
+    # control seeded identically otherwise.
+    r1 = psychological_residual(1, db_session, as_of=date(2026, 7, 1))
+    ctl = psychological_residual(2, db_session, as_of=date(2026, 7, 1))
+    assert r1 is not None and ctl is not None
+    assert r1.latest_residual != pytest.approx(ctl.latest_residual, abs=1e-6)
+
+
 def test_gate5_multi_session_day_is_flagged_not_averaged(db_session):
     """A day with two sessions is recorded in `multi_session_days`, and its duration is
     SUMMED (not averaged) into actual_sRPE."""

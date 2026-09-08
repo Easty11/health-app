@@ -51,20 +51,34 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 import models
+from load_events import FORMULA_VERSION as _FV_STRENGTH, WINDOW_MECHANICAL, WINDOW_NEUROMUSCULAR
+from load_events_metabolic import FORMULA_VERSION_METABOLIC as _FV_METABOLIC, WINDOW_METABOLIC
 from load_metrics import _local_day  # identical AEST day-bucketing as the Banister rollup
 
 # ---------------------------------------------------------------------------
 # REASONED-PRIOR constants — calibratable, never magic numbers (S4 §3.5/§3.7).
 # ---------------------------------------------------------------------------
 
-# The physical windows whose per-day `daily_load` impulse are the ridge predictors.
+# The physical windows whose per-day `daily_load` impulse are the ridge predictors,
+# each PAIRED with the formula_version its producing transform writes. These are NOT
+# one version: the Hevy transform writes mechanical + neuromuscular under `tier0-v1`
+# (load_events.FORMULA_VERSION) while the aerobic transform writes metabolic under
+# `metab-v1` (load_events_metabolic.FORMULA_VERSION_METABOLIC). Filtering on a single
+# version therefore SILENTLY drops a whole window — metabolic never entered the fit —
+# so we match the (window, version) PAIR and never sum a window across versions.
+# Imported from the transforms so a version bump there cannot drift this pairing.
 # `psychological` is DELIBERATELY absent — it is never a predictor of its own residual
 # (exclusivity, gate 2), mirroring load_metrics' fail-closed window allowlist.
-PREDICTOR_WINDOWS: tuple[str, ...] = ("mechanical", "metabolic", "neuromuscular")
+PREDICTOR_WINDOW_VERSIONS: dict[str, str] = {
+    WINDOW_MECHANICAL: _FV_STRENGTH,
+    WINDOW_METABOLIC: _FV_METABOLIC,
+    WINDOW_NEUROMUSCULAR: _FV_STRENGTH,
+}
+PREDICTOR_WINDOWS: tuple[str, ...] = tuple(PREDICTOR_WINDOW_VERSIONS)
 
 # Ridge penalty. Predictors are standardised (z-scored) before the fit, so λ is
 # scale-invariant and a mild λ=1.0 is the standard small-N default: enough to tame the
@@ -210,23 +224,29 @@ def _aest_today() -> date:
     return datetime.now(pytz.timezone("Australia/Brisbane")).date()
 
 
-def _daily_load_by_window(
-    db: Session, user_id: int, *, formula_version: str = "tier0-v1"
-) -> dict[date, dict[str, float]]:
+def _daily_load_by_window(db: Session, user_id: int) -> dict[date, dict[str, float]]:
     """AEST-day → {physical window → Σ daily_load} from `load_events`.
 
     Reads `load_events` ONLY (never raw Hevy/aerobic payloads — same discipline as
     load_metrics) and buckets to the user-local day with the IDENTICAL `_local_day`
     rule, so this residual's predictors sit on the same calendar as the Banister rollup.
-    Restricted to PREDICTOR_WINDOWS: a psychological load_event never enters as a
-    predictor (gate 2). Undated events cannot be placed on a day and are skipped.
+
+    Matches each window to its PRODUCING formula_version (PREDICTOR_WINDOW_VERSIONS) as
+    a (window, version) pair — mechanical/neuromuscular under tier0-v1, metabolic under
+    metab-v1. A window is summed only within its own version, never across versions, and
+    a window whose events sit under a different version than expected simply do not enter
+    (they are not this window's canonical load). A psychological load_event never enters
+    as a predictor (gate 2). Undated events cannot be placed on a day and are skipped.
     """
+    pair_filter = or_(*[
+        and_(models.LoadEvent.load_window == w, models.LoadEvent.formula_version == v)
+        for w, v in PREDICTOR_WINDOW_VERSIONS.items()
+    ])
     events = db.execute(
         select(models.LoadEvent).where(
             models.LoadEvent.user_id == user_id,
-            models.LoadEvent.formula_version == formula_version,
             models.LoadEvent.occurred_at.is_not(None),
-            models.LoadEvent.load_window.in_(PREDICTOR_WINDOWS),
+            pair_filter,
         )
     ).scalars().all()
     out: dict[date, dict[str, float]] = defaultdict(lambda: defaultdict(float))
