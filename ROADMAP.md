@@ -57,6 +57,8 @@ A group surfaces if any member trips any gate, which routes it to What Moved rat
 
 _Live, undated — no external date orders these; pick by readiness._
 
+**SUPERSEDED (2026-09-08).** Stale as of this date: increments **2 (rephrase, #202)** and **5 (go-live, #194)** are DONE; **increment 3 backend spine landed (#268)** with **Q139 (frontend)** queued; the **hub shell (#150) is BUILT (#162)**, not a next pick (see the #150 row below). Current what's-next: **Q139** to complete increment 3, else the ROADMAP NEXT rows / dated NOW items. Historic 2026-08-02 note retained:
+
 **Post-1b next lanes (2026-08-02 reconciliation).** `ROADMAP.md` is the single canonical answer to "what's next" (per the canonical-stores table); the committed close-out's next-action and any chat proposal are candidates until promoted here. With 1b delivered, the interpretation lane's sequenced continuation remains increments **2 (rephrase) -> 3 (lever-tap) -> 5 (go-live)** in the build-sequence block above. Separately, the **hub shell (#150)** is now unblocked and is the operator-preferred next pick, with **`lab_accession`** as the strongest small alternative — both queued as rows below. Dated NOW items still precede these.
 
 | Item | Notes |
