@@ -280,11 +280,11 @@ class KnowledgeEntryOut(BaseModel):
 RESOLVED_BY_VALUES = ("user", "clinician")
 
 
-class InjuryResolutionIn(BaseModel):
-    """The operator's answer to "is this still true?". `basis` is mandatory and
-    free text: a resolution with no stated grounds is the thing that later reads as
-    an accident. `resolved_on` defaults to today rather than being required, since
-    the common case is resolving something as of now."""
+class ResolutionIn(BaseModel):
+    """The operator's answer to "is this still true?", for any resolvable entry type.
+    `basis` is mandatory and free text: a resolution with no stated grounds is the
+    thing that later reads as an accident. `resolved_on` defaults to today rather than
+    being required, since the common case is resolving something as of now."""
     basis: str
     resolved_by: str
     resolved_on: date | None = None
@@ -602,10 +602,88 @@ def expire_stale(
     return {"expired": count}
 
 
+# Human label per resolvable type, used to build the 404/409 details. The type
+# scope is the deliberate cross-type 404-leak defence (see `_resolve_entry`); the
+# label keeps each route's refusals named for its own type.
+_RESOLVE_LABELS = {
+    "injury": "Injury entry",
+    "schedule_item": "schedule_item entry",
+}
+
+
+def _resolve_entry(
+    entry_id: int,
+    body: ResolutionIn,
+    entry_type: str,
+    user_id: int,
+    db: Session,
+) -> models.UserKnowledgeEntry:
+    """Retire one entry of `entry_type`: it is no longer true. The shared body behind
+    the per-type resolve routes (injury, schedule_item).
+
+    THE TYPE SCOPE IS A DELIBERATE 404-LEAK DEFENCE. The query filters on
+    `type=entry_type` as well as the caller, so a resolve route can only ever retire a
+    row of its OWN type: an injury id reached through the schedule route (or the
+    reverse) is a 404 that reveals nothing about whether that id exists under some
+    other type, exactly as another user's id does. This is why the routes stay
+    per-type and are NOT generalised into one `/entry/{id}/resolve` — the type in the
+    path IS the boundary.
+
+    RESOLUTION IS NOT SUPERSESSION. Both terminal states set `active=False`, but
+    supersession names its successor in `superseded_by`; resolution has no successor,
+    so `superseded_by` stays untouched (null for a first-time terminal row).
+
+    NEVER DELETES. The row is retained with its `resolution` block — a resolved fact
+    is still context for the next decision.
+    """
+    label = _RESOLVE_LABELS[entry_type]
+    if body.resolved_by not in RESOLVED_BY_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"resolved_by must be one of: {', '.join(RESOLVED_BY_VALUES)}",
+        )
+    if not body.basis.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="basis is required — a resolution must state its grounds",
+        )
+
+    entry = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(id=entry_id, user_id=user_id, type=entry_type)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{label} not found")
+    if not entry.active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{label} is already inactive — resolving twice is an error, not a no-op",
+        )
+
+    # REASSIGN, never mutate in place: the column is a plain `JSON`, not a
+    # `MutableDict`, so an in-place `entry.value["resolution"] = ...` is not seen by
+    # the unit of work and is silently dropped at commit. Tested by reading the row
+    # back from a fresh query rather than from the in-session identity map.
+    entry.value = {
+        **(entry.value or {}),
+        "resolution": {
+            "resolved_on": str(body.resolved_on or date.today()),
+            "basis": body.basis,
+            "resolved_by": body.resolved_by,
+        },
+    }
+    entry.active = False
+    # `superseded_by` is deliberately left untouched — resolution has no successor.
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
 @router.post("/injuries/{entry_id}/resolve", response_model=KnowledgeEntryOut)
 def resolve_injury(
     entry_id: int,
-    body: InjuryResolutionIn,
+    body: ResolutionIn,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -629,47 +707,34 @@ def resolve_injury(
     NEVER DELETES. The row is retained with its `resolution` block; a resolved
     hamstring tear is still a fact about the user and still context for the next one.
     """
-    if body.resolved_by not in RESOLVED_BY_VALUES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"resolved_by must be one of: {', '.join(RESOLVED_BY_VALUES)}",
-        )
-    if not body.basis.strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="basis is required — a resolution must state its grounds",
-        )
+    return _resolve_entry(entry_id, body, "injury", current_user.id, db)
 
-    # Scoped to the caller AND to type='injury': another user's row and a
-    # non-injury row are both 404 here, so this route cannot retire a
-    # schedule_item, and a probe for someone else's entry id learns nothing.
-    entry = (
-        db.query(models.UserKnowledgeEntry)
-        .filter_by(id=entry_id, user_id=current_user.id, type="injury")
-        .first()
-    )
-    if entry is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Injury entry not found")
-    if not entry.active:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Injury entry is already inactive — resolving twice is an error, not a no-op",
-        )
 
-    # REASSIGN, never mutate in place: the column is a plain `JSON`, not a
-    # `MutableDict`, so an in-place `entry.value["resolution"] = ...` is not seen by
-    # the unit of work and is silently dropped at commit. Tested by reading the row
-    # back from a fresh query rather than from the in-session identity map.
-    entry.value = {
-        **(entry.value or {}),
-        "resolution": {
-            "resolved_on": str(body.resolved_on or date.today()),
-            "basis": body.basis,
-            "resolved_by": body.resolved_by,
-        },
-    }
-    entry.active = False
-    # `superseded_by` is deliberately left untouched — see the docstring.
-    db.commit()
-    db.refresh(entry)
-    return entry
+@router.post("/schedule/{entry_id}/resolve", response_model=KnowledgeEntryOut)
+def resolve_schedule_item(
+    entry_id: int,
+    body: ResolutionIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retire one schedule_item: the commitment is no longer true — the season ended,
+    the user left the team, the job changed — recorded with provenance and no
+    successor.
+
+    RESOLUTION IS NOT SUPERSESSION AND IS NOT EXPIRY. Supersession replaces a row
+    with a newer statement about the same commitment and names it in `superseded_by`
+    (the `supersedes` / day-overlap path in `upsert_knowledge_entry`). `expire-stale`
+    is the overlay sweep — it flips rows whose predicted `expires_at` has passed and
+    writes no `resolution` block. This is the third, distinct act: an explicit
+    operator assertion that the commitment is retired, stamped with who made it,
+    keeping the row and leaving `superseded_by` untouched.
+
+    PER-TYPE BY DESIGN. Scoped to `type='schedule_item'`, so an injury id here is a
+    404 — the same cross-type 404-leak defence the injury route carries. Do not
+    generalise the two into a shared `/entry/{id}/resolve`; the type in the path is
+    the boundary.
+
+    NEVER DELETES. The retired commitment stays in history with its `resolution`
+    block; `GET /knowledge/schedule` (active-only) simply stops returning it.
+    """
+    return _resolve_entry(entry_id, body, "schedule_item", current_user.id, db)

@@ -10904,3 +10904,45 @@ your stack," and the deflection guard is what enforces that.
 history, or general-context sweep — those are general chat, and the distinction is the point of
 the increment. Add an input-side classifier only if the output guard proves leaky in practice
 (Fork B v2). Do not widen the seed beyond the #49 lock.
+
+### 269. Resolution-not-supersession extends to `schedule_item`; `expire-stale` is the overlay sweep, not the retire path
+
+**Decision.** The resolution terminal state established for injuries (#222/#223) extends to
+`schedule_item` with no change of meaning: `POST /knowledge/schedule/{entry_id}/resolve` retires a
+commitment as "no longer true" — the season ended, the user left the team — with a mandatory
+`basis`, a `resolved_by` in the closed set (`user | clinician`), an `active=False` flip, and
+`superseded_by` left untouched. The injury and schedule routes share one body, `_resolve_entry`,
+and `InjuryResolutionIn` is renamed `ResolutionIn` accordingly. There are now three distinct ways a
+`schedule_item` leaves the active set, and they are not interchangeable:
+- **Supersession** — replaced by a newer statement about the same commitment; names its successor in
+  `superseded_by` (the `supersedes` / day-overlap path in `upsert_knowledge_entry`, #233).
+- **Expiry** — `expire-stale` flips rows whose *predicted* `expires_at` has passed. It is the
+  overlay sweep for one-off date-bounded rows (#228: a passed `season_end`/`duration_weeks`/
+  `expires_at` is a badge, and only `expires_at` drives this sweep); it writes no `resolution` block,
+  so an expired row stays distinguishable from a resolved one. It is **not** the retire path.
+- **Resolution** — this endpoint: an explicit operator assertion that a still-live commitment is
+  retired, stamped with who made it, keeping the row.
+
+**Rationale.** `schedule_item` had a create/supersede/expire lifecycle but no honest retire: a
+commitment that simply ended (not replaced, not on a predicted expiry date) had nowhere to go but a
+misused supersede or a hand-set `active`. Reusing the injury resolution shape rather than minting a
+new one keeps one meaning of "resolved" across the ledger and one body to audit. The routes stay
+**per-type** — `_resolve_entry` filters on `type=entry_type`, so an injury id through the schedule
+route (or the reverse) is a 404 that leaks nothing — deliberately NOT generalised to
+`/entry/{id}/resolve`: the type in the path is the cross-type 404-leak boundary (the injury route's
+existing docstring names this as the reason).
+
+**Status.** Landed. No migration — `value` is plain `sa.JSON`, and the resolution block is a
+reassignment, not a schema change.
+
+**How you know.** `backend/tests/test_schedule_item_resolution.py` mirrors the injury resolve tests
+and is green in a py3.12 venv against pinned requirements (schedule + injury resolution: 54 passed;
+schema/chat/weekly/probes regression set: 118 passed). The load-bearing gates are the cross-type
+404 (`test_an_injury_id_through_the_schedule_route_is_404_and_writes_nothing`) and the fresh-query
+read of the persisted resolution block (`test_the_resolution_block_actually_persists`, the
+plain-JSON-column trap). The injury resolve tests were untouched and still pass.
+
+**Do not revisit unless.** Do not collapse the two per-type routes into one `/entry/{id}/resolve` —
+that drops the 404-leak boundary. Do not let `expire-stale` write a `resolution` block or otherwise
+absorb the retire path; the three exits are distinct by design. Do not make resolution auto-fire
+from a passed `season_end`/`duration_weeks` (#228: nothing auto-retires).
