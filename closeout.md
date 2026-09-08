@@ -45,14 +45,19 @@ dosing. Full detail: DECISIONS_LOG #267.
 - Graded (non-boolean) life-load severity: build only if the binary proves jumpy.
 - Residual→readiness promotion stays parked (§3.6 guard 2, data-gated).
 
-**Discovered, out of scope — needs an operator call (tag: Likely a real gap).**
-`load_metrics.compute_load_metrics` rolls up a SINGLE `formula_version` (default
-`tier0-v1`). Metabolic `load_events` are written under `metab-v1`, so the metabolic
-Banister window is not populated by a default rollup run — the same single-version blind
-spot just fixed in the psych producer. Whether this is a defect or an intended
-"run-the-rollup-once-per-version, union at read" design depends on how load_metrics
-consumers read across formula_versions — unverified this session. Worth an OPEN_QUESTION
-if confirmed. Not touched here.
+**Discovered, then VERIFIED as NOT a gap (2026-09-08).** An earlier draft of this
+handoff flagged `load_metrics.compute_load_metrics`'s single-`formula_version` rollup as
+a possible metabolic blind spot. Traced end to end — it is not. The single-version
+rollup is the intended per-version design: `metabolic_cascade.run_metabolic_cascade`
+(fired on every aerobic ingest — Polar import-export + sync) calls
+`compute_load_metrics(..., formula_version='metab-v1')`, rolling metabolic into its own
+`(metab-v1 / banister-v1)` `load_metrics` rows — idempotent, never touching the
+`tier0-v1` strength series — and the consumer `mcp_server.get_training_load` reads that
+lane by its own `(formula_version, metrics_version, load_window)`. Metabolic is populated
+AND consumed, end to end. No OPEN_QUESTION, no action. The psych producer's
+`(window, version)` pairing was still the right fix THERE and only there: it fuses all
+three windows into one ridge in a single read, so it alone must span both versions;
+`load_metrics` keeps the lanes separate by design.
 
 **What was NOT touched (named so the queue isn't misread).** This session was one
 feature + its governance; the product lanes stood still and none of their gates moved:
@@ -67,6 +72,5 @@ feature + its governance; the product lanes stood still and none of their gates 
 closed** (no new question opened). No FEEDBACK edits this session.
 
 **Single clearest next action:** pick up the **hub shell (#150)** — the operator-preferred
-next lane on ROADMAP NEXT — or, if confirming the load_metrics metabolic-rollup gap
-above is preferred first, verify how load_metrics consumers read across formula_versions
-and raise an OPEN_QUESTION.
+next lane on ROADMAP NEXT. (The load_metrics metabolic-rollup question raised in an
+earlier draft is resolved above: verified not a gap, no action.)
