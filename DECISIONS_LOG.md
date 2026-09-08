@@ -6953,6 +6953,14 @@ from manual to guard-enforced and the batch can land unattended; or a governance
 time-critical (a live-wrong canonical row that will mislead an in-flight session), in which case a
 single hotfix PR is justified and stated as such.
 
+**SUPERSEDED IN PART (2026-09-08) — code half.** The "Code/schema always take full human
+review" clause is superseded for CODE by #238 (human merge gate removed — Code self-merges on
+green) and refined by #257 (self-merge in-turn; holds only for (a) schema migration, (b) a PR
+the session was told to hold, (c) a PR embedding an un-ratified Code decision). The SCHEMA half
+stands — it is #257 hold (a). Annotated because the clause read live and was re-litigated at the
+#268 merge — this is a pointer annotation (the decision itself is carried by #238/#257), not a
+new decision.
+
 ---
 
 ### 177. The lab-ingest banner discarded list-form 422 `detail`; both catch blocks now render the refused field (Move 1 of 2 — the contract question is held at `Q85`)

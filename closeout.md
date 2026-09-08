@@ -1,76 +1,75 @@
-# Code session close-out — psychological window (S4 §3), 2026-09-08
+# Code session close-out — governance-hygiene checkpoint, 2026-09-08
 
 ## 1. Real commits this session
 
-Session-open ref: `8ab5e62` (master at session start). `git log --oneline 8ab5e62..c1ad46b`:
+Session-open ref: `a20d3be` (master at session start — #163/#268 merged). This session is a
+**governance/docs-only batch** (#176): no code, no schema, migration-free → self-merges on green
+per #257 (no hold class applies). It banks one commit onto
+`claude/governance-hygiene-checkpoint-cqnakr` and lands as one PR per checkpoint. The landing SHA
+resolves at merge (number-at-merge honoured; `#NEXT` re-read against master immediately before the
+merge Code itself performs).
+
+Three edits ride this batch, all additive/declared per the #176(c) diff-shape gate (removed-line
+audit run before commit — no removed line outside a declared replacement region):
 
 ```
-c1ad46b Merge pull request #160 from Easty11/claude/psych-window-residual-nxsiyk
-3e9485e fix(psych-window): pair each predictor window with its producing formula_version
-92d06a3 gov(s4): record #267 (Q122 resolved) + §3.6/§3.4 handoff corrections
-eebbab4 feat(psych-window): residual producer + down-only life-load modulator (S4 §3, Q122)
+gov(hygiene): annotate #176 code-half supersession; strike stale ROADMAP + closeout pointers
 ```
 
-All landed on `master` via PR #160 (merge commit `c1ad46b`); branch
-`claude/psych-window-residual-nxsiyk` merged + remote-deleted; stale local ref deleted.
-Terminal-state gate: clean — no `BRANCHES.md` row required.
+- **DECISIONS_LOG #176** — appended a dated **SUPERSEDED IN PART (code half)** pointer annotation:
+  the "Code/schema always take full human review" clause is superseded for CODE by **#238**
+  (human merge gate removed) and refined by **#257** (self-merge in-turn; holds only = schema
+  migration / told-to-hold / un-ratified decision). The SCHEMA half stands (= #257 hold (a)).
+  Pointer only — no new decision number; the decision itself is #238/#257. Original text untouched.
+- **ROADMAP** — prepended a **SUPERSEDED (2026-09-08)** note to the "Post-1b next lanes
+  (2026-08-02 reconciliation)" paragraph (the phantom that regenerated the #150 next-pick pointer):
+  increments 2 (rephrase, #202) and 5 (go-live, #194) are DONE, increment 3 backend spine landed
+  (#268, Q139 frontend queued), hub shell #150 is BUILT (#162) — not a next pick. Historic
+  2026-08-02 text retained after the note (struck-not-deleted).
+- **closeout.md** — this wholesale ritual overwrite. The increment-3 session merged its build
+  (#268) without a close-out refresh, so the prior handoff still described the psych-window session
+  and carried the built-#150 next-action; this replaces it with the true current state.
 
 ## 2. Pending-queue reconciliation
 
-No pending-commit queue was carried in — this session ran from the S4 §3 Code brief, not
-a chat `;cc` handoff. Nothing is provisional: every artifact is on `master`.
+No pending-commit queue was carried in — this session ran from the governance-hygiene Code brief,
+not a chat `;cc` handoff. Nothing is provisional once this batch lands: every artifact is on the
+branch and headed to `master` via its PR.
 
-- Feature code (`backend/reads/psychological_reads.py`, `engine/selection.py`,
-  `routers/engine.py`) + tests (`backend/tests/test_psychological_window.py`, 19 tests) —
-  landed (`eebbab4`, `3e9485e`).
-- Governance: DECISIONS_LOG **#267** (Q122 resolved to the divergence/residual horn +
-  the §3.6 guard-1 void and §3.4 over-claim corrections), OPEN_QUESTIONS **Q122 → DONE →
-  #267** — landed (`92d06a3`). Number-at-merge honoured: master max was #266 at merge
-  instant (re-read immediately before merging; master had not advanced), so #267 stands.
+Housekeeping rides this originating branch (#176(b)): the Recent-landings pointer in `CLAUDE.md`
+and any terminal `BRANCHES.md` row are resolved within the batch at merge.
+
+**Prior session (#268) landed un-closed-out.** The interpretation increment-3 backend spine merged
+via PR #163 (`a20d3be`) with no close-out ritual, which is why the stale ROADMAP/closeout pointers
+this batch fixes survived. This close-out is also that session's belated cold-resume refresh — its
+state is folded into §3 below.
 
 ## 3. Cold-resume handoff
 
-**What landed.** The psychological window (S4 §3) as a read-time **residual producer** +
-down-only **life-load modulator**, resolving Q122. Migration-free; the `load_metrics`
-fail-closed psychological guard is untouched and green. Predictors read each physical
-window under its producing `formula_version` as a (window, version) pair
-(mechanical/neuromuscular=`tier0-v1`, metabolic=`metab-v1`). Life-load is wired as a
-sibling to `readiness_hint` into the existing selection re-rank — never a gate, never
-dosing. Full detail: DECISIONS_LOG #267.
+**What is live on master (`a20d3be`).**
+- **Interpretation increment 3 — backend spine (#268).** Lever-tap → scoped ephemeral education
+  thread: `interpretation/education_seed.py` (seed read from the producer, #49 lock) +
+  `education_thread.py` (stateless, injected client, fail-closed output guard) +
+  `POST /interpretation/education-thread`; `contains_directive` extracted as the one shared #47
+  detector; three evals. The **frontend tap surface is deferred → Q139** (build-sequence step 5).
+  Full detail: DECISIONS_LOG #268.
+- **Interpretation lane status:** increments 2 (rephrase, #202) and 5 (go-live, #194) DONE;
+  increment 3 backend landed (#268); the **hub shell (#150) is BUILT and merged (#162** at
+  `001df4c`) — its only residual is the `#116`/`#121` frontend deploy probe (ROADMAP row-68), never
+  run. #150 is **not** a next pick.
+- **This governance-hygiene batch** — the three pointer/annotation fixes in §1.
 
-**Deferred follow-ons from #267 (not bugs — designed deferrals).**
-- Residual→block-level-plan **consumer** is not wired — it depends on the S4 §1
-  phase-timeline surface, which is unbuilt. The producer emits its smoothed value now.
-- Confidence-weighted cold-start ramp: build only if the N=15 hard flip proves jumpy (§5).
-- Graded (non-boolean) life-load severity: build only if the binary proves jumpy.
-- Residual→readiness promotion stays parked (§3.6 guard 2, data-gated).
+**Single clearest next action:** **Q139 — interpretation increment-3 frontend tap-to-thread
+surface** (build-sequence step 5), which makes increment 3 user-complete against the shipped
+backend spine. If the operator prefers a different lane, take the ROADMAP NEXT rows / dated NOW
+items instead. **Not #150** — it is built (#162). The residual #150 frontend deploy probe (row-68)
+is separable and out of this batch's scope.
 
-**Discovered, then VERIFIED as NOT a gap (2026-09-08).** An earlier draft of this
-handoff flagged `load_metrics.compute_load_metrics`'s single-`formula_version` rollup as
-a possible metabolic blind spot. Traced end to end — it is not. The single-version
-rollup is the intended per-version design: `metabolic_cascade.run_metabolic_cascade`
-(fired on every aerobic ingest — Polar import-export + sync) calls
-`compute_load_metrics(..., formula_version='metab-v1')`, rolling metabolic into its own
-`(metab-v1 / banister-v1)` `load_metrics` rows — idempotent, never touching the
-`tier0-v1` strength series — and the consumer `mcp_server.get_training_load` reads that
-lane by its own `(formula_version, metrics_version, load_window)`. Metabolic is populated
-AND consumed, end to end. No OPEN_QUESTION, no action. The psych producer's
-`(window, version)` pairing was still the right fix THERE and only there: it fuses all
-three windows into one ridge in a single read, so it alone must span both versions;
-`load_metrics` keeps the lanes separate by design.
+**Open watch-points (not this session's work).**
+- Q139 (above) — the actionable next pick.
+- Q137 — sweep other tests for naive `date.today()`-vs-AEST anchoring (`test_a_future_measurement_date_is_refused` a candidate).
+- Q138 — session-close sweep of OWED/BLOCKED BRANCHES rows against merge/ref reality.
 
-**What was NOT touched (named so the queue isn't misread).** This session was one
-feature + its governance; the product lanes stood still and none of their gates moved:
-- **S4 remainder** — §1 (phase timeline) and §2 (shear/depth sub-track, gated on the
-  external Aubrey knee + provisional to training-chat scope). Separable, own briefs.
-- **Interpretation layer** (increments 2 rephrase → 3 lever-tap → 5 go-live) — ROADMAP NOW.
-- **Lab upload pipeline** (Vision extraction → confirmation → store) — hero consumer dep.
-- **Hub shell (#150)** — unblocked, the operator-preferred next pick.
-- **Appointment brief** — depends on lab pipeline + interpretation layer.
-
-**Session-open maxima → now:** decisions #266 → **#267**; questions Q138 max, **Q122
-closed** (no new question opened). No FEEDBACK edits this session.
-
-**Single clearest next action:** pick up the **hub shell (#150)** — the operator-preferred
-next lane on ROADMAP NEXT. (The load_metrics metabolic-rollup question raised in an
-earlier draft is resolved above: verified not a gap, no action.)
+**Session-open maxima → now:** decisions **#268** (unchanged — no new numbered decision this batch;
+the #176 annotation is a pointer to #238/#257); questions **Q139** max (unchanged — no new question
+opened). No FEEDBACK edits this session.
