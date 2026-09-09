@@ -1,85 +1,95 @@
-# Code session close-out — 2026-09-09
+# Code session close-out — 2026-09-09 (engine suppressed-phase output tidy + L190 governance fix)
 
 ## 1. Real commits this session
 
-Branch `claude/training-phase-ledger-q112-p8uywe` (now merged + deleted). Session-open ref
-`3540785` (master at branch time).
+Session-open ref `b0526b4` (master at session start, post-#270). Two PRs landed to master;
+both branches merged + remote-deleted, no local branches remain but `master`.
 
 ```
-2cf4e9f Merge pull request #167 from Easty11/claude/training-phase-ledger-q112-p8uywe
-34b03ed gov(q112): resolve Q112 -> #270; amend Q106 scope; SCHEMA §031; ROADMAP offseason note
-9eab120 feat(engine): training_phases ledger — phase-scoped exposure modulation (Q112)
+6508a29 Merge pull request #170 from Easty11/claude/gov-merge-disposition-l190-fix
+569f4d5 gov: retire the CLAUDE.md L190 absolute contradicting § Merge disposition
+fe3a99c Merge pull request #169 from Easty11/claude/engine-training-phase-output-carlvi
+59334ef gov: DECISIONS #271 + BRANCHES row for the suppressed-phase output tidy
+ae7a19e feat(engine): tidy select_next output under a suppressed training phase
 ```
 
-Merged to master via PR #167 (`--merge`, per the repo rule that `BRANCHES.md` records landing
-SHAs — squash/rebase would dangle them). Required check `placeholder guard (POSIX)` green;
-`mergeable_state: clean`; branch remote-deleted on merge, local branch deleted at close.
+- **PR #169** (`claude/engine-training-phase-output-carlvi`): feature `ae7a19e` (engine +
+  context_builder + tests) then governance `59334ef` (DECISIONS #271 + BRANCHES row) — GATE 3
+  disjoint. Merged `fe3a99c`. `placeholder guard (POSIX)` green; `mergeable_state: clean`;
+  master max was #270 at merge so **#271 stands** unre-resolved. Opened draft by the harness,
+  flipped ready + self-merged at operator instruction.
+- **PR #170** (`claude/gov-merge-disposition-l190-fix`): governance `569f4d5` — CLAUDE.md L190
+  fix + FEEDBACK §35 + the #271 BRANCHES row rolled to merged. Merged `6508a29`. Guard green;
+  docs-only, self-merged on green.
+- The close-out commit (`chore: session close-out`) lands on top of this via its own PR.
+
+`--merge` throughout (BRANCHES rows record landing SHAs; squash/rebase would dangle them).
 
 ## 2. Pending-queue reconciliation
 
-No `;cc` pending-commit queue was carried into this session — the work was driven directly from
-the Q112 brief, not from a chat close-out handoff. Nothing provisional remains: every item the
-brief specified landed in the two commits above, and the governance half (DECISIONS_LOG #270,
-Q112 → DONE→#270, Q106 amended, SCHEMA §031, ROADMAP note, BRANCHES row) is committed, not
-pasted. GATE 7 held — feature commit `9eab120` carries no governance; governance commit `34b03ed`
-carries no code.
+No `;cc` pending-commit queue was carried into this session — work was driven directly from the
+`claude_ENGINE_TRAINING_PHASE_OUTPUT` brief (chat-designed 2026-09-09), not a chat close-out
+handoff. Nothing provisional remains from this session's own work:
 
-Two small validation calls the brief did not specify were made and are now live (flagged to the
-operator, not blocking): `sessions_per_cycle` bounds `0–28` on the microcycle slot, and
-`close_reason` required-non-empty on `POST /engine/phase/close`. Adjust in a follow-up if either
-is wrong; neither is load-bearing on the resolved design.
+- Brief T1–T5 all landed in PR #169. T1 (probe block `None` under suppression + context line),
+  T2 (recovery-vehicle re-rank via `RECOVERY_VEHICLES`, its own note), T3 (dosing-note corrected
+  to #248), T4 (tests), T5 (DECISIONS #271 + BRANCHES). Feature/governance split held.
+- The operator follow-up (merge #169; land the L190 fix + a FEEDBACK line) landed in PR #170.
+  The L190 fix reconciles #257's own decision — no new DECISIONS entry, no `#NEXT`.
+
+**Carried forward, still unresolved (from the prior #270 close-out, untouched this session):**
+two validation calls made during the #270 work remain live and un-adjudicated — the microcycle
+slot `sessions_per_cycle` bounds (`0–28`) and `close_reason` required-non-empty on
+`POST /engine/phase/close`. Neither is load-bearing; adjust in a follow-up if either is wrong.
 
 ## 3. Cold-resume handoff
 
-**What landed (this session).** Q112 resolved as **DECISIONS_LOG #270** — the `training_phases`
-store (migration `f2b7c1a4d9e0`): a per-user, append-only, exactly-one-open ledger separating
-DOING NOW (the open phase) from the profile's standing BUILDING TOWARD. `models.TrainingPhase`;
-`engine/training_phase.py` (validate / open / close / current / `phase_at` half-open);
-router `/engine/phase` (open, close→404-if-none, GET current, history); `select_next` hooks
-E1–E6 (suppressed→probe-budget-0/fortify; capacities REMOVE-only filter, Q105 resolve-before-
-compare, never re-admits a #221 stop; fortify target never filtered, disagreement surfaced;
-block only when a phase is open; `None`→byte-identical); `context_builder` + `current_state`
-surfaces. S7 `_local_day()` is now the single AEST-today source, extended to the
-`resolve_injury` / `resolve_schedule_item` `resolved_on` default (was Railway-UTC `date.today()`).
-`Capacity` stays movement-quality only — aerobic posture lives in `intent` prose, gated by
-nothing. 43 tests; full suite 1353 passed (2 pre-existing env failures unrelated to this change).
+**Maxima at close.** Decisions `### 271`; questions `## Q139`. (The L190 governance fix minted no
+decision number — it reconciled #257.)
 
-**Current sprint (from `ROADMAP.md` NOW).** Dated CBT-I titration-cycle work; the standing
-cross-repo shared-block propagation debt (pinned to ROADMAP NOW by #112 — still OWED, structural
-orphaning of `#NEXT` tokens outside the stores). No date-anchored item was touched this session.
+**What landed (this session).**
+- **DECISIONS #271** — engine output tidied under a *suppressed* `training_phase`, EMIT-ONLY (no
+  change to what `select_next` decides): (T1) the `probe` block is withheld (`None`) under
+  suppression, queue still computed for `has_priority`/E3/E5; `context_builder` renders
+  `- PROBE: suppressed by training phase '<label>'`, distinct from the queue-empty line. (T2) a
+  suppressed phase is a third trigger into the stable two-group vehicle re-rank via new module
+  constant `RECOVERY_VEHICLES = ("swim","pilates_clinical","hike")` — recovery-first, orders
+  preserved, nothing removed (#8), with its own note; `held` unchanged. (T3) `_DOSING_NOTE`
+  corrected: Banister Form is computed in `load_metrics` (#248), the dosing seam does not yet
+  read it (was the stale #18 "designed, not implemented"). `#228` structural guard stays green.
+- **CLAUDE.md L190 contradiction retired (FEEDBACK §35)** — the pre-#257 absolute "Code and
+  schema changes always take full human review" survived #257's amendment of § Merge disposition
+  and contradicted it; it made Code hold green code-only PR #169 for review. Replaced with
+  "Schema migrations take full human review (hold (a)). Code changes self-merge on green under
+  § Merge disposition." FEEDBACK §35: when amending a CLAUDE.md rule, grep the WHOLE file for the
+  superseded wording, not only the section rewritten. The #271 BRANCHES row was rolled to merged.
 
-**Open questions (grouped).**
-- *Resolved this session:* Q112 → #270.
-- *Amended this session:* Q106 (the weekly-resolver `minutes` question) — its input is now
-  phase-current over profile-baseline: read `phase.microcycle`, fall back to `weekly_template`.
-  Still OPEN, still blocks only the (unbuilt) weekly-resolver lane.
-- *Open, untouched:* Q105 (resolve-before-compare trade), Q106 (resolver lane), Q109 (no unread
-  structure), Q120 (no onset field on injuries), Q129–Q133 (Garmin garth cluster), Q137
-  (naive-`date.today()` audit — this session fixed the two resolve endpoints but did NOT sweep
-  the rest), Q138 (session-close BRANCHES/merge-reality sweep), **Q139 (interpretation
-  increment 3 frontend tap-to-thread surface — the standing next-action before this session)**.
+**What was NOT touched — the frontend / product surface stood still (name it, don't infer a queue
+from what moved).** This session and the prior one (#270) both went to the *engine / ledger
+instrument* — the `training_phases` store, then the plumbing of its output. The surfaces the
+operator actually sees were not built:
 
-**Single clearest next action.** **Q139 — build the interpretation increment-3 frontend
-tap-to-thread surface** (build-sequence step 5; the backend spine landed at #268). It was the
-next-action at the last close-out and this session did not touch it. Alternatively the dated
-CBT-I NOW rows, or the first Decompression phase can now be authored live against the new ledger
-(`POST /engine/phase`, the brief's worked example).
+- **The exposure-UI panel.** DECISIONS #271 was explicitly sequenced *before*
+  `claude_EXPOSURE_UI_READ_BRIEF.md` "so the panel renders clean engine output rather than gating
+  around it in JSX." The engine now emits clean output under a suppressed phase — but the panel
+  itself was **not built** this session. It is the direct next lane the tidy was clearing for.
+- **Q139 — interpretation increment 3 frontend tap-to-thread surface** (STEP 5): still **OPEN**,
+  untouched. Backend spine landed (#268); the tappable lever → scoped thread panel/route,
+  client-held turn history POST, and `{text,source,deflected}` render remain. A separate frontend
+  lane from the exposure panel, but the same unbuilt-surface pattern.
 
-**What was NOT touched — named explicitly.** This session built engine *instrumentation* (a new
-store + engine modulation), not product-facing surfaces. Standing still:
-- **Q139 interpretation frontend** — the actual user-facing tap-to-thread lane; backend has been
-  ready since #268 and is now one session further from its frontend.
-- **The weekly-resolver lane (Q106)** — this session gave it phase-scoped *input* and did not
-  build it; fortnightly/microcycle dosing is declared, not enforced, until it lands.
-- **Adaptive programming lane (Plan schema steps 2–4 + taxonomy v1 / Q27)** — the offseason
-  Block-A target; untouched.
-- **Q137 naive-`date.today()` audit** — only the two resolve endpoints were converted to
-  `_local_day()`; the broader sweep of other AEST-mismatched call sites is still open.
-- **The `training_phases` ledger has zero rows in prod** — landed ≠ live. The first phase
-  (Decompression, per the brief's worked example) has not been authored; the migration is applied
-  on merge but no phase exists until the operator POSTs one. Nothing verifies the live write path
-  yet (SQLite tests only).
+Both are surfaces chat cannot verify (the unseeable-surface rule) — a frontend session must verify
+against the served bundle (`#121`), not backend-test green.
 
-Consecutive sessions (this one, the 2026-09-08 governance-hygiene checkpoint) have gone to
-instrument and governance rather than to the interpretation frontend that has been the named
-next-action throughout. Worth a deliberate pick, not a drift, next session.
+**Open questions (grouped).** OPEN: **Q139** (interp increment-3 frontend), Q138 (session-close
+BRANCHES-row sweep vs merge reality — partly exercised this close-out by rolling the #271 row),
+Q137 (`date.today()` AEST audit), Q136 (`SamsungHRVReading` constraint drift). WATCH: Q132/Q133
+(Garmin garth durability). DEFERRED: Q134/Q135 (Samsung HRV read restructure).
+
+**Single clearest next action.** Build the **exposure-UI panel** to `claude_EXPOSURE_UI_READ_BRIEF.md`
+— the lane #271 was sequenced to clear. It renders `select_next`'s output; under a suppressed phase
+the probe block is now `None` (render "suppressed by training phase", not an empty probe) and the
+vehicles arrive recovery-first with a note. Verify against the served frontend bundle (`#121`), not
+a backend green. (Alternative frontend pick: Q139.) Whichever is taken, the standing signal is that
+two consecutive sessions instrumented rather than shipped the instrument's surface — the next
+session should go to a surface, not deeper into the engine.
