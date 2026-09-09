@@ -170,7 +170,7 @@ _Rewritten against committed tree evidence (2026-09-09). The live `users`/`user_
 3. **Cooper — user 5.** Hevy only; **no wearable** (Q10 note). Stored Hevy key authenticates to an empty account — 0 customs, 0 workouts (Q100, OPEN); resolution needs Cooper.
 4. **Son — iOS, future phase.** Requires an Expo iOS build or native integration (see LATER "Apple Health (son)"); holds no account today.
 
-**Not confirmed in-tree:** chat's belief that a "Georgia" user is on a Polar H10. No such user appears anywhere in the stores; Q98 records exactly three accounts (Luke/Deb/Cooper), and every Polar/H10 reference is Luke's device (Decisions 3/9/17). Treat as unverified — a prod `users`/`user_integrations` query is the only thing that would settle it, and it was not runnable this session.
+_Georgia is **not** a platform user (operator-confirmed 2026-09-09): an earlier chat belief placing "Georgia" on a Polar H10 is retired — no such user in the stores, Q98's three-account roster (Luke/Deb/Cooper) stands, and every Polar/H10 reference is Luke's device (Decisions 3/9/17)._
 
 ---
 
