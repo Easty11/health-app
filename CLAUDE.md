@@ -270,11 +270,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Exposure UI increment 1 (read) — the React app consumes `/engine/next` (`#272`), landed + merged (PR #172)** - Handoff: `closeout.md`.
+
 - **Engine output tidied under a suppressed `training_phase` (`#271`) + CLAUDE.md L190 merge-disposition contradiction retired (`FEEDBACK` §35) — landed + merged (PRs #169, #170)** - Handoff: `closeout.md`.
 
 - **`training_phases` ledger — Q112 resolved (`#270`), landed + merged (PR #167)** - Handoff: `closeout.md`.
-
-- **Governance-hygiene checkpoint (2026-09-08)** - #176 code-half supersession annotated (→ #238/#257; the schema half stands = #257 hold (a)); the ROADMAP "Post-1b next lanes (2026-08-02)" phantom struck (increments 2/5 DONE #202/#194, increment 3 backend spine #268, hub shell #150 BUILT #162 — not a next pick); `closeout.md` refreshed to a Q139 next-action. Docs-only, no `#NEXT`. Handoff: `closeout.md`.
 
 ---
 
