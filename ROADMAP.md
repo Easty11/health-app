@@ -104,6 +104,22 @@ _Live, undated — no external date orders these; pick by readiness._
 | **SCHEMA.md is stale for the entire lab family** | **OWED.** `CLAUDE.md` makes `SCHEMA.md` repo-canonical and says it "must never lag master; a canonical-but-stale schema doc is worse than a stale project-knowledge copy." It lags, and not by one column: it documents a **superseded** design — `lab_results` hanging off `lab_panel` **events**, plus `marker_aliases` and `unknown_markers` — none of which exist. The implemented `lab_reports` / `lab_results` pair (#52) has never been in it, and **no lab migration has ever updated it** (`c655bd6`, `005c1a6`, `7753758`, `d7c4b1a90e35` all touch `models.py` and none touch `SCHEMA.md`). Discovered while landing `zero_row_reason`: the rule could not be honoured because there is no table entry to update without first authoring the whole family. Fixing it means rewriting the lab section against master, not appending a column — a doc task with its own scope, deliberately not absorbed into a data-loss or interface branch. Owner: Luke. |
 | ~~**Hevy custom-exercise creation (step 2)** — blocked on this session's prod gate~~ | DONE — gate and build both. Step-1 prod gate closed at #163 (Railway catalogue verified, 494→499). `<hevy_create_exercise>` landed at #164 (explicit separately-confirmed block, processor-side idempotency re-check). Response-tolerance fix (#166) confirmed a live create in production. Q75 (freshness beyond connect-seed) **RESOLVED → #211** (2026-08-12): sync-on-workout-fetch, staleness-gated on a per-user marker. Struck, not deleted. |
 
+## Offseason phase sequence — orientation, operator-held (#270)
+
+_Not a plan the system holds. The `training_phases` ledger (Q112 → #270) records ACTUALS as each
+phase is entered; it never stores a future phase (no future-dated `entered_on`, no auto-transition).
+This note is the operator's map of the intended offseason arc; the ledger is what was actually run.
+At each `review_on` badge the operator opens the next phase (which closes the current) or does
+nothing — the badge is a prompt, never a transition._
+
+| # | Phase | Posture (indicative) |
+|---|-------|----------------------|
+| 1 | **Decompression** | probe suppressed; movement not loading; mobility/stability; swims easy aerobic |
+| 2 | **Aerobic Base** | metabolic base (recorded in `intent`, not gated); load re-entering |
+| 3 | **Build Ramp** | probe held/re-opening; strength/power re-admitted |
+| 4 | **Operator Preseason** | full capacities; A/B microcycle dosing |
+| 5 | **Club Preseason** | operator-adjudicated handoff; club-start and the Q4 flip are events, not phases the ledger schedules |
+
 ## LATER — planned
 
 _Unchanged from before this triage._
