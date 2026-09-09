@@ -11035,3 +11035,67 @@ Do not filter the Fortify target by a phase (#221). Do not let `select_next` rea
 date. Do not turn the ledger into a plan/scheduler — the offseason sequence lives in `ROADMAP`,
 operator-held. Do not reuse the `upsert_profile` `is not None` merge pattern — a phase is INSERTed,
 never upserted, and never edited after authorship except the one closure UPDATE.
+
+### 271. Engine output under a suppressed training phase — probe withheld, recovery-vehicle re-rank, dosing-note truth correction
+
+**Decision.** Three changes to what `select_next` EMITS under an open phase whose
+`probe_posture == "suppressed"`, plus one string correction; nothing it DECIDES changes. Sequenced
+before the exposure-UI panel so the panel renders clean engine output rather than gating around it
+in JSX.
+
+- **T1 — the probe block is withheld (`None`) under suppression.** Was: the computed probe block,
+  even though the E2 effective probe budget is already 0. The queue is still computed —
+  `has_priority`, the E3 capacity filter, and the E5 note all depend on it — only the emission is
+  withheld. #221: a block is present only when it applies, and a suppressed phase does not probe.
+  `context_builder._section_probe` renders `- PROBE: suppressed by training phase '<label>'` for the
+  None-under-suppression case, kept distinct from the "queue empty under current filters" sentence:
+  suppression and an exhausted queue are different facts and must not share one sentence.
+
+- **T2 — a suppressed phase re-ranks vehicles toward recovery.** It becomes a THIRD independent
+  trigger into the existing stable two-group re-rank (alongside low readiness and life-load),
+  reading a new module constant `RECOVERY_VEHICLES = ("swim", "pilates_clinical", "hike")` — hoisted
+  from the local list so all three triggers read one definition. Recovery vehicles rank first, their
+  within-group order preserved; loaded vehicles remain listed after, order preserved. It is a
+  re-rank, never a removal (#8 is the authority: the engine re-orders, it does not drop a vehicle or
+  gate a session). The trigger surfaces its own note, mirroring the readiness / life-load reasons.
+  `held` posture triggers none of this. No vehicle metadata / `loaded` flag / taxonomy is added
+  (Q109 — nothing else would read it).
+
+- **T3 — dosing-note truth correction.** The `_DOSING_NOTE` Banister sentence "Banister Form
+  (Fitness − Fatigue); that model is designed, not yet implemented (DECISIONS_LOG #18)" is replaced
+  by wording true in-tree today: Form is computed per-window in `load_metrics` (#248), and the dosing
+  seam does not yet read it. ACWR still not used. The wire from `load_metrics` into dosing is a
+  separate lane — NOT built here; nothing in `engine/` reads Form (verified).
+
+**Rationale.** #8 is why the re-rank is a re-rank: readiness/posture only re-order vehicles, they
+never gate or remove. Withholding the probe block (rather than emitting one, or emitting an
+again-computed empty) makes "suppressed" legible downstream as a distinct emitted fact from "queue
+exhausted", which the exposure panel needs so it does not re-derive posture from an empty probe. The
+dosing note had gone stale: #248 (Gate 3) landed the per-window Banister Fitness/Fatigue/Form rollup
+in `load_metrics`, so "designed, not yet implemented" was no longer true — the true statement is that
+Form exists and the dosing seam has not been wired to it.
+
+**Status.** Landed. No schema change. `select_next`'s signature and its DECISION logic are unchanged
+— the E3 capacity filter, `has_priority`, mode heuristic, and the #228 structural guard
+(`test_assertion_provenance::test_no_selection_code_reads_review_on`) all stay green; no review-prompt
+date is read.
+
+**How you know.** `backend/tests/test_training_phase.py` extended: suppressed → `probe is None`
+(`test_suppressed_withholds_probe_block`, plus the assertion added to
+`test_suppressed_forces_fortify_and_zero_probe_budget`); `held` probe block byte-equal to the
+no-phase path (`test_held_keeps_probe_block_identical_to_no_phase`); the suppressed vehicle re-rank
+is recovery-first with both within-group orders preserved and its note present
+(`test_suppressed_reranks_vehicles_recovery_first`), while `held` leaves the seed order and adds no
+note (`test_held_phase_does_not_rerank_vehicles`); the context line renders under suppression and the
+queue-empty line still renders for a genuinely empty queue with no suppression
+(`test_section_probe_renders_suppressed_line`, `test_section_probe_renders_queue_empty_without_suppression`).
+E1 `None`-phase byte-identical still green (`test_none_phase_is_byte_identical`). Full backend suite
+1393 passed / 1 skipped, save two pre-existing env-only failures untouched by this change: the
+`3360ed5` shallow-clone `git show` in `test_current_state`, and `garminconnect` import errors on
+py3.11 (four modules).
+
+**Do not revisit unless.** Do not add vehicle metadata, a `loaded` flag, or a vehicle taxonomy —
+`RECOVERY_VEHICLES` is a bare tuple by design (Q109). Do not turn the re-rank into a removal or a gate
+(#8). Do not wire `load_metrics` into dosing here — the seam reads no Form yet; the wire is its own
+lane. Do not let a suppressed phase's withheld probe stop the queue being computed (`has_priority`
+and the capacity filter need it). Do not let `select_next` reference the review-prompt date (#228).

@@ -451,8 +451,8 @@ _WINDOWS_BY_CAPACITY: dict[str, list[str]] = {
 _DOSING_NOTE = (
     "Graded entry (spec §7): a novel pattern is unknown capacity — small dose, "
     "read response, never blind-load at intensity. Quantitative load references "
-    "Banister Form (Fitness − Fatigue); that model is designed, not yet "
-    "implemented (DECISIONS_LOG #18). ACWR is not used."
+    "Banister Form (Fitness − Fatigue), computed per-window in load_metrics "
+    "(DECISIONS_LOG #248); the dosing seam does not yet read it. ACWR is not used."
 )
 
 
@@ -478,6 +478,12 @@ VEHICLES: dict[str, str] = {
     "barbell_floor_hold": "Barbell / trap-bar (floor-holder and NM dose — not the variety)",
     "sled": "Sled drive/drag (horizontal force, scrum-specific)",
 }
+
+# The stable recovery group for the two-group vehicle re-rank (DECISIONS_LOG #8: a
+# re-rank, never a removal). Read by all three triggers — low readiness, life-load,
+# and a suppressed training phase — so the group is stated once. No vehicle metadata
+# is attached (Q109): nothing else reads it.
+RECOVERY_VEHICLES = ("swim", "pilates_clinical", "hike")
 
 
 def select_next(
@@ -527,7 +533,10 @@ def select_next(
     # stored `profile.probe_budget` is untouched; `budget` below reports the effective
     # values, not the standing ones.
     effective_probe_budget = probe_budget
-    if training_phase is not None and training_phase.probe_posture == "suppressed":
+    probe_suppressed = (
+        training_phase is not None and training_phase.probe_posture == "suppressed"
+    )
+    if probe_suppressed:
         effective_probe_budget = 0.0
 
     # E3 — the phase capacity allow-list. Resolve every stored token to its `.value`
@@ -588,11 +597,14 @@ def select_next(
     # the readiness scalar (that would inject into the readiness signal, which D1
     # forbids). Like readiness, this only re-ranks vehicles — never a gate, never dosing
     # (DECISIONS_LOG #8).
-    if low_readiness or life_load_bias:
-        recovery = ["swim", "pilates_clinical", "hike"]
+    # A suppressed training phase is a THIRD independent trigger into the same stable
+    # two-group re-rank (T2). Like the two above it only re-orders vehicle_bias — recovery
+    # group first, loaded vehicles preserved after, nothing removed (DECISIONS_LOG #8).
+    # `held` posture never triggers it.
+    if low_readiness or life_load_bias or probe_suppressed:
         vehicle_bias = (
-            [v for v in vehicle_bias if v in recovery]
-            + [v for v in vehicle_bias if v not in recovery]
+            [v for v in vehicle_bias if v in RECOVERY_VEHICLES]
+            + [v for v in vehicle_bias if v not in RECOVERY_VEHICLES]
         )
 
     target_key = profile.primary_target if profile else None
@@ -628,6 +640,12 @@ def select_next(
         notes.append(
             "Elevated life-load — pre-emptively biasing toward recovery vehicles "
             "(switch window, not skip). Re-rank, never a gate."
+        )
+    # T2 — the suppressed phase surfaces its OWN re-rank reason, mirroring the two above.
+    if probe_suppressed:
+        notes.append(
+            f"Training phase '{training_phase.label}' — recovery vehicles ranked "
+            f"first; loaded vehicles remain listed."
         )
     # E5 — the phase surfaces its own reason so the operator sees WHY mode is fortify,
     # mirroring the low-readiness / life-load triggers above.
@@ -670,7 +688,11 @@ def select_next(
             "fortify": round(1.0 - effective_probe_budget, 4),
         },
         "fortify": fortify_block,
-        "probe": probe_block,
+        # T1 — a suppressed phase withholds the probe block entirely (`None`): the block is
+        # present only when it applies (#221), and a suppressed phase does not probe. The
+        # queue is still computed above — `has_priority`, the E3 capacity-filter, and the E5
+        # note all depend on it; only the emission changes.
+        "probe": None if probe_suppressed else probe_block,
         "notes": notes,
     }
     if training_phase is not None:

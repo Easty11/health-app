@@ -300,6 +300,8 @@ def test_suppressed_forces_fortify_and_zero_probe_budget(db_session):
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     assert out["mode_recommended"] == "fortify"
     assert out["budget"] == {"probe": 0.0, "fortify": 1.0}
+    # T1 — the probe block is withheld entirely under suppression.
+    assert out["probe"] is None
     # Standing budget untouched in the store.
     assert profile_mod.get_profile(db_session, u.id).probe_budget == 0.25
     # E5 block present, naming the phase, with review_due.
@@ -375,6 +377,111 @@ def test_null_capacities_target_within_phase_true(db_session):
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     assert out["training_phase"]["fortify_target_within_phase"] is True
+
+
+# ── T1 — probe emission under suppression ────────────────────────────────────
+
+def test_suppressed_withholds_probe_block(db_session):
+    """T1: under suppression `probe` is `None` — the phase withheld it — even though the
+    queue is non-empty and `has_priority`/the E3 capacity filter still ran over it."""
+    u, p, queue = _seeded(db_session)
+    assert queue, "fixture precondition: a non-empty probe queue"
+    phase = phase_mod.open_phase(db_session, u.id, _payload(
+        probe_posture="suppressed", capacities=None, microcycle=None))
+    out = selection.select_next(
+        db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
+    assert out["probe"] is None
+
+
+def test_held_keeps_probe_block_identical_to_no_phase(db_session):
+    """T1: `held` posture leaves the probe block exactly as the no-phase path emits it —
+    the emission changes only under suppression."""
+    u, p, queue = _seeded(db_session)
+    baseline = selection.select_next(db_session, u.id, profile=p, probe_queue=list(queue))
+    phase = phase_mod.open_phase(db_session, u.id, _payload(
+        probe_posture="held", capacities=None, microcycle=None))
+    out = selection.select_next(
+        db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
+    assert out["probe"] is not None
+    assert out["probe"] == baseline["probe"]
+
+
+# ── T2 — recovery-vehicle re-rank on a suppressed phase ──────────────────────
+
+def test_suppressed_reranks_vehicles_recovery_first(db_session):
+    """T2: a suppressed phase fires the same stable two-group re-rank — recovery vehicles
+    first (their original relative order preserved), loaded vehicles after (order
+    preserved), nothing dropped (#8). Its own reason is surfaced in notes."""
+    u, p, queue = _seeded(db_session)
+    phase = phase_mod.open_phase(db_session, u.id, _payload(
+        probe_posture="suppressed", capacities=None, microcycle=None))
+    out = selection.select_next(
+        db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
+    keys = [v["key"] for v in out["fortify"]["vehicles"]]
+    # Seed order was pilates_clinical, offset_carry, unilateral_lifting, swim, hike,
+    # barbell_floor_hold → recovery {swim, pilates_clinical, hike} lifted to the front.
+    assert keys == ["pilates_clinical", "swim", "hike",
+                    "offset_carry", "unilateral_lifting", "barbell_floor_hold"]
+    recovery = [k for k in keys if k in selection.RECOVERY_VEHICLES]
+    loaded = [k for k in keys if k not in selection.RECOVERY_VEHICLES]
+    assert keys == recovery + loaded                        # stable two-group partition
+    assert recovery == ["pilates_clinical", "swim", "hike"]  # within-group order preserved
+    assert loaded == ["offset_carry", "unilateral_lifting", "barbell_floor_hold"]
+    assert any("recovery vehicles ranked first" in n for n in out["notes"])
+
+
+def test_held_phase_does_not_rerank_vehicles(db_session):
+    """T2: `held` posture never triggers the recovery re-rank — the seed's order stands and
+    no recovery note is surfaced."""
+    u, p, queue = _seeded(db_session)
+    phase = phase_mod.open_phase(db_session, u.id, _payload(
+        probe_posture="held", capacities=None, microcycle=None))
+    out = selection.select_next(
+        db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
+    keys = [v["key"] for v in out["fortify"]["vehicles"]]
+    assert keys == ["pilates_clinical", "offset_carry", "unilateral_lifting",
+                    "swim", "hike", "barbell_floor_hold"]
+    assert not any("recovery vehicles ranked first" in n for n in out["notes"])
+
+
+# ── T1 (context_builder) — the suppressed-PROBE line ─────────────────────────
+
+def _selection_stub(**overrides):
+    base = {
+        "mode_recommended": "fortify",
+        "budget": {"probe": 0.0, "fortify": 1.0},
+        "fortify": {"target": "anti_lateral_flexion",
+                    "target_label": "Anti-lateral flexion",
+                    "vehicles": [], "dosing": {"windows": ["Neuromuscular"]}},
+        "probe": None,
+        "notes": [],
+    }
+    base.update(overrides)
+    return base
+
+
+def test_section_probe_renders_suppressed_line():
+    """T1 (context): probe `None` + an open suppressed phase → the suppressed-PROBE line
+    naming the phase, NOT the queue-empty sentence (they are different facts)."""
+    from context_builder import _section_probe
+    out = _section_probe(_selection_stub(
+        training_phase={"label": "decompression", "probe_posture": "suppressed"}))
+    assert "- PROBE: suppressed by training phase 'decompression'" in out
+    assert "queue empty under current filters" not in out
+
+
+def test_section_probe_renders_queue_empty_without_suppression():
+    """The queue-empty line still renders when probe is genuinely `None` with no suppressing
+    phase — no phase block at all, or a `held` one."""
+    from context_builder import _section_probe
+    out_no_phase = _section_probe(_selection_stub())
+    assert "- PROBE: queue empty under current filters" in out_no_phase
+    assert "suppressed by training phase" not in out_no_phase
+
+    out_held = _section_probe(_selection_stub(
+        training_phase={"label": "aerobic_base", "probe_posture": "held"}))
+    assert "- PROBE: queue empty under current filters" in out_held
+    assert "suppressed by training phase" not in out_held
 
 
 # ── local-day (cross-cutting S7) ─────────────────────────────────────────────

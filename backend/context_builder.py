@@ -1164,7 +1164,14 @@ def _section_probe(selection: dict[str, Any] | None) -> str:
             "hard — that report is the result. Pain = stop + refer."
         )
     else:
-        lines.append("- PROBE: queue empty under current filters (well-sampled or hard-stopped).")
+        # A suppressed phase and a genuinely empty queue are DIFFERENT facts and must not
+        # share a sentence: under suppression `probe` is `None` by design (the phase withheld
+        # it, the queue may be full), so name the phase rather than implying the map is sampled.
+        phase = selection.get("training_phase") or {}
+        if phase.get("probe_posture") == "suppressed":
+            lines.append(f"- PROBE: suppressed by training phase '{phase.get('label')}'")
+        else:
+            lines.append("- PROBE: queue empty under current filters (well-sampled or hard-stopped).")
 
     for n in selection.get("notes") or []:
         lines.append(f"- Note: {n}")
