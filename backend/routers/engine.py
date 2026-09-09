@@ -41,6 +41,7 @@ from engine import (
     adaptation,
     observations as observations_mod,
     profile as profile_mod,
+    resolver as resolver_mod,
     selection,
     taxonomy,
     training_phase as training_phase_mod,
@@ -245,6 +246,14 @@ async def get_next(
             status_code=422,
             detail=f"unknown capacity {capacity!r} — one of {taxonomy.capacity_tokens()}",
         )
+    # Enforcement (#221/#270 resolver): with no explicit `capacity=`, default to the slot the
+    # due-slot resolver names for today's window. An explicit capacity still wins, unchanged.
+    # `due_capacity` is None at baseline or when every slot is met → unfiltered (today's
+    # behaviour), so existing capacity-passing clients see no change.
+    effective_capacity = (
+        capacity if capacity is not None
+        else resolver_mod.due_capacity(db, current_user.id)
+    )
     p = profile_mod.get_profile(db, current_user.id)
     loaded = await _loaded_regions(db, current_user.id)
     # The stop/contraindication filter lives HERE, upstream of the slot filter —
@@ -260,7 +269,7 @@ async def get_next(
         db, current_user.id, profile=p, probe_queue=queue,
         readiness_hint=_readiness_hint(db, current_user.id),
         life_load_bias=_life_load_bias(db, current_user.id),
-        capacity=capacity,
+        capacity=effective_capacity,
         training_phase=phase,
         training_phase_review_due=training_phase_mod.review_due(phase),
     )
@@ -268,6 +277,18 @@ async def get_next(
     if phase is not None and "training_phase" in out:
         out["training_phase"]["review_on"] = str(phase.review_on) if phase.review_on else None
     return out
+
+
+@router.get("/resolver")
+async def get_resolver(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The due-slot resolver read (#221/#270): the current quota window, per-slot position
+    counted from Hevy, the due capacity (Rule 4), and the surfaced `uncounted[]`. At baseline
+    — no open-phase microcycle and no weekly template — `window` is null with a 200, matching
+    the no-profile contract (#272). `minutes` is never consulted (Q106 stays open on it)."""
+    return resolver_mod.resolve(db, current_user.id)
 
 
 @router.post("/response")
