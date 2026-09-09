@@ -59,7 +59,13 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 22, not 20. jsdom@30 pulls undici@8.10, whose webidl layer calls
+          # worker_threads.markAsUncloneable — added in Node 22.0.0 and ABSENT on Node 20,
+          # where every jsdom-environment test file crashes its worker with
+          # "webidl.util.markAsUncloneable is not a function" (the pure-JS suites still pass,
+          # so it fails as 6 worker errors, not a clean red). package.json engines `>=20` is a
+          # floor the test stack outgrew; the suite is authored and passes on Node 22.
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
