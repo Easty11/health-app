@@ -82,6 +82,10 @@ operator-side ruleset edit Code cannot version.
 **Session-open maxima to re-read:** DECISIONS `#274`, questions `Q139` (both confirmed on master at this
 close).
 
+**v1-triage handoff prompt (standing, from the v1 steer — the `DECISIONS_LOG` v1-definition entry).** For
+each lane in NOW: which v1 test does it serve (See / Know / Walk in / Loop)? If none, state why it is in
+NOW.
+
 ### NOT touched this session — named explicitly
 This session, like the two before it (#273 test lane, #272 read surface), was **frontend/instrumentation
 work, not the health-intelligence core**. Three consecutive sessions have gone to the UI and its CI

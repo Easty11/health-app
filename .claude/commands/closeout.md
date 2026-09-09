@@ -51,6 +51,11 @@ Execute these steps in order:
    instrumented, say so in the handoff rather than leaving it to be noticed. Absence is not
    self-reporting; an unnamed lane reads as a finished one.
 
+   **v1-triage prompt (standing, from the v1 steer — the `DECISIONS_LOG` v1-definition entry).**
+   For each lane in NOW, name which v1 test it serves — See / Know / Walk in / Loop — or, if none,
+   state why it is in NOW. A lane serving no v1 test and with no reason to sit in NOW is a demotion
+   candidate; surface it rather than letting it ride by lane momentum.
+
 6. **Update the CLAUDE.md "Recent landings" block.** Prepend one pointer-only line for
    what landed this session — canonical home only (`#N` in `DECISIONS_LOG.md`, or
    `closeout.md`), no SHAs, no test counts, no decision sub-bullets — then trim to the 3
