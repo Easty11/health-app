@@ -67,7 +67,7 @@ MATURITY_DAYS = 42
 _AEST = pytz.timezone("Australia/Brisbane")
 
 
-def _local_day(occurred_at: datetime) -> date:
+def _local_day(occurred_at: datetime | None = None) -> date:
     """The user-local (AEST) calendar day a load_event belongs to.
 
     Mirrors `routers/health_connect._wake_date`: treat the stored instant as UTC (attach
@@ -75,12 +75,23 @@ def _local_day(occurred_at: datetime) -> date:
     before taking the date — so an early-morning-AEST session is not mis-bucketed onto the
     prior UTC day.
 
+    Called with NO ARGUMENT it returns TODAY in AEST — now-UTC converted to the operator's
+    local calendar day. That is the single-source "which day is it for the operator" used as
+    the default anchor and the `<= today` comparison across the engine (Q42 local-day
+    precedent), replacing the naive `date.today()` (= Railway UTC) that mis-stamped a late
+    AEST evening onto the following UTC day. now-UTC is a genuine UTC instant, so the +10
+    conversion below is unconditionally correct for the no-argument case.
+
     **S1 RELEASE-GATE (DECISIONS gate-3 entry).** This is correct IFF `load_events.occurred_at`
     (= `hevy_workouts.start_time`) is a TRUE UTC INSTANT. If a stored `start_time` turns out
     to be a naive-LOCAL wall-clock coerced to UTC (clock already local), this over-adds +10
     and the rule must become `occurred_at.date()` directly — a one-line change here plus the
     near-midnight reconciliation-oracle expectation. Confirm against one real stored value
-    (clock vs a known training time) before release; the code alone cannot disambiguate."""
+    (clock vs a known training time) before release; the code alone cannot disambiguate.
+    (The gate applies to the datetime-argument bucketing path only, not the no-argument
+    now-UTC form.)"""
+    if occurred_at is None:
+        occurred_at = datetime.now(timezone.utc)
     dt = occurred_at if occurred_at.tzinfo is not None else occurred_at.replace(tzinfo=timezone.utc)
     return dt.astimezone(_AEST).date()
 

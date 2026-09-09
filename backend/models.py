@@ -894,6 +894,75 @@ class FortificationProfile(Base):
     )
 
 
+class TrainingPhase(Base):
+    """A phase-tagged history ledger for the exposure engine (Q112, DECISIONS_LOG #270).
+
+    Separates DOING NOW (the open phase) from the profile's standing BUILDING TOWARD
+    (`fortification_profiles`). A phase records the operator's current training posture —
+    a probe posture, an optional capacity allow-list, an optional phase-scoped A/B
+    microcycle — and modulates `select_next`; it NEVER branches on `label` (a name, not a
+    control) and NEVER governs aerobic/metabolic posture (that stays prose in `intent`, a
+    movement-quality boundary — the engine's `Capacity` axis is movement-quality only).
+
+    Append-only, structurally identical to `cbti_blocks`. The ONLY permitted UPDATE is
+    setting `closed_on` + `close_reason` at closure — no other column is ever rewritten.
+    Model+application invariant, no DB trigger (the SQLite test path builds via create_all,
+    not migrations), the same discipline `CBTIBlock` carries. Rows are INSERTed, never
+    upserted: a phase is never edited after authorship except closure, so the
+    `upsert_profile` `is not None` merge pattern deliberately does NOT apply here.
+
+    Exactly-one-open per user, enforced at write in `engine/training_phase.open_phase`
+    (close the current open row in the same transaction, then insert). Zero-open is a valid
+    state = baseline (like `cbti_blocks` between blocks); with no open row the engine runs
+    off profile + `weekly_template`, byte-identical to pre-Q112.
+
+    `probe_posture` is REQUIRED at write with NO default (#230 discipline). `asserted_by`
+    / `source` carry the provenance domains from #227 / #230 — the DB CHECK domains here
+    are frozen snapshots of `engine.profile.ASSERTED_BY_VALUES` and
+    `routers.knowledge.SOURCE_VALUES` (models.py cannot import either without a cycle);
+    `test_training_phase` pins them equal so a widening of the canonical tuple cannot drift
+    past the constraint silently.
+    """
+    __tablename__ = "training_phases"
+    __table_args__ = (
+        CheckConstraint(
+            "probe_posture IN ('suppressed','held')",
+            name="ck_training_phase_probe_posture",
+        ),
+        # Frozen snapshot of engine.profile.ASSERTED_BY_VALUES (#227).
+        CheckConstraint(
+            "asserted_by IN ('user','engine','clinician')",
+            name="ck_training_phase_asserted_by",
+        ),
+        # Frozen snapshot of routers.knowledge.SOURCE_VALUES (#230).
+        CheckConstraint(
+            "source IN ('onboarding','chat','system','api')",
+            name="ck_training_phase_source",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    label: Mapped[str] = mapped_column(String(100), nullable=False)          # free text; engine never branches on it
+    intent: Mapped[str | None] = mapped_column(Text, nullable=True)          # prose, incl. energy-system posture the engine does not enforce
+    probe_posture: Mapped[str] = mapped_column(String(10), nullable=False)   # suppressed | held — required, no default
+    capacities: Mapped[list | None] = mapped_column(JSON, nullable=True)     # allow-list of Capacity tokens; null = all live
+    microcycle: Mapped[dict | None] = mapped_column(JSON, nullable=True)     # A/B shape; null = fall back to weekly_template
+    entered_on: Mapped[date] = mapped_column(Date, nullable=False)           # anchor; A/B index counts from here
+    review_on: Mapped[date | None] = mapped_column(Date, nullable=True)      # "ask again" — never expires, never auto-closes (#228)
+    closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)      # UPDATE-once at closure
+    close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)    # UPDATE-once at closure
+    asserted_by: Mapped[str] = mapped_column(String(20), nullable=False)     # #227
+    asserted_on: Mapped[date] = mapped_column(Date, nullable=False)          # #227
+    source: Mapped[str] = mapped_column(String(20), nullable=False)          # #230
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class InterpretationRephrase(Base):
     """Disposable plain-register overlay + its promotion state (DECISIONS_LOG #202).
 

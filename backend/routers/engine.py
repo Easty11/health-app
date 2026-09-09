@@ -43,6 +43,7 @@ from engine import (
     profile as profile_mod,
     selection,
     taxonomy,
+    training_phase as training_phase_mod,
 )
 
 router = APIRouter(prefix="/engine", tags=["engine"])
@@ -251,12 +252,22 @@ async def get_next(
     queue = selection.compute_probe_queue(
         db, current_user.id, profile=p, loaded_region_keys=loaded,
     )
-    return selection.select_next(
+    # The open phase (Q112, #270) is fetched here and injected as a kwarg, mirroring
+    # `profile`. None (baseline) → byte-identical to pre-Q112. `review_due` is computed HERE
+    # (not in selection.py, which #228 forbids from reading `review_on`) and passed in.
+    phase = training_phase_mod.current_training_phase(db, current_user.id)
+    out = selection.select_next(
         db, current_user.id, profile=p, probe_queue=queue,
         readiness_hint=_readiness_hint(db, current_user.id),
         life_load_bias=_life_load_bias(db, current_user.id),
         capacity=capacity,
+        training_phase=phase,
+        training_phase_review_due=training_phase_mod.review_due(phase),
     )
+    # Fold the `review_on` date into the response block here — the engine never touches it.
+    if phase is not None and "training_phase" in out:
+        out["training_phase"]["review_on"] = str(phase.review_on) if phase.review_on else None
+    return out
 
 
 @router.post("/response")

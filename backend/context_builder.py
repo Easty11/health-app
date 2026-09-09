@@ -1031,6 +1031,46 @@ def render_asked_lab_value(row: Any) -> str:
     )
 
 
+def _section_training_phase(phase: dict[str, Any] | None) -> str:
+    """Render the open training phase (Q112, #270) — DOING NOW, framing the profile's
+    standing BUILDING TOWARD below it. Absent (baseline) → empty string. The `review_on`
+    line is a BADGE, never a transition (#228): same discipline as `schedule_item` bounds —
+    a prompt the operator acts on, not an auto-close."""
+    if not phase:
+        return ""
+    lines = ["## Training Phase (Adaptive Exposure Engine — doing now)"]
+    lines.append(f"- Phase: {phase.get('label')} (entered {phase.get('entered_on')})")
+    if phase.get("intent"):
+        lines.append(f"  - Intent: {phase['intent']}")
+    posture = phase.get("probe_posture")
+    if posture:
+        suppressed = posture == "suppressed"
+        lines.append(
+            f"- Probe posture: {posture}"
+            + (" — probe budget forced to 0, mode is fortify this phase" if suppressed else "")
+        )
+    caps = phase.get("capacities")
+    if caps is not None:
+        lines.append(
+            f"- Capacities live this phase: {', '.join(caps) if caps else 'none'} "
+            f"(others removed from the probe queue; the Fortify target is never dropped)"
+        )
+    else:
+        lines.append("- Capacities: all live (no phase restriction)")
+    review_on = phase.get("review_on")
+    if review_on:
+        due = " ◀ REVIEW DUE — ask whether to open the next phase (a prompt, not a transition)" \
+            if phase.get("review_due") else ""
+        lines.append(f"- Review on: {review_on}{due}")
+    lines += [
+        "",
+        "The phase is HISTORY + CURRENT, never a plan. It records what is being run now; it "
+        "does not schedule what comes next. Aerobic/metabolic posture lives in the intent "
+        "prose above and is not enforced by the engine.",
+    ]
+    return "\n".join(lines)
+
+
 def _section_fortification(profile: dict[str, Any] | None) -> str:
     """Render the structured fortification-target profile (spec §9) — the object
     that replaces the hardcoded injury string. Lever, not directive."""
@@ -1195,6 +1235,11 @@ def build_system_prompt(
 
     if not state.knowledge_entries:
         sections.append(_section_onboarding_interview())
+
+    if getattr(state, "training_phase", None) is not None:
+        phase_section = _section_training_phase(state.training_phase)
+        if phase_section:
+            sections.append(phase_section)
 
     if state.fortification_profile is not None:
         fort_section = _section_fortification(state.fortification_profile)

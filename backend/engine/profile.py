@@ -195,18 +195,25 @@ _MAX_SLOT_MINUTES = 180
 _SLOT_FIELDS = ("capacity", "sessions_per_week", "minutes")
 
 
-def _slot_int(slot: dict[str, Any], field: str, lo: int, hi: int, i: int) -> None:
+def _slot_int(
+    slot: dict[str, Any], field: str, lo: int, hi: int, i: int,
+    *, where: str = "weekly_template.slots",
+) -> None:
     """Range-check one integer slot field. `bool` is rejected explicitly: it is an
-    `int` subclass, so `True` would otherwise pass as `sessions_per_week=1`."""
+    `int` subclass, so `True` would otherwise pass as `sessions_per_week=1`.
+
+    `where` locates the error for a caller that reuses this on a different store — the
+    phase-scoped microcycle's slots (#270) reuse it verbatim, differing only in the
+    prefix. The default keeps every `weekly_template` message byte-identical."""
     if field not in slot:
-        raise ValueError(f"weekly_template.slots[{i}]: missing required field {field!r}")
+        raise ValueError(f"{where}[{i}]: missing required field {field!r}")
     v = slot[field]
     if isinstance(v, bool) or not isinstance(v, int):
         raise ValueError(
-            f"weekly_template.slots[{i}].{field} must be an integer, got {type(v).__name__}"
+            f"{where}[{i}].{field} must be an integer, got {type(v).__name__}"
         )
     if not (lo <= v <= hi):
-        raise ValueError(f"weekly_template.slots[{i}].{field} must be {lo}-{hi}, got {v}")
+        raise ValueError(f"{where}[{i}].{field} must be {lo}-{hi}, got {v}")
 
 
 def validate_weekly_template(value: Any) -> dict[str, Any]:

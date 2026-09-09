@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 import models
 from declared_state import lift_declared_state
 from engine import profile as profile_mod
+from engine import training_phase as training_phase_mod
 from reads.labs_reads import LabRow, latest_lab_results
 
 
@@ -44,6 +45,10 @@ class CurrentState:
     declared_state: dict = field(default_factory=dict)
     fortification_profile: dict | None = None
     fortification_profile_orm: models.FortificationProfile | None = None
+    # The open training phase (Q112, #270) — DOING-NOW to the profile's BUILDING-TOWARD.
+    # None = baseline (zero-open). `review_due` is folded into the dict at read time.
+    training_phase: dict | None = None
+    training_phase_orm: models.TrainingPhase | None = None
     capability_state: list[models.CapabilityState] = field(default_factory=list)
     hrv_baseline_7d: HRVBaseline | None = None
     labs: list[LabRow] = field(default_factory=list)
@@ -64,6 +69,7 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
             break
 
     fort_profile_orm = profile_mod.get_profile(db, user_id)
+    phase_orm = training_phase_mod.current_training_phase(db, user_id)
 
     capability_rows = db.query(models.CapabilityState).filter_by(user_id=user_id).all()
 
@@ -98,6 +104,8 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         declared_state=lift_declared_state(entries, today),
         fortification_profile=profile_mod.profile_to_dict(fort_profile_orm),
         fortification_profile_orm=fort_profile_orm,
+        training_phase=training_phase_mod.phase_to_dict(phase_orm, on=today),
+        training_phase_orm=phase_orm,
         capability_state=capability_rows,
         hrv_baseline_7d=hrv_baseline,
         labs=labs,

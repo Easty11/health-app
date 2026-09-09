@@ -489,6 +489,8 @@ def select_next(
     readiness_hint: int | None = None,
     life_load_bias: bool = False,
     capacity: "taxonomy.Capacity | str | None" = None,
+    training_phase: "models.TrainingPhase | None" = None,
+    training_phase_review_due: bool = False,
 ) -> dict[str, Any]:
     """
     The explore/exploit split (§2). Returns BOTH a Fortify recommendation and a
@@ -504,8 +506,41 @@ def select_next(
     than an ordering convention: this function only ever REMOVES candidates, so no
     contraindicated region can re-enter through a matching slot. Absent, behaviour
     and response shape are exactly as before.
+
+    `training_phase` (Q112, #270) is the router-fetched open phase, mirroring how
+    `profile` is injected — the DOING-NOW modulator over this recommendation. `None`
+    (baseline) → byte-identical output. When present it can: suppress the probe budget
+    to 0 (posture `suppressed`), REMOVE-only-filter the queue to its capacity allow-list
+    (Q105 resolve-before-compare — never re-admitting a stop, identical discipline to the
+    #221 slot filter), and surface itself. The Fortify TARGET is never filtered (#221: a
+    declared field, not a candidate); a phase excluding its capacity is a standing-vs-now
+    disagreement, surfaced not resolved.
+
+    `training_phase_review_due` is the review-prompt state, computed by the CALLER and passed
+    in — this module never reads the phase's review-prompt date (#228: the review prompt must
+    be incapable of gating selection, enforced structurally by `test_assertion_provenance`).
+    The router folds that date into the response block itself.
     """
     probe_budget = float(profile.probe_budget) if profile and profile.probe_budget is not None else 0.25
+
+    # E2 — posture `suppressed` forces the EFFECTIVE probe budget to 0 (→ fortify). The
+    # stored `profile.probe_budget` is untouched; `budget` below reports the effective
+    # values, not the standing ones.
+    effective_probe_budget = probe_budget
+    if training_phase is not None and training_phase.probe_posture == "suppressed":
+        effective_probe_budget = 0.0
+
+    # E3 — the phase capacity allow-list. Resolve every stored token to its `.value`
+    # BEFORE comparing (Q105): the queue carries lowercase `.value`, so a verbatim compare
+    # silently empties the queue. `null` capacities = all live (no filter). REMOVE-only,
+    # never re-admitting a hard-stopped region (the queue is already stop-filtered upstream).
+    phase_caps: set[str] | None = None
+    if training_phase is not None and training_phase.capacities is not None:
+        phase_caps = {
+            cap.value for tok in training_phase.capacities
+            if (cap := taxonomy.resolve_capacity(tok)) is not None
+        }
+        probe_queue = [c for c in probe_queue if c.get("capacity") in phase_caps]
 
     # Normalise once. A caller that hands an unresolvable token gets a loud
     # failure here rather than a silently empty slot — the router 422s first, so
@@ -521,9 +556,11 @@ def select_next(
         # Queue entries carry `capacity` as `Region.capacity.value` (lowercase).
         probe_queue = [c for c in probe_queue if c.get("capacity") == slot_capacity]
 
+    # E6 — filter order between the phase filter and the slot filter is irrelevant (set
+    # intersection); `has_priority` is computed over the post-filter queue.
     probe = probe_queue[0] if probe_queue else None
     has_priority = any(c.get("probe_priority") for c in probe_queue)
-    mode = "probe" if (probe is not None and probe_budget > 0 and has_priority) else "fortify"
+    mode = "probe" if (probe is not None and effective_probe_budget > 0 and has_priority) else "fortify"
 
     probe_block = None
     if probe is not None:
@@ -560,6 +597,15 @@ def select_next(
 
     target_key = profile.primary_target if profile else None
     target_region = taxonomy.by_key(target_key) if target_key else None
+    # E4 — the Fortify target is NOT filtered by the phase. `fortify_target_within_phase`
+    # records whether the standing target's capacity survives the phase allow-list: a phase
+    # that excludes it is a genuine standing-vs-now disagreement, surfaced (never silently
+    # served or dropped). `null` capacities = all live → within.
+    fortify_target_within_phase = True
+    if phase_caps is not None:
+        fortify_target_within_phase = bool(
+            target_region is not None and target_region.capacity.value in phase_caps
+        )
     fortify_block = {
         "target": target_key,
         "target_label": target_region.label if target_region else (target_key or "—"),
@@ -583,6 +629,26 @@ def select_next(
             "Elevated life-load — pre-emptively biasing toward recovery vehicles "
             "(switch window, not skip). Re-rank, never a gate."
         )
+    # E5 — the phase surfaces its own reason so the operator sees WHY mode is fortify,
+    # mirroring the low-readiness / life-load triggers above.
+    if training_phase is not None:
+        if training_phase.probe_posture == "suppressed":
+            notes.append(
+                f"Training phase '{training_phase.label}' — probe posture suppressed: probe "
+                f"budget forced to 0, mode fortify (standing probe_budget {probe_budget} "
+                f"untouched)."
+            )
+        else:
+            notes.append(
+                f"Training phase '{training_phase.label}' — probe posture held; probe budget "
+                f"unchanged."
+            )
+        if phase_caps is not None and not fortify_target_within_phase:
+            notes.append(
+                f"Training phase '{training_phase.label}' excludes the standing Fortify "
+                f"target's capacity — a standing-vs-now disagreement, surfaced not resolved "
+                f"(the declared target is still served)."
+            )
     if probe is None and slot_capacity is None:
         notes.append(
             "Probe queue is empty under current filters — either the map is well "
@@ -597,11 +663,33 @@ def select_next(
 
     out = {
         "mode_recommended": mode,
-        "budget": {"probe": probe_budget, "fortify": round(1.0 - probe_budget, 4)},
+        # Effective budget (E2): suppressed posture reports probe 0 / fortify 1.0, not the
+        # standing 0.25. Identical to the standing values when no phase suppresses.
+        "budget": {
+            "probe": effective_probe_budget,
+            "fortify": round(1.0 - effective_probe_budget, 4),
+        },
         "fortify": fortify_block,
         "probe": probe_block,
         "notes": notes,
     }
+    if training_phase is not None:
+        # E5 — present ONLY when a phase is open (#221 "only present when it applies"), so
+        # the no-phase response is byte-identical to pre-Q112.
+        #
+        # `review_due` is passed IN (computed by the caller), never derived here: #228
+        # forbids selection code from reading the phase's review-prompt date at all, so that
+        # a later edit cannot make the review prompt gate selection — retirement stays an
+        # explicit write. The router folds that date into this block after the fact.
+        out["training_phase"] = {
+            "id": training_phase.id,
+            "label": training_phase.label,
+            "probe_posture": training_phase.probe_posture,
+            "capacities": training_phase.capacities,          # verbatim
+            "entered_on": str(training_phase.entered_on),
+            "review_due": bool(training_phase_review_due),
+            "fortify_target_within_phase": fortify_target_within_phase,
+        }
     if slot_capacity is not None:
         # Only present when a slot was requested, so the no-parameter response is
         # byte-identical to before this change.
