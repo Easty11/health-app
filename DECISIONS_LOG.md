@@ -11147,3 +11147,74 @@ engine surfaces. Do not render `error` as `empty` or absence — they are distin
 Do not add a `POST` to this increment (open-phase / close-to-baseline / history is increment 2,
 below). Do not fake dose — nothing implies which sub-cycle is due or sessions remaining; that is Q106
 (increment 3). Do not re-sort vehicles client-side; the engine has already re-ranked them.
+
+### 273. Test CI lane — `frontend tests (vitest)` + `backend tests (pytest)` gate every PR to master
+
+**Decision.** A second workflow, `.github/workflows/tests.yml`, runs both suites on every
+`push`/`pull_request` to master. Two jobs, named by the exact strings **`frontend tests
+(vitest)`** and **`backend tests (pytest)`**. Once the operator binds those two contexts on
+ruleset `master-pr-gated` (id `20414758`) alongside `placeholder guard (POSIX)`, "green" —
+the condition § Merge disposition self-merges on — means the guard AND both suites passed,
+not the guard alone.
+
+**Rationale.** The merge gate ran only the governance guard, so a test regression could
+self-merge on local test runs. #271 and #272 both did exactly that — merged green with CI
+never running a suite. The lane closes that hole. `pull_request` is the prevention arm
+(before the merge button is live); `push: [master]` is the detection backstop.
+
+**Load-bearing facts (do not revisit casually).**
+- **The two job-name strings are the binding key.** The ruleset requires a context by
+  `jobs.<id>.name`, never the workflow name. A required context that never reports reads as
+  PENDING, not failed — so renaming a bound job silently unbinds its requirement and every
+  PR goes green ungated. Never rename `frontend tests (vitest)` or `backend tests (pytest)`.
+- **Three enforcement layers, one versioned** — same caveat as the guard (#167,
+  governance-guard.yml). `core.hooksPath` is per clone, the ruleset is per repo, and the
+  workflow file is the only piece with a diff. A green run is never proof the contexts are
+  bound; read the ruleset (`gh api repos/Easty11/health-app/rules/branches/master`).
+- **Binding is an operator ruleset edit, GitHub-side, not committable.** Code cannot version
+  it; the PR body carries the instruction. Until bound, both jobs run but do not gate.
+
+**Environmental config the suites need (no secrets — #111 clean).** `SECRET_KEY` /
+`ALGORITHM` are throwaway CI literals. `FERNET_KEY` is NOT in the brief's env list but
+`encryption.py` builds `Fernet(FERNET_KEY)` at import, so collection fails without a valid
+Fernet key — the workflow generates a fresh one per run from stdlib
+(`base64.urlsafe_b64encode(os.urandom(32))`), no literal committed, discarded with the
+runner. `DATABASE_URL` is left unset → SQLite `create_all` (the tested path, #270/#271). The
+backend job checks out `fetch-depth: 0` for `test_current_state.py`'s `git show 3360ed5`.
+
+**Two deviations from the brief, both environmental, both recorded here per C2.**
+- **Frontend runs on Node 22, not the brief's Node 20.** `jsdom@30` pulls `undici@8.10`,
+  whose webidl layer calls `worker_threads.markAsUncloneable` — added in Node 22.0.0, absent
+  on Node 20, where every jsdom-environment test file crashes its worker
+  (`webidl.util.markAsUncloneable is not a function`; the pure-JS suites still pass, so it
+  fails as 6 worker errors). `package.json` engines `>=20` is a floor the test stack
+  outgrew. The first PR run proved it (Node 20 → 6 errors; Node 22 → green).
+- **No `skipif` markers were added.** The garmin HRV test fakes at the transport layer
+  (`GarminClient.from_token` monkeypatched, `garminconnect.Garmin` a fake) — no live call,
+  no credentials — and no Postgres-only test exists. The full backend suite (1432 pass, 1
+  pre-existing skip) and frontend suite (91 pass) go green with no test touched.
+
+**Lint is deliberately NOT gated in this job.** `npm run lint` is red on six pre-existing
+eslint errors in files this PR must not touch (`ChatPanel.jsx` ×2, `WorkoutPanel.jsx` ×2 —
+unedited under #272 — `interpretation/PlainPanel.jsx`, `Settings.jsx`). Gating them here
+would block every PR on unrelated debt. They are recorded in `FEEDBACK` §36 and a `ROADMAP`
+NEXT row queues a dedicated fix-then-bind PR. Lint is NOT added as a non-required job
+either: a failing non-required check sets `mergeable_state: unstable`, which would re-stall
+the self-merge gate that keys on `clean` — the same L190 class of ambiguity (#257/§35).
+
+**Status.** Landed. No schema change; workflow + governance only. `governance-guard.yml`
+untouched; its required context stands. This does not change § Merge disposition — it makes
+the existing "self-merge on green" true.
+
+**How you know.** On PR #174 all three contexts reported by their exact names; guard and
+backend green on the first run, frontend green after the Node-22 fix (`ca16e74`). Suites
+reproduced locally in the CI-equivalent env before the first push (backend Python 3.12,
+SQLite, ephemeral FERNET_KEY, `fetch-depth` full → 1432 pass / 1 skip / 0 fail; frontend
+Node 22 → 91 pass).
+
+**Do not revisit unless.** Never rename a bound job (silent unbind). Never path-filter a
+required job — a skipped required context never reports and blocks the merge as pending.
+Never add a real secret to the workflow or a suite. Do not drop the Node-22 pin back to 20
+while the jsdom/undici stack needs `markAsUncloneable`. Do not read a green run as proof the
+contexts are bound — read the ruleset. When the lint-debt PR lands, add `frontend lint
+(eslint)` as its OWN required job and bind it; do not fold lint back into the vitest job.
