@@ -2,88 +2,96 @@
 
 ## 1. Real commits this session
 
-Session-open ref: `b1ba6ad` (master tip at start, PR #173 merge). All work landed via
-PR #174 (merge commit `82b1804`), branch `claude/test-ci-lane` (merged + remote-deleted).
+Session-open ref: `60708aa` (master tip at start, PR #175 close-out merge). Feature + governance
+landed via **PR #176** (merge commit `edbce94`), branch `claude/exposure-ui-write-increment-2-280tv4`
+(merged + remote-deleted). Two disjoint commits on that branch:
 
 ```
-82b1804 Merge pull request #174 from Easty11/claude/test-ci-lane
-2155c76 gov: test CI lane — DECISIONS #273, FEEDBACK §36, ROADMAP, BRANCHES
-ca16e74 ci: run frontend suite on Node 22, not 20
-d666676 ci: add test lane — frontend (vitest) + backend (pytest) on every PR
+3c10818 gov: Exposure UI increment 2 (write) — DECISIONS #274, ROADMAP, BRANCHES
+00c3d29 feat(exposure-ui): increment 2 — the operator writes from the panel
 ```
 
-- `d666676` — **workflow.** `.github/workflows/tests.yml`: two jobs on push/PR to master —
-  `frontend tests (vitest)` (`npm ci` + `npm test`) and `backend tests (pytest)` (Python
-  3.12, `pip install -r backend/requirements.txt`, `pytest -q` on the SQLite default,
-  `fetch-depth: 0`, ephemeral stdlib `FERNET_KEY`, throwaway `SECRET_KEY`/`ALGORITHM`). No
-  change to `governance-guard.yml`.
-- `ca16e74` — **Node fix.** Bumped the frontend job Node 20 → 22 after the first PR run
-  crashed every jsdom worker (`webidl.util.markAsUncloneable` — `undici@8.10` via `jsdom@30`
-  needs `worker_threads.markAsUncloneable`, Node 22.0.0+).
-- `2155c76` — **governance (disjoint commit).** DECISIONS #273; FEEDBACK §36; ROADMAP
-  lint-fix-then-bind row; BRANCHES row.
+- `00c3d29` — **feature (frontend only, no backend/schema/migration).** Three components under
+  `frontend/src/components/exposure/`: `PhaseForm` (`POST /engine/phase`), `ClosePhaseDialog`
+  (`POST /engine/phase/close`), `PhaseHistory` (`GET /engine/phase/history`, read-only) + helper
+  `phaseTime.js` + fixture `phaseHistory.json`. `ExposurePanel.jsx` wired additively (Phase controls
+  row; review-due badge is now a button opening the form, #228; `onWritten` refetches `/engine/next`;
+  no chat push on write, #59). Tests: `PhaseForm`/`ClosePhaseDialog`/`PhaseHistory` units +
+  `ExposurePanel.write.test.jsx` integration (kept separate so the #272 tests stay untouched). Full
+  frontend suite 110 pass (91 #272-era untouched + 19 new); no new eslint (`todayLocal` split into
+  `phaseTime.js` for react-refresh).
+- `3c10818` — **governance (disjoint commit).** DECISIONS #274; ROADMAP (inc-2 → DONE +
+  microcycle-editor sub-item; inc-3 unchanged, blocked on Q106); BRANCHES terminal row. Number-at-merge:
+  master max re-read #273 → resolved #274 (no advance at merge).
 
-Close-out commit (this file + CLAUDE.md Recent-landings) is separate, below.
+Close-out commit (this file + CLAUDE.md Recent-landings + FEEDBACK §37) is separate, on branch
+`claude/closeout-exposure-ui-write`, below.
+
+### Post-merge verification folded in this session
+- **#121 served-bundle check (operator-run, 2026-09-10) — both increments confirmed LIVE on
+  `health-app-frontend`.** Bundle `assets/index-CHeBgVK8.js`; PRESENT strings: `No exposure profile
+  yet` + `Probe suppressed by training phase` (#272), `Close to baseline` + `Phase history` (#274) —
+  the #121 discriminating probe, not a version string. **#116 instance-identity:** the served bundle
+  hash `index-CHeBgVK8.js` matches the local `npm run build` output, so the instance answering prod is
+  exactly #274's code, not a stale image. LANDED → LIVE closed for the exposure write surface.
 
 ## 2. Pending-queue reconciliation
 
-**No pending-commit queue was carried in.** The session implemented the attached
-`claude_TEST_CI_LANE_BRIEF.md` directly (chat-designed, non-migration → self-merge on green
-under § Merge disposition). Two brief premises proved false and were handled in-tree, both
-recorded in DECISIONS #273 (not provisional — committed):
-- The brief's env list omitted `FERNET_KEY`; `encryption.py` needs it at import. Fixed
-  (ephemeral in-workflow key).
-- The brief specified Node 20; the jsdom/undici test stack needs Node 22. Fixed (`ca16e74`).
-- The brief listed `npm run lint` as a frontend-job step; it is red on 6 pre-existing eslint
-  errors. **Operator-ratified this session:** lint dropped from the vitest job, the six
-  recorded as debt (FEEDBACK §36), a ROADMAP row queues the fix-then-bind PR. Nothing here
-  is uncommitted.
+**No pending-commit queue was carried in.** The session implemented the attached Exposure-UI
+increment-2 brief directly (chat-designed 2026-09-10, frontend-only non-migration, no new judgment →
+self-merge on green under § Merge disposition). Every brief call landed as specified (DECISIONS #274,
+not provisional — committed + merged). One process error occurred and was contained:
+
+- **A repo-wide `sed 's/#NEXT/#274/g'` over the three governance stores clobbered historical `#NEXT`
+  mentions in unrelated rows** (the number-at-merge convention is quoted verbatim across the
+  append-only history — the §113 substring trap in write form). Caught before any commit; all three
+  files reverted and the additions re-applied with the literal `#274` typed into the new text only.
+  The final governance diff was +64/−1 (the one deletion the ROADMAP inc-2 row replaced in place).
+  **Recorded this session as `FEEDBACK` §37** (#176's report had flagged it without recording it).
 
 ## 3. Cold-resume handoff
 
-**Maxima:** DECISIONS `#273` · OPEN_QUESTIONS `Q139`.
+**Where things stand.** The **Exposure UI lane** now has increments 1 (read, #272) and 2 (write, #274)
+both shipped, merged, and confirmed LIVE (#121). From `/training` the operator can open the next
+phase, close to baseline, and read the phase ledger; the review-due badge opens the form (#228); writes
+refetch `/engine/next` so the recommendation visibly changes; no chat push on write (#59). The server
+remains the sole validator (422 `detail` shown verbatim; no client-side re-validation).
 
-**Branch:** none in flight — `claude/test-ci-lane` merged (PR #174, `82b1804`), remote
-deleted, rowed in `BRANCHES.md` DONE → #273. On `master`.
+**Open questions gating the lane (unchanged this session, named so they don't read as finished):**
+- **Q106 — the three non-equivalent readings of microcycle `minutes`** (scales set volume / caps region
+  count per session / advisory only). Blocks **Exposure UI increment 3 (dose)** — no dose arithmetic
+  client-side until it settles and a due-slot resolver exists.
+- **Q105 — slot capacities stored verbatim** → a consumer must route through `taxonomy.resolve_capacity`,
+  not string-compare. Settle in the same stroke as the weekly resolver (its first real consumer).
+- **The Weekly-resolver lane** (`weekly_template` → which slot is due) is still unbuilt; "pick-by-readiness",
+  not blocked.
 
-### What landed
-Test CI lane, `#273` — `frontend tests (vitest)` + `backend tests (pytest)` run on every PR
-to master. Closes the hole where a green governance guard alone let a test regression
-self-merge (#271, #272 both did, on local runs).
+**NEXT ACTION (single clearest) — PROVE THE #273 TEST-LANE BINDING, and it is the one item from this
+arc still OWED.** #176's report called it "the first PR gated by the #273 test CI lane", but nothing has
+verified the two contexts are actually *required* — #176 merged green, which proves the jobs RUN and
+REPORT, never that a red one would BLOCK. A required-but-unbound context lets a red PR merge. **At next
+session-open, open a throwaway PR that deliberately fails one test** (e.g. a one-line failing assertion
+in a frontend test) and confirm it lands **red and blocked — merge refused — not grey/pending or
+mergeable**, then **close it unmerged** (never merge, never leave it open). Red-and-blocked = bound;
+mergeable-or-pending = the operator ruleset edit binding `frontend tests (vitest)` + `backend tests
+(pytest)` on ruleset `20414758` (id, alongside `placeholder guard (POSIX)`) has NOT happened — read the
+ruleset directly (`gh api repos/Easty11/health-app/rules/branches/master`), a green run is never proof
+of binding (#273). This discharges the OWED binding item or proves it still open. Binding itself is an
+operator-side ruleset edit Code cannot version.
 
-### OWED — the operator action that makes the lane bite
-The two contexts **`frontend tests (vitest)`** and **`backend tests (pytest)`** are NOT yet
-required. Bind them on ruleset `master-pr-gated` (id `20414758`), alongside
-`placeholder guard (POSIX)` — a GitHub-side ruleset edit Code cannot version. Until bound,
-the jobs run but do not gate. (VERIFY note: the ruleset was confirmed *functionally* live
-this session — every PR required the guard and direct pushes were refused — but not read via
-`gh api`, which is unavailable in this environment; read it when you make the edit.)
+**Session-open maxima to re-read:** DECISIONS `#274`, questions `Q139` (both confirmed on master at this
+close).
 
-### What was NOT touched — the standing feature lanes, unchanged
-This was an **instrument** session (CI plumbing + governance), as #271 (engine tidy) and, in
-part, #272 (UI read) leaned toward. The product lanes stood still:
-
-- **Exposure UI increment 2 (write)** — open next phase / close to baseline / phase history
-  from the panel; the review badge becomes actionable. First `POST` from that surface.
-  Unblocked once the phase open/retire write endpoints are confirmed in
-  `backend/routers/training_phase.py`. Untouched.
-- **Exposure UI increment 3 (dose)** — **blocked on `Q106`** (how a slot's `minutes` reaches
-  the prescription, still OPEN) and the Weekly-resolver lane (ROADMAP NOW). Untouched.
-- **Interpretation increment 3 frontend (`Q139`, OPEN)** — the tap-to-thread surface;
-  backend spine landed at #268, frontend unbuilt, needs served-bundle verification (#121).
-  Untouched.
-- **Frontend lint debt (new, #273)** — 6 eslint errors (`ChatPanel` ×2, `WorkoutPanel` ×2,
-  `PlainPanel`, `Settings`); a dedicated PR fixes them then binds `frontend lint (eslint)`
-  as a third required job. Not started.
-- **Dated NOW items** (Lab upload pipeline, Appointment brief, Banister build) — unchanged.
-
-Note for the next session: three of the last four sessions have gone to instrument or
-governance (#271 engine tidy, #273 CI lane, plus the governance-hygiene checkpoint), with
-#272 the one product surface. The exposure lane has a read surface and no write surface; the
-interpretation lane has a backend and no frontend. The next pick should be a **product**
-lane (Exposure increment 2 is the most unblocked), not more instrumentation.
-
-### Single clearest next action
-The operator binds the two CI contexts on ruleset `20414758` (above) — the lane does not
-gate until then. In parallel, the next build pick is **Exposure UI increment 2 (write)**,
-unblocked once the phase write endpoints are confirmed present.
+### NOT touched this session — named explicitly
+This session, like the two before it (#273 test lane, #272 read surface), was **frontend/instrumentation
+work, not the health-intelligence core**. Three consecutive sessions have gone to the UI and its CI
+scaffolding rather than to the thing being instrumented. Standing still:
+- **The engine/algorithm lane** — Banister Form per-window load (`load_metrics`, #248) is computed but the
+  dosing seam still does not read it (#271/#274 notes); no work here this session.
+- **Increment 3 (dose)** and the **Weekly resolver** — both untouched, blocked/unready per Q106/Q105 above.
+- **Microcycle editor** — newly queued as a ROADMAP sub-item this session; not started (the advanced-JSON
+  escape hatch is the whole write affordance increment 2 shipped).
+- **Injury-ledger lanes** (backfill audit #222/#223, edit-and-supersede path) — untouched.
+- The **5 October live test** is the real proof of the write path against real data (review badge fires →
+  open Aerobic Base from the panel, posture held, capacities per that block, fortnightly A/B microcycle in
+  the advanced field, watch the recommendation change) — an operator event, not Code work.
