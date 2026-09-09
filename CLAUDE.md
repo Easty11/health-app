@@ -269,11 +269,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **`training_phases` ledger — Q112 resolved (`#270`), landed + merged (PR #167)** - Handoff: `closeout.md`.
+
 - **Governance-hygiene checkpoint (2026-09-08)** - #176 code-half supersession annotated (→ #238/#257; the schema half stands = #257 hold (a)); the ROADMAP "Post-1b next lanes (2026-08-02)" phantom struck (increments 2/5 DONE #202/#194, increment 3 backend spine #268, hub shell #150 BUILT #162 — not a next pick); `closeout.md` refreshed to a Q139 next-action. Docs-only, no `#NEXT`. Handoff: `closeout.md`.
 
 - **Interpretation increment 3 — lever-tap → scoped ephemeral education thread, backend spine (`#268`), landed + merged (PR #163)** - `interpretation/education_seed.py` (seed read from the producer, #49 lock) + `education_thread.py` (stateless, injected client, fail-closed output guard) + `POST /interpretation/education-thread`; `contains_directive` extracted as one shared #47 detector from the rephrase validator; three evals. Frontend tap surface deferred → Q139. Handoff: `closeout.md`.
-
-- **Psychological window — residual producer + down-only life-load modulator (S4 §3); Q122 resolved (`#267`), landed + merged (PR #160)** - Handoff: `closeout.md`.
 
 ---
 
