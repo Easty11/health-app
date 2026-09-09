@@ -1,0 +1,113 @@
+# Test lane — make "self-merge on green" mean the suites actually ran.
+#
+# WHY THIS EXISTS. Until now the only required check was `placeholder guard (POSIX)`
+# (governance-guard.yml). Both test suites were un-gated, so a test regression could
+# self-merge on a green guard alone — which is exactly what #271 and #272 did (both merged
+# on LOCAL test runs, CI never ran them). This workflow runs the frontend (vitest) and
+# backend (pytest) suites on every PR to master so a regression is caught before the merge
+# button is live.
+#
+# PREVENTION vs DETECTION — read this before trusting either job's green.
+#   * `pull_request` is the PREVENTION arm: it runs before the merge button is live, so a
+#     failing suite is stopped rather than merely noticed. It only PREVENTS once the ruleset
+#     REQUIRES these contexts — that is GitHub-side repo config, not committable and not in
+#     this file. Ruleset `master-pr-gated` (id `20414758`) requires a context by the exact
+#     JOB name (`jobs.<id>.name`), never the workflow name. The two strings that must be
+#     bound are `frontend tests (vitest)` and `backend tests (pytest)`. A required context
+#     that never reports reads as PENDING, not failed — so renaming a job silently unbinds
+#     its requirement. NEVER rename a bound job.
+#   * `push: [master]` is the DETECTION backstop for anything reaching master outside a PR.
+#     By the time it runs the ref has already moved. Worth having; not the mechanism.
+#
+# THE ENFORCEMENT SPANS THREE LAYERS AND ONLY ONE IS VERSIONED — same caveat as the guard.
+# `core.hooksPath` is per clone, the ruleset is per repo, and a workflow file is the only
+# piece with a diff. A deleted ruleset or a removed required-context leaves these runs green
+# while gating nothing. A green run is evidence the suite passed, never evidence the context
+# is bound: read the ruleset (`gh api repos/Easty11/health-app/rules/branches/master`).
+#
+# NO SECRETS. Nothing in either suite needs a real secret. `SECRET_KEY`/`ALGORITHM` are
+# throwaway CI values; `FERNET_KEY` is a valid Fernet key generated FRESH each run (stdlib,
+# no literal committed) purely so `encryption.py` imports and its round-trips work. The
+# frontend suite runs `npm test` only — lint is deliberately NOT gated here (six pre-existing
+# eslint errors are tracked as debt in FEEDBACK; a dedicated PR fixes them, then lint is
+# added as its own required job — never as a non-required one, which would set
+# mergeable_state: unstable and re-stall every PR).
+
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: frontend tests (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the ref under test
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Node 22, not 20. jsdom@30 pulls undici@8.10, whose webidl layer calls
+          # worker_threads.markAsUncloneable — added in Node 22.0.0 and ABSENT on Node 20,
+          # where every jsdom-environment test file crashes its worker with
+          # "webidl.util.markAsUncloneable is not a function" (the pure-JS suites still pass,
+          # so it fails as 6 worker errors, not a clean red). package.json engines `>=20` is a
+          # floor the test stack outgrew; the suite is authored and passes on Node 22.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install (clean, from lockfile)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Vitest
+        working-directory: frontend
+        run: npm test
+
+  backend:
+    name: backend tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the ref under test
+        uses: actions/checkout@v4
+        with:
+          # test_current_state.py reads `git show 3360ed5:backend/context_builder.py`;
+          # a shallow clone cannot see that object. Same reason the guard checks out full depth.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r backend/requirements.txt
+
+      # A fresh, valid Fernet key per run — encryption.py builds Fernet(FERNET_KEY) at import,
+      # so collection fails without one. Generated from stdlib (no dependency, no literal in
+      # the file); it protects nothing and is discarded when the runner is torn down.
+      - name: Generate an ephemeral CI Fernet key
+        run: |
+          echo "FERNET_KEY=$(python -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+
+      - name: Pytest
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-only-not-a-secret
+          ALGORITHM: HS256
+          # DATABASE_URL left unset → database.py defaults to SQLite (create_all path).
+        run: pytest -q
