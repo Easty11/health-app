@@ -11099,3 +11099,51 @@ py3.11 (four modules).
 (#8). Do not wire `load_metrics` into dosing here — the seam reads no Form yet; the wire is its own
 lane. Do not let a suppressed phase's withheld probe stop the queue being computed (`has_priority`
 and the capacity filter need it). Do not let `select_next` reference the review-prompt date (#228).
+
+### 272. Exposure UI increment 1 (read) — the React app consumes `/engine/next` for the first time
+
+**Decision.** The frontend reads the exposure engine. Three surfaces: (a) the Dashboard's Training
+tile becomes **data-backed** — the static `<Tile to="/training">` is REPLACED (not duplicated) by
+`ExposureTile`, which fetches `/engine/next` and renders one copy line, the same move the
+interpretation tile made under Q63; (b) `/training` gains an **`ExposurePanel` above the workout
+record** (recommendation above record) rendering the full engine surface — mode + effective budget,
+the open-phase card, the fortify card, the probe card or the suppressed-probe line, and the notes
+verbatim; (c) a **user-initiated Discuss push** into the docked chat via the existing
+`useHubChat().sendToChat` channel. Read-only: no `POST`, and the review badge is a PROMPT, never a
+button (#228).
+
+**Rationale.** The engine has emitted `/engine/next` since the fortification lane; nothing in the UI
+consumed it. The tile mirrors `InterpretationTile` exactly — four visible states, an error that is
+red and says *fault*, a 404/absence that says *no profile* — because absence-is-emptiness is the
+failure that lane produced repeatedly. **No chat seeding (#59, #150 rule 3):** the standing prompt is
+served server-side by `context_builder` (#270 S6), so the panel touches it on neither mount nor
+render; the only push is the explicit Discuss click, the same permitted user-initiated channel
+`WorkoutPanel.onFeedback` already uses. **COST NOTE (carried from the interpretation tile):**
+`/engine/next` runs the selector per request (no cache); the hub now calls it on load. Acceptable for
+one user — the fix if hub load gets slow is a cached endpoint, not client-side arithmetic.
+
+**No-profile mapping settled in-tree, not guessed.** `GET /engine/next` never 404s: with no
+`FortificationProfile`, `selection.select_next` builds a fortify block with `target = None`
+(`target_label` collapses to `"—"`) and returns 200. So `empty` = a 404 (defensive; the endpoint
+does not emit it today) OR a 200 with no `fortify.target`; anything else non-2xx = `error`. This is
+GATE 2 of the brief.
+
+**Status.** Landed. Frontend only — no backend, no schema, no migration. `WorkoutPanel`, `Tile`,
+`HubLayout` unedited; the Training-tile swap is a replacement, so the Dashboard grid's doorway count
+is unchanged.
+
+**How you know.** 23 new vitest tests (`exposureTileCopy.test.js`, `ExposureTile.test.jsx`,
+`ExposurePanel.test.jsx`, `Dashboard.test.jsx`) mirror `Injuries.test.jsx`: the four tile states with
+404→empty / 200-no-target→empty / 500→error-not-empty; the panel against the live
+`engineNextDecompression` fixture (Fortify chip, phase card, no probe card, suppressed-probe line,
+vehicles in received order, notes verbatim, nothing pushed on mount) and against the hand-authored
+`engineNextHeld` fixture (probe card, no suppressed line, the #221 within-phase warning); Discuss
+calls `onDiscuss` once with text carrying the target label; exactly one Dashboard link routes to
+`/training`. Full frontend suite green (10 files, 91 tests).
+
+**Do not revisit unless.** Do not seed chat from any surface here — nothing on mount, nothing
+automatic, nothing into the standing prompt (#59); server-side `context_builder` already carries the
+engine surfaces. Do not render `error` as `empty` or absence — they are distinct renders by design.
+Do not add a `POST` to this increment (open-phase / close-to-baseline / history is increment 2,
+below). Do not fake dose — nothing implies which sub-cycle is due or sessions remaining; that is Q106
+(increment 3). Do not re-sort vehicles client-side; the engine has already re-ranked them.

@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom'
 import HubLayout from '../components/HubLayout'
 import Tile from '../components/hub/Tile'
 import InterpretationTile from '../components/hub/InterpretationTile'
+import ExposureTile from '../components/hub/ExposureTile'
 import api from '../api'
 
 function CheckInButtons() {
@@ -67,7 +68,7 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <Tile to="/recovery" icon="🌙" label="Recovery" detail="HRV, sleep and overnight vitals" />
-          <Tile to="/training" icon="🏋️" label="Training" detail="Strength and aerobic sessions" />
+          <ExposureTile />
           <Tile to="/metrics" icon="🧪" label="Labs" detail="Blood panels and marker history" />
           <InterpretationTile />
           <Tile to="/checkin-history" icon="📅" label="History" detail="Past check-ins" />

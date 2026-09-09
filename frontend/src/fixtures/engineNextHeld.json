@@ -1,0 +1,55 @@
+{
+  "mode_recommended": "probe",
+  "budget": { "probe": 0.25, "fortify": 0.75 },
+  "fortify": {
+    "target": "anti_lateral_flexion",
+    "target_label": "Anti-lateral-flexion",
+    "target_note": "Frontal/transverse trunk control as the right-side asymmetry corrective — the limiter the bar named (oblique/QL/glute-med/erector tension at 120, legs in reserve = control cap, not strength cap). Same object as the longevity priority and the 30-year right-side through-line.",
+    "vehicles": [
+      { "key": "pilates_clinical", "label": "Clinical Pilates (frontal/transverse control, IAP, position tolerance)" },
+      { "key": "swim", "label": "Swimming (decompressed load, managing weeks)" },
+      { "key": "hike", "label": "Hiking (probes foot/ankle base + aerobic)" },
+      { "key": "offset_carry", "label": "Offset / suitcase carry (corrects anti-lateral-flexion asymmetry)" },
+      { "key": "unilateral_lifting", "label": "Unilateral lifting (exposes + corrects per-side asymmetry)" },
+      { "key": "barbell_floor_hold", "label": "Barbell / trap-bar (floor-holder and NM dose — not the variety)" }
+    ],
+    "dosing": {
+      "windows": ["Neuromuscular", "Psychological"],
+      "entry": "fortify (progress on demonstrated response)",
+      "note": "Graded entry (spec §7): a novel pattern is unknown capacity — small dose, read response, never blind-load at intensity. Quantitative load references Banister Form (Fitness − Fatigue), computed per-window in load_metrics (DECISIONS_LOG #248); the dosing seam does not yet read it. ACWR is not used."
+    }
+  },
+  "probe": {
+    "region_key": "carry",
+    "label": "Carry",
+    "side": "right",
+    "group": "A",
+    "plane": "frontal",
+    "capacity": "strength",
+    "probing_test": "Farmer / offset carry",
+    "expectation": "Offset version probes anti-lateral-flexion asymmetry directly",
+    "confidence": "likely",
+    "probe_priority": true,
+    "needs_norm": false,
+    "idiom": "Surface it in the education idiom — the user logs whether it felt unstable / asymmetric / hard, not a screen score (spec §12). Pain = stop + refer.",
+    "dosing": {
+      "windows": ["Neuromuscular", "Mechanical"],
+      "entry": "exploratory (graded)",
+      "note": "Graded entry (spec §7): a novel pattern is unknown capacity — small dose, read response, never blind-load at intensity. Quantitative load references Banister Form (Fitness − Fatigue), computed per-window in load_metrics (DECISIONS_LOG #248); the dosing seam does not yet read it. ACWR is not used."
+    }
+  },
+  "notes": [
+    "Training phase 'rebuild' — probe posture held; probe budget unchanged.",
+    "Training phase 'rebuild' excludes the standing Fortify target's capacity — a standing-vs-now disagreement, surfaced not resolved (the declared target is still served)."
+  ],
+  "training_phase": {
+    "id": 2,
+    "label": "rebuild",
+    "probe_posture": "held",
+    "capacities": ["strength", "power"],
+    "entered_on": "2026-09-08",
+    "review_due": false,
+    "fortify_target_within_phase": false,
+    "review_on": "2026-10-06"
+  }
+}
