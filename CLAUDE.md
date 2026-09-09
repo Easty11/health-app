@@ -187,7 +187,8 @@ as one PR per checkpoint. Three invariants:
   any removed line outside a declared replacement region forces human review (the guard
   anchors on placeholder headings and cannot see content corruption).
 
-Code and schema changes always take full human review.
+Schema migrations take full human review (§ Merge disposition, hold (a)). Code changes
+self-merge on green under § Merge disposition.
 
 ### Conventions
 
