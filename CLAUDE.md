@@ -270,11 +270,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Test CI lane — `vitest` + `pytest` run on every PR so a test regression can't self-merge (`#273`), landed + merged (PR #174); binding the two contexts is an operator ruleset edit still OWED** - Handoff: `closeout.md`.
+
 - **Exposure UI increment 1 (read) — the React app consumes `/engine/next` (`#272`), landed + merged (PR #172)** - Handoff: `closeout.md`.
 
 - **Engine output tidied under a suppressed `training_phase` (`#271`) + CLAUDE.md L190 merge-disposition contradiction retired (`FEEDBACK` §35) — landed + merged (PRs #169, #170)** - Handoff: `closeout.md`.
-
-- **`training_phases` ledger — Q112 resolved (`#270`), landed + merged (PR #167)** - Handoff: `closeout.md`.
 
 ---
 
