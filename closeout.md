@@ -1,95 +1,79 @@
-# Code session close-out — 2026-09-09 (engine suppressed-phase output tidy + L190 governance fix)
+# Code session close-out — 2026-09-09
 
 ## 1. Real commits this session
 
-Session-open ref `b0526b4` (master at session start, post-#270). Two PRs landed to master;
-both branches merged + remote-deleted, no local branches remain but `master`.
+Session-open ref: `52a12ce` (master tip at session start, PR #171 merge). All work landed
+via PR #172 (merge commit `81c1fb9`), branch `claude/exposure-ui-read-increment-5j86um`
+(merged + remote-deleted).
 
 ```
-6508a29 Merge pull request #170 from Easty11/claude/gov-merge-disposition-l190-fix
-569f4d5 gov: retire the CLAUDE.md L190 absolute contradicting § Merge disposition
-fe3a99c Merge pull request #169 from Easty11/claude/engine-training-phase-output-carlvi
-59334ef gov: DECISIONS #271 + BRANCHES row for the suppressed-phase output tidy
-ae7a19e feat(engine): tidy select_next output under a suppressed training phase
+81c1fb9 Merge pull request #172 from Easty11/claude/exposure-ui-read-increment-5j86um
+5f9b0d3 gov: Exposure UI increment 1 (read) — DECISIONS #272, ROADMAP, BRANCHES
+63abd49 feat(frontend): Exposure UI increment 1 (read) — the app consumes /engine/next
 ```
 
-- **PR #169** (`claude/engine-training-phase-output-carlvi`): feature `ae7a19e` (engine +
-  context_builder + tests) then governance `59334ef` (DECISIONS #271 + BRANCHES row) — GATE 3
-  disjoint. Merged `fe3a99c`. `placeholder guard (POSIX)` green; `mergeable_state: clean`;
-  master max was #270 at merge so **#271 stands** unre-resolved. Opened draft by the harness,
-  flipped ready + self-merged at operator instruction.
-- **PR #170** (`claude/gov-merge-disposition-l190-fix`): governance `569f4d5` — CLAUDE.md L190
-  fix + FEEDBACK §35 + the #271 BRANCHES row rolled to merged. Merged `6508a29`. Guard green;
-  docs-only, self-merged on green.
-- The close-out commit (`chore: session close-out`) lands on top of this via its own PR.
+- `63abd49` — **feature (F1–F5).** `exposureTileCopy.js` (pure, tested); `ExposureTile.jsx`
+  (four states, REPLACES the static Dashboard Training tile); `ExposurePanel.jsx` (full
+  read surface on `/training`, above `WorkoutPanel`); `Training.jsx` (stack owns its own
+  scroll, `HubLayout`/`WorkoutPanel`/`Tile` unedited); `Dashboard.jsx` (tile swap). Two
+  fixtures — `engineNextDecompression.json` (live prod payload, user 1, verbatim) and
+  `engineNextHeld.json` (hand-authored, probe + within-phase-warning path). 23 new vitest
+  tests; full frontend suite green (10 files, 91 tests).
+- `5f9b0d3` — **governance (F6), disjoint commit.** DECISIONS #272; ROADMAP NEXT rows for
+  Exposure UI increment 2 (write) and increment 3 (dose, blocked on Q106); BRANCHES row.
+  Additions only — #176(c) diff-shape clean; `placeholder guard (POSIX)` green.
 
-`--merge` throughout (BRANCHES rows record landing SHAs; squash/rebase would dangle them).
+The close-out commit itself (this file + CLAUDE.md Recent-landings) is separate, below.
 
 ## 2. Pending-queue reconciliation
 
-No `;cc` pending-commit queue was carried into this session — work was driven directly from the
-`claude_ENGINE_TRAINING_PHASE_OUTPUT` brief (chat-designed 2026-09-09), not a chat close-out
-handoff. Nothing provisional remains from this session's own work:
-
-- Brief T1–T5 all landed in PR #169. T1 (probe block `None` under suppression + context line),
-  T2 (recovery-vehicle re-rank via `RECOVERY_VEHICLES`, its own note), T3 (dosing-note corrected
-  to #248), T4 (tests), T5 (DECISIONS #271 + BRANCHES). Feature/governance split held.
-- The operator follow-up (merge #169; land the L190 fix + a FEEDBACK line) landed in PR #170.
-  The L190 fix reconciles #257's own decision — no new DECISIONS entry, no `#NEXT`.
-
-**Carried forward, still unresolved (from the prior #270 close-out, untouched this session):**
-two validation calls made during the #270 work remain live and un-adjudicated — the microcycle
-slot `sessions_per_cycle` bounds (`0–28`) and `close_reason` required-non-empty on
-`POST /engine/phase/close`. Neither is load-bearing; adjust in a follow-up if either is wrong.
+**No pending-commit queue was carried in.** This session did not open from a chat `;cc`
+handoff; it implemented the attached `claude_EXPOSURE_UI_READ_BRIEF.md` directly
+(chat-ratified, non-migration → self-merge on green under § Merge disposition). The one
+missing input — the `engineNextDecompression.json` payload, referenced as "the JSON below"
+but absent from the brief — was supplied by the operator on request and written verbatim;
+no item is provisional. Everything decided this session is committed (§1) and merged.
 
 ## 3. Cold-resume handoff
 
-**Maxima at close.** Decisions `### 271`; questions `## Q139`. (The L190 governance fix minted no
-decision number — it reconciled #257.)
+**Maxima:** DECISIONS `#272` · OPEN_QUESTIONS `Q139`.
 
-**What landed (this session).**
-- **DECISIONS #271** — engine output tidied under a *suppressed* `training_phase`, EMIT-ONLY (no
-  change to what `select_next` decides): (T1) the `probe` block is withheld (`None`) under
-  suppression, queue still computed for `has_priority`/E3/E5; `context_builder` renders
-  `- PROBE: suppressed by training phase '<label>'`, distinct from the queue-empty line. (T2) a
-  suppressed phase is a third trigger into the stable two-group vehicle re-rank via new module
-  constant `RECOVERY_VEHICLES = ("swim","pilates_clinical","hike")` — recovery-first, orders
-  preserved, nothing removed (#8), with its own note; `held` unchanged. (T3) `_DOSING_NOTE`
-  corrected: Banister Form is computed in `load_metrics` (#248), the dosing seam does not yet
-  read it (was the stale #18 "designed, not implemented"). `#228` structural guard stays green.
-- **CLAUDE.md L190 contradiction retired (FEEDBACK §35)** — the pre-#257 absolute "Code and
-  schema changes always take full human review" survived #257's amendment of § Merge disposition
-  and contradicted it; it made Code hold green code-only PR #169 for review. Replaced with
-  "Schema migrations take full human review (hold (a)). Code changes self-merge on green under
-  § Merge disposition." FEEDBACK §35: when amending a CLAUDE.md rule, grep the WHOLE file for the
-  superseded wording, not only the section rewritten. The #271 BRANCHES row was rolled to merged.
+**Branch:** `claude/exposure-ui-read-increment-5j86um` — merged (PR #172, `81c1fb9`),
+remote deleted, rowed in `BRANCHES.md` DONE → #272. Local copy can be deleted. On `master`.
 
-**What was NOT touched — the frontend / product surface stood still (name it, don't infer a queue
-from what moved).** This session and the prior one (#270) both went to the *engine / ledger
-instrument* — the `training_phases` store, then the plumbing of its output. The surfaces the
-operator actually sees were not built:
+### What landed
+Exposure UI increment 1 (read), `#272` — the React app consumes `/engine/next` for the
+first time. Data-backed Training tile + `ExposurePanel` on `/training`. Read-only; no chat
+seeding (#59 — `context_builder` serves the standing prompt); no backend/schema change. The
+no-profile mapping (404 OR 200-with-no-`fortify.target` → empty; else error) was determined
+in-tree, not from the brief.
 
-- **The exposure-UI panel.** DECISIONS #271 was explicitly sequenced *before*
-  `claude_EXPOSURE_UI_READ_BRIEF.md` "so the panel renders clean engine output rather than gating
-  around it in JSX." The engine now emits clean output under a suppressed phase — but the panel
-  itself was **not built** this session. It is the direct next lane the tidy was clearing for.
-- **Q139 — interpretation increment 3 frontend tap-to-thread surface** (STEP 5): still **OPEN**,
-  untouched. Backend spine landed (#268); the tappable lever → scoped thread panel/route,
-  client-held turn history POST, and `{text,source,deflected}` render remain. A separate frontend
-  lane from the exposure panel, but the same unbuilt-surface pattern.
+### What was NOT touched — the standing lanes, unchanged this session
+This was a **frontend read increment**; two feature lanes stood still and remain the real
+queue:
 
-Both are surfaces chat cannot verify (the unseeable-surface rule) — a frontend session must verify
-against the served bundle (`#121`), not backend-test green.
+- **Exposure UI increment 2 (write)** — open next phase / close to baseline / phase history
+  from the panel; the review badge (#232/#228) becomes actionable. First `POST` from this
+  surface. Needs the phase open/retire write endpoints verified server-side first.
+  (ROADMAP NEXT, added this session.)
+- **Exposure UI increment 3 (dose)** — **blocked on `Q106`** (how a slot's `minutes`
+  reaches the prescription — still OPEN, nothing changed) and the Weekly-resolver lane
+  (#221-deferred due-slot resolver, ROADMAP NOW). The panel would show the declared
+  microcycle and say *declared, not scheduled*.
+- **Interpretation increment 3 frontend (`Q139`, OPEN)** — the tap-to-thread surface
+  (build-sequence step 5). Backend spine landed at `#268`; the frontend surface is
+  unbuilt and needs served-bundle verification (#121, unseeable-surface rule). Untouched
+  this session.
+- **Dated NOW items** (Lab upload pipeline, Interpretation layer go-live follow-ups,
+  Appointment brief) — unchanged.
 
-**Open questions (grouped).** OPEN: **Q139** (interp increment-3 frontend), Q138 (session-close
-BRANCHES-row sweep vs merge reality — partly exercised this close-out by rolling the #271 row),
-Q137 (`date.today()` AEST audit), Q136 (`SamsungHRVReading` constraint drift). WATCH: Q132/Q133
-(Garmin garth durability). DEFERRED: Q134/Q135 (Samsung HRV read restructure).
+Note for the next session: the last several sessions have been engine-tidy (#271) and now
+its UI read (#272) plus governance. The exposure lane now has a *read* surface but no
+*write* surface, and the interpretation lane's increment 3 has a backend but no frontend —
+both are frontend-surface picks gated on verification, not on undecided design.
 
-**Single clearest next action.** Build the **exposure-UI panel** to `claude_EXPOSURE_UI_READ_BRIEF.md`
-— the lane #271 was sequenced to clear. It renders `select_next`'s output; under a suppressed phase
-the probe block is now `None` (render "suppressed by training phase", not an empty probe) and the
-vehicles arrive recovery-first with a note. Verify against the served frontend bundle (`#121`), not
-a backend green. (Alternative frontend pick: Q139.) Whichever is taken, the standing signal is that
-two consecutive sessions instrumented rather than shipped the instrument's surface — the next
-session should go to a surface, not deeper into the engine.
+### Single clearest next action
+Pick **Exposure UI increment 2 (write)** — it is unblocked once the phase open/retire write
+endpoints are confirmed present (verify in `backend/routers/training_phase.py` first), and
+it makes the #272 read panel actionable. Alternative small pick: the **Interpretation
+increment 3 frontend (`Q139`)**. Increment 3 (dose) stays blocked on `Q106`.
