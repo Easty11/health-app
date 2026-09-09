@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 import models
 from auth import get_current_user
 from database import get_db
+from load_metrics import _local_day  # operator-local (AEST) day — Q42 single source
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -284,7 +285,8 @@ class ResolutionIn(BaseModel):
     """The operator's answer to "is this still true?", for any resolvable entry type.
     `basis` is mandatory and free text: a resolution with no stated grounds is the
     thing that later reads as an accident. `resolved_on` defaults to today rather than
-    being required, since the common case is resolving something as of now."""
+    being required, since the common case is resolving something as of now — today is
+    the operator-local (AEST) day, not Railway UTC (Q42 local-day; see `_resolve_entry`)."""
     basis: str
     resolved_by: str
     resolved_on: date | None = None
@@ -668,7 +670,10 @@ def _resolve_entry(
     entry.value = {
         **(entry.value or {}),
         "resolution": {
-            "resolved_on": str(body.resolved_on or date.today()),
+            # Operator-local (AEST) day, not Railway UTC (Q42): a resolution stamped
+            # late on an AEST evening must not read as the following UTC day. Mirrors
+            # the training-phase ledger's `entered_on` default.
+            "resolved_on": str(body.resolved_on or _local_day()),
             "basis": body.basis,
             "resolved_by": body.resolved_by,
         },

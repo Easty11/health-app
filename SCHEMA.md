@@ -1012,7 +1012,7 @@ ALTER TABLE fortification_profiles ADD COLUMN weekly_template JSON;
 
 No migration. `user_knowledge_entries.value` is `sa.JSON()` (Postgres `json`, not `jsonb`) and holds a different shape per `type`; this section records the shape for `type='schedule_item'` only. The parent table predates this document's coverage (see the note under 020). Shape declared and validated at DECISIONS_LOG #233.
 
-**Ownership.** `schedule_item` owns **WHEN**. `fortification_profiles.weekly_template` (023) owns **HOW MUCH OF WHAT KIND**. Stores own facts; the resolver composes them. Any further axis resolves into an existing vocabulary rather than minting a store. `sessions_per_week` appears in both and means different things by design — here it is a calendar fact (*how often this commitment happens*), there a capacity quota (*how many doses of this capacity*).
+**Ownership — now three stores (#270).** `schedule_item` owns **WHEN**. `fortification_profiles.weekly_template` (023) owns the **HOW-MUCH baseline** — the standing per-user capacity quota. `training_phases` (031) owns **POSTURE + the current block's HOW-MUCH** — the phase's `probe_posture`/`capacities` and its phase-scoped `microcycle`, which supersedes `weekly_template` while a phase is open. Stores own facts; the resolver composes them (phase-current over profile-baseline). Minting `training_phases` rather than adding a field is deliberate: temporal posture + history is a third axis, neither WHEN nor HOW-MUCH, that resolves into neither existing vocabulary. `sessions_per_week` (023, `schedule_item`) and `sessions_per_cycle` (031, `microcycle`) are distinct tokens by design — a weekly quota vs a per-sub-cycle dose — with no cross-store rename.
 
 ```json
 {
@@ -1209,6 +1209,40 @@ CREATE TABLE hrv_samples (
 CREATE INDEX ix_hrv_samples_id              ON hrv_samples (id);
 CREATE INDEX ix_hrv_samples_hrv_reading_id  ON hrv_samples (hrv_reading_id);
 ```
+
+### 031 — training_phases
+
+The exposure engine's **DOING-NOW axis** (migration `f2b7c1a4d9e0`, DECISIONS_LOG #270; Q112). A per-user, append-only, **exactly-one-open** ledger — structurally identical to `cbti_blocks` — separating what the operator is *doing now* (the open phase) from the profile's standing *building toward* (`fortification_profiles`). See the ownership note under 024: this is the third store, owning **POSTURE + the current block's HOW-MUCH**.
+
+```sql
+CREATE TABLE training_phases (
+    id             SERIAL PRIMARY KEY,
+    user_id        INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- indexed
+    label          VARCHAR(100) NOT NULL,        -- free text; the engine NEVER branches on it
+    intent         TEXT,                         -- prose, incl. the energy-system posture nothing enforces
+    probe_posture  VARCHAR(10) NOT NULL,         -- CHECK IN ('suppressed','held'); required, no default (#230)
+    capacities     JSON,                         -- allow-list of taxonomy Capacity tokens; NULL = all live; stored verbatim
+    microcycle     JSON,                         -- phase-scoped A/B shape; NULL = fall back to weekly_template
+    entered_on     DATE NOT NULL,                -- anchor; A/B index counts from here; <= operator-local day
+    review_on      DATE,                         -- "ask again" prompt — never expires, never auto-closes (#228)
+    closed_on      DATE,                         -- UPDATE-once at closure
+    close_reason   TEXT,                         -- UPDATE-once at closure
+    asserted_by    VARCHAR(20) NOT NULL,         -- CHECK IN ('user','engine','clinician') (#227)
+    asserted_on    DATE NOT NULL,                -- (#227)
+    source         VARCHAR(20) NOT NULL,         -- CHECK IN ('onboarding','chat','system','api') (#230)
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX ix_training_phases_user_id ON training_phases (user_id);
+```
+
+**Append-only, INSERT never upsert.** The ONLY permitted UPDATE is `closed_on` + `close_reason` at closure — a model+application invariant (no DB trigger; the SQLite test path builds via `create_all`), the same discipline `cbti_blocks` carries. A phase is never edited after authorship except closure, so the `upsert_profile` `is not None` merge pattern deliberately does not apply. The three domain CHECKs are the only DB-enforced constraints; their values are frozen snapshots of `engine.profile.ASSERTED_BY_VALUES` / `routers.knowledge.SOURCE_VALUES` (models.py cannot import them without a cycle), pinned equal by a test.
+
+**Exactly-one-open, enforced at write.** `engine/training_phase.open_phase` closes the current open row in the same transaction (`closed_on = new.entered_on`, the half-open handoff) then INSERTs the new one. Zero-open is a valid **baseline** (like `cbti_blocks` between blocks): with no open row the engine runs off profile + `weekly_template`, byte-identical to pre-Q112. `entered_on` is monotonic (>= the open row's) and never future-dated (a future-dated phase is a scheduler, #228). Reads: `current_training_phase` (the open row | None), `phase_at(d)` over the **half-open interval** `entered_on <= d < closed_on` (`closed_on NULL` = open; the successor wins a same-day boundary).
+
+**Validated at write, stored verbatim.** `engine/training_phase.validate_training_phase` refuses (422) an unknown/duplicate capacity, a bad `probe_posture`/`asserted_by`/`source`, a future or non-monotonic `entered_on`, a `review_on` before `entered_on`, and a malformed `microcycle` (`sub_cycle_days` 3–28; `sub_cycles` 1–4; each slot a `weekly_template` slot shape with `sessions_per_cycle` in place of `sessions_per_week`, `minutes` 5–180, duplicate-capacity checked **per-sub-cycle** so the same capacity across A/B is allowed). `capacities`/`microcycle` are byte-identical PUT/GET. Router: `POST /engine/phase` (open), `POST /engine/phase/close` (→ 404 if none open), `GET /engine/phase` (current | null, with `review_due`), `GET /engine/phase/history`.
+
+**Readers.** `select_next` (router-injected `training_phase` kwarg, mirroring `profile`): `suppressed` → effective probe budget 0 / mode fortify (stored `probe_budget` untouched); non-null `capacities` REMOVE-only-filters the probe queue (Q105 resolve-before-compare; never re-admits a #221 stop); the Fortify target is never filtered, `fortify_target_within_phase` surfaces a phase excluding it. `review_due` is computed by the router, never by `select_next` (#228: the prompt cannot gate selection). `context_builder` renders the open phase with a `review_on` badge. `select_next` does NOT read `microcycle` — the week-to-date resolver (Q106, unbuilt) does, falling back to `weekly_template` at baseline.
 
 ## Canonical Metric Type Whitelist
 

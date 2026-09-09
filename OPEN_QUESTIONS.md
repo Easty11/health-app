@@ -3251,6 +3251,15 @@ lane. The field is validated and stored so the consuming lane needs no migration
 **State:** OPEN — blocks the weekly-resolver lane, nothing else. Owner: Luke. Cross-refs #221
 (the declaration), #18 (the load model the first reading depends on), Q105.
 
+**Scope amended (#270).** The resolver's input is no longer `weekly_template` alone: when a
+`training_phases` row is open with a `microcycle`, the week-to-date / due-slot resolver reads
+`phase.microcycle` (the phase-scoped A/B shape, whose count key is `sessions_per_cycle`) and falls
+back to `weekly_template` only at baseline (zero-open). The `minutes` question here is unchanged —
+the microcycle slot carries the same `minutes` field with the same three open readings — but the
+resolver this question owns must now compose phase-current over profile-baseline, mirroring
+phase-now over profile-intent. Landed ≠ live: #270 gives the resolver phase-scoped input; it does
+not build the resolver.
+
 
 ## Q107. Should a `review` flag surface a resolve prompt, and on which surface?
 
@@ -3464,10 +3473,17 @@ than no phase: a settle outliving its reason becomes a standing restriction nobo
 the failure #228 names for `review_on` in the store next door. Answering this means either changing
 the null-guard or accepting that a phase can be overwritten and never cleared.
 
-**State:** OPEN — blocks nothing mechanically; the cost is a recommendation the operator
-overrides by hand, and an engine that earns less trust each time. Owner: Luke. Cross-refs the injury
-coupling question above (the same missing-relationship shape), #228 (an un-clearable standing
-value), Q105/Q106 (the weekly-store ownership questions this sits beside).
+**State:** DONE → #270. The engine needs a phase concept, and it is a STORE, not a field: the
+`training_phases` ledger (append-only, exactly-one-open, structurally `cbti_blocks`) separates DOING
+NOW from the profile's standing BUILDING TOWARD. It carries `probe_posture` (`suppressed | held`), an
+optional `capacities` allow-list, a phase-scoped A/B `microcycle`, an `entered_on` anchor and a
+`review_on` prompt (#228), and modulates `select_next` (suppressed → probe budget 0/fortify;
+capacities REMOVE-only-filter the queue; the Fortify target is never dropped, disagreement surfaced).
+The `upsert_profile` null-guard concern dissolves — a phase is INSERTed, never upserted; there is
+nothing to fail to unset, you close a row and open (or don't) the next; `upsert_profile` is
+untouched. Scope boundary: movement-quality capacities only — aerobic posture stays in `intent`
+prose, enforced by nothing. The ledger is history + current, never a plan (the offseason sequence is
+ROADMAP, operator-held). Owner: Luke.
 
 
 ## Q113. Which `source` value names an operator write made directly against the API?

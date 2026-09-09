@@ -10946,3 +10946,92 @@ plain-JSON-column trap). The injury resolve tests were untouched and still pass.
 that drops the 404-leak boundary. Do not let `expire-stale` write a `resolution` block or otherwise
 absorb the retire path; the three exits are distinct by design. Do not make resolution auto-fire
 from a passed `season_end`/`duration_weeks` (#228: nothing auto-retires).
+
+### 270. Q112 resolved — the `training_phases` ledger: a phase-tagged history axis (DOING NOW), separate from the profile's standing BUILDING TOWARD
+
+**Decision.** Mint a new store, `training_phases` (migration `f2b7c1a4d9e0`), a per-user
+append-only, exactly-one-open ledger structurally identical to `cbti_blocks`. It separates what
+the operator is *doing now* (the open phase) from the profile's standing *building toward*
+(`fortification_profiles`), and modulates the exposure engine's recommendation. A phase carries a
+`probe_posture` (`suppressed | held`, required at write, no default — #230), an optional
+`capacities` allow-list (taxonomy `Capacity` tokens; null = all live), an optional phase-scoped
+A/B `microcycle`, an `entered_on` anchor, a `review_on` prompt (#228 semantics: "ask again", never
+expires, never auto-closes), and provenance (`asserted_by`/#227, `source`/#230, both imported not
+redeclared). Exactly-one-open is enforced at write — opening a phase closes the current open row in
+the same transaction (`closed_on = new.entered_on`); zero-open is a valid baseline where the engine
+runs off profile + `weekly_template`, byte-identical to pre-Q112.
+
+Engine hooks in `select_next` (router-injected `training_phase` kwarg, mirroring `profile`):
+`suppressed` forces the effective probe budget to 0 → mode fortify (the stored `probe_budget` is
+untouched; `budget` reports the effective values); a non-null `capacities` REMOVE-only-filters the
+probe queue (Q105 resolve-before-compare; identical discipline to the #221 slot filter, so it can
+never re-admit a hard-stopped region); the Fortify target is NOT filtered (#221: a declared field,
+not a ranked candidate) and a phase excluding its capacity surfaces
+`fortify_target_within_phase=false` — a standing-vs-now disagreement surfaced, not resolved. The
+`training_phase` response block is present only when a phase is open (#221 "only present when it
+applies"). `review_due` is computed by the router and passed IN; `select_next` never reads the
+review-prompt date, so #228's "the prompt cannot gate selection" holds structurally
+(`test_assertion_provenance::test_no_selection_code_reads_review_on`).
+
+**Ownership argument (why a new store, not a new field).** SCHEMA 024 says any further axis resolves
+into an existing vocabulary rather than minting a store. This axis does not: temporal posture +
+history is neither WHEN (`schedule_item`) nor HOW-MUCH (`weekly_template`). It is POSTURE + the
+current block's HOW-MUCH, a third ownership. The scope boundary is load-bearing: `Capacity` is
+movement-quality only (mobility/stability/strength/power/endurance). Aerobic / VO2 / recovery
+posture is training-load, not a capacity — the phase RECORDS it in `intent` prose and nothing gates
+it. `Capacity` is never extended with energy-system members (two axes in one enum — Q27 territory),
+and no `energy_systems` field is minted (structure nothing reads — Q109/Q112 anti-pattern).
+
+**Precedence over `weekly_template`.** `weekly_template` (023) is not retired; it becomes the per-user
+baseline default. An open phase with a `microcycle` gives the (still-unbuilt) week-to-date resolver
+phase-scoped input; else it falls back to `weekly_template`. Q106's scope is amended: "read
+`phase.microcycle` then fall back to `weekly_template`." Landed ≠ live — the microcycle is a
+*declaration*, exactly as `weekly_template` is; fortnightly dosing is declared, not enforced, until
+the Q106 resolver lands. `select_next` does NOT read `microcycle` (it picks a candidate, not a dose)
+— resolver-only.
+
+**Named consumers (the ledger's warrant).** `capability_observations` when built (the deficit lane);
+`context_builder` observation views now (renders the open phase — label, intent, probe_posture,
+capacities — with a `review_on` badge, same badge discipline as `schedule_item` bounds: a prompt,
+never a transition).
+
+**The ledger is history + current, never a plan.** No future-dated `entered_on` (a future-dated
+phase is a mini-scheduler, #228's auto-transition by another name); no auto-close; `review_on` is a
+prompt. The offseason is authored one phase at a time at each transition; the plan-of-record lives
+in `ROADMAP` (operator-held), the ledger records what was actually run. Club-start and the Q4 flip
+remain operator-adjudicated events.
+
+**Also (S7, cross-cutting).** `_local_day()` (operator-local AEST, Q42) is now the single source for
+"which day is it for the operator": extended to a no-argument now-UTC form and applied to
+`entered_on` default / the `<= today` check / the A/B index / `review_due`, and — the fix that
+prompted it — to the `resolve_injury` / `resolve_schedule_item` default `resolved_on`, which was
+`date.today()` = Railway UTC and mis-stamped a late-AEST evening onto the following day
+(`schedule_item` id 9's 2026-09-08 stamp for a 2026-09-09 AEST action). Id 9's stamp is left as a
+history row.
+
+**Status.** Landed. Migration `f2b7c1a4d9e0` (`down_revision` = `c1d2e3f4a5b6`, resolved in-tree at
+branch time) creates the table + `ix_training_phases_user_id`; three DB-enforced domain CHECKs
+(`probe_posture`, `asserted_by`, `source`) are frozen snapshots of the canonical tuples (models.py
+cannot import them without a cycle), pinned equal by `test_model_check_domains_match_the_canonical_tuples`.
+The migration is RELEASED (operator, 2026-09-09) — no schema hold.
+
+**How you know.** `backend/tests/test_training_phase.py` (43 tests, green on py3.11 against pinned
+requirements) mirrors `test_cbti_substrate` for the append-only / one-open invariants and
+`test_schedule_item_schema` for the fail-closed validation battery, and asserts E2–E5 end-to-end
+through `select_next` plus the HTTP surface. Load-bearing gates: the `None`-phase path is
+byte-identical to pre-Q112 (`test_none_phase_is_byte_identical`); suppressed → probe budget 0 with
+the stored 0.25 intact (`test_suppressed_forces_fortify_and_zero_probe_budget`); the capacity filter
+only narrows and Q105 resolves uppercase tokens (`test_capacities_filter_removes_only_never_readmits`,
+`test_capacities_resolve_before_compare_uppercase_tokens`); `phase_at` half-open with the successor
+winning the same-day boundary (`test_phase_at_half_open_and_same_day_boundary`); and the migration
+DDL renders clean offline (table, three CHECKs, FK, index; downgrade drops). The full suite is
+1352 passed / 3 pre-existing env failures (a missing git object for a diff-against-old-commit test,
+and two missing-optional-dep import errors — none touch this change).
+
+**Do not revisit unless.** Do not extend `Capacity` with energy-system members or mint an
+`energy_systems` field — the movement-quality boundary is the whole scope argument. Do not let a
+phase auto-close, auto-transition, or be future-dated; do not make `review_on` gate anything (#228).
+Do not filter the Fortify target by a phase (#221). Do not let `select_next` read the review-prompt
+date. Do not turn the ledger into a plan/scheduler — the offseason sequence lives in `ROADMAP`,
+operator-held. Do not reuse the `upsert_profile` `is not None` merge pattern — a phase is INSERTed,
+never upserted, and never edited after authorship except the one closure UPDATE.
