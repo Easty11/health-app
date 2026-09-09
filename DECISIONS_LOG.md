@@ -11218,3 +11218,64 @@ Never add a real secret to the workflow or a suite. Do not drop the Node-22 pin 
 while the jsdom/undici stack needs `markAsUncloneable`. Do not read a green run as proof the
 contexts are bound — read the ruleset. When the lint-debt PR lands, add `frontend lint
 (eslint)` as its OWN required job and bind it; do not fold lint back into the vitest job.
+
+### 274. Exposure UI increment 2 (write) — the operator opens, closes, and reads phases from the panel
+
+**Decision.** The `ExposurePanel` gains a write surface, additive beside the #272 read path; frontend
+only, no backend change. Three components under `components/exposure/`: **`PhaseForm`** (`POST
+/engine/phase`), **`ClosePhaseDialog`** (`POST /engine/phase/close`), **`PhaseHistory`** (`GET
+/engine/phase/history`, read-only). Six calls settled here, each honouring a standing rule rather
+than minting a new one:
+- **The review-due badge opens a form — #228 honoured in the UI.** The amber `review_due` chip
+  becomes a button that opens `PhaseForm`; it is a PROMPT that opens a form, never a transition.
+  Nothing submits without the operator. This lifts #272's read-only GUARD deliberately, as the
+  ROADMAP row declared, not by drift.
+- **UI-originated phases carry `source: "api"` — no new source value (#230).** The React app is an
+  API client; `PhaseForm` sends fixed `asserted_by: "user"`, `asserted_on: <today local>`,
+  `source: "api"` on every submit. The `onboarding | chat | system | api` axis gains no member.
+- **The microcycle is authored via an advanced JSON field, not an editor.** The collapsed Advanced
+  microcycle textarea is the whole affordance this increment ships — the A/B authoring escape hatch
+  that keeps UI-driven phase authoring possible without building a structured editor (queued as a
+  later ROADMAP sub-item). Client check is only `JSON.parse` succeeds and the result is a plain
+  object; the server validates the shape.
+- **A new phase does not inherit the previous phase's microcycle.** An empty advanced field omits the
+  `microcycle` key from the body, which lands `null` on the new row and falls back to
+  `weekly_template`. The form says so next to the field.
+- **No chat push on write (#59).** A successful open or close calls neither `sendToChat` nor
+  `onDiscuss`; it refetches `/engine/next` and collapses the form/dialog. Discuss remains the only
+  chat path, user-initiated. Nothing seeds on mount or on write.
+- **The server is the validator; the UI shows the 422 `detail` verbatim.** No client-side
+  re-validation of server rules (taxonomy tokens, `entered_on` <= today + monotonic, `review_on` >=
+  `entered_on`, microcycle shape). `ClosePhaseDialog` distinguishes a 404 ("No open phase to close.")
+  from a 422 (`detail`); `close_reason` is required and Confirm is disabled until non-empty (#222).
+
+**Rationale.** #272 shipped the read surface read-only and named increment 2 as the first `POST` from
+it. The loop this closes is **write -> engine -> panel refetch -> the recommendation visibly
+changes**: after any write `ExposurePanel` refetches its existing `/engine/next` read, so the new
+engine output (recommendation, budget, probe block, notes) is the proof the write took. `PhaseHistory`
+is read-only because append-only is the ledger's invariant — the UI must not imply an edit path
+exists.
+
+**Status.** Landed. Frontend only — no backend, no schema, no migration. `ExposurePanel`'s read path,
+`WorkoutPanel`, `Tile`, `HubLayout` unedited beyond the W4 composition points. First PR gated by the
+#273 test CI lane.
+
+**How you know.** 19 new vitest tests (`PhaseForm.test.jsx`, `ClosePhaseDialog.test.jsx`,
+`PhaseHistory.test.jsx`, `ExposurePanel.write.test.jsx`) assert: the submit body carries
+`asserted_by: "user"` / `source: "api"` / `asserted_on` today and omits `microcycle` when the field
+is empty / sends `capacities: null` when "All" is toggled; a 422 renders its `detail` and retains the
+form; submit is disabled in flight; the advanced field rejects non-JSON before any request; Confirm
+is disabled until `close_reason` is non-empty and 404/422 render distinctly; history is collapsed by
+default, fetches once on expand, renders newest first, and has no edit affordance; the review-due
+chip opens the form; a 201 triggers exactly one `/engine/next` refetch and the panel re-renders from
+the new payload; `onDiscuss` is never called on open or close; baseline (no phase) shows only "Open
+next phase". Full frontend suite green (14 files, 110 tests); the #272 tests untouched. No new eslint
+error (the six #273/§36 pre-existing errors unchanged; the `todayLocal` helper lives in its own
+`phaseTime.js` so `PhaseForm` exports only a component).
+
+**Do not revisit unless.** Do not mint a new `source` value for UI-originated writes — `api` is the
+channel (#230). Do not make the review badge transition anything on its own — it opens a form, the
+operator submits (#228). Do not push to chat on a write (#59). Do not re-validate server rules
+client-side; show the 422 `detail`. Do not build a microcycle editor as part of this increment — the
+advanced JSON field is the affordance; the editor is a later sub-item. Do not fake dose — that is
+increment 3, blocked on Q106.
