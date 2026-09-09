@@ -18,6 +18,9 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
 import { formatReviewDate } from './hub/exposureTileCopy'
+import PhaseForm from './exposure/PhaseForm'
+import ClosePhaseDialog from './exposure/ClosePhaseDialog'
+import PhaseHistory from './exposure/PhaseHistory'
 
 function Chip({ children, tone = 'gray' }) {
   const tones = {
@@ -72,6 +75,11 @@ function formatForChat(d) {
 export default function ExposurePanel({ onDiscuss }) {
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading') // loading | ready | empty | error
+  // Write-surface UI state (increment 2). `refetchKey` re-runs the read effect after a write — the
+  // single loop this increment closes: write → engine → panel refetch → the recommendation changes.
+  const [formOpen, setFormOpen] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const [refetchKey, setRefetchKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -90,7 +98,20 @@ export default function ExposurePanel({ onDiscuss }) {
         setStatus(err.response?.status === 404 ? 'empty' : 'error')
       })
     return () => { cancelled = true }
-  }, [])
+  }, [refetchKey])
+
+  // A successful open or close refetches /engine/next and collapses the form/dialog. NO chat push on
+  // write (#59) — Discuss remains the only chat path, below, user-initiated.
+  function onWritten() {
+    setFormOpen(false)
+    setClosing(false)
+    setRefetchKey((k) => k + 1)
+  }
+
+  function openForm() {
+    setClosing(false)
+    setFormOpen(true)
+  }
 
   if (status === 'loading') {
     return <p className="text-sm text-gray-500 p-4">Reading the engine…</p>
@@ -135,7 +156,18 @@ export default function ExposurePanel({ onDiscuss }) {
           <Field label="Entered">{phase.entered_on}</Field>
           <div className="flex flex-wrap gap-2 items-center">
             <Field label="Review on">{phase.review_on}</Field>
-            {phase.review_due && <Chip tone="amber">Review due — open the next phase</Chip>}
+            {/* The review-due badge is a PROMPT that opens a form, never a transition (#228). Its
+                text is unchanged; nothing submits without the operator. */}
+            {phase.review_due && (
+              <button
+                type="button"
+                onClick={openForm}
+                className="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700
+                  hover:bg-amber-200 transition-colors"
+              >
+                Review due — open the next phase
+              </button>
+            )}
           </div>
           {phase.fortify_target_within_phase === false && (
             <p className="text-xs text-amber-700 leading-snug">
@@ -144,6 +176,40 @@ export default function ExposurePanel({ onDiscuss }) {
             </p>
           )}
         </Card>
+      )}
+
+      {/* 2b. Phase controls (increment 2, write). Open next phase is always available — and is the
+          only control at baseline (no phase). Close to baseline shows only when a phase is open. */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={openForm}
+          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 border
+            border-indigo-200 rounded-full px-3 py-1 transition-colors"
+        >
+          Open next phase
+        </button>
+        {phase && (
+          <button
+            type="button"
+            onClick={() => { setFormOpen(false); setClosing(true) }}
+            className="text-xs font-medium text-gray-600 hover:text-gray-800 border
+              border-gray-300 rounded-full px-3 py-1 transition-colors"
+          >
+            Close to baseline
+          </button>
+        )}
+      </div>
+
+      {formOpen && (
+        <PhaseForm
+          hasOpenPhase={!!phase}
+          onWritten={onWritten}
+          onCancel={() => setFormOpen(false)}
+        />
+      )}
+      {closing && (
+        <ClosePhaseDialog onWritten={onWritten} onCancel={() => setClosing(false)} />
       )}
 
       {/* 3. Fortify card */}
@@ -198,7 +264,10 @@ export default function ExposurePanel({ onDiscuss }) {
         </Card>
       )}
 
-      {/* 6. Discuss — user-initiated push into chat (#59), never automatic */}
+      {/* 6. Phase history — the read-only ledger, collapsed by default (increment 2). */}
+      <PhaseHistory />
+
+      {/* 7. Discuss — user-initiated push into chat (#59), never automatic */}
       <button
         type="button"
         onClick={() => onDiscuss?.(formatForChat(data))}

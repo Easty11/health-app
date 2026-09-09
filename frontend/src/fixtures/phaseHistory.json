@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "label": "decompression",
+    "probe_posture": "suppressed",
+    "capacities": ["mobility", "stability"],
+    "entered_on": "2026-09-07",
+    "review_on": "2026-10-05",
+    "closed_on": null,
+    "close_reason": null
+  },
+  {
+    "id": 0,
+    "label": "base build",
+    "probe_posture": "held",
+    "capacities": null,
+    "entered_on": "2026-08-01",
+    "review_on": "2026-08-29",
+    "closed_on": "2026-09-07",
+    "close_reason": "progressed to decompression"
+  }
+]
