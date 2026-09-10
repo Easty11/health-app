@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import api from '../api'
 import { formatApiError } from '../lib/apiError'
 import { confidencePct, isClinicalFlag, isSuspect, rowTier } from './labRowClassification'
+import LoadChart from '../components/charts/LoadChart'
 
 const STAGE = { IDLE: 'IDLE', EXTRACTING: 'EXTRACTING', CONFIRM: 'CONFIRM' }
 
@@ -625,6 +626,11 @@ export default function Metrics() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-4">
+        {/* Training-load chart (Visuals increment 1) — mounted additively above the lab
+            surface. Reads GET /series/load; self-contained (own fetch, range selector, empty
+            state), so it neither depends on nor disturbs the lab-report flow below. */}
+        <LoadChart />
+
         {error && (
           <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>
         )}
