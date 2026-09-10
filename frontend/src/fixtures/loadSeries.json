@@ -1,0 +1,620 @@
+{
+  "days": 30,
+  "metrics_version": "banister-v1",
+  "windows": [
+    {
+      "load_window": "mechanical",
+      "unit": "kg_reps",
+      "formula_version": "tier0-v1",
+      "points": [
+        {
+          "day": "2026-07-01",
+          "daily_load": 0,
+          "fitness": 200,
+          "fatigue": 100,
+          "form": 100,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-02",
+          "daily_load": 110,
+          "fitness": 201,
+          "fatigue": 105,
+          "form": 96,
+          "acute_load": 99,
+          "chronic_load": 88,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-03",
+          "daily_load": 120,
+          "fitness": 202,
+          "fatigue": 110,
+          "form": 92,
+          "acute_load": 108,
+          "chronic_load": 96,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-04",
+          "daily_load": 130,
+          "fitness": 203,
+          "fatigue": 115,
+          "form": 88,
+          "acute_load": 117,
+          "chronic_load": 104,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-05",
+          "daily_load": 140,
+          "fitness": 204,
+          "fatigue": 120,
+          "form": 84,
+          "acute_load": 126,
+          "chronic_load": 112,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-06",
+          "daily_load": 100,
+          "fitness": 205,
+          "fatigue": 100,
+          "form": 105,
+          "acute_load": 90,
+          "chronic_load": 80,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-07",
+          "daily_load": 110,
+          "fitness": 206,
+          "fatigue": 105,
+          "form": 101,
+          "acute_load": 99,
+          "chronic_load": 88,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-08",
+          "daily_load": 0,
+          "fitness": 207,
+          "fatigue": 110,
+          "form": 97,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-09",
+          "daily_load": 130,
+          "fitness": 208,
+          "fatigue": 115,
+          "form": 93,
+          "acute_load": 117,
+          "chronic_load": 104,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-10",
+          "daily_load": 140,
+          "fitness": 209,
+          "fatigue": 120,
+          "form": 89,
+          "acute_load": 126,
+          "chronic_load": 112,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-11",
+          "daily_load": 100,
+          "fitness": 210,
+          "fatigue": 100,
+          "form": 110,
+          "acute_load": 90,
+          "chronic_load": 80,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-12",
+          "daily_load": 110,
+          "fitness": 211,
+          "fatigue": 105,
+          "form": 106,
+          "acute_load": 99,
+          "chronic_load": 88,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-13",
+          "daily_load": 120,
+          "fitness": 212,
+          "fatigue": 110,
+          "form": 102,
+          "acute_load": 108,
+          "chronic_load": 96,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-14",
+          "daily_load": 130,
+          "fitness": 213,
+          "fatigue": 115,
+          "form": 98,
+          "acute_load": 117,
+          "chronic_load": 104,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-15",
+          "daily_load": 0,
+          "fitness": 214,
+          "fatigue": 120,
+          "form": 94,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-16",
+          "daily_load": 100,
+          "fitness": 215,
+          "fatigue": 100,
+          "form": 115,
+          "acute_load": 90,
+          "chronic_load": 80,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-17",
+          "daily_load": 110,
+          "fitness": 216,
+          "fatigue": 105,
+          "form": 111,
+          "acute_load": 99,
+          "chronic_load": 88,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-18",
+          "daily_load": 120,
+          "fitness": 217,
+          "fatigue": 110,
+          "form": 107,
+          "acute_load": 108,
+          "chronic_load": 96,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-19",
+          "daily_load": 130,
+          "fitness": 218,
+          "fatigue": 115,
+          "form": 103,
+          "acute_load": 117,
+          "chronic_load": 104,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-20",
+          "daily_load": 140,
+          "fitness": 219,
+          "fatigue": 120,
+          "form": 99,
+          "acute_load": 126,
+          "chronic_load": 112,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-21",
+          "daily_load": 100,
+          "fitness": 220,
+          "fatigue": 100,
+          "form": 120,
+          "acute_load": 90,
+          "chronic_load": 80,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-22",
+          "daily_load": 0,
+          "fitness": 221,
+          "fatigue": 105,
+          "form": 116,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-23",
+          "daily_load": 120,
+          "fitness": 222,
+          "fatigue": 110,
+          "form": 112,
+          "acute_load": 108,
+          "chronic_load": 96,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-24",
+          "daily_load": 130,
+          "fitness": 223,
+          "fatigue": 115,
+          "form": 108,
+          "acute_load": 117,
+          "chronic_load": 104,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-25",
+          "daily_load": 140,
+          "fitness": 224,
+          "fatigue": 120,
+          "form": 104,
+          "acute_load": 126,
+          "chronic_load": 112,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-26",
+          "daily_load": 100,
+          "fitness": 225,
+          "fatigue": 100,
+          "form": 125,
+          "acute_load": 90,
+          "chronic_load": 80,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-27",
+          "daily_load": 110,
+          "fitness": 226,
+          "fatigue": 105,
+          "form": 121,
+          "acute_load": 99,
+          "chronic_load": 88,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-28",
+          "daily_load": 120,
+          "fitness": 227,
+          "fatigue": 110,
+          "form": 117,
+          "acute_load": 108,
+          "chronic_load": 96,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-29",
+          "daily_load": 0,
+          "fitness": 228,
+          "fatigue": 115,
+          "form": 113,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-30",
+          "daily_load": 140,
+          "fitness": 229,
+          "fatigue": 120,
+          "form": 109,
+          "acute_load": 126,
+          "chronic_load": 112,
+          "maturity": "ok"
+        }
+      ]
+    },
+    {
+      "load_window": "neuromuscular",
+      "unit": "nm_au",
+      "formula_version": "tier0-v1",
+      "points": [
+        {
+          "day": "2026-07-01",
+          "daily_load": 0,
+          "fitness": 16,
+          "fatigue": 8,
+          "form": 8,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-02",
+          "daily_load": 18,
+          "fitness": 17,
+          "fatigue": 13,
+          "form": 4,
+          "acute_load": 16.2,
+          "chronic_load": 14.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-03",
+          "daily_load": 28,
+          "fitness": 18,
+          "fatigue": 18,
+          "form": 0,
+          "acute_load": 25.2,
+          "chronic_load": 22.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-04",
+          "daily_load": 38,
+          "fitness": 19,
+          "fatigue": 23,
+          "form": -4,
+          "acute_load": 34.2,
+          "chronic_load": 30.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-05",
+          "daily_load": 48,
+          "fitness": 20,
+          "fatigue": 28,
+          "form": -8,
+          "acute_load": 43.2,
+          "chronic_load": 38.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-06",
+          "daily_load": 8,
+          "fitness": 21,
+          "fatigue": 8,
+          "form": 13,
+          "acute_load": 7.2,
+          "chronic_load": 6.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-07",
+          "daily_load": 18,
+          "fitness": 22,
+          "fatigue": 13,
+          "form": 9,
+          "acute_load": 16.2,
+          "chronic_load": 14.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-08",
+          "daily_load": 0,
+          "fitness": 23,
+          "fatigue": 18,
+          "form": 5,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-09",
+          "daily_load": 38,
+          "fitness": 24,
+          "fatigue": 23,
+          "form": 1,
+          "acute_load": 34.2,
+          "chronic_load": 30.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-10",
+          "daily_load": 48,
+          "fitness": 25,
+          "fatigue": 28,
+          "form": -3,
+          "acute_load": 43.2,
+          "chronic_load": 38.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-11",
+          "daily_load": 8,
+          "fitness": 26,
+          "fatigue": 8,
+          "form": 18,
+          "acute_load": 7.2,
+          "chronic_load": 6.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-12",
+          "daily_load": 18,
+          "fitness": 27,
+          "fatigue": 13,
+          "form": 14,
+          "acute_load": 16.2,
+          "chronic_load": 14.4,
+          "maturity": "low"
+        },
+        {
+          "day": "2026-07-13",
+          "daily_load": 28,
+          "fitness": 28,
+          "fatigue": 18,
+          "form": 10,
+          "acute_load": 25.2,
+          "chronic_load": 22.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-14",
+          "daily_load": 38,
+          "fitness": 29,
+          "fatigue": 23,
+          "form": 6,
+          "acute_load": 34.2,
+          "chronic_load": 30.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-15",
+          "daily_load": 0,
+          "fitness": 30,
+          "fatigue": 28,
+          "form": 2,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-16",
+          "daily_load": 8,
+          "fitness": 31,
+          "fatigue": 8,
+          "form": 23,
+          "acute_load": 7.2,
+          "chronic_load": 6.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-17",
+          "daily_load": 18,
+          "fitness": 32,
+          "fatigue": 13,
+          "form": 19,
+          "acute_load": 16.2,
+          "chronic_load": 14.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-18",
+          "daily_load": 28,
+          "fitness": 33,
+          "fatigue": 18,
+          "form": 15,
+          "acute_load": 25.2,
+          "chronic_load": 22.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-19",
+          "daily_load": 38,
+          "fitness": 34,
+          "fatigue": 23,
+          "form": 11,
+          "acute_load": 34.2,
+          "chronic_load": 30.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-20",
+          "daily_load": 48,
+          "fitness": 35,
+          "fatigue": 28,
+          "form": 7,
+          "acute_load": 43.2,
+          "chronic_load": 38.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-21",
+          "daily_load": 8,
+          "fitness": 36,
+          "fatigue": 8,
+          "form": 28,
+          "acute_load": 7.2,
+          "chronic_load": 6.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-22",
+          "daily_load": 0,
+          "fitness": 37,
+          "fatigue": 13,
+          "form": 24,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-23",
+          "daily_load": 28,
+          "fitness": 38,
+          "fatigue": 18,
+          "form": 20,
+          "acute_load": 25.2,
+          "chronic_load": 22.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-24",
+          "daily_load": 38,
+          "fitness": 39,
+          "fatigue": 23,
+          "form": 16,
+          "acute_load": 34.2,
+          "chronic_load": 30.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-25",
+          "daily_load": 48,
+          "fitness": 40,
+          "fatigue": 28,
+          "form": 12,
+          "acute_load": 43.2,
+          "chronic_load": 38.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-26",
+          "daily_load": 8,
+          "fitness": 41,
+          "fatigue": 8,
+          "form": 33,
+          "acute_load": 7.2,
+          "chronic_load": 6.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-27",
+          "daily_load": 18,
+          "fitness": 42,
+          "fatigue": 13,
+          "form": 29,
+          "acute_load": 16.2,
+          "chronic_load": 14.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-28",
+          "daily_load": 28,
+          "fitness": 43,
+          "fatigue": 18,
+          "form": 25,
+          "acute_load": 25.2,
+          "chronic_load": 22.4,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-29",
+          "daily_load": 0,
+          "fitness": 44,
+          "fatigue": 23,
+          "form": 21,
+          "acute_load": 0,
+          "chronic_load": 0,
+          "maturity": "ok"
+        },
+        {
+          "day": "2026-07-30",
+          "daily_load": 48,
+          "fitness": 45,
+          "fatigue": 28,
+          "form": 17,
+          "acute_load": 43.2,
+          "chronic_load": 38.4,
+          "maturity": "ok"
+        }
+      ]
+    }
+  ]
+}
