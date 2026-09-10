@@ -270,11 +270,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Lab batch 2026-08-04 + 2026-09-02 (24 reports / 97 results) — ingestion adjudicated against master, NOT stored this session: table binding reconciled (`/labs/confirm` resolves raw→canonical from the live `marker_canonical_entries` map, ignoring the extractor's proposed key), the two 09-02 events are separate by construction (disjoint markers), the handoff's "first-seen" list corrected against the 70-row seed. Three canonical binds ratified by operator (`igf1`, `psa_free`, `psa_free_percent`); OWED operator/prod-side — run `/labs/canonical/bind` + the 24 `/labs/confirm` calls, verify via Postgres. Imaging/DEXA deferred (Q142). Governance-only, self-merged on green (`#280`)** - Handoff: `closeout.md`.
+
 - **Visuals increment 3 (extends v1 test 1 "See") — per-exercise e1RM (Epley, top set, reps>10 off e1RM but on volume) + volume (kg·reps) on `/metrics` from `GET /series/exercises` + `GET /series/exercise/{id}` over `hevy_workouts.raw` (warmup/dedup/excluded filtered as the resolver does); `ExerciseChart` two small multiples + `PhaseMarkers` overlaying training-phase boundaries (reused `GET /engine/phase/history`, no new route) on all four charts. Read-only non-schema, self-merged on green (`#278`, PR #189)** - Handoff: `closeout.md`.
 
 - **Visuals increment 2 (v1 test 1 "See" → MET) — `FormChart` (fitness/fatigue/form from the existing `/series/load`, negative-form domain, shared lifted range) + `GET /series/readiness` + observed-readiness `ReadinessChart` (1–5 self-report + passive HRV small multiples) on `/metrics`; actual-vs-forecast dropped to Q141 (applies #277's pattern on #186's shared-unit contract, no new decision), read-only non-schema, self-merges on green (PR #187)** - Handoff: `closeout.md`.
-
-- **Visuals increment 1 (v1 test 1 "See") — Recharts adopted, `routers/series.py` at `/series` with `GET /series/load`, and the daily work-done `LoadChart` on `/metrics` (read-only, non-schema); `engines.node` `>=22` (`#277`, PR #185). Amended by `fix/load-chart-units` (FEEDBACK §40, PR #186): small multiples + bars + shared-axis⇒shared-unit guard — the incommensurable-units overlay fixed. #121 served-bundle grep + the user-1 populated-window read are operator hand-offs** - Handoff: `closeout.md`.
 
 ---
 
