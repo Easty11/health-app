@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 import models
 from auth import get_current_user
 from database import get_db
+from load_metrics import _local_day  # AEST "today" — the clock the resolve path uses (Q137)
 from routers import knowledge as knowledge_router
 
 
@@ -141,7 +142,9 @@ def test_resolved_on_defaults_to_today_when_omitted(db_session):
         json={"basis": "no longer at this club", "resolved_by": "clinician"},
     )
     assert r.status_code == 200
-    assert r.json()["value"]["resolution"]["resolved_on"] == str(date.today())
+    # `resolved_on` defaults to `_local_day()` (AEST) in the resolve path; anchor
+    # the expectation on that same clock, not the runner's UTC `date.today()` (Q137).
+    assert r.json()["value"]["resolution"]["resolved_on"] == str(_local_day())
 
 
 def test_a_resolved_schedule_item_drops_out_of_get_schedule(db_session):
