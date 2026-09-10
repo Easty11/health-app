@@ -4,6 +4,8 @@ import api from '../api'
 import { formatApiError } from '../lib/apiError'
 import { confidencePct, isClinicalFlag, isSuspect, rowTier } from './labRowClassification'
 import LoadChart from '../components/charts/LoadChart'
+import FormChart from '../components/charts/FormChart'
+import ReadinessChart from '../components/charts/ReadinessChart'
 
 const STAGE = { IDLE: 'IDLE', EXTRACTING: 'EXTRACTING', CONFIRM: 'CONFIRM' }
 
@@ -529,6 +531,10 @@ export default function Metrics() {
   const [outcome, setOutcome] = useState(null) // what the last save actually wrote
   const [storedReports, setStoredReports] = useState(null) // null=loading, []=none
   const fileInputRef = useRef(null)
+  // Range shared across the three Banister-view charts (Visuals increment 2). Lifted here so a
+  // single control drives them all: the LoadChart renders the selector (its lead role) and
+  // reports changes up, and FormChart / ReadinessChart take the chosen window as a prop.
+  const [chartDays, setChartDays] = useState(90)
 
   function loadStored() {
     api.get('/labs/results').then((res) => setStoredReports(res.data)).catch(() => setStoredReports([]))
@@ -626,10 +632,15 @@ export default function Metrics() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-4">
-        {/* Training-load chart (Visuals increment 1) — mounted additively above the lab
-            surface. Reads GET /series/load; self-contained (own fetch, range selector, empty
-            state), so it neither depends on nor disturbs the lab-report flow below. */}
-        <LoadChart />
+        {/* Banister view (Visuals increments 1 + 2) — mounted additively above the lab surface,
+            each chart self-contained (own fetch, empty state) so none disturbs the lab-report
+            flow below. The range is shared: LoadChart owns the visible selector and lifts the
+            chosen window to `chartDays`, which FormChart and ReadinessChart follow. LoadChart
+            (work-done per window) and FormChart (fitness/fatigue/form) read /series/load;
+            ReadinessChart reads /series/readiness. */}
+        <LoadChart days={chartDays} onSelectRange={setChartDays} />
+        <FormChart days={chartDays} />
+        <ReadinessChart days={chartDays} />
 
         {error && (
           <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>

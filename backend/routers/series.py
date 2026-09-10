@@ -142,3 +142,75 @@ def get_load_series(
         ))
 
     return LoadSeriesOut(days=days, metrics_version=METRICS_VERSION, windows=out_windows)
+
+
+# ── readiness series (Visuals increment 2) ──────────────────────────────────────
+#
+# The OBSERVED readiness trend for the current user: the 1–5 morning self-report and the
+# passive overnight HRV, per day, ascending, over the trailing `days` window. It reshapes the
+# `daily_records` store the same way `checkin_v2 GET /history` reads it — a distinct read
+# surface, not a call into that router, so `/series/*` owns its own query (mirroring
+# `/series/load`).
+#
+# Deliberately NOT an actual-vs-forecast surface. `model_forecast` / `model_confidence` are
+# excluded until Q141 resolves what observed quantity the forecast predicts and on what scale:
+# it is written nowhere today (the column is null in prod), and a 0–10 forecast against a 1–5
+# ordinal self-report is not a residual. Shipping those two fields here would spec a comparison
+# that is both empty and meaningless — the picture would render fine and mean nothing. So this
+# carries only what is observed and on a single, honest scale per series.
+#
+# Nulls are PRESERVED, never coerced: a day with no AM check-in has `morning_readiness = None`
+# (and a day with no overnight reading `passive_hrv_ms = None`). The chart draws those as gaps,
+# not zeros — a missing self-report is not a readiness of zero.
+#
+# `days` carries its OWN bound (ge=1, le=730) rather than inheriting `checkin_v2 /history`'s
+# default-14: that route is newest-first and unbounded, this one is ascending and explicitly
+# ranged to match `/series/load`. No change is made to `/history`.
+
+
+class ReadinessPoint(BaseModel):
+    date: str
+    morning_readiness: int | None  # 1–5 self-report; None on a day with no AM check-in
+    passive_hrv_ms: float | None   # overnight HRV at capture, ms; None when no reading
+
+
+class ReadinessSeriesOut(BaseModel):
+    days: int
+    points: list[ReadinessPoint]
+
+
+@router.get("/readiness", response_model=ReadinessSeriesOut)
+def get_readiness_series(
+    days: int = Query(90, ge=1, le=730),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Observed readiness for the current user, ascending by day, over the trailing `days`
+    window: the 1–5 morning self-report and passive overnight HRV per day.
+
+    A day appears only if a `daily_records` row exists for it — but a row present with a null
+    field keeps that null (drawn as a gap), because "no check-in that day" and "readiness zero"
+    are different facts and only the store knows which."""
+    since = _today_aest() - timedelta(days=days)
+
+    rows = (
+        db.query(models.DailyRecord)
+        .filter(
+            models.DailyRecord.user_id == current_user.id,
+            models.DailyRecord.date >= since,
+        )
+        .order_by(models.DailyRecord.date.asc())
+        .all()
+    )
+
+    return ReadinessSeriesOut(
+        days=days,
+        points=[
+            ReadinessPoint(
+                date=r.date.isoformat(),
+                morning_readiness=r.morning_readiness,
+                passive_hrv_ms=r.passive_hrv_ms,
+            )
+            for r in rows
+        ],
+    )

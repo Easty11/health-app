@@ -1,0 +1,10 @@
+{
+  "days": 90,
+  "points": [
+    { "date": "2026-08-01", "morning_readiness": 3, "passive_hrv_ms": 48.0 },
+    { "date": "2026-08-02", "morning_readiness": 4, "passive_hrv_ms": 52.0 },
+    { "date": "2026-08-03", "morning_readiness": null, "passive_hrv_ms": null },
+    { "date": "2026-08-04", "morning_readiness": 5, "passive_hrv_ms": 60.0 },
+    { "date": "2026-08-05", "morning_readiness": 2, "passive_hrv_ms": 44.0 }
+  ]
+}

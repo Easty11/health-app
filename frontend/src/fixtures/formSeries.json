@@ -1,0 +1,30 @@
+{
+  "days": 90,
+  "metrics_version": "banister-v1",
+  "windows": [
+    {
+      "load_window": "mechanical",
+      "unit": "kg_reps",
+      "formula_version": "tier0-v1",
+      "points": [
+        { "day": "2026-08-01", "daily_load": 100, "fitness": 200, "fatigue": 190, "form": 10, "acute_load": 90, "chronic_load": 80, "maturity": "low" },
+        { "day": "2026-08-02", "daily_load": 120, "fitness": 205, "fatigue": 201, "form": 4, "acute_load": 108, "chronic_load": 96, "maturity": "low" },
+        { "day": "2026-08-03", "daily_load": 140, "fitness": 210, "fatigue": 212, "form": -2, "acute_load": 126, "chronic_load": 112, "maturity": "ok" },
+        { "day": "2026-08-04", "daily_load": 150, "fitness": 214, "fatigue": 222, "form": -8, "acute_load": 135, "chronic_load": 120, "maturity": "ok" },
+        { "day": "2026-08-05", "daily_load": 90, "fitness": 216, "fatigue": 211, "form": 5, "acute_load": 81, "chronic_load": 72, "maturity": "ok" }
+      ]
+    },
+    {
+      "load_window": "neuromuscular",
+      "unit": "nm_au",
+      "formula_version": "tier0-v1",
+      "points": [
+        { "day": "2026-08-01", "daily_load": 18, "fitness": 20, "fatigue": 14, "form": 6, "acute_load": 16.2, "chronic_load": 14.4, "maturity": "low" },
+        { "day": "2026-08-02", "daily_load": 28, "fitness": 22, "fatigue": 20, "form": 2, "acute_load": 25.2, "chronic_load": 22.4, "maturity": "ok" },
+        { "day": "2026-08-03", "daily_load": 38, "fitness": 24, "fatigue": 27, "form": -3, "acute_load": 34.2, "chronic_load": 30.4, "maturity": "ok" },
+        { "day": "2026-08-04", "daily_load": 48, "fitness": 26, "fatigue": 33, "form": -7, "acute_load": 43.2, "chronic_load": 38.4, "maturity": "ok" },
+        { "day": "2026-08-05", "daily_load": 8, "fitness": 27, "fatigue": 22, "form": 5, "acute_load": 7.2, "chronic_load": 6.4, "maturity": "ok" }
+      ]
+    }
+  ]
+}

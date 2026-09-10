@@ -1,6 +1,6 @@
 import {
   LineChart, Line, BarChart, Bar, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 
 // The ONE jsdom-safe mounting pattern every chart in the app shares, and the home of the
@@ -21,6 +21,18 @@ import {
 //
 // `isAnimationActive={false}` draws the final state immediately — an animated chart has no
 // final-position marks at first paint, exactly what a synchronous jsdom assertion would read.
+//
+// `yDomain`, `lineType`, `strokeWidth` and `legend` are additive (Visuals increment 2),
+// defaulting to increment-1's behaviour (Recharts' own auto y-domain, monotone interpolation,
+// 2px stroke, no legend) so `LoadChart` is unchanged. They exist for series that need an HONEST
+// rendering the default would misstate:
+//   * `yDomain={['auto','auto']}` lets a series that goes NEGATIVE (Banister `form`) show its
+//     sub-zero range instead of a floor clamped at 0; a fixed `yDomain={[1,5]}` pins an ordinal
+//     scale so its axis reads the same every window.
+//   * `lineType="linear"` refuses smoothing for an ORDINAL daily observation (1–5 readiness),
+//     where a monotone spline would invent between-day values the reading never claimed.
+//   * `legend` labels a multi-series line overlay (FormChart's fitness/fatigue/form, all one
+//     unit); a small multiple with one series names it in its own caption and needs none.
 export default function TimeSeriesChart({
   data,
   series,
@@ -31,6 +43,10 @@ export default function TimeSeriesChart({
   responsive = false,
   hideXLabels = false,
   margin = { top: 8, right: 16, bottom: 8, left: 8 },
+  yDomain,
+  lineType = 'monotone',
+  strokeWidth = 2,
+  legend = false,
 }) {
   const units = [...new Set(series.map((s) => s.unit).filter((u) => u != null))]
   if (units.length > 1) {
@@ -47,8 +63,9 @@ export default function TimeSeriesChart({
     <>
       <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
       <XAxis dataKey={xKey} tick={hideXLabels ? false : { fontSize: 11 }} minTickGap={24} />
-      <YAxis tick={{ fontSize: 11 }} width={56} label={yLabel} />
+      <YAxis tick={{ fontSize: 11 }} width={56} label={yLabel} domain={yDomain} />
       <Tooltip />
+      {legend && <Legend />}
     </>
   )
 
@@ -86,11 +103,11 @@ export default function TimeSeriesChart({
         {series.map((s) => (
           <Line
             key={s.dataKey}
-            type="monotone"
+            type={lineType}
             dataKey={s.dataKey}
             name={s.name}
             stroke={s.color}
-            strokeWidth={2}
+            strokeWidth={strokeWidth}
             dot={s.dot ?? false}
             activeDot={{ r: 4 }}
             connectNulls={false}
