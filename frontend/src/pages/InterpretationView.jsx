@@ -104,13 +104,13 @@ export default function InterpretationView() {
           <p className="text-sm font-semibold text-gray-900">No lab results yet</p>
           <p className="text-xs text-gray-500">
             There is nothing to interpret until a lab report has been confirmed. Add one from
-            Metrics and this page will read your latest draw.
+            Labs and this page will read your latest draw.
           </p>
           <Link
-            to="/metrics"
+            to="/labs"
             className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-2xl px-5 py-2.5 text-sm transition-colors"
           >
-            Go to Metrics
+            Go to Labs
           </Link>
         </div>
       </Shell>

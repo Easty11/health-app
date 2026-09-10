@@ -101,9 +101,9 @@ describe('formatApiError — shapes that already worked and must not regress', (
 // The helper being correct proves nothing if a call site still collapses the detail
 // itself. This asserts the WIRING, which is the part the unit tests above cannot see —
 // and it is the whole defect: the logic was never wrong, it was never reached.
-describe('Metrics.jsx call sites are actually wired to the helper', () => {
+describe('Labs.jsx call sites are actually wired to the helper', () => {
   const source = readFileSync(
-    fileURLToPath(new URL('../pages/Metrics.jsx', import.meta.url)),
+    fileURLToPath(new URL('../pages/Labs.jsx', import.meta.url)),
     'utf-8',
   )
 

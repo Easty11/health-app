@@ -10,6 +10,7 @@ import CheckInAM from './pages/CheckInAM'
 import CheckInHistory from './pages/CheckInHistory'
 import NightlyCloseOut from './pages/NightlyCloseOut'
 import Metrics from './pages/Metrics'
+import Labs from './pages/Labs'
 import InterpretationView from './pages/InterpretationView'
 import Recovery from './pages/Recovery'
 import Training from './pages/Training'
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/recovery" element={<RequireAuth><Recovery /></RequireAuth>} />
         <Route path="/training" element={<RequireAuth><Training /></RequireAuth>} />
         <Route path="/metrics" element={<RequireAuth><Metrics /></RequireAuth>} />
+        <Route path="/labs" element={<RequireAuth><Labs /></RequireAuth>} />
         <Route path="/interpretation" element={<RequireAuth><InterpretationView /></RequireAuth>} />
         <Route path="/injuries" element={<RequireAuth><Injuries /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />

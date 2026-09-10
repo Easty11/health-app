@@ -268,7 +268,7 @@ def test_render_asked_lab_value_relays_value_and_ref_but_no_interpretation(db_se
     assert "28.0" in rendered
     assert "umol/L" in rendered
     assert "21.0" in rendered
-    assert "Metrics page" in rendered  # temporary route pointer (#60)
+    assert "Labs page" in rendered  # temporary route pointer (#60); labs surface split to /labs
     assert "computed" not in rendered.lower()
     assert "delta" not in rendered.lower()
     assert "axis" not in rendered.lower()

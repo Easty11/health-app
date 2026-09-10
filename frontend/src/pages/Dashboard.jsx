@@ -69,7 +69,8 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <Tile to="/recovery" icon="🌙" label="Recovery" detail="HRV, sleep and overnight vitals" />
           <ExposureTile />
-          <Tile to="/metrics" icon="🧪" label="Labs" detail="Blood panels and marker history" />
+          <Tile to="/metrics" icon="📈" label="Metrics" detail="Training load, form and progression" />
+          <Tile to="/labs" icon="🧪" label="Labs" detail="Blood panels and marker history" />
           <InterpretationTile />
           <Tile to="/checkin-history" icon="📅" label="History" detail="Past check-ins" />
           <Tile to="/injuries" icon="🩹" label="Injuries" detail="Active injury ledger and resolution" />
