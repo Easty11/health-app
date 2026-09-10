@@ -4231,3 +4231,28 @@ Fix for both live sites: `_local_day()`, or inject an AEST `today` at the caller
 non-destructive → ship-with-watch class, not a live-probe gate). Owner: Luke / a code session.
 
 **State:** OPEN
+
+## Q141. What observed quantity is `model_forecast` a prediction of, on what scale, and does anything write it?
+
+Raised deferring the actual-vs-forecast half of Visuals increment 2 (the ReadinessChart). The brief specced
+`morning_readiness` (actual) vs `model_forecast` (forecast) as two lines with a residual (actual − forecast) as
+"the model's accuracy view". Three facts make that unbuildable today:
+
+- **Scale mismatch.** `daily_records.morning_readiness` is a 1–5 ordinal self-report (`ge=1, le=5`, tagged in
+  `models.py` "primary OUTCOME"); `model_forecast` is a 0–10 float (`context_builder.py` renders it `{mf:.1f}/10`,
+  the `naive_baseline` space). Subtracting a 0–10 forecast from a 1–5 Likert is not a residual, and linearly
+  mapping the five-point ordinal onto a continuous 0–10 is false precision that would pass every render test.
+- **Written nowhere.** No non-test assignment to `DailyRecord.model_forecast` exists (`grep` clean); the column is
+  null in prod, so the forecast line is empty — the "accuracy view" would be a chart of nothing.
+- **Undecided semantics.** What the forecast is a prediction OF — which observed quantity, on which scale — is not
+  recorded in any store. `context_builder`'s guardrail frames the model's job as "beat the naive baseline on this
+  user's data", which points at `naive_baseline` (0–10) as the comparison partner, but that is an inference, not a
+  decision.
+
+Increment 2 therefore ships observed-only: `/series/readiness` carries `morning_readiness` + `passive_hrv_ms`, and
+the ReadinessChart is small multiples on honest per-series scales — no forecast field, no residual. A
+forecast-vs-actual chart is a real feature and lands as its own increment once this resolves: pin the predicted
+quantity + scale, wire a writer for `model_forecast`, then build. Owner: Luke / chat (data-meaning), then a code
+session.
+
+**State:** OPEN
