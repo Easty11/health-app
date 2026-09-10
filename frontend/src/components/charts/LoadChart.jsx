@@ -58,8 +58,16 @@ function mergeSeries(windows) {
   return [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
 }
 
-export default function LoadChart({ width, height, initialDays = 90 }) {
-  const [days, setDays] = useState(initialDays)
+// Range state is optionally LIFTED (Visuals increment 2): when the parent passes `days` +
+// `onSelectRange`, LoadChart becomes the controlled lead for a range shared with FormChart and
+// ReadinessChart on the same page — its selector drives the parent, which feeds all three the
+// same window. Passed neither (its standalone/increment-1 use, and its own test), it owns its
+// range internally exactly as before. The selector renders and behaves identically in both
+// modes; only WHERE the chosen `days` lives differs.
+export default function LoadChart({ width, height, initialDays = 90, days: daysProp, onSelectRange }) {
+  const controlled = daysProp != null && typeof onSelectRange === 'function'
+  const [internalDays, setInternalDays] = useState(initialDays)
+  const days = controlled ? daysProp : internalDays
   const [windows, setWindows] = useState(null) // null = loading, [] = loaded-empty
   const [error, setError] = useState('')
 
@@ -79,7 +87,8 @@ export default function LoadChart({ width, height, initialDays = 90 }) {
     if (r === days) return
     setWindows(null)   // back to loading until the new range resolves
     setError('')
-    setDays(r)
+    if (controlled) onSelectRange(r)
+    else setInternalDays(r)
   }
 
   const data = useMemo(() => (windows ? mergeSeries(windows) : []), [windows])

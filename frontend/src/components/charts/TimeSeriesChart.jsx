@@ -15,6 +15,15 @@ import {
 // zero state over timers, so an animated chart has no final-position dots at first paint —
 // exactly what a synchronous jsdom assertion would read. Disabling it draws the final state
 // immediately.
+// `yDomain`, `lineType` and `strokeWidth` are additive, defaulting to increment-1's behaviour
+// (Recharts' own auto y-domain, monotone interpolation, 2px stroke) so LoadChart is unchanged.
+// They exist for series that need an HONEST rendering the default would misstate:
+//   * `yDomain={['auto','auto']}` lets a series that goes NEGATIVE (Banister `form`) show its
+//     sub-zero range instead of being clamped at 0.
+//   * `lineType="linear"` refuses smoothing for an ORDINAL daily observation (1–5 readiness),
+//     where a monotone spline would invent between-day values the reading never claimed.
+//   * a fixed `yDomain={[1,5]}` pins an ordinal scale so its axis reads the same every window.
+// `Tooltip`'s optional `formatter` lets a chart show a derived value on hover (unused by default).
 export default function TimeSeriesChart({
   data,
   lines,
@@ -23,6 +32,11 @@ export default function TimeSeriesChart({
   height = 280,
   responsive = false,
   margin = { top: 8, right: 16, bottom: 8, left: 0 },
+  yDomain,
+  yAllowDataOverflow = false,
+  lineType = 'monotone',
+  strokeWidth = 2,
+  tooltipFormatter,
 }) {
   const chart = (
     <LineChart
@@ -33,17 +47,17 @@ export default function TimeSeriesChart({
     >
       <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
       <XAxis dataKey={xKey} tick={{ fontSize: 11 }} minTickGap={24} />
-      <YAxis tick={{ fontSize: 11 }} width={44} />
-      <Tooltip />
+      <YAxis tick={{ fontSize: 11 }} width={44} domain={yDomain} allowDataOverflow={yAllowDataOverflow} />
+      <Tooltip formatter={tooltipFormatter} />
       <Legend />
       {lines.map((l) => (
         <Line
           key={l.dataKey}
-          type="monotone"
+          type={lineType}
           dataKey={l.dataKey}
           name={l.name}
           stroke={l.color}
-          strokeWidth={2}
+          strokeWidth={strokeWidth}
           dot={l.dot ?? false}
           activeDot={{ r: 4 }}
           connectNulls={false}
