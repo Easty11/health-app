@@ -1,77 +1,79 @@
-# Code session close-out — #273 test-lane binding probe, 2026-09-10
+# Code session close-out — Visuals increment 2 (Banister view), 2026-09-10
 
 ## 1. Real commits this session
 
-**Nothing landed on master from this session's own work.** The task was a verification —
-prove whether the #273 test-lane contexts are bound — not a change. The probe rode a throwaway
-branch, `claude/ci-binding-probe`, and its two commits were **closed unmerged** via PR #178:
+Three commits, all landed on master via **PR #187** (merge commit `74ea7ce`), branch
+`claude/banister-view-charts-rswilw` **merged + remote-deleted**:
 
 ```
-287cf99 test: CI binding probe step 2 — fail pytest only, frontend green (throwaway)
-e4b5fe1 test: CI binding probe — deliberately fail vitest (throwaway, do not merge)
+814aa95 Merge master (fix/load-chart-units #186) into Banister view; rebuild increment 2 on the shared-unit contract
+8056f70 gov(visuals): Q141 forecast-semantics; FEEDBACK §40 chart-brief VERIFY; ROADMAP test 1 MET; BRANCHES + Recent-landings
+265f940 feat(visuals): Banister view — FormChart + observed-readiness small multiples (increment 2)
 ```
 
-Master advanced independently during the arc: **#275** (PR #179, "v1 definition of done + surfacing
-sequence + fossil retirement") landed from another session — noted here only because number-at-merge
-was re-read against it (max #275; no new decision minted this session).
+Master advanced **mid-session**: **`fix/load-chart-units` (PR #186)** landed independently
+(`d2c5a0e` fix + `093caf9` gov), redesigning the charting substrate — `TimeSeriesChart`
+`lines`→`series` with a shared-axis⇒shared-unit guard, `LoadChart`→small-multiples bars,
+FEEDBACK §40. Increment 2 was rebuilt on that contract via the `814aa95` merge (not the
+pre-#186 one). Number-at-merge: decisions max re-read = **#277** (no new decision minted this
+session; #186 minted none either).
 
-The close-out governance commit (this file + `FEEDBACK` §38 + the ROADMAP binding row + the BRANCHES
-row) is separate, on branch `claude/closeout-ci-binding-probe`, below.
+The close-out governance commit (this file) is separate, on the restarted-from-master
+`claude/banister-view-charts-rswilw`, below.
 
 ## 2. Pending-queue reconciliation
 
-**No pending-commit queue was carried in.** This session ran the binding-proof task directly (the OWED
-item named in the prior close-out's handoff). Nothing is provisional: the finding is durable in three
-stores (below) and on PR #178 as a comment. No new `DECISIONS_LOG` number was minted — a verification
-result is not an architecture decision; its homes are `FEEDBACK` (the reusable method) and `ROADMAP`
-(the OWED action).
+**No `;cc` pending-commit queue was carried in.** This session ran directly from a written
+brief (Visuals increment 2). Nothing is provisional — every change landed on master under
+PR #187:
+
+- `FormChart` + `GET /series/readiness` + `ReadinessChart` (code) → `265f940`, adapted to
+  #186's contract in `814aa95`.
+- Q141 raised, FEEDBACK §40 extended, ROADMAP test-1-MET + item-2 note, BRANCHES row,
+  CLAUDE.md Recent-landings → `8056f70` (+ conflict-merged §40/BRANCHES/Recent-landings in
+  `814aa95`).
 
 ## 3. Cold-resume handoff
 
-**The finding (this session's whole substance).** The #273 test lane is **NOT bound** — proven, not
-inferred. Probe PR #178 failed one suite at a time with the guard + other suite green and read
-`mergeable_state`:
+**Landed — v1 test 1 "See" is MET.** `/metrics` now carries three charts: `LoadChart`
+(work-done bars per window, #186), `FormChart` (fitness/fatigue/form for one window at a time,
+negative-form domain, cold-start muted), and `ReadinessChart` (observed readiness as small
+multiples — 1–5 self-report + passive HRV on separate axes, nulls as gaps). Backend added
+read-only `GET /series/readiness` (`{days, points:[{date, morning_readiness, passive_hrv_ms}]}`,
+ascending, user-scoped, own days bound). Range selector lifted to `/metrics`, shared across all
+three. No schema, no migration.
 
-| step | vitest | pytest | guard | `mergeable_state` |
-|------|--------|--------|-------|-------------------|
-| 1 | fail | pass | pass | `unstable` |
-| 2 | pass | fail | pass | `unstable` |
+**The one judgment call.** The brief specced an actual-vs-forecast readiness chart with a
+residual. Dropped — `model_forecast` (0–10) is written nowhere in prod and is not a residual
+against `morning_readiness` (1–5 ordinal). Raised as **Q141** (what quantity the forecast
+predicts, on what scale, and wiring a writer); FEEDBACK §40 extended so a chart brief VERIFIES
+scale/unit/population before speccing. A forecast-vs-actual chart is a real feature for a
+later increment once Q141 resolves.
 
-A *required* failing check forces `blocked`; both steps resolved to `unstable` (mergeable). So
-`frontend tests (vitest)` and `backend tests (pytest)` **report but do not gate** — neither is a
-required check on ruleset `master-pr-gated` (`20414758`). **The #36 hole is still open:** a test
-regression can still self-merge on a green guard. #176 merged green, which proved the jobs run/report,
-never that a red one blocks. Probe method banked as `FEEDBACK` §38.
+**Single clearest next action.** Operator, GitHub-side / prod (no Code step): run the **#121
+served-bundle grep** against the live `health-app-frontend` bundle for the `Fitness` and
+`Readiness` render strings to confirm increment 2 is LIVE (LANDED ≠ LIVE, FEEDBACK §8), and
+the **user-1 populated-window read** (which `load_window`s actually light up for user 1 — the
+endpoint hardcodes no set). Both were out of this session's reach (no prod egress).
 
-**Single clearest next action — bind the two contexts (operator, GitHub-side).** Add both strings
-**verbatim** — `frontend tests (vitest)` and `backend tests (pytest)` — to *Require status checks to
-pass* on ruleset `20414758`, alongside `placeholder guard (POSIX)`. A name typo makes the context sit
-permanently pending and block every PR, so match exactly. Verify by re-running the #178-style probe →
-both steps should flip to `blocked`. Not committable by Code. Tracked: ROADMAP "Bind the #273 test
-contexts" row. **Until it lands, treat "green" for self-merge as guard-only and do not rely on a red
-suite to stop a merge.**
+**NOT touched this session — the standing feature lanes (v1-triage).** This was a Visuals
+(See) increment; the other three v1 tests stood still and none was advanced:
+- **Weekly resolver — test 2 (Know)** (surfacing seq 1, Oct 5 anchor): UNSTARTED here.
+- **Appointment brief v1 — test 3 (Walk in)** (surfacing seq 3): UNSTARTED here.
+- **Surface-debt sweep — test 4 (Loop)** (surfacing seq 4): UNSTARTED here.
+- **Visuals lane (See)**: its v1 core is now MET, so the lane is a **demotion candidate from
+  NOW** — remaining Visuals work (exercise progression, the wrap-vs-plan view that "comes
+  after the resolver") is NEXT, not gating any v1 test. Surface rather than let it ride by lane
+  momentum.
 
-**Leftover branch (OWED).** `claude/ci-binding-probe` could not be deleted from this session — GitHub
-returns 403 on `git push --delete` (ref-deletion denied to the session's credentials, even under
-protocol v0; no MCP delete-branch tool, no `gh` CLI, proxy healthy → server-side refusal). Delete with
-`git push origin --delete claude/ci-binding-probe` or the branch's trash icon. Rowed in `BRANCHES.md`.
+**Open OWED carried from prior sessions (not this session's work, unchanged):**
+- **#273 test-lane binding** — `frontend tests (vitest)` + `backend tests (pytest)` are NOT
+  required on ruleset `20414758` (proven by PR #178, FEEDBACK §38); only `placeholder guard
+  (POSIX)` gates. Operator must add both context strings verbatim GitHub-side. Until then,
+  "green" for self-merge is guard-only. (This session's PR #187 nonetheless had all three green.)
+- **`claude/ci-binding-probe`** leftover remote branch — prior session hit 403 on delete;
+  rowed in BRANCHES.md, operator-delete.
+- **Q140** (naive `date.today()` AEST skew, two live sites), **Q139** (interpretation
+  increment 3) — OPEN, untouched.
 
-**Session maxima:** decisions **#275** (re-read against advancing master; none minted here), questions
-**Q139** (unchanged).
-
-### NOT touched this session — named explicitly
-This was a **CI-instrumentation verification** — the fourth consecutive session in the test/CI/UI
-scaffolding rather than the health-intelligence core. Standing still, unchanged:
-- **The engine/algorithm lane** — Banister Form per-window load (`load_metrics`, #248) computed but the
-  dosing seam still does not read it; no work here.
-- **Exposure UI increment 3 (dose)** — blocked on **Q106** (the three readings of microcycle `minutes`).
-- **Weekly resolver** (`weekly_template` → which slot is due) and **Q105** (route slot capacities through
-  `taxonomy.resolve_capacity`) — unbuilt, pick-by-readiness.
-- **Microcycle editor** (ROADMAP sub-item under the exposure lane) — not started; the advanced-JSON
-  escape hatch is still the whole write affordance.
-- **Injury-ledger lanes** (backfill audit #222/#223, edit-and-supersede path) — untouched.
-- **Q136** (Samsung HRV constraint drift), **Q137** (naive `date.today()` sweep), **Q138** (BRANCHES
-  OWED/BLOCKED sweep vs ref reality) — open watch-points, untouched.
-- The **5 October exposure live test** (review badge → open Aerobic Base from the panel) — operator event.
-- **v1 definition of done (#275)** now gives the machinery a destination to triage lanes against — the
-  next pick should be chosen against it, and it points at the core, not more instrumentation.
+**Session maxima:** decisions **#277** · questions **Q141**.
