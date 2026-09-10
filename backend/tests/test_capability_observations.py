@@ -107,10 +107,17 @@ def test_enum_fields_are_closed(db_session, field, bad):
 
 
 def test_a_future_measurement_date_is_refused(db_session):
-    """It would sort ahead of every real row in `latest()`."""
+    """It would sort ahead of every real row in `latest()`.
+
+    Anchor "tomorrow" on the same AEST clock the write path checks against
+    (`observations._today()`, engine/observations.py) — not `date.today()`. With
+    the CI runner on UTC and AEST a day ahead near the UTC midnight window,
+    `date.today() + 1` collapses to the engine's today and the future-guard
+    (strictly greater) no longer fires (Q137, #154 pattern).
+    """
     u = _user(db_session)
     with pytest.raises(ValueError, match="in the future"):
-        _rec(db_session, u.id, observed_on=date.today() + timedelta(days=1))
+        _rec(db_session, u.id, observed_on=obs._today() + timedelta(days=1))
 
 
 def test_the_seeded_measures_are_exactly_the_briefed_battery():
