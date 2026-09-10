@@ -21,6 +21,7 @@ import { formatReviewDate } from './hub/exposureTileCopy'
 import PhaseForm from './exposure/PhaseForm'
 import ClosePhaseDialog from './exposure/ClosePhaseDialog'
 import PhaseHistory from './exposure/PhaseHistory'
+import QuotaWindow from './exposure/QuotaWindow'
 
 function Chip({ children, tone = 'gray' }) {
   const tones = {
@@ -211,6 +212,10 @@ export default function ExposurePanel({ onDiscuss }) {
       {closing && (
         <ClosePhaseDialog onWritten={onWritten} onCancel={() => setClosing(false)} />
       )}
+
+      {/* 2c. Quota window — the due-slot resolver read (#276, resolver brief STEP 7). Position
+          only; refetched with the panel after a write. Renders nothing at baseline. */}
+      <QuotaWindow refetchKey={refetchKey} />
 
       {/* 3. Fortify card */}
       <Card title={fortify.target_label}>

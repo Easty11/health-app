@@ -47,9 +47,16 @@ test('the review-due chip opens the form (#228 — a prompt, not a transition)',
 })
 
 test('a 201 triggers exactly one refetch and the panel re-renders from the new payload', async () => {
-  api.get
-    .mockResolvedValueOnce({ data: decompression }) // mount
-    .mockResolvedValueOnce({ data: held }) // refetch after the write
+  // The panel now reads two endpoints (/engine/next + /engine/resolver via QuotaWindow), so dispatch
+  // by URL rather than by call order: /engine/next serves decompression then held (FIFO), and
+  // /engine/resolver serves a baseline null window (QuotaWindow renders nothing — out of the way).
+  const nextQueue = [decompression, held]
+  api.get.mockImplementation((url) => {
+    if (url === '/engine/resolver') {
+      return Promise.resolve({ data: { window: null, slots: [], due_capacity: null, uncounted: [] } })
+    }
+    return Promise.resolve({ data: nextQueue.shift() ?? held })
+  })
   api.post.mockResolvedValue({ data: { training_phase: {} } })
   const onDiscuss = vi.fn()
   await act(async () => { render(<ExposurePanel onDiscuss={onDiscuss} />) })
@@ -63,8 +70,9 @@ test('a 201 triggers exactly one refetch and the panel re-renders from the new p
 
   // the refetched payload (held) surfaces the probe card — the visible proof the write took
   await waitFor(() => expect(screen.getByText('Probe · Carry')).toBeTruthy())
-  expect(api.get).toHaveBeenCalledTimes(2)
-  expect(api.get).toHaveBeenCalledWith('/engine/next')
+  // exactly one refetch of /engine/next (mount + post-write); resolver calls are counted separately
+  const nextCalls = api.get.mock.calls.filter((c) => c[0] === '/engine/next')
+  expect(nextCalls).toHaveLength(2)
   // no chat push on write (#59)
   expect(onDiscuss).not.toHaveBeenCalled()
 })
