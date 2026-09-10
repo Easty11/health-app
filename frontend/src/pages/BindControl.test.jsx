@@ -26,7 +26,7 @@ vi.mock('../api', () => ({
 }))
 
 import api from '../api'
-import { BindControl } from './Metrics'
+import { BindControl } from './Labs'
 
 const RAW = 'Lipoprotein(a)'
 

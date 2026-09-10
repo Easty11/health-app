@@ -939,11 +939,12 @@ def _section_schedule(entries: list[Any], now: datetime) -> str:
 # ---------- Adaptive Exposure Engine sections (Decision Support) ----------
 
 # TEMPORARY (DECISIONS_LOG #60): #49's dedicated lab-interpretation view has not
-# been built yet — "Metrics" (/metrics) is the closest existing screen, and today
-# it only does attach/extract/confirm, not a persisted read-back. This constant
-# is a stand-in pointer, not a real destination; swap it for the real interpretation
-# view's name the moment #49 ships a UI, and drop this comment.
-_LAB_INTERPRETATION_VIEW_LABEL = "Metrics page"
+# been built yet — "Labs" (/labs) is the closest existing screen (the lab surface
+# split off /metrics in increment 4 STEP 0), and it does attach/extract/confirm plus
+# a persisted read-back, not interpretation. This constant is a stand-in pointer, not
+# a real destination; swap it for the real interpretation view's name the moment #49
+# ships a UI, and drop this comment.
+_LAB_INTERPRETATION_VIEW_LABEL = "Labs page"
 
 
 def _section_labs(labs: list[Any]) -> str:
