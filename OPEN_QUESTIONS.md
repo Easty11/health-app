@@ -3260,6 +3260,13 @@ resolver this question owns must now compose phase-current over profile-baseline
 phase-now over profile-intent. Landed ≠ live: #270 gives the resolver phase-scoped input; it does
 not build the resolver.
 
+**Resolver half discharged (#276).** The week-to-date / due-slot resolver this question's #270 scope
+amendment describes is now BUILT — `engine/resolver.py`, `GET /engine/resolver`, and `/engine/next`
+default-to-due. Q106 **remains OPEN on `minutes` alone**: the resolver never reads a slot's `minutes`
+(asserted by `grep minutes engine/resolver.py` → empty), so the three non-equivalent readings are
+untouched and still owed. The consuming lane the field waited for now exists without having consumed
+it; the `minutes` fork is LATER per the #275 steer.
+
 
 ## Q107. Should a `review` flag surface a resolve prompt, and on which surface?
 
