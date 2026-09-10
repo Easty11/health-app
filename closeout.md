@@ -1,79 +1,104 @@
-# Code session close-out — Visuals increment 2 (Banister view), 2026-09-10
+# Code session close-out — Visuals increment 3 (exercise progression + phase markers), 2026-09-10
 
 ## 1. Real commits this session
 
-Three commits, all landed on master via **PR #187** (merge commit `74ea7ce`), branch
-`claude/banister-view-charts-rswilw` **merged + remote-deleted**:
+Three authored commits, all landed on master via **PR #189** (merge commit `4425ad9`), branch
+`claude/exercise-progression-phase-markers-aze636` **merged + remote-deleted**:
 
 ```
-814aa95 Merge master (fix/load-chart-units #186) into Banister view; rebuild increment 2 on the shared-unit contract
-8056f70 gov(visuals): Q141 forecast-semantics; FEEDBACK §40 chart-brief VERIFY; ROADMAP test 1 MET; BRANCHES + Recent-landings
-265f940 feat(visuals): Banister view — FormChart + observed-readiness small multiples (increment 2)
+da8e48f Merge remote-tracking branch 'origin/master' into claude/exercise-progression-phase-markers-aze636
+d1b0e52 gov(visuals): increment 3 #278 (D1–D5); ROADMAP test-1 See + surfacing item 2; increment-2 OWEDs closed; BRANCHES row; Recent-landings
+b1a560c feat(visuals): exercise progression + phase markers (increment 3)
 ```
 
-Master advanced **mid-session**: **`fix/load-chart-units` (PR #186)** landed independently
-(`d2c5a0e` fix + `093caf9` gov), redesigning the charting substrate — `TimeSeriesChart`
-`lines`→`series` with a shared-axis⇒shared-unit guard, `LoadChart`→small-multiples bars,
-FEEDBACK §40. Increment 2 was rebuilt on that contract via the `814aa95` merge (not the
-pre-#186 one). Number-at-merge: decisions max re-read = **#277** (no new decision minted this
-session; #186 minted none either).
+Master advanced **mid-session**: **PR #188** (increment-2 close-out, `25209cf` → merge
+`415038d`) landed while this branch was in flight — `closeout.md` only, no code. It was merged
+into the branch cleanly via `da8e48f` (no conflict). Number-at-merge: decisions max re-read at
+merge = **#277**, so the new entry claimed **#278** and did not collide.
 
-The close-out governance commit (this file) is separate, on the restarted-from-master
-`claude/banister-view-charts-rswilw`, below.
+The close-out governance commit (this file + its BRANCHES row) is separate, on
+`chore/closeout-inc3-278` (restarted from master), below.
 
 ## 2. Pending-queue reconciliation
 
 **No `;cc` pending-commit queue was carried in.** This session ran directly from a written
-brief (Visuals increment 2). Nothing is provisional — every change landed on master under
-PR #187:
+brief (Visuals increment 3). Nothing is provisional — every change landed on master under
+PR #189:
 
-- `FormChart` + `GET /series/readiness` + `ReadinessChart` (code) → `265f940`, adapted to
-  #186's contract in `814aa95`.
-- Q141 raised, FEEDBACK §40 extended, ROADMAP test-1-MET + item-2 note, BRANCHES row,
-  CLAUDE.md Recent-landings → `8056f70` (+ conflict-merged §40/BRANCHES/Recent-landings in
-  `814aa95`).
+- Backend `GET /series/exercises` + `GET /series/exercise/{template_id}` (read-only over
+  `hevy_workouts.raw`) + `backend/tests/test_series_exercise.py` → `b1a560c`.
+- Frontend `ExerciseChart`, `PhaseMarkers`, `TimeSeriesChart` `markers` prop, the three sibling
+  charts + `Metrics.jsx` threaded, fixtures + tests → `b1a560c`.
+- DECISIONS_LOG **#278** (D1–D5), ROADMAP (See pointer + surfacing item 2 increment-3 DONE +
+  both increment-2 operator OWEDs closed), BRANCHES row, CLAUDE.md Recent-landings → `d1b0e52`.
+
+**Increment-2 operator OWEDs — CLOSED this session (operator-confirmed mid-turn):** the #121
+served-bundle grep passed on `index-BSgJsRq2.js` (Fitness/Readiness render strings + the
+unit-guard message served), and the user-1 populated-window read is **mechanical, metabolic,
+neuromuscular**. Recorded in DECISIONS_LOG #278 and ROADMAP surfacing item 2.
 
 ## 3. Cold-resume handoff
 
-**Landed — v1 test 1 "See" is MET.** `/metrics` now carries three charts: `LoadChart`
-(work-done bars per window, #186), `FormChart` (fitness/fatigue/form for one window at a time,
-negative-form domain, cold-start muted), and `ReadinessChart` (observed readiness as small
-multiples — 1–5 self-report + passive HRV on separate axes, nulls as gaps). Backend added
-read-only `GET /series/readiness` (`{days, points:[{date, morning_readiness, passive_hrv_ms}]}`,
-ascending, user-scoped, own days bound). Range selector lifted to `/metrics`, shared across all
-three. No schema, no migration.
+**Landed — Visuals increment 3, extending v1 test 1 "See".** `/metrics` now carries a fourth
+chart, `ExerciseChart` (per-exercise strength progression), plus a training-phase overlay on
+**all four** charts. This is the first chart Hevy cannot draw: the phase boundary across the
+e1RM line ("e1RM fell here — that's when Decompression started") is the platform's read.
 
-**The one judgment call.** The brief specced an actual-vs-forecast readiness chart with a
-residual. Dropped — `model_forecast` (0–10) is written nowhere in prod and is not a residual
-against `morning_readiness` (1–5 ordinal). Raised as **Q141** (what quantity the forecast
-predicts, on what scale, and wiring a writer); FEEDBACK §40 extended so a chart brief VERIFIES
-scale/unit/population before speccing. A forecast-vs-actual chart is a real feature for a
-later increment once Q141 resolves.
+- **Backend (read-only, no migration).** `GET /series/exercises` — selector source: templates
+  with ≥ 3 qualifying session-days in range, most-frequent first (D5). `GET /series/exercise/
+  {template_id}` — per-session points: e1RM by Epley from the top set (reps > 10 excluded from
+  e1RM but not volume — D1), volume kg·reps (D2), working-sets count, one point per `_local_day`;
+  warmup + `excluded_at` + `dedup_flag` filtered exactly as `engine/resolver` does (D3). No
+  `/series/phases` — the phase ledger is **reused** via the existing `GET /engine/phase/history`.
+- **Frontend.** `ExerciseChart` = two small multiples on `TimeSeriesChart` (e1RM line with null
+  gaps + volume bars, distinct units on own axes), an exercise selector, sharing the page range.
+  `PhaseMarkers` (`usePhaseMarkers` one fetch/page + `referenceLinesFor`) snaps `entered_on`/
+  `closed_on` boundaries to in-range chart categories and threads them into LoadChart, FormChart,
+  ReadinessChart and ExerciseChart via `TimeSeriesChart`'s new `markers` prop (D4).
+- **Gates.** pytest (14), vitest (21 new / 158 total), 0 new eslint, bundle **+8.79 kB raw /
+  +2.09 kB gzip**. All three CI checks green on the merged head.
 
-**Single clearest next action.** Operator, GitHub-side / prod (no Code step): run the **#121
-served-bundle grep** against the live `health-app-frontend` bundle for the `Fitness` and
-`Readiness` render strings to confirm increment 2 is LIVE (LANDED ≠ LIVE, FEEDBACK §8), and
-the **user-1 populated-window read** (which `load_window`s actually light up for user 1 — the
-endpoint hardcodes no set). Both were out of this session's reach (no prod egress).
+**The one judgment call (an implementation detail, not a new decision).** The phase-marker snap
+drops a boundary that falls **before** a chart's first data category (a phase begun before the
+window — off-screen, D4's "in range" only) and one that falls after the last category. On a
+sparse chart a real phase change near an edge therefore shows no line. This is the honest
+choice; an edge-clamped alternative ("phase changed around here") is a one-line change if the
+operator prefers it — flagged, not actioned.
 
-**NOT touched this session — the standing feature lanes (v1-triage).** This was a Visuals
-(See) increment; the other three v1 tests stood still and none was advanced:
-- **Weekly resolver — test 2 (Know)** (surfacing seq 1, Oct 5 anchor): UNSTARTED here.
-- **Appointment brief v1 — test 3 (Walk in)** (surfacing seq 3): UNSTARTED here.
+**Single clearest next action.** Operator, prod-side (no Code step, no prod egress this session):
+the **#121 served-bundle grep** against the live `health-app-frontend` bundle for the `e1RM`
+string + the `phase-marker` label to confirm increment 3 is LIVE (LANDED ≠ LIVE, FEEDBACK §8),
+and an eyeball of the live `/metrics` exercise chart against Hevy for an exercise Luke knows
+(e1RM sanity-check, the whole reason D1 uses the same metric Hevy shows). Both literals are
+confirmed present in the local build.
+
+**NOT touched this session — the standing feature lanes (v1-triage).** This was the last queued
+Visuals (See) increment; the other three v1 tests stood still and none was advanced. **Three
+consecutive sessions (#277 inc1, #187 inc2, #278 inc3) have all gone to the Visuals instrument.**
+The visual "See" surface is now rich; the health-intelligence core that the appointment brief
+synthesises has not moved. Next pick should leave the Visuals lane unless a specific gap is named.
+
+- **Weekly resolver consumer — test 2 (Know)** (surfacing seq 1, **Oct 5 anchor**): the
+  resolver itself is BUILT (`#276`, `engine/resolver.py`, `/engine/resolver` + `/engine/next`
+  default-to-due) and the panel POSITION landed (`#276` STEP 7). What is still owed for "Know"
+  is enforcement-against-the-plan surfacing beyond position — UNSTARTED here. This is the
+  strongest next pick by the #275 sequence.
+- **Appointment brief v1 — test 3 (Walk in)** (surfacing seq 3): UNSTARTED here — the
+  synthesising consumer the whole co-equal-modules sequencing points at.
 - **Surface-debt sweep — test 4 (Loop)** (surfacing seq 4): UNSTARTED here.
-- **Visuals lane (See)**: its v1 core is now MET, so the lane is a **demotion candidate from
-  NOW** — remaining Visuals work (exercise progression, the wrap-vs-plan view that "comes
-  after the resolver") is NEXT, not gating any v1 test. Surface rather than let it ride by lane
-  momentum.
+- **Visuals lane (See)**: v1 core MET; increment 3 was its last queued item. Remaining Visuals
+  work (the wrap-vs-plan view that "comes after the resolver", RPE progression once dense) is
+  **NEXT, not NOW** — a demotion candidate, surfaced rather than left to ride lane momentum.
 
 **Open OWED carried from prior sessions (not this session's work, unchanged):**
 - **#273 test-lane binding** — `frontend tests (vitest)` + `backend tests (pytest)` are NOT
   required on ruleset `20414758` (proven by PR #178, FEEDBACK §38); only `placeholder guard
-  (POSIX)` gates. Operator must add both context strings verbatim GitHub-side. Until then,
-  "green" for self-merge is guard-only. (This session's PR #187 nonetheless had all three green.)
-- **`claude/ci-binding-probe`** leftover remote branch — prior session hit 403 on delete;
+  (POSIX)` gates the merge. Operator must add both context strings verbatim GitHub-side. Until
+  then, "green" for self-merge is guard-only. (This session's PR #189 nonetheless had all three
+  green before merge.)
+- **`claude/ci-binding-probe`** leftover remote branch — a prior session hit 403 on delete;
   rowed in BRANCHES.md, operator-delete.
 - **Q140** (naive `date.today()` AEST skew, two live sites), **Q139** (interpretation
-  increment 3) — OPEN, untouched.
+  increment 3 frontend tap surface) — OPEN, untouched.
 
-**Session maxima:** decisions **#277** · questions **Q141**.
+**Session maxima:** decisions **#278** · questions **Q141**.
