@@ -94,14 +94,19 @@ export default function FormChart({ width, height, days = 90 }) {
     [windows, selected],
   )
   const data = useMemo(() => windowRows(activeWindow), [activeWindow])
-  const lines = useMemo(
+  // fitness/fatigue/form share the window's load unit, so they legitimately share one y-axis —
+  // tagging every series with that same `unit` satisfies TimeSeriesChart's shared-unit guard
+  // (they are not incommensurable, unlike two different windows) and labels the axis.
+  const unit = activeWindow?.unit
+  const series = useMemo(
     () => LINES.map((l) => ({
       dataKey: l.key,
       name: l.name,
       color: COLORS[l.key],
+      unit,
       dot: <MaturityDot color={COLORS[l.key]} />,
     })),
-    [],
+    [unit],
   )
 
   const hasData = !!windows && windows.length > 0 && data.length > 0
@@ -148,11 +153,12 @@ export default function FormChart({ width, height, days = 90 }) {
         <div className="overflow-x-auto">
           <TimeSeriesChart
             data={data}
-            lines={lines}
+            series={series}
             xKey="day"
             width={width}
             height={height}
             yDomain={['auto', 'auto']}
+            legend
           />
         </div>
       )}

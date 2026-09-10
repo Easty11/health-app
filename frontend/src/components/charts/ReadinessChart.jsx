@@ -37,7 +37,7 @@ function ObservationDot(color, cls) {
   return <Dot />
 }
 
-function Panel({ label, hint, data, dataKey, name, color, dotClass, yDomain, width, height }) {
+function Panel({ label, hint, data, dataKey, name, color, dotClass, unit, yDomain, width, height }) {
   return (
     <div aria-label={label} className="space-y-1">
       <div className="flex items-baseline justify-between gap-2">
@@ -45,9 +45,12 @@ function Panel({ label, hint, data, dataKey, name, color, dotClass, yDomain, wid
         <p className="text-[11px] text-gray-400">{hint}</p>
       </div>
       <div className="overflow-x-auto">
+        {/* One series per panel — the small-multiple that keeps two different scales (1–5
+            ordinal, ms) off a shared axis. TimeSeriesChart's shared-unit guard is trivially
+            satisfied at one series; the panels are separated by design, not overlaid. */}
         <TimeSeriesChart
           data={data}
-          lines={[{ dataKey, name, color, dot: ObservationDot(color, dotClass) }]}
+          series={[{ dataKey, name, color, unit, dot: ObservationDot(color, dotClass) }]}
           xKey="date"
           width={width}
           height={height}
@@ -114,6 +117,7 @@ export default function ReadinessChart({ width, height, days = 90 }) {
             width={width}
             height={panelHeight}
           />
+          {/* readiness carries no `unit` label — the fixed 1–5 domain and the panel hint say it */}
           <Panel
             label="Resting HRV"
             hint="ms"
@@ -122,6 +126,7 @@ export default function ReadinessChart({ width, height, days = 90 }) {
             name="Resting HRV"
             color={HRV_COLOR}
             dotClass="hrv-dot"
+            unit="ms"
             yDomain={['auto', 'auto']}
             width={width}
             height={panelHeight}

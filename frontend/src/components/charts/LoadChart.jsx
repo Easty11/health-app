@@ -2,47 +2,25 @@ import { useEffect, useMemo, useState } from 'react'
 import api from '../../api'
 import TimeSeriesChart from './TimeSeriesChart'
 
-// First chart in the app (Visuals increment 1): daily training load per window, from
-// `GET /series/load`. One LINE per load_window over `daily_load`; the range selector reloads
-// the series at 30/90/180 days. Read-only — it draws what the Banister rollup already wrote,
-// shaping nothing.
+// Daily training load per window, from `GET /series/load` — SMALL MULTIPLES, not an overlay.
+// One chart per populated window, stacked, each with its own y-axis labelled in that window's
+// unit and a shared x-axis domain (so the days line up across the stack). Load is a discrete
+// per-day quantity, so it is drawn as BARS; a zero/rest day renders as no bar; pre-maturity
+// (cold-start) days keep the muted treatment. Read-only — draws what the Banister rollup wrote.
+//
+// Why not one chart with many lines: the windows carry incommensurable units (kg_reps vs nm_au
+// vs trimp_edw_au). Sharing one y-axis across them is meaningless — TimeSeriesChart now forbids
+// it (shared axis ⇒ shared unit). Small multiples is the fix.
 
 const RANGES = [30, 90, 180]
 
-// Window palette — brand-neutral, distinguishable in both themes. One colour per window in
-// series order; wraps if more windows ever light up than colours listed.
+// One colour per window in series order; wraps if more windows light up than colours listed.
 const COLORS = ['#4f46e5', '#0d9488', '#d97706', '#db2777', '#2563eb', '#65a30d']
 
-// A muted, hollow, dashed dot marks a point the MODEL ITSELF flags as cold-start
-// (`maturity === 'low'`): before a window has ≥42d continuous history its EWMA stocks are not
-// yet trustworthy. Annotate-never-suppress (#10/#28) — the point is drawn, just visibly
-// provisional, never dropped. `matKey` is the merged-row field holding this window's maturity
-// for the day; Recharts clones this element per point, adding cx/cy/payload/index.
-function MaturityDot(props) {
-  const { cx, cy, payload, matKey, color } = props
-  if (cx == null || cy == null) return null
-  const cold = payload?.[matKey] === 'low'
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={cold ? 2.5 : 3}
-      className={cold ? 'load-dot load-dot--cold' : 'load-dot load-dot--mature'}
-      data-maturity={cold ? 'low' : 'ok'}
-      fill={cold ? 'var(--chart-cold-fill, #ffffff)' : color}
-      stroke={color}
-      strokeWidth={1}
-      strokeDasharray={cold ? '2 1' : undefined}
-      opacity={cold ? 0.55 : 1}
-    />
-  )
-}
-
-// Fold the per-window series into one row per day keyed by window (`daily_load`) plus the
-// per-window maturity (`<window>__mat`) the dot reads. Days present in only some windows leave
-// the others null on that row, so a window's line breaks over days it has no data for
-// (connectNulls={false}) rather than drawing a false straight segment across the gap.
-function mergeSeries(windows) {
+// Fold every window's series onto one shared day domain: one row per day, each window's
+// `daily_load` under its own key (0 → null so a rest day draws no bar) plus its maturity under
+// `<window>__mat`. Passing this same array to every small multiple is what aligns their x-axes.
+function mergeDomain(windows) {
   const byDay = new Map()
   for (const w of windows) {
     for (const p of w.points) {
@@ -51,7 +29,7 @@ function mergeSeries(windows) {
         row = { day: p.day }
         byDay.set(p.day, row)
       }
-      row[w.load_window] = p.daily_load
+      row[w.load_window] = p.daily_load === 0 ? null : p.daily_load
       row[`${w.load_window}__mat`] = p.maturity
     }
   }
@@ -71,10 +49,6 @@ export default function LoadChart({ width, height, initialDays = 90, days: daysP
   const [windows, setWindows] = useState(null) // null = loading, [] = loaded-empty
   const [error, setError] = useState('')
 
-  // Fetch on mount and whenever the range changes. The loading reset (windows → null) lives in
-  // `selectRange`, not here, so the effect body calls no setState synchronously — only its
-  // async then/catch callbacks do, which is the intended place. On mount `windows` is already
-  // null (its initial value), so the loading state shows without an in-effect reset.
   useEffect(() => {
     let alive = true
     api.get('/series/load', { params: { days } })
@@ -91,20 +65,7 @@ export default function LoadChart({ width, height, initialDays = 90, days: daysP
     else setInternalDays(r)
   }
 
-  const data = useMemo(() => (windows ? mergeSeries(windows) : []), [windows])
-  const lines = useMemo(
-    () => (windows || []).map((w, i) => {
-      const color = COLORS[i % COLORS.length]
-      return {
-        dataKey: w.load_window,
-        name: w.unit ? `${w.load_window} (${w.unit})` : w.load_window,
-        color,
-        dot: <MaturityDot matKey={`${w.load_window}__mat`} color={color} />,
-      }
-    }),
-    [windows],
-  )
-
+  const data = useMemo(() => (windows ? mergeDomain(windows) : []), [windows])
   const hasData = !!windows && windows.length > 0 && data.length > 0
 
   return (
@@ -112,7 +73,7 @@ export default function LoadChart({ width, height, initialDays = 90, days: daysP
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Training load</h2>
-          <p className="text-[11px] text-gray-400">Daily load per window · dashed points are pre-maturity (cold-start).</p>
+          <p className="text-[11px] text-gray-400">Daily load per window · faded bars are pre-maturity (cold-start).</p>
         </div>
         <div role="group" aria-label="Range" className="flex gap-1">
           {RANGES.map((r) => (
@@ -144,8 +105,25 @@ export default function LoadChart({ width, height, initialDays = 90, days: daysP
       )}
 
       {hasData && (
-        <div className="overflow-x-auto">
-          <TimeSeriesChart data={data} lines={lines} xKey="day" width={width} height={height} />
+        <div className="space-y-4">
+          {windows.map((w, i) => (
+            <figure key={w.load_window} className="m-0" aria-label={`${w.load_window} load`}>
+              <figcaption className="text-xs font-medium text-gray-600">
+                {w.load_window} <span className="text-gray-400 font-normal">({w.unit})</span>
+              </figcaption>
+              <div className="overflow-x-auto">
+                <TimeSeriesChart
+                  data={data}
+                  series={[{ dataKey: w.load_window, name: w.load_window, color: COLORS[i % COLORS.length], unit: w.unit, matKey: `${w.load_window}__mat` }]}
+                  xKey="day"
+                  mark="bar"
+                  width={width}
+                  height={height}
+                  hideXLabels={i < windows.length - 1}
+                />
+              </div>
+            </figure>
+          ))}
         </div>
       )}
     </section>
