@@ -4164,7 +4164,27 @@ against whether the exercised code uses `_today_aest()` (or otherwise computes A
 to the engine's clock — as PR #154 did. Do NOT "fix" the engine to UTC: AEST is the user's calendar, the
 engine is correct. Scoped out of PR #154 deliberately (test-only, single concern).
 
-**State:** OPEN
+**State:** RESOLVED (PR #182, 2026-09-10) — three anchors repointed onto the AEST helper each code path
+actually uses (the #154 pattern), engine untouched, full backend suite green (1449 passed).
+
+- **Repointed (were live):** `test_a_future_measurement_date_is_refused` → `observations._today()` — the
+  write-path future guard's own clock (`engine/observations.py:130`, `if observed > _today()`). Confirmed
+  the Q137 "could be a real bug" lead was skew, not a bug: with the runner on UTC and AEST a day ahead,
+  `date.today()+1d` collapses onto the engine's today, so the strict-greater guard correctly does not fire.
+  Both `test_resolved_on_defaults_to_today_when_omitted` (injury + schedule) → `_local_day()` — the resolve
+  path's `resolved_on` default (`routers/knowledge.py:676`, AEST/Q42), which the tests had asserted `==`
+  UTC `date.today()`.
+- **Audited, non-live (not repointed):** the remaining ~28 `date.today()` + 17 `datetime.now()` anchors in
+  `backend/tests/`. Evidence they are non-live: green on #180's in-window run `7c9a570` AND on this session's
+  local run. Every `datetime.now()` is tz-aware `datetime.now(timezone.utc)` compared against UTC quantities;
+  the surviving `date.today()` uses store fixture creation dates (`added_at=`) never asserted-equal to an
+  AEST-computed value. Only the three where a runner-clock value was asserted `==` an AEST-computed date
+  actually skewed.
+- **Prod-code `date.today()` (reported, not fixed — see Q140):** three `backend/` non-test sites.
+  `cbti/replay.py:349` is CLI-only (`main()` under `__main__`), not a request path. `routers/knowledge.py:315`
+  (`expire_stale_entries`, live via `chat.py:677` / `knowledge.py:603`) and `injury_trajectory.py:144`
+  (`evaluate`, live via `mcp_server.py:486`, which passes no `today` so the UTC fallback fires) both compute a
+  user-facing "today" in UTC → a real AEST-boundary skew. Two live → Q140 opened.
 
 
 ## Q138. Session-close should sweep OWED/BLOCKED BRANCHES rows against merge/ref reality
@@ -4185,3 +4205,29 @@ backend-test green. The contract is fixed by the endpoint: `{lever_key, marker_c
 a 422 structural refusal for an untappable lever, `{text, source, deflected}` out. Owner: Luke / a frontend
 session. Cross-refs `#49` (design lock), `#47` (education boundary), `#268` (the spine), and the
 "Selectable term definitions / glossary" ROADMAP row (kin surface, possible fold-in).
+
+
+## Q140. Naive `date.today()` in AEST-computing prod paths — two live skew sites (from Q137 step 4)
+
+Q137's prod-code sweep found three `backend/` non-test `date.today()` sites; two compute a **user-facing**
+"today" in UTC while the app's canon is `_local_day()` (AEST, Q42 single source), so both skew by a day in the
+evening-AEST / prior-UTC-day window (AEST = UTC+10):
+
+- `routers/knowledge.py:315` — `expire_stale_entries`: `today = date.today()`, then filters `expires_at < today`.
+  Live via `routers/chat.py:677` and `routers/knowledge.py:603`. Because AEST leads UTC, a knowledge entry that
+  should expire on the AEST calendar day stays `active` up to ~10h too long until UTC rolls over. Surfacing /
+  suppression only; no data corruption; self-heals at the next UTC midnight.
+- `injury_trajectory.py:144` — `evaluate(user_id, db, today=None)`: takes an injected date, but the sole live
+  caller `mcp_server.py:486` passes none, so the UTC `date.today()` fallback fires. The divergence / review
+  windows are then anchored on a UTC "today" in the MCP plan-review surface. Surfacing only (returns messages,
+  changes nothing).
+
+Not live: `cbti/replay.py:349` (`d1 = block.closed_on or date.today()`) is inside `main()` under
+`if __name__ == "__main__"` — an operator replay CLI, not a request path; at most an off-by-one on an open-block
+window end.
+
+Fix for both live sites: `_local_day()`, or inject an AEST `today` at the caller. Deliberately scoped OUT of Q137
+(test-only, single concern). Not blocking — boundary-window, self-healing, no irreversible write (#166 gate:
+non-destructive → ship-with-watch class, not a live-probe gate). Owner: Luke / a code session.
+
+**State:** OPEN
