@@ -6,6 +6,8 @@ import { confidencePct, isClinicalFlag, isSuspect, rowTier } from './labRowClass
 import LoadChart from '../components/charts/LoadChart'
 import FormChart from '../components/charts/FormChart'
 import ReadinessChart from '../components/charts/ReadinessChart'
+import ExerciseChart from '../components/charts/ExerciseChart'
+import { usePhaseMarkers } from '../components/charts/PhaseMarkers'
 
 const STAGE = { IDLE: 'IDLE', EXTRACTING: 'EXTRACTING', CONFIRM: 'CONFIRM' }
 
@@ -535,6 +537,10 @@ export default function Metrics() {
   // single control drives them all: the LoadChart renders the selector (its lead role) and
   // reports changes up, and FormChart / ReadinessChart take the chosen window as a prop.
   const [chartDays, setChartDays] = useState(90)
+  // Training-phase boundaries, fetched ONCE for the page and overlaid on every chart below
+  // (Visuals increment 3, D4). An empty list until resolved — markers are an overlay, never a
+  // precondition for a chart to draw.
+  const phaseMarkers = usePhaseMarkers()
 
   function loadStored() {
     api.get('/labs/results').then((res) => setStoredReports(res.data)).catch(() => setStoredReports([]))
@@ -632,15 +638,18 @@ export default function Metrics() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-4">
-        {/* Banister view (Visuals increments 1 + 2) — mounted additively above the lab surface,
+        {/* Banister view (Visuals increments 1–3) — mounted additively above the lab surface,
             each chart self-contained (own fetch, empty state) so none disturbs the lab-report
             flow below. The range is shared: LoadChart owns the visible selector and lifts the
-            chosen window to `chartDays`, which FormChart and ReadinessChart follow. LoadChart
-            (work-done per window) and FormChart (fitness/fatigue/form) read /series/load;
-            ReadinessChart reads /series/readiness. */}
-        <LoadChart days={chartDays} onSelectRange={setChartDays} />
-        <FormChart days={chartDays} />
-        <ReadinessChart days={chartDays} />
+            chosen window to `chartDays`, which the others follow. LoadChart (work-done per
+            window) and FormChart (fitness/fatigue/form) read /series/load; ReadinessChart reads
+            /series/readiness; ExerciseChart (per-exercise e1RM + volume) reads /series/exercise*.
+            Training-phase boundaries (`phaseMarkers`, one fetch of /engine/phase/history) are
+            overlaid on all four. */}
+        <LoadChart days={chartDays} onSelectRange={setChartDays} markers={phaseMarkers} />
+        <FormChart days={chartDays} markers={phaseMarkers} />
+        <ExerciseChart days={chartDays} markers={phaseMarkers} />
+        <ReadinessChart days={chartDays} markers={phaseMarkers} />
 
         {error && (
           <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>

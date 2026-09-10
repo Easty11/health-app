@@ -42,7 +42,7 @@ function mergeDomain(windows) {
 // same window. Passed neither (its standalone/increment-1 use, and its own test), it owns its
 // range internally exactly as before. The selector renders and behaves identically in both
 // modes; only WHERE the chosen `days` lives differs.
-export default function LoadChart({ width, height, initialDays = 90, days: daysProp, onSelectRange }) {
+export default function LoadChart({ width, height, initialDays = 90, days: daysProp, onSelectRange, markers = [] }) {
   const controlled = daysProp != null && typeof onSelectRange === 'function'
   const [internalDays, setInternalDays] = useState(initialDays)
   const days = controlled ? daysProp : internalDays
@@ -120,6 +120,7 @@ export default function LoadChart({ width, height, initialDays = 90, days: daysP
                   width={width}
                   height={height}
                   hideXLabels={i < windows.length - 1}
+                  markers={markers}
                 />
               </div>
             </figure>

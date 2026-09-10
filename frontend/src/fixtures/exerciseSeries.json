@@ -1,0 +1,18 @@
+{
+  "template_id": "SQ",
+  "title": "Back Squat",
+  "points": [
+    { "date": "2026-07-06", "e1rm_kg": 120.0, "top_set": { "weight_kg": 100, "reps": 5 }, "volume_kg_reps": 2000, "working_sets": 4 },
+    { "date": "2026-07-13", "e1rm_kg": 122.5, "top_set": { "weight_kg": 102.5, "reps": 5 }, "volume_kg_reps": 2100, "working_sets": 4 },
+    { "date": "2026-07-20", "e1rm_kg": 125.0, "top_set": { "weight_kg": 105, "reps": 5 }, "volume_kg_reps": 2150, "working_sets": 4 },
+    { "date": "2026-07-27", "e1rm_kg": 127.0, "top_set": { "weight_kg": 110, "reps": 4 }, "volume_kg_reps": 2200, "working_sets": 4 },
+    { "date": "2026-08-01", "e1rm_kg": 128.3, "top_set": { "weight_kg": 110, "reps": 5 }, "volume_kg_reps": 2300, "working_sets": 5 },
+    { "date": "2026-08-10", "e1rm_kg": 130.0, "top_set": { "weight_kg": 112.5, "reps": 4 }, "volume_kg_reps": 2250, "working_sets": 4 },
+    { "date": "2026-08-17", "e1rm_kg": 131.5, "top_set": { "weight_kg": 115, "reps": 4 }, "volume_kg_reps": 2400, "working_sets": 5 },
+    { "date": "2026-08-24", "e1rm_kg": 133.0, "top_set": { "weight_kg": 117.5, "reps": 4 }, "volume_kg_reps": 2350, "working_sets": 4 },
+    { "date": "2026-08-31", "e1rm_kg": 134.0, "top_set": { "weight_kg": 120, "reps": 3 }, "volume_kg_reps": 2450, "working_sets": 5 },
+    { "date": "2026-09-07", "e1rm_kg": 118.0, "top_set": { "weight_kg": 100, "reps": 4 }, "volume_kg_reps": 1600, "working_sets": 3 },
+    { "date": "2026-09-10", "e1rm_kg": null, "top_set": null, "volume_kg_reps": 1400, "working_sets": 3 },
+    { "date": "2026-09-14", "e1rm_kg": 120.0, "top_set": { "weight_kg": 100, "reps": 5 }, "volume_kg_reps": 1800, "working_sets": 4 }
+  ]
+}

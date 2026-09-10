@@ -50,3 +50,30 @@ test('does not throw when series share a unit', () => {
   )
   expect(container.querySelector('.recharts-wrapper')).toBeTruthy()
 })
+
+test('draws a phase-marker reference line at an in-range boundary date', () => {
+  const { container } = render(
+    <TimeSeriesChart
+      data={DATA}
+      width={400}
+      height={200}
+      series={[{ dataKey: 'a', name: 'a', color: '#4f46e5', unit: 'kg' }]}
+      markers={[{ date: '2026-07-02', label: 'decompression' }]}
+    />,
+  )
+  expect(container.querySelector('.recharts-reference-line')).toBeTruthy()
+  expect(container.textContent).toContain('decompression')  // the phase name is the label
+})
+
+test('an out-of-range boundary draws no reference line', () => {
+  const { container } = render(
+    <TimeSeriesChart
+      data={DATA}
+      width={400}
+      height={200}
+      series={[{ dataKey: 'a', name: 'a', color: '#4f46e5', unit: 'kg' }]}
+      markers={[{ date: '2020-01-01', label: 'ancient' }]}
+    />,
+  )
+  expect(container.querySelector('.recharts-reference-line')).toBeNull()
+})

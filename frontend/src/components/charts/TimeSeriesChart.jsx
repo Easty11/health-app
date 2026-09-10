@@ -2,6 +2,7 @@ import {
   LineChart, Line, BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
+import { referenceLinesFor } from './PhaseMarkers'
 
 // The ONE jsdom-safe mounting pattern every chart in the app shares, and the home of the
 // one invariant that a chart cannot break silently.
@@ -47,6 +48,7 @@ export default function TimeSeriesChart({
   lineType = 'monotone',
   strokeWidth = 2,
   legend = false,
+  markers = [],            // [{date, label}] training-phase boundaries (Visuals increment 3, D4)
 }) {
   const units = [...new Set(series.map((s) => s.unit).filter((u) => u != null))]
   if (units.length > 1) {
@@ -55,6 +57,10 @@ export default function TimeSeriesChart({
     console.error(msg)
   }
   const unit = units[0]
+  // Phase-boundary reference lines, snapped to this chart's categories. Built here (not nested
+  // in a child component) so they spread as DIRECT children of the Recharts chart — the only
+  // place Recharts registers them.
+  const refLines = referenceLinesFor(markers, data, xKey)
   const yLabel = unit
     ? { value: unit, angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: '#6b7280' } }
     : undefined
@@ -94,6 +100,7 @@ export default function TimeSeriesChart({
             })}
           </Bar>
         ))}
+        {refLines}
       </BarChart>
     )
   } else {
@@ -114,6 +121,7 @@ export default function TimeSeriesChart({
             isAnimationActive={false}
           />
         ))}
+        {refLines}
       </LineChart>
     )
   }

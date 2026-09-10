@@ -1,0 +1,5 @@
+[
+  { "template_id": "SQ", "title": "Back Squat", "sessions": 12 },
+  { "template_id": "BP", "title": "Bench Press", "sessions": 9 },
+  { "template_id": "DL", "title": "Deadlift", "sessions": 5 }
+]
