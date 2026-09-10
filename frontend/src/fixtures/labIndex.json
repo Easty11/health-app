@@ -1,0 +1,18 @@
+[
+  {
+    "canonical": "testosterone_total",
+    "display_name": "testosterone_total",
+    "unit": "nmol/L",
+    "draws": 8,
+    "latest": { "date": "2026-06-25", "value": 500.0, "flag": null },
+    "any_flagged": true
+  },
+  {
+    "canonical": "crp",
+    "display_name": "crp",
+    "unit": "mg/L",
+    "draws": 1,
+    "latest": { "date": "2025-01-01", "value": 1.0, "flag": null },
+    "any_flagged": false
+  }
+]
