@@ -37,7 +37,7 @@ function ObservationDot(color, cls) {
   return <Dot />
 }
 
-function Panel({ label, hint, data, dataKey, name, color, dotClass, unit, yDomain, width, height }) {
+function Panel({ label, hint, data, dataKey, name, color, dotClass, unit, yDomain, width, height, markers }) {
   return (
     <div aria-label={label} className="space-y-1">
       <div className="flex items-baseline justify-between gap-2">
@@ -57,13 +57,14 @@ function Panel({ label, hint, data, dataKey, name, color, dotClass, unit, yDomai
           yDomain={yDomain}
           lineType="linear"
           strokeWidth={1.5}
+          markers={markers}
         />
       </div>
     </div>
   )
 }
 
-export default function ReadinessChart({ width, height, days = 90 }) {
+export default function ReadinessChart({ width, height, days = 90, markers = [] }) {
   const [points, setPoints] = useState(null) // null = loading, [] = loaded-empty
   const [error, setError] = useState('')
 
@@ -116,6 +117,7 @@ export default function ReadinessChart({ width, height, days = 90 }) {
             yDomain={[1, 5]}
             width={width}
             height={panelHeight}
+            markers={markers}
           />
           {/* readiness carries no `unit` label — the fixed 1–5 domain and the panel hint say it */}
           <Panel
@@ -130,6 +132,7 @@ export default function ReadinessChart({ width, height, days = 90 }) {
             yDomain={['auto', 'auto']}
             width={width}
             height={panelHeight}
+            markers={markers}
           />
         </div>
       )}

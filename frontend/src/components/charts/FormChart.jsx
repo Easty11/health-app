@@ -65,7 +65,7 @@ function windowRows(win) {
     }))
 }
 
-export default function FormChart({ width, height, days = 90 }) {
+export default function FormChart({ width, height, days = 90, markers = [] }) {
   const [windows, setWindows] = useState(null) // null = loading, [] = loaded-empty
   const [error, setError] = useState('')
   const [chosen, setChosen] = useState(null) // the user's EXPLICIT window pick, or null
@@ -159,6 +159,7 @@ export default function FormChart({ width, height, days = 90 }) {
             height={height}
             yDomain={['auto', 'auto']}
             legend
+            markers={markers}
           />
         </div>
       )}
