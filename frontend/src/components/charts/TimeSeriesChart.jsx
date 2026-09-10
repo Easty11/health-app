@@ -34,10 +34,20 @@ import { referenceLinesFor } from './PhaseMarkers'
 //     where a monotone spline would invent between-day values the reading never claimed.
 //   * `legend` labels a multi-series line overlay (FormChart's fitness/fatigue/form, all one
 //     unit); a small multiple with one series names it in its own caption and needs none.
+//
+// `xType` is additive (Lab visuals, D4). Default `'category'` is unchanged — every training
+// chart bins to a data-carrying day and wants even category spacing. `'time'` makes the x a
+// NUMBER axis over epoch-day values, so points sit at their true temporal distance: a 90-day
+// and a 365-day gap render proportionally, which a categorical axis (even spacing regardless of
+// gap) would flatten. Lab draws are irregular in time and MUST read that way. `children` are
+// spread as direct children of the Recharts chart (like `markers`' reference lines) so a caller
+// can pass `ReferenceArea` band segments / `ReferenceDot` censored markers — Recharts only
+// registers those it finds as direct children.
 export default function TimeSeriesChart({
   data,
   series,
   xKey = 'day',
+  xType = 'category',      // 'category' (even spacing) | 'time' (numeric epoch-day, proportional)
   mark = 'line',            // 'line' | 'bar' — bars for discrete per-day quantities (daily_load)
   width = 640,
   height = 200,
@@ -49,6 +59,8 @@ export default function TimeSeriesChart({
   strokeWidth = 2,
   legend = false,
   markers = [],            // [{date, label}] training-phase boundaries (Visuals increment 3, D4)
+  children = null,         // extra Recharts elements (ReferenceArea/ReferenceDot) — direct children
+  tooltipContent = null,   // custom Recharts Tooltip content (Lab visuals: operator / flag / derived notes)
 }) {
   const units = [...new Set(series.map((s) => s.unit).filter((u) => u != null))]
   if (units.length > 1) {
@@ -65,12 +77,29 @@ export default function TimeSeriesChart({
     ? { value: unit, angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: '#6b7280' } }
     : undefined
 
+  // Epoch-day (integer days since 1970) → a short ISO date tick. Deterministic and jsdom-safe
+  // (no locale dependence). Used only on the time axis.
+  const epochDayLabel = (d) => new Date(d * 86400000).toISOString().slice(0, 10)
+  const xAxis = xType === 'time'
+    ? (
+      <XAxis
+        dataKey={xKey}
+        type="number"
+        scale="linear"
+        domain={['dataMin', 'dataMax']}
+        tickFormatter={epochDayLabel}
+        tick={hideXLabels ? false : { fontSize: 11 }}
+        minTickGap={24}
+      />
+    )
+    : <XAxis dataKey={xKey} tick={hideXLabels ? false : { fontSize: 11 }} minTickGap={24} />
+
   const axes = (
     <>
       <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-      <XAxis dataKey={xKey} tick={hideXLabels ? false : { fontSize: 11 }} minTickGap={24} />
+      {xAxis}
       <YAxis tick={{ fontSize: 11 }} width={56} label={yLabel} domain={yDomain} />
-      <Tooltip />
+      {tooltipContent ? <Tooltip content={tooltipContent} /> : <Tooltip />}
       {legend && <Legend />}
     </>
   )
@@ -100,6 +129,7 @@ export default function TimeSeriesChart({
             })}
           </Bar>
         ))}
+        {children}
         {refLines}
       </BarChart>
     )
@@ -121,6 +151,7 @@ export default function TimeSeriesChart({
             isAnimationActive={false}
           />
         ))}
+        {children}
         {refLines}
       </LineChart>
     )

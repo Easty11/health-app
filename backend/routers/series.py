@@ -24,11 +24,12 @@ Day grain is the operator-local (AEST) calendar day, matching `load_metrics._loc
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytz
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 import models
@@ -439,3 +440,222 @@ def get_exercise_series(
         ))
 
     return ExerciseSeriesOut(template_id=template_id, title=title, points=points)
+
+
+# ---------- lab marker series (Lab visuals — v1 test 3 prerequisite) ----------
+#
+# READ-ONLY over `lab_reports` / `lab_results`, reusing the same user-scoped join
+# `routers.labs.get_lab_results` reads (`LabResult` ⋈ `LabReport`, filtered on
+# `LabReport.user_id`) — a per-MARKER time series rather than that per-report grouping.
+# Nothing here recomputes `computed_flag`: it is the extractor's derivation (labs.py's
+# documented rule, which honours the exclusive flags), stored verbatim, and this surface
+# relays it so the chart never re-derives a verdict the platform already made.
+#
+# The three EXCLUSION reasons a result can't be plotted (D3), each returned in `excluded[]`
+# rather than dropped:
+#   * `qualitative`   — no numeric value_num (a text result); nothing to plot on a value axis.
+#   * `unit_mismatch` — `unit_canonical` disagrees with the marker's `unit_established`; the
+#                       chart never converts (GUARD), so a mismatched unit is surfaced, not merged.
+#   * `unmapped`      — a historical row of this marker's raw name never promoted to the canonical
+#                       (marker_canonical still NULL); it belongs to the series but can't join it
+#                       until bound. The page links these to the bind control.
+# A CENSORED value (value_operator '<'/'>') IS a point: it carries `operator` and its bound in
+# `value`, so the chart can draw a hollow marker at the bound and break the line there rather than
+# plotting the bound as a measurement (D2). It is never an exclusion.
+
+# `confidence` below this is muted on the chart, same treatment as a cold-start point (D5).
+# It is the ONE extraction threshold in the codebase (labs.py's `field_confidence.* < 0.85`
+# suspect rule); the stored per-row `confidence` is the MIN of a row's field confidences
+# (labs.py `min(confidences)`), so `confidence < 0.85` here reproduces that rule exactly.
+LAB_LOW_CONFIDENCE = 0.85
+
+_OUT_OF_RANGE_FLAGS = frozenset({"H", "L"})
+
+
+class LabLatest(BaseModel):
+    date: date
+    value: float | None
+    flag: str | None
+
+
+class LabIndexEntry(BaseModel):
+    canonical: str
+    display_name: str
+    unit: str | None
+    draws: int
+    latest: LabLatest
+    any_flagged: bool
+
+
+class LabPoint(BaseModel):
+    date: date
+    value: float | None
+    operator: str | None  # '<' | '>' — present ⇒ censored (hollow marker, line gap)
+    ref_low: float | None
+    ref_high: float | None
+    ref_low_exclusive: bool
+    ref_high_exclusive: bool
+    computed_flag: str | None
+    lab_flag: str | None
+    is_derived: bool
+    confidence: float
+    report_id: int
+
+
+class LabExcluded(BaseModel):
+    report_id: int
+    date: date
+    reason: str  # 'qualitative' | 'unit_mismatch' | 'unmapped'
+
+
+class LabDetailOut(BaseModel):
+    canonical: str
+    unit: str | None
+    points: list[LabPoint]
+    excluded: list[LabExcluded]
+
+
+def _canonical_meta(db: Session) -> dict[str, dict]:
+    """canonical -> {display_name, unit} from the marker map. `display_name` is unwired for
+    the seeded rows (all NULL), so it falls back to the canonical id; `unit` takes the first
+    non-null `unit_established` for the canonical (a unitless marker legitimately has none)."""
+    meta: dict[str, dict] = {}
+    for e in db.query(models.MarkerCanonicalEntry).filter(
+        models.MarkerCanonicalEntry.marker_canonical.isnot(None)
+    ).all():
+        m = meta.setdefault(e.marker_canonical, {"display_name": None, "unit": None})
+        if m["display_name"] is None and e.display_name:
+            m["display_name"] = e.display_name
+        if m["unit"] is None and e.unit_established:
+            m["unit"] = e.unit_established
+    return meta
+
+
+@router.get("/labs", response_model=list[LabIndexEntry])
+def get_lab_index(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """What's worth looking at: one row per canonical marker the user has, newest draw first.
+    The lab picker's source and the appointment brief's "which markers move" list. Mapped
+    markers only — an unmapped raw name has no canonical to key a series on, and surfaces
+    instead as an `unmapped` exclusion on the marker it belongs to (see the detail route)."""
+    rows = (
+        db.query(models.LabResult, models.LabReport.collected_date)
+        .join(models.LabReport, models.LabResult.lab_report_id == models.LabReport.id)
+        .filter(
+            models.LabReport.user_id == current_user.id,
+            models.LabResult.marker_canonical.isnot(None),
+        )
+        .all()
+    )
+
+    meta = _canonical_meta(db)
+    by_canon: dict[str, list] = {}
+    for r, cdate in rows:
+        by_canon.setdefault(r.marker_canonical, []).append((r, cdate))
+
+    out: list[LabIndexEntry] = []
+    for canon, items in by_canon.items():
+        # latest by collected_date, tie-broken by report id (the later-ingested report wins)
+        latest_r, latest_d = max(items, key=lambda it: (it[1], it[0].lab_report_id))
+        m = meta.get(canon, {})
+        out.append(LabIndexEntry(
+            canonical=canon,
+            display_name=(m.get("display_name") or canon),
+            unit=(m.get("unit") or latest_r.unit_canonical),
+            draws=len({cdate for _, cdate in items}),
+            latest=LabLatest(date=latest_d, value=latest_r.value_num, flag=latest_r.computed_flag),
+            any_flagged=any(r.computed_flag in _OUT_OF_RANGE_FLAGS for r, _ in items),
+        ))
+
+    out.sort(key=lambda e: e.latest.date, reverse=True)
+    return out
+
+
+@router.get("/lab/{canonical}", response_model=LabDetailOut)
+def get_lab_series(
+    canonical: str,
+    from_: date | None = Query(None, alias="from"),
+    to: date | None = Query(None),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """One marker's value over collection dates, ascending. Each point carries its OWN
+    reference range (the band steps between draws — the chart takes the earlier draw's range
+    for the segment up to the next). Censored, qualitative, unmapped, and unit-mismatched
+    results are surfaced (`excluded[]` or an `operator` on the point), never silently plotted
+    or dropped. `from`/`to` bound `collected_date` inclusive."""
+    entries = (
+        db.query(models.MarkerCanonicalEntry)
+        .filter(models.MarkerCanonicalEntry.marker_canonical == canonical)
+        .all()
+    )
+    raw_names = [e.marker_name_raw for e in entries]
+    established_unit = next((e.unit_established for e in entries if e.unit_established), None)
+
+    # A row belongs to this series if it is mapped to the canonical, OR it is an unmapped row
+    # (marker_canonical NULL) whose raw name maps to this canonical — a historical draw that
+    # never got promoted. The second arm is what surfaces `unmapped` in `excluded[]`.
+    match = [models.LabResult.marker_canonical == canonical]
+    if raw_names:
+        match.append(and_(
+            models.LabResult.marker_canonical.is_(None),
+            models.LabResult.marker_name_raw.in_(raw_names),
+        ))
+
+    q = (
+        db.query(models.LabResult, models.LabReport.collected_date, models.LabReport.id)
+        .join(models.LabReport, models.LabResult.lab_report_id == models.LabReport.id)
+        .filter(models.LabReport.user_id == current_user.id)
+        .filter(or_(*match))
+    )
+    if from_ is not None:
+        q = q.filter(models.LabReport.collected_date >= from_)
+    if to is not None:
+        q = q.filter(models.LabReport.collected_date <= to)
+
+    # Ascending by collection date; ties broken by report id for a stable order.
+    rows = sorted(q.all(), key=lambda t: (t[1], t[2]))
+
+    points: list[LabPoint] = []
+    excluded: list[LabExcluded] = []
+    plotted_units: list[str] = []
+
+    for r, cdate, report_id in rows:
+        if r.marker_canonical is None:
+            # matched only by raw name — belongs to the series but never bound
+            excluded.append(LabExcluded(report_id=report_id, date=cdate, reason="unmapped"))
+            continue
+        if r.value_num is None:
+            # no numeric value to place on a value axis (a text/qualitative result)
+            excluded.append(LabExcluded(report_id=report_id, date=cdate, reason="qualitative"))
+            continue
+        if established_unit and r.unit_canonical and r.unit_canonical != established_unit:
+            # the chart never converts units (GUARD) — a mismatch is surfaced, not merged
+            excluded.append(LabExcluded(report_id=report_id, date=cdate, reason="unit_mismatch"))
+            continue
+        if r.unit_canonical:
+            plotted_units.append(r.unit_canonical)
+        points.append(LabPoint(
+            date=cdate,
+            value=r.value_num,
+            operator=r.value_operator,
+            ref_low=r.ref_low,
+            ref_high=r.ref_high,
+            ref_low_exclusive=r.ref_low_exclusive,
+            ref_high_exclusive=r.ref_high_exclusive,
+            computed_flag=r.computed_flag,
+            lab_flag=r.lab_flag,
+            is_derived=r.is_derived,
+            confidence=r.confidence,
+            report_id=report_id,
+        ))
+
+    # No rows for this marker at all (and not a known canonical) is a 404 — a mistyped id, not
+    # an empty-but-valid series. A canonical the user simply has no draws for still 200s empty.
+    if not points and not excluded and canonical not in _canonical_meta(db):
+        raise HTTPException(status_code=404, detail=f"Unknown marker '{canonical}'")
+
+    unit = established_unit or (plotted_units[0] if plotted_units else None)
+    return LabDetailOut(canonical=canonical, unit=unit, points=points, excluded=excluded)

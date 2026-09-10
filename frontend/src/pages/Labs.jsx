@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import api from '../api'
 import { formatApiError } from '../lib/apiError'
 import { confidencePct, isClinicalFlag, isSuspect, rowTier } from './labRowClassification'
+import LabsPanel from '../components/charts/LabsPanel'
 
 const STAGE = { IDLE: 'IDLE', EXTRACTING: 'EXTRACTING', CONFIRM: 'CONFIRM' }
 
@@ -625,6 +626,10 @@ export default function Labs() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-4">
+        {/* Lab visuals — the marker picker + trend, mounted ABOVE the ingestion surface (its own
+            fetches, own empty state) so it never disturbs the extract/confirm flow below. */}
+        <LabsPanel />
+
         {error && (
           <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>
         )}

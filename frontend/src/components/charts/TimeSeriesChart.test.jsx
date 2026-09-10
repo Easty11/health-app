@@ -77,3 +77,24 @@ test('an out-of-range boundary draws no reference line', () => {
   )
   expect(container.querySelector('.recharts-reference-line')).toBeNull()
 })
+
+test('xType="time" places points at their true temporal distance (90d vs 365d, D4)', () => {
+  // Three points 0 / 90 / 365 days apart. On a NUMBER (time) x-axis the middle point must sit
+  // at 90/365 of the way from the first to the last — a categorical axis would space them evenly
+  // (0.5) and flatten the irregular gaps that matter for lab draws.
+  const { container } = render(
+    <TimeSeriesChart
+      data={[{ x: 0, v: 1 }, { x: 90, v: 2 }, { x: 365, v: 3 }]}
+      xKey="x"
+      xType="time"
+      width={600}
+      height={200}
+      series={[{ dataKey: 'v', name: 'v', color: '#4f46e5', unit: 'x', dot: true }]}
+    />,
+  )
+  const dots = [...container.querySelectorAll('.recharts-line-dot')]
+  expect(dots).toHaveLength(3)
+  const cx = dots.map((d) => parseFloat(d.getAttribute('cx')))
+  const fraction = (cx[1] - cx[0]) / (cx[2] - cx[0])
+  expect(fraction).toBeCloseTo(90 / 365, 2)  // proportional, not the 0.5 a category axis would give
+})
