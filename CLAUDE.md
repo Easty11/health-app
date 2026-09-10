@@ -270,7 +270,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Visuals increment 1 (v1 test 1 "See") — Recharts adopted, `routers/series.py` at `/series` with `GET /series/load`, and the daily work-done `LoadChart` on `/metrics` (read-only, non-schema); `engines.node` `>=22` (`#277`), self-merges on green (PR #185). #121 served-bundle grep + the user-1 populated-window read are operator hand-offs (no prod egress this session)** - Handoff: `closeout.md`.
+- **Visuals increment 1 (v1 test 1 "See") — Recharts adopted, `routers/series.py` at `/series` with `GET /series/load`, and the daily work-done `LoadChart` on `/metrics` (read-only, non-schema); `engines.node` `>=22` (`#277`, PR #185). Amended by `fix/load-chart-units` (FEEDBACK §40, PR #186): small multiples + bars + shared-axis⇒shared-unit guard — the incommensurable-units overlay fixed. #121 served-bundle grep + the user-1 populated-window read are operator hand-offs** - Handoff: `closeout.md`.
 
 - **v1 definition of done + surfacing-phase sequence + fossil retirement — the ROADMAP gains a v1 destination the machinery can triage against; co-equal-modules principle amended to sequence-by-consumer, demotions and rollout retirements on verified evidence (`#275`), landed + merged (PR #179)** - Handoff: `closeout.md`.
 
