@@ -4256,3 +4256,22 @@ quantity + scale, wire a writer for `model_forecast`, then build. Owner: Luke / 
 session.
 
 **State:** OPEN
+
+## Q142. Imaging / DEXA ingestion target — where do narrative studies and structured DEXA numerics land?
+
+Raised deferring the imaging half of the 2026-08/09 lab batch (#280). `imaging_extraction_new_batch.json` holds three
+studies: MRI pituitary (no lesion — narrative), US urinary tract (chronic bladder outlet obstruction, PVR 234 mL,
+11 mm renal cyst — narrative), and a baseline DEXA (total-body BMD T +1.8; structured body-composition numerics). No
+landed home exists today:
+
+- **Narrative MRI/US** need the generic `health_events` parent, deferred at #43/#52 — there is no table for a narrative
+  study.
+- **DEXA numerics** are structured (BMD, T/Z-score, lean/fat mass, RSMI, segmental) and could seed a numeric series,
+  but NOT `lab_results` — DEXA is not a lab panel, and forcing it would require declaring ~15 new canonicals and misusing
+  a lab table for imaging (#280 refused this; the handoff itself warns against it).
+
+Options: (a) wait for the `health_events` parent, land all three there; (b) a dedicated imaging/DEXA schema — a migration,
+so Merge disposition hold (a), full human review; (c) a DEXA-only numeric series now, narrative MRI/US still deferred.
+Operator deferred the decision this session. Owner: Luke / chat (data-meaning + schema), then a code session.
+
+**State:** OPEN
