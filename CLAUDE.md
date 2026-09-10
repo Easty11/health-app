@@ -270,11 +270,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Visuals increment 1 (v1 test 1 "See") — Recharts adopted, `routers/series.py` at `/series` with `GET /series/load`, and the daily work-done `LoadChart` on `/metrics` (read-only, non-schema); `engines.node` `>=22` (`#277`), self-merges on green (PR #185). #121 served-bundle grep + the user-1 populated-window read are operator hand-offs (no prod egress this session)** - Handoff: `closeout.md`.
+
 - **v1 definition of done + surfacing-phase sequence + fossil retirement — the ROADMAP gains a v1 destination the machinery can triage against; co-equal-modules principle amended to sequence-by-consumer, demotions and rollout retirements on verified evidence (`#275`), landed + merged (PR #179)** - Handoff: `closeout.md`.
 
 - **Exposure UI increment 2 (write) — the operator opens/closes/reads phases from the panel (`#274`), landed + merged (PR #176) + confirmed LIVE (#121 served-bundle); the `#273` test-lane binding is still OWED, its proof probe queued** - Handoff: `closeout.md`.
-
-- **Test CI lane — `vitest` + `pytest` run on every PR so a test regression can't self-merge (`#273`), landed + merged (PR #174); binding the two contexts is an operator ruleset edit still OWED** - Handoff: `closeout.md`.
 
 ---
 

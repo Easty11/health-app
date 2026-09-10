@@ -22,7 +22,7 @@ Last updated: 2026-09-09
 _The ordered path to the four v1 tests. Each entry names the test it serves._
 
 1. **Weekly resolver** — v1 **test 2 (Know)**. Oct 5 anchor. (The NEXT "Weekly resolver — consume `weekly_template`" row.)
-2. **Visuals lane, done-data first** — work-done analysis, exercise progression — v1 **test 1 (See)**. The wrap-vs-plan view comes after the resolver.
+2. **Visuals lane, done-data first** — work-done analysis, exercise progression — v1 **test 1 (See)**. The wrap-vs-plan view comes after the resolver. **Increment 1 DONE → #277** (2026-09-10): Recharts adopted, `routers/series.py` mounted at `/series` with `GET /series/load`, and the daily work-done `LoadChart` on `/metrics` (one line per window, cold-start points surfaced). `engines.node` bumped `>=22` in the same PR (aligns with the #273 Node-22 test stack). Increment 1b (fitness/fatigue/form chart) next once the pattern is proven; `/series/readiness` (increment 2) shapes from `checkin_v2 /history`. #121 served-bundle grep + the user-1 populated-window read are operator-side (no prod egress this session).
 3. **Appointment brief v1** — v1 **test 3 (Walk in)**. (The NOW Appointment brief row, sequence position 3.)
 4. **Surface-debt sweep** — session cards not clickable, dual-panel scroll, sleep-duration semantic error, chat persistence — v1 **test 4 (Loop)**.
 
