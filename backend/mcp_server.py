@@ -1,5 +1,9 @@
+import functools
+import inspect
 import re
 from datetime import datetime, timezone, timedelta
+
+import pytz
 
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.fastmcp import FastMCP
@@ -70,10 +74,54 @@ def _epley_1rm(weight_kg: float, reps: int) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Temporal anchoring — every tool output carries a visible `as_of` (WS3 / #281)
+# ---------------------------------------------------------------------------
+
+# Australia/Brisbane, no DST — the operator-local day the rest of the codebase
+# anchors on (context_builder, load_metrics). An MCP thread can persist across
+# calendar days; without a per-output stamp the client reasons off whatever "today"
+# it last cached (the Q140 skew family). The data itself is already emit-time fresh
+# (every query resolves `CURRENT_DATE` server-side per call); this makes the anchor
+# the data was computed against VISIBLE, so a re-run on a later day is legible as later.
+_AS_OF_TZ = pytz.timezone("Australia/Brisbane")
+
+
+def _as_of(now: datetime | None = None) -> str:
+    """ISO-8601 Brisbane-local instant this response was generated (seconds grain)."""
+    dt = now.astimezone(_AS_OF_TZ) if now is not None else datetime.now(_AS_OF_TZ)
+    return dt.isoformat(timespec="seconds")
+
+
+def _stamp(body: str, now: datetime | None = None) -> str:
+    """Prepend the generation-time anchor to a tool's text output."""
+    return f"as_of: {_as_of(now)} (Australia/Brisbane)\n\n{body}"
+
+
+def _stamped(fn):
+    """Decorator: stamp a tool's string return with `as_of` at the call boundary, once.
+
+    Applied UNDER `@mcp.tool()` (so the tool the client sees is the stamped one) and
+    ABOVE the body, so it wraps every exit path -- including the no-data early returns
+    -- without editing each `return`. `functools.wraps` preserves the signature and
+    docstring FastMCP introspects. Handles the one async tool (`get_hevy_workouts`)."""
+    if inspect.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def _async_wrapper(*args, **kwargs):
+            return _stamp(await fn(*args, **kwargs))
+        return _async_wrapper
+
+    @functools.wraps(fn)
+    def _wrapper(*args, **kwargs):
+        return _stamp(fn(*args, **kwargs))
+    return _wrapper
+
+
+# ---------------------------------------------------------------------------
 # Tool 1 — Recovery metrics
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
+@_stamped
 def get_recovery_metrics(days: int = 7) -> str:
     """Get recent recovery biometrics from Samsung Ring.
     Returns HRV (ms), sleep architecture (deep/REM/light/awake minutes),
@@ -148,6 +196,7 @@ def get_recovery_metrics(days: int = 7) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
+@_stamped
 def get_checkin_history(days: int = 30) -> str:
     """Get morning check-in history. Unions legacy and new tables for
     continuous history. Returns sleep quality, fatigue, soreness, life load,
@@ -209,6 +258,7 @@ def get_checkin_history(days: int = 30) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
+@_stamped
 def get_training_sessions(days: int = 28) -> str:
     """Get aerobic/cardio sessions from all connected sources (Polar, etc).
     Returns sport type, duration, average/max HR, distance, calories, HR zones."""
@@ -276,6 +326,7 @@ def get_training_sessions(days: int = 28) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
+@_stamped
 async def get_hevy_workouts(days: int = 14) -> str:
     """Get strength training workouts from Hevy. Returns exercises, sets,
     weights, reps, and estimated 1RM (Epley formula) per movement."""
@@ -373,6 +424,7 @@ async def get_hevy_workouts(days: int = 14) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
+@_stamped
 def get_readiness_snapshot() -> str:
     """Today's readiness snapshot. Latest biometrics, most recent check-in,
     7-day training summary, and current injury constraints."""
@@ -541,6 +593,7 @@ def _format_training_load(rows: list[dict]) -> str:
 
 
 @mcp.tool()
+@_stamped
 def get_training_load() -> str:
     """Metabolic training-load readout: the Banister fitness/fatigue/form curves and the
     acute/chronic trace over the metabolic window (Edwards zone-weighted TRIMP), read from
@@ -715,6 +768,7 @@ def _format_latest_levels(rows, marker: str | None = None, limit: int | None = N
 
 
 @mcp.tool()
+@_stamped
 def get_lab_results(marker: str | None = None, limit: int | None = None,
                     latest_only: bool = False) -> str:
     """Raw stored lab values, ranges, and lab-asserted flags, grouped by report, newest

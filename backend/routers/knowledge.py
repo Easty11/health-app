@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from typing import Any
 
@@ -91,8 +92,87 @@ SCHEDULE_ITEM_REQUIRED = (
 )
 
 
+# Coarse time-of-day bands, minutes past local midnight, half-open [start, end).
+# A schedule_item resolves to ONE occupancy interval: an explicit `time_range` wins,
+# else the `time_of_day` band, else unresolvable. These bands are the data-meaning
+# default the day-overlap refinement rests on (#281) -- they exist only to decide
+# whether two same-day commitments share clock time, never to move a commitment.
+_TIME_OF_DAY_BANDS = {
+    "morning": (5 * 60, 12 * 60),      # 05:00–12:00
+    "afternoon": (12 * 60, 17 * 60),   # 12:00–17:00
+    "evening": (17 * 60, 22 * 60),     # 17:00–22:00
+}
+
+_HHMM_RE = re.compile(r"^\s*(\d{1,2}):(\d{2})\s*$")
+
+
+def _parse_hhmm(token: str) -> int | None:
+    m = _HHMM_RE.match(token)
+    if not m:
+        return None
+    h, mm = int(m.group(1)), int(m.group(2))
+    if not (0 <= h <= 23 and 0 <= mm <= 59):
+        return None
+    return h * 60 + mm
+
+
+def _time_interval(value: dict[str, Any]) -> tuple[int, int] | None:
+    """Resolve a schedule_item's occupancy interval, minutes past local midnight,
+    half-open [start, end). A parseable `time_range` wins ("HH:MM-HH:MM", or a lone
+    "HH:MM" as the point [t, t]); otherwise the `time_of_day` band.
+
+    Returns None when the time cannot be resolved -- `time_of_day` is "unknown" or
+    absent and no parseable `time_range` is present, OR a `time_range` is present but
+    does not parse. A present-but-unparseable range is deliberately NOT downgraded to
+    the band: it was written to say something specific, so treating it as unknown keeps
+    the acknowledgement rather than guessing a wider window. The caller reads None as
+    "cannot prove disjoint" and keeps the overlap requirement -- never a silent
+    double-book.
+    """
+    tr = value.get("time_range")
+    if isinstance(tr, str) and tr.strip():
+        parts = re.split(r"\s*[-–—]\s*", tr.strip(), maxsplit=1)
+        if len(parts) == 2:
+            a, b = _parse_hhmm(parts[0]), _parse_hhmm(parts[1])
+            if a is not None and b is not None and a <= b:
+                return (a, b)
+        else:
+            a = _parse_hhmm(parts[0])
+            if a is not None:
+                return (a, a)
+        return None
+    tod = value.get("time_of_day")
+    if tod in _TIME_OF_DAY_BANDS:
+        return _TIME_OF_DAY_BANDS[tod]
+    return None
+
+
+def _intervals_overlap(i1: tuple[int, int], i2: tuple[int, int]) -> bool:
+    """Half-open interval intersection, with degenerate (point) intervals compared
+    inclusively so a lone-time item ([t, t]) overlaps a band iff t falls inside it and
+    two identical times still collide."""
+    s1, e1 = i1
+    s2, e2 = i2
+    if s1 == e1 or s2 == e2:
+        return max(s1, s2) <= min(e1, e2)
+    return max(s1, s2) < min(e1, e2)
+
+
+def _times_overlap(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """True when two same-day items may occupy the same clock time -- the refined
+    occupancy trigger (#281, supersedes #233's day-alone trigger). Non-overlapping
+    times (work-morning vs gym-16:30) no longer clash and save with no manual
+    disambiguation. When either side's time is unresolvable the pair cannot be proven
+    disjoint, so this returns True and the visible acknowledgement is kept."""
+    ia, ib = _time_interval(a), _time_interval(b)
+    if ia is None or ib is None:
+        return True
+    return _intervals_overlap(ia, ib)
+
+
 class ScheduleItemOverlap(Exception):
-    """A schedule_item write overlaps an active row on `days`, unacknowledged.
+    """A schedule_item write overlaps an active row on `days` AND on clock time,
+    unacknowledged (#281 refines #233: day membership alone no longer triggers).
 
     Carries the overlapping rows so every caller -- HTTP, chat, a future surface --
     can render the same structured refusal instead of each inventing one.
@@ -129,9 +209,24 @@ def validate_schedule_item(value: Any) -> dict[str, Any]:
     known = set(SCHEDULE_ITEM_FIELDS) | set(SCHEDULE_ITEM_WRITE_ONLY_FIELDS)
     extra = sorted(set(value) - known)
     if extra:
+        # `active` is the single most likely wrong guess: it is a top-level column that
+        # renders on read, so a writer retiring a commitment reaches for it -- but INSIDE
+        # `value`, where it is not a field. Redirect to the real deactivation lever rather
+        # than only listing what `value` accepts (the observed `unknown field(s)
+        # ['active']` failure, WS2 / #281).
+        hint = ""
+        if "active" in extra:
+            hint = (
+                " -- to retire a commitment do NOT put `active` in `value`; emit the "
+                "block with a TOP-LEVEL `\"active\": false` beside `type`/`key`"
+            )
+        # The overlap refusal advises `distinct_from`, so the accepted-value list must
+        # name it too (WS1#4): advertising only the stored fields told a writer a field
+        # the same surface elsewhere tells it to use is unknown.
         raise ValueError(
-            f"schedule_item: unknown field(s) {extra} -- "
-            f"one of {list(SCHEDULE_ITEM_FIELDS)}"
+            f"schedule_item: unknown field(s) {extra} -- one of "
+            f"{list(SCHEDULE_ITEM_FIELDS)} "
+            f"(plus write-only {list(SCHEDULE_ITEM_WRITE_ONLY_FIELDS)}){hint}"
         )
 
     missing = [f for f in SCHEDULE_ITEM_REQUIRED if f not in value]
@@ -334,20 +429,26 @@ def _schedule_overlap_check(
     entry_in: KnowledgeEntryIn,
     db: Session,
 ) -> None:
-    """Refuse a schedule_item write that lands on a day an active row already holds,
-    unless the write acknowledges every row it overlaps.
+    """Refuse a schedule_item write that lands on a day AND a clock time an active row
+    already holds, unless the write acknowledges every row it collides with.
 
-    THE TRIGGER IS DAY OVERLAP ALONE -- deliberately not `days` overlap AND matching
-    `activity`. The duplicate pairs in live data exist because the writer minted a new
-    key for an existing commitment; matching on `activity` is string equality over
-    generated free text, which fails the same way one level down and fails OPEN -- a
-    near-miss string produces a silent duplicate exactly as before.
+    THE TRIGGER IS DAY OVERLAP AND TIME OVERLAP (#281, refining #233). #233 triggered
+    on day membership ALONE, to make the live duplicate pairs visible -- but it also
+    refused every genuinely distinct same-day commitment, so work(morning) and
+    gym(16:30) on one weekday could not coexist without manual `supersedes`/
+    `distinct_from`. The refinement keeps the anti-duplicate guarantee (a true duplicate
+    shares the commitment's time, so it still collides) while letting non-overlapping
+    same-day times save automatically. Matching on `activity` stays rejected for #233's
+    reason: it is string equality over generated free text and fails OPEN.
 
-    This refuses more often, including on genuinely distinct same-day commitments.
-    That is the point: the failure moves from silent to visible, and the caller states
-    which it is. Every overlapping row must be accounted for, not just one of them --
-    acknowledging a single row out of three would leave the other two to duplicate
-    silently, which is the hole this closes.
+    Time is compared via `_times_overlap`. When either side's time is UNRESOLVABLE
+    (`time_of_day` "unknown"/absent with no parseable `time_range`) the pair cannot be
+    proven disjoint, so it is treated as colliding -- the ambiguous case stays visible,
+    never a silent double-book.
+
+    Every colliding row must be accounted for, not just one of them -- acknowledging a
+    single row out of three would leave the other two to duplicate silently, which is
+    the hole this closes.
     """
     value = entry_in.value
     days = {d for d in (value.get("days") or []) if isinstance(d, str)}
@@ -372,7 +473,7 @@ def _schedule_overlap_check(
             continue
         row_value = row.value or {}
         row_days = {d for d in (row_value.get("days") or []) if isinstance(d, str)}
-        if days & row_days:
+        if (days & row_days) and _times_overlap(value, row_value):
             unacknowledged.append({
                 "id": row.id,
                 "activity": row_value.get("activity"),
