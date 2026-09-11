@@ -269,6 +269,132 @@ def test_overlap_is_scoped_to_the_writing_user(db_session):
     assert row.active is True
 
 
+# ---------- the time-overlap refinement (#281, refines #233) ----------
+# #233 triggered on day membership ALONE. The refinement additionally requires the
+# clock times to overlap (or be unresolvable), so a work-morning row and a gym-16:30
+# row coexist on one weekday with no manual disambiguation, while a true duplicate
+# (same commitment, same time) still collides.
+
+def test_same_day_different_time_of_day_coexists_without_acknowledgement(db_session):
+    """The decompression-schedule symptom: work(morning) and gym(evening) on the same
+    Tuesday were refused under the day-alone rule. Different bands do not overlap in
+    time, so the second row now saves untouched."""
+    u = _user(db_session)
+    _write(db_session, u.id, "work_2026_09", activity="Work", time_of_day="morning")
+    row = _write(db_session, u.id, "gym_2026_09", activity="Gym", time_of_day="evening")
+    assert row.active is True
+
+
+def test_same_day_same_time_of_day_still_collides(db_session):
+    """Regression guard: the anti-duplicate guarantee survives. A true duplicate shares
+    the commitment's time, so two evening rows on one day still refuse."""
+    u = _user(db_session)
+    first = _write(db_session, u.id, "rugby_2026_08", time_of_day="evening")
+    with pytest.raises(ScheduleItemOverlap) as exc:
+        _write(db_session, u.id, "rugby_dup", activity="Seniors rugby",
+               time_of_day="evening")
+    assert [o["id"] for o in exc.value.overlapping] == [first.id]
+
+
+def test_a_lone_time_range_inside_a_band_collides(db_session):
+    """gym 16:30 falls inside the afternoon band, so it collides with an afternoon row
+    on the same day — the `time_range` point-in-band case."""
+    u = _user(db_session)
+    _write(db_session, u.id, "meeting_2026_09", activity="Meeting",
+           time_of_day="afternoon")
+    with pytest.raises(ScheduleItemOverlap):
+        _write(db_session, u.id, "gym_2026_09", activity="Gym",
+               time_of_day="afternoon", time_range="16:30")
+
+
+def test_a_time_range_disjoint_from_a_band_coexists(db_session):
+    """gym 16:30 vs a morning row: the explicit time wins and is disjoint from the
+    morning band, so both save."""
+    u = _user(db_session)
+    _write(db_session, u.id, "work_2026_09", activity="Work", time_of_day="morning")
+    row = _write(db_session, u.id, "gym_2026_09", activity="Gym",
+                 time_of_day="afternoon", time_range="16:30")
+    assert row.active is True
+
+
+def test_overlapping_time_ranges_collide(db_session):
+    u = _user(db_session)
+    _write(db_session, u.id, "a_2026_09", activity="A", time_of_day="afternoon",
+           time_range="16:00-18:00")
+    with pytest.raises(ScheduleItemOverlap):
+        _write(db_session, u.id, "b_2026_09", activity="B", time_of_day="evening",
+               time_range="17:30-19:00")
+
+
+def test_an_unknown_time_cannot_be_ruled_out_so_still_collides(db_session):
+    """A time we cannot resolve must not silently double-book: `time_of_day` "unknown"
+    with no parseable `time_range` is treated as possibly-overlapping."""
+    u = _user(db_session)
+    _write(db_session, u.id, "work_2026_09", activity="Work", time_of_day="morning")
+    with pytest.raises(ScheduleItemOverlap):
+        _write(db_session, u.id, "thing_2026_09", activity="Thing",
+               time_of_day="unknown")
+
+
+def test_an_unparseable_time_range_is_treated_as_unknown(db_session):
+    """A present-but-unparseable `time_range` is not downgraded to the band — it meant
+    something specific we cannot read, so the collision stays visible."""
+    u = _user(db_session)
+    _write(db_session, u.id, "work_2026_09", activity="Work", time_of_day="morning")
+    with pytest.raises(ScheduleItemOverlap):
+        _write(db_session, u.id, "thing_2026_09", activity="Thing",
+               time_of_day="morning", time_range="after work")
+
+
+# ---------- the retirement lever + the coupling gate (WS1 × WS2) ----------
+
+def test_active_in_value_is_refused_and_redirects_to_the_top_level(db_session):
+    """The observed `unknown field(s) ['active']` failure. `active` is a top-level
+    column, not a `value` field; the refusal must point the writer at the real
+    deactivation lever rather than only listing what `value` accepts."""
+    with pytest.raises(ValueError, match="TOP-LEVEL") as exc:
+        validate_schedule_item(_value(active=False))
+    assert "active" in str(exc.value)
+
+
+def test_the_unknown_field_message_advertises_the_write_only_ack_field(db_session):
+    """WS1#4: the overlap refusal advises `distinct_from`, so the accepted-value list an
+    unknown-field refusal prints must name it too — else the two surfaces contradict."""
+    with pytest.raises(ValueError, match="distinct_from"):
+        validate_schedule_item(_value(minimum_days=2))
+
+
+def test_retiring_a_row_vacates_its_slot_and_the_freed_time_saves(db_session):
+    """The coupling gate. Rugby (Tue evening) is retired via the `active` column; on the
+    freed Tuesday a gym row (16:30) is added on a day that also holds Work (morning).
+    Both the retirement and the non-overlap must hold together: the gym row saves with
+    no acknowledgement, and Work + Gym both render for Tuesday."""
+    u = _user(db_session)
+    work = _write(db_session, u.id, "work_2026_09", activity="Work",
+                  days=["tuesday"], time_of_day="morning")
+    rugby = _write(db_session, u.id, "rugby_2026_09", activity="Rugby — Seniors",
+                   days=["tuesday"], time_of_day="evening")
+
+    # Retire rugby via the row-level `active` column (the chat deactivation path and the
+    # resolve endpoint both flip this same column).
+    rugby.active = False
+    db_session.commit()
+
+    gym = _write(db_session, u.id, "gym_2026_09", activity="Gym",
+                 days=["tuesday"], time_of_day="afternoon", time_range="16:30")
+    assert gym.active is True
+
+    active_tue = (
+        db_session.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=u.id, type="schedule_item", active=True)
+        .all()
+    )
+    activities = sorted(r.value["activity"] for r in active_tue)
+    assert activities == ["Gym", "Work"]
+    db_session.refresh(work)
+    assert work.active is True
+
+
 # ---------- the HTTP surface ----------
 
 def test_the_route_returns_422_for_shape_and_409_for_overlap(db_session):

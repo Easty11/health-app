@@ -4275,3 +4275,27 @@ so Merge disposition hold (a), full human review; (c) a DEXA-only numeric series
 Operator deferred the decision this session. Owner: Luke / chat (data-meaning + schema), then a code session.
 
 **State:** OPEN
+
+## Q143. MCP temporal re-anchoring + failure acknowledgement — the out-of-repo halves flagged by #281
+
+Raised closing the decompression-schedule verify-then-fix (#281). Two halves sit outside `health-app` and were flagged
+rather than forced into the tree:
+
+- **Per-turn `as_of` re-anchor + day-boundary re-pull (WS3).** #281 stamped every MCP tool output with a visible
+  Brisbane `as_of` — the in-repo half. But a thread persisting across calendar days also needs the MCP CLIENT to
+  re-inject "now" into context each turn, and to force a fresh readiness/schedule pull when the gap since last
+  interaction crosses a day boundary. Those live at the chat/client/orchestration layer (Claude Desktop / mobile /
+  companion), not in health-app. Until they exist, the tool-side `as_of` is the only anchor — present but passive (the
+  model must read it). If the client gains its own per-turn datetime injection, the tool stamp becomes
+  belt-and-suspenders (see #281 "do not revisit unless").
+
+- **Failure acknowledgement discipline (WS4).** The observed session narrated "saved / locked" while calls returned
+  `✗`. In-tree state: MCP tools return bare `str` (a failure is a string the agent can gloss), while the chat-side
+  schedule write path already returns structured `✓`/`✗`-prefixed action strings. Making a failed write *un-narratable
+  as success* (e.g. a `{saved: false, reason}` contract the orchestration must acknowledge, or an agent-prompt rule that
+  a `✗` action string must be surfaced verbatim before any success claim) is primarily an agent-prompt / orchestration
+  concern, not a tree fix. Owner: chat (agent prompt) + whoever owns the MCP client contract.
+
+Owner: Luke / chat + client-layer. Not a health-app code task unless a tool-output contract change is decided.
+
+**State:** OPEN
