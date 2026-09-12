@@ -4290,12 +4290,18 @@ rather than forced into the tree:
   belt-and-suspenders (see #281 "do not revisit unless").
 
 - **Failure acknowledgement discipline (WS4).** The observed session narrated "saved / locked" while calls returned
-  `✗`. In-tree state: MCP tools return bare `str` (a failure is a string the agent can gloss), while the chat-side
-  schedule write path already returns structured `✓`/`✗`-prefixed action strings. Making a failed write *un-narratable
-  as success* (e.g. a `{saved: false, reason}` contract the orchestration must acknowledge, or an agent-prompt rule that
-  a `✗` action string must be surfaced verbatim before any success claim) is primarily an agent-prompt / orchestration
-  concern, not a tree fix. Owner: chat (agent prompt) + whoever owns the MCP client contract.
+  `✗`. **In-repo substrate DONE → #283 (Q143a).** `ChatResponse.write_results` now carries one machine-checkable
+  `{saved, reason_code, reason, key}` per `<knowledge_update>` block (per-row, never a roll-up), paired 1:1 with the
+  `actions_taken` prose. Verification en route: the write surface is the CHAT channel, not an MCP tool (all seven are
+  reads); `POST /knowledge/entry` was already structured (status + typed body). **Still OWED — the CONSUMING GATE, and
+  it has NO in-repo (health-app) target:** `frontend/` has no chat component and no `/chat` caller, so the layer that
+  refuses to emit "saved" on `saved:false` lives in the companion app / the agent-orchestration layer, not here. That
+  gate — plus, optionally, an agent-prompt rule that a `✗`/`saved:false` result must be surfaced before any success
+  claim — is where the discipline is actually enforced; #283 only makes enforcement possible. Owner: companion-app /
+  agent-prompt owner. (A follow-up in-repo option: extend `write_results` to the Hevy routine/exercise lanes — same
+  shape, their own codes — noted in #283, not built.)
 
-Owner: Luke / chat + client-layer. Not a health-app code task unless a tool-output contract change is decided.
+Owner: Luke / chat + client-layer. The WS3 re-anchor and the WS4 consuming gate remain out-of-repo; the WS4 in-repo
+substrate landed (#283).
 
 **State:** OPEN
