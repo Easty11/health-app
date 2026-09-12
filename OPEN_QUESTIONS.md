@@ -4351,3 +4351,51 @@ the last string-only Hevy write surface; with it wrapped, the acknowledgement-di
 an unverified success.
 
 **State:** DONE → #286 (a,b) · #287 (d) · #288 (exercise-lane fold; residual discharged — arc complete)
+
+## Q145. Directly-supplied (corrupted/typo'd) exercise_template_id is not catalogue-validated on create
+
+Verify-don't-patch finding (WED decompression routine, Concern A). The right-side entry carried
+`b4bab549-a143-4166-9615-249185e5a4a2` vs the left's `b4bab549-a143-4186-9615-249165e5a4a2` — two digits
+off, a model typo. `_resolve_missing_ids` only fills ids for TITLE-only exercises; an entry that already
+carries an id is passed straight through (#60), so a corrupted-but-format-valid id is NOT caught as
+`unresolved_exercise` — it reaches Hevy and fails as `create_failed` (Hevy rejects the unknown id). So the
+failure IS surfaced honestly (never silent, never a duplicate), just via the Hevy-rejection path, not the
+catalogue resolver. Pinned by `test_hevy_routine_numeric_and_folder.py::test_wed_directly_supplied_corrupted_id_is_create_failed_not_unresolved`.
+
+Open fork: should a directly-supplied `exercise_template_id` be validated against the local catalogue
+before the POST (surfacing a typo as `unresolved_exercise` with candidate suggestions, like the title path),
+or is the current create_failed-via-Hevy path good enough? Validating pre-POST would name the typo'd exercise
+and could suggest the intended id, but adds a catalogue lookup on every id-bearing create. Per the brief:
+report, don't patch — Luke's call.
+
+**State:** OPEN
+
+## Q146. Schedule-save narration doubling — cosmetic or duplicate rows? (Concern B)
+
+The `/chat` turn that saved the five decompression schedule entries emitted each save line twice, then
+`✓ 5 saved` (ten ticks for five entries). Code analysis (this session — NOT a prod read, per the unseeable-
+surface rule; no psql from the sandbox, the data connector needs auth it can't do non-interactively):
+- **No duplicate ACTIVE rows possible by construction.** `upsert_knowledge_entry` supersedes any existing
+  active row with the same key (deactivates it, `superseded_by`), so per key there is at most one active row;
+  the five keys are distinct (`decompression_gym_mon/wed/fri`, `decompression_swim_tue/thu`) → five active rows.
+  A genuine double-write of one key would leave an inactive SUPERSEDED sibling, not a second active row.
+- **The doubling is Likely cosmetic.** The `✓ 5 saved` footer is computed from `write_results` (5 entries) →
+  5 blocks processed → 5 writes; the extra five ticks are the model echoing the confirmations in its own prose
+  alongside the deterministic action strings. Ten visible ticks, five writes.
+
+Definitive confirmation is a read Luke runs (via the health-app data MCP in chat, or `railway connect
+health-app-DB`): expect five keys, each `active=true` once, correct day/time, and NO superseded siblings.
+Superseded siblings would prove a real double-write (a schedule-lane idempotency bug); their absence proves
+cosmetic. Do not auto-clean if duplicates are found — Luke rules.
+
+**State:** OWED → Luke's schedule read-back (confirm five active, once each; superseded siblings ⇒ real bug)
+
+## Q147. Should the deterministic numeric floor extend to the workout READ/parse path?
+
+#289 put a numeric floor on the routine-CREATE (write) path. The workout READ/parse path (`load_events`) also
+consumes set numerics (weight, reps, rpe → load calcs). A non-finite value arriving from Hevy's read side
+(or a bad stored value) could poison a load computation silently rather than 400ing. Open: whether to apply
+the same finite-or-reject discipline on the read/parse path, or whether the read path already guards
+(e.g. `_e1rm`, RIR bands) against NaN/None. Not investigated this session (Concern A was the write path).
+
+**State:** OPEN
