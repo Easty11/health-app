@@ -105,7 +105,7 @@ def test_block_calls_create_and_resolve_with_parsed_fields(db_session, monkeypat
     _key(db_session)
     calls = _install_create(monkeypatch)
 
-    cleaned, actions = _run(chat._process_exercise_actions(
+    cleaned, actions, _wr = _run(chat._process_exercise_actions(
         "Here you go.\n" + _block(), 1, db_session))
 
     assert calls == [{
@@ -120,7 +120,7 @@ def test_block_calls_create_and_resolve_with_parsed_fields(db_session, monkeypat
 
 def test_no_block_is_a_no_op(db_session, monkeypatch):
     calls = _install_create(monkeypatch)
-    cleaned, actions = _run(chat._process_exercise_actions("just talking", 1, db_session))
+    cleaned, actions, _wr = _run(chat._process_exercise_actions("just talking", 1, db_session))
     assert (cleaned, actions, calls) == ("just talking", [], [])
 
 
@@ -128,7 +128,7 @@ def test_not_connected_strips_block_and_warns_once(db_session, monkeypatch):
     """No stored key: one warning for the whole reply, as routines do — not one per block."""
     calls = _install_create(monkeypatch)
 
-    cleaned, actions = _run(chat._process_exercise_actions(
+    cleaned, actions, _wr = _run(chat._process_exercise_actions(
         _block() + "\n" + _block(title="Jefferson Curl"), 1, db_session))
 
     assert actions == ["⚠️ Custom exercise not created — Hevy is not connected."]
@@ -172,7 +172,7 @@ def test_same_turn_create_then_use_resolves_by_title(db_session, monkeypatch):
     )
 
     # The call-site order, verbatim from chat.py: exercises, then routines.
-    reply, ex_actions = _run(chat._process_exercise_actions(reply, 1, db_session))
+    reply, ex_actions, _wr = _run(chat._process_exercise_actions(reply, 1, db_session))
     reply, rt_actions, _rt_writes = _run(chat._process_routine_actions(
         reply, FakeHevyClient(), 1, db_session))
 
@@ -224,7 +224,7 @@ def test_custom_exercise_limit_maps_to_its_own_message(db_session, monkeypatch):
     _key(db_session)
     _install_create(monkeypatch, raises=HevyCustomExerciseLimitError("limit: 403"))
 
-    _, actions = _run(chat._process_exercise_actions(_block(), 1, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(_block(), 1, db_session))
 
     assert actions == [
         "⚠️ Custom exercise not created — Hevy's custom-exercise limit reached."
@@ -237,7 +237,7 @@ def test_bad_request_names_the_rejected_field_and_its_valid_values(db_session, m
     _install_create(monkeypatch, raises=HevyBadRequestError(
         "Hevy rejected the exercise-template body: invalid exercise_type"))
 
-    _, actions = _run(chat._process_exercise_actions(_block(), 1, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(_block(), 1, db_session))
 
     msg = actions[0]
     assert "exercise_type must be one of:" in msg
@@ -252,7 +252,7 @@ def test_bad_request_with_unparseable_detail_lists_every_enum(db_session, monkey
     _key(db_session)
     _install_create(monkeypatch, raises=HevyBadRequestError("400: something went wrong"))
 
-    _, actions = _run(chat._process_exercise_actions(_block(), 1, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(_block(), 1, db_session))
 
     msg = actions[0]
     for field in ("exercise_type", "equipment_category", "muscle_group"):
@@ -265,7 +265,7 @@ def test_unresolved_create_is_an_honest_failure_that_forbids_retry(db_session, m
     _install_create(monkeypatch, raises=HevyCreateUnresolvedError(
         "Created 'Copenhagen Plank' for user 1 but it never surfaced after 3 sync attempts"))
 
-    _, actions = _run(chat._process_exercise_actions(_block(), 1, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(_block(), 1, db_session))
 
     msg = actions[0]
     assert msg.startswith("⚠️")                          # never a ✓
@@ -278,7 +278,7 @@ def test_key_missing_mid_turn_surfaces_rather_than_raising(db_session, monkeypat
     _key(db_session)
     _install_create(monkeypatch, raises=HevyKeyMissingError("No Hevy key for user 1"))
 
-    _, actions = _run(chat._process_exercise_actions(_block(), 1, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(_block(), 1, db_session))
 
     assert actions == ["⚠️ Custom exercise not created — Hevy is not connected."]
 
@@ -287,7 +287,7 @@ def test_unparseable_json_reports_and_strips(db_session, monkeypatch):
     _key(db_session)
     calls = _install_create(monkeypatch)
 
-    cleaned, actions = _run(chat._process_exercise_actions(
+    cleaned, actions, _wr = _run(chat._process_exercise_actions(
         "<hevy_create_exercise>\n{not json\n</hevy_create_exercise>", 1, db_session))
 
     assert calls == []
@@ -306,11 +306,11 @@ def test_existing_default_title_creates_nothing(db_session, monkeypatch):
     _template(db_session, "DEFAULT1", "Bench Press")
     calls = _install_create(monkeypatch)
 
-    _, actions = _run(chat._process_exercise_actions(
+    _, actions, _wr = _run(chat._process_exercise_actions(
         _block(title="Bench Press"), 1, db_session))
 
     assert calls == []                                  # nothing attempted
-    assert actions == ["✓ 'Bench Press' is already in the exercise catalogue — nothing created"]
+    assert actions == ["ℹ️ 'Bench Press' is already in the exercise catalogue — nothing created"]
     assert "created in Hevy" not in actions[0]
 
 
@@ -319,7 +319,7 @@ def test_users_own_existing_custom_creates_nothing(db_session, monkeypatch):
     _template(db_session, "MINE-1", "Copenhagen Plank", is_custom=True, owner=1)
     calls = _install_create(monkeypatch)
 
-    _, actions = _run(chat._process_exercise_actions(_block(), 1, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(_block(), 1, db_session))
 
     assert calls == []
     assert "already in the exercise catalogue" in actions[0]
@@ -331,7 +331,7 @@ def test_another_users_custom_does_not_short_circuit(db_session, monkeypatch):
     _template(db_session, "THEIRS-1", "Copenhagen Plank", is_custom=True, owner=999)
     calls = _install_create(monkeypatch)
 
-    _, actions = _run(chat._process_exercise_actions(_block(), 1, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(_block(), 1, db_session))
 
     assert len(calls) == 1
     assert actions == ["✓ Custom exercise 'Copenhagen Plank' created in Hevy"]
@@ -341,7 +341,7 @@ def test_missing_title_creates_nothing(db_session, monkeypatch):
     _key(db_session)
     calls = _install_create(monkeypatch)
 
-    _, actions = _run(chat._process_exercise_actions(
+    _, actions, _wr = _run(chat._process_exercise_actions(
         _block(title="   "), 1, db_session))
 
     assert calls == []

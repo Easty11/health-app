@@ -280,7 +280,7 @@ def test_chat_reports_success_not_failure_after_a_bad_body(db_session, monkeypat
                            "equipment_category": "none", "muscle_group": "adductors"})
              + '\n</hevy_create_exercise>')
 
-    _, actions = _run(chat._process_exercise_actions(block, USER, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(block, USER, db_session))
 
     assert actions == ["✓ Custom exercise 'Copenhagen Plank' created in Hevy"]
     assert not any("Failed to create" in a for a in actions)

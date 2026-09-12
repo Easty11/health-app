@@ -119,8 +119,8 @@ class ChatResponse(BaseModel):
     response: str
     actions_taken: list[str] = []   # e.g. ["✓ Routine 'Push Day' created in Hevy"]
     # Per-block structured outcomes for the write lanes. Additive to `actions_taken`; empty
-    # when the turn wrote no mapped blocks. Covers the knowledge/schedule lane (#283) and the
-    # Hevy routine lane (Q144); the Hevy exercise-action lane stays string-only for now.
+    # when the turn wrote no mapped blocks. Covers every write lane: knowledge/schedule
+    # (#283), Hevy routine (#286), and Hevy exercise (Q144). No string-only write lane remains.
     write_results: list[WriteResult] = []
 
 
@@ -270,13 +270,13 @@ async def _process_exercise_actions(
     reply: str,
     user_id: int,
     db: Session,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[WriteResult]]:
     """Scan `reply` for <hevy_create_exercise> blocks and mint each one.
 
     Mirrors `_process_routine_actions`: parse, act, strip the raw block, record a
-    confirmation. Delegates to `create_and_resolve` (#65), which owns the
-    create -> sync -> list-back-in-the-custom-subset loop and returns the canonical
-    string id — never the integer id the POST response carries.
+    confirmation AND a machine-checkable WriteResult. Delegates to `create_and_resolve`
+    (#65), which owns the create -> sync -> list-back-in-the-custom-subset loop and
+    returns the canonical string id — never the integer id the POST response carries.
 
     MUST run before `_process_routine_actions`. The model cannot know a server-minted
     UUID, so a same-turn routine references the new exercise by TITLE, and
@@ -302,21 +302,38 @@ async def _process_exercise_actions(
     run once per turn, so a recent fetch/create skips the Hevy call; non-blocking on failure,
     so a Hevy outage degrades to the stale-store behaviour rather than dropping the reply.
 
-    Returns (cleaned_reply, actions_taken).
+    Returns (cleaned_reply, actions_taken, write_results) — this is the LAST un-wrapped
+    Hevy write surface folded onto the #283 substrate (Q144), one WriteResult per block
+    paired 1:1 with its action string so a failed/unconfirmed/already-present create can't
+    be narrated as a fresh success. WRAP-ONLY, no collision guard: unlike routines (#286),
+    this lane is already idempotent — the `resolve_exercise` pre-check below, plus
+    `create_and_resolve`'s own #65 pre-check and the freshness gate above, structurally
+    prevent a duplicate mint. Reason_code vocab reuses #286 where the outcome matches, with
+    new codes for the genuinely distinct exercise outcomes: created | already_present |
+    invalid_json | invalid_shape | limit_reached | invalid_exercise_field |
+    created_unconfirmed | create_failed.
     """
     actions_taken: list[str] = []
+    write_results: list[WriteResult] = []
+
+    def record(saved: bool, reason_code: str, message: str, *, key: str | None = None):
+        actions_taken.append(message)
+        write_results.append(
+            WriteResult(saved=saved, reason_code=reason_code, reason=message, key=key)
+        )
+
     matches = list(_EXERCISE_BLOCK_RE.finditer(reply))
 
     if not matches:
-        return reply, actions_taken
+        return reply, actions_taken, write_results
 
     # Not connected — strip every block with one message, as routines do, rather than
     # emitting an identical warning per block. The `HevyKeyMissingError` branch below is
     # the defensive twin: it catches a key deleted between this check and the create.
     if user_hevy_key(db, user_id) is None:
         cleaned = _EXERCISE_BLOCK_RE.sub("", reply).strip()
-        actions_taken.append("⚠️ Custom exercise not created — Hevy is not connected.")
-        return cleaned, actions_taken
+        record(False, "create_failed", "⚠️ Custom exercise not created — Hevy is not connected.")
+        return cleaned, actions_taken, write_results
 
     # Close the stale-catalogue mint window (see docstring): refresh before either
     # idempotency read, staleness-gated so the common (fresh) path skips the Hevy call.
@@ -328,24 +345,31 @@ async def _process_exercise_actions(
         try:
             data = json.loads(raw_json)
         except json.JSONDecodeError as exc:
-            actions_taken.append(f"⚠️ Could not parse custom-exercise JSON: {exc}")
+            record(False, "invalid_json", f"⚠️ Could not parse custom-exercise JSON: {exc}")
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
+
+        if not isinstance(data, dict):
+            record(False, "invalid_shape", "⚠️ Custom-exercise block is not a JSON object.")
             cleaned = cleaned.replace(match.group(0), "")
             continue
 
         title = (data.get("title") or "").strip()
         if not title:
-            actions_taken.append("⚠️ Custom exercise not created — no title given.")
+            record(False, "invalid_shape", "⚠️ Custom exercise not created — no title given.")
             cleaned = cleaned.replace(match.group(0), "")
             continue
 
         # Honest-confirmation pre-check (see docstring). Default-wins, same predicate the
         # routine path resolves against, so "already there" means "the routine block will
-        # resolve it".
+        # resolve it". saved=False: nothing was minted, so a pre-write "created!" is
+        # CORRECTED to "already in your catalogue" rather than left standing as a fresh
+        # create — the exact gloss this fold closes. Informational, not a fault.
         existing = resolve_exercise(db, title, user_id)
         if existing is not None:
-            actions_taken.append(
-                f"✓ '{title}' is already in the exercise catalogue — nothing created"
-            )
+            record(False, "already_present",
+                   f"ℹ️ '{title}' is already in the exercise catalogue — nothing created",
+                   key=title)
             cleaned = cleaned.replace(match.group(0), "")
             continue
 
@@ -359,32 +383,33 @@ async def _process_exercise_actions(
                 muscle_group=data.get("muscle_group"),
                 other_muscles=data.get("other_muscles"),
             )
-            actions_taken.append(f"✓ Custom exercise '{title}' created in Hevy")
+            record(True, "created", f"✓ Custom exercise '{title}' created in Hevy", key=title)
         except HevyCustomExerciseLimitError:
-            actions_taken.append(
-                "⚠️ Custom exercise not created — Hevy's custom-exercise limit reached."
-            )
+            record(False, "limit_reached",
+                   "⚠️ Custom exercise not created — Hevy's custom-exercise limit reached.",
+                   key=title)
         except HevyBadRequestError as exc:
-            actions_taken.append(_format_exercise_rejection(title, str(exc)))
+            record(False, "invalid_exercise_field", _format_exercise_rejection(title, str(exc)), key=title)
         except HevyCreateUnresolvedError as exc:
             # The POST may well have SUCCEEDED — only the list-back failed. Say so, and
             # say not to retry: a second create against a delete-less API is how you get
-            # two permanent templates with the same name.
-            actions_taken.append(
-                f"⚠️ Custom exercise '{title}' — created in Hevy but it did not surface "
-                f"in the catalogue after the sync retries. Do NOT create it again; it "
-                f"likely exists. ({exc})"
-            )
+            # two permanent templates with the same name. saved=False so a confident
+            # "created!" is discarded, but the verbatim no-retry guidance rides in the
+            # action string regardless of how pass-2 renders it.
+            record(False, "created_unconfirmed",
+                   f"⚠️ Custom exercise '{title}' — created in Hevy but it did not surface "
+                   f"in the catalogue after the sync retries. Do NOT create it again; it "
+                   f"likely exists. ({exc})",
+                   key=title)
         except HevyKeyMissingError:
-            actions_taken.append(
-                "⚠️ Custom exercise not created — Hevy is not connected."
-            )
+            record(False, "create_failed",
+                   "⚠️ Custom exercise not created — Hevy is not connected.", key=title)
         except Exception as exc:  # noqa: BLE001 — mirror the routine path's catch-all
-            actions_taken.append(f"⚠️ Failed to create custom exercise '{title}': {exc}")
+            record(False, "create_failed", f"⚠️ Failed to create custom exercise '{title}': {exc}", key=title)
 
         cleaned = cleaned.replace(match.group(0), "")
 
-    return cleaned.strip(), actions_taken
+    return cleaned.strip(), actions_taken, write_results
 
 
 # ---------- routine action parsing ----------
@@ -783,6 +808,11 @@ _FOOTER_REASON_PHRASE = {
     "already_exists": "already exists",
     "unresolved_exercise": "unresolved exercise",
     "create_failed": "create failed",
+    # Hevy exercise lane (Q144 — the last un-wrapped write surface)
+    "already_present": "already present",
+    "limit_reached": "limit reached",
+    "invalid_exercise_field": "rejected by Hevy",
+    "created_unconfirmed": "created (unconfirmed)",
 }
 
 
@@ -1096,7 +1126,8 @@ async def chat(
     # turn must be in the catalogue before the routine block's `_resolve_missing_ids`
     # looks for it by title. The model cannot cite a server-minted UUID it has never
     # seen, so same-turn create-then-use resolves only in this order.
-    reply, exercise_actions = await _process_exercise_actions(reply, current_user.id, db)
+    reply, exercise_actions, exercise_write_results = await _process_exercise_actions(
+        reply, current_user.id, db)
     reply, routine_actions, routine_write_results = await _process_routine_actions(
         reply, hevy_client, current_user.id, db)
     reply, knowledge_actions, knowledge_write_results = _process_knowledge_updates(
@@ -1104,11 +1135,12 @@ async def chat(
     reply, capability_actions = _process_capability_updates(reply, current_user.id, db)
 
     all_actions = exercise_actions + routine_actions + knowledge_actions + capability_actions
-    # The routine and knowledge/schedule lanes are both mapped onto WriteResult now (Q144
-    # folds the routine lane onto #283's substrate); one combined list drives the single
-    # narrate-after-write pass and the deterministic footer. The exercise-action lane stays
-    # string-only this pass — the remaining un-wrapped Hevy write surface (Q144).
-    all_write_results = routine_write_results + knowledge_write_results
+    # Every Hevy write lane (exercise + routine) and the knowledge/schedule lane are now
+    # mapped onto WriteResult (Q144 folds the last one, the exercise-action lane); one
+    # combined list drives the single narrate-after-write pass and the deterministic footer.
+    # The acknowledgement-discipline arc (schedule / /chat / Hevy routine / Hevy exercise)
+    # is complete — no string-only write lane remains.
+    all_write_results = exercise_write_results + routine_write_results + knowledge_write_results
 
     # Narrate-after-write (Q143a / WS4). `reply` was generated in the single pass above,
     # BEFORE these writes executed, so any "saved" it claims precedes the outcome. If every
@@ -1127,9 +1159,9 @@ async def chat(
     )
 
     # `write_results` is the machine-checkable outcome of the write lanes — a client (or a
-    # later turn) hard-gates on `saved` rather than trusting the reply's prose. The routine
-    # lane (Q144) and the knowledge/schedule lane (#283) are both mapped onto this shape; the
-    # Hevy exercise-action lane remains string-only (the last un-wrapped write surface, Q144).
+    # later turn) hard-gates on `saved` rather than trusting the reply's prose. Every write
+    # lane is mapped onto this shape now: knowledge/schedule (#283), Hevy routine (#286), and
+    # Hevy exercise (Q144, this arc). No string-only write lane remains.
     return ChatResponse(
         response=reply,
         actions_taken=all_actions,
