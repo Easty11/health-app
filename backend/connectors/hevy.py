@@ -26,6 +26,39 @@ class HevyBadRequestError(Exception):
     pass
 
 
+class RoutineAlreadyExists(Exception):
+    """A create_routine call collides with an existing routine on title AND folder.
+
+    Hevy has NO delete endpoint and its update REPLACES a routine's contents, so
+    silently POSTing past a duplicate leaves an unremovable second copy, and
+    auto-updating on a false match destroys the original irrecoverably. The guard
+    therefore refuses the create before the POST and hands the collision back
+    typed, so every caller renders the SAME choice (rename, or explicitly update)
+    rather than each inventing one — the chat lane flattens it to a WriteResult,
+    the REST lane to a 409.
+
+    Match is case-insensitive on title AND equal on folder_id (None == None): the
+    same title in a different folder is a distinct routine, not a collision. The
+    colliding rows are carried so a caller can name the existing id(s).
+    """
+
+    # Machine-checkable outcome code for the write-result contract, mirroring
+    # ScheduleItemOverlap.code — a caller flattening this to a string keeps a
+    # stable, type-derived code rather than parsing the prose (#283).
+    code = "already_exists"
+
+    def __init__(self, title: str, folder_id: int | None, existing: list[dict[str, Any]]):
+        self.title = title
+        self.folder_id = folder_id
+        self.existing = existing
+        ids = ", ".join(str(r.get("id")) for r in existing) or "?"
+        super().__init__(
+            f"a Hevy routine titled {title!r} already exists in this folder "
+            f"(id: {ids}); Hevy has no delete and an update REPLACES its contents, "
+            f"so rename the new routine or explicitly update the existing one"
+        )
+
+
 class HevyClient:
     def __init__(self, api_key: str) -> None:
         self._headers = {"api-key": api_key}
@@ -102,6 +135,27 @@ class HevyClient:
             r = await client.get(f"{HEVY_BASE}/routines/{routine_id}")
             return self._check(r).json()
 
+    async def get_all_routines(self, page_size: int = 10) -> list[dict[str, Any]]:
+        """Every routine across Hevy's paginated /routines endpoint — a flat list.
+
+        Hevy caps a /routines page at 10 and offers no all-in-one read, so the
+        idempotency guard (and any caller needing the full set) walks page
+        1..page_count here. Mirrors get_all_workouts' terminate-on-page_count-or-
+        empty-batch loop, so a missing/short page_count can't hang it. Returns the
+        rows, not the paged envelope — every caller wants the routines themselves.
+        """
+        routines: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            data = await self.get_routines(page=page, page_size=page_size)
+            batch = data.get("routines", []) or []
+            routines.extend(batch)
+            page_count = data.get("page_count", page)
+            if page >= page_count or not batch:
+                break
+            page += 1
+        return routines
+
     async def get_exercise_templates(
         self,
         page: int = 1,
@@ -148,7 +202,30 @@ class HevyClient:
                 custom_metric     any|None
 
         index fields on exercises and sets are assigned automatically (0-based).
+
+        Idempotency (safe, Q144(a)): Hevy has NO delete and its update REPLACES a
+        routine's contents, so a duplicate is unremovable and an auto-update on a
+        false match is unrecoverable. Before the POST this refuses a create whose
+        (title, folder_id) already exists — case-insensitive title, equal folder
+        (None == None) — raising RoutineAlreadyExists. Both entry points inherit
+        this floor. Cost accepted: one paginated /routines read per create.
+
+        `rpe` is stripped from every set (Q144(b)): Hevy ignores rpe on a planned
+        routine set, so emitting it is noise. The strip is deterministic here, not
+        just prompt guidance — the model may emit it anyway. RPE is a logged-set
+        fact consumed on the workout READ path (load_events); there is no
+        workout-CREATE path, so this strip cannot touch load logging.
         """
+        existing = await self.get_all_routines()
+        wanted = (title or "").strip().casefold()
+        collisions = [
+            r for r in existing
+            if (r.get("title") or "").strip().casefold() == wanted
+            and r.get("folder_id") == folder_id
+        ]
+        if collisions:
+            raise RoutineAlreadyExists(title, folder_id, collisions)
+
         built_exercises = []
         for ex_idx, ex in enumerate(exercises):
             built_sets = []
@@ -156,7 +233,9 @@ class HevyClient:
                 set_data: dict[str, Any] = {
                     "type": s.get("type", "normal"),
                 }
-                for field in ("weight_kg", "reps", "distance_meters", "duration_seconds", "rpe", "custom_metric"):
+                # `rpe` intentionally ABSENT — Hevy ignores it on a routine set and
+                # the strip is the hard floor, not prompt guidance (Q144(b)).
+                for field in ("weight_kg", "reps", "distance_meters", "duration_seconds", "custom_metric"):
                     val = s.get(field)
                     if val is not None:
                         set_data[field] = val
