@@ -100,11 +100,11 @@ def test_stale_catalogue_refreshes_before_idempotency_check(db_session, monkeypa
 
     monkeypatch.setattr(hevy_templates, "sync_exercise_templates", fake_sync)
 
-    cleaned, actions = _run(chat._process_exercise_actions("ok\n" + _block(), 1, db_session))
+    cleaned, actions, _wr = _run(chat._process_exercise_actions("ok\n" + _block(), 1, db_session))
 
     assert create_calls == []                                # never minted
     assert actions == [
-        "✓ 'Copenhagen Plank' is already in the exercise catalogue — nothing created"]
+        "ℹ️ 'Copenhagen Plank' is already in the exercise catalogue — nothing created"]
     assert "<hevy_create_exercise>" not in cleaned
 
 
@@ -126,7 +126,7 @@ def test_fresh_marker_skips_the_sync_and_create_proceeds(db_session, monkeypatch
 
     monkeypatch.setattr(hevy_templates, "sync_exercise_templates", fake_sync)
 
-    _, actions = _run(chat._process_exercise_actions(_block(), 1, db_session))
+    _, actions, _wr = _run(chat._process_exercise_actions(_block(), 1, db_session))
 
     assert synced == []                                      # fresh -> no Hevy sync
     assert create_calls == ["Copenhagen Plank"]              # brand-new title still mints
