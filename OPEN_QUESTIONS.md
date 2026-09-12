@@ -4290,18 +4290,25 @@ rather than forced into the tree:
   belt-and-suspenders (see #281 "do not revisit unless").
 
 - **Failure acknowledgement discipline (WS4).** The observed session narrated "saved / locked" while calls returned
-  `✗`. **In-repo substrate DONE → #283 (Q143a).** `ChatResponse.write_results` now carries one machine-checkable
-  `{saved, reason_code, reason, key}` per `<knowledge_update>` block (per-row, never a roll-up), paired 1:1 with the
-  `actions_taken` prose. Verification en route: the write surface is the CHAT channel, not an MCP tool (all seven are
-  reads); `POST /knowledge/entry` was already structured (status + typed body). **Still OWED — the CONSUMING GATE, and
-  it has NO in-repo (health-app) target:** `frontend/` has no chat component and no `/chat` caller, so the layer that
-  refuses to emit "saved" on `saved:false` lives in the companion app / the agent-orchestration layer, not here. That
-  gate — plus, optionally, an agent-prompt rule that a `✗`/`saved:false` result must be surfaced before any success
-  claim — is where the discipline is actually enforced; #283 only makes enforcement possible. Owner: companion-app /
-  agent-prompt owner. (A follow-up in-repo option: extend `write_results` to the Hevy routine/exercise lanes — same
-  shape, their own codes — noted in #283, not built.)
+  `✗`. **In-repo substrate DONE → #283 (Q143a); in-repo GATE DONE → #284.** #283 made each write's outcome
+  machine-checkable (`ChatResponse.write_results`, one `{saved, reason_code, reason, key}` per `<knowledge_update>`
+  block, per-row never a roll-up). #284 closed the loop on the NARRATION server-side: `/chat` regenerates the reply
+  after a failed write (bounded pass-2, affordance type-derived from `reason_code`) and appends an always-on
+  deterministic footer computed from `write_results`, so the reply the client renders is already truthful with a hard
+  floor. **The #283/this-item claim that "`frontend/` has no chat component and no `/chat` caller" was WRONG — a grep
+  miss (FEEDBACK §42):** `frontend/src/components/ChatPanel.jsx:78` posts `api.post('/chat', …)` and renders
+  `data.response` verbatim (FEEDBACK §36, from #273, had already cited `ChatPanel.jsx` by name). So Luke drives chat
+  from the web app, and the truthful `response` + footer reach it with no client change. The out-of-repo consuming gate
+  is therefore **no longer REQUIRED for truthfulness** — it becomes belt-and-suspenders; an agent-prompt rule surfacing
+  `saved:false` before any success claim stays a nice-to-have at the orchestration layer. **Residual (recorded, not a
+  blocker):** on an all-SAVED turn no pass-2 fires, so a prose claim about a write the model never EMITTED as a block is
+  not regenerated away; the always-on footer mitigates it (the `✓ N saved` tally, from `write_results`, gives the reader
+  a cross-check against an over-claiming sentence) but does not fully catch it. **Still pending (in-repo option):**
+  extend `write_results` + narrate-after-write to the Hevy routine/exercise lanes — same shape, their own codes
+  (#283/#284), not built.
 
-Owner: Luke / chat + client-layer. The WS3 re-anchor and the WS4 consuming gate remain out-of-repo; the WS4 in-repo
-substrate landed (#283).
+Owner: Luke / chat + client-layer. The WS3 per-turn re-anchor remains out-of-repo; the WS4 in-repo substrate (#283) and
+gate (#284) both landed, and the out-of-repo consuming gate is now optional rather than the only home for the
+discipline. Q143 stays OPEN on WS3 (and the Hevy-lane option).
 
 **State:** OPEN
