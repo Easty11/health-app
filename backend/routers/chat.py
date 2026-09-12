@@ -37,6 +37,7 @@ from engine import adaptation, selection
 from reads.labs_reads import find_marker
 from routers.knowledge import (
     KnowledgeEntryIn,
+    ScheduleItemInvalid,
     ScheduleItemOverlap,
     expire_stale_entries,
     upsert_knowledge_entry,
@@ -92,9 +93,34 @@ class ChatRequest(BaseModel):
     conversation_history: list[ChatMessage] = []
 
 
+class WriteResult(BaseModel):
+    """Machine-checkable outcome of ONE knowledge/schedule write block (#283, Q143a).
+
+    The gloss the origin transcript showed — narrating "saved" while `actions_taken`
+    carried `✗` strings — was possible because success was only inferable from prose.
+    This is the additive, hard-gateable substrate: a client (or a later turn) checks
+    `saved` rather than trusting the reply's narration. `actions_taken` is preserved
+    verbatim as `reason`, so nothing regresses for a reader.
+
+    ONE result per `<knowledge_update>` block, never a batch roll-up: the failure mode
+    was several blocks where some saved and some did not, narrated as all-saved, so a
+    single top-level flag would reintroduce exactly that gloss.
+    """
+    saved: bool
+    # Stable, type-derived (never message-parsed): saved | deactivated | not_found |
+    # day_time_clash | unknown_field | invalid_shape | invalid_json | error.
+    reason_code: str
+    reason: str             # the human string, identical to the `actions_taken` entry
+    key: str | None = None  # the schedule_item / knowledge key, when the block named one
+
+
 class ChatResponse(BaseModel):
     response: str
     actions_taken: list[str] = []   # e.g. ["✓ Routine 'Push Day' created in Hevy"]
+    # Per-block structured outcomes for the knowledge/schedule write lane (#283). Additive
+    # to `actions_taken`; empty when the turn wrote no `<knowledge_update>` blocks. The
+    # Hevy routine/exercise lanes are not yet mapped onto this shape (see #283 / Q143).
+    write_results: list[WriteResult] = []
 
 
 # ---------- context gathering ----------
@@ -491,7 +517,7 @@ def _process_knowledge_updates(
     reply: str,
     user_id: int,
     db: Session,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[WriteResult]]:
     """
     Scan `reply` for <knowledge_update> blocks.
 
@@ -501,13 +527,25 @@ def _process_knowledge_updates(
       - If active=false is present, deactivates the existing entry for that key
         without creating a new one.
 
-    Returns (cleaned_reply, actions_taken).
+    Returns (cleaned_reply, actions_taken, write_results). `write_results` carries ONE
+    machine-checkable `WriteResult` per block (#283), paired with its `actions_taken`
+    string so `saved` never disagrees with the prose a reader sees. `record()` appends
+    to both lists together — the pairing is the point (the origin gloss was possible
+    because only the prose existed).
     """
     actions_taken: list[str] = []
+    write_results: list[WriteResult] = []
+
+    def record(saved: bool, reason_code: str, message: str, *, key: str | None = None):
+        actions_taken.append(message)
+        write_results.append(
+            WriteResult(saved=saved, reason_code=reason_code, reason=message, key=key)
+        )
+
     matches = list(_KNOWLEDGE_BLOCK_RE.finditer(reply))
 
     if not matches:
-        return reply, actions_taken
+        return reply, actions_taken, write_results
 
     cleaned = reply
     for match in matches:
@@ -515,10 +553,11 @@ def _process_knowledge_updates(
         try:
             data = json.loads(raw_json)
         except json.JSONDecodeError as exc:
-            actions_taken.append(f"⚠️ Could not parse knowledge update: {exc}")
+            record(False, "invalid_json", f"⚠️ Could not parse knowledge update: {exc}")
             cleaned = cleaned.replace(match.group(0), "")
             continue
 
+        key = data.get("key") if isinstance(data, dict) else None
         try:
             if "type" in data and "key" in data:
                 # Structured format → UserKnowledgeEntry
@@ -534,9 +573,12 @@ def _process_knowledge_updates(
                     if existing:
                         existing.active = False
                         db.commit()
-                        actions_taken.append(f"✓ Schedule entry removed: {key}")
+                        record(True, "deactivated", f"✓ Schedule entry removed: {key}", key=key)
                     else:
-                        actions_taken.append(f"ℹ️ No active entry found for key: {key}")
+                        # No row changed — a `not_found` outcome, NOT a success. Narrating
+                        # this as "removed" is the same gloss `saved:false` exists to block.
+                        record(False, "not_found",
+                               f"ℹ️ No active entry found for key: {key}", key=key)
                 else:
                     from datetime import date as _date
                     expires_raw = data.get("expires_at")
@@ -566,16 +608,21 @@ def _process_knowledge_updates(
                     # difference between "not said" and "said and lost".
                     try:
                         upsert_knowledge_entry(user_id, entry_in, db)
-                        actions_taken.append(f"✓ Schedule entry saved: {key}")
+                        record(True, "saved", f"✓ Schedule entry saved: {key}", key=key)
                     except ScheduleItemOverlap as exc:
                         db.rollback()
-                        actions_taken.append(_format_schedule_overlap(key, exc.overlapping))
+                        record(False, exc.code,
+                               _format_schedule_overlap(key, exc.overlapping), key=key)
                     except ValueError as exc:
                         db.rollback()
-                        actions_taken.append(
-                            f"✗ Schedule entry NOT saved: {key} — {exc}. "
-                            f"State this back to the user and retry with a corrected block."
-                        )
+                        # ScheduleItemInvalid carries a specific `code` (e.g. unknown_field);
+                        # any other ValueError is a generic shape failure. Type-derived, never
+                        # parsed out of the message.
+                        code = getattr(exc, "code", "invalid_shape")
+                        record(False, code,
+                               f"✗ Schedule entry NOT saved: {key} — {exc}. "
+                               f"State this back to the user and retry with a corrected block.",
+                               key=key)
 
             else:
                 # Legacy format → UserKnowledge (free-text categories)
@@ -595,7 +642,7 @@ def _process_knowledge_updates(
                 if existing:
                     existing.content = existing.content.rstrip() + "\n" + new_content
                     db.commit()
-                    actions_taken.append(f"✓ Knowledge updated: {category}")
+                    record(True, "saved", f"✓ Knowledge updated: {category}", key=category)
                 else:
                     entry = models.UserKnowledge(
                         user_id=user_id,
@@ -604,14 +651,14 @@ def _process_knowledge_updates(
                     )
                     db.add(entry)
                     db.commit()
-                    actions_taken.append(f"✓ Knowledge saved: {category}")
+                    record(True, "saved", f"✓ Knowledge saved: {category}", key=category)
 
         except Exception as exc:
-            actions_taken.append(f"⚠️ Failed to save knowledge: {exc}")
+            record(False, "error", f"⚠️ Failed to save knowledge: {exc}", key=key)
 
         cleaned = cleaned.replace(match.group(0), "")
 
-    return cleaned.strip(), actions_taken
+    return cleaned.strip(), actions_taken, write_results
 
 
 # ---------- capability update parsing (adaptation loop, §7) ----------
@@ -814,7 +861,8 @@ async def chat(
     # seen, so same-turn create-then-use resolves only in this order.
     reply, exercise_actions = await _process_exercise_actions(reply, current_user.id, db)
     reply, routine_actions = await _process_routine_actions(reply, hevy_client, current_user.id, db)
-    reply, knowledge_actions = _process_knowledge_updates(reply, current_user.id, db)
+    reply, knowledge_actions, knowledge_write_results = _process_knowledge_updates(
+        reply, current_user.id, db)
     reply, capability_actions = _process_capability_updates(reply, current_user.id, db)
 
     all_actions = exercise_actions + routine_actions + knowledge_actions + capability_actions
@@ -823,4 +871,12 @@ async def chat(
     if all_actions:
         reply = reply + "\n\n" + "\n".join(all_actions)
 
-    return ChatResponse(response=reply, actions_taken=all_actions)
+    # `write_results` is the machine-checkable outcome of the knowledge/schedule write
+    # lane (#283) — a client (or a later turn) hard-gates on `saved` rather than trusting
+    # the reply's prose. Only the knowledge lane is mapped onto this shape today; the Hevy
+    # routine/exercise actions remain string-only (Q143).
+    return ChatResponse(
+        response=reply,
+        actions_taken=all_actions,
+        write_results=knowledge_write_results,
+    )

@@ -178,12 +178,30 @@ class ScheduleItemOverlap(Exception):
     can render the same structured refusal instead of each inventing one.
     """
 
+    # Machine-checkable outcome code for the write-result contract (#283). A caller
+    # that flattens this to a string keeps a stable, type-derived code rather than
+    # parsing the prose.
+    code = "day_time_clash"
+
     def __init__(self, overlapping: list[dict[str, Any]]):
         self.overlapping = overlapping
         super().__init__(
             "schedule_item overlaps an active row on days; retry with "
             "`supersedes: <id>` or `distinct_from: [<id>, ...]`"
         )
+
+
+class ScheduleItemInvalid(ValueError):
+    """A schedule_item value fails validation. Subclasses ValueError so every existing
+    `except ValueError` handler (HTTP `create_entry` -> 422, the chat channel) keeps
+    catching it unchanged; it additionally carries a stable `code` so a caller can
+    report WHY without parsing the message (#283). `unknown_field` is set at the
+    unknown-key raise; every other shape failure defaults to `invalid_shape`.
+    """
+
+    def __init__(self, message: str, code: str = "invalid_shape"):
+        self.code = code
+        super().__init__(message)
 
 
 def _strict_bool(value: dict[str, Any], field: str) -> None:
@@ -223,10 +241,11 @@ def validate_schedule_item(value: Any) -> dict[str, Any]:
         # The overlap refusal advises `distinct_from`, so the accepted-value list must
         # name it too (WS1#4): advertising only the stored fields told a writer a field
         # the same surface elsewhere tells it to use is unknown.
-        raise ValueError(
+        raise ScheduleItemInvalid(
             f"schedule_item: unknown field(s) {extra} -- one of "
             f"{list(SCHEDULE_ITEM_FIELDS)} "
-            f"(plus write-only {list(SCHEDULE_ITEM_WRITE_ONLY_FIELDS)}){hint}"
+            f"(plus write-only {list(SCHEDULE_ITEM_WRITE_ONLY_FIELDS)}){hint}",
+            code="unknown_field",
         )
 
     missing = [f for f in SCHEDULE_ITEM_REQUIRED if f not in value]
