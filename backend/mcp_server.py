@@ -3,6 +3,7 @@ import inspect
 import re
 from datetime import datetime, timezone, timedelta
 
+import httpx
 import pytz
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -16,6 +17,7 @@ from database import engine, SessionLocal
 from injury_trajectory import evaluate as evaluate_injury_trajectories
 from connectors.hevy import HevyClient
 from hevy_format import format_set
+from hevy_templates import catalogue_titles_by_id
 from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
 import models
@@ -790,3 +792,195 @@ def get_lab_results(marker: str | None = None, limit: int | None = None,
         # brief's belt-and-suspenders: read and format inside the session.
         reports = _read_lab_results(current_user=user, db=sess)
         return _format_lab_results(reports, marker=marker, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# Tools 8 & 9 — Hevy routine read-back (list + full-by-id)
+#
+# Routines are read LIVE from Hevy and never persisted (there is no routine
+# store to reconcile) — mirroring `get_hevy_workouts`. Two granularities, per
+# prior art (`chrisdoc/hevy-mcp` splits `search-routines`/`get-routine`):
+#   * search_hevy_routines — compact list (title, id, folder, exercise titles +
+#     count, NO set detail) so a title-existence / made-it check stays context-
+#     small. This is the surface a create's check-exists-before-create guard reads.
+#   * get_hevy_routine — the full config of one routine, INCLUDING superset
+#     grouping and per-set detail, so a routine can be verified made-correctly.
+# ---------------------------------------------------------------------------
+
+
+def _current_user_hevy_key() -> str | None:
+    """Decrypted Hevy key for the current MCP user, or None if not connected.
+
+    Mirrors `get_hevy_workouts`'s preamble (own SessionLocal, resolve user via
+    `_current_user_id`, decrypt the stored token) so the routine tools share one
+    connect/decrypt path. Returns None rather than raising on the not-connected
+    case, leaving the caller to render the user-facing message."""
+    user_id = _current_user_id()
+    db: Session = SessionLocal()
+    try:
+        row = (
+            db.query(models.UserIntegration)
+            .filter_by(user_id=user_id, provider="hevy")
+            .first()
+        )
+        return decrypt(row.api_key_encrypted) if row is not None else None
+    finally:
+        db.close()
+
+
+def _routine_title_fallback(routines: list[dict]) -> dict[str, str]:
+    """template_id -> catalogue title, for exercises whose LIVE payload omits a title.
+
+    Payload-first (VERIFY 4): Hevy's routine exercises carry `title`, so the happy
+    path needs no lookup — this opens a session and queries the local template
+    store ONLY for ids missing a title, and returns {} (no query) when every
+    exercise already carries one."""
+    missing = {
+        ex.get("exercise_template_id")
+        for r in routines
+        for ex in r.get("exercises", [])
+        if not ex.get("title") and ex.get("exercise_template_id")
+    }
+    if not missing:
+        return {}
+    db: Session = SessionLocal()
+    try:
+        return catalogue_titles_by_id(db, missing)
+    finally:
+        db.close()
+
+
+def _exercise_display_title(ex: dict, fallback: dict[str, str]) -> str:
+    """Human title for a routine exercise: payload `title` first, then the store
+    fallback, then the raw id as a last resort (never crash, never blank)."""
+    tid = ex.get("exercise_template_id")
+    return ex.get("title") or fallback.get(tid) or tid or "Unknown exercise"
+
+
+def _format_routine_header(routine: dict) -> str:
+    folder = routine.get("folder_id")
+    folder_str = folder if folder is not None else "none"
+    title = routine.get("title") or "Untitled routine"
+    return f"## {title}  (id: {routine.get('id')}, folder: {folder_str})"
+
+
+def _format_routine_compact(routine: dict, fallback: dict[str, str]) -> list[str]:
+    """Compact rendering: header + exercise count + exercise titles. NO set detail
+    (the list must stay context-small)."""
+    exercises = routine.get("exercises", []) or []
+    lines = [_format_routine_header(routine)]
+    if not exercises:
+        lines.append("   (no exercises)")
+        return lines
+    titles = ", ".join(_exercise_display_title(ex, fallback) for ex in exercises)
+    lines.append(f"   {len(exercises)} exercise(s): {titles}")
+    return lines
+
+
+def _format_routine_full(routine: dict, fallback: dict[str, str]) -> list[str]:
+    """Full rendering: header, then each exercise IN PAYLOAD ORDER with superset
+    grouping, rest, notes, and every set. Superset membership is surfaced as a
+    `[superset N]` tag so grouped writes are verifiable."""
+    lines = [_format_routine_header(routine)]
+
+    notes = (routine.get("notes") or "").strip()
+    if notes:
+        lines.append(f"   Notes: {notes}")
+
+    exercises = routine.get("exercises", []) or []
+    if not exercises:
+        lines.append("   (no exercises)")
+        return lines
+
+    for ex in exercises:
+        title = _exercise_display_title(ex, fallback)
+        superset_id = ex.get("superset_id")
+        superset_tag = f"  [superset {superset_id}]" if superset_id is not None else ""
+        lines.append(f"  {title}{superset_tag}")
+
+        rest = ex.get("rest_seconds")
+        if rest is not None:
+            lines.append(f"     rest: {rest}s")
+
+        ex_notes = (ex.get("notes") or "").strip()
+        if ex_notes:
+            for note_line in ex_notes.split("\n"):
+                note_line = note_line.strip()
+                if note_line:
+                    lines.append(f"     note: {note_line}")
+
+        sets = ex.get("sets", []) or []
+        if not sets:
+            lines.append("     (no sets)")
+        for set_idx, s in enumerate(sets):
+            lines.append(format_set(s, set_idx))
+
+    return lines
+
+
+@mcp.tool()
+@_stamped
+async def search_hevy_routines() -> str:
+    """List the user's existing Hevy routines — compact. Returns each routine's
+    title, id, folder, and its exercise names with a count, but NO set detail.
+
+    Use this to check whether a routine exists (e.g. before creating one) or to
+    find a routine's id to inspect in full with get_hevy_routine."""
+    api_key = _current_user_hevy_key()
+    if api_key is None:
+        return "Hevy integration not connected for this user."
+
+    client = HevyClient(api_key)
+
+    all_routines: list[dict] = []
+    page = 1
+    while True:
+        data = await client.get_routines(page=page, page_size=10)
+        routines = data.get("routines", []) or []
+        all_routines.extend(routines)
+        page_count = data.get("page_count", page)
+        if page >= page_count or not routines:
+            break
+        page += 1
+
+    if not all_routines:
+        return "No routines found in Hevy."
+
+    fallback = _routine_title_fallback(all_routines)
+    lines = [f"Hevy routines ({len(all_routines)})", ""]
+    for routine in all_routines:
+        lines.extend(_format_routine_compact(routine, fallback))
+    return "\n".join(lines)
+
+
+@mcp.tool()
+@_stamped
+async def get_hevy_routine(routine_id: str) -> str:
+    """Inspect one Hevy routine in full by its id: every exercise (in order),
+    superset grouping, rest, notes, and every set (type, weight, reps, duration,
+    distance, RPE).
+
+    Use this to verify a routine was built correctly. Get the id from
+    search_hevy_routines. An unknown id returns a clear not-found message."""
+    api_key = _current_user_hevy_key()
+    if api_key is None:
+        return "Hevy integration not connected for this user."
+
+    client = HevyClient(api_key)
+
+    try:
+        data = await client.get_routine(routine_id)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        if status in (400, 404):
+            return f"No routine found with id '{routine_id}'."
+        raise
+
+    # Tolerate both a {"routine": {...}} wrapper and a bare routine object — the
+    # connector parses nothing, so neither shape is asserted (VERIFY 2/4).
+    routine = data.get("routine", data) if isinstance(data, dict) else None
+    if not routine:
+        return f"No routine found with id '{routine_id}'."
+
+    fallback = _routine_title_fallback([routine])
+    return "\n".join(_format_routine_full(routine, fallback))

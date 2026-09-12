@@ -85,6 +85,23 @@ class HevyClient:
             )
             return self._check(r).json()
 
+    async def get_routine(self, routine_id: str) -> dict[str, Any]:
+        """Fetch a single routine by its Hevy id — GET /v1/routines/{id}.
+
+        The list endpoint (`get_routines`) returns compact rows; this is the
+        full-config read the by-id inspect tool needs. The response is returned
+        raw (`.json()`), like every GET here — Hevy wraps it as
+        `{"routine": {...}}`, but callers tolerate both a wrapper and a bare
+        object rather than asserting one shape (the connector parses nothing).
+
+        A missing/invalid id surfaces as the connector's normal error mapping:
+        `_check` raises `httpx.HTTPStatusError` on the 404, which the calling
+        tool catches to render a clean not-found message rather than a crash.
+        """
+        async with httpx.AsyncClient(headers=self._headers) as client:
+            r = await client.get(f"{HEVY_BASE}/routines/{routine_id}")
+            return self._check(r).json()
+
     async def get_exercise_templates(
         self,
         page: int = 1,

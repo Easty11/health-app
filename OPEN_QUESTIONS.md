@@ -4312,3 +4312,25 @@ gate (#284) both landed, and the out-of-repo consuming gate is now optional rath
 discipline. Q143 stays OPEN on WS3 (and the Hevy-lane option).
 
 **State:** OPEN
+
+## Q144. Hevy routine-create hardening — two prior-art findings the create path must inherit
+
+Surfaced building the routine read-back (#285). Recorded here, NOT acted on in #285 (a read-only tool); they gate the
+next arc item — the routine create-guard ("#1"). Both are settled findings, owed to that build:
+
+- **(a) Check-exists-before-create — Hevy has no delete.** The Hevy API exposes no delete for routines OR exercise
+  templates, so a create-on-retry (or a create the model fires without checking) mints an UNDELETABLE duplicate — the
+  same class the custom-exercise path already guards against (`create_and_resolve` idempotency pre-check, #65; the
+  connector comment "an API with no delete"). The routine-create path has no such guard today. **Fix owed to #1:** the
+  create must first read existing routines (via #285's `search_hevy_routines`) and short-circuit / confirm on a
+  title-existence hit rather than blindly POST. This is precisely why #285's cheap compact list exists.
+
+- **(b) Strip `rpe` from routine-create set payloads — routines ignore it.** Hevy routines are prescriptions; RPE is a
+  live-logging (workout) field only (Hevy docs), so a routine set's `rpe` is rejected/ignored. Yet the create payload
+  builder emits `rpe` on routine sets (`connectors/hevy.py`, the `for field in (... "rpe" ...)` set loop) — carried over
+  from the workout-set shape. **Fix owed to #1:** drop `rpe` from the routine-create set fields (leave the workout read
+  path untouched — `format_set` rendering RPE on read-back is correct there).
+
+Owner: Luke / next build (routine create-guard). Neither blocks #285.
+
+**State:** OWED → routine create-guard build (this arc's "#1")
