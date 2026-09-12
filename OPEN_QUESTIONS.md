@@ -4388,7 +4388,15 @@ health-app-DB`): expect five keys, each `active=true` once, correct day/time, an
 Superseded siblings would prove a real double-write (a schedule-lane idempotency bug); their absence proves
 cosmetic. Do not auto-clean if duplicates are found — Luke rules.
 
-**State:** OWED → Luke's schedule read-back (confirm five active, once each; superseded siblings ⇒ real bug)
+**Resolved (verified by direct prod read, Luke 2026-09-12).** The five entries exist as ids 82–86
+(`decompression_gym_mon/wed/fri_2026`, `decompression_swim_tue/thu_2026` — note the `_2026` key suffix the
+first verification query dropped, §43), each `active=t`, exactly one row per key, NO `active=f` superseded
+siblings — plus the earlier 80–81 (Sat pilates, Sun recovery) as single clean rows. So the doubled `✓` ticks
+were cosmetic exactly as the structural analysis predicted: five blocks, five writes, five rows. No
+double-write, no idempotency bug. The write path was truthful throughout; the earlier "0 rows / serious case"
+scare was a truncated-key verification query, not missing data (§43).
+
+**State:** DONE → #289 (Concern B closed, verified not inferred)
 
 ## Q147. Should the deterministic numeric floor extend to the workout READ/parse path?
 
