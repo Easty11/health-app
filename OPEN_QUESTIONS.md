@@ -4333,4 +4333,18 @@ next arc item — the routine create-guard ("#1"). Both are settled findings, ow
 
 Owner: Luke / next build (routine create-guard). Neither blocks #285.
 
-**State:** OWED → routine create-guard build (this arc's "#1")
+**Discharged (#286, this arc).** Both findings acted on in the connector floor:
+- **(a) idempotency — DONE.** `create_routine` now reads the paginated `/routines` list and raises typed
+  `RoutineAlreadyExists` before the POST on a same-(title, folder) collision (case-insensitive title, equal folder;
+  refuse+offer, never auto-clobber — [fork] ratified by Luke: refuse+offer, title+folder). Both entry points inherit it
+  (chat → WriteResult `already_exists`; REST → 409).
+- **(b) rpe strip — DONE.** `rpe` removed from the routine set-field tuple; deterministic floor, not prompt-only. The
+  workout READ path (`load_events`, `format_set`) is untouched — there is no workout-CREATE path to affect.
+- **Superset write (d, #287)** also landed this arc: `superset_id` + the fragile conventions documented in
+  `_section_routine_creation`.
+
+**Residual — the exercise-action lane is the last un-wrapped Hevy write surface.** `_process_exercise_actions`
+(custom-exercise creation) stays string-only this pass, mirroring #283's scope-boundary discipline — flagged, not folded
+silently. Folding it onto `write_results` is the remaining option (see #286 "Do not revisit unless").
+
+**State:** DONE → #286 (a,b) · #287 (d); exercise-action lane residual noted above (tracked in #286)
