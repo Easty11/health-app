@@ -18,6 +18,7 @@ from connectors.hevy import (
     HevyClient,
     HevyCustomExerciseLimitError,
     RoutineAlreadyExists,
+    RoutineNumericError,
 )
 from context_builder import build_system_prompt, render_asked_lab_value
 from current_state import current_state as compute_current_state
@@ -467,6 +468,37 @@ def _format_unresolved(unresolved: list[tuple[str, list[tuple[str, str]]]]) -> s
     return ", ".join(parts)
 
 
+async def _resolve_folder_id(
+    hevy_client: HevyClient,
+    folder_name: str | None,
+    explicit_id: int | None,
+) -> tuple[int | None, str | None]:
+    """Resolve a routine's target folder to an int id (Q144 follow-up — FIX #1).
+
+    The model names a folder (`"folder": "2026 Post Season Decompression"`); the connector
+    needs `folder_id` (int). Before this, the name was silently dropped and the routine
+    landed unfoldered. Now: an explicit `folder_id` wins; otherwise the name is matched
+    case-insensitively against the live folder list. Returns `(folder_id, unresolved_name)`
+    — a miss yields `(None, name)` so the caller creates the routine UNFOLDERED (never a
+    NaN, never a hard failure) and surfaces the miss, mirroring the exercise-title resolver.
+    A folder-list read that raises is treated as a miss (unfoldered), never blocking the create.
+    """
+    if explicit_id is not None:
+        return explicit_id, None
+    if not folder_name:
+        return None, None
+    try:
+        folders = await hevy_client.get_routine_folders()
+    except Exception as exc:  # noqa: BLE001 — a folder-lookup failure must not block the create
+        logger.warning("routine folder lookup failed; creating unfoldered: %s", exc)
+        return None, folder_name
+    wanted = folder_name.strip().casefold()
+    for f in folders:
+        if (f.get("title") or "").strip().casefold() == wanted:
+            return f.get("id"), None
+    return None, folder_name
+
+
 async def _process_routine_actions(
     reply: str,
     hevy_client: HevyClient | None,
@@ -489,8 +521,12 @@ async def _process_routine_actions(
 
     Hevy reason_code vocab (type-derived, never message-parsed):
       created            — routine POSTed (saved=True)
+      created_unfoldered — routine POSTed, but the named folder didn't resolve; created
+                           unfoldered (saved=True — don't retry, it exists)
       already_exists     — (title, folder) collision; the connector refused (saved=False)
       unresolved_exercise— a title did not match the catalogue; nothing created (saved=False)
+      invalid_number     — a non-finite/non-number reached a numeric field; caught before
+                           the POST, named by field+exercise (saved=False)
       invalid_json       — the block was not parseable JSON (saved=False)
       invalid_shape      — the block parsed but was not a JSON object (saved=False)
       create_failed      — Hevy not connected, or the create raised (saved=False)
@@ -532,7 +568,11 @@ async def _process_routine_actions(
 
         title = data.get("title", "Untitled Routine")
         exercises = data.get("exercises", [])
-        folder_id = data.get("folder_id")
+
+        # Folder name→id resolution (FIX #1). The model names a folder; resolve it to an
+        # int id, else create unfoldered and surface the miss (never a NaN folder_id).
+        folder_id, unresolved_folder = await _resolve_folder_id(
+            hevy_client, data.get("folder"), data.get("folder_id"))
 
         # Opt-in fallback: fill ids for any title-only exercises. Blocks that
         # already carry ids are untouched (#60).
@@ -553,11 +593,25 @@ async def _process_routine_actions(
                 exercises=exercises,
                 folder_id=folder_id,
             )
-            record(True, "created", f"✓ Routine '{title}' created in Hevy", key=title)
+            if unresolved_folder:
+                # The routine WAS created (saved=True → no retry, no duplicate) but not
+                # in the named folder. A distinct code keeps the miss machine-visible;
+                # the verbatim reason tells the user, correcting any "filed under X" claim.
+                record(True, "created_unfoldered",
+                       f"✓ Routine '{title}' created in Hevy — folder "
+                       f"'{unresolved_folder}' not found, so it was created unfoldered "
+                       f"(create the folder in Hevy or fix the name).",
+                       key=title)
+            else:
+                record(True, "created", f"✓ Routine '{title}' created in Hevy", key=title)
         except RoutineAlreadyExists as exc:
             # The connector refused a (title, folder) duplicate before the POST. Type-
             # derived code drives the user_resolvable affordance (rename vs update),
             # exactly like the schedule lane's day_time_clash.
+            record(False, exc.code, f"⚠️ Routine '{title}' not created — {exc}", key=title)
+        except RoutineNumericError as exc:
+            # A non-finite/non-number reached a numeric field (the `received nan` class).
+            # Caught before the POST and named by field+exercise, never sent to Hevy.
             record(False, exc.code, f"⚠️ Routine '{title}' not created — {exc}", key=title)
         except Exception as exc:
             record(False, "create_failed", f"⚠️ Failed to create routine '{title}': {exc}", key=title)
@@ -783,7 +837,10 @@ def _process_capability_updates(
 # `create_failed` are neither — they fall to `informational` (stated plainly), the routine
 # lane's honest default.
 _USER_RESOLVABLE_CODES = frozenset({"day_time_clash", "needs_disambiguation", "already_exists"})
-_SYSTEM_BUG_CODES = frozenset({"unknown_field", "invalid_shape", "invalid_json", "error"})
+# `invalid_number` (a non-finite/non-number in a routine numeric field, Q144 follow-up) is a
+# malformed-payload fault on our side, like invalid_shape/invalid_json — never handed to the
+# user to fix.
+_SYSTEM_BUG_CODES = frozenset({"unknown_field", "invalid_shape", "invalid_json", "error", "invalid_number"})
 
 
 def _write_affordance(reason_code: str) -> str:
@@ -808,6 +865,7 @@ _FOOTER_REASON_PHRASE = {
     "already_exists": "already exists",
     "unresolved_exercise": "unresolved exercise",
     "create_failed": "create failed",
+    "invalid_number": "invalid number",
     # Hevy exercise lane (Q144 — the last un-wrapped write surface)
     "already_present": "already present",
     "limit_reached": "limit reached",

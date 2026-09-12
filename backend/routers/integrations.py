@@ -9,7 +9,13 @@ import httpx
 
 import models
 from auth import get_current_user
-from connectors.hevy import HevyAuthError, HevyClient, HevyForbiddenError, RoutineAlreadyExists
+from connectors.hevy import (
+    HevyAuthError,
+    HevyClient,
+    HevyForbiddenError,
+    RoutineAlreadyExists,
+    RoutineNumericError,
+)
 from database import get_db
 from encryption import decrypt, encrypt
 from hevy_templates import refresh_catalogue_if_stale, sync_exercise_templates
@@ -362,5 +368,9 @@ async def hevy_create_routine(
         # Hevy has no delete and update replaces contents, so the connector refuses
         # the duplicate; the caller renames or explicitly updates (Q144(a)).
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except RoutineNumericError as exc:
+        # A non-finite/non-number reached a numeric field — client input error, named
+        # by field+exercise, caught before the POST (the `received nan` class).
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except (HevyAuthError, HevyForbiddenError, httpx.HTTPStatusError) as exc:
         raise _hevy_error_to_http(exc)

@@ -1,6 +1,7 @@
 import httpx
 import json
 import logging
+import math
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,38 @@ class RoutineAlreadyExists(Exception):
             f"(id: {ids}); Hevy has no delete and an update REPLACES its contents, "
             f"so rename the new routine or explicitly update the existing one"
         )
+
+
+class RoutineNumericError(ValueError):
+    """A routine-create payload carries a non-number where Hevy expects a number.
+
+    The concrete incident was `Expected number, received nan`: the model emitted a
+    literal `NaN` token, `json.loads` accepts it (parse_constant default), the builder
+    passed it through (`NaN is not None`), and httpx serialized it (`allow_nan=True`
+    default) straight to the wire. This is the whole CLASS — NaN, ±Infinity, a string
+    or bool in a numeric slot — caught deterministically BEFORE any POST, naming the
+    field and the exercise so the failure is nameable, not a bare Hevy 400.
+
+    Subclasses ValueError so a REST caller's existing `except ValueError` still catches
+    it; carries a stable `code` for the write-result contract (mirrors ScheduleItemInvalid).
+    """
+
+    code = "invalid_number"
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+def _is_finite_number(value: Any) -> bool:
+    """True only for a real, finite int/float — never a bool, never NaN/±Infinity.
+
+    bool is a subclass of int, so `True`/`False` in a numeric slot is rejected too
+    (a boolean weight is as wrong as a NaN one)."""
+    if isinstance(value, bool):
+        return False
+    if not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
 
 
 class HevyClient:
@@ -156,6 +189,33 @@ class HevyClient:
             page += 1
         return routines
 
+    async def get_routine_folders(self, page_size: int = 10) -> list[dict[str, Any]]:
+        """Every routine folder across Hevy's paginated /routine_folders endpoint.
+
+        Backs name→id resolution for routine creation: the model names a folder, the
+        chat lane matches it here. Returns a flat list of folder dicts (each carrying at
+        least `id` and `title`). Defensive about the envelope — Hevy wraps the page as
+        `{"routine_folders": [...], "page_count": N}`, but a caller asserts nothing:
+        both a `routine_folders` key and a bare list are tolerated, mirroring how
+        `get_routine` tolerates its wrapper (the connector parses nothing rigid).
+        """
+        folders: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            async with httpx.AsyncClient(headers=self._headers) as client:
+                r = await client.get(
+                    f"{HEVY_BASE}/routine_folders",
+                    params={"page": page, "pageSize": page_size},
+                )
+                data = self._check(r).json()
+            batch = data.get("routine_folders", []) if isinstance(data, dict) else (data or [])
+            folders.extend(batch)
+            page_count = data.get("page_count", page) if isinstance(data, dict) else page
+            if page >= page_count or not batch:
+                break
+            page += 1
+        return folders
+
     async def get_exercise_templates(
         self,
         page: int = 1,
@@ -215,7 +275,36 @@ class HevyClient:
         just prompt guidance — the model may emit it anyway. RPE is a logged-set
         fact consumed on the workout READ path (load_events); there is no
         workout-CREATE path, so this strip cannot touch load logging.
+
+        Numeric floor (Q144 follow-up — the `Expected number, received nan` class):
+        every value bound for a numeric field is checked for finiteness FIRST, before
+        any network call, and a non-number (NaN, ±Infinity, a string/bool in a numeric
+        slot) raises `RoutineNumericError` naming the field and exercise. Nothing
+        non-finite is ever built or sent. `folder_id` name→id resolution is the caller's
+        job (chat lane); here folder_id must already be an int or None.
         """
+        def _ref(ex_idx: int, ex: dict[str, Any]) -> str:
+            tid = ex.get("exercise_template_id") or ex.get("title") or "?"
+            return f"exercise {ex_idx + 1} ({tid})"
+
+        for ex_idx, ex in enumerate(exercises):
+            for field in ("rest_seconds", "superset_id"):
+                val = ex.get(field)
+                if val is not None and not _is_finite_number(val):
+                    raise RoutineNumericError(
+                        f"{field} on {_ref(ex_idx, ex)} is not a valid number ({val!r})"
+                    )
+            for set_idx, s in enumerate(ex.get("sets", [])):
+                for field in ("weight_kg", "reps", "distance_meters", "duration_seconds"):
+                    val = s.get(field)
+                    if val is not None and not _is_finite_number(val):
+                        raise RoutineNumericError(
+                            f"{field} on set {set_idx + 1} of {_ref(ex_idx, ex)} "
+                            f"is not a valid number ({val!r})"
+                        )
+        if folder_id is not None and not _is_finite_number(folder_id):
+            raise RoutineNumericError(f"folder_id is not a valid number ({folder_id!r})")
+
         existing = await self.get_all_routines()
         wanted = (title or "").strip().casefold()
         collisions = [
@@ -259,8 +348,17 @@ class HevyClient:
 
         logger.info("Hevy create_routine payload: %s", payload)
 
+        # Hard serialize backstop: allow_nan=False makes any non-finite that slipped
+        # past the numeric floor above raise locally (ValueError) instead of emitting
+        # an invalid `NaN`/`Infinity` token to the wire. The numeric floor should have
+        # caught it already; this guarantees "never sent" even if a field was missed.
+        body = json.dumps(payload, allow_nan=False).encode()
         async with httpx.AsyncClient(headers=self._headers) as client:
-            r = await client.post(f"{HEVY_BASE}/routines", json=payload)
+            r = await client.post(
+                f"{HEVY_BASE}/routines",
+                content=body,
+                headers={"Content-Type": "application/json"},
+            )
             return self._check(r).json()
 
     async def create_exercise_template(
