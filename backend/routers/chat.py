@@ -705,6 +705,203 @@ def _process_capability_updates(
     return cleaned.strip(), actions_taken
 
 
+# ---------- narrate-after-write (Q143a / WS4 in-repo gate) ----------
+
+# The conversational reply is produced in ONE pass, BEFORE any write executes (see the
+# endpoint). So a "saved" the model writes into that prose PRECEDES the outcome it claims —
+# the exact gloss the origin transcript showed: a rugby-retire narrated as done while the
+# `active` block was mis-nested and the write was in fact refused. #283 made each write's
+# outcome machine-checkable (`WriteResult.saved`); this closes the loop on the NARRATION.
+# If any write failed, the pre-write prose is discarded and a bounded second pass
+# regenerates a reply that reports the true per-row outcome. A deterministic footer,
+# computed from `write_results`, is the hard floor under both passes.
+
+# Affordance is TYPE-DERIVED from the reason_code — never parsed from prose, the same
+# discipline as the codes themselves. A user-resolvable clash offers the supersedes/
+# distinct_from path; a bug code is a fault on OUR side and must never be handed back to
+# the user to fix. `needs_disambiguation` is not emitted today (the current vocab is in
+# `WriteResult`); it is carried here so a future code lands in the right bucket by default.
+_USER_RESOLVABLE_CODES = frozenset({"day_time_clash", "needs_disambiguation"})
+_SYSTEM_BUG_CODES = frozenset({"unknown_field", "invalid_shape", "invalid_json", "error"})
+
+
+def _write_affordance(reason_code: str) -> str:
+    if reason_code in _USER_RESOLVABLE_CODES:
+        return "user_resolvable"
+    if reason_code in _SYSTEM_BUG_CODES:
+        return "system_issue"
+    return "informational"  # e.g. not_found — nothing matched; state it plainly
+
+
+# Short, user-facing phrase per code for the deterministic footer. Falls back to the raw
+# code so a member added to the vocab upstream still renders (never a KeyError).
+_FOOTER_REASON_PHRASE = {
+    "day_time_clash": "day/time clash",
+    "needs_disambiguation": "needs disambiguation",
+    "unknown_field": "unknown field",
+    "invalid_shape": "invalid shape",
+    "invalid_json": "invalid format",
+    "not_found": "no matching entry",
+    "error": "system error",
+}
+
+
+def _has_failed_write(write_results: list[WriteResult]) -> bool:
+    return any(not r.saved for r in write_results)
+
+
+def _render_write_footer(write_results: list[WriteResult]) -> str:
+    """Deterministic status line for the knowledge/schedule write lane (always-on, Q143a).
+
+    Empty when the turn wrote no `<knowledge_update>` blocks — the footer is a floor for
+    write turns, not a banner on every reply. On an all-saved turn it is one terse line
+    (`✓ 3 saved`); this is the cost the always-on fork accepts, and it is also what neuters
+    the exotic "narrated a save it never emitted" case on a SUCCESS turn — the tally is
+    computed from `write_results`, not from the prose. On a mixed/failed turn it names the
+    saved/failed counts and the distinct failure reasons, so the floor tells the truth even
+    if pass-2 itself misreports.
+    """
+    if not write_results:
+        return ""
+    saved = sum(1 for r in write_results if r.saved)
+    failed = [r for r in write_results if not r.saved]
+    if not failed:
+        return f"✓ {saved} saved"
+    reasons: list[str] = []
+    for r in failed:
+        phrase = _FOOTER_REASON_PHRASE.get(r.reason_code, r.reason_code)
+        if phrase not in reasons:
+            reasons.append(phrase)
+    return f"⚠ {saved} saved, {len(failed)} failed — " + ", ".join(reasons)
+
+
+# Pass-2 is bounded: it reproduces the turn's conversational content and corrects only the
+# write claims, so it needs far fewer tokens than the open-ended first pass. Kept well below
+# the first pass's 4096 to cap the added cost of the (failed-write only) second call.
+_PASS2_MAX_TOKENS = 1024
+
+_PASS2_SYSTEM = (
+    "You are correcting your own draft reply in a health app. The draft was written "
+    "BEFORE the outcomes were known, and some of the changes it described were NOT saved. "
+    "Rewrite the reply so it is TRUE about what was saved.\n"
+    "\n"
+    "- Keep every piece of conversational and analytical content from the draft — advice, "
+    "synthesis, and answers to what the user asked. Only the claims about what was SAVED "
+    "may change.\n"
+    "- Never state or imply a change was saved unless its outcome below says [SAVED].\n"
+    "- For each [NOT SAVED] item, say plainly that it was not saved, in the user's terms.\n"
+    "- Act on the affordance tag attached to each item:\n"
+    "  - user_resolvable: the user must choose. State the clash and ask whether the new "
+    "entry REPLACES the existing one or sits alongside it. Do not decide for them.\n"
+    "  - system_issue: a fault on OUR side. Say briefly it wasn't recorded and that you'll "
+    "sort it out. NEVER tell the user to fix a format, field, or block — they cannot see "
+    "or edit one.\n"
+    "  - informational: state the fact plainly (e.g. there was nothing matching to remove).\n"
+    "- Do NOT append a tally or a '✓ N saved' line; that is added separately.\n"
+)
+
+
+def _pass2_user_content(
+    user_message: str,
+    pre_write_reply: str,
+    write_results: list[WriteResult],
+) -> str:
+    """Render the pass-2 user turn: the ask, the draft to preserve, and the PER-ROW outcome.
+
+    One line per result, never a roll-up — the failure mode was several blocks narrated as
+    all-saved, so a batch summary here would re-open exactly that gap.
+    """
+    lines = []
+    for r in write_results:
+        status = "SAVED" if r.saved else "NOT SAVED"
+        tag = "saved" if r.saved else _write_affordance(r.reason_code)
+        key = r.key or "(unkeyed)"
+        lines.append(f"- [{status} · {tag}] key={key} ({r.reason_code}): {r.reason}")
+    outcomes = "\n".join(lines)
+    return (
+        f"The user said:\n{user_message}\n\n"
+        f"Your draft reply (conversational content to preserve):\n{pre_write_reply}\n\n"
+        f"The actual outcome of each write you requested:\n{outcomes}\n\n"
+        "Rewrite your reply following the rules."
+    )
+
+
+# Fail-closed body if pass-2 itself errors: never re-emit the possibly-false draft prose.
+# The truthful per-row action strings and the deterministic footer are appended after this,
+# so the user still gets the real outcome.
+_PASS2_FALLBACK = (
+    "I ran into a problem finishing that — the outcome of each change is listed below."
+)
+
+
+def _narrate_after_write(
+    *,
+    client: Any,
+    model: str,
+    user_message: str,
+    pre_write_reply: str,
+    write_results: list[WriteResult],
+) -> tuple[str, bool]:
+    """Bounded second generation that reports the true write outcomes (Q143a / WS4).
+
+    Client-injected so it is faked at the TRANSPORT layer in tests (#166 companion rule),
+    never the live model. Returns (narration, second_call_fired). On any transport error the
+    draft prose is DISCARDED for a fixed safe line — the floor (action strings + footer)
+    still carries the truth, and a false "saved" never survives.
+    """
+    try:
+        resp = client.messages.create(
+            model=model,
+            max_tokens=_PASS2_MAX_TOKENS,
+            system=_PASS2_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": _pass2_user_content(user_message, pre_write_reply, write_results),
+            }],
+        )
+        return resp.content[0].text, True
+    except Exception as exc:  # noqa: BLE001 — degrade to the deterministic floor, never the draft
+        logger.warning("narrate-after-write pass-2 failed, falling back to floor: %s", exc)
+        return _PASS2_FALLBACK, True
+
+
+def _compose_response(
+    *,
+    client: Any,
+    model: str,
+    user_message: str,
+    reply: str,
+    all_actions: list[str],
+    write_results: list[WriteResult],
+) -> tuple[str, bool]:
+    """Assemble the final `response` text after writes have executed (Q143a / WS4).
+
+    - Every write saved (or none attempted) → keep the pre-write `reply`, no second call.
+    - Any write failed → discard the pre-write prose and regenerate it (pass-2).
+    Then append the confirmation strings (unchanged from before) and the always-on
+    deterministic footer. Returns (response_text, second_call_fired); the flag lets the
+    caller and the gates assert the "+1 call on failed-write turns only" cost profile.
+    """
+    second_call_fired = False
+    if _has_failed_write(write_results):
+        reply, second_call_fired = _narrate_after_write(
+            client=client,
+            model=model,
+            user_message=user_message,
+            pre_write_reply=reply,
+            write_results=write_results,
+        )
+
+    if all_actions:
+        reply = reply + "\n\n" + "\n".join(all_actions)
+
+    footer = _render_write_footer(write_results)
+    if footer:
+        reply = reply + "\n\n" + footer
+
+    return reply, second_call_fired
+
+
 # ---------- endpoint ----------
 
 @router.post("", response_model=ChatResponse)
@@ -867,9 +1064,21 @@ async def chat(
 
     all_actions = exercise_actions + routine_actions + knowledge_actions + capability_actions
 
-    # Append confirmation messages inline so they appear in the chat bubble
-    if all_actions:
-        reply = reply + "\n\n" + "\n".join(all_actions)
+    # Narrate-after-write (Q143a / WS4). `reply` was generated in the single pass above,
+    # BEFORE these writes executed, so any "saved" it claims precedes the outcome. If every
+    # knowledge/schedule write saved, that prose is already true and is kept unchanged (no
+    # second call). If any failed, the prose is discarded and regenerated to report the true
+    # per-row outcome. Either way the confirmation strings and the always-on deterministic
+    # footer are appended — the footer is the hard floor if pass-2 itself misreports. The
+    # SAME `client` is reused for the bounded second call.
+    reply, _second_call_fired = _compose_response(
+        client=client,
+        model=MODEL,
+        user_message=body.message,
+        reply=reply,
+        all_actions=all_actions,
+        write_results=knowledge_write_results,
+    )
 
     # `write_results` is the machine-checkable outcome of the knowledge/schedule write
     # lane (#283) — a client (or a later turn) hard-gates on `saved` rather than trusting
