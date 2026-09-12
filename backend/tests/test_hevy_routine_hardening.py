@@ -38,8 +38,12 @@ def _patch_transport(monkeypatch, existing_routines, post_status=201):
             json={"routines": existing_routines, "page": 1, "page_count": 1},
         )
 
-    async def fake_post(self, url, json=None, **kw):
-        sent["posts"].append({"url": url, "json": json})
+    async def fake_post(self, url, json=None, content=None, **kw):
+        # The connector serializes with allow_nan=False and posts via `content=` (bytes),
+        # not `json=`; accept either so the capture survives that change.
+        import json as _json
+        payload = json if json is not None else _json.loads(content)
+        sent["posts"].append({"url": url, "json": payload})
         return httpx.Response(
             post_status, request=httpx.Request("POST", url),
             json={"routine": {"id": "new-routine"}},
