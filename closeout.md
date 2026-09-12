@@ -57,13 +57,11 @@ master and the operator's two decisions recorded. It was **not stored**, by desi
 - **Imaging/DEXA deferred → Q142.** No landed home (`health_events` narrative parent deferred
   #43/#52); forcing DEXA numerics into `lab_results` refused.
 
-**Single clearest next action — OPERATOR, prod-side (no Code step, no prod egress this session).**
-Ingest the batch through the running app against prod: (1) run the three `/labs/canonical/bind` calls
-above; (2) upload each of the 24 reports at `/labs` (extract → review → bind any remaining unmapped →
-confirm), keeping the two 09-02 events as their own confirms; (3) verify the writes with a Postgres
-query against Railway (`lab_reports`/`lab_results` row counts + the PSA/IGF-1 series), **not** the
-on-device UI. Bind-then-confirm and confirm-then-bind both work (a later bind backfills the unmapped
-rows). This is the OWED on #280 — an unseeable surface this session cannot confirm.
+**#280 operator prod-side ingestion — DISCHARGED & VERIFIED (#282).** The batch is ingested: all
+24 reports (2026-08-04 + 2026-09-02) confirmed in prod, the three binds (`igf1`, `psa_free`,
+`psa_free_percent`) live, marker series continuous (late-bind backfill confirmed). Verified this
+session via `get_lab_results` (2026-09-12), reconciling the operator's 2026-09-11/12 check. No
+remaining prod-side OWED on #280. Imaging/DEXA still deferred (Q142).
 
 **NOT touched this session — the feature lanes stood still.** This was an ingestion/governance turn;
 no v1-test surface moved. Per the v1 steer (#275), the standing NOW lanes are unchanged:
@@ -72,7 +70,7 @@ no v1-test surface moved. Per the v1 steer (#275), the standing NOW lanes are un
   (#276); enforcement-against-the-plan surfacing beyond panel position is still UNSTARTED. Strongest
   next feature pick.
 - **Appointment brief v1 — test 3 (Walk in)** (surfacing seq 3): UNSTARTED. It reads the `/series/lab*`
-  surface (#279) and the interpretation layer — this lab batch, once the operator ingests it, is the
+  surface (#279) and the interpretation layer — this lab batch, now ingested (#282), is the
   first real multi-panel corpus that brief would synthesise. Substrate complete (#220/#194/#268).
 - **Surface-debt sweep — test 4 (Loop)** (seq 4): UNSTARTED.
 - **Visuals lane (See)**: v1 core MET at increment 3 (#278); remaining work is NEXT, not NOW.
