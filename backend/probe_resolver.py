@@ -303,7 +303,7 @@ def _turn(client, system, messages, db, user_id):
     )
     raw = "".join(b.text for b in resp.content if b.type == "text")
     fake = FakeHevyClient()
-    cleaned, actions = asyncio.run(
+    cleaned, actions, _write_results = asyncio.run(
         chat_mod._process_routine_actions(raw, fake, user_id, db)
     )
     stored = cleaned + ("\n\n" + "\n".join(actions) if actions else "")

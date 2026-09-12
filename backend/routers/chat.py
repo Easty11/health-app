@@ -17,6 +17,7 @@ from connectors.hevy import (
     HevyBadRequestError,
     HevyClient,
     HevyCustomExerciseLimitError,
+    RoutineAlreadyExists,
 )
 from context_builder import build_system_prompt, render_asked_lab_value
 from current_state import current_state as compute_current_state
@@ -117,9 +118,9 @@ class WriteResult(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     actions_taken: list[str] = []   # e.g. ["✓ Routine 'Push Day' created in Hevy"]
-    # Per-block structured outcomes for the knowledge/schedule write lane (#283). Additive
-    # to `actions_taken`; empty when the turn wrote no `<knowledge_update>` blocks. The
-    # Hevy routine/exercise lanes are not yet mapped onto this shape (see #283 / Q143).
+    # Per-block structured outcomes for the write lanes. Additive to `actions_taken`; empty
+    # when the turn wrote no mapped blocks. Covers the knowledge/schedule lane (#283) and the
+    # Hevy routine lane (Q144); the Hevy exercise-action lane stays string-only for now.
     write_results: list[WriteResult] = []
 
 
@@ -446,7 +447,7 @@ async def _process_routine_actions(
     hevy_client: HevyClient | None,
     user_id: int,
     db: Session,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[WriteResult]]:
     """
     Scan `reply` for <hevy_create_routine> blocks.
     For each one found:
@@ -454,21 +455,40 @@ async def _process_routine_actions(
       - Resolve any title-only exercises to ids (opt-in fallback, #60)
       - Call hevy_client.create_routine()
       - Strip the raw block from the displayed text
-      - Record a confirmation message in actions_taken
+      - Record a confirmation message AND a machine-checkable WriteResult
 
-    Returns (cleaned_reply, actions_taken).
+    Returns (cleaned_reply, actions_taken, write_results). Each block yields ONE
+    `WriteResult` (the #283 shape, Hevy codes), paired 1:1 with its `actions_taken`
+    string via `record()` so a failed or collided create can never be narrated as
+    success (Q144(c)) — the same discipline the knowledge lane already holds.
+
+    Hevy reason_code vocab (type-derived, never message-parsed):
+      created            — routine POSTed (saved=True)
+      already_exists     — (title, folder) collision; the connector refused (saved=False)
+      unresolved_exercise— a title did not match the catalogue; nothing created (saved=False)
+      invalid_json       — the block was not parseable JSON (saved=False)
+      invalid_shape      — the block parsed but was not a JSON object (saved=False)
+      create_failed      — Hevy not connected, or the create raised (saved=False)
     """
     actions_taken: list[str] = []
+    write_results: list[WriteResult] = []
+
+    def record(saved: bool, reason_code: str, message: str, *, key: str | None = None):
+        actions_taken.append(message)
+        write_results.append(
+            WriteResult(saved=saved, reason_code=reason_code, reason=message, key=key)
+        )
+
     matches = list(_ROUTINE_BLOCK_RE.finditer(reply))
 
     if not matches:
-        return reply, actions_taken
+        return reply, actions_taken, write_results
 
     if hevy_client is None:
         # Hevy not connected — strip blocks and explain
         cleaned = _ROUTINE_BLOCK_RE.sub("", reply).strip()
-        actions_taken.append("⚠️ Routine not created — Hevy is not connected.")
-        return cleaned, actions_taken
+        record(False, "create_failed", "⚠️ Routine not created — Hevy is not connected.")
+        return cleaned, actions_taken, write_results
 
     cleaned = reply
     for match in matches:
@@ -476,7 +496,12 @@ async def _process_routine_actions(
         try:
             data = json.loads(raw_json)
         except json.JSONDecodeError as exc:
-            actions_taken.append(f"⚠️ Could not parse routine JSON: {exc}")
+            record(False, "invalid_json", f"⚠️ Could not parse routine JSON: {exc}")
+            cleaned = cleaned.replace(match.group(0), "")
+            continue
+
+        if not isinstance(data, dict):
+            record(False, "invalid_shape", "⚠️ Routine block is not a JSON object.")
             cleaned = cleaned.replace(match.group(0), "")
             continue
 
@@ -488,9 +513,11 @@ async def _process_routine_actions(
         # already carry ids are untouched (#60).
         exercises, unresolved = _resolve_missing_ids(exercises, user_id, db)
         if unresolved:
-            actions_taken.append(
+            record(
+                False, "unresolved_exercise",
                 f"⚠️ Routine '{title}' not created — could not resolve exercise(s): "
-                + _format_unresolved(unresolved)
+                + _format_unresolved(unresolved),
+                key=title,
             )
             cleaned = cleaned.replace(match.group(0), "")
             continue
@@ -501,14 +528,19 @@ async def _process_routine_actions(
                 exercises=exercises,
                 folder_id=folder_id,
             )
-            actions_taken.append(f"✓ Routine '{title}' created in Hevy")
+            record(True, "created", f"✓ Routine '{title}' created in Hevy", key=title)
+        except RoutineAlreadyExists as exc:
+            # The connector refused a (title, folder) duplicate before the POST. Type-
+            # derived code drives the user_resolvable affordance (rename vs update),
+            # exactly like the schedule lane's day_time_clash.
+            record(False, exc.code, f"⚠️ Routine '{title}' not created — {exc}", key=title)
         except Exception as exc:
-            actions_taken.append(f"⚠️ Failed to create routine '{title}': {exc}")
+            record(False, "create_failed", f"⚠️ Failed to create routine '{title}': {exc}", key=title)
 
         # Remove the raw block from the visible response
         cleaned = cleaned.replace(match.group(0), "")
 
-    return cleaned.strip(), actions_taken
+    return cleaned.strip(), actions_taken, write_results
 
 
 # ---------- knowledge update parsing ----------
@@ -721,7 +753,11 @@ def _process_capability_updates(
 # distinct_from path; a bug code is a fault on OUR side and must never be handed back to
 # the user to fix. `needs_disambiguation` is not emitted today (the current vocab is in
 # `WriteResult`); it is carried here so a future code lands in the right bucket by default.
-_USER_RESOLVABLE_CODES = frozenset({"day_time_clash", "needs_disambiguation"})
+# `already_exists` (Hevy routine collision, Q144) is user_resolvable: the user chooses
+# rename vs update, exactly like a schedule day_time_clash. `unresolved_exercise` and
+# `create_failed` are neither — they fall to `informational` (stated plainly), the routine
+# lane's honest default.
+_USER_RESOLVABLE_CODES = frozenset({"day_time_clash", "needs_disambiguation", "already_exists"})
 _SYSTEM_BUG_CODES = frozenset({"unknown_field", "invalid_shape", "invalid_json", "error"})
 
 
@@ -743,6 +779,10 @@ _FOOTER_REASON_PHRASE = {
     "invalid_json": "invalid format",
     "not_found": "no matching entry",
     "error": "system error",
+    # Hevy routine lane (Q144)
+    "already_exists": "already exists",
+    "unresolved_exercise": "unresolved exercise",
+    "create_failed": "create failed",
 }
 
 
@@ -1057,35 +1097,41 @@ async def chat(
     # looks for it by title. The model cannot cite a server-minted UUID it has never
     # seen, so same-turn create-then-use resolves only in this order.
     reply, exercise_actions = await _process_exercise_actions(reply, current_user.id, db)
-    reply, routine_actions = await _process_routine_actions(reply, hevy_client, current_user.id, db)
+    reply, routine_actions, routine_write_results = await _process_routine_actions(
+        reply, hevy_client, current_user.id, db)
     reply, knowledge_actions, knowledge_write_results = _process_knowledge_updates(
         reply, current_user.id, db)
     reply, capability_actions = _process_capability_updates(reply, current_user.id, db)
 
     all_actions = exercise_actions + routine_actions + knowledge_actions + capability_actions
+    # The routine and knowledge/schedule lanes are both mapped onto WriteResult now (Q144
+    # folds the routine lane onto #283's substrate); one combined list drives the single
+    # narrate-after-write pass and the deterministic footer. The exercise-action lane stays
+    # string-only this pass — the remaining un-wrapped Hevy write surface (Q144).
+    all_write_results = routine_write_results + knowledge_write_results
 
     # Narrate-after-write (Q143a / WS4). `reply` was generated in the single pass above,
     # BEFORE these writes executed, so any "saved" it claims precedes the outcome. If every
-    # knowledge/schedule write saved, that prose is already true and is kept unchanged (no
-    # second call). If any failed, the prose is discarded and regenerated to report the true
-    # per-row outcome. Either way the confirmation strings and the always-on deterministic
-    # footer are appended — the footer is the hard floor if pass-2 itself misreports. The
-    # SAME `client` is reused for the bounded second call.
+    # write (routine + knowledge/schedule) saved, that prose is already true and is kept
+    # unchanged (no second call). If any failed, the prose is discarded and regenerated to
+    # report the true per-row outcome. Either way the confirmation strings and the always-on
+    # deterministic footer are appended — the footer is the hard floor if pass-2 itself
+    # misreports. The SAME `client` is reused for the bounded second call.
     reply, _second_call_fired = _compose_response(
         client=client,
         model=MODEL,
         user_message=body.message,
         reply=reply,
         all_actions=all_actions,
-        write_results=knowledge_write_results,
+        write_results=all_write_results,
     )
 
-    # `write_results` is the machine-checkable outcome of the knowledge/schedule write
-    # lane (#283) — a client (or a later turn) hard-gates on `saved` rather than trusting
-    # the reply's prose. Only the knowledge lane is mapped onto this shape today; the Hevy
-    # routine/exercise actions remain string-only (Q143).
+    # `write_results` is the machine-checkable outcome of the write lanes — a client (or a
+    # later turn) hard-gates on `saved` rather than trusting the reply's prose. The routine
+    # lane (Q144) and the knowledge/schedule lane (#283) are both mapped onto this shape; the
+    # Hevy exercise-action lane remains string-only (the last un-wrapped write surface, Q144).
     return ChatResponse(
         response=reply,
         actions_taken=all_actions,
-        write_results=knowledge_write_results,
+        write_results=all_write_results,
     )

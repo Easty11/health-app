@@ -173,7 +173,7 @@ def test_same_turn_create_then_use_resolves_by_title(db_session, monkeypatch):
 
     # The call-site order, verbatim from chat.py: exercises, then routines.
     reply, ex_actions = _run(chat._process_exercise_actions(reply, 1, db_session))
-    reply, rt_actions = _run(chat._process_routine_actions(
+    reply, rt_actions, _rt_writes = _run(chat._process_routine_actions(
         reply, FakeHevyClient(), 1, db_session))
 
     assert ex_actions == ["✓ Custom exercise 'Copenhagen Plank' created in Hevy"]
@@ -208,7 +208,7 @@ def test_reversed_order_would_fail_to_resolve(db_session, monkeypatch):
         + "\n</hevy_create_routine>"
     )
 
-    reply, rt_actions = _run(chat._process_routine_actions(
+    reply, rt_actions, _rt_writes = _run(chat._process_routine_actions(
         reply, FakeHevyClient(), 1, db_session))
 
     assert len(rt_actions) == 1
@@ -381,7 +381,7 @@ def test_routine_with_unresolved_title_creates_no_exercise_and_no_routine(db_ses
                                                               "sets": []}]})
              + "\n</hevy_create_routine>")
 
-    _, actions = _run(chat._process_routine_actions(reply, FakeHevyClient(), 1, db_session))
+    _, actions, _writes = _run(chat._process_routine_actions(reply, FakeHevyClient(), 1, db_session))
 
     assert calls == []
     assert "could not resolve exercise(s)" in actions[0]

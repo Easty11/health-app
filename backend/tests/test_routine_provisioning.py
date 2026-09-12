@@ -47,7 +47,7 @@ def test_title_only_resolves_end_to_end(db_session):
     client = FakeHevyClient()
     reply = _block('{"title":"Bench Press (Barbell)","sets":[{"type":"normal","reps":8}]}')
 
-    cleaned, actions = asyncio.run(
+    cleaned, actions, write_results = asyncio.run(
         chat_mod._process_routine_actions(reply, client, USER, db_session)
     )
 
@@ -57,6 +57,10 @@ def test_title_only_resolves_end_to_end(db_session):
     assert "title" not in ex                          # title stripped after resolution
     assert any("created" in a for a in actions)
     assert "<hevy_create_routine>" not in cleaned      # block stripped from visible reply
+    # The create is mapped onto the WriteResult substrate (Q144): saved, coded `created`.
+    assert len(write_results) == 1
+    assert write_results[0].saved is True
+    assert write_results[0].reason_code == "created"
 
 
 # ---------- (b) existing id -> passed through untouched ----------
@@ -65,7 +69,7 @@ def test_existing_id_passthrough_untouched(db_session):
     client = FakeHevyClient()
     reply = _block('{"exercise_template_id":"AAAA1111","sets":[{"type":"normal","reps":5}]}')
 
-    _cleaned, _actions = asyncio.run(
+    _cleaned, _actions, _write_results = asyncio.run(
         chat_mod._process_routine_actions(reply, client, USER, db_session)
     )
 
@@ -77,12 +81,16 @@ def test_unresolvable_title_skips_routine(db_session):
     client = FakeHevyClient()
     reply = _block('{"title":"Totally Made Up Lift","sets":[{"type":"normal","reps":5}]}')
 
-    _cleaned, actions = asyncio.run(
+    _cleaned, actions, write_results = asyncio.run(
         chat_mod._process_routine_actions(reply, client, USER, db_session)
     )
 
     assert client.calls == []                          # create_routine never called
     assert any("could not resolve" in a.lower() for a in actions)
+    # Unresolved surfaces as a WriteResult, not a silent string (Q144 GATE).
+    assert len(write_results) == 1
+    assert write_results[0].saved is False
+    assert write_results[0].reason_code == "unresolved_exercise"
 
 
 # ---------- (d) id + title together — id wins, title is inert ----------
@@ -100,7 +108,7 @@ def test_id_and_title_together_uses_id_and_ignores_title(db_session):
         '"sets":[{"type":"normal","reps":8}]}'
     )
 
-    _cleaned, actions = asyncio.run(
+    _cleaned, actions, _write_results = asyncio.run(
         chat_mod._process_routine_actions(reply, client, USER, db_session)
     )
 
@@ -123,7 +131,7 @@ def test_unresolved_title_warning_names_candidates(db_session):
     client = FakeHevyClient()
     reply = _block('{"title":"Bulgarian Split Squat","sets":[{"type":"normal","reps":8}]}')
 
-    _cleaned, actions = asyncio.run(
+    _cleaned, actions, _write_results = asyncio.run(
         chat_mod._process_routine_actions(reply, client, USER, db_session)
     )
 
@@ -141,7 +149,7 @@ def test_unresolved_title_with_no_candidates_says_so(db_session):
     client = FakeHevyClient()
     reply = _block('{"title":"Zercher Moonwalk Press","sets":[{"type":"normal","reps":5}]}')
 
-    _cleaned, actions = asyncio.run(
+    _cleaned, actions, _write_results = asyncio.run(
         chat_mod._process_routine_actions(reply, client, USER, db_session)
     )
 
