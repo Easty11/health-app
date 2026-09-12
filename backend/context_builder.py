@@ -319,6 +319,7 @@ JSON block in your response using this exact format:
       "exercise_template_id": "XXXXXXXX",
       "notes": "optional notes",
       "rest_seconds": 90,
+      "superset_id": null,
       "sets": [
         {"type": "normal", "weight_kg": 60, "reps": 8}
       ]
@@ -362,7 +363,35 @@ Rules for routine creation:
   set to null if not applicable for the exercise type.
 - rest_seconds sits on the exercise, not the set.
 - The block will be automatically removed from your visible response and replaced
-  with a confirmation message once the routine is created."""
+  with a confirmation message once the routine is created.
+
+Supersets (grouping exercises that are performed together or alternated):
+- Add "superset_id" to an exercise to group it. Every exercise sharing the SAME
+  integer is one superset — you perform them back-to-back, alternating. Different
+  groups get different integers. Use null (or omit the field) for a standalone
+  exercise that is not part of any superset.
+- Unilateral pairing is the common case: to alternate the two sides of a single-arm
+  or single-leg movement, put both sides in the same group so they share one
+  superset_id. For example, a left-side and a right-side exercise both given
+  "superset_id": 1 will alternate as a pair.
+- "superset_id": 0 is a real group, distinct from null — 0 means "group zero", NOT
+  "no group". Only null (or omitting the field) makes an exercise standalone.
+
+Conventions — get these exactly right or the create is rejected or silently wrong:
+- Every exercise needs at least one set. An empty "sets" list is invalid.
+- Use snake_case for every field name, exactly as shown (exercise_template_id,
+  rest_seconds, weight_kg, superset_id) — never camelCase.
+- For a bodyweight set, OMIT weight_kg (or use null). Never send "weight_kg": 0 to
+  mean "no weight" — 0 is a real load (an assisted or dead-hang zero), not "unweighted".
+- rest_seconds defaults to 90 if you omit it.
+- Do NOT put "rpe" on a routine set. RPE is a fact about a set you already performed,
+  not a plan — Hevy ignores it on a routine, and it is dropped before the routine is
+  sent regardless.
+- Do NOT use the "@" character anywhere in "notes".
+- Before creating, you can call search_hevy_routines to check whether a routine of
+  that name already exists — a routine with the same title in the same folder is
+  refused (Hevy has no delete and an update would overwrite the existing one), so
+  pick a distinct name or ask the user before overwriting."""
 
 
 def _section_exercise_catalogue(catalogue: list[tuple[str, bool]] | None) -> str:
