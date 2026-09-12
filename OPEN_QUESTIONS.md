@@ -4343,8 +4343,11 @@ Owner: Luke / next build (routine create-guard). Neither blocks #285.
 - **Superset write (d, #287)** also landed this arc: `superset_id` + the fragile conventions documented in
   `_section_routine_creation`.
 
-**Residual — the exercise-action lane is the last un-wrapped Hevy write surface.** `_process_exercise_actions`
-(custom-exercise creation) stays string-only this pass, mirroring #283's scope-boundary discipline — flagged, not folded
-silently. Folding it onto `write_results` is the remaining option (see #286 "Do not revisit unless").
+**Residual — DISCHARGED (#288).** The exercise-action lane (`_process_exercise_actions`) is folded onto
+`write_results` — wrap-only, no collision guard, because the lane is already idempotent (the `resolve_exercise`
+pre-check + `create_and_resolve`'s #65 pre-check + the #212 freshness gate structurally prevent a duplicate mint). It was
+the last string-only Hevy write surface; with it wrapped, the acknowledgement-discipline arc across schedule
+(#281/#283/#284), `/chat` knowledge, Hevy routine (#286) and Hevy exercise (#288) is complete — no write lane can narrate
+an unverified success.
 
-**State:** DONE → #286 (a,b) · #287 (d); exercise-action lane residual noted above (tracked in #286)
+**State:** DONE → #286 (a,b) · #287 (d) · #288 (exercise-lane fold; residual discharged — arc complete)
