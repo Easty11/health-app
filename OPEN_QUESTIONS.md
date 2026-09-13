@@ -4407,3 +4407,25 @@ the same finite-or-reject discipline on the read/parse path, or whether the read
 (e.g. `_e1rm`, RIR bands) against NaN/None. Not investigated this session (Concern A was the write path).
 
 **State:** OPEN
+
+## Q148. Progression-tiered lifecycle, §G measure declaration, and proactive §G surfacing (DEFERRED from #290)
+
+Three follow-ons deliberately not built in the loose consumer (#290):
+
+- **(a) Tight consumer — screen→train lifecycle.** A per-region screen→train lifecycle where a passing
+  screen auto-promotes the region to trainable AND the screen result selects a progression tier
+  (regression → full expression), especially §E/§G (e.g. hop: pogo → line hops → bounding → depth). Needs
+  progression-tiered pool tagging that does not exist. The rotation/recency rule in #290 is the intended
+  hook point for tier selection.
+- **(b) Declare §G measures on the taxonomy.** Give `sit_to_rise`, `gait_speed`, `grip_strength`,
+  `single_leg_balance_eyes_closed`, `loaded_carry_capacity_bw` a `Region.measures` entry so §G screens via
+  the Measure layer instead of #290's honest "no instrument yet" stub. Additive, no migration. Gated on
+  domain grounding — some clinical-adjacent (practitioner input), some sport/longevity norms — which is why
+  #290 did NOT invent them (they are `Confidence.GUESSING`/`needs_norm`).
+- **(c) Proactive §G surfacing.** `compute_probe_queue` excludes `queue_eligible=False` regions, so #290's
+  consumer only handles §G reactively (as a `fortify` target). Making the engine actively schedule §G
+  screens is an upstream `compute_probe_queue` change, out of #290's scope.
+
+Revisit once the loose router has real screen data flowing and tags are being confirmed.
+
+**State:** OPEN (DEFERRED — logged not built with #290)
