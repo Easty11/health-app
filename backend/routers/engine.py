@@ -41,6 +41,7 @@ from engine import (
     adaptation,
     observations as observations_mod,
     profile as profile_mod,
+    region_exercise as region_exercise_mod,
     resolver as resolver_mod,
     selection,
     taxonomy,
@@ -276,6 +277,12 @@ async def get_next(
     # Fold the `review_on` date into the response block here — the engine never touches it.
     if phase is not None and "training_phase" in out:
         out["training_phase"]["review_on"] = str(phase.review_on) if phase.review_on else None
+    # Region→exercise consumer (#NEXT): resolve the prescription to a concrete exercise
+    # (train) or a screen, pure-downstream — `out` above is unchanged, this only adds a key.
+    out["exercise"] = region_exercise_mod.resolve_prescription(
+        db, current_user.id, out,
+        recent_template_ids=region_exercise_mod.recent_template_ids(db, current_user.id),
+    )
     return out
 
 
