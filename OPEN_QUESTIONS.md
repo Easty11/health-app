@@ -4527,3 +4527,16 @@ history worth reflecting, then run it as-of each past date. Watch-point, not owe
 **Trigger to close:** when Q151 resolves recovery.py (adopt with a consumer that reads `hrv_deviation`, or delete the module) AND no consumer calls the arbitration selection (`.canonical`). Then delete `_SOURCE_RANK` + the arbitration branch and keep `_hrv_rows`. If a future need for a single arbitrated number arises, derive it from the deviation model via `representative_source` (highest-confidence/highest-weight source) — NEVER a resurrected rank. Until then the branch stays callable but no NEW consumer may call it (enforced by review + the `recovery_reads` docstring). This is coupled to Q151, not independent; track consumer migration to completion so dual-reader does not become permanent (the failure mode Q151 itself names).
 
 **State:** OPEN (deferred — blocked on Q151; the branch is superseded but callable until recovery.py's disposition is decided)
+
+## Q154. Aerobic ingest is not automatable — the metabolic branch of the scheduled load chain rolls stale `aerobic_sessions`  [DEFERRED]
+
+The #296 scheduled orchestrator (`scripts/refresh_load.py`) automates the resistance ingest (Hevy API → `hevy_workouts`) but NOT the aerobic ingest. Step 3 (`load_events_metabolic`) only ROLLS whatever is already in `aerobic_sessions`; nothing in the nightly sweep refreshes that table, so metabolic load silently ages to the last manual Polar pull. Verified 2026-09-14: the two writers of `aerobic_sessions` are both unautomatable as-is —
+
+- `routers/polar.py::sync_polar_sessions` — the Polar AccessLink **API** pull, the only path that fetches fresh sessions. Request-coupled: `current_user` dependency + a per-request OAuth client (`_valid_client(current_user.id, db)`). Making it batch-callable crosses the router/contract boundary #296 was explicitly scoped OUT of.
+- `import_polar.py::import_flow_export` — a batch-callable **ZIP-export** CLI, but it needs a human-downloaded Polar Flow export ZIP per run (no API pull). Not a recurring automation candidate.
+
+So v1 scopes to rolling existing aerobic sessions only (#296 decision), leaving a freshness gap on the metabolic window.
+
+**Trigger to close / options:** extract the Polar AccessLink fetch+persist core out of `sync_polar_sessions` into a per-user batch callable (token read from `UserIntegration(provider="polar")`, refresh handled outside the request), then add it as the aerobic counterpart to step 1 in `refresh_load.py` (Hevy and Polar ingests side by side, each per-user isolated). The refactor must preserve the endpoint's contract (the router keeps calling the extracted core). Until then the nightly metabolic figure is only as fresh as the last manual Polar sync.
+
+**State:** OPEN (deferred — filed by #296; not solved there. Blocks fully-fresh nightly metabolic load, not the resistance chain.)
