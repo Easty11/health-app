@@ -4493,3 +4493,29 @@ scope once that ticket lands. Full event-detection may remain gated on next hard
 **State:** OPEN — blocked on the `health-connect-app` scraper-trace test. Storage is a schema
 migration → § Merge disposition hold (a): full human review, no self-merge. Not built this
 session (gate unanswered + shape gate-dependent + migration hold).
+
+## Q151. recovery.py — unmounted canonical-recovery surface: adopt with a consumer or delete  [DEFERRED]
+
+`routers/recovery.py` carries a working source-agnostic `hrv` block (built on `canonical_hrv`)
+alongside the Samsung + HealthConnect blocks, but its router is NOT mounted in `main.py` — nothing
+consumes `/recovery/summary`. It partially duplicates `/health/summary` and the MCP recovery tool.
+Deliberately left unmounted in the #291 HRV-consumption rewire (Q130): the Garmin-into-readiness
+goal is already delivered by the checkin / current_state / MCP-readiness / series rewires, so
+mounting it would ship a live, testable, maintainable endpoint for zero consumers — surface sprawl
+this task did not need. Decide adopt-or-delete as its own scoped call: adopt WITH a defined consumer
+(a frontend/dashboard that reads the `hrv` block), or delete the module.
+
+**State:** OPEN (deferred — decide when a consumer is proposed, or delete)
+
+## Q152. Historical `daily_records.passive_hrv_ms` backfill from `canonical_hrv` (Garmin cutover seam)  [DEFERRED]
+
+`/series/readiness` reads `daily_records.passive_hrv_ms`, a value frozen at AM check-in. The #291
+rewire repoints the snapshot source to `canonical_hrv` for FUTURE check-ins only; historical rows
+keep their Samsung-snapshotted values, leaving a seam at the date a user connects Garmin (before it:
+Samsung-snapshotted; after: canonical). A clean history needs a one-off script recomputing
+`passive_hrv_ms` from `canonical_hrv` as-of each past date. Non-destructive (recomputes a
+forward-frozen scalar) and a NO-OP today: canonical == Samsung on every existing night (per-user
+overlap nil, Q131), so backfilling now changes nothing. Defer until Garmin has synced a stretch of
+history worth reflecting, then run it as-of each past date. Watch-point, not owed work.
+
+**State:** OPEN (deferred — no-op until Garmin has overlapping history)
