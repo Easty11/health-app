@@ -28,6 +28,7 @@ import models
 from auth import get_current_user
 from database import get_db
 from routers import recovery
+from routers.checkin_v2 import AMCheckInIn, _snapshot_passive, submit_am
 from routers.samsung_hrv import HRVReadingIn, _mirror_passive_overnight_hrv
 
 
@@ -270,3 +271,74 @@ def test_summary_device_blocks_byte_identical_to_pre_change_snapshot(db_session)
         "total_days_synced": 1,
     }
     assert body["has_data"] is True
+
+
+# ── Stage B (consumption): the passive snapshot reads canonical HRV ────────────────
+#
+# `_snapshot_passive` feeds daily_records.passive_hrv_ms → /series/readiness. After the
+# Q130 rewire it reads the HRV scalar through canonical_hrv (source-agnostic, arbitrated),
+# not samsung_hrv_readings directly, so Garmin HRV surfaces once connected. Sleep stays
+# on Health Connect (unchanged), which these tests do not seed.
+
+_FOR_DATE = date(2026, 6, 10)
+
+
+def test_snapshot_passive_garmin_only_night_returns_garmin_rmssd(db_session):
+    user = _user(db_session)
+    db_session.add(models.HrvReading(
+        user_id=user.id, captured_at=_FOR_DATE, source="garmin", rmssd_ms=42.0))
+    db_session.commit()
+
+    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 42.0
+
+
+def test_snapshot_passive_contested_night_returns_garmin_over_samsung(db_session):
+    user = _user(db_session)
+    db_session.add(models.HrvReading(
+        user_id=user.id, captured_at=_FOR_DATE, source="samsung", rmssd_ms=50.0))
+    db_session.add(models.HrvReading(
+        user_id=user.id, captured_at=_FOR_DATE, source="garmin", rmssd_ms=42.0))
+    db_session.commit()
+
+    # Garmin outranks Samsung on the contested night → its RMSSD is snapshotted.
+    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 42.0
+
+
+def test_snapshot_passive_samsung_only_night_returns_samsung_rmssd(db_session):
+    user = _user(db_session)
+    # Samsung-only night, as the backfill / dual-write writes it into hrv_readings.
+    db_session.add(models.HrvReading(
+        user_id=user.id, captured_at=_FOR_DATE, source="samsung", rmssd_ms=50.0))
+    db_session.commit()
+
+    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 50.0
+
+
+def test_snapshot_passive_picks_latest_at_or_before_for_date(db_session):
+    """as_of=for_date: a later night must NOT leak into an earlier snapshot."""
+    user = _user(db_session)
+    db_session.add_all([
+        models.HrvReading(user_id=user.id, captured_at=_FOR_DATE, source="garmin", rmssd_ms=42.0),
+        models.HrvReading(user_id=user.id, captured_at=_FOR_DATE + timedelta(days=1),
+                          source="garmin", rmssd_ms=99.0),
+    ])
+    db_session.commit()
+
+    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 42.0
+
+
+def test_garmin_hrv_row_propagates_to_daily_record_passive_hrv_ms(db_session):
+    """End-to-end: a Garmin hrv_readings row flows through submit_am's snapshot into
+    daily_records.passive_hrv_ms — the value /series/readiness later reads."""
+    user = _user(db_session)
+    # A canonical Garmin night at or before today (submit_am snapshots as_of today).
+    db_session.add(models.HrvReading(
+        user_id=user.id, captured_at=date.today() - timedelta(days=1),
+        source="garmin", rmssd_ms=47.0))
+    db_session.commit()
+
+    body = AMCheckInIn(
+        morning_readiness=3, sleep_quality=3, fatigue=5, motivation=5, life_load=3)
+    record = submit_am(body=body, current_user=user, db=db_session)
+
+    assert record.passive_hrv_ms == 47.0

@@ -24,6 +24,7 @@ from declared_state import lift_declared_state
 from engine import profile as profile_mod
 from engine import training_phase as training_phase_mod
 from reads.labs_reads import LabRow, latest_lab_results
+from reads.recovery_reads import canonical_hrv
 
 
 @dataclass
@@ -74,21 +75,21 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
     capability_rows = db.query(models.CapabilityState).filter_by(user_id=user_id).all()
 
     window_start = today - timedelta(days=7)
-    hrv_readings = (
-        db.query(models.SamsungHRVReading)
-        .filter(
-            models.SamsungHRVReading.user_id == user_id,
-            models.SamsungHRVReading.captured_at >= window_start,
-            models.SamsungHRVReading.context != "session",
-        )
-        .order_by(models.SamsungHRVReading.captured_at.desc())
-        .all()
-    )
-    hrv_values = [r.hrv_ms for r in hrv_readings if r.hrv_ms is not None]
+    # Source-agnostic HRV baseline (Q130): read canonical nightly readings over
+    # `hrv_readings` (Garmin-arbitrated), not `samsung_hrv_readings` directly, so the
+    # baseline the engine/chat sees reflects Garmin once connected. Every row is
+    # passive-overnight-equivalent by construction, so no `context != 'session'`
+    # analogue is needed; `.canonical` picks one row per contested night.
+    hrv_readings = [
+        r
+        for r in canonical_hrv(user_id, db, since=window_start)
+        if r.canonical
+    ]
+    hrv_values = [r.rmssd_ms for r in hrv_readings if r.rmssd_ms is not None]
     hrv_baseline = None
     if hrv_values:
         mean = sum(hrv_values) / len(hrv_values)
-        latest_ms = hrv_readings[0].hrv_ms
+        latest_ms = hrv_readings[0].rmssd_ms
         hrv_baseline = HRVBaseline(
             mean_ms=mean,
             n=len(hrv_values),

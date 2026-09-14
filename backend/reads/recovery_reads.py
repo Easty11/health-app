@@ -1,5 +1,5 @@
 """
-canonical_hrv(user_id, db, *, since, limit) -> list[HrvReading]
+canonical_hrv(user_id, db, *, since, as_of, limit) -> list[HrvReading]
 arbitrate(readings) -> list  (pure; sets `.canonical` on each row)
 
 Read-time cross-source arbitration over `hrv_readings`. Two sources (Garmin,
@@ -77,14 +77,22 @@ def canonical_hrv(
     db: Session,
     *,
     since: Optional[date] = None,
+    as_of: Optional[date] = None,
     limit: Optional[int] = None,
 ) -> list:
     """HRV readings for a user, each carrying a derived `.canonical` flag.
 
-    Arbitration runs over the whole `since`-windowed set BEFORE `limit` is applied, so
-    a night's counterpart from another source is never truncated out of the group.
-    Reads `hrv_readings` only (source-agnostic); Samsung rows are absent until the
-    deferred unification migration.
+    `since` is a lower bound (captured_at >= since); `as_of` an upper bound
+    (captured_at <= as_of). Both are applied BEFORE arbitration, so a night's
+    counterpart from another source is never dropped out of its group — the
+    `as_of` bound cuts on the night, never mid-group, keeping same-night
+    arbitration complete (`_snapshot_passive` needs "latest canonical at or before
+    for_date", an upper bound the `since`-only signature could not express).
+
+    Arbitration then runs over the whole windowed set BEFORE `limit` is applied, so
+    truncation likewise never splits a night. Reads `hrv_readings` only
+    (source-agnostic); Samsung rows are present once the unification backfill /
+    dual-write has run.
     """
     q = (
         db.query(models.HrvReading)
@@ -93,6 +101,8 @@ def canonical_hrv(
     )
     if since is not None:
         q = q.filter(models.HrvReading.captured_at >= since)
+    if as_of is not None:
+        q = q.filter(models.HrvReading.captured_at <= as_of)
     rows = q.all()
     arbitrate(rows)
     if limit is not None:
