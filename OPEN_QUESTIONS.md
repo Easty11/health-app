@@ -4429,3 +4429,67 @@ Three follow-ons deliberately not built in the loose consumer (#290):
 Revisit once the loose router has real screen data flowing and tags are being confirmed.
 
 **State:** OPEN (DEFERRED — logged not built with #290)
+
+---
+
+## Q150. Oxygenation awareness capture — overnight SpO2 as a series, not a scalar [SAFETY-RELEVANT]
+
+Retrospective, morning-review awareness of overnight oxygenation for a CPAP-dependent user
+(ResMed AirMini — sealed, no SpO2 input, no clinician-grade export; verified dead end). On
+current hardware the Samsung wrist/ring path is the ONLY oxygenation source. Hardware path
+forward is owned separately, deliberately not specced here.
+
+**What this is:** nightly SpO2 MINIMUM, count/duration of dips below a threshold (88% clinical
+convention, user-configurable), and dip timestamps — so mask-off / mask-shift desaturations
+are visible after the fact and trends are trackable over weeks.
+
+**Hard scope boundary — must be enforced in UI + framing:** NOT real-time alerting (cannot and
+must not wake the user), NOT a safety device, NOT a mask-failure backstop. The CPAP and its own
+alarms are the safety layer; this is pattern-awareness only, never positioned or relied on
+otherwise.
+
+**Storage shape (decided-in-brief, gated only on build):** series, not a scalar — a
+`hrv_readings`/`hrv_samples`-style parent+child (see `models.py:482–533`), NOT a mean.
+`SamsungHRVReading.spo2_average_pct` (`models.py:476`) is ACTIVELY WRONG for this purpose: a
+nightly mean masks the dips by construction. It is currently surfaced as the SpO2 figure in
+`context_builder.py:805`, `routers/recovery.py:65`, `routers/health.py:52`, and
+`mcp_server.py` (×2) — every one of those reads the masking average. The device-agnostic target
+already reserves the metric: `'spo2'` is in `CANONICAL_METRIC_TYPES` (SCHEMA.md). SpO2 is
+therefore pulled OUT of the trim decision entirely — neither keep nor trim: it is REBUILD.
+
+**BLOCKING GATE — scraper-trace capability test (owned by `health-connect-app`, NOT answerable
+from this tree):** can the accessibility scraper extract the SAMPLE SERIES behind Samsung
+Health's sleep-oxygenation graph, or only the rendered summary tile?
+  - Trace reachable → event-detection (min + time-below + timestamps) is buildable → full scope.
+  - Summary only → best achievable is a coarse nightly minimum → ship that for TREND only;
+    event-detail deferred to next-hardware.
+  HC path is insufficient regardless (sparse daytime-mixed spot reads, gaps span mask-off
+  windows — verified). Cannot found event-detection on spots.
+
+  **In-tree evidence, not an answer:** as of the last integration the scraper POSTs only a scalar
+  `spo2_average_pct` to `routers/samsung_hrv.py` (payload + bounds at `samsung_hrv.py:49,72`) —
+  no SpO2 series field exists. That places the scraper on the "summary" side *today*, but it does
+  NOT settle the ceiling: a scraper that aggregates a series it CAN see is indistinguishable from
+  one that can only read the tile, from this end. Only a trace test against a live sleep-oxygenation
+  graph in `health-connect-app` distinguishes them. That test is the gate; it is unseeable here.
+
+**GUARDRAIL — false reassurance is the critical failure mode for this user:** never render a
+night "fine"/green on sparse or thin coverage. Absence of a recorded dip is NOT absence of a dip.
+Every oxygenation surface must show coverage/confidence and degrade to "minimum recorded: X%,
+coverage thin" rather than an unearned all-clear.
+
+**Value even at coarse resolution:** the AirMini gives zero SpO2 visibility. A consistent nightly
+minimum alone surfaces mask-effectiveness drift over weeks, clustering of bad nights, and the
+effect of a mask/cushion change — the near-term win is retrospective trend.
+
+**Related:** skin-temp + respiration overnight traces are the same "capture withheld Samsung
+traces" family, same two-gate logic (withheld-from-HC + scraper-reachable), lower priority —
+separate ticket. The trim decision (SpO2 excised per above) is not yet registered in this repo.
+
+**RESOLVES WHEN:** trace-test answered (in `health-connect-app`); capture built to whatever
+resolution that allows; storage in series shape; guardrail enforced; SpO2 removed from the trim
+scope once that ticket lands. Full event-detection may remain gated on next hardware.
+
+**State:** OPEN — blocked on the `health-connect-app` scraper-trace test. Storage is a schema
+migration → § Merge disposition hold (a): full human review, no self-merge. Not built this
+session (gate unanswered + shape gate-dependent + migration hold).
