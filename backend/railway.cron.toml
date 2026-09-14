@@ -1,0 +1,44 @@
+# Railway config-as-code for the load-chain refresh CRON SERVICE (#296).
+#
+# MECHANISM (verified against the live project, 2026-09-14). Railway runs a cron by
+# giving a SERVICE a `cronSchedule`: its container runs the start command on schedule
+# and MUST EXIT when done; the next tick starts a fresh container. The existing
+# `health-app-backend` service is a long-running web server (`uvicorn`, never exits),
+# so a cronSchedule cannot ride it -- a cron target must terminate. The load sweep
+# therefore runs as a DEDICATED cron service in this same project, built from this same
+# repo + root (`Easty11/health-app`, rootDirectory `/backend`, same image as the web
+# service), whose only job is to run `python -m scripts.refresh_load` once per night and
+# exit.
+#
+# WHY A SEPARATE CONFIG FILE. A service auto-reads `railway.toml` at its root; the web
+# service already owns `backend/railway.toml` (the uvicorn start command). Two services
+# share the `/backend` root, so the cron service is pointed at THIS file via its
+# "Config-as-code path" setting (`backend/railway.cron.toml`) to avoid clobbering the
+# web service's start command. See DECISIONS_LOG #296.
+#
+# ENV (the #296 VERIFY point). Railway variables are PER SERVICE -- a new service does
+# NOT inherit the backend's. This standalone cron service must be GIVEN the same env the
+# run needs so the internal `.railway.internal` DB host resolves and Hevy keys decrypt:
+#   DATABASE_URL  -> reference the Postgres service:  ${{health-app-DB.DATABASE_URL}}
+#   FERNET_KEY    -> the SAME value the backend uses (encryption.py builds Fernet at
+#                    import and decrypts each user's Hevy key). Compare by SHA-256 digest,
+#                    never by rendering the value (CLAUDE.md secrets rule #111).
+# No other variable is required by the load chain's import graph.
+#
+# SCHEDULE. 16:00 UTC = 02:00 AEST (Australia/Brisbane, UTC+10, no DST -- matches
+# `load_metrics._AEST`). Load buckets on the AEST calendar day, so the sweep runs just
+# after the AEST day boundary. Fixed to UTC+10 year-round (the code buckets on AEST, not
+# civil AEDT).
+#
+# FORCED / MANUAL RUN. To exercise the chain on demand against prod without waiting for
+# 16:00 UTC, run it in the backend image and env:
+#   railway ssh --service health-app-backend
+#   cd /app && /opt/venv/bin/python -m scripts.refresh_load            # all keyed users
+#   cd /app && /opt/venv/bin/python -m scripts.refresh_load --user <uid>   # one user
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python -m scripts.refresh_load"
+cronSchedule = "0 16 * * *"
