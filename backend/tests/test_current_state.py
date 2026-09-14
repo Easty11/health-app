@@ -341,3 +341,73 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     new_prompt = _excise_hrv(new_prompt, _NEW_HRV_LABEL)
 
     assert old_prompt == new_prompt
+
+
+# ---------- (e) #294/#295 settling wire — current_state feeds the active phase-change
+# date into hrv_deviation, so a mid-deload baseline is flagged, and surfaces the verdict
+# on HRVBaseline.baseline_state (the scalar alone would hide it). ----------
+
+_HRV_TODAY = date(2026, 6, 30)
+
+
+def _seed_mature_hrv(db, user_id, source="samsung", *, baseline_rmssd=50.0, today_rmssd=56.0):
+    """25 nightly baseline rows @ baseline_rmssd, then today's reading @ today_rmssd —
+    a mature source with an upward move (→ high confidence absent settling)."""
+    for i in range(25):
+        db.add(models.HrvReading(
+            user_id=user_id, captured_at=_HRV_TODAY - timedelta(days=25 - i),
+            source=source, rmssd_ms=baseline_rmssd,
+        ))
+    db.add(models.HrvReading(
+        user_id=user_id, captured_at=_HRV_TODAY, source=source, rmssd_ms=today_rmssd,
+    ))
+    db.commit()
+
+
+def _open_phase(db, user_id, entered_on):
+    db.add(models.TrainingPhase(
+        user_id=user_id, label="deload", probe_posture="held",
+        entered_on=entered_on, asserted_by="user", asserted_on=entered_on, source="api",
+    ))
+    db.commit()
+
+
+def test_current_state_flags_settling_during_recorded_phase_change(db_session):
+    """An open training phase changed within SETTLING_NIGHTS of `today` makes the HRV
+    baseline unsettled: baseline_state == "settling" and the scalar is still emitted
+    (deviation present, just flagged)."""
+    user = _make_user(db_session, email="settle@example.com")
+    _seed_mature_hrv(db_session, user.id)
+    _open_phase(db_session, user.id, _HRV_TODAY - timedelta(days=3))
+
+    state = current_state_mod.current_state(user.id, db_session, _HRV_TODAY)
+
+    assert state.hrv_baseline is not None                 # deviation still emitted
+    assert state.hrv_baseline.baseline_state == "settling"
+    assert state.hrv_baseline.latest_ms == 56.0           # the scalar survives the flag
+
+
+def test_current_state_no_phase_is_none_safe_and_behaves_as_pre_change(db_session):
+    """No open training phase → phase_change_date None → settling off → prior behaviour.
+    Must not error, and baseline_state is never "settling"."""
+    user = _make_user(db_session, email="nophase@example.com")
+    _seed_mature_hrv(db_session, user.id)
+
+    state = current_state_mod.current_state(user.id, db_session, _HRV_TODAY)
+
+    assert state.hrv_baseline is not None
+    assert state.hrv_baseline.baseline_state == "normal"  # mature, unsettled → normal
+    assert state.hrv_baseline.baseline_state != "settling"
+
+
+def test_current_state_stale_phase_change_does_not_settle(db_session):
+    """A phase change older than SETTLING_NIGHTS no longer settles — the window is
+    bounded, so an ancient regime change does not cap confidence forever."""
+    user = _make_user(db_session, email="stalephase@example.com")
+    _seed_mature_hrv(db_session, user.id)
+    _open_phase(db_session, user.id, _HRV_TODAY - timedelta(days=30))
+
+    state = current_state_mod.current_state(user.id, db_session, _HRV_TODAY)
+
+    assert state.hrv_baseline is not None
+    assert state.hrv_baseline.baseline_state == "normal"

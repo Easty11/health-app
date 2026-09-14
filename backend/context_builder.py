@@ -841,6 +841,14 @@ def _section_samsung_hrv(readings: list[Any], now: datetime, baseline: HRVBaseli
         if baseline.diff_from_mean_ms is not None:
             direction = "above" if baseline.diff_from_mean_ms >= 0 else "below"
             lines.append(f"Today vs baseline: {abs(baseline.diff_from_mean_ms):.0f}ms {direction} mean")
+        # #294/#295: flag an unsettled baseline so the number isn't read at face value.
+        if baseline.baseline_state == "settling":
+            lines.append(
+                "Baseline unsettled — a recent training-phase change (deload / regime "
+                "change); treat the HRV deviation as low-confidence while it settles."
+            )
+        elif baseline.baseline_state == "building":
+            lines.append("Baseline still building — fewer than the mature-baseline nights.")
 
     # ----- last 7 readings -----
     lines.append("")
