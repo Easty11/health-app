@@ -25,6 +25,7 @@ from cbti.replay import evaluate_live_cycle
 from cbti.timeutil import clock_delta_minutes, clock_to_minutes, minutes_between
 from database import get_db
 from injury_trajectory import injury_soreness_key
+from reads.recovery_reads import canonical_hrv
 
 router = APIRouter(prefix="/checkin-v2", tags=["checkin-v2"])
 
@@ -216,16 +217,20 @@ def _freeze_diary(
 # ── passive snapshot ──────────────────────────────────────────────────────────
 
 def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, Any]:
-    """Latest Samsung HRV and HC sleep at the moment of AM capture."""
-    hrv_row = (
-        db.query(models.SamsungHRVReading)
-        .filter(
-            models.SamsungHRVReading.user_id == user_id,
-            models.SamsungHRVReading.captured_at <= for_date,
-            models.SamsungHRVReading.context != 'session',
-        )
-        .order_by(models.SamsungHRVReading.captured_at.desc())
-        .first()
+    """Latest canonical HRV and HC sleep at the moment of AM capture.
+
+    HRV reads through `canonical_hrv` (source-agnostic over `hrv_readings`,
+    Garmin-arbitrated) so Garmin HRV surfaces once connected; `as_of=for_date`
+    supplies the "latest canonical at or before capture" upper bound. Every
+    `hrv_readings` row is passive-overnight-equivalent by construction (the Samsung
+    mirror early-returns unless context=='passive_overnight'; the Garmin connector
+    writes nightly HRV only), so the old `context != 'session'` guard is implicitly
+    satisfied and needs no analogue here. Sleep stays on Health Connect (Garmin
+    supplies no sleep). (Q130 consumption.)
+    """
+    canon = next(
+        (r for r in canonical_hrv(user_id, db, as_of=for_date) if r.canonical),
+        None,
     )
     hc_row = (
         db.query(models.HealthConnectSync)
@@ -237,7 +242,7 @@ def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, An
         .first()
     )
     return {
-        "passive_hrv_ms": hrv_row.hrv_ms if hrv_row else None,
+        "passive_hrv_ms": canon.rmssd_ms if canon else None,
         "passive_sleep_min": hc_row.sleep_duration_minutes if hc_row else None,
     }
 
@@ -538,18 +543,16 @@ def get_prefill(
     passive = _snapshot_passive(current_user.id, today, db)
 
     hrv_ms = passive["passive_hrv_ms"]
-    hrv_baseline_rows = (
-        db.query(models.SamsungHRVReading)
-        .filter(
-            models.SamsungHRVReading.user_id == current_user.id,
-            models.SamsungHRVReading.captured_at <= today,
-            models.SamsungHRVReading.context != 'session',
-        )
-        .order_by(models.SamsungHRVReading.captured_at.desc())
-        .limit(7)
-        .all()
-    )
-    hrv_values = [r.hrv_ms for r in hrv_baseline_rows if r.hrv_ms is not None]
+    # Rolling baseline over the most recent 7 canonical nights (source-agnostic,
+    # Garmin-arbitrated — Q130). Filter `.canonical` before slicing so a contested
+    # night contributes exactly one value; both scalars (`hrv_ms` above and this
+    # baseline) now come from the same canonical source, so `vs_baseline` compares
+    # like with like.
+    hrv_values = [
+        r.rmssd_ms
+        for r in canonical_hrv(current_user.id, db, as_of=today)
+        if r.canonical and r.rmssd_ms is not None
+    ][:7]
     baseline = sum(hrv_values) / len(hrv_values) if hrv_values else None
     vs_baseline = round(hrv_ms - baseline, 1) if (hrv_ms and baseline) else None
 

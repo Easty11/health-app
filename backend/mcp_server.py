@@ -23,6 +23,7 @@ from oauth_provider import PersonalOAuthProvider
 import models
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from reads.labs_reads import latest_lab_results
+from reads.recovery_reads import canonical_hrv
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
@@ -446,6 +447,16 @@ def get_readiness_snapshot() -> str:
         {"user_id": user_id},
     )
 
+    # Q130: the readiness HRV FIGURE reads through canonical arbitration
+    # (source-agnostic over hrv_readings), so Garmin's RMSSD surfaces here on a
+    # contested night once connected. Sleep/SpO2/architecture below stay on the
+    # Samsung device row (Garmin supplies none). Scalar-only swap.
+    with SessionLocal() as _db:
+        _canon = next(
+            (row for row in canonical_hrv(user_id, _db) if row.canonical), None
+        )
+    canonical_hrv_ms = _canon.rmssd_ms if _canon is not None else None
+
     checkin_rows = _db_rows(
         """
         SELECT date, sleep_quality, fatigue, soreness::text,
@@ -486,7 +497,7 @@ def get_readiness_snapshot() -> str:
     if hrv_rows:
         r = hrv_rows[0]
         lines.append(f"Latest biometrics ({str(r['captured_at'])[:10]}):")
-        lines.append(f"  HRV: {r['hrv_ms']:.0f} ms" if r["hrv_ms"] is not None else "  HRV: —")
+        lines.append(f"  HRV: {canonical_hrv_ms:.0f} ms" if canonical_hrv_ms is not None else "  HRV: —")
         lines.append(f"  Sleep efficiency: {r['sleep_efficiency_pct']:.0f}%" if r["sleep_efficiency_pct"] is not None else "  Sleep efficiency: —")
         lines.append(f"  Sleep duration: {r['actual_sleep_time_minutes']:.0f} min" if r["actual_sleep_time_minutes"] is not None else "  Sleep duration: —")
         lines.append(f"  Deep: {r['deep_minutes']:.0f} min  REM: {r['rem_minutes']:.0f} min" if (r.get("deep_minutes") is not None and r.get("rem_minutes") is not None) else "  Sleep stages: —")

@@ -178,6 +178,18 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
             hrv_ms=50.0 + i,
             context="passive_overnight",
         ))
+        # Q130: current_state now computes the HRV baseline from canonical
+        # `hrv_readings` (source-agnostic), not `samsung_hrv_readings` directly. Mirror
+        # each Samsung night into hrv_readings exactly as the dual-write/backfill does,
+        # so the canonical baseline equals the pre-#43 monolith's Samsung-sourced one and
+        # this parity guard keeps exercising the baseline block (rather than narrowing it
+        # out). The Samsung rows above still drive the section's device readout unchanged.
+        db_session.add(models.HrvReading(
+            user_id=user.id,
+            captured_at=base_day + timedelta(days=i),
+            source="samsung",
+            rmssd_ms=50.0 + i,
+        ))
     db_session.commit()
     samsung_readings = (
         db_session.query(models.SamsungHRVReading)

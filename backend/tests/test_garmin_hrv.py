@@ -318,3 +318,38 @@ def test_canonical_hrv_windows_and_flags(db_session):
     assert len(rows) == 1
     assert rows[0].captured_at == date(2026, 8, 15)
     assert rows[0].canonical is True
+
+
+def test_canonical_hrv_as_of_upper_bounds_and_keeps_night_complete(db_session):
+    """as_of is an upper bound (captured_at <= as_of) applied BEFORE arbitration, so a
+    contested night on the boundary keeps BOTH source rows in the group — arbitration
+    stays complete and deterministic, never truncated mid-night by the bound."""
+    user = _user(db_session)
+    db_session.add_all([
+        models.HrvReading(user_id=user.id, captured_at=date(2026, 8, 14), source="garmin", rmssd_ms=40),
+        # 8/15 is contested — both sources report the boundary night.
+        models.HrvReading(user_id=user.id, captured_at=date(2026, 8, 15), source="samsung", rmssd_ms=50),
+        models.HrvReading(user_id=user.id, captured_at=date(2026, 8, 15), source="garmin", rmssd_ms=42),
+        # 8/16 is strictly after the bound — must be excluded.
+        models.HrvReading(user_id=user.id, captured_at=date(2026, 8, 16), source="garmin", rmssd_ms=44),
+    ])
+    db_session.commit()
+
+    rows = canonical_hrv(user.id, db_session, as_of=date(2026, 8, 15))
+    assert {r.captured_at for r in rows} == {date(2026, 8, 14), date(2026, 8, 15)}  # 8/16 dropped
+
+    aug15 = [r for r in rows if r.captured_at == date(2026, 8, 15)]
+    assert len(aug15) == 2                                   # full contested group retained
+    canon15 = [r for r in aug15 if r.canonical]
+    assert len(canon15) == 1                                 # exactly one canonical
+    assert canon15[0].source == "garmin" and canon15[0].rmssd_ms == 42   # Garmin outranks Samsung
+
+    aug14 = [r for r in rows if r.captured_at == date(2026, 8, 14)]
+    assert len(aug14) == 1 and aug14[0].canonical is True    # single-source night canonical
+
+    # since + as_of together window to exactly the boundary night, group still complete.
+    windowed = canonical_hrv(
+        user.id, db_session, since=date(2026, 8, 15), as_of=date(2026, 8, 15)
+    )
+    assert {r.captured_at for r in windowed} == {date(2026, 8, 15)}
+    assert len(windowed) == 2
