@@ -197,7 +197,7 @@ def _prompt(catalogue, **kw):
     user = models.User(email="a@b.c", hashed_password="x")
     state = CurrentState(
         device_profile=None, knowledge_entries=[], fortification_profile=None,
-        labs=[], hrv_baseline_7d=None,
+        labs=[], hrv_baseline=None,
     )
     return build_system_prompt(
         user=user, connected_integrations=["hevy"], state=state,

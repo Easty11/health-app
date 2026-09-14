@@ -292,16 +292,31 @@ def test_snapshot_passive_garmin_only_night_returns_garmin_rmssd(db_session):
     assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 42.0
 
 
-def test_snapshot_passive_contested_night_returns_garmin_over_samsung(db_session):
+def test_snapshot_passive_contested_night_takes_higher_weight_source(db_session):
+    """#292 SUPERSEDES `_SOURCE_RANK`: on a contested night the single `passive_hrv_ms`
+    scalar is the higher-WEIGHT source (the one with the more mature per-source baseline),
+    derived from the deviation model's `representative_source` — NOT a fixed device rank.
+    Here Samsung has 10 baseline nights and Garmin only 2, so Samsung is representative and
+    its RMSSD (50.0) is snapshotted — even though the old rank ranked Samsung BELOW Garmin
+    (which would have picked 42.0)."""
     user = _user(db_session)
+    # Samsung: a fuller baseline (10 prior nights) → higher maturity weight.
+    for i in range(1, 11):
+        db_session.add(models.HrvReading(
+            user_id=user.id, captured_at=_FOR_DATE - timedelta(days=i),
+            source="samsung", rmssd_ms=50.0))
+    # Garmin: a thin baseline (2 prior nights) → lower maturity weight.
+    for i in range(1, 3):
+        db_session.add(models.HrvReading(
+            user_id=user.id, captured_at=_FOR_DATE - timedelta(days=i),
+            source="garmin", rmssd_ms=42.0))
     db_session.add(models.HrvReading(
         user_id=user.id, captured_at=_FOR_DATE, source="samsung", rmssd_ms=50.0))
     db_session.add(models.HrvReading(
         user_id=user.id, captured_at=_FOR_DATE, source="garmin", rmssd_ms=42.0))
     db_session.commit()
 
-    # Garmin outranks Samsung on the contested night → its RMSSD is snapshotted.
-    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 42.0
+    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 50.0
 
 
 def test_snapshot_passive_samsung_only_night_returns_samsung_rmssd(db_session):

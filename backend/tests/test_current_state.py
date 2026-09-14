@@ -128,7 +128,7 @@ def test_current_state_empty_profile_user_returns_well_formed_empty_object(db_se
     assert state.fortification_profile is None
     assert state.fortification_profile_orm is None
     assert state.capability_state == []
-    assert state.hrv_baseline_7d is None
+    assert state.hrv_baseline is None
 
 
 # ---------- (d) context_builder is formatter-only (no behavioural drift) ----------
@@ -305,5 +305,39 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
 
     old_prompt = _excise_span(old_prompt, "pre-refactor")
     new_prompt = _excise_span(new_prompt, "current")
+
+    # NARROWED AGAIN (#292): the HRV baseline sub-block is rewritten BY INTENT — it now
+    # derives from the per-source-normalised deviation model (the representative source's
+    # OWN rolling baseline), not a fixed 7-night mean of `.canonical` rows, and the label
+    # changed from "7-day HRV baseline" to "HRV baseline (rolling)" to match (the window
+    # is the deviation reader's, no longer 7). Same reasoning as the #82/#230/#233
+    # narrowings: for this sub-block the guard's question ("did the #43 refactor drift?")
+    # is no longer answerable, old==new can never hold again, and PRE_REFACTOR_SHA cannot
+    # move. The new block is pinned by tests/test_hrv_deviation.py plus the current_state
+    # assertions elsewhere in this file.
+    _OLD_HRV_LABEL = "7-day HRV baseline:"
+    _NEW_HRV_LABEL = "HRV baseline (rolling):"
+    _HRV_END = "Last 7 readings (RMSSD):"
+    assert _OLD_HRV_LABEL in old_prompt and _NEW_HRV_LABEL in new_prompt, (
+        "the HRV baseline narrowing lost an anchor — it would silently remove the wrong "
+        "region or hide real drift"
+    )
+    old_hrv = old_prompt[old_prompt.find(_OLD_HRV_LABEL):old_prompt.find(_HRV_END)]
+    new_hrv = new_prompt[new_prompt.find(_NEW_HRV_LABEL):new_prompt.find(_HRV_END)]
+    assert old_hrv != new_hrv, (
+        "the excised HRV baseline block is identical on both sides — this narrowing is "
+        "now a no-op and should be removed rather than left hiding drift"
+    )
+
+    def _excise_hrv(prompt: str, label: str) -> str:
+        start = prompt.find(label)
+        end = prompt.find(_HRV_END)
+        assert start != -1 and end != -1 and start < end, (
+            "the HRV baseline block anchors are missing or out of order"
+        )
+        return prompt[:start] + prompt[end:]
+
+    old_prompt = _excise_hrv(old_prompt, _OLD_HRV_LABEL)
+    new_prompt = _excise_hrv(new_prompt, _NEW_HRV_LABEL)
 
     assert old_prompt == new_prompt

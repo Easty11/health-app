@@ -15,7 +15,7 @@ of re-deriving current state from raw tables.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 
 from sqlalchemy.orm import Session
 
@@ -24,7 +24,7 @@ from declared_state import lift_declared_state
 from engine import profile as profile_mod
 from engine import training_phase as training_phase_mod
 from reads.labs_reads import LabRow, latest_lab_results
-from reads.recovery_reads import canonical_hrv
+from reads.recovery_reads import hrv_deviation, representative_source
 
 
 @dataclass
@@ -51,7 +51,7 @@ class CurrentState:
     training_phase: dict | None = None
     training_phase_orm: models.TrainingPhase | None = None
     capability_state: list[models.CapabilityState] = field(default_factory=list)
-    hrv_baseline_7d: HRVBaseline | None = None
+    hrv_baseline: HRVBaseline | None = None   # per-source rolling baseline (#292)
     labs: list[LabRow] = field(default_factory=list)
 
 
@@ -74,25 +74,21 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
 
     capability_rows = db.query(models.CapabilityState).filter_by(user_id=user_id).all()
 
-    window_start = today - timedelta(days=7)
-    # Source-agnostic HRV baseline (Q130): read canonical nightly readings over
-    # `hrv_readings` (Garmin-arbitrated), not `samsung_hrv_readings` directly, so the
-    # baseline the engine/chat sees reflects Garmin once connected. Every row is
-    # passive-overnight-equivalent by construction, so no `context != 'session'`
-    # analogue is needed; `.canonical` picks one row per contested night.
-    hrv_readings = [
-        r
-        for r in canonical_hrv(user_id, db, since=window_start)
-        if r.canonical
-    ]
-    hrv_values = [r.rmssd_ms for r in hrv_readings if r.rmssd_ms is not None]
+    # Source-agnostic HRV baseline (Q130 → #292): derived from the per-source-normalised
+    # deviation model, NOT `.canonical` arbitration (§ #292 all-or-nothing migration).
+    # The representative source (highest weight) supplies a single source's own rolling
+    # baseline — never a cross-source blend of raw ms (the offset is non-constant). The
+    # baseline window is the deviation reader's rolling window (28d), so this is no longer
+    # a fixed 7-night mean. Every `hrv_readings` row is passive-overnight-equivalent by
+    # construction, so no `context != 'session'` analogue is needed.
+    rep = representative_source(hrv_deviation(user_id, db, for_date=today))
     hrv_baseline = None
-    if hrv_values:
-        mean = sum(hrv_values) / len(hrv_values)
-        latest_ms = hrv_readings[0].rmssd_ms
+    if rep is not None and rep["baseline_n"] > 0:
+        mean = rep["baseline_mean"]
+        latest_ms = rep["rmssd"]
         hrv_baseline = HRVBaseline(
             mean_ms=mean,
-            n=len(hrv_values),
+            n=rep["baseline_n"],
             latest_ms=latest_ms,
             diff_from_mean_ms=(latest_ms - mean) if latest_ms is not None else None,
         )
@@ -108,6 +104,6 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         training_phase=training_phase_mod.phase_to_dict(phase_orm, on=today),
         training_phase_orm=phase_orm,
         capability_state=capability_rows,
-        hrv_baseline_7d=hrv_baseline,
+        hrv_baseline=hrv_baseline,
         labs=labs,
     )

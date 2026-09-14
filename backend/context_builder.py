@@ -837,7 +837,7 @@ def _section_samsung_hrv(readings: list[Any], now: datetime, baseline: HRVBaseli
     # ----- rolling 7-day HRV baseline (computed by current_state) -----
     if baseline is not None:
         lines.append("")
-        lines.append(f"7-day HRV baseline: {baseline.mean_ms:.0f} ms ({baseline.n} readings)")
+        lines.append(f"HRV baseline (rolling): {baseline.mean_ms:.0f} ms ({baseline.n} readings)")
         if baseline.diff_from_mean_ms is not None:
             direction = "above" if baseline.diff_from_mean_ms >= 0 else "below"
             lines.append(f"Today vs baseline: {abs(baseline.diff_from_mean_ms):.0f}ms {direction} mean")
@@ -1334,7 +1334,7 @@ def build_system_prompt(
             sections.append(hc_section)
 
     if samsung_hrv:
-        ring_section = _section_samsung_hrv(samsung_hrv, now, state.hrv_baseline_7d)
+        ring_section = _section_samsung_hrv(samsung_hrv, now, state.hrv_baseline)
         if ring_section:
             sections.append(ring_section)
 
