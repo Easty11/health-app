@@ -33,6 +33,11 @@ class HRVBaseline:
     n: int
     latest_ms: float | None
     diff_from_mean_ms: float | None
+    # Deviation-reader verdict on baseline trust (#292): "normal" | "settling" |
+    # "building". "settling" = within SETTLING_NIGHTS of an active training-phase change
+    # (#294/#295) — the deviation is real but its confidence is capped; a consumer
+    # surfacing the number should flag it. None only for legacy callers that predate #295.
+    baseline_state: str | None = None
 
 
 @dataclass
@@ -81,7 +86,17 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
     # baseline window is the deviation reader's rolling window (28d), so this is no longer
     # a fixed 7-night mean. Every `hrv_readings` row is passive-overnight-equivalent by
     # construction, so no `context != 'session'` analogue is needed.
-    rep = representative_source(hrv_deviation(user_id, db, for_date=today))
+    # #294/#295: feed the active training-phase change date so a mid-deload / regime
+    # change makes the deviation reader flag an unsettled baseline (baseline_state
+    # "settling", confidence capped) instead of crying wolf. `phase_orm` is the one open
+    # phase (read above); no open phase → phase_change_date None → settling off → prior
+    # behaviour. `baseline_state` is surfaced on HRVBaseline so it reaches the context
+    # this state feeds (context_builder), where the scalar alone would hide the caveat.
+    _dev = hrv_deviation(
+        user_id, db, for_date=today,
+        phase_change_date=phase_orm.entered_on if phase_orm is not None else None,
+    )
+    rep = representative_source(_dev)
     hrv_baseline = None
     if rep is not None and rep["baseline_n"] > 0:
         mean = rep["baseline_mean"]
@@ -91,6 +106,7 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
             n=rep["baseline_n"],
             latest_ms=latest_ms,
             diff_from_mean_ms=(latest_ms - mean) if latest_ms is not None else None,
+            baseline_state=_dev["baseline_state"],
         )
 
     labs = latest_lab_results(user_id, db)

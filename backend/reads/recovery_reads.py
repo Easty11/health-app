@@ -56,7 +56,7 @@ import models
 # ─────────────────────────────────────────────────────────────────────────────
 # Deviation-reader constants (#292).
 #
-# PROVISIONAL — informed by n=5 dual-wear DELOAD nights only; tune after 3-4 weeks
+# CALIBRATION-GATED — informed by n=5 dual-wear DELOAD nights only; tune after 3-4 weeks
 # of representative-load overlap. AGREEMENT_HIGH / AGREEMENT_MED are the primary
 # calibration targets. All are parameterised (never hard-coded at the call site):
 # every threshold below is a keyword default on `hrv_deviation`.
@@ -212,12 +212,12 @@ def hrv_deviation(
     A compact surface uses `combined_z` + `confidence`; a readout uses `sources[]`;
     a consumer needing one ms scalar takes `representative_source(...)["rmssd"]`.
 
-    NOTE on the confidence value set: the #292 brief's output-contract line lists the
-    five primary tiers (high/medium/low/very_low/conflicted); the brief's confidence
-    TABLE additionally specifies `flat` (all-flat night — confident-NEUTRAL, direction
-    flat: "nothing's happening" is NOT "we don't know", so it is never very_low) and
-    single-mature-source `medium_low`. This reader emits the full table faithfully
-    rather than fold those two into a tier that would misstate them.
+    Confidence value set — CANONICAL, 7 values (ratified #293): high, medium,
+    medium_low, low, very_low, conflicted, flat. `flat` is confident-NEUTRAL (every
+    contributing source inside the dead-zone, |z| < flat_threshold — "nothing's
+    happening" is NOT "we don't know", so it is never very_low); `medium_low` is a
+    single mature source (no corroboration). These are distinct tiers and must NOT be
+    folded into high/medium. The #292 design brief's five-value enum is superseded.
 
     `phase_change_date`: if set and `for_date` is within `settling_nights` of it, the
     baseline is treated as unsettled — deviation is still emitted, `baseline_state`

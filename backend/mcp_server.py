@@ -24,6 +24,7 @@ import models
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from reads.labs_reads import latest_lab_results
 from reads.recovery_reads import hrv_deviation, representative_source
+from engine.training_phase import current_training_phase
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
@@ -454,8 +455,13 @@ def get_readiness_snapshot() -> str:
     # deviation object (combined z, direction, cross-source confidence). Sleep/SpO2/
     # architecture below stay on the Samsung device row (Garmin supplies none).
     with SessionLocal() as _db:
+        # #294: feed the active training-phase change date so a mid-deload / regime
+        # change surfaces as baseline_state="settling" with capped confidence here (this
+        # readout surfaces both), instead of crying wolf. No open phase → None → off.
+        _phase = current_training_phase(_db, user_id)
         _dev = hrv_deviation(
-            user_id, _db, for_date=datetime.now(timezone.utc).date()
+            user_id, _db, for_date=datetime.now(timezone.utc).date(),
+            phase_change_date=_phase.entered_on if _phase is not None else None,
         )
     _rep = representative_source(_dev)
     hrv_rep_ms = _rep["rmssd"] if _rep is not None else None

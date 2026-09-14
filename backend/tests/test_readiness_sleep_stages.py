@@ -9,6 +9,7 @@ never a daily term.
 from datetime import date, datetime
 
 from context_builder import _section_samsung_hrv, _section_health_connect
+from current_state import HRVBaseline
 
 _NOW = datetime(2026, 6, 28, 8, 0, 0)
 
@@ -43,3 +44,25 @@ def test_health_connect_section_reports_combined_deep_light():
     assert "REM: 1h 31m" in out          # 91m REM retained, matches Samsung app
     assert ", Light:" not in out         # no standalone light term (was ", Light: ...")
     assert "Deep: " not in out           # no standalone deep term (combined is "Deep+Light:")
+
+
+# --- #294/#295: baseline_state surfaces in the Samsung HRV context section ---
+
+def _reading():
+    return [{"captured_at": _NOW.date(), "hrv_ms": 57.0}]
+
+
+def test_settling_baseline_state_renders_low_confidence_caveat():
+    base = HRVBaseline(mean_ms=52.0, n=24, latest_ms=57.0, diff_from_mean_ms=5.0,
+                       baseline_state="settling")
+    out = _section_samsung_hrv(_reading(), _NOW, base)
+    assert "Baseline unsettled" in out
+    assert "low-confidence" in out
+
+
+def test_normal_baseline_state_adds_no_caveat():
+    base = HRVBaseline(mean_ms=52.0, n=24, latest_ms=57.0, diff_from_mean_ms=5.0,
+                       baseline_state="normal")
+    out = _section_samsung_hrv(_reading(), _NOW, base)
+    assert "Baseline unsettled" not in out
+    assert "still building" not in out
