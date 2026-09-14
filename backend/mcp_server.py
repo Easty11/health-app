@@ -23,7 +23,7 @@ from oauth_provider import PersonalOAuthProvider
 import models
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from reads.labs_reads import latest_lab_results
-from reads.recovery_reads import canonical_hrv
+from reads.recovery_reads import hrv_deviation, representative_source
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
@@ -447,15 +447,18 @@ def get_readiness_snapshot() -> str:
         {"user_id": user_id},
     )
 
-    # Q130: the readiness HRV FIGURE reads through canonical arbitration
-    # (source-agnostic over hrv_readings), so Garmin's RMSSD surfaces here on a
-    # contested night once connected. Sleep/SpO2/architecture below stay on the
-    # Samsung device row (Garmin supplies none). Scalar-only swap.
+    # Q130 → #292: the readiness HRV reads the per-source-normalised deviation model
+    # (source-agnostic over hrv_readings), NOT `.canonical` arbitration. This is a rich
+    # LLM readout (not the device-attributed `get_recovery_metrics`, which stays wholly
+    # Samsung), so it surfaces BOTH the representative single ms figure and the full
+    # deviation object (combined z, direction, cross-source confidence). Sleep/SpO2/
+    # architecture below stay on the Samsung device row (Garmin supplies none).
     with SessionLocal() as _db:
-        _canon = next(
-            (row for row in canonical_hrv(user_id, _db) if row.canonical), None
+        _dev = hrv_deviation(
+            user_id, _db, for_date=datetime.now(timezone.utc).date()
         )
-    canonical_hrv_ms = _canon.rmssd_ms if _canon is not None else None
+    _rep = representative_source(_dev)
+    hrv_rep_ms = _rep["rmssd"] if _rep is not None else None
 
     checkin_rows = _db_rows(
         """
@@ -497,7 +500,13 @@ def get_readiness_snapshot() -> str:
     if hrv_rows:
         r = hrv_rows[0]
         lines.append(f"Latest biometrics ({str(r['captured_at'])[:10]}):")
-        lines.append(f"  HRV: {canonical_hrv_ms:.0f} ms" if canonical_hrv_ms is not None else "  HRV: —")
+        lines.append(f"  HRV: {hrv_rep_ms:.0f} ms" if hrv_rep_ms is not None else "  HRV: —")
+        if _dev["n_contributing"]:
+            lines.append(
+                f"  HRV deviation: {_dev['combined_z']:+.2f}σ {_dev['direction']} "
+                f"(confidence {_dev['confidence']}, {_dev['n_contributing']} source(s), "
+                f"baseline {_dev['baseline_state']})"
+            )
         lines.append(f"  Sleep efficiency: {r['sleep_efficiency_pct']:.0f}%" if r["sleep_efficiency_pct"] is not None else "  Sleep efficiency: —")
         lines.append(f"  Sleep duration: {r['actual_sleep_time_minutes']:.0f} min" if r["actual_sleep_time_minutes"] is not None else "  Sleep duration: —")
         lines.append(f"  Deep: {r['deep_minutes']:.0f} min  REM: {r['rem_minutes']:.0f} min" if (r.get("deep_minutes") is not None and r.get("rem_minutes") is not None) else "  Sleep stages: —")

@@ -4519,3 +4519,11 @@ overlap nil, Q131), so backfilling now changes nothing. Defer until Garmin has s
 history worth reflecting, then run it as-of each past date. Watch-point, not owed work.
 
 **State:** OPEN (deferred — no-op until Garmin has overlapping history)
+
+## Q153. `_SOURCE_RANK` arbitration branch — delete once no consumer calls it; keep `canonical_hrv` row-reading  [DEFERRED]
+
+#292 made `hrv_deviation` the HRV consumption model and migrated all four live #291 consumers off `canonical_hrv`'s arbitration selection. The arbitration branch (`_SOURCE_RANK`, `_rank`, `_win_key`, `arbitrate`, the derived `.canonical` flag) is now SUPERSEDED but kept callable, because one caller remains: the UNMOUNTED `routers/recovery.py` (Q151). The exit is the fine cut — delete the selection layer, keep `_hrv_rows` (the source-tagged row-reading plumbing the deviation reader depends on).
+
+**Trigger to close:** when Q151 resolves recovery.py (adopt with a consumer that reads `hrv_deviation`, or delete the module) AND no consumer calls the arbitration selection (`.canonical`). Then delete `_SOURCE_RANK` + the arbitration branch and keep `_hrv_rows`. If a future need for a single arbitrated number arises, derive it from the deviation model via `representative_source` (highest-confidence/highest-weight source) — NEVER a resurrected rank. Until then the branch stays callable but no NEW consumer may call it (enforced by review + the `recovery_reads` docstring). This is coupled to Q151, not independent; track consumer migration to completion so dual-reader does not become permanent (the failure mode Q151 itself names).
+
+**State:** OPEN (deferred — blocked on Q151; the branch is superseded but callable until recovery.py's disposition is decided)

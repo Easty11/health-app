@@ -25,7 +25,7 @@ from cbti.replay import evaluate_live_cycle
 from cbti.timeutil import clock_delta_minutes, clock_to_minutes, minutes_between
 from database import get_db
 from injury_trajectory import injury_soreness_key
-from reads.recovery_reads import canonical_hrv
+from reads.recovery_reads import hrv_deviation, representative_source
 
 router = APIRouter(prefix="/checkin-v2", tags=["checkin-v2"])
 
@@ -217,21 +217,20 @@ def _freeze_diary(
 # ── passive snapshot ──────────────────────────────────────────────────────────
 
 def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, Any]:
-    """Latest canonical HRV and HC sleep at the moment of AM capture.
+    """Latest overnight HRV and HC sleep at the moment of AM capture.
 
-    HRV reads through `canonical_hrv` (source-agnostic over `hrv_readings`,
-    Garmin-arbitrated) so Garmin HRV surfaces once connected; `as_of=for_date`
-    supplies the "latest canonical at or before capture" upper bound. Every
+    HRV reads through `hrv_deviation` (#292, source-agnostic over `hrv_readings`)
+    with `for_date` as the capture-day upper bound; `passive_hrv_ms` is the single ms
+    scalar this snapshot needs, derived from the deviation model via
+    `representative_source` (the highest-weight source), NOT from `_SOURCE_RANK`
+    arbitration — so every HRV surface reads one model (§ #292 all-or-nothing). Every
     `hrv_readings` row is passive-overnight-equivalent by construction (the Samsung
     mirror early-returns unless context=='passive_overnight'; the Garmin connector
     writes nightly HRV only), so the old `context != 'session'` guard is implicitly
     satisfied and needs no analogue here. Sleep stays on Health Connect (Garmin
-    supplies no sleep). (Q130 consumption.)
+    supplies no sleep). (Q130 → #292 consumption.)
     """
-    canon = next(
-        (r for r in canonical_hrv(user_id, db, as_of=for_date) if r.canonical),
-        None,
-    )
+    rep = representative_source(hrv_deviation(user_id, db, for_date=for_date))
     hc_row = (
         db.query(models.HealthConnectSync)
         .filter(
@@ -242,7 +241,7 @@ def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, An
         .first()
     )
     return {
-        "passive_hrv_ms": canon.rmssd_ms if canon else None,
+        "passive_hrv_ms": rep["rmssd"] if rep else None,
         "passive_sleep_min": hc_row.sleep_duration_minutes if hc_row else None,
     }
 
@@ -543,18 +542,18 @@ def get_prefill(
     passive = _snapshot_passive(current_user.id, today, db)
 
     hrv_ms = passive["passive_hrv_ms"]
-    # Rolling baseline over the most recent 7 canonical nights (source-agnostic,
-    # Garmin-arbitrated — Q130). Filter `.canonical` before slicing so a contested
-    # night contributes exactly one value; both scalars (`hrv_ms` above and this
-    # baseline) now come from the same canonical source, so `vs_baseline` compares
-    # like with like.
-    hrv_values = [
-        r.rmssd_ms
-        for r in canonical_hrv(current_user.id, db, as_of=today)
-        if r.canonical and r.rmssd_ms is not None
-    ][:7]
-    baseline = sum(hrv_values) / len(hrv_values) if hrv_values else None
-    vs_baseline = round(hrv_ms - baseline, 1) if (hrv_ms and baseline) else None
+    # `vs_baseline` is the representative source's deviation in ms, taken from the SAME
+    # #292 deviation model that produced `hrv_ms` (via `_snapshot_passive`): the
+    # representative source's `rmssd - baseline_mean` (its own rolling baseline). Both
+    # scalars therefore trace to one source's baseline and compare like with like — no
+    # `.canonical` arbitration read (§ #292 all-or-nothing migration; a compact tile
+    # takes a documented representative number off the deviation object).
+    rep = representative_source(hrv_deviation(current_user.id, db, for_date=today))
+    vs_baseline = (
+        round(rep["rmssd"] - rep["baseline_mean"], 1)
+        if rep and rep["baseline_n"] > 0
+        else None
+    )
 
     cbti_ctx = _cbti_context(current_user.id, today, db)
     diary_prefill = DiaryPrefillOut()
