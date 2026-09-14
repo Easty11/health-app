@@ -1,46 +1,55 @@
-# Close-out — HRV settling protection activated + 7-value confidence contract ratified
+# Code session close-out — 2026-09-14
 
-## 1 · Real commits this session
+## 1. Real commits this session
 
-Session-open ref: `3e7e5cd` (master, carrying #292). `git log --oneline 3e7e5cd..HEAD`:
+Session-open master: `786e298` (PR #209 merge). `git log --oneline 786e298..HEAD`:
 
 ```
-fde309f Merge pull request #208 from Easty11/claude/great-cerf-ncg16q
-119f918 gov(hrv): DECISIONS #293 ratify 7-value confidence set; #294 activate settling wire; #295 current_state surfaces baseline_state
-8092796 feat(hrv): activate settling protection + ratify 7-value confidence contract (#293, #294, #295)
+86d5749 Merge pull request #210 from Easty11/feat/load-refresh-scheduler
+56d78ac gov: log #296 (scheduled load orchestrator) + file Q154 (aerobic-ingest gap)
+33dcc9c feat(load): scheduled orchestrator for the full load chain (#296)
 ```
 
-- `8092796` **feat** (STEPS 3–4): wired `phase_change_date` (from `engine.training_phase.current_training_phase(...).entered_on`) into the confidence-surfacing HRV consumers — `mcp_server.get_readiness_snapshot` and `current_state`; left the two scalar-only `checkin_v2` consumers alone (no-op). Ratified the seven-value confidence set in the `hrv_deviation` docstring (removed the reconciliation/provisional framing; reworded the threshold-constants `PROVISIONAL` → `CALIBRATION-GATED`). `#295` half: added `baseline_state` to `HRVBaseline`, surfaced it as a low-confidence caveat in `context_builder._section_samsung_hrv`. Tests: `test_current_state.py` (settling activation, None-safety, stale-phase) + `test_readiness_sleep_stages.py` (caveat render/omit). Full backend suite **1622 passed**.
-- `119f918` **gov** (STEP 5): DECISIONS_LOG #293/#294/#295 appended (canonical format, integers re-resolved against master max 292 at commit); CLAUDE.md Recent-landings rotated (added the #293/#294/#295 line, dropped #290). Placeholder guard green.
-- `fde309f` merge commit — PR #208, `--merge` (not squash/rebase, per repo rule), branch auto-deleted.
+- `33dcc9c` — `backend/scripts/refresh_load.py` (orchestrator), `backend/tests/test_refresh_load.py` (4 tests), `backend/railway.cron.toml` (dedicated-cron-service config-as-code).
+- `56d78ac` — `DECISIONS_LOG.md` #296, `OPEN_QUESTIONS.md` Q154 (number-at-merge: `#NEXT` → 296 against master max 295).
+- `86d5749` — merge commit (PR #210, `--merge`, self-merged on green: `placeholder guard (POSIX)` + `frontend tests (vitest)` + `backend tests (pytest)` all success; `mergeable_state: clean`). Branch remote-deleted on merge; local branches `feat/load-refresh-scheduler` and the empty `claude/elegant-ramanujan-m6sdor` deleted.
 
-Merge disposition: self-merged on green (three required checks — placeholder guard, backend pytest, frontend vitest — all success; `mergeable_state: clean`; no Claude Approvals check on this repo). Chat-approved brief, no un-ratified decision embedded (#293 resolves a #292-flagged question the brief ratified; #295 was operator-nodded this session), so self-merge was authorised.
+A close-out commit (`chore: session close-out`) follows this file with the CLAUDE.md Recent-landings + this `closeout.md`.
 
-## 2 · Pending-queue reconciliation
+## 2. Pending-commit queue reconciliation
 
-No `;cc` pending-commit queue was carried into this session — the input was a standalone Code Brief. Every step of that brief landed in the commits above:
+No `;cc` pending-commit queue was carried into this session — it opened from a direct brief (ANCHOR/OBJECTIVE/STEPS), not a chat close-out handoff. Nothing to reconcile. Nothing decided this session is left uncommitted: all code, config, and governance landed in `86d5749`.
 
-- STEP 1 (discovery) + STEP 2 (contract boundary): reported at the gate; both cleared. Key finding — `current_state` was scalar-only (contra the brief's expectation), triggering the operator-nodded #295 scope addition. No five-value confidence enum exists anywhere, so ratification is safe.
-- STEP 3 (wire) → `8092796`. STEP 4 (ratify) → `8092796`. STEP 5 (governance) → `119f918`. STEP 6 (validate/PR/merge) → PR #208 merged, master carries it.
+## 3. Cold-resume handoff
 
-Nothing decided-but-uncommitted. One judgment call recorded in #293 for operator review: the reader had two distinct "provisional" usages — the confidence-set reconciliation (removed) and the threshold-constants caveat (kept, reworded `CALIBRATION-GATED`, because the thresholds are genuinely still un-ratified). The brief's literal "grep clean for provisional" was scoped to the confidence-set framing only.
+### What landed
+**#296 — scheduled load orchestrator.** `scripts/refresh_load.py` replaces the four independently-run manual load modules with one ordered per-user sweep over all Hevy-keyed users: Hevy ingest (async) → `load_events` (`tier0-v1`) → `load_events_metabolic` (`metab-v1`) → `load_metrics` (`tier0-v1`) → `load_metrics` (`metab-v1`). Per-user isolation mirrors `scripts/garmin_sync.py` (one user's failure caught + recorded against the failing step, rest of that user's chain skipped, sweep continues); aggregate summary of attempted/succeeded/failed + per-user, per-step outcomes. Idempotent (upsert / delete-then-insert throughout). CLI: `--user`, `--days`, `--as-of`. Verified on the FK-enforced SQLite substrate (4 tests + a seeded end-to-end run: `tier0_events=4, tier0_metrics=212 rows`, identical on re-run).
 
-## 3 · Cold-resume handoff
+### The one OPEN item — Step 2's live half (NOT done; operator/outward-facing)
+The Railway cron mechanism is verified (greenfield — no scheduler existed) and the config is committed (`backend/railway.cron.toml`: dedicated cron service, same repo/`/backend` root/image, `python -m scripts.refresh_load`, `0 16 * * *` = 02:00 AEST). What remains cannot be done from the build sandbox (no `railway` CLI, no `.railway.internal` DB reach):
 
-**What landed.** HRV settling protection is now WIRED and, per operator confirmation of an open deload phase, **LIVE — not dormant**: during a recorded training-phase change, `hrv_deviation` caps confidence at `low` and sets `baseline_state="settling"` for `SETTLING_NIGHTS` (10) after `entered_on`, surfaced in the MCP readiness readout and the `current_state`→`context_builder` HRV section. The seven-value confidence set (`high, medium, medium_low, low, very_low, conflicted, flat`) is the canonical contract (#293). See DECISIONS_LOG #293/#294/#295.
+1. Create a **dedicated cron service** in the `health-app` Railway project (id `24f3eb3d-bc79-4fdc-bf38-be7f36ffbc9a`), source `Easty11/health-app` @ `master`, rootDirectory `/backend`.
+2. Point its **config-as-code path** at `backend/railway.cron.toml`.
+3. Give it the two vars — both settable as cross-service **references** so no secret is rendered: `DATABASE_URL = ${{health-app-DB.DATABASE_URL}}`, `FERNET_KEY = ${{health-app-backend.FERNET_KEY}}`.
+4. Run one **forced sweep** and confirm it reaches prod: `railway ssh --service health-app-backend` → `cd /app && /opt/venv/bin/python -m scripts.refresh_load` (all users) or `--user <uid>` — expect a per-user summary with non-zero events/metrics for a resistance user and no `.railway.internal` resolution failure.
 
-**Still gated in this area (unchanged this session):**
-- Threshold calibration — the seven `hrv_deviation` constants (`SETTLING_NIGHTS`, `FLAT_THRESHOLD`, `AGREEMENT_HIGH/MED`, …) remain calibration-gated on ~3–4 wk representative-load dual-wear (#292; #293 explicitly did NOT ratify them).
-- **Q151** (DEFERRED) — `recovery.py` unmounted canonical-recovery surface: adopt with a consumer reading `hrv_deviation`, or delete.
-- **Q152** (DEFERRED) — historical `daily_records.passive_hrv_ms` backfill (Garmin cutover seam); no-op today.
-- **Q153** (DEFERRED) — delete the `_SOURCE_RANK` arbitration branch once no consumer calls `.canonical` (only unmounted `recovery.py`/Q151 still does); keep `_hrv_rows`.
+Claude offered to do (1)–(4) via the Railway MCP (create-service + set-variables + cron + a forced run reading logs) — **awaiting the operator's go-ahead** on touching live prod infra. Until this lands, the orchestrator exists but nothing triggers it nightly; the load chain still requires a manual run.
 
-**Operator step now unblocked (Luke, out-of-band, NOT a Code action — per brief GUARD):** the Garmin sync (`connected: True`, unsynced) — PowerShell → `/integrations/garmin/sync`. It now flows Garmin HRV into the corrected deviation model and proves the token authenticates.
+### Deferred (filed this session)
+**Q154 — aerobic ingest is not automatable.** The metabolic branch (step 3) only ROLLS existing `aerobic_sessions`; nothing in the sweep refreshes that table. The only fresh-fetch path, `routers/polar.py::sync_polar_sessions`, is request-coupled (`current_user` + per-request OAuth client) and out of #296's scope; the ZIP CLI (`import_polar.py`) needs a human-downloaded export. To close: extract the Polar AccessLink fetch+persist core into a per-user batch callable, then add it as the aerobic counterpart to step 1 (preserving the endpoint's contract). Until then nightly metabolic load is only as fresh as the last manual Polar sync.
 
-**What did NOT move — the v1 lanes (named explicitly).** This session went to the HRV *instrument* (readiness data quality), not to a v1-test lane. Per the v1-triage prompt, none of #293/#294/#295 serves See/Know/Walk-in/Loop directly — it hardens the readiness signal the Loop and See lanes eventually consume. The v1 path stood still:
-- **Know** — Weekly resolver panel wiring is the next dated lane (Oct 5 anchor); the resolver itself landed (#276), the panel position landed (QuotaWindow); dose (`minutes`/Q106) is LATER.
-- **Walk in** — the pre-appointment brief (the synthesising consumer that sets build order) is still unbuilt; trigger resolution settled (#147) but no endpoint exists.
-- **Loop** — the Banister fitness-fatigue readiness model is still OWED (data precondition met; `model_forecast`/`model_confidence` exist but the model behind them is unbuilt); this session improved a readiness *input*, not the score.
-- **See** — MET (#277/#278); untouched.
+### Single clearest NEXT action
+Decide the Step-2 live provisioning: authorise Claude to create the Railway cron service via MCP (references-only vars, forced run to verify), or wire it yourself from `backend/railway.cron.toml`. Nothing else in #296 is outstanding.
 
-**Single clearest next action.** Pick a v1-path lane rather than more HRV instrumentation: the **weekly resolver panel** (Know, Oct 5 anchor) or the **pre-appointment brief** (Walk in — the sequencing-setting consumer). If continuing the readiness thread instead, the **Banister readiness build** (Loop) is the OWED item the new settling-flagged input now feeds — but note two consecutive sessions (#291/#292) plus this one have gone to the HRV instrument, not to a v1 test.
+### What was NOT touched this session (named, per the ritual)
+This session went to **instrumentation** — keeping the load compute chain alive on a schedule — not to a new v1 surface. The v1 surfacing lanes stood still:
+
+- **Weekly resolver — v1 test 2 (Know)** (ROADMAP NOW, Oct 5 anchor): untouched. Still the sequenced next surfacing lane.
+- **Appointment brief — v1 test 3 (Walk in)** (the synthesising consumer that sets build order): untouched.
+- **Loop — v1 test 4 (check-in → readiness → recommendation → log → close-out as a daily habit)**: untouched. #296 is plumbing *underneath* the Loop (fresh load data), not the Loop itself.
+- The open HRV calibration debt (Q151 recovery.py disposition, Q152 `passive_hrv_ms` backfill, Q153 `_SOURCE_RANK` deletion) is unchanged — all still OPEN/deferred, none advanced here.
+
+v1-triage note: #296 serves **See** (already MET) and **Loop** only indirectly, by preventing the surfaced load/readiness data from silently rotting — it is maintenance of a met test, not progress on an unmet one. Two-plus sessions of HRV-consumption + now load-scheduling instrumentation have gone to the recovery/load substrate; the next session should weigh going to a v1 surfacing lane (Weekly resolver / appointment brief / Loop) rather than more instrument.
+
+### Session-open maxima (for the next open ritual)
+Decisions max **296** (was 295); Questions max **Q154** (was Q153).
