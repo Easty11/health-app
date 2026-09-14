@@ -11618,3 +11618,51 @@ Exercise names render as titles: payload `title` first, `HevyExerciseTemplate` s
 **How you know.** Full backend suite **1617 passed** (locally on Python 3.11 with a 3.11-compatible `garminconnect`; CI substrate is 3.12). New `tests/test_hrv_deviation.py` (11 tests) asserts the brief's mandated cases against the `db_session` fixture: new-source-doesn't-swamp (thin Garmin cannot flip a flat mature Samsung; Garmin weight < mature), flat-is-confident (all dead-zone → direction=flat, confidence=flat, never very_low/low), settling caps (an otherwise-high night → confidence=low, deviation still present, baseline_state=settling), conflicted (opposite signs outside dead-zone → conflicted, both sources present, no verdict), immature-single (very_low/building), single-mature (medium_low), a gap-driven medium tier, the 5 dual-wear DELOAD nights as real divergent data (non-constant offset; each source z'd against its OWN baseline, combined = weighted mean, thin baselines never manufacture a mature-tier verdict), shared-plumbing-without-arbitration, no-data, and threshold parameterisation. Existing coverage updated BY INTENT: `test_hrv_consumption`'s contested-night test now asserts the higher-WEIGHT source (superseding the rank assertion); `test_current_state` parity guard narrows the rewritten HRV-baseline sub-block per the standing #82/#230/#233 pattern.
 
 **Do not revisit unless.** the calibration window (~3–4 wk representative-load dual-wear) lands and the seven constants are tuned (AGREEMENT_HIGH/MED first); or Q153 fires (the arbitration branch is deleted once recovery.py/Q151 resolves and no consumer calls `.canonical`); or the flagged confidence value set is re-mapped by chat; or a new single-arbitrated-number need arises (derive from `representative_source`, never a resurrected `_SOURCE_RANK`).
+
+---
+
+### 293. Ratify the HRV confidence value set (7 values) as canonical
+
+**Context.** #292 shipped `hrv_deviation` emitting seven confidence values (`high`, `medium`, `medium_low`, `low`, `very_low`, `conflicted`, `flat`), reconciling the #292 design brief's contradictory five-value output-contract enum against its seven-value confidence table. #292 flagged that reconciliation as "one flagged interpretation for chat" (see #292) — provisional pending confirmation the five-value listing was not meant as closed.
+
+**Decision.** The seven-value set is CANONICAL. `flat` is confident-NEUTRAL — every contributing source inside the dead-zone (`|z| < FLAT_THRESHOLD`), "nothing's happening" is not "we don't know", so it is never `very_low`/`low` — and must NOT be folded into `high`/`medium`. `medium_low` is a single mature source (no corroboration) and is likewise its own tier. The design brief's five-value enum is superseded. The reader's docstring reconciliation/provisional framing is removed; this is a docstring/comment edit only — the values were already emitted, so there is NO behavioural change.
+
+**Scope guard.** This ratifies the confidence VALUE SET only. It does NOT ratify the seven threshold CONSTANTS (`BASELINE_WINDOW`, `MIN_BASELINE_N`, `MIN_BASELINE_SD`, `SETTLING_NIGHTS`, `FLAT_THRESHOLD`, `AGREEMENT_HIGH`, `AGREEMENT_MED`) — those remain calibration-gated on ~3–4 wk representative-load dual-wear (#292, unchanged). The reader comment reworded `PROVISIONAL` → `CALIBRATION-GATED` on that block so the retired "provisional" token does not muddy this ratification while the caveat's force is preserved.
+
+**Status.** Locked. Docstring/comment-only; self-merges on green per § Merge disposition (no new judgment — resolves a #292-flagged question chat has now ratified).
+
+**How you know.** STEP 2 contract-boundary audit: no consumer or client enumerates the confidence value set — MCP interpolates `confidence` as free text (no branch), `current_state`/`checkin_v2` read only the scalar, and the frontend has zero HRV-confidence references (the only `very_low` frontend hits are unrelated lab `grade`). So no five-value switch/enum mishandles `flat`/`medium_low`. Full backend suite **1622 passed**.
+
+**Do not revisit unless.** a consumer or client is added that branches on the confidence value (then it must handle all seven); or the semantics of `flat`/`medium_low` are themselves re-litigated (distinct from the value-set membership ratified here).
+
+---
+
+### 294. Activate HRV settling protection via the active training-phase change date
+
+**Context.** #292 built the settling flag in `hrv_deviation` (within `SETTLING_NIGHTS` of `phase_change_date`: caps confidence at `low`, sets `baseline_state="settling"`, still emits the deviation) but shipped it UNWIRED — no consumer passed `phase_change_date`, so it defaulted off. During a recorded regime change (a deload) the metric therefore still "cried wolf".
+
+**Decision.** Feed the active training-phase change date — `engine.training_phase.current_training_phase(db, user_id).entered_on` — as `phase_change_date` into the `hrv_deviation` call in every CONFIDENCE-SURFACING consumer: `mcp_server.get_readiness_snapshot` (already surfaces `confidence` + `baseline_state`) and `current_state` (expanded to surface `baseline_state` — see #295). Scalar-only consumers are NOT wired: `checkin_v2._snapshot_passive`/`passive_hrv_ms` and `get_prefill`'s `vs_baseline` surface only the representative ms scalar, which settling does not touch — wiring them would be a pure no-op that adds noise.
+
+**None-safe.** No open training phase → `current_training_phase` returns `None` → `phase_change_date=None` → settling off → prior behaviour. Must not error on a user with no phase history.
+
+**Effective-only-when-recorded.** Settling fires only against a recorded regime change. It is inert unless the deload/phase is logged as an open `training_phases` row. (Confirmed at build time: an open phase exists for the operator, so the protection is live, not dormant.)
+
+**Status.** Locked. Code change (non-migration, reads existing tables); self-merges on green per § Merge disposition — implements the chat-approved brief with no new judgment beyond the #295 scope addition logged separately.
+
+**How you know.** `tests/test_current_state.py`: an open phase within `SETTLING_NIGHTS` of `today` → `baseline_state == "settling"`, scalar still emitted; no open phase → `None`-safe, `baseline_state == "normal"`; a phase change older than the window → no settle. Reader-level settling already pinned by `tests/test_hrv_deviation.py` (#292). Full backend suite **1622 passed**.
+
+**Do not revisit unless.** the settling mechanism itself changes (window, cap), or a new confidence-surfacing HRV consumer is added (it too must pass `phase_change_date`).
+
+---
+
+### 295. `current_state` surfaces `baseline_state` — the settling wire's visible half
+
+**Context.** Wiring #294 into `current_state` alone would have been INVISIBLE: `current_state.hrv_baseline` consumed only `representative_source(...)` (the `HRVBaseline` scalar — mean/n/latest/diff), discarding the deviation object's `confidence`/`baseline_state`. Settling caps confidence and sets `baseline_state`; a consumer that surfaces neither cannot show the deload protection reaching the surface the operator reads. The #294 brief flagged this as a scope addition requiring a nod.
+
+**Decision (operator-nodded).** Add `baseline_state: str | None` to `HRVBaseline` and set it from the deviation object in `current_state`. Surface it in `context_builder._section_samsung_hrv` as a low-confidence caveat when `"settling"` (and a "still building" note when `"building"`), so the settling verdict reaches the LLM context `current_state` feeds. `HRVBaseline` is an internal read-model dataclass consumed only by `_section_samsung_hrv` — it is NOT serialised into any Pydantic API response, so no API response shape changes and the frontend is unaffected (consistent with #291/#292's "no response-shape change").
+
+**Status.** Locked. Logged as a distinct decision (not folded into #294) because it is a separate judgment — expanding what `current_state` exposes, beyond wiring an existing parameter.
+
+**How you know.** `tests/test_readiness_sleep_stages.py`: the settling caveat renders when `baseline_state=="settling"` and is absent when `"normal"`. `tests/test_current_state.py` asserts `state.hrv_baseline.baseline_state` is populated from the deviation object. Full backend suite **1622 passed**.
+
+**Do not revisit unless.** `HRVBaseline` is promoted into an API response (then `baseline_state`'s value set becomes a client-facing contract), or `current_state`'s HRV surface is redesigned.
