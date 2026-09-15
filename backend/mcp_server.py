@@ -124,59 +124,24 @@ def _stamped(fn):
 # Tool 1 — Recovery metrics
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-@_stamped
-def get_recovery_metrics(days: int = 7) -> str:
-    """Get recent recovery biometrics from Samsung Ring.
-    Returns HRV (ms), sleep architecture (deep/REM/light/awake minutes),
-    SpO2, respiratory rate, sleep efficiency for the last N days."""
-    user_id = _current_user_id()
+def _format_recovery_metrics(rows: list, days: int) -> str:
+    """Render source-tagged recovery rows into the tool's text table (pure; testable).
 
-    rows = _db_rows(
-        """
-        SELECT captured_at, hrv_ms, sleep_hr_bpm, respiratory_rate,
-               sleep_efficiency_pct, actual_sleep_time_minutes,
-               deep_minutes, rem_minutes, light_minutes, awake_minutes,
-               spo2_average_pct, bedtime, wake_time
-        FROM samsung_hrv_readings
-        WHERE user_id = :user_id
-          AND captured_at >= CURRENT_DATE - :days
-          AND context = 'passive_overnight'
-        ORDER BY captured_at DESC
-        """,
-        {"user_id": user_id, "days": days},
-    )
-
-    source = "samsung_hrv_readings"
-    if not rows:
-        rows = _db_rows(
-            """
-            SELECT date AS captured_at, hrv_rmssd AS hrv_ms,
-                   resting_heart_rate AS sleep_hr_bpm,
-                   respiratory_rate, NULL AS sleep_efficiency_pct,
-                   sleep_duration_minutes AS actual_sleep_time_minutes,
-                   deep_sleep_minutes AS deep_minutes,
-                   rem_sleep_minutes AS rem_minutes,
-                   NULL AS light_minutes, NULL AS awake_minutes,
-                   oxygen_saturation AS spo2_average_pct,
-                   NULL AS bedtime, NULL AS wake_time
-            FROM health_connect_syncs
-            WHERE user_id = :user_id
-              AND date >= CURRENT_DATE - :days
-            ORDER BY date DESC
-            """,
-            {"user_id": user_id, "days": days},
-        )
-        source = "health_connect_syncs"
-
+    Each row is a mapping carrying `source` plus HRV/sleep fields; rows are already
+    ordered captured_at DESC. Every line is prefixed with its `[source]` so provenance is
+    never silent and a night carried by two sources shows as two labelled lines — neither
+    collapsed nor dropped (Garmin lines carry HRV only; Samsung supplies the sleep
+    architecture, so a Garmin line renders the sleep fields as '—')."""
     if not rows:
         return f"No recovery data found in the last {days} days."
 
-    lines = [f"Recovery metrics — last {days} days (source: {source})"]
+    sources = ", ".join(sorted({str(r["source"]) for r in rows}))
+    lines = [f"Recovery metrics — last {days} days (sources: {sources})"]
     lines.append(f"Data window: {rows[-1]['captured_at']} → {rows[0]['captured_at']}\n")
 
     for r in rows:
         date = str(r["captured_at"])[:10]
+        src = r["source"]
         hrv = f"{r['hrv_ms']:.0f} ms" if r["hrv_ms"] is not None else "—"
         rhr = f"{r['sleep_hr_bpm']:.0f} bpm" if r["sleep_hr_bpm"] is not None else "—"
         spo2 = f"{r['spo2_average_pct']:.1f}%" if r["spo2_average_pct"] is not None else "—"
@@ -188,11 +153,76 @@ def get_recovery_metrics(days: int = 7) -> str:
         light = f"{r['light_minutes']:.0f}" if r.get("light_minutes") is not None else "—"
         awake = f"{r['awake_minutes']:.0f}" if r.get("awake_minutes") is not None else "—"
         lines.append(
-            f"{date}: HRV={hrv} RHR={rhr} SpO2={spo2} RR={rr} Eff={eff} "
+            f"{date} [{src}]: HRV={hrv} RHR={rhr} SpO2={spo2} RR={rr} Eff={eff} "
             f"TST={tst} Deep={deep}m REM={rem}m Light={light}m Awake={awake}m"
         )
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+@_stamped
+def get_recovery_metrics(days: int = 7) -> str:
+    """Get recent recovery biometrics across connected sources (Samsung Ring + Garmin).
+    Returns HRV (ms) source-tagged per night, plus sleep architecture (deep/REM/light/
+    awake minutes), SpO2, respiratory rate, sleep efficiency for the last N days. Sleep
+    architecture is Samsung-only; a Garmin night carries HRV and shows sleep fields as
+    '—'. A night measured by both sources shows as two labelled lines — never collapsed,
+    never silently preferring one source."""
+    user_id = _current_user_id()
+
+    # Union the source-native stores: Samsung device rows carry HRV + full sleep
+    # architecture (and pre-mirror history the held backfill hasn't copied), Garmin HRV
+    # comes from the source-agnostic `hrv_readings`. Neither is dropped; each row is
+    # source-tagged for the formatter. Raw ms is never blended (cross-instrument offset is
+    # non-constant, #292) — the two sources are shown side by side, labelled.
+    rows = _db_rows(
+        """
+        SELECT captured_at, hrv_ms, sleep_hr_bpm, respiratory_rate,
+               sleep_efficiency_pct, actual_sleep_time_minutes,
+               deep_minutes, rem_minutes, light_minutes, awake_minutes,
+               spo2_average_pct, bedtime, wake_time, 'samsung' AS source
+        FROM samsung_hrv_readings
+        WHERE user_id = :user_id
+          AND captured_at >= CURRENT_DATE - :days
+          AND context = 'passive_overnight'
+        UNION ALL
+        SELECT captured_at, rmssd_ms AS hrv_ms, NULL AS sleep_hr_bpm,
+               NULL AS respiratory_rate, NULL AS sleep_efficiency_pct,
+               NULL AS actual_sleep_time_minutes, NULL AS deep_minutes,
+               NULL AS rem_minutes, NULL AS light_minutes, NULL AS awake_minutes,
+               NULL AS spo2_average_pct, NULL AS bedtime, NULL AS wake_time,
+               'garmin' AS source
+        FROM hrv_readings
+        WHERE user_id = :user_id
+          AND captured_at >= CURRENT_DATE - :days
+          AND source = 'garmin'
+        ORDER BY captured_at DESC, source
+        """,
+        {"user_id": user_id, "days": days},
+    )
+
+    if not rows:
+        rows = _db_rows(
+            """
+            SELECT date AS captured_at, hrv_rmssd AS hrv_ms,
+                   resting_heart_rate AS sleep_hr_bpm,
+                   respiratory_rate, NULL AS sleep_efficiency_pct,
+                   sleep_duration_minutes AS actual_sleep_time_minutes,
+                   deep_sleep_minutes AS deep_minutes,
+                   rem_sleep_minutes AS rem_minutes,
+                   NULL AS light_minutes, NULL AS awake_minutes,
+                   oxygen_saturation AS spo2_average_pct,
+                   NULL AS bedtime, NULL AS wake_time, 'health_connect_syncs' AS source
+            FROM health_connect_syncs
+            WHERE user_id = :user_id
+              AND date >= CURRENT_DATE - :days
+            ORDER BY date DESC
+            """,
+            {"user_id": user_id, "days": days},
+        )
+
+    return _format_recovery_metrics(rows, days)
 
 
 # ---------------------------------------------------------------------------
