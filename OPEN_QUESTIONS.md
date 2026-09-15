@@ -4541,7 +4541,7 @@ So v1 scopes to rolling existing aerobic sessions only (#296 decision), leaving 
 
 **State:** OPEN (deferred — filed by #296; not solved there. Blocks fully-fresh nightly metabolic load, not the resistance chain.)
 
-## Q155. Garmin HRV has no ingestion trigger — connecting stores a token but nothing pulls  [DEFERRED]
+## Q155. Garmin HRV has no ingestion trigger — connecting stores a token but nothing pulls  [RESOLVED → #299]
 
 Diagnosed 2026-09-15 (#298): Garmin overnight HRV reaches `hrv_readings` only when something RUNS the pull — `POST /integrations/garmin/sync`, the `scripts/garmin_sync.py` ops runner, or the export backfill. There is NO scheduler: `main.lifespan` runs only the #297 load sweep, not Garmin, and connecting Garmin (`POST /integrations/garmin/token`) stores an encrypted token and pulls nothing. So a freshly-connected user sees no HRV until a manual sweep, and the recovery card's freshness silently depends on that sweep having run — exactly this session's failure, fixed by one hand-run `scripts.garmin_sync --from 2026-09-13 --to 2026-09-15` (3 nights, 235 samples, token alive).
 
@@ -4549,4 +4549,6 @@ Diagnosed 2026-09-15 (#298): Garmin overnight HRV reaches `hrv_readings` only wh
 
 **Also surfaced (ops, not this question):** the 2026-09-15 sweep hit TWO Garmin-connected users (ids 1 and 4) with identical pulls — likely one Garmin account stored under two `UserIntegration` rows. Verify and clean up if unintended; left untouched this session (may be a test + real split).
 
-**State:** OPEN (deferred — filed by #298; the read-path fix landed, the capture-trigger gap did not.)
+**Resolution (#299).** Both triggers, on #297's in-process rail (not a dedicated cron — #297 removed that as the fragile part): (a) on-read `POST /integrations/garmin/refresh` fires on Recovery-card open, staleness-gated, `force`-bypassable — the freshness leg that lands this morning's HRV after Garmin's ~6am sync; (b) `garmin_sync` added as a second per-user job in the 02:00 Brisbane sweep — the guarantee for un-opened mornings, accepted as landing only the prior night. Per-user isolation reused from `garmin_sync.py` (dead token caught, rolled back, skipped). No schema change: the gate reads `max(hrv_readings.created_at)` (data-recency; no attempt-recency marker exists — `UserIntegration.updated_at` reads fresh right after connecting). The two ops notes above stay open as their own concerns: the get_hrv_range ~7-day self-heal ceiling is a known limit (not fixed here), and the duplicate Garmin `UserIntegration` for users 1 & 4 is data hygiene (per-user isolation keeps the sweep clean regardless).
+
+**State:** DONE → #299 (both triggers landed; the read-path composite decision — Garmin HRV vs Samsung sleep coherence on one record — is deliberately out of scope, falls due only if Garmin sleep ingestion is added).
