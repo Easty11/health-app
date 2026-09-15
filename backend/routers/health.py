@@ -26,6 +26,32 @@ def _epley_1rm(weight_kg: float, reps: int) -> float:
     return round(weight_kg * (1 + reps / 30), 1)
 
 
+# Fidelity rank when two sources report the same night — the richer source wins the
+# single headline figure (garmin carries the 5-min series + status band; samsung is
+# nightly-only). Mirrors reads.recovery_reads._SOURCE_RANK; an unknown source ranks below
+# both. NEVER used to blend: the picker returns ONE source's reading, labelled — raw ms of
+# different instruments is never averaged (that offset is non-constant; see #292).
+_HRV_SOURCE_RANK = {"garmin": 2, "samsung": 1}
+
+
+def _pick_latest_hrv(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Newest HRV reading across sources, source-labelled — or None.
+
+    `candidates`: dicts carrying at least `captured_at` (date) and `hrv_ms`, plus a
+    `source` tag. The newest `captured_at` wins; a same-night tie breaks to the richer
+    source (garmin > samsung > unknown), deterministic so a contested night always yields
+    exactly one headline and neither source is silently dropped from the payload — the
+    full multi-source set still travels in `trend`. Candidates without an `hrv_ms` are
+    ignored (nothing to headline)."""
+    usable = [c for c in candidates if c.get("hrv_ms") is not None]
+    if not usable:
+        return None
+    return max(
+        usable,
+        key=lambda c: (c["captured_at"], _HRV_SOURCE_RANK.get(c.get("source") or "", 0)),
+    )
+
+
 def _serialize_reading(r: models.SamsungHRVReading) -> dict[str, Any]:
     return {
         "id": r.id,
@@ -105,8 +131,61 @@ def get_health_summary(
         .all()
     )
 
+    # ── Source-agnostic "latest HRV across sources" (Q130/#292) ──────────────────────
+    # The Samsung `latest`/`trend`/baseline below stay exactly as they were — sleep
+    # architecture and the samsung-native baseline are device data. This ADDS a headline
+    # HRV figure that is the newest reading across every source (Garmin included), each
+    # candidate carrying its `source` so the card can label provenance and never silently
+    # prefer Samsung. Candidates: every `hrv_readings` row (Garmin, plus Samsung nights the
+    # scraper mirror dual-writes) AND the newest Samsung device row — so a Samsung night
+    # that predates the mirror (the backfill migration is held) is never dropped from the
+    # headline. The pick is newest-wins, tie→richer source; it selects ONE labelled
+    # reading and never blends raw ms across instruments.
+    hrv_rows = (
+        db.query(models.HrvReading)
+        .filter(models.HrvReading.user_id == current_user.id)
+        .order_by(models.HrvReading.captured_at.desc())
+        .all()
+    )
+    hrv_candidates: list[dict[str, Any]] = [
+        {
+            "captured_at": r.captured_at,
+            "hrv_ms": r.rmssd_ms,
+            "source": r.source,
+            "status": r.status,
+            "baseline_low": r.baseline_low,
+            "baseline_high": r.baseline_high,
+        }
+        for r in hrv_rows
+    ]
+    if readings and readings[0].hrv_ms is not None:
+        hrv_candidates.append({
+            "captured_at": readings[0].captured_at,
+            "hrv_ms": readings[0].hrv_ms,
+            "source": "samsung",
+            "status": None,
+            "baseline_low": None,
+            "baseline_high": None,
+        })
+    picked = _pick_latest_hrv(hrv_candidates)
+    latest_hrv = None
+    if picked is not None:
+        latest_hrv = {
+            "captured_at": str(picked["captured_at"]),
+            "hrv_ms": picked["hrv_ms"],
+            "source": picked["source"],
+            "status": picked["status"],
+            "baseline_low": picked["baseline_low"],
+            "baseline_high": picked["baseline_high"],
+        }
+
     if not readings:
-        return {"latest": None, "trend": [], "baseline_hrv": None, "vs_baseline": None}
+        # No Samsung device row (sleep/baseline unavailable), but a source-agnostic HRV
+        # reading may still exist (e.g. a Garmin-only user) — surface it, don't blank out.
+        return {
+            "latest": None, "trend": [], "baseline_hrv": None, "vs_baseline": None,
+            "latest_hrv": latest_hrv,
+        }
 
     latest = readings[0]
     trend = [
@@ -126,6 +205,7 @@ def get_health_summary(
         "trend": trend,
         "baseline_hrv": baseline_hrv,
         "vs_baseline": vs_baseline,
+        "latest_hrv": latest_hrv,
     }
 
 
