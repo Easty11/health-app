@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import api from '../api'
+import useRecoveryRefresh from '../lib/useRecoveryRefresh'
 
 function fmtMins(minutes) {
   if (minutes == null) return '—'
@@ -53,12 +54,28 @@ export default function HealthPanel() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    api.get('/health/summary')
+  // Re-fetch the summary WITHOUT blanking the card on failure — used when a Garmin refresh
+  // actually ingested a new night, so the newest HRV is reflected without a manual reload.
+  const refetchSummary = useCallback(() => {
+    return api.get('/health/summary')
       .then(({ data }) => setData(data))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
+      .catch(() => {}) // a background re-fetch must never blank a card already showing data
   }, [])
+
+  // First paint: load the cached summary. A failure HERE (not a re-fetch) drops to the empty
+  // state; this is the only path that may clear `data`.
+  useEffect(() => {
+    let cancelled = false
+    api.get('/health/summary')
+      .then(({ data }) => { if (!cancelled) setData(data) })
+      .catch(() => { if (!cancelled) setData(null) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  // On mount, ask the server to pull this morning's Garmin HRV (server-gated, #299); on a REAL
+  // run re-fetch the summary so the card updates. force = pull-to-refresh. Never blocks paint.
+  const { refreshing, forceRefresh } = useRecoveryRefresh({ onFreshRun: refetchSummary })
 
   if (loading) {
     return (
@@ -143,7 +160,20 @@ export default function HealthPanel() {
       {/* Header */}
       <div className="flex-none px-4 py-3 border-b border-gray-200 bg-white flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-800">Recovery</h2>
-        <span className="text-xs text-gray-400">{fmtDate(hrvDate)}</span>
+        <div className="flex items-center gap-2">
+          {refreshing && (
+            <span className="text-[11px] text-gray-400" role="status">refreshing…</span>
+          )}
+          <span className="text-xs text-gray-400">{fmtDate(hrvDate)}</span>
+          <button
+            type="button"
+            onClick={forceRefresh}
+            disabled={refreshing}
+            className="text-xs font-medium text-blue-500 hover:text-blue-600 disabled:text-gray-300"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 px-4 py-4 space-y-4">
