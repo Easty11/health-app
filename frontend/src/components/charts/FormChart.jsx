@@ -65,7 +65,10 @@ function windowRows(win) {
     }))
 }
 
-export default function FormChart({ width, height, days = 90, markers = [] }) {
+// `reloadToken` (#297): bumping it re-fetches /series/load without a loading flash — the page
+// raises it after an on-demand load refresh actually ran. Default 0 leaves the range-only fetch
+// behaviour (and this chart's own test) unchanged.
+export default function FormChart({ width, height, days = 90, markers = [], reloadToken = 0 }) {
   const [windows, setWindows] = useState(null) // null = loading, [] = loaded-empty
   const [error, setError] = useState('')
   const [chosen, setChosen] = useState(null) // the user's EXPLICIT window pick, or null
@@ -80,7 +83,7 @@ export default function FormChart({ width, height, days = 90, markers = [] }) {
       .then((res) => { if (alive) { setWindows(res.data?.windows || []); setError('') } })
       .catch(() => { if (alive) { setWindows([]); setError('Could not load Banister curves.') } })
     return () => { alive = false }
-  }, [days])
+  }, [days, reloadToken])
 
   // Effective window is DERIVED, not stored in an effect: the user's explicit pick when it is
   // still populated, else the first populated window. `chosen` holds only an explicit choice,

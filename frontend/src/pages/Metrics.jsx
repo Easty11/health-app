@@ -5,6 +5,7 @@ import FormChart from '../components/charts/FormChart'
 import ReadinessChart from '../components/charts/ReadinessChart'
 import ExerciseChart from '../components/charts/ExerciseChart'
 import { usePhaseMarkers } from '../components/charts/PhaseMarkers'
+import useLoadRefresh from '../lib/useLoadRefresh'
 
 // The training-performance view (Visuals increments 1–3). The lab surface — ingestion,
 // stored results, upload history — used to share this page; it now lives at /labs (STEP 0
@@ -21,6 +22,15 @@ export default function Metrics() {
   // precondition for a chart to draw.
   const phaseMarkers = usePhaseMarkers()
 
+  // On-demand load refresh (#297). The charts below render cached /series/load on first paint;
+  // this fires POST /load/refresh on open (server-gated at 15 min) and, ONLY when the server
+  // actually ran, bumps `reloadToken` so the two /series/load charts re-fetch the fresh metrics.
+  // The refresh button forces (bypasses the gate). Never blocks first paint.
+  const [reloadToken, setReloadToken] = useState(0)
+  const { refreshing, forceRefresh } = useLoadRefresh({
+    onFreshRun: () => setReloadToken((k) => k + 1),
+  })
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
@@ -30,6 +40,20 @@ export default function Metrics() {
           </svg>
         </Link>
         <span className="text-sm font-bold text-gray-900">Metrics</span>
+        <div className="ml-auto flex items-center gap-2">
+          {refreshing && (
+            <span className="text-[11px] text-gray-400" role="status">refreshing load…</span>
+          )}
+          <button
+            type="button"
+            onClick={forceRefresh}
+            disabled={refreshing}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-800 border
+              border-indigo-200 rounded-full px-3 py-1 transition-colors disabled:opacity-50"
+          >
+            Refresh
+          </button>
+        </div>
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-4">
@@ -39,8 +63,8 @@ export default function Metrics() {
             /series/load; ReadinessChart reads /series/readiness; ExerciseChart (per-exercise
             e1RM + volume) reads /series/exercise*. Training-phase boundaries (`phaseMarkers`,
             one fetch of /engine/phase/history) are overlaid on all four. */}
-        <LoadChart days={chartDays} onSelectRange={setChartDays} markers={phaseMarkers} />
-        <FormChart days={chartDays} markers={phaseMarkers} />
+        <LoadChart days={chartDays} onSelectRange={setChartDays} markers={phaseMarkers} reloadToken={reloadToken} />
+        <FormChart days={chartDays} markers={phaseMarkers} reloadToken={reloadToken} />
         <ExerciseChart days={chartDays} markers={phaseMarkers} />
         <ReadinessChart days={chartDays} markers={phaseMarkers} />
       </div>

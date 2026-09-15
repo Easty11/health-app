@@ -42,7 +42,11 @@ function mergeDomain(windows) {
 // same window. Passed neither (its standalone/increment-1 use, and its own test), it owns its
 // range internally exactly as before. The selector renders and behaves identically in both
 // modes; only WHERE the chosen `days` lives differs.
-export default function LoadChart({ width, height, initialDays = 90, days: daysProp, onSelectRange, markers = [] }) {
+// `reloadToken` (Visuals + #297): bumping it re-fetches /series/load without a loading flash —
+// the page raises it after an on-demand load refresh actually ran, so the chart picks up the
+// freshly-computed metrics. Default 0 keeps standalone/increment-1 use (and the chart's own test)
+// unchanged: the effect then runs on mount and range change only.
+export default function LoadChart({ width, height, initialDays = 90, days: daysProp, onSelectRange, markers = [], reloadToken = 0 }) {
   const controlled = daysProp != null && typeof onSelectRange === 'function'
   const [internalDays, setInternalDays] = useState(initialDays)
   const days = controlled ? daysProp : internalDays
@@ -55,7 +59,7 @@ export default function LoadChart({ width, height, initialDays = 90, days: daysP
       .then((res) => { if (alive) setWindows(res.data?.windows || []) })
       .catch(() => { if (alive) { setWindows([]); setError('Could not load training load.') } })
     return () => { alive = false }
-  }, [days])
+  }, [days, reloadToken])
 
   function selectRange(r) {
     if (r === days) return

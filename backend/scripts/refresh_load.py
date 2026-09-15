@@ -30,9 +30,11 @@ orchestrator does NOT ingest aerobic data. The only automated aerobic ingest
 OAuth client and is out of scope to refactor here. The aerobic-ingest-automation gap
 is tracked in OPEN_QUESTIONS Q154.
 
-Trigger: a nightly Railway cron (~02:00 AEST) runs `python -m scripts.refresh_load`
-(all users). Load buckets on the AEST calendar day, so the sweep runs after the AEST
-day boundary. See DECISIONS_LOG #296.
+Triggers (#297, supersedes #296's dedicated Railway cron service): the per-user
+`POST /load/refresh` route (`routers/load.py`) on Training-page open, and the in-process
+nightly all-users sweep at 02:00 Brisbane (`load_sweep.py`, wired in `main.lifespan`). Both
+reuse `refresh_load` UNCHANGED. Load buckets on the AEST calendar day, so the nightly sweep
+runs after the AEST day boundary. This `__main__` entry point remains for manual runs:
 
     /opt/venv/bin/python -m scripts.refresh_load                    # all keyed users
     /opt/venv/bin/python -m scripts.refresh_load --user 4          # one user only

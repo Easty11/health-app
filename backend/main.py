@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -25,9 +26,11 @@ from routers import mcp_auth as mcp_auth_router
 from routers import labs as labs_router
 from routers import interpretation as interpretation_router
 from routers import series as series_router
+from routers import load as load_router
 
 Base.metadata.create_all(bind=engine)
 
+import load_sweep
 from mcp_server import mcp
 
 _mcp_app = mcp.streamable_http_app()
@@ -38,7 +41,18 @@ async def lifespan(app: FastAPI):
     # Run the MCP sub-app's lifespan so its StreamableHTTPSessionManager
     # initialises its task group before the first request arrives.
     async with _mcp_app.router.lifespan_context(_mcp_app):
-        yield
+        # Nightly in-process all-users load sweep (#297) — the guarantee half of the
+        # on-demand refresh model that replaces #296's dedicated Railway cron service. Fires
+        # at 02:00 Brisbane and once on startup if stale; runs off the loop (see load_sweep).
+        sweep_task = asyncio.create_task(load_sweep.sweep_loop())
+        try:
+            yield
+        finally:
+            sweep_task.cancel()
+            try:
+                await sweep_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="Health & Performance API", lifespan=lifespan)
@@ -88,6 +102,7 @@ app.include_router(mcp_auth_router.router)
 app.include_router(labs_router.router)
 app.include_router(interpretation_router.router)
 app.include_router(series_router.router)
+app.include_router(load_router.router)
 
 
 @app.get("/health")
