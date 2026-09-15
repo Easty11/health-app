@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 
 import models
 from database import SessionLocal
+from scripts.garmin_sync import sweep_garmin_hrv
 from scripts.refresh_load import refresh_load
 
 logger = logging.getLogger(__name__)
@@ -94,11 +95,23 @@ def all_users_stale(
 
 
 def _sweep() -> dict[str, Any]:
-    """Run the all-users load chain in a FRESH session. Called via `asyncio.to_thread` so the
-    orchestrator's `asyncio.run(...)` has no running loop to collide with."""
+    """Run the all-users load chain AND the Garmin HRV sweep in a FRESH session. Called via
+    `asyncio.to_thread` so the load orchestrator's `asyncio.run(...)` has no running loop to
+    collide with (the Garmin sweep is plain blocking I/O — no asyncio — but rides the same
+    off-loop thread).
+
+    Two jobs on the one rail (#299): the load chain, then `garmin_sync` as the second per-user
+    job. At 02:00 Brisbane the Garmin leg can only ever land the PRIOR night — Garmin finalises
+    overnight HRV post-wake (~6am), after this sweep — which is accepted: this is the GUARANTEE
+    that no night is permanently lost for mornings the card is never opened, not the freshness
+    path. `POST /integrations/garmin/refresh` (fired on card open) owns same-morning freshness.
+    Per-user isolation lives inside `sweep_garmin_hrv` (one dead token is caught, rolled back and
+    skipped, never aborting the batch), so a Garmin failure never touches the load result."""
     db = SessionLocal()
     try:
-        return refresh_load(db, only_user_id=None)
+        load_summary = refresh_load(db, only_user_id=None)
+        garmin_summary = sweep_garmin_hrv(db, only_user_id=None)
+        return {"load": load_summary, "garmin": garmin_summary}
     finally:
         db.close()
 
@@ -113,10 +126,19 @@ def _startup_is_stale() -> bool:
 
 
 def _summary_brief(summary: dict[str, Any]) -> dict[str, Any]:
-    """The log-worthy head of a sweep summary — never the full per-user tree."""
+    """The log-worthy head of a sweep summary — never the full per-user tree. Both jobs (#299):
+    the load chain and the Garmin sweep, each reduced to its user counts."""
+    load = summary.get("load", {})
+    garmin = summary.get("garmin", {})
     return {
-        k: summary.get(k)
-        for k in ("users_attempted", "users_succeeded", "users_failed", "days")
+        "load": {
+            k: load.get(k)
+            for k in ("users_attempted", "users_succeeded", "users_failed", "days")
+        },
+        "garmin": {
+            k: garmin.get(k)
+            for k in ("users_attempted", "users_succeeded", "users_failed")
+        },
     }
 
 
