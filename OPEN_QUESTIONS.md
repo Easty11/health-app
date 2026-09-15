@@ -4540,3 +4540,13 @@ So v1 scopes to rolling existing aerobic sessions only (#296 decision), leaving 
 **Trigger to close / options:** extract the Polar AccessLink fetch+persist core out of `sync_polar_sessions` into a per-user batch callable (token read from `UserIntegration(provider="polar")`, refresh handled outside the request), then add it as the aerobic counterpart to step 1 in `refresh_load.py` (Hevy and Polar ingests side by side, each per-user isolated). The refactor must preserve the endpoint's contract (the router keeps calling the extracted core). Until then the nightly metabolic figure is only as fresh as the last manual Polar sync.
 
 **State:** OPEN (deferred — filed by #296; not solved there. Blocks fully-fresh nightly metabolic load, not the resistance chain.)
+
+## Q155. Garmin HRV has no ingestion trigger — connecting stores a token but nothing pulls  [DEFERRED]
+
+Diagnosed 2026-09-15 (#298): Garmin overnight HRV reaches `hrv_readings` only when something RUNS the pull — `POST /integrations/garmin/sync`, the `scripts/garmin_sync.py` ops runner, or the export backfill. There is NO scheduler: `main.lifespan` runs only the #297 load sweep, not Garmin, and connecting Garmin (`POST /integrations/garmin/token`) stores an encrypted token and pulls nothing. So a freshly-connected user sees no HRV until a manual sweep, and the recovery card's freshness silently depends on that sweep having run — exactly this session's failure, fixed by one hand-run `scripts.garmin_sync --from 2026-09-13 --to 2026-09-15` (3 nights, 235 samples, token alive).
+
+**Options / trigger to close:** the parallel to #297's load model — either an in-process nightly sweep in `main.lifespan` over Garmin-connected users (off the loop via `asyncio.to_thread`, mirroring `load_sweep.py`), or an on-demand `POST /integrations/garmin/sync` fired fire-and-forget from a surface the user already hits (check-in / dashboard load), staleness-gated. The unofficial `garminconnect` auth is fragile (curl_cffi cat-and-mouse, #259) and a dead token raises `GarminReconnectError` → 424, so any sweep must isolate per-user failures (as `garmin_sync.py` already does) and never abort the batch. Distinct from Q154 (aerobic ingest): same shape (an un-automated ingest feeding a downstream read), different source.
+
+**Also surfaced (ops, not this question):** the 2026-09-15 sweep hit TWO Garmin-connected users (ids 1 and 4) with identical pulls — likely one Garmin account stored under two `UserIntegration` rows. Verify and clean up if unintended; left untouched this session (may be a test + real split).
+
+**State:** OPEN (deferred — filed by #298; the read-path fix landed, the capture-trigger gap did not.)
