@@ -162,7 +162,9 @@ def test_sweep_runs_off_thread_from_a_running_loop(db_session, monkeypatch):
         return await asyncio.to_thread(load_sweep._sweep)
 
     summary = asyncio.run(_drive())
-    assert summary["users_succeeded"] == 1
+    assert summary["load"]["users_succeeded"] == 1
+    # the Garmin leg ran too (no Garmin-keyed users seeded -> a clean zero, no network)
+    assert summary["garmin"]["users_attempted"] == 0
 
 
 # ── CANCELLATION ──────────────────────────────────────────────────────────────────
@@ -231,10 +233,61 @@ def test_seeded_in_memory_sweep_reports_summary(db_session, monkeypatch, capsys)
     # asyncio.run works directly — same code path to_thread runs in prod.
     summary = load_sweep._sweep()
 
-    assert summary["users_attempted"] == 1
-    assert summary["users_succeeded"] == 1
-    assert summary["users_failed"] == 0
-    assert summary["per_user"][1]["status"] == "succeeded"
+    load = summary["load"]
+    assert load["users_attempted"] == 1
+    assert load["users_succeeded"] == 1
+    assert load["users_failed"] == 0
+    assert load["per_user"][1]["status"] == "succeeded"
     assert db_session.query(models.LoadMetric).filter_by(user_id=1).count() > 0
+    # the Garmin leg ran beside the load chain (no Garmin-keyed users here)
+    assert summary["garmin"]["users_attempted"] == 0
 
     print("SWEEP SUMMARY:", load_sweep._summary_brief(summary))
+
+
+# ── GARMIN LEG (#299): the second per-user job on the sweep, isolated from load ───
+
+def _garmin_key(db, uid):
+    from encryption import encrypt
+    db.add(models.UserIntegration(
+        user_id=uid, provider="garmin", api_key_encrypted=encrypt("garmin-token")))
+    db.commit()
+
+
+def test_sweep_runs_garmin_beside_load_per_user_isolated(db_session, monkeypatch, capsys):
+    """The seeded sweep runs `garmin_sync` per-user beside the load chain, and one user's dead
+    Garmin token is caught and skipped without aborting the batch or touching the load result."""
+    import scripts.garmin_sync as garmin_sync_mod
+    from connectors.garmin import GarminReconnectError
+
+    # One Hevy-keyed user drives the load chain; two Garmin-keyed users drive the Garmin leg,
+    # the second with a dead token.
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _resistance_workout(db_session, "w1", 1)
+    _garmin_key(db_session, 1)
+    _user(db_session, 4)
+    _garmin_key(db_session, 4)
+    _mock_hevy_noop(monkeypatch)
+    monkeypatch.setattr(load_sweep, "SessionLocal", lambda: db_session)
+
+    def _fake_garmin_sync(db, user_id, start, end):
+        if user_id == 4:
+            raise GarminReconnectError("token expired")  # one user's failure must be isolated
+        return {"from": start.isoformat(), "to": end.isoformat(),
+                "days_with_data": 2, "readings_upserted": 2, "samples_upserted": 20}
+    monkeypatch.setattr(garmin_sync_mod, "sync_hrv_for_user", _fake_garmin_sync)
+
+    summary = load_sweep._sweep()
+
+    # load leg unaffected by the Garmin failure
+    assert summary["load"]["users_succeeded"] == 1
+    # garmin leg swept both users, isolated the dead-token one
+    g = summary["garmin"]
+    assert g["users_attempted"] == 2
+    assert g["users_succeeded"] == 1
+    assert g["users_failed"] == 1
+    assert g["per_user"][1]["status"] == "succeeded"
+    assert g["per_user"][4]["status"] == "reconnect_required"
+
+    print("SWEEP SUMMARY (garmin):", load_sweep._summary_brief(summary))
