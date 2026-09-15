@@ -16,11 +16,21 @@ import HubLayout from '../components/HubLayout'
 import { useHubChat } from '../components/hub/HubChatContext'
 import ExposurePanel from '../components/ExposurePanel'
 import WorkoutPanel from '../components/WorkoutPanel'
+import useLoadRefresh from '../lib/useLoadRefresh'
 
 function TrainingBody() {
   const { sendToChat } = useHubChat()
+  // On-demand load refresh (#297). Training is the post-workout landing, so opening it kicks a
+  // per-user load refresh (server-gated at 15 min) early — the load-metrics table is then fresh
+  // by the time the Metrics charts are opened. Fire-and-forget: nothing on this page renders the
+  // load-metrics surface, so there is nothing to re-fetch here, only a subtle in-flight note.
+  // Never blocks first paint (the panels below render immediately).
+  const { refreshing } = useLoadRefresh()
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
+      {refreshing && (
+        <p className="text-[11px] text-gray-400" role="status">refreshing load…</p>
+      )}
       <ExposurePanel onDiscuss={sendToChat} />
       <div className="h-[75vh] min-h-[420px] border border-gray-200 rounded-2xl overflow-hidden bg-white">
         <WorkoutPanel onFeedback={sendToChat} />

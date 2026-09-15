@@ -100,3 +100,14 @@ test('empty series renders the empty state and no chart', async () => {
   expect(container.querySelector('.recharts-line')).toBeNull()
   expect(container.querySelector('svg')).toBeNull()
 })
+
+test('bumping reloadToken refetches the series (#297 on-demand refresh)', async () => {
+  api.get.mockResolvedValue({ data: formSeries })
+  let rerender
+  await act(async () => { ({ rerender } = render(<FormChart {...FIXED} days={90} reloadToken={0} />)) })
+  await waitFor(() => expect(api.get).toHaveBeenCalledWith('/series/load', { params: { days: 90 } }))
+  const callsBefore = api.get.mock.calls.length
+
+  await act(async () => { rerender(<FormChart {...FIXED} days={90} reloadToken={1} />) })
+  await waitFor(() => expect(api.get.mock.calls.length).toBe(callsBefore + 1))
+})

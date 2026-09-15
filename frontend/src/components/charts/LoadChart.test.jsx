@@ -87,3 +87,15 @@ test('one shared range selector reissues the request with the chosen days', asyn
   await waitFor(() => expect(screen.getByRole('button', { name: '180d' }).getAttribute('aria-pressed')).toBe('true'))
   expect(container.querySelectorAll('.recharts-wrapper')).toHaveLength(loadSeries.windows.length)
 })
+
+test('bumping reloadToken refetches the series (#297 on-demand refresh)', async () => {
+  api.get.mockResolvedValue({ data: loadSeries })
+  let rerender
+  await act(async () => { ({ rerender } = render(<LoadChart {...FIXED} reloadToken={0} />)) })
+  await waitFor(() => expect(api.get).toHaveBeenCalledWith('/series/load', { params: { days: 90 } }))
+  const callsBefore = api.get.mock.calls.length
+
+  await act(async () => { rerender(<LoadChart {...FIXED} reloadToken={1} />) })
+  await waitFor(() => expect(api.get.mock.calls.length).toBe(callsBefore + 1))
+  expect(api.get).toHaveBeenLastCalledWith('/series/load', { params: { days: 90 } })
+})
