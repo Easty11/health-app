@@ -1,8 +1,9 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 import models
@@ -50,6 +51,146 @@ def _pick_latest_hrv(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
         usable,
         key=lambda c: (c["captured_at"], _HRV_SOURCE_RANK.get(c.get("source") or "", 0)),
     )
+
+
+# ── Card sleep: freshest staged sleep across sources, source-labelled ─────────────────
+# The card's sleep block used to read ONLY the Samsung scraper table (samsung_hrv_readings),
+# which froze when the Samsung ring died — so a live Garmin-only night showed sleep days
+# stale. This repoints it to the NEWEST-available staged night across {samsung scraper,
+# Health Connect aggregate}, source-labelled and dated. The check-in already reads the HC
+# aggregate for sleep (checkin_v2._snapshot_passive); the card now agrees on source. NOT a
+# blend and NOT ingestion — the HC data is already staged; this is a read-path repoint.
+#
+# Health Connect record identity (HC → package) as it actually arrives in
+# health_connect_record_sources.source_package.
+# Health Connect writer package → friendly source, as the packages actually arrive in
+# health_connect_record_sources.source_package. Withings is here because it IS a real HC
+# sleep writer historically (Q83) even though it is disabled on live nights — so a
+# Samsung+Withings night is recognised as multi-source, not misattributed to Samsung.
+_SLEEP_SOURCE_BY_PACKAGE = {
+    "com.garmin.android.apps.connectmobile": "garmin",
+    "com.sec.android.app.shealth": "samsung",
+    "com.withings.wiscale2": "withings",
+}
+_SLEEP_SOURCE_LABELS = {"garmin": "Garmin", "samsung": "Samsung", "withings": "Withings"}
+
+
+def _resolve_hc_sleep_source(db: Session, user_id: int, night: date) -> tuple[str, str]:
+    """(source_key, display_label) for a Health-Connect sleep night, from the per-record
+    writer identities in health_connect_record_sources.
+
+    JOIN WINDOW — a sleep session's `record_start` is its START timestamp, whose local date
+    is normally the calendar day BEFORE the wake-date that `health_connect_syncs` is keyed on
+    (bedtime the prior evening). So match `record_start` on {night, night-1}, record_type
+    'sleep'.
+
+    Multiplicity is judged on DISTINCT REAL packages (the 'unknown' pre-cutover sentinel does
+    not count as a source): two or more → the aggregate is a blend, 'Health Connect (multiple)'
+    — never misattribute a blend to one device (Decision B; mirrors the HRV multi-source
+    guard), and this holds even when only one of the two is a package we have a friendly name
+    for. Exactly one real package → its chip if known, else generic 'Health Connect' (a real
+    but unlabelled writer, honest: we know it is HC, not which device). None/only-'unknown' →
+    generic 'Health Connect'."""
+    days = [night.isoformat(), (night - timedelta(days=1)).isoformat()]
+    rows = db.execute(
+        select(models.HealthConnectRecordSource.source_package)
+        .where(
+            models.HealthConnectRecordSource.user_id == user_id,
+            models.HealthConnectRecordSource.record_type == "sleep",
+            func.substr(models.HealthConnectRecordSource.record_start, 1, 10).in_(days),
+        )
+        .distinct()
+    ).all()
+    packages = {pkg for (pkg,) in rows if pkg and pkg != "unknown"}
+    if len(packages) >= 2:
+        return "multiple", "Health Connect (multiple)"
+    if len(packages) == 1:
+        key = _SLEEP_SOURCE_BY_PACKAGE.get(next(iter(packages)))
+        if key:
+            return key, _SLEEP_SOURCE_LABELS[key]
+    return "health_connect", "Health Connect"
+
+
+def _build_latest_sleep(db: Session, user_id: int) -> dict[str, Any] | None:
+    """Freshest staged sleep night across the Samsung scraper table and the Health Connect
+    aggregate, source-labelled and dated. Newest wake-date wins; a same-night tie prefers the
+    HC aggregate (richer, and honestly labelled including 'multiple').
+
+    Fields the winning source does not carry are None — the card renders '—'. The HC aggregate
+    stores only the asleep-union stages (deep/rem/light, summing to duration) plus a score, so
+    efficiency %, awake/WASO, respiratory rate, sleep HR, SpO2 and bedtime/wake are genuinely
+    absent for an HC night (no in-bed span is staged to derive WASO from) → '—', never mixed
+    with another night's Samsung values under the same header."""
+    hc = (
+        db.query(models.HealthConnectSync)
+        .filter(
+            models.HealthConnectSync.user_id == user_id,
+            models.HealthConnectSync.sleep_duration_minutes.isnot(None),
+        )
+        .order_by(models.HealthConnectSync.date.desc())
+        .first()
+    )
+    samsung = (
+        db.query(models.SamsungHRVReading)
+        .filter(
+            models.SamsungHRVReading.user_id == user_id,
+            models.SamsungHRVReading.context != "session",
+            or_(
+                models.SamsungHRVReading.total_sleep_time_minutes.isnot(None),
+                models.SamsungHRVReading.actual_sleep_time_minutes.isnot(None),
+            ),
+        )
+        .order_by(models.SamsungHRVReading.captured_at.desc())
+        .first()
+    )
+
+    hc_night = hc.date if hc else None
+    samsung_night = samsung.captured_at if samsung else None
+
+    # HC wins when it exists and is not older than the freshest Samsung night (tie → HC).
+    if hc_night is not None and (samsung_night is None or hc_night >= samsung_night):
+        source, label = _resolve_hc_sleep_source(db, user_id, hc_night)
+        return {
+            "night": hc_night.isoformat(),
+            "source": source,
+            "source_label": label,
+            "duration_min": hc.sleep_duration_minutes,
+            "deep_min": hc.deep_sleep_minutes,
+            "rem_min": hc.rem_sleep_minutes,
+            "light_min": hc.light_sleep_minutes,
+            "score": hc.sleep_score,
+            # Not staged by the HC aggregate → honest '—' (Decision A(a); no split-night mix):
+            "efficiency_pct": None,
+            "awake_min": None,
+            "resp_rate": None,
+            "sleep_hr_bpm": None,
+            "spo2_pct": None,
+            "bedtime": None,
+            "wake_time": None,
+        }
+    if samsung_night is not None:
+        return {
+            "night": samsung_night.isoformat(),
+            "source": "samsung",
+            "source_label": "Samsung",
+            "duration_min": (
+                samsung.total_sleep_time_minutes
+                if samsung.total_sleep_time_minutes is not None
+                else samsung.actual_sleep_time_minutes
+            ),
+            "deep_min": samsung.deep_minutes,
+            "rem_min": samsung.rem_minutes,
+            "light_min": samsung.light_minutes,
+            "score": None,
+            "efficiency_pct": samsung.sleep_efficiency_pct,
+            "awake_min": samsung.awake_minutes,
+            "resp_rate": samsung.respiratory_rate,
+            "sleep_hr_bpm": samsung.sleep_hr_bpm,
+            "spo2_pct": samsung.spo2_average_pct,
+            "bedtime": samsung.bedtime,
+            "wake_time": samsung.wake_time,
+        }
+    return None
 
 
 def _serialize_reading(r: models.SamsungHRVReading) -> dict[str, Any]:
@@ -179,12 +320,17 @@ def get_health_summary(
             "baseline_high": picked["baseline_high"],
         }
 
+    # Freshest staged sleep across sources (Garmin/HC + Samsung), source-labelled and dated —
+    # independent of the Samsung-native HRV path above. Computed unconditionally so a
+    # Garmin-only user (no Samsung device row) still gets last night's sleep.
+    latest_sleep = _build_latest_sleep(db, current_user.id)
+
     if not readings:
         # No Samsung device row (sleep/baseline unavailable), but a source-agnostic HRV
         # reading may still exist (e.g. a Garmin-only user) — surface it, don't blank out.
         return {
             "latest": None, "trend": [], "baseline_hrv": None, "vs_baseline": None,
-            "latest_hrv": latest_hrv,
+            "latest_hrv": latest_hrv, "latest_sleep": latest_sleep,
         }
 
     latest = readings[0]
@@ -206,6 +352,7 @@ def get_health_summary(
         "baseline_hrv": baseline_hrv,
         "vs_baseline": vs_baseline,
         "latest_hrv": latest_hrv,
+        "latest_sleep": latest_sleep,
     }
 
 
