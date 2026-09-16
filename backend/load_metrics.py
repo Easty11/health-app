@@ -13,11 +13,12 @@ and delete-and-reinserts per `(user, formula_version, metrics_version)`; a `form
 is a form-column refresh derivable from the stored stocks alone — neither a stock
 recompute nor a `metrics_version` bump.
 
-Windows are computed only where `load_events` supply rows (today: mechanical,
-neuromuscular). The fatigue-τ table has NO `psychological` key, so that window is
+Windows are computed only where `load_events` supply rows (mechanical, neuromuscular,
+metabolic). The fatigue-τ table has NO `psychological` key, so that window is
 FAIL-CLOSED — a psychological load_event produces no metric row until a τ prior is minted
-(OPEN_QUESTIONS Q122). `metabolic` carries a τ (provisioned) and lights up the moment a
-Metabolic→load_events transform feeds it; no re-architecting.
+(OPEN_QUESTIONS Q122). `metabolic` is LIVE — the Metabolic→load_events transform
+(`load_events_metabolic.py`, `metab-v1`, `trimp_edw_au`) feeds it and its lane is rolled
+up here beside the resistance windows.
 
 Re-runnable CLI (mirrors load_events.py):
     python backend/load_metrics.py                       # every keyed user, defaults
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 # REASONED-PRIOR constants — the recompute identity (metrics_version pins the τ-set)
 # ---------------------------------------------------------------------------
 
-METRICS_VERSION = "banister-v1"
+METRICS_VERSION = "banister-v2"
 
 # Banister time constants (#32). Fitness τ is common to all windows; fatigue τ is
 # per-window. The fatigue dict is the window allowlist: a window with no key here is
@@ -52,7 +53,7 @@ TAU_FITNESS_DAYS = 42
 TAU_FATIGUE_DAYS = {
     "mechanical": 10,
     "neuromuscular": 6,
-    "metabolic": 4,        # provisioned — lights up when a metabolic transform feeds load_events
+    "metabolic": 4,        # live — fed by load_events_metabolic (metab-v1, trimp_edw_au)
 }
 FORM_K = 1               # form = fitness − k·fatigue; read-time-refreshable, no version bump
 
@@ -131,9 +132,22 @@ def compute_window_series(
     the Banister stocks + ΔLoad per day. Rest days (and tail days past the last session)
     carry `daily_load=0` and still decay. Seeds `fitness(d0-1)=fatigue(d0-1)=0`.
 
-        fitness(d) = fitness(d-1)·e^(-1/42)          + daily_load(d)
-        fatigue(d) = fatigue(d-1)·e^(-1/τ_fatigue)   + daily_load(d)
-        form(d)    = fitness(d) − FORM_K·fatigue(d)
+    NORMALISED EWMA (#18, banister-v2): the load term is weighted by (1 − decay), so a
+    constant load L drives each stock to L (not to L/(1−decay)) and the two stocks share
+    one scale. Because τ_fatigue < τ_fit, fatigue responds harder to a load spike and
+    decays faster in rest, so form = fitness − fatigue genuinely goes NEGATIVE after hard
+    days and positive after rest — the property the old un-normalised leaky sums could
+    never show (fitness ≥ fatigue every day by construction, form never < 0).
+
+        decay_x     = e^(-1/τ_x)
+        fitness(d)  = fitness(d-1)·decay_fit + (1 − decay_fit)·daily_load(d)
+        fatigue(d)  = fatigue(d-1)·decay_fat + (1 − decay_fat)·daily_load(d)
+        form(d)     = fitness(d) − FORM_K·fatigue(d)
+
+    Zero-seed warm-up now biases fitness LOW (τ_fit=42 is slow to fill), so form is
+    strongly negative for ~τ_fit days from a cold start — surfaced by the maturity gate
+    ('low' until MATURITY_DAYS), not suppressed. Metabolic τ_fat=4 makes the metabolic
+    fatigue trace near-instantaneous — a known artefact, τ untouched here (queued P6/P4).
     """
     if not daily_by_day:
         return []
@@ -152,8 +166,8 @@ def compute_window_series(
     fatigue = 0.0
     for i, d in enumerate(days):
         load = loads[i]
-        fitness = fitness * decay_fit + load
-        fatigue = fatigue * decay_fat + load
+        fitness = fitness * decay_fit + (1.0 - decay_fit) * load
+        fatigue = fatigue * decay_fat + (1.0 - decay_fat) * load
         form = fitness - FORM_K * fatigue
         acute = _trailing_mean(loads, i, ACUTE_DAYS)
         chronic = _trailing_mean(loads, i, CHRONIC_DAYS)

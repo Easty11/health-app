@@ -7,7 +7,7 @@ readiness and per-exercise series (`/series/readiness`, `/series/exercise/{id}`)
 next and reuse this shape.
 
 Version pinning (the whole reason this is not a naive `SELECT *`):
-  * `metrics_version` is ONE axis — `banister-v1`, imported from `load_metrics.METRICS_VERSION`
+  * `metrics_version` is ONE axis — `banister-v2`, imported from `load_metrics.METRICS_VERSION`
     so this surface can never drift from the τ-set the rollup actually wrote. Rows at any
     other metrics_version (a retired τ-set) are excluded.
   * `formula_version` is PER-LANE, not global: `tier0-v1` for the mechanical/neuromuscular

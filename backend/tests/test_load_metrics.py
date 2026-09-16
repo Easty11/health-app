@@ -43,23 +43,84 @@ def _rows(db, uid=1):
 # ── Pure series: EWMA recurrence + form sign (mutation-proof on τ and k) ─────────
 
 def test_window_series_ewma_recurrence_and_form():
-    """fitness/fatigue are the discrete Banister EWMAs; form = fitness − fatigue (k=1).
-    Two days, one load each — a wrong τ or a wrong form sign fails here."""
+    """fitness/fatigue are the NORMALISED Banister EWMAs (#18/banister-v2): the load term
+    is weighted by (1 − decay), so day-0 stocks are FRACTIONS of the load, not the load
+    itself, and form starts strongly NEGATIVE (fatigue-τ < fitness-τ ⇒ (1 − decay_fat) >
+    (1 − decay_fit) ⇒ fatigue outruns fitness). Two days, one load each — a wrong τ, the
+    old un-normalised recurrence, or a wrong form sign all fail here."""
     from datetime import date
     import math
+    dfit = math.exp(-1 / 42)
+    dfat = math.exp(-1 / 10)
     series = compute_window_series(
         {date(2026, 6, 1): 100.0, date(2026, 6, 2): 50.0},
         date(2026, 6, 2),
         tau_fatigue_days=10,
     )
     assert [m.day for m in series] == [date(2026, 6, 1), date(2026, 6, 2)]
-    assert series[0].fitness == pytest.approx(100.0) and series[0].fatigue == pytest.approx(100.0)
-    assert series[0].form == pytest.approx(0.0)
-    exp_fit = 100.0 * math.exp(-1 / 42) + 50.0
-    exp_fat = 100.0 * math.exp(-1 / 10) + 50.0
-    assert series[1].fitness == pytest.approx(exp_fit, abs=1e-6)
-    assert series[1].fatigue == pytest.approx(exp_fat, abs=1e-6)
-    assert series[1].form == pytest.approx(exp_fit - exp_fat, abs=1e-6)
+
+    # Day 0 (load 100): stock = (1 − decay)·load, seeded from 0. Normalisation makes these
+    # ~2.35 / ~9.52, NOT 100/100 as the old leaky sum produced — and form starts negative.
+    exp_fit0 = 100.0 * (1.0 - dfit)      # ≈ 2.352831
+    exp_fat0 = 100.0 * (1.0 - dfat)      # ≈ 9.516258
+    assert series[0].fitness == pytest.approx(exp_fit0, abs=1e-6)
+    assert series[0].fatigue == pytest.approx(exp_fat0, abs=1e-6)
+    assert series[0].form == pytest.approx(exp_fit0 - exp_fat0, abs=1e-6)   # ≈ −7.163427
+    assert series[0].form < 0                                               # normalised ⇒ day-0 form negative
+
+    # Day 1 (load 50): stock = day0·decay + (1 − decay)·50 for each window.
+    exp_fit1 = exp_fit0 * dfit + (1.0 - dfit) * 50.0
+    exp_fat1 = exp_fat0 * dfat + (1.0 - dfat) * 50.0
+    assert series[1].fitness == pytest.approx(exp_fit1, abs=1e-6)
+    assert series[1].fatigue == pytest.approx(exp_fat1, abs=1e-6)
+    assert series[1].form == pytest.approx(exp_fit1 - exp_fat1, abs=1e-6)
+
+
+# ── Normalisation property tests (behaviour, not numbers) — pin "form goes negative" ──
+# against a future un-normalising regression (the old leaky sum kept form ≥ 0 forever).
+
+def test_constant_load_converges_to_that_load():
+    """Property (a): a constant load L for 300 days drives BOTH stocks to L and form to 0.
+    The signature of a normalised EWMA — the un-normalised sum would run away to L/(1−decay)
+    (thousands), never converging on L. τ_fit=42 is the slow stock, so 300 days is the bound
+    that gets it within 1e-3·L."""
+    from datetime import date, timedelta
+    L = 100.0
+    d0 = date(2026, 1, 1)
+    daily = {d0 + timedelta(days=k): L for k in range(300)}
+    series = compute_window_series(daily, d0 + timedelta(days=299), tau_fatigue_days=10)
+    last = series[-1]
+    assert last.fitness == pytest.approx(L, abs=1e-3 * L)
+    assert last.fatigue == pytest.approx(L, abs=1e-3 * L)
+    assert last.form == pytest.approx(0.0, abs=1e-3 * L)
+
+
+def test_spike_day_drives_form_negative():
+    """Property (b): from steady state, a single day at 2L pushes form NEGATIVE that day —
+    fatigue (shorter τ ⇒ larger 1−decay) responds harder to the spike than fitness does."""
+    from datetime import date, timedelta
+    L = 100.0
+    d0 = date(2026, 1, 1)
+    daily = {d0 + timedelta(days=k): L for k in range(300)}
+    spike = d0 + timedelta(days=300)
+    daily[spike] = 2 * L
+    series = compute_window_series(daily, spike, tau_fatigue_days=10)
+    assert series[-1].form < 0
+
+
+def test_rest_after_spike_recovers_form_positive():
+    """Property (c): after the spike, 14 rest days recover form to POSITIVE — fatigue decays
+    faster (τ_fat=10) than fitness (τ_fit=42), so the gap flips sign. The training→rest sign
+    change the FormChart caption and #18 both assert."""
+    from datetime import date, timedelta
+    L = 100.0
+    d0 = date(2026, 1, 1)
+    daily = {d0 + timedelta(days=k): L for k in range(300)}
+    daily[d0 + timedelta(days=300)] = 2 * L
+    as_of = d0 + timedelta(days=314)   # 14 rest days after the spike
+    series = compute_window_series(daily, as_of, tau_fatigue_days=10)
+    assert series[-1].daily_load == 0.0     # confirm the tail is a rest day
+    assert series[-1].form > 0
 
 
 def test_rest_day_is_continuous_and_decays():
