@@ -13,7 +13,7 @@ The cascade is the two-level recompute in dependency order — the repo's standi
 rule "recompute `load_events`, then `load_metrics`":
 
   1. metabolic transform  `aerobic_sessions` → `load_events`   (`metab-v1`)
-  2. daily rollup         `load_events`      → `load_metrics`  (`metab-v1` / `banister-v1`,
+  2. daily rollup         `load_events`      → `load_metrics`  (`metab-v1` / `banister-v2`,
                                                                 the `metabolic` window)
 
 Both steps are per-user and idempotent — each delete-and-reinserts only its own

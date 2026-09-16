@@ -611,10 +611,12 @@ def get_readiness_snapshot() -> str:
 
 # The metabolic lane of load_metrics: the Metabolic→load_events transform (#251,
 # `metab-v1`, Edwards zone-weighted TRIMP) rolled up under the Banister τ-set
-# (`banister-v1`). This readout replaced the legacy aerobic acute:chronic ratio (ACWR)
-# surface, retired in #255 once that transform landed — the revisit trigger #249 named.
+# (`banister-v2`, the normalised EWMA — #18 restored). This pin FOLLOWS the metrics_version
+# bump (the revisit trigger the banister-v2 entry named): the rollup writes only banister-v2
+# now, so this readout must select it. This readout replaced the legacy aerobic acute:chronic
+# ratio (ACWR) surface, retired in #255 once that transform landed — the trigger #249 named.
 _METAB_FORMULA_VERSION = "metab-v1"
-_METAB_METRICS_VERSION = "banister-v1"
+_METAB_METRICS_VERSION = "banister-v2"
 _METAB_WINDOW = "metabolic"
 
 
@@ -655,7 +657,7 @@ def _format_training_load(rows: list[dict]) -> str:
 def get_training_load() -> str:
     """Metabolic training-load readout: the Banister fitness/fatigue/form curves and the
     acute/chronic trace over the metabolic window (Edwards zone-weighted TRIMP), read from
-    the `load_metrics` metabolic lane (metab-v1 / banister-v1). No acute:chronic ratio and
+    the `load_metrics` metabolic lane (metab-v1 / banister-v2). No acute:chronic ratio and
     no sweet-spot verdict — the legacy aerobic ACWR readout was retired (#255) after the
     Metabolic→load_events transform landed (#251)."""
     user_id = _current_user_id()

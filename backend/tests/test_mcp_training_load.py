@@ -1,5 +1,5 @@
 """The `get_training_load` MCP tool — a thin text formatter over the metabolic lane of
-`load_metrics` (`metab-v1` / `banister-v1`, window `metabolic`).
+`load_metrics` (`metab-v1` / `banister-v2`, window `metabolic`).
 
 The legacy aerobic acute:chronic ratio (ACWR) readout was retired in #255 once the
 Metabolic→load_events transform landed (#251, the trigger #249 named). The tool now serves
@@ -59,5 +59,5 @@ def test_only_latest_day_is_served():
 def test_empty_metabolic_lane_is_a_clean_no_data_readout():
     out = _format_training_load([])
     assert "No metabolic load metrics yet." in out
-    assert "metab-v1 / banister-v1" in out
+    assert "metab-v1 / banister-v2" in out
     assert "acwr" not in out.lower()
