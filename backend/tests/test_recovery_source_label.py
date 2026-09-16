@@ -161,7 +161,7 @@ def test_summary_preserves_existing_samsung_keys(db_session):
     db_session.commit()
 
     body = _summary(db_session, user)
-    assert set(body) == {"latest", "trend", "baseline_hrv", "vs_baseline", "latest_hrv"}
+    assert set(body) == {"latest", "trend", "baseline_hrv", "vs_baseline", "latest_hrv", "latest_sleep"}
     assert body["baseline_hrv"] == 50.0
     assert body["trend"] == [{"captured_at": d.isoformat(), "hrv_ms": 50.0}]
     assert body["latest"]["hrv_ms"] == 50.0

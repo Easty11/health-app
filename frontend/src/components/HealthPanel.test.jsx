@@ -38,6 +38,27 @@ test('renders the cached summary on first paint, then fires POST /integrations/g
     expect(api.post).toHaveBeenCalledWith('/integrations/garmin/refresh', null, undefined))
 })
 
+test('sleep block renders the freshest staged night, source-chipped, with — for fields the source lacks', async () => {
+  // Garmin/HC night wins: staging present, sub-metrics the HC aggregate does not carry are null.
+  api.get.mockResolvedValue({ data: {
+    ...SUMMARY,
+    latest_sleep: {
+      night: '2026-09-16', source: 'garmin', source_label: 'Garmin',
+      duration_min: 381, deep_min: 39, rem_min: 40, light_min: 302, score: 6,
+      efficiency_pct: null, awake_min: null, resp_rate: null,
+      sleep_hr_bpm: null, spo2_pct: null, bedtime: null, wake_time: null,
+    },
+  } })
+  await act(async () => { render(<HealthPanel />) })
+  // Source provenance line: chip + the night this sleep is from.
+  await waitFor(() => expect(screen.getByText(/Sleep · Garmin · 16 Sep/)).toBeTruthy())
+  // Staging present.
+  expect(screen.getByText('6h 21m')).toBeTruthy()      // 381 min duration
+  expect(screen.getByText('39m')).toBeTruthy()          // deep
+  // Efficiency is not staged by HC → '—', never a stale Samsung value.
+  expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+})
+
 test('a real run re-fetches /health/summary; a skip does not', async () => {
   await act(async () => { render(<HealthPanel />) })
   await waitFor(() => expect(api.post).toHaveBeenCalled())

@@ -136,24 +136,44 @@ export default function HealthPanel() {
 
   const borderDelta = isSamsungHrv ? vs_baseline : null
 
-  const sleepMins = latest ? (latest.total_sleep_time_minutes ?? latest.actual_sleep_time_minutes) : null
-  const sleepColor = colorText(sleepMins, 420, 360)
-  const effColor = colorText(latest?.sleep_efficiency_pct, 85, 80)
-  const deepColor = colorText(latest?.deep_minutes, 60, 40)
-  const remColor = colorText(latest?.rem_minutes, 60, 45)
+  // Sleep block = freshest staged night across sources (backend `latest_sleep`), source-
+  // labelled and dated. Fall back to the Samsung device row when the API predates the field
+  // (never regress an older backend). Fields the winning source lacks are null → shown as '—',
+  // never mixed with another night's values under this header.
+  const sleep = data?.latest_sleep ?? (latest ? {
+    night: latest.captured_at,
+    source: 'samsung',
+    source_label: 'Samsung',
+    duration_min: latest.total_sleep_time_minutes ?? latest.actual_sleep_time_minutes,
+    efficiency_pct: latest.sleep_efficiency_pct,
+    deep_min: latest.deep_minutes,
+    rem_min: latest.rem_minutes,
+    light_min: latest.light_minutes,
+    awake_min: latest.awake_minutes,
+    resp_rate: latest.respiratory_rate,
+    sleep_hr_bpm: latest.sleep_hr_bpm,
+    spo2_pct: latest.spo2_average_pct,
+    bedtime: latest.bedtime,
+    wake_time: latest.wake_time,
+    score: null,
+  } : null)
 
-  // Sleep stages bar
-  const deep = latest?.deep_minutes ?? 0
-  const rem = latest?.rem_minutes ?? 0
-  const light = latest?.light_minutes ?? 0
-  const awake = latest?.awake_minutes ?? 0
+  const sleepMins = sleep?.duration_min ?? null
+  const sleepColor = colorText(sleepMins, 420, 360)
+  const effColor = colorText(sleep?.efficiency_pct, 85, 80)
+  const deepColor = colorText(sleep?.deep_min, 60, 40)
+  const remColor = colorText(sleep?.rem_min, 60, 45)
+
+  // Sleep stages bar. `awake_min` is null when the source does not stage it (HC/Garmin) —
+  // distinct from a measured 0: the bar omits the awake segment and the text shows '—'.
+  const deep = sleep?.deep_min ?? 0
+  const rem = sleep?.rem_min ?? 0
+  const light = sleep?.light_min ?? 0
+  const awake = sleep?.awake_min ?? 0
   const stagesTotal = deep + rem + light + awake
   const pct = (v) => stagesTotal > 0 ? `${((v / stagesTotal) * 100).toFixed(1)}%` : '0%'
 
-  // Sleep is Samsung-measured; if it is from a different night than the headline HRV
-  // (e.g. Garmin HRV synced for last night before the Samsung scraper caught up), say so.
-  const sleepDate = latest?.captured_at
-  const sleepIsOlderThanHrv = sleepDate && hrvDate && sleepDate !== hrvDate
+  const sleepDate = sleep?.night
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -200,13 +220,12 @@ export default function HealthPanel() {
           )}
         </div>
 
-        {latest ? (
+        {sleep ? (
           <>
-            {sleepIsOlderThanHrv && (
-              <p className="text-xs text-gray-400 -mt-2">
-                Sleep from Samsung · {fmtShortDate(sleepDate)}
-              </p>
-            )}
+            {/* Sleep provenance: source chip + the night this sleep is from */}
+            <p className="text-xs text-gray-400 -mt-2">
+              Sleep · {sleep.source_label}{sleepDate ? ` · ${fmtShortDate(sleepDate)}` : ''}
+            </p>
 
             {/* Sleep 2×2 grid */}
             <div className="grid grid-cols-2 gap-2">
@@ -217,17 +236,17 @@ export default function HealthPanel() {
               />
               <SleepMetricCard
                 label="Efficiency"
-                value={latest.sleep_efficiency_pct != null ? `${latest.sleep_efficiency_pct}%` : '—'}
+                value={sleep.efficiency_pct != null ? `${sleep.efficiency_pct}%` : '—'}
                 color={effColor}
               />
               <SleepMetricCard
                 label="Deep"
-                value={latest.deep_minutes != null ? `${latest.deep_minutes}m` : '—'}
+                value={sleep.deep_min != null ? `${sleep.deep_min}m` : '—'}
                 color={deepColor}
               />
               <SleepMetricCard
                 label="REM"
-                value={latest.rem_minutes != null ? `${latest.rem_minutes}m` : '—'}
+                value={sleep.rem_min != null ? `${sleep.rem_min}m` : '—'}
                 color={remColor}
               />
             </div>
@@ -242,7 +261,7 @@ export default function HealthPanel() {
                   {awake > 0 && <div className="bg-orange-200" style={{ width: pct(awake) }} />}
                 </div>
                 <p className="text-xs text-gray-400 mt-1.5">
-                  Deep {deep}m · REM {rem}m · Light {light}m · Awake {awake}m
+                  Deep {deep}m · REM {rem}m · Light {light}m · Awake {sleep.awake_min != null ? `${awake}m` : '—'}
                 </p>
               </div>
             )}
@@ -250,9 +269,9 @@ export default function HealthPanel() {
             {/* Vitals row */}
             <div className="grid grid-cols-3 gap-2">
               {[
-                { label: 'Resp Rate', value: latest.respiratory_rate != null ? `${latest.respiratory_rate.toFixed(1)}` : '—', unit: 'br/m' },
-                { label: 'Sleep HR', value: latest.sleep_hr_bpm ?? '—', unit: 'bpm' },
-                { label: 'SpO2', value: latest.spo2_average_pct != null ? `${latest.spo2_average_pct.toFixed(1)}` : '—', unit: '%' },
+                { label: 'Resp Rate', value: sleep.resp_rate != null ? `${sleep.resp_rate.toFixed(1)}` : '—', unit: 'br/m' },
+                { label: 'Sleep HR', value: sleep.sleep_hr_bpm ?? '—', unit: 'bpm' },
+                { label: 'SpO2', value: sleep.spo2_pct != null ? `${sleep.spo2_pct.toFixed(1)}` : '—', unit: '%' },
               ].map(({ label, value, unit }) => (
                 <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
                   <p className="text-base font-semibold text-gray-700">
@@ -264,9 +283,9 @@ export default function HealthPanel() {
             </div>
 
             {/* Sleep timing */}
-            {(latest.bedtime || latest.wake_time) && (
+            {(sleep.bedtime || sleep.wake_time) && (
               <p className="text-xs text-gray-400 text-center">
-                Bedtime {latest.bedtime ?? '—'} → Wake {latest.wake_time ?? '—'}
+                Bedtime {sleep.bedtime ?? '—'} → Wake {sleep.wake_time ?? '—'}
               </p>
             )}
           </>
