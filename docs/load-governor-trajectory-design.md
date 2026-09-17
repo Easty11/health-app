@@ -158,6 +158,10 @@ Daily, per user × window, computed from `load_events` (never raw payloads — #
   convention; whether strength windows want a different τ is a candidate OQ, §11).
   This is the **fitness trace** and the load-bearing chronic object.
 - `acute` — EW trace, prior **τ_a = 7 d**. v1 role: display + guard inputs.
+  **[Tier 3 — reconciled #306.]** This EWMA acute trace is a design proposal, NOT what
+  ships. Tier 0 (shipped, #249) computes `acute` as a coupled 7-in-28 **trailing mean**
+  (`load_metrics._trailing_mean`), and its ratio is a descriptive spike indicator with no
+  risk band (#306). The EWMA variant stays Tier 3 until a criterion (Q156) justifies it.
 - `fatigue` / `form` — **computed, displayed, NOT authoritative in v1.** The fatigue
   component is the model's statistically weakest part (adds no predictive value across
   two datasets — Marchal 2025). Promotion to veto authority is a v2 decision with
@@ -299,9 +303,10 @@ calibration dataset is the option on a careful v2, not a promise of personal con
 
 **Candidate decisions (if adopted):** two-object architecture + INV set; fatigue-trace
 demotion in v1 with named promotion criteria; per-window criterion requirement as the
-authority gate; ACWR readout boundary — the MCP monitoring surface currently reports
-ACWR sweet-spot language while #18 forbids ACWR in dosing; one sentence formalising
-"readout ≠ dosing input" (or retiring the readout) when this work starts.
+authority gate; ~~ACWR readout boundary — the MCP monitoring surface currently reports
+ACWR sweet-spot language while #18 forbids ACWR in dosing~~ — **CLOSED: the ACWR readout
+was retired in #255, and load_ratio is reclassified descriptive (no risk band) in #306; the
+"readout ≠ dosing input" boundary is now moot for this surface.**
 
 **Candidate open questions:** ~~strength-window τ priors vs the 42/7 aerobic
 convention~~ — **discharged into `docs/load-constants-provenance.md` (#305):** the
