@@ -2,16 +2,20 @@
   "window": {
     "start_date": "2026-09-07",
     "end_date": "2026-09-13",
-    "label": "Week of 2026-09-07",
-    "source": "weekly"
+    "label": "A",
+    "source": "phase"
   },
   "slots": [
-    { "capacity": "strength", "quota": 2, "done": 1, "remaining": 1, "workouts_counted": ["w1"] },
-    { "capacity": "endurance", "quota": 1, "done": 1, "remaining": 0, "workouts_counted": ["w2"] }
+    { "kind": "capacity", "capacity": "strength", "quota": 2, "done": 1, "remaining": 1, "workouts_counted": ["w1"] },
+    { "kind": "capacity", "capacity": "endurance", "quota": 1, "done": 1, "remaining": 0, "workouts_counted": ["w2"] },
+    { "kind": "load_window", "load_window": "metabolic", "quota": 3, "done": 1, "remaining": 2, "sessions_counted": [ { "session": 11, "sport_name": "Ride", "duration_minutes": 45.0, "trimp": 80.0 } ] }
   ],
   "due_capacity": "strength",
+  "due_slot": { "kind": "capacity", "key": "strength" },
   "uncounted": [
     { "workout": "w3", "reason": "untagged", "untagged_exercises": 2 },
-    { "workout": "w4", "reason": "off_plan", "capacity": "power" }
+    { "workout": "w4", "reason": "off_plan", "capacity": "power" },
+    { "session": 21, "reason": "concurrent_strength", "sport_name": "Row", "duration_minutes": 45.0 },
+    { "session": 22, "reason": "untimed", "sport_name": "Swim", "duration_minutes": 30.0 }
   ]
 }
