@@ -6,32 +6,38 @@ named days — an oracle the code cannot satisfy by implementing the wrong spec.
 includes a rest gap and one session near local midnight (2026-06-05T16:00:00Z =
 2026-06-06T02:00 AEST) that exercises the S1 day-boundary rule.
 
-ORACLE (mechanical window; NORMALISED EWMA per #18/banister-v3 — the load term is weighted
-by (1 − decay). τ_fit=42 → df=e^(-1/42)=0.976471687, 1-df=0.023528313; τ_fat=10 →
-dfat=e^(-1/10)=0.904837418, 1-dfat=0.095162582):
+ORACLE (mechanical window; NORMALISED EWMA per #18 with the FIRST-WEEK-MEAN SEED of
+banister-v4 — the load term is weighted by (1 − decay). τ_fit=42 → df=e^(-1/42)=0.976471687,
+1-df=0.023528313; τ_fat=10 → dfat=e^(-1/10)=0.904837418, 1-dfat=0.095162582):
 
   daily_load by user-local (AEST) day: 06-01=100, 06-03=100, 06-06=100, 06-09=1400; rest days=0.
-  fitness(d) = fitness(d-1)*df   + (1-df)*load(d)     seed fitness(06-01 -1)=0
-  fatigue(d) = fatigue(d-1)*dfat + (1-dfat)*load(d)   seed fatigue(06-01 -1)=0
-  form(d)    = fitness(d) - fatigue(d)                (k=1)
 
-  Normalisation makes form NEGATIVE throughout here: fatigue's larger load weight (1-dfat >
-  1-df) means fatigue outruns fitness on every load day, and the zero-seed warm-up keeps the
-  slow fitness stock low for ~τ_fit days (#18 warm-up direction flip).
+  banister-v4 SEED (P1.1): both stocks start at the mean of the first ACUTE_DAYS(7) daily_loads.
+  Here the first 7 calendar days are 06-01..06-07 = [100,0,100,0,0,100,0] → seed = 300/7 =
+  42.857142857. Day 0 (06-01) IS the seed: fitness(0)=fatigue(0)=42.857143, so form(0)=0 by
+  construction. The recurrence runs from day 1:
+    fitness(d) = fitness(d-1)*df   + (1-df)*load(d)     (d ≥ 1)
+    fatigue(d) = fatigue(d-1)*dfat + (1-dfat)*load(d)   (d ≥ 1)
+    form(d)    = fitness(d) - fatigue(d)                (k=1)
 
-    06-01: fit=2.352831,   fat=9.516258,    form=-7.163427
-    06-02: fit=2.297473,   fat=8.610666,    form=-6.313193    (rest, decays)
-    06-03: fit=4.596249,   fat=17.307511,   form=-12.711263
-    06-04: fit=4.488107,   fat=15.660484,   form=-11.172377   (rest)
-    06-05: fit=4.382509,   fat=14.170192,   form=-9.787683    (rest)
-    06-06: fit=6.632228,   fat=22.337978,   form=-15.70575
+  Values re-derived independently under the seed semantics (a standalone re-implementation,
+  not the module's own output fed back). Form now CROSSES ZERO — the warm-up artefact is gone,
+  so form is 0 at day 0, positive on rest days as the fast fatigue stock decays below the
+  seeded fitness, and negative on the 06-09 spike (fatigue outruns fitness):
+
+    06-01: fit=42.857143,  fat=42.857143,   form=0.0          (seed; form(0)=0 by construction)
+    06-02: fit=41.848787,  fat=38.778746,   form=3.07004      (rest, decays)
+    06-03: fit=43.216987,  fat=44.604719,   form=-1.387733    (load)
+    06-04: fit=42.200164,  fat=40.360019,   form=1.840145     (rest)
+    06-05: fit=41.207265,  fat=36.519255,   form=4.68801      (rest)
+    06-06: fit=42.590559,  fat=42.560247,   form=0.030312
            (the 06-05T16:00Z session lands HERE, not on 06-05 — boundary proof)
-    06-07: fit=6.476182,   fat=20.212238,   form=-13.736056   (rest)
-    06-08: fit=6.323809,   fat=18.288790,   form=-11.964981   (rest)
-    06-09: fit=39.114659,  fat=149.775996,  form=-110.661337
+    06-07: fit=41.588475,  fat=38.510104,   form=3.078371     (rest)
+    06-08: fit=40.609968,  fat=34.845383,   form=5.764585     (rest)
+    06-09: fit=72.594123,  fat=164.757021,  form=-92.162898
 
   ΔLoad (#33): acute=mean(last 7 daily_loads), chronic=mean(all days, ≤28); rest days count 0.
-  UNCHANGED by normalisation — computed off daily_load, not the stocks.
+  UNCHANGED by the seed — computed off daily_load, not the stocks.
     06-08: acute=[0,100,0,0,100,0,0]/7=28.571429; chronic=[100,0,100,0,0,100,0,0]/8=37.5;   ratio=0.761905
     06-09: acute=[100,0,0,100,0,0,1400]/7=228.571429; chronic=1700/9=188.888889;             ratio=1.210084
 """
@@ -49,8 +55,9 @@ def _utc(iso: str) -> datetime:
 
 
 def _user(db, uid=1):
-    # NULL rpe_complete_from → no P3 truncation, so the full 9-day calendar and every oracle
-    # value below are UNCHANGED by banister-v3 (which only alters the per-user series start).
+    # NULL rpe_complete_from → no P3 truncation, so the full 9-day calendar holds; the stock
+    # values below are the banister-v4 first-week-mean seed (P1.1), the daily_load/ΔLoad
+    # columns are unchanged by the seed.
     db.add(models.User(id=uid, email=f"u{uid}@x.com", hashed_password="x"))
     db.commit()
 
@@ -64,14 +71,14 @@ def _le(db, ref, occurred_iso, load):
 
 
 # expected (fitness, fatigue, form) per local day, 6dp (transform rounds to 6dp). Derived
-# independently under the normalised recurrence (a standalone re-implementation, not the
-# module's own output fed back).
+# independently under the normalised recurrence with the banister-v4 first-week-mean seed
+# (a standalone re-implementation, not the module's own output fed back).
 _ORACLE = {
-    "2026-06-01": (2.352831, 9.516258, -7.163427),
-    "2026-06-02": (2.297473, 8.610666, -6.313193),
-    "2026-06-03": (4.596249, 17.307511, -12.711263),
-    "2026-06-06": (6.632228, 22.337978, -15.70575),
-    "2026-06-09": (39.114659, 149.775996, -110.661337),
+    "2026-06-01": (42.857143, 42.857143, 0.0),          # day 0 = seed → form 0 by construction
+    "2026-06-02": (41.848787, 38.778746, 3.07004),
+    "2026-06-03": (43.216987, 44.604719, -1.387733),
+    "2026-06-06": (42.590559, 42.560247, 0.030312),
+    "2026-06-09": (72.594123, 164.757021, -92.162898),
 }
 
 
