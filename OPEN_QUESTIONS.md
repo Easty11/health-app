@@ -4564,3 +4564,15 @@ Preregistered 2026-09-16 with banister-v2 (#301). The normalised stocks (#301) r
 **Amended (P3, #302).** The criterion sweep is now POST-EPOCH by construction: `banister-v3` truncates each user's series at `users.rpe_complete_from`, so the e1RM-vs-fitness comparison only ever runs over the RPE-complete span — there is no cross-epoch logging-behaviour step left for the harness to model around. User 4 has NO e1RM criterion until ~60 d of RPE-present sets accrue, and that is contingent on her adopting RPE at all (her epoch is currently NULL); until then her fitness trace has no observable to validate against. The metabolic-window criterion (§3.2) remains unbuilt.
 
 **State:** OPEN (P4). Blocks no current surface — banister-v2/-v3 ship without it; criterion validation is downstream.
+
+---
+
+## Q157. `hrv_readings.source` has no enum/CHECK — the wake-day selector's >2-source guard is runtime, not schema  [OPEN]
+
+Raised 2026-09-17 with #303. `HrvReading.source` is an unconstrained `String(50)`; any writer can stamp any string, so >2 distinct sources on one wake-day is a real state, not theoretical. `select_wakeday_hrv` (#303) guards it at READ time — three sources → `config_error`, never a silent 2-of-3 pick — but nothing stops the rows being written in the first place, and every future reader of `hrv_readings` must re-implement the same guard or silently mispick. A `source` enum (or a CHECK against the known set `{garmin, samsung, …}`) would move the guarantee from per-reader runtime to the schema, catching a bad/typo'd source at ingest and letting readers trust a bounded source set.
+
+**Why deferred, not done in #303.** #303 is scoped additive/non-migration (helper + tests only) precisely so it self-merges on green ahead of the denorm brief; a schema constraint is a migration, which takes full human review (§ Merge disposition hold (a)) and would block the precondition. The runtime guard is the correct floor regardless — a schema constraint complements it (defence at write), it does not replace the read-time guard (a reader must still decide what to DO with a legit multi-source night).
+
+**To close:** a migration adding a CHECK/enum on `hrv_readings.source` (decide the allowed set — at least `garmin`, `samsung`; whether to admit `withings`/others already seen in `health_connect_record_sources`), plus a decision on whether the read-time `config_error` path stays (it should — the guard is about >2 same-night sources, which a per-value CHECK does not prevent). Full human review (schema migration).
+
+**State:** OPEN. Blocks no surface — the runtime guard (#303) holds the correctness floor; this is a defence-in-depth upgrade.
