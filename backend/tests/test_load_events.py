@@ -276,23 +276,112 @@ def test_bilateral_pair_summed_no_flags():
 
 
 def test_post_epoch_zero_rpe_artifact_signature():
-    """Epoch's ONLY use: diagnostic. A post-epoch rep workout with no RPE → flagged.
-    Same workout WITH an rpe, or the same zero-RPE workout PRE-epoch → NOT flagged
-    (mutation-proof: the flag must key on both the epoch AND the RPE absence)."""
+    """The PER-USER epoch's ONLY use: diagnostic. A session on/after the user's
+    `rpe_complete_from` whose working rep sets carry no RPE → flagged. Same workout WITH an
+    rpe, the same zero-RPE workout PRE-epoch, or a NULL epoch → NOT flagged (mutation-proof:
+    the flag keys on both the epoch AND the RPE absence, and NEVER fires without an epoch)."""
     zero = [(0, "T", {"weight_kg": 100.0, "reps": 5})]
     withrpe = [(0, "T", {"weight_kg": 100.0, "reps": 5, "rpe": 8.0})]
+    epoch = date(2026, 5, 11)
 
     post_zero = compute_session_events(_sess(date(2026, 6, 1), zero),
-                                       laterality_by_template={}, e1rm_by_template={"T": None})
+                                       laterality_by_template={}, e1rm_by_template={"T": None},
+                                       rpe_complete_from=epoch)
     post_rpe = compute_session_events(_sess(date(2026, 6, 1), withrpe),
-                                      laterality_by_template={}, e1rm_by_template={"T": None})
+                                      laterality_by_template={}, e1rm_by_template={"T": None},
+                                      rpe_complete_from=epoch)
     pre_zero = compute_session_events(_sess(date(2026, 4, 1), zero),
-                                      laterality_by_template={}, e1rm_by_template={"T": None})
+                                      laterality_by_template={}, e1rm_by_template={"T": None},
+                                      rpe_complete_from=epoch)
+    null_epoch = compute_session_events(_sess(date(2026, 6, 1), zero),
+                                        laterality_by_template={}, e1rm_by_template={"T": None},
+                                        rpe_complete_from=None)
     assert post_zero["mechanical"]["provenance"]["post_epoch_zero_rpe"] is True
     assert post_rpe["mechanical"]["provenance"]["post_epoch_zero_rpe"] is False
     assert pre_zero["mechanical"]["provenance"]["post_epoch_zero_rpe"] is False
-    # and the diagnostic changes no load
+    assert null_epoch["mechanical"]["provenance"]["post_epoch_zero_rpe"] is False  # never without an epoch
+    # and the diagnostic changes no load (single zero-RPE set → no session RIR, no imputation)
     assert post_zero["mechanical"]["load"] == pytest.approx(500.0)
+
+
+# ── Session-median RIR imputation (P3) ─────────────────────────────────────────
+
+def test_session_median_rir_floors_ties_and_excludes_warmup_nonrep():
+    """`_session_median_rir`: median over working rep sets carrying a usable RIR (real RPE or
+    failure=RIR 0), integer with ties FLOORED (#244). Warmups and non-rep sets never count;
+    no usable RIR → None."""
+    two = [(0, "A", {"weight_kg": 100.0, "reps": 5, "rpe": 8.0}),   # RIR 2
+           (0, "A", {"weight_kg": 100.0, "reps": 5, "rpe": 9.0})]   # RIR 1
+    assert le._session_median_rir(two) == 1                          # floor((1+2)/2)
+    three = two + [(0, "A", {"type": "failure", "weight_kg": 100.0, "reps": 3})]  # RIR 0 → {0,1,2}
+    assert le._session_median_rir(three) == 1                       # odd → middle
+    assert le._session_median_rir([(0, "A", {"weight_kg": 100.0, "reps": 5})]) is None
+    mixed = [(0, "A", {"type": "warmup", "weight_kg": 100.0, "reps": 5, "rpe": 6.0}),  # excluded
+             (0, "A", {"distance_meters": 20.0, "weight_kg": 40.0}),                    # non-rep excluded
+             (0, "A", {"weight_kg": 100.0, "reps": 5, "rpe": 8.0})]                     # RIR 2 only
+    assert le._session_median_rir(mixed) == 2
+
+
+def test_compute_set_load_impute_rir_flags_and_scores():
+    """An imputed RIR drives m and f·h exactly like a real RPE, but the set is flagged
+    `rir_imputed` and is neither `rpe_used` nor `reps_banded`."""
+    sl = compute_set_load({"weight_kg": 80.0, "reps": 5}, e1rm=None, impute_rir=1)
+    assert sl.rir_imputed is True and sl.rpe_used is False and sl.reps_banded is False
+    assert sl.mechanical == pytest.approx(80 * 5 * 1.30)   # m(RIR1)
+    assert sl.neuromuscular == pytest.approx(0.9 * 0.5)    # f(1)·0.5
+
+
+def test_warmup_never_imputed():
+    """A warmup is NEVER imputed even when a session median is supplied — m stays 1.0."""
+    sl = compute_set_load({"type": "warmup", "weight_kg": 60.0, "reps": 5}, e1rm=None, impute_rir=0)
+    assert sl.is_warmup and sl.rir_imputed is False
+    assert sl.mechanical == pytest.approx(60 * 5 * 1.0 * 0.5)   # m=1.0 (unimputed), warmup ×0.5
+    assert sl.neuromuscular == 0.0
+
+
+def test_absent_working_set_scores_at_session_median():
+    """MUTATION-PROOF: an RPE-absent working rep set in an RPE-bearing session scores at the
+    session median RIR in BOTH windows, is flagged/counted, and does not count as rpe/reps-band.
+    Session RIRs {2,1} → median floor 1; imputed set uses RIR 1."""
+    sets = [
+        (0, "A", {"weight_kg": 100.0, "reps": 5, "rpe": 8.0}),   # RIR 2 (real)
+        (0, "A", {"weight_kg": 100.0, "reps": 5, "rpe": 9.0}),   # RIR 1 (real)
+        (1, "B", {"weight_kg": 80.0, "reps": 5}),                # RPE-absent → impute RIR 1
+    ]
+    ev = compute_session_events(_sess(date(2026, 6, 1), sets),
+                                laterality_by_template={}, e1rm_by_template={"A": None, "B": None})
+    nm = ev["neuromuscular"]["provenance"]
+    assert nm["session_imputed_sets"] == 1
+    assert nm["rpe_unavailable_templates"] == ["B"]
+    assert ev["mechanical"]["provenance"]["session_imputed_sets"] == 1   # both windows
+    assert nm["rpe_sets"] == 2 and nm["reps_banded_sets"] == 0           # imputed is neither
+    # mech: 575 (RIR2) + 650 (RIR1) + 520 (imputed RIR1, 80*5*1.30)
+    assert ev["mechanical"]["load"] == pytest.approx(575.0 + 650.0 + 520.0)
+    # nm: f(2)·0.5 + f(1)·0.5 + f(1)·0.5 (imputed)
+    assert ev["neuromuscular"]["load"] == pytest.approx(0.375 + 0.45 + 0.45)
+
+
+def test_session_with_no_rpe_falls_to_reps_band_no_imputation():
+    """A session with NO usable RIR imputes nothing: RPE-absent sets keep the reps-band prior,
+    session_imputed_sets=0, reps_banded_sets counts."""
+    sets = [(0, "A", {"weight_kg": 100.0, "reps": 5}),    # reps<=5 → 0.6
+            (0, "A", {"weight_kg": 100.0, "reps": 8})]    # 6–11 → 0.35
+    ev = compute_session_events(_sess(date(2026, 6, 1), sets),
+                                laterality_by_template={}, e1rm_by_template={"A": None})
+    nm = ev["neuromuscular"]["provenance"]
+    assert nm["session_imputed_sets"] == 0 and nm["rpe_unavailable_templates"] == []
+    assert nm["reps_banded_sets"] == 2
+    assert ev["neuromuscular"]["load"] == pytest.approx(0.6 + 0.35)
+    assert ev["mechanical"]["load"] == pytest.approx(100 * 5 * 1.0 + 100 * 8 * 1.0)
+
+
+def test_imputed_set_never_enters_e1rm_fit():
+    """An imputed RIR must never seed the e1RM fit — `e1rm_samples` reads the RAW rpe, so a
+    template whose only sets are RPE-absent (imputed in a mixed session) produces NO sample."""
+    sets = [(0, "A", {"weight_kg": 100.0, "reps": 5, "rpe": 8.0}),   # A: real rpe
+            (0, "B", {"weight_kg": 80.0, "reps": 5})]                # B: RPE-absent (would impute)
+    samples = le.e1rm_samples([_sess(date(2026, 6, 1), sets)])
+    assert sorted(s.template_id for s in samples) == ["A"]           # B never fits
 
 
 # ── Orchestrator (DB) ─────────────────────────────────────────────────────────

@@ -5,10 +5,14 @@ four independently-run manual modules (#296).
 Sweeps every Hevy-keyed user and, per user, runs the load chain IN ORDER:
 
     1. hevy_workouts.sync_workouts                        Hevy API -> hevy_workouts   (async)
-    2. load_events.compute_all_users                     resistance events   tier0-v1
+    2. load_events.compute_all_users                     resistance events   tier0-v2
     3. load_events_metabolic.compute_all_users_metabolic metabolic events    metab-v1
-    4. load_metrics.compute_all_users (tier0-v1)         mechanical / neuromuscular metrics
+    4. load_metrics.compute_all_users (tier0-v2)         mechanical / neuromuscular metrics
     5. load_metrics.compute_all_users (metab-v1)         metabolic metrics
+
+Version labels above track the module constants — steps 4/5 pass
+`load_events.FORMULA_VERSION` / `load_events_metabolic.FORMULA_VERSION_METABOLIC` rather than
+literals, so a formula bump (e.g. tier0-v1 → tier0-v2, P3) propagates without editing here.
 
 Per-user isolation mirrors `scripts/garmin_sync.py`: one user's failure is caught,
 recorded, and skipped -- it never aborts the sweep. Steps 2-5 depend on their
@@ -89,10 +93,12 @@ def run_user_chain(
             load_events_metabolic.compute_all_users_metabolic(db, only_user_id=uid), uid)),
         ("load_metrics_tier0", lambda: _per_user(
             load_metrics.compute_all_users(
-                db, only_user_id=uid, formula_version="tier0-v1", as_of=as_of), uid)),
+                db, only_user_id=uid,
+                formula_version=load_events.FORMULA_VERSION, as_of=as_of), uid)),
         ("load_metrics_metab", lambda: _per_user(
             load_metrics.compute_all_users(
-                db, only_user_id=uid, formula_version="metab-v1", as_of=as_of), uid)),
+                db, only_user_id=uid,
+                formula_version=load_events_metabolic.FORMULA_VERSION_METABOLIC, as_of=as_of), uid)),
     ]
 
     outcome: dict[str, Any] = {"status": "succeeded", "steps": {}}

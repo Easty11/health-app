@@ -12,11 +12,13 @@ import pytest
 
 import models
 import load_metrics as lm
+from load_events import FORMULA_VERSION as _FV
 from load_metrics import compute_load_metrics, compute_window_series, METRICS_VERSION
 
 
-def _user(db, uid=1):
-    db.add(models.User(id=uid, email=f"u{uid}@x.com", hashed_password="x"))
+def _user(db, uid=1, rpe_complete_from=None):
+    db.add(models.User(id=uid, email=f"u{uid}@x.com", hashed_password="x",
+                       rpe_complete_from=rpe_complete_from))
     db.commit()
 
 
@@ -24,7 +26,7 @@ def _utc(iso: str) -> datetime:
     return datetime.fromisoformat(iso.replace("Z", "+00:00"))
 
 
-def _le(db, *, ref, window, load, occurred_at, uid=1, unit=None, fv="tier0-v1"):
+def _le(db, *, ref, window, load, occurred_at, uid=1, unit=None, fv=_FV):
     if unit is None:
         unit = "kg_reps" if window == "mechanical" else "nm_au"
     db.add(models.LoadEvent(
@@ -257,3 +259,49 @@ def test_only_named_formula_version_rolled_up(db_session):
     assert len(rows) == 1
     assert rows[0].daily_load == pytest.approx(100.0)     # 999 (tier0-v0) excluded
     assert rows[0].metrics_version == METRICS_VERSION
+
+
+# ── Per-user RPE epoch truncation (P3, banister-v3) ─────────────────────────────
+
+def test_epoch_truncates_pre_epoch_events_from_stocks(db_session):
+    """When a user's rpe_complete_from is set, events on user-local days BEFORE it are dropped
+    from the daily calendar — stocks and ΔLoad included — while an event ON the epoch is kept.
+    The calendar STARTS at the epoch, so the pre-epoch day has no row at all."""
+    import datetime as _d
+    _user(db_session, rpe_complete_from=_d.date(2026, 6, 3))
+    _le(db_session, ref="pre", window="mechanical", load=500.0, occurred_at=_utc("2026-06-01T00:00:00Z"))
+    _le(db_session, ref="on",  window="mechanical", load=100.0, occurred_at=_utc("2026-06-03T00:00:00Z"))
+    summary = compute_load_metrics(db_session, 1, as_of=_d.date(2026, 6, 3))
+    rows = _rows(db_session)
+    assert [r.day.isoformat() for r in rows] == ["2026-06-03"]   # 06-01/02 absent — calendar starts at epoch
+    assert rows[0].daily_load == pytest.approx(100.0)            # pre-epoch 500 never entered daily_load
+    assert summary["pre_epoch_skipped"] == 1
+    assert summary["rpe_complete_from"] == "2026-06-03"
+
+
+def test_epoch_truncates_metabolic_lane_same_date(db_session):
+    """EVERY lane shares the per-user series start: the metabolic lane (its own formula_version)
+    truncates by the same epoch."""
+    import datetime as _d
+    _user(db_session, rpe_complete_from=_d.date(2026, 6, 3))
+    _le(db_session, ref="pre_mtb", window="metabolic", load=200.0,
+        occurred_at=_utc("2026-06-01T00:00:00Z"), unit="trimp", fv="metab-v1")
+    _le(db_session, ref="on_mtb", window="metabolic", load=150.0,
+        occurred_at=_utc("2026-06-03T00:00:00Z"), unit="trimp", fv="metab-v1")
+    compute_load_metrics(db_session, 1, formula_version="metab-v1", as_of=_d.date(2026, 6, 3))
+    rows = _rows(db_session)
+    assert [r.day.isoformat() for r in rows] == ["2026-06-03"]
+    assert rows[0].daily_load == pytest.approx(150.0)
+
+
+def test_null_epoch_keeps_full_history(db_session):
+    """A NULL epoch → no truncation: a continuous calendar from the first load day."""
+    import datetime as _d
+    _user(db_session, rpe_complete_from=None)
+    _le(db_session, ref="d1", window="mechanical", load=100.0, occurred_at=_utc("2026-06-01T00:00:00Z"))
+    _le(db_session, ref="d3", window="mechanical", load=100.0, occurred_at=_utc("2026-06-03T00:00:00Z"))
+    summary = compute_load_metrics(db_session, 1, as_of=_d.date(2026, 6, 3))
+    rows = _rows(db_session)
+    assert [r.day.isoformat() for r in rows] == ["2026-06-01", "2026-06-02", "2026-06-03"]  # full history
+    assert summary["pre_epoch_skipped"] == 0
+    assert summary["rpe_complete_from"] is None

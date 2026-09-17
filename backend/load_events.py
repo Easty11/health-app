@@ -16,18 +16,28 @@ Three rules from the brief's BUILD-step-2 supersessions (these GOVERN over the o
 ROADMAP row-79 agenda wording, which was stale):
 
   * RPE is a PER-SET fact, date-independent. A set with an `rpe` bands on (reps, RPE)
-    whatever its date; a set without one takes the reps-band prior. NO imputation, ever.
+    whatever its date. A WORKING rep set WITHOUT an `rpe`, inside a session that has >=1
+    RPE-or-failure working set, takes the SESSION'S MEDIAN RIR (session-median imputation,
+    DECISIONS_LOG P3 / tier0-v2 — see `compute_session_events`): it then scores on the same
+    m(RIR) / f(RIR)·h(I) path as a real RPE set. A set in a session with NO usable RIR at
+    all falls back to the reps-band prior. That reps-band prior was ALWAYS an imputation, so
+    the older "NO imputation, ever" wording is superseded — the policy is now explicit. An
+    imputed set is flagged `rir_imputed`, kept OUT of the e1RM fit, and counted separately in
+    `provenance` (never as an `rpe`/`reps_banded` set).
   * e1RM is fitted from ALL RPE-present working sets, ANY date (rolling 60 d, per
-    template). An RPE-absent set may CONSUME a fit but never UPDATES it.
+    template). An RPE-absent set — imputed or reps-banded — may CONSUME a fit but never
+    UPDATES it (`e1rm_samples` reads the RAW `rpe`, so an imputed RIR can never enter it).
   * LOAD SUMS SETS AS LOGGED. Unilateral work is genuine work — 3 sets/leg of 40kg×10
     is 2400 kg·reps, at parity with the bilateral equivalent — so the D-E laterality
     pairing NEVER discounts cost (its supersession narrows halving to the
     movement-count / asymmetry instrument). Pairing and indeterminate-tag detection are
     retained in `provenance` only, surfaced for that instrument, never applied to load.
 
-`EPOCH_RPE_COMPLETE` survives for exactly one, DIAGNOSTIC use: a rep-based workout on or
-after it that carries no RPE at all is a planned-vs-performed artifact signature (D-G
-hardening candidate), flagged in `provenance`. It appears in NO cost or e1RM code path.
+The per-user `users.rpe_complete_from` epoch (P3) has one DIAGNOSTIC use here: a rep-based
+session on/after that user's epoch carrying no RPE at all is a planned-vs-performed artifact
+signature (D-G hardening candidate), flagged `post_epoch_zero_rpe` in `provenance`. A NULL
+epoch → it never fires. It gates NO cost and NO e1RM path. (It replaces the retired global
+`EPOCH_RPE_COMPLETE` constant — the epoch is now per-user, passed in by the orchestrator.)
 
 The mechanism is pure functions over normalized sets (`compute_set_load`,
 `epley_with_rir`, `rolling_e1rm`); the DB orchestrator only reads sessions and persists.
@@ -58,13 +68,7 @@ logger = logging.getLogger(__name__)
 # REASONED-PRIOR constants (all provenance-labelled #32; tagged by FORMULA_VERSION)
 # ---------------------------------------------------------------------------
 
-FORMULA_VERSION = "tier0-v1"
-
-# Operator input (brief): the date from which RPE logging is complete. DIAGNOSTIC ONLY —
-# a rep-based workout on/after this date carrying no RPE at all is a planned-vs-performed
-# artifact signature (D-G hardening candidate), surfaced in provenance. It gates NO cost
-# and NO e1RM path: RPE is a per-set fact and bands on (reps, RPE) whatever the date.
-EPOCH_RPE_COMPLETE = date(2026, 5, 11)
+FORMULA_VERSION = "tier0-v2"
 
 # Operator input (brief): used as the effective load for a PURE bodyweight movement
 # (a rep/timed set with no external `weight_kg`). Weighted-bodyweight sets (an added
@@ -163,8 +167,11 @@ class SetLoad:
     is_warmup: bool = False
     is_non_rep: bool = False
     non_rep_mech: float = 0.0
-    rpe_used: bool = False       # NM via f(RIR)·h(I)
-    reps_banded: bool = False    # NM via RPE-absent reps prior (a gap)
+    rpe_used: bool = False       # NM via f(RIR)·h(I) from a REAL per-set RPE
+    reps_banded: bool = False    # NM via RPE-absent reps prior (a gap; only when no session RIR)
+    rir_imputed: bool = False    # NM/mech via the SESSION-MEDIAN RIR (P3) — an absent set in an
+                                 # RPE-bearing session. Distinct from rpe_used (never enters the
+                                 # e1RM fit) and from reps_banded (it took the m/f·h path instead).
     is_failure: bool = False
     e1rm_used: bool | None = None  # h(I) used a fitted e1RM (True) or the 0.5 fallback (False); None if N/A
 
@@ -174,15 +181,19 @@ def compute_set_load(
     *,
     e1rm: float | None,
     bw_fraction: float | None = None,
+    impute_rir: int | None = None,
 ) -> SetLoad:
     """Score one normalized set (keys: type, weight_kg, reps, duration_seconds,
     distance_meters, rpe — the live snake_case shape, #68).
 
-    RPE is per-set and date-independent: a set with an `rpe` bands on (reps, RPE); one
-    without takes the reps-band prior (no imputation). `e1rm` is the template's fitted
-    e1RM as of the session (None → h(I)=0.5). `bw_fraction` is the template's bodyweight
-    fraction (#245), applied ONLY to a rep set with `weight_kg` NULL or 0; a logged
-    weight > 0 is untouched. Pure and deterministic.
+    RPE is per-set and date-independent: a set with an `rpe` bands on (reps, RPE). A set
+    without one falls to `impute_rir` when the caller supplies a session median (P3
+    session-median imputation, flagged `rir_imputed`), else to the reps-band prior. Warmups
+    are NEVER imputed. `e1rm` is the template's fitted e1RM as of the session (None →
+    h(I)=0.5). `bw_fraction` is the template's bodyweight fraction (#245), applied ONLY to a
+    rep set with `weight_kg` NULL or 0; a logged weight > 0 is untouched. Pure and
+    deterministic (the imputation decision is made by `compute_session_events`, which owns
+    session context; this function only applies the value it is handed).
     """
     set_type = (s.get("type") or "normal").lower()
     is_warmup = set_type == "warmup"
@@ -226,6 +237,7 @@ def compute_set_load(
 
     # RIR: a failure set is RIR 0 by definition (a set-type fact, no `rpe` needed).
     # Otherwise RIR comes from a present RPE (any date), else it is unknown.
+    imputed = False
     if is_failure:
         rir: int | None = 0
     elif rpe is not None:
@@ -233,7 +245,15 @@ def compute_set_load(
     else:
         rir = None
 
-    # ── Mechanical: weight × reps × m(RIR); RPE-absent → m = 1.0; warmup ×0.5 ────
+    # Session-median imputation (P3): an RPE-absent WORKING rep set in a session that has a
+    # usable RIR takes that session median. Warmups are NEVER imputed. The imputed RIR then
+    # drives m and f·h exactly like a real RPE, but the set stays flagged `rir_imputed` so it
+    # never counts as an `rpe`/`reps_banded` set and never enters the e1RM fit.
+    if rir is None and impute_rir is not None and not is_warmup:
+        rir = impute_rir
+        imputed = True
+
+    # ── Mechanical: weight × reps × m(RIR); no usable RIR → m = 1.0; warmup ×0.5 ──
     m = _mech_mult(rir) if rir is not None else 1.0
     mech = eff_w * float(reps) * m
     if is_warmup:
@@ -246,7 +266,8 @@ def compute_set_load(
             mechanical=mech, neuromuscular=0.0, is_warmup=True, is_failure=is_failure,
         )
     if rir is not None:
-        # RPE-dominant path: f(RIR)·h(I). I = effective_weight / e1RM.
+        # RIR path: f(RIR)·h(I). I = effective_weight / e1RM. Covers a real RPE set, a
+        # failure set (RIR 0), and an imputed set — identical math, distinct provenance.
         if e1rm is not None and e1rm > 0:
             h = _h_intensity(eff_w / e1rm)
             e1rm_used = True
@@ -256,9 +277,11 @@ def compute_set_load(
         nm = _f_rir(rir) * h
         return SetLoad(
             mechanical=mech, neuromuscular=nm,
-            rpe_used=not is_failure, is_failure=is_failure, e1rm_used=e1rm_used,
+            rpe_used=(rpe is not None and not is_failure and not imputed),
+            rir_imputed=imputed,
+            is_failure=is_failure, e1rm_used=e1rm_used,
         )
-    # RPE-absent rep set → coarse reps-band prior (no h(I), no imputation).
+    # No usable RIR (no RPE, no failure, no session median) → coarse reps-band prior.
     nm = _nm_reps_prior(int(reps))
     return SetLoad(mechanical=mech, neuromuscular=nm, reps_banded=True)
 
@@ -375,6 +398,36 @@ def _session_from_row(row: Any) -> Session_:
     )
 
 
+def _session_median_rir(sets: list[tuple[int, str, dict[str, Any]]]) -> int | None:
+    """The session's median RIR over its WORKING (non-warmup) rep sets that carry a usable
+    RIR — a real `rpe` (banded via `_rir_from_rpe`) or a failure tag (RIR 0). Returns None
+    when no such set exists → no imputation, and RPE-absent sets fall to the reps-band prior.
+
+    The median is an INTEGER with ties FLOORED (the #244 convention): an even count averages
+    the two central banded RIRs and floors, so {1, 2} → 1 (the harder band, never rounded up
+    to the easier one). RIR >= 0 always, so integer `//` is exactly that floor. Warmups never
+    contribute (they carry no NM and are never imputed)."""
+    rirs: list[int] = []
+    for _block_index, _template_id, s in sets:
+        set_type = (s.get("type") or "normal").lower()
+        if set_type == "warmup":
+            continue
+        if s.get("reps") is None:
+            continue  # non-rep / no-data set — not a working rep set
+        if set_type == "failure":
+            rirs.append(0)
+        elif s.get("rpe") is not None:
+            rirs.append(_rir_from_rpe(float(s["rpe"])))
+    if not rirs:
+        return None
+    rirs.sort()
+    n = len(rirs)
+    mid = n // 2
+    if n % 2 == 1:
+        return rirs[mid]
+    return (rirs[mid - 1] + rirs[mid]) // 2
+
+
 # ---------------------------------------------------------------------------
 # Session → (Mechanical, Neuromuscular) load events
 # ---------------------------------------------------------------------------
@@ -385,6 +438,7 @@ def compute_session_events(
     laterality_by_template: dict[str, str | None],
     e1rm_by_template: dict[str, float | None],
     bw_fraction_by_template: dict[str, float | None] | None = None,
+    rpe_complete_from: date | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Two window aggregates ({window: {load, unit, provenance}}) for one session.
 
@@ -395,13 +449,24 @@ def compute_session_events(
     template in >=2 blocks — surfaced, never guessed) both travel in the blob and feed
     the asymmetry instrument, not the load sum.
 
-    Epoch DIAGNOSTIC (`post_epoch_zero_rpe`): a session on/after `EPOCH_RPE_COMPLETE`
-    whose working (non-warmup) rep sets carry no RPE at all is a planned-vs-performed
-    artifact signature (D-G hardening candidate). Diagnostic only — it changes no load.
+    SESSION-MEDIAN IMPUTATION (P3): this function owns session context, so it computes the
+    session median RIR ONCE (`_session_median_rir`) and hands it to every set as
+    `impute_rir`. A working RPE-absent rep set then scores on the m/f·h path at that median
+    instead of the reps-band prior; a session with no usable RIR imputes nothing (median
+    None). Imputed sets are counted in `session_imputed_sets` and their templates in
+    `rpe_unavailable_templates`; `reps_banded_sets` now counts ONLY the non-imputed absent
+    sets (a session with no RIR at all).
+
+    Epoch DIAGNOSTIC (`post_epoch_zero_rpe`): a session on/after the user's
+    `rpe_complete_from` whose working (non-warmup) rep sets carry no RPE at all is a
+    planned-vs-performed artifact signature (D-G hardening candidate). A NULL epoch → it
+    never fires. Diagnostic only — it changes no load.
     """
     pairing = detect_session_pairing(sess.blocks, laterality_by_template)
     paired_templates = sorted(pairing.paired.keys())
     indeterminate_templates = sorted(pairing.indeterminate.keys())
+
+    session_rir = _session_median_rir(sess.sets)
 
     mech_load = 0.0
     nm_load = 0.0
@@ -413,6 +478,8 @@ def compute_session_events(
     }
     working_rep_sets = 0        # non-warmup rep sets — the diagnostic's denominator
     working_rep_with_rpe = 0
+    session_imputed_sets = 0
+    imputed_templates: set[str] = set()
     bwf = bw_fraction_by_template or {}
 
     for block_index, template_id, s in sess.sets:
@@ -420,6 +487,7 @@ def compute_session_events(
             s,
             e1rm=e1rm_by_template.get(template_id),
             bw_fraction=bwf.get(template_id),
+            impute_rir=session_rir,
         )
         if sl.skip:
             continue
@@ -449,6 +517,9 @@ def compute_session_events(
             nm_p["failure_sets"] += 1
         if sl.rpe_used or sl.is_failure:
             nm_p["rpe_sets"] += 1
+        if sl.rir_imputed:
+            session_imputed_sets += 1
+            imputed_templates.add(template_id)
         if sl.reps_banded:
             nm_p["reps_banded_sets"] += 1
         if sl.e1rm_used is True:
@@ -456,13 +527,19 @@ def compute_session_events(
         elif sl.e1rm_used is False:
             nm_p["e1rm_fallback_templates"].add(template_id)
 
-    post_epoch = sess.when is not None and sess.when >= EPOCH_RPE_COMPLETE
+    post_epoch = (
+        sess.when is not None
+        and rpe_complete_from is not None
+        and sess.when >= rpe_complete_from
+    )
     post_epoch_zero_rpe = post_epoch and working_rep_sets > 0 and working_rep_with_rpe == 0
 
     shared_prov = {
         "paired_templates": paired_templates,
         "indeterminate_laterality": indeterminate_templates,
         "post_epoch_zero_rpe": post_epoch_zero_rpe,
+        "session_imputed_sets": session_imputed_sets,
+        "rpe_unavailable_templates": sorted(imputed_templates),
     }
     mech_p["non_rep_load"] = round(mech_p["non_rep_load"], 6)
     nm_p["e1rm_fit_templates"] = sorted(nm_p["e1rm_fit_templates"])
@@ -521,6 +598,11 @@ def compute_load_events(
     now = now or datetime.now(timezone.utc)
     lat_map = _laterality_map(db)
     bwf_map = _bw_fraction_map(db)
+    # Per-user RPE-complete epoch (P3) — anchors the post_epoch_zero_rpe diagnostic.
+    # NULL (or no user row) → the diagnostic never fires for this user.
+    rpe_complete_from = db.execute(
+        select(models.User.rpe_complete_from).where(models.User.id == user_id)
+    ).scalar_one_or_none()
 
     rows = db.execute(
         select(models.HevyWorkout)
@@ -557,6 +639,7 @@ def compute_load_events(
             laterality_by_template=lat_map,
             e1rm_by_template=e1rm_by_template,
             bw_fraction_by_template=bwf_map,
+            rpe_complete_from=rpe_complete_from,
         )
         for window, agg in windows.items():
             db.add(models.LoadEvent(
