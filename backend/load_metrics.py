@@ -75,7 +75,20 @@ TAU_FATIGUE_DAYS = {
 }
 FORM_K = 1               # form = fitness − k·fatigue; read-time-refreshable, no version bump
 
-# ΔLoad (#33): acute:chronic over daily_load, rest days counted as 0.
+# ΔLoad (#33 → #249; reclassified descriptive #306). `load_ratio = acute/chronic` over
+# daily_load (rest days counted as 0) is a DESCRIPTIVE SPIKE INDICATOR — "this 7-day block
+# is heavier/lighter than the trailing 28-day average" — NOT an injury-risk score. No risk
+# band, threshold, or sweet-spot verdict rides it on any surface (readiness never consumes
+# it — #18/#267; the MCP readout prints acute/chronic as trace values, not a ratio — #255).
+# ACWR as a risk proxy adds no predictive value over acute load and creates statistical
+# artefacts (Impellizzeri 2020); the acute/chronic mathematical coupling induces a spurious
+# ~0.5 correlation (Lolli 2017 / Windt 2018) though its practical effect is small (Coyne 2019).
+#
+# TIER 0 (shipped): coupled trailing means — the chronic 28-day window CONTAINS the acute
+# 7-day window, kept because the coupling effect is small in practice and an uncoupled
+# chronic (days 8–28) needs a new column (OQ Q158). An EWMA acute trace (design §4.1, τ_a=7)
+# is a SEPARATE Tier-3 proposal, not what ships here. Any future reintroduction of thresholds
+# needs a criterion (Q156), never a literature-borrowed band.
 ACUTE_DAYS = 7
 CHRONIC_DAYS = 28
 
