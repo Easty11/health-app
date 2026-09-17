@@ -259,7 +259,8 @@ def test_open_phase_without_microcycle_falls_back_to_weekly(db_session):
 def test_baseline_no_phase_no_profile_is_null_window(db_session):
     u = _user(db_session)
     res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
-    assert res == {"window": None, "slots": [], "due_capacity": None, "uncounted": []}
+    assert res == {"window": None, "slots": [], "due_capacity": None,
+                   "due_slot": None, "uncounted": []}
 
 
 # --------------------------------------------------------------------------- #
@@ -369,4 +370,164 @@ def test_http_resolver_endpoint_and_baseline_null_window(db_session):
     c2 = _client(db_session, u2)
     r2 = c2.get("/engine/resolver")
     assert r2.status_code == 200
-    assert r2.json() == {"window": None, "slots": [], "due_capacity": None, "uncounted": []}
+    assert r2.json() == {"window": None, "slots": [], "due_capacity": None,
+                         "due_slot": None, "uncounted": []}
+
+
+# --------------------------------------------------------------------------- #
+# load_window slots (#307 / Amendment 1) — count canonical aerobic_sessions   #
+# --------------------------------------------------------------------------- #
+
+def _lw_micro(scd, quota, *, label="cond"):
+    """A microcycle carrying a single metabolic load_window slot."""
+    return {"sub_cycle_days": scd, "sub_cycles": [
+        {"label": label, "slots": [
+            {"load_window": "metabolic", "sessions_per_cycle": quota, "minutes": 30}]}]}
+
+
+def _aerobic(db, uid, sid, session_date, *, start=None, stop=None, sport="Ride",
+             duration=45.0, zones=(0, 600, 600, 0, 0), source="polar_flow_export"):
+    z1, z2, z3, z4, z5 = zones
+    obj = models.AerobicSession(
+        user_id=uid, source=source, source_session_id=sid, session_date=session_date,
+        start_time=start, stop_time=stop, sport_name=sport, duration_minutes=duration,
+        z1_seconds=z1, z2_seconds=z2, z3_seconds=z3, z4_seconds=z4, z5_seconds=z5,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj.id
+
+
+def _gym_workout(db, uid, hevy_id, start, end, tids):
+    """A Hevy workout with an explicit end_time (the overlap check needs both endpoints)."""
+    db.add(models.HevyWorkout(
+        hevy_id=hevy_id, user_id=uid, start_time=start, end_time=end, title="W",
+        raw={"id": hevy_id, "exercises": [{"exercise_template_id": t} for t in tids]},
+        dedup_flag=False, excluded_at=None,
+    ))
+    db.commit()
+
+
+def test_load_window_counts_canonical_timed_session(db_session):
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 3), MONDAY)   # leg A [09-07, 09-13]
+    _aerobic(db_session, u.id, "a1", date(2026, 9, 8),
+             start=datetime(2026, 9, 8, 6, 0, tzinfo=timezone.utc),
+             stop=datetime(2026, 9, 8, 6, 45, tzinfo=timezone.utc),
+             sport="Ride", duration=45.0, zones=(0, 600, 1200, 0, 0))
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    slot = res["slots"][0]
+    assert slot["kind"] == "load_window" and slot["load_window"] == "metabolic"
+    assert slot["done"] == 1 and slot["remaining"] == 2
+    counted = slot["sessions_counted"]
+    assert len(counted) == 1
+    assert counted[0]["sport_name"] == "Ride" and counted[0]["duration_minutes"] == 45.0
+    assert counted[0]["trimp"] > 0, "zone-weighted TRIMP is surfaced per counted session (S4)"
+    assert res["uncounted"] == []
+
+
+def test_load_window_untimed_session_fails_closed(db_session):
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)
+    aid = _aerobic(db_session, u.id, "a_untimed", date(2026, 9, 8),
+                   start=None, stop=None, sport="Swim", duration=30.0)
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert res["slots"][0]["done"] == 0
+    assert res["uncounted"] == [
+        {"session": aid, "reason": "untimed", "sport_name": "Swim", "duration_minutes": 30.0}]
+
+
+def test_load_window_half_timed_is_untimed(db_session):
+    """The G0 fall-through cell: exactly one of start/stop NULL is undecidable for overlap →
+    untimed, never silently counted (Amendment 1)."""
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)
+    aid = _aerobic(db_session, u.id, "a_half", date(2026, 9, 8),
+                   start=datetime(2026, 9, 8, 6, 0, tzinfo=timezone.utc), stop=None,
+                   sport="Run", duration=30.0)
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert res["slots"][0]["done"] == 0
+    assert res["uncounted"] == [
+        {"session": aid, "reason": "untimed", "sport_name": "Run", "duration_minutes": 30.0}]
+
+
+def test_load_window_concurrent_strength_excluded(db_session):
+    """An aerobic session overlapping a non-excluded, non-dedup Hevy workout is a strength
+    trace → concurrent_strength, not conditioning."""
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)
+    _tpl(db_session, "t_str", STRENGTH_RK)
+    _gym_workout(db_session, u.id, "w_gym",
+                 datetime(2026, 9, 8, 6, 0, tzinfo=timezone.utc),
+                 datetime(2026, 9, 8, 7, 0, tzinfo=timezone.utc), ["t_str"])
+    aid = _aerobic(db_session, u.id, "a_gym", date(2026, 9, 8),
+                   start=datetime(2026, 9, 8, 6, 30, tzinfo=timezone.utc),
+                   stop=datetime(2026, 9, 8, 7, 15, tzinfo=timezone.utc),
+                   sport="Row", duration=45.0)
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert res["slots"][0]["done"] == 0
+    assert {"session": aid, "reason": "concurrent_strength",
+            "sport_name": "Row", "duration_minutes": 45.0} in res["uncounted"]
+
+
+def test_load_window_local_day_trap_late_utc(db_session):
+    """The 23:30-UTC → next-Brisbane-day trap for a metabolic session. A 23:30Z instant on
+    09-13 is local 09-14 (+10), so it belongs to leg B, not leg A."""
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 5), MONDAY)   # A [09-07,09-13], B [09-14,09-20]
+    _aerobic(db_session, u.id, "a_late", date(2026, 9, 14),
+             start=datetime(2026, 9, 13, 23, 30, tzinfo=timezone.utc),
+             stop=datetime(2026, 9, 14, 0, 15, tzinfo=timezone.utc), sport="Ride")
+    a = resolver.resolve(db_session, u.id, today=date(2026, 9, 10))
+    assert a["window"]["end_date"] == "2026-09-13" and a["slots"][0]["done"] == 0
+    b = resolver.resolve(db_session, u.id, today=date(2026, 9, 14))
+    assert b["window"]["start_date"] == "2026-09-14" and b["slots"][0]["done"] == 1
+
+
+def test_load_window_counts_only_canonical_of_same_bout(db_session):
+    """Amendment 1 counts CANONICAL sessions (cross-source arbitration, #260). A same-bout
+    pair (flow_export richer + health_connect) yields exactly one canonical → one count, not
+    two. The canonical dimension replaces the load_events formula-version gate of the pre-
+    amendment draft (there is no load_events in this count path)."""
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)
+    start = datetime(2026, 9, 8, 6, 0, tzinfo=timezone.utc)
+    stop = datetime(2026, 9, 8, 6, 45, tzinfo=timezone.utc)
+    _aerobic(db_session, u.id, "flow1", date(2026, 9, 8), start=start, stop=stop,
+             sport="Ride", zones=(0, 600, 600, 0, 0), source="polar_flow_export")
+    _aerobic(db_session, u.id, "hc1", date(2026, 9, 8), start=start, stop=stop,
+             sport="Ride", zones=(0, 0, 0, 0, 0), source="health_connect")
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert res["slots"][0]["done"] == 1
+    assert res["uncounted"] == [], "the non-canonical twin is filtered, not surfaced"
+
+
+def test_load_window_zoneless_session_still_counts(db_session):
+    """Amendment 1 counts the SESSION, not a load_events row — so a canonical zoneless session
+    (which emits NO metabolic load_events row, INV-7) still counts, with trimp 0."""
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)
+    _aerobic(db_session, u.id, "a_zeroless", date(2026, 9, 8),
+             start=datetime(2026, 9, 8, 6, 0, tzinfo=timezone.utc),
+             stop=datetime(2026, 9, 8, 6, 30, tzinfo=timezone.utc),
+             sport="Walk", duration=30.0, zones=(0, 0, 0, 0, 0))
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert res["slots"][0]["done"] == 1
+    assert res["slots"][0]["sessions_counted"][0]["trimp"] == 0
+
+
+def test_due_slot_crosses_kinds_and_due_capacity_skips_load_window(db_session):
+    """Rule 4 across BOTH kinds: due_slot is the first unmet in declared order regardless of
+    kind; due_capacity stays the first unmet CAPACITY slot, skipping a due load_window so
+    /engine/next never receives one (S3)."""
+    u = _user(db_session)
+    mc = {"sub_cycle_days": 7, "sub_cycles": [
+        {"label": "A", "slots": [
+            {"load_window": "metabolic", "sessions_per_cycle": 1, "minutes": 30},
+            {"capacity": "strength", "sessions_per_cycle": 1, "minutes": 45}]}]}
+    _phase(db_session, u.id, mc, MONDAY)
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert [s["kind"] for s in res["slots"]] == ["load_window", "capacity"]
+    assert res["due_slot"] == {"kind": "load_window", "key": "metabolic"}
+    assert res["due_capacity"] == "strength"
