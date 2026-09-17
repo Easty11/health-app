@@ -1,84 +1,76 @@
-# Close-out — metabolic `load_window` slot kind (#307), backend + frontend
+# Close-out — chat context renders the resolver POSITION (#308, completes #307 A2)
 
 ## Real commits this session
 
-Session-open ref: master `e8cd1a8` (the #305/#306 close-out merge). Two PRs.
-
-**PR1 #228 — backend #307 (merged, `a5e04e3`):**
-
-```
-b1a3b04 gov(#307): metabolic load_window slot kind — DECISIONS, ROADMAP, BRANCHES, Recent-landings
-71179f6 feat(resolver): metabolic load_window slot kind — declare + count conditioning (#307)
-5feb16d docs(handoff): GO receipt — metabolic slot-kind resolver, Amendment 1 + S6
-a6fde9f docs(handoff): CHAT→CODE receipt — metabolic slot-kind resolver brief received
-```
-
-**PR2 `feat/quota-window-conditioning` — frontend S5 (this branch):**
+Session-open ref: master `4611f96` (the #307 PR2 merge). One PR, branch
+`feat/resolver-position-chat-context`:
 
 ```
-<gov>    gov(#307 PR2): closeout, BRANCHES row, ROADMAP surfacing-1 + sequencing guardrail
-f177db8  feat(frontend): QuotaWindow renders the load_window conditioning slot (#307 PR2)
-0bcbd65  docs(handoff): GO receipt — PR2 frontend QuotaWindow + G2/sequencing rulings
+<gov>    gov(#308): DECISIONS, FEEDBACK §44, ROADMAP/closeout wording corrections, BRANCHES, Recent-landings
+c98c014  feat(context): chat sees the resolver POSITION, not just the declared quota (#308, #307 A2)
+1379b30  docs(handoff): S6b receipt — resolver position in chat context (completes #307 A2)
 ```
 
-Both branches merged + remote-deleted at land. Non-migration throughout. Self-merge on green
-under § Merge disposition (chat-ratified brief + Amendment 1 + operator GO on PR2; no new
-judgment — PR2 is #307's frontend, no new decision).
+Branch merged + remote-deleted at land. Non-schema, read-only over `resolve()`. Self-merges on
+green under § Merge disposition — chat-ratified brief, A2 already ratified, no new judgment.
 
 ## Pending-queue reconciliation
 
-No `;cc` pending-commit queue was carried in — the brief was the Chat→Code handoff. Everything
-it named LANDED; nothing provisional:
+No `;cc` queue carried in — the S6b brief was the Chat→Code handoff. Everything it named LANDED:
 
-- Backend S1–S4 + S6, governance #307 — PR1 (`71179f6`/`b1a3b04`), merged `a5e04e3`.
-- Frontend S5 (`QuotaWindow` renders the `load_window` kind, the due marker via `due_slot` on
-  either kind, the `concurrent_strength`/`untimed` uncounted reasons) — PR2 (`f177db8`).
-- G0 open calls (no floor; untimed fail-closed) ruled from the prod probe.
-- Operator review rulings actioned: G2 gate amended (two baseline dict literals gained the
-  additive `due_slot: None`; recorded on PR #228); the cross-PR sequencing rule recorded (PR #228)
-  and carried below.
+- S1 `CurrentState.resolver_position = resolve(db, uid, today=today)`, try/except→None+log — `c98c014`.
+- S2 `_section_training_phase(phase, resolver_position)` renders the window, per-slot done/quota
+  across both kinds, `◀ DUE` via `due_slot`, counted conditioning sessions (`unzoned` when trimp 0),
+  the four uncounted reasons in words, an all-met line; `_conditioning_line` folded out — `c98c014`.
+- S3 the one instruction sentence (authoritative count; don't infer from history; flag intent≠quota) — `c98c014`.
+- Governance: DECISIONS #308, FEEDBACK §44, the two wording corrections, BRANCHES row, Recent-landings — `<gov>`.
 
-Gates: G1–G4 (backend) green — full backend suite 1719 passed on a 3.12 venv; G3 clean. Frontend
-suite 195 passed (29 files); the QuotaWindow suite covers both kinds, the due marker on a
-load_window slot, and all four uncounted reasons. #121 served-bundle grep is operator-side.
+Gates: G1 render content + the §18 mutation EXERCISED (swap `due_slot`→`due_capacity` → the
+conditioning-due assertion fails); G2 parity (`state.resolver_position == resolve()` and the section
+carries those numbers); G3 null window byte-identical (golden context test green); G4 resolver raises
+→ context still builds, position omitted; G5 full backend suite **1724 passed** on a 3.12 venv.
 
 ## Cold-resume handoff
 
-**Sprint — v1 test 2 (Know): "what's due, enforced against the plan."** The due-slot resolver
-(#276) and the metabolic `load_window` slot kind (#307, backend + frontend) are landed: a phase
-microcycle may declare a conditioning quota (`load_window: "metabolic"`) that the resolver counts
-from canonical `aerobic_sessions` (session-count only — no dose, bands, or write-back), and
-`QuotaWindow` renders it. The engine still never SELECTS conditioning (#270 narrowed, not broken).
+**Sprint — v1 test 2 (Know): "what's due, enforced against the plan."** The lane is now complete
+end to end: the due-slot resolver (#276), the metabolic `load_window` slot kind backend + frontend
+(#307), and the resolver POSITION in the coach's chat context (#308). The coach can now read what
+has been done against the declared plan this window — the half of Know the operator actually uses.
 
-**Single clearest next action — operator, gated.** Open the block-2 phase with a conditioning
-quota. **DO NOT open it until PR2 (frontend) is deployed AND you have seen the served bundle
-render the `load_window` slot** (#121 grep for the "Conditioning" render string on the live
-`assets/index-*.js`). Rationale: before PR2 deploys, the old `QuotaWindow` would render a
-conditioning slot with an undefined label and show the two new uncounted reasons as "off-plan"
-(recorded on PR #228). PR1's backend response is backward-compatible for capacity slots, so
-nothing breaks until such a phase exists. Once the served bundle is confirmed, this guardrail
-lifts. After that: the wrap-vs-plan view (surfacing item 2, increment 4).
+**Single clearest next action.** The metabolic INGEST bridge is now the ceiling and the
+highest-leverage next brief (an operator brief). #307/#308 count canonical `aerobic_sessions` from
+BOTH Polar sources (`polar_flow_export` + `polar_v4`), but Garmin/Samsung/HC exercise write no
+`aerobic_sessions` row (HC exercise is source-captured only, `#189`'s ingestion Status unbuilt), so
+those sessions are invisible to the quota and the load model. Stage-1 HC-workout ingest (zones
+derived from the posted HR) vs a direct `garminconnect` pull is the fork; that brief mints the
+gap's own `Q#` and is where OPEN CALL 1's session-floor becomes real.
+
+**Still gated (operator).** Do not open the block-2 conditioning phase until the frontend bundle
+(#307 PR2) is deployed and the served bundle is confirmed rendering the `load_window` slot (`#121`
+grep for the "Conditioning" string on the live `assets/index-*.js`). Chat position (#308) reads
+the same `resolve()` regardless, so it is correct as soon as a phase carries a conditioning slot —
+but the panel must render before the phase is opened.
+
+**Wording corrections landed this session (do not re-propagate the old forms).** (a) The
+HC-exercise ingest gap is NOT `Q154` — `Q154` is Polar ingest AUTOMATION; the HC gap is `#189`'s
+unbuilt Status and gets its own `Q#` from the stage-1 ingest brief. (b) The count is not
+"Polar-Flow-export only" — `polar_v4` rows are `aerobic_sessions` too (`connectors/polar.py:241`),
+and canonical-session counting includes them.
 
 **Open questions gating.** Q106 — the `minutes` reading keeps dose LATER; nothing reads `minutes`.
-Q154 — aerobic ingest is not automatable (below). Q158 — uncoupled chronic denominator (unrelated).
+Q158 — uncoupled chronic denominator (unrelated). The HC-ingest `Q#` — not yet minted (owed by the
+stage-1 ingest brief).
 
-**NOT touched this session — named explicitly.**
+**NOT touched.** No prod queries this session (pure code over an existing read). The wrap-vs-plan
+view (surfacing item 2, increment 4) and the interpretation / appointment-brief lanes stood still —
+substrate-complete, unstarted. Operator's own owed (not Code): plan-of-record v2 (pending knee-consult
++ club-start dates); the HCA HR-lag brief go-ahead; the stage-1 metabolic-ingest brief.
 
-- **The metabolic INGEST gap is the real ceiling on #307 and it stood still (Q154 / OPEN CALL 0).**
-  The prod probe (P5) confirmed Garmin Connect reaches Health Connect (1 exercise + 1204
-  heart_rate records in 30 d) but the backend writes NO `aerobic_sessions` row for it — HC
-  exercise is source-captured only (`health_connect.py`, #189); the only `aerobic_sessions`
-  writers are Polar (`routers/polar.py`, `import_polar.py`, source `polar_flow_export`). So the
-  #307 conditioning quota counts ONLY Polar-Flow-export sessions; every Garmin/Samsung/HC session
-  is invisible to it (and to the load model). The H10/Polar export is the no-build cover. The
-  Garmin→metabolic bridge (HC-workout ingest with zones from posted HR, vs a direct
-  `garminconnect` pull) is its own operator brief — the highest-leverage next thing, and where
-  the OPEN CALL 1 session-floor question becomes real. A data-path lane, not more resolver
-  instrumentation.
-- **Interpretation layer / Appointment brief lanes** — no change; substrate-complete, unstarted.
+**v1-triage (NOW lanes).** The exposure/Know lane served **Know** and is now demonstrable end to end
+(resolver + slot kind + frontend + chat position). No NOW lane rode by momentum without a v1 test.
+The metabolic-ingest bridge, once briefed, serves Know AND the load model (readiness).
 
-**v1-triage (NOW lanes).** The exposure/Know lane served **Know** (test 2) this session, backend
-and frontend both landed; it remains its home. No NOW lane rode by momentum without a v1 test.
-The metabolic-ingest bridge, once briefed, serves Know AND the load model (readiness) — the lane
-that makes #307's count complete rather than Polar-only. Operator's own owed (not Code):
-plan-of-record v2 (pending knee-consult + club-start dates); the HCA HR-lag brief go-ahead.
+**Process note (FEEDBACK §44).** #307's S6 narrowed A2 to the declaration and I reported it as "a
+bounded shape" — a divergence that should have been flagged at the gate, not folded into prose. #308
+lands the real A2; §44 encodes the rule (a step landing smaller than its brief is REPORTED as a
+divergence, "done" has no totality check).

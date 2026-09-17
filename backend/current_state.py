@@ -14,6 +14,7 @@ of re-deriving current state from raw tables.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -22,7 +23,10 @@ from sqlalchemy.orm import Session
 import models
 from declared_state import lift_declared_state
 from engine import profile as profile_mod
+from engine import resolver as resolver_mod
 from engine import training_phase as training_phase_mod
+
+logger = logging.getLogger(__name__)
 from reads.labs_reads import LabRow, latest_lab_results
 from reads.recovery_reads import hrv_deviation, representative_source
 
@@ -55,6 +59,11 @@ class CurrentState:
     # None = baseline (zero-open). `review_due` is folded into the dict at read time.
     training_phase: dict | None = None
     training_phase_orm: models.TrainingPhase | None = None
+    # The due-slot resolver's read (#276/#307), from the SAME `resolve()` call the panel uses
+    # (#308, completing #307 Amendment 1 A2): current window, per-slot done/quota, `due_slot`,
+    # `uncounted`. None = the resolver read failed (logged) — the chat context omits the
+    # position rather than going down. `{"window": None, ...}` = baseline (no plan).
+    resolver_position: dict | None = None
     capability_state: list[models.CapabilityState] = field(default_factory=list)
     hrv_baseline: HRVBaseline | None = None   # per-source rolling baseline (#292)
     labs: list[LabRow] = field(default_factory=list)
@@ -111,6 +120,15 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
 
     labs = latest_lab_results(user_id, db)
 
+    # The resolver position (#308, #307 A2), from the SAME local `today` the phase read uses.
+    # A resolver failure must never take the chat down (G4): catch, log, leave None so the
+    # context builder omits the position block.
+    try:
+        resolver_position = resolver_mod.resolve(db, user_id, today=today)
+    except Exception:
+        logger.exception("resolver position read failed for user %s — omitting from context", user_id)
+        resolver_position = None
+
     return CurrentState(
         knowledge_entries=entries,
         device_profile=device_profile,
@@ -122,4 +140,5 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         capability_state=capability_rows,
         hrv_baseline=hrv_baseline,
         labs=labs,
+        resolver_position=resolver_position,
     )
