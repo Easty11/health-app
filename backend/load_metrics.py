@@ -51,7 +51,18 @@ logger = logging.getLogger(__name__)
 # confounding the stocks. The recurrence is unchanged, so this is a metrics_version bump for
 # a stock RECOMPUTE, not new stock math. banister-v2 rows stay as dormant versioned history
 # (same disposition as banister-v1 under #301).
-METRICS_VERSION = "banister-v3"
+#
+# banister-v4 (P1.1): the STOCK SEED changes. banister-v3 seeded both stocks at 0, which
+# under a normalised EWMA biases the slow fitness stock (τ=42) low for ~2.5τ while the fast
+# fatigue stock (τ=10) fills quickly — so form read strongly negative for months from a cold
+# start regardless of training (user 1 mechanical: mean form −3019 May → +234 Aug, the sign
+# only tracking load ~2.5τ after the series start, while the 42-day maturity dot said 'ok'
+# from 22 Jun — inside the artefact). v4 seeds BOTH stocks at the mean of the series' first
+# ACUTE_DAYS (7) calendar days of daily_load (rest days as 0), so day 0's stocks are equal
+# and form(0) = 0 by construction; steady state is unchanged. Recurrence, τ-set, ΔLoad and
+# the maturity threshold are all untouched — a stock RECOMPUTE, not new stock math. v3 rows
+# go dormant (same disposition as v1/v2).
+METRICS_VERSION = "banister-v4"
 
 # Banister time constants (#32). Fitness τ is common to all windows; fatigue τ is
 # per-window. The fatigue dict is the window allowlist: a window with no key here is
@@ -137,7 +148,24 @@ def compute_window_series(
 ) -> list[DayMetric]:
     """Walk a CONTINUOUS daily calendar from the first load day to `as_of` and compute
     the Banister stocks + ΔLoad per day. Rest days (and tail days past the last session)
-    carry `daily_load=0` and still decay. Seeds `fitness(d0-1)=fatigue(d0-1)=0`.
+    carry `daily_load=0` and still decay.
+
+    FIRST-WEEK-MEAN SEED (banister-v4, P1.1). Both stocks are seeded at the mean of the
+    series' first ACUTE_DAYS (7) calendar days of daily_load — rest days counted as 0, and
+    if the series is shorter than 7 days the mean is taken over what exists (an empty series
+    returns [] above, so the window is never empty here). Day 0's reported stocks ARE that
+    seed (fitness(0) = fatigue(0) = seed), so form(0) = fitness(0) − fatigue(0) = 0 by
+    construction; the recurrence below runs from day 1 onward. This removes the zero-seed
+    warm-up artefact: under a normalised EWMA a 0 seed fills the slow fitness stock (τ=42)
+    far more slowly than the fast fatigue stock (τ=10), so form(0) ≈ −0.35·L at 1τ and read
+    strongly negative for ~2.5τ regardless of training (measured on banister-v3). ACUTE_DAYS
+    is reused deliberately — the seed window is one microcycle, the same constant ΔLoad
+    already uses; no new prior is introduced.
+
+    LOOK-AHEAD, bounded and gated. The seed is re-derived on every recompute from the first
+    ACUTE_DAYS days, so a brand-new series' seed (and hence its first week of stocks) moves
+    as those days fill in — the maturity gate ('low' until MATURITY_DAYS=42) already covers
+    that week. STEADY STATE unchanged: a constant load L seeds at L and stays at L.
 
     NORMALISED EWMA (#18, banister-v2): the load term is weighted by (1 − decay), so a
     constant load L drives each stock to L (not to L/(1−decay)) and the two stocks share
@@ -146,15 +174,15 @@ def compute_window_series(
     days and positive after rest — the property the old un-normalised leaky sums could
     never show (fitness ≥ fatigue every day by construction, form never < 0).
 
+        seed        = mean(daily_load over the first ACUTE_DAYS calendar days)
+        fitness(0)  = fatigue(0) = seed                     (⇒ form(0) = 0)
         decay_x     = e^(-1/τ_x)
-        fitness(d)  = fitness(d-1)·decay_fit + (1 − decay_fit)·daily_load(d)
-        fatigue(d)  = fatigue(d-1)·decay_fat + (1 − decay_fat)·daily_load(d)
+        fitness(d)  = fitness(d-1)·decay_fit + (1 − decay_fit)·daily_load(d)   (d ≥ 1)
+        fatigue(d)  = fatigue(d-1)·decay_fat + (1 − decay_fat)·daily_load(d)   (d ≥ 1)
         form(d)     = fitness(d) − FORM_K·fatigue(d)
 
-    Zero-seed warm-up now biases fitness LOW (τ_fit=42 is slow to fill), so form is
-    strongly negative for ~τ_fit days from a cold start — surfaced by the maturity gate
-    ('low' until MATURITY_DAYS), not suppressed. Metabolic τ_fat=4 makes the metabolic
-    fatigue trace near-instantaneous — a known artefact, τ untouched here (queued P6/P4).
+    Metabolic τ_fat=4 makes the metabolic fatigue trace near-instantaneous — a known
+    artefact, τ untouched here (queued P6/P4).
     """
     if not daily_by_day:
         return []
@@ -168,13 +196,19 @@ def compute_window_series(
     decay_fit = math.exp(-1.0 / TAU_FITNESS_DAYS)
     decay_fat = math.exp(-1.0 / tau_fatigue_days)
 
+    # banister-v4 seed: both stocks start at the first-week mean load (rest days as 0). Day 0
+    # is the seed itself (recurrence runs from day 1), so form(0) = 0 by construction.
+    seed_window = loads[:ACUTE_DAYS]
+    seed = sum(seed_window) / len(seed_window) if seed_window else 0.0
+
     out: list[DayMetric] = []
-    fitness = 0.0
-    fatigue = 0.0
+    fitness = seed
+    fatigue = seed
     for i, d in enumerate(days):
         load = loads[i]
-        fitness = fitness * decay_fit + (1.0 - decay_fit) * load
-        fatigue = fatigue * decay_fat + (1.0 - decay_fat) * load
+        if i > 0:
+            fitness = fitness * decay_fit + (1.0 - decay_fit) * load
+            fatigue = fatigue * decay_fat + (1.0 - decay_fat) * load
         form = fitness - FORM_K * fatigue
         acute = _trailing_mean(loads, i, ACUTE_DAYS)
         chronic = _trailing_mean(loads, i, CHRONIC_DAYS)
@@ -210,10 +244,11 @@ def compute_load_metrics(
     calendar per window to `as_of`, and REPLACES the user's rows for this
     `(formula_version, metrics_version)` (delete-then-insert — idempotent recompute, D-B).
 
-    PER-USER CALENDAR START (P3, banister-v3): when the user's `users.rpe_complete_from` is
-    set, an event whose user-local day is BEFORE that epoch is dropped here, so the daily
-    calendar (hence the Banister warm-up seed) starts at the first load day on/after the
-    epoch. The truncation applies to EVERY lane rolled through this function — strength and
+    PER-USER CALENDAR START (introduced P3/banister-v3, live under banister-v4): when the
+    user's `users.rpe_complete_from` is set, an event whose user-local day is BEFORE that
+    epoch is dropped here, so the daily calendar (hence the Banister first-week-mean seed)
+    starts at the first load day on/after the epoch. The truncation applies to EVERY lane
+    rolled through this function — strength and
     metabolic alike — so all of a user's windows share one series start and stay comparable.
     A NULL epoch → full history, no truncation. The earlier `load_events` are untouched and
     still feed the e1RM fit; only the stocks/ΔLoad here begin at the epoch.

@@ -45,11 +45,12 @@ def _rows(db, uid=1):
 # ── Pure series: EWMA recurrence + form sign (mutation-proof on τ and k) ─────────
 
 def test_window_series_ewma_recurrence_and_form():
-    """fitness/fatigue are the NORMALISED Banister EWMAs (#18/banister-v2): the load term
-    is weighted by (1 − decay), so day-0 stocks are FRACTIONS of the load, not the load
-    itself, and form starts strongly NEGATIVE (fatigue-τ < fitness-τ ⇒ (1 − decay_fat) >
-    (1 − decay_fit) ⇒ fatigue outruns fitness). Two days, one load each — a wrong τ, the
-    old un-normalised recurrence, or a wrong form sign all fail here."""
+    """fitness/fatigue are the NORMALISED Banister EWMAs (#18) with the banister-v4
+    FIRST-WEEK-MEAN SEED (P1.1): both stocks start at the mean of the series' first
+    ACUTE_DAYS(7) daily_loads (here only 2 days exist → mean(100,50)=75), so day 0 IS the
+    seed and form(0)=0 by construction. The recurrence runs from day 1. Expectations are
+    driven off the seed formula, not typed constants — a wrong τ, the old un-normalised
+    recurrence, or a wrong seed all fail here."""
     from datetime import date
     import math
     dfit = math.exp(-1 / 42)
@@ -61,21 +62,65 @@ def test_window_series_ewma_recurrence_and_form():
     )
     assert [m.day for m in series] == [date(2026, 6, 1), date(2026, 6, 2)]
 
-    # Day 0 (load 100): stock = (1 − decay)·load, seeded from 0. Normalisation makes these
-    # ~2.35 / ~9.52, NOT 100/100 as the old leaky sum produced — and form starts negative.
-    exp_fit0 = 100.0 * (1.0 - dfit)      # ≈ 2.352831
-    exp_fat0 = 100.0 * (1.0 - dfat)      # ≈ 9.516258
-    assert series[0].fitness == pytest.approx(exp_fit0, abs=1e-6)
-    assert series[0].fatigue == pytest.approx(exp_fat0, abs=1e-6)
-    assert series[0].form == pytest.approx(exp_fit0 - exp_fat0, abs=1e-6)   # ≈ −7.163427
-    assert series[0].form < 0                                               # normalised ⇒ day-0 form negative
+    # Day 0 = the seed itself: both stocks == mean(first ≤7 daily_loads) == mean(100,50) == 75,
+    # so form(0) == 0 exactly. (Under banister-v3's 0-seed this was ~2.35/~9.52 and form < 0.)
+    seed = (100.0 + 50.0) / 2
+    assert series[0].fitness == pytest.approx(seed, abs=1e-6)
+    assert series[0].fatigue == pytest.approx(seed, abs=1e-6)
+    assert series[0].form == pytest.approx(0.0, abs=1e-9)                   # 0 by construction
 
-    # Day 1 (load 50): stock = day0·decay + (1 − decay)·50 for each window.
-    exp_fit1 = exp_fit0 * dfit + (1.0 - dfit) * 50.0
-    exp_fat1 = exp_fat0 * dfat + (1.0 - dfat) * 50.0
+    # Day 1 (load 50): stock = day0·decay + (1 − decay)·50 for each window, from the seed.
+    exp_fit1 = seed * dfit + (1.0 - dfit) * 50.0
+    exp_fat1 = seed * dfat + (1.0 - dfat) * 50.0
     assert series[1].fitness == pytest.approx(exp_fit1, abs=1e-6)
     assert series[1].fatigue == pytest.approx(exp_fat1, abs=1e-6)
     assert series[1].form == pytest.approx(exp_fit1 - exp_fat1, abs=1e-6)
+
+
+# ── banister-v4 first-week-mean seed (P1.1) — form(0)=0 by construction ──────────────
+
+def test_seed_is_first_week_mean_and_day0_form_is_zero():
+    """banister-v4: for any non-empty series, day 0's stocks both equal the mean of the first
+    ACUTE_DAYS(7) daily_loads (rest days as 0), so form(0)==0 EXACTLY. Uses a >7-day series so
+    the seed window is the full week (with rest days), and a later load past the window."""
+    from datetime import date, timedelta
+    from load_metrics import ACUTE_DAYS
+    d0 = date(2026, 3, 1)
+    week = [100.0, 0.0, 60.0, 0.0, 0.0, 200.0, 40.0]      # first 7 days → mean 400/7
+    daily = {d0 + timedelta(days=k): v for k, v in enumerate(week)}
+    daily[d0 + timedelta(days=9)] = 500.0                 # later load, past the seed window
+    series = compute_window_series(daily, d0 + timedelta(days=9), tau_fatigue_days=10)
+    seed = sum(week[:ACUTE_DAYS]) / ACUTE_DAYS
+    assert series[0].fitness == pytest.approx(seed, abs=1e-9)
+    assert series[0].fatigue == pytest.approx(seed, abs=1e-9)
+    assert series[0].fitness == series[0].fatigue         # equal stocks ⇒ form 0
+    assert series[0].form == 0.0                          # exactly, by construction
+
+
+def test_seed_short_series_uses_available_days():
+    """A series shorter than ACUTE_DAYS seeds on the days that exist (mean over <7)."""
+    from datetime import date, timedelta
+    d0 = date(2026, 3, 1)
+    daily = {d0: 90.0, d0 + timedelta(days=1): 30.0, d0 + timedelta(days=2): 0.0}
+    series = compute_window_series(daily, d0 + timedelta(days=2), tau_fatigue_days=10)
+    seed = (90.0 + 30.0 + 0.0) / 3
+    assert series[0].fitness == pytest.approx(seed, abs=1e-9)
+    assert series[0].fatigue == pytest.approx(seed, abs=1e-9)
+    assert series[0].form == 0.0
+
+
+def test_seed_all_zero_first_week_degenerates_to_zero_seed():
+    """An all-zero first week seeds 0 — the banister-v3 behaviour. The later load then fills
+    the stocks from 0, form(0)==0 (both 0), and the first load day drives form negative
+    (fatigue's larger load weight outruns fitness)."""
+    from datetime import date, timedelta
+    d0 = date(2026, 3, 1)
+    daily = {d0 + timedelta(days=k): 0.0 for k in range(7)}
+    daily[d0 + timedelta(days=7)] = 300.0
+    series = compute_window_series(daily, d0 + timedelta(days=7), tau_fatigue_days=10)
+    assert series[0].fitness == 0.0 and series[0].fatigue == 0.0      # seed 0
+    assert series[0].form == 0.0
+    assert series[-1].form < 0                                        # the load day
 
 
 # ── Normalisation property tests (behaviour, not numbers) — pin "form goes negative" ──
@@ -261,7 +306,7 @@ def test_only_named_formula_version_rolled_up(db_session):
     assert rows[0].metrics_version == METRICS_VERSION
 
 
-# ── Per-user RPE epoch truncation (P3, banister-v3) ─────────────────────────────
+# ── Per-user RPE epoch truncation (introduced P3/banister-v3, live under banister-v4) ──
 
 def test_epoch_truncates_pre_epoch_events_from_stocks(db_session):
     """When a user's rpe_complete_from is set, events on user-local days BEFORE it are dropped
