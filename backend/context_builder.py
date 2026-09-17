@@ -1096,36 +1096,59 @@ def render_asked_lab_value(row: Any) -> str:
     )
 
 
-def _conditioning_line(microcycle: dict[str, Any] | None) -> str | None:
-    """Summarise any `load_window` conditioning slots declared in the microcycle (#307). None
-    when the phase declares none. Read-only over the verbatim microcycle dict and defensive on
-    shape — this is rendering, never validation, so a malformed microcycle must not crash the
-    prompt (validation already refused a bad one at write)."""
-    if not isinstance(microcycle, dict):
-        return None
-    parts: list[str] = []
-    for sc in microcycle.get("sub_cycles") or []:
-        if not isinstance(sc, dict):
-            continue
-        label = sc.get("label")
-        tag = f"{label}: " if isinstance(label, str) and label.strip() else ""
-        for slot in sc.get("slots") or []:
-            if isinstance(slot, dict) and slot.get("load_window"):
-                parts.append(f"{tag}{slot.get('load_window')} ×{slot.get('sessions_per_cycle')}/sub-cycle")
-    if not parts:
-        return None
-    return (
-        "- Conditioning quota (counted on read from aerobic sessions; the engine never SELECTS "
-        f"conditioning): {'; '.join(parts)}"
-    )
+def _slot_display_label(slot: dict[str, Any]) -> str:
+    """A quota slot's label: a `load_window` conditioning slot is "Conditioning" (the metabolic
+    window); a capacity slot is its title-cased capacity token. Mirrors the frontend `QuotaWindow`."""
+    if slot.get("kind") == "load_window":
+        lw = slot.get("load_window")
+        return "Conditioning" if lw == "metabolic" else _cap(lw)
+    return _cap(slot.get("capacity"))
 
 
-def _section_training_phase(phase: dict[str, Any] | None) -> str:
-    """Render the open training phase (Q112, #270) — DOING NOW, framing the profile's
-    standing BUILDING TOWARD below it. Absent (baseline) → empty string. The `review_on`
-    line is a BADGE, never a transition (#228): same discipline as `schedule_item` bounds —
-    a prompt the operator acts on, not an auto-close. A conditioning quota (a metabolic
-    `load_window` slot, #307) is surfaced when the microcycle declares one."""
+def _slot_is_due(slot: dict[str, Any], due_slot: dict[str, Any] | None) -> bool:
+    """True when `due_slot {kind, key}` names this slot — matched on kind + key (capacity slots
+    key on `capacity`, load_window slots on `load_window`). Reading `due_slot`, never
+    `due_capacity` (capacity-only), is what lets the marker land on a conditioning slot."""
+    if not isinstance(due_slot, dict):
+        return False
+    key = slot.get("load_window") if slot.get("kind") == "load_window" else slot.get("capacity")
+    return due_slot.get("kind") == slot.get("kind") and due_slot.get("key") == key
+
+
+def _uncounted_phrase(u: dict[str, Any]) -> str:
+    """One `uncounted` item in plain words. Hevy workouts carry `workout`; aerobic sessions
+    carry `session`. All four reasons are named; an unknown reason falls back to itself."""
+    reason = u.get("reason")
+    if reason == "off_plan":
+        return f"off-plan workout ({_cap(u.get('capacity'))})"
+    if reason == "untagged":
+        n = u.get("untagged_exercises")
+        return f"untagged workout ({n} exercise{'' if n == 1 else 's'})"
+    if reason == "concurrent_strength":
+        return f"conditioning session overlapping a gym workout ({u.get('sport_name')})"
+    if reason == "untimed":
+        return f"untimed conditioning session ({u.get('sport_name')})"
+    return str(reason)
+
+
+def _cap(s: Any) -> Any:
+    return s[0].upper() + s[1:] if isinstance(s, str) and s else s
+
+
+def _section_training_phase(
+    phase: dict[str, Any] | None, resolver_position: dict[str, Any] | None = None
+) -> str:
+    """Render the open training phase (Q112, #270) — DOING NOW, framing the profile's standing
+    BUILDING TOWARD below it. Absent (baseline) → empty string. The `review_on` line is a BADGE,
+    never a transition (#228).
+
+    Under the phase, the QUOTA POSITION from the resolver (#308, completing #307 Amendment 1 A2):
+    the same `resolve()` read the panel uses (`current_state.resolver_position`) — the current
+    window, each slot's `{done}/{quota}` across BOTH kinds, the `due_slot` of either kind, the
+    counted conditioning sessions, and the four `uncounted` reasons. Rendered only when the read
+    succeeded AND its window is non-null; a null window (baseline) leaves the section byte-identical
+    to the pre-#308 phase render. The section reports the resolver's numbers verbatim — it never
+    recomputes (GUARD)."""
     if not phase:
         return ""
     lines = ["## Training Phase (Adaptive Exposure Engine — doing now)"]
@@ -1152,16 +1175,45 @@ def _section_training_phase(phase: dict[str, Any] | None) -> str:
         due = " ◀ REVIEW DUE — ask whether to open the next phase (a prompt, not a transition)" \
             if phase.get("review_due") else ""
         lines.append(f"- Review on: {review_on}{due}")
-    cond = _conditioning_line(phase.get("microcycle"))
-    if cond:
-        lines.append(cond)
+
+    window = resolver_position.get("window") if isinstance(resolver_position, dict) else None
+    if window:
+        slots = resolver_position.get("slots") or []
+        due_slot = resolver_position.get("due_slot")
+        uncounted = resolver_position.get("uncounted") or []
+        lines.append(
+            f"- Quota window: {window.get('label')} "
+            f"({window.get('start_date')} → {window.get('end_date')}, source {window.get('source')})"
+        )
+        for slot in slots:
+            marker = "  ◀ DUE" if _slot_is_due(slot, due_slot) else ""
+            lines.append(f"  - {_slot_display_label(slot)} · {slot.get('done')}/{slot.get('quota')}{marker}")
+            if slot.get("kind") == "load_window":
+                for cs in slot.get("sessions_counted") or []:
+                    dur = cs.get("duration_minutes")
+                    dur_str = f"{dur:g}min" if isinstance(dur, (int, float)) else "?min"
+                    unzoned = " (unzoned)" if not cs.get("trimp") else ""
+                    lines.append(f"    · {cs.get('sport_name')} {dur_str}{unzoned}")
+        if slots and all((s.get("quota") or 0) - (s.get("done") or 0) <= 0 for s in slots):
+            lines.append("  - all quotas met this window — nothing due")
+        if uncounted:
+            lines.append("  - Not counted:")
+            for u in uncounted:
+                lines.append(f"    · {_uncounted_phrase(u)}")
+        lines.append(
+            "  - This is the AUTHORITATIVE count of what has been done against the declared plan "
+            "this window: do not infer position from workout history when it is present, and if "
+            "the user's stated intent for the week differs from the declared quota, say so rather "
+            "than silently following either."
+        )
+
     lines += [
         "",
         "The phase is HISTORY + CURRENT, never a plan. It records what is being run now; it "
-        "does not schedule what comes next. Aerobic/metabolic posture lives in the intent "
-        "prose above; a phase MAY declare a conditioning quota (a metabolic load_window slot, "
-        "shown above when present) that the resolver counts from aerobic sessions on read — but "
-        "the engine still never SELECTS conditioning.",
+        "does not schedule what comes next. Aerobic/metabolic posture lives in the intent prose "
+        "above; a phase MAY declare a conditioning quota (a metabolic load_window slot, counted "
+        "in the quota position above when present) that the resolver counts from aerobic sessions "
+        "on read — but the engine still never SELECTS conditioning.",
     ]
     return "\n".join(lines)
 
@@ -1339,7 +1391,9 @@ def build_system_prompt(
         sections.append(_section_onboarding_interview())
 
     if getattr(state, "training_phase", None) is not None:
-        phase_section = _section_training_phase(state.training_phase)
+        phase_section = _section_training_phase(
+            state.training_phase, getattr(state, "resolver_position", None)
+        )
         if phase_section:
             sections.append(phase_section)
 

@@ -411,3 +411,56 @@ def test_current_state_stale_phase_change_does_not_settle(db_session):
 
     assert state.hrv_baseline is not None
     assert state.hrv_baseline.baseline_state == "normal"
+
+
+# ---------- (e) resolver position (#308, completes #307 A2) ----------
+
+def test_resolver_position_parity_state_equals_resolve(db_session):
+    """G2: current_state.resolver_position IS what resolve() returns (one source, not a second
+    computation), and the phase section renders those very numbers."""
+    from datetime import date as _date
+    from engine import resolver as resolver_mod
+    from engine import training_phase as phase_mod
+
+    user = _make_user(db_session, email="parity-pos@example.com")
+    phase_mod.open_phase(db_session, user.id, {
+        "label": "cond", "probe_posture": "held",
+        "microcycle": {"sub_cycle_days": 7, "sub_cycles": [
+            {"label": "A", "slots": [
+                {"capacity": "strength", "sessions_per_cycle": 2, "minutes": 45},
+                {"load_window": "metabolic", "sessions_per_cycle": 2, "minutes": 30}]}]},
+        "entered_on": "2026-09-07", "asserted_by": "user", "asserted_on": "2026-09-07", "source": "api",
+    })
+    today = _date(2026, 9, 9)   # Wed, inside leg A [09-07, 09-13]
+
+    resp = resolver_mod.resolve(db_session, user.id, today=today)
+    state = current_state_mod.current_state(user.id, db_session, today=today)
+    assert state.resolver_position == resp                       # one source, asserted
+
+    section = context_builder._section_training_phase(state.training_phase, state.resolver_position)
+    strength = next(s for s in resp["slots"] if s.get("capacity") == "strength")
+    cond = next(s for s in resp["slots"] if s.get("load_window") == "metabolic")
+    assert f"Strength · {strength['done']}/{strength['quota']}" in section
+    assert f"Conditioning · {cond['done']}/{cond['quota']}" in section
+    assert f"source {resp['window']['source']}" in section
+
+
+def test_resolver_failure_omits_position_and_context_still_builds(db_session, monkeypatch):
+    """G4: a resolver read that raises must not take the chat down — resolver_position is None
+    and the context still assembles."""
+    from datetime import date as _date
+    from engine import resolver as resolver_mod
+
+    user = _make_user(db_session, email="resolver-fail@example.com")
+
+    def _boom(*a, **k):
+        raise RuntimeError("resolver exploded")
+    monkeypatch.setattr(resolver_mod, "resolve", _boom)
+
+    state = current_state_mod.current_state(user.id, db_session, today=_date(2026, 9, 9))
+    assert state.resolver_position is None
+
+    prompt = context_builder.build_system_prompt(
+        user=user, connected_integrations=[], state=state,
+    )
+    assert isinstance(prompt, str) and prompt

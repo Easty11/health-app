@@ -531,29 +531,90 @@ def test_section_probe_renders_queue_empty_without_suppression():
     assert "suppressed by training phase" not in out_held
 
 
-def test_section_training_phase_surfaces_conditioning_quota():
-    """S6 (#307): a microcycle declaring a metabolic load_window slot surfaces a
-    conditioning-quota line plus the 'engine never SELECTS conditioning' framing; a
-    capacity-only microcycle surfaces no such line (negative control)."""
+_PHASE_STUB = {"label": "base", "probe_posture": "held", "capacities": None,
+               "review_on": None, "microcycle": None}
+
+
+def test_section_renders_resolver_position_capacity_done_and_due():
+    """S6b (#308, #307 A2): the phase section renders the resolver POSITION — the window line,
+    a met capacity slot, and an unmet capacity slot marked DUE from `due_slot`."""
     from context_builder import _section_training_phase
-
-    cond_phase = {
-        "label": "base", "probe_posture": "held", "capacities": None, "review_on": None,
-        "microcycle": {"sub_cycle_days": 7, "sub_cycles": [
-            {"label": "A", "slots": [
-                {"load_window": "metabolic", "sessions_per_cycle": 3, "minutes": 30}]}]},
+    position = {
+        "window": {"label": "A", "start_date": "2026-09-07", "end_date": "2026-09-13", "source": "phase"},
+        "slots": [
+            {"kind": "capacity", "capacity": "strength", "quota": 2, "done": 2, "remaining": 0, "workouts_counted": ["w1", "w2"]},
+            {"kind": "capacity", "capacity": "endurance", "quota": 1, "done": 0, "remaining": 1, "workouts_counted": []},
+        ],
+        "due_capacity": "endurance",
+        "due_slot": {"kind": "capacity", "key": "endurance"},
+        "uncounted": [],
     }
-    out = _section_training_phase(cond_phase)
-    assert "Conditioning quota" in out and "metabolic ×3/sub-cycle" in out
-    assert "never SELECTS conditioning" in out
+    out = _section_training_phase(_PHASE_STUB, position)
+    assert "Quota window: A (2026-09-07 → 2026-09-13, source phase)" in out
+    assert "Strength · 2/2" in out and "Strength · 2/2  ◀ DUE" not in out   # met, not due
+    assert "Endurance · 0/1  ◀ DUE" in out                                  # unmet, due
 
-    cap_only = {
-        "label": "base", "probe_posture": "held", "capacities": None, "review_on": None,
-        "microcycle": {"sub_cycle_days": 7, "sub_cycles": [
-            {"label": "A", "slots": [
-                {"capacity": "strength", "sessions_per_cycle": 2, "minutes": 45}]}]},
+
+def test_section_renders_conditioning_due_sessions_and_all_uncounted():
+    """S6b: a load_window slot is marked DUE when `due_slot` names it (the §18 mutation guard —
+    swap `due_slot` for `due_capacity` in the renderer and this DUE assertion fails, because
+    due_capacity is capacity-only); an unzoned counted session is shown; all four uncounted
+    reasons render in plain words."""
+    from context_builder import _section_training_phase
+    # Conditioning is FIRST-unmet (declared first) → due_slot names it. A strength slot is also
+    # unmet and later, so due_capacity = "strength" (a DIFFERENT slot). This is what makes the
+    # mutation bite: a renderer using due_capacity would mark Strength, not Conditioning, and the
+    # Conditioning-DUE assertion below would fail — it cannot pass by a null==null coincidence.
+    position = {
+        "window": {"label": "cond", "start_date": "2026-09-07", "end_date": "2026-09-13", "source": "phase"},
+        "slots": [
+            {"kind": "load_window", "load_window": "metabolic", "quota": 3, "done": 1, "remaining": 2,
+             "sessions_counted": [{"session": 11, "sport_name": "Walk", "duration_minutes": 30, "trimp": 0}]},
+            {"kind": "capacity", "capacity": "strength", "quota": 2, "done": 0, "remaining": 2, "workouts_counted": []},
+        ],
+        "due_capacity": "strength",
+        "due_slot": {"kind": "load_window", "key": "metabolic"},
+        "uncounted": [
+            {"workout": "w3", "reason": "untagged", "untagged_exercises": 2},
+            {"workout": "w4", "reason": "off_plan", "capacity": "power"},
+            {"session": 21, "reason": "concurrent_strength", "sport_name": "Row", "duration_minutes": 45},
+            {"session": 22, "reason": "untimed", "sport_name": "Swim", "duration_minutes": 30},
+        ],
     }
-    assert "Conditioning quota" not in _section_training_phase(cap_only)
+    out = _section_training_phase(_PHASE_STUB, position)
+    assert "Conditioning · 1/3  ◀ DUE" in out                     # MUTATION GUARD: due on load_window
+    assert "Strength · 0/2  ◀ DUE" not in out                     # due_capacity's slot is NOT the due one
+    assert "Walk 30min (unzoned)" in out                          # zoneless counted session (trimp 0)
+    assert "untagged workout (2 exercises)" in out
+    assert "off-plan workout (Power)" in out
+    assert "conditioning session overlapping a gym workout (Row)" in out
+    assert "untimed conditioning session (Swim)" in out
+
+
+def test_section_all_quotas_met_says_nothing_due():
+    from context_builder import _section_training_phase
+    position = {
+        "window": {"label": "A", "start_date": "2026-09-07", "end_date": "2026-09-13", "source": "phase"},
+        "slots": [
+            {"kind": "capacity", "capacity": "strength", "quota": 1, "done": 1, "remaining": 0, "workouts_counted": ["w1"]},
+            {"kind": "load_window", "load_window": "metabolic", "quota": 1, "done": 1, "remaining": 0, "sessions_counted": []},
+        ],
+        "due_capacity": None, "due_slot": None, "uncounted": [],
+    }
+    out = _section_training_phase(_PHASE_STUB, position)
+    assert "all quotas met this window — nothing due" in out
+    assert "◀ DUE" not in out
+
+
+def test_section_null_window_renders_no_position_block():
+    """G3: a null window (baseline / resolver returned no window) leaves the phase section with
+    no Quota-window block — byte-identical to the pre-#308 render."""
+    from context_builder import _section_training_phase
+    baseline = {"window": None, "slots": [], "due_capacity": None, "due_slot": None, "uncounted": []}
+    out_null = _section_training_phase(_PHASE_STUB, baseline)
+    out_none = _section_training_phase(_PHASE_STUB, None)
+    assert "Quota window" not in out_null and "Quota window" not in out_none
+    assert out_null == out_none   # a null window and a failed read render identically
 
 
 # ── local-day (cross-cutting S7) ─────────────────────────────────────────────
