@@ -4578,3 +4578,13 @@ Raised 2026-09-17 with #303. `HrvReading.source` is an unconstrained `String(50)
 **To close:** a migration adding a CHECK/enum on `hrv_readings.source` (decide the allowed set — at least `garmin`, `samsung`; whether to admit `withings`/others already seen in `health_connect_record_sources`), plus a decision on whether the read-time `config_error` path stays (it should — the guard is about >2 same-night sources, which a per-value CHECK does not prevent). Full human review (schema migration).
 
 **State:** OPEN. Blocks no surface — the runtime guard (#303) holds the correctness floor; this is a defence-in-depth upgrade.
+
+---
+
+## Q158. Uncoupled chronic (days 8–28) as an optional descriptive `load_ratio` denominator  [OPEN]
+
+Raised 2026-09-17 with #306. `load_ratio = acute(7d)/chronic(28d)` is a COUPLED ratio — the 28-day chronic window contains the 7-day acute window, which induces a spurious ~0.5 correlation between numerator and denominator (Lolli 2017 / Windt 2018). #306 keeps the coupled form at Tier 0 because the practical effect is small (Coyne 2019) and de-coupling is not free: an uncoupled chronic (days 8–28, excluding the acute window) needs a **new `load_metrics` column** (`chronic_uncoupled`) and a migration, plus the recompute/versioning that any stored-series change carries (#248 disposition). 
+
+**To close (if built):** add the column + a `_trailing_mean` over days 8–28, surface it as a SECOND descriptive ratio (never a risk band — the #306 reclassification binds it too), and decide whether the coupled ratio stays or is superseded. It remains descriptive-only; a criterion (Q156) is required before any threshold rides either denominator. Schema change → full human review.
+
+**State:** OPEN. Blocks nothing — the coupled ratio ships descriptive under #306; this is an optional precision upgrade, not a correctness fix.
