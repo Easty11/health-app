@@ -303,7 +303,11 @@ authority gate; ACWR readout boundary — the MCP monitoring surface currently r
 ACWR sweet-spot language while #18 forbids ACWR in dosing; one sentence formalising
 "readout ≠ dosing input" (or retiring the readout) when this work starts.
 
-**Candidate open questions:** strength-window τ priors vs the 42/7 aerobic convention;
+**Candidate open questions:** ~~strength-window τ priors vs the 42/7 aerobic
+convention~~ — **discharged into `docs/load-constants-provenance.md` (#305):** the
+strength-window τ_fatigue priors (mechanical 10, neuromuscular 6) and τ_metabolic 4 are
+tabled there as "operator prior, uncited", their non-transfer from the aerobic convention
+(Vermeire 2021) recorded, and Q156 sweeps them (τ_metabolic first);
 Metabolic unit + TRIMP-class transfer prior and criterion definition from actual Polar
 data shape; RPE-T capture surface in Hevy vs check-in; fatigue-trace promotion
 evidence bar; substitution equivalence priors (how much Metabolic session "replaces" an

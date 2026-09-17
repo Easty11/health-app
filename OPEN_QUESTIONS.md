@@ -4563,7 +4563,9 @@ Preregistered 2026-09-16 with banister-v2 (#301). The normalised stocks (#301) r
 
 **Amended (P3, #302).** The criterion sweep is now POST-EPOCH by construction: `banister-v3` truncates each user's series at `users.rpe_complete_from`, so the e1RM-vs-fitness comparison only ever runs over the RPE-complete span — there is no cross-epoch logging-behaviour step left for the harness to model around. User 4 has NO e1RM criterion until ~60 d of RPE-present sets accrue, and that is contingent on her adopting RPE at all (her epoch is currently NULL); until then her fitness trace has no observable to validate against. The metabolic-window criterion (§3.2) remains unbuilt.
 
-**State:** OPEN (P4). Blocks no current surface — banister-v2/-v3 ship without it; criterion validation is downstream.
+**Amended (P6, #305).** The harness's INPUT LIST is now explicit: `docs/load-constants-provenance.md` tables every load coefficient with a provenance class, and its "operator prior (uncited)" rows (15 of 23) are exactly what the sweep must adjudicate. **Sweep order: τ_metabolic=4 first** (against McGregor 2007 / Vermeire 2021), then the other τ_fatigue priors (mech 10, nm 6), then the mechanical/NM band coefficients (`_mech_mult`, `_f_rir`, `_nm_reps_prior`, `_h_intensity`) and the bridging constants (`K_DIST`, `K_TIME`, `E1RM_WINDOW_DAYS`, `H_NO_E1RM`). A fit that moves any row from "operator prior" to "fitted" updates that row (the standing rule, #305). `TAU_FITNESS_DAYS` (42) and `FORM_K` (1) are the tabled *cited* rows the sweep tests against their conventions, not blank priors.
+
+**State:** OPEN (P4). Blocks no current surface — banister-v2/-v3/-v4 ship without it; criterion validation is downstream. Input list now pinned (#305).
 
 ---
 
