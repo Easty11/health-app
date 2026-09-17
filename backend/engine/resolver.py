@@ -3,17 +3,26 @@ user is, and which slot is due next (Q106's week-to-date / due-slot half, #221-d
 #270-scoped).
 
 A **quota window** is the unit this module resolves over: a dated span carrying an ordered
-list of `{capacity, quota}` slots. Two producers, one precedence (mirrors phase-now over
-profile-intent, #270):
+list of slots. A slot is one of two kinds (#307): a movement-quality `capacity` slot, or a
+`load_window` conditioning slot keyed on a load window (`metabolic` only, for now). Two
+producers, one precedence (mirrors phase-now over profile-intent, #270):
 
     open phase WITH a microcycle  → the current A/B leg, quota = `sessions_per_cycle`
     else, a fortification profile → this Mon–Sun week,   quota = `sessions_per_week`
     neither                        → None (baseline; the endpoint returns a null window, 200)
 
-Completion is **derived on read from Hevy**, never written back — a session counts because it
-is in the record, not because anything marked it "taken". For each non-excluded, non-dedup
-workout whose LOCAL day falls in the window, a dominant capacity is computed and, if it names
-a slot, increments that slot's `done`.
+Completion is **derived on read**, never written back — a session counts because it is in the
+record, not because anything marked it "taken". The two kinds count from DIFFERENT sources,
+orthogonally (a day may count once on each axis):
+
+  • **`capacity` slots** count Hevy: for each non-excluded, non-dedup workout whose LOCAL day
+    falls in the window, a dominant capacity (Rule 1) is computed and, if it names a slot,
+    increments that slot's `done`.
+  • **`load_window` slots** count canonical `aerobic_sessions` (#307 / Amendment 1 — canonical
+    SESSIONS, not `load_events`, so a zoneless conditioning session still counts). A canonical
+    session in the window counts UNLESS its start/stop is NULL (`untimed`, fail-closed) or it
+    overlaps a non-excluded, non-dedup Hevy workout (`concurrent_strength` — an HR strap worn in
+    the gym is a strength trace, not conditioning). Both misses are surfaced in `uncounted[]`.
 
 Two rules the resolver turns on (operator-pinned, this session; not `infer_loaded_regions`,
 which answers coverage, not "what was this session"):
@@ -46,11 +55,13 @@ from sqlalchemy.orm import Session
 
 import models
 from load_metrics import _local_day
+from load_events_metabolic import WINDOW_METABOLIC, compute_metabolic_load
+from reads.aerobic_reads import arbitrated_sessions
 
 from . import taxonomy
 from .profile import get_profile
 from .taxonomy import Capacity
-from .training_phase import current_training_phase
+from .training_phase import current_training_phase, _SLOT_LOAD_WINDOWS
 
 # Sub-cycle labels when a leg carries none of its own: A, B, C, D by order.
 _LEG_LABELS = ("A", "B", "C", "D")
@@ -58,9 +69,21 @@ _LEG_LABELS = ("A", "B", "C", "D")
 
 @dataclass(frozen=True)
 class Slot:
-    """One quota line in a window: a capacity and how many sessions it wants."""
-    capacity: Capacity
+    """One quota line in a window. A slot is EITHER a movement-quality `capacity` (counted from
+    Hevy by Rule 1) OR a `load_window` conditioning slot (counted from canonical
+    `aerobic_sessions`, #307 / Amendment 1) — exactly one is set, enforced at write by
+    `validate_microcycle`. `quota` is the session count it wants."""
     quota: int
+    capacity: Capacity | None = None
+    load_window: str | None = None
+
+    @property
+    def kind(self) -> str:
+        return "capacity" if self.capacity is not None else "load_window"
+
+    @property
+    def key(self) -> str:
+        return self.capacity.value if self.capacity is not None else (self.load_window or "")
 
 
 @dataclass
@@ -77,19 +100,26 @@ class QuotaWindow:
 # --------------------------------------------------------------------------- #
 
 def _slots_from(raw_slots: list[dict[str, Any]], quota_key: str) -> list[Slot]:
-    """Resolve each declared slot's capacity via `resolve_capacity` (Q105 — never compare a
-    stored token to a string directly) and pair it with its quota. A slot whose capacity does
-    not resolve is skipped defensively; validation refuses such a slot at write, so this is a
-    guard, not a path."""
+    """Build each declared slot. A `load_window` slot (#307) is taken as-is against the closed
+    declared set; otherwise the `capacity` is resolved via `resolve_capacity` (Q105 — never
+    compare a stored token to a string directly). A slot that resolves to neither is skipped
+    defensively; validation refuses such a slot at write, so this is a guard, not a path."""
     out: list[Slot] = []
     for s in raw_slots:
         if not isinstance(s, dict):
             continue
+        quota = s.get(quota_key)
+        q = int(quota) if isinstance(quota, int) and not isinstance(quota, bool) else 0
+        lw = s.get("load_window")
+        if lw is not None:
+            if lw not in _SLOT_LOAD_WINDOWS:      # guard; validation refuses at write
+                continue
+            out.append(Slot(quota=q, load_window=lw))
+            continue
         cap = taxonomy.resolve_capacity(s.get("capacity"))
         if cap is None:
             continue
-        quota = s.get(quota_key)
-        out.append(Slot(capacity=cap, quota=int(quota) if isinstance(quota, int) else 0))
+        out.append(Slot(quota=q, capacity=cap))
     return out
 
 
@@ -237,6 +267,41 @@ def _in_window_workouts(db: Session, user_id: int, window: QuotaWindow) -> list[
 
 
 # --------------------------------------------------------------------------- #
+# Counting — canonical aerobic_sessions over the load_window (Amendment 1).    #
+# --------------------------------------------------------------------------- #
+
+def _in_window_aerobic(db: Session, user_id: int, window: QuotaWindow) -> list[Any]:
+    """Canonical `aerobic_sessions` whose LOCAL (Brisbane) day is in the window. Amendment 1
+    counts canonical SESSIONS directly (via read-time cross-source arbitration, #260) — NOT
+    `load_events` — so the count is not gated on zones/qualifying or on a formula version: a
+    zoneless conditioning session still counts. A timed session buckets by `start_time`
+    (`_local_day`, the +10h trap); an untimed one has no instant to bucket, so its always-present
+    `session_date` (already a local calendar date) is the day."""
+    out: list[Any] = []
+    for s in arbitrated_sessions(user_id, db):
+        if not getattr(s, "canonical", True):
+            continue
+        day = _local_day(s.start_time) if s.start_time is not None else s.session_date
+        if window.start_date <= day <= window.end_date:
+            out.append(s)
+    return out
+
+
+def _overlaps_strength(session: Any, hevy_workouts: list[models.HevyWorkout]) -> bool:
+    """True if the session's `[start_time, stop_time]` interval intersects any Hevy workout's
+    `[start_time, end_time]` (both endpoints present on each side). An HR strap worn in the gym
+    is a strength session's trace, not conditioning (Amendment 1 → `concurrent_strength`). The
+    caller guarantees the session's start/stop are non-NULL (untimed is handled upstream)."""
+    s_start, s_stop = session.start_time, session.stop_time
+    for w in hevy_workouts:
+        if w.start_time is None or w.end_time is None:
+            continue                              # undecidable pair — cannot prove overlap
+        if s_start < w.end_time and w.start_time < s_stop:
+            return True
+    return False
+
+
+# --------------------------------------------------------------------------- #
 # Public: resolve → the endpoint/enforcement payload.                          #
 # --------------------------------------------------------------------------- #
 
@@ -247,13 +312,20 @@ def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str
     today = today or _local_day()
     window = resolve_window(db, user_id, today)
     if window is None:
-        return {"window": None, "slots": [], "due_capacity": None, "uncounted": []}
+        return {"window": None, "slots": [], "due_capacity": None,
+                "due_slot": None, "uncounted": []}
 
-    slot_order = [s.capacity for s in window.slots]
-    done: dict[Capacity, int] = {s.capacity: 0 for s in window.slots}
-    counted: dict[Capacity, list[str]] = {s.capacity: [] for s in window.slots}
+    slots = window.slots
+    done = [0] * len(slots)
+    counted_workouts: list[list[str]] = [[] for _ in slots]      # capacity slots (Hevy ids)
+    counted_sessions: list[list[dict[str, Any]]] = [[] for _ in slots]  # load_window slots
     uncounted: list[dict[str, Any]] = []
 
+    # ---- capacity slots: Rule 1 dominant capacity over in-window Hevy workouts ----
+    cap_index: dict[Capacity, int] = {
+        s.capacity: i for i, s in enumerate(slots) if s.kind == "capacity"
+    }
+    slot_order = [s.capacity for s in slots if s.kind == "capacity"]
     workouts = _in_window_workouts(db, user_id, window)
     all_tids: set[str] = set()
     for w in workouts:
@@ -262,34 +334,66 @@ def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str
             if tid:
                 all_tids.add(tid)
     caps_by_template = _primary_caps_by_template(db, all_tids)
-
-    slot_caps = set(slot_order)
     for w in workouts:
         exercises = (w.raw or {}).get("exercises") or []
         dominant, untagged = _dominant_capacity(exercises, caps_by_template, slot_order)
         if dominant is None:
             uncounted.append({"workout": w.hevy_id, "reason": "untagged",
                               "untagged_exercises": untagged})
-        elif dominant in slot_caps:
-            done[dominant] += 1
-            counted[dominant].append(w.hevy_id)
+        elif dominant in cap_index:
+            i = cap_index[dominant]
+            done[i] += 1
+            counted_workouts[i].append(w.hevy_id)
         else:
             uncounted.append({"workout": w.hevy_id, "reason": "off_plan",
                               "capacity": dominant.value})
 
+    # ---- load_window slots: Amendment 1 — count canonical aerobic_sessions ----
+    lw_index: dict[str, int] = {
+        s.load_window: i for i, s in enumerate(slots) if s.kind == "load_window"
+    }
+    if lw_index:                                  # only touch the aerobic lane when declared
+        for sess in _in_window_aerobic(db, user_id, window):
+            idx = lw_index.get(WINDOW_METABOLIC)  # every aerobic session feeds the metabolic window
+            if idx is None:
+                continue                          # no metabolic slot in this window
+            entry = {"session": sess.id, "sport_name": sess.sport_name,
+                     "duration_minutes": sess.duration_minutes}
+            if sess.start_time is None or sess.stop_time is None:
+                # Fail-closed (S0 OPEN CALL 2): a NULL start OR stop is undecidable for the
+                # overlap guard, so it is surfaced, never silently counted. Covers half-timed.
+                uncounted.append({**entry, "reason": "untimed"})
+            elif _overlaps_strength(sess, workouts):
+                uncounted.append({**entry, "reason": "concurrent_strength"})
+            else:
+                done[idx] += 1
+                counted_sessions[idx].append({
+                    **entry,
+                    "trimp": compute_metabolic_load({
+                        1: sess.z1_seconds, 2: sess.z2_seconds, 3: sess.z3_seconds,
+                        4: sess.z4_seconds, 5: sess.z5_seconds,
+                    }).trimp,
+                })
+
+    # ---- per-slot output + due (Rule 4 across BOTH kinds; due_capacity capacity-only) ----
     slots_out: list[dict[str, Any]] = []
-    due_capacity: Capacity | None = None
-    for s in window.slots:
-        remaining = max(s.quota - done[s.capacity], 0)
-        if due_capacity is None and remaining > 0:      # Rule 4: first unmet in declared order
-            due_capacity = s.capacity
-        slots_out.append({
-            "capacity": s.capacity.value,
-            "quota": s.quota,
-            "done": done[s.capacity],
-            "remaining": remaining,
-            "workouts_counted": counted[s.capacity],
-        })
+    due_slot: dict[str, str] | None = None
+    due_capacity_val: str | None = None
+    for i, s in enumerate(slots):
+        remaining = max(s.quota - done[i], 0)
+        if due_slot is None and remaining > 0:              # Rule 4: first unmet, declared order
+            due_slot = {"kind": s.kind, "key": s.key}
+        if due_capacity_val is None and s.kind == "capacity" and remaining > 0:
+            due_capacity_val = s.capacity.value             # /engine/next never sees a load_window
+        out: dict[str, Any] = {"kind": s.kind, "quota": s.quota,
+                               "done": done[i], "remaining": remaining}
+        if s.kind == "capacity":
+            out["capacity"] = s.capacity.value
+            out["workouts_counted"] = counted_workouts[i]
+        else:
+            out["load_window"] = s.load_window
+            out["sessions_counted"] = counted_sessions[i]
+        slots_out.append(out)
 
     return {
         "window": {
@@ -299,7 +403,8 @@ def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str
             "source": window.source,
         },
         "slots": slots_out,
-        "due_capacity": due_capacity.value if due_capacity is not None else None,
+        "due_capacity": due_capacity_val,
+        "due_slot": due_slot,
         "uncounted": uncounted,
     }
 

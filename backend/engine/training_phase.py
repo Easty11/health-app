@@ -39,6 +39,14 @@ from .profile import (
 # import is acyclic; it is the canonical home for the write-source domain.
 from routers.knowledge import SOURCE_VALUES
 
+# The metabolic window token, imported not literal (mirrors #302 R3 on version strings). A
+# microcycle slot may key on a load WINDOW instead of a capacity (#307); the closed declared
+# set is one member for now — the metabolic (aerobic) window. `load_events_metabolic` imports
+# only `models` + stdlib at module load, so this import is acyclic.
+from load_events_metabolic import WINDOW_METABOLIC
+
+_SLOT_LOAD_WINDOWS = (WINDOW_METABOLIC,)
+
 # ── domains local to the phase ledger ────────────────────────────────────────
 PROBE_POSTURE_VALUES = ("suppressed", "held")
 
@@ -54,7 +62,7 @@ _MAX_SUB_CYCLES = 4
 _MIN_SESSIONS_PER_CYCLE = 0
 _MAX_SESSIONS_PER_CYCLE = 28
 
-_MICRO_SLOT_FIELDS = ("capacity", "sessions_per_cycle", "minutes")
+_MICRO_SLOT_FIELDS = ("capacity", "load_window", "sessions_per_cycle", "minutes")
 
 
 class NoOpenPhase(Exception):
@@ -84,9 +92,13 @@ def validate_microcycle(value: Any) -> dict[str, Any]:
     `validate_weekly_template`).
 
     Shape: `{"sub_cycle_days": int, "sub_cycles": [{"label"?: str, "slots": [slot, ...]}]}`.
-    A slot is the `weekly_template` slot shape EXCEPT the count key is `sessions_per_cycle`.
-    The duplicate-capacity check is PER-SUB-CYCLE, not template-wide: the same capacity in A
-    and B at different doses is the point; a duplicate WITHIN one sub-cycle is the error.
+    A slot carries EXACTLY ONE of `capacity` | `load_window` (#307), plus the count key
+    `sessions_per_cycle` and the required `minutes`. `capacity` is a movement-quality slot
+    (counted from Hevy, Rule 1); `load_window` is a conditioning slot keyed on a load window
+    (counted from canonical `aerobic_sessions`), a closed set of one — `metabolic`. Both keys
+    or neither is a refusal. The duplicate check is PER-SUB-CYCLE, not template-wide: one slot
+    per capacity AND one per load_window within a sub-cycle; the same key in A and B at
+    different doses is the point.
     """
     if not isinstance(value, dict):
         raise ValueError("microcycle must be an object with 'sub_cycle_days' and 'sub_cycles'")
@@ -126,25 +138,50 @@ def validate_microcycle(value: Any) -> dict[str, Any]:
             raise ValueError(f"microcycle.sub_cycles[{j}].slots must be a non-empty list")
 
         where = f"microcycle.sub_cycles[{j}].slots"
-        seen: dict[taxonomy.Capacity, int] = {}
+        seen_caps: dict[taxonomy.Capacity, int] = {}
+        seen_lws: dict[str, int] = {}
         for i, slot in enumerate(slots):
             if not isinstance(slot, dict):
                 raise ValueError(f"{where}[{i}] must be an object")
             unknown = sorted(set(slot) - set(_MICRO_SLOT_FIELDS))
             if unknown:
                 raise ValueError(f"{where}[{i}]: unknown field(s) {unknown}")
-            cap = taxonomy.resolve_capacity(slot.get("capacity"))
-            if cap is None:
+            # Exactly one of `capacity` | `load_window` keys the slot (#307). Both or neither
+            # is a refusal — the two are distinct count sources (Hevy dominant-capacity vs the
+            # canonical aerobic lane) and a slot is one or the other.
+            has_cap = "capacity" in slot
+            has_lw = "load_window" in slot
+            if has_cap == has_lw:
                 raise ValueError(
-                    f"{where}[{i}].capacity: unknown capacity {slot.get('capacity')!r} "
-                    f"— one of {taxonomy.capacity_tokens()}"
+                    f"{where}[{i}]: a slot carries exactly one of 'capacity' | 'load_window', "
+                    f"got {'both' if has_cap else 'neither'}"
                 )
-            if cap in seen:                       # per-sub-cycle only
-                raise ValueError(
-                    f"{where}[{i}].capacity: duplicate capacity {cap.name} within this "
-                    f"sub-cycle (already at [{seen[cap]}]) — cross-sub-cycle repeats are allowed"
-                )
-            seen[cap] = i
+            if has_cap:
+                cap = taxonomy.resolve_capacity(slot.get("capacity"))
+                if cap is None:
+                    raise ValueError(
+                        f"{where}[{i}].capacity: unknown capacity {slot.get('capacity')!r} "
+                        f"— one of {taxonomy.capacity_tokens()}"
+                    )
+                if cap in seen_caps:                  # per-sub-cycle only
+                    raise ValueError(
+                        f"{where}[{i}].capacity: duplicate capacity {cap.name} within this "
+                        f"sub-cycle (already at [{seen_caps[cap]}]) — cross-sub-cycle repeats are allowed"
+                    )
+                seen_caps[cap] = i
+            else:
+                lw = slot.get("load_window")
+                if lw not in _SLOT_LOAD_WINDOWS:
+                    raise ValueError(
+                        f"{where}[{i}].load_window: unknown load_window {lw!r} "
+                        f"— one of {list(_SLOT_LOAD_WINDOWS)}"
+                    )
+                if lw in seen_lws:                    # per-sub-cycle only
+                    raise ValueError(
+                        f"{where}[{i}].load_window: duplicate load_window {lw!r} within this "
+                        f"sub-cycle (already at [{seen_lws[lw]}]) — cross-sub-cycle repeats are allowed"
+                    )
+                seen_lws[lw] = i
             _slot_int(slot, "sessions_per_cycle",
                       _MIN_SESSIONS_PER_CYCLE, _MAX_SESSIONS_PER_CYCLE, i, where=where)
             _slot_int(slot, "minutes", _MIN_SLOT_MINUTES, _MAX_SLOT_MINUTES, i, where=where)

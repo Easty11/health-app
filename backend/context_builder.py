@@ -1096,11 +1096,36 @@ def render_asked_lab_value(row: Any) -> str:
     )
 
 
+def _conditioning_line(microcycle: dict[str, Any] | None) -> str | None:
+    """Summarise any `load_window` conditioning slots declared in the microcycle (#307). None
+    when the phase declares none. Read-only over the verbatim microcycle dict and defensive on
+    shape — this is rendering, never validation, so a malformed microcycle must not crash the
+    prompt (validation already refused a bad one at write)."""
+    if not isinstance(microcycle, dict):
+        return None
+    parts: list[str] = []
+    for sc in microcycle.get("sub_cycles") or []:
+        if not isinstance(sc, dict):
+            continue
+        label = sc.get("label")
+        tag = f"{label}: " if isinstance(label, str) and label.strip() else ""
+        for slot in sc.get("slots") or []:
+            if isinstance(slot, dict) and slot.get("load_window"):
+                parts.append(f"{tag}{slot.get('load_window')} ×{slot.get('sessions_per_cycle')}/sub-cycle")
+    if not parts:
+        return None
+    return (
+        "- Conditioning quota (counted on read from aerobic sessions; the engine never SELECTS "
+        f"conditioning): {'; '.join(parts)}"
+    )
+
+
 def _section_training_phase(phase: dict[str, Any] | None) -> str:
     """Render the open training phase (Q112, #270) — DOING NOW, framing the profile's
     standing BUILDING TOWARD below it. Absent (baseline) → empty string. The `review_on`
     line is a BADGE, never a transition (#228): same discipline as `schedule_item` bounds —
-    a prompt the operator acts on, not an auto-close."""
+    a prompt the operator acts on, not an auto-close. A conditioning quota (a metabolic
+    `load_window` slot, #307) is surfaced when the microcycle declares one."""
     if not phase:
         return ""
     lines = ["## Training Phase (Adaptive Exposure Engine — doing now)"]
@@ -1127,11 +1152,16 @@ def _section_training_phase(phase: dict[str, Any] | None) -> str:
         due = " ◀ REVIEW DUE — ask whether to open the next phase (a prompt, not a transition)" \
             if phase.get("review_due") else ""
         lines.append(f"- Review on: {review_on}{due}")
+    cond = _conditioning_line(phase.get("microcycle"))
+    if cond:
+        lines.append(cond)
     lines += [
         "",
         "The phase is HISTORY + CURRENT, never a plan. It records what is being run now; it "
         "does not schedule what comes next. Aerobic/metabolic posture lives in the intent "
-        "prose above and is not enforced by the engine.",
+        "prose above; a phase MAY declare a conditioning quota (a metabolic load_window slot, "
+        "shown above when present) that the resolver counts from aerobic sessions on read — but "
+        "the engine still never SELECTS conditioning.",
     ]
     return "\n".join(lines)
 

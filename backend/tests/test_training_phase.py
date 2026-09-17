@@ -210,10 +210,57 @@ def test_zero_open_is_a_valid_baseline(db_session):
     (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
         {"slots": [{"capacity": "stability", "sessions_per_cycle": 1, "minutes": 4}]}]}),
      "must be 5-180"),
+    # ── load_window slot kind (#307 / Amendment 1). The both/neither cases are the §18
+    #    mutation guard for the exactly-one rule: drop the gate and both stop raising. ──
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"capacity": "stability", "load_window": "metabolic",
+                    "sessions_per_cycle": 1, "minutes": 30}]}]}),
+     "exactly one of"),                                        # both keys
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"sessions_per_cycle": 1, "minutes": 30}]}]}),
+     "exactly one of"),                                        # neither key
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"load_window": "mechanical", "sessions_per_cycle": 1, "minutes": 30}]}]}),
+     "unknown load_window"),                                   # off the closed set of one
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"load_window": "metabolic", "sessions_per_cycle": 1, "minutes": 30},
+                   {"load_window": "metabolic", "sessions_per_cycle": 2, "minutes": 30}]}]}),
+     "duplicate load_window"),                                 # dup WITHIN one sub-cycle
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"load_window": "metabolic", "sessions_per_cycle": 1}]}]}),
+     "missing required field 'minutes'"),                      # minutes stays required (S0(f))
 ])
 def test_invalid_payloads_are_refused(payload, match):
     with pytest.raises(ValueError, match=match):
         phase_mod.validate_training_phase(payload)
+
+
+def test_load_window_slot_is_valid_and_byte_identical():
+    """A conditioning slot keyed on the metabolic load window validates and round-trips
+    UNCHANGED (#307 / Amendment 1) — negative control for the load_window refusal cases."""
+    mc = {"sub_cycle_days": 7, "sub_cycles": [
+        {"label": "cond", "slots": [
+            {"load_window": "metabolic", "sessions_per_cycle": 3, "minutes": 40}]}]}
+    out = phase_mod.validate_training_phase(_payload(microcycle=mc))
+    assert out["microcycle"] is mc
+
+
+def test_mixed_capacity_and_load_window_in_one_sub_cycle_pass():
+    """The two kinds coexist in one sub-cycle: one capacity slot + one load_window slot."""
+    mc = {"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [
+            {"capacity": "strength", "sessions_per_cycle": 2, "minutes": 45},
+            {"load_window": "metabolic", "sessions_per_cycle": 2, "minutes": 30}]}]}
+    assert phase_mod.validate_training_phase(_payload(microcycle=mc))["microcycle"] is mc
+
+
+def test_cross_sub_cycle_duplicate_load_window_passes():
+    """Mirror of the capacity cross-sub-cycle rule: the SAME load_window in A and B at
+    different doses is allowed; only a duplicate WITHIN one sub-cycle is the error."""
+    mc = {"sub_cycle_days": 7, "sub_cycles": [
+        {"label": "A", "slots": [{"load_window": "metabolic", "sessions_per_cycle": 3, "minutes": 40}]},
+        {"label": "B", "slots": [{"load_window": "metabolic", "sessions_per_cycle": 1, "minutes": 30}]}]}
+    assert phase_mod.validate_training_phase(_payload(microcycle=mc))["microcycle"] is mc
 
 
 def test_cross_sub_cycle_duplicate_capacity_passes():
@@ -482,6 +529,31 @@ def test_section_probe_renders_queue_empty_without_suppression():
         training_phase={"label": "aerobic_base", "probe_posture": "held"}))
     assert "- PROBE: queue empty under current filters" in out_held
     assert "suppressed by training phase" not in out_held
+
+
+def test_section_training_phase_surfaces_conditioning_quota():
+    """S6 (#307): a microcycle declaring a metabolic load_window slot surfaces a
+    conditioning-quota line plus the 'engine never SELECTS conditioning' framing; a
+    capacity-only microcycle surfaces no such line (negative control)."""
+    from context_builder import _section_training_phase
+
+    cond_phase = {
+        "label": "base", "probe_posture": "held", "capacities": None, "review_on": None,
+        "microcycle": {"sub_cycle_days": 7, "sub_cycles": [
+            {"label": "A", "slots": [
+                {"load_window": "metabolic", "sessions_per_cycle": 3, "minutes": 30}]}]},
+    }
+    out = _section_training_phase(cond_phase)
+    assert "Conditioning quota" in out and "metabolic ×3/sub-cycle" in out
+    assert "never SELECTS conditioning" in out
+
+    cap_only = {
+        "label": "base", "probe_posture": "held", "capacities": None, "review_on": None,
+        "microcycle": {"sub_cycle_days": 7, "sub_cycles": [
+            {"label": "A", "slots": [
+                {"capacity": "strength", "sessions_per_cycle": 2, "minutes": 45}]}]},
+    }
+    assert "Conditioning quota" not in _section_training_phase(cap_only)
 
 
 # ── local-day (cross-cutting S7) ─────────────────────────────────────────────
