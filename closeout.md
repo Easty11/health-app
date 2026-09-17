@@ -1,119 +1,84 @@
-# Session close-out — #305 constant-provenance table + #306 load_ratio descriptive (P6 + P2)
+# Close-out — metabolic `load_window` slot kind (#307), backend + frontend
 
 ## Real commits this session
 
-Session-open ref: `ceb1c22` (master head, the #304 close-out merge). Two work packages, two
-branches, two PRs, run in order (WP-B off master after WP-A merged).
+Session-open ref: master `e8cd1a8` (the #305/#306 close-out merge). Two PRs.
+
+**PR1 #228 — backend #307 (merged, `a5e04e3`):**
 
 ```
-# WP-A (#305) — constant-provenance table + drift guard — PR #225, merge ac179c7
-01e4731  Constant-provenance table for the load modules + drift-guard test
-61a357a  gov(#305): constant-provenance table gate, Q156 input-list amend, design-doc discharge, BRANCHES, Recent-landings roll
-ac179c7  Merge pull request #225 from Easty11/claude/p6-constant-provenance
-
-# WP-B (#306) — load_ratio descriptive reclassification — PR #226, merge d687c29
-af7237c  load_ratio is a descriptive spike indicator — docstring reclassification
-7f8216a  gov(#306): load_ratio descriptive reclassification, Q158, design-doc annotations, BRANCHES, Recent-landings roll
-d687c29  Merge pull request #226 from Easty11/claude/p2-load-ratio
+b1a3b04 gov(#307): metabolic load_window slot kind — DECISIONS, ROADMAP, BRANCHES, Recent-landings
+71179f6 feat(resolver): metabolic load_window slot kind — declare + count conditioning (#307)
+5feb16d docs(handoff): GO receipt — metabolic slot-kind resolver, Amendment 1 + S6
+a6fde9f docs(handoff): CHAT→CODE receipt — metabolic slot-kind resolver brief received
 ```
-Plus the `chore: session close-out` commit carrying this file (its own docs-only follow-up
-PR, branch cut fresh from master; governance/docs-only, self-merges on green).
 
-All three required checks (`placeholder guard (POSIX)`, `backend tests (pytest)`, `frontend
-tests (vitest)`) were green on both PRs before merge. Full backend suite **1700 passed, 1
-skipped** on an isolated Python 3.12 venv (prod parity, CI env vars); the one local red,
-`test_current_state`'s `git show 3360ed5:…`, is the shallow-clone artifact (green in CI at
-`fetch-depth: 0`).
+**PR2 `feat/quota-window-conditioning` — frontend S5 (this branch):**
 
-**Merge disposition.** Both non-migration, implementing a chat-ratified brief → self-merged
-on green. WP-A is docs + one test (no source change); WP-B is one docstring + docs (no
-behaviour change — the ratio arithmetic and every consumer are byte-identical).
+```
+<gov>    gov(#307 PR2): closeout, BRANCHES row, ROADMAP surfacing-1 + sequencing guardrail
+f177db8  feat(frontend): QuotaWindow renders the load_window conditioning slot (#307 PR2)
+0bcbd65  docs(handoff): GO receipt — PR2 frontend QuotaWindow + G2/sequencing rulings
+```
+
+Both branches merged + remote-deleted at land. Non-migration throughout. Self-merge on green
+under § Merge disposition (chat-ratified brief + Amendment 1 + operator GO on PR2; no new
+judgment — PR2 is #307's frontend, no new decision).
 
 ## Pending-queue reconciliation
 
-No pending-commit queue (`;cc`) carried in — a direct two-WP brief (P6 + P2, chat 17 Sep).
-Nothing provisional; everything decided landed on master. The brief arrived truncated
-mid-A2; WP-A's A1 enumeration (read-only) was reported first, then the rest of the brief was
-resent and the work proceeded.
+No `;cc` pending-commit queue was carried in — the brief was the Chat→Code handoff. Everything
+it named LANDED; nothing provisional:
 
-- **#305 (WP-A)** — DECISIONS `### 305` — `docs/load-constants-provenance.md` (23 rows) +
-  `backend/tests/test_load_constants_provenance.py` drift guard. Landed `01e4731`/`61a357a`,
-  merge `ac179c7`.
-  - **G-A1:** enumeration read from the tree, not the brief — the auto-collected `UPPER_CASE`
-    set matched the 13 tabled module constants on the first run (no untabled constant).
-    Adjudications: `_h_intensity` is four coefficients; Epley /30 and TRIMP /60 each a row;
-    no HR-zone rows (upstream); version-key strings excluded.
-  - **G-A2:** 23 rows = 13 auto-collected + 10 allow-listed; **15/23 "operator prior,
-    uncited"** (the Q156 harness input list, τ_metabolic=4 first), 4 cited, 3 derived, 1
-    operator input.
-  - **G-A3:** drift guard demonstrated — deleting the `FORM_K` row fails naming `FORM_K`,
-    green on restore. Standing rule set (a coefficient change changes its row in the same PR).
-  - Governance: Q156 amended (input list pinned); design-doc candidate-OQ "strength-window τ
-    priors vs 42/7 aerobic convention" discharged into the table.
-- **#306 (WP-B)** — DECISIONS `### 306` — `load_ratio` reclassified descriptive. Landed
-  `af7237c`/`7f8216a`, merge `d687c29`.
-  - **G-B1:** the "strip risk-band language" surface list is **EMPTY** — the frontend renders
-    no `load_ratio` (a chart fixture carries acute/chronic trace values only), and the MCP
-    `get_training_load` readout was already de-ACWR'd in #255 (prints acute/chronic as trace
-    values, "not a dosing ratio"; its test asserts no acwr/sweet-spot/injury-risk). B1a:
-    coupled 7-in-28 trailing means (#249), no EWMA variant in code. B1c: design §4.1 (EWMA
-    acute trace) and §11 (stale "MCP reports ACWR sweet-spot") both stale vs shipped code.
-  - The reclassification is one `load_metrics` ΔLoad docstring + governance (no surface strip,
-    no behaviour change). Governance: design §4.1 annotated Tier 3, §11 candidate-OQ CLOSED,
-    Q158 raised (uncoupled chronic d8–28 = optional column, schema change deferred).
+- Backend S1–S4 + S6, governance #307 — PR1 (`71179f6`/`b1a3b04`), merged `a5e04e3`.
+- Frontend S5 (`QuotaWindow` renders the `load_window` kind, the due marker via `due_slot` on
+  either kind, the `concurrent_strength`/`untimed` uncounted reasons) — PR2 (`f177db8`).
+- G0 open calls (no floor; untimed fail-closed) ruled from the prod probe.
+- Operator review rulings actioned: G2 gate amended (two baseline dict literals gained the
+  additive `due_slot: None`; recorded on PR #228); the cross-PR sequencing rule recorded (PR #228)
+  and carried below.
+
+Gates: G1–G4 (backend) green — full backend suite 1719 passed on a 3.12 venv; G3 clean. Frontend
+suite 195 passed (29 files); the QuotaWindow suite covers both kinds, the due marker on a
+load_window slot, and all four uncounted reasons. #121 served-bundle grep is operator-side.
 
 ## Cold-resume handoff
 
-**Where the tree is.** master @ `d687c29`. Decisions max **#306**, questions max **Q158**.
-The load model now carries a **constant-provenance gate** (`docs/load-constants-provenance.md`
-+ its drift test — no coefficient lands unlabelled) and a **descriptively-reclassified
-`load_ratio`** (spike indicator, not a risk score; computation unchanged). Fresh-clone setup
-still per session (`git config core.hooksPath .githooks`; `git config --local alias.land …`).
-Backend suite runs on an isolated **Python 3.12** venv (repo pins `garminconnect==0.3.11`,
-needs ≥3.12; sandbox default 3.11) with CI env vars `FERNET_KEY` (ephemeral), `SECRET_KEY`,
-`ALGORITHM` — see `.github/workflows/tests.yml`.
+**Sprint — v1 test 2 (Know): "what's due, enforced against the plan."** The due-slot resolver
+(#276) and the metabolic `load_window` slot kind (#307, backend + frontend) are landed: a phase
+microcycle may declare a conditioning quota (`load_window: "metabolic"`) that the resolver counts
+from canonical `aerobic_sessions` (session-count only — no dose, bands, or write-back), and
+`QuotaWindow` renders it. The engine still never SELECTS conditioning (#270 narrowed, not broken).
 
-**Single clearest next action.** The load model is now at a defensible resting point — the
-only open load item is the **Q156 criterion/sensitivity harness** (P4), whose input list is
-now pinned (the provenance table's operator-prior rows, τ_metabolic=4 first). The next pull
-should NOT be another load-model increment: it should be the dated **Weekly resolver** (v1
-test 2 — Know, Oct 5 anchor) or the **appointment brief** (v1 test 3 — Walk in). See the
-instrument-vs-thing flag below.
+**Single clearest next action — operator, gated.** Open the block-2 phase with a conditioning
+quota. **DO NOT open it until PR2 (frontend) is deployed AND you have seen the served bundle
+render the `load_window` slot** (#121 grep for the "Conditioning" render string on the live
+`assets/index-*.js`). Rationale: before PR2 deploys, the old `QuotaWindow` would render a
+conditioning slot with an undefined label and show the two new uncounted reasons as "off-plan"
+(recorded on PR #228). PR1's backend response is backward-compatible for capacity slots, so
+nothing breaks until such a phase exists. Once the served bundle is confirmed, this guardrail
+lifts. After that: the wrap-vs-plan view (surfacing item 2, increment 4).
 
-**Open questions (load-model group, all downstream, blocking no surface).**
-- **Q156** [OPEN, P4] — Banister τ criterion/sensitivity harness. Input list now pinned
-  (#305); τ_metabolic=4 first, then the other τ_fatigue priors and the band coefficients. A
-  fit that moves a provenance row from "operator prior" to "fitted" updates that row.
-- **Q158** [OPEN] — uncoupled chronic (days 8–28) as an optional descriptive `load_ratio`
-  denominator; needs a new column (schema change), so deferred. The coupled ratio ships
-  descriptive under #306.
-- **Q157** [OPEN] — `hrv_readings.source` enum/CHECK (defence-in-depth on the #303
-  >2-source guard). Blocks nothing.
-- **Q152** [DEFERRED] — historical `passive_hrv_ms` backfill; gates the check-in HRV denorm's
-  historical arm. Needs a prod query.
+**Open questions gating.** Q106 — the `minutes` reading keeps dose LATER; nothing reads `minutes`.
+Q154 — aerobic ingest is not automatable (below). Q158 — uncoupled chronic denominator (unrelated).
 
-**What was NOT touched (named, per the ritual).**
-- **Check-in HRV denorm** — still pending; #303 landed its precondition (the wake-day
-  selector), but the denorm itself is not started and its historical arm is gated on Q152.
-- **`passive_sleep_min` denorm** — the sibling of the HRV denorm; still the named next step
-  after HRV. Untouched.
-- **Weekly resolver** (ROADMAP NOW, **Oct 5 anchor; v1 test 2 — Know**) — the dated,
-  sequencing-priority lane. Not touched, again.
-- **Appointment brief** (v1 test 3 — **Walk in**) — the synthesising consumer that sets
-  build order. Not touched.
-- **Q156 harness** itself — this session pinned its INPUT (the provenance table) but did not
-  build the sweep; the harness is still unbuilt.
+**NOT touched this session — named explicitly.**
 
-**v1-triage.** #305 and #306 are both **load-model hygiene** — a provenance gate and a
-naming/framing correction. Neither moves a v1 test (See was already MET; Know / Walk in /
-Loop are untouched). This continues a now-long run — #298 card HRV, #300 card sleep,
-#301/#302/#304 load model, #303 HRV selector, #305/#306 load-model hygiene — that has stayed
-entirely in the **reads/model around the check-in and card**. The dated **Know** lane (Weekly
-resolver, Oct 5) and the **Walk in** lane (appointment brief) have not moved across any of
-them. The load model is now well-instrumented and at rest; the honest next move is a v1-test
-lane, not another model/reads pass. Flagged here and in the last three close-outs — worth the
-operator naming the next brief against a v1 test rather than lane momentum.
+- **The metabolic INGEST gap is the real ceiling on #307 and it stood still (Q154 / OPEN CALL 0).**
+  The prod probe (P5) confirmed Garmin Connect reaches Health Connect (1 exercise + 1204
+  heart_rate records in 30 d) but the backend writes NO `aerobic_sessions` row for it — HC
+  exercise is source-captured only (`health_connect.py`, #189); the only `aerobic_sessions`
+  writers are Polar (`routers/polar.py`, `import_polar.py`, source `polar_flow_export`). So the
+  #307 conditioning quota counts ONLY Polar-Flow-export sessions; every Garmin/Samsung/HC session
+  is invisible to it (and to the load model). The H10/Polar export is the no-build cover. The
+  Garmin→metabolic bridge (HC-workout ingest with zones from posted HR, vs a direct
+  `garminconnect` pull) is its own operator brief — the highest-leverage next thing, and where
+  the OPEN CALL 1 session-floor question becomes real. A data-path lane, not more resolver
+  instrumentation.
+- **Interpretation layer / Appointment brief lanes** — no change; substrate-complete, unstarted.
 
-_Out of scope, noted (not widened into these PRs): `mcp_server.get_training_load`'s docstring
-still says "banister-v2" (stale since #304's v4 bump); the live constant is correct, only the
-docstring literal lags. A one-line sweep when convenient._
+**v1-triage (NOW lanes).** The exposure/Know lane served **Know** (test 2) this session, backend
+and frontend both landed; it remains its home. No NOW lane rode by momentum without a v1 test.
+The metabolic-ingest bridge, once briefed, serves Know AND the load model (readiness) — the lane
+that makes #307's count complete rather than Polar-only. Operator's own owed (not Code):
+plan-of-record v2 (pending knee-consult + club-start dates); the HCA HR-lag brief go-ahead.
