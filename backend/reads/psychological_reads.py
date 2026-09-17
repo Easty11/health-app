@@ -65,7 +65,7 @@ from load_metrics import _local_day  # identical AEST day-bucketing as the Banis
 
 # The physical windows whose per-day `daily_load` impulse are the ridge predictors,
 # each PAIRED with the formula_version its producing transform writes. These are NOT
-# one version: the Hevy transform writes mechanical + neuromuscular under `tier0-v1`
+# one version: the Hevy transform writes mechanical + neuromuscular under `tier0-v2`
 # (load_events.FORMULA_VERSION) while the aerobic transform writes metabolic under
 # `metab-v1` (load_events_metabolic.FORMULA_VERSION_METABOLIC). Filtering on a single
 # version therefore SILENTLY drops a whole window — metabolic never entered the fit —
@@ -232,7 +232,7 @@ def _daily_load_by_window(db: Session, user_id: int) -> dict[date, dict[str, flo
     rule, so this residual's predictors sit on the same calendar as the Banister rollup.
 
     Matches each window to its PRODUCING formula_version (PREDICTOR_WINDOW_VERSIONS) as
-    a (window, version) pair — mechanical/neuromuscular under tier0-v1, metabolic under
+    a (window, version) pair — mechanical/neuromuscular under tier0-v2, metabolic under
     metab-v1. A window is summed only within its own version, never across versions, and
     a window whose events sit under a different version than expected simply do not enter
     (they are not this window's canonical load). A psychological load_event never enters

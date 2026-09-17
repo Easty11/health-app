@@ -4,7 +4,7 @@ Proves the four things the brief's Step-1 gate asks for, on the FK-enforced SQLi
 substrate (conftest `db_session`):
 
   * ORDER — the five steps run per user in the fixed chain order (Hevy ingest ->
-    load_events tier0 -> load_events_metabolic -> load_metrics tier0-v1 ->
+    load_events tier0 -> load_events_metabolic -> load_metrics tier0-v2 ->
     load_metrics metab-v1);
   * NON-ZERO — a Hevy-keyed user with a resistance workout gets non-zero resistance
     events and non-zero mechanical/NM metrics (real compute for steps 2-5; only the
@@ -93,12 +93,14 @@ def test_chain_runs_five_steps_in_order(db_session, monkeypatch):
 
     refresh_load.refresh_load(db_session, as_of=AS_OF)
 
+    # Steps 4/5 pass the module version constants (P3: tier0-v2 for strength, metab-v1
+    # unchanged) rather than literals — reference the constants so this can't drift on a bump.
     assert calls == [
         "hevy_sync",
         "load_events_tier0",
         "load_events_metabolic",
-        "load_metrics:tier0-v1",
-        "load_metrics:metab-v1",
+        f"load_metrics:{load_events.FORMULA_VERSION}",
+        f"load_metrics:{refresh_load.load_events_metabolic.FORMULA_VERSION_METABOLIC}",
     ]
 
 

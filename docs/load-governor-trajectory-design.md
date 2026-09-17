@@ -240,10 +240,16 @@ CBT-I subsystem uses the token.)
 
 ## §8 Multi-user and cold start
 
-- **§8.1 De-hardcode operator priors.** `BODYWEIGHT_KG = 102.0` (`load_events.py:73`)
+- **§8.1 De-hardcode operator priors.** `BODYWEIGHT_KG = 102.0` (`load_events.py:77`)
   → per-user profile attribute (existing bodyweight source — VERIFY; else prompt at
-  onboarding). `EPOCH_RPE_COMPLETE = date(2026,5,11)` (`load_events.py:67`) → per-user
+  onboarding). `EPOCH_RPE_COMPLETE = date(2026,5,11)` → per-user
   integration attribute (nullable = diagnostic off). e1RM window stays a global prior.
+  - **Partially discharged (P3, #302).** The `EPOCH_RPE_COMPLETE` half is DONE: retired as a
+    global constant and replaced by the nullable per-user `users.rpe_complete_from`. Narrowed
+    from "per-user integration attribute" to `users` — the epoch truncates the metabolic lane
+    too, so it is a user property, not a Hevy-credential one (a NULL means both diagnostic-off
+    AND no series truncation; the P3 decision also extends its meaning to the calendar start).
+    `BODYWEIGHT_KG = 102.0` remains a global constant — still owed. e1RM window unchanged.
 - **§8.2 Priors + partial pooling.** New users start on population priors (τ, guards,
   transfer priors); per-user distributions take over as history accrues. Bayesian
   informative-prior fitting is the sanctioned v2 path (Peng 2023) — never

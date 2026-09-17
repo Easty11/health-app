@@ -17,6 +17,7 @@ from datetime import date, datetime, timezone
 import pytest
 
 import models
+from load_events import FORMULA_VERSION as _FV
 from engine import profile as profile_mod, selection
 from reads.psychological_reads import (
     life_load_bias,
@@ -58,7 +59,7 @@ def _load(db, d: date, window: str, load: float, uid=1, ref=None):
     db.add(models.LoadEvent(
         user_id=uid, source="hevy", source_ref=ref or f"u{uid}-{window}-{d}",
         load_window=window, occurred_at=_utc_noon(d), load=load,
-        unit="kg_reps" if window == "mechanical" else "nm_au", formula_version="tier0-v1",
+        unit="kg_reps" if window == "mechanical" else "nm_au", formula_version=_FV,
     ))
     db.commit()
 

@@ -23,6 +23,14 @@ class User(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
+    # Per-user RPE-complete epoch (DECISIONS_LOG P3 — tier0-v2 / banister-v3). When set,
+    # `load_metrics.compute_load_metrics` starts that user's daily calendar (every lane)
+    # here; earlier `load_events` remain and still feed the e1RM fit but never the stocks
+    # or ΔLoad. It also anchors the `post_epoch_zero_rpe` diagnostic (per-user, not a
+    # global constant). NULL = full history / no truncation. On `users` and not the Hevy
+    # integration row because the truncation covers the metabolic lane too, which is not a
+    # Hevy property. Backfill: user 1 = 2026-05-11; all others NULL (user 4 pending adoption).
+    rpe_complete_from: Mapped[date | None] = mapped_column(Date, nullable=True)
 
 
 class UserIntegration(Base):

@@ -6,7 +6,7 @@ named days — an oracle the code cannot satisfy by implementing the wrong spec.
 includes a rest gap and one session near local midnight (2026-06-05T16:00:00Z =
 2026-06-06T02:00 AEST) that exercises the S1 day-boundary rule.
 
-ORACLE (mechanical window; NORMALISED EWMA per #18/banister-v2 — the load term is weighted
+ORACLE (mechanical window; NORMALISED EWMA per #18/banister-v3 — the load term is weighted
 by (1 − decay). τ_fit=42 → df=e^(-1/42)=0.976471687, 1-df=0.023528313; τ_fat=10 →
 dfat=e^(-1/10)=0.904837418, 1-dfat=0.095162582):
 
@@ -40,6 +40,7 @@ from datetime import date, datetime, timezone
 import pytest
 
 import models
+from load_events import FORMULA_VERSION as _FV
 from load_metrics import compute_load_metrics
 
 
@@ -48,6 +49,8 @@ def _utc(iso: str) -> datetime:
 
 
 def _user(db, uid=1):
+    # NULL rpe_complete_from → no P3 truncation, so the full 9-day calendar and every oracle
+    # value below are UNCHANGED by banister-v3 (which only alters the per-user series start).
     db.add(models.User(id=uid, email=f"u{uid}@x.com", hashed_password="x"))
     db.commit()
 
@@ -55,7 +58,7 @@ def _user(db, uid=1):
 def _le(db, ref, occurred_iso, load):
     db.add(models.LoadEvent(
         user_id=1, source="hevy", source_ref=ref, load_window="mechanical",
-        occurred_at=_utc(occurred_iso), load=load, unit="kg_reps", formula_version="tier0-v1",
+        occurred_at=_utc(occurred_iso), load=load, unit="kg_reps", formula_version=_FV,
     ))
     db.commit()
 

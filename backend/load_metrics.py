@@ -36,6 +36,7 @@ import pytz
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+import load_events
 import models
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,13 @@ logger = logging.getLogger(__name__)
 # REASONED-PRIOR constants — the recompute identity (metrics_version pins the τ-set)
 # ---------------------------------------------------------------------------
 
-METRICS_VERSION = "banister-v2"
+# banister-v3 (P3): identical τ-set / normalised-EWMA math to banister-v2, but the daily
+# calendar is now PER-USER — it starts at that user's `users.rpe_complete_from` when set
+# (every lane, strength and metabolic alike), so cross-epoch logging-behaviour steps stop
+# confounding the stocks. The recurrence is unchanged, so this is a metrics_version bump for
+# a stock RECOMPUTE, not new stock math. banister-v2 rows stay as dormant versioned history
+# (same disposition as banister-v1 under #301).
+METRICS_VERSION = "banister-v3"
 
 # Banister time constants (#32). Fitness τ is common to all windows; fatigue τ is
 # per-window. The fatigue dict is the window allowlist: a window with no key here is
@@ -190,7 +197,7 @@ def compute_load_metrics(
     db: Session,
     user_id: int,
     *,
-    formula_version: str = "tier0-v1",
+    formula_version: str = load_events.FORMULA_VERSION,
     metrics_version: str = METRICS_VERSION,
     as_of: date | None = None,
     now: datetime | None = None,
@@ -202,9 +209,22 @@ def compute_load_metrics(
     each to its user-local day and window, sums to `daily_load`, walks a continuous daily
     calendar per window to `as_of`, and REPLACES the user's rows for this
     `(formula_version, metrics_version)` (delete-then-insert — idempotent recompute, D-B).
+
+    PER-USER CALENDAR START (P3, banister-v3): when the user's `users.rpe_complete_from` is
+    set, an event whose user-local day is BEFORE that epoch is dropped here, so the daily
+    calendar (hence the Banister warm-up seed) starts at the first load day on/after the
+    epoch. The truncation applies to EVERY lane rolled through this function — strength and
+    metabolic alike — so all of a user's windows share one series start and stay comparable.
+    A NULL epoch → full history, no truncation. The earlier `load_events` are untouched and
+    still feed the e1RM fit; only the stocks/ΔLoad here begin at the epoch.
     """
     as_of = as_of or datetime.now(_AEST).date()
     now = now or datetime.now(timezone.utc)
+
+    # Per-user RPE-complete epoch (P3). NULL (or no user row) → full history.
+    rpe_complete_from = db.execute(
+        select(models.User.rpe_complete_from).where(models.User.id == user_id)
+    ).scalar_one_or_none()
 
     events = db.execute(
         select(models.LoadEvent).where(
@@ -218,12 +238,16 @@ def compute_load_metrics(
     daily: dict[str, dict[date, float]] = defaultdict(lambda: defaultdict(float))
     unit_by_window: dict[str, str] = {}
     undated_skipped = 0
+    pre_epoch_skipped = 0
     for e in events:
         if e.occurred_at is None:      # defensive; the query already excludes these
             undated_skipped += 1
             continue
         day = _local_day(e.occurred_at)
         if day > as_of:                # a rollup as-of T never consumes load logged after T
+            continue
+        if rpe_complete_from is not None and day < rpe_complete_from:
+            pre_epoch_skipped += 1     # pre-epoch — truncated from every lane's series (P3)
             continue
         daily[e.load_window][day] += float(e.load)
         unit_by_window[e.load_window] = e.unit
@@ -277,6 +301,8 @@ def compute_load_metrics(
         "windows_computed": sorted(windows_computed),
         "windows_skipped_no_tau": sorted(windows_skipped_no_tau),
         "undated_skipped": undated_skipped,
+        "rpe_complete_from": rpe_complete_from.isoformat() if rpe_complete_from else None,
+        "pre_epoch_skipped": pre_epoch_skipped,
     }
 
 
@@ -284,7 +310,7 @@ def compute_all_users(
     db: Session,
     *,
     only_user_id: int | None = None,
-    formula_version: str = "tier0-v1",
+    formula_version: str = load_events.FORMULA_VERSION,
     metrics_version: str = METRICS_VERSION,
     as_of: date | None = None,
 ) -> dict:
@@ -306,7 +332,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Recompute Q6 gate-3 load_metrics from load_events.")
     parser.add_argument("--user", type=int, default=None, help="only this user id")
-    parser.add_argument("--formula-version", default="tier0-v1", help="load_events formula_version to roll up")
+    parser.add_argument("--formula-version", default=load_events.FORMULA_VERSION, help="load_events formula_version to roll up")
     parser.add_argument("--metrics-version", default=METRICS_VERSION, help="τ-set / EWMA identity")
     parser.add_argument("--as-of", default=None, help="ISO date; default = today (AEST)")
     args = parser.parse_args()

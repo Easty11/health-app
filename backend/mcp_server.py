@@ -611,12 +611,14 @@ def get_readiness_snapshot() -> str:
 
 # The metabolic lane of load_metrics: the Metabolic→load_events transform (#251,
 # `metab-v1`, Edwards zone-weighted TRIMP) rolled up under the Banister τ-set
-# (`banister-v2`, the normalised EWMA — #18 restored). This pin FOLLOWS the metrics_version
-# bump (the revisit trigger the banister-v2 entry named): the rollup writes only banister-v2
-# now, so this readout must select it. This readout replaced the legacy aerobic acute:chronic
-# ratio (ACWR) surface, retired in #255 once that transform landed — the trigger #249 named.
+# (`banister-v3`, the normalised EWMA — #18 restored — now on a per-user calendar start, P3).
+# This pin FOLLOWS the metrics_version bump (the revisit trigger the banister-v2 entry named,
+# re-invoked by P3): the rollup writes only banister-v3 now, so this readout must select it.
+# This readout replaced the legacy aerobic acute:chronic ratio (ACWR) surface, retired in
+# #255 once that transform landed — the trigger #249 named. `_METAB_FORMULA_VERSION` is the
+# metabolic events version and is UNCHANGED by P3 (only the strength lane went tier0-v2).
 _METAB_FORMULA_VERSION = "metab-v1"
-_METAB_METRICS_VERSION = "banister-v2"
+_METAB_METRICS_VERSION = "banister-v3"
 _METAB_WINDOW = "metabolic"
 
 
