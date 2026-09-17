@@ -1,98 +1,112 @@
-# Session close-out — #302 per-user RPE epoch + session-median RIR imputation
+# Session close-out — #303 wake-day HRV selector (standalone read helper)
 
 ## Real commits this session
 
-Session-open ref: `5db324f` (master head, the #218 merge). Landed via PR #219
-(merge `6aa0e29`), then this close-out follow-up.
+Session-open ref: `be98a89` (master head, the #220 close-out merge). Landed via PR #221
+(merge `07de28f`), then this close-out follow-up.
 
 ```
-22a8264  Per-user RPE epoch truncates the Banister series; session-median RIR imputation (tier0-v2 / banister-v3, P3)   [feature: backend + tests + schema migration]
-305d308  gov(#302): per-user RPE epoch + session-median imputation decision, Q156 amend, §8.1 partial-discharge, BRANCHES, Recent-landings roll
-6aa0e29  Merge pull request #219 from Easty11/claude/p3-rpe-epoch   [merge to master]
+5c79e2b  Wake-day HRV selector — standalone read helper (current-day-strict)   [feature: backend + tests, non-migration]
+4b3cf1b  gov(#303): wake-day HRV selector decision, Q157, BRANCHES row, Recent-landings roll
+07de28f  Merge pull request #221 from Easty11/feat/hrv-wakeday-selector   [merge to master]
 ```
 Plus the `chore: session close-out` commit carrying this file (its own docs-only
 follow-up PR, branch cut fresh from master; governance/docs-only, self-merges on green).
 
-All three required checks were green on #219 before merge — `placeholder guard (POSIX)`,
-`backend tests (pytest)`, `frontend tests (vitest)`. The full-clone backend suite passed
-(`1683 passed, 1 skipped`); the one local red, `test_current_state`'s `git show 3360ed5:…`,
-is a shallow-clone artifact (fails identically on the clean base), not reproduced in CI
-(`fetch-depth: 0`).
+All three required checks were green on #221 before merge — `placeholder guard (POSIX)`,
+`backend tests (pytest)`, `frontend tests (vitest)`. The full backend suite passed on an
+isolated Python 3.12 venv (prod parity, CI env vars): **1694 passed, 1 skipped**; the one
+local red, `test_current_state`'s `git show 3360ed5:…`, is the shallow-clone artifact
+(fails identically on the clean base), green in CI at `fetch-depth: 0`. No frontend touched.
 
-**Merge disposition.** This PR carried a schema migration, so under § Merge disposition
-hold (a) it did NOT self-merge — it opened ready-for-review and was merged on the operator's
-explicit instruction ("merge and close out"). Not a self-merge.
+**Merge disposition.** Additive helper, non-migration, implementing a chat-ratified brief
+with no un-ratified judgment embedded → self-merged on green under § Merge disposition. Not
+a hold. The garmin-primary-on-pair tie-break is inferred from the #298 card convention and
+flagged to the operator (not a new ratified rule); names/module form were Code's delegated
+call.
 
 ## Pending-queue reconciliation
 
 No pending-commit queue (`;cc`) was carried in — the work arrived as a direct brief
-(BRIEF — P3, chat 16–17 Sep). Nothing provisional; everything decided landed on master.
+(WAKE-DAY HRV SELECTOR — standalone helper, chat 17 Sep), itself the precondition the
+earlier check-in HRV denorm brief STOPPED on. Nothing provisional; everything decided
+landed on master.
 
-- **#302** — DECISIONS_LOG `### 302` — landed `22a8264` (code+tests) / `305d308` (gov),
-  merge `6aa0e29`.
-- **Operator rulings (G1) all implemented:** R1 concern-named branch `claude/p3-rpe-epoch`;
-  R2 `rpe_complete_from` on `users` (not the Hevy integration row), rationale recorded in
-  `### 302`; R3 the brief's "no version literals" premise was wrong about the tree —
-  `load_metrics`/`refresh_load` now import `load_events.FORMULA_VERSION` /
-  `load_events_metabolic.FORMULA_VERSION_METABOLIC` (no circular import), so the bump
-  propagates; R4 HOLD honoured (merged on instruction, not self-merged).
-- **Governance batch (one gov commit, #176):** DECISIONS `### 302`, OPEN_QUESTIONS Q156
-  amended, `docs/load-governor-trajectory-design.md` §8.1 marked partially discharged,
-  BRANCHES row, CLAUDE.md Recent-landings roll (#299 off).
-- **SCHEMA.md:** intentionally NOT touched — its migration sequence mirrors the health-data
-  chain (001–030); `users`/`user_integrations` are base auth tables outside its scope (the
-  precedent `templates_synced_at` add, #211, likewise did not touch it). So SCHEMA.md does
-  not lag master.
+- **#303** — DECISIONS_LOG `### 303` — landed `5c79e2b` (code+tests) / `4b3cf1b` (gov),
+  merge `07de28f`.
+- **PREREQ verified before writing (brief VERIFY-FIRST):** the two master HRV readers are
+  still exactly `routers/health._pick_latest_hrv` (#298, newest-across-sources) and
+  `reads/recovery_reads.hrv_deviation` (#292, `for_date` upper-bound); no selector with the
+  `require_current_day` / `wake_day` / `stale_withheld` / tz-divergence / config-error
+  tokens pre-existed. Maxima at open: decisions **302**, questions **Q156** (matched the
+  brief's expectation).
+- **Helper landed:** `select_wakeday_hrv(db, user_id, wake_day, *, require_current_day,
+  today=None) -> HrvSelection` in `reads/recovery_reads.py`. Reads `hrv_readings` by
+  day-equality. States value / pair (delta = primary−secondary, same-wake-day only, headline
+  = richer source) / absent / stale_withheld (never returns yesterday) / config_error (>2
+  sources). tz-divergence flags a wake_day±1 source without merging; baseline maturity passed
+  through from `hrv_deviation`, surfaced, never gating the value. Nothing consumes it yet —
+  deliberate.
+- **Guards not disturbed:** `hrv_deviation`, `representative_source`, `_pick_latest_hrv`,
+  `canonical_hrv`, and the arbitration layer are all untouched. No endpoint, no frontend,
+  no schema.
+- **Q157 raised** (OPEN) — `hrv_readings.source` has no enum/CHECK, so the >2-source guard is
+  runtime; the schema-constraint upgrade is deferred (full human review). Cross-ref in
+  `### 303`'s "do not revisit unless".
+- **Governance batch (one gov commit, #176):** DECISIONS `### 303`, OPEN_QUESTIONS Q157,
+  BRANCHES terminal row for `feat/hrv-wakeday-selector`, CLAUDE Recent-landings roll (#303
+  on, #300 off — cap 3). `#176(b)`: the row rode its own branch.
 
 ## Cold-resume handoff
 
-**Where things stand.** Master is at `#302`. Strength load is now `tier0-v2` and the Banister
-rollup `banister-v3`. Each user's daily calendar (every lane — mechanical, neuromuscular,
-metabolic) starts at that user's `users.rpe_complete_from` when set; NULL = full history.
-Backfill: user 1 = 2026-05-11, all others NULL. An RPE-absent working set inside an
-RPE-bearing session takes the session's floored-median RIR (#244) on the m/f·h path
-(`rir_imputed`, out of the e1RM fit, counted in provenance); a no-RIR session is unchanged.
-The global `EPOCH_RPE_COMPLETE` is retired; the `post_epoch_zero_rpe` diagnostic is per-user.
-Migration `a7f3c1e29d84` runs in the deploy path (`Procfile` + `railway.toml` chain
-`alembic upgrade head && uvicorn …`), so the column exists before the app and the 02:00 sweep.
+**Where the tree is.** master @ `07de28f`. Decisions max **#303**, questions max **Q157**.
+The wake-day HRV selector is on master as a standalone, fully-tested read helper with **no
+consumer**. Fresh-clone setup still required per session (`git config core.hooksPath
+.githooks`; `git config --local alias.land …`) — unversioned, silent when absent. Backend
+suite must run on an isolated **Python 3.12** venv (repo pins `garminconnect==0.3.11`, needs
+≥3.12; sandbox default is 3.11) with CI env vars `FERNET_KEY` (fresh, ephemeral),
+`SECRET_KEY`, `ALGORITHM` — see `.github/workflows/tests.yml`.
 
-**OWED — operator (Luke), no prod egress this session.** After the migration releases and the
-next 02:00 Brisbane sweep (or a manual `railway ssh --service health-app-backend` → `cd /app`
-→ `/opt/venv/bin/python -m scripts.refresh_load`): confirm user 1's mechanical/NM/metabolic
-curves begin 2026-05-11, ≥1 negative-form day in June remains, FormChart maturity 'ok'
-throughout, and daily provenance shows small stable `session_imputed_sets` on the same
-templates; confirm user 4's curves unchanged in start date with `post_epoch_zero_rpe` absent
-from every row. And: **user 4's RPE-adoption decision** stays open — when she starts logging
-RPE, set her `rpe_complete_from` to her first RPE-present session (derive by query, operator
-confirms) and her banister-v3 series restarts there.
+**Single clearest next action.** Land the **check-in HRV denorm** brief — it is now
+**unblocked**: its sole prereq (this selector) is on master. That brief: (1) stop the
+check-in save writing `daily_records.passive_hrv_ms`; (2) repoint the check-in HRV display
+to `select_wakeday_hrv(..., require_current_day=True, wake_day=today)` — current value +
+source chip + conditional delta/baseline, or "–"/withheld, never a prior-day value or a
+"Ring HRV" label on a non-ring source; (3) correlation joins canonical `hrv_readings` at read
+time; (4) historical consumers (series/readiness, `get_checkin_history`, context_builder)
+per-wake-day join with the retired column as fallback. Consumer map was banked at the STOP:
+`checkin_v2` write @ `638` + display @ `544`, `series.py:213`, `mcp_server.py:243`,
+`context_builder.py:554`. **Gate (1c): the historical repoint is still gated on the Q152 prod
+query** — does `hrv_readings` cover the wake-days `passive_hrv_ms` currently backs? Must be
+run (no prod egress this session) before the historical arm ships; stage the rest behind the
+column fallback until then.
 
-**Open questions.** **Q156** (criterion/sensitivity harness for the Banister τ-set, P4) —
-amended this session: the criterion sweep is now post-epoch by construction, and user 4 has no
-e1RM criterion until ~60 d of RPE-present sets, contingent on adoption. Still OPEN, still
-downstream, blocks no surface. **Q154** (aerobic ingest not automatable) — DEFERRED, untouched.
-The metabolic τ_fat=4 near-instantaneous artefact (#301) remains the first concrete tune Q156's
-harness would adjudicate — unbuilt.
+**Open questions gating the Loop lane.**
+- **Q152** [DEFERRED] — historical `passive_hrv_ms` backfill from canonical (Garmin cutover
+  seam). Gates the denorm brief's historical repoint. Needs a prod query.
+- **Q157** [OPEN] — `hrv_readings.source` enum/CHECK; defence-in-depth on the >2-source
+  guard. Blocks nothing (runtime guard holds the floor).
+- **Q156** [OPEN, P4] — Banister τ criterion/sensitivity harness; downstream, blocks no
+  surface.
 
-**What was NOT touched — the standing feature lanes (named because absence is not
-self-reporting).** This session was **instrumentation of the load model**, not a v1 test. Per
-the v1-triage: the **See** test is already MET (#277/#278); #302 refines the load metric that
-feeds it but does not advance an *unmet* v1 test. The unmet lanes stood still:
-- **Know** (v1 test 2) — the **Weekly resolver** (consume `weekly_template`), Oct 5 anchor. This
-  is the date-anchored NOW item and the clearest next feature lane.
-- **Walk in** (v1 test 3) — the **Appointment brief** (NOT STARTED, substrate complete: #220
-  canonicalisation, #194 interpretation go-live, #268 education spine, current_state per Q8).
-  Design brief still owed.
-- **Loop** (v1 test 4) — the **Surface-debt sweep** (clickable session cards, dual-panel scroll,
-  sleep-duration semantic error, chat persistence).
-- **Cross-repo shared-block debt** (HCA) — OWED, only landable from an HCA-rooted session.
+**What was NOT touched (named, per the ritual).**
+- **`passive_sleep_min` denorm** — the sibling of the HRV denorm, explicitly out of scope
+  of the selector brief and named as the deliberate NEXT step after HRV is clean. Its
+  read-time consumers span the sleep-source work. Untouched this session.
+- **Weekly resolver** (ROADMAP NOW, **Oct 5 anchor; v1 test 2 — Know**) — the dated,
+  sequencing-priority lane. Not touched. Nothing HRV-related advances it.
+- **Appointment brief** (v1 test 3 — **Walk in**) — the synthesising consumer that sets
+  build order. Not touched.
+- **The Loop daily habit itself** (v1 test 4) — this session hardened a *read* the check-in
+  will use, not the loop's end-to-end run.
 
-**Instrumentation drift, flagged.** Two consecutive load-model sessions have now gone to the
-Banister metric (#301 banister-v2, #302 banister-v3) rather than to a v1 test. That is
-deliberate and correct here — #302 restores measurement invariance the criterion work needs —
-but the next session should weigh a v1-test lane (weekly resolver / appointment brief) against
-more load-model tuning, not ride the load lane by momentum.
-
-**Single clearest next action.** Operator: run the #302 post-sweep acceptance check above once
-the migration releases. Next dev session: the **weekly resolver** (v1 test 2, Know; Oct 5
-anchor) — the date-anchored NOW item — unless the operator elects the Q156 criterion harness
-(P4, downstream) instead.
+**v1-triage.** This session's landing (#303) serves **Loop** (v1 test 4) — a correctness
+precondition for the check-in's HRV read — but is a helper with **no live consumer**, so it
+moves no v1 test until the denorm brief consumes it. Flag for the next session: the recent
+run of sessions (#298 card HRV, #300 card sleep, #301/#302 load model, #303 selector) has
+gone repeatedly to the *instruments* around the check-in and card — reads, versioning,
+helpers — while the **Weekly resolver** (the dated *Know* test) and the **appointment brief**
+(the *Walk in* test that sets sequencing) have stood still. The denorm brief is the right
+immediate next (it closes a live data-integrity bug: a stale dead-source HRV frozen into the
+daily record on every Save), but after it, the next pull should be back to the dated Know
+lane, not another check-in/card instrument — say so rather than letting lane momentum decide.
