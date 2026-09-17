@@ -1,9 +1,15 @@
-// QuotaWindow — the due-slot resolver read surface (resolver brief STEP 7; consumes #276).
+// QuotaWindow — the due-slot resolver read surface (resolver brief STEP 7; consumes #276/#307).
 //
 // Reads GET /engine/resolver and renders the current quota window's per-slot position
-// ({label} · {done}/{quota}), marking the due slot (Rule 4), plus an `uncounted` line that
-// distinguishes an `untagged` workout (zero primary tags) from an `off_plan` one (dominant
-// capacity not in the window). POSITION ONLY — dose (`minutes`) is not read here; Q106 stays open.
+// ({label} · {done}/{quota}), marking the due slot (Rule 4). A slot is one of two KINDS (#307):
+// a movement-quality `capacity` slot, or a `load_window` conditioning slot (metabolic) shown as
+// "Conditioning". The due marker reads the top-level `due_slot {kind, key}`, so it lands on
+// either kind (never the old `due_capacity`, which is capacity-only and would mis-mark a
+// load_window slot when both are null). The `uncounted` line names four reasons: `untagged`
+// (zero primary tags) and `off_plan` (dominant capacity not in the window) for Hevy workouts,
+// and `concurrent_strength` (an aerobic session overlapping the gym) and `untimed` (NULL
+// start/stop) for canonical aerobic sessions. POSITION ONLY — dose (`minutes`) is not read here;
+// Q106 stays open.
 //
 // Baseline (no phase microcycle, no weekly template) → `window` is null, 200 — the #272 no-profile
 // contract; the surface renders nothing rather than a fault. It owns its own fetch, re-run on
@@ -17,6 +23,40 @@ import api from '../../api'
 
 function titleCase(s) {
   return typeof s === 'string' && s ? s[0].toUpperCase() + s.slice(1) : s
+}
+
+// A slot's display label: a load_window slot is a conditioning slot ("Conditioning" for the
+// metabolic window); a capacity slot is its title-cased capacity token.
+function slotLabel(s) {
+  if (s.kind === 'load_window') {
+    return s.load_window === 'metabolic' ? 'Conditioning' : titleCase(s.load_window)
+  }
+  return titleCase(s.capacity)
+}
+
+// The key `due_slot` names this slot, matched on (kind, key) — capacity slots key on `capacity`,
+// load_window slots on `load_window`. Both-null can never spuriously match (unlike due_capacity).
+function isDue(s, dueSlot) {
+  if (!dueSlot) return false
+  const key = s.kind === 'load_window' ? s.load_window : s.capacity
+  return dueSlot.kind === s.kind && dueSlot.key === key
+}
+
+// One "not counted" line per surfaced item. Hevy workouts carry `workout`; aerobic sessions
+// carry `session`. Each reason renders its own phrasing; an unknown reason falls back to itself.
+function uncountedLabel(u) {
+  switch (u.reason) {
+    case 'off_plan':
+      return <>off-plan · {titleCase(u.capacity)}</>
+    case 'untagged':
+      return <>untagged · {u.untagged_exercises} exercise{u.untagged_exercises === 1 ? '' : 's'}</>
+    case 'concurrent_strength':
+      return <>concurrent strength · {u.sport_name}</>
+    case 'untimed':
+      return <>untimed · {u.sport_name}</>
+    default:
+      return <>{u.reason}</>
+  }
 }
 
 export default function QuotaWindow({ refetchKey = 0 }) {
@@ -46,19 +86,20 @@ export default function QuotaWindow({ refetchKey = 0 }) {
 
   const slots = data.slots ?? []
   const uncounted = data.uncounted ?? []
-  const due = data.due_capacity
+  const dueSlot = data.due_slot
 
   return (
     <section className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-2">
       <h3 className="text-sm font-semibold text-gray-900">Quota · {window.label}</h3>
 
       <ul className="flex flex-col gap-1">
-        {slots.map((s) => (
-          <li key={s.capacity} className="flex items-center gap-2 text-xs text-gray-700">
-            <span className="font-medium">{titleCase(s.capacity)}</span>
+        {slots.map((s, i) => (
+          <li key={`${s.kind}:${s.capacity ?? s.load_window ?? i}`}
+              className="flex items-center gap-2 text-xs text-gray-700">
+            <span className="font-medium">{slotLabel(s)}</span>
             <span className="text-gray-400">·</span>
             <span className="tabular-nums">{s.done}/{s.quota}</span>
-            {due === s.capacity && (
+            {isDue(s, dueSlot) && (
               <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
                 due
               </span>
@@ -72,10 +113,8 @@ export default function QuotaWindow({ refetchKey = 0 }) {
           <p className="text-[11px] font-medium text-gray-600 mb-0.5">Not counted</p>
           <ul className="flex flex-col gap-0.5">
             {uncounted.map((u, i) => (
-              <li key={u.workout ?? i} className="text-[11px] text-gray-500 leading-snug">
-                {u.reason === 'off_plan'
-                  ? <>off-plan · {titleCase(u.capacity)}</>
-                  : <>untagged · {u.untagged_exercises} exercise{u.untagged_exercises === 1 ? '' : 's'}</>}
+              <li key={u.workout ?? u.session ?? i} className="text-[11px] text-gray-500 leading-snug">
+                {uncountedLabel(u)}
               </li>
             ))}
           </ul>
