@@ -4605,9 +4605,11 @@ Raised 2026-09-18 with #309 (HC exercise ingest stage 1). Stage 1 ingests HC exe
 
 Raised 2026-09-18 with #309 (HC exercise ingest) at PR review. `reads/psychological_reads._duration_min_by_day` sums per-day training minutes; that Σminutes × `session_rpe` is the "felt" load — the target `y` of the ridge regression in `psychological_residual` (the subjective-vs-objective decoupling marker, #28; a down-only diagnostic, consumer deferred) — and its session count flags a multi-session day.
 
-#309 fixed the double-count (canonical aerobic rows only; a bout overlapping a counted Hevy workout excluded; Hevy `excluded_at`/`dedup_flag` honoured) but deliberately did NOT decide **whether a canonical walk, rehab swim, or pilates session should contribute minutes to this felt-load term at all**. Today they DO (any canonical `aerobic_sessions` row counts). The resolver excludes such sessions from a *conditioning* quota by sport declaration (activity-slot v2), but the psychological felt-load term is a different consumer with its own meaning: a 40-minute walk at RPE 2 is real perceived effort, or it is noise that dilutes the decoupling signal — not obvious either way.
+#309 fixed the double-count (canonical aerobic rows only; a bout overlapping a counted Hevy workout excluded; Hevy via the `counted_workouts` door) but deliberately did NOT decide **whether a canonical walk, rehab swim, or pilates session should contribute minutes to this felt-load term at all**. The resolver excludes such sessions from a *conditioning* quota by sport declaration (activity-slot v2), but the psychological felt-load term is a different consumer with its own meaning: a 40-minute walk at RPE 2 is real perceived effort, or it is noise that dilutes the decoupling signal — not obvious either way.
 
-**To close:** decide whether the felt-load term filters by sport/activity kind (and if so, reuse the activity-slot v2 declaration rather than a second sport list), or counts all canonical sessions as now. Read-time only; no schema.
+**INTERIM (merge condition 1, #309):** `health_connect`-source rows contribute NOTHING to this metric — no minutes, no session tally — so the ingest does not perturb the pre-#309 Polar+Hevy series. Decision pending, **likely by declared sport** (reuse the activity-slot v2 declaration, not a second sport list). Until then, HC activity is OUT.
+
+**To close:** rule whether the felt-load term filters by sport/activity kind (and which kinds), and lift the interim HC exclusion accordingly. Read-time only; no schema.
 
 **State:** OPEN. Blocks nothing — the residual's consumer is deferred (#28); this is a scope decision to settle before that consumer lands.
 
@@ -4617,20 +4619,20 @@ Raised 2026-09-18 with #309, at PR review. The `_duration_min_by_day` double-cou
 
 **Aerobic — no canonical filter (twins/mirrors double-count):**
 - `reads/psychological_reads._duration_min_by_day` — **FIXED in #309.**
-- `mcp_server.get_readiness_snapshot` — raw SQL `COUNT(*)` + `SUM(duration_minutes)` over last-7d `aerobic_sessions`; readiness numbers can double-count a Garmin bout + its twins. **Newly material.**
-- `mcp_server.get_training_sessions` — raw SQL list of last-N-days sessions; lists each twin. **Newly material.**
+- `mcp_server.get_readiness_snapshot` — raw SQL `COUNT(*)` + `SUM(duration_minutes)` over last-7d `aerobic_sessions`; readiness numbers can double-count a Garmin bout + its twins. **Newly material.** Feeds EXTERNAL MCP clients (not the in-app coach, which has no tool runtime).
+- `mcp_server.get_training_sessions` — raw SQL list of last-N-days sessions; lists each twin. **Newly material.** External MCP clients.
 - `cbti/replay.load_nights` (`_TRAINING_SQL`) — raw SQL; partly mitigated (keys into a `{date: stop_time}` dict so same-day twins collapse, but the surviving `stop_time` is arbitrary, not the canonical row's).
   (The three raw-SQL readers cannot reuse `arbitrated_sessions` trivially — `canonical` is a read-time Python flag, not a column — so a fix restructures the query or routes through the read helper; a design call for the brief, not a drive-by.)
 
 **Hevy — missing `excluded_at` and/or `dedup_flag`:**
 - `reads/psychological_reads._duration_min_by_day` — **FIXED in #309** (now filters both).
-- `load_events.compute_*` (the Tier-0 strength load transform) — filters `excluded_at`, MISSING `dedup_flag`, so a dedup-flagged-but-not-excluded workout enters load — DIVERGES from `engine/resolver` and `routers/series`, which drop both. Either intentional (the `HevyWorkout` "flag never drop" docstring) or a real inconsistency in what population feeds load. **Needs an explicit ruling** (out of #309's scope — the GUARD forbids touching the load transform here).
+- `load_events.compute_*` (the Tier-0 strength load transform) — filters `excluded_at` only. Round 2 established this is RIGHT for an adjudicated pair (the excluded artifact drops, the retained log counts) but counts BOTH members of an UNADJUDICATED pair. It adopts `counted_workouts` in the follow-up read-door PR behind a gate proving `load_events`/`load_metrics` are byte-identical before/after for users 1 and 4 (they are — every current pair is adjudicated). NOT touched in #309 (the GUARD forbids the load transform here). The operator is pulling the flagged prod rows to confirm.
 - `engine/region_exercise.recent_template_ids` — has `excluded_at`, missing `dedup_flag` (a dup biases exercise-rotation recency).
 - `audit_bodyweight_templates.audit` — has `excluded_at`, missing `dedup_flag` (audit script; dup inflates counts).
 - `audit_laterality_coverage` — neither filter (only `user_id` scope; audit script).
 
 **Well-behaved (for reference):** `load_events_metabolic`, `engine/resolver._in_window_aerobic`, `routers/polar.get_aerobic_sessions` (aerobic, all canonical); `engine/resolver._in_window_workouts`, `routers/series` (hevy, both filters).
 
-**To close:** the Hevy-deletion brief rules each reader — fix, or accept with a documented reason — and settles the `load_events` `dedup_flag` divergence. #309 fixed only the metric the ingest made blocking.
+**Routing (operator, round 2):** NOT the Hevy-deletion brief (bottom of queue). A **dedicated read-door PR immediately after #231, before plan-of-record**: one read door per table (`arbitrated_sessions` for aerobic; `reads.hevy_reads.counted_workouts` for hevy — both seeded by #309); the two `mcp_server` readers restructured through them (correctness over query elegance); a **drift-guard test that FAILS when either table is queried outside a file allow-list**, so reader N+1 cannot repeat this; every other swept reader fixed or explicitly allow-listed with a reason; `load_events`/`load_metrics` adopt the hevy door behind the byte-identical gate above. #309 fixed only `psychological_reads` (the metric the ingest made blocking) and the resolver (via the shared door).
 
-**State:** OPEN. Not blocking #309 (its one blocking reader is fixed); the rest are pre-existing, surfaced here so the Hevy-deletion brief inherits the map.
+**State:** OPEN. Not blocking #309 (its blocking reader is fixed, resolver corrected); the rest are the read-door PR's scope.
