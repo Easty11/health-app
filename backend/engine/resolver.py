@@ -56,7 +56,7 @@ from sqlalchemy.orm import Session
 import models
 from load_metrics import _local_day
 from load_events_metabolic import WINDOW_METABOLIC, compute_metabolic_load
-from reads.aerobic_reads import arbitrated_sessions
+from reads.aerobic_reads import arbitrated_sessions, overlaps_workout
 
 from . import taxonomy
 from .profile import get_profile
@@ -287,18 +287,10 @@ def _in_window_aerobic(db: Session, user_id: int, window: QuotaWindow) -> list[A
     return out
 
 
-def _overlaps_strength(session: Any, hevy_workouts: list[models.HevyWorkout]) -> bool:
-    """True if the session's `[start_time, stop_time]` interval intersects any Hevy workout's
-    `[start_time, end_time]` (both endpoints present on each side). An HR strap worn in the gym
-    is a strength session's trace, not conditioning (Amendment 1 → `concurrent_strength`). The
-    caller guarantees the session's start/stop are non-NULL (untimed is handled upstream)."""
-    s_start, s_stop = session.start_time, session.stop_time
-    for w in hevy_workouts:
-        if w.start_time is None or w.end_time is None:
-            continue                              # undecidable pair — cannot prove overlap
-        if s_start < w.end_time and w.start_time < s_stop:
-            return True
-    return False
+# `concurrent_strength` overlap test: a session overlapping a counted Hevy workout is that
+# strength session's trace, not conditioning (Amendment 1). The predicate itself is the shared
+# `reads.aerobic_reads.overlaps_workout` (#309) — one definition, also used by the psychological
+# duration read. The caller here only reaches it on a timed session (untimed handled upstream).
 
 
 # --------------------------------------------------------------------------- #
@@ -363,7 +355,7 @@ def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str
                 # Fail-closed (S0 OPEN CALL 2): a NULL start OR stop is undecidable for the
                 # overlap guard, so it is surfaced, never silently counted. Covers half-timed.
                 uncounted.append({**entry, "reason": "untimed"})
-            elif _overlaps_strength(sess, workouts):
+            elif overlaps_workout(sess, workouts):
                 uncounted.append({**entry, "reason": "concurrent_strength"})
             else:
                 done[idx] += 1

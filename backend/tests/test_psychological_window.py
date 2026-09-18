@@ -25,6 +25,7 @@ from reads.psychological_reads import (
     psychological_residual,
     ridge_fit,
     ewma_time_aware,
+    _duration_min_by_day,
     _stress_severity,
     _sleep_severity,
     _combine_severity,
@@ -355,3 +356,79 @@ def test_life_load_bias_never_touches_dosing(db_session):
     assert on["fortify"]["dosing"] == off["fortify"]["dosing"]
     if off["probe"] is not None:
         assert on["probe"]["dosing"] == off["probe"]["dosing"]
+
+
+# ---------------------------------------------------------------------------
+# _duration_min_by_day — one bout counted once (#309 double-count fix)
+# ---------------------------------------------------------------------------
+# The HC exercise ingest made a pre-existing double-count material: the metric summed
+# ALL aerobic_sessions (twins/mirrors) and ALL hevy_workouts (excluded/dedup), and a
+# Garmin-recorded gym/pilates bout counted on both sides. The fix: canonical aerobic
+# rows only; a session overlapping a counted Hevy workout contributes nothing; the Hevy
+# side honours excluded_at/dedup_flag.
+
+GARMIN = "com.garmin.android.apps.connectmobile"
+SHEALTH = "com.sec.android.app.shealth"
+WITHINGS = "com.withings.wiscale2"
+
+
+def _utc(d: date, h, mi=0):
+    return datetime(d.year, d.month, d.day, h, mi, tzinfo=timezone.utc)
+
+
+def _hc_row(db, d, start_h, start_m, stop_h, stop_m, *, pkg, sid, uid=1):
+    st, sp = _utc(d, start_h, start_m), _utc(d, stop_h, stop_m)
+    db.add(models.AerobicSession(
+        user_id=uid, source="health_connect", source_package=pkg, source_session_id=sid,
+        session_date=d, start_time=st, stop_time=sp,
+        duration_minutes=(sp - st).total_seconds() / 60.0,
+    ))
+    db.commit()
+
+
+def _hevy(db, d, start_h, stop_h, *, hid, uid=1, dedup=False, excluded=False):
+    db.add(models.HevyWorkout(
+        hevy_id=hid, user_id=uid, start_time=_utc(d, start_h), end_time=_utc(d, stop_h),
+        title="W", raw={"id": hid, "exercises": []}, dedup_flag=dedup,
+        excluded_at=_utc(d, 23) if excluded else None,
+    ))
+    db.commit()
+
+
+def test_duration_one_bout_counted_once(db_session):
+    """{Hevy workout + overlapping Garmin HC row + Samsung twin + Withings mirror} on one day
+    yields that day's minutes ONCE. All three HC rows overlap the counted Hevy workout, so none
+    contribute; only the Hevy workout's 60 minutes count."""
+    uid = _user(db_session)
+    d = date(2026, 8, 1)
+    _hevy(db_session, d, 6, 7, hid="w1")                                  # 60 min, counted
+    _hc_row(db_session, d, 6, 5, 6, 55, pkg=GARMIN, sid="g1")             # canonical, overlaps
+    _hc_row(db_session, d, 6, 6, 6, 54, pkg=SHEALTH, sid="s1")            # twin
+    _hc_row(db_session, d, 6, 5, 6, 50, pkg=WITHINGS, sid="wi1")          # mirror
+    assert _duration_min_by_day(db_session, uid) == {d: (60.0, 1)}
+
+
+def test_duration_canonical_filter_dedups_hc_twins(db_session):
+    """No Hevy: a Garmin bout with a Samsung twin + Withings mirror (all same bout) counts the
+    CANONICAL row's minutes ONCE. This is the §18 mutation guard: drop the canonical filter and
+    the non-canonical twins re-enter → 3 sessions / 145 min, and this assertion fails."""
+    uid = _user(db_session)
+    d = date(2026, 8, 2)
+    _hc_row(db_session, d, 6, 0, 6, 50, pkg=GARMIN, sid="g2")             # 50 min, canonical (longest)
+    _hc_row(db_session, d, 6, 1, 6, 49, pkg=SHEALTH, sid="s2")            # 48 min twin
+    _hc_row(db_session, d, 6, 0, 6, 45, pkg=WITHINGS, sid="wi2")         # 45 min mirror
+    assert _duration_min_by_day(db_session, uid) == {d: (50.0, 1)}
+
+
+def test_duration_excluded_hevy_contributes_nothing(db_session):
+    uid = _user(db_session)
+    d = date(2026, 8, 3)
+    _hevy(db_session, d, 6, 7, hid="wx", excluded=True)
+    assert d not in _duration_min_by_day(db_session, uid)
+
+
+def test_duration_dedup_hevy_contributes_nothing(db_session):
+    uid = _user(db_session)
+    d = date(2026, 8, 4)
+    _hevy(db_session, d, 6, 7, hid="wd", dedup=True)
+    assert d not in _duration_min_by_day(db_session, uid)

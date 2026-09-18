@@ -472,11 +472,12 @@ def test_load_window_concurrent_strength_excluded(db_session):
 
 
 def test_s3b_garmin_gym_bout_ingested_canonical_not_conditioning(db_session):
-    """Cross-PR fixture (HC ingest #309 S3b): a Garmin-recorded HC session overlapping a Hevy
-    workout — the operator wears the Garmin in the gym. It is a REAL ingested `health_connect`
-    row (source_package set, zoneless), it is CANONICAL (no richer twin), yet it must NOT count
-    as conditioning: the concurrent_strength guard (now load-bearing, not the ~0 edge #228
-    assumed) excludes it and the slot count is unchanged."""
+    """Cross-PR fixture (HC ingest #309 S3b): a Garmin-recorded HC session (a pilates class,
+    co-recorded with Samsung) overlapping a Hevy workout. It is a REAL ingested `health_connect`
+    row (source_package set, zoneless), CANONICAL (no richer twin), yet it must NOT count as
+    conditioning: the concurrent_strength guard excludes it and the slot count is unchanged.
+    The guard is load-bearing against ANY watch auto-detecting or co-recording a session that
+    is already a Hevy workout — not a claim about how this user trains."""
     from reads.aerobic_reads import arbitrated_sessions
     u = _user(db_session)
     _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)

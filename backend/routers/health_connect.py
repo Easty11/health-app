@@ -598,6 +598,12 @@ def _ingest_exercise_sessions(payload: "SyncPayload", user_id: int, db: Session)
             continue
         survivors.append(r)
 
+    # All of the user's existing health_connect rows — needed for mirror detection (an
+    # incoming record can mirror an already-stored row) and upsert-by-ssid. Loaded whole;
+    # fine at personal/family scale. NOT bounded by the sync's date window on purpose:
+    # `payload.workouts` is not window-filtered, so a survivor can fall outside it, and a
+    # window bound would then miss that survivor's stored twin/row. A safe bound would key
+    # off the survivors' own start-day range, not the sync window — deferred (non-blocking).
     existing = (
         db.query(models.AerobicSession)
         .filter(models.AerobicSession.user_id == user_id,
@@ -651,7 +657,7 @@ def _ingest_exercise_sessions(payload: "SyncPayload", user_id: int, db: Session)
             session_date=session_date,
             start_time=start,
             stop_time=stop,
-            sport_id=str(r.type),
+            sport_id=None if r.type is None else str(r.type),   # type is a required int, so defensive
             sport_name=sport_name_for(r.type),
             duration_minutes=_exercise_duration_minutes(start, stop, r.durationMinutes),
             source_package=pkg,

@@ -220,6 +220,28 @@ def arbitrated_sessions(
     return rows
 
 
+def overlaps_workout(session, workouts) -> bool:
+    """True iff `session`'s `[start_time, stop_time]` interval intersects any workout's
+    `[start_time, end_time]` (all four endpoints present on the pair). The SINGLE overlap
+    predicate (#309) — the resolver's `concurrent_strength` guard and the psychological
+    duration read both call this; one definition, so "same bout as a Hevy workout" means
+    the same thing to every reader.
+
+    Null-safe on the session side: an untimed session (NULL start or stop) has no interval,
+    so it cannot be proven to overlap and returns False — the caller counts it rather than
+    dropping real minutes on an undecidable pair. Each workout with a NULL endpoint is
+    likewise skipped."""
+    s_start, s_stop = session.start_time, session.stop_time
+    if s_start is None or s_stop is None:
+        return False
+    for w in workouts:
+        if w.start_time is None or w.end_time is None:
+            continue
+        if s_start < w.end_time and w.start_time < s_stop:
+            return True
+    return False
+
+
 # ── zone coverage (the "transport-starved sessions are visible, not silent" flag) ──
 
 # A zoneless `polar_v4` session older than this many days is STALE: the v4 list
