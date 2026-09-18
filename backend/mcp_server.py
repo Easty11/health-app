@@ -23,6 +23,7 @@ from oauth_provider import PersonalOAuthProvider
 import models
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from reads.labs_reads import latest_lab_results
+from reads.aerobic_reads import arbitrated_sessions   # the canonical read-door (#Q161)
 from reads.recovery_reads import hrv_deviation, representative_source
 from engine.training_phase import current_training_phase
 
@@ -297,60 +298,46 @@ def get_training_sessions(days: int = 28) -> str:
     """Get aerobic/cardio sessions from all connected sources (Polar, etc).
     Returns sport type, duration, average/max HR, distance, calories, HR zones."""
     user_id = _current_user_id()
+    since = datetime.now(timezone.utc).date() - timedelta(days=days)
 
-    rows = _db_rows(
-        """
-        SELECT source, sport_name AS sport, start_time, stop_time AS end_time,
-               (duration_minutes * 60)::int AS duration_seconds,
-               hr_avg AS avg_hr, hr_max AS max_hr,
-               NULL::float AS distance_meters, calories,
-               CASE WHEN z1_seconds IS NOT NULL
-                    THEN jsonb_build_object(
-                        '1', ROUND(COALESCE(z1_seconds, 0) / 60.0),
-                        '2', ROUND(COALESCE(z2_seconds, 0) / 60.0),
-                        '3', ROUND(COALESCE(z3_seconds, 0) / 60.0),
-                        '4', ROUND(COALESCE(z4_seconds, 0) / 60.0),
-                        '5', ROUND(COALESCE(z5_seconds, 0) / 60.0))
-                    ELSE NULL END AS hr_zones
-        FROM aerobic_sessions
-        WHERE user_id = :user_id
-          AND start_time >= CURRENT_DATE - :days
-        ORDER BY start_time DESC
-        """,
-        {"user_id": user_id, "days": days},
-    )
+    # Read-door (#Q161): list CANONICAL sessions only — a same-bout Polar/HC twin must not
+    # appear twice. arbitrated_sessions marks exactly one row per bout canonical; day is the
+    # local `session_date` (untimed sessions, which the old `start_time >=` filter dropped,
+    # are now included). Rendered inside the session so attributes are materialised.
+    with SessionLocal() as _db:
+        sessions = [s for s in arbitrated_sessions(user_id, _db, since=since)
+                    if getattr(s, "canonical", True)]
 
-    if not rows:
-        return (
-            f"No aerobic sessions found in the last {days} days. "
-            "Note: Polar data accumulates from June 2026 onward."
-        )
+        if not sessions:
+            return (
+                f"No aerobic sessions found in the last {days} days. "
+                "Note: Polar data accumulates from June 2026 onward."
+            )
 
-    lines = [f"Training sessions — last {days} days"]
-    lines.append(f"Data window: {rows[-1]['start_time']} → {rows[0]['start_time']}")
-    lines.append("Note: Polar data accumulates from June 2026 onward.\n")
+        lines = [f"Training sessions — last {days} days"]
+        lines.append(f"Data window: {sessions[-1].session_date} → {sessions[0].session_date}")
+        lines.append("Note: Polar data accumulates from June 2026 onward.\n")
 
-    for r in rows:
-        date = str(r["start_time"])[:10]
-        dur_min = f"{r['duration_seconds'] / 60:.0f} min" if r["duration_seconds"] else "—"
-        avg_hr = f"{r['avg_hr']:.0f}" if r["avg_hr"] is not None else "—"
-        max_hr = f"{r['max_hr']:.0f}" if r["max_hr"] is not None else "—"
-        dist = f"{r['distance_meters'] / 1000:.2f} km" if r["distance_meters"] else "—"
-        cal = f"{r['calories']:.0f} kcal" if r["calories"] is not None else "—"
+        for s in sessions:
+            dur_min = f"{s.duration_minutes:.0f} min" if s.duration_minutes else "—"
+            avg_hr = f"{s.hr_avg:.0f}" if s.hr_avg is not None else "—"
+            max_hr = f"{s.hr_max:.0f}" if s.hr_max is not None else "—"
+            cal = f"{s.calories:.0f} kcal" if s.calories is not None else "—"
 
-        zone_summary = ""
-        if r.get("hr_zones"):
-            try:
-                zones = r["hr_zones"] if isinstance(r["hr_zones"], dict) else {}
+            zone_summary = ""
+            if s.z1_seconds is not None:
+                zones = {
+                    "1": round((s.z1_seconds or 0) / 60), "2": round((s.z2_seconds or 0) / 60),
+                    "3": round((s.z3_seconds or 0) / 60), "4": round((s.z4_seconds or 0) / 60),
+                    "5": round((s.z5_seconds or 0) / 60),
+                }
                 zone_parts = [f"Z{k}={v}min" for k, v in zones.items() if v]
                 zone_summary = " zones=[" + " ".join(zone_parts) + "]"
-            except Exception:
-                pass
 
-        lines.append(
-            f"{date} [{r['source']}] {r['sport'] or 'unknown'}: "
-            f"{dur_min} HR={avg_hr}/{max_hr} dist={dist} cal={cal}{zone_summary}"
-        )
+            lines.append(
+                f"{s.session_date} [{s.source}] {s.sport_name or 'unknown'}: "
+                f"{dur_min} HR={avg_hr}/{max_hr} dist=— cal={cal}{zone_summary}"
+            )
 
     return "\n".join(lines)
 
@@ -509,16 +496,15 @@ def get_readiness_snapshot() -> str:
         {"user_id": user_id},
     )
 
-    session_stats = _db_rows(
-        """
-        SELECT COUNT(*) AS session_count,
-               SUM((duration_minutes * 60)::int) AS total_seconds
-        FROM aerobic_sessions
-        WHERE user_id = :user_id
-          AND start_time >= CURRENT_DATE - 7
-        """,
-        {"user_id": user_id},
-    )
+    # Read-door (#Q161): count CANONICAL sessions only, so a same-bout Polar/HC twin does not
+    # inflate the readiness training summary (session_date is the local day).
+    with SessionLocal() as _sdb:
+        _week = [s for s in arbitrated_sessions(
+                     user_id, _sdb, since=datetime.now(timezone.utc).date() - timedelta(days=7))
+                 if getattr(s, "canonical", True)]
+    session_count = len(_week)
+    session_total_min = sum(float(s.duration_minutes) for s in _week
+                            if s.duration_minutes is not None)
 
     hrv_continuity = _db_rows(
         """
@@ -563,11 +549,9 @@ def get_readiness_snapshot() -> str:
     else:
         lines.append("Most recent check-in: none found.\n")
 
-    if session_stats:
-        s = session_stats[0]
-        count = s["session_count"] or 0
-        total_min = (s["total_seconds"] or 0) / 60
-        lines.append(f"Aerobic sessions (last 7 days): {count} sessions, {total_min:.0f} total minutes\n")
+    if session_count:
+        lines.append(f"Aerobic sessions (last 7 days): {session_count} sessions, "
+                     f"{session_total_min:.0f} total minutes\n")
 
     injury_rows = _db_rows(
         """

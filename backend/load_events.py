@@ -60,6 +60,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 import models
+from reads.hevy_reads import counted_workouts   # the counted-workouts read-door (#Q161)
 from laterality import detect_session_pairing
 
 logger = logging.getLogger(__name__)
@@ -612,7 +613,13 @@ def compute_load_events(
         )
         .order_by(models.HevyWorkout.start_time)
     ).scalars().all()
-    sessions = [_session_from_row(r) for r in rows]
+    # Read-door (#Q161): filter to COUNTED workouts. For CURRENT data this is byte-identical
+    # to `excluded_at IS NULL` alone — every dedup pair is adjudicated, so the retained log
+    # counts and the artifact is already excluded — but it correctly drops a FUTURE
+    # UNADJUDICATED pair from load (counting both would double-count the bout). Input order
+    # (start_time) is preserved by the door.
+    counted, _unadjudicated = counted_workouts(db, user_id, rows)
+    sessions = [_session_from_row(r) for r in counted]
 
     samples = e1rm_samples(sessions)
 

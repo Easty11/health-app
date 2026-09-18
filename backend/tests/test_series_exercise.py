@@ -45,7 +45,7 @@ def _ws(weight, reps, set_type="normal"):
     return {"type": set_type, "weight_kg": weight, "reps": reps}
 
 
-def _workout(db, *, user_id, day, blocks, dedup=False, excluded=False, hevy_id=None):
+def _workout(db, *, user_id, day, blocks, dedup=False, excluded=False, hevy_id=None, partners=None):
     """One HevyWorkout whose `raw.exercises` carries `blocks` = [(template_id, [sets])].
 
     `start_time` is noon UTC on `day` → 22:00 AEST same day, so `_local_day(start_time)`
@@ -59,7 +59,7 @@ def _workout(db, *, user_id, day, blocks, dedup=False, excluded=False, hevy_id=N
         user_id=user_id,
         start_time=datetime(day.year, day.month, day.day, 12, 0, tzinfo=timezone.utc),
         raw=raw,
-        dedup_flag=dedup,
+        dedup_flag=dedup, dedup_partner_ids=partners,
         excluded_at=datetime.now(timezone.utc) if excluded else None,
     ))
     db.commit()
@@ -124,19 +124,34 @@ def test_a_session_of_only_warmups_is_no_point():
 
 # ---------- dedup / excluded exclusion (D3, as the resolver does) ----------
 
-def test_dedup_and_excluded_workouts_contribute_nothing(db_session):
+def test_excluded_and_unadjudicated_dropped_retained_log_counts(db_session):
+    """#Q161 correcting #276: an excluded workout and an UNADJUDICATED flagged pair contribute
+    nothing, but the RETAINED performed log of an ADJUDICATED pair DOES — the old
+    `dedup_flag IS NOT TRUE` filter dropped it too (both members of a pair are flagged). §18:
+    revert series to that filter and the today-1 point (the retained log) disappears."""
     u = _user(db_session, "a@example.com")
     today = _today()
-    _workout(db_session, user_id=u.id, day=today, blocks=[("SQ", [_ws(100, 5)])],
-             hevy_id="keep")
-    _workout(db_session, user_id=u.id, day=today - timedelta(days=1),
-             blocks=[("SQ", [_ws(999, 5)])], dedup=True, hevy_id="dedup")
-    _workout(db_session, user_id=u.id, day=today - timedelta(days=2),
-             blocks=[("SQ", [_ws(888, 5)])], excluded=True, hevy_id="excl")
+    d1, d2, d3 = today - timedelta(days=1), today - timedelta(days=2), today - timedelta(days=3)
+    _workout(db_session, user_id=u.id, day=today, blocks=[("SQ", [_ws(100, 5)])], hevy_id="keep")
+    # adjudicated pair on d1: artifact excluded, performed retained → the performed log counts
+    _workout(db_session, user_id=u.id, day=d1, blocks=[("SQ", [_ws(110, 5)])],
+             dedup=True, partners=["art1"], hevy_id="perf1")
+    _workout(db_session, user_id=u.id, day=d1, blocks=[("SQ", [_ws(999, 5)])],
+             dedup=True, excluded=True, partners=["perf1"], hevy_id="art1")
+    _workout(db_session, user_id=u.id, day=d2, blocks=[("SQ", [_ws(888, 5)])],
+             excluded=True, hevy_id="excl")
+    # unadjudicated pair on d3 → neither counts
+    _workout(db_session, user_id=u.id, day=d3, blocks=[("SQ", [_ws(700, 5)])],
+             dedup=True, partners=["udb"], hevy_id="uda")
+    _workout(db_session, user_id=u.id, day=d3, blocks=[("SQ", [_ws(700, 5)])],
+             dedup=True, partners=["uda"], hevy_id="udb")
 
     out = _series(db_session, u, "SQ")
-    assert [p.date for p in out.points] == [today.isoformat()]  # only the kept day
-    assert out.points[0].e1rm_kg == pytest.approx(_epley_e1rm(100.0, 5))
+    by_date = {p.date: p for p in out.points}
+    assert sorted(by_date) == sorted([today.isoformat(), d1.isoformat()])   # keep + retained log
+    assert by_date[today.isoformat()].e1rm_kg == pytest.approx(_epley_e1rm(100.0, 5))
+    # the retained log (110), NOT the excluded artifact (999)
+    assert by_date[d1.isoformat()].e1rm_kg == pytest.approx(_epley_e1rm(110.0, 5))
 
 
 # ---------- per-day collapse (brief step 2) ----------

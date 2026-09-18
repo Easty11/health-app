@@ -68,6 +68,23 @@ def test_unadjudicated_pair_neither_counts_both_surfaced(db_session):
     assert _ids(unadj) == ["a", "b"]
 
 
+def test_byte_identical_to_excluded_only_when_fully_adjudicated(db_session):
+    """The load-transform adoption gate (#Q161): when every dedup pair is ADJUDICATED — the
+    current prod state for users 1 and 4 — the door returns EXACTLY the `excluded_at IS NULL`
+    set, dropping nothing and surfacing nothing. So `load_events`/`load_metrics` adopting the
+    door is byte-identical on current data; it diverges only on a FUTURE unadjudicated pair,
+    which it correctly drops from load (counting both would double-count the bout)."""
+    uid = _u(db_session)
+    _w(db_session, uid, "clean1")
+    _w(db_session, uid, "clean2")
+    _w(db_session, uid, "perf", flagged=True, partners=["art"])          # retained
+    _w(db_session, uid, "art", flagged=True, excluded=True, partners=["perf"])  # artifact
+    excluded_null = [w for w in _all(db_session) if w.excluded_at is None]
+    counted, unadj = counted_workouts(db_session, uid, excluded_null)
+    assert {w.hevy_id for w in counted} == {w.hevy_id for w in excluded_null}   # nothing dropped
+    assert unadj == []                                                          # nothing surfaced
+
+
 def test_partner_outside_the_candidate_set_is_still_seen(db_session):
     """The retained log counts even when its excluded partner is NOT in the candidate list
     (a re-log hours later, outside a resolver window) — partner exclusion is resolved against
