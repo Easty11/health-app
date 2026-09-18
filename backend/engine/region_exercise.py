@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 
 import models
 from hevy_templates import _visible_to  # ONE visibility rule, never two (#83, FEEDBACK §10)
+from reads.hevy_reads import counted_workouts   # the counted-workouts read-door (#Q161)
 
 from . import taxonomy
 from .taxonomy import SIDE_BILATERAL, SIDE_LEFT, SIDE_RIGHT
@@ -259,13 +260,17 @@ def recent_template_ids(db: Session, user_id: int, *, limit_workouts: int = 20) 
     result (nothing logged, or the sets table not backfilled) → rotation is simply inert."""
     Workout = models.HevyWorkout
     Set = models.HevySet
-    recent_ids = db.execute(
-        select(Workout.hevy_id)
+    # Read-door (#Q161): fetch the non-excluded candidates, filter to COUNTED via the door,
+    # THEN take the most-recent `limit_workouts`. The limit is applied AFTER the door so an
+    # unadjudicated duplicate cannot eat a recency slot and evict a genuinely-distinct workout.
+    candidates = db.execute(
+        select(Workout)
         .where(Workout.user_id == user_id)
         .where(Workout.excluded_at.is_(None))
         .order_by(Workout.start_time.desc().nullslast())
-        .limit(limit_workouts)
     ).scalars().all()
+    counted, _unadjudicated = counted_workouts(db, user_id, candidates)
+    recent_ids = [w.hevy_id for w in counted[:limit_workouts]]
     if not recent_ids:
         return frozenset()
     tmpl_ids = db.execute(

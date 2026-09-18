@@ -33,6 +33,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 import models
+from reads.hevy_reads import counted_workouts   # the counted-workouts read-door (#Q161)
 from auth import get_current_user
 from database import get_db
 from load_metrics import METRICS_VERSION, _local_day
@@ -298,24 +299,25 @@ def _aggregate_session(raw_sets: list[dict]) -> dict | None:
 def _session_days_by_template(
     db: Session, user_id: int, since, *, template_id: str | None = None
 ) -> dict[str, dict]:
-    """{template_id: {day: [raw_set, ...]}} for the user's in-range, non-excluded,
-    non-dedup workouts. Grouped by `_local_day` so multiple same-day workouts collapse onto
-    one session-day (brief step 2). `template_id` narrows to a single template when given.
+    """{template_id: {day: [raw_set, ...]}} for the user's in-range, COUNTED workouts. Grouped
+    by `_local_day` so multiple same-day workouts collapse onto one session-day (brief step 2).
+    `template_id` narrows to a single template when given.
 
-    The exclusion filter is `engine/resolver`'s exactly (D3): `excluded_at IS NULL` AND
-    `dedup_flag IS NOT TRUE`. The local-day bound is applied in Python off `_local_day` rather
-    than on the UTC `start_time` column, so an early-AEST row is not mis-windowed at the edge
-    (the resolver does the same)."""
+    Counting goes through the shared `reads.hevy_reads.counted_workouts` door (#Q161): the old
+    `dedup_flag IS NOT TRUE` filter (mirroring the resolver's pre-#309 D3) dropped the RETAINED
+    performed log of an adjudicated pair too — both members are flagged. The door keeps the
+    retained log and drops only the artifact / an unadjudicated pair. The local-day bound is
+    applied in Python off `_local_day` (the resolver does the same)."""
     today = _today_aest()
-    rows = (
+    candidates = (
         db.query(models.HevyWorkout)
         .filter(
             models.HevyWorkout.user_id == user_id,
             models.HevyWorkout.excluded_at.is_(None),
-            models.HevyWorkout.dedup_flag.isnot(True),
         )
         .all()
     )
+    rows, _unadjudicated = counted_workouts(db, user_id, candidates)
 
     by_template: dict[str, dict] = {}
     for w in rows:
