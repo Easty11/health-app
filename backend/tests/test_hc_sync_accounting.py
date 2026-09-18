@@ -3,10 +3,10 @@ and what lost its writer (#235).
 
 Three maps, additive to the existing synced/dates/rejected_pre_2020/sources_captured:
   received     — records per stream as POSTED (before pre-2020 reject).
-  aggregated   — records on a date that produced a DailyRecord row. `workouts` is 0
-                 by design: HC exercise is source-captured, ingestion held at #189.
-                 (Named `aggregated`, not `ingested`, so that honest 0 does not read
-                 as a permanent defect — the GATE 1 finding, hardened into the contract.)
+  aggregated   — records on a date that produced a DailyRecord row, EXCEPT `workouts`,
+                 which since #NEXT is the count of exercise records ingested into
+                 `aerobic_sessions` (a separate lane, not a DailyRecord). #189's hold is
+                 discharged; the admission drops live under `exercise_ingest`.
   unattributed — records whose writer degraded to 'unknown' (branch-6, orthogonal axis).
 
 Dates are built relative to "now" so the 7-day aggregation window never ages these
@@ -80,14 +80,18 @@ def test_received_is_nonzero_for_all_five_streams(db_session):
     assert out["received"] == {"sleep": 1, "hrv": 1, "heartRate": 1, "steps": 1, "workouts": 1}
 
 
-def test_aggregated_populates_four_streams_and_workouts_is_zero_by_design(db_session):
+def test_aggregated_populates_four_streams_and_workouts_is_ingested_count(db_session):
     out = _sync(db_session, _full_payload())
     assert out["aggregated"]["sleep"] == 1
     assert out["aggregated"]["hrv"] == 1
     assert out["aggregated"]["heartRate"] == 1
     assert out["aggregated"]["steps"] == 1
-    # Not a drop — HC exercise ingestion into DailyRecord is held at #189.
-    assert out["aggregated"]["workouts"] == 0
+    # #189's hold is discharged (#NEXT): the one shealth exercise record is now ingested
+    # into `aerobic_sessions`, so `workouts` is the real ingested count, not a fixed 0.
+    assert out["aggregated"]["workouts"] == 1
+    assert out["exercise_ingest"]["ingested"] == 1
+    assert out["exercise_ingest"]["hevy_dropped"] == 0
+    assert out["exercise_ingest"]["mirrors_dropped"] == 0
 
 
 # ---------- an empty stream reads 0 and still 200 ----------

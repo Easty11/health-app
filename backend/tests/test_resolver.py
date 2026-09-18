@@ -471,6 +471,40 @@ def test_load_window_concurrent_strength_excluded(db_session):
             "sport_name": "Row", "duration_minutes": 45.0} in res["uncounted"]
 
 
+def test_s3b_garmin_gym_bout_ingested_canonical_not_conditioning(db_session):
+    """Cross-PR fixture (HC ingest #309 S3b): a Garmin-recorded HC session overlapping a Hevy
+    workout — the operator wears the Garmin in the gym. It is a REAL ingested `health_connect`
+    row (source_package set, zoneless), it is CANONICAL (no richer twin), yet it must NOT count
+    as conditioning: the concurrent_strength guard (now load-bearing, not the ~0 edge #228
+    assumed) excludes it and the slot count is unchanged."""
+    from reads.aerobic_reads import arbitrated_sessions
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)
+    _tpl(db_session, "t_str", STRENGTH_RK)
+    _gym_workout(db_session, u.id, "w_gym",
+                 datetime(2026, 9, 8, 6, 0, tzinfo=timezone.utc),
+                 datetime(2026, 9, 8, 7, 0, tzinfo=timezone.utc), ["t_str"])
+    aid = _aerobic(db_session, u.id, "hc_garmin_gym", date(2026, 9, 8),
+                   start=datetime(2026, 9, 8, 6, 15, tzinfo=timezone.utc),
+                   stop=datetime(2026, 9, 8, 7, 5, tzinfo=timezone.utc),
+                   sport="Pilates", duration=50.0, zones=(0, 0, 0, 0, 0),
+                   source="health_connect")
+    # Stamp the writer package the ingest would set (Garmin, wearable-native).
+    row = db_session.get(models.AerobicSession, aid)
+    row.source_package = "com.garmin.android.apps.connectmobile"
+    db_session.commit()
+
+    # Ingested + canonical: no same-bout twin, so it survives arbitration.
+    canonical = [s for s in arbitrated_sessions(u.id, db_session) if s.canonical]
+    assert [s.id for s in canonical] == [aid]
+
+    # ...but not conditioning: overlaps the Hevy strength workout.
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert res["slots"][0]["done"] == 0
+    assert {"session": aid, "reason": "concurrent_strength",
+            "sport_name": "Pilates", "duration_minutes": 50.0} in res["uncounted"]
+
+
 def test_load_window_local_day_trap_late_utc(db_session):
     """The 23:30-UTC → next-Brisbane-day trap for a metabolic session. A 23:30Z instant on
     09-13 is local 09-14 (+10), so it belongs to leg B, not leg A."""

@@ -38,6 +38,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 027 — load_events              FK to users (CASCADE) — derived per-session-window load; source_ref soft (no FK), source-neutral (Q6 gate 2)
 029 — hrv_readings             FK to users (CASCADE) — source-agnostic nightly HRV summary; unique (user, night, source)
 030 — hrv_samples              FK to hrv_readings (CASCADE) — 5-min RMSSD series; Garmin-populated
+032 — aerobic_sessions         FK to users (CASCADE) — canonical aerobic/conditioning sessions; unique (user, source, source_session_id); read-time cross-source + writer-class arbitration
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1423,3 +1424,45 @@ async def build_ai_context(user_id, lookback_days=90,
 | workout_metrics raw extraction spec | What to extract from R-R series before discarding raw; lock before any discard logic is implemented |
 | Hevy resolver activation | Landed but dormant — title-resolution fires only after context_builder emits titles + byte-parity guard re-baseline |
 | Hevy create-loop (app-originated exercises) | Recon gate: POST /v1/exercise_templates returns bare integer vs canonical UUID — decides clean upsert vs list-back |
+
+### 032 — aerobic_sessions
+
+Canonical aerobic / conditioning sessions — the metabolic-window load source (Edwards TRIMP → `load_events` → Banister, #251) and the resolver's `load_window` session count (#307/Amendment 1). One row per `(user_id, source, source_session_id)` (`uq_aerobic_session_source`). Fed by two lanes: **Polar** (`source='polar_flow_export'` from the Flow-export ZIP, `source='polar_v4'` from the v4 list endpoint) and, since **#189/#309**, **Health Connect** (`source='health_connect'`) — a synced HC exercise record becomes one row here (`routers/health_connect._ingest_exercise_sessions`).
+
+**Zones are provenance-gated.** `z*_seconds` carry the HR-zone split when the source measured it (Polar Flow export). A source that did not — `polar_v4` list rows, and every `health_connect` row (stage-1 ingest is zoneless; HR zones are stage 2, deferred, blocked on the HCA HR-lag finding, Q159) — leaves them **NULL, not 0**: NULL reads as "not measured", 0 as "measured, none", and the metabolic transform is fail-closed on NULL (INV-7 — no zones ⇒ no `load_events` row). The HC ingest writes `sqlalchemy.null()` to defeat the column's Python-side `default=0`.
+
+**Two-tier read-time arbitration** (`reads/aerobic_reads.arbitrate`, derived `canonical` flag, never persisted — there is no `canonical` column):
+- **Cross-source** pairs describing one bout rank by `source` fidelity (`polar_flow_export` > `polar_v4` > `health_connect`) — the richer row is canonical (#260/Q127).
+- **Same-source `health_connect`** pairs rank by **writer class** (#309, Ruling 1): wearable-native (`com.garmin.android.apps.connectmobile`, `com.sec.android.app.shealth`, `fi.polar.polarflow`) > aggregator/mirror (`com.withings.wiscale2`, `nl.appyhapps.healthsync`) > unknown; equal within a class, so the duration→start→id ladder decides. This is why the row carries `source_package`.
+
+**HC provenance columns** (#309, both nullable, NULL for Polar rows): `source_package` (the recording app's HC package, drives the writer-class rank above) and `recording_method` (HC `ExerciseRecord.recordingMethod`, Q118 — Samsung leaves it at the sentinel 0, so descriptive only). Admission drops a `com.hevy` mirror (the Hevy connector owns those bouts) and a lower-writer-class record sharing an identical start (a mirror), both counted in the `/health-connect/sync` response, never silent.
+
+```sql
+CREATE TABLE aerobic_sessions (
+    id                SERIAL PRIMARY KEY,
+    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    source            VARCHAR(50) NOT NULL,       -- 'polar_flow_export' | 'polar_v4' | 'health_connect'
+    source_session_id VARCHAR(255),               -- originating id; HC uses the record id, else 'package|startTime'
+    session_date      DATE NOT NULL,              -- LOCAL (AEST) calendar day of the session
+    start_time        TIMESTAMPTZ,
+    stop_time         TIMESTAMPTZ,
+    sport_id          VARCHAR(100),               -- source sport id (HC: the exerciseType int as text)
+    sport_name        VARCHAR(100),               -- decoded (HC: sport_name_for(type))
+    source_package    VARCHAR(255),               -- #309 HC writer package; NULL for Polar
+    recording_method  INTEGER,                    -- #309 HC recordingMethod (Q118); NULL for Polar
+    duration_minutes  DOUBLE PRECISION,
+    hr_avg            INTEGER,
+    hr_max            INTEGER,
+    calories          INTEGER,
+    cardio_load       DOUBLE PRECISION,           -- Polar-native cardio load
+    muscle_load       DOUBLE PRECISION,
+    recovery_hours    DOUBLE PRECISION,
+    z1_seconds        INTEGER DEFAULT 0,          -- NULL when not measured (polar_v4, health_connect)
+    z2_seconds        INTEGER DEFAULT 0,
+    z3_seconds        INTEGER DEFAULT 0,
+    z4_seconds        INTEGER DEFAULT 0,
+    z5_seconds        INTEGER DEFAULT 0,
+    created_at        TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT uq_aerobic_session_source UNIQUE (user_id, source, source_session_id)
+);
+```
