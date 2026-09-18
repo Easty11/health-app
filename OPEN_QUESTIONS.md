@@ -4588,3 +4588,15 @@ Raised 2026-09-17 with #306. `load_ratio = acute(7d)/chronic(28d)` is a COUPLED 
 **To close (if built):** add the column + a `_trailing_mean` over days 8–28, surface it as a SECOND descriptive ratio (never a risk band — the #306 reclassification binds it too), and decide whether the coupled ratio stays or is superseded. It remains descriptive-only; a criterion (Q156) is required before any threshold rides either denominator. Schema change → full human review.
 
 **State:** OPEN. Blocks nothing — the coupled ratio ships descriptive under #306; this is an optional precision upgrade, not a correctness fix.
+
+## Q159. Stage-2 HC exercise zones — load treatment of a zoned activity session  [OPEN]
+
+Raised 2026-09-18 with #309 (HC exercise ingest stage 1). Stage 1 ingests HC exercise records as ZONELESS `aerobic_sessions` rows (`z*_seconds` NULL, INV-7 fail-closed → no metabolic `load_event`). Stage 2 would derive HR-zone seconds from the HC heart-rate samples posted alongside the workout, at which point a session deposits metabolic TRIMP like any Polar row.
+
+**Named blocker:** the HCA HR-lag finding — HR samples arrive ~6 days behind the sync that carries the workout (observed ~15 s sample spacing during Garmin activities on user 4, ~2 min outside them), so a zone reconstruction on the workout's sync would score an empty window. Stage 2 cannot be built until the lag is characterised and the reconstruction reads the later-arriving HR.
+
+**Coupled load-model decision (NOT a resolver one, #302 series invariance):** a zoned pilates or walk session would deposit metabolic TRIMP. Whether some sports (rehab swimming, pilates, walks) are EXCLUDED from the metabolic window is a LOAD-MODEL call — it changes what the transform computes, not what the resolver counts — and is explicitly NOT made in #309. The resolver's `activity`-slot brief (v2, queued) decides what a session MEANS for the plan; it never alters the load model.
+
+**To close (if built):** characterise the HR-lag, reconstruct zones from the posted HR onto the existing zoneless row (a recompute, not a new row), and rule the sport-exclusion question at the load layer. Schema-neutral if it only fills existing `z*_seconds`; the recompute/versioning discipline (#248) applies.
+
+**State:** OPEN. Blocks nothing — stage 1 ships zoneless-but-counted under #309/#307; this is the load-deposit upgrade.
