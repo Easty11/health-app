@@ -49,8 +49,11 @@ def _rpe_day(db, d: date, rpe: float, uid=1):
 
 
 def _aerobic(db, d: date, minutes: float, uid=1, sid=None):
+    # A feeding source (Polar). NOT health_connect: the Q160 interim excludes HC-source rows
+    # from _duration_min_by_day, and pre-#309 no HC aerobic rows existed, so a duration-provider
+    # fixture is faithfully Polar.
     db.add(models.AerobicSession(
-        user_id=uid, source="health_connect", source_session_id=sid or f"s-{d}",
+        user_id=uid, source="polar_flow_export", source_session_id=sid or f"s-{d}",
         session_date=d, duration_minutes=minutes,
     ))
     db.commit()
@@ -359,17 +362,17 @@ def test_life_load_bias_never_touches_dosing(db_session):
 
 
 # ---------------------------------------------------------------------------
-# _duration_min_by_day — one bout counted once (#309 double-count fix)
+# _duration_min_by_day — count each bout once (#309 double-count fix + Q160 interim)
 # ---------------------------------------------------------------------------
-# The HC exercise ingest made a pre-existing double-count material: the metric summed
-# ALL aerobic_sessions (twins/mirrors) and ALL hevy_workouts (excluded/dedup), and a
-# Garmin-recorded gym/pilates bout counted on both sides. The fix: canonical aerobic
-# rows only; a session overlapping a counted Hevy workout contributes nothing; the Hevy
-# side honours excluded_at/dedup_flag.
+# The HC ingest made a pre-existing double-count material: the metric summed ALL
+# aerobic_sessions (twins/mirrors) and ALL hevy_workouts (excluded/dedup), and one bout
+# counted on both sides. Fix: canonical aerobic rows only; a session overlapping a counted
+# Hevy workout contributes nothing; the Hevy side honours excluded_at/dedup_flag. Q160
+# INTERIM: health_connect-source rows contribute nothing at all (no minutes, no tally) until
+# Q160 is ruled — so the ingest does not perturb the pre-#309 Polar+Hevy series. The
+# canonical/overlap mechanisms are therefore exercised with a FEEDING source (Polar).
 
 GARMIN = "com.garmin.android.apps.connectmobile"
-SHEALTH = "com.sec.android.app.shealth"
-WITHINGS = "com.withings.wiscale2"
 
 
 def _utc(d: date, h, mi=0):
@@ -386,37 +389,70 @@ def _hc_row(db, d, start_h, start_m, stop_h, stop_m, *, pkg, sid, uid=1):
     db.commit()
 
 
-def _hevy(db, d, start_h, stop_h, *, hid, uid=1, dedup=False, excluded=False):
+def _polar(db, d, start_h, start_m, stop_h, stop_m, *, source="polar_flow_export", sid, uid=1):
+    st, sp = _utc(d, start_h, start_m), _utc(d, stop_h, stop_m)
+    db.add(models.AerobicSession(
+        user_id=uid, source=source, source_session_id=sid,
+        session_date=d, start_time=st, stop_time=sp,
+        duration_minutes=(sp - st).total_seconds() / 60.0,
+    ))
+    db.commit()
+
+
+def _hevy(db, d, start_h, stop_h, *, hid, uid=1, dedup=False, excluded=False, partners=None):
     db.add(models.HevyWorkout(
         hevy_id=hid, user_id=uid, start_time=_utc(d, start_h), end_time=_utc(d, stop_h),
-        title="W", raw={"id": hid, "exercises": []}, dedup_flag=dedup,
+        title="W", raw={"id": hid, "exercises": []},
+        dedup_flag=dedup, dedup_partner_ids=partners,
         excluded_at=_utc(d, 23) if excluded else None,
     ))
     db.commit()
 
 
-def test_duration_one_bout_counted_once(db_session):
-    """{Hevy workout + overlapping Garmin HC row + Samsung twin + Withings mirror} on one day
-    yields that day's minutes ONCE. All three HC rows overlap the counted Hevy workout, so none
-    contribute; only the Hevy workout's 60 minutes count."""
+def test_duration_hc_source_excluded_interim(db_session):  # Q160 interim + §18
+    """An HC walk on a gym day contributes NOTHING — the day's minutes are the Hevy workout's
+    alone. The walk is canonical and does NOT overlap the workout (07:00 vs 17:00), so only the
+    source filter excludes it: remove `if s.source == HEALTH_CONNECT` and its 40 min re-enter
+    (100 min / 2 sessions), failing this assertion."""
     uid = _user(db_session)
-    d = date(2026, 8, 1)
-    _hevy(db_session, d, 6, 7, hid="w1")                                  # 60 min, counted
-    _hc_row(db_session, d, 6, 5, 6, 55, pkg=GARMIN, sid="g1")             # canonical, overlaps
-    _hc_row(db_session, d, 6, 6, 6, 54, pkg=SHEALTH, sid="s1")            # twin
-    _hc_row(db_session, d, 6, 5, 6, 50, pkg=WITHINGS, sid="wi1")          # mirror
+    d = date(2026, 8, 5)
+    # UTC hours <= 13 so +10h AEST stays on the same day (17:00Z would bucket to the next day).
+    _hevy(db_session, d, 10, 11, hid="wg")                              # 60 min gym, 10:00-11:00
+    _hc_row(db_session, d, 7, 0, 7, 40, pkg=GARMIN, sid="walk")          # 40 min HC walk, no overlap
     assert _duration_min_by_day(db_session, uid) == {d: (60.0, 1)}
 
 
-def test_duration_canonical_filter_dedups_hc_twins(db_session):
-    """No Hevy: a Garmin bout with a Samsung twin + Withings mirror (all same bout) counts the
-    CANONICAL row's minutes ONCE. This is the §18 mutation guard: drop the canonical filter and
-    the non-canonical twins re-enter → 3 sessions / 145 min, and this assertion fails."""
+def test_duration_one_bout_counted_once(db_session):
+    """The messy real bout — a Hevy workout plus HC twins/mirror all recording it — is counted
+    ONCE (the Hevy workout's 60 min). The HC rows are out under the Q160 interim; even absent
+    that, they overlap the counted workout."""
     uid = _user(db_session)
-    d = date(2026, 8, 2)
-    _hc_row(db_session, d, 6, 0, 6, 50, pkg=GARMIN, sid="g2")             # 50 min, canonical (longest)
-    _hc_row(db_session, d, 6, 1, 6, 49, pkg=SHEALTH, sid="s2")            # 48 min twin
-    _hc_row(db_session, d, 6, 0, 6, 45, pkg=WITHINGS, sid="wi2")         # 45 min mirror
+    d = date(2026, 8, 1)
+    _hevy(db_session, d, 6, 7, hid="w1")                                 # 60 min, counted
+    _hc_row(db_session, d, 6, 5, 6, 55, pkg=GARMIN, sid="g1")
+    _hc_row(db_session, d, 6, 6, 6, 54, pkg="com.sec.android.app.shealth", sid="s1")
+    _hc_row(db_session, d, 6, 5, 6, 50, pkg="com.withings.wiscale2", sid="wi1")
+    assert _duration_min_by_day(db_session, uid) == {d: (60.0, 1)}
+
+
+def test_duration_polar_overlapping_hevy_excluded(db_session):
+    """Overlap-exclusion for a FEEDING source: a Polar session overlapping a counted Hevy
+    workout is the same bout and contributes nothing — the day's minutes are the workout's."""
+    uid = _user(db_session)
+    d = date(2026, 8, 6)
+    _hevy(db_session, d, 6, 7, hid="wp")                                 # 60 min
+    _polar(db_session, d, 6, 15, 6, 55, sid="p1")                        # overlaps → excluded
+    assert _duration_min_by_day(db_session, uid) == {d: (60.0, 1)}
+
+
+def test_duration_canonical_filter_dedups_polar_twins(db_session):  # §18
+    """A polar_flow_export + polar_v4 same-bout twin counts the CANONICAL (flow_export) row's
+    minutes ONCE. Drop the canonical filter and the v4 twin re-enters → 100 min / 2 sessions,
+    failing this — the canonical filter is load-bearing for the feeding source too."""
+    uid = _user(db_session)
+    d = date(2026, 8, 7)
+    _polar(db_session, d, 6, 0, 6, 50, source="polar_flow_export", sid="fe")  # canonical (rank 3)
+    _polar(db_session, d, 6, 0, 6, 50, source="polar_v4", sid="v4")           # zoneless twin
     assert _duration_min_by_day(db_session, uid) == {d: (50.0, 1)}
 
 
@@ -427,8 +463,22 @@ def test_duration_excluded_hevy_contributes_nothing(db_session):
     assert d not in _duration_min_by_day(db_session, uid)
 
 
-def test_duration_dedup_hevy_contributes_nothing(db_session):
+def test_duration_adjudicated_pair_counts_the_retained_log(db_session):
+    """The operator excluded the artifact and kept the performed log — only the performed log's
+    minutes count. `dedup_flag IS NOT TRUE` alone would drop BOTH (both flagged); §18: reverting
+    the counted() door to that filter drops the retained log and the day disappears."""
     uid = _user(db_session)
-    d = date(2026, 8, 4)
-    _hevy(db_session, d, 6, 7, hid="wd", dedup=True)
+    d = date(2026, 8, 8)
+    _hevy(db_session, d, 6, 7, hid="perf", dedup=True, partners=["artifact"])          # 60 min, kept
+    _hevy(db_session, d, 4, 5, hid="artifact", dedup=True, excluded=True, partners=["perf"])
+    assert _duration_min_by_day(db_session, uid) == {d: (60.0, 1)}
+
+
+def test_duration_unadjudicated_pair_contributes_nothing(db_session):
+    """A flagged pair the operator has NOT adjudicated (neither excluded) counts for nothing —
+    never counted twice — until adjudication marks the artifact."""
+    uid = _user(db_session)
+    d = date(2026, 8, 9)
+    _hevy(db_session, d, 6, 7, hid="a", dedup=True, partners=["b"])
+    _hevy(db_session, d, 4, 5, hid="b", dedup=True, partners=["a"])
     assert d not in _duration_min_by_day(db_session, uid)

@@ -58,7 +58,8 @@ import models
 from load_events import FORMULA_VERSION as _FV_STRENGTH, WINDOW_MECHANICAL, WINDOW_NEUROMUSCULAR
 from load_events_metabolic import FORMULA_VERSION_METABOLIC as _FV_METABOLIC, WINDOW_METABOLIC
 from load_metrics import _local_day  # identical AEST day-bucketing as the Banister rollup
-from reads.aerobic_reads import arbitrated_sessions, overlaps_workout
+from reads.aerobic_reads import HEALTH_CONNECT, arbitrated_sessions, overlaps_workout
+from reads.hevy_reads import counted_workouts
 
 # ---------------------------------------------------------------------------
 # REASONED-PRIOR constants — calibratable, never magic numbers (S4 §3.5/§3.7).
@@ -275,32 +276,40 @@ def _duration_min_by_day(db: Session, user_id: int) -> dict[date, tuple[float, i
         already counted on the Hevy side. Reuses the shared `overlaps_workout` predicate —
         the same "same bout as a Hevy workout" test the resolver's `concurrent_strength`
         guard uses.
-      • Hevy side honours `excluded_at IS NULL` and `dedup_flag IS NOT TRUE` — an excluded
-        or dedup workout is not a counted bout.
+      • Hevy side counts via the shared `counted_workouts` door: `excluded_at IS NULL` AND
+        (not `dedup_flag` OR every `dedup_partner_ids` member is excluded). `dedup_flag` is
+        set on BOTH members of a suspected pair, so a bare `dedup_flag IS NOT TRUE` would
+        wrongly drop the RETAINED performed log; and a flagged pair not yet adjudicated is
+        UNADJUDICATED — it contributes no minutes here (like an excluded row), surfaced
+        instead by the resolver.
     Keyed on `aerobic_sessions.session_date` (already a local date) and, for Hevy, the AEST
     day of `start_time` (`_local_day`). A session with no usable duration contributes no
     minutes but still tallies.
 
-    NOT DECIDED HERE (Q160): whether non-training activity minutes — a canonical walk, rehab
-    swim or pilates session — belong in this felt-load term at all. They are LEFT IN (a
-    canonical activity session counts); excluding some sports from "training minutes" is a
-    metric-scope call, raised as Q160, not made in this fix.
+    Q160 INTERIM: `health_connect`-source rows contribute NOTHING here — no minutes, no
+    session tally — until Q160 is ruled. The #309 ingest must not change this existing metric
+    as a side effect: pre-#309 only Polar + Hevy fed it (no HC aerobic rows existed), so
+    excluding HC preserves the series. The final rule (do walk/rehab/pilates activity minutes
+    belong here at all, likely by declared sport) is Q160, deferred; today they are OUT.
     """
     out_min: dict[date, float] = defaultdict(float)
     out_n: dict[date, int] = defaultdict(int)
 
     # Counted Hevy workouts — the "same bout" set an aerobic row must not duplicate, and the
-    # only workouts whose minutes count (excluded_at / dedup_flag honoured, matching the
-    # resolver's counted-workout definition).
-    hevy = db.execute(
+    # only workouts whose minutes count. The shared door partitions non-excluded workouts into
+    # counted and unadjudicated; unadjudicated duplicates contribute no minutes (surfaced by
+    # the resolver, not here).
+    hevy_candidates = db.execute(
         select(models.HevyWorkout).where(
             models.HevyWorkout.user_id == user_id,
             models.HevyWorkout.excluded_at.is_(None),
-            models.HevyWorkout.dedup_flag.isnot(True),
         )
     ).scalars().all()
+    hevy, _unadjudicated = counted_workouts(db, user_id, hevy_candidates)
 
     for s in arbitrated_sessions(user_id, db):
+        if s.source == HEALTH_CONNECT:
+            continue                              # Q160 interim: HC rows do not feed this metric yet
         if not getattr(s, "canonical", True):
             continue
         if overlaps_workout(s, hevy):

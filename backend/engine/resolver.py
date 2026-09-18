@@ -57,6 +57,7 @@ import models
 from load_metrics import _local_day
 from load_events_metabolic import WINDOW_METABOLIC, compute_metabolic_load
 from reads.aerobic_reads import arbitrated_sessions, overlaps_workout
+from reads.hevy_reads import counted_workouts as _counted_workouts   # aliased: local var shadows the name
 
 from . import taxonomy
 from .profile import get_profile
@@ -246,9 +247,14 @@ def _dominant_capacity(
 
 
 def _in_window_workouts(db: Session, user_id: int, window: QuotaWindow) -> list[models.HevyWorkout]:
-    """Non-excluded, non-dedup workouts whose LOCAL (Brisbane) day is in the window. A UTC
-    prefilter widened one day each side bounds the query; the precise bucket is `_local_day`
-    (the +10h offset can push a late-UTC instant onto the next local day — the known trap)."""
+    """Non-excluded workouts whose LOCAL (Brisbane) day is in the window. A UTC prefilter
+    widened one day each side bounds the query; the precise bucket is `_local_day` (the +10h
+    offset can push a late-UTC instant onto the next local day — the known trap).
+
+    Dedup is NOT filtered here (corrects #276): `dedup_flag` is set on BOTH members of a
+    suspected pair, so dropping it here would drop the retained performed log too. The caller
+    partitions these through `reads.hevy_reads.counted_workouts` — counted ones feed the
+    quota, unadjudicated ones are surfaced as `unadjudicated_duplicate`."""
     lo = datetime.combine(window.start_date - timedelta(days=1), time.min, tzinfo=timezone.utc)
     hi = datetime.combine(window.end_date + timedelta(days=1), time.max, tzinfo=timezone.utc)
     rows = (
@@ -256,7 +262,6 @@ def _in_window_workouts(db: Session, user_id: int, window: QuotaWindow) -> list[
         .filter(
             models.HevyWorkout.user_id == user_id,
             models.HevyWorkout.excluded_at.is_(None),
-            models.HevyWorkout.dedup_flag.isnot(True),
             models.HevyWorkout.start_time.isnot(None),
             models.HevyWorkout.start_time >= lo,
             models.HevyWorkout.start_time <= hi,
@@ -318,7 +323,11 @@ def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str
         s.capacity: i for i, s in enumerate(slots) if s.kind == "capacity"
     }
     slot_order = [s.capacity for s in slots if s.kind == "capacity"]
-    workouts = _in_window_workouts(db, user_id, window)
+    # Partition non-excluded in-window workouts (#309): `counted` feed the quota + the aerobic
+    # overlap guard; a flagged pair not yet adjudicated is surfaced, never counted twice.
+    workouts, unadjudicated = _counted_workouts(db, user_id, _in_window_workouts(db, user_id, window))
+    for w in unadjudicated:
+        uncounted.append({"workout": w.hevy_id, "reason": "unadjudicated_duplicate"})
     all_tids: set[str] = set()
     for w in workouts:
         for ex in (w.raw or {}).get("exercises") or []:
