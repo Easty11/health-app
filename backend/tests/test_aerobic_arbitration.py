@@ -230,3 +230,58 @@ def test_session_missing_interval_is_canonical():
     arbitrate([partial, polar])
     assert partial.canonical is True
     assert polar.canonical is True
+
+
+# ---------- same-source health_connect: writer-class arbitration (#309, S0(a)) ----------
+# S0(a): arbitrate() used to skip ALL same-source pairs. Two health_connect rows are now
+# compared by WRITER CLASS (Ruling 1) — the real change, not an extension.
+
+GARMIN = "com.garmin.android.apps.connectmobile"
+SHEALTH = "com.sec.android.app.shealth"
+WITHINGS = "com.withings.wiscale2"
+
+
+def _hc(start, stop, *, pkg, sid):
+    return models.AerobicSession(
+        id=sid, user_id=1, source="health_connect", source_package=pkg,
+        session_date=start.date(), start_time=start, stop_time=stop,
+    )
+
+
+def test_two_same_source_hc_rows_writer_class_decides():  # S0(a) two-row same-source fixture
+    # Identical interval, one wearable (garmin) + one aggregator/mirror (withings) → the
+    # wearable is canonical purely on writer class (the id/duration/start tie-break can't).
+    garmin = _hc(_utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), pkg=GARMIN, sid=1)
+    withings = _hc(_utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), pkg=WITHINGS, sid=2)
+    arbitrate([garmin, withings])
+    assert garmin.canonical is True
+    assert withings.canonical is False
+
+
+def test_same_source_hc_writer_class_flip_flips_canonical():  # mutation §18
+    # Same interval; swap the packages and the winner follows the package, not the id — the
+    # outcome tracks writer class, so the writer-class comparison is load-bearing.
+    a = _hc(_utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), pkg=WITHINGS, sid=1)
+    b = _hc(_utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), pkg=GARMIN, sid=2)
+    arbitrate([a, b])
+    assert b.canonical is True     # garmin (wearable) wins despite the higher id
+    assert a.canonical is False
+
+
+def test_same_source_hc_equal_class_falls_to_ladder():
+    # Two wearables (equal class) that overlap → the duration→start→id ladder decides;
+    # here the longer session wins.
+    short = _hc(_utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 6, 40), pkg=GARMIN, sid=1)
+    long = _hc(_utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), pkg=SHEALTH, sid=2)
+    arbitrate([short, long])
+    assert long.canonical is True
+    assert short.canonical is False
+
+
+def test_two_hc_rows_below_threshold_both_canonical():
+    # Same source, but only 10 of 60 min overlap (< 0.50) → not the same bout, both survive.
+    a = _hc(_utc(2026, 8, 1, 6, 0), _utc(2026, 8, 1, 7, 0), pkg=GARMIN, sid=1)
+    b = _hc(_utc(2026, 8, 1, 6, 50), _utc(2026, 8, 1, 7, 50), pkg=WITHINGS, sid=2)
+    arbitrate([a, b])
+    assert a.canonical is True
+    assert b.canonical is True

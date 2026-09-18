@@ -16,11 +16,14 @@ import pytz
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import null
 from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
 from database import get_db
+from load_metrics import _local_day     # operator-local (AEST) day — Q42 single source
+from reads.aerobic_reads import HEALTH_CONNECT, writer_class, writer_class_rank
 
 router = APIRouter(prefix="/health-connect", tags=["health-connect"])
 
@@ -534,6 +537,152 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     return inserted, unattributed
 
 
+# `com.hevy` mirrors Hevy workouts into Health Connect, but the direct Hevy connector
+# already owns those bouts (hevy_workouts). A Hevy-mirrored exercise record is dropped at
+# admission — counted in the sync response, never ingested as an HC aerobic session
+# (#309, Ruling 2). Distinct from the writer-class table (reads/aerobic_reads): those
+# packages ARE ingested and only rank each other; com.hevy is excluded outright.
+HEVY_PACKAGE = "com.hevy"
+
+
+def _epoch(dt: Optional[datetime]) -> Optional[float]:
+    """Epoch seconds for a start instant, naive treated as UTC — a hashable, tz-safe
+    key for grouping records/rows by identical start (mirror detection)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def _exercise_duration_minutes(
+    start: Optional[datetime], stop: Optional[datetime], fallback: Optional[int]
+) -> Optional[float]:
+    """Minutes from start/stop when both are present and ordered; else the record's
+    `durationMinutes` (S2 fallback); else None."""
+    if start is not None and stop is not None and stop > start:
+        return (stop - start).total_seconds() / 60.0
+    return float(fallback) if fallback is not None else None
+
+
+def _ingest_exercise_sessions(payload: "SyncPayload", user_id: int, db: Session) -> dict:
+    """Stage-1 HC exercise ingest — discharges #189's hold (#309).
+
+    Each surviving exercise record becomes ONE `aerobic_sessions` row
+    (source='health_connect'), ZONELESS: every `z*_seconds` is NULL, not 0, so the
+    metabolic transform reads "not measured" and stays fail-closed (INV-7) — a 0 would
+    read as "measured, none". Zones are stage 2, out of scope.
+
+    Admission (S1), write-time, drops two kinds of record — both COUNTED in the response,
+    never silent:
+      - `com.hevy` mirrors (the Hevy connector owns those bouts);
+      - MIRRORS: a record whose start instant is identical to a higher-writer-class record
+        in the same payload OR an existing `health_connect` row (Ruling 1 rank). Two
+        INDEPENDENT detections of one bout (starts seconds apart) are NOT dropped here —
+        read-time arbitration (`reads/aerobic_reads.arbitrate`) picks the canonical one,
+        order-independently (S0(a): that is a real change to arbitrate(), not this path).
+
+    Write (S2) upserts on the natural key `(user_id, 'health_connect', source_session_id)`
+    with `source_session_id` = the HC record `id`, falling back to `package|startTime` when
+    `id` is null (counted). Idempotent: re-syncing a payload updates rows in place, same ids.
+    """
+    counts = {"ingested": 0, "hevy_dropped": 0, "mirrors_dropped": 0,
+              "id_fallback": 0, "unknown_writer": 0}
+
+    # S1a — drop Hevy mirrors outright.
+    survivors: list = []
+    for r in payload.workouts:
+        pkg = r.sourcePackage or "unknown"
+        if pkg == HEVY_PACKAGE:
+            counts["hevy_dropped"] += 1
+            continue
+        survivors.append(r)
+
+    # All of the user's existing health_connect rows — needed for mirror detection (an
+    # incoming record can mirror an already-stored row) and upsert-by-ssid. Loaded whole;
+    # fine at personal/family scale. NOT bounded by the sync's date window on purpose:
+    # `payload.workouts` is not window-filtered, so a survivor can fall outside it, and a
+    # window bound would then miss that survivor's stored twin/row. A safe bound would key
+    # off the survivors' own start-day range, not the sync window — deferred (non-blocking).
+    existing = (
+        db.query(models.AerobicSession)
+        .filter(models.AerobicSession.user_id == user_id,
+                models.AerobicSession.source == HEALTH_CONNECT)
+        .all()
+    )
+
+    # S1b — mirror-drop by identical start instant. Highest writer-class rank at an instant
+    # wins; a STRICTLY lower-rank record at that same instant is a mirror. Compared within
+    # the payload AND against already-stored health_connect rows.
+    best_rank_by_start: dict[float, int] = {}
+    for e in existing:
+        k = _epoch(e.start_time)
+        if k is not None:
+            best_rank_by_start[k] = max(best_rank_by_start.get(k, -1),
+                                        writer_class_rank(e.source_package))
+    for r in survivors:
+        k = _epoch(_parse_dt(r.startTime))
+        if k is not None:
+            rk = writer_class_rank(r.sourcePackage or "unknown")
+            best_rank_by_start[k] = max(best_rank_by_start.get(k, -1), rk)
+
+    kept: list = []
+    for r in survivors:
+        k = _epoch(_parse_dt(r.startTime))
+        rk = writer_class_rank(r.sourcePackage or "unknown")
+        if k is not None and rk < best_rank_by_start.get(k, rk):
+            counts["mirrors_dropped"] += 1
+            continue
+        kept.append(r)
+
+    # S2 — write / upsert.
+    existing_by_ssid = {e.source_session_id: e for e in existing}
+    for r in kept:
+        pkg = r.sourcePackage or "unknown"
+        if writer_class(pkg) == "unknown":
+            counts["unknown_writer"] += 1
+        start = _parse_dt(r.startTime)
+        stop = _parse_dt(r.endTime)
+        ssid = r.id
+        if ssid is None:
+            counts["id_fallback"] += 1
+            ssid = f"{pkg}|{r.startTime}"
+        if start is not None:
+            session_date = _local_day(start)
+        elif stop is not None:
+            session_date = _local_day(stop)
+        else:
+            session_date = _parse_date(r.startTime)
+        fields = dict(
+            session_date=session_date,
+            start_time=start,
+            stop_time=stop,
+            sport_id=None if r.type is None else str(r.type),   # type is a required int, so defensive
+            sport_name=sport_name_for(r.type),
+            duration_minutes=_exercise_duration_minutes(start, stop, r.durationMinutes),
+            source_package=pkg,
+            recording_method=r.recordingMethod,
+            # SQL NULL, not the column default 0 — INV-7 keys on "not measured" and a 0
+            # would read as "measured, none". A plain None triggers the Python-side
+            # default=0; sqlalchemy.null() forces the INSERT to write NULL instead.
+            z1_seconds=null(), z2_seconds=null(), z3_seconds=null(),
+            z4_seconds=null(), z5_seconds=null(),
+        )
+        row = existing_by_ssid.get(ssid)
+        if row is None:
+            row = models.AerobicSession(
+                user_id=user_id, source=HEALTH_CONNECT, source_session_id=ssid, **fields,
+            )
+            db.add(row)
+            existing_by_ssid[ssid] = row
+        else:
+            for key, val in fields.items():
+                setattr(row, key, val)
+        counts["ingested"] += 1
+
+    return counts
+
+
 # F3a — sleep aggregated as the UNION of asleep stage-intervals over the
 # wake-date's session set, not the longest single session (DECISIONS_LOG #254).
 # The asleep stages (LIGHT/DEEP/REM) that count toward total sleep time; AWAKE
@@ -854,6 +1003,11 @@ def sync(
     # night — the backend enabler for source-priority dedup (#36/#37).
     sources_captured, unattributed = _capture_record_sources(payload, current_user.id, db)
 
+    # Stage-1 HC exercise ingest (#189 discharged, #309): surviving exercise records
+    # become health_connect `aerobic_sessions` rows (zoneless). Admission drops are
+    # counted, never silent. Runs after pre-2020 reject (payload.workouts already filtered).
+    exercise_ingest = _ingest_exercise_sessions(payload, current_user.id, db)
+
     # Collect all unique dates across all record types
     dates: set[date] = set()
     for r in payload.steps:
@@ -877,16 +1031,17 @@ def sync(
     # `aggregated` = records (post pre-2020 reject) whose date falls on a synced
     # date, i.e. that fed _aggregate_day for a persisted row (#235). Distinct from
     # `received`: an in-window-but-out-of-range record is received, not aggregated.
-    # `workouts` is honestly 0 — HC exercise is source-captured, NOT ingested into
-    # DailyRecord; that ingestion is deliberately held at #189, so a 0 here is a
-    # decided hold, not a silent drop. (Naming it `ingested` would have implied a
-    # defect on every sync forever; see GATE 1.)
+    # `workouts` is the real count of exercise records ingested into `aerobic_sessions`
+    # this sync (#189's hold discharged, #309) — NOT a DailyRecord count (exercise feeds
+    # the aerobic lane, a separate table). The admission drops (Hevy mirrors, writer-class
+    # mirrors) are surfaced separately under `exercise_ingest`, so this number plus those
+    # drops reconciles against `received["workouts"]` (minus any pre-2020 reject).
     aggregated = {
         "sleep": sum(1 for r in payload.sleep if _wake_date(r.endTime) in valid_dates),
         "hrv": sum(1 for r in payload.hrv if _parse_date(r.time) in valid_dates),
         "heartRate": sum(1 for r in payload.heartRate if _parse_date(r.time) in valid_dates),
         "steps": sum(1 for r in payload.steps if r.date and _parse_date(r.date) in valid_dates),
-        "workouts": 0,  # source-captured only; DailyRecord ingestion held at #189
+        "workouts": exercise_ingest["ingested"],
     }
 
     synced_dates = []
@@ -946,6 +1101,10 @@ def sync(
         "received": received,
         "aggregated": aggregated,
         "unattributed": unattributed,
+        # Stage-1 HC exercise ingest accounting (#309): ingested rows plus the admission
+        # drops (Hevy mirrors, writer-class mirrors), the null-id fallback count, and how
+        # many surviving records carried a writer outside the class table (Ruling 2).
+        "exercise_ingest": exercise_ingest,
     }
 
 

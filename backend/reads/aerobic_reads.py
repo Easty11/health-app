@@ -61,6 +61,45 @@ def _rank(source: Optional[str]) -> int:
     return _SOURCE_RANK.get(source or "", _UNKNOWN_RANK)
 
 
+HEALTH_CONNECT = "health_connect"
+
+# Writer-class table (#309, Ruling 1) — the SINGLE declared table used both here (same-bout
+# arbitration between two `health_connect` rows, S3) and at admission (mirror-drop, S1,
+# routers/health_connect). Classes rank wearable-native > aggregator/mirror > unknown; WITHIN
+# a class rank is EQUAL, so the duration→start→id ladder in `_win_key` decides (Ruling 1: no
+# per-device preference — a deliberate recording and an auto-detection are separated by the
+# ladder, not by device identity). A package outside the table is `unknown` — the total
+# catch-all (Ruling 2), so the table classifies EVERY package. `com.hevy` is deliberately
+# absent: Hevy-mirrored bouts are dropped at admission (the Hevy connector owns them), never
+# ingested as HC aerobic sessions, so they never reach this arbitration.
+WEARABLE_NATIVE = frozenset({
+    "com.garmin.android.apps.connectmobile",
+    "com.sec.android.app.shealth",
+    "fi.polar.polarflow",
+})
+AGGREGATOR_MIRROR = frozenset({
+    "com.withings.wiscale2",
+    "nl.appyhapps.healthsync",
+})
+_WRITER_CLASS_RANK = {"wearable_native": 2, "aggregator_mirror": 1, "unknown": 0}
+
+
+def writer_class(source_package: Optional[str]) -> str:
+    """The declared writer class for an HC recording package. Total over all packages —
+    anything outside the table is `unknown` (Ruling 2)."""
+    if source_package in WEARABLE_NATIVE:
+        return "wearable_native"
+    if source_package in AGGREGATOR_MIRROR:
+        return "aggregator_mirror"
+    return "unknown"
+
+
+def writer_class_rank(source_package: Optional[str]) -> int:
+    """Higher wins when two same-source `health_connect` rows describe one bout. Equal within
+    a class (the ladder then decides)."""
+    return _WRITER_CLASS_RANK[writer_class(source_package)]
+
+
 def _ts(dt: Optional[datetime]) -> Optional[float]:
     """Epoch seconds, treating a naive datetime as UTC. Comparing epoch floats
     (not datetime objects) sidesteps aware/naive subtraction errors when rows
@@ -72,15 +111,22 @@ def _ts(dt: Optional[datetime]) -> Optional[float]:
     return dt.timestamp()
 
 
-def _win_key(session, dur: float, start_ts: float) -> tuple:
+def _win_key(session, dur: float, start_ts: float, *, by_writer: bool) -> tuple:
     """Ordering key for 'which row of a same-bout pair is canonical'. LARGER
     wins: higher rank, then longer duration, then earlier start, then lower id.
-    The id is a final deterministic discriminator so a fully-tied cross-source
-    pair still yields exactly ONE canonical (never zero — which would drop the
-    bout entirely). The brief's stated tie chain is rank -> duration -> start;
-    id only breaks a residual exact tie."""
+    The id is a final deterministic discriminator so a fully-tied pair still
+    yields exactly ONE canonical (never zero — which would drop the bout
+    entirely). The tie chain is rank -> duration -> start; id only breaks a
+    residual exact tie.
+
+    Two rank bases, selected by the PAIR being compared (#309): a CROSS-source
+    pair ranks by `source` fidelity (`_SOURCE_RANK`, e.g. polar_flow_export >
+    polar_v4 > health_connect); a same-source `health_connect` pair ranks by
+    WRITER CLASS (`writer_class_rank`, Ruling 1). Both sides of one comparison
+    always use the same basis, so the ordering stays a total order."""
+    rank = writer_class_rank(session.source_package) if by_writer else _rank(session.source)
     return (
-        _rank(session.source),
+        rank,
         dur,
         -start_ts,
         -(session.id if session.id is not None else 0),
@@ -90,11 +136,20 @@ def _win_key(session, dur: float, start_ts: float) -> tuple:
 def arbitrate(sessions: list) -> list:
     """Set `.canonical` (bool) on every session in `sessions`, in place.
 
-    A session is canonical unless some OTHER session from a DIFFERENT source
-    describes the same bout (interval overlap >= OVERLAP_THRESHOLD of the shorter
-    duration) and outranks it by `_win_key`. Same-source pairs are never compared
-    — same-source duplication is out of scope (the unique key prevents it). A
-    session with no usable [start_time, stop_time] interval cannot be paired and
+    A session is canonical unless some OTHER session describes the same bout
+    (interval overlap >= OVERLAP_THRESHOLD of the shorter duration) and outranks
+    it by `_win_key`. Two comparison regimes (#309):
+
+    - CROSS-source pairs rank by `source` fidelity (the original behaviour).
+    - Same-source `health_connect` pairs ARE compared, ranked by WRITER CLASS
+      (Ruling 1) — two health_connect rows can be a same-bout pair: a mirror
+      (identical start, lower writer class → dropped) or two independent device
+      detections (starts seconds apart, both wearable → the ladder decides). This
+      is why the same-source skip is now health_connect-specific, not universal.
+    - Other same-source pairs (two polar_* rows) are still never compared —
+      same-source duplication is out of scope there (the unique key prevents it).
+
+    A session with no usable [start_time, stop_time] interval cannot be paired and
     is canonical by default.
 
     O(n^2) over the passed set; fine at personal/family scale (same assumption as
@@ -113,9 +168,13 @@ def arbitrate(sessions: list) -> list:
         canonical = True
         if xi is not None:
             x_start, x_stop, x_dur = xi
-            x_key = _win_key(x, x_dur, x_start)
             for y in sessions:
-                if y is x or y.source == x.source:
+                if y is x:
+                    continue
+                same_source = (y.source == x.source)
+                # Same-source pairs are compared ONLY within health_connect (writer-class
+                # arbitration); any other same-source pair is skipped as before.
+                if same_source and x.source != HEALTH_CONNECT:
                     continue
                 yi = intervals.get(id(y))
                 if yi is None:
@@ -124,7 +183,11 @@ def arbitrate(sessions: list) -> list:
                 overlap = min(x_stop, y_stop) - max(x_start, y_start)
                 if overlap < OVERLAP_THRESHOLD * min(x_dur, y_dur):
                     continue  # not the same bout
-                if _win_key(y, y_dur, y_start) > x_key:
+                # `same_source` here implies both rows are health_connect, so rank by
+                # writer class; a cross-source pair ranks by source fidelity.
+                by_writer = same_source
+                x_key = _win_key(x, x_dur, x_start, by_writer=by_writer)
+                if _win_key(y, y_dur, y_start, by_writer=by_writer) > x_key:
                     canonical = False
                     break
         x.canonical = canonical
@@ -155,6 +218,28 @@ def arbitrated_sessions(
     if limit is not None:
         rows = rows[:limit]
     return rows
+
+
+def overlaps_workout(session, workouts) -> bool:
+    """True iff `session`'s `[start_time, stop_time]` interval intersects any workout's
+    `[start_time, end_time]` (all four endpoints present on the pair). The SINGLE overlap
+    predicate (#309) — the resolver's `concurrent_strength` guard and the psychological
+    duration read both call this; one definition, so "same bout as a Hevy workout" means
+    the same thing to every reader.
+
+    Null-safe on the session side: an untimed session (NULL start or stop) has no interval,
+    so it cannot be proven to overlap and returns False — the caller counts it rather than
+    dropping real minutes on an undecidable pair. Each workout with a NULL endpoint is
+    likewise skipped."""
+    s_start, s_stop = session.start_time, session.stop_time
+    if s_start is None or s_stop is None:
+        return False
+    for w in workouts:
+        if w.start_time is None or w.end_time is None:
+            continue
+        if s_start < w.end_time and w.start_time < s_stop:
+            return True
+    return False
 
 
 # ── zone coverage (the "transport-starved sessions are visible, not silent" flag) ──

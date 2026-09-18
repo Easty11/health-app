@@ -438,6 +438,13 @@ class AerobicSession(Base):
     stop_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sport_id: Mapped[str | None] = mapped_column(String(100), nullable=True)       # source system sport ID
     sport_name: Mapped[str | None] = mapped_column(String(100), nullable=True)     # decoded sport name
+    # HC exercise provenance (#309 / Q118). Populated only for source='health_connect';
+    # Polar rows leave both NULL. `source_package` is the recording app's HC package —
+    # it drives same-bout WRITER-CLASS arbitration between two health_connect rows
+    # (reads/aerobic_reads.writer_class_rank); `recording_method` actions Q118's
+    # persistence (Samsung leaves it at the sentinel 0, so it is descriptive only).
+    source_package: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    recording_method: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duration_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
     hr_avg: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hr_max: Mapped[int | None] = mapped_column(Integer, nullable=True)

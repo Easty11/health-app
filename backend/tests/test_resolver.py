@@ -43,14 +43,15 @@ def _tpl(db, tid, region_key=None, role="primary"):
         db.flush()
 
 
-def _workout(db, uid, hevy_id, start, tids, *, dedup=False, excluded=False, raw_exercises=None):
+def _workout(db, uid, hevy_id, start, tids, *, dedup=False, excluded=False, raw_exercises=None,
+             partners=None):
     exercises = raw_exercises if raw_exercises is not None else [
         {"exercise_template_id": t, "title": t} for t in tids
     ]
     db.add(models.HevyWorkout(
         hevy_id=hevy_id, user_id=uid, start_time=start, title="W",
         raw={"id": hevy_id, "exercises": exercises},
-        dedup_flag=dedup,
+        dedup_flag=dedup, dedup_partner_ids=partners,
         excluded_at=datetime(2026, 1, 1, tzinfo=timezone.utc) if excluded else None,
     ))
     db.commit()
@@ -202,18 +203,39 @@ def test_off_plan_workout_surfaced_distinct_from_untagged(db_session):
 # dedup / excluded not counted                                                #
 # --------------------------------------------------------------------------- #
 
-def test_dedup_and_excluded_workouts_are_not_counted(db_session):
+def test_excluded_out_unadjudicated_pair_surfaced(db_session):
+    """#309 correcting #276: `excluded_at` rows are filtered out (not surfaced); a flagged pair
+    the operator has NOT adjudicated (neither excluded) is NEITHER counted NOR silently dropped
+    — both are surfaced as `unadjudicated_duplicate`. A clean workout counts."""
     u = _user(db_session)
     _tpl(db_session, "t_str", STRENGTH_RK)
     d = datetime(2026, 9, 8, 9, 0, tzinfo=timezone.utc)
-    _workout(db_session, u.id, "w_dedup", d, ["t_str"], dedup=True)
     _workout(db_session, u.id, "w_excl", d, ["t_str"], excluded=True)
     _workout(db_session, u.id, "w_ok", d, ["t_str"])
+    _workout(db_session, u.id, "w_dup_a", d, ["t_str"], dedup=True, partners=["w_dup_b"])
+    _workout(db_session, u.id, "w_dup_b", d, ["t_str"], dedup=True, partners=["w_dup_a"])
     _phase(db_session, u.id, _micro(7, ("A", [("strength", 3)])), MONDAY)
 
     res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
     assert res["slots"][0]["done"] == 1 and res["slots"][0]["workouts_counted"] == ["w_ok"]
-    assert res["uncounted"] == [], "dedup/excluded are filtered out entirely, not surfaced"
+    reasons = {(x["workout"], x["reason"]) for x in res["uncounted"]}
+    assert reasons == {("w_dup_a", "unadjudicated_duplicate"), ("w_dup_b", "unadjudicated_duplicate")}
+
+
+def test_adjudicated_duplicate_counts_the_retained_log(db_session):
+    """The operator excluded the artifact and kept the performed log; the retained log COUNTS.
+    `dedup_flag IS NOT TRUE` alone (the old #276 filter) would have dropped it too — both members
+    are flagged. §18: revert the counted() door to `dedup_flag IS NOT TRUE` and `done` drops to 0."""
+    u = _user(db_session)
+    _tpl(db_session, "t_str", STRENGTH_RK)
+    d = datetime(2026, 9, 8, 9, 0, tzinfo=timezone.utc)
+    _workout(db_session, u.id, "perf", d, ["t_str"], dedup=True, partners=["artifact"])
+    _workout(db_session, u.id, "artifact", d, ["t_str"], dedup=True, excluded=True, partners=["perf"])
+    _phase(db_session, u.id, _micro(7, ("A", [("strength", 3)])), MONDAY)
+
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert res["slots"][0]["done"] == 1 and res["slots"][0]["workouts_counted"] == ["perf"]
+    assert res["uncounted"] == []
 
 
 # --------------------------------------------------------------------------- #
@@ -469,6 +491,41 @@ def test_load_window_concurrent_strength_excluded(db_session):
     assert res["slots"][0]["done"] == 0
     assert {"session": aid, "reason": "concurrent_strength",
             "sport_name": "Row", "duration_minutes": 45.0} in res["uncounted"]
+
+
+def test_s3b_garmin_gym_bout_ingested_canonical_not_conditioning(db_session):
+    """Cross-PR fixture (HC ingest #309 S3b): a Garmin-recorded HC session (a pilates class,
+    co-recorded with Samsung) overlapping a Hevy workout. It is a REAL ingested `health_connect`
+    row (source_package set, zoneless), CANONICAL (no richer twin), yet it must NOT count as
+    conditioning: the concurrent_strength guard excludes it and the slot count is unchanged.
+    The guard is load-bearing against ANY watch auto-detecting or co-recording a session that
+    is already a Hevy workout — not a claim about how this user trains."""
+    from reads.aerobic_reads import arbitrated_sessions
+    u = _user(db_session)
+    _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)
+    _tpl(db_session, "t_str", STRENGTH_RK)
+    _gym_workout(db_session, u.id, "w_gym",
+                 datetime(2026, 9, 8, 6, 0, tzinfo=timezone.utc),
+                 datetime(2026, 9, 8, 7, 0, tzinfo=timezone.utc), ["t_str"])
+    aid = _aerobic(db_session, u.id, "hc_garmin_gym", date(2026, 9, 8),
+                   start=datetime(2026, 9, 8, 6, 15, tzinfo=timezone.utc),
+                   stop=datetime(2026, 9, 8, 7, 5, tzinfo=timezone.utc),
+                   sport="Pilates", duration=50.0, zones=(0, 0, 0, 0, 0),
+                   source="health_connect")
+    # Stamp the writer package the ingest would set (Garmin, wearable-native).
+    row = db_session.get(models.AerobicSession, aid)
+    row.source_package = "com.garmin.android.apps.connectmobile"
+    db_session.commit()
+
+    # Ingested + canonical: no same-bout twin, so it survives arbitration.
+    canonical = [s for s in arbitrated_sessions(u.id, db_session) if s.canonical]
+    assert [s.id for s in canonical] == [aid]
+
+    # ...but not conditioning: overlaps the Hevy strength workout.
+    res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
+    assert res["slots"][0]["done"] == 0
+    assert {"session": aid, "reason": "concurrent_strength",
+            "sport_name": "Pilates", "duration_minutes": 50.0} in res["uncounted"]
 
 
 def test_load_window_local_day_trap_late_utc(db_session):
