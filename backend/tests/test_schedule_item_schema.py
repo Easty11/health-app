@@ -463,4 +463,5 @@ def test_the_declared_sets_are_what_the_schema_documents(db_session):
         "activity", "days", "sessions_per_week", "hard", "expected_load",
         "time_of_day", "time_range", "same_day_training", "same_day_note",
         "duration_weeks", "season_end", "supersedes",
+        "satisfies",   # #312 — the schedule↔quota link (SCHEMA.md §024)
     }

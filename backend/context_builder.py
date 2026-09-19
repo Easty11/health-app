@@ -6,7 +6,7 @@ GameTraka, etc.) write a new async `_section_<name>` function that returns a
 string block, then call it inside `build_system_prompt`.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import pytz
@@ -1135,8 +1135,71 @@ def _cap(s: Any) -> Any:
     return s[0].upper() + s[1:] if isinstance(s, str) and s else s
 
 
+def _entry_value(e: Any) -> dict[str, Any]:
+    """A knowledge entry's `value` dict, ORM or plain-dict alike (mirrors `_section_schedule`'s
+    `_v`)."""
+    v = getattr(e, "value", None) if hasattr(e, "value") else (e.get("value") if isinstance(e, dict) else None)
+    return v or {}
+
+
+def _entry_type(e: Any) -> Any:
+    return getattr(e, "type", None) if hasattr(e, "type") else (e.get("type") if isinstance(e, dict) else None)
+
+
+def _schedule_sessions_per_week(val: dict[str, Any]) -> int:
+    """A schedule_item's weekly session count for the consistency line (#312): `sessions_per_week`
+    when present (days are CANDIDATES, not a count — "Mon/Wed/Fri, 2 a week" is 2), else the number
+    of listed `days`. `validate_schedule_item` constrains neither against the other, so an item
+    carrying BOTH is read as its declared count."""
+    spw = val.get("sessions_per_week")
+    if isinstance(spw, int) and not isinstance(spw, bool):
+        return spw
+    days = val.get("days")
+    return len(days) if isinstance(days, list) else 0
+
+
+def _section_training_plan(plan: dict[str, Any] | None, phase: dict[str, Any] | None) -> str:
+    """Render the PLAN OF RECORD (#312) — the macro plan the athlete is following, the coach's
+    every-turn reference — directly ABOVE the training-phase section. `macro` is verbatim bounded
+    markdown (its own section, rendered ONCE). A STALE line fires when the plan was last revised
+    BEFORE the open phase's review date AND that date has passed (the phase's own `review_due`, so
+    no second definition of "passed"): shown as stale, never silently dropped, never silently
+    trusted. No plan → empty string (the section is omitted; context byte-identical to pre-#312)."""
+    if not plan:
+        return ""
+    macro = plan.get("macro")
+    if not isinstance(macro, str) or not macro.strip():
+        return ""
+    lines = ["## Plan of Record (the macro plan the athlete is following)"]
+    revised_on = plan.get("revised_on")
+    revised_by = plan.get("revised_by")
+    meta = []
+    if revised_on:
+        meta.append(f"revised {revised_on}")
+    if revised_by:
+        meta.append(f"by {revised_by}")
+    if meta:
+        lines.append(f"- Last {', '.join(meta)}.")
+
+    if isinstance(phase, dict) and phase.get("review_due") and phase.get("review_on") and revised_on:
+        try:
+            stale = date.fromisoformat(str(revised_on)) < date.fromisoformat(str(phase["review_on"]))
+        except (ValueError, TypeError):
+            stale = False
+        if stale:
+            lines.append(
+                "- STALE — plan not revised since before the last phase review; treat the macro "
+                "below as possibly out of date and prompt the athlete to confirm or revise it."
+            )
+
+    lines += ["", macro.strip()]
+    return "\n".join(lines)
+
+
 def _section_training_phase(
-    phase: dict[str, Any] | None, resolver_position: dict[str, Any] | None = None
+    phase: dict[str, Any] | None,
+    resolver_position: dict[str, Any] | None = None,
+    knowledge_entries: list[Any] | None = None,
 ) -> str:
     """Render the open training phase (Q112, #270) — DOING NOW, framing the profile's standing
     BUILDING TOWARD below it. Absent (baseline) → empty string. The `review_on` line is a BADGE,
@@ -1200,6 +1263,57 @@ def _section_training_phase(
             lines.append("  - Not counted:")
             for u in uncounted:
                 lines.append(f"    · {_uncounted_phrase(u)}")
+
+        # ---- schedule↔quota consistency, DERIVED on read (#312, S4) --------------------------
+        # Per slot: `scheduled` (sessions/wk summed over ACTIVE linked schedule_items — those whose
+        # `satisfies` names this slot's {kind,key}) vs `quota` (this leg) vs `done` (from resolve(),
+        # never recounted). "Active" = the row is in `knowledge_entries` (already active=True;
+        # `supersedes` resolves to active=False). MISMATCH/UNPLACED are claimed ONLY on a 7-day leg
+        # (`sub_cycle_days == 7`, derived from the window span) — the one span where a per-week
+        # `scheduled` and a per-leg `quota` share a unit; otherwise both numbers render with their
+        # own units and NO mismatch is asserted. Rendered only when ≥1 active schedule_item exists,
+        # so a user with none leaves the section byte-identical.
+        schedule_items = [e for e in (knowledge_entries or []) if _entry_type(e) == "schedule_item"]
+        if schedule_items:
+            try:
+                leg_days = (date.fromisoformat(window["end_date"])
+                            - date.fromisoformat(window["start_date"])).days + 1
+            except (ValueError, TypeError, KeyError):
+                leg_days = None
+            lines.append("  - Schedule vs quota (declared links):")
+            for slot in slots:
+                kind = slot.get("kind")
+                key = slot.get("load_window") if kind == "load_window" else slot.get("capacity")
+                scheduled = sum(
+                    _schedule_sessions_per_week(_entry_value(e)) for e in schedule_items
+                    if isinstance(_entry_value(e).get("satisfies"), dict)
+                    and _entry_value(e)["satisfies"].get(kind) == key
+                )
+                quota = slot.get("quota") or 0
+                done = slot.get("done") or 0
+                label = _slot_display_label(slot)
+                if leg_days == 7:
+                    line = f"    · {label} — scheduled {scheduled}/wk · quota {quota} · done {done}"
+                    if scheduled > quota:
+                        line += f" — MISMATCH: scheduled exceeds quota by {scheduled - quota}"
+                    elif scheduled < quota:
+                        d = quota - scheduled
+                        line += f" — UNPLACED: {d} quota session{'' if d == 1 else 's'} has no scheduled slot"
+                else:
+                    leg_str = f"{leg_days}-day leg" if leg_days else "leg"
+                    line = (f"    · {label} — scheduled {scheduled}/wk · quota {quota} per {leg_str} "
+                            f"· done {done}")
+                lines.append(line)
+            unlinked = [
+                _entry_value(e).get("activity") or "?"
+                for e in schedule_items
+                if _entry_value(e).get("satisfies") is None and _entry_value(e).get("hard") is False
+            ]
+            if unlinked:
+                lines.append(
+                    f"    · unlinked (soft, counted to no slot): {', '.join(unlinked)}"
+                )
+
         lines.append(
             "  - This is the AUTHORITATIVE count of what has been done against the declared plan "
             "this window: do not infer position from workout history when it is present, and if "
@@ -1214,6 +1328,23 @@ def _section_training_phase(
         "above; a phase MAY declare a conditioning quota (a metabolic load_window slot, counted "
         "in the quota position above when present) that the resolver counts from aerobic sessions "
         "on read — but the engine still never SELECTS conditioning.",
+        "",
+        "### Plan of record, schedule and quota — how to read them (#312)",
+        "- The Plan of Record above is the MACRO plan the athlete is following; the quota window "
+        "is what the engine COUNTS. Routine TITLES and the phase `intent` prose are NEITHER — "
+        "never derive what is \"due\" or what was \"done\" from a Hevy routine title or from intent "
+        "prose.",
+        "- When the schedule, the quota and the logged record disagree, NAME the disagreement with "
+        "the numbers (scheduled vs quota vs done) and ASK — do not resolve it by silently picking a "
+        "side.",
+        "- Never assert a session HAPPENED unless the resolver counted it (the position above) or "
+        "the athlete told you so. A scheduled or planned session is an intention, not a record.",
+        "- Week facts go through the existing confirm flow, where they already belong: a one-off (a "
+        "carnival, travel, illness) → a `load_context` entry; a recurring commitment → a "
+        "`schedule_item` (add `satisfies` when it fills a quota slot). A change to the MACRO plan → "
+        "propose a `training_plan` rewrite. You REQUEST the write; the system confirms it.",
+        "- You may PROPOSE a phase change in words; you never write the phase ledger yourself.",
+        "- Never put a weekday in a Hevy routine title — the schedule owns the day, not the title.",
     ]
     return "\n".join(lines)
 
@@ -1390,9 +1521,19 @@ def build_system_prompt(
     if not state.knowledge_entries:
         sections.append(_section_onboarding_interview())
 
+    # Plan of record (#312) sits directly ABOVE the training-phase section. Conditional append,
+    # so with no plan the section list is byte-identical to pre-#312 (the #43 parity discipline).
+    if getattr(state, "training_plan", None) is not None:
+        plan_section = _section_training_plan(
+            state.training_plan, getattr(state, "training_phase", None)
+        )
+        if plan_section:
+            sections.append(plan_section)
+
     if getattr(state, "training_phase", None) is not None:
         phase_section = _section_training_phase(
-            state.training_phase, getattr(state, "resolver_position", None)
+            state.training_phase, getattr(state, "resolver_position", None),
+            state.knowledge_entries,
         )
         if phase_section:
             sections.append(phase_section)

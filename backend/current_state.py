@@ -59,6 +59,10 @@ class CurrentState:
     # None = baseline (zero-open). `review_due` is folded into the dict at read time.
     training_phase: dict | None = None
     training_phase_orm: models.TrainingPhase | None = None
+    # The plan of record (#312) — the macro plan the coach reads every turn, its `value`
+    # (macro/revised_on/revised_by). None = no plan → the render section is omitted (context
+    # byte-identical to pre-#312). Exactly one active row per user (fixed key, enforced at write).
+    training_plan: dict | None = None
     # The due-slot resolver's read (#276/#307), from the SAME `resolve()` call the panel uses
     # (#308, completing #307 Amendment 1 A2): current window, per-slot done/quota, `due_slot`,
     # `uncounted`. None = the resolver read failed (logged) — the chat context omits the
@@ -82,6 +86,11 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         if e.type == "preference" and e.key == "device_profile":
             device_profile = e.value
             break
+
+    # The plan of record (#312) — at most one active `training_plan` row (fixed key, enforced
+    # at write); newest-first is a defence, not a need. Its `value` is what the render section
+    # formats; None = no plan.
+    training_plan = next((e.value for e in entries if e.type == "training_plan"), None)
 
     fort_profile_orm = profile_mod.get_profile(db, user_id)
     phase_orm = training_phase_mod.current_training_phase(db, user_id)
@@ -137,6 +146,7 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         fortification_profile_orm=fort_profile_orm,
         training_phase=training_phase_mod.phase_to_dict(phase_orm, on=today),
         training_phase_orm=phase_orm,
+        training_plan=training_plan,
         capability_state=capability_rows,
         hrv_baseline=hrv_baseline,
         labs=labs,

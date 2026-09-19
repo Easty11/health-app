@@ -1028,7 +1028,8 @@ No migration. `user_knowledge_entries.value` is `sa.JSON()` (Postgres `json`, no
   "same_day_note": "gym earlier the same day is fine if it is upper body",
   "duration_weeks": null,
   "season_end": "2026-09-05",
-  "supersedes": null
+  "supersedes": null,
+  "satisfies": {"capacity": "stability"}
 }
 ```
 
@@ -1046,9 +1047,12 @@ No migration. `user_knowledge_entries.value` is `sa.JSON()` (Postgres `json`, no
 | `duration_weeks` | int \| null | yes | |
 | `season_end` | date \| null | yes | |
 | `supersedes` | int \| null | conditional | see the overlap rule below |
+| `satisfies` | object \| null | no | the quota slot this item fills (#312); see below |
 | any other key | — | — | **REFUSED** |
 
 `distinct_from: [<id>, …]` is accepted at write and **never stored** — an acknowledgement token for one write, not a relationship.
+
+**`satisfies` — the schedule↔quota link (#312).** Optional; absent or null = *unlinked*, exactly as before. When present it is an object with **exactly one key**, validated against the SAME vocabularies the microcycle slot validator uses (imported, one definition): `{"capacity": <token>}` (a movement-quality token — `engine.taxonomy`) or `{"load_window": "metabolic"}` (`load_events_metabolic.WINDOW_METABOLIC`). A third kind, `activity`, arrives with the activity-slot brief (a one-line validator addition). The link is read on the chat-context read path only — `context_builder._section_training_phase` derives a per-slot **scheduled vs quota vs done** consistency line from it (MISMATCH/UNPLACED claimed only on a 7-day leg); nothing writes back and no engine selection depends on it.
 
 **`hard` and `expected_load` are two axes, not one.** `hard` is a *scheduling* fact (immovable in the calendar); `expected_load` is a *cost* fact. Saturday rugby and Thursday set piece are both `hard`, and only one wants the day before scaled back. Conflating them was the original error.
 
@@ -1466,3 +1470,30 @@ CREATE TABLE aerobic_sessions (
     CONSTRAINT uq_aerobic_session_source UNIQUE (user_id, source, source_session_id)
 );
 ```
+
+### 033 — user_knowledge_entries.training_plan
+
+No migration. As with §024, this records the `value` shape for one `user_knowledge_entries.type` — here `type='training_plan'` (#312). It is the **plan of record**: the macro plan the coach reads every turn, relocating the forward plan out of `ROADMAP.md` (which the coach cannot read) into a store it can. Supersedes #270's "plan-of-record lives in ROADMAP"; reverses nothing.
+
+**Exactly one current row per user.** Keyed on the fixed `key='training_plan'` (`routers/knowledge.py::TRAINING_PLAN_KEY`), so a rewrite supersedes its predecessor by key via `upsert_knowledge_entry` (predecessor retained, `active=False`, `superseded_by` set — history). A write under any other key is refused (422); belt-and-braces, a write is also refused if an active `training_plan` already exists under a different key. `expires_at` **must be null** — the plan supersedes by rewrite and never expires, so `expire-stale` can never retire it.
+
+```json
+{
+  "macro": "## Offseason\nPhase 1 (base) … buffer rule: sacrifice conditioning first … knee gate: fall back to bike.",
+  "revised_on": "2026-09-19",
+  "revised_by": "operator"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `macro` | str (markdown) | yes | non-empty; ≤ 4000 chars — a rejection states the **measured** length |
+| `revised_on` | date (YYYY-MM-DD) | yes | |
+| `revised_by` | `operator` \| `coach` | yes | |
+| any other key | — | — | **REFUSED** |
+
+The current week is deliberately **not** stored here — that is `schedule_item` + `load_context` + the quota window; a prose copy would be a fifth store going stale.
+
+**Validated at write, stored verbatim** (`routers/knowledge.py::validate_training_plan`, inside `upsert_knowledge_entry` — the shared write path). Direct ORM construction is unvalidated (the backfill path), as with every other type.
+
+**Readers.** `context_builder._section_training_plan` renders it as its own `## Plan of Record` section directly above the training-phase section, with a STALE badge when the plan predates a passed phase review. It renders **once** — `_section_schedule` is type-filtered (`schedule_item`/`load_context`/`injury`) and ignores it, and no `engine/`, MCP, or frontend surface reads this type. `current_state` lifts the single active row onto `CurrentState.training_plan`.
