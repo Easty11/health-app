@@ -83,6 +83,14 @@ _Live, undated — no external date orders these; pick by readiness._
 
 **Post-1b next lanes (2026-08-02 reconciliation).** `ROADMAP.md` is the single canonical answer to "what's next" (per the canonical-stores table); the committed close-out's next-action and any chat proposal are candidates until promoted here. With 1b delivered, the interpretation lane's sequenced continuation remains increments **2 (rephrase) -> 3 (lever-tap) -> 5 (go-live)** in the build-sequence block above. Separately, the **hub shell (#150)** is now unblocked and is the operator-preferred next pick, with **`lab_accession`** as the strongest small alternative — both queued as rows below. Dated NOW items still precede these.
 
+**Queued briefs (chat-authored, not yet received) — order, no detail (#312).**
+1. Coach routine read/update.
+2. Activity slots v2.
+3. Week planner.
+4. Hevy deletion reconciliation.
+5. Phase-change flow (unwritten; awaiting operator form-vs-chat ruling).
+6. HC ingest stage 2 (blocked on HCA HR-lag, Q159).
+
 | Item | Notes |
 |------|-------|
 | ~~**Bind the #273 test contexts as required checks**~~ — the OWED half of the test lane | **DONE (2026-09-10).** All three contexts are now REQUIRED on ruleset `master-pr-gated` (`20414758`): `placeholder guard (POSIX)`, `frontend tests (vitest)`, `backend tests (pytest)`. Verified by the §38 discriminator on PR **#182**: with the guard already green and both suites still pending, `mergeable_state` read `blocked` — vs probe #178's `unstable` when the suites were unbound. The guard alone passing cannot hold `blocked`, so a required-but-unmet check (the pending suites) is doing it → the suites are bound. **The #36 hole is closed** — "green" for self-merge is now guard + both suites, not guard-only. Owner: Luke (operator binding, GitHub-side). |
@@ -135,6 +143,9 @@ phase is entered; it never stores a future phase (no future-dated `entered_on`, 
 This note is the operator's map of the intended offseason arc; the ledger is what was actually run.
 At each `review_on` badge the operator opens the next phase (which closes the current) or does
 nothing — the badge is a prompt, never a transition._
+
+_Orientation only — the plan of record the coach reads is the user's `training_plan` entry (#312,
+SCHEMA.md §033), not this table._
 
 | # | Phase | Posture (indicative) |
 |---|-------|----------------------|
