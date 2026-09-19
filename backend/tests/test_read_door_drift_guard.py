@@ -29,7 +29,7 @@ ALLOW_AEROBIC = {
     "routers/health_connect.py": "Writer (HC exercise ingest); reads existing rows for mirror-drop/upsert.",
     "import_polar.py": "Writer (Polar Flow-export ZIP ingest).",
     "load_events_metabolic.py": "Sources rows via arbitrated_sessions (the door); the only direct query is the distinct-user-id worklist.",
-    "cbti/replay.py": "Allow-listed: keeps its deliberate pre-migration raw-SQL isolation; twin ambiguity moves a per-night training_end stop_time by seconds, not a count.",
+    "cbti/replay.py": "Allow-listed: keeps its pre-migration raw-SQL isolation, and reads training_end DETERMINISTICALLY — MAX(stop_time) per session_date with source='health_connect' EXCLUDED (interim, Q162) — so no order-dependent wrong-pick and no HC ingest side effect on the sleep engine (#311).",
 }
 ALLOW_HEVY = {
     "reads/hevy_reads.py": "THE counted-workouts read-door.",
