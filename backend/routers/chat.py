@@ -82,6 +82,17 @@ _CAPABILITY_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 
+# Raw <thinking>…</thinking> is model scratch, never for the user. Unlike the action tags above
+# it has no processor to strip it, so a prod turn (19 Sep, a training_plan save) rendered one
+# verbatim to the user (#313). Stripped from the FINAL reply in the same post-processing pass.
+_THINKING_BLOCK_RE = re.compile(r"<thinking>.*?</thinking>", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_thinking(reply: str) -> str:
+    """Remove any <thinking> blocks and collapse the blank-line gap their removal leaves."""
+    cleaned = _THINKING_BLOCK_RE.sub("", reply)
+    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
 
 # ---------- schemas ----------
 
@@ -624,6 +635,19 @@ async def _process_routine_actions(
 
 # ---------- knowledge update parsing ----------
 
+def _entry_noun(entry_type: str | None) -> str:
+    """Human label for a structured-write result footer, per type — so a refusal reads
+    'Plan-of-record entry NOT saved', not 'Schedule entry NOT saved' for a training_plan
+    (#313: a real prod refusal of a `training_plan` write footered as 'Schedule entry')."""
+    return {
+        "schedule_item": "Schedule entry",
+        "training_plan": "Plan-of-record entry",
+        "injury": "Injury entry",
+        "load_context": "Context entry",
+        "preference": "Preference entry",
+    }.get(entry_type or "", "Knowledge entry")
+
+
 def _process_knowledge_updates(
     reply: str,
     user_id: int,
@@ -691,6 +715,7 @@ def _process_knowledge_updates(
                         record(False, "not_found",
                                f"ℹ️ No active entry found for key: {key}", key=key)
                 else:
+                    noun = _entry_noun(data.get("type", "schedule_item"))
                     from datetime import date as _date
                     expires_raw = data.get("expires_at")
                     expires_at = None
@@ -719,7 +744,7 @@ def _process_knowledge_updates(
                     # difference between "not said" and "said and lost".
                     try:
                         upsert_knowledge_entry(user_id, entry_in, db)
-                        record(True, "saved", f"✓ Schedule entry saved: {key}", key=key)
+                        record(True, "saved", f"✓ {noun} saved: {key}", key=key)
                     except ScheduleItemOverlap as exc:
                         db.rollback()
                         record(False, exc.code,
@@ -728,10 +753,11 @@ def _process_knowledge_updates(
                         db.rollback()
                         # ScheduleItemInvalid carries a specific `code` (e.g. unknown_field);
                         # any other ValueError is a generic shape failure. Type-derived, never
-                        # parsed out of the message.
+                        # parsed out of the message. The noun is type-aware (#313) so a
+                        # training_plan refusal is not mislabelled 'Schedule entry'.
                         code = getattr(exc, "code", "invalid_shape")
                         record(False, code,
-                               f"✗ Schedule entry NOT saved: {key} — {exc}. "
+                               f"✗ {noun} NOT saved: {key} — {exc}. "
                                f"State this back to the user and retry with a corrected block.",
                                key=key)
 
@@ -1215,6 +1241,10 @@ async def chat(
         all_actions=all_actions,
         write_results=all_write_results,
     )
+
+    # Final display sanitation: strip any raw <thinking> scratch the model emitted (it is not an
+    # action block, so nothing above removed it) before the reply reaches the user (#313).
+    reply = _strip_thinking(reply)
 
     # `write_results` is the machine-checkable outcome of the write lanes — a client (or a
     # later turn) hard-gates on `saved` rather than trusting the reply's prose. Every write
