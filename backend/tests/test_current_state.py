@@ -306,6 +306,25 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     old_prompt = _excise_span(old_prompt, "pre-refactor")
     new_prompt = _excise_span(new_prompt, "current")
 
+    # NARROWED AGAIN (#313): `_section_user_profile` now documents the `training_plan` write
+    # shape (the "UPDATING THE PLAN OF RECORD" block) — added BY INTENT so #312's S5(iv) write
+    # instruction has a schema (the coach was told to write a plan it had never been shown the
+    # shape of). It sits AFTER STEP 3, so the STEP1–STEP3 span excision above does not reach it.
+    # Same reasoning as the #82/#230/#233/#292 narrowings: old==new can never hold for this block
+    # and PRE_REFACTOR_SHA cannot move. Pinned by tests/test_plan_write_protocol.py. (The
+    # `satisfies` additions sit inside STEP 2 and are already excised by the span narrowing.)
+    _TP_MARK = "UPDATING THE PLAN OF RECORD"
+    assert _TP_MARK in new_prompt and _TP_MARK not in old_prompt, (
+        "the #313 training_plan-doc narrowing lost its anchor — it would hide real drift or "
+        "excise the wrong region"
+    )
+    _tp_start = new_prompt.find("\n" + _TP_MARK)
+    _tp_end_mark = "never expires.\n"
+    _tp_end = new_prompt.find(_tp_end_mark, _tp_start) + len(_tp_end_mark)
+    # Excise the inserted block exactly — `...week\n` + [`\nUPDATING…never expires.\n`] + `---`
+    # → `...week\n---`, byte-identical to the pre-#313 section tail.
+    new_prompt = new_prompt[:_tp_start] + new_prompt[_tp_end:]
+
     # NARROWED AGAIN (#292): the HRV baseline sub-block is rewritten BY INTENT — it now
     # derives from the per-source-normalised deviation model (the representative source's
     # OWN rolling baseline), not a fixed 7-night mean of `.canonical` rows, and the label

@@ -14,6 +14,17 @@ import pytz
 import models
 from current_state import CurrentState, HRVBaseline
 from hevy_format import format_set
+# Write-shape vocab for the knowledge-update protocol text (#313), GENERATED not re-typed so
+# the coach's instructions cannot drift from the validators. Acyclic: `routers.knowledge`
+# imports engine.taxonomy / load_events_metabolic / models / auth / database / load_metrics —
+# none import `context_builder`.
+from routers.knowledge import (
+    MACRO_MAX_CHARS,
+    REVISED_BY_VALUES,
+    TRAINING_PLAN_FIELDS,
+    TRAINING_PLAN_KEY,
+    _SATISFIES_VALIDATORS,
+)
 
 AEST = pytz.timezone("Australia/Brisbane")
 
@@ -108,7 +119,8 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         '    "same_day_note": null,\n'
         '    "duration_weeks": null,\n'
         '    "season_end": null,\n'
-        '    "supersedes": null\n'
+        '    "supersedes": null,\n'
+        '    "satisfies": null\n'
         "  },\n"
         '  "expires_at": null,\n'
         '  "notes": "[raw text from user]"\n'
@@ -129,6 +141,12 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         "  moderate and Thursday is heavy, write TWO rows, not one.\n"
         "- `season_end` is YYYY-MM-DD or null. Nothing retires itself: a passed date is\n"
         "  a prompt to the user, never an automatic change of state.\n"
+        "- `satisfies` (optional) LINKS this commitment to the quota slot it fills, so the\n"
+        "  system states scheduled-vs-quota rather than guessing. Exactly one key, one of "
+        f"{', '.join(sorted(_SATISFIES_VALIDATORS))}: "
+        '`"satisfies": {"capacity": "stability"}` for a movement-quality slot, or '
+        '`"satisfies": {"load_window": "metabolic"}` for the conditioning window. Omit it (or\n'
+        "  null) when the commitment fills no declared quota slot — unlinked is fine.\n"
         "\n"
         "SAME DAY, DIFFERENT TIME — no conflict\n"
         "Two commitments on the same weekday at non-overlapping times (work in the\n"
@@ -188,6 +206,38 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         '(e.g. "physio is done"):\n'
         '- Emit knowledge_update with active: false for that key\n'
         "- Confirm the removal and re-synthesise the week\n"
+        "\n"
+        "UPDATING THE PLAN OF RECORD (the macro plan — the six-phase arc, buffer rule, gates)\n"
+        "The macro plan is the single entry you read at the top of the prompt under \"Plan of\n"
+        f"Record\": `type: \"training_plan\"`, key `\"{TRAINING_PLAN_KEY}\"`. Propose a rewrite ONLY\n"
+        "when the athlete changes the macro plan itself — week-to-week facts are `schedule_item` /\n"
+        "`load_context`, never this. Emit:\n"
+        "\n"
+        "<knowledge_update>\n"
+        "{\n"
+        '  "type": "training_plan",\n'
+        f'  "key": "{TRAINING_PLAN_KEY}",\n'
+        '  "value": {\n'
+        '    "macro": "## Offseason\\nPhase 1 (base): rebuild aerobic base; buffer rule — '
+        'sacrifice conditioning first; knee gate — if it flares, fall back to the bike.\\nPhase '
+        '2 …",\n'
+        '    "revised_on": "2026-09-19",\n'
+        '    "revised_by": "coach"\n'
+        "  }\n"
+        "}\n"
+        "</knowledge_update>\n"
+        "\n"
+        f"Value fields (ALL required): {', '.join(TRAINING_PLAN_FIELDS)}. Rules:\n"
+        "- A rewrite SUPERSEDES the whole plan — it is NOT appended. Send the COMPLETE macro\n"
+        "  every time, changing ONLY what the athlete asked to change; leave the rest verbatim.\n"
+        "- When the athlete supplies the plan text, store it VERBATIM — do not paraphrase, reword,\n"
+        "  or summarise it. On a PARTIAL change, edit only the affected line(s) and leave every\n"
+        "  other line exactly as the athlete wrote it.\n"
+        f"- `macro` is markdown, at most {MACRO_MAX_CHARS} characters (a longer write is refused).\n"
+        f'- `revised_by` is one of {", ".join(REVISED_BY_VALUES)}: "coach" when you drafted the\n'
+        '  change at the athlete\'s request, "operator" when they wrote it themselves.\n'
+        "- `revised_on` is this revision's ISO date (YYYY-MM-DD).\n"
+        "- Do NOT send `expires_at` — the plan supersedes by rewrite and never expires.\n"
         "---"
     )
 
