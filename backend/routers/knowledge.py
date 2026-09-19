@@ -10,6 +10,13 @@ import models
 from auth import get_current_user
 from database import get_db
 from load_metrics import _local_day  # operator-local (AEST) day — Q42 single source
+# `satisfies` (#312) validates against the SAME vocabularies the microcycle slot validator
+# uses — imported, one definition, never re-literaled. Both are acyclic from here:
+# `engine.taxonomy` imports only stdlib; `load_events_metabolic` imports only models+stdlib.
+# `engine.training_phase` (which owns `_SLOT_LOAD_WINDOWS`) imports `routers.knowledge`, so
+# importing IT back would cycle — hence the token `WINDOW_METABOLIC` at its own source.
+from engine.taxonomy import capacity_tokens, resolve_capacity
+from load_events_metabolic import WINDOW_METABOLIC
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -73,7 +80,7 @@ MAX_SESSIONS_PER_WEEK = 14
 SCHEDULE_ITEM_FIELDS = (
     "activity", "days", "sessions_per_week", "hard", "expected_load",
     "time_of_day", "time_range", "same_day_training", "same_day_note",
-    "duration_weeks", "season_end", "supersedes",
+    "duration_weeks", "season_end", "supersedes", "satisfies",
 )
 
 # Accepted at write, NEVER stored. `distinct_from` acknowledges an overlap for one
@@ -90,6 +97,34 @@ SCHEDULE_ITEM_REQUIRED = (
     "activity", "hard", "expected_load", "time_of_day",
     "same_day_training", "duration_weeks", "season_end",
 )
+
+
+# `satisfies` (#312) declares which quota slot a schedule_item fills, so the plan/schedule/
+# quota disagreement can be STATED on read rather than resolved by the coach guessing. EXACTLY
+# ONE key, validated against the SAME vocabularies `validate_microcycle` uses — a movement
+# `capacity` token or the `load_window` metabolic token. `satisfies` is OPTIONAL: absent (or
+# null) = unlinked, exactly as today, and an item without it validates byte-identically.
+def _validate_satisfies_capacity(v: Any) -> None:
+    if resolve_capacity(v) is None:
+        raise ValueError(
+            f"schedule_item.satisfies.capacity: unknown capacity {v!r} -- one of {capacity_tokens()}"
+        )
+
+
+def _validate_satisfies_load_window(v: Any) -> None:
+    if v not in (WINDOW_METABOLIC,):
+        raise ValueError(
+            f"schedule_item.satisfies.load_window: unknown load_window {v!r} -- one of "
+            f"{[WINDOW_METABOLIC]}"
+        )
+
+
+# key -> value-validator. A future `activity` kind (the activity-slot brief) is added as ONE
+# line here; nothing else in the validator changes.
+_SATISFIES_VALIDATORS = {
+    "capacity": _validate_satisfies_capacity,
+    "load_window": _validate_satisfies_load_window,
+}
 
 
 # Coarse time-of-day bands, minutes past local midnight, half-open [start, end).
@@ -348,6 +383,81 @@ def validate_schedule_item(value: Any) -> dict[str, Any]:
             if not isinstance(rid, int) or isinstance(rid, bool):
                 raise ValueError(f"schedule_item.distinct_from[{i}] must be an integer id")
 
+    if value.get("satisfies") is not None:
+        sat = value["satisfies"]
+        if not isinstance(sat, dict) or len(sat) != 1:
+            raise ValueError(
+                "schedule_item.satisfies must be an object with exactly one key -- one of "
+                f"{list(_SATISFIES_VALIDATORS)}"
+            )
+        (key, val), = sat.items()
+        validator = _SATISFIES_VALIDATORS.get(key)
+        if validator is None:
+            raise ValueError(
+                f"schedule_item.satisfies: unknown key {key!r} -- one of {list(_SATISFIES_VALIDATORS)}"
+            )
+        validator(val)
+
+    return value
+
+
+# ---------- training_plan shape (#312) ----------
+#
+# The plan of record — the macro plan the coach reads every turn. Supersedes ROADMAP as the
+# coach-readable home for the forward plan (#270 relocated to a store the coach can read;
+# reverses nothing). EXACTLY ONE current row per user, keyed on the fixed `TRAINING_PLAN_KEY`
+# so a rewrite supersedes it by key (the schedule_item same-key pattern) and predecessors are
+# retained as history. The CURRENT week is NOT stored here — that is `schedule_item` +
+# `load_context` + the quota window; a prose copy would be a fifth store going stale.
+TRAINING_PLAN_KEY = "training_plan"
+TRAINING_PLAN_FIELDS = ("macro", "revised_on", "revised_by")
+REVISED_BY_VALUES = ("operator", "coach")
+# Bound on the rendered-every-turn macro (~1000 tokens/turn at 4 chars/token, operator-accepted).
+# The operator's reconciled core measures 3,822 chars; 2000 would cut the buffer rule, the
+# sacrifice order and the knee-gate fallback — which are the point (G0 ruling 1).
+MACRO_MAX_CHARS = 4000
+
+
+def validate_training_plan(value: Any) -> dict[str, Any]:
+    """Validate a `training_plan` value — the closed macro-plan shape. Returned UNCHANGED
+    (byte-identical write→read), mirroring `validate_schedule_item` / `validate_microcycle`.
+
+    `macro` is bounded markdown; a rejection states the MEASURED length so a caller knows how
+    far over it is. `revised_on` is an ISO date; `revised_by` is `operator | coach`. The
+    current week is deliberately NOT a field — see the type comment above.
+    """
+    if not isinstance(value, dict):
+        raise ValueError("training_plan must be an object")
+    extra = sorted(set(value) - set(TRAINING_PLAN_FIELDS))
+    if extra:
+        raise ValueError(
+            f"training_plan: unknown field(s) {extra} -- one of {list(TRAINING_PLAN_FIELDS)}"
+        )
+    missing = [f for f in TRAINING_PLAN_FIELDS if f not in value]
+    if missing:
+        raise ValueError(f"training_plan: missing required field(s) {missing}")
+
+    macro = value["macro"]
+    if not isinstance(macro, str) or not macro.strip():
+        raise ValueError("training_plan.macro must be a non-empty string")
+    if len(macro) > MACRO_MAX_CHARS:
+        raise ValueError(
+            f"training_plan.macro is {len(macro)} chars, over the {MACRO_MAX_CHARS}-char bound "
+            f"-- tighten the plan (the current week is not stored here)"
+        )
+
+    try:
+        date.fromisoformat(str(value["revised_on"]))
+    except ValueError:
+        raise ValueError(
+            f"training_plan.revised_on must be an ISO date (YYYY-MM-DD), got {value['revised_on']!r}"
+        ) from None
+
+    if value["revised_by"] not in REVISED_BY_VALUES:
+        raise ValueError(
+            f"training_plan.revised_by: {value['revised_by']!r} is not one of "
+            f"{list(REVISED_BY_VALUES)}"
+        )
     return value
 
 
@@ -504,6 +614,43 @@ def _schedule_overlap_check(
         raise ScheduleItemOverlap(unacknowledged)
 
 
+def _validate_training_plan_write(user_id: int, entry_in: KnowledgeEntryIn, db: Session) -> None:
+    """Guard a `training_plan` write: exactly one current plan of record per user.
+
+    Enforced by a FIXED key (`TRAINING_PLAN_KEY`) so `upsert_knowledge_entry`'s same-key
+    supersede gives single-current + retained predecessor for free; a write under any other key
+    is refused. Belt-and-braces: a write is also refused if an active `training_plan` already
+    exists under a DIFFERENT key — a pre-existing stray would otherwise leave two current plans.
+    `expires_at` must be null: the plan supersedes by rewrite and never expires, so the
+    `expire-stale` sweep can never silently retire it.
+    """
+    if entry_in.key != TRAINING_PLAN_KEY:
+        raise ValueError(
+            f"training_plan.key must be {TRAINING_PLAN_KEY!r} -- exactly one plan of record per "
+            f"user, keyed so a rewrite supersedes it; got {entry_in.key!r}"
+        )
+    if entry_in.expires_at is not None:
+        raise ValueError(
+            "training_plan.expires_at must be null -- the plan supersedes by rewrite and never expires"
+        )
+    validate_training_plan(entry_in.value)
+    stray = (
+        db.query(models.UserKnowledgeEntry)
+        .filter(
+            models.UserKnowledgeEntry.user_id == user_id,
+            models.UserKnowledgeEntry.type == "training_plan",
+            models.UserKnowledgeEntry.active == True,
+            models.UserKnowledgeEntry.key != TRAINING_PLAN_KEY,
+        )
+        .first()
+    )
+    if stray is not None:
+        raise ValueError(
+            f"an active training_plan already exists under key {stray.key!r} -- resolve it before "
+            f"writing a new plan of record (exactly one current plan per user)"
+        )
+
+
 def upsert_knowledge_entry(
     user_id: int,
     entry_in: KnowledgeEntryIn,
@@ -523,6 +670,8 @@ def upsert_knowledge_entry(
     and validation is at write.
     """
     stored_value = entry_in.value
+    if entry_in.type == "training_plan":
+        _validate_training_plan_write(user_id, entry_in, db)
     if entry_in.type == "schedule_item":
         validate_schedule_item(entry_in.value)
         _schedule_overlap_check(user_id, entry_in, db)
