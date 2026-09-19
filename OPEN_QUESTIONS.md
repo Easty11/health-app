@@ -4636,3 +4636,13 @@ Raised 2026-09-18 with #309, at PR review. The `_duration_min_by_day` double-cou
 **Routing (operator, round 2):** NOT the Hevy-deletion brief (bottom of queue). A **dedicated read-door PR immediately after #231, before plan-of-record**: one read door per table (`arbitrated_sessions` for aerobic; `reads.hevy_reads.counted_workouts` for hevy — both seeded by #309); the two `mcp_server` readers restructured through them (correctness over query elegance); a **drift-guard test that FAILS when either table is queried outside a file allow-list**, so reader N+1 cannot repeat this; every other swept reader fixed or explicitly allow-listed with a reason; `load_events`/`load_metrics` adopt the hevy door behind the byte-identical gate above. #309 fixed only `psychological_reads` (the metric the ingest made blocking) and the resolver (via the shared door).
 
 **State:** DONE → #310. The read-door PR landed the routing: `mcp_server`'s two readers, `region_exercise`, and `series` onto the doors; `load_events` adopts `counted_workouts` behind the byte-identical gate; `cbti/replay` + the two audit CLIs allow-listed with reasons; a drift-guard test (`tests/test_read_door_drift_guard.py`) fails on any new un-doored toucher.
+
+## Q162. Which activities constrain a CBT-I night (training_end)?  [OPEN]
+
+Raised 2026-09-19 with #311. `cbti/replay.load_nights` sets `training_end` = a training session's stop on the day before a night; a night whose lights-out is within `TRAINING_RECOVERY_MIN` (90) of that is `training_constrained` and excluded from titration. Pre-#309 only Polar fed this (H10 chest strap → deliberate hard sessions). The HC ingest now brings Garmin/Samsung-recorded sessions of ALL kinds into `aerobic_sessions`, so the question is which of them should constrain a night.
+
+**Interim (#311):** `source='health_connect'` is EXCLUDED from `training_end` — no HC session constrains a night — preserving the pre-#309 behaviour. A walk almost certainly does NOT constrain sleep; a hard evening session recorded on Garmin/Samsung arguably does. Not picked here.
+
+**To close:** rule which HC activities constrain a night (likely by declared sport — reuse the activity-slot v2 declaration rather than a second sport list), and lift the interim exclusion for those. `CBTI_TITRATION_POLICY` (operator-held, not in the tree) may define "training session" for this purpose — anchor the ruling on it if so. Read-time only; no schema. Companion to Q160 (the felt-load felt-minutes scope) — same "which activities count for which consumer" shape, different consumer (the sleep engine vs the psychological residual).
+
+**State:** OPEN. Not blocking — the interim preserves prior behaviour; this decides when HC sessions begin to constrain nights.
