@@ -50,10 +50,19 @@ _SAMSUNG_SQL = text(
     "AND bedtime IS NOT NULL AND captured_at BETWEEN :d0 AND :d1"
 )
 
+# One training_end per session_date, DETERMINISTIC (#311): MAX(stop_time), never SQL row
+# order — post-#309 a day can hold DIFFERENT bouts, so the old order-dependent
+# {date: stop_time} fold (last-row-wins) could pick a morning walk over the evening session.
+# INTERIM (mirrors Q160, raise Q162): source='health_connect' rows are EXCLUDED until it is
+# ruled which activities constrain a night — a walk almost certainly does not; a hard evening
+# Garmin/Samsung session arguably does. This preserves the pre-#309 behaviour exactly (only
+# Polar fed training_end then). `source` is NOT NULL, so `<> 'health_connect'` drops no Polar.
 _TRAINING_SQL = text(
-    "SELECT session_date, stop_time FROM aerobic_sessions "
+    "SELECT session_date, MAX(stop_time) AS stop_time FROM aerobic_sessions "
     "WHERE user_id = :uid AND stop_time IS NOT NULL "
-    "AND session_date BETWEEN :d0 AND :d1"
+    "AND source <> 'health_connect' "
+    "AND session_date BETWEEN :d0 AND :d1 "
+    "GROUP BY session_date"
 )
 
 
