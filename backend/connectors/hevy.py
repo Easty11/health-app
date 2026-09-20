@@ -8,8 +8,20 @@ logger = logging.getLogger(__name__)
 
 HEVY_BASE = "https://api.hevyapp.com/v1"
 
+# Per-request timeout (connect 5s, total 10s) — a backstop under the chat turn's own hard
+# 3s budget (routers/chat.py), so a slow Hevy never hangs a request beyond httpx's default
+# either. The turn-level budget is what the user actually feels; this stops a stuck socket.
+_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+
 
 class HevyAuthError(Exception):
+    pass
+
+
+class HevyRateLimitError(Exception):
+    """429 Too Many Requests. Typed so a caller can back off / serve a cached copy rather
+    than surfacing a raw HTTPStatusError. The routine read/update path (#314) catches it and
+    serves the last cached routines marked with their age."""
     pass
 
 
@@ -92,6 +104,54 @@ def _is_finite_number(value: Any) -> bool:
     return math.isfinite(value)
 
 
+def _validate_routine_exercises(exercises: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Numeric floor + build the Hevy `exercises` payload, `rpe` stripped. ONE home for both
+    `create_routine` and `update_routine` — Hevy's create and update take the same routine
+    body (update just REPLACES its contents, #314), so the finiteness checks and the rpe strip
+    must not drift between the two paths. Raises `RoutineNumericError` (naming field+exercise)
+    for any NaN/±Infinity/string/bool in a numeric slot; nothing non-finite is ever built."""
+    def _ref(ex_idx: int, ex: dict[str, Any]) -> str:
+        tid = ex.get("exercise_template_id") or ex.get("title") or "?"
+        return f"exercise {ex_idx + 1} ({tid})"
+
+    for ex_idx, ex in enumerate(exercises):
+        for field in ("rest_seconds", "superset_id"):
+            val = ex.get(field)
+            if val is not None and not _is_finite_number(val):
+                raise RoutineNumericError(
+                    f"{field} on {_ref(ex_idx, ex)} is not a valid number ({val!r})"
+                )
+        for set_idx, s in enumerate(ex.get("sets", [])):
+            for field in ("weight_kg", "reps", "distance_meters", "duration_seconds"):
+                val = s.get(field)
+                if val is not None and not _is_finite_number(val):
+                    raise RoutineNumericError(
+                        f"{field} on set {set_idx + 1} of {_ref(ex_idx, ex)} "
+                        f"is not a valid number ({val!r})"
+                    )
+
+    built_exercises = []
+    for ex in exercises:
+        built_sets = []
+        for s in ex.get("sets", []):
+            set_data: dict[str, Any] = {"type": s.get("type", "normal")}
+            # `rpe` intentionally ABSENT — Hevy ignores it on a routine set and the strip is
+            # the hard floor, not prompt guidance (Q144(b)).
+            for field in ("weight_kg", "reps", "distance_meters", "duration_seconds", "custom_metric"):
+                val = s.get(field)
+                if val is not None:
+                    set_data[field] = val
+            built_sets.append(set_data)
+        built_exercises.append({
+            "exercise_template_id": ex["exercise_template_id"],
+            "superset_id": ex.get("superset_id"),
+            "notes": ex.get("notes", ""),
+            "rest_seconds": ex.get("rest_seconds", 90),
+            "sets": built_sets,
+        })
+    return built_exercises
+
+
 class HevyClient:
     def __init__(self, api_key: str) -> None:
         self._headers = {"api-key": api_key}
@@ -101,6 +161,8 @@ class HevyClient:
             raise HevyAuthError(f"Invalid Hevy API key: {response.text}")
         if response.status_code == 403:
             raise HevyForbiddenError(f"Access forbidden — check Hevy plan or permissions: {response.text}")
+        if response.status_code == 429:
+            raise HevyRateLimitError(f"Hevy rate limit (429): {response.text}")
         if response.is_error:
             raise httpx.HTTPStatusError(
                 f"Hevy API error {response.status_code}: {response.text}",
@@ -144,7 +206,7 @@ class HevyClient:
         return {"workouts": all_workouts, "page_count": page_count}
 
     async def get_routines(self, page: int = 1, page_size: int = 10) -> dict[str, Any]:
-        async with httpx.AsyncClient(headers=self._headers) as client:
+        async with httpx.AsyncClient(headers=self._headers, timeout=_TIMEOUT) as client:
             r = await client.get(
                 f"{HEVY_BASE}/routines",
                 params={"page": page, "pageSize": page_size},
@@ -202,7 +264,7 @@ class HevyClient:
         folders: list[dict[str, Any]] = []
         page = 1
         while True:
-            async with httpx.AsyncClient(headers=self._headers) as client:
+            async with httpx.AsyncClient(headers=self._headers, timeout=_TIMEOUT) as client:
                 r = await client.get(
                     f"{HEVY_BASE}/routine_folders",
                     params={"page": page, "pageSize": page_size},
@@ -283,25 +345,9 @@ class HevyClient:
         non-finite is ever built or sent. `folder_id` name→id resolution is the caller's
         job (chat lane); here folder_id must already be an int or None.
         """
-        def _ref(ex_idx: int, ex: dict[str, Any]) -> str:
-            tid = ex.get("exercise_template_id") or ex.get("title") or "?"
-            return f"exercise {ex_idx + 1} ({tid})"
-
-        for ex_idx, ex in enumerate(exercises):
-            for field in ("rest_seconds", "superset_id"):
-                val = ex.get(field)
-                if val is not None and not _is_finite_number(val):
-                    raise RoutineNumericError(
-                        f"{field} on {_ref(ex_idx, ex)} is not a valid number ({val!r})"
-                    )
-            for set_idx, s in enumerate(ex.get("sets", [])):
-                for field in ("weight_kg", "reps", "distance_meters", "duration_seconds"):
-                    val = s.get(field)
-                    if val is not None and not _is_finite_number(val):
-                        raise RoutineNumericError(
-                            f"{field} on set {set_idx + 1} of {_ref(ex_idx, ex)} "
-                            f"is not a valid number ({val!r})"
-                        )
+        # Numeric floor + build (rpe stripped) BEFORE any network call — shared with
+        # update_routine so the checks and the strip never drift between the two paths (#314).
+        built_exercises = _validate_routine_exercises(exercises)
         if folder_id is not None and not _is_finite_number(folder_id):
             raise RoutineNumericError(f"folder_id is not a valid number ({folder_id!r})")
 
@@ -314,29 +360,6 @@ class HevyClient:
         ]
         if collisions:
             raise RoutineAlreadyExists(title, folder_id, collisions)
-
-        built_exercises = []
-        for ex_idx, ex in enumerate(exercises):
-            built_sets = []
-            for set_idx, s in enumerate(ex.get("sets", [])):
-                set_data: dict[str, Any] = {
-                    "type": s.get("type", "normal"),
-                }
-                # `rpe` intentionally ABSENT — Hevy ignores it on a routine set and
-                # the strip is the hard floor, not prompt guidance (Q144(b)).
-                for field in ("weight_kg", "reps", "distance_meters", "duration_seconds", "custom_metric"):
-                    val = s.get(field)
-                    if val is not None:
-                        set_data[field] = val
-                built_sets.append(set_data)
-
-            built_exercises.append({
-                "exercise_template_id": ex["exercise_template_id"],
-                "superset_id": ex.get("superset_id"),
-                "notes": ex.get("notes", ""),
-                "rest_seconds": ex.get("rest_seconds", 90),
-                "sets": built_sets,
-            })
 
         payload = {
             "routine": {
@@ -353,12 +376,65 @@ class HevyClient:
         # an invalid `NaN`/`Infinity` token to the wire. The numeric floor should have
         # caught it already; this guarantees "never sent" even if a field was missed.
         body = json.dumps(payload, allow_nan=False).encode()
-        async with httpx.AsyncClient(headers=self._headers) as client:
+        async with httpx.AsyncClient(headers=self._headers, timeout=_TIMEOUT) as client:
             r = await client.post(
                 f"{HEVY_BASE}/routines",
                 content=body,
                 headers={"Content-Type": "application/json"},
             )
+            return self._check(r).json()
+
+    async def update_routine(
+        self,
+        routine_id: str,
+        title: str,
+        exercises: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Update an existing routine in place — PUT /v1/routines/{id} (#314).
+
+        Hevy's update REPLACES the routine's contents, so the caller sends the COMPLETE
+        intended body (title + every exercise/set), not a patch. The exercise/set build and
+        the `rpe` strip are the SAME `_validate_routine_exercises` create uses — one home, no
+        drift.
+
+        NO `folder_id` is sent: PUT /v1/routines/{id} has no folder field and Hevy exposes no
+        endpoint to move a routine between folders (confirmed by three independent clients +
+        the OpenAPI spec); a sent folder_id is silently ignored, so sending it would let a
+        caller believe a move happened. Folder is set at CREATE only. The caller (chat lane)
+        does the confirm-first, exercise-id validation, and the stale-`updated_at` refetch
+        guard before calling this.
+        """
+        built_exercises = _validate_routine_exercises(exercises)
+        payload = {"routine": {"title": title, "exercises": built_exercises}}
+        logger.info("Hevy update_routine %s payload: %s", routine_id, payload)
+        body = json.dumps(payload, allow_nan=False).encode()
+        async with httpx.AsyncClient(headers=self._headers, timeout=_TIMEOUT) as client:
+            r = await client.put(
+                f"{HEVY_BASE}/routines/{routine_id}",
+                content=body,
+                headers={"Content-Type": "application/json"},
+            )
+            return self._check(r).json()
+
+    async def create_routine_folder(self, title: str) -> dict[str, Any]:
+        """Create a routine folder — POST /v1/routine_folders (#314).
+
+        Used only when the current phase has no declared folder and no folder of the phase's
+        name exists yet, so a new routine can be placed in a phase folder. Body is WRAPPED
+        (`{"routine_folder": {"title": …}}`), mirroring the `{"routine": …}` / `{"exercise": …}`
+        convention of the other two POSTs.
+
+        NOTE (#314, unseeable-surface): the exact request-body shape is INFERRED from that
+        wrapper convention — `api.hevyapp.com` is unreachable from the build sandbox (egress
+        allowlist), so it is not doc-verified here; it is exercised by a transport-faked test
+        and confirmed against prod on first live use. The caller creates a folder only after a
+        name-match check against the live folder list, so a wrong shape fails loudly (4xx →
+        typed error) rather than silently duplicating.
+        """
+        payload = {"routine_folder": {"title": title}}
+        logger.info("Hevy create_routine_folder payload: %s", payload)
+        async with httpx.AsyncClient(headers=self._headers, timeout=_TIMEOUT) as client:
+            r = await client.post(f"{HEVY_BASE}/routine_folders", json=payload)
             return self._check(r).json()
 
     async def create_exercise_template(

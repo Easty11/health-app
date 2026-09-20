@@ -14,6 +14,7 @@ import pytz
 import models
 from current_state import CurrentState, HRVBaseline
 from hevy_format import format_set
+from hevy_routine_format import format_routine_compact, format_routine_full  # shared renderers (#314)
 # Write-shape vocab for the knowledge-update protocol text (#313), GENERATED not re-typed so
 # the coach's instructions cannot drift from the validators. Acyclic: `routers.knowledge`
 # imports engine.taxonomy / load_events_metabolic / models / auth / database / load_metrics —
@@ -181,6 +182,9 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         "(\"I'm recording…\", \"setting this to…\") and let the system's confirmation line\n"
         "carry completion. If a write is refused you will be told why — the system's line,\n"
         "not your prose, is the source of truth for what saved.\n"
+        "Do NOT write a status or tally line yourself (for example a \"saved\"/\"N saved\" line):\n"
+        "the system appends the single authoritative confirmation, so a line you add only\n"
+        "duplicates it.\n"
         "\n"
         "STEP 3 — SYNTHESISE IMPACT\n"
         "After writing, immediately state:\n"
@@ -353,6 +357,110 @@ def _section_knowledge(entries: list[Any]) -> str:
     return "\n".join(lines)
 
 
+# Full-detail token budget for the routines section (~2500 tokens, G0 ruling 2), measured in
+# characters at ~4 chars/token. Working-set routines beyond it are named by title, never dropped.
+_ROUTINES_FULL_CHAR_BUDGET = 10_000
+
+
+def _mru_folder_id(routines: list[dict[str, Any]]) -> Any:
+    """The folder_id of the most-recently-UPDATED routine — the fallback full-detail folder when
+    no folder is declared for the current phase (#314, ruling 1)."""
+    if not routines:
+        return None
+    return max(routines, key=lambda r: r.get("updated_at") or "").get("folder_id")
+
+
+def _section_hevy_routines(
+    data: dict[str, Any] | None,
+    phase: dict[str, Any] | None,
+    phase_folders: dict[str, Any] | None,
+) -> str:
+    """Render the athlete's Hevy routines (#314): a compact index of ALL routines (by name),
+    plus the FULL contents of the working-set folder — the folder DECLARED for the current phase
+    (`phase_folders[label]`), else a most-recently-used-folder FALLBACK that says so. Full detail
+    is capped at ~2500 tokens; working-set routines beyond the cap are named by title, never
+    silently dropped. A failed/timed-out fetch renders "unavailable" (or a stale cached copy
+    marked with its age) — the chat never goes down for Hevy. No data (Hevy not connected) →
+    empty string, so the section is omitted and the prompt is byte-identical."""
+    if not data:
+        return ""
+    lines = ["## Hevy routines"]
+    if data.get("unavailable"):
+        lines.append(
+            "Routines are unavailable right now — Hevy did not respond in time. Do NOT guess a "
+            "routine's contents or claim to have changed one; say you can't see them this moment "
+            "and try again shortly."
+        )
+        return "\n".join(lines)
+    routines = data.get("routines") or []
+    if not routines:
+        lines.append("No routines found in Hevy.")
+        return "\n".join(lines)
+    if data.get("stale"):
+        age = data.get("age_seconds")
+        mins = age // 60 if isinstance(age, int) else "?"
+        lines.append(f"(Cached copy ~{mins} min old — Hevy was slow to respond; may be slightly out of date.)")
+
+    folders = data.get("folders") or []
+    folder_title = {
+        f.get("id"): (f.get("title") or f.get("name") or str(f.get("id")))
+        for f in folders if isinstance(f, dict)
+    }
+
+    label = phase.get("label") if isinstance(phase, dict) else None
+    declared = phase_folders.get(label) if (label and isinstance(phase_folders, dict)) else None
+    if declared is not None:
+        working_folder = declared
+        working_note = f"declared for phase '{label}'"
+    else:
+        working_folder = _mru_folder_id(routines)
+        working_note = (
+            "FALLBACK: most-recently-used folder — no folder is declared for "
+            + (f"phase '{label}'" if label else "the current phase")
+            + "; declare one to pin the full-detail set"
+        )
+
+    lines.append("")
+    lines.append(f"### All routines ({len(routines)}) — index")
+    for r in routines:
+        lines.extend(format_routine_compact(r, {}))
+
+    working = sorted(
+        [r for r in routines if r.get("folder_id") == working_folder],
+        key=lambda r: r.get("updated_at") or "", reverse=True,
+    )
+    wf_name = folder_title.get(working_folder, "none" if working_folder is None else str(working_folder))
+    lines.append("")
+    lines.append(f"### Full detail — folder: {wf_name} ({working_note})")
+    if not working:
+        lines.append("(no routines in this folder)")
+    used = 0
+    any_full = False
+    capped: list[str] = []
+    for r in working:
+        block = "\n".join(format_routine_full(r, {}))
+        # Always render at least one full routine; then stop adding once the budget is spent and
+        # name the rest by title (never silently drop — ruling 2).
+        if any_full and used + len(block) > _ROUTINES_FULL_CHAR_BUDGET:
+            capped.append(r.get("title") or "Untitled routine")
+            continue
+        lines.append(block)
+        used += len(block)
+        any_full = True
+    if capped:
+        lines.append(
+            "(shown by title only — routines-section token cap: " + ", ".join(capped) + ")"
+        )
+
+    lines += [
+        "",
+        "These are the athlete's ACTUAL Hevy routines. To adjust a session, UPDATE the existing "
+        "routine in place (see the routine-update block below); never ask the athlete to start or "
+        "log a workout just to show you a routine.",
+    ]
+    return "\n".join(lines)
+
+
 def _section_routine_creation(connected: list[str]) -> str:
     if "hevy" not in connected:
         return ""
@@ -438,10 +546,51 @@ Conventions — get these exactly right or the create is rejected or silently wr
   not a plan — Hevy ignores it on a routine, and it is dropped before the routine is
   sent regardless.
 - Do NOT use the "@" character anywhere in "notes".
-- Before creating, you can call search_hevy_routines to check whether a routine of
-  that name already exists — a routine with the same title in the same folder is
-  refused (Hevy has no delete and an update would overwrite the existing one), so
-  pick a distinct name or ask the user before overwriting."""
+- The athlete's existing routines are listed in the `## Hevy routines` section above —
+  read that to check whether a routine already exists before creating, so you don't mint a
+  duplicate. A create with the same title in the same folder is refused (Hevy has no delete
+  and its update REPLACES contents), so pick a distinct name, or UPDATE the existing routine
+  instead of creating a new one.
+
+## Updating a Hevy routine (adjusting an existing session)
+
+To CHANGE a session, update its routine IN PLACE — do not create a new one (a near-duplicate is
+permanent; Hevy has no routine delete). Embed a block with the routine's id and its COMPLETE new
+contents (Hevy's update REPLACES the routine, so a partial body wipes the rest):
+
+<hevy_update_routine>
+{
+  "routine_id": "ROUTINE_ID_FROM_THE_LIST_ABOVE",
+  "title": "Existing routine title",
+  "exercises": [
+    {
+      "exercise_template_id": "XXXXXXXX",
+      "rest_seconds": 90,
+      "superset_id": null,
+      "sets": [
+        {"type": "normal", "weight_kg": 60, "reps": 8}
+      ]
+    }
+  ]
+}
+</hevy_update_routine>
+
+- The `exercises`/`sets` shape is IDENTICAL to <hevy_create_routine> above (same id rules, same
+  set fields; `rpe` is stripped either way). Copy the current contents from the `## Hevy routines`
+  section and change ONLY what the athlete asked — every exercise/set you omit is deleted.
+- `routine_id` is required and must match a routine in the list above.
+- CONFIRM with the athlete before emitting the block — state exactly what will change. Only emit
+  it after they say go.
+- Do NOT send a `folder_id`: Hevy's update cannot move a routine between folders and a sent
+  folder is ignored. If the athlete wants a routine MOVED, tell them it can't be done through the
+  app and takes a few seconds in the Hevy app itself — never claim you moved it.
+- The system re-reads the routine immediately before writing and reports the exact per-exercise
+  change; if the routine changed in Hevy since you read it, the write is refused and you are
+  re-shown the current version — do not describe a change as done until the system confirms it.
+
+To adjust a session, UPDATE the existing routine; create a new one only for a genuinely NEW
+session. Never ask the athlete to start or log a workout just to show you a routine. Never put a
+weekday in a routine title — the schedule owns the day, not the title."""
 
 
 def _section_exercise_catalogue(catalogue: list[tuple[str, bool]] | None) -> str:
@@ -1544,6 +1693,7 @@ def build_system_prompt(
     daily_record: Any | None = None,
     engine_selection: dict[str, Any] | None = None,
     exercise_catalogue: list[tuple[str, bool]] | None = None,
+    hevy_routines: dict[str, Any] | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
@@ -1635,6 +1785,15 @@ def build_system_prompt(
         catalogue_section = _section_exercise_catalogue(exercise_catalogue)
         if catalogue_section:
             sections.append(catalogue_section)
+
+    # The athlete's Hevy routines (#314) — fetched (cached, budgeted) upstream in chat.py and
+    # handed in, keeping this a pure formatter (#43). Empty string when Hevy is not connected, so
+    # the section list stays byte-identical for the parity guard.
+    routines_section = _section_hevy_routines(
+        hevy_routines, state.training_phase, getattr(state, "phase_folders", None)
+    )
+    if routines_section:
+        sections.append(routines_section)
 
     sections += [
         "",

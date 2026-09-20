@@ -23,6 +23,7 @@ from connectors.hevy import (
 from context_builder import build_system_prompt, render_asked_lab_value
 from current_state import current_state as compute_current_state
 from database import get_db
+import hevy_routine_cache
 from encryption import decrypt
 from hevy_templates import (
     HevyCreateUnresolvedError,
@@ -56,6 +57,12 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # Regex to find <hevy_create_routine>...</hevy_create_routine> blocks
 _ROUTINE_BLOCK_RE = re.compile(
     r"<hevy_create_routine>\s*(.*?)\s*</hevy_create_routine>",
+    re.DOTALL,
+)
+
+# Regex to find <hevy_update_routine>...</hevy_update_routine> blocks (#314)
+_ROUTINE_UPDATE_BLOCK_RE = re.compile(
+    r"<hevy_update_routine>\s*(.*?)\s*</hevy_update_routine>",
     re.DOTALL,
 )
 
@@ -515,6 +522,8 @@ async def _process_routine_actions(
     hevy_client: HevyClient | None,
     user_id: int,
     db: Session,
+    phase_label: str | None = None,
+    phase_folders: dict | None = None,
 ) -> tuple[str, list[str], list[WriteResult]]:
     """
     Scan `reply` for <hevy_create_routine> blocks.
@@ -580,10 +589,19 @@ async def _process_routine_actions(
         title = data.get("title", "Untitled Routine")
         exercises = data.get("exercises", [])
 
-        # Folder name→id resolution (FIX #1). The model names a folder; resolve it to an
-        # int id, else create unfoldered and surface the miss (never a NaN folder_id).
-        folder_id, unresolved_folder = await _resolve_folder_id(
-            hevy_client, data.get("folder"), data.get("folder_id"))
+        # Folder resolution. If the block names no folder, place the new routine in the current
+        # PHASE's folder (declared, else a phase-named folder found-or-created) — #314 ruling 3.
+        # An explicit folder in the block still wins (the coach's deliberate choice).
+        phase_folder_note = None
+        if data.get("folder") is None and data.get("folder_id") is None:
+            folder_id, phase_folder_note = await _resolve_phase_folder_for_create(
+                hevy_client, phase_label, phase_folders)
+            unresolved_folder = None
+        else:
+            # The model names a folder; resolve it to an int id, else create unfoldered and
+            # surface the miss (never a NaN folder_id).
+            folder_id, unresolved_folder = await _resolve_folder_id(
+                hevy_client, data.get("folder"), data.get("folder_id"))
 
         # Opt-in fallback: fill ids for any title-only exercises. Blocks that
         # already carry ids are untouched (#60).
@@ -614,7 +632,8 @@ async def _process_routine_actions(
                        f"(create the folder in Hevy or fix the name).",
                        key=title)
             else:
-                record(True, "created", f"✓ Routine '{title}' created in Hevy", key=title)
+                extra = f" ({phase_folder_note})" if phase_folder_note else ""
+                record(True, "created", f"✓ Routine '{title}' created in Hevy{extra}", key=title)
         except RoutineAlreadyExists as exc:
             # The connector refused a (title, folder) duplicate before the POST. Type-
             # derived code drives the user_resolvable affordance (rename vs update),
@@ -628,6 +647,157 @@ async def _process_routine_actions(
             record(False, "create_failed", f"⚠️ Failed to create routine '{title}': {exc}", key=title)
 
         # Remove the raw block from the visible response
+        cleaned = cleaned.replace(match.group(0), "")
+
+    return cleaned.strip(), actions_taken, write_results
+
+
+async def _resolve_phase_folder_for_create(
+    hevy_client: HevyClient,
+    phase_label: str | None,
+    phase_folders: dict | None,
+) -> tuple[int | None, str | None]:
+    """The folder a NEW routine should go in for the current phase (#314, ruling 3): the phase's
+    DECLARED folder (`phase_folders[label]`), else a folder named after the phase — found by name
+    or created (POST routine_folders). Returns (folder_id, note); (None, None) when there is no
+    phase or the folder can't be resolved (→ created unfoldered, never blocks). Idempotent by
+    name so a phase never accrues duplicate folders; a create failure falls back to unfoldered."""
+    if not phase_label:
+        return None, None
+    if isinstance(phase_folders, dict) and phase_folders.get(phase_label) is not None:
+        return phase_folders[phase_label], None
+    want = phase_label.strip().casefold()
+    try:
+        folders = await hevy_client.get_routine_folders()
+    except Exception:
+        return None, None
+    for f in folders:
+        if (f.get("title") or f.get("name") or "").strip().casefold() == want:
+            return f.get("id"), None
+    try:
+        created = await hevy_client.create_routine_folder(phase_label)
+        body = created.get("routine_folder", created) if isinstance(created, dict) else {}
+        fid = body.get("id") if isinstance(body, dict) else None
+        return fid, (f"created a '{phase_label}' folder for this phase" if fid is not None else None)
+    except Exception:
+        return None, None
+
+
+def _routine_change_summary(live: dict, proposed_exercises: list[dict]) -> str:
+    """Per-exercise diff of the PROPOSED replacement against the routine as JUST fetched (never
+    the coach's memory) — added / removed / changed(sets), keyed by exercise_template_id."""
+    from hevy_routine_format import exercise_display_title
+    live_ex = {e.get("exercise_template_id"): e for e in (live.get("exercises") or [])}
+    prop_ex = {e.get("exercise_template_id"): e for e in proposed_exercises}
+
+    def _sig(ex: dict) -> list:
+        return [
+            {k: s.get(k) for k in ("type", "weight_kg", "reps", "distance_meters", "duration_seconds")}
+            for s in (ex.get("sets") or [])
+        ]
+
+    added = [t for t in prop_ex if t not in live_ex]
+    removed = [t for t in live_ex if t not in prop_ex]
+    changed = [t for t in prop_ex if t in live_ex and _sig(prop_ex[t]) != _sig(live_ex[t])]
+    parts: list[str] = []
+    if added:
+        parts.append("added " + ", ".join(exercise_display_title(prop_ex[t], {}) for t in added))
+    if removed:
+        parts.append("removed " + ", ".join(exercise_display_title(live_ex[t], {}) for t in removed))
+    if changed:
+        parts.append("changed sets on " + ", ".join(exercise_display_title(prop_ex[t], {}) for t in changed))
+    return "; ".join(parts) if parts else "no changes"
+
+
+async def _process_routine_updates(
+    reply: str,
+    hevy_client: HevyClient | None,
+    user_id: int,
+    db: Session,
+) -> tuple[str, list[str], list[WriteResult]]:
+    """Scan `reply` for <hevy_update_routine> blocks and update each routine IN PLACE (#314).
+
+    Mirrors `_process_routine_actions`: id-resolution + rpe-strip are the same (connector), one
+    WriteResult per block. Because Hevy's update REPLACES contents, the block carries the COMPLETE
+    routine. Before each write the routine is REFETCHED (get_routine) — this is both the diff base
+    (a per-exercise diff against the just-fetched routine, never the coach's memory) and the stale
+    guard: if the block's `updated_at` (the value the coach read) differs from the live one, the
+    routine changed upstream and the write is refused + the coach is told to re-read. `folder_id`
+    is never sent (Hevy's update can't move a routine). Reason codes: updated / stale / not_found /
+    unresolved_exercise / invalid_number / invalid_json / invalid_shape / update_failed."""
+    actions_taken: list[str] = []
+    write_results: list[WriteResult] = []
+
+    def record(saved: bool, reason_code: str, message: str, *, key: str | None = None):
+        actions_taken.append(message)
+        write_results.append(WriteResult(saved=saved, reason_code=reason_code, reason=message, key=key))
+
+    matches = list(_ROUTINE_UPDATE_BLOCK_RE.finditer(reply))
+    if not matches:
+        return reply, actions_taken, write_results
+    if hevy_client is None:
+        cleaned = _ROUTINE_UPDATE_BLOCK_RE.sub("", reply).strip()
+        record(False, "update_failed", "⚠️ Routine not updated — Hevy is not connected.")
+        return cleaned, actions_taken, write_results
+
+    cleaned = reply
+    for match in matches:
+        try:
+            data = json.loads(match.group(1))
+        except json.JSONDecodeError as exc:
+            record(False, "invalid_json", f"⚠️ Could not parse routine-update JSON: {exc}")
+            cleaned = cleaned.replace(match.group(0), ""); continue
+        if not isinstance(data, dict):
+            record(False, "invalid_shape", "⚠️ Routine-update block is not a JSON object.")
+            cleaned = cleaned.replace(match.group(0), ""); continue
+
+        routine_id = data.get("routine_id") or data.get("id")
+        title = data.get("title", "")
+        exercises = data.get("exercises", [])
+        if not routine_id:
+            record(False, "invalid_shape", "⚠️ Routine update needs a routine_id.", key=title or None)
+            cleaned = cleaned.replace(match.group(0), ""); continue
+
+        exercises, unresolved = _resolve_missing_ids(exercises, user_id, db)
+        if unresolved:
+            record(False, "unresolved_exercise",
+                   f"⚠️ Routine '{title or routine_id}' not updated — could not resolve exercise(s): "
+                   + _format_unresolved(unresolved), key=str(routine_id))
+            cleaned = cleaned.replace(match.group(0), ""); continue
+
+        # Refetch immediately before the write — the diff base AND the stale check (#314). Skipping
+        # this refetch is the §18 mutation the stale-write test guards.
+        try:
+            live_raw = await hevy_client.get_routine(str(routine_id))
+        except Exception as exc:
+            record(False, "not_found",
+                   f"⚠️ Routine '{routine_id}' not updated — could not read it ({exc}).", key=str(routine_id))
+            cleaned = cleaned.replace(match.group(0), ""); continue
+        live = live_raw.get("routine", live_raw) if isinstance(live_raw, dict) else None
+        if not live:
+            record(False, "not_found", f"⚠️ No routine found with id '{routine_id}'.", key=str(routine_id))
+            cleaned = cleaned.replace(match.group(0), ""); continue
+
+        seen, live_updated = data.get("updated_at"), live.get("updated_at")
+        if seen is not None and live_updated is not None and str(seen) != str(live_updated):
+            record(False, "stale",
+                   f"⚠️ Routine '{live.get('title') or routine_id}' NOT updated — it changed in Hevy "
+                   f"since you read it. Re-read the current version and re-confirm before updating.",
+                   key=str(routine_id))
+            cleaned = cleaned.replace(match.group(0), ""); continue
+
+        diff = _routine_change_summary(live, exercises)
+        try:
+            await hevy_client.update_routine(
+                routine_id=str(routine_id), title=title or live.get("title") or "", exercises=exercises)
+            hevy_routine_cache.invalidate(user_id)
+            record(True, "updated",
+                   f"✓ Routine '{title or live.get('title') or routine_id}' updated in Hevy — {diff}.",
+                   key=str(routine_id))
+        except RoutineNumericError as exc:
+            record(False, exc.code, f"⚠️ Routine '{routine_id}' not updated — {exc}", key=str(routine_id))
+        except Exception as exc:
+            record(False, "update_failed", f"⚠️ Failed to update routine '{routine_id}': {exc}", key=str(routine_id))
         cleaned = cleaned.replace(match.group(0), "")
 
     return cleaned.strip(), actions_taken, write_results
@@ -929,6 +1099,23 @@ def _render_write_footer(write_results: list[WriteResult]) -> str:
     return f"⚠ {saved} saved, {len(failed)} failed — " + ", ".join(reasons)
 
 
+# A whole line that mimics the deterministic footer TALLY: the mark, a DIGIT, then "saved"
+# ("✓ 3 saved", "⚠ 2 saved, 1 failed — …"). The digit is what distinguishes it from the per-entry
+# action strings ("✓ Schedule entry saved: key"), which carry no count and must be kept.
+_FOOTER_ECHO_RE = re.compile(r"(?m)^[ \t]*[✓⚠][ \t]*\d+[ \t]+saved\b.*$")
+
+
+def _strip_footer_echo(reply: str) -> str:
+    """Drop any footer-tally line the MODEL wrote from this turn's reply, before the real footer
+    is appended (#314). Prior turns' deterministic footers sit in the model's context, so it
+    reproduces the format in its own prose; kept as-is on an all-saved turn, that duplicates the
+    authoritative footer (prod, 19 Sep: "✓ 3 saved" shown twice). Only the tally grammar is
+    matched — per-entry action lines are untouched — and only this reply is cleaned, never the
+    conversation HISTORY (the coach still needs to know what saved on prior turns)."""
+    cleaned = _FOOTER_ECHO_RE.sub("", reply)
+    return re.sub(r"\n{3,}", "\n\n", cleaned).rstrip()
+
+
 # Pass-2 is bounded: it reproduces the turn's conversational content and corrects only the
 # write claims, so it needs far fewer tokens than the open-ended first pass. Kept well below
 # the first pass's 4096 to cap the added cost of the (failed-write only) second call.
@@ -1046,6 +1233,11 @@ def _compose_response(
             write_results=write_results,
         )
 
+    # Strip any footer-tally line the model wrote itself, so the authoritative footer appended
+    # below is the ONLY one (#314). Kept prose on an all-saved turn is where the duplicate came
+    # from; pass-2 is told not to add one, but stripping here covers both paths.
+    reply = _strip_footer_echo(reply)
+
     if all_actions:
         reply = reply + "\n\n" + "\n".join(all_actions)
 
@@ -1081,6 +1273,7 @@ async def chat(
     hevy_data: dict[str, Any] | None = None
     hevy_client: HevyClient | None = None
     exercise_catalogue: list[tuple[str, bool]] | None = None
+    hevy_routines: dict[str, Any] | None = None
     if "hevy" in connected:
         raw_key = decrypt(connected["hevy"].api_key_encrypted)
         hevy_data = await _gather_hevy_context(raw_key)
@@ -1090,6 +1283,9 @@ async def chat(
         # Session (the #43 parity-guard invariant), same reason _annotate_canonical_titles
         # runs upstream. It renders whatever we hand it.
         exercise_catalogue = catalogue_titles(db, current_user.id)
+        # The athlete's routines (#314), short-TTL cached + 3s-budgeted so the turn never waits
+        # on Hevy; the section renderer decides what to show at full detail.
+        hevy_routines = await hevy_routine_cache.get_routines_cached(hevy_client, current_user.id)
 
     knowledge_entries = (
         db.query(models.UserKnowledge)
@@ -1178,6 +1374,7 @@ async def chat(
         daily_record=daily_record,
         engine_selection=engine_selection,
         exercise_catalogue=exercise_catalogue,
+        hevy_routines=hevy_routines,
     )
 
     # On-ask lab value relay (#60): standing feed above is generality-only.
@@ -1212,19 +1409,25 @@ async def chat(
     # seen, so same-turn create-then-use resolves only in this order.
     reply, exercise_actions, exercise_write_results = await _process_exercise_actions(
         reply, current_user.id, db)
+    _phase = state.training_phase or {}
     reply, routine_actions, routine_write_results = await _process_routine_actions(
+        reply, hevy_client, current_user.id, db,
+        phase_label=_phase.get("label"), phase_folders=state.phase_folders)
+    reply, routine_update_actions, routine_update_write_results = await _process_routine_updates(
         reply, hevy_client, current_user.id, db)
     reply, knowledge_actions, knowledge_write_results = _process_knowledge_updates(
         reply, current_user.id, db)
     reply, capability_actions = _process_capability_updates(reply, current_user.id, db)
 
-    all_actions = exercise_actions + routine_actions + knowledge_actions + capability_actions
+    all_actions = (exercise_actions + routine_actions + routine_update_actions
+                   + knowledge_actions + capability_actions)
     # Every Hevy write lane (exercise + routine) and the knowledge/schedule lane are now
     # mapped onto WriteResult (Q144 folds the last one, the exercise-action lane); one
     # combined list drives the single narrate-after-write pass and the deterministic footer.
     # The acknowledgement-discipline arc (schedule / /chat / Hevy routine / Hevy exercise)
     # is complete — no string-only write lane remains.
-    all_write_results = exercise_write_results + routine_write_results + knowledge_write_results
+    all_write_results = (exercise_write_results + routine_write_results
+                         + routine_update_write_results + knowledge_write_results)
 
     # Narrate-after-write (Q143a / WS4). `reply` was generated in the single pass above,
     # BEFORE these writes executed, so any "saved" it claims precedes the outcome. If every
