@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+import context_builder
 import models
 from auth import get_current_user
 from connectors.hevy import HevyAuthError, HevyClient
@@ -312,6 +313,39 @@ async def get_week_plan(
     weekly template — the null-window contract, #272). Read-only, stateless; no `resolve()`,
     validator, or free-order (#275) change."""
     return week_plan_mod.plan_week(db, current_user.id, _local_day())
+
+
+@router.get("/plan-of-record")
+async def get_plan_of_record(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The plan of record (#312/#319) for the Phase card: the macro plan the coach reads every
+    turn — `macro`, `revised_on`, `revised_by` — plus the SAME STALE flag the chat section
+    computes (`context_builder.plan_of_record_stale`, ONE definition, never re-derived
+    client-side). `null` when no plan is set (or its macro is blank), matching the chat section's
+    omit-when-absent contract. Read-only, stateless."""
+    plan = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=current_user.id, active=True, type="training_plan")
+        .order_by(models.UserKnowledgeEntry.added_at.desc())
+        .first()
+    )
+    if plan is None or not isinstance(plan.value, dict):
+        return None
+    value = plan.value
+    macro = value.get("macro")
+    if not isinstance(macro, str) or not macro.strip():
+        return None
+    phase = training_phase_mod.phase_to_dict(
+        training_phase_mod.current_training_phase(db, current_user.id), on=_local_day()
+    )
+    return {
+        "macro": macro,
+        "revised_on": value.get("revised_on"),
+        "revised_by": value.get("revised_by"),
+        "stale": context_builder.plan_of_record_stale(value, phase),
+    }
 
 
 @router.post("/response")

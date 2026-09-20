@@ -18,6 +18,7 @@ import context_builder
 import models
 from routers.chat import _process_knowledge_updates, _strip_thinking
 from routers.knowledge import (
+    SCHEDULE_ITEM_FIELDS,
     TRAINING_PLAN_FIELDS,
     TRAINING_PLAN_KEY,
     _SATISFIES_VALIDATORS,
@@ -48,6 +49,54 @@ def test_protocol_text_documents_every_training_plan_field_and_satisfies_kind():
     assert '"type": "training_plan"' in txt
     assert TRAINING_PLAN_KEY in txt
     assert "SUPERSEDES the whole plan" in txt and "NOT appended" in txt
+
+
+def test_protocol_text_documents_every_schedule_item_field():
+    """§45/#313/#319: every SCHEDULE_ITEM_FIELDS field — `event_date`/`event_end` included —
+    appears in the rendered write-shape protocol, GENERATED from the constant so the docs cannot
+    drift from the validator. This is the standing guard against the S0(d) gap recurring: #317
+    shipped `event_date`/`event_end` on the validator but the hand-written prose never listed them,
+    so a dated hard item could enter only through the phase form."""
+    txt = context_builder._section_user_profile(None)
+    for f in SCHEDULE_ITEM_FIELDS:
+        assert f in txt, f"schedule_item field {f!r} is not documented in the write-shape home"
+    # the routing rule the coach must learn: a DATED commitment is a schedule_item, NOT a
+    # load_context (and event_date is mutually exclusive with weekday recurrence).
+    assert "event_date" in txt and "load_context" in txt
+    assert "mutually exclusive" in txt
+
+
+def test_documented_dated_one_off_lands_and_blocks_its_day(db_session):
+    """#319 end-to-end: the DOCUMENTED dated-one-off shape passes `_process_knowledge_updates`
+    (lands an active schedule_item) AND marks its calendar day unavailable in `plan_week` — the
+    routing rule made real, not just prose. 2026-09-12 is the Saturday inside leg A [09-07, 09-13]."""
+    from datetime import date
+    from engine import week_plan as week_plan_mod
+    u = _user(db_session, email="dated-oneoff@example.com")
+    # an open phase gives plan_week a window to derive over.
+    db_session.add(models.TrainingPhase(
+        user_id=u.id, label="base", probe_posture="held",
+        entered_on=date(2026, 9, 7), asserted_by="user", asserted_on=date(2026, 9, 7), source="api",
+        microcycle={"sub_cycle_days": 7, "sub_cycles": [
+            {"label": "A", "slots": [{"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},
+    ))
+    db_session.commit()
+    payload = {
+        "type": "schedule_item", "key": "carnival_2026_09",
+        "value": {
+            "activity": "swim carnival", "event_date": "2026-09-12", "event_end": "2026-09-12",
+            "hard": True, "expected_load": "heavy", "time_of_day": "unknown",
+            "same_day_training": False, "duration_weeks": None, "season_end": None,
+        },
+    }
+    _, actions, results = _process_knowledge_updates(_block(payload), u.id, db_session)
+    assert results and results[-1].saved is True, actions
+    row = (db_session.query(models.UserKnowledgeEntry)
+           .filter_by(user_id=u.id, type="schedule_item", key="carnival_2026_09", active=True).one())
+    assert row.value["event_date"] == "2026-09-12"
+    plan = week_plan_mod.plan_week(db_session, u.id, date(2026, 9, 9))
+    sat = next(d for d in plan["days"] if d["weekday"] == "saturday")
+    assert sat["available"] is False   # the dated one-off blocks its day
 
 
 # ---------- (b) e2e: the documented training_plan block lands a current row ----------
