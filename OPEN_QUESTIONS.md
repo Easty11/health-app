@@ -4662,3 +4662,11 @@ Raised 2026-09-20 with #315. Activity and sport-scoped `load_window` slots decid
 **To decide:** whether the ingest path should NORMALISE `sport_name` to a canonical vocabulary (a source→canonical map, e.g. HC `WALKING`→"Walking", Polar "Walk"→"Walking") so slot membership rests on a canonical token rather than the raw device string, and whether `device_sports` should then validate against that canonical set (closing the vocabulary) or stay open. Trade-off: robustness of matching + a closed validatable set vs the maintenance of a per-source map and the risk of refusing a genuinely new sport at write.
 
 **State:** OPEN. Not blocking — exact case-insensitive matching works for the sports observed in prod, and a miss is visible (`unclaimed_session`, "other activity"), never a silent miscount. Revisited if real sessions repeatedly go unclaimed on spelling.
+
+## Q165. A dated / date-range one-off hard item on `schedule_item`?  [OPEN]
+
+Raised 2026-09-20 with #316. `schedule_item.days` are WEEKDAY recurrence; `duration_weeks` bounds how long the recurrence lasts; `season_end` is an end date. There is no field for a ONE-OFF dated event (a carnival on 19–20 Sep, travel, an appointment on a specific date). `load_context` carries a `description` + a single `expires_at` and renders as a note, not a day-occupying item the week planner's day-view reads. #316 defers this: active `load_context` entries are surfaced beside the week as undated one-off notes, but a dated one-off does not occupy its day in the availability model.
+
+**To decide:** the smallest shape for a dated one-off hard item — an optional `event_date` or `[start, end]` on `schedule_item`, validated as ISO dates (a validator-only change; `schedule_item.value` is JSON, so NON-schema, like `satisfies` #312 and `activity` #315). It would make the planner mark those exact dates unavailable (and drive the `caution: day after heavy` off them).
+
+**State:** OPEN. Not blocking — undated one-off notes render beside the week today. To be built WITH the phase-change form brief: that brief's "known one-off events" question is the natural write home for a dated hard item, so the field and its capture surface land together rather than a field with nowhere to write it.

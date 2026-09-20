@@ -256,8 +256,10 @@ def test_one_reply_one_write_per_block_and_exactly_one_footer(db_session):
     u = models.User(email="footer314@x.io", hashed_password="x")
     db_session.add(u); db_session.commit(); db_session.refresh(u)
     # three distinct, non-clashing schedule_item rewrites in one reply, PLUS a model footer echo
+    # (the tally, #314) AND a model echo of a PER-ENTRY action line (#316 carry-over).
     reply = ("Done.\n" + _kn_block("mon_a", "gym A", "monday") + _kn_block("tue_b", "gym B", "tuesday")
-             + _kn_block("wed_c", "gym C", "wednesday") + "\n✓ 3 saved")
+             + _kn_block("wed_c", "gym C", "wednesday")
+             + "\n✓ Schedule entry saved: mon_a\n✓ 3 saved")
     cleaned, actions, results = _process_knowledge_updates(reply, u.id, db_session)
     assert len(results) == 3 and all(r.saved for r in results)   # exactly one write per block
 
@@ -265,12 +267,26 @@ def test_one_reply_one_write_per_block_and_exactly_one_footer(db_session):
     final, _ = _compose_response(
         client=_DummyClient(), model="m", user_message="x", reply=cleaned,
         all_actions=actions, write_results=results)
-    assert final.count("✓ 3 saved") == 1     # the model's echo stripped, one authoritative footer
+    assert final.count("✓ 3 saved") == 1     # tally echo stripped, one authoritative footer
+    # #316: every per-entry action line appears EXACTLY once — the model's echo of "mon_a" is
+    # stripped before the authoritative `actions_taken` are appended.
+    for key in ("mon_a", "tue_b", "wed_c"):
+        assert final.count(f"✓ Schedule entry saved: {key}") == 1
 
 
-def test_strip_footer_echo_keeps_action_lines():
-    # per-entry action lines (no leading digit) survive; only the tally is stripped
-    txt = "✓ Schedule entry saved: mon_a\n✓ 3 saved\nkeep me"
+def test_strip_footer_echo_strips_per_entry_action_echoes(db_session):
+    # #316: per-entry action lines the MODEL wrote are stripped too (they duplicated in prod);
+    # ordinary prose — including a ✓ bullet that is NOT an action line — is kept.
+    txt = ("✓ Schedule entry saved: mon_a\n"
+           "✗ Injury entry NOT saved: knee — day clash\n"
+           "✓ Routine 'Push Day' created in Hevy — folder Base\n"
+           "✓ 3 saved\n"
+           "✓ Your deadlift is looking strong this week\n"     # prose, no action phrase → kept
+           "keep me")
     out = _strip_footer_echo(txt)
-    assert "✓ Schedule entry saved: mon_a" in out and "keep me" in out
+    assert "✓ Schedule entry saved: mon_a" not in out
+    assert "NOT saved: knee" not in out
+    assert "created in Hevy" not in out
     assert "✓ 3 saved" not in out
+    assert "✓ Your deadlift is looking strong this week" in out   # prose survives
+    assert "keep me" in out
