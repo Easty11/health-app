@@ -88,7 +88,7 @@ _Live, undated — no external date orders these; pick by readiness._
 2. ~~Activity slots v2.~~ **DONE → #315** (device-evidenced zero-load `activity` slot + sport-scoped `load_window`; `Q164` raised — ingest-side sport-name normalisation for slot membership).
 3. ~~Week planner.~~ **DONE → #316** (derived, stateless week plan over the resolver window: hard-first day-view + availability, per-key scheduled/quota/done, needs_planning, freshness; `Q165` raised — dated one-off `schedule_item`, to land with the phase-change form brief).
 4. Hevy deletion reconciliation. — **S0(a) answered YES (#314):** the official Hevy API exposes a paged workout-EVENTS feed of updates AND deletes since a given date; that brief can reconcile the phantom-workout class (deleted-in-Hevy workouts that the upsert-only sync left counted) against it.
-5. Phase card + structured phase-change form (form, not chat — operator ruled). **PR1 backend DONE → #317** (atomic `POST /engine/phase/transition`, dated one-off `schedule_item`s closing Q165, `recorded_via`, draft read); **PR2 (Phase card + 8-step flow, frontend) is the next lane** (#318). `Q166` raised — a structured planned-phase store for "Move to a new phase" prefill (deliberately not built).
+5. ~~Phase card + structured phase-change form (form, not chat — operator ruled).~~ **DONE — PR1 backend → #317** (atomic `POST /engine/phase/transition`, dated one-off `schedule_item`s closing Q165, `recorded_via`, draft read); **PR2 Phase card + 8-step flow (frontend) → #318**. `Q166` raised — a structured planned-phase store for "Move to a new phase" prefill (deliberately not built).
 6. HC ingest stage 2 (blocked on HCA HR-lag, Q159).
 
 | Item | Notes |
