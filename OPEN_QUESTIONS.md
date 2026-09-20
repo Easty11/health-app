@@ -4646,3 +4646,11 @@ Raised 2026-09-19 with #311. `cbti/replay.load_nights` sets `training_end` = a t
 **To close:** rule which HC activities constrain a night (likely by declared sport — reuse the activity-slot v2 declaration rather than a second sport list), and lift the interim exclusion for those. `CBTI_TITRATION_POLICY` (operator-held, not in the tree) may define "training session" for this purpose — anchor the ruling on it if so. Read-time only; no schema. Companion to Q160 (the felt-load felt-minutes scope) — same "which activities count for which consumer" shape, different consumer (the sleep engine vs the psychological residual).
 
 **State:** OPEN. Not blocking — the interim preserves prior behaviour; this decides when HC sessions begin to constrain nights.
+
+## Q163. A real tool-use runtime for the in-app chat?  [OPEN]
+
+Raised 2026-09-20 with #314. The in-app coach has NO tool loop — it acts through embedded tags (`<hevy_create_routine>`, `<hevy_update_routine>`, `<knowledge_update>`, `<capability_update>`) parsed out of a single completion, and reads everything it needs (routines included, #314) from the prepared context. The MCP tools (`search_hevy_routines`, `get_hevy_routine`, …) exist only for EXTERNAL MCP clients. #314's GUARD: do NOT build a tool runtime there — it is a larger decision.
+
+**To decide:** whether the in-app chat should gain a genuine Anthropic tool-use loop (`tools=` + tool-call turns), letting the coach fetch a routine on demand rather than reading a bounded working set from context, and folding create/update into tool calls. Trade-offs: per-turn latency + cost of multi-step tool turns vs the current single-pass + tags; and how the write-result/footer truthfulness discipline (#283/#313/#314) maps onto tool results.
+
+**State:** OPEN. Not blocking — the tag lane works and #314's read/update ride it. A capability question, revisited if the working-set-from-context model proves too limiting.

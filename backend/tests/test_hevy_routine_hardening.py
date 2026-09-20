@@ -190,7 +190,7 @@ def test_grouped_superset_reads_back_grouped(monkeypatch):
     ))
     posted = _posted_exercises(sent)
     routine = {"title": "Unilateral Day", "id": "x", "exercises": posted}
-    rendered = "\n".join(mcp_server._format_routine_full(routine, fallback={}))
+    rendered = "\n".join(mcp_server.format_routine_full(routine, fallback={}))
     assert rendered.count("[superset 0]") == 2             # 0 is grouped, not dropped
 
 
