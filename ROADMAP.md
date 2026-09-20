@@ -84,10 +84,10 @@ _Live, undated — no external date orders these; pick by readiness._
 **Post-1b next lanes (2026-08-02 reconciliation).** `ROADMAP.md` is the single canonical answer to "what's next" (per the canonical-stores table); the committed close-out's next-action and any chat proposal are candidates until promoted here. With 1b delivered, the interpretation lane's sequenced continuation remains increments **2 (rephrase) -> 3 (lever-tap) -> 5 (go-live)** in the build-sequence block above. Separately, the **hub shell (#150)** is now unblocked and is the operator-preferred next pick, with **`lab_accession`** as the strongest small alternative — both queued as rows below. Dated NOW items still precede these.
 
 **Queued briefs (chat-authored, not yet received) — order, no detail (#312).**
-1. Coach routine read/update.
+1. ~~Coach routine read/update.~~ **DONE → #314.**
 2. Activity slots v2.
 3. Week planner.
-4. Hevy deletion reconciliation.
+4. Hevy deletion reconciliation. — **S0(a) answered YES (#314):** the official Hevy API exposes a paged workout-EVENTS feed of updates AND deletes since a given date; that brief can reconcile the phantom-workout class (deleted-in-Hevy workouts that the upsert-only sync left counted) against it.
 5. Phase-change flow (unwritten; awaiting operator form-vs-chat ruling).
 6. HC ingest stage 2 (blocked on HCA HR-lag, Q159).
 
