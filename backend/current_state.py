@@ -25,6 +25,7 @@ from declared_state import lift_declared_state
 from engine import profile as profile_mod
 from engine import resolver as resolver_mod
 from engine import training_phase as training_phase_mod
+from engine import week_plan as week_plan_mod
 
 logger = logging.getLogger(__name__)
 from reads.labs_reads import LabRow, latest_lab_results
@@ -73,6 +74,11 @@ class CurrentState:
     # `uncounted`. None = the resolver read failed (logged) — the chat context omits the
     # position rather than going down. `{"window": None, ...}` = baseline (no plan).
     resolver_position: dict | None = None
+    # The derived week plan (#316) over the SAME resolver window: per-day hard/availability, per-key
+    # scheduled/quota/done (the #312 derivation, shared), needs_planning, freshness. None = the
+    # resolver window is null (baseline) OR the read failed (logged) — the chat week block is then
+    # omitted (context byte-identical). Stateless, derived on read; no new store.
+    week_plan: dict | None = None
     capability_state: list[models.CapabilityState] = field(default_factory=list)
     hrv_baseline: HRVBaseline | None = None   # per-source rolling baseline (#292)
     labs: list[LabRow] = field(default_factory=list)
@@ -148,6 +154,18 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         logger.exception("resolver position read failed for user %s — omitting from context", user_id)
         resolver_position = None
 
+    # The derived week plan (#316), over the SAME resolver read (entries + position reused, no
+    # second query). A failure must never take the chat down (G4): catch, log, leave None.
+    week_plan = None
+    if resolver_position is not None:
+        try:
+            week_plan = week_plan_mod.plan_week(
+                db, user_id, today, entries=entries, resolver_position=resolver_position
+            )
+        except Exception:
+            logger.exception("week plan read failed for user %s — omitting from context", user_id)
+            week_plan = None
+
     return CurrentState(
         knowledge_entries=entries,
         device_profile=device_profile,
@@ -162,4 +180,5 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         hrv_baseline=hrv_baseline,
         labs=labs,
         resolver_position=resolver_position,
+        week_plan=week_plan,
     )

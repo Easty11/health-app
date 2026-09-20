@@ -26,6 +26,9 @@ from routers.knowledge import (
     TRAINING_PLAN_KEY,
     _SATISFIES_VALIDATORS,
 )
+# Week-planner derivation (#316), ONE definition shared with the chat consistency line —
+# engine.week_plan imports resolver/load_metrics/models, never context_builder (acyclic).
+from engine.week_plan import consistency_rows, schedule_sessions_per_week
 
 AEST = pytz.timezone("Australia/Brisbane")
 
@@ -1071,8 +1074,14 @@ def _section_samsung_hrv(readings: list[Any], now: datetime, baseline: HRVBaseli
 _DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
-def _section_schedule(entries: list[Any], now: datetime) -> str:
-    """Build a synthesised weekly schedule view from structured knowledge entries."""
+def _section_schedule(entries: list[Any], now: datetime, suppress_hard_flags: bool = False) -> str:
+    """Build a synthesised weekly schedule view from structured knowledge entries.
+
+    `suppress_hard_flags` (#316): when the training-phase section is rendering the derived WEEK
+    (hard-by-day + availability), the next-7-days "Hard commitment" / "Pre-event shadow" flag lines
+    here are folded into that block — so they are dropped to state the week once, not twice. Default
+    False keeps the pre-#316 output byte-identical (the #43 parity discipline, and the null-window
+    case where no week block renders)."""
     if not entries:
         return ""
 
@@ -1137,8 +1146,10 @@ def _section_schedule(entries: list[Any], now: datetime) -> str:
     # THIS WEEK FLAGS
     flags: list[str] = []
 
-    # Hard commitments in next 7 days
-    for e in schedule_items:
+    # Hard commitments in next 7 days. Folded into the #316 week block when it renders
+    # (`suppress_hard_flags`), so the week is stated once; an unknown weekday is still caught by
+    # the day-map loop above, so suppression drops no data-integrity report.
+    for e in schedule_items if not suppress_hard_flags else []:
         val = _v(e, "value") or {}
         if not val.get("hard"):
             continue
@@ -1355,16 +1366,8 @@ def _entry_type(e: Any) -> Any:
     return getattr(e, "type", None) if hasattr(e, "type") else (e.get("type") if isinstance(e, dict) else None)
 
 
-def _schedule_sessions_per_week(val: dict[str, Any]) -> int:
-    """A schedule_item's weekly session count for the consistency line (#312): `sessions_per_week`
-    when present (days are CANDIDATES, not a count — "Mon/Wed/Fri, 2 a week" is 2), else the number
-    of listed `days`. `validate_schedule_item` constrains neither against the other, so an item
-    carrying BOTH is read as its declared count."""
-    spw = val.get("sessions_per_week")
-    if isinstance(spw, int) and not isinstance(spw, bool):
-        return spw
-    days = val.get("days")
-    return len(days) if isinstance(days, list) else 0
+# One definition, in `engine.week_plan` (#316). Kept as a module-local alias for back-compat.
+_schedule_sessions_per_week = schedule_sessions_per_week
 
 
 def _section_training_plan(plan: dict[str, Any] | None, phase: dict[str, Any] | None) -> str:
@@ -1409,6 +1412,7 @@ def _section_training_phase(
     phase: dict[str, Any] | None,
     resolver_position: dict[str, Any] | None = None,
     knowledge_entries: list[Any] | None = None,
+    week_plan: dict[str, Any] | None = None,
 ) -> str:
     """Render the open training phase (Q112, #270) — DOING NOW, framing the profile's standing
     BUILDING TOWARD below it. Absent (baseline) → empty string. The `review_on` line is a BADGE,
@@ -1420,7 +1424,13 @@ def _section_training_phase(
     counted conditioning sessions, and the four `uncounted` reasons. Rendered only when the read
     succeeded AND its window is non-null; a null window (baseline) leaves the section byte-identical
     to the pre-#308 phase render. The section reports the resolver's numbers verbatim — it never
-    recomputes (GUARD)."""
+    recomputes (GUARD).
+
+    When `week_plan` is supplied (the #316 derived read; None in the isolated #312 tests, so those
+    stay byte-identical), the WEEK is folded in under the position: hard items by day → availability
+    (with `caution: day after heavy`) → the #312 per-key consistency block → PLANNING NEEDED →
+    one-off notes → the S3 coach rules. The next-7-days hard lines are then suppressed in
+    `_section_schedule` so the week is stated once, not twice."""
     if not phase:
         return ""
     lines = ["## Training Phase (Adaptive Exposure Engine — doing now)"]
@@ -1474,6 +1484,48 @@ def _section_training_phase(
             for u in uncounted:
                 lines.append(f"    · {_uncounted_phrase(u)}")
 
+        # ---- the WEEK, hard commitments first (#316) — one statement of the week -------------
+        # Rendered only when the derived plan is supplied (None in the isolated #312 tests, so
+        # those stay byte-identical). Hard items occupy their days; what is left is availability;
+        # a `heavy` hard item the day before flags `caution: day after heavy` (advisory, never
+        # blocking). Days are preferences (#275 untouched) — nothing here marks a session "missed".
+        if week_plan is not None:
+            lines.append("  - Week (hard commitments first, then availability):")
+            for day in week_plan.get("days") or []:
+                wd = (day.get("weekday") or "").capitalize()
+                hard = day.get("hard") or []
+                if hard:
+                    parts = []
+                    for h in hard:
+                        el = h.get("expected_load")
+                        load = f", {el}" if el else ""
+                        sdt = ", same-day training OK" if h.get("same_day_training") else ""
+                        parts.append(f"{h.get('activity')}{load}{sdt}")
+                    hard_str = "; ".join(parts)
+                else:
+                    hard_str = "no hard commitment"
+                avail = "available" if day.get("available") else "UNAVAILABLE"
+                caution = f" ⚠ {day['caution']}" if day.get("caution") else ""
+                flex = day.get("flexible") or []
+                flex_str = (" · flexible: " + ", ".join(f.get("activity") or "?" for f in flex)) if flex else ""
+                lines.append(f"    · {wd} {day.get('date')}: {hard_str} — {avail}{caution}{flex_str}")
+            fr = week_plan.get("freshness") or {}
+            hc = fr.get("hc_synced_at")
+            polar = fr.get("polar_latest_session_at")
+            lines.append(
+                f"  - Data freshness: HC last synced {hc or 'never'}; newest Polar session received "
+                f"{polar or 'never'} (no Polar pull timestamp is recorded — Q154)."
+            )
+            has_device_slot = any(s.get("kind") in ("load_window", "activity") for s in slots)
+            if has_device_slot and (fr.get("hc_stale") or fr.get("polar_stale")):
+                stale_src = [s for s, flag in
+                             (("Health Connect", fr.get("hc_stale")), ("Polar", fr.get("polar_stale"))) if flag]
+                lines.append(
+                    "    ⚠ device-evidenced counts (activity/conditioning) may be INCOMPLETE — "
+                    f"{' and '.join(stale_src)} has not reported since before this window began; "
+                    "do not present a device-slot 'done' as settled fact."
+                )
+
         # ---- schedule↔quota consistency, DERIVED on read (#312, S4) --------------------------
         # Per slot: `scheduled` (sessions/wk summed over ACTIVE linked schedule_items — those whose
         # `satisfies` names this slot's {kind,key}) vs `quota` (this leg) vs `done` (from resolve(),
@@ -1491,16 +1543,12 @@ def _section_training_phase(
             except (ValueError, TypeError, KeyError):
                 leg_days = None
             lines.append("  - Schedule vs quota (declared links):")
-            for slot in slots:
-                kind = slot.get("kind")
-                key = slot.get(kind)   # capacity token | load_window | activity name (#315)
-                scheduled = sum(
-                    _schedule_sessions_per_week(_entry_value(e)) for e in schedule_items
-                    if isinstance(_entry_value(e).get("satisfies"), dict)
-                    and _entry_value(e)["satisfies"].get(kind) == key
-                )
-                quota = slot.get("quota") or 0
-                done = slot.get("done") or 0
+            # Numbers from the ONE shared derivation (#316), so the chat line and `plan_week` agree.
+            rows = consistency_rows(slots, [_entry_value(e) for e in schedule_items])
+            for slot, row in zip(slots, rows):
+                scheduled = row["scheduled"]
+                quota = row["quota"]
+                done = row["done"]
                 label = _slot_display_label(slot)
                 if leg_days == 7:
                     line = f"    · {label} — scheduled {scheduled}/wk · quota {quota} · done {done}"
@@ -1523,6 +1571,20 @@ def _section_training_phase(
                 lines.append(
                     f"    · unlinked (soft, counted to no slot): {', '.join(unlinked)}"
                 )
+
+        # PLANNING NEEDED + one-off notes (#316) — after the per-key block, per the brief order.
+        if week_plan is not None:
+            if week_plan.get("needs_planning"):
+                lines.append(
+                    "  - PLANNING NEEDED — the phase declares a quota but NO schedule item is placed "
+                    "against any slot. Planning is DUE: say so and point the athlete to the structured "
+                    "phase-change flow; do NOT improvise the planning conversation. Until that flow "
+                    "ships, list the hard commitments, the availability and the unplaced quota above, "
+                    "and stop there."
+                )
+            for n in week_plan.get("one_off_notes") or []:
+                exp = f" (expires {n['expires_at']})" if n.get("expires_at") else ""
+                lines.append(f"  - One-off note (undated, from load context): {n.get('description')}{exp}")
 
         lines.append(
             "  - This is the AUTHORITATIVE count of what has been done against the declared plan "
@@ -1556,6 +1618,21 @@ def _section_training_phase(
         "- You may PROPOSE a phase change in words; you never write the phase ledger yourself.",
         "- Never put a weekday in a Hevy routine title — the schedule owns the day, not the title.",
     ]
+    # S3 week-planner coach rules (#316) — rendered with the week (None in the isolated #312 tests).
+    if week_plan is not None:
+        lines += [
+            "### Planning the week (#316)",
+            "- Hard commitments are FIXED. Plan around them, never over them; a day marked "
+            "UNAVAILABLE has a blocking hard commitment. A `caution: day after heavy` day is "
+            "available but flag the carryover when you propose placing a hard session there.",
+            "- Before you PROPOSE a session or CREATE a Hevy routine for a slot key, check that key's "
+            "`done + still-scheduled` against its `quota` above. At or over quota → say so, give the "
+            "numbers (scheduled / quota / done), and ASK. Never initiate silently — the athlete may "
+            "still choose it, but it is their call, a prompt not a lock.",
+            "- Counts are only as fresh as the last device ingest. When the freshness line flags a "
+            "device-evidenced slot as possibly INCOMPLETE, do not treat its `done` as settled — say "
+            "the platform may not have heard from the device yet.",
+        ]
     return "\n".join(lines)
 
 
@@ -1744,7 +1821,7 @@ def build_system_prompt(
     if getattr(state, "training_phase", None) is not None:
         phase_section = _section_training_phase(
             state.training_phase, getattr(state, "resolver_position", None),
-            state.knowledge_entries,
+            state.knowledge_entries, getattr(state, "week_plan", None),
         )
         if phase_section:
             sections.append(phase_section)
@@ -1763,7 +1840,12 @@ def build_system_prompt(
         sections.append(_section_knowledge(knowledge_entries))
 
     if state.knowledge_entries:
-        schedule_section = _section_schedule(state.knowledge_entries, now)
+        # When the week block renders (a non-null resolver window → `week_plan` present), fold the
+        # next-7-days hard lines into it rather than stating the week twice (#316).
+        schedule_section = _section_schedule(
+            state.knowledge_entries, now,
+            suppress_hard_flags=getattr(state, "week_plan", None) is not None,
+        )
         if schedule_section:
             sections.append(schedule_section)
 

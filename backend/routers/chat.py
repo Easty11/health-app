@@ -1100,19 +1100,35 @@ def _render_write_footer(write_results: list[WriteResult]) -> str:
 
 
 # A whole line that mimics the deterministic footer TALLY: the mark, a DIGIT, then "saved"
-# ("✓ 3 saved", "⚠ 2 saved, 1 failed — …"). The digit is what distinguishes it from the per-entry
-# action strings ("✓ Schedule entry saved: key"), which carry no count and must be kept.
+# ("✓ 3 saved", "⚠ 2 saved, 1 failed — …").
 _FOOTER_ECHO_RE = re.compile(r"(?m)^[ \t]*[✓⚠][ \t]*\d+[ \t]+saved\b.*$")
+
+# A whole line that mimics a PER-ENTRY action string the system appends from `actions_taken`
+# ("✓ Schedule entry saved: key", "✗ Injury entry NOT saved: key — …", "✓ Routine 'X' created in
+# Hevy …", "✓ Knowledge saved: cat", "✓ Capability logged: …"). Anchored on the ✓/✗ mark PLUS a
+# deterministic action phrase from `record()`, so ordinary prose (a ✓ bullet the coach writes) is
+# not eaten. Only reached BEFORE `all_actions` is appended, so any such line present is a model
+# echo of a prior turn's footer, never an authoritative line (#316, extending #314).
+_ACTION_ECHO_RE = re.compile(
+    r"(?m)^[ \t]*[✓✗][ \t]+.*?(?:"
+    r"saved:|NOT saved:|removed:|"
+    r"created in Hevy|updated in Hevy|"
+    r"Knowledge (?:updated|saved):|"
+    r"Capability logged:"
+    r").*$"
+)
 
 
 def _strip_footer_echo(reply: str) -> str:
-    """Drop any footer-tally line the MODEL wrote from this turn's reply, before the real footer
-    is appended (#314). Prior turns' deterministic footers sit in the model's context, so it
-    reproduces the format in its own prose; kept as-is on an all-saved turn, that duplicates the
-    authoritative footer (prod, 19 Sep: "✓ 3 saved" shown twice). Only the tally grammar is
-    matched — per-entry action lines are untouched — and only this reply is cleaned, never the
-    conversation HISTORY (the coach still needs to know what saved on prior turns)."""
+    """Drop any footer line the MODEL wrote itself from this turn's reply, before the authoritative
+    footer + action lines are appended (#314 for the TALLY grammar; #316 extends it to the PER-ENTRY
+    action grammar). Prior turns' deterministic footers sit in the model's context, so it reproduces
+    the format in its own prose; kept as-is, that duplicates the authoritative line (prod: "✓ 3
+    saved" twice, #314; and "✓ Schedule entry saved: decompression_pilates_sat_2026" twice with the
+    tally once, #316). Both the tally and the per-entry action grammar are stripped; only THIS
+    reply, never the conversation HISTORY (the coach still needs to know what saved on prior turns)."""
     cleaned = _FOOTER_ECHO_RE.sub("", reply)
+    cleaned = _ACTION_ECHO_RE.sub("", cleaned)
     return re.sub(r"\n{3,}", "\n\n", cleaned).rstrip()
 
 

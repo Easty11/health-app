@@ -46,7 +46,9 @@ from engine import (
     selection,
     taxonomy,
     training_phase as training_phase_mod,
+    week_plan as week_plan_mod,
 )
+from load_metrics import _local_day
 
 router = APIRouter(prefix="/engine", tags=["engine"])
 
@@ -296,6 +298,20 @@ async def get_resolver(
     — no open-phase microcycle and no weekly template — `window` is null with a 200, matching
     the no-profile contract (#272). `minutes` is never consulted (Q106 stays open on it)."""
     return resolver_mod.resolve(db, current_user.id)
+
+
+@router.get("/week-plan")
+async def get_week_plan(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The derived week plan (#316): the resolver's current window as a per-day view (hard
+    commitments first, then availability, with `caution: day after heavy`), per-slot-key
+    scheduled/quota/done (the #312 derivation, shared), `unlinked_soft`, `one_off_notes`,
+    `needs_planning`, and device-ingest `freshness`. `null` at baseline (no phase microcycle, no
+    weekly template — the null-window contract, #272). Read-only, stateless; no `resolve()`,
+    validator, or free-order (#275) change."""
+    return week_plan_mod.plan_week(db, current_user.id, _local_day())
 
 
 @router.post("/response")
