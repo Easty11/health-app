@@ -81,6 +81,7 @@ SCHEDULE_ITEM_FIELDS = (
     "activity", "days", "sessions_per_week", "hard", "expected_load",
     "time_of_day", "time_range", "same_day_training", "same_day_note",
     "duration_weeks", "season_end", "supersedes", "satisfies",
+    "event_date", "event_end",   # #317/Q165 — a dated one-off hard item (exclusive with `days`)
 )
 
 # Accepted at write, NEVER stored. `distinct_from` acknowledges an overlap for one
@@ -298,12 +299,20 @@ def validate_schedule_item(value: Any) -> dict[str, Any]:
     if not isinstance(value["activity"], str) or not value["activity"].strip():
         raise ValueError("schedule_item.activity must be a non-empty string")
 
-    # WHEN it happens: a day list, a weekly count, or both. Neither is not a schedule.
+    # WHEN it happens: a day list, a weekly count, or both — OR a dated one-off (`event_date`,
+    # #317/Q165). A dated one-off names specific CALENDAR dates, so it is mutually exclusive with
+    # weekday recurrence (`days`/`sessions_per_week`): a commitment is one or the other.
     has_days = "days" in value and value["days"] is not None
     has_count = "sessions_per_week" in value and value["sessions_per_week"] is not None
-    if not has_days and not has_count:
+    has_event = value.get("event_date") is not None
+    if has_event and (has_days or has_count):
         raise ValueError(
-            "schedule_item: at least one of `days` or `sessions_per_week` is required"
+            "schedule_item: `event_date` (a dated one-off) is mutually exclusive with `days` / "
+            "`sessions_per_week` (weekday recurrence) — a commitment is one or the other"
+        )
+    if not has_days and not has_count and not has_event:
+        raise ValueError(
+            "schedule_item: at least one of `days`, `sessions_per_week`, or `event_date` is required"
         )
 
     if has_days:
@@ -378,6 +387,29 @@ def validate_schedule_item(value: Any) -> dict[str, Any]:
                 f"schedule_item.season_end must be an ISO date (YYYY-MM-DD) or null, "
                 f"got {value['season_end']!r}"
             ) from None
+
+    # Dated one-off (#317/Q165): `event_date` ISO; optional `event_end` ISO on or after it.
+    # `event_end` without `event_date` is meaningless.
+    if has_event:
+        try:
+            ed = date.fromisoformat(str(value["event_date"]))
+        except ValueError:
+            raise ValueError(
+                f"schedule_item.event_date must be an ISO date (YYYY-MM-DD), "
+                f"got {value['event_date']!r}"
+            ) from None
+        if value.get("event_end") is not None:
+            try:
+                ee = date.fromisoformat(str(value["event_end"]))
+            except ValueError:
+                raise ValueError(
+                    f"schedule_item.event_end must be an ISO date (YYYY-MM-DD) or null, "
+                    f"got {value['event_end']!r}"
+                ) from None
+            if ee < ed:
+                raise ValueError("schedule_item.event_end must be on or after event_date")
+    elif value.get("event_end") is not None:
+        raise ValueError("schedule_item.event_end requires event_date")
 
     if value.get("supersedes") is not None:
         if not isinstance(value["supersedes"], int) or isinstance(value["supersedes"], bool):
@@ -659,24 +691,15 @@ def _validate_training_plan_write(user_id: int, entry_in: KnowledgeEntryIn, db: 
         )
 
 
-def upsert_knowledge_entry(
+def _stage_upsert_entry(
     user_id: int,
     entry_in: KnowledgeEntryIn,
     db: Session,
 ) -> models.UserKnowledgeEntry:
-    """Create a new entry, superseding any existing active entry with the same key.
-
-    A `schedule_item` is validated BEFORE the session is touched (#221's ordering): a
-    refused write must leave no row behind, and `db.add` runs before the commit, so a
-    later raise would strand a pending INSERT for a caller sharing the session.
-
-    Validation lives here rather than only on `POST /knowledge/entry` because this
-    function is the write path for chat (`routers/chat.py`) and the health router too.
-    A rejection that the chat writer never sees is a silently dropped fact, which is
-    the failure this replaces -- so the check has to sit where every writer passes.
-    Direct ORM construction stays unvalidated by design: that is the backfill's path,
-    and validation is at write.
-    """
+    """Validate + STAGE an upsert (supersede-by-key, and an explicit cross-key `supersedes`)
+    WITHOUT committing — the shared core of `upsert_knowledge_entry` (which commits) and the
+    phase transition (#317, which batches many writes into ONE commit so a later failure rolls the
+    whole set back). One definition of the write mechanic; no fork. Returns the flushed new row."""
     stored_value = entry_in.value
     if entry_in.type == "training_plan":
         _validate_training_plan_write(user_id, entry_in, db)
@@ -728,6 +751,28 @@ def upsert_knowledge_entry(
             target.superseded_by = new_entry.id
             target.active = False
 
+    return new_entry
+
+
+def upsert_knowledge_entry(
+    user_id: int,
+    entry_in: KnowledgeEntryIn,
+    db: Session,
+) -> models.UserKnowledgeEntry:
+    """Create a new entry, superseding any existing active entry with the same key.
+
+    A `schedule_item` is validated BEFORE the session is touched (#221's ordering): a
+    refused write must leave no row behind, and `db.add` runs before the commit, so a
+    later raise would strand a pending INSERT for a caller sharing the session.
+
+    Validation lives here rather than only on `POST /knowledge/entry` because this
+    function is the write path for chat (`routers/chat.py`) and the health router too.
+    A rejection that the chat writer never sees is a silently dropped fact, which is
+    the failure this replaces -- so the check has to sit where every writer passes.
+    Direct ORM construction stays unvalidated by design: that is the backfill's path,
+    and validation is at write.
+    """
+    new_entry = _stage_upsert_entry(user_id, entry_in, db)
     db.commit()
     db.refresh(new_entry)
     return new_entry

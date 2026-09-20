@@ -1208,6 +1208,34 @@ def _section_schedule(entries: list[Any], now: datetime, suppress_hard_flags: bo
         for f in flags:
             lines.append(f"- {f}")
 
+    # Dated one-off commitments (#317/Q165) — `schedule_item`s with `event_date` (no weekday, so
+    # absent from the grid above). Rendered only while the event has not passed (`event_end`, else
+    # `event_date`, on or after today); a past one-off simply drops off (derive on read, nothing
+    # retires itself). No dated items → nothing appended, so output stays byte-identical.
+    dated: list[str] = []
+    for e in schedule_items:
+        val = _v(e, "value") or {}
+        ev = val.get("event_date")
+        if ev is None:
+            continue
+        try:
+            start = date.fromisoformat(str(ev))
+            end = date.fromisoformat(str(val["event_end"])) if val.get("event_end") else start
+        except (ValueError, TypeError, KeyError):
+            continue
+        if end < today:
+            continue
+        activity = val.get("activity", "?")
+        load = val.get("expected_load")
+        tag = "hard" if val.get("hard") else "soft"
+        tag = f"{tag}, {load}" if load and load != "none" else tag
+        span = start.strftime("%a %d %b") if start == end else \
+            f"{start.strftime('%a %d %b')}–{end.strftime('%a %d %b')}"
+        dated.append(f"- {activity} ({tag}) — {span}")
+    if dated:
+        lines.append("\nDATED ONE-OFFS")
+        lines.extend(dated)
+
     return "\n".join(lines)
 
 
@@ -1632,6 +1660,10 @@ def _section_training_phase(
             "- Counts are only as fresh as the last device ingest. When the freshness line flags a "
             "device-evidenced slot as possibly INCOMPLETE, do not treat its `done` as settled — say "
             "the platform may not have heard from the device yet.",
+            "- When the phase review is DUE (the badge above), or PLANNING NEEDED is shown, SAY so "
+            "and point the athlete to the Phase card to review or change the phase. Do NOT conduct "
+            "the transition in chat, and NEVER write a phase, a microcycle or the Hevy phase-folder "
+            "yourself — that is the form's single confirmed write, not a coach action (#317).",
         ]
     return "\n".join(lines)
 

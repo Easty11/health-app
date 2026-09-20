@@ -220,6 +220,28 @@ def arbitrated_sessions(
     return rows
 
 
+def sport_names_seen(user_id: int, db: Session) -> list[dict[str, str]]:
+    """Distinct `sport_name` this user has recorded, with a representative `source` (#317) — the
+    pick-list the phase-change form offers for a slot's `device_sports` (plus free entry), so the
+    operator scopes a slot by a sport that WILL match a real session rather than a guessed spelling
+    (the Q164 mismatch risk). A NULL sport is skipped (it matches nothing — surfaced elsewhere as
+    `no_sport`). Newest-first by the most recent session carrying each name."""
+    rows = (
+        db.query(models.AerobicSession.sport_name, models.AerobicSession.source,
+                 models.AerobicSession.session_date)
+        .filter(models.AerobicSession.user_id == user_id,
+                models.AerobicSession.sport_name.isnot(None))
+        .order_by(models.AerobicSession.session_date.desc())
+        .all()
+    )
+    seen: dict[str, str] = {}
+    for sport, source, _ in rows:
+        s = (sport or "").strip()
+        if s and s not in seen:
+            seen[s] = source
+    return [{"sport_name": k, "source": v} for k, v in seen.items()]
+
+
 def overlaps_workout(session, workouts) -> bool:
     """True iff `session`'s `[start_time, stop_time]` interval intersects any workout's
     `[start_time, end_time]` (all four endpoints present on the pair). The SINGLE overlap
