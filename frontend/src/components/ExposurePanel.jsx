@@ -18,10 +18,8 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
 import { formatReviewDate } from './hub/exposureTileCopy'
-import PhaseForm from './exposure/PhaseForm'
-import ClosePhaseDialog from './exposure/ClosePhaseDialog'
-import PhaseHistory from './exposure/PhaseHistory'
-import QuotaWindow from './exposure/QuotaWindow'
+import PhaseCard from './exposure/PhaseCard'
+import PhaseTransitionFlow from './exposure/PhaseTransitionFlow'
 
 function Chip({ children, tone = 'gray' }) {
   const tones = {
@@ -78,8 +76,7 @@ export default function ExposurePanel({ onDiscuss }) {
   const [status, setStatus] = useState('loading') // loading | ready | empty | error
   // Write-surface UI state (increment 2). `refetchKey` re-runs the read effect after a write — the
   // single loop this increment closes: write → engine → panel refetch → the recommendation changes.
-  const [formOpen, setFormOpen] = useState(false)
-  const [closing, setClosing] = useState(false)
+  const [flowOpen, setFlowOpen] = useState(false)
   const [refetchKey, setRefetchKey] = useState(0)
 
   useEffect(() => {
@@ -104,14 +101,8 @@ export default function ExposurePanel({ onDiscuss }) {
   // A successful open or close refetches /engine/next and collapses the form/dialog. NO chat push on
   // write (#59) — Discuss remains the only chat path, below, user-initiated.
   function onWritten() {
-    setFormOpen(false)
-    setClosing(false)
+    setFlowOpen(false)
     setRefetchKey((k) => k + 1)
-  }
-
-  function openForm() {
-    setClosing(false)
-    setFormOpen(true)
   }
 
   if (status === 'loading') {
@@ -144,78 +135,20 @@ export default function ExposurePanel({ onDiscuss }) {
         </span>
       </div>
 
-      {/* 2. Phase card — only when a phase is open */}
-      {phase && (
-        <Card title={`Phase · ${phase.label}`}>
-          <Field label="Probe posture">{phase.probe_posture}</Field>
-          <div className="flex flex-wrap gap-1 items-center">
-            <span className="text-xs font-medium text-gray-700">Capacities:</span>
-            {phase.capacities === null
-              ? <Chip>all capacities</Chip>
-              : phase.capacities.map((c) => <Chip key={c}>{c}</Chip>)}
-          </div>
-          <Field label="Entered">{phase.entered_on}</Field>
-          <div className="flex flex-wrap gap-2 items-center">
-            <Field label="Review on">{phase.review_on}</Field>
-            {/* The review-due badge is a PROMPT that opens a form, never a transition (#228). Its
-                text is unchanged; nothing submits without the operator. */}
-            {phase.review_due && (
-              <button
-                type="button"
-                onClick={openForm}
-                className="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700
-                  hover:bg-amber-200 transition-colors"
-              >
-                Review due — open the next phase
-              </button>
-            )}
-          </div>
-          {phase.fortify_target_within_phase === false && (
-            <p className="text-xs text-amber-700 leading-snug">
-              This phase excludes the standing Fortify target's capacity — the engine is serving a
-              declared target the phase does not permit.
-            </p>
-          )}
-        </Card>
+      {/* 2. Phase card (#318) — the phase surface: current phase + week N + review badge, the quota
+          position, the #312/#316 week line, history, and ONE action → the structured 8-step change
+          flow. Replaces the ad-hoc Open/Close buttons + inline PhaseForm/ClosePhaseDialog: a phase
+          change is the form's single confirmed atomic write now (#317). */}
+      <PhaseCard phase={phase} refetchKey={refetchKey} onReviewChange={() => setFlowOpen(true)} />
+      {phase?.fortify_target_within_phase === false && (
+        <p className="text-xs text-amber-700 leading-snug px-1">
+          This phase excludes the standing Fortify target's capacity — the engine is serving a
+          declared target the phase does not permit.
+        </p>
       )}
-
-      {/* 2b. Phase controls (increment 2, write). Open next phase is always available — and is the
-          only control at baseline (no phase). Close to baseline shows only when a phase is open. */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={openForm}
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 border
-            border-indigo-200 rounded-full px-3 py-1 transition-colors"
-        >
-          Open next phase
-        </button>
-        {phase && (
-          <button
-            type="button"
-            onClick={() => { setFormOpen(false); setClosing(true) }}
-            className="text-xs font-medium text-gray-600 hover:text-gray-800 border
-              border-gray-300 rounded-full px-3 py-1 transition-colors"
-          >
-            Close to baseline
-          </button>
-        )}
-      </div>
-
-      {formOpen && (
-        <PhaseForm
-          hasOpenPhase={!!phase}
-          onWritten={onWritten}
-          onCancel={() => setFormOpen(false)}
-        />
+      {flowOpen && (
+        <PhaseTransitionFlow onWritten={onWritten} onCancel={() => setFlowOpen(false)} />
       )}
-      {closing && (
-        <ClosePhaseDialog onWritten={onWritten} onCancel={() => setClosing(false)} />
-      )}
-
-      {/* 2c. Quota window — the due-slot resolver read (#276, resolver brief STEP 7). Position
-          only; refetched with the panel after a write. Renders nothing at baseline. */}
-      <QuotaWindow refetchKey={refetchKey} />
 
       {/* 3. Fortify card */}
       <Card title={fortify.target_label}>
@@ -268,9 +201,6 @@ export default function ExposurePanel({ onDiscuss }) {
           ))}
         </Card>
       )}
-
-      {/* 6. Phase history — the read-only ledger, collapsed by default (increment 2). */}
-      <PhaseHistory />
 
       {/* 7. Discuss — user-initiated push into chat (#59), never automatic */}
       <button
