@@ -139,7 +139,7 @@ export default function ExposurePanel({ onDiscuss }) {
           position, the #312/#316 week line, history, and ONE action → the structured 8-step change
           flow. Replaces the ad-hoc Open/Close buttons + inline PhaseForm/ClosePhaseDialog: a phase
           change is the form's single confirmed atomic write now (#317). */}
-      <PhaseCard phase={phase} refetchKey={refetchKey} onReviewChange={() => setFlowOpen(true)} />
+      <PhaseCard phase={phase} refetchKey={refetchKey} onReviewChange={() => setFlowOpen(true)} onWritten={onWritten} />
       {phase?.fortify_target_within_phase === false && (
         <p className="text-xs text-amber-700 leading-snug px-1">
           This phase excludes the standing Fortify target's capacity — the engine is serving a

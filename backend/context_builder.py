@@ -22,6 +22,7 @@ from hevy_routine_format import format_routine_compact, format_routine_full  # s
 from routers.knowledge import (
     MACRO_MAX_CHARS,
     REVISED_BY_VALUES,
+    SCHEDULE_ITEM_FIELDS,
     TRAINING_PLAN_FIELDS,
     TRAINING_PLAN_KEY,
     _SATISFIES_VALIDATORS,
@@ -133,8 +134,9 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         "\n"
         "THE SHAPE IS VALIDATED AND CLOSED. A block that does not conform is REFUSED,\n"
         "not stored, and you will be told why. Rules:\n"
-        "- No key outside the list above. If a fact has no field, say so — do not\n"
-        "  invent a key for it (that is how `minimum_days` came to exist).\n"
+        f"- The stored fields, all of them: {', '.join(SCHEDULE_ITEM_FIELDS)}. No key outside\n"
+        "  this set. If a fact has no field, say so — do not invent a key for it (that is how\n"
+        "  `minimum_days` came to exist).\n"
         "- `days` holds weekday names only: monday…sunday, lowercase. A frequency like\n"
         '  "flexible" is NOT a day — it belongs in `sessions_per_week` (1-14).\n'
         "- At least one of `days` or `sessions_per_week` must be present.\n"
@@ -152,6 +154,45 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         '`"satisfies": {"load_window": "metabolic"}` for the conditioning window, or '
         '`"satisfies": {"activity": "pilates"}` for a device-evidenced activity slot. Omit it\n'
         "  (or null) when the commitment fills no declared quota slot — unlinked is fine.\n"
+        "\n"
+        "A DATED ONE-OFF — a commitment that happens ON a known date, not every week (a game,\n"
+        "carnival, appointment, travel)\n"
+        "Give it `event_date` (and `event_end` for a multi-day span) INSTEAD of "
+        "`days`/`sessions_per_week`\n"
+        "— they are mutually exclusive, and the validator refuses a row that mixes them. It is still\n"
+        "a `schedule_item`, and `hard` is whatever the athlete states (a fixture is hard; an optional\n"
+        "social match may be soft). Emit:\n"
+        "\n"
+        "<knowledge_update>\n"
+        "{\n"
+        '  "type": "schedule_item",\n'
+        '  "key": "cup_final_2026_10",\n'
+        '  "value": {\n'
+        '    "activity": "cup final",\n'
+        '    "event_date": "2026-10-17",\n'
+        '    "event_end": "2026-10-18",\n'
+        '    "hard": true,\n'
+        '    "expected_load": "heavy",\n'
+        '    "time_of_day": "unknown",\n'
+        '    "same_day_training": false,\n'
+        '    "duration_weeks": null,\n'
+        '    "season_end": null\n'
+        "  },\n"
+        '  "notes": "regional cup final, Sat–Sun"\n'
+        "}\n"
+        "</knowledge_update>\n"
+        "- `event_date` is YYYY-MM-DD; `event_end` is YYYY-MM-DD on or after it — omit `event_end`\n"
+        "  for a single day. `event_end` without `event_date` is refused.\n"
+        "- A dated one-off carries NO `days`/`sessions_per_week`. With `event_date` set, the week\n"
+        "  planner marks those calendar days UNAVAILABLE (and the day after a heavy one cautioned).\n"
+        "\n"
+        "DATED COMMITMENT vs TEMPORAL STATE — the routing rule (do not confuse them)\n"
+        "A commitment with a known DATE the athlete will plan AROUND (a game, carnival, appointment,\n"
+        "travel) is a `schedule_item` with `event_date` (+ `event_end`), `hard` as the athlete states\n"
+        "— NOT a `load_context`. A vague, undated state AFTER the fact (\"big weekend\", \"slept badly\",\n"
+        "\"heavy session\") stays a `load_context` (see TEMPORAL EVENTS below): it expires on its own\n"
+        "and blocks no future day. If it has a date and the athlete is planning around it, it is the\n"
+        "former.\n"
         "\n"
         "SAME DAY, DIFFERENT TIME — no conflict\n"
         "Two commitments on the same weekday at non-overlapping times (work in the\n"
@@ -1398,6 +1439,24 @@ def _entry_type(e: Any) -> Any:
 _schedule_sessions_per_week = schedule_sessions_per_week
 
 
+def plan_of_record_stale(plan: dict[str, Any] | None, phase: dict[str, Any] | None) -> bool:
+    """The SINGLE definition of the plan-of-record STALE flag (#312/#319): the plan was last
+    revised BEFORE the open phase's review date AND that review date has passed — the phase's own
+    `review_due`, so no second definition of "passed". ONE definition, two callers: the chat render
+    (`_section_training_plan`) and `GET /engine/plan-of-record` (the Phase card, #319) — never
+    re-derived client-side. False whenever an input is absent or unparseable (shown as not-stale,
+    never a crash)."""
+    if not isinstance(plan, dict) or not isinstance(phase, dict):
+        return False
+    revised_on = plan.get("revised_on")
+    if not (phase.get("review_due") and phase.get("review_on") and revised_on):
+        return False
+    try:
+        return date.fromisoformat(str(revised_on)) < date.fromisoformat(str(phase["review_on"]))
+    except (ValueError, TypeError):
+        return False
+
+
 def _section_training_plan(plan: dict[str, Any] | None, phase: dict[str, Any] | None) -> str:
     """Render the PLAN OF RECORD (#312) — the macro plan the athlete is following, the coach's
     every-turn reference — directly ABOVE the training-phase section. `macro` is verbatim bounded
@@ -1421,16 +1480,11 @@ def _section_training_plan(plan: dict[str, Any] | None, phase: dict[str, Any] | 
     if meta:
         lines.append(f"- Last {', '.join(meta)}.")
 
-    if isinstance(phase, dict) and phase.get("review_due") and phase.get("review_on") and revised_on:
-        try:
-            stale = date.fromisoformat(str(revised_on)) < date.fromisoformat(str(phase["review_on"]))
-        except (ValueError, TypeError):
-            stale = False
-        if stale:
-            lines.append(
-                "- STALE — plan not revised since before the last phase review; treat the macro "
-                "below as possibly out of date and prompt the athlete to confirm or revise it."
-            )
+    if plan_of_record_stale(plan, phase):
+        lines.append(
+            "- STALE — plan not revised since before the last phase review; treat the macro "
+            "below as possibly out of date and prompt the athlete to confirm or revise it."
+        )
 
     lines += ["", macro.strip()]
     return "\n".join(lines)

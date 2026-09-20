@@ -49,7 +49,36 @@ test('renders the phase, week N, review badge, the week line, and the one action
 test('baseline (no phase) shows "Open a phase"', async () => {
   const onReviewChange = vi.fn()
   await act(async () => { render(<PhaseCard phase={null} onReviewChange={onReviewChange} />) })
-  expect(screen.getByRole('button', { name: /open a phase/i })).toBeTruthy()
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /open a phase/i })) })
+  expect(screen.getByRole('button', { name: /^open a phase$/i })).toBeTruthy()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^open a phase$/i })) })
   expect(onReviewChange).toHaveBeenCalled()
+})
+
+// #319 — plan of record on the card: headline + STALE badge from GET /engine/plan-of-record (the
+// SAME stale flag the chat computes, never re-derived here), full macro on expand.
+test('renders the plan-of-record headline, STALE badge, and full macro on expand', async () => {
+  api.get.mockImplementation((url) => {
+    if (url === '/engine/plan-of-record') return Promise.resolve({ data: {
+      macro: '## Offseason\nPhase 1 base; buffer rule first.', revised_on: '2026-08-15',
+      revised_by: 'coach', stale: true } })
+    if (url === '/engine/week-plan') return Promise.resolve({ data: WEEK })
+    if (url === '/engine/resolver') return Promise.resolve({ data: { window: null, slots: [], due_slot: null, uncounted: [] } })
+    if (url === '/engine/phase/history') return Promise.resolve({ data: { history: [] } })
+    return Promise.resolve({ data: {} })
+  })
+  await act(async () => { render(<PhaseCard phase={PHASE} onReviewChange={vi.fn()} onWritten={vi.fn()} />) })
+  await waitFor(() => expect(screen.getByText('Offseason')).toBeTruthy())   // headline, '#' stripped
+  expect(screen.getByText('plan may be stale')).toBeTruthy()
+  expect(screen.queryByText(/buffer rule first/)).toBeNull()               // full macro hidden
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /show full plan/i })) })
+  expect(screen.getByText(/buffer rule first/)).toBeTruthy()               // shown on expand
+})
+
+// #319 item 4 — the advanced disclosure keeps the direct PhaseForm reachable until the flow is
+// prod-confirmed.
+test('the advanced link mounts the direct open-phase form', async () => {
+  await act(async () => { render(<PhaseCard phase={PHASE} onReviewChange={vi.fn()} onWritten={vi.fn()} />) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /advanced · open \/ close phase directly/i })) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /open a new phase/i })) })
+  expect(screen.getByText('New phase')).toBeTruthy()   // PhaseForm mounted
 })
