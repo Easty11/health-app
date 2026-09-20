@@ -35,7 +35,8 @@ describe('decompression payload — fortify, phase, suppressed probe (F5)', () =
 
   test('the phase card is present', async () => {
     await renderPanel(decompression)
-    expect(screen.getByText('Phase · decompression')).toBeTruthy()
+    // #318: the heading now carries "· week N" after the label.
+    expect(screen.getByText(/Phase · decompression/)).toBeTruthy()
   })
 
   test('there is no probe card', async () => {
