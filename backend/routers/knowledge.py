@@ -70,7 +70,7 @@ SOURCE_VALUES = ("onboarding", "chat", "system", "api")
 WEEKDAYS = (
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
 )
-EXPECTED_LOAD_VALUES = ("light", "moderate", "heavy")
+EXPECTED_LOAD_VALUES = ("light", "moderate", "heavy", "none")  # "none" = zero-load item (#315)
 TIME_OF_DAY_VALUES = ("morning", "afternoon", "evening", "unknown")
 
 MAX_SESSIONS_PER_WEEK = 14
@@ -119,11 +119,19 @@ def _validate_satisfies_load_window(v: Any) -> None:
         )
 
 
-# key -> value-validator. A future `activity` kind (the activity-slot brief) is added as ONE
-# line here; nothing else in the validator changes.
+def _validate_satisfies_activity(v: Any) -> None:
+    # An `activity` slot's key is a declared, OPEN-vocabulary name (#315) — not a closed set like
+    # capacity/load_window — so this checks only a non-empty string; the resolver matches it to a
+    # declared activity slot's name at read time.
+    if not isinstance(v, str) or not v.strip():
+        raise ValueError("schedule_item.satisfies.activity must be a non-empty activity name")
+
+
+# key -> value-validator. `activity` (#315) is the third kind, mirroring the microcycle slot kinds.
 _SATISFIES_VALIDATORS = {
     "capacity": _validate_satisfies_capacity,
     "load_window": _validate_satisfies_load_window,
+    "activity": _validate_satisfies_activity,
 }
 
 

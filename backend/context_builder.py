@@ -145,9 +145,10 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         "- `satisfies` (optional) LINKS this commitment to the quota slot it fills, so the\n"
         "  system states scheduled-vs-quota rather than guessing. Exactly one key, one of "
         f"{', '.join(sorted(_SATISFIES_VALIDATORS))}: "
-        '`"satisfies": {"capacity": "stability"}` for a movement-quality slot, or '
-        '`"satisfies": {"load_window": "metabolic"}` for the conditioning window. Omit it (or\n'
-        "  null) when the commitment fills no declared quota slot — unlinked is fine.\n"
+        '`"satisfies": {"capacity": "stability"}` for a movement-quality slot, '
+        '`"satisfies": {"load_window": "metabolic"}` for the conditioning window, or '
+        '`"satisfies": {"activity": "pilates"}` for a device-evidenced activity slot. Omit it\n'
+        "  (or null) when the commitment fills no declared quota slot — unlinked is fine.\n"
         "\n"
         "SAME DAY, DIFFERENT TIME — no conflict\n"
         "Two commitments on the same weekday at non-overlapping times (work in the\n"
@@ -1297,26 +1298,31 @@ def render_asked_lab_value(row: Any) -> str:
 
 def _slot_display_label(slot: dict[str, Any]) -> str:
     """A quota slot's label: a `load_window` conditioning slot is "Conditioning" (the metabolic
-    window); a capacity slot is its title-cased capacity token. Mirrors the frontend `QuotaWindow`."""
-    if slot.get("kind") == "load_window":
+    window); an `activity` slot is its title-cased activity name (#315); a capacity slot is its
+    title-cased capacity token. Mirrors the frontend `QuotaWindow`."""
+    kind = slot.get("kind")
+    if kind == "load_window":
         lw = slot.get("load_window")
         return "Conditioning" if lw == "metabolic" else _cap(lw)
+    if kind == "activity":                       # #315 — the declared activity name
+        return _cap(slot.get("activity"))
     return _cap(slot.get("capacity"))
 
 
 def _slot_is_due(slot: dict[str, Any], due_slot: dict[str, Any] | None) -> bool:
-    """True when `due_slot {kind, key}` names this slot — matched on kind + key (capacity slots
-    key on `capacity`, load_window slots on `load_window`). Reading `due_slot`, never
-    `due_capacity` (capacity-only), is what lets the marker land on a conditioning slot."""
+    """True when `due_slot {kind, key}` names this slot — matched on kind + key. The key is the
+    slot's own kind-value (capacity token / load_window / activity name), so `slot.get(kind)`
+    reads it for all three kinds (#315). Reading `due_slot`, never `due_capacity` (capacity-only),
+    is what lets the marker land on a conditioning or activity slot."""
     if not isinstance(due_slot, dict):
         return False
-    key = slot.get("load_window") if slot.get("kind") == "load_window" else slot.get("capacity")
-    return due_slot.get("kind") == slot.get("kind") and due_slot.get("key") == key
+    kind = slot.get("kind")
+    return due_slot.get("kind") == kind and due_slot.get("key") == slot.get(kind)
 
 
 def _uncounted_phrase(u: dict[str, Any]) -> str:
     """One `uncounted` item in plain words. Hevy workouts carry `workout`; aerobic sessions
-    carry `session`. All four reasons are named; an unknown reason falls back to itself."""
+    carry `session`. An unknown reason falls back to itself."""
     reason = u.get("reason")
     if reason == "off_plan":
         return f"off-plan workout ({_cap(u.get('capacity'))})"
@@ -1327,6 +1333,10 @@ def _uncounted_phrase(u: dict[str, Any]) -> str:
         return f"conditioning session overlapping a gym workout ({u.get('sport_name')})"
     if reason == "untimed":
         return f"untimed conditioning session ({u.get('sport_name')})"
+    if reason == "unclaimed_session":            # #315 — a session no slot's sport claims
+        if u.get("detail") == "no_sport":
+            return "other activity (no recorded sport — set the sport in the app so it can count)"
+        return f"other activity ({u.get('sport_name')})"
     return str(reason)
 
 
@@ -1450,11 +1460,12 @@ def _section_training_phase(
         for slot in slots:
             marker = "  ◀ DUE" if _slot_is_due(slot, due_slot) else ""
             lines.append(f"  - {_slot_display_label(slot)} · {slot.get('done')}/{slot.get('quota')}{marker}")
-            if slot.get("kind") == "load_window":
+            if slot.get("kind") in ("load_window", "activity"):   # #315 — both count sessions
                 for cs in slot.get("sessions_counted") or []:
                     dur = cs.get("duration_minutes")
                     dur_str = f"{dur:g}min" if isinstance(dur, (int, float)) else "?min"
-                    unzoned = " (unzoned)" if not cs.get("trimp") else ""
+                    # "(unzoned)" is a load_window (conditioning) note only; activity slots are zero-load.
+                    unzoned = " (unzoned)" if slot.get("kind") == "load_window" and not cs.get("trimp") else ""
                     lines.append(f"    · {cs.get('sport_name')} {dur_str}{unzoned}")
         if slots and all((s.get("quota") or 0) - (s.get("done") or 0) <= 0 for s in slots):
             lines.append("  - all quotas met this window — nothing due")
@@ -1482,7 +1493,7 @@ def _section_training_phase(
             lines.append("  - Schedule vs quota (declared links):")
             for slot in slots:
                 kind = slot.get("kind")
-                key = slot.get("load_window") if kind == "load_window" else slot.get("capacity")
+                key = slot.get(kind)   # capacity token | load_window | activity name (#315)
                 scheduled = sum(
                     _schedule_sessions_per_week(_entry_value(e)) for e in schedule_items
                     if isinstance(_entry_value(e).get("satisfies"), dict)

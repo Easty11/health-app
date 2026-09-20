@@ -223,12 +223,30 @@ def test_zero_open_is_a_valid_baseline(db_session):
         {"slots": [{"load_window": "mechanical", "sessions_per_cycle": 1, "minutes": 30}]}]}),
      "unknown load_window"),                                   # off the closed set of one
     (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
-        {"slots": [{"load_window": "metabolic", "sessions_per_cycle": 1, "minutes": 30},
-                   {"load_window": "metabolic", "sessions_per_cycle": 2, "minutes": 30}]}]}),
+        {"slots": [{"load_window": "metabolic", "device_sports": ["Ride"],
+                    "sessions_per_cycle": 1, "minutes": 30},
+                   {"load_window": "metabolic", "device_sports": ["Run"],
+                    "sessions_per_cycle": 2, "minutes": 30}]}]}),
      "duplicate load_window"),                                 # dup WITHIN one sub-cycle
     (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
-        {"slots": [{"load_window": "metabolic", "sessions_per_cycle": 1}]}]}),
+        {"slots": [{"load_window": "metabolic", "device_sports": ["Ride"],
+                    "sessions_per_cycle": 1}]}]}),
      "missing required field 'minutes'"),                      # minutes stays required (S0(f))
+    # ── #315: a load_window (and activity) slot is SPORT-SCOPED — device_sports is REQUIRED. ──
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"load_window": "metabolic", "sessions_per_cycle": 1, "minutes": 30}]}]}),
+     "device_sports must be a non-empty list"),                # load_window without a sport scope
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"activity": "pilates", "sessions_per_cycle": 1, "minutes": 30}]}]}),
+     "device_sports must be a non-empty list"),                # activity without a sport scope
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"activity": "  ", "device_sports": ["Pilates"],
+                    "sessions_per_cycle": 1, "minutes": 30}]}]}),
+     "activity must be a non-empty name"),                     # activity slot needs a name
+    (_payload(microcycle={"sub_cycle_days": 7, "sub_cycles": [
+        {"slots": [{"capacity": "stability", "device_sports": ["Ride"],
+                    "sessions_per_cycle": 1, "minutes": 30}]}]}),
+     "capacity slot does not take device_sports"),             # scope is the aerobic lane only
 ])
 def test_invalid_payloads_are_refused(payload, match):
     with pytest.raises(ValueError, match=match):
@@ -240,7 +258,8 @@ def test_load_window_slot_is_valid_and_byte_identical():
     UNCHANGED (#307 / Amendment 1) — negative control for the load_window refusal cases."""
     mc = {"sub_cycle_days": 7, "sub_cycles": [
         {"label": "cond", "slots": [
-            {"load_window": "metabolic", "sessions_per_cycle": 3, "minutes": 40}]}]}
+            {"load_window": "metabolic", "device_sports": ["Ride", "Row"],
+             "sessions_per_cycle": 3, "minutes": 40}]}]}
     out = phase_mod.validate_training_phase(_payload(microcycle=mc))
     assert out["microcycle"] is mc
 
@@ -250,7 +269,8 @@ def test_mixed_capacity_and_load_window_in_one_sub_cycle_pass():
     mc = {"sub_cycle_days": 7, "sub_cycles": [
         {"slots": [
             {"capacity": "strength", "sessions_per_cycle": 2, "minutes": 45},
-            {"load_window": "metabolic", "sessions_per_cycle": 2, "minutes": 30}]}]}
+            {"load_window": "metabolic", "device_sports": ["Ride"],
+             "sessions_per_cycle": 2, "minutes": 30}]}]}
     assert phase_mod.validate_training_phase(_payload(microcycle=mc))["microcycle"] is mc
 
 
@@ -258,8 +278,10 @@ def test_cross_sub_cycle_duplicate_load_window_passes():
     """Mirror of the capacity cross-sub-cycle rule: the SAME load_window in A and B at
     different doses is allowed; only a duplicate WITHIN one sub-cycle is the error."""
     mc = {"sub_cycle_days": 7, "sub_cycles": [
-        {"label": "A", "slots": [{"load_window": "metabolic", "sessions_per_cycle": 3, "minutes": 40}]},
-        {"label": "B", "slots": [{"load_window": "metabolic", "sessions_per_cycle": 1, "minutes": 30}]}]}
+        {"label": "A", "slots": [{"load_window": "metabolic", "device_sports": ["Ride"],
+                                  "sessions_per_cycle": 3, "minutes": 40}]},
+        {"label": "B", "slots": [{"load_window": "metabolic", "device_sports": ["Run"],
+                                  "sessions_per_cycle": 1, "minutes": 30}]}]}
     assert phase_mod.validate_training_phase(_payload(microcycle=mc))["microcycle"] is mc
 
 
