@@ -4654,3 +4654,11 @@ Raised 2026-09-20 with #314. The in-app coach has NO tool loop — it acts throu
 **To decide:** whether the in-app chat should gain a genuine Anthropic tool-use loop (`tools=` + tool-call turns), letting the coach fetch a routine on demand rather than reading a bounded working set from context, and folding create/update into tool calls. Trade-offs: per-turn latency + cost of multi-step tool turns vs the current single-pass + tags; and how the write-result/footer truthfulness discipline (#283/#313/#314) maps onto tool results.
 
 **State:** OPEN. Not blocking — the tag lane works and #314's read/update ride it. A capability question, revisited if the working-set-from-context model proves too limiting.
+
+## Q164. Ingest-side sport-name normalisation for slot membership?  [OPEN]
+
+Raised 2026-09-20 with #315. Activity and sport-scoped `load_window` slots decide membership by matching a slot's declared `device_sports` against a canonical session's `sport_name` — EXACT but case-insensitive, no fuzzy/category matching (ruling 4c). `device_sports` is an OPEN vocabulary because Polar sports are free-form (`Fitness`, `Road cycling`, `Other outdoor`, …) and HC produces title-cased `ExerciseSessionType` names; a closed set would refuse a real Polar sport. The cost of open + exact: a typo or a source-specific spelling (HC "Walking" vs a Polar "Walk") matches no slot and surfaces as `unclaimed_session` — visible and fixable, but silent to the quota until fixed.
+
+**To decide:** whether the ingest path should NORMALISE `sport_name` to a canonical vocabulary (a source→canonical map, e.g. HC `WALKING`→"Walking", Polar "Walk"→"Walking") so slot membership rests on a canonical token rather than the raw device string, and whether `device_sports` should then validate against that canonical set (closing the vocabulary) or stay open. Trade-off: robustness of matching + a closed validatable set vs the maintenance of a per-source map and the risk of refusing a genuinely new sport at write.
+
+**State:** OPEN. Not blocking — exact case-insensitive matching works for the sports observed in prod, and a miss is visible (`unclaimed_session`, "other activity"), never a silent miscount. Revisited if real sessions repeatedly go unclaimed on spelling.

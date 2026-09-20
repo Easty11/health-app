@@ -85,7 +85,7 @@ _Live, undated — no external date orders these; pick by readiness._
 
 **Queued briefs (chat-authored, not yet received) — order, no detail (#312).**
 1. ~~Coach routine read/update.~~ **DONE → #314.**
-2. Activity slots v2.
+2. ~~Activity slots v2.~~ **DONE → #315** (device-evidenced zero-load `activity` slot + sport-scoped `load_window`; `Q164` raised — ingest-side sport-name normalisation for slot membership).
 3. Week planner.
 4. Hevy deletion reconciliation. — **S0(a) answered YES (#314):** the official Hevy API exposes a paged workout-EVENTS feed of updates AND deletes since a given date; that brief can reconcile the phantom-workout class (deleted-in-Hevy workouts that the upsert-only sync left counted) against it.
 5. Phase-change flow (unwritten; awaiting operator form-vs-chat ruling).
