@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 //
-// QuotaWindow (resolver brief STEP 7, consumes #276/#307). Assertions: a window renders the card
-// title + per-slot {Label} · {done}/{quota} across BOTH kinds (capacity + the load_window
-// "Conditioning" slot), marks the due slot once via `due_slot` (on either kind), and surfaces
-// `uncounted` distinguishing all four reasons (untagged / off_plan for Hevy; concurrent_strength /
-// untimed for aerobic sessions); baseline (null window) renders nothing; error renders a fault
-// line; a refetchKey change re-reads /engine/resolver.
+// QuotaWindow (resolver brief STEP 7, consumes #276/#307/#315). Assertions: a window renders the
+// card title + per-slot {Label} · {done}/{quota} across ALL THREE kinds (capacity, the load_window
+// "Conditioning" slot, and an #315 activity slot shown by its title-cased name), marks the due slot
+// once via `due_slot` (on any kind), and surfaces `uncounted` distinguishing its reasons (untagged /
+// off_plan for Hevy; concurrent_strength / untimed / unclaimed_session — "other activity" — for
+// aerobic sessions); baseline (null window) renders nothing; error renders a fault line; a
+// refetchKey change re-reads /engine/resolver.
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -77,6 +78,46 @@ describe('a live quota window', () => {
     expect(screen.getByText(/off-plan · Power/)).toBeTruthy()
     expect(screen.getByText(/concurrent strength · Row/)).toBeTruthy()   // aerobic overlapping the gym
     expect(screen.getByText(/untimed · Swim/)).toBeTruthy()              // NULL start/stop
+  })
+})
+
+describe('activity slots (#315)', () => {
+  // A window with an activity slot (pilates), a sport-scoped conditioning slot, and an
+  // unclaimed walk. The activity slot renders its title-cased name; the walk surfaces as
+  // "other activity"; a no-sport session says so.
+  const activityPayload = {
+    window: { start_date: '2026-09-07', end_date: '2026-09-13', label: 'A', source: 'phase' },
+    slots: [
+      { kind: 'activity', activity: 'pilates', device_sports: ['pilates'], quota: 1, done: 0, remaining: 1, sessions_counted: [] },
+      { kind: 'load_window', load_window: 'metabolic', device_sports: ['road cycling'], quota: 2, done: 1, remaining: 1, sessions_counted: [{ session: 9, sport_name: 'Road cycling', duration_minutes: 45, trimp: 120 }] },
+    ],
+    due_capacity: null,
+    due_slot: { kind: 'activity', key: 'pilates' },
+    uncounted: [
+      { session: 1, reason: 'unclaimed_session', sport_name: 'Walking', duration_minutes: 30 },
+      { session: 2, reason: 'unclaimed_session', detail: 'no_sport', duration_minutes: 20 },
+    ],
+  }
+
+  test('an activity slot renders its title-cased name and its done/quota', async () => {
+    await renderQuota(activityPayload)
+    await waitFor(() => expect(screen.getByText('Pilates')).toBeTruthy())
+    expect(screen.getByText('0/1')).toBeTruthy()
+  })
+
+  test('the due marker lands on the activity slot when due_slot names it', async () => {
+    await renderQuota(activityPayload)
+    await waitFor(() => expect(screen.getByText('Pilates')).toBeTruthy())
+    const due = screen.getAllByText('due')
+    expect(due).toHaveLength(1)
+    expect(screen.getByText('Pilates').closest('li').textContent).toContain('due')
+  })
+
+  test('an unclaimed session renders as "other activity", with and without a recorded sport', async () => {
+    await renderQuota(activityPayload)
+    await waitFor(() => expect(screen.getByText('Not counted')).toBeTruthy())
+    expect(screen.getByText(/other activity · Walking/)).toBeTruthy()
+    expect(screen.getByText(/other activity · no recorded sport/)).toBeTruthy()
   })
 })
 

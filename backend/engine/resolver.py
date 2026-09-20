@@ -55,7 +55,7 @@ from sqlalchemy.orm import Session
 
 import models
 from load_metrics import _local_day
-from load_events_metabolic import WINDOW_METABOLIC, compute_metabolic_load
+from load_events_metabolic import compute_metabolic_load
 from reads.aerobic_reads import arbitrated_sessions, overlaps_workout
 from reads.hevy_reads import counted_workouts as _counted_workouts   # aliased: local var shadows the name
 
@@ -70,21 +70,33 @@ _LEG_LABELS = ("A", "B", "C", "D")
 
 @dataclass(frozen=True)
 class Slot:
-    """One quota line in a window. A slot is EITHER a movement-quality `capacity` (counted from
-    Hevy by Rule 1) OR a `load_window` conditioning slot (counted from canonical
-    `aerobic_sessions`, #307 / Amendment 1) — exactly one is set, enforced at write by
-    `validate_microcycle`. `quota` is the session count it wants."""
+    """One quota line in a window. A slot is EXACTLY ONE of (enforced at write by
+    `validate_microcycle`): a movement-quality `capacity` (counted from Hevy by Rule 1); a
+    `load_window` conditioning slot (counted from canonical `aerobic_sessions`, #307/Amendment 1,
+    now sport-scoped #315); or an `activity` slot (#315 — a device-evidenced session of a declared
+    sport, zero-load). `device_sports` (casefolded) scopes the aerobic lane for load_window/activity;
+    `quota` is the session count it wants."""
     quota: int
     capacity: Capacity | None = None
     load_window: str | None = None
+    activity: str | None = None
+    device_sports: tuple[str, ...] = ()   # casefolded sport names for load_window/activity matching
 
     @property
     def kind(self) -> str:
-        return "capacity" if self.capacity is not None else "load_window"
+        if self.capacity is not None:
+            return "capacity"
+        if self.activity is not None:
+            return "activity"
+        return "load_window"
 
     @property
     def key(self) -> str:
-        return self.capacity.value if self.capacity is not None else (self.load_window or "")
+        if self.capacity is not None:
+            return self.capacity.value
+        if self.activity is not None:
+            return self.activity
+        return self.load_window or ""
 
 
 @dataclass
@@ -111,11 +123,23 @@ def _slots_from(raw_slots: list[dict[str, Any]], quota_key: str) -> list[Slot]:
             continue
         quota = s.get(quota_key)
         q = int(quota) if isinstance(quota, int) and not isinstance(quota, bool) else 0
+        # device_sports casefolded once for matching (#315); validation guarantees non-empty for
+        # load_window/activity, so an empty tuple here means a malformed slot → skipped defensively.
+        ds = tuple(
+            x.strip().casefold() for x in (s.get("device_sports") or [])
+            if isinstance(x, str) and x.strip()
+        )
+        if s.get("activity") is not None:
+            name = s.get("activity")
+            if not (isinstance(name, str) and name.strip()) or not ds:  # guard; refused at write
+                continue
+            out.append(Slot(quota=q, activity=name.strip(), device_sports=ds))
+            continue
         lw = s.get("load_window")
         if lw is not None:
-            if lw not in _SLOT_LOAD_WINDOWS:      # guard; validation refuses at write
+            if lw not in _SLOT_LOAD_WINDOWS or not ds:  # guard; sport-scope required at write (#315)
                 continue
-            out.append(Slot(quota=q, load_window=lw))
+            out.append(Slot(quota=q, load_window=lw, device_sports=ds))
             continue
         cap = taxonomy.resolve_capacity(s.get("capacity"))
         if cap is None:
@@ -349,32 +373,52 @@ def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str
             uncounted.append({"workout": w.hevy_id, "reason": "off_plan",
                               "capacity": dominant.value})
 
-    # ---- load_window slots: Amendment 1 — count canonical aerobic_sessions ----
-    lw_index: dict[str, int] = {
-        s.load_window: i for i, s in enumerate(slots) if s.kind == "load_window"
-    }
-    if lw_index:                                  # only touch the aerobic lane when declared
+    # ---- aerobic sessions: activity slots + sport-scoped load_window slots (#307 → #315) ----
+    # Claim order (S3): (1) exclusions first — untimed (fail-closed) and concurrent_strength (an
+    # HR trace of a gym session, #307); (2) activity slots claim by sport match in declared order;
+    # (3) what remains is eligible for sport-scoped load_window slots. ONE session claims AT MOST
+    # one slot. A session that matches no slot is surfaced as `unclaimed_session` — with detail
+    # `no_sport` when it carries no recorded sport at all (a NULL sport_name can match no
+    # sport-scoped slot, #315 ruling 4b), so the operator can see WHY and fix it at the source.
+    aerobic_targets = [(i, s) for i, s in enumerate(slots) if s.kind in ("activity", "load_window")]
+    if aerobic_targets:
         for sess in _in_window_aerobic(db, user_id, window):
-            idx = lw_index.get(WINDOW_METABOLIC)  # every aerobic session feeds the metabolic window
-            if idx is None:
-                continue                          # no metabolic slot in this window
             entry = {"session": sess.id, "sport_name": sess.sport_name,
                      "duration_minutes": sess.duration_minutes}
             if sess.start_time is None or sess.stop_time is None:
-                # Fail-closed (S0 OPEN CALL 2): a NULL start OR stop is undecidable for the
-                # overlap guard, so it is surfaced, never silently counted. Covers half-timed.
                 uncounted.append({**entry, "reason": "untimed"})
-            elif overlaps_workout(sess, workouts):
+                continue
+            if overlaps_workout(sess, workouts):
                 uncounted.append({**entry, "reason": "concurrent_strength"})
-            else:
-                done[idx] += 1
-                counted_sessions[idx].append({
+                continue
+            sport_cf = (sess.sport_name or "").strip().casefold()
+            if not sport_cf:
+                uncounted.append({**entry, "reason": "unclaimed_session", "detail": "no_sport"})
+                continue
+            # (2) activity slots, then (3) load_window slots — each in declared order.
+            claimed_idx = next(
+                (i for i, s in aerobic_targets if s.kind == "activity" and sport_cf in s.device_sports),
+                None,
+            )
+            if claimed_idx is None:
+                claimed_idx = next(
+                    (i for i, s in aerobic_targets if s.kind == "load_window" and sport_cf in s.device_sports),
+                    None,
+                )
+            if claimed_idx is None:
+                uncounted.append({**entry, "reason": "unclaimed_session"})
+                continue
+            done[claimed_idx] += 1
+            if slots[claimed_idx].kind == "load_window":
+                counted_sessions[claimed_idx].append({
                     **entry,
                     "trimp": compute_metabolic_load({
                         1: sess.z1_seconds, 2: sess.z2_seconds, 3: sess.z3_seconds,
                         4: sess.z4_seconds, 5: sess.z5_seconds,
                     }).trimp,
                 })
+            else:  # activity slot — zero-load, no trimp
+                counted_sessions[claimed_idx].append(dict(entry))
 
     # ---- per-slot output + due (Rule 4 across BOTH kinds; due_capacity capacity-only) ----
     slots_out: list[dict[str, Any]] = []
@@ -391,8 +435,13 @@ def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str
         if s.kind == "capacity":
             out["capacity"] = s.capacity.value
             out["workouts_counted"] = counted_workouts[i]
-        else:
+        elif s.kind == "load_window":
             out["load_window"] = s.load_window
+            out["device_sports"] = list(s.device_sports)
+            out["sessions_counted"] = counted_sessions[i]
+        else:  # activity (#315)
+            out["activity"] = s.activity
+            out["device_sports"] = list(s.device_sports)
             out["sessions_counted"] = counted_sessions[i]
         slots_out.append(out)
 

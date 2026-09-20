@@ -1,15 +1,18 @@
 // QuotaWindow — the due-slot resolver read surface (resolver brief STEP 7; consumes #276/#307).
 //
 // Reads GET /engine/resolver and renders the current quota window's per-slot position
-// ({label} · {done}/{quota}), marking the due slot (Rule 4). A slot is one of two KINDS (#307):
-// a movement-quality `capacity` slot, or a `load_window` conditioning slot (metabolic) shown as
-// "Conditioning". The due marker reads the top-level `due_slot {kind, key}`, so it lands on
-// either kind (never the old `due_capacity`, which is capacity-only and would mis-mark a
-// load_window slot when both are null). The `uncounted` line names four reasons: `untagged`
-// (zero primary tags) and `off_plan` (dominant capacity not in the window) for Hevy workouts,
-// and `concurrent_strength` (an aerobic session overlapping the gym) and `untimed` (NULL
-// start/stop) for canonical aerobic sessions. POSITION ONLY — dose (`minutes`) is not read here;
-// Q106 stays open.
+// ({label} · {done}/{quota}), marking the due slot (Rule 4). A slot is one of three KINDS
+// (#307/#315): a movement-quality `capacity` slot; a sport-scoped `load_window` conditioning
+// slot (metabolic) shown as "Conditioning"; or an `activity` slot (#315 — a device-evidenced
+// session of a declared sport, zero-load) shown as its title-cased activity name. The due marker
+// reads the top-level `due_slot {kind, key}`, so it lands on any kind (never the old
+// `due_capacity`, which is capacity-only and would mis-mark a non-capacity slot when both are
+// null). The `uncounted` line names the miss reasons: `untagged` (zero primary tags) and
+// `off_plan` (dominant capacity not in the window) for Hevy workouts; `concurrent_strength` (an
+// aerobic session overlapping the gym), `untimed` (NULL start/stop), and `unclaimed_session` (a
+// recorded session matching no slot's sport, e.g. a walk — "other activity"; detail `no_sport`
+// when no sport was recorded) for canonical aerobic sessions. POSITION ONLY — dose (`minutes`) is
+// not read here; Q106 stays open.
 //
 // Baseline (no phase microcycle, no weekly template) → `window` is null, 200 — the #272 no-profile
 // contract; the surface renders nothing rather than a fault. It owns its own fetch, re-run on
@@ -26,20 +29,27 @@ function titleCase(s) {
 }
 
 // A slot's display label: a load_window slot is a conditioning slot ("Conditioning" for the
-// metabolic window); a capacity slot is its title-cased capacity token.
+// metabolic window); an activity slot is its title-cased activity name (#315); a capacity slot is
+// its title-cased capacity token.
 function slotLabel(s) {
   if (s.kind === 'load_window') {
     return s.load_window === 'metabolic' ? 'Conditioning' : titleCase(s.load_window)
   }
+  if (s.kind === 'activity') return titleCase(s.activity)
   return titleCase(s.capacity)
 }
 
-// The key `due_slot` names this slot, matched on (kind, key) — capacity slots key on `capacity`,
-// load_window slots on `load_window`. Both-null can never spuriously match (unlike due_capacity).
+// The token `due_slot` names this slot, matched on (kind, key) — capacity slots key on `capacity`,
+// load_window slots on `load_window`, activity slots on `activity` (#315). Both/all-null can never
+// spuriously match (unlike due_capacity).
+function slotKey(s) {
+  if (s.kind === 'load_window') return s.load_window
+  if (s.kind === 'activity') return s.activity
+  return s.capacity
+}
 function isDue(s, dueSlot) {
   if (!dueSlot) return false
-  const key = s.kind === 'load_window' ? s.load_window : s.capacity
-  return dueSlot.kind === s.kind && dueSlot.key === key
+  return dueSlot.kind === s.kind && dueSlot.key === slotKey(s)
 }
 
 // One "not counted" line per surfaced item. Hevy workouts carry `workout`; aerobic sessions
@@ -54,6 +64,10 @@ function uncountedLabel(u) {
       return <>concurrent strength · {u.sport_name}</>
     case 'untimed':
       return <>untimed · {u.sport_name}</>
+    case 'unclaimed_session':
+      return u.detail === 'no_sport'
+        ? <>other activity · no recorded sport</>
+        : <>other activity · {u.sport_name}</>
     default:
       return <>{u.reason}</>
   }
@@ -94,7 +108,7 @@ export default function QuotaWindow({ refetchKey = 0 }) {
 
       <ul className="flex flex-col gap-1">
         {slots.map((s, i) => (
-          <li key={`${s.kind}:${s.capacity ?? s.load_window ?? i}`}
+          <li key={`${s.kind}:${s.capacity ?? s.load_window ?? s.activity ?? i}`}
               className="flex items-center gap-2 text-xs text-gray-700">
             <span className="font-medium">{slotLabel(s)}</span>
             <span className="text-gray-400">·</span>

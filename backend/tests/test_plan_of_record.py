@@ -161,6 +161,7 @@ def test_training_plan_belt_and_braces_rejects_second_active_under_other_key(db_
 def test_satisfies_capacity_and_load_window_accepted():
     validate_schedule_item(_valid_item(satisfies={"capacity": "stability"}))
     validate_schedule_item(_valid_item(satisfies={"load_window": "metabolic"}))
+    validate_schedule_item(_valid_item(satisfies={"activity": "pilates"}))   # #315 — the third kind
 
 
 def test_satisfies_unknown_values_and_shapes_refused():
@@ -173,7 +174,7 @@ def test_satisfies_unknown_values_and_shapes_refused():
     with pytest.raises(ValueError, match="exactly one key"):
         validate_schedule_item(_valid_item(satisfies={}))
     with pytest.raises(ValueError, match="unknown key"):
-        validate_schedule_item(_valid_item(satisfies={"activity": "swim"}))   # future kind, not yet
+        validate_schedule_item(_valid_item(satisfies={"tempo": "z2"}))        # not a slot kind
 
 
 def test_item_without_satisfies_validates_byte_identically():

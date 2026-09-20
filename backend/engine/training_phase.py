@@ -62,7 +62,23 @@ _MAX_SUB_CYCLES = 4
 _MIN_SESSIONS_PER_CYCLE = 0
 _MAX_SESSIONS_PER_CYCLE = 28
 
-_MICRO_SLOT_FIELDS = ("capacity", "load_window", "sessions_per_cycle", "minutes")
+_MICRO_SLOT_FIELDS = ("capacity", "load_window", "activity", "sessions_per_cycle", "minutes", "device_sports")
+
+
+def _validate_device_sports(slot: dict[str, Any], where: str, i: int) -> None:
+    """`device_sports` on a `load_window` or `activity` slot (#315): a NON-EMPTY list of NON-EMPTY
+    strings — the device-recorded sport names a canonical aerobic session must match (exact,
+    case-insensitive) to count for this slot. Deliberately OPEN, not a closed set: HC produces
+    title-cased `ExerciseSessionType` names but Polar rows carry Polar's own free-form sports
+    (prod: 'Fitness', 'Road cycling', 'Other outdoor', …), so a closed vocabulary would refuse a
+    real Polar sport. A typo therefore isn't refused at write; it simply matches no session, which
+    surfaces as an `unclaimed_session` on read (visible, fixable at source)."""
+    ds = slot.get("device_sports")
+    if not isinstance(ds, list) or not ds:
+        raise ValueError(f"{where}[{i}].device_sports must be a non-empty list of sport names")
+    for k, s in enumerate(ds):
+        if not isinstance(s, str) or not s.strip():
+            raise ValueError(f"{where}[{i}].device_sports[{k}] must be a non-empty string")
 
 
 class NoOpenPhase(Exception):
@@ -92,13 +108,16 @@ def validate_microcycle(value: Any) -> dict[str, Any]:
     `validate_weekly_template`).
 
     Shape: `{"sub_cycle_days": int, "sub_cycles": [{"label"?: str, "slots": [slot, ...]}]}`.
-    A slot carries EXACTLY ONE of `capacity` | `load_window` (#307), plus the count key
-    `sessions_per_cycle` and the required `minutes`. `capacity` is a movement-quality slot
-    (counted from Hevy, Rule 1); `load_window` is a conditioning slot keyed on a load window
-    (counted from canonical `aerobic_sessions`), a closed set of one — `metabolic`. Both keys
-    or neither is a refusal. The duplicate check is PER-SUB-CYCLE, not template-wide: one slot
-    per capacity AND one per load_window within a sub-cycle; the same key in A and B at
-    different doses is the point.
+    A slot carries EXACTLY ONE of `capacity` | `load_window` | `activity` (#307 → #315), plus
+    the count key `sessions_per_cycle` and the required `minutes`. `capacity` is a movement-quality
+    slot (counted from Hevy, Rule 1); `load_window` is a conditioning slot keyed on a load window
+    (counted from canonical `aerobic_sessions`), a closed set of one — `metabolic`; `activity` is a
+    device-evidenced slot of a declared sport, zero-load (#315). A `load_window` or `activity` slot
+    REQUIRES `device_sports` (a non-empty list of sport names scoping the aerobic lane, #315); a
+    `capacity` slot refuses it. None or more than one kind key is a refusal. The duplicate check is
+    PER-SUB-CYCLE, not template-wide: one slot per capacity AND one per load_window AND one per
+    activity (case-insensitive) within a sub-cycle; the same key in A and B at different doses is
+    the point.
     """
     if not isinstance(value, dict):
         raise ValueError("microcycle must be an object with 'sub_cycle_days' and 'sub_cycles'")
@@ -140,23 +159,29 @@ def validate_microcycle(value: Any) -> dict[str, Any]:
         where = f"microcycle.sub_cycles[{j}].slots"
         seen_caps: dict[taxonomy.Capacity, int] = {}
         seen_lws: dict[str, int] = {}
+        seen_acts: dict[str, int] = {}
         for i, slot in enumerate(slots):
             if not isinstance(slot, dict):
                 raise ValueError(f"{where}[{i}] must be an object")
             unknown = sorted(set(slot) - set(_MICRO_SLOT_FIELDS))
             if unknown:
                 raise ValueError(f"{where}[{i}]: unknown field(s) {unknown}")
-            # Exactly one of `capacity` | `load_window` keys the slot (#307). Both or neither
-            # is a refusal — the two are distinct count sources (Hevy dominant-capacity vs the
-            # canonical aerobic lane) and a slot is one or the other.
-            has_cap = "capacity" in slot
-            has_lw = "load_window" in slot
-            if has_cap == has_lw:
+            # Exactly one of `capacity` | `load_window` | `activity` keys the slot (#307 → #315).
+            # Three distinct count sources: Hevy dominant-capacity, the sport-scoped metabolic
+            # window, and a device-evidenced activity (zero-load). None or more than one is refused.
+            kinds = [k for k in ("capacity", "load_window", "activity") if k in slot]
+            if len(kinds) != 1:
                 raise ValueError(
-                    f"{where}[{i}]: a slot carries exactly one of 'capacity' | 'load_window', "
-                    f"got {'both' if has_cap else 'neither'}"
+                    f"{where}[{i}]: a slot carries exactly one of 'capacity' | 'load_window' | "
+                    f"'activity', got {kinds or 'none'}"
                 )
-            if has_cap:
+            kind = kinds[0]
+            if kind == "capacity":
+                if "device_sports" in slot:
+                    raise ValueError(
+                        f"{where}[{i}]: a capacity slot does not take device_sports "
+                        "(that scopes the aerobic-session lane, not the Hevy dominant-capacity one)"
+                    )
                 cap = taxonomy.resolve_capacity(slot.get("capacity"))
                 if cap is None:
                     raise ValueError(
@@ -169,7 +194,7 @@ def validate_microcycle(value: Any) -> dict[str, Any]:
                         f"sub-cycle (already at [{seen_caps[cap]}]) — cross-sub-cycle repeats are allowed"
                     )
                 seen_caps[cap] = i
-            else:
+            elif kind == "load_window":
                 lw = slot.get("load_window")
                 if lw not in _SLOT_LOAD_WINDOWS:
                     raise ValueError(
@@ -182,6 +207,22 @@ def validate_microcycle(value: Any) -> dict[str, Any]:
                         f"sub-cycle (already at [{seen_lws[lw]}]) — cross-sub-cycle repeats are allowed"
                     )
                 seen_lws[lw] = i
+                # #315 (S2): a load_window slot MUST be sport-scoped, so a recorded WALK can never
+                # satisfy a conditioning quota. Required, not optional — no phase has ever opened
+                # with a load_window slot (S0), so this breaks nothing live.
+                _validate_device_sports(slot, where, i)
+            else:  # activity (#315)
+                name = slot.get("activity")
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError(f"{where}[{i}].activity must be a non-empty name")
+                nkey = name.strip().casefold()
+                if nkey in seen_acts:                 # per-sub-cycle only
+                    raise ValueError(
+                        f"{where}[{i}].activity: duplicate activity {name!r} within this "
+                        f"sub-cycle (already at [{seen_acts[nkey]}]) — cross-sub-cycle repeats are allowed"
+                    )
+                seen_acts[nkey] = i
+                _validate_device_sports(slot, where, i)
             _slot_int(slot, "sessions_per_cycle",
                       _MIN_SESSIONS_PER_CYCLE, _MAX_SESSIONS_PER_CYCLE, i, where=where)
             _slot_int(slot, "minutes", _MIN_SLOT_MINUTES, _MAX_SLOT_MINUTES, i, where=where)

@@ -457,7 +457,7 @@ def test_the_declared_sets_are_what_the_schema_documents(db_session):
     through that `SCHEMA.md` says is refused, and nothing else would notice."""
     assert WEEKDAYS == ("monday", "tuesday", "wednesday", "thursday", "friday",
                         "saturday", "sunday")
-    assert EXPECTED_LOAD_VALUES == ("light", "moderate", "heavy")
+    assert EXPECTED_LOAD_VALUES == ("light", "moderate", "heavy", "none")  # "none" = zero-load (#315)
     assert TIME_OF_DAY_VALUES == ("morning", "afternoon", "evening", "unknown")
     assert set(SCHEDULE_ITEM_FIELDS) == {
         "activity", "days", "sessions_per_week", "hard", "expected_load",

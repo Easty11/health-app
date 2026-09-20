@@ -400,11 +400,17 @@ def test_http_resolver_endpoint_and_baseline_null_window(db_session):
 # load_window slots (#307 / Amendment 1) — count canonical aerobic_sessions   #
 # --------------------------------------------------------------------------- #
 
-def _lw_micro(scd, quota, *, label="cond"):
-    """A microcycle carrying a single metabolic load_window slot."""
+def _lw_micro(scd, quota, *, label="cond", sports=None):
+    """A microcycle carrying a single metabolic load_window slot. Since #315, a load_window slot is
+    SPORT-SCOPED — `device_sports` is required. These #307 tests exercise timing/overlap/arbitration,
+    not the sport scope, so the default declares every sport they use; the sport-scope itself is
+    pinned in test_activity_slots.py."""
+    ds = list(sports) if sports is not None else [
+        "Ride", "Swim", "Run", "Row", "Pilates", "Walk"]
     return {"sub_cycle_days": scd, "sub_cycles": [
         {"label": label, "slots": [
-            {"load_window": "metabolic", "sessions_per_cycle": quota, "minutes": 30}]}]}
+            {"load_window": "metabolic", "device_sports": ds,
+             "sessions_per_cycle": quota, "minutes": 30}]}]}
 
 
 def _aerobic(db, uid, sid, session_date, *, start=None, stop=None, sport="Ride",
@@ -581,7 +587,8 @@ def test_due_slot_crosses_kinds_and_due_capacity_skips_load_window(db_session):
     u = _user(db_session)
     mc = {"sub_cycle_days": 7, "sub_cycles": [
         {"label": "A", "slots": [
-            {"load_window": "metabolic", "sessions_per_cycle": 1, "minutes": 30},
+            {"load_window": "metabolic", "device_sports": ["Ride"],
+             "sessions_per_cycle": 1, "minutes": 30},
             {"capacity": "strength", "sessions_per_cycle": 1, "minutes": 45}]}]}
     _phase(db_session, u.id, mc, MONDAY)
     res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))

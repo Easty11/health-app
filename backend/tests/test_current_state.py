@@ -447,7 +447,8 @@ def test_resolver_position_parity_state_equals_resolve(db_session):
         "microcycle": {"sub_cycle_days": 7, "sub_cycles": [
             {"label": "A", "slots": [
                 {"capacity": "strength", "sessions_per_cycle": 2, "minutes": 45},
-                {"load_window": "metabolic", "sessions_per_cycle": 2, "minutes": 30}]}]},
+                {"load_window": "metabolic", "device_sports": ["Ride"],
+                 "sessions_per_cycle": 2, "minutes": 30}]}]},
         "entered_on": "2026-09-07", "asserted_by": "user", "asserted_on": "2026-09-07", "source": "api",
     })
     today = _date(2026, 9, 9)   # Wed, inside leg A [09-07, 09-13]
