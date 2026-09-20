@@ -219,11 +219,34 @@ def plan_week(
     def _item_days(v: dict[str, Any]) -> list[str]:
         return [d.lower() for d in (v.get("days") or []) if isinstance(d, str)]
 
-    # Precompute the weekdays a HEAVY hard item lands on, for the day-after caution.
-    heavy_weekdays: set[str] = set()
-    for v in schedule_vals:
-        if v.get("hard") and v.get("expected_load") == "heavy":
-            heavy_weekdays.update(_item_days(v))
+    def _event_span(v: dict[str, Any]) -> tuple[date, date] | None:
+        """A dated one-off's [event_date, event_end] span (#317/Q165), or None if not dated /
+        malformed. `event_end` defaults to `event_date` (a single-day event)."""
+        ev = v.get("event_date")
+        if ev is None:
+            return None
+        try:
+            s = date.fromisoformat(str(ev))
+            e = date.fromisoformat(str(v["event_end"])) if v.get("event_end") else s
+        except (ValueError, TypeError, KeyError):
+            return None
+        return (s, e)
+
+    def _covers(v: dict[str, Any], d_: date, wd_: str) -> bool:
+        """Does this item fall on local day `d_`? A dated one-off covers its span; a recurring item
+        covers its weekdays. (An event whose span excludes the window contributes nothing — so a
+        past event is ignored on read, nothing retires itself.)"""
+        span = _event_span(v)
+        if span is not None:
+            return span[0] <= d_ <= span[1]
+        return wd_ in _item_days(v)
+
+    def _heavy_on(d_: date) -> bool:
+        wd_ = _DAY_ORDER[d_.weekday()]
+        return any(
+            v.get("hard") and v.get("expected_load") == "heavy" and _covers(v, d_, wd_)
+            for v in schedule_vals
+        )
 
     days: list[dict[str, Any]] = []
     d = start
@@ -232,7 +255,7 @@ def plan_week(
         hard: list[dict[str, Any]] = []
         flexible: list[dict[str, Any]] = []
         for v in schedule_vals:
-            if wd not in _item_days(v):
+            if not _covers(v, d, wd):
                 continue
             if v.get("hard"):
                 hard.append({
@@ -249,9 +272,8 @@ def plan_week(
             if not h["same_day_training"] and h["expected_load"] != "none"
         ]
         available = not constraining
-        # Caution when the PREVIOUS day carried a heavy hard item (width = operator prior).
-        prev_wd = _DAY_ORDER[(d - timedelta(days=1)).weekday()]
-        caution = "day after heavy" if prev_wd in heavy_weekdays else None
+        # Caution when the PREVIOUS day carried a heavy hard item (weekday OR dated one-off).
+        caution = "day after heavy" if _heavy_on(d - timedelta(days=1)) else None
         days.append({
             "date": d.isoformat(),
             "weekday": wd,

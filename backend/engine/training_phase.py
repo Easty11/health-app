@@ -62,7 +62,13 @@ _MAX_SUB_CYCLES = 4
 _MIN_SESSIONS_PER_CYCLE = 0
 _MAX_SESSIONS_PER_CYCLE = 28
 
-_MICRO_SLOT_FIELDS = ("capacity", "load_window", "activity", "sessions_per_cycle", "minutes", "device_sports")
+_MICRO_SLOT_FIELDS = ("capacity", "load_window", "activity", "sessions_per_cycle", "minutes",
+                      "device_sports", "recorded_via")
+
+# `recorded_via` (#317) — how a slot's sessions are recorded, so the form can WARN when a choice
+# has no evidence path today (a Garmin/Samsung load_window deposits no load until HC stage 2, Q159;
+# an H10 session with no sport won't match). Optional, closed set, metadata to the resolver/planner.
+_RECORDED_VIA_VALUES = ("hevy", "polar_h10", "garmin", "samsung_health", "manual")
 
 
 def _validate_device_sports(slot: dict[str, Any], where: str, i: int) -> None:
@@ -226,6 +232,11 @@ def validate_microcycle(value: Any) -> dict[str, Any]:
             _slot_int(slot, "sessions_per_cycle",
                       _MIN_SESSIONS_PER_CYCLE, _MAX_SESSIONS_PER_CYCLE, i, where=where)
             _slot_int(slot, "minutes", _MIN_SLOT_MINUTES, _MAX_SLOT_MINUTES, i, where=where)
+            rv = slot.get("recorded_via")   # #317 — optional, closed set; metadata only
+            if rv is not None and rv not in _RECORDED_VIA_VALUES:
+                raise ValueError(
+                    f"{where}[{i}].recorded_via: {rv!r} is not one of {list(_RECORDED_VIA_VALUES)}"
+                )
 
     return value
 
@@ -384,15 +395,12 @@ def phase_to_dict(phase: models.TrainingPhase | None, *, on: date | None = None)
 # Write path — INSERT never upsert; the one permitted UPDATE is closure.      #
 # --------------------------------------------------------------------------- #
 
-def open_phase(db: Session, user_id: int, payload: dict[str, Any]) -> models.TrainingPhase:
-    """Open a phase in one transaction: close the current open row (if any), then INSERT the
-    new one. Validate BEFORE touching the session (mirror `upsert_profile`) so a refused open
-    strands nothing.
-
-    `close_prior_reason` (optional, on the payload) is the closing note for the superseded
-    row; default `"opened <label>"`. The prior row closes at `closed_on = new.entered_on`
-    (half-open handoff), the ONLY UPDATE this ledger ever performs.
-    """
+def _apply_open_phase(db: Session, user_id: int, payload: dict[str, Any]) -> models.TrainingPhase:
+    """Validate + STAGE the close-prior + open-new mutations WITHOUT committing — the shared core
+    of `open_phase` (which commits) and the phase transition (#317, which batches the schedule /
+    `phase_folders` / dated-item writes into ONE commit so a later failure rolls the phase open back
+    too). One definition of the validator AND the close/insert mechanics; no fork. Validate BEFORE
+    touching the session (mirror `upsert_profile`) so a refused open strands nothing."""
     body = dict(payload)
     close_prior_reason = body.pop("close_prior_reason", None)
 
@@ -416,6 +424,19 @@ def open_phase(db: Session, user_id: int, payload: dict[str, Any]) -> models.Tra
 
     phase = models.TrainingPhase(user_id=user_id, **fields)
     db.add(phase)
+    return phase
+
+
+def open_phase(db: Session, user_id: int, payload: dict[str, Any]) -> models.TrainingPhase:
+    """Open a phase in one transaction: close the current open row (if any), then INSERT the
+    new one. Validate BEFORE touching the session (mirror `upsert_profile`) so a refused open
+    strands nothing.
+
+    `close_prior_reason` (optional, on the payload) is the closing note for the superseded
+    row; default `"opened <label>"`. The prior row closes at `closed_on = new.entered_on`
+    (half-open handoff), the ONLY UPDATE this ledger ever performs.
+    """
+    phase = _apply_open_phase(db, user_id, payload)
     db.commit()
     db.refresh(phase)
     return phase

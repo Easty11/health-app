@@ -4669,4 +4669,12 @@ Raised 2026-09-20 with #316. `schedule_item.days` are WEEKDAY recurrence; `durat
 
 **To decide:** the smallest shape for a dated one-off hard item — an optional `event_date` or `[start, end]` on `schedule_item`, validated as ISO dates (a validator-only change; `schedule_item.value` is JSON, so NON-schema, like `satisfies` #312 and `activity` #315). It would make the planner mark those exact dates unavailable (and drive the `caution: day after heavy` off them).
 
-**State:** OPEN. Not blocking — undated one-off notes render beside the week today. To be built WITH the phase-change form brief: that brief's "known one-off events" question is the natural write home for a dated hard item, so the field and its capture surface land together rather than a field with nowhere to write it.
+**State:** DONE → #317. `schedule_item` gained `event_date` + optional `event_end` (ISO, exclusive with `days`), validator-only (non-schema); `plan_week` marks the days unavailable with the heavy→next-day caution, `_section_schedule` renders a dated line while live, and the phase-change transition writes them. Built with the phase-change form brief as planned.
+
+## Q166. A structured planned-phase store (so "Move to a new phase" can prefill from the plan)?  [OPEN]
+
+Raised 2026-09-20 with #317. The phase-change form's "Move to a new phase" step (vs "Continue") asks for a new label + intent + microcycle with NOTHING prefilled — the plan of record (#312) is prose (`training_plan.macro`), and the form deliberately never parses it (GUARD). So the operator retypes the next block from memory / by reading the plan beside the field. The plan stays prose by design (#312: a macro the coach reads, not a machine schedule).
+
+**To decide:** whether to add a STRUCTURED planned-phase store — e.g. an ordered list of upcoming `{label, intent, microcycle}` blocks the athlete/coach fills once, from which "Move to a new phase" prefills — WITHOUT turning the prose plan into a scheduler (the #270/#275 line: the ledger is history+current, never a plan; a planned-phase store would be a SEPARATE forward-looking object the transition reads but the engine never auto-applies).
+
+**State:** OPEN. Not blocking — "Move" works from a blank label today, and "Continue" (the common case, incl. 5 Oct) prefills from the outgoing phase. Deliberately NOT built in #317/#318. Revisited if retyping the next block proves a real friction.
