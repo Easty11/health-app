@@ -4663,7 +4663,7 @@ Raised 2026-09-20 with #315. Activity and sport-scoped `load_window` slots decid
 
 **State:** OPEN. Not blocking — exact case-insensitive matching works for the sports observed in prod, and a miss is visible (`unclaimed_session`, "other activity"), never a silent miscount. Revisited if real sessions repeatedly go unclaimed on spelling.
 
-## Q165. A dated / date-range one-off hard item on `schedule_item`?  [OPEN]
+## Q165. A dated / date-range one-off hard item on `schedule_item`?  [DONE]
 
 Raised 2026-09-20 with #316. `schedule_item.days` are WEEKDAY recurrence; `duration_weeks` bounds how long the recurrence lasts; `season_end` is an end date. There is no field for a ONE-OFF dated event (a carnival on 19–20 Sep, travel, an appointment on a specific date). `load_context` carries a `description` + a single `expires_at` and renders as a note, not a day-occupying item the week planner's day-view reads. #316 defers this: active `load_context` entries are surfaced beside the week as undated one-off notes, but a dated one-off does not occupy its day in the availability model.
 
