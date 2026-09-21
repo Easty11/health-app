@@ -4678,3 +4678,13 @@ Raised 2026-09-20 with #317. The phase-change form's "Move to a new phase" step 
 **To decide:** whether to add a STRUCTURED planned-phase store — e.g. an ordered list of upcoming `{label, intent, microcycle}` blocks the athlete/coach fills once, from which "Move to a new phase" prefills — WITHOUT turning the prose plan into a scheduler (the #270/#275 line: the ledger is history+current, never a plan; a planned-phase store would be a SEPARATE forward-looking object the transition reads but the engine never auto-applies).
 
 **State:** OPEN. Not blocking — "Move" works from a blank label today, and "Continue" (the common case, incl. 5 Oct) prefills from the outgoing phase. Deliberately NOT built in #317/#318. Revisited if retyping the next block proves a real friction.
+
+## Q167. Two watch-points on `health_connect_sync_events` (per-POST sync telemetry, #321)  [OPEN]
+
+Raised 2026-09-21 with #321. The new per-POST table (`git_sha`/`fetch_meta`/…) is capture-only and rides `sync()`'s single transaction. Two boundaries were accepted rather than solved, recorded so a future reader does not mistake either for an oversight:
+
+**(i) Failed syncs are undiagnosed.** The event row commits with `sync()`'s transaction, so a POST that raises and rolls back leaves NO event row — the exact case (a build erroring mid-sync) most worth a fingerprint is the one that records nothing. Accepted at current scale (single operator, low sync volume; the successful-POST fingerprint is what the HR-lag read needed). **To decide, if it becomes a need:** write the event row in its own committed transaction (or a `try/finally` that commits the event even on aggregation failure), trading atomicity-with-the-sync for failed-sync visibility.
+
+**(ii) The week planner could repoint its HC-freshness read.** The week planner currently derives "how fresh is the newest HC record" from `health_connect_syncs`; `health_connect_sync_events.synced_at` (server clock, per POST) plus `fetch_meta[*].newestAt` is a cleaner, more direct source. **To decide, if the freshness read proves imprecise:** repoint it. Explicitly NOT in #321 (that touched no read path, GUARD).
+
+**State:** OPEN. Neither blocks #321. Both are follow-ups the table now makes possible; revisit (i) if a failed sync needs post-mortem, (ii) if week-planner freshness drifts.
