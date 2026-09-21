@@ -200,11 +200,18 @@ def _apply_phase_transition(
         if op.action == "upsert":
             if not isinstance(op.value, dict):
                 raise ValueError(f"schedule item {op.key!r}: 'upsert' requires a value object")
-            _stage_upsert_entry(
-                user_id,
-                KnowledgeEntryIn(type="schedule_item", key=op.key, value=op.value, source="api"),
-                db,
-            )
+            try:
+                _stage_upsert_entry(
+                    user_id,
+                    KnowledgeEntryIn(type="schedule_item", key=op.key, value=op.value, source="api"),
+                    db,
+                )
+            except ScheduleItemOverlap as exc:
+                # Name the offending op so the form can render F17 (the clash) and offer to
+                # resubmit that specific row with `distinct_from`. The rows the write collides
+                # with already ride on `exc.overlapping`.
+                exc.key = op.key
+                raise
 
     if folder_id is not None:
         existing = (
@@ -271,13 +278,29 @@ async def phase_transition(
             schedule_ops=body.schedule_items,
             folder_id=folder_id,
         )
-    except (ValueError, ScheduleItemOverlap) as exc:
+    except ScheduleItemOverlap as exc:
+        # STRUCTURED 422 (F17): a day+time clash carries the colliding rows (id / activity /
+        # days / time_of_day) and the offending schedule key, so the form can name the clash
+        # and offer "these are separate sessions" → a `distinct_from` resubmit. `error` keeps a
+        # readable string for any caller that does not special-case the structure.
         db.rollback()
-        detail = str(exc)
+        detail: dict[str, Any] = {
+            "code": exc.code,
+            "error": str(exc),
+            "key": getattr(exc, "key", None),
+            "overlapping": exc.overlapping,
+            "resolve_with": ["distinct_from"],
+        }
         if body.new_folder_name:
-            detail += (f" — NOTHING was written, but the Hevy folder "
-                       f"'{body.new_folder_name}' was already created (orphan; reuse or delete it)")
+            detail["orphan_folder"] = body.new_folder_name
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+    except ValueError as exc:
+        db.rollback()
+        detail_str = str(exc)
+        if body.new_folder_name:
+            detail_str += (f" — NOTHING was written, but the Hevy folder "
+                           f"'{body.new_folder_name}' was already created (orphan; reuse or delete it)")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail_str)
     return {"training_phase": phase_mod.phase_to_dict(phase), "no_op": False}
 
 
@@ -340,8 +363,12 @@ async def phase_transition_draft(
         .filter_by(user_id=current_user.id, active=True)
         .all()
     )
+    # `id` (F8) so the form can render each active item for keep / relink / retire and, on an
+    # overlap, acknowledge the colliding row by id via `distinct_from`. `value` already carries
+    # `satisfies` and `hard`, so the form splits hard-first without a second field.
     schedule_items = [
-        {"key": e.key, "value": e.value} for e in entries if e.type == "schedule_item"
+        {"id": e.id, "key": e.key, "value": e.value}
+        for e in entries if e.type == "schedule_item"
     ]
 
     folders: list[dict[str, Any]] | None = None
@@ -368,4 +395,36 @@ async def phase_transition_draft(
         "sport_names_seen": sport_names_seen(current_user.id, db),
         "routine_folders": folders,
         "freshness": week_plan_mod._freshness(db, current_user.id, today),
+        # The outgoing window's per-day availability + `caution: day after heavy` (F12), so
+        # step 5 can show which days a hard commitment blocks. `None` at baseline (no window).
+        "week_plan": week_plan_mod.plan_week(db, current_user.id, today, entries=entries),
     }
+
+
+class TransitionPreviewIn(BaseModel):
+    """The step-5 counter's live inputs (F9): the PROPOSED quota slots and the schedule-item
+    values that would be active after this transition (kept-and-linked existing items + the new
+    rows). The server computes `consistency_rows` — the ONE definition `plan_week` and the chat
+    consistency line already share — so the form never re-derives "scheduled" client-side (the B3
+    fault). `done` is 0: a not-yet-opened phase has recorded nothing, and placement parity (F9/G4)
+    turns on scheduled-vs-quota only."""
+    slots: list[dict[str, Any]] = []            # {kind, key, quota}
+    schedule_item_values: list[dict[str, Any]] = []
+
+
+@router.post("/transition/preview")
+def phase_transition_preview(
+    body: TransitionPreviewIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Pure derivation, no state (F9). Normalises the form's `{kind, key, quota}` slots into the
+    `consistency_rows` slot shape and returns the per-slot scheduled/quota/excess/unplaced for the
+    kept+proposed set. Same definition the backend uses everywhere, so the counter cannot drift
+    from what the phase will actually read (B3)."""
+    norm = [
+        {"kind": s.get("kind"), s.get("kind"): s.get("key"),
+         "quota": s.get("quota") or 0, "done": 0}
+        for s in body.slots if s.get("kind")
+    ]
+    return {"consistency_rows": week_plan_mod.consistency_rows(norm, body.schedule_item_values)}
