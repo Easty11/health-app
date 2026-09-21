@@ -1506,3 +1506,30 @@ No migration. Two #314 conventions recorded for discoverability:
 
 - **`phase_folders`** — a `type='preference'` entry, `key='phase_folders'`, `value` = `{"<phase label>": <hevy_folder_id>}`, mapping which Hevy routine folder holds a training phase's full-detail working set. It is UNVALIDATED (a plain preference; no closed shape) and read-only on the context path: `current_state` lifts it onto `CurrentState.phase_folders`, and `context_builder._section_hevy_routines` reads `phase_folders[current_phase_label]` to choose the folder shown at full detail (else it falls back to the most-recently-used folder and says so). Nothing writes it automatically — the operator declares it through the normal knowledge-write path. A `column on training_phases` was rejected (would be a migration); this keeps it a no-schema declaration.
 - **Hevy routines are NOT persisted.** Read live from Hevy (`connectors/hevy.get_all_routines` + `get_routine_folders`) and held only in a per-process short-TTL cache (`hevy_routine_cache`, 5 min, invalidated on a coach create/update, behind a 3s fetch budget). There is no routines table to reconcile — the coach reads the working set from context and updates in place via `<hevy_update_routine>` (PUT /v1/routines/{id}, which REPLACES; no folder move). Recorded here so a future reader does not go looking for a routines migration.
+
+### 035 — health_connect_sync_events
+
+Migration `d9f2a1c7e4b8`. **One row per POST** to `/health-connect/sync` — the client build fingerprint plus per-stream fetch telemetry HCA now sends under the additive `client` / `fetchMeta` keys (HCA DECISIONS #40; cross-ref HCA Q22, the HR-lag deployment gap this makes prod-readable). `SyncPayload` stays `extra="allow"`; both keys are optional-defaulted, so an old build's payload (neither key) validates and writes a row unchanged. **Capture only** — it filters nothing and feeds no aggregation or read path.
+
+**Per-POST, not per-date.** A `periodDays=7` POST fans out to ~7 `health_connect_syncs` (§ date-keyed aggregate) rows, but the fingerprint describes the sync EVENT — which build sent it, how fresh its newest record was — not a calendar day. Wrong granularity to stamp onto the date-rows; hence its own table.
+
+**`git_sha` NULL is the signal, not a gap.** An old build (or a phone not yet updated) sends no `client` key → `git_sha IS NULL` means "still on an old build", first-class and queryable (`WHERE git_sha IS NULL`) — the read the HR-lag defect needed and could not get from prod. `synced_at` is the **server clock** (`server_default now()`), deliberately not the client's `syncedAt`. `fetch_meta` stores the `fetchMeta` object verbatim (`models._JSONB` → JSONB on Postgres, JSON on SQLite), NULL when none was sent.
+
+```sql
+CREATE TABLE health_connect_sync_events (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- indexed
+    synced_at    TIMESTAMPTZ NOT NULL DEFAULT now(),   -- SERVER clock; indexed
+    git_sha      VARCHAR(80),        -- `git describe --always --dirty`; NULL == old build (the signal)
+    built_at     VARCHAR(40),        -- client build timestamp (ISO), verbatim
+    app_version  VARCHAR(40),
+    platform     VARCHAR(40),
+    period_days  INTEGER,            -- the POST's periodDays
+    fetch_meta   JSONB               -- the fetchMeta object verbatim; NULL when none sent
+);
+CREATE INDEX ix_health_connect_sync_events_user_id   ON health_connect_sync_events (user_id);
+CREATE INDEX ix_health_connect_sync_events_synced_at ON health_connect_sync_events (synced_at);
+CREATE INDEX ix_hc_sync_events_user_synced           ON health_connect_sync_events (user_id, synced_at);
+```
+
+Written in `sync()` after `received` is counted, one `db.add` on the existing transaction (the single `db.commit()` at the end). See the Pydantic `ClientInfo` / `FetchMetaEntry` (both `extra="allow"`, all fields optional) on `SyncPayload`.

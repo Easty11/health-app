@@ -284,6 +284,43 @@ class HealthConnectRecordSource(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class HealthConnectSyncEvent(Base):
+    """One row PER POST to /health-connect/sync — the client build fingerprint plus
+    the fetch telemetry HCA sends under `client` / `fetchMeta` (HCA DECISIONS #40).
+
+    Per-POST, NOT per-date: a periodDays=7 POST fans out to ~7 health_connect_syncs
+    rows, but the fingerprint describes the sync EVENT (which build sent it, how fresh
+    its newest record was), not a calendar day — so it cannot live on the date-keyed
+    health_connect_syncs table (wrong granularity). Capture-only: it filters nothing
+    and feeds no aggregation or read path.
+
+    git_sha nullable is the load-bearing SIGNAL, not a gap: an old build (or a phone
+    not yet updated) sends no `client` key, so git_sha IS NULL means "still on an old
+    build" — first-class and queryable (`WHERE git_sha IS NULL`), the read that the
+    HR-lag defect (HCA Q22) needed and could not get from prod. synced_at is the
+    SERVER clock (server_default now()), deliberately not the client's syncedAt.
+    fetch_meta stores the fetchMeta object verbatim as JSONB-on-Postgres / JSON-on-
+    SQLite (the _JSONB variant), NULL when no fetchMeta was sent.
+    """
+    __tablename__ = "health_connect_sync_events"
+    # Composite index for the "which builds has this user sent, newest first" read.
+    # Declared here (not only in the migration) so create_all (SQLite tests) and the
+    # Alembic revision (Postgres prod) build the SAME indexes — engine parity.
+    __table_args__ = (
+        Index("ix_hc_sync_events_user_synced", "user_id", "synced_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    git_sha: Mapped[str | None] = mapped_column(String(80))       # NULL == old build (the signal) — first-class, queryable
+    built_at: Mapped[str | None] = mapped_column(String(40))
+    app_version: Mapped[str | None] = mapped_column(String(40))
+    platform: Mapped[str | None] = mapped_column(String(40))
+    period_days: Mapped[int | None] = mapped_column(Integer)
+    fetch_meta: Mapped[dict | None] = mapped_column(_JSONB)        # the fetchMeta object verbatim; NULL when none sent
+
+
 class CBTIBlock(Base):
     """A single CBT-I titration block (#108). The module is block-structured, not a
     single arc: a block opens with the in-flight prescription (decision='adopt') and
