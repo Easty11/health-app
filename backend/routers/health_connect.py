@@ -1030,13 +1030,19 @@ def sync(
     # the "still on an old build" signal, not a gap. synced_at is the SERVER clock
     # (server_default now()), deliberately not the client's syncedAt. Capture only —
     # it rides the single db.commit() at the end and touches no aggregation.
+    # Clip each string to its column width. Postgres enforces String(n) and would
+    # RAISE on an over-length value — which, on this insert, would roll back the whole
+    # sync. A telemetry field must never be able to fail the real work, so truncate
+    # rather than trust the client's lengths. (SQLite does not enforce width, so the
+    # unit tests cannot see this; the clip is what makes prod safe.) `is not None`
+    # guards the slice and preserves an empty string as "", mapping only real None to NULL.
     client = payload.client
     db.add(models.HealthConnectSyncEvent(
         user_id=current_user.id,
-        git_sha=(client.gitSha if client else None),
-        built_at=(client.builtAt if client else None),
-        app_version=(client.appVersion if client else None),
-        platform=(client.platform if client else None),
+        git_sha=(client.gitSha[:80] if client and client.gitSha is not None else None),
+        built_at=(client.builtAt[:40] if client and client.builtAt is not None else None),
+        app_version=(client.appVersion[:40] if client and client.appVersion is not None else None),
+        platform=(client.platform[:40] if client and client.platform is not None else None),
         period_days=payload.periodDays,
         fetch_meta={k: v.model_dump() for k, v in payload.fetchMeta.items()} or None,
     ))

@@ -166,3 +166,20 @@ def test_dirty_git_sha_is_stored_verbatim(db_session):
     rows = _events(db_session)
     assert len(rows) == 1
     assert rows[0].git_sha == "6fd8b3e-dirty"
+
+
+# ---------- e) an over-length gitSha is clipped to the column width, never fails ----------
+
+def test_an_over_length_git_sha_is_truncated_not_a_failure(db_session):
+    # git_sha is String(80). Postgres would RAISE on a 200-char value and roll back the
+    # whole sync; a telemetry field must never do that. The router clips to 80, so the
+    # sync succeeds (200) and stores exactly 80 chars. (SQLite would not enforce the
+    # width, so without the clip this test would silently store all 200 and pass — the
+    # assertion on the stored length is what pins the truncation.)
+    long_sha = "a" * 200
+    out = _sync(db_session, _validate(client={"gitSha": long_sha}))
+    assert out["synced"] == 0                      # no records, just the event row
+    rows = _events(db_session)
+    assert len(rows) == 1
+    assert len(rows[0].git_sha) == 80
+    assert rows[0].git_sha == long_sha[:80]
