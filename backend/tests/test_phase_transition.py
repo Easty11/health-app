@@ -282,3 +282,95 @@ def test_recorded_via_accepted_and_closed(db_session):
     with pytest.raises(ValueError, match="recorded_via"):
         validate_microcycle({"sub_cycle_days": 7, "sub_cycles": [{"label": "A", "slots": [
             {"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30, "recorded_via": "fitbit"}]}]})
+
+
+# --------------------------------------------------------------------------- #
+# Form-support surface (2026-09-21 fixes): the step-5 counter definition (F9),   #
+# the structured overlap 422 (F17), and the draft's ids + week_plan (F8/F12).    #
+# --------------------------------------------------------------------------- #
+
+from fastapi import FastAPI                          # noqa: E402
+from fastapi.testclient import TestClient            # noqa: E402
+
+from auth import get_current_user                    # noqa: E402
+from database import get_db                          # noqa: E402
+from routers.knowledge import KnowledgeEntryIn, upsert_knowledge_entry  # noqa: E402
+
+
+def _client(db, user) -> TestClient:
+    app = FastAPI()
+    app.include_router(tp.router)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: user
+    return TestClient(app)
+
+
+def _linked_item(db, uid, key, activity, days, satisfies, *, time_of_day="evening"):
+    upsert_knowledge_entry(uid, KnowledgeEntryIn(type="schedule_item", key=key, source="api", value={
+        "activity": activity, "days": days, "hard": False, "expected_load": "moderate",
+        "time_of_day": time_of_day, "same_day_training": False,
+        "duration_weeks": None, "season_end": None, "satisfies": satisfies}), db)
+
+
+def test_f9_preview_counts_kept_and_proposed_by_one_definition(db_session):
+    """F9/G4: the counter is `consistency_rows` over kept-linked existing items + proposed rows —
+    the SAME definition the plan uses — so an existing gym Mon/Wed/Fri linked to stability at quota
+    3 shows NO unplaced with ZERO new rows (the B3 false-UNPLACED it was mis-derived to show)."""
+    u = _user(db_session)
+    gym_val = {
+        "activity": "gym", "days": ["monday", "wednesday", "friday"], "hard": False,
+        "expected_load": "moderate", "time_of_day": "evening", "same_day_training": False,
+        "duration_weeks": None, "season_end": None, "satisfies": {"capacity": "stability"}}
+    c = _client(db_session, u)
+    r = c.post("/engine/phase/transition/preview", json={
+        "slots": [{"kind": "capacity", "key": "stability", "quota": 3}],
+        "schedule_item_values": [gym_val]})
+    assert r.status_code == 200
+    row = r.json()["consistency_rows"][0]
+    assert row["scheduled"] == 3 and row["quota"] == 3 and row["unplaced"] == 0 and row["excess"] == 0
+
+
+def test_f17_transition_overlap_returns_structured_detail_then_distinct_from_saves(db_session):
+    """F17: a day+time clash surfaces STRUCTURED — the colliding row (id/activity/days/time) and the
+    offending key — so the form can name it; a resubmit acknowledging it via `distinct_from` saves."""
+    u = _user(db_session)
+    phase_mod.open_phase(db_session, u.id, _phase_payload(entered_on=PRIOR.isoformat()))
+    _linked_item(db_session, u.id, "swim", "swim", ["tuesday"], {"activity": "pilates"})
+    swim_id = (db_session.query(models.UserKnowledgeEntry)
+               .filter_by(user_id=u.id, key="swim", active=True).first().id)
+    c = _client(db_session, u)
+
+    def _body(distinct_from=None):
+        val = {"activity": "gym", "days": ["tuesday"], "hard": False, "expected_load": "moderate",
+               "time_of_day": "evening", "same_day_training": False,
+               "duration_weeks": None, "season_end": None}
+        if distinct_from is not None:
+            val["distinct_from"] = distinct_from
+        return {"phase": _phase_payload(entered_on=TODAY.isoformat(), stability=3),
+                "schedule_items": [{"action": "upsert", "key": "gym_tue", "value": val}]}
+
+    r = c.post("/engine/phase/transition", json=_body())
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert isinstance(detail, dict) and detail["code"] == "day_time_clash"
+    assert detail["key"] == "gym_tue"
+    assert any(o["id"] == swim_id and o["activity"] == "swim" for o in detail["overlapping"])
+    # Nothing was written — the phase open rolled back with the failed item.
+    assert phase_mod.current_training_phase(db_session, u.id).entered_on == PRIOR
+
+    r2 = c.post("/engine/phase/transition", json=_body(distinct_from=[swim_id]))
+    assert r2.status_code == 200 and r2.json()["no_op"] is False
+    assert phase_mod.current_training_phase(db_session, u.id).entered_on == TODAY
+
+
+def test_draft_returns_item_ids_and_week_plan(db_session):
+    """F8/F12: the draft carries each active item's id (for keep/relink/retire + distinct_from) and
+    the outgoing window's `week_plan` (per-day availability + day-after-heavy caution)."""
+    u = _user(db_session)
+    phase_mod.open_phase(db_session, u.id, _phase_payload(entered_on=PRIOR.isoformat()))
+    _linked_item(db_session, u.id, "gym", "gym", ["monday"], {"capacity": "stability"})
+    c = _client(db_session, u)
+    d = c.get("/engine/phase/transition/draft").json()
+    assert d["schedule_items"] and all("id" in it for it in d["schedule_items"])
+    assert d["week_plan"] is not None and "days" in d["week_plan"]
+    assert all("available" in day and "caution" in day for day in d["week_plan"]["days"])
