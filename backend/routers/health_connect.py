@@ -300,6 +300,32 @@ class MindfulnessRecord(WriterIdentity):
             return 0
 
 
+class ClientInfo(BaseModel):
+    # The per-POST build fingerprint HCA sends under `client` (HCA DECISIONS #40).
+    # extra="allow": a field a newer HCA build adds is retained, never a 422. Every
+    # field optional/defaulted — an old build sends no `client` at all, which is
+    # normal (SyncPayload.client stays None) and must not 422.
+    model_config = ConfigDict(extra="allow")
+
+    gitSha: Optional[str] = None        # `git describe --always --dirty`; may carry a "-dirty" suffix
+    builtAt: Optional[str] = None
+    appVersion: Optional[str] = None
+    platform: Optional[str] = None
+
+
+class FetchMetaEntry(BaseModel):
+    # One entry per stream HCA fetched, under `fetchMeta` (HCA DECISIONS #40).
+    # extra="allow" for the same forward-compat reason as ClientInfo.
+    model_config = ConfigDict(extra="allow")
+
+    received: int = 0
+    oldestAt: Optional[str] = None      # null when received == 0
+    newestAt: Optional[str] = None
+    pages: int = 0
+    truncated: bool = False
+    endedOnFailure: bool = False
+
+
 class SyncPayload(BaseModel):
     # extra="allow" (#234): the LOAD-BEARING one. An unknown TOP-LEVEL key is
     # retained in model_extra (the additive-key tolerance) and is what Step 4
@@ -309,6 +335,13 @@ class SyncPayload(BaseModel):
 
     syncedAt: Optional[str] = None
     periodDays: int = 7
+
+    # Per-POST build fingerprint + fetch telemetry (HCA DECISIONS #40). Both
+    # optional-defaulted so an old build (neither key) validates unchanged — absence
+    # is normal, never a 422. Persisted one-row-per-POST to health_connect_sync_events;
+    # capture only, feeds no aggregation or read path.
+    client: Optional[ClientInfo] = None
+    fetchMeta: dict[str, FetchMetaEntry] = {}
 
     # The five streams HCA ALWAYS posts are REQUIRED but emptyable (#234): no
     # default, so an omitted key 422s, while `[]` is valid. Envelope-required is
@@ -990,6 +1023,23 @@ def sync(
         "steps": len(payload.steps),
         "workouts": len(payload.workouts),
     }
+
+    # Persist ONE health_connect_sync_events row per POST — the client build
+    # fingerprint + fetch telemetry (HCA DECISIONS #40). Written for EVERY POST,
+    # including an old build's (neither `client` nor `fetchMeta`): git_sha NULL is
+    # the "still on an old build" signal, not a gap. synced_at is the SERVER clock
+    # (server_default now()), deliberately not the client's syncedAt. Capture only —
+    # it rides the single db.commit() at the end and touches no aggregation.
+    client = payload.client
+    db.add(models.HealthConnectSyncEvent(
+        user_id=current_user.id,
+        git_sha=(client.gitSha if client else None),
+        built_at=(client.builtAt if client else None),
+        app_version=(client.appVersion if client else None),
+        platform=(client.platform if client else None),
+        period_days=payload.periodDays,
+        fetch_meta={k: v.model_dump() for k, v in payload.fetchMeta.items()} or None,
+    ))
 
     # F2 — reject pre-2020 (epoch-zero) records before any aggregation (#35).
     rejected_pre_2020 = _reject_pre2020(payload)
