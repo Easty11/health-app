@@ -318,7 +318,12 @@ class HealthConnectSyncEvent(Base):
     app_version: Mapped[str | None] = mapped_column(String(40))
     platform: Mapped[str | None] = mapped_column(String(40))
     period_days: Mapped[int | None] = mapped_column(Integer)
-    fetch_meta: Mapped[dict | None] = mapped_column(_JSONB)        # the fetchMeta object verbatim; NULL when none sent
+    # none_as_null on THIS column only (not the shared _JSONB): the writer assigns
+    # fetch_meta=None explicitly when no fetchMeta was sent, and a plain JSON type
+    # persists that as the JSON literal 'null', not SQL NULL — so `IS NULL` missed it.
+    fetch_meta: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
+    )  # the fetchMeta object verbatim; SQL NULL when none sent
 
 
 class CBTIBlock(Base):

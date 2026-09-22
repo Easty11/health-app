@@ -17,7 +17,7 @@ Dates are relative to "now" so the 7-day aggregation window never ages a fixture
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -138,6 +138,23 @@ def test_old_build_payload_validates_and_writes_a_null_git_sha_row(db_session):
     assert rows[0].built_at is None
     assert rows[0].fetch_meta is None
     assert rows[0].period_days == 7
+
+
+def test_no_fetchmeta_is_stored_as_sql_null_not_json_null(db_session):
+    # The ORM read above cannot tell the two apart (JSON 'null' loads back as None);
+    # only an SQL `IS NULL` can. The writer assigns fetch_meta=None explicitly, so
+    # without none_as_null the column holds the JSON literal 'null' and this is 0.
+    u = _user(db_session)
+    sync(payload=_validate(), current_user=u, db=db_session)       # no fetchMeta -> SQL NULL
+    sync(payload=_validate(fetchMeta={"steps": {"received": 1}}),  # control: stays NOT NULL
+         current_user=u, db=db_session)
+    null_rows = db_session.execute(text(
+        "SELECT count(*) FROM health_connect_sync_events WHERE fetch_meta IS NULL"
+    )).scalar()
+    total = db_session.execute(text(
+        "SELECT count(*) FROM health_connect_sync_events"
+    )).scalar()
+    assert (null_rows, total) == (1, 2)
 
 
 # ---------- c) per-POST grain: N date-rows, still ONE event row ----------

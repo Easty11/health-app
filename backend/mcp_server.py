@@ -648,7 +648,7 @@ def _format_training_load(rows: list[dict]) -> str:
 def get_training_load() -> str:
     """Metabolic training-load readout: the Banister fitness/fatigue/form curves and the
     acute/chronic trace over the metabolic window (Edwards zone-weighted TRIMP), read from
-    the `load_metrics` metabolic lane (metab-v1 / banister-v2). No acute:chronic ratio and
+    the `load_metrics` metabolic lane (metab-v1 / banister-v4). No acute:chronic ratio and
     no sweet-spot verdict — the legacy aerobic ACWR readout was retired (#255) after the
     Metabolic→load_events transform landed (#251)."""
     user_id = _current_user_id()
