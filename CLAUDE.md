@@ -196,6 +196,11 @@ self-merge on green under § Merge disposition.
   typed `HUMAN`/`MODEL`/`COUPLED`, `status` mutable (`STANDS`/`STRUCK`); a row exists only if
   a procedural change would have prevented the failure (`prevention` mandatory), `caused_by`
   derived from `caused` — now lives in `FEEDBACK_ARCHIVE.md` §19 (post-prune). See #129–#132.
+- **`OPEN_QUESTIONS.md` layout** (health-app only). State lives only on the
+  `**State:**` line; question headings carry no bracketed state tag. OPEN/OWED
+  entries sit above `## CLOSED` in ascending Q order, and a new question is inserted
+  there, never appended at end of file. An entry reaching `DONE → #N` moves below
+  `## CLOSED`, in ascending order, in the same commit. (#322)
 - **Hevy:** canonical creation is `create_workout`, not `create_routine` (custom exercise
   UUIDs do not resolve via the routine endpoint — confirmed API limit). Matrix: `Hevy_Pattern`.
 - **CBT-I block references.** `cbti_blocks.id` is canonical for any operational reference
