@@ -8,13 +8,19 @@ constrains the night). #322 (closing Q162) replaced #311's interim `source='heal
 exclusion with the shared static set `sport_classes.NON_TRAINING_SPORTS`: a Walking / Pilates /
 Yoga / Stretching session (case-insensitive, ANY source) never constrains a night; every other
 session does, including generic names and a NULL/blank sport_name.
+
+SEEDS ARE TRUE UTC INSTANTS (#323). `stop_h` is the Brisbane wall-clock hour the session
+ended; `_aero` stores the matching UTC instant (a 21:30 Brisbane finish = 11:30Z), exactly as
+every writer does and as Postgres hands it back. Assertions read the stop back in the diary
+frame. The pre-#323 seeds tagged a Brisbane hour as UTC, which SQLite returns unchanged, so
+the suite agreed with an engine that read `.hour` off an aware-UTC value — and could not fail.
 """
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
 import models
-from cbti.engine import classify_night
+from cbti.engine import DIARY_TZ, _as_diary_local, classify_night
 from cbti.replay import load_nights
 
 GARMIN = "com.garmin.android.apps.connectmobile"
@@ -39,12 +45,17 @@ def _rec(db, uid, d, *, tst=400):
     db.commit()
 
 
+def _utc(d, hour):
+    """The UTC instant of Brisbane wall-clock `hour`:00 on local day `d`."""
+    return DIARY_TZ.localize(datetime(d.year, d.month, d.day, hour, 0)).astimezone(timezone.utc)
+
+
 def _aero(db, uid, d, *, source, stop_h, sid, pkg=None, sport=None):
     db.add(models.AerobicSession(
         user_id=uid, source=source, source_session_id=sid, source_package=pkg, session_date=d,
         sport_name=sport,
-        start_time=datetime(d.year, d.month, d.day, max(stop_h - 1, 0), 0, tzinfo=timezone.utc),
-        stop_time=datetime(d.year, d.month, d.day, stop_h, 0, tzinfo=timezone.utc),
+        start_time=_utc(d, max(stop_h - 1, 0)),
+        stop_time=_utc(d, stop_h),
         duration_minutes=60.0,
     ))
     db.commit()
@@ -57,9 +68,19 @@ def _night(db, uid):
 def _classify(n):
     """classify_night on the loaded Night. SQLite returns the `MAX(stop_time)` aggregate as a
     string (Postgres returns a datetime), so coerce it here — test-side only."""
-    if isinstance(n.training_end, str):
-        n.training_end = datetime.fromisoformat(n.training_end)
+    n.training_end = _as_dt(n.training_end)
     return classify_night(n, RX_LIGHTS_OUT).reason
+
+
+def _as_dt(v):
+    """SQLite returns the `MAX(stop_time)` aggregate as a zone-less string (Postgres returns
+    an aware datetime) — test-side coercion only; the engine treats naive as UTC."""
+    return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+
+def _local_hm(te):
+    """The stop read back in the diary frame, "HH:MM"."""
+    return _as_diary_local(_as_dt(te)).strftime("%H:%M")
 
 
 def _training_end(db, uid):
@@ -81,8 +102,7 @@ def test_hc_walk_ignored_evening_polar_constrains(db_session, hc_first):
     ]
     (seed if hc_first else seed[::-1])[0]()
     (seed if hc_first else seed[::-1])[1]()
-    te = str(_training_end(db_session, u.id))
-    assert "18:00" in te and "08:00" not in te
+    assert _local_hm(_training_end(db_session, u.id)) == "18:00"
 
 
 @pytest.mark.parametrize("evening_first", [False, True])
@@ -98,8 +118,7 @@ def test_two_polar_sessions_take_the_latest_stop(db_session, evening_first):
     ]
     (seed if evening_first else seed[::-1])[0]()
     (seed if evening_first else seed[::-1])[1]()
-    te = str(_training_end(db_session, u.id))
-    assert "18:00" in te and "09:00" not in te
+    assert _local_hm(_training_end(db_session, u.id)) == "18:00"
 
 
 @pytest.mark.parametrize("late_first", [False, True])
@@ -116,8 +135,7 @@ def test_two_sessions_mixed_sources_take_the_later_stop(db_session, late_first):
     ]
     (seed if late_first else seed[::-1])[0]()
     (seed if late_first else seed[::-1])[1]()
-    te = str(_training_end(db_session, u.id))
-    assert "20:00" in te and "09:00" not in te
+    assert _local_hm(_training_end(db_session, u.id)) == "20:00"
 
 
 def test_polar_fitness_day_unchanged(db_session):
@@ -127,7 +145,7 @@ def test_polar_fitness_day_unchanged(db_session):
     _rec(db_session, u.id, NIGHT)
     _aero(db_session, u.id, SESS, source="polar_flow_export", stop_h=22, sid="fit", sport="Fitness")
     n = _night(db_session, u.id)
-    assert "22:00" in str(n.training_end)
+    assert _local_hm(n.training_end) == "22:00"
     assert _classify(n) == "training_constrained"
 
 
@@ -154,5 +172,5 @@ def test_hc_training_session_now_constrains(db_session, sport):
     _rec(db_session, u.id, NIGHT)
     _aero(db_session, u.id, SESS, source="health_connect", stop_h=22, sid="hc", pkg=GARMIN, sport=sport)
     n = _night(db_session, u.id)
-    assert n.training_end is not None and "22:00" in str(n.training_end)
+    assert n.training_end is not None and _local_hm(n.training_end) == "22:00"
     assert _classify(n) == "training_constrained"
