@@ -12171,7 +12171,21 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 
 **Do not revisit unless.** A session kind outside the four is shown to inflate felt load or falsely constrain nights (extend the one set, never add a second list); or Q164's trigger fires and ingest normalisation lands, at which point match on the canonical token instead of the raw string; or `CBTI_TITRATION_POLICY` (operator-held) defines "training session" differently from S4.
 
-### 323. `OPEN_QUESTIONS.md` layout rule — state on the State line only; OPEN/OWED above `## CLOSED`, ascending
+### 323. CBT-I `training_constrained` — full diary-local datetime compare (T1); persisted ledgers never restated (T2)
+
+**Decision.**
+- **T1.** `cbti/engine.classify_night` converts `training_end` to the diary frame explicitly (`DIARY_TZ` = Australia/Brisbane; a naive value is read as UTC) and compares FULL local datetimes: `training_end_local + TRAINING_RECOVERY_MIN` against the prescribed lights-out as a datetime on that night (`prescribed_lights_out_at`). A lights-out of 00:00–05:59 rolls to the wake date; any later clock sits on the evening before. The verdict is correct whatever the DB session tz is. `_TRAINING_SQL` and the replay are unchanged. `RULESET_VERSION` goes to `cbti-basis/2026-09-23.1`, as its own rule requires on any exclusion-predicate change.
+- **T2.** Persisted `cbti_prescriptions` ledgers (`basis_ledger`, `excluded_nights`) are the historical record and are never restated. This is moot for the current history, because the replay shows zero flips, but the stance holds for any future predicate change.
+
+**Rationale.** The old compare read `.hour` off an aware instant. On prod that instant arrives in UTC. It then compared the reading as minutes-since-midnight against a Brisbane wall-clock prescription. That hides two defects. The first is a frame mismatch: an evening session (21:30 local = 11:30Z) could never constrain a night, while a morning finish at 07:01–08:29 local (21:01–22:29Z) would, against a 22:30 prescription. The second is a midnight wrap: a 23:15 finish + 90 = 00:45 read as 45 minutes, so it never constrained. Converting the timezone alone fixes the first but not the second, so the compare is on datetimes. There is no per-user tz column. The diary and prescription `HH:MM` strings are implicitly operator-local Brisbane, the same zone the codebase buckets days in.
+
+**Status.** Built and landed. `cbti/engine.py` + tests; non-schema. Number `#323` resolved from master max #322 at `29c57c3`. PR #247 (held) also heads an entry `### 322.`. When it lands it re-resolves past this one. #322's Status predicted that it would become #323, and that prediction is superseded by landing order (number-at-merge).
+
+**How you know.** Operator prod run, 23 Sep 2026, `tz_replay.py` in-container on the app's own session: `SHOW TimeZone` = `Etc/UTC`, and `training_end` is delivered aware-UTC. A replay of user 1's blocks 1 and 2 under three rules (as deployed / TZ-converted / TZ + full datetime) showed ZERO night flips and no cycle-outcome change, so the bug was latent, not live. A local Postgres 16 + psycopg2 probe confirmed the readback shape: session TimeZone UTC → `tzinfo=UTC`, Brisbane → `+10:00`, the same instant either way. `tests/test_cbti_engine.py` has aware-UTC cases: an evening session constrains in both the UTC and +10 input zones; 07:45 local does not constrain; 23:15 vs 22:30 constrains; a 00:30 lights-out rolls over (22:30 finish clear, 23:30 constrained); naive = UTC. `tests/test_cbti_replay_training_end.py` seeds are true UTC instants. Mutation checks: against master's engine, every brief case fails (11 failures). A no-rollover mutant and a TZ-only (clock-minutes) mutant each fail their targeting case.
+
+**Do not revisit unless.** A per-user timezone is introduced, in which case `DIARY_TZ` becomes that user's zone and never a second constant; or a prescription legitimately falls in 06:00–11:59 (the rollover boundary assumes lights-out is evening or early morning); or a session after local midnight is shown to need to constrain the same night. Today `session_date` = the wake date maps it to the NEXT night, which is a replay-join limit, not this predicate.
+
+### 324. `OPEN_QUESTIONS.md` layout rule — state on the State line only; OPEN/OWED above `## CLOSED`, ascending
 
 **Context.** `OPEN_QUESTIONS.md` carried state in two places (the `**State:**` line and bracketed heading tags such as `[OPEN]`/`[DEFERRED]`/`[DONE]`, which drifted from each other), and new questions were appended at end of file, interleaving live and closed entries. #246 (Q168) re-sectioned the register and stripped the tags; without a rule the layout decays back on the next append.
 
@@ -12179,7 +12193,7 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 
 **Rationale.** The question parser (`gov_dialects.entry_state`, via `gen_status_model.parse_questions`) reads a heading state only in the HCA inline `· STATE` dialect (`split_inline_state`) and otherwise the `**State:**` body line; a bracketed `[OPEN]`-style tag is never read, so it is an unparsed second copy that can only diverge. Sectioning makes the live register readable top-down without a filter.
 
-**Status.** Ratified in chat 23 Sep (R3). Landed docs-only, merge HELD by operator instruction: merges after #246 (landed; it performs the re-sectioning this rule preserves). Number-at-merge `#323` from master max `#322` @ `29c57c3` — re-resolve if master advances before landing.
+**Status.** Ratified in chat 23 Sep (R3). Landed docs-only, merge HELD by operator instruction: merges after #246 (landed; it performs the re-sectioning this rule preserves). Number-at-merge `#324` from master max `#323` @ `2846cd9` — re-resolve if master advances before landing.
 
 **How you know.** #246's gates: G1 (conservation — Q-id set identical + Q168, every block byte-identical save its declared edit), G2 (`gen_status_model.py` tally via its own parser: `off_vocab {}` and `missing_state 0` post-move — the parser reads the State line, not the heading), G3 (`status_diff` master..branch: zero question state changes across the tag strip).
 

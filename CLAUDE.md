@@ -200,7 +200,7 @@ self-merge on green under § Merge disposition.
   `**State:**` line; question headings carry no bracketed state tag. OPEN/OWED
   entries sit above `## CLOSED` in ascending Q order, and a new question is inserted
   there, never appended at end of file. An entry reaching `DONE → #N` moves below
-  `## CLOSED`, in ascending order, in the same commit. (#323)
+  `## CLOSED`, in ascending order, in the same commit. (#324)
 - **Hevy:** canonical creation is `create_workout`, not `create_routine` (custom exercise
   UUIDs do not resolve via the routine endpoint — confirmed API limit). Matrix: `Hevy_Pattern`.
 - **CBT-I block references.** `cbti_blocks.id` is canonical for any operational reference

@@ -8,7 +8,7 @@ gate is exercised here or nowhere.
 
 No real rows appear (both repos are public).
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -89,12 +89,58 @@ def test_travel_or_match_excluded():
     assert classify_night(night(1, travel=True), RX).reason == "travel_or_match"
 
 
-def test_training_night_excluded_only_when_session_end_pushes_past_prescription():
-    """Session end + 90 min is a physical floor, not a compliance failure."""
-    late = classify_night(night(1, training_end=datetime(2026, 6, 1, 21, 30)), RX)
-    assert not late.valid and late.reason == "training_constrained"   # 21:30+90 = 23:00 > 22:30
-    early = classify_night(night(1, training_end=datetime(2026, 6, 1, 19, 0)), RX)
-    assert early.valid                                               # 19:00+90 = 20:30 <= 22:30
+# ── training_constrained: a full diary-local datetime compare (#323) ─────────
+# Inputs are AWARE-UTC instants, exactly as Postgres hands `stop_time` back (session
+# TimeZone Etc/UTC in prod). `_bne` builds the UTC instant of a Brisbane wall-clock time,
+# so each case reads in local terms. Night(2) wakes 2026-06-02; its session is on 06-01.
+_BNE = timezone(timedelta(hours=10))   # Australia/Brisbane: UTC+10, no DST
+
+
+def _bne(day, hh, mm=0, *, tz=timezone.utc):
+    """The instant of Brisbane wall-clock hh:mm on 2026-06-`day`, expressed in `tz`."""
+    return datetime(2026, 6, day, hh, mm, tzinfo=_BNE).astimezone(tz)
+
+
+@pytest.mark.parametrize("tz", [timezone.utc, _BNE], ids=["utc", "bne"])
+def test_training_evening_session_constrains(tz):
+    """21:30 local (11:30Z) + 90 = 23:00 > 22:30. Pre-#323 read .hour=11 off the UTC value
+    and let it through. The verdict must not depend on the zone the instant arrives in."""
+    v = classify_night(night(2, training_end=_bne(1, 21, 30, tz=tz)), RX)
+    assert not v.valid and v.reason == "training_constrained"
+
+
+def test_training_early_evening_session_does_not_constrain():
+    v = classify_night(night(2, training_end=_bne(1, 19, 0)), RX)   # 20:30 <= 22:30
+    assert v.valid
+
+
+def test_training_morning_session_does_not_constrain():
+    """07:45 local = 21:45Z the day before. Pre-#323: 21:45 + 90 = 23:15 > 22:30 -> a false
+    training_constrained exclusion of a night a morning session cannot have affected."""
+    v = classify_night(night(2, training_end=_bne(1, 7, 45)), RX)
+    assert v.valid
+
+
+def test_training_late_finish_constrains_across_midnight():
+    """23:15 + 90 = 00:45 the next day, which is LATER than 22:30. A clock-minutes compare
+    wraps it to 45 min and waves the night through."""
+    v = classify_night(night(2, training_end=_bne(1, 23, 15)), RX)
+    assert not v.valid and v.reason == "training_constrained"
+
+
+@pytest.mark.parametrize("finish, constrained", [((22, 30), False), ((23, 30), True)])
+def test_training_vs_post_midnight_lights_out_rolls_to_wake_date(finish, constrained):
+    """A 00:30 lights-out is 00:30 ON the wake date (06-02), not on 06-01. A 22:30 finish
+    -> 00:00 <= 00:30 (clear); 23:30 -> 01:00 > 00:30 (constrained). Without the rollover
+    the prescription sits on 06-01 and both nights read constrained."""
+    v = classify_night(night(2, lights_out="00:30", training_end=_bne(1, *finish)), "00:30")
+    assert (v.reason == "training_constrained") is constrained
+
+
+def test_training_naive_instant_is_read_as_utc():
+    """SQLite drops the zone on round-trip; a naive stop_time is a UTC instant (#323)."""
+    v = classify_night(night(2, training_end=datetime(2026, 6, 1, 11, 30)), RX)   # 21:30 local
+    assert v.reason == "training_constrained"
 
 
 def test_incomplete_night_excluded():
