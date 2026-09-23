@@ -12198,3 +12198,17 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 **How you know.** #246's gates: G1 (conservation — Q-id set identical + Q168, every block byte-identical save its declared edit), G2 (`gen_status_model.py` tally via its own parser: `off_vocab {}` and `missing_state 0` post-move — the parser reads the State line, not the heading), G3 (`status_diff` master..branch: zero question state changes across the tag strip).
 
 **Do not revisit unless.** The status parser starts reading bracketed heading tags (then a tag becomes load-bearing and this rule must be re-derived).
+
+### 325. Sliding token renewal on `/health-connect/sync`
+
+**Context.** Prod access tokens expire after 7 days (`ACCESS_TOKEN_EXPIRE_MINUTES=10080`, operator-read). HCA #44 background sync got a 401 on the first run after expiry, cleared its token, and every later run exited with no token (dumpsys/logcat 24 Sep). Any fixed lifetime fails identically for an app the operator never opens.
+
+**Decision.** Every successful `POST /health-connect/sync` returns `renewed_token` — a fresh JWT minted in `sync()` after `db.commit()` via `auth.create_access_token({"sub": current_user.email})`, the login route's exact claim set and lifetime (no new env var). The client stores it (HCA #NEXT, Brief B). A failed sync (401 from `get_current_user`, 422 from payload validation, any exception before the return) carries none. Additive key: no change to login, the expiry env, or `get_current_user`; no refresh-token table. Rejected: a long-lived device token (still has a cliff; larger blast radius if leaked).
+
+**Rationale.** Sliding renewal on the one call the companion makes on schedule converts a fixed cliff into "expires only after 7 days without a successful sync". Minting after the commit ties renewal to a sync that actually landed.
+
+**Status.** Chat-approved brief (Brief A, G0 ratified); implemented with no new judgment → self-merge on green (non-schema). Live only once HCA stores the token (Brief B; G2 joint). Number-at-merge #325 from master max #324 @ `17f5c3b`.
+
+**How you know.** `backend/tests/test_hc_sync_token_renewal.py` drives the REAL router with the REAL bearer decode (only `get_db` overridden): success → same `sub`, later `exp` than the request token, `exp ≈ now + ACCESS_TOKEN_EXPIRE_MINUTES`, claims exactly `{sub, exp}`, and the renewed token authenticates the next sync; 422 / expired-token 401 / unknown-subject 401 → no `renewed_token`. Negative control: with the `sync()` change stashed, the two success tests fail and the three failure tests pass. Full backend suite 1916 passed. HCA read at `bb94b67`: `api.syncHealthData` returns `response.data`; `syncRunner.runSync` awaits it and discards the return — so HCA reads the key as `response.renewed_token` once Brief B lands.
+
+**Do not revisit unless.** The companion stops syncing on a schedule shorter than the token lifetime, or a token-revocation requirement appears (sliding renewal keeps a leaked token alive as long as it keeps syncing — revocation would then need server state).

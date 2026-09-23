@@ -20,7 +20,7 @@ from sqlalchemy import null
 from sqlalchemy.orm import Session
 
 import models
-from auth import get_current_user
+from auth import create_access_token, get_current_user
 from database import get_db
 from load_metrics import _local_day     # operator-local (AEST) day — Q42 single source
 from reads.aerobic_reads import HEALTH_CONNECT, writer_class, writer_class_rank
@@ -1144,6 +1144,12 @@ def sync(
                     daily_rec.mindfulness_duration_min = sum(s.duration() for s in sessions)
 
     db.commit()
+    # Sliding renewal (#NEXT): a fresh access token on every SUCCESSFUL sync, minted
+    # after the commit with the login route's exact claim set ({"sub": email}) and
+    # lifetime (ACCESS_TOKEN_EXPIRE_MINUTES), so a companion syncing on a schedule
+    # never reaches expiry. Any failure path (401/422/an exception before here)
+    # returns no token. Additive key; clients that ignore it are unaffected.
+    renewed_token = create_access_token({"sub": current_user.email})
     return {
         "synced": len(synced_dates),
         "dates": synced_dates,
@@ -1161,6 +1167,7 @@ def sync(
         # drops (Hevy mirrors, writer-class mirrors), the null-id fallback count, and how
         # many surviving records carried a writer outside the class table (Ruling 2).
         "exercise_ingest": exercise_ingest,
+        "renewed_token": renewed_token,
     }
 
 
