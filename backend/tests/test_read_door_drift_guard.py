@@ -29,7 +29,7 @@ ALLOW_AEROBIC = {
     "routers/health_connect.py": "Writer (HC exercise ingest); reads existing rows for mirror-drop/upsert.",
     "import_polar.py": "Writer (Polar Flow-export ZIP ingest).",
     "load_events_metabolic.py": "Sources rows via arbitrated_sessions (the door); the only direct query is the distinct-user-id worklist.",
-    "cbti/replay.py": "Allow-listed: keeps its pre-migration raw-SQL isolation, and reads training_end DETERMINISTICALLY — MAX(stop_time) per session_date with source='health_connect' EXCLUDED (interim, Q162) — so no order-dependent wrong-pick and no HC ingest side effect on the sleep engine (#311).",
+    "cbti/replay.py": "Allow-listed: keeps its pre-migration raw-SQL isolation, and reads training_end DETERMINISTICALLY — MAX(stop_time) per session_date with non-training sports (sport_classes.NON_TRAINING_SPORTS) EXCLUDED, all sources (#322, closing Q162) — so no order-dependent wrong-pick (#311).",
     "engine/week_plan.py": "Derived week plan (#316) does NOT count — every `done` is resolve()'s (doored). Its only direct aerobic reads are day-attribution of the exact session ids resolve() ALREADY counted (never a membership/count decision) and the freshness aggregate max(created_at) for Polar rows, which no door exposes (ruling 4).",
 }
 ALLOW_HEVY = {
