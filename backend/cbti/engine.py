@@ -55,7 +55,11 @@ import statistics
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from datetime import time as dtime
+from datetime import timezone
 from typing import Literal
+
+import pytz
 
 from cbti.timeutil import (
     clock_delta_minutes,
@@ -110,6 +114,16 @@ CYCLE_NIGHTS = 4
 # duration starved a cycle outright (Q78's frequent-napper stall).
 NAP_EXCLUDE_MIN = 30
 TRAINING_RECOVERY_MIN = 90    # constrained night floor = session end + 90 min
+# The diary / prescription clock frame (#323). `lights_out` and `prescribed_lights_out`
+# are bare "HH:MM" wall-clock strings with no zone of their own; the operator records them
+# in Australia/Brisbane (UTC+10, no DST), the same operator-local zone the rest of the
+# codebase buckets days in. There is no per-user tz column. `training_end` is an INSTANT
+# (timestamptz) and is converted INTO this frame before any compare — never read by
+# `.hour` in whatever zone the DB session happened to hand it back in.
+DIARY_TZ = pytz.timezone("Australia/Brisbane")
+# A prescribed lights-out in [00:00, 06:00) falls on the WAKE date (past midnight); any
+# later clock falls on the evening before it (#323).
+LIGHTS_OUT_ROLLOVER_HOUR = 6
 
 # UNVALIDATED BY THE OBSERVED BLOCK. Not derived from data; the observed
 # prescription moves ranged 1..35 min so this would have clipped one of eight,
@@ -156,7 +170,9 @@ AdherenceSource = Literal["samsung", "diary", "none"]
 # ledger persisted at close-out stays reproducible against the rules that produced it
 # (it is snapshotted onto the successor prescription, never recomputed at render).
 # `2026-08-30.1` is minted for the #253 alcohol reclass and this ledger producer.
-RULESET_VERSION = "cbti-basis/2026-08-30.1"
+# `2026-09-23.1`: the training_constrained predicate became a full diary-local datetime
+# compare (#323). The zero-flip prod replay shows no historical night changes verdict.
+RULESET_VERSION = "cbti-basis/2026-09-23.1"
 
 # ── per-night ledger (closed enums) ───────────────────────────────────────────
 # The ledger row's three-state status and its reason code. BOTH ARE CLOSED SETS: a
@@ -189,7 +205,8 @@ class Night:
 
     `samsung_bedtime` must come from the `context = 'passive_overnight'` allowlist
     and nowhere else. `training_end` is the stop_time of a session on the calendar
-    day preceding the wake date, or None.
+    day preceding the wake date, or None. It is an INSTANT (aware; naive = UTC) and
+    is converted to the diary frame before it is compared (#323).
     """
     date: date                            # wake date; the diary's own row-date
     tst_min: int | None = None
@@ -374,6 +391,28 @@ def _ledger_row(v: "NightVerdict") -> dict:
 
 # ── exclusions ────────────────────────────────────────────────────────────────
 
+def _as_diary_local(instant: datetime) -> datetime:
+    """An instant expressed in the diary frame (#323). A NAIVE value is treated as UTC,
+    the codebase-wide convention for a stored instant that lost its zone (SQLite's
+    round-trip drops it; `hevy_workouts._parse_dt`, `load_metrics._local_day` do the same)."""
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    return instant.astimezone(DIARY_TZ)
+
+
+def prescribed_lights_out_at(wake_date: date, prescribed_lights_out: str) -> datetime | None:
+    """The prescribed lights-out for the night ending on `wake_date`, as an aware
+    diary-local datetime (#323). A clock in [00:00, LIGHTS_OUT_ROLLOVER_HOUR) is past
+    midnight and so falls ON the wake date; any later clock falls on the evening before.
+    None for a blank or malformed prescription (the caller then cannot constrain)."""
+    rx_min = clock_to_minutes(prescribed_lights_out)
+    if rx_min is None:
+        return None
+    h, m = divmod(rx_min, 60)
+    day = wake_date if h < LIGHTS_OUT_ROLLOVER_HOUR else wake_date - timedelta(days=1)
+    return DIARY_TZ.localize(datetime.combine(day, dtime(h, m)))
+
+
 def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
     """Decide whether a night counts toward the basis, and if so how its adherence
     was established. Exclusions are RECORDED with a reason, never silently dropped.
@@ -415,12 +454,15 @@ def classify_night(night: Night, prescribed_lights_out: str) -> NightVerdict:
 
     # constrained training night: the prescription is unreachable because the
     # session ended too late for it. Not a compliance failure — a physical floor.
+    # #323: a FULL local-datetime compare. The session end is converted into the diary
+    # frame and the prescription is placed on its real calendar day, so neither the DB
+    # session's tz (prod hands back aware-UTC) nor the midnight wrap can flip the verdict.
     if night.training_end is not None and night.lights_out is not None:
-        earliest = night.training_end + timedelta(minutes=TRAINING_RECOVERY_MIN)
-        rx_min = clock_to_minutes(prescribed_lights_out)
-        earliest_min = earliest.hour * 60 + earliest.minute
-        if rx_min is not None and earliest_min > rx_min:
-            return NightVerdict(night, False, "training_constrained")
+        rx_at = prescribed_lights_out_at(night.date, prescribed_lights_out)
+        if rx_at is not None:
+            earliest = _as_diary_local(night.training_end) + timedelta(minutes=TRAINING_RECOVERY_MIN)
+            if earliest > rx_at:
+                return NightVerdict(night, False, "training_constrained")
 
     # valid — now establish HOW adherence is known for this night.
     # RECALL-ONLY (#127): adherence differences the prescribed lights-out against the
