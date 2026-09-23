@@ -58,8 +58,9 @@ import models
 from load_events import FORMULA_VERSION as _FV_STRENGTH, WINDOW_MECHANICAL, WINDOW_NEUROMUSCULAR
 from load_events_metabolic import FORMULA_VERSION_METABOLIC as _FV_METABOLIC, WINDOW_METABOLIC
 from load_metrics import _local_day  # identical AEST day-bucketing as the Banister rollup
-from reads.aerobic_reads import HEALTH_CONNECT, arbitrated_sessions, overlaps_workout
+from reads.aerobic_reads import arbitrated_sessions, overlaps_workout
 from reads.hevy_reads import counted_workouts
+from sport_classes import is_non_training
 
 # ---------------------------------------------------------------------------
 # REASONED-PRIOR constants — calibratable, never magic numbers (S4 §3.5/§3.7).
@@ -286,11 +287,11 @@ def _duration_min_by_day(db: Session, user_id: int) -> dict[date, tuple[float, i
     day of `start_time` (`_local_day`). A session with no usable duration contributes no
     minutes but still tallies.
 
-    Q160 INTERIM: `health_connect`-source rows contribute NOTHING here — no minutes, no
-    session tally — until Q160 is ruled. The #309 ingest must not change this existing metric
-    as a side effect: pre-#309 only Polar + Hevy fed it (no HC aerobic rows existed), so
-    excluding HC preserves the series. The final rule (do walk/rehab/pilates activity minutes
-    belong here at all, likely by declared sport) is Q160, deferred; today they are OUT.
+    Non-training sessions (#322 S3, closing Q160): a canonical aerobic row whose `sport_name`
+    is in `sport_classes.NON_TRAINING_SPORTS` (Walking/Pilates/Yoga/Stretching, case-insensitive,
+    ALL sources) contributes NOTHING — no minutes, no session tally — because `session_rpe` is
+    one whole-day RPE and non-training minutes would inflate the day's felt load. Every other
+    session counts, whatever its source (the #309 interim HC-source exclusion is lifted).
     """
     out_min: dict[date, float] = defaultdict(float)
     out_n: dict[date, int] = defaultdict(int)
@@ -308,10 +309,10 @@ def _duration_min_by_day(db: Session, user_id: int) -> dict[date, tuple[float, i
     hevy, _unadjudicated = counted_workouts(db, user_id, hevy_candidates)
 
     for s in arbitrated_sessions(user_id, db):
-        if s.source == HEALTH_CONNECT:
-            continue                              # Q160 interim: HC rows do not feed this metric yet
         if not getattr(s, "canonical", True):
             continue
+        if is_non_training(s.sport_name):
+            continue                              # #322 S3: non-training minutes are not felt load
         if overlaps_workout(s, hevy):
             continue                              # same bout as a counted Hevy workout
         day = s.session_date

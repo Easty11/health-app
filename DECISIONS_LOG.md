@@ -12153,7 +12153,25 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 
 **Do not revisit unless.** A real sync begins arriving with a non-null `git_sha` and `heartRate.newestAt` within hours of `synced_at` (that makes HCA Q21.1 runnable and, if it passes, closes HCA Q22, G3); or the week planner's HC-freshness read is repointed to `health_connect_sync_events.synced_at` (Q167 (ii)); or a failed/rolled-back sync leaving no event row becomes a diagnosis need at scale (Q167 (i)).
 
-### 322. `OPEN_QUESTIONS.md` layout rule — state on the State line only; OPEN/OWED above `## CLOSED`, ascending
+
+### 322. Static non-training sport set — #302 sport call ruled; Q160 + Q162 closed
+
+**Decision.** Rulings ratified in chat 23 Sep (S1–S5):
+- **S1.** One static exclusion set, `NON_TRAINING_SPORTS = {Walking, Pilates, Yoga, Stretching}` (`backend/sport_classes.py`), matched case-insensitively on raw `aerobic_sessions.sport_name` (the Q164 rule: exact, case-insensitive, no trimming or fuzzy matching). It applies to ALL sources. It is defined once and imported by every consumer; there is no second list. It is deliberately NOT derived from activity-slot `device_sports` declarations, which are phase-scoped, so deriving from them would break series invariance (#302).
+- **S2.** #302 / Q159 metabolic load: NO sport exclusion. Every zoned session deposits, and zone weighting discriminates. No code change; recorded for the stage-2 brief. `load_events_metabolic` must not import the set.
+- **S3.** Q160 felt load (`reads/psychological_reads._duration_min_by_day`): a canonical session in S1 contributes no minutes and no session tally. The #309 interim HC-source exclusion is lifted for everything else.
+- **S4.** Q162 CBT-I `training_end` (`cbti/replay._TRAINING_SQL`): a session in S1 never constrains a night. Every other session does, including generic names ("Fitness", "Other Workout") and a blank or NULL `sport_name`. The #311 interim HC-source exclusion is lifted. The per-day `training_end` stays `MAX(stop_time)` over that day's remaining sessions (already MAX since #311, so no change).
+- **S5.** Q164: no ingest normalisation now; its revisit trigger has not fired.
+
+**Rationale.** `session_rpe` is one whole-day RPE, so non-training minutes inflate the day's felt load (S3). A walk or a stretch does not put a physical floor under lights-out, but any real session can, and the generic HC names hide real sessions (S4). A static set keeps a historical day's classification stable across phase changes. A phase-scoped declaration would reclassify history whenever a phase changed (#302). The metabolic deposit is a separate consumer. There, zone weighting already separates a walk from a hard session, so a sport cut would discard signal (S2).
+
+**Status.** Built and landed. Backend and tests only; non-schema, read-time only. Number `#322` resolved from master max #321 at `7dc6162` at PR open. PR #247, held, claims #322 too, and it renumbers to #323 when it merges (number-at-merge: the second PR to land re-resolves).
+
+**How you know.** The HC mapper `routers/health_connect.sport_name_for` emits exactly `Walking` (79), `Pilates` (48), `Stretching` (71) and `Yoga` (83), and `Other Workout` (0) and `Strength Training` (70) fall outside the set. Confirmed by calling it. `tests/test_non_training_sports.py`: the set equals the ratified four; case-insensitive exact matching; both consumers import `sport_classes`; no other non-test module holds a literal list; the metabolic transform does not import it. `tests/test_cbti_replay_training_end.py` and `tests/test_psychological_window.py` cover four cases: a Polar "Fitness" day is unchanged; an HC or Polar Walking/Pilates/Yoga/Stretching session contributes nothing to either consumer; an HC "Other Workout"/"Rugby"/blank/NULL session counts in felt load and makes a 22:00 stop `training_constrained` against a 22:30 prescription (22:00 + `TRAINING_RECOVERY_MIN` 90); and two sessions on one day give the later stop in both insert orders. A mutation run of the new tests against master's two consumer files: the Polar Fitness and HC non-training cases pass there (behaviour unchanged), and every new-behaviour case fails. Backend suite 1901 passed, 1 skipped, 1 failed: the known shallow-clone artifact `test_context_builder_output_unchanged_pre_post_refactor`, where `3360ed5` is absent here.
+
+**Do not revisit unless.** A session kind outside the four is shown to inflate felt load or falsely constrain nights (extend the one set, never add a second list); or Q164's trigger fires and ingest normalisation lands, at which point match on the canonical token instead of the raw string; or `CBTI_TITRATION_POLICY` (operator-held) defines "training session" differently from S4.
+
+### 323. `OPEN_QUESTIONS.md` layout rule — state on the State line only; OPEN/OWED above `## CLOSED`, ascending
 
 **Context.** `OPEN_QUESTIONS.md` carried state in two places (the `**State:**` line and bracketed heading tags such as `[OPEN]`/`[DEFERRED]`/`[DONE]`, which drifted from each other), and new questions were appended at end of file, interleaving live and closed entries. #246 (Q168) re-sectioned the register and stripped the tags; without a rule the layout decays back on the next append.
 
@@ -12161,7 +12179,7 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 
 **Rationale.** The question parser (`gov_dialects.entry_state`, via `gen_status_model.parse_questions`) reads a heading state only in the HCA inline `· STATE` dialect (`split_inline_state`) and otherwise the `**State:**` body line; a bracketed `[OPEN]`-style tag is never read, so it is an unparsed second copy that can only diverge. Sectioning makes the live register readable top-down without a filter.
 
-**Status.** Ratified in chat 23 Sep (R3). Landed docs-only, merge HELD by operator instruction: merges after #246 (which performs the re-sectioning this rule preserves). Number-at-merge `#322` from master max `#321` @ `4f13349` (#246 mints no decision) — re-resolve if master advances before landing.
+**Status.** Ratified in chat 23 Sep (R3). Landed docs-only, merge HELD by operator instruction: merges after #246 (landed; it performs the re-sectioning this rule preserves). Number-at-merge `#323` from master max `#322` @ `29c57c3` — re-resolve if master advances before landing.
 
 **How you know.** #246's gates: G1 (conservation — Q-id set identical + Q168, every block byte-identical save its declared edit), G2 (`gen_status_model.py` tally via its own parser: `off_vocab {}` and `missing_state 0` post-move — the parser reads the State line, not the heading), G3 (`status_diff` master..branch: zero question state changes across the tag strip).
 
