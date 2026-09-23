@@ -49,9 +49,8 @@ def _rpe_day(db, d: date, rpe: float, uid=1):
 
 
 def _aerobic(db, d: date, minutes: float, uid=1, sid=None):
-    # A feeding source (Polar). NOT health_connect: the Q160 interim excludes HC-source rows
-    # from _duration_min_by_day, and pre-#309 no HC aerobic rows existed, so a duration-provider
-    # fixture is faithfully Polar.
+    # A Polar duration-provider fixture (no sport_name → training, #322 S1); pre-#309 no HC
+    # aerobic rows existed, so Polar is the faithful historical provider.
     db.add(models.AerobicSession(
         user_id=uid, source="polar_flow_export", source_session_id=sid or f"s-{d}",
         session_date=d, duration_minutes=minutes,
@@ -362,15 +361,15 @@ def test_life_load_bias_never_touches_dosing(db_session):
 
 
 # ---------------------------------------------------------------------------
-# _duration_min_by_day — count each bout once (#309 double-count fix + Q160 interim)
+# _duration_min_by_day — count each bout once (#309) + non-training excluded (#322, Q160)
 # ---------------------------------------------------------------------------
 # The HC ingest made a pre-existing double-count material: the metric summed ALL
 # aerobic_sessions (twins/mirrors) and ALL hevy_workouts (excluded/dedup), and one bout
 # counted on both sides. Fix: canonical aerobic rows only; a session overlapping a counted
-# Hevy workout contributes nothing; the Hevy side honours excluded_at/dedup_flag. Q160
-# INTERIM: health_connect-source rows contribute nothing at all (no minutes, no tally) until
-# Q160 is ruled — so the ingest does not perturb the pre-#309 Polar+Hevy series. The
-# canonical/overlap mechanisms are therefore exercised with a FEEDING source (Polar).
+# Hevy workout contributes nothing; the Hevy side honours excluded_at/dedup_flag. #322 S3
+# (closing Q160): a session whose sport_name is in sport_classes.NON_TRAINING_SPORTS
+# (case-insensitive, ANY source) contributes nothing at all (no minutes, no tally); every other
+# session counts whatever its source — the #309 interim HC-source exclusion is lifted.
 
 GARMIN = "com.garmin.android.apps.connectmobile"
 
@@ -379,20 +378,21 @@ def _utc(d: date, h, mi=0):
     return datetime(d.year, d.month, d.day, h, mi, tzinfo=timezone.utc)
 
 
-def _hc_row(db, d, start_h, start_m, stop_h, stop_m, *, pkg, sid, uid=1):
+def _hc_row(db, d, start_h, start_m, stop_h, stop_m, *, pkg, sid, uid=1, sport=None):
     st, sp = _utc(d, start_h, start_m), _utc(d, stop_h, stop_m)
     db.add(models.AerobicSession(
         user_id=uid, source="health_connect", source_package=pkg, source_session_id=sid,
-        session_date=d, start_time=st, stop_time=sp,
+        session_date=d, start_time=st, stop_time=sp, sport_name=sport,
         duration_minutes=(sp - st).total_seconds() / 60.0,
     ))
     db.commit()
 
 
-def _polar(db, d, start_h, start_m, stop_h, stop_m, *, source="polar_flow_export", sid, uid=1):
+def _polar(db, d, start_h, start_m, stop_h, stop_m, *, source="polar_flow_export", sid, uid=1,
+           sport=None):
     st, sp = _utc(d, start_h, start_m), _utc(d, stop_h, stop_m)
     db.add(models.AerobicSession(
-        user_id=uid, source=source, source_session_id=sid,
+        user_id=uid, source=source, source_session_id=sid, sport_name=sport,
         session_date=d, start_time=st, stop_time=sp,
         duration_minutes=(sp - st).total_seconds() / 60.0,
     ))
@@ -409,23 +409,58 @@ def _hevy(db, d, start_h, stop_h, *, hid, uid=1, dedup=False, excluded=False, pa
     db.commit()
 
 
-def test_duration_hc_source_excluded_interim(db_session):  # Q160 interim + §18
-    """An HC walk on a gym day contributes NOTHING — the day's minutes are the Hevy workout's
-    alone. The walk is canonical and does NOT overlap the workout (07:00 vs 17:00), so only the
-    source filter excludes it: remove `if s.source == HEALTH_CONNECT` and its 40 min re-enter
-    (100 min / 2 sessions), failing this assertion."""
+@pytest.mark.parametrize("sport", ["Walking", "Pilates", "yoga", "STRETCHING"])
+def test_duration_hc_non_training_contributes_nothing(db_session, sport):  # #322 S3 + §18
+    """An HC Walking/Pilates/Yoga/Stretching session on a gym day contributes NOTHING — the
+    day's minutes are the Hevy workout's alone. The session is canonical and does NOT overlap
+    the workout (07:00 vs 10:00), so only the sport filter excludes it: remove the
+    `is_non_training` skip and its 40 min re-enter (100 min / 2 sessions), failing this."""
     uid = _user(db_session)
     d = date(2026, 8, 5)
     # UTC hours <= 13 so +10h AEST stays on the same day (17:00Z would bucket to the next day).
-    _hevy(db_session, d, 10, 11, hid="wg")                              # 60 min gym, 10:00-11:00
-    _hc_row(db_session, d, 7, 0, 7, 40, pkg=GARMIN, sid="walk")          # 40 min HC walk, no overlap
+    _hevy(db_session, d, 10, 11, hid="wg")                                        # 60 min gym
+    _hc_row(db_session, d, 7, 0, 7, 40, pkg=GARMIN, sid="nt", sport=sport)       # 40 min, no overlap
     assert _duration_min_by_day(db_session, uid) == {d: (60.0, 1)}
+
+
+def test_duration_hc_non_training_alone_leaves_no_day(db_session):
+    """A day whose only session is non-training has no entry at all (no minutes, no tally)."""
+    uid = _user(db_session)
+    d = date(2026, 8, 10)
+    _hc_row(db_session, d, 7, 0, 7, 40, pkg=GARMIN, sid="walk", sport="Walking")
+    assert d not in _duration_min_by_day(db_session, uid)
+
+
+@pytest.mark.parametrize("sport", ["Other Workout", "Rugby", None])
+def test_duration_hc_training_session_now_counts(db_session, sport):  # #322 S3 lifts the interim
+    """An HC session that is not non-training now counts in felt load — minutes AND tally.
+    Under the #309 interim this day was absent."""
+    uid = _user(db_session)
+    d = date(2026, 8, 11)
+    _hc_row(db_session, d, 7, 0, 7, 40, pkg=GARMIN, sid="hc", sport=sport)
+    assert _duration_min_by_day(db_session, uid) == {d: (40.0, 1)}
+
+
+def test_duration_polar_fitness_day_unchanged(db_session):
+    """A Polar "Fitness" day is identical to pre-#322 behaviour — its minutes and tally."""
+    uid = _user(db_session)
+    d = date(2026, 8, 12)
+    _polar(db_session, d, 6, 0, 6, 50, sid="fit", sport="Fitness")
+    assert _duration_min_by_day(db_session, uid) == {d: (50.0, 1)}
+
+
+def test_duration_polar_non_training_also_excluded(db_session):
+    """S1 applies to ALL sources: a Polar "Yoga" session contributes nothing either."""
+    uid = _user(db_session)
+    d = date(2026, 8, 13)
+    _polar(db_session, d, 6, 0, 6, 50, sid="yoga", sport="Yoga")
+    assert d not in _duration_min_by_day(db_session, uid)
 
 
 def test_duration_one_bout_counted_once(db_session):
     """The messy real bout — a Hevy workout plus HC twins/mirror all recording it — is counted
-    ONCE (the Hevy workout's 60 min). The HC rows are out under the Q160 interim; even absent
-    that, they overlap the counted workout."""
+    ONCE (the Hevy workout's 60 min). The HC rows overlap the counted workout, so they are that
+    bout (or its twins) and contribute nothing."""
     uid = _user(db_session)
     d = date(2026, 8, 1)
     _hevy(db_session, d, 6, 7, hid="w1")                                 # 60 min, counted

@@ -41,6 +41,7 @@ from sqlalchemy import text
 import models
 from cbti.engine import CYCLE_NIGHTS, MAX_MOVE_MIN, Night, evaluate_cycle, outcome_of
 from database import SessionLocal
+from sport_classes import NON_TRAINING_SPORTS_LOWER
 
 # The ONLY permitted Samsung read. A second query path around this allowlist is
 # the thing #108's isolation exists to prevent.
@@ -53,14 +54,20 @@ _SAMSUNG_SQL = text(
 # One training_end per session_date, DETERMINISTIC (#311): MAX(stop_time), never SQL row
 # order — post-#309 a day can hold DIFFERENT bouts, so the old order-dependent
 # {date: stop_time} fold (last-row-wins) could pick a morning walk over the evening session.
-# INTERIM (mirrors Q160, raise Q162): source='health_connect' rows are EXCLUDED until it is
-# ruled which activities constrain a night — a walk almost certainly does not; a hard evening
-# Garmin/Samsung session arguably does. This preserves the pre-#309 behaviour exactly (only
-# Polar fed training_end then). `source` is NOT NULL, so `<> 'health_connect'` drops no Polar.
+# The latest session on the day is the one that constrains the night.
+# Non-training sessions never constrain a night (#322 S4, closing Q162): a row whose
+# `sport_name` is in `sport_classes.NON_TRAINING_SPORTS` (case-insensitive exact, ALL sources)
+# is dropped; every other session counts, whatever its source — including generic names and a
+# NULL/blank sport_name (hence the explicit `IS NULL OR`, since `NULL NOT IN (...)` is NULL).
+# The #311 interim `source <> 'health_connect'` exclusion is lifted. The IN-list is expanded
+# from the shared constant as bind params — never a second list here.
+_NON_TRAINING_PARAMS = {f"nt{i}": s for i, s in enumerate(sorted(NON_TRAINING_SPORTS_LOWER))}
 _TRAINING_SQL = text(
     "SELECT session_date, MAX(stop_time) AS stop_time FROM aerobic_sessions "
     "WHERE user_id = :uid AND stop_time IS NOT NULL "
-    "AND source <> 'health_connect' "
+    "AND (sport_name IS NULL OR LOWER(sport_name) NOT IN ("
+    + ", ".join(f":{k}" for k in _NON_TRAINING_PARAMS)
+    + ")) "
     "AND session_date BETWEEN :d0 AND :d1 "
     "GROUP BY session_date"
 )
@@ -143,7 +150,8 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     rows = db.execute(_NIGHTS_SQL, {"uid": user_id, "d0": d0, "d1": d1}).all()
     samsung = {_as_date(r[0]): r[1] for r in db.execute(_SAMSUNG_SQL, {"uid": user_id, "d0": d0, "d1": d1})}
     # a session on the calendar day BEFORE the wake date constrains that night
-    training = {_as_date(r[0]): r[1] for r in db.execute(_TRAINING_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1})}
+    training = {_as_date(r[0]): r[1] for r in db.execute(
+        _TRAINING_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1, **_NON_TRAINING_PARAMS})}
     # likewise a nap on the calendar day BEFORE the wake date is the one that discharged
     # this night's sleep pressure — Night(W) reads the nap recorded on W-1 (Q45 -> #219).
     # This is the read `models.DailyRecord.naps_min` has documented as the contract since
