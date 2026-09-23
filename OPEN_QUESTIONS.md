@@ -2291,33 +2291,9 @@ Raised 2026-09-18 with #309 (HC exercise ingest stage 1). Stage 1 ingests HC exe
 
 Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). HC sessions still carry null `hr_avg`/`hr_max` by stage-1 design; this is the stage-2 join.
 
+#302 sport call ruled #322: no sport exclusion for the metabolic deposit. Stage 2 unblocked on the load-model side.
+
 **State:** OPEN. Blocks nothing — stage 1 ships zoneless-but-counted under #309/#307; this is the load-deposit upgrade.
-
----
-
-## Q160. Do non-training activity minutes belong in the psychological felt-load term?
-
-Raised 2026-09-18 with #309 (HC exercise ingest) at PR review. `reads/psychological_reads._duration_min_by_day` sums per-day training minutes; that Σminutes × `session_rpe` is the "felt" load — the target `y` of the ridge regression in `psychological_residual` (the subjective-vs-objective decoupling marker, #28; a down-only diagnostic, consumer deferred) — and its session count flags a multi-session day.
-
-#309 fixed the double-count (canonical aerobic rows only; a bout overlapping a counted Hevy workout excluded; Hevy via the `counted_workouts` door) but deliberately did NOT decide **whether a canonical walk, rehab swim, or pilates session should contribute minutes to this felt-load term at all**. The resolver excludes such sessions from a *conditioning* quota by sport declaration (activity-slot v2), but the psychological felt-load term is a different consumer with its own meaning: a 40-minute walk at RPE 2 is real perceived effort, or it is noise that dilutes the decoupling signal — not obvious either way.
-
-**INTERIM (merge condition 1, #309):** `health_connect`-source rows contribute NOTHING to this metric — no minutes, no session tally — so the ingest does not perturb the pre-#309 Polar+Hevy series. Decision pending, **likely by declared sport** (reuse the activity-slot v2 declaration, not a second sport list). Until then, HC activity is OUT.
-
-**To close:** rule whether the felt-load term filters by sport/activity kind (and which kinds), and lift the interim HC exclusion accordingly. Read-time only; no schema.
-
-**State:** OPEN. Blocks nothing — the residual's consumer is deferred (#28); this is a scope decision to settle before that consumer lands.
-
----
-
-## Q162. Which activities constrain a CBT-I night (training_end)?
-
-Raised 2026-09-19 with #311. `cbti/replay.load_nights` sets `training_end` = a training session's stop on the day before a night; a night whose lights-out is within `TRAINING_RECOVERY_MIN` (90) of that is `training_constrained` and excluded from titration. Pre-#309 only Polar fed this (H10 chest strap → deliberate hard sessions). The HC ingest now brings Garmin/Samsung-recorded sessions of ALL kinds into `aerobic_sessions`, so the question is which of them should constrain a night.
-
-**Interim (#311):** `source='health_connect'` is EXCLUDED from `training_end` — no HC session constrains a night — preserving the pre-#309 behaviour. A walk almost certainly does NOT constrain sleep; a hard evening session recorded on Garmin/Samsung arguably does. Not picked here.
-
-**To close:** rule which HC activities constrain a night (likely by declared sport — reuse the activity-slot v2 declaration rather than a second sport list), and lift the interim exclusion for those. `CBTI_TITRATION_POLICY` (operator-held, not in the tree) may define "training session" for this purpose — anchor the ruling on it if so. Read-time only; no schema. Companion to Q160 (the felt-load felt-minutes scope) — same "which activities count for which consumer" shape, different consumer (the sleep engine vs the psychological residual).
-
-**State:** OPEN. Not blocking — the interim preserves prior behaviour; this decides when HC sessions begin to constrain nights.
 
 ---
 
@@ -2336,6 +2312,8 @@ Raised 2026-09-20 with #314. The in-app coach has NO tool loop — it acts throu
 Raised 2026-09-20 with #315. Activity and sport-scoped `load_window` slots decide membership by matching a slot's declared `device_sports` against a canonical session's `sport_name` — EXACT but case-insensitive, no fuzzy/category matching (ruling 4c). `device_sports` is an OPEN vocabulary because Polar sports are free-form (`Fitness`, `Road cycling`, `Other outdoor`, …) and HC produces title-cased `ExerciseSessionType` names; a closed set would refuse a real Polar sport. The cost of open + exact: a typo or a source-specific spelling (HC "Walking" vs a Polar "Walk") matches no slot and surfaces as `unclaimed_session` — visible and fixable, but silent to the quota until fixed.
 
 **To decide:** whether the ingest path should NORMALISE `sport_name` to a canonical vocabulary (a source→canonical map, e.g. HC `WALKING`→"Walking", Polar "Walk"→"Walking") so slot membership rests on a canonical token rather than the raw device string, and whether `device_sports` should then validate against that canonical set (closing the vocabulary) or stay open. Trade-off: robustness of matching + a closed validatable set vs the maintenance of a per-source map and the risk of refusing a genuinely new sport at write.
+
+Ruled #322: not built; trigger unchanged.
 
 **State:** OPEN. Not blocking — exact case-insensitive matching works for the sports observed in prod, and a miss is visible (`unclaimed_session`, "other activity"), never a silent miscount. Revisited if real sessions repeatedly go unclaimed on spelling.
 
@@ -4792,6 +4770,20 @@ Diagnosed 2026-09-15 (#298): Garmin overnight HRV reaches `hrv_readings` only wh
 
 ---
 
+## Q160. Do non-training activity minutes belong in the psychological felt-load term?
+
+Raised 2026-09-18 with #309 (HC exercise ingest) at PR review. `reads/psychological_reads._duration_min_by_day` sums per-day training minutes; that Σminutes × `session_rpe` is the "felt" load — the target `y` of the ridge regression in `psychological_residual` (the subjective-vs-objective decoupling marker, #28; a down-only diagnostic, consumer deferred) — and its session count flags a multi-session day.
+
+#309 fixed the double-count (canonical aerobic rows only; a bout overlapping a counted Hevy workout excluded; Hevy via the `counted_workouts` door) but deliberately did NOT decide **whether a canonical walk, rehab swim, or pilates session should contribute minutes to this felt-load term at all**. The resolver excludes such sessions from a *conditioning* quota by sport declaration (activity-slot v2), but the psychological felt-load term is a different consumer with its own meaning: a 40-minute walk at RPE 2 is real perceived effort, or it is noise that dilutes the decoupling signal — not obvious either way.
+
+**INTERIM (merge condition 1, #309):** `health_connect`-source rows contribute NOTHING to this metric — no minutes, no session tally — so the ingest does not perturb the pre-#309 Polar+Hevy series. Decision pending, **likely by declared sport** (reuse the activity-slot v2 declaration, not a second sport list). Until then, HC activity is OUT.
+
+**To close:** rule whether the felt-load term filters by sport/activity kind (and which kinds), and lift the interim HC exclusion accordingly. Read-time only; no schema.
+
+**State:** DONE → #322. Sessions in the static `NON_TRAINING_SPORTS` set (Walking/Pilates/Yoga/Stretching, case-insensitive, all sources) contribute no minutes and no tally; the #309 interim HC exclusion is lifted for everything else. The set is static, NOT the activity-slot declaration this entry anticipated, because declarations are phase-scoped (#302 series invariance).
+
+---
+
 ## Q161. Reader-consistency audit — which readers of `aerobic_sessions` / `hevy_workouts` skip the canonical / excluded_at / dedup_flag filters
 
 Raised 2026-09-18 with #309, at PR review. The `_duration_min_by_day` double-count (fixed in #309) is one instance of a class: a reader that sums or lists rows without the read-time canonical filter (aerobic) or the `excluded_at`/`dedup_flag` filters (hevy) over-counts once the HC ingest lands (a bout gains twins + a Hevy co-log). The operator asked for a sweep of ALL readers; this entry is its durable home and the **S0(d) input to the queued Hevy-deletion brief** — do it once.
@@ -4815,6 +4807,18 @@ Raised 2026-09-18 with #309, at PR review. The `_duration_min_by_day` double-cou
 **Routing (operator, round 2):** NOT the Hevy-deletion brief (bottom of queue). A **dedicated read-door PR immediately after #231, before plan-of-record**: one read door per table (`arbitrated_sessions` for aerobic; `reads.hevy_reads.counted_workouts` for hevy — both seeded by #309); the two `mcp_server` readers restructured through them (correctness over query elegance); a **drift-guard test that FAILS when either table is queried outside a file allow-list**, so reader N+1 cannot repeat this; every other swept reader fixed or explicitly allow-listed with a reason; `load_events`/`load_metrics` adopt the hevy door behind the byte-identical gate above. #309 fixed only `psychological_reads` (the metric the ingest made blocking) and the resolver (via the shared door).
 
 **State:** DONE → #310. The read-door PR landed the routing: `mcp_server`'s two readers, `region_exercise`, and `series` onto the doors; `load_events` adopts `counted_workouts` behind the byte-identical gate; `cbti/replay` + the two audit CLIs allow-listed with reasons; a drift-guard test (`tests/test_read_door_drift_guard.py`) fails on any new un-doored toucher.
+
+---
+
+## Q162. Which activities constrain a CBT-I night (training_end)?
+
+Raised 2026-09-19 with #311. `cbti/replay.load_nights` sets `training_end` = a training session's stop on the day before a night; a night whose lights-out is within `TRAINING_RECOVERY_MIN` (90) of that is `training_constrained` and excluded from titration. Pre-#309 only Polar fed this (H10 chest strap → deliberate hard sessions). The HC ingest now brings Garmin/Samsung-recorded sessions of ALL kinds into `aerobic_sessions`, so the question is which of them should constrain a night.
+
+**Interim (#311):** `source='health_connect'` is EXCLUDED from `training_end` — no HC session constrains a night — preserving the pre-#309 behaviour. A walk almost certainly does NOT constrain sleep; a hard evening session recorded on Garmin/Samsung arguably does. Not picked here.
+
+**To close:** rule which HC activities constrain a night (likely by declared sport — reuse the activity-slot v2 declaration rather than a second sport list), and lift the interim exclusion for those. `CBTI_TITRATION_POLICY` (operator-held, not in the tree) may define "training session" for this purpose — anchor the ruling on it if so. Read-time only; no schema. Companion to Q160 (the felt-load felt-minutes scope) — same "which activities count for which consumer" shape, different consumer (the sleep engine vs the psychological residual).
+
+**State:** DONE → #322. Sessions in the static `NON_TRAINING_SPORTS` set never constrain a night; every other session does (generic names and a blank/NULL `sport_name` included). The #311 interim HC exclusion is lifted, and per-day `training_end` stays `MAX(stop_time)`.
 
 ---
 
