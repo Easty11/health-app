@@ -3,7 +3,7 @@
 HOLD FOR OPERATOR RELEASE (CLAUDE.md § Merge disposition, hold (a)). Data correction, no
 schema change.
 
-WHY. Before the HRV recency gate (#NEXT), the AM check-in Save froze
+WHY. Before the HRV recency gate (#327), the AM check-in Save froze
 `representative_source(hrv_deviation(for_date=today))["rmssd"]` into
 `daily_records.passive_hrv_ms`. `hrv_deviation` read each source's latest reading AT OR
 BEFORE `for_date`, so on a morning whose night had not landed (or whose source had died) it
@@ -13,27 +13,25 @@ equality and fall back to this column only for a day with NO canonical row; a fo
 on such a day would still be drawn as that day's HRV. NULLing it makes that day a gap, which
 is the truth: no reading for that night existed at Save.
 
-WHICH ROWS. Verified in chat 2026-09-17 (prod): 12 user-1 rows. The identification criteria
-as briefed — a LATERAL join finding the earlier genuine `hrv_readings` row whose `rmssd_ms`
-equals the frozen value, `days_back` 1–2 — are reconstructed below (the 09-17 SQL text is
-not in the repo). A row qualifies when ALL hold:
+WHICH ROWS (rule amended by operator ruling 2026-09-24). A row qualifies when ALL hold:
   1. user_id = 1, passive_hrv_ms IS NOT NULL;
   2. NO `hrv_readings` row ON dr.date carries rmssd_ms = passive_hrv_ms (not that day's own);
-  3. the most recent EARLIER `hrv_readings` row with rmssd_ms = passive_hrv_ms is 1–2 days
-     before dr.date (days_back ∈ {1, 2}).
-Run `IDENTIFY_SQL` read-only against prod BEFORE releasing this (the live probe is the gate —
-#166: this write cannot be undone from the data alone). The upgrade re-runs it and REFUSES
-(raises, transaction rolled back, nothing written) if the count is not EXPECTED_COUNT.
+  3. an EARLIER `hrv_readings` row carries exactly rmssd_ms = passive_hrv_ms — the most
+     recent such row (LATERAL) is the carry source, and carry age = dr.date − its date is
+     >= 1 day, with NO upper bound. (The 09-17 verification's 1–2 day bound was an artefact
+     of that date: the source has been dead longer since, and every later Save carried the
+     same frozen value further.)
 
-Count drift: Save kept writing passive_hrv_ms until the #NEXT denorm drop deployed, so the
-count may exceed 12 by the time this is released. A mismatch is a HALT, never an auto-adjust
-— re-verify the extra rows and re-ratify EXPECTED_COUNT in a reviewed commit.
+THE COUNT IS AN OPERATOR PLACEHOLDER. `EXPECTED_CARRY_COUNT` is None in the committed file.
+Run the preview (`IDENTIFY_SQL` / the row listing in the PR) ONLY AFTER #327 has deployed —
+until then every AM Save can add another carry, so the count is still moving. Set the
+constant to the reviewed preview count in a reviewed commit, then release. The upgrade
+re-runs the identification and REFUSES (raises; the transaction rolls back; nothing
+written) when the constant is unset or does not equal the live count. A mismatch is a HALT,
+never an auto-adjust.
 
-Scope note: carries older than 2 days (e.g. a long-dead source frozen for weeks) do NOT match
-criterion 3 and are left untouched here by design; see the PR for that open point.
-
-Irreversibility: `downgrade()` is a no-op — the NULLed values are recoverable only from the
-upgrade's own log line (each row's id/date/value is printed before the UPDATE) or a backup.
+Irreversibility (#166 — the live preview is the gate): `downgrade()` is a no-op — the
+NULLed values are recoverable only from the upgrade's own log line (each row's id/date/value is printed before the UPDATE) or a backup.
 Postgres-only (LATERAL); a no-op on any other dialect.
 
 Revision ID: e3b7c5a1f942
@@ -53,13 +51,15 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-EXPECTED_COUNT = 12
+# OPERATOR PLACEHOLDER — set from the post-deploy preview at release (see docstring).
+# None = unreleased: the upgrade refuses with zero writes.
+EXPECTED_CARRY_COUNT: int | None = None
 USER_ID = 1
 
 IDENTIFY_SQL = """
 SELECT dr.id, dr.date, dr.passive_hrv_ms,
        src.captured_at AS carried_from, src.source AS carried_source,
-       (dr.date - src.captured_at) AS days_back
+       (dr.date - src.captured_at) AS carry_age_days
 FROM daily_records dr
 CROSS JOIN LATERAL (
     SELECT h.captured_at, h.source
@@ -72,7 +72,7 @@ CROSS JOIN LATERAL (
 ) src
 WHERE dr.user_id = :user_id
   AND dr.passive_hrv_ms IS NOT NULL
-  AND (dr.date - src.captured_at) BETWEEN 1 AND 2
+  AND (dr.date - src.captured_at) >= 1
   AND NOT EXISTS (
       SELECT 1 FROM hrv_readings same
       WHERE same.user_id = dr.user_id
@@ -87,17 +87,23 @@ def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return
+    if EXPECTED_CARRY_COUNT is None:
+        raise RuntimeError(
+            "EXPECTED_CARRY_COUNT is unset — run the post-deploy preview, set the constant to "
+            "the reviewed count, then release. Nothing written."
+        )
     rows = bind.execute(sa.text(IDENTIFY_SQL), {"user_id": USER_ID}).fetchall()
-    if len(rows) != EXPECTED_COUNT:
+    if len(rows) != EXPECTED_CARRY_COUNT:
         raise RuntimeError(
             f"forward-carry identification returned {len(rows)} rows, expected "
-            f"{EXPECTED_COUNT} — HALT. Re-verify and re-ratify EXPECTED_COUNT; nothing written."
+            f"{EXPECTED_CARRY_COUNT} — HALT. Re-verify and re-ratify EXPECTED_CARRY_COUNT; "
+            "nothing written."
         )
     for r in rows:
         print(
             f"[e3b7c5a1f942] NULL passive_hrv_ms id={r.id} date={r.date} "
             f"was={r.passive_hrv_ms} carried_from={r.carried_from} ({r.carried_source}, "
-            f"{r.days_back}d back)"
+            f"{r.carry_age_days}d)"
         )
     ids = [r.id for r in rows]
     result = bind.execute(
@@ -105,8 +111,10 @@ def upgrade() -> None:
                 "WHERE user_id = :user_id AND id = ANY(:ids)"),
         {"user_id": USER_ID, "ids": ids},
     )
-    if result.rowcount != EXPECTED_COUNT:
-        raise RuntimeError(f"UPDATE touched {result.rowcount} rows, expected {EXPECTED_COUNT}")
+    if result.rowcount != EXPECTED_CARRY_COUNT:
+        raise RuntimeError(
+            f"UPDATE touched {result.rowcount} rows, expected {EXPECTED_CARRY_COUNT}"
+        )
 
 
 def downgrade() -> None:
