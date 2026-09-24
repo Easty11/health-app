@@ -22,7 +22,7 @@ WHICH ROWS (rule amended by operator ruling 2026-09-24). A row qualifies when AL
      of that date: the source has been dead longer since, and every later Save carried the
      same frozen value further.)
 
-THE COUNT IS AN OPERATOR PLACEHOLDER. `EXPECTED_CARRY_COUNT` is None in the committed file.
+THE COUNT IS OPERATOR-SET. `EXPECTED_CARRY_COUNT` was None until release; set to 28 on 2026-09-25.
 Run the preview (`IDENTIFY_SQL` / the row listing in the PR) ONLY AFTER #327 has deployed —
 until then every AM Save can add another carry, so the count is still moving. Set the
 constant to the reviewed preview count in a reviewed commit, then release. The upgrade
@@ -51,9 +51,10 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-# OPERATOR PLACEHOLDER — set from the post-deploy preview at release (see docstring).
-# None = unreleased: the upgrade refuses with zero writes.
-EXPECTED_CARRY_COUNT: int | None = None
+# OPERATOR-SET at release (see docstring): 28, from the preview run 2026-09-25 after #327
+# deployed, listing reviewed — 9 single-night sync-lag carries + runs of 32 / 87 / 113 ms
+# (the 113 run = samsung 2026-09-14 frozen 2026-09-15..09-24). Mismatch → refuse, zero writes.
+EXPECTED_CARRY_COUNT: int | None = 28
 USER_ID = 1
 
 IDENTIFY_SQL = """
