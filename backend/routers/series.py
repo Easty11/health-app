@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 
 import models
 from reads.hevy_reads import counted_workouts   # the counted-workouts read-door (#Q161)
+from reads.recovery_reads import wakeday_hrv_by_date   # live per-day HRV (#327)
 from auth import get_current_user
 from database import get_db
 from load_metrics import METRICS_VERSION, _local_day
@@ -162,8 +163,9 @@ def get_load_series(
 # carries only what is observed and on a single, honest scale per series.
 #
 # Nulls are PRESERVED, never coerced: a day with no AM check-in has `morning_readiness = None`
-# (and a day with no overnight reading `passive_hrv_ms = None`). The chart draws those as gaps,
-# not zeros — a missing self-report is not a readiness of zero.
+# (and a day with no overnight reading `passive_hrv_ms = None` — read live from hrv_readings,
+# falling back to the retained denorm column only for pre-change days). The chart draws those
+# as gaps, not zeros — a missing self-report is not a readiness of zero.
 #
 # `days` carries its OWN bound (ge=1, le=730) rather than inheriting `checkin_v2 /history`'s
 # default-14: that route is newest-first and unbounded, this one is ascending and explicitly
@@ -205,13 +207,24 @@ def get_readiness_series(
         .all()
     )
 
+    # HRV per day is read LIVE from `hrv_readings` by day-equality (#327); the retained
+    # `passive_hrv_ms` denorm is a fallback ONLY for a day with no canonical row (pre-
+    # `hrv_readings` history). A canonical row always wins, so a forward-carried denorm value
+    # (a prior night frozen at Save) can never be drawn as that day's HRV.
+    canonical = wakeday_hrv_by_date(db, current_user.id, since=since)
+
+    def _hrv(r) -> float | None:
+        if r.date in canonical:
+            return canonical[r.date]["rmssd_ms"]
+        return r.passive_hrv_ms
+
     return ReadinessSeriesOut(
         days=days,
         points=[
             ReadinessPoint(
                 date=r.date.isoformat(),
                 morning_readiness=r.morning_readiness,
-                passive_hrv_ms=r.passive_hrv_ms,
+                passive_hrv_ms=_hrv(r),
             )
             for r in rows
         ],

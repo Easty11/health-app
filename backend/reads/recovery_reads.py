@@ -69,7 +69,13 @@ SETTLING_NIGHTS = 10      # post-phase-change settling period
 FLAT_THRESHOLD = 0.5      # sigma: dead-zone; |z| below this is neutral
 AGREEMENT_HIGH = 1.0      # sigma: cross-source gap for `high`   (calibration target)
 AGREEMENT_MED = 2.0       # sigma: cross-source gap for `medium` (calibration target)
-RECENCY_FACTOR = 1.0      # nightly use; hook for a future backfill-combine
+RECENCY_FACTOR = 1.0      # weight multiplier for a CONTRIBUTING source — always 1.0,
+#   because recency is enforced upstream as a binary GATE, not a weight: a source
+#   contributes only if it has a reading ON `for_date` (same wake-day). A source whose
+#   latest reading is older is excluded from weighting, combined_z, confidence and
+#   representative_source, and reported in `stale_sources` instead (#327 — supersedes
+#   the old "hook for a future backfill-combine" placeholder, which let a dead source's
+#   last reading + frozen mature baseline be reported as today's).
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -193,9 +199,13 @@ def hrv_deviation(
 ) -> dict:
     """Per-source-normalised HRV deviation + cross-source confidence for `for_date`.
 
-    Each source's most recent reading at or before `for_date` is z-scored against
-    that source's OWN rolling baseline; the per-source deviations are combined by
-    weight, and cross-source (dis)agreement becomes confidence. Never blends raw ms.
+    Each source's reading ON `for_date` (same wake-day — the recency gate, #327) is
+    z-scored against that source's OWN rolling baseline; the per-source deviations are
+    combined by weight, and cross-source (dis)agreement becomes confidence. Never blends
+    raw ms. A source whose latest reading is BEFORE `for_date` does not contribute (not
+    to weighting, combined_z, confidence or representative_source): it is listed in
+    `stale_sources` with its last date, so "absent today" is distinguishable from "never
+    any". A dead source's last reading and frozen mature baseline is never today's HRV.
 
     Output contract (downstream reads the object, never a bare scalar)::
 
@@ -208,6 +218,7 @@ def hrv_deviation(
                      baseline_n, weight, mature}, ...],
           agreement_gap: float,
           n_contributing: int,
+          stale_sources: [{source, last_captured_at}, ...],   # no reading on for_date
         }
 
     A compact surface uses `combined_z` + `confidence`; a readout uses `sources[]`;
@@ -235,8 +246,13 @@ def hrv_deviation(
         by_source[r.source or "unknown"].append(r)   # each list stays captured_at DESC
 
     sources_out: list[dict] = []
+    stale_out: list[dict] = []
     for source, srows in by_source.items():
         today_row = srows[0]                          # latest reading <= for_date
+        # ── recency gate (#327): same wake-day or it does not contribute ──
+        if today_row.captured_at != for_date:
+            stale_out.append({"source": source, "last_captured_at": today_row.captured_at})
+            continue
         today_rmssd = today_row.rmssd_ms
         lo = today_row.captured_at - timedelta(days=baseline_window)
         baseline_vals = [
@@ -276,6 +292,7 @@ def hrv_deviation(
 
     # Deterministic ordering for stable readouts: strongest deviation first.
     sources_out.sort(key=lambda s: (-abs(s["z"]), s["source"]))
+    stale_out.sort(key=lambda s: s["source"])
 
     n_contributing = len(sources_out)
     total_w = sum(s["weight"] for s in sources_out)
@@ -353,6 +370,7 @@ def hrv_deviation(
         "sources": sources_out,
         "agreement_gap": agreement_gap,
         "n_contributing": n_contributing,
+        "stale_sources": stale_out,
     }
 
 
@@ -362,8 +380,9 @@ def representative_source(deviation_result: dict) -> Optional[dict]:
     Part-3 rule: derive a single number from the deviation model (highest-weight
     source), NEVER from a resurrected `_SOURCE_RANK`. Ties break deterministically:
     weight, then baseline maturity (`baseline_n`), then |z|, then source name. Returns
-    None when no source contributed. Consumers read `["rmssd"]` (and `["baseline_mean"]`
-    for an ms deviation) off the returned entry.
+    None when no source contributed — including when every source is stale (no reading
+    on `for_date`; see the recency gate on `hrv_deviation`). Consumers read `["rmssd"]`
+    (and `["baseline_mean"]` for an ms deviation) off the returned entry.
     """
     srcs = deviation_result.get("sources") or []
     if not srcs:
@@ -377,13 +396,14 @@ def representative_source(deviation_result: dict) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Wake-day HRV selector — "what HRV do I show for a wake-day, honestly?"
 #
-# STANDALONE read helper. NOTHING consumes it yet (deliberate): it is the
-# precondition for the check-in HRV denorm (whose read currently uses
-# `hrv_deviation` with `for_date` as an UPPER BOUND — latest reading <= for_date,
-# which silently returns a stale prior-day value when today's has not landed). This
-# helper closes that seam: an explicit current-day gate that NEVER returns a
-# reading whose `captured_at != wake_day`, plus source labelling, a same-wake-day-
-# only cross-source delta, and hard guards on the two silent-wrong modes.
+# Consumed (#327) by the check-in prefill and the coach context's daily-record HRV
+# (via current_state), both with require_current_day=True. It replaced the check-in
+# HRV denorm, whose read used `hrv_deviation` with `for_date` as an UPPER BOUND —
+# latest reading <= for_date, which silently returned a stale prior-day value when
+# today's had not landed. This helper closes that seam: an explicit current-day
+# gate that NEVER returns a reading whose `captured_at != wake_day`, plus source
+# labelling, a same-wake-day-only cross-source delta, and hard guards on the two
+# silent-wrong modes.
 #
 # `hrv_readings.captured_at` is a `Date` = the WAKE-DAY (the night), one row per
 # (user, captured_at, source) — so this reads by DAY EQUALITY, never a range. It
@@ -576,3 +596,49 @@ def select_wakeday_hrv(
         sources_seen=sources_seen,
         baseline_state=_primary_baseline_state(db, user_id, primary_row),
     )
+
+
+def wakeday_hrv_by_date(
+    db: Session,
+    user_id: int,
+    *,
+    since: date,
+    until: Optional[date] = None,
+) -> dict:
+    """Per-wake-day headline HRV over `[since, until]`, for HISTORICAL readers (#327).
+
+    `{captured_at: {"source": str | None, "rmssd_ms": float | None}}` — one entry per day
+    that has any value-bearing `hrv_readings` row. The headline follows
+    `select_wakeday_hrv`'s rules for a day (rule 4: richer source by
+    `_WAKEDAY_SOURCE_RANK` headlines a same-day pair; rule 7: >2 sources is a config
+    error → rmssd_ms None, never a silent 2-of-3 pick), in ONE query rather than one
+    selector call per day. Day-equality only: a day with no row is simply absent from the
+    dict — never filled from a neighbouring day. The selector itself is not modified.
+
+    Callers fall back to the retained `daily_records.passive_hrv_ms` ONLY for a day absent
+    here (pre-`hrv_readings` history); a day present here always wins, so a forward-carried
+    denorm value can never override the canonical row.
+    """
+    q = (
+        db.query(models.HrvReading)
+        .filter(
+            models.HrvReading.user_id == user_id,
+            models.HrvReading.rmssd_ms.isnot(None),
+            models.HrvReading.captured_at >= since,
+        )
+    )
+    if until is not None:
+        q = q.filter(models.HrvReading.captured_at <= until)
+
+    by_day: dict[date, list] = defaultdict(list)
+    for r in q.all():
+        by_day[r.captured_at].append(r)
+
+    out: dict = {}
+    for day, rows in by_day.items():
+        if len({r.source for r in rows}) > 2:
+            out[day] = {"source": None, "rmssd_ms": None}
+            continue
+        head = max(rows, key=lambda r: (_WAKEDAY_SOURCE_RANK.get(r.source, 0), r.id or 0))
+        out[day] = {"source": head.source, "rmssd_ms": head.rmssd_ms}
+    return out

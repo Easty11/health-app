@@ -170,7 +170,11 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     db_session.add(fort)
     db_session.commit()
 
-    base_day = date(2026, 6, 28)
+    # Ends ON `today` (7/4): the #327 recency gate admits a source to the deviation model
+    # only with a same-wake-day reading, so a series ending before `today` would yield no
+    # baseline and silently drop the block this guard exercises. (Was 6/28 → 7/2.) Both
+    # renderers receive the same Samsung rows, so the shift is parity-neutral.
+    base_day = date(2026, 6, 30)
     for i in range(5):
         db_session.add(models.SamsungHRVReading(
             user_id=user.id,
@@ -358,6 +362,25 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
 
     old_prompt = _excise_hrv(old_prompt, _OLD_HRV_LABEL)
     new_prompt = _excise_hrv(new_prompt, _NEW_HRV_LABEL)
+
+    # NARROWED AGAIN (HRV staleness, #327): the closing HRV guidance line is rewritten BY
+    # INTENT — the hard-coded "This Ring HRV is the PRIMARY readiness signal…" sentence
+    # named one device as the source of truth, so a dead Ring's reading read as current.
+    # The replacement is source-neutral and date-attributed. Same reasoning as the
+    # #82/#230/#233/#292 narrowings: old==new can never hold again for this ONE line, and
+    # PRE_REFACTOR_SHA cannot move. Swapped line-for-line (not the section dropped), so
+    # the rest of the Samsung section stays under parity. Pinned by
+    # tests/test_hrv_staleness.py (G5 + the replacement copy).
+    _OLD_GUIDE = (
+        "This Ring HRV is the PRIMARY readiness signal (the Galaxy Ring does not expose "
+        "HRV through Health Connect, hence the scraper). Compare RMSSD against the 7-day "
+        "baseline first; treat sleep quality as the secondary input."
+    )
+    _NEW_GUIDE = context_builder.HRV_GUIDANCE_LINE
+    assert old_prompt.count(_OLD_GUIDE) == 1 and new_prompt.count(_NEW_GUIDE) == 1, (
+        "the HRV guidance narrowing lost an anchor"
+    )
+    old_prompt = old_prompt.replace(_OLD_GUIDE, _NEW_GUIDE)
 
     assert old_prompt == new_prompt
 

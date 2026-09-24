@@ -25,7 +25,7 @@ from cbti.replay import evaluate_live_cycle
 from cbti.timeutil import clock_delta_minutes, clock_to_minutes, minutes_between
 from database import get_db
 from injury_trajectory import injury_soreness_key
-from reads.recovery_reads import hrv_deviation, representative_source
+from reads.recovery_reads import hrv_deviation, select_wakeday_hrv
 
 router = APIRouter(prefix="/checkin-v2", tags=["checkin-v2"])
 
@@ -217,20 +217,14 @@ def _freeze_diary(
 # ── passive snapshot ──────────────────────────────────────────────────────────
 
 def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, Any]:
-    """Latest overnight HRV and HC sleep at the moment of AM capture.
+    """HC sleep at the moment of AM capture (Health Connect; Garmin supplies no sleep).
 
-    HRV reads through `hrv_deviation` (#292, source-agnostic over `hrv_readings`)
-    with `for_date` as the capture-day upper bound; `passive_hrv_ms` is the single ms
-    scalar this snapshot needs, derived from the deviation model via
-    `representative_source` (the highest-weight source), NOT from `_SOURCE_RANK`
-    arbitration — so every HRV surface reads one model (§ #292 all-or-nothing). Every
-    `hrv_readings` row is passive-overnight-equivalent by construction (the Samsung
-    mirror early-returns unless context=='passive_overnight'; the Garmin connector
-    writes nightly HRV only), so the old `context != 'session'` guard is implicitly
-    satisfied and needs no analogue here. Sleep stays on Health Connect (Garmin
-    supplies no sleep). (Q130 → #292 consumption.)
+    HRV is NO LONGER snapshotted here (#327): the `passive_hrv_ms` denorm froze whatever
+    `hrv_deviation` returned at Save, which before the recency gate could be a prior-day
+    reading carried forward as today's. HRV is read LIVE from `hrv_readings` by every
+    surface instead (prefill: `select_wakeday_hrv`; history: `wakeday_hrv_by_date` with a
+    `passive_hrv_ms` fallback for pre-change rows). The column is retained, read-only.
     """
-    rep = representative_source(hrv_deviation(user_id, db, for_date=for_date))
     hc_row = (
         db.query(models.HealthConnectSync)
         .filter(
@@ -241,9 +235,35 @@ def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, An
         .first()
     )
     return {
-        "passive_hrv_ms": rep["rmssd"] if rep else None,
         "passive_sleep_min": hc_row.sleep_duration_minutes if hc_row else None,
     }
+
+
+def _prefill_hrv(user_id: int, today: date, db: Session) -> dict[str, Any]:
+    """The check-in HRV tile: the CURRENT wake-day only, never a prior-day carry.
+
+    `hrv_ms` is `select_wakeday_hrv(require_current_day=True)`'s primary (Garmin headlines a
+    same-wake-day pair; both are surfaced). `hrv_vs_baseline` is the SAME primary source's
+    ms deviation from its own rolling baseline, read off the recency-gated `hrv_deviation`
+    — never another source's baseline, and None when that source did not contribute or has
+    no history. `hrv_state` lets the tile render "–" for absent / stale_withheld."""
+    sel = select_wakeday_hrv(db, user_id, today, require_current_day=True, today=today)
+    out: dict[str, Any] = {
+        "hrv_ms": None, "hrv_vs_baseline": None, "hrv_state": sel.state,
+        "hrv_source": None, "hrv_secondary_ms": None, "hrv_secondary_source": None,
+    }
+    if sel.primary is None:
+        return out
+    out["hrv_ms"] = sel.primary["rmssd_ms"]
+    out["hrv_source"] = sel.primary["source"]
+    if sel.secondary is not None:
+        out["hrv_secondary_ms"] = sel.secondary["rmssd_ms"]
+        out["hrv_secondary_source"] = sel.secondary["source"]
+    dev = hrv_deviation(user_id, db, for_date=today)
+    same = next((s for s in dev["sources"] if s["source"] == sel.primary["source"]), None)
+    if same is not None and same["baseline_n"] > 0:
+        out["hrv_vs_baseline"] = round(same["rmssd"] - same["baseline_mean"], 1)
+    return out
 
 
 # ── schemas ────────────────────────────────────────────────────────────────────
@@ -500,8 +520,15 @@ class TodayOut(BaseModel):
 
 
 class AMPrefillOut(BaseModel):
+    # Current wake-day HRV only (#327). `hrv_state` is the selector's discriminator
+    # (value | pair | absent | stale_withheld | config_error); hrv_ms is None unless
+    # value/pair. `hrv_secondary_*` is the other source on a same-wake-day pair.
     hrv_ms: Optional[float] = None
     hrv_vs_baseline: Optional[float] = None
+    hrv_state: Optional[str] = None
+    hrv_source: Optional[str] = None
+    hrv_secondary_ms: Optional[float] = None
+    hrv_secondary_source: Optional[str] = None
     sleep_min: Optional[int] = None
     morning_readiness: int = 3
     sleep_quality: int = 3
@@ -540,20 +567,7 @@ def get_prefill(
     today = _today_aest()
     existing = db.query(models.DailyRecord).filter_by(user_id=current_user.id, date=today).first()
     passive = _snapshot_passive(current_user.id, today, db)
-
-    hrv_ms = passive["passive_hrv_ms"]
-    # `vs_baseline` is the representative source's deviation in ms, taken from the SAME
-    # #292 deviation model that produced `hrv_ms` (via `_snapshot_passive`): the
-    # representative source's `rmssd - baseline_mean` (its own rolling baseline). Both
-    # scalars therefore trace to one source's baseline and compare like with like — no
-    # `.canonical` arbitration read (§ #292 all-or-nothing migration; a compact tile
-    # takes a documented representative number off the deviation object).
-    rep = representative_source(hrv_deviation(current_user.id, db, for_date=today))
-    vs_baseline = (
-        round(rep["rmssd"] - rep["baseline_mean"], 1)
-        if rep and rep["baseline_n"] > 0
-        else None
-    )
+    hrv = _prefill_hrv(current_user.id, today, db)
 
     cbti_ctx = _cbti_context(current_user.id, today, db)
     diary_prefill = DiaryPrefillOut()
@@ -579,8 +593,7 @@ def get_prefill(
             )
 
     return AMPrefillOut(
-        hrv_ms=hrv_ms,
-        hrv_vs_baseline=vs_baseline,
+        **hrv,
         sleep_min=passive["passive_sleep_min"],
         soreness=derive_soreness_items(current_user.id, db),
         existing=existing,
@@ -634,8 +647,9 @@ def submit_am(
     record.naive_baseline = calc_naive_baseline(
         body.sleep_quality, body.fatigue, body.soreness, body.motivation
     )
+    # HRV is NOT frozen here (#327) — `passive_hrv_ms` is retained read-only for
+    # pre-change history; every surface reads current-day HRV live from hrv_readings.
     passive = _snapshot_passive(current_user.id, today, db)
-    record.passive_hrv_ms = passive["passive_hrv_ms"]
     record.passive_sleep_min = passive["passive_sleep_min"]
 
     db.commit()
