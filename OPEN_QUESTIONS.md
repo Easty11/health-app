@@ -2361,6 +2361,16 @@ Raised 2026-09-24 with #326. The CBT-I ruling in #326 relies on the late-session
 
 ---
 
+## Q171. MCP `get_readiness_snapshot` 7-day session count keys on the UTC date
+
+Raised 2026-09-24 with #327 (nit accepted, not fixed there). #327 moved the readiness HRV read to the AEST wake-day (`_aest_wake_day`), but the same tool's training summary still windows sessions with `datetime.now(timezone.utc).date() - timedelta(days=7)` (`mcp_server.py`, the `arbitrated_sessions(since=...)` call). Before 10:00 AEST that window is one day off the local one.
+
+**To decide:** whether to key the window on `_aest_wake_day()` like the HRV read (one-line change plus a test at 07:00 AEST), or leave it and document why.
+
+**State:** OPEN. Low impact: an off-by-one edge on a 7-day count.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
