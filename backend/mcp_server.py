@@ -1,7 +1,7 @@
 import functools
 import inspect
 import re
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 
 import httpx
 import pytz
@@ -99,6 +99,15 @@ def _as_of(now: datetime | None = None) -> str:
     """ISO-8601 Brisbane-local instant this response was generated (seconds grain)."""
     dt = now.astimezone(_AS_OF_TZ) if now is not None else datetime.now(_AS_OF_TZ)
     return dt.isoformat(timespec="seconds")
+
+
+def _aest_wake_day(now: datetime | None = None) -> date:
+    """The Brisbane-local wake-day for `now` (default: the wall clock). The HRV readiness
+    read keys on this, not the UTC date: at 07:00 AEST the UTC date is still YESTERDAY,
+    and under the same-wake-day recency gate (#327) a UTC `for_date` would read
+    yesterday's night as today's."""
+    dt = now.astimezone(_AS_OF_TZ) if now is not None else datetime.now(_AS_OF_TZ)
+    return dt.date()
 
 
 def _stamp(body: str, now: datetime | None = None) -> str:
@@ -245,9 +254,21 @@ def get_checkin_history(days: int = 30) -> str:
     rows = _db_rows(
         """
         SELECT date, sleep_quality, fatigue, soreness::text, motivation,
-               life_load, alcohol_units, session_rpe, passive_hrv_ms,
+               life_load, alcohol_units, session_rpe,
+               -- #327: HRV read live from hrv_readings by wake-day equality (garmin
+               -- headlines a same-day pair, as select_wakeday_hrv); the retained
+               -- passive_hrv_ms denorm is a fallback ONLY for a day with no canonical row.
+               COALESCE(
+                   (SELECT h.rmssd_ms FROM hrv_readings h
+                    WHERE h.user_id = dr.user_id AND h.captured_at = dr.date
+                      AND h.rmssd_ms IS NOT NULL
+                    ORDER BY CASE h.source WHEN 'garmin' THEN 2 WHEN 'samsung' THEN 1
+                             ELSE 0 END DESC, h.id DESC
+                    LIMIT 1),
+                   dr.passive_hrv_ms   -- reached only when no value-bearing row exists
+               ) AS hrv_ms,
                morning_readiness, 'daily_records' AS source
-        FROM daily_records
+        FROM daily_records dr
         WHERE user_id = :user_id
           AND am_timestamp IS NOT NULL
           AND date >= CURRENT_DATE - :days
@@ -256,7 +277,7 @@ def get_checkin_history(days: int = 30) -> str:
 
         SELECT date, sleep_quality, fatigue, NULL AS soreness,
                motivation, NULL AS life_load, NULL AS alcohol_units,
-               NULL AS session_rpe, NULL AS passive_hrv_ms,
+               NULL AS session_rpe, NULL AS hrv_ms,
                readiness_score AS morning_readiness, 'legacy' AS source
         FROM daily_check_ins
         WHERE user_id = :user_id
@@ -283,10 +304,11 @@ def get_checkin_history(days: int = 30) -> str:
         alcohol = r["alcohol_units"] if r.get("alcohol_units") is not None else "—"
         rpe = r["session_rpe"] if r.get("session_rpe") is not None else "—"
         readiness = r["morning_readiness"] if r["morning_readiness"] is not None else "—"
+        hrv = f"{r['hrv_ms']:.0f}ms" if r.get("hrv_ms") is not None else "—"
         lines.append(
             f"{r['date']} {src_tag}: sleep={sleep_q} fatigue={fatigue} soreness={soreness} "
             f"motivation={motivation} life_load={life_load} alcohol={alcohol} "
-            f"session_rpe={rpe} readiness={readiness}"
+            f"session_rpe={rpe} hrv={hrv} readiness={readiness}"
         )
 
     return "\n".join(lines)
@@ -448,6 +470,19 @@ async def get_hevy_workouts(days: int = 14) -> str:
 # Tool 5 — Today's readiness snapshot
 # ---------------------------------------------------------------------------
 
+def _readiness_hrv_line(rep: dict | None, dev: dict, wake_day: date) -> str:
+    """The readiness snapshot's HRV line: the representative source's current-day ms WITH
+    its source and date, or "—" plus the stale sources' last dates when no source read
+    today (#327 recency gate). Never prints a prior-day number as today's."""
+    if rep is not None:
+        return f"  HRV: {rep['rmssd']:.0f} ms ({rep['source']}, {wake_day})"
+    stale = dev.get("stale_sources") or []
+    if stale:
+        last = ", ".join(f"{s['source']} {s['last_captured_at']}" for s in stale)
+        return f"  HRV: — (no current-day reading; last: {last})"
+    return "  HRV: —"
+
+
 @mcp.tool()
 @_stamped
 def get_readiness_snapshot() -> str:
@@ -480,12 +515,12 @@ def get_readiness_snapshot() -> str:
         # change surfaces as baseline_state="settling" with capped confidence here (this
         # readout surfaces both), instead of crying wolf. No open phase → None → off.
         _phase = current_training_phase(_db, user_id)
+        _wake_day = _aest_wake_day()
         _dev = hrv_deviation(
-            user_id, _db, for_date=datetime.now(timezone.utc).date(),
+            user_id, _db, for_date=_wake_day,
             phase_change_date=_phase.entered_on if _phase is not None else None,
         )
     _rep = representative_source(_dev)
-    hrv_rep_ms = _rep["rmssd"] if _rep is not None else None
 
     checkin_rows = _db_rows(
         """
@@ -526,7 +561,7 @@ def get_readiness_snapshot() -> str:
     if hrv_rows:
         r = hrv_rows[0]
         lines.append(f"Latest biometrics ({str(r['captured_at'])[:10]}):")
-        lines.append(f"  HRV: {hrv_rep_ms:.0f} ms" if hrv_rep_ms is not None else "  HRV: —")
+        lines.append(_readiness_hrv_line(_rep, _dev, _wake_day))
         if _dev["n_contributing"]:
             lines.append(
                 f"  HRV deviation: {_dev['combined_z']:+.2f}σ {_dev['direction']} "

@@ -95,8 +95,15 @@ function NumField({ label, value, onChange, hint, manual }) {
   )
 }
 
-function PassiveCard({ hrv, hrvVsBaseline, sleepMin }) {
-  if (!hrv && !sleepMin) return null
+// HRV is CURRENT wake-day only (server-side select_wakeday_hrv). No reading for today
+// (absent / stale_withheld / config_error) renders "–" — an earlier night's value is never
+// shown as today's. The source is labelled; a same-night pair shows the second device.
+const HRV_STATES_WITH_VALUE = new Set(['value', 'pair'])
+
+export function PassiveCard({ hrv, hrvVsBaseline, hrvState, hrvSource, hrvSecondaryMs, hrvSecondarySource, sleepMin }) {
+  const hasHrv = hrv != null && HRV_STATES_WITH_VALUE.has(hrvState ?? 'value')
+  const showHrvTile = hasHrv || hrvState != null
+  if (!showHrvTile && sleepMin == null) return null
   const sign = hrvVsBaseline >= 0 ? '+' : ''
   const colour = hrvVsBaseline > 2
     ? 'text-green-600'
@@ -109,12 +116,19 @@ function PassiveCard({ hrv, hrvVsBaseline, sleepMin }) {
 
   return (
     <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 mb-5 flex gap-4">
-      {hrv != null && (
+      {showHrvTile && (
         <div className="flex-1 text-center">
-          <p className="text-xs text-gray-400">Ring HRV</p>
-          <p className="text-lg font-bold text-gray-800">{hrv} <span className="text-xs font-normal text-gray-400">ms</span></p>
-          {hrvVsBaseline != null && (
-            <p className={`text-xs font-medium ${colour}`}>{sign}{hrvVsBaseline} vs 7d mean</p>
+          <p className="text-xs text-gray-400">HRV{hasHrv && hrvSource ? ` · ${hrvSource}` : ''}</p>
+          {hasHrv ? (
+            <p className="text-lg font-bold text-gray-800">{hrv} <span className="text-xs font-normal text-gray-400">ms</span></p>
+          ) : (
+            <p className="text-lg font-bold text-gray-400" title="No HRV for today yet">–</p>
+          )}
+          {hasHrv && hrvVsBaseline != null && (
+            <p className={`text-xs font-medium ${colour}`}>{sign}{hrvVsBaseline} vs baseline</p>
+          )}
+          {hasHrv && hrvSecondaryMs != null && (
+            <p className="text-xs text-gray-400">{hrvSecondarySource}: {hrvSecondaryMs} ms</p>
           )}
         </div>
       )}
@@ -295,6 +309,10 @@ export default function CheckInAM() {
           <PassiveCard
             hrv={prefill.hrv_ms}
             hrvVsBaseline={prefill.hrv_vs_baseline}
+            hrvState={prefill.hrv_state}
+            hrvSource={prefill.hrv_source}
+            hrvSecondaryMs={prefill.hrv_secondary_ms}
+            hrvSecondarySource={prefill.hrv_secondary_source}
             sleepMin={prefill.sleep_min}
           />
         )}

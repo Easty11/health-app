@@ -750,10 +750,37 @@ rejection. Use the list above.
 - The block is removed from your visible response and replaced with a confirmation."""
 
 
-def _section_daily_record(record: Any) -> str:
+def _hrv_today_lines(sel: Any) -> list[str]:
+    """Current wake-day HRV, read LIVE by `select_wakeday_hrv(require_current_day=True)`
+    (#327) — never the `passive_hrv_ms` denorm, and never a number for a prior day.
+    Source-neutral copy: the value carries its source and date."""
+    if sel is None:
+        return []
+    if sel.state == "value":
+        p = sel.primary
+        return [f"HRV (RMSSD) for {p['captured_at']}: {p['rmssd_ms']:.0f} ms — {p['source']}"]
+    if sel.state == "pair":
+        p, q = sel.primary, sel.secondary
+        return [
+            f"HRV (RMSSD) for {p['captured_at']}: {p['rmssd_ms']:.0f} ms — {p['source']} "
+            f"(primary); {q['rmssd_ms']:.0f} ms — {q['source']} (Δ {sel.delta_ms:+d} ms, "
+            "same night, two devices — not interchangeable)"
+        ]
+    if sel.state == "config_error":
+        return ["HRV: no current-day HRV (more than two sources reported this night — "
+                "unresolved, not shown)"]
+    # absent | stale_withheld
+    return ["HRV: no current-day HRV (today's reading has not landed; do not treat an "
+            "earlier night's value as today's)"]
+
+
+def _section_daily_record(record: Any, hrv_today: Any = None) -> str:
     """
     Descriptive section for the new two-moment daily record.
     MUST NOT contain prescriptive load instructions — descriptive only.
+
+    `hrv_today` is the live current-wake-day `HrvSelection` (#327); the frozen
+    `passive_hrv_ms` column is no longer rendered here.
     """
     def _v(field: str) -> Any:
         return getattr(record, field) if hasattr(record, field) else record.get(field)
@@ -795,12 +822,11 @@ def _section_daily_record(record: Any) -> str:
             finish = _v("alcohol_finish_time") or "unknown"
             lines.append(f"Alcohol last night: {alcohol_units} units, finished {finish}")
 
-        hrv = _v("passive_hrv_ms")
+        hrv_lines = _hrv_today_lines(hrv_today)
         sleep_min = _v("passive_sleep_min")
-        if hrv is not None or sleep_min is not None:
+        if hrv_lines or sleep_min is not None:
             lines.append("")
-            if hrv is not None:
-                lines.append(f"Ring HRV at capture: {hrv} ms")
+            lines += hrv_lines
             if sleep_min is not None:
                 h, m = divmod(sleep_min, 60)
                 lines.append(f"Sleep at capture: {h}h {m}m")
@@ -1015,6 +1041,16 @@ def _section_health_connect(records: list[Any], now: datetime) -> str:
     return "\n".join(lines)
 
 
+# Source-neutral HRV guidance (#327) — replaced a hard-coded line naming the Galaxy Ring as
+# THE primary readiness signal, which let a dead ring's last reading read as current.
+HRV_GUIDANCE_LINE = (
+    "HRV is the PRIMARY readiness signal; sleep quality is the secondary input. Every "
+    "HRV value above carries its source and date — only a value dated today is today's "
+    "HRV; an older reading is history, never current readiness. Compare today's value "
+    "against its own source's baseline, never across devices."
+)
+
+
 def _section_samsung_hrv(readings: list[Any], now: datetime, baseline: HRVBaseline | None) -> str:
     """Inject the latest Galaxy Ring reading plus a rolling 7-day HRV baseline.
 
@@ -1084,7 +1120,10 @@ def _section_samsung_hrv(readings: list[Any], now: datetime, baseline: HRVBaseli
         lines.append(f"HRV baseline (rolling): {baseline.mean_ms:.0f} ms ({baseline.n} readings)")
         if baseline.diff_from_mean_ms is not None:
             direction = "above" if baseline.diff_from_mean_ms >= 0 else "below"
-            lines.append(f"Today vs baseline: {abs(baseline.diff_from_mean_ms):.0f}ms {direction} mean")
+            src = f" ({baseline.source}, {today})" if getattr(baseline, "source", None) else ""
+            lines.append(
+                f"Today vs baseline{src}: {abs(baseline.diff_from_mean_ms):.0f}ms {direction} mean"
+            )
         # #294/#295: flag an unsettled baseline so the number isn't read at face value.
         if baseline.baseline_state == "settling":
             lines.append(
@@ -1102,12 +1141,7 @@ def _section_samsung_hrv(readings: list[Any], now: datetime, baseline: HRVBaseli
         v = _v(r, "hrv_ms")
         lines.append(f"- {d}: {v} ms" if v is not None else f"- {d}: — ms")
 
-    lines += [
-        "",
-        "This Ring HRV is the PRIMARY readiness signal (the Galaxy Ring does not expose "
-        "HRV through Health Connect, hence the scraper). Compare RMSSD against the 7-day "
-        "baseline first; treat sleep quality as the secondary input.",
-    ]
+    lines += ["", HRV_GUIDANCE_LINE]
 
     return "\n".join(lines)
 
@@ -1874,7 +1908,7 @@ def build_system_prompt(
 
     # Use new DailyRecord section when available; fall back to legacy check-in
     readiness_section = (
-        _section_daily_record(daily_record)
+        _section_daily_record(daily_record, getattr(state, "hrv_today", None))
         if daily_record is not None
         else _section_checkin(today_checkin, now)
     )

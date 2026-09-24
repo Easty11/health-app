@@ -29,7 +29,12 @@ from engine import week_plan as week_plan_mod
 
 logger = logging.getLogger(__name__)
 from reads.labs_reads import LabRow, latest_lab_results
-from reads.recovery_reads import hrv_deviation, representative_source
+from reads.recovery_reads import (
+    HrvSelection,
+    hrv_deviation,
+    representative_source,
+    select_wakeday_hrv,
+)
 
 
 @dataclass
@@ -43,6 +48,10 @@ class HRVBaseline:
     # (#294/#295) — the deviation is real but its confidence is capped; a consumer
     # surfacing the number should flag it. None only for legacy callers that predate #295.
     baseline_state: str | None = None
+    # Which source the representative baseline belongs to (#327: carried so the coach copy
+    # is source-neutral but attributed). Under the recency gate the representative source
+    # always has a reading ON `today`, so `latest_ms` is that day's — never a prior-day carry.
+    source: str | None = None
 
 
 @dataclass
@@ -81,6 +90,10 @@ class CurrentState:
     week_plan: dict | None = None
     capability_state: list[models.CapabilityState] = field(default_factory=list)
     hrv_baseline: HRVBaseline | None = None   # per-source rolling baseline (#292)
+    # Current wake-day HRV (#327): `select_wakeday_hrv(require_current_day=True)` for `today`,
+    # read LIVE — the coach's daily-record HRV, replacing the `passive_hrv_ms` denorm. None only
+    # when the read failed (logged); a prior-day value is never carried here.
+    hrv_today: HrvSelection | None = None
     labs: list[LabRow] = field(default_factory=list)
 
 
@@ -141,7 +154,14 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
             latest_ms=latest_ms,
             diff_from_mean_ms=(latest_ms - mean) if latest_ms is not None else None,
             baseline_state=_dev["baseline_state"],
+            source=rep["source"],
         )
+
+    try:
+        hrv_today = select_wakeday_hrv(db, user_id, today, require_current_day=True, today=today)
+    except Exception:
+        logger.exception("wake-day HRV read failed for user %s — omitting from context", user_id)
+        hrv_today = None
 
     labs = latest_lab_results(user_id, db)
 
@@ -178,6 +198,7 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         phase_folders=phase_folders,
         capability_state=capability_rows,
         hrv_baseline=hrv_baseline,
+        hrv_today=hrv_today,
         labs=labs,
         resolver_position=resolver_position,
         week_plan=week_plan,

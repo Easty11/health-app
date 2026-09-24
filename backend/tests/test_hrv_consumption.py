@@ -28,7 +28,7 @@ import models
 from auth import get_current_user
 from database import get_db
 from routers import recovery
-from routers.checkin_v2 import AMCheckInIn, _snapshot_passive, submit_am
+from routers.checkin_v2 import AMCheckInIn, _snapshot_passive, _today_aest, get_prefill, submit_am
 from routers.samsung_hrv import HRVReadingIn, _mirror_passive_overnight_hrv
 
 
@@ -273,82 +273,109 @@ def test_summary_device_blocks_byte_identical_to_pre_change_snapshot(db_session)
     assert body["has_data"] is True
 
 
-# ── Stage B (consumption): the passive snapshot reads canonical HRV ────────────────
+# ── Stage B (consumption): the check-in HRV reads the CURRENT wake-day live ──────
 #
-# `_snapshot_passive` feeds daily_records.passive_hrv_ms → /series/readiness. After the
-# Q130 rewire it reads the HRV scalar through canonical_hrv (source-agnostic, arbitrated),
-# not samsung_hrv_readings directly, so Garmin HRV surfaces once connected. Sleep stays
-# on Health Connect (unchanged), which these tests do not seed.
+# HRV staleness (#327): `_snapshot_passive` no longer snapshots HRV (sleep only), and Save
+# no longer writes daily_records.passive_hrv_ms. The prefill tile reads
+# `select_wakeday_hrv(require_current_day=True)` — Garmin headlines a same-wake-day pair
+# (both surfaced) — and `hrv_vs_baseline` is the SAME primary source's deviation from its
+# own rolling baseline. These replace four `_snapshot_passive(...)["passive_hrv_ms"]` tests:
+# garmin-only / samsung-only carry over as prefill tests; the contested-night test changes
+# MEANING (the check-in tile follows the selector's Garmin-primary headline, not the
+# deviation model's highest-weight representative — that rule still governs the gated
+# deviation object, pinned in test_hrv_deviation); the "later night must not leak" test is
+# subsumed by day-equality and replaced by a Save-writes-nothing test.
 
-_FOR_DATE = date(2026, 6, 10)
+
+def _prefill(db, user):
+    return get_prefill(current_user=user, db=db)
 
 
-def test_snapshot_passive_garmin_only_night_returns_garmin_rmssd(db_session):
+def test_prefill_garmin_only_night_returns_garmin_rmssd(db_session):
     user = _user(db_session)
     db_session.add(models.HrvReading(
-        user_id=user.id, captured_at=_FOR_DATE, source="garmin", rmssd_ms=42.0))
+        user_id=user.id, captured_at=_today_aest(), source="garmin", rmssd_ms=42.0))
     db_session.commit()
 
-    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 42.0
+    out = _prefill(db_session, user)
+    assert (out.hrv_ms, out.hrv_source, out.hrv_state) == (42.0, "garmin", "value")
 
 
-def test_snapshot_passive_contested_night_takes_higher_weight_source(db_session):
-    """#292 SUPERSEDES `_SOURCE_RANK`: on a contested night the single `passive_hrv_ms`
-    scalar is the higher-WEIGHT source (the one with the more mature per-source baseline),
-    derived from the deviation model's `representative_source` — NOT a fixed device rank.
-    Here Samsung has 10 baseline nights and Garmin only 2, so Samsung is representative and
-    its RMSSD (50.0) is snapshotted — even though the old rank ranked Samsung BELOW Garmin
-    (which would have picked 42.0)."""
+def test_prefill_samsung_only_night_returns_samsung_rmssd(db_session):
     user = _user(db_session)
-    # Samsung: a fuller baseline (10 prior nights) → higher maturity weight.
-    for i in range(1, 11):
+    db_session.add(models.HrvReading(
+        user_id=user.id, captured_at=_today_aest(), source="samsung", rmssd_ms=50.0))
+    db_session.commit()
+
+    out = _prefill(db_session, user)
+    assert (out.hrv_ms, out.hrv_source) == (50.0, "samsung")
+
+
+def test_g3_prefill_contested_night_garmin_primary_both_surfaced(db_session):
+    """G3: a same-wake-day pair → Garmin primary, Samsung surfaced as the secondary; the
+    baseline delta is GARMIN's own (never Samsung's more mature baseline)."""
+    user = _user(db_session)
+    today = _today_aest()
+    for i in range(1, 11):    # Samsung: fuller baseline (higher deviation-model weight)
         db_session.add(models.HrvReading(
-            user_id=user.id, captured_at=_FOR_DATE - timedelta(days=i),
+            user_id=user.id, captured_at=today - timedelta(days=i),
             source="samsung", rmssd_ms=50.0))
-    # Garmin: a thin baseline (2 prior nights) → lower maturity weight.
-    for i in range(1, 3):
+    for i in range(1, 3):     # Garmin: thin baseline @40
         db_session.add(models.HrvReading(
-            user_id=user.id, captured_at=_FOR_DATE - timedelta(days=i),
-            source="garmin", rmssd_ms=42.0))
-    db_session.add(models.HrvReading(
-        user_id=user.id, captured_at=_FOR_DATE, source="samsung", rmssd_ms=50.0))
-    db_session.add(models.HrvReading(
-        user_id=user.id, captured_at=_FOR_DATE, source="garmin", rmssd_ms=42.0))
-    db_session.commit()
-
-    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 50.0
-
-
-def test_snapshot_passive_samsung_only_night_returns_samsung_rmssd(db_session):
-    user = _user(db_session)
-    # Samsung-only night, as the backfill / dual-write writes it into hrv_readings.
-    db_session.add(models.HrvReading(
-        user_id=user.id, captured_at=_FOR_DATE, source="samsung", rmssd_ms=50.0))
-    db_session.commit()
-
-    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 50.0
-
-
-def test_snapshot_passive_picks_latest_at_or_before_for_date(db_session):
-    """as_of=for_date: a later night must NOT leak into an earlier snapshot."""
-    user = _user(db_session)
+            user_id=user.id, captured_at=today - timedelta(days=i),
+            source="garmin", rmssd_ms=40.0))
     db_session.add_all([
-        models.HrvReading(user_id=user.id, captured_at=_FOR_DATE, source="garmin", rmssd_ms=42.0),
-        models.HrvReading(user_id=user.id, captured_at=_FOR_DATE + timedelta(days=1),
-                          source="garmin", rmssd_ms=99.0),
+        models.HrvReading(user_id=user.id, captured_at=today, source="samsung", rmssd_ms=50.0),
+        models.HrvReading(user_id=user.id, captured_at=today, source="garmin", rmssd_ms=42.0),
     ])
     db_session.commit()
 
-    assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 42.0
+    out = _prefill(db_session, user)
+    assert out.hrv_state == "pair"
+    assert (out.hrv_ms, out.hrv_source) == (42.0, "garmin")
+    assert (out.hrv_secondary_ms, out.hrv_secondary_source) == (50.0, "samsung")
+    assert out.hrv_vs_baseline == 2.0             # 42 − Garmin's own mean 40
 
 
-def test_garmin_hrv_row_propagates_to_daily_record_passive_hrv_ms(db_session):
-    """End-to-end: a Garmin hrv_readings row flows through submit_am's snapshot into
-    daily_records.passive_hrv_ms — the value /series/readiness later reads."""
+def test_g2_prefill_only_dead_source_is_stale_withheld_no_number(db_session):
+    """G2 (prefill): a dead source's last reading + mature baseline → no number, no delta,
+    state stale_withheld (the tile renders "–")."""
     user = _user(db_session)
-    # A canonical Garmin night at or before today (submit_am snapshots as_of today).
+    today = _today_aest()
+    for i in range(20, 48):
+        db_session.add(models.HrvReading(
+            user_id=user.id, captured_at=today - timedelta(days=i),
+            source="samsung", rmssd_ms=113.0))
+    db_session.commit()
+
+    out = _prefill(db_session, user)
+    assert out.hrv_state == "stale_withheld"
+    assert out.hrv_ms is None and out.hrv_vs_baseline is None and out.hrv_source is None
+
+
+def test_save_does_not_write_passive_hrv_ms_even_with_a_current_day_reading(db_session):
+    """S3: Save no longer denormalises HRV — the column is retained read-only for history."""
+    user = _user(db_session)
     db_session.add(models.HrvReading(
-        user_id=user.id, captured_at=date.today() - timedelta(days=1),
+        user_id=user.id, captured_at=_today_aest(), source="garmin", rmssd_ms=47.0))
+    db_session.commit()
+
+    body = AMCheckInIn(
+        morning_readiness=3, sleep_quality=3, fatigue=5, motivation=5, life_load=3)
+    record = submit_am(body=body, current_user=user, db=db_session)
+
+    assert record.passive_hrv_ms is None
+    assert "passive_hrv_ms" not in _snapshot_passive(user.id, _today_aest(), db_session)
+
+
+def test_prior_day_garmin_row_is_not_snapshotted_as_today(db_session):
+    """End-to-end (#327 recency gate): a Garmin row from YESTERDAY must not flow through
+    submit_am's snapshot into today's daily_records.passive_hrv_ms. This test previously
+    asserted the opposite (47.0) — that WAS the staleness bug: a prior-day reading
+    presented as today's."""
+    user = _user(db_session)
+    db_session.add(models.HrvReading(
+        user_id=user.id, captured_at=_today_aest() - timedelta(days=1),
         source="garmin", rmssd_ms=47.0))
     db_session.commit()
 
@@ -356,4 +383,39 @@ def test_garmin_hrv_row_propagates_to_daily_record_passive_hrv_ms(db_session):
         morning_readiness=3, sleep_quality=3, fatigue=5, motivation=5, life_load=3)
     record = submit_am(body=body, current_user=user, db=db_session)
 
-    assert record.passive_hrv_ms == 47.0
+    assert record.passive_hrv_ms is None
+
+
+# ── G4: MCP readiness reads the AEST wake-day, not the UTC date ────────────────
+def test_g4_mcp_readiness_wake_day_is_aest_at_0700():
+    """At 07:00 AEST the UTC date is still yesterday. The readiness read keys on the
+    Brisbane wake-day, so under the same-wake-day gate it reads TODAY's night."""
+    from mcp_server import _aest_wake_day
+
+    seven_am_aest_as_utc = datetime(2026, 9, 23, 21, 0, tzinfo=timezone.utc)  # 07:00 +10
+    assert seven_am_aest_as_utc.date() == date(2026, 9, 23)          # the old (wrong) key
+    assert _aest_wake_day(seven_am_aest_as_utc) == date(2026, 9, 24)
+
+
+def test_g4_mcp_readiness_snapshot_uses_the_aest_helper():
+    """Structural pin: the readiness tool body passes the AEST wake-day to hrv_deviation,
+    never `datetime.now(timezone.utc).date()` (the tool body needs Postgres, so this reads
+    its source the way the other mcp tests pin tool bodies)."""
+    import inspect as _inspect
+    import mcp_server
+
+    src = _inspect.getsource(mcp_server.get_readiness_snapshot)
+    dev_call = src[src.index("hrv_deviation("):src.index("representative_source(_dev)")]
+    assert "_wake_day" in dev_call
+    assert "timezone.utc" not in dev_call
+
+
+def test_mcp_readiness_hrv_line_never_prints_a_stale_number():
+    from mcp_server import _readiness_hrv_line
+
+    wd = date(2026, 9, 24)
+    stale = {"stale_sources": [{"source": "samsung", "last_captured_at": date(2026, 9, 4)}]}
+    line = _readiness_hrv_line(None, stale, wd)
+    assert "113" not in line and "—" in line and "samsung 2026-09-04" in line
+    rep = {"source": "garmin", "rmssd": 62.4}
+    assert _readiness_hrv_line(rep, {"stale_sources": []}, wd) == "  HRV: 62 ms (garmin, 2026-09-24)"
