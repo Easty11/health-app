@@ -44,6 +44,16 @@ RECOVERY_REFRESH_STALE_AFTER = timedelta(minutes=30)
 _ON_READ_WINDOW_DAYS = 3
 
 
+def garmin_wake_day() -> date:
+    """The Brisbane-local wake-day — the date Garmin files a night under (`hrvSummary.calendarDate`,
+    stored as `hrv_readings.captured_at`). Every Garmin pull window ENDS here, never on the UTC
+    date: before 10:00 AEST the UTC date is still yesterday, so a UTC-bounded morning pull never
+    requests the night just slept and the card/check-in show yesterday or "–" (#327 follow-up)."""
+    import pytz
+
+    return datetime.now(pytz.timezone("Australia/Brisbane")).date()
+
+
 class GarminTokenIn(BaseModel):
     token: str
 
@@ -237,7 +247,7 @@ def sync_garmin_hrv(
     Defaults to the last `_DEFAULT_WINDOW_DAYS` nights ending today when a bound is
     omitted. `from_` binds the `from` query param (a Python reserved word).
     """
-    today = datetime.now(timezone.utc).date()
+    today = garmin_wake_day()
     try:
         end = date.fromisoformat(to) if to else today
         start = date.fromisoformat(from_) if from_ else end - timedelta(days=_DEFAULT_WINDOW_DAYS)
@@ -288,7 +298,7 @@ def refresh_garmin_hrv(
     ):
         return {"skipped": True, "reason": "fresh", "last_ingested_at": last.isoformat()}
 
-    today = datetime.now(timezone.utc).date()
+    today = garmin_wake_day()
     start = today - timedelta(days=_ON_READ_WINDOW_DAYS)
     last_iso = last.isoformat() if last is not None else None
     try:
