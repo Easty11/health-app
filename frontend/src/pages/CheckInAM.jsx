@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
+import useRecoveryRefresh from '../lib/useRecoveryRefresh'
 
 const READINESS_LABELS = ['Very tired', 'Tired', 'Okay', 'Good', 'Great']
 const SORENESS_LABELS = ['None', 'Mild', 'Moderate', 'Sore', 'Very sore']
@@ -142,10 +143,35 @@ export function PassiveCard({ hrv, hrvVsBaseline, hrvState, hrvSource, hrvSecond
   )
 }
 
+// The passive tiles (HRV + sleep) — the ONLY prefill fields a background Garmin refresh may
+// update. Everything else on the form is the user's, and a re-fetch never touches it.
+const PASSIVE_KEYS = [
+  'hrv_ms', 'hrv_vs_baseline', 'hrv_state', 'hrv_source',
+  'hrv_secondary_ms', 'hrv_secondary_source', 'sleep_min',
+]
+const pickPassive = (data) =>
+  Object.fromEntries(PASSIVE_KEYS.map((k) => [k, data?.[k] ?? null]))
+
 export default function CheckInAM() {
   const navigate = useNavigate()
 
   const [prefill, setPrefill] = useState(null)
+  // Passive tiles, held apart from `prefill` so the Garmin refresh can update them alone.
+  const [passive, setPassive] = useState(null)
+  // Set once a post-refresh re-fetch has landed, so a slower FIRST prefill load can never
+  // overwrite the fresher tiles with its older snapshot.
+  const refreshedRef = useRef(false)
+
+  // Garmin HRV on-read refresh (#299 pattern, second surface): opening the check-in lands this
+  // morning's night without the Recovery card being opened first. Background and fail-soft —
+  // it never blocks render, input or Save. Only a REAL run (not {skipped:true}) re-fetches the
+  // prefill, once, and applies the passive tiles only.
+  const refetchPassive = useCallback(() => {
+    api.get('/checkin-v2/prefill')
+      .then(({ data }) => { refreshedRef.current = true; setPassive(pickPassive(data)) })
+      .catch(() => {}) // tile stays as the first prefill had it
+  }, [])
+  useRecoveryRefresh({ onFreshRun: refetchPassive })
   const [submitted, setSubmitted] = useState(false)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -181,6 +207,7 @@ export default function CheckInAM() {
     api.get('/checkin-v2/prefill')
       .then(({ data }) => {
         setPrefill(data)
+        if (!refreshedRef.current) setPassive(pickPassive(data))
         if (data.existing?.am_timestamp) {
           setSubmitted(true)
           setResult(data.existing)
@@ -305,15 +332,15 @@ export default function CheckInAM() {
           <h1 className="text-lg font-semibold text-gray-800">Morning Check-in</h1>
         </div>
 
-        {prefill && (
+        {passive && (
           <PassiveCard
-            hrv={prefill.hrv_ms}
-            hrvVsBaseline={prefill.hrv_vs_baseline}
-            hrvState={prefill.hrv_state}
-            hrvSource={prefill.hrv_source}
-            hrvSecondaryMs={prefill.hrv_secondary_ms}
-            hrvSecondarySource={prefill.hrv_secondary_source}
-            sleepMin={prefill.sleep_min}
+            hrv={passive.hrv_ms}
+            hrvVsBaseline={passive.hrv_vs_baseline}
+            hrvState={passive.hrv_state}
+            hrvSource={passive.hrv_source}
+            hrvSecondaryMs={passive.hrv_secondary_ms}
+            hrvSecondarySource={passive.hrv_secondary_source}
+            sleepMin={passive.sleep_min}
           />
         )}
 
