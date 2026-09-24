@@ -254,9 +254,21 @@ def get_checkin_history(days: int = 30) -> str:
     rows = _db_rows(
         """
         SELECT date, sleep_quality, fatigue, soreness::text, motivation,
-               life_load, alcohol_units, session_rpe, passive_hrv_ms,
+               life_load, alcohol_units, session_rpe,
+               -- #NEXT: HRV read live from hrv_readings by wake-day equality (garmin
+               -- headlines a same-day pair, as select_wakeday_hrv); the retained
+               -- passive_hrv_ms denorm is a fallback ONLY for a day with no canonical row.
+               COALESCE(
+                   (SELECT h.rmssd_ms FROM hrv_readings h
+                    WHERE h.user_id = dr.user_id AND h.captured_at = dr.date
+                      AND h.rmssd_ms IS NOT NULL
+                    ORDER BY CASE h.source WHEN 'garmin' THEN 2 WHEN 'samsung' THEN 1
+                             ELSE 0 END DESC, h.id DESC
+                    LIMIT 1),
+                   dr.passive_hrv_ms   -- reached only when no value-bearing row exists
+               ) AS hrv_ms,
                morning_readiness, 'daily_records' AS source
-        FROM daily_records
+        FROM daily_records dr
         WHERE user_id = :user_id
           AND am_timestamp IS NOT NULL
           AND date >= CURRENT_DATE - :days
@@ -265,7 +277,7 @@ def get_checkin_history(days: int = 30) -> str:
 
         SELECT date, sleep_quality, fatigue, NULL AS soreness,
                motivation, NULL AS life_load, NULL AS alcohol_units,
-               NULL AS session_rpe, NULL AS passive_hrv_ms,
+               NULL AS session_rpe, NULL AS hrv_ms,
                readiness_score AS morning_readiness, 'legacy' AS source
         FROM daily_check_ins
         WHERE user_id = :user_id
@@ -292,10 +304,11 @@ def get_checkin_history(days: int = 30) -> str:
         alcohol = r["alcohol_units"] if r.get("alcohol_units") is not None else "—"
         rpe = r["session_rpe"] if r.get("session_rpe") is not None else "—"
         readiness = r["morning_readiness"] if r["morning_readiness"] is not None else "—"
+        hrv = f"{r['hrv_ms']:.0f}ms" if r.get("hrv_ms") is not None else "—"
         lines.append(
             f"{r['date']} {src_tag}: sleep={sleep_q} fatigue={fatigue} soreness={soreness} "
             f"motivation={motivation} life_load={life_load} alcohol={alcohol} "
-            f"session_rpe={rpe} readiness={readiness}"
+            f"session_rpe={rpe} hrv={hrv} readiness={readiness}"
         )
 
     return "\n".join(lines)

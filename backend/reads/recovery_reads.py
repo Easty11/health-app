@@ -381,8 +381,8 @@ def representative_source(deviation_result: dict) -> Optional[dict]:
     source), NEVER from a resurrected `_SOURCE_RANK`. Ties break deterministically:
     weight, then baseline maturity (`baseline_n`), then |z|, then source name. Returns
     None when no source contributed — including when every source is stale (no reading
-    on `for_date`; see the recency gate on `hrv_deviation`). Consumers read `["rmssd"]` (and `["baseline_mean"]`
-    for an ms deviation) off the returned entry.
+    on `for_date`; see the recency gate on `hrv_deviation`). Consumers read `["rmssd"]`
+    (and `["baseline_mean"]` for an ms deviation) off the returned entry.
     """
     srcs = deviation_result.get("sources") or []
     if not srcs:
@@ -396,13 +396,14 @@ def representative_source(deviation_result: dict) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Wake-day HRV selector — "what HRV do I show for a wake-day, honestly?"
 #
-# STANDALONE read helper. NOTHING consumes it yet (deliberate): it is the
-# precondition for the check-in HRV denorm (whose read currently uses
-# `hrv_deviation` with `for_date` as an UPPER BOUND — latest reading <= for_date,
-# which silently returns a stale prior-day value when today's has not landed). This
-# helper closes that seam: an explicit current-day gate that NEVER returns a
-# reading whose `captured_at != wake_day`, plus source labelling, a same-wake-day-
-# only cross-source delta, and hard guards on the two silent-wrong modes.
+# Consumed (#NEXT) by the check-in prefill and the coach context's daily-record HRV
+# (via current_state), both with require_current_day=True. It replaced the check-in
+# HRV denorm, whose read used `hrv_deviation` with `for_date` as an UPPER BOUND —
+# latest reading <= for_date, which silently returned a stale prior-day value when
+# today's had not landed. This helper closes that seam: an explicit current-day
+# gate that NEVER returns a reading whose `captured_at != wake_day`, plus source
+# labelling, a same-wake-day-only cross-source delta, and hard guards on the two
+# silent-wrong modes.
 #
 # `hrv_readings.captured_at` is a `Date` = the WAKE-DAY (the night), one row per
 # (user, captured_at, source) — so this reads by DAY EQUALITY, never a range. It
@@ -595,3 +596,49 @@ def select_wakeday_hrv(
         sources_seen=sources_seen,
         baseline_state=_primary_baseline_state(db, user_id, primary_row),
     )
+
+
+def wakeday_hrv_by_date(
+    db: Session,
+    user_id: int,
+    *,
+    since: date,
+    until: Optional[date] = None,
+) -> dict:
+    """Per-wake-day headline HRV over `[since, until]`, for HISTORICAL readers (#NEXT).
+
+    `{captured_at: {"source": str | None, "rmssd_ms": float | None}}` — one entry per day
+    that has any value-bearing `hrv_readings` row. The headline follows
+    `select_wakeday_hrv`'s rules for a day (rule 4: richer source by
+    `_WAKEDAY_SOURCE_RANK` headlines a same-day pair; rule 7: >2 sources is a config
+    error → rmssd_ms None, never a silent 2-of-3 pick), in ONE query rather than one
+    selector call per day. Day-equality only: a day with no row is simply absent from the
+    dict — never filled from a neighbouring day. The selector itself is not modified.
+
+    Callers fall back to the retained `daily_records.passive_hrv_ms` ONLY for a day absent
+    here (pre-`hrv_readings` history); a day present here always wins, so a forward-carried
+    denorm value can never override the canonical row.
+    """
+    q = (
+        db.query(models.HrvReading)
+        .filter(
+            models.HrvReading.user_id == user_id,
+            models.HrvReading.rmssd_ms.isnot(None),
+            models.HrvReading.captured_at >= since,
+        )
+    )
+    if until is not None:
+        q = q.filter(models.HrvReading.captured_at <= until)
+
+    by_day: dict[date, list] = defaultdict(list)
+    for r in q.all():
+        by_day[r.captured_at].append(r)
+
+    out: dict = {}
+    for day, rows in by_day.items():
+        if len({r.source for r in rows}) > 2:
+            out[day] = {"source": None, "rmssd_ms": None}
+            continue
+        head = max(rows, key=lambda r: (_WAKEDAY_SOURCE_RANK.get(r.source, 0), r.id or 0))
+        out[day] = {"source": head.source, "rmssd_ms": head.rmssd_ms}
+    return out
