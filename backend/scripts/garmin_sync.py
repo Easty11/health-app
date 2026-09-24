@@ -19,13 +19,13 @@ never aborts the batch. Idempotent: the upsert keys on (user, night, source).
 import argparse
 import logging
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Any
 
 from connectors.garmin import GarminReconnectError
 from database import SessionLocal
 import models
-from routers.garmin import sync_hrv_for_user
+from routers.garmin import garmin_wake_day, sync_hrv_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def sweep_garmin_hrv(
     Not a route and not CLI-shaped, so it is callable from the nightly sweep. `db` is caller-owned
     (the CLI opens its own; the sweep passes its `SessionLocal()`); a per-user failure rolls the
     session back so the next user starts clean."""
-    today = datetime.now(timezone.utc).date()
+    today = garmin_wake_day()   # AEST wake-day, not UTC (#327 follow-up)
     end = end or today
     start = start or (end - timedelta(days=days))
 
@@ -91,7 +91,7 @@ def sweep_garmin_hrv(
 
 
 def _resolve_window(args) -> tuple[date, date]:
-    today = datetime.now(timezone.utc).date()
+    today = garmin_wake_day()   # AEST wake-day, not UTC (#327 follow-up)
     end = date.fromisoformat(args.to) if args.to else today
     if args.from_:
         start = date.fromisoformat(args.from_)

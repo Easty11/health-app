@@ -154,3 +154,49 @@ def test_generic_sync_failure_returns_last_good_never_raises(db_session, monkeyp
     assert out["skipped"] is True
     assert out["reason"] == "error"
     assert out["last_ingested_at"] is None  # never ingested -> null marker, still no raise
+
+
+# ── WINDOW DATE (#327 follow-up): the pull ends on the AEST wake-day, never the UTC date ──
+
+class _FrozenClock(datetime):
+    """07:00 AEST on 2026-09-25 == 21:00 UTC on 2026-09-24 — the morning window where the UTC
+    date is still yesterday."""
+    _NOW = datetime(2026, 9, 24, 21, 0, tzinfo=timezone.utc)
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls._NOW.astimezone(tz) if tz is not None else cls._NOW.replace(tzinfo=None)
+
+
+def test_morning_refresh_window_ends_on_aest_wake_day_not_utc(db_session, monkeypatch):
+    """At 07:00 AEST the refresh must request THIS morning's night (calendarDate 2026-09-25).
+    Before the fix the window ended on the UTC date (2026-09-24), so the night just slept was never
+    pulled and the card showed yesterday's HRV / the check-in showed "–"."""
+    from datetime import date
+    caller = _user(db_session, 1)
+    _garmin_key(db_session, 1)
+    calls = _spy_sync(monkeypatch)
+    monkeypatch.setattr(garmin_router, "datetime", _FrozenClock)
+
+    refresh_garmin_hrv(force=True, current_user=caller, db=db_session)
+
+    assert calls[0]["end"] == date(2026, 9, 25)
+    assert calls[0]["end"] != _FrozenClock._NOW.date()     # the old (UTC) key
+
+
+def test_sweep_window_ends_on_aest_wake_day(db_session, monkeypatch):
+    from datetime import date
+    from scripts import garmin_sync
+
+    monkeypatch.setattr(garmin_router, "datetime", _FrozenClock)
+    seen = []
+    monkeypatch.setattr(garmin_sync, "sync_hrv_for_user",
+                        lambda db, uid, s, e: seen.append(e) or {"days_with_data": 0,
+                                                                  "readings_upserted": 0,
+                                                                  "samples_upserted": 0})
+    _user(db_session, 1)
+    _garmin_key(db_session, 1)
+
+    garmin_sync.sweep_garmin_hrv(db_session)
+
+    assert seen == [date(2026, 9, 25)]
