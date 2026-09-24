@@ -752,7 +752,7 @@ rejection. Use the list above.
 
 def _hrv_today_lines(sel: Any) -> list[str]:
     """Current wake-day HRV, read LIVE by `select_wakeday_hrv(require_current_day=True)`
-    (#NEXT) — never the `passive_hrv_ms` denorm, and never a number for a prior day.
+    (#327) — never the `passive_hrv_ms` denorm, and never a number for a prior day.
     Source-neutral copy: the value carries its source and date."""
     if sel is None:
         return []
@@ -779,7 +779,7 @@ def _section_daily_record(record: Any, hrv_today: Any = None) -> str:
     Descriptive section for the new two-moment daily record.
     MUST NOT contain prescriptive load instructions — descriptive only.
 
-    `hrv_today` is the live current-wake-day `HrvSelection` (#NEXT); the frozen
+    `hrv_today` is the live current-wake-day `HrvSelection` (#327); the frozen
     `passive_hrv_ms` column is no longer rendered here.
     """
     def _v(field: str) -> Any:
@@ -1041,7 +1041,7 @@ def _section_health_connect(records: list[Any], now: datetime) -> str:
     return "\n".join(lines)
 
 
-# Source-neutral HRV guidance (#NEXT) — replaced a hard-coded line naming the Galaxy Ring as
+# Source-neutral HRV guidance (#327) — replaced a hard-coded line naming the Galaxy Ring as
 # THE primary readiness signal, which let a dead ring's last reading read as current.
 HRV_GUIDANCE_LINE = (
     "HRV is the PRIMARY readiness signal; sleep quality is the secondary input. Every "

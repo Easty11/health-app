@@ -73,7 +73,7 @@ RECENCY_FACTOR = 1.0      # weight multiplier for a CONTRIBUTING source — alwa
 #   because recency is enforced upstream as a binary GATE, not a weight: a source
 #   contributes only if it has a reading ON `for_date` (same wake-day). A source whose
 #   latest reading is older is excluded from weighting, combined_z, confidence and
-#   representative_source, and reported in `stale_sources` instead (#NEXT — supersedes
+#   representative_source, and reported in `stale_sources` instead (#327 — supersedes
 #   the old "hook for a future backfill-combine" placeholder, which let a dead source's
 #   last reading + frozen mature baseline be reported as today's).
 
@@ -199,7 +199,7 @@ def hrv_deviation(
 ) -> dict:
     """Per-source-normalised HRV deviation + cross-source confidence for `for_date`.
 
-    Each source's reading ON `for_date` (same wake-day — the recency gate, #NEXT) is
+    Each source's reading ON `for_date` (same wake-day — the recency gate, #327) is
     z-scored against that source's OWN rolling baseline; the per-source deviations are
     combined by weight, and cross-source (dis)agreement becomes confidence. Never blends
     raw ms. A source whose latest reading is BEFORE `for_date` does not contribute (not
@@ -249,7 +249,7 @@ def hrv_deviation(
     stale_out: list[dict] = []
     for source, srows in by_source.items():
         today_row = srows[0]                          # latest reading <= for_date
-        # ── recency gate (#NEXT): same wake-day or it does not contribute ──
+        # ── recency gate (#327): same wake-day or it does not contribute ──
         if today_row.captured_at != for_date:
             stale_out.append({"source": source, "last_captured_at": today_row.captured_at})
             continue
@@ -396,7 +396,7 @@ def representative_source(deviation_result: dict) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Wake-day HRV selector — "what HRV do I show for a wake-day, honestly?"
 #
-# Consumed (#NEXT) by the check-in prefill and the coach context's daily-record HRV
+# Consumed (#327) by the check-in prefill and the coach context's daily-record HRV
 # (via current_state), both with require_current_day=True. It replaced the check-in
 # HRV denorm, whose read used `hrv_deviation` with `for_date` as an UPPER BOUND —
 # latest reading <= for_date, which silently returned a stale prior-day value when
@@ -605,7 +605,7 @@ def wakeday_hrv_by_date(
     since: date,
     until: Optional[date] = None,
 ) -> dict:
-    """Per-wake-day headline HRV over `[since, until]`, for HISTORICAL readers (#NEXT).
+    """Per-wake-day headline HRV over `[since, until]`, for HISTORICAL readers (#327).
 
     `{captured_at: {"source": str | None, "rmssd_ms": float | None}}` — one entry per day
     that has any value-bearing `hrv_readings` row. The headline follows

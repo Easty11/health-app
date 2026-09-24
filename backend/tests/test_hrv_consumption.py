@@ -275,7 +275,7 @@ def test_summary_device_blocks_byte_identical_to_pre_change_snapshot(db_session)
 
 # ── Stage B (consumption): the check-in HRV reads the CURRENT wake-day live ──────
 #
-# HRV staleness (#NEXT): `_snapshot_passive` no longer snapshots HRV (sleep only), and Save
+# HRV staleness (#327): `_snapshot_passive` no longer snapshots HRV (sleep only), and Save
 # no longer writes daily_records.passive_hrv_ms. The prefill tile reads
 # `select_wakeday_hrv(require_current_day=True)` — Garmin headlines a same-wake-day pair
 # (both surfaced) — and `hrv_vs_baseline` is the SAME primary source's deviation from its
@@ -369,7 +369,7 @@ def test_save_does_not_write_passive_hrv_ms_even_with_a_current_day_reading(db_s
 
 
 def test_prior_day_garmin_row_is_not_snapshotted_as_today(db_session):
-    """End-to-end (#NEXT recency gate): a Garmin row from YESTERDAY must not flow through
+    """End-to-end (#327 recency gate): a Garmin row from YESTERDAY must not flow through
     submit_am's snapshot into today's daily_records.passive_hrv_ms. This test previously
     asserted the opposite (47.0) — that WAS the staleness bug: a prior-day reading
     presented as today's."""

@@ -170,7 +170,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     db_session.add(fort)
     db_session.commit()
 
-    # Ends ON `today` (7/4): the #NEXT recency gate admits a source to the deviation model
+    # Ends ON `today` (7/4): the #327 recency gate admits a source to the deviation model
     # only with a same-wake-day reading, so a series ending before `today` would yield no
     # baseline and silently drop the block this guard exercises. (Was 6/28 → 7/2.) Both
     # renderers receive the same Samsung rows, so the shift is parity-neutral.
@@ -363,7 +363,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     old_prompt = _excise_hrv(old_prompt, _OLD_HRV_LABEL)
     new_prompt = _excise_hrv(new_prompt, _NEW_HRV_LABEL)
 
-    # NARROWED AGAIN (HRV staleness, #NEXT): the closing HRV guidance line is rewritten BY
+    # NARROWED AGAIN (HRV staleness, #327): the closing HRV guidance line is rewritten BY
     # INTENT — the hard-coded "This Ring HRV is the PRIMARY readiness signal…" sentence
     # named one device as the source of truth, so a dead Ring's reading read as current.
     # The replacement is source-neutral and date-attributed. Same reasoning as the

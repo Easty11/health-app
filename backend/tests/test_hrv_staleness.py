@@ -1,4 +1,4 @@
-"""HRV staleness (#NEXT) — no surface presents a prior-day HRV as today's.
+"""HRV staleness (#327) — no surface presents a prior-day HRV as today's.
 
 Root: `hrv_deviation` had no age bound, so a dead source's last reading + frozen mature
 baseline was reported as current (model-layer gates G1/G2 live in test_hrv_deviation; the

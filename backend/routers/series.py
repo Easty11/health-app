@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session
 
 import models
 from reads.hevy_reads import counted_workouts   # the counted-workouts read-door (#Q161)
-from reads.recovery_reads import wakeday_hrv_by_date   # live per-day HRV (#NEXT)
+from reads.recovery_reads import wakeday_hrv_by_date   # live per-day HRV (#327)
 from auth import get_current_user
 from database import get_db
 from load_metrics import METRICS_VERSION, _local_day
@@ -207,7 +207,7 @@ def get_readiness_series(
         .all()
     )
 
-    # HRV per day is read LIVE from `hrv_readings` by day-equality (#NEXT); the retained
+    # HRV per day is read LIVE from `hrv_readings` by day-equality (#327); the retained
     # `passive_hrv_ms` denorm is a fallback ONLY for a day with no canonical row (pre-
     # `hrv_readings` history). A canonical row always wins, so a forward-carried denorm value
     # (a prior night frozen at Save) can never be drawn as that day's HRV.

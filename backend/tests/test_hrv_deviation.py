@@ -269,7 +269,7 @@ def test_thresholds_are_parameterised(db_session):
     assert MIN_BASELINE_N == 21     # the mature-at constant the maturity factor reads
 
 
-# ── recency gate (#NEXT): same wake-day or it does not contribute ────────────────
+# ── recency gate (#327): same wake-day or it does not contribute ────────────────
 def test_g1_dead_mature_source_loses_to_fresh_source(db_session):
     """G1: a DEAD source (last reading D-20, mature 28-night baseline) + a FRESH source
     reading on D → the fresh source is representative; the dead one is excluded from

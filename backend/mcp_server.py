@@ -104,7 +104,7 @@ def _as_of(now: datetime | None = None) -> str:
 def _aest_wake_day(now: datetime | None = None) -> date:
     """The Brisbane-local wake-day for `now` (default: the wall clock). The HRV readiness
     read keys on this, not the UTC date: at 07:00 AEST the UTC date is still YESTERDAY,
-    and under the same-wake-day recency gate (#NEXT) a UTC `for_date` would read
+    and under the same-wake-day recency gate (#327) a UTC `for_date` would read
     yesterday's night as today's."""
     dt = now.astimezone(_AS_OF_TZ) if now is not None else datetime.now(_AS_OF_TZ)
     return dt.date()
@@ -255,7 +255,7 @@ def get_checkin_history(days: int = 30) -> str:
         """
         SELECT date, sleep_quality, fatigue, soreness::text, motivation,
                life_load, alcohol_units, session_rpe,
-               -- #NEXT: HRV read live from hrv_readings by wake-day equality (garmin
+               -- #327: HRV read live from hrv_readings by wake-day equality (garmin
                -- headlines a same-day pair, as select_wakeday_hrv); the retained
                -- passive_hrv_ms denorm is a fallback ONLY for a day with no canonical row.
                COALESCE(
@@ -473,7 +473,7 @@ async def get_hevy_workouts(days: int = 14) -> str:
 def _readiness_hrv_line(rep: dict | None, dev: dict, wake_day: date) -> str:
     """The readiness snapshot's HRV line: the representative source's current-day ms WITH
     its source and date, or "—" plus the stale sources' last dates when no source read
-    today (#NEXT recency gate). Never prints a prior-day number as today's."""
+    today (#327 recency gate). Never prints a prior-day number as today's."""
     if rep is not None:
         return f"  HRV: {rep['rmssd']:.0f} ms ({rep['source']}, {wake_day})"
     stale = dev.get("stale_sources") or []

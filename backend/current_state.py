@@ -48,7 +48,7 @@ class HRVBaseline:
     # (#294/#295) — the deviation is real but its confidence is capped; a consumer
     # surfacing the number should flag it. None only for legacy callers that predate #295.
     baseline_state: str | None = None
-    # Which source the representative baseline belongs to (#NEXT: carried so the coach copy
+    # Which source the representative baseline belongs to (#327: carried so the coach copy
     # is source-neutral but attributed). Under the recency gate the representative source
     # always has a reading ON `today`, so `latest_ms` is that day's — never a prior-day carry.
     source: str | None = None
@@ -90,7 +90,7 @@ class CurrentState:
     week_plan: dict | None = None
     capability_state: list[models.CapabilityState] = field(default_factory=list)
     hrv_baseline: HRVBaseline | None = None   # per-source rolling baseline (#292)
-    # Current wake-day HRV (#NEXT): `select_wakeday_hrv(require_current_day=True)` for `today`,
+    # Current wake-day HRV (#327): `select_wakeday_hrv(require_current_day=True)` for `today`,
     # read LIVE — the coach's daily-record HRV, replacing the `passive_hrv_ms` denorm. None only
     # when the read failed (logged); a prior-day value is never carried here.
     hrv_today: HrvSelection | None = None

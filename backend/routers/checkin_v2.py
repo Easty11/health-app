@@ -219,7 +219,7 @@ def _freeze_diary(
 def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, Any]:
     """HC sleep at the moment of AM capture (Health Connect; Garmin supplies no sleep).
 
-    HRV is NO LONGER snapshotted here (#NEXT): the `passive_hrv_ms` denorm froze whatever
+    HRV is NO LONGER snapshotted here (#327): the `passive_hrv_ms` denorm froze whatever
     `hrv_deviation` returned at Save, which before the recency gate could be a prior-day
     reading carried forward as today's. HRV is read LIVE from `hrv_readings` by every
     surface instead (prefill: `select_wakeday_hrv`; history: `wakeday_hrv_by_date` with a
@@ -520,7 +520,7 @@ class TodayOut(BaseModel):
 
 
 class AMPrefillOut(BaseModel):
-    # Current wake-day HRV only (#NEXT). `hrv_state` is the selector's discriminator
+    # Current wake-day HRV only (#327). `hrv_state` is the selector's discriminator
     # (value | pair | absent | stale_withheld | config_error); hrv_ms is None unless
     # value/pair. `hrv_secondary_*` is the other source on a same-wake-day pair.
     hrv_ms: Optional[float] = None
@@ -647,7 +647,7 @@ def submit_am(
     record.naive_baseline = calc_naive_baseline(
         body.sleep_quality, body.fatigue, body.soreness, body.motivation
     )
-    # HRV is NOT frozen here (#NEXT) — `passive_hrv_ms` is retained read-only for
+    # HRV is NOT frozen here (#327) — `passive_hrv_ms` is retained read-only for
     # pre-change history; every surface reads current-day HRV live from hrv_readings.
     passive = _snapshot_passive(current_user.id, today, db)
     record.passive_sleep_min = passive["passive_sleep_min"]
