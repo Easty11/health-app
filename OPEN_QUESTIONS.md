@@ -2351,6 +2351,37 @@ Raised 2026-09-22. Nothing records when a Polar pull last ran — no last-succes
 
 ---
 
+## Q169. Unrecorded training — how should days with training no device captured be represented?
+
+Raised 2026-09-23 after #322. Prod read, 23 Sep: from finals through the decompression phase, user 1 trained without the H10. Only device-recorded sessions exist (4 HC rows, 25 Aug – 20 Sep); operator confirms this is not all training done. No manual write path to `aerobic_sessions` exists (writers: Polar `/sync`, `/import-export`, HC ingest). Q119 backfill cannot recover sessions no device recorded.
+
+**The problem is missingness, not a missing session row.** An unrecorded training day currently reads as a rest day (zero) in every consumer: felt load (`_duration_min_by_day`), CBT-I `training_end` (`cbti/replay._TRAINING_SQL`), and the metabolic window (`load_events_metabolic`, and post-Q159 stage 2). The main harm: the next zoned block reads as a spike against a falsely detrained baseline.
+
+**Decided in principle (operator, 2026-09-24): coverage marker only. No self-reported session rows.**
+- The operator can mark a date range as "trained, not fully recorded". No per-session detail, RPE, duration, or time.
+- The marker deposits no load and no TRIMP (INV-7 and #255 are unaffected). It changes how confident consumers are in a day, not the day's values.
+- Device-recorded sessions inside a marked range still count as usual. For marked days, measured load is a lower bound, not a total.
+- Rejected: self-reported `aerobic_sessions` rows, including an sRPE variant. Recalled sessions add build and provenance cost for consumers that the marker already protects.
+
+**Mechanism: open items, adjudicated against master `01d9c38` (Code, 2026-09-24).** These are findings plus a recommendation for each item. Nothing below is ruled; the rulings route to chat.
+
+1. **Store and shape.** #230 governs `source` on `user_knowledge_entries`, but the phase store already imports both provenance domains for its own rows (`engine/training_phase.py:305-315`: `asserted_by` ∈ `ASSERTED_BY_VALUES` (#227, `user|engine|clinician`), `source` ∈ `SOURCE_VALUES` (#230, `onboarding|chat|system|api`), both required, no default). That pattern carries over directly: a marker row carries `source` (channel: `api` for a form or direct write, `chat` if a coach tag writes it) and `asserted_by='user'`, and the write refuses a missing value. `kind` should be a closed vocabulary with one member for now. **A new table is a schema migration → hold (a), full human review, SCHEMA.md in the same commit.** Recommend: the range table as briefed plus `asserted_by`/`source`/`asserted_on`, plus a CHECK on `end_date >= start_date`. Overlapping ranges are allowed (consumers read "any overlap").
+2. **Metabolic window: the premise needs correcting.** No spike/ACWR *flag* exists to suppress: #255 retired ACWR, and #306 made `load_ratio` a descriptive value with no band or threshold on any surface. What the marker actually corrupts are the stored `load_metrics` values: `chronic_load` is a trailing 28-day mean with rest days counted as 0 (`load_metrics.py:148-153, 207, 226-228`), and the Banister stocks decay through zero days, so a marked range deflates `chronic`/`fitness` and inflates the next block's `load_ratio`. Readers are `routers/series.py` (chart), the MCP `get_training_load` readout, and `routers/load.py` (freshness only); selection/dosing does not read `load_metrics` (#248). A further point: HC rows are zoneless until Q159 stage 2, so they deposit **no** metabolic TRIMP (`load_events_metabolic.py:204-206`). For the finals block the metabolic window is empty on marked days, not just a lower bound. Recommend: **emit with a low-confidence annotation, computed at read time**, following the `maturity` annotate-never-suppress precedent (#10/#28). A row whose 28-day window overlaps a marked day is tagged. Suppressing or down-weighting the baseline would mean inventing values the marker was defined *not* to produce. It would also need a stock model for skipped days, which Banister does not have.
+3. **Felt load: the premise needs correcting.** No baseline denominator exists. `psychological_residual` pairs a day only if `session_rpe` is present AND resolved duration > 0 (`reads/psychological_reads.py:386-391`), so a marked day with no recorded session is **already excluded**, not counted as zero. The real exposure is the opposite case: a marked day with a *partially* recorded session and a whole-day `session_rpe` enters the ridge fit with `actual = rpe × partial minutes` (understated) against partial predictors. That produces a mis-paired row, not a missing one. Recommend: exclude every marked day from pairing, with or without a recorded session.
+4. **CBT-I `training_end`: confirmed, replay does NOT distinguish unknown from none.** `load_nights` sets `training_end=training.get(d-1)` (`cbti/replay.py:153-154, 171`). A missing session and "no training" both give `None`, and the engine acts only on `is not None` (`cbti/engine.py:460`, `training_constrained`). A marked night with unrecorded late training is therefore judged as a normal valid night, which can score as an adherence miss rather than a physical floor. The fix is a tri-state on `Night` (e.g. `training_unknown: bool`) plus an engine rule. **The engine rule is an un-ratified call.** The `naps_min` precedent (`engine.py:446-448`) treats null as UNKNOWN and does *not* exclude, while the `training_constrained` logic argues for exclusion (reason `training_unknown`). Changing that verdict re-adjudicates closed blocks on replay; the `cbti_prescriptions` ledger itself is not rewritten.
+5. **Retro-entry and #248, per consumer.** The marker changes no stored *value*, so:
+   - felt-load residual: read-time, no recompute needed.
+   - metabolic `load_events`: values unchanged, no recompute needed.
+   - `load_metrics`: stored rows, but the confidence tag is **read-time** under recommendation 2, so no recompute. The tag becomes a recompute (`scripts/refresh_load.py`) only if it is stored as a column, which is a second migration. Read-time avoids both the migration and the recompute.
+   - CBT-I replay: read-time; the historical ledger is untouched (see 4).
+   - context/MCP readouts: read-time.
+
+**To decide (chat):** (i) CBT-I engine rule for a `training_unknown` night: exclude or keep valid (item 4); (ii) confirm read-time annotation over suppression or down-weighting for `load_metrics` (item 2); (iii) confirm that felt-load pairing excludes every marked day, including days with a partial recording (item 3). Once ruled, the build is one migration (marker table, hold (a)) plus read-time consumers.
+
+**State:** OPEN. Marker-only is decided in principle; the mechanism is open. Not blocking: stage 2 (Q159) proceeds on recorded sessions.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
