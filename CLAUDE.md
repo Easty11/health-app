@@ -145,7 +145,7 @@ OPEN · OWED · DONE → #N, under the label `**State:**`.
 ### Merge path — PR-gated (#171)
 
 - **The pull request is the only route to master.** Ruleset `master-pr-gated` (id `20414758`)
-  requires a PR + the `placeholder guard (POSIX)` status check, forbids non-fast-forward, and
+  requires a PR + the `placeholder guard (POSIX)` and `backend tests (pytest)` status checks, forbids non-fast-forward, and
   has no bypass actors (`current_user_can_bypass: "never"`). Direct `git push origin master`
   is refused server-side.
 - **This section is repo-specific** (not shared): a merge path depends on enforcement config
