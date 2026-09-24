@@ -267,3 +267,80 @@ def test_thresholds_are_parameterised(db_session):
     widened = hrv_deviation(user.id, db_session, for_date=_FOR_DATE, flat_threshold=5.0)
     assert widened["direction"] == "flat"
     assert MIN_BASELINE_N == 21     # the mature-at constant the maturity factor reads
+
+
+# ── recency gate (#NEXT): same wake-day or it does not contribute ────────────────
+def test_g1_dead_mature_source_loses_to_fresh_source(db_session):
+    """G1: a DEAD source (last reading D-20, mature 28-night baseline) + a FRESH source
+    reading on D → the fresh source is representative; the dead one is excluded from
+    weighting/combined_z/confidence and listed in stale_sources with its last date. Before
+    the gate the dead source's frozen mature baseline out-weighed the fresh source and its
+    20-day-old rmssd was reported as today's."""
+    user = _user(db_session)
+    # Dead Samsung: 28 mature nights ending D-20, sitting high @113.
+    _seed(db_session, user.id, "samsung", start_offset=47, count=28, rmssd=113.0)
+    # Fresh, thin Garmin: 5 nights ending ON D.
+    _seed(db_session, user.id, "garmin", start_offset=4, count=5, rmssd=[60.0, 62.0, 61.0, 63.0, 64.0])
+
+    res = hrv_deviation(user.id, db_session, for_date=_FOR_DATE)
+
+    assert [s["source"] for s in res["sources"]] == ["garmin"]
+    assert res["n_contributing"] == 1
+    assert representative_source(res)["source"] == "garmin"
+    assert representative_source(res)["rmssd"] == 64.0
+    assert res["stale_sources"] == [
+        {"source": "samsung", "last_captured_at": _FOR_DATE - timedelta(days=20)}
+    ]
+    # Dead source's maturity no longer manufactures confidence: one immature source.
+    assert res["confidence"] == "very_low"
+    assert res["baseline_state"] == "building"
+
+
+def test_g2_only_dead_source_contributes_nothing(db_session):
+    """G2 (model layer): only a dead source → sources[] empty, representative None, and the
+    dead source surfaced in stale_sources so 'absent today' ≠ 'never any'."""
+    user = _user(db_session)
+    _seed(db_session, user.id, "samsung", start_offset=47, count=28, rmssd=113.0)
+
+    res = hrv_deviation(user.id, db_session, for_date=_FOR_DATE)
+
+    assert res["sources"] == []
+    assert res["n_contributing"] == 0
+    assert representative_source(res) is None
+    assert res["confidence"] == "very_low" and res["direction"] == "flat"
+    assert res["combined_z"] == 0.0
+    assert res["stale_sources"] == [
+        {"source": "samsung", "last_captured_at": _FOR_DATE - timedelta(days=20)}
+    ]
+
+
+def test_gate_is_one_day_strict_yesterday_is_stale(db_session):
+    """Yesterday is not today: a D-1 reading is stale for for_date=D (no grace window)."""
+    user = _user(db_session)
+    _seed(db_session, user.id, "garmin", start_offset=25, count=25, rmssd=55.0)  # ends D-1
+
+    res = hrv_deviation(user.id, db_session, for_date=_FOR_DATE)
+
+    assert res["sources"] == []
+    assert res["stale_sources"][0]["last_captured_at"] == _FOR_DATE - timedelta(days=1)
+
+
+def test_never_any_data_has_empty_stale_sources(db_session):
+    """'Never any' is distinguishable from 'stale': no rows at all → stale_sources empty."""
+    user = _user(db_session)
+    res = hrv_deviation(user.id, db_session, for_date=_FOR_DATE)
+    assert res["sources"] == [] and res["stale_sources"] == []
+
+
+def test_gate_leaves_contributing_baseline_math_unchanged(db_session):
+    """A contributing source's baseline is computed exactly as before the gate: the 28-day
+    window before its D reading, including nights on which the OTHER source was dead."""
+    user = _user(db_session)
+    _seed(db_session, user.id, "garmin", start_offset=25, count=25, rmssd=50.0)
+    db_session.add(models.HrvReading(user_id=user.id, captured_at=_FOR_DATE,
+                                     source="garmin", rmssd_ms=56.0))
+    db_session.commit()
+
+    g = _src(hrv_deviation(user.id, db_session, for_date=_FOR_DATE), "garmin")
+    assert g["baseline_n"] == 25 and g["baseline_mean"] == 50.0 and g["mature"]
+    assert g["z"] == (56.0 - 50.0) / 3.0     # SD floor

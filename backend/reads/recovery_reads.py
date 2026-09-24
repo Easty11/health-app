@@ -69,7 +69,13 @@ SETTLING_NIGHTS = 10      # post-phase-change settling period
 FLAT_THRESHOLD = 0.5      # sigma: dead-zone; |z| below this is neutral
 AGREEMENT_HIGH = 1.0      # sigma: cross-source gap for `high`   (calibration target)
 AGREEMENT_MED = 2.0       # sigma: cross-source gap for `medium` (calibration target)
-RECENCY_FACTOR = 1.0      # nightly use; hook for a future backfill-combine
+RECENCY_FACTOR = 1.0      # weight multiplier for a CONTRIBUTING source — always 1.0,
+#   because recency is enforced upstream as a binary GATE, not a weight: a source
+#   contributes only if it has a reading ON `for_date` (same wake-day). A source whose
+#   latest reading is older is excluded from weighting, combined_z, confidence and
+#   representative_source, and reported in `stale_sources` instead (#NEXT — supersedes
+#   the old "hook for a future backfill-combine" placeholder, which let a dead source's
+#   last reading + frozen mature baseline be reported as today's).
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -193,9 +199,13 @@ def hrv_deviation(
 ) -> dict:
     """Per-source-normalised HRV deviation + cross-source confidence for `for_date`.
 
-    Each source's most recent reading at or before `for_date` is z-scored against
-    that source's OWN rolling baseline; the per-source deviations are combined by
-    weight, and cross-source (dis)agreement becomes confidence. Never blends raw ms.
+    Each source's reading ON `for_date` (same wake-day — the recency gate, #NEXT) is
+    z-scored against that source's OWN rolling baseline; the per-source deviations are
+    combined by weight, and cross-source (dis)agreement becomes confidence. Never blends
+    raw ms. A source whose latest reading is BEFORE `for_date` does not contribute (not
+    to weighting, combined_z, confidence or representative_source): it is listed in
+    `stale_sources` with its last date, so "absent today" is distinguishable from "never
+    any". A dead source's last reading and frozen mature baseline is never today's HRV.
 
     Output contract (downstream reads the object, never a bare scalar)::
 
@@ -208,6 +218,7 @@ def hrv_deviation(
                      baseline_n, weight, mature}, ...],
           agreement_gap: float,
           n_contributing: int,
+          stale_sources: [{source, last_captured_at}, ...],   # no reading on for_date
         }
 
     A compact surface uses `combined_z` + `confidence`; a readout uses `sources[]`;
@@ -235,8 +246,13 @@ def hrv_deviation(
         by_source[r.source or "unknown"].append(r)   # each list stays captured_at DESC
 
     sources_out: list[dict] = []
+    stale_out: list[dict] = []
     for source, srows in by_source.items():
         today_row = srows[0]                          # latest reading <= for_date
+        # ── recency gate (#NEXT): same wake-day or it does not contribute ──
+        if today_row.captured_at != for_date:
+            stale_out.append({"source": source, "last_captured_at": today_row.captured_at})
+            continue
         today_rmssd = today_row.rmssd_ms
         lo = today_row.captured_at - timedelta(days=baseline_window)
         baseline_vals = [
@@ -276,6 +292,7 @@ def hrv_deviation(
 
     # Deterministic ordering for stable readouts: strongest deviation first.
     sources_out.sort(key=lambda s: (-abs(s["z"]), s["source"]))
+    stale_out.sort(key=lambda s: s["source"])
 
     n_contributing = len(sources_out)
     total_w = sum(s["weight"] for s in sources_out)
@@ -353,6 +370,7 @@ def hrv_deviation(
         "sources": sources_out,
         "agreement_gap": agreement_gap,
         "n_contributing": n_contributing,
+        "stale_sources": stale_out,
     }
 
 
@@ -362,7 +380,8 @@ def representative_source(deviation_result: dict) -> Optional[dict]:
     Part-3 rule: derive a single number from the deviation model (highest-weight
     source), NEVER from a resurrected `_SOURCE_RANK`. Ties break deterministically:
     weight, then baseline maturity (`baseline_n`), then |z|, then source name. Returns
-    None when no source contributed. Consumers read `["rmssd"]` (and `["baseline_mean"]`
+    None when no source contributed — including when every source is stale (no reading
+    on `for_date`; see the recency gate on `hrv_deviation`). Consumers read `["rmssd"]` (and `["baseline_mean"]`
     for an ms deviation) off the returned entry.
     """
     srcs = deviation_result.get("sources") or []

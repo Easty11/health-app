@@ -28,7 +28,7 @@ import models
 from auth import get_current_user
 from database import get_db
 from routers import recovery
-from routers.checkin_v2 import AMCheckInIn, _snapshot_passive, submit_am
+from routers.checkin_v2 import AMCheckInIn, _snapshot_passive, _today_aest, submit_am
 from routers.samsung_hrv import HRVReadingIn, _mirror_passive_overnight_hrv
 
 
@@ -342,13 +342,14 @@ def test_snapshot_passive_picks_latest_at_or_before_for_date(db_session):
     assert _snapshot_passive(user.id, _FOR_DATE, db_session)["passive_hrv_ms"] == 42.0
 
 
-def test_garmin_hrv_row_propagates_to_daily_record_passive_hrv_ms(db_session):
-    """End-to-end: a Garmin hrv_readings row flows through submit_am's snapshot into
-    daily_records.passive_hrv_ms — the value /series/readiness later reads."""
+def test_prior_day_garmin_row_is_not_snapshotted_as_today(db_session):
+    """End-to-end (#NEXT recency gate): a Garmin row from YESTERDAY must not flow through
+    submit_am's snapshot into today's daily_records.passive_hrv_ms. This test previously
+    asserted the opposite (47.0) — that WAS the staleness bug: a prior-day reading
+    presented as today's."""
     user = _user(db_session)
-    # A canonical Garmin night at or before today (submit_am snapshots as_of today).
     db_session.add(models.HrvReading(
-        user_id=user.id, captured_at=date.today() - timedelta(days=1),
+        user_id=user.id, captured_at=_today_aest() - timedelta(days=1),
         source="garmin", rmssd_ms=47.0))
     db_session.commit()
 
@@ -356,4 +357,39 @@ def test_garmin_hrv_row_propagates_to_daily_record_passive_hrv_ms(db_session):
         morning_readiness=3, sleep_quality=3, fatigue=5, motivation=5, life_load=3)
     record = submit_am(body=body, current_user=user, db=db_session)
 
-    assert record.passive_hrv_ms == 47.0
+    assert record.passive_hrv_ms is None
+
+
+# ── G4: MCP readiness reads the AEST wake-day, not the UTC date ────────────────
+def test_g4_mcp_readiness_wake_day_is_aest_at_0700():
+    """At 07:00 AEST the UTC date is still yesterday. The readiness read keys on the
+    Brisbane wake-day, so under the same-wake-day gate it reads TODAY's night."""
+    from mcp_server import _aest_wake_day
+
+    seven_am_aest_as_utc = datetime(2026, 9, 23, 21, 0, tzinfo=timezone.utc)  # 07:00 +10
+    assert seven_am_aest_as_utc.date() == date(2026, 9, 23)          # the old (wrong) key
+    assert _aest_wake_day(seven_am_aest_as_utc) == date(2026, 9, 24)
+
+
+def test_g4_mcp_readiness_snapshot_uses_the_aest_helper():
+    """Structural pin: the readiness tool body passes the AEST wake-day to hrv_deviation,
+    never `datetime.now(timezone.utc).date()` (the tool body needs Postgres, so this reads
+    its source the way the other mcp tests pin tool bodies)."""
+    import inspect as _inspect
+    import mcp_server
+
+    src = _inspect.getsource(mcp_server.get_readiness_snapshot)
+    dev_call = src[src.index("hrv_deviation("):src.index("representative_source(_dev)")]
+    assert "_wake_day" in dev_call
+    assert "timezone.utc" not in dev_call
+
+
+def test_mcp_readiness_hrv_line_never_prints_a_stale_number():
+    from mcp_server import _readiness_hrv_line
+
+    wd = date(2026, 9, 24)
+    stale = {"stale_sources": [{"source": "samsung", "last_captured_at": date(2026, 9, 4)}]}
+    line = _readiness_hrv_line(None, stale, wd)
+    assert "113" not in line and "—" in line and "samsung 2026-09-04" in line
+    rep = {"source": "garmin", "rmssd": 62.4}
+    assert _readiness_hrv_line(rep, {"stale_sources": []}, wd) == "  HRV: 62 ms (garmin, 2026-09-24)"

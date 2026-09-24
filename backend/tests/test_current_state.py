@@ -170,7 +170,11 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     db_session.add(fort)
     db_session.commit()
 
-    base_day = date(2026, 6, 28)
+    # Ends ON `today` (7/4): the #NEXT recency gate admits a source to the deviation model
+    # only with a same-wake-day reading, so a series ending before `today` would yield no
+    # baseline and silently drop the block this guard exercises. (Was 6/28 → 7/2.) Both
+    # renderers receive the same Samsung rows, so the shift is parity-neutral.
+    base_day = date(2026, 6, 30)
     for i in range(5):
         db_session.add(models.SamsungHRVReading(
             user_id=user.id,
