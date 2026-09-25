@@ -2371,20 +2371,6 @@ Raised 2026-09-24 with #327 (nit accepted, not fixed there). #327 moved the read
 
 ---
 
-## Q172. S7 — which diary entry-side fields may each HC source's session start fill?
-
-Raised 2026-09-25 with the HC sleep-clocks decision (#328). `health_connect_syncs` now persists `sleep_start` / `sleep_onset` / `sleep_end` with per-endpoint writer packages. Nothing maps start or onset to `got_into_bed` / `lights_out` / `out_of_bed` (#127). Whether a device's "start" means into-bed, lights-out, onset, or none of them differs by writer and is unmeasured.
-
-**Evidence owed (report only, after release and the operator's 30-day deep sync, HCA `handleSync(30)`):**
-- For each night with a recalled diary, compute in minutes: `sleep_start − got_into_bed`, `sleep_start − lights_out`, `sleep_onset − lights_out`, `sleep_end − final_wake`.
-- Group start-based deltas by `sleep_start_source_package` and end deltas by `sleep_end_source_package`, with median and IQR per source.
-- Report mixed-writer nights (start writer ≠ end writer) separately, never pooled.
-- Where a same-day Samsung scrape exists, also compare the scraped bedtime with `sleep_start`.
-
-**To decide:** a per-source table of which entry-side fields that source's start or onset may prefill (possibly none).
-
-**State:** OWED. Blocked on the migration's release and a 30-day re-sync.
-
 ## Q173. S8 — latest-row readers of the dead ring table and the HC aggregate that reach a surface
 
 Raised 2026-09-25 with the HC sleep-clocks decision (#328). This is an audit (the table is in PR2's description), and no reader is fixed there. Several user- and coach-facing readers take the newest `samsung_hrv_readings` row, or a window of it, with no same-day gate. The ring scraper has been dead since 2026-09-14. The sharpest case is the MCP readiness snapshot's "Latest biometrics (<date>)" block, which sits under "TODAY'S READINESS SNAPSHOT" with 2026-09-14 sleep/SpO2 values. It is dated, but headlined as today.
@@ -2402,6 +2388,24 @@ Raised 2026-09-25 with the HC sleep-clocks decision (#328), accepted as #259 rul
 **To decide:** whether `SLEEPING` counts as asleep for TST, period selection and onset (and how it combines with a detailed-stage writer on the same night), or whether a SLEEPING-only writer is treated as stageless.
 
 **State:** OPEN. Latent; no current writer triggers it.
+
+---
+
+## Q175. Device identity for HC sleep sessions — persist the recording device so per-source rules key on it
+
+Raised 2026-09-25 with #329. Per-source sleep rulings must key on the **recording device**: Samsung Health relays other devices' sessions (09-16), so `sourcePackage` is the writer app, not the device. The device is not on the wire for sleep. HCA's `fetchSleepData` mapper (`healthConnect.js` L227–234) sends only `startTime`, `endTime`, `stages`, `durationMinutes` and `sourcePackage`, and drops the library's `metadata.device`, `recordingMethod` and `id`. The exercise mapper does forward them; per #35, Samsung Health leaves them at their UNKNOWN sentinels there. The backend's `extra="allow"` would retain them if sent.
+
+**To decide:** add `metadata.device` (manufacturer/model/type), `recordingMethod` and `id` to HCA's sleep mapper, and persist a per-endpoint device alongside `sleep_*_source_package`. Settle first whether relaying writers populate the device at all (the #35 sentinels suggest Samsung Health may not).
+
+**State:** OPEN. Needs an HCA change and a schema migration (hold (a)).
+
+## Q176. Ring validation window at ring return — suspend the ring `got_into_bed` prefill for about 10 nights and re-run S7
+
+Raised 2026-09-25 with #329. The ring and Samsung start semantics are unruled because the diary evidence is contaminated: `got_into_bed` was prefilled from the ring itself (circular) or corrected selectively (biased).
+
+**To decide:** when the ring returns, suspend the ring `got_into_bed` prefill for about 10 nights (recall-only entry), then re-run S7 on those independent nights and rule on the ring's start per recording device (Q175).
+
+**State:** OWED. Triggered by the ring returning.
 
 ---
 
@@ -4921,3 +4925,27 @@ Raised 2026-09-23 after #322. Prod read, 23 Sep: from finals through the decompr
 **Build:** one held migration (the marker table, hold (a), SCHEMA.md in the same commit) plus read-time consumers for metabolic and felt load. No CBT-I change. The residual CBT-I risk (an unrecorded late session scored as an adherence miss) has no capture path on master → raised as Q170.
 
 **State:** DONE → #326. Marker-only; CBT-I out of scope; metabolic read-time tag; felt-load read-time exclusion. Build follows the migration review.
+
+---
+
+## Q172. S7 — which diary entry-side fields may each HC source's session start fill?
+
+Raised 2026-09-25 with the HC sleep-clocks decision (#328). `health_connect_syncs` now persists `sleep_start` / `sleep_onset` / `sleep_end` with per-endpoint writer packages. Nothing maps start or onset to `got_into_bed` / `lights_out` / `out_of_bed` (#127). Whether a device's "start" means into-bed, lights-out, onset, or none of them differs by writer and is unmeasured.
+
+**Evidence owed (report only, after release and the operator's 30-day deep sync, HCA `handleSync(30)`):**
+- For each night with a recalled diary, compute in minutes: `sleep_start − got_into_bed`, `sleep_start − lights_out`, `sleep_onset − lights_out`, `sleep_end − final_wake`.
+- Group start-based deltas by `sleep_start_source_package` and end deltas by `sleep_end_source_package`, with median and IQR per source.
+- Report mixed-writer nights (start writer ≠ end writer) separately, never pooled.
+- Where a same-day Samsung scrape exists, also compare the scraped bedtime with `sleep_start`.
+
+**To decide:** a per-source table of which entry-side fields that source's start or onset may prefill (possibly none).
+
+**Evidence (operator S7 run, 2026-09-25, 25 nights):**
+- Garmin, independent-diary nights 09-16..09-24: `start − (lights_out + recalled SOL)` = −5, −5, +17, +1, +4, 0 (09-16 −20). So Garmin start ≈ sleep onset.
+- `end − final_wake` = 0, 0, 2, −1, −4, 0. So Garmin end is validated as final wake.
+- 09-19: the diary `final_wake` of 06:00 is true (woke about 03:55, back to bed, slept to 06:00), but the HC end was 03:55. The record-sources query found one Garmin session only: the re-sleep never reached HC.
+- Ring nights: `got_into_bed` was prefilled from the same source (circular) or selectively corrected (biased), so no ruling is possible.
+- 09-16: the start writer was `com.sec.android.app.shealth` while the ring was dead. Samsung Health relays other devices' sessions, so the writer package is not the recording device.
+- 08-26: the main-period start was 04:22 against `got_into_bed` 22:35. A main period can be a late fragment.
+
+**State:** DONE → #329. Garmin start = onset and fills no entry-side field. Garmin end is validated for `final_wake`. Ring and Samsung are unruled (#127 stands; validation window Q176). Future rules key on the recording device (Q175). Any start-based prefill must guard against a late-fragment main period.
