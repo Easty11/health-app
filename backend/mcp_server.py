@@ -329,6 +329,15 @@ _CBTI_DIARY_COLS = (
     "diary_tst_min", "diary_se_pct",
 )
 
+# Output labels where the column name misstates the unit. The waking-cause columns hold
+# MINUTES of waso_min by cause, not counts (#332); the rename is owed as a migration, so
+# the served header says what the value is.
+_CBTI_DIARY_LABELS = {
+    "wakings_nocturia_n": "waso_nocturia_min",
+    "wakings_pain_n": "waso_pain_min",
+    "wakings_spontaneous_n": "waso_spontaneous_min",
+}
+
 _CBTI_DIARY_SQL = (
     "SELECT date, " + ", ".join(_CBTI_DIARY_COLS) + " FROM daily_records "
     "WHERE user_id = :user_id AND date >= :since ORDER BY date"
@@ -423,11 +432,13 @@ def _format_cbti_diary(data: dict[str, list[dict]], since: date, days: int) -> s
         "cbti_isi ledger. No sensor-derived fields (I1).",
         "Night = wake date. naps_min = nap logged the previous afternoon (belongs to this "
         "night, #219). Diary clocks may have been accepted from a prefill (final_wake from "
-        "HC sleep_end since #328); prefill provenance is not stored.",
+        "HC sleep_end since #328); prefill provenance is not stored. waso_*_min = minutes "
+        "of waso_min by cause (not counts; night_wakings_n is the count).",
         "",
         "== Nightly diary ==",
     ]
-    header = ["date", "rx_id", "rx_lights_out", "rx_wake_anchor"] + list(_CBTI_DIARY_COLS)
+    header = ["date", "rx_id", "rx_lights_out", "rx_wake_anchor"] + [
+        _CBTI_DIARY_LABELS.get(c, c) for c in _CBTI_DIARY_COLS]
     lines.append(" | ".join(header))
 
     served = 0
@@ -511,7 +522,7 @@ def _format_cbti_diary(data: dict[str, list[dict]], since: date, days: int) -> s
 def get_cbti_diary(days: int = 42) -> str:
     """CBT-I sleep diary for the last N nights, read-only: per night (wake date) the
     prescription in force (prescribed lights-out + wake anchor), got_into_bed, lights_out,
-    sleep latency, WASO, night wakings split by cause (nocturia / pain / spontaneous),
+    sleep latency, WASO and its minutes by cause (nocturia / pain / spontaneous), wakings count,
     final wake, out of bed, naps, alcohol units, and the diary's own TST and SE. Also the
     full block + prescription ledger and ISI history. Recall-diary and ledger columns
     only — no sensor-derived sleep data (I1)."""

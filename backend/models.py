@@ -185,8 +185,11 @@ class DailyRecord(Base):
     )
     diary_se_pct: Mapped[float | None] = mapped_column(Float, nullable=True)          # frozen at AM; same contract as naive_baseline
     diary_tst_min: Mapped[int | None] = mapped_column(Integer, nullable=True)         # frozen at AM; same contract as naive_baseline
-    # Waking-cause decomposition of night_wakings_n (nocturia/pain/spontaneous).
-    # OBSERVATIONAL ONLY — the titration engine must not read these (grep -rn
+    # Waking-cause decomposition of the time awake: MINUTES of waso_min by cause
+    # (nocturia/pain/spontaneous), NOT a split of night_wakings_n (#332). The `_n` names
+    # are historical — the form never said which unit, and every entry since block 3 opened
+    # [cbti_blocks.id 2] was minutes summing to waso_min, so the semantics followed the data;
+    # a rename to *_min is a migration, owed separately (Q178). OBSERVATIONAL ONLY — the titration engine must not read these (grep -rn
     # 'wakings_' cbti/ stays empty). No sum constraint: recall is imperfect and
     # enforcement would block submission; consistency is surfaced, not enforced.
     wakings_nocturia_n: Mapped[int | None] = mapped_column(Integer, nullable=True)

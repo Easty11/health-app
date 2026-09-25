@@ -289,7 +289,8 @@ class AMCheckInIn(BaseModel):
     night_wakings_n: Optional[int] = None
     final_wake: Optional[str] = None
     out_of_bed: Optional[str] = None
-    # waking-cause decomposition (observational; engine must not read)
+    # MINUTES of waso_min by cause, not counts — `_n` names are historical (#332).
+    # Observational; the engine must not read them.
     wakings_nocturia_n: Optional[int] = None
     wakings_pain_n: Optional[int] = None
     wakings_spontaneous_n: Optional[int] = None
@@ -407,7 +408,12 @@ def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
     return CBTIContextOut(
         block_open=True,
         block_id=block.id,
-        wake_anchor=block.wake_anchor,
+        # The anchor comes from the SAME row as lights-out and window (#331). It used to
+        # read `block.wake_anchor` — the block's OPENING anchor, frozen append-only — so once
+        # rx 11 moved the anchor 05:45 -> 05:00 the screen showed 21:48-05:45 while the
+        # ledger and engine titrated on 05:00, and every window understated the one run by
+        # 45 min. The block anchor is only the fallback when no prescription is in force.
+        wake_anchor=rx.wake_anchor if rx else block.wake_anchor,
         prescribed_lights_out=rx.prescribed_lights_out if rx else None,
         window_minutes=rx.window_minutes if rx else None,
         effective_from=rx.effective_from if rx else None,
