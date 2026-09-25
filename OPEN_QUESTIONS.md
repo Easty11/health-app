@@ -2371,6 +2371,40 @@ Raised 2026-09-24 with #327 (nit accepted, not fixed there). #327 moved the read
 
 ---
 
+## Q172. S7 — which diary entry-side fields may each HC source's session start fill?
+
+Raised 2026-09-25 with the HC sleep-clocks decision (#328). `health_connect_syncs` now persists `sleep_start` / `sleep_onset` / `sleep_end` with per-endpoint writer packages. Nothing maps start or onset to `got_into_bed` / `lights_out` / `out_of_bed` (#127). Whether a device's "start" means into-bed, lights-out, onset, or none of them differs by writer and is unmeasured.
+
+**Evidence owed (report only, after release and the operator's 30-day deep sync, HCA `handleSync(30)`):**
+- For each night with a recalled diary, compute in minutes: `sleep_start − got_into_bed`, `sleep_start − lights_out`, `sleep_onset − lights_out`, `sleep_end − final_wake`.
+- Group start-based deltas by `sleep_start_source_package` and end deltas by `sleep_end_source_package`, with median and IQR per source.
+- Report mixed-writer nights (start writer ≠ end writer) separately, never pooled.
+- Where a same-day Samsung scrape exists, also compare the scraped bedtime with `sleep_start`.
+
+**To decide:** a per-source table of which entry-side fields that source's start or onset may prefill (possibly none).
+
+**State:** OWED. Blocked on the migration's release and a 30-day re-sync.
+
+## Q173. S8 — latest-row readers of the dead ring table and the HC aggregate that reach a surface
+
+Raised 2026-09-25 with the HC sleep-clocks decision (#328). This is an audit (the table is in PR2's description), and no reader is fixed there. Several user- and coach-facing readers take the newest `samsung_hrv_readings` row, or a window of it, with no same-day gate. The ring scraper has been dead since 2026-09-14. The sharpest case is the MCP readiness snapshot's "Latest biometrics (<date>)" block, which sits under "TODAY'S READINESS SNAPSHOT" with 2026-09-14 sleep/SpO2 values. It is dated, but headlined as today.
+
+**To decide:** per reader, gate to same-day, keep dated but re-headline, or retire now that the ring is returning (the scraper stays the ring-HRV path).
+
+**State:** OPEN.
+
+---
+
+## Q174. Generic SLEEPING (stage 2) is outside the asleep set: a SLEEPING-only writer yields TST 0
+
+Raised 2026-09-25 with the HC sleep-clocks decision (#328), accepted as #259 ruling 1. `_ASLEEP_STAGES` (#254/#256) is LIGHT/DEEP/REM. Health Connect's generic `SLEEPING` (2) is not in it. So a writer that emits only `SLEEPING` stages contributes no asleep minutes. Its night has TST 0, no main period is selected on asleep time, and `sleep_onset` is NULL. This is pre-existing and latent: Garmin and Samsung Health both write detailed stages. It is not fixed with the clocks because it changes #256's TST semantics.
+
+**To decide:** whether `SLEEPING` counts as asleep for TST, period selection and onset (and how it combines with a detailed-stage writer on the same night), or whether a SLEEPING-only writer is treated as stageless.
+
+**State:** OPEN. Latent; no current writer triggers it.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the

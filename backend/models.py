@@ -235,6 +235,19 @@ class HealthConnectSync(Base):
     rem_sleep_minutes: Mapped[int | None] = mapped_column(Integer)
     light_sleep_minutes: Mapped[int | None] = mapped_column(Integer)
 
+    # Session clocks of the night's MAIN sleep period (#328, source-agnostic): the same
+    # period the duration comes from (#254/#256). start/end = earliest/latest segment edge,
+    # each tagged with the writer package of the segment that supplies it (a night can span
+    # two writers). onset = first ASLEEP stage from a REAL stage record — a stageless
+    # session's synthetic span never counts, so it is NULL when no real stages exist.
+    # The per-source MEANING of `sleep_start` is not ruled (S7); nothing reads it as
+    # got_into_bed / lights_out yet.
+    sleep_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sleep_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sleep_onset: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sleep_start_source_package: Mapped[str | None] = mapped_column(String)
+    sleep_end_source_package: Mapped[str | None] = mapped_column(String)
+
     active_calories: Mapped[int | None] = mapped_column(Integer)
     distance_meters: Mapped[int | None] = mapped_column(Integer)
     oxygen_saturation: Mapped[float | None] = mapped_column(Float)

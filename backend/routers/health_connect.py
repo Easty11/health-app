@@ -789,6 +789,40 @@ def _union_minutes(intervals) -> int:
     return int(_interval_seconds(_merge_intervals(intervals)) // 60)
 
 
+class _SyntheticSpan(tuple):
+    """A stageless session's whole span, standing in as one LIGHT segment so its sleep
+    time is not lost (#254). Unpacks exactly like a real segment tuple — every duration
+    consumer is unchanged — but is distinguishable, so session-clock onset (#328) never
+    reads a synthetic span as a real stage."""
+
+
+def _period_clocks(period) -> dict:
+    """Session clocks of a sleep period (#328), source-agnostic.
+
+    sleep_start / sleep_end = earliest / latest segment edge, each with the writer package
+    of the segment that supplies it (per-endpoint: a period can span two writers). On an
+    exact tie, the lexically-first package wins (deterministic). sleep_onset = start of the
+    first ASLEEP (LIGHT/DEEP/REM — the #254 TST set) segment from a REAL stage record;
+    NULL when there is none. Instants are stored as timezone-aware UTC."""
+    first = min(period, key=lambda s: (s[0], s[3]))
+    end = max(s[1] for s in period)
+    last = min((s for s in period if s[1] == end), key=lambda s: s[3])
+    real_asleep = [s for s in period
+                   if not isinstance(s, _SyntheticSpan) and s[2] in _ASLEEP_STAGES]
+    onset = min((s[0] for s in real_asleep), default=None)
+
+    def _utc(dt):
+        return dt.astimezone(timezone.utc) if dt is not None else None
+
+    return {
+        "sleep_start": _utc(first[0]),
+        "sleep_start_source_package": first[3],
+        "sleep_end": _utc(last[1]),
+        "sleep_end_source_package": last[3],
+        "sleep_onset": _utc(onset),
+    }
+
+
 def _cluster_periods(
     segments: list[tuple[datetime, datetime, int, str]],
 ) -> list[list[tuple[datetime, datetime, int, str]]]:
@@ -950,7 +984,7 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
             else:
                 a, b = _parse_dt(s.startTime), _parse_dt(s.endTime)
                 if a and b and b > a:
-                    segments.append((a, b, int(SLEEP_STAGE_LIGHT), src))
+                    segments.append(_SyntheticSpan((a, b, int(SLEEP_STAGE_LIGHT), src)))
 
         if segments:
             # Cluster into periods by coverage continuity; the main period is the
@@ -978,6 +1012,10 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
             row["rem_sleep_minutes"] = rem
             row["light_sleep_minutes"] = light
             row["sleep_score"] = _sleep_score(deep, rem, tst)
+            # Session clocks of the SAME main period (#328) — persisted source-agnostically;
+            # no per-device branch. The meaning of `sleep_start` per source is ruled later
+            # from evidence (S7) and nothing maps it to a diary entry-side field yet.
+            row.update(_period_clocks(main))
 
     # Oxygen saturation — average for the day
     day_spo2 = [r for r in payload.oxygenSaturation if r.percentage and _parse_date(r.time) == day]
