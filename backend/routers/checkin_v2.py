@@ -569,6 +569,36 @@ def _get_or_create(user_id: int, for_date: date, db: Session) -> models.DailyRec
     return record
 
 
+# Display name for a Health Connect writer package — a LABEL lookup only, never a
+# behavioural branch (S6). An unlisted package shows as "Health Connect" rather than a raw
+# package id. Package ids per CLAUDE.md § Tooling (Samsung Health is
+# com.sec.android.app.shealth).
+_HC_PACKAGE_LABELS = {
+    "com.garmin.android.apps.connectmobile": "Garmin",
+    "com.sec.android.app.shealth": "Samsung Health",
+}
+
+
+def _hc_final_wake(user_id: int, today: date, db: Session) -> Optional[tuple[str, str]]:
+    """(local "HH:MM", device label) of TODAY's HC main-period `sleep_end`, or None.
+
+    Wake-day row only (`date == today` — same-day, S3/#327). The stored instant is UTC;
+    rendered in the operator-local (Brisbane) zone, so a session ending 06:00 AEST
+    prefills "06:00" (G7). A naive value (SQLite test path) is treated as UTC."""
+    row = (
+        db.query(models.HealthConnectSync)
+        .filter_by(user_id=user_id, date=today)
+        .first()
+    )
+    if row is None or row.sleep_end is None:
+        return None
+    end = row.sleep_end
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    pkg = row.sleep_end_source_package
+    return end.astimezone(AEST).strftime("%H:%M"), _HC_PACKAGE_LABELS.get(pkg, "Health Connect")
+
+
 # ── endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("/prefill", response_model=AMPrefillOut)
@@ -604,6 +634,16 @@ def get_prefill(
             diary_prefill = _diary_prefill(
                 sam.bedtime, sam.wake_time, cbti_ctx.prescribed_lights_out
             )
+        # S6 (#NEXT): final_wake from TODAY's HC main-period sleep_end, whatever the writer;
+        # the same-day Samsung scrape above is the fallback. Entry-side fields
+        # (got_into_bed / lights_out / out_of_bed) are never filled from HC (#127; the
+        # per-source meaning of session start is unruled, S7). No per-device branch: the
+        # label is a lookup on the stored writer package.
+        hc_wake = _hc_final_wake(current_user.id, today, db)
+        if hc_wake is not None:
+            clock, label = hc_wake
+            diary_prefill.final_wake = clock
+            diary_prefill.sources = {**diary_prefill.sources, "final_wake": label}
 
     return AMPrefillOut(
         **hrv,
