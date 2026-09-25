@@ -792,12 +792,12 @@ def _union_minutes(intervals) -> int:
 class _SyntheticSpan(tuple):
     """A stageless session's whole span, standing in as one LIGHT segment so its sleep
     time is not lost (#254). Unpacks exactly like a real segment tuple — every duration
-    consumer is unchanged — but is distinguishable, so session-clock onset (#NEXT) never
+    consumer is unchanged — but is distinguishable, so session-clock onset (#328) never
     reads a synthetic span as a real stage."""
 
 
 def _period_clocks(period) -> dict:
-    """Session clocks of a sleep period (#NEXT), source-agnostic.
+    """Session clocks of a sleep period (#328), source-agnostic.
 
     sleep_start / sleep_end = earliest / latest segment edge, each with the writer package
     of the segment that supplies it (per-endpoint: a period can span two writers). On an
@@ -1012,7 +1012,7 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
             row["rem_sleep_minutes"] = rem
             row["light_sleep_minutes"] = light
             row["sleep_score"] = _sleep_score(deep, rem, tst)
-            # Session clocks of the SAME main period (#NEXT) — persisted source-agnostically;
+            # Session clocks of the SAME main period (#328) — persisted source-agnostically;
             # no per-device branch. The meaning of `sleep_start` per source is ruled later
             # from evidence (S7) and nothing maps it to a diary entry-side field yet.
             row.update(_period_clocks(main))

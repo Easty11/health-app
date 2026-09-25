@@ -1,10 +1,10 @@
 """add health_connect_syncs sleep session clocks (source-agnostic)
 
-HOLD FOR OPERATOR RELEASE (CLAUDE.md § Merge disposition, hold (a)). Additive, all
+Released by the operator 2026-09-25 (hold (a) lifted, #328). Additive, all
 nullable, no backfill — historical rows fill on the next re-sync (the operator's 30-day
 deep sync, HCA SyncScreen.handleSync(30), repopulates the window).
 
-Adds the clocks of the night's MAIN sleep period (#NEXT) — the same period the duration
+Adds the clocks of the night's MAIN sleep period (#328) — the same period the duration
 already comes from (#254/#256):
   * sleep_start / sleep_end (timestamptz): earliest / latest segment edge of the period.
   * sleep_start_source_package / sleep_end_source_package (text): the writer package of

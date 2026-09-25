@@ -1,4 +1,4 @@
-"""HC sleep session clocks, persisted source-agnostically (#NEXT, sleep brief PR2).
+"""HC sleep session clocks, persisted source-agnostically (#328, sleep brief PR2).
 
 The night's MAIN period (#254/#256 — the one the duration comes from) now also yields
 `sleep_start` / `sleep_end` (earliest / latest segment edge, each tagged with the writer

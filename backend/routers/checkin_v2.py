@@ -634,7 +634,7 @@ def get_prefill(
             diary_prefill = _diary_prefill(
                 sam.bedtime, sam.wake_time, cbti_ctx.prescribed_lights_out
             )
-        # S6 (#NEXT): final_wake from TODAY's HC main-period sleep_end, whatever the writer;
+        # S6 (#328): final_wake from TODAY's HC main-period sleep_end, whatever the writer;
         # the same-day Samsung scrape above is the fallback. Entry-side fields
         # (got_into_bed / lights_out / out_of_bed) are never filled from HC (#127; the
         # per-source meaning of session start is unruled, S7). No per-device branch: the

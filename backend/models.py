@@ -235,7 +235,7 @@ class HealthConnectSync(Base):
     rem_sleep_minutes: Mapped[int | None] = mapped_column(Integer)
     light_sleep_minutes: Mapped[int | None] = mapped_column(Integer)
 
-    # Session clocks of the night's MAIN sleep period (#NEXT, source-agnostic): the same
+    # Session clocks of the night's MAIN sleep period (#328, source-agnostic): the same
     # period the duration comes from (#254/#256). start/end = earliest/latest segment edge,
     # each tagged with the writer package of the segment that supplies it (a night can span
     # two writers). onset = first ASLEEP stage from a REAL stage record — a stageless
