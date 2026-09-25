@@ -643,7 +643,12 @@ def get_prefill(
         if hc_wake is not None:
             clock, label = hc_wake
             diary_prefill.final_wake = clock
-            diary_prefill.sources = {**diary_prefill.sources, "final_wake": label}
+            # out_of_bed comes from the scrape ONLY alongside a scrape-supplied final_wake
+            # (#259 ruling): mixing sources could give out_of_bed < final_wake — time in bed
+            # ending before wake, a corrupt diary SE. With an HC wake it is left for entry.
+            diary_prefill.out_of_bed = None
+            sources = {k: v for k, v in diary_prefill.sources.items() if k != "out_of_bed"}
+            diary_prefill.sources = {**sources, "final_wake": label}
 
     return AMPrefillOut(
         **hrv,

@@ -188,3 +188,37 @@ def test_yesterdays_hc_clock_never_prefills_today(db_session):
            _payload(_night(day - timedelta(days=1), _GARMIN)))
     dp = get_prefill(current_user=u, db=db_session).diary_prefill
     assert dp.final_wake is None and dp.sources == {}
+
+
+# ── Amendment (#259 ruling 3): out_of_bed only with a scrape-supplied final_wake ──
+def _scrape(db, uid, day, *, bed="22:35", wake="06:00"):
+    db.add(models.SamsungHRVReading(user_id=uid, captured_at=day, bedtime=bed,
+                                    wake_time=wake, context="passive_overnight"))
+    db.commit()
+
+
+def test_hc_final_wake_leaves_out_of_bed_empty_even_with_a_same_day_scrape(db_session):
+    """HC final_wake 06:12 + a same-day ring scrape waking 06:00 → out_of_bed EMPTY. Mixed
+    sources could otherwise give out_of_bed (06:00) < final_wake (06:12): time in bed ending
+    before wake corrupts diary SE. got_into_bed still comes from the scrape (unchanged)."""
+    day = _today_aest()
+    u = _user(db_session, "mix@x.io")
+    _open_block(db_session, u.id)
+    _scrape(db_session, u.id, day, wake="06:00")
+    _store(db_session, u.id, day, _payload(_night(day, _GARMIN, wake="06:12")))
+
+    dp = get_prefill(current_user=u, db=db_session).diary_prefill
+    assert dp.final_wake == "06:12" and dp.sources["final_wake"] == "Garmin"
+    assert dp.out_of_bed is None and "out_of_bed" not in dp.sources
+    assert dp.got_into_bed == "22:35" and dp.sources["got_into_bed"] == "Galaxy Ring"
+
+
+def test_scrape_only_night_fills_final_wake_and_out_of_bed_from_the_scrape(db_session):
+    day = _today_aest()
+    u = _user(db_session, "scr@x.io")
+    _open_block(db_session, u.id)
+    _scrape(db_session, u.id, day, wake="06:00")
+
+    dp = get_prefill(current_user=u, db=db_session).diary_prefill
+    assert (dp.final_wake, dp.out_of_bed) == ("06:00", "06:00")
+    assert dp.sources["final_wake"] == dp.sources["out_of_bed"] == "Galaxy Ring"
