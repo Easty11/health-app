@@ -315,6 +315,214 @@ def get_checkin_history(days: int = 30) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Tool 2b — CBT-I sleep diary + prescription ledger + ISI (read-only, #330)
+# ---------------------------------------------------------------------------
+
+# The diary columns served, in output order. I1 sensor firewall: CBT-I reads the recall
+# diary and its ledger ONLY — never passive_*, health_connect_syncs, samsung_* or
+# hrv_readings. This tuple IS the whole daily_records projection (the SELECT is built
+# from it), so a sensor column can only arrive by being named here.
+_CBTI_DIARY_COLS = (
+    "got_into_bed", "lights_out", "sleep_latency_min", "waso_min",
+    "night_wakings_n", "wakings_nocturia_n", "wakings_pain_n", "wakings_spontaneous_n",
+    "final_wake", "out_of_bed", "naps_min", "alcohol_units",
+    "diary_tst_min", "diary_se_pct",
+)
+
+_CBTI_DIARY_SQL = (
+    "SELECT date, " + ", ".join(_CBTI_DIARY_COLS) + " FROM daily_records "
+    "WHERE user_id = :user_id AND date >= :since ORDER BY date"
+)
+_CBTI_BLOCKS_SQL = (
+    "SELECT id, opened_on, closed_on, wake_anchor, open_reason, close_reason, "
+    "exit_tst_min, exit_se_pct FROM cbti_blocks WHERE user_id = :user_id "
+    "ORDER BY opened_on, id"
+)
+# cbti_prescriptions / cbti_isi carry no user_id — scoped through their block. A screening
+# ISI with block_id NULL is therefore unattributable and not served (said in the output).
+_CBTI_RX_SQL = (
+    "SELECT p.id, p.block_id, p.effective_from, p.effective_to, p.prescribed_lights_out, "
+    "p.wake_anchor, p.window_minutes, p.decision, p.basis_tst_min, p.basis_se_pct, "
+    "p.basis_nights_n, p.basis_n_diary, p.basis_n_samsung, p.rationale "
+    "FROM cbti_prescriptions p JOIN cbti_blocks b ON b.id = p.block_id "
+    "WHERE b.user_id = :user_id ORDER BY p.effective_from, p.id"
+)
+_CBTI_ISI_SQL = (
+    "SELECT i.block_id, i.administered_at, i.timepoint, i.item_1, i.item_2, i.item_3, "
+    "i.item_4, i.item_5, i.item_6, i.item_7, i.total_reported, i.administered_via "
+    "FROM cbti_isi i JOIN cbti_blocks b ON b.id = i.block_id "
+    "WHERE b.user_id = :user_id ORDER BY i.administered_at"
+)
+
+
+def _as_date_val(v) -> date | None:
+    if v is None or isinstance(v, date) and not isinstance(v, datetime):
+        return v
+    if isinstance(v, datetime):
+        return v.date()
+    return date.fromisoformat(str(v)[:10])
+
+
+def _load_cbti_diary(conn, user_id: int, since: date) -> dict[str, list[dict]]:
+    """Run the four read-only CBT-I queries on `conn`. Fetches from `since - 1` so the
+    formatter can attribute the previous afternoon's nap to the first night served."""
+    def rows(sql, **params):
+        result = conn.execute(text(sql), {"user_id": user_id, **params})
+        cols = list(result.keys())
+        return [dict(zip(cols, r)) for r in result.fetchall()]
+
+    return {
+        "nights": rows(_CBTI_DIARY_SQL, since=since - timedelta(days=1)),
+        "blocks": rows(_CBTI_BLOCKS_SQL),
+        "prescriptions": rows(_CBTI_RX_SQL),
+        "isi": rows(_CBTI_ISI_SQL),
+    }
+
+
+def _rx_in_force(night: date, rxs: list[dict]) -> dict | None:
+    """The prescription governing the night that ends on wake-date `night`: the latest
+    `effective_from <= night`, unless its `effective_to` has already passed (a gap between
+    blocks has no prescription). Same span rule as cbti.replay: a successor's
+    effective_from is a hard wall."""
+    live = None
+    for rx in sorted(rxs, key=lambda r: (_as_date_val(r["effective_from"]), r["id"])):
+        if _as_date_val(rx["effective_from"]) <= night:
+            live = rx
+    if live is None:
+        return None
+    to = _as_date_val(live["effective_to"])
+    return None if to is not None and night > to else live
+
+
+def _fmt(v, spec: str = "") -> str:
+    if v is None:
+        return "—"
+    return format(v, spec) if spec else str(v)
+
+
+def _one_line(s) -> str:
+    return " ".join(str(s).split()) if s else "—"
+
+
+def _format_cbti_diary(data: dict[str, list[dict]], since: date, days: int) -> str:
+    """Render the diary, ledger and ISI (pure; testable). Only `_CBTI_DIARY_COLS` are
+    rendered from a night row — any other key is ignored, so the I1 firewall holds at the
+    formatter too, not only at the SELECT.
+
+    Night = wake date (the AM record's date). `naps_min` on night D is the value logged at
+    PM on D-1 (it belongs to the night terminating D; #219, the same read cbti.replay does)."""
+    nights = data.get("nights") or []
+    rxs = data.get("prescriptions") or []
+    blocks = data.get("blocks") or []
+    isi = data.get("isi") or []
+
+    naps_by_date = {_as_date_val(n["date"]): n.get("naps_min") for n in nights}
+    lines = [
+        f"CBT-I sleep diary — nights since {since} (last {days} days)",
+        "Source: daily_records recall-diary columns + cbti_blocks / cbti_prescriptions / "
+        "cbti_isi ledger. No sensor-derived fields (I1).",
+        "Night = wake date. naps_min = nap logged the previous afternoon (belongs to this "
+        "night, #219). Diary clocks may have been accepted from a prefill (final_wake from "
+        "HC sleep_end since #328); prefill provenance is not stored.",
+        "",
+        "== Nightly diary ==",
+    ]
+    header = ["date", "rx_id", "rx_lights_out", "rx_wake_anchor"] + list(_CBTI_DIARY_COLS)
+    lines.append(" | ".join(header))
+
+    served = 0
+    for n in nights:
+        d = _as_date_val(n["date"])
+        if d < since:
+            continue
+        vals = {c: n.get(c) for c in _CBTI_DIARY_COLS}
+        vals["naps_min"] = naps_by_date.get(d - timedelta(days=1))
+        # A daily_records row with no diary entry at all (ratings-only day) is not a night.
+        if all(vals[c] is None for c in _CBTI_DIARY_COLS if c != "naps_min"):
+            continue
+        rx = _rx_in_force(d, rxs)
+        cells = [
+            str(d),
+            _fmt(rx["id"]) if rx else "—",
+            _fmt(rx["prescribed_lights_out"]) if rx else "—",
+            _fmt(rx["wake_anchor"]) if rx else "—",
+        ] + [
+            _fmt(vals[c], ".1f") if c == "diary_se_pct" and vals[c] is not None else _fmt(vals[c])
+            for c in _CBTI_DIARY_COLS
+        ]
+        lines.append(" | ".join(cells))
+        served += 1
+    if served == 0:
+        lines.append(f"(no diary nights since {since})")
+
+    lines += ["", "== Blocks =="]
+    for b in blocks:
+        exit_se = _fmt(b["exit_se_pct"], ".1f")
+        lines.append(
+            f"block {b['id']}: {b['opened_on']} → {b['closed_on'] or 'open'} "
+            f"wake_anchor={b['wake_anchor']} exit_tst_min={_fmt(b['exit_tst_min'])} "
+            f"exit_se_pct={exit_se}"
+        )
+        lines.append(f"  open_reason: {_one_line(b['open_reason'])}")
+        if b["closed_on"]:
+            lines.append(f"  close_reason: {_one_line(b['close_reason'])}")
+    if not blocks:
+        lines.append("(no CBT-I blocks)")
+
+    lines += ["", "== Prescriptions =="]
+    for p in rxs:
+        lines.append(
+            f"rx {p['id']} [block {p['block_id']}] {p['effective_from']} → "
+            f"{p['effective_to'] or 'live'}: lights_out={p['prescribed_lights_out']} "
+            f"wake_anchor={p['wake_anchor']} window_min={p['window_minutes']} "
+            f"decision={p['decision']} basis_tst_min={_fmt(p['basis_tst_min'])} "
+            f"basis_se_pct={_fmt(p['basis_se_pct'], '.1f')} "
+            f"basis_nights={_fmt(p['basis_nights_n'])} "
+            f"(diary {_fmt(p['basis_n_diary'])}, device {_fmt(p['basis_n_samsung'])})"
+        )
+        lines.append(f"  rationale: {_one_line(p['rationale'])}")
+    if not rxs:
+        lines.append("(no prescriptions)")
+
+    lines += ["", "== ISI (Insomnia Severity Index) =="]
+    for i in isi:
+        items = [i[f"item_{k}"] for k in range(1, 8)]
+        at = i["administered_at"]
+        if isinstance(at, str):          # SQLite returns the timestamp as text
+            at = datetime.fromisoformat(at)
+        if isinstance(at, datetime):
+            at = (at if at.tzinfo else at.replace(tzinfo=timezone.utc)).astimezone(_AS_OF_TZ)
+            at = at.strftime("%Y-%m-%d %H:%M")
+        lines.append(
+            f"{at} [block {i['block_id']}, {i['timepoint']}] total={sum(items)} "
+            f"(reported {_fmt(i['total_reported'])}) items={items} "
+            f"via={_fmt(i['administered_via'])}"
+        )
+    if not isi:
+        lines.append("(no block-linked ISI administrations)")
+    lines.append("ISI total is the canonical item sum; screening ISIs not linked to a "
+                 "block are not served (no user scope).")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+@_stamped
+def get_cbti_diary(days: int = 42) -> str:
+    """CBT-I sleep diary for the last N nights, read-only: per night (wake date) the
+    prescription in force (prescribed lights-out + wake anchor), got_into_bed, lights_out,
+    sleep latency, WASO, night wakings split by cause (nocturia / pain / spontaneous),
+    final wake, out of bed, naps, alcohol units, and the diary's own TST and SE. Also the
+    full block + prescription ledger and ISI history. Recall-diary and ledger columns
+    only — no sensor-derived sleep data (I1)."""
+    user_id = _current_user_id()
+    since = _aest_wake_day() - timedelta(days=days)
+    with engine.connect() as conn:
+        data = _load_cbti_diary(conn, user_id, since)
+    return _format_cbti_diary(data, since, days)
+
+
+# ---------------------------------------------------------------------------
 # Tool 3 — Training sessions (aerobic/cardio)
 # ---------------------------------------------------------------------------
 

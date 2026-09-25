@@ -223,7 +223,7 @@ def test_create_makes_phase_folder_when_none_declared(db_session):
 _MCP_TOOL_NAMES = [
     "search_hevy_routines", "get_hevy_routine", "get_recovery_metrics", "get_checkin_history",
     "get_training_sessions", "get_hevy_workouts", "get_readiness_snapshot", "get_training_load",
-    "get_lab_results",
+    "get_lab_results", "get_cbti_diary",
 ]
 
 
