@@ -12248,3 +12248,27 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 **How you know.** Tests: `test_hrv_deviation` G1 (dead D-20 mature vs fresh D → fresh is representative; dead in `stale_sources`), G2 (only-dead → `sources[]` empty, representative None), D-1 strictness, contributing math unchanged. `test_hrv_consumption`: G2/G3 prefill, Save writes no HRV, G4 (07:00 AEST → 24th, not the UTC 23rd; structural pin on the tool body). `test_hrv_staleness`: G2 coach context with no HRV number, G3 pair in context, G5 grep, series canonical-over-forward-carry. Frontend `CheckInAM.passive.test.jsx` covers the "–" tile. Backend suite 1916 → 1931. The S5 migration is exercised separately on its own branch.
 
 **Do not revisit unless.** A backfill-combine need appears (combining a late-landing night into an earlier deviation). That is a new read with its own `for_date` semantics, not a relaxation of this gate. Or a source's wake-day attribution proves tz-split (`possible_tz_split` firing on real data), in which case fix the attribution upstream rather than widening the gate.
+
+### #NEXT. HC sleep session clocks persisted source-agnostically from the main period; per-endpoint writer; real-stage onset; start semantics ruled per source from evidence
+
+**Context.** The HC sync already carries each sleep session's `startTime`/`endTime`/`sourcePackage`, but only the duration and stage breakdown were derived; no clock was persisted. So the AM diary's `final_wake` could come only from the Samsung ring scrape, which has been dead since 2026-09-14. The night's duration is built from a clustered **main period** of stage segments across every session and writer that ends on the wake-day (#254/#256), not from any single session. So a night can span two writers.
+
+**Decision.**
+1. **Clocks from the main period, any writer.** `health_connect_syncs` gains `sleep_start` / `sleep_end` (the earliest / latest segment edge of the same main period the duration comes from), stored as UTC instants.
+2. **Per-endpoint writer.** `sleep_start_source_package` / `sleep_end_source_package` each carry the package of the segment that supplies that edge. A mixed-writer night is represented as it is, never collapsed to one writer. On an exact tie, the lexically first package wins.
+3. **Real-stage onset.** `sleep_onset` = the start of the first ASLEEP (LIGHT/DEEP/REM, the #254 TST set) segment from a real stage record. The synthetic LIGHT span a stageless session contributes to the duration never counts, so with no real stages `sleep_onset` is NULL.
+4. **Diary wake is source-agnostic.** `final_wake` prefills from today's `sleep_end` as local (AEST) `HH:MM`, whatever the writer. The same-day Samsung scrape is the fallback. The label is a package lookup, `sleep_end_source_package` → device name; no consumer branches per device.
+5. **Session-start meaning is per source and ruled from evidence.** Nothing maps `sleep_start` or `sleep_onset` to `got_into_bed` / `lights_out` / `out_of_bed` (#127 stands). S7 measures, per source, how start and onset relate to recalled diary entries, and a follow-up ruling decides which entry-side fields a source may fill (Q#NEXT).
+
+**Rationale.** Reading the clocks off the duration's own period means the stored start, end and duration always describe the same sleep. Per-endpoint writers keep the S7 evidence honest: a night that one writer starts and another ends is flagged, never pooled. Real-stage onset refuses to invent an onset a stageless session never measured. Deferring start semantics avoids repeating #127's failure mode (a device clock mistaken for a recalled moment) on a new device.
+
+**Status.** Chat-briefed 2026-09-25 (sleep brief PR2, S4–S6). Migration `f7a2c9e1d3b5` is HELD for operator release (hold (a)). PR1 (same-day gates, #327 extension) landed as `275f391`. S7 is a report owed after release plus a 30-day deep sync. S8 is an audit table in the PR, with readers not fixed here (Q#NEXT).
+
+**How you know.** `backend/tests/test_hc_sleep_clocks.py`:
+- G3 Garmin-only and G4 Samsung-Health-only nights take the identical path and are labelled by lookup.
+- G5 mixed-writer: start from the Samsung Health edge, end from the Garmin edge, end-writer label.
+- G6 onset: a real stage sets it; a stageless session gives NULL with the duration unchanged at 450.
+- G7: 06:00 AEST is stored as 20:00 UTC and prefilled as "06:00".
+- G3–G7 fail on master's code. Backend 1937 → 1945.
+
+**Do not revisit unless.** S7's evidence rules a source's `sleep_start` or `sleep_onset` fit for an entry-side diary field (then that field gains a per-source mapping, recorded as its own decision). Or the duration model's period selection changes, in which case the clocks follow it and are not re-derived separately.
