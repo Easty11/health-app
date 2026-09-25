@@ -419,3 +419,31 @@ def test_mcp_readiness_hrv_line_never_prints_a_stale_number():
     assert "113" not in line and "—" in line and "samsung 2026-09-04" in line
     rep = {"source": "garmin", "rmssd": 62.4}
     assert _readiness_hrv_line(rep, {"stale_sources": []}, wd) == "  HRV: 62 ms (garmin, 2026-09-24)"
+
+
+# ── G2 (S3): passive_sleep_min is SAME wake-day only ─────────────────────────────
+def test_g2_yesterdays_hc_sleep_is_not_last_nights(db_session):
+    """An HC row for YESTERDAY's wake-day only → the prefill tile is None and Save writes
+    passive_sleep_min NULL. (Previously the latest row <= today was taken, so a prior
+    night's sleep was shown and frozen as last night's.)"""
+    user = _user(db_session)
+    db_session.add(models.HealthConnectSync(
+        user_id=user.id, date=_today_aest() - timedelta(days=1), sleep_duration_minutes=412))
+    db_session.commit()
+
+    assert _prefill(db_session, user).sleep_min is None
+    body = AMCheckInIn(
+        morning_readiness=3, sleep_quality=3, fatigue=5, motivation=5, life_load=3)
+    assert submit_am(body=body, current_user=user, db=db_session).passive_sleep_min is None
+
+
+def test_s3_todays_hc_sleep_is_shown_and_saved(db_session):
+    user = _user(db_session)
+    db_session.add(models.HealthConnectSync(
+        user_id=user.id, date=_today_aest(), sleep_duration_minutes=341))
+    db_session.commit()
+
+    assert _prefill(db_session, user).sleep_min == 341
+    body = AMCheckInIn(
+        morning_readiness=3, sleep_quality=3, fatigue=5, motivation=5, life_load=3)
+    assert submit_am(body=body, current_user=user, db=db_session).passive_sleep_min == 341

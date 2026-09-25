@@ -47,16 +47,18 @@ function SliderField({ label, value, onChange, min = 0, max = 10 }) {
   )
 }
 
-// Clock field for the sleep diary. `prefilled` marks a value the ring supplied (the
-// operator confirms rather than recalls it); `manual` marks a field the device is
-// systematically wrong about (latency/WASO), styled distinctly so the difference is
-// legible rather than incidental (#117).
-function ClockField({ label, value, onChange, prefilled }) {
+// Clock field for the sleep diary. `source` names the device that supplied this field's
+// value (the operator confirms rather than recalls it) and is set ONLY for a field the
+// prefill actually filled — an empty field is never labelled as device-supplied (S2).
+// `manual` marks a field the device is systematically wrong about (latency/WASO), styled
+// distinctly so the difference is legible rather than incidental (#117).
+export function ClockField({ label, value, onChange, source }) {
+  const prefilled = Boolean(source)
   return (
     <div className="space-y-1">
       <div className="flex justify-between items-baseline">
         <label className="text-xs text-gray-500">{label}</label>
-        {prefilled && <span className="text-[10px] text-indigo-400">from ring · edit if wrong</span>}
+        {prefilled && <span className="text-[10px] text-indigo-400">from {source} · edit if wrong</span>}
       </div>
       <input
         type="time"
@@ -190,7 +192,7 @@ export default function CheckInAM() {
   const [alcoholFinishTime, setAlcoholFinishTime] = useState('22:00')
 
   // CBT-I sleep diary (rendered only while a block is open). Clock fields are
-  // prefilled from the ring; latency/WASO are always manual (#117).
+  // prefilled from a same-day device reading; latency/WASO are always manual (#117).
   const [gotIntoBed, setGotIntoBed] = useState('')
   const [lightsOut, setLightsOut] = useState('')
   const [finalWake, setFinalWake] = useState('')
@@ -233,6 +235,9 @@ export default function CheckInAM() {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  // Device label per diary field — only fields the prefill actually supplied (S2).
+  const diarySources = prefill?.diary_prefill?.sources ?? {}
 
   function setSorenessRegion(region, val) {
     setSoreness(prev => ({ ...prev, [region]: val }))
@@ -408,10 +413,10 @@ export default function CheckInAM() {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <ClockField label="Got into bed" value={gotIntoBed} onChange={setGotIntoBed} prefilled />
-                <ClockField label="Lights out (tried to sleep)" value={lightsOut} onChange={setLightsOut} prefilled />
-                <ClockField label="Final wake" value={finalWake} onChange={setFinalWake} prefilled />
-                <ClockField label="Out of bed" value={outOfBed} onChange={setOutOfBed} prefilled />
+                <ClockField label="Got into bed" value={gotIntoBed} onChange={setGotIntoBed} source={diarySources.got_into_bed} />
+                <ClockField label="Lights out (tried to sleep)" value={lightsOut} onChange={setLightsOut} source={diarySources.lights_out} />
+                <ClockField label="Final wake" value={finalWake} onChange={setFinalWake} source={diarySources.final_wake} />
+                <ClockField label="Out of bed" value={outOfBed} onChange={setOutOfBed} source={diarySources.out_of_bed} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

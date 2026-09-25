@@ -42,3 +42,11 @@ test('pair surfaces both sources, garmin primary', () => {
   expect(container.textContent).toMatch(/HRV · garmin/)
   expect(container.textContent).toMatch(/samsung: 70 ms/)
 })
+
+test('S2: a diary clock field is labelled only with the device that supplied it', async () => {
+  const { ClockField } = await import('./CheckInAM')
+  const { container, rerender } = render(<ClockField label="Final wake" value="06:00" onChange={() => {}} source="Garmin" />)
+  expect(container.textContent).toMatch(/from Garmin · edit if wrong/)
+  rerender(<ClockField label="Lights out" value="" onChange={() => {}} />)
+  expect(container.textContent).not.toMatch(/from /)
+})
