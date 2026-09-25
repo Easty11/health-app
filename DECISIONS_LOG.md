@@ -12274,3 +12274,24 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 - G3–G7 fail on master's code. Backend 1937 → 1947.
 
 **Do not revisit unless.** S7's evidence rules a source's `sleep_start` or `sleep_onset` fit for an entry-side diary field (then that field gains a per-source mapping, recorded as its own decision). Or the duration model's period selection changes, in which case the clocks follow it and are not re-derived separately.
+
+### 329. Q172 ruled — Garmin session start is sleep onset and fills no diary entry field; Garmin end validated for final_wake; ring/Samsung unruled; per-source rules key on the recording device
+
+**Context.** Q172 (owed from #328) asked which diary entry-side fields each HC source's session start may prefill. The operator ran the S7 report on 2026-09-25, after #328 deployed and the 30-day deep sync (25 nights).
+
+**Decision.**
+1. **Garmin start = sleep onset.** Over the independent-diary nights 09-16..09-24, `sleep_start − (lights_out + recalled SOL)` ≈ 0 (−5, −5, +17, +1, +4, 0; 09-16 −20). So a Garmin start is onset, not into-bed or lights-out, and **fills no entry-side field** (`got_into_bed` / `lights_out` / `out_of_bed`). #127 stands.
+2. **Garmin end is validated for `final_wake`.** `sleep_end − final_wake` ≈ 0 (0, 0, 2, −1, −4, 0), so #328's S6 prefill stands as built.
+3. **Ring / Samsung stay unruled.** On ring nights the diary's `got_into_bed` was either prefilled from the same source (circular) or corrected selectively (biased), so no ruling is possible. #127 behaviour stands. A clean validation window is owed at ring return (Q176).
+4. **Future per-source rules key on the recording device, not the writer package.** On 09-16 the start writer was `com.sec.android.app.shealth` while the ring was dead: Samsung Health relays other devices' sessions. Device identity is not on the wire today (Q175).
+5. **Any future start-based entry prefill must guard against a late-fragment main period.** On 08-26 the main-period start was 04:22 against a `got_into_bed` of 22:35.
+
+**Not adopted: "final wake = end of the last overnight sleep".** The brief proposed extending `sleep_end` past the main period to a re-sleep, citing 09-19 (true final wake 06:00; HC end 03:55). VERIFY found that a re-sleep within `SLEEP_PERIOD_GAP_MINUTES` (120) is already part of the main period on master. The operator's `health_connect_record_sources` query for the 09-19 night returned **one** sleep record, Garmin, starting 2026-09-18T12:37:08Z (22:37 AEST). The 04:20–06:00 re-sleep **never reached Health Connect**, so no windowing rule could recover it. The built change (`a17f1cd`, PR #260) was dropped. Its secondary effect (ending at the last ASLEEP segment, so a trailing AWAKE stage no longer moves the wake later) would also have shifted `final_wake` away from the end times item 2 validates. On a night with an unrecorded re-sleep, the prefilled `final_wake` is wrong and the operator edits it. The field is a default, never a stored truth.
+
+**Rationale.** The evidence validates Garmin's end and shows its start is onset. It cannot rule on the ring or Samsung. Keying future rules on the writer package would misattribute relayed sessions.
+
+**Status.** Chat-ruled 2026-09-25 (sleep follow-up brief). Governance only; no code change. Q172 → DONE.
+
+**How you know.** The operator S7 run on 2026-09-25 (deltas above, recorded in Q172). The 09-19 record-sources query returned one Garmin record at 12:37:08Z. On `b49bc0b`, a 22:37–03:55 + 04:20–06:00 night already yields `sleep_end` 06:00 and duration 418; `a17f1cd`'s short-gap pin shows this. HCA's `fetchSleepData` mapper (`healthConnect.js` L227–234) forwards no `metadata.device` / `recordingMethod` / `id`.
+
+**Do not revisit unless.** A recording-device-keyed validation (Q175/Q176) supplies independent evidence for a ring or Samsung start, or a writer starts delivering re-sleeps as separate sessions more than 2 h after the wake. Then revisit the night window with that evidence.
