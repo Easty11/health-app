@@ -33,10 +33,10 @@ def _block(db, uid, *, opened, closed=None, anchor="05:00"):
     return b
 
 
-def _rx(db, bid, *, eff, lo, win, decision="adopt"):
+def _rx(db, bid, *, eff, lo, win, decision="adopt", anchor="05:00"):
     r = models.CBTIPrescription(
         block_id=bid, effective_from=eff, prescribed_lights_out=lo,
-        wake_anchor="05:00", window_minutes=win, decision=decision,
+        wake_anchor=anchor, window_minutes=win, decision=decision,
     )
     db.add(r)
     db.commit()
@@ -84,6 +84,24 @@ def test_the_LATEST_effective_prescription_wins_not_the_first(db_session):
     _rx(db_session, b.id, eff=date(2026, 7, 8), lo="22:10", win=410, decision="extend")
     ctx = _cbti_context(u.id, date(2026, 7, 12), db_session)
     assert ctx.prescribed_lights_out == "22:10" and ctx.window_minutes == 410
+
+
+def test_wake_anchor_comes_from_the_prescription_not_the_block(db_session):
+    """#331. Lights-out, window and anchor must describe ONE window. The block row keeps
+    its OPENING anchor forever (append-only), so reading the anchor off the block showed
+    21:48-05:45 while the prescription and engine ran 05:00 — block id 2 exactly."""
+    u = _user(db_session, "anchor@x.io")
+    b = _block(db_session, u.id, opened=date(2026, 7, 24), anchor="05:45")
+    _rx(db_session, b.id, eff=date(2026, 7, 24), lo="23:45", win=360, anchor="05:45")
+    _rx(db_session, b.id, eff=date(2026, 9, 20), lo="21:48", win=432, decision="extend")
+    ctx = _cbti_context(u.id, date(2026, 9, 21), db_session)
+    assert (ctx.prescribed_lights_out, ctx.wake_anchor, ctx.window_minutes) == ("21:48", "05:00", 432)
+
+
+def test_block_anchor_is_the_fallback_when_no_prescription_is_in_force(db_session):
+    u = _user(db_session, "anchorfb@x.io")
+    _block(db_session, u.id, opened=date(2026, 7, 24), anchor="05:45")
+    assert _cbti_context(u.id, date(2026, 7, 25), db_session).wake_anchor == "05:45"
 
 
 def test_a_future_prescription_is_not_yet_in_force(db_session):

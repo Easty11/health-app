@@ -424,17 +424,19 @@ export default function CheckInAM() {
                 <NumField label="Time awake in night (min)" value={waso} onChange={setWaso} manual />
               </div>
 
-              <NumField
-                label="Times woken"
-                value={nightWakings}
-                onChange={setNightWakings}
-                hint="If you can, split the count by cause below — it need not add up exactly."
-              />
+              {/* The cause split is MINUTES of the time awake above, not a count (#332) —
+                  the columns are named *_n for history, but minutes is what was entered and
+                  what separates nocturia from the insomnia signal. */}
+              <p className="text-xs text-gray-500">
+                Of that time awake, minutes by cause — need not add up exactly.
+              </p>
               <div className="grid grid-cols-3 gap-3">
-                <NumField label="Toilet" value={wakeNocturia} onChange={setWakeNocturia} />
-                <NumField label="Pain" value={wakePain} onChange={setWakePain} />
-                <NumField label="Other" value={wakeSpontaneous} onChange={setWakeSpontaneous} />
+                <NumField label="Toilet (min)" value={wakeNocturia} onChange={setWakeNocturia} />
+                <NumField label="Pain (min)" value={wakePain} onChange={setWakePain} />
+                <NumField label="Other (min)" value={wakeSpontaneous} onChange={setWakeSpontaneous} />
               </div>
+
+              <NumField label="Times woken" value={nightWakings} onChange={setNightWakings} />
             </div>
           )}
 

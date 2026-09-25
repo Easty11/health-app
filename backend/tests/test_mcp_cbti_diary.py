@@ -20,7 +20,7 @@ from datetime import date, datetime, timezone
 
 import models
 from mcp_server import (
-    _CBTI_BLOCKS_SQL, _CBTI_DIARY_COLS, _CBTI_DIARY_SQL, _CBTI_ISI_SQL, _CBTI_RX_SQL,
+    _CBTI_BLOCKS_SQL, _CBTI_DIARY_COLS, _CBTI_DIARY_LABELS, _CBTI_DIARY_SQL, _CBTI_ISI_SQL, _CBTI_RX_SQL,
     _format_cbti_diary, _load_cbti_diary, _rx_in_force,
 )
 
@@ -93,11 +93,13 @@ def test_real_sql_serves_diary_with_prescription_in_force_and_shifted_nap(db):
     rows = [l for l in out.splitlines() if l.startswith("2026-09-1")]
     header = next(l for l in out.splitlines() if l.startswith("date | "))
     assert header.split(" | ") == ["date", "rx_id", "rx_lights_out", "rx_wake_anchor",
-                                   *_CBTI_DIARY_COLS]
+                                   *[_CBTI_DIARY_LABELS.get(c, c) for c in _CBTI_DIARY_COLS]]
+    # the cause split is minutes of WASO, labelled as such (#332)
+    assert "waso_nocturia_min" in header and "wakings_nocturia_n" not in header
     n10 = dict(zip(header.split(" | "), rows[0].split(" | ")))
     assert n10["date"] == "2026-09-10" and n10["rx_id"] == "1"
     assert n10["rx_lights_out"] == "22:30" and n10["rx_wake_anchor"] == "05:30"
-    assert n10["wakings_nocturia_n"] == "2" and n10["wakings_spontaneous_n"] == "1"
+    assert n10["waso_nocturia_min"] == "2" and n10["waso_spontaneous_min"] == "1"
     assert n10["naps_min"] == "20"                  # logged PM 09-09, belongs to night 09-10
     assert n10["diary_se_pct"] == "84.5"
     n12 = dict(zip(header.split(" | "), rows[1].split(" | ")))
