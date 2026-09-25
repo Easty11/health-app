@@ -13,6 +13,7 @@ from routers.checkin_v2 import (
     DiaryPrefillOut,
     PREFILL_GATE_MAX_DELTA_MIN,
     _diary_prefill,
+    _today_aest,
     get_prefill,
 )
 
@@ -114,7 +115,7 @@ def _samsung(db, uid, *, captured_at, bedtime, wake_time, context="passive_overn
 
 def test_no_open_block_yields_empty_prefill(db_session):
     u = _user(db_session, "noblk@x.io")
-    _samsung(db_session, u.id, captured_at=date.today(), bedtime="22:35", wake_time="05:05")
+    _samsung(db_session, u.id, captured_at=_today_aest(), bedtime="22:35", wake_time="05:05")
     out = get_prefill(current_user=u, db=db_session)
     assert out.diary_prefill.got_into_bed is None and out.cbti.block_open is False
 
@@ -122,7 +123,7 @@ def test_no_open_block_yields_empty_prefill(db_session):
 def test_open_block_prefills_from_a_passive_overnight_row(db_session):
     u = _user(db_session, "blk@x.io")
     _open_block_with_rx(db_session, u.id, lo="22:30")
-    _samsung(db_session, u.id, captured_at=date.today(), bedtime="22:35", wake_time="05:05")
+    _samsung(db_session, u.id, captured_at=_today_aest(), bedtime="22:35", wake_time="05:05")
     out = get_prefill(current_user=u, db=db_session)
     assert out.cbti.block_open is True
     assert out.diary_prefill.got_into_bed == "22:35"
@@ -131,24 +132,48 @@ def test_open_block_prefills_from_a_passive_overnight_row(db_session):
 
 def test_prefill_ignores_a_calibration_row_the_denylist_would_admit(db_session):
     """The read is on the passive_overnight allowlist. A `calibration` row — which the
-    readiness denylist `context != 'session'` would admit — must NOT seed the diary,
-    even when it is the most recent reading."""
+    readiness denylist `context != 'session'` would admit — must NOT seed the diary.
+    (Rewritten for S1, same-day only: this previously fell back to YESTERDAY's overnight
+    row, which S1 now forbids; `(user, captured_at)` is unique, so today's calibration row
+    is the only candidate and the diary must stay empty.)"""
     u = _user(db_session, "cal@x.io")
     _open_block_with_rx(db_session, u.id, lo="22:30")
-    _samsung(db_session, u.id, captured_at=date.today(),
-             bedtime="09:99-bad", wake_time="00:00", context="calibration")
-    _samsung(db_session, u.id, captured_at=date.today() - timedelta(days=1),
-             bedtime="22:40", wake_time="05:10", context="passive_overnight")
+    _samsung(db_session, u.id, captured_at=_today_aest(),
+             bedtime="22:40", wake_time="05:10", context="calibration")
     out = get_prefill(current_user=u, db=db_session)
-    # the calibration row is the newest, but the allowlist skips it for the overnight one
-    assert out.diary_prefill.got_into_bed == "22:40"
+    assert out.diary_prefill.got_into_bed is None
+    assert out.diary_prefill.sources == {}
+
+
+def test_g1_prior_night_ring_row_does_not_seed_the_diary(db_session):
+    """G1 (S1): the ring's last row is D-11 and there is none today → every diary clock is
+    empty and no field carries a device label."""
+    u = _user(db_session, "g1@x.io")
+    _open_block_with_rx(db_session, u.id, lo="22:30")
+    _samsung(db_session, u.id, captured_at=_today_aest() - timedelta(days=11),
+             bedtime="22:40", wake_time="05:10")
+    dp = get_prefill(current_user=u, db=db_session).diary_prefill
+    assert (dp.got_into_bed, dp.lights_out, dp.final_wake, dp.out_of_bed) == (None,) * 4
+    assert dp.sources == {} and dp.gate_rejected is False
+
+
+def test_s2_labels_only_the_fields_the_device_filled(db_session):
+    """S2: a same-day ring row labels exactly the fields it filled; lights_out (never
+    prefilled, #127) carries no label."""
+    u = _user(db_session, "s2@x.io")
+    _open_block_with_rx(db_session, u.id, lo="22:30")
+    _samsung(db_session, u.id, captured_at=_today_aest(), bedtime="22:40", wake_time="05:10")
+    dp = get_prefill(current_user=u, db=db_session).diary_prefill
+    assert dp.sources == {"got_into_bed": "Galaxy Ring", "final_wake": "Galaxy Ring",
+                          "out_of_bed": "Galaxy Ring"}
+    assert "lights_out" not in dp.sources
 
 
 def test_endpoint_rejects_a_12h_corrupt_overnight_row(db_session):
     """Full path: a corrupt passive_overnight value reaches the gate and is suppressed."""
     u = _user(db_session, "corrupt@x.io")
     _open_block_with_rx(db_session, u.id, lo="22:12")
-    _samsung(db_session, u.id, captured_at=date.today(), bedtime="10:12", wake_time="05:57")
+    _samsung(db_session, u.id, captured_at=_today_aest(), bedtime="10:12", wake_time="05:57")
     out = get_prefill(current_user=u, db=db_session)
     assert out.diary_prefill.gate_rejected is True
     assert out.diary_prefill.got_into_bed is None

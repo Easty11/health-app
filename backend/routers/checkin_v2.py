@@ -217,7 +217,7 @@ def _freeze_diary(
 # ── passive snapshot ──────────────────────────────────────────────────────────
 
 def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, Any]:
-    """HC sleep at the moment of AM capture (Health Connect; Garmin supplies no sleep).
+    """HC sleep for the wake-day `for_date` at AM capture (Health Connect; same day only).
 
     HRV is NO LONGER snapshotted here (#327): the `passive_hrv_ms` denorm froze whatever
     `hrv_deviation` returned at Save, which before the recency gate could be a prior-day
@@ -229,9 +229,10 @@ def _snapshot_passive(user_id: int, for_date: date, db: Session) -> dict[str, An
         db.query(models.HealthConnectSync)
         .filter(
             models.HealthConnectSync.user_id == user_id,
-            models.HealthConnectSync.date <= for_date,
+            # SAME wake-day only (S3): `date` is the wake-day, so a prior night's row is
+            # never snapshotted or shown as last night's sleep.
+            models.HealthConnectSync.date == for_date,
         )
-        .order_by(models.HealthConnectSync.date.desc())
         .first()
     )
     return {
@@ -442,12 +443,17 @@ class DiaryPrefillOut(BaseModel):
     final_wake: Optional[str] = None
     out_of_bed: Optional[str] = None
     gate_rejected: bool = False
+    # Per-field device label (S2): present ONLY for a field the device actually supplied,
+    # so the surface never labels a field ("from ring") that it did not prefill.
+    sources: dict[str, str] = Field(default_factory=dict)
 
 
 def _diary_prefill(
     bedtime: Optional[str],
     wake_time: Optional[str],
     prescribed_lights_out: Optional[str],
+    *,
+    source_label: str = "Galaxy Ring",
 ) -> DiaryPrefillOut:
     """Map Samsung clock values to diary defaults, gated against the prescription.
 
@@ -473,7 +479,7 @@ def _diary_prefill(
         delta = clock_delta_minutes(got, prescribed_lights_out)
         if delta is not None and abs(delta) > PREFILL_GATE_MAX_DELTA_MIN:
             return DiaryPrefillOut(gate_rejected=True)
-    return DiaryPrefillOut(
+    out = DiaryPrefillOut(
         got_into_bed=got,
         # RECALL-ONLY (#127): lights_out is NOT prefilled — entered from recall with no
         # device value shown. got_into_bed (a distinct, verified bed-entry moment) stays
@@ -482,6 +488,12 @@ def _diary_prefill(
         final_wake=wake_time,
         out_of_bed=wake_time,
     )
+    out.sources = {
+        f: source_label
+        for f in ("got_into_bed", "lights_out", "final_wake", "out_of_bed")
+        if getattr(out, f) is not None
+    }
+    return out
 
 
 class TodayOut(BaseModel):
@@ -580,7 +592,8 @@ def get_prefill(
             db.query(models.SamsungHRVReading)
             .filter(
                 models.SamsungHRVReading.user_id == current_user.id,
-                models.SamsungHRVReading.captured_at <= today,
+                # SAME-DAY only (S1): a prior night's scrape is never last night's clock.
+                models.SamsungHRVReading.captured_at == today,
                 models.SamsungHRVReading.context == 'passive_overnight',
                 models.SamsungHRVReading.bedtime.isnot(None),
             )
