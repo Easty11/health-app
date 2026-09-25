@@ -1538,7 +1538,7 @@ Written in `sync()` after `received` is counted, one `db.add` on the existing tr
 
 ### 036 — health_connect_syncs sleep session clocks (source-agnostic)
 
-Migration `f7a2c9e1d3b5` (revises `e3b7c5a1f942`; `#NEXT`). Additive, all nullable, no backfill. Historical rows fill on the next re-sync; the operator's 30-day deep sync, `SyncScreen.handleSync(30)`, repopulates the window.
+Migration `f7a2c9e1d3b5` (revises `e3b7c5a1f942`; `#328`). Additive, all nullable, no backfill. Historical rows fill on the next re-sync; the operator's 30-day deep sync, `SyncScreen.handleSync(30)`, repopulates the window.
 
 ```sql
 ALTER TABLE health_connect_syncs ADD COLUMN sleep_start                TIMESTAMPTZ;  -- earliest segment edge of the night's MAIN period
@@ -1552,4 +1552,4 @@ ALTER TABLE health_connect_syncs ADD COLUMN sleep_end_source_package   TEXT;    
 - **Per-endpoint writer.** A main period can span two writers. Each edge carries the package of the segment that supplies it; an exact tie goes to the lexically first package.
 - **Onset.** A stageless session contributes a synthetic LIGHT span to the duration (so its sleep time is not lost), but that span never sets `sleep_onset`. With no real asleep stage, `sleep_onset` is NULL.
 - **Stored as UTC instants.** Rendered in AEST at read time: the diary `final_wake` prefill uses today's `sleep_end` as local `HH:MM`.
-- **Meaning of `sleep_start` per source is not ruled.** Nothing maps it to `got_into_bed` / `lights_out` / `out_of_bed` (#127). That ruling comes from S7 evidence (Q#NEXT).
+- **Meaning of `sleep_start` per source is not ruled.** Nothing maps it to `got_into_bed` / `lights_out` / `out_of_bed` (#127). That ruling comes from S7 evidence (Q172).

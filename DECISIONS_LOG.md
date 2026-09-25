@@ -12249,7 +12249,7 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 
 **Do not revisit unless.** A backfill-combine need appears (combining a late-landing night into an earlier deviation). That is a new read with its own `for_date` semantics, not a relaxation of this gate. Or a source's wake-day attribution proves tz-split (`possible_tz_split` firing on real data), in which case fix the attribution upstream rather than widening the gate.
 
-### #NEXT. HC sleep session clocks persisted source-agnostically from the main period; per-endpoint writer; real-stage onset; start semantics ruled per source from evidence
+### 328. HC sleep session clocks persisted source-agnostically from the main period; per-endpoint writer; real-stage onset; start semantics ruled per source from evidence
 
 **Context.** The HC sync already carries each sleep session's `startTime`/`endTime`/`sourcePackage`, but only the duration and stage breakdown were derived; no clock was persisted. So the AM diary's `final_wake` could come only from the Samsung ring scrape, which has been dead since 2026-09-14. The night's duration is built from a clustered **main period** of stage segments across every session and writer that ends on the wake-day (#254/#256), not from any single session. So a night can span two writers.
 
@@ -12259,11 +12259,11 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 3. **Real-stage onset.** `sleep_onset` = the start of the first ASLEEP (LIGHT/DEEP/REM, the #254 TST set) segment from a real stage record. The synthetic LIGHT span a stageless session contributes to the duration never counts, so with no real stages `sleep_onset` is NULL.
 4. **Diary wake is source-agnostic.** `final_wake` prefills from today's `sleep_end` as local (AEST) `HH:MM`, whatever the writer. The same-day Samsung scrape is the fallback. The label is a package lookup, `sleep_end_source_package` → device name; no consumer branches per device.
    **Amendment (#259 ruling 3):** `out_of_bed` comes from the same-day scrape only when that scrape also supplied `final_wake`. With an HC `final_wake`, `out_of_bed` is empty, because mixed sources can give `out_of_bed` < `final_wake` (time in bed ending before the wake, which corrupts diary SE). `got_into_bed` is unchanged. The #110 gate still suppresses only the scraped clocks (ruling 2). "First non-AWAKE" = the first LIGHT/DEEP/REM stage (ruling 1).
-5. **Session-start meaning is per source and ruled from evidence.** Nothing maps `sleep_start` or `sleep_onset` to `got_into_bed` / `lights_out` / `out_of_bed` (#127 stands). S7 measures, per source, how start and onset relate to recalled diary entries, and a follow-up ruling decides which entry-side fields a source may fill (Q#NEXT).
+5. **Session-start meaning is per source and ruled from evidence.** Nothing maps `sleep_start` or `sleep_onset` to `got_into_bed` / `lights_out` / `out_of_bed` (#127 stands). S7 measures, per source, how start and onset relate to recalled diary entries, and a follow-up ruling decides which entry-side fields a source may fill (Q172).
 
 **Rationale.** Reading the clocks off the duration's own period means the stored start, end and duration always describe the same sleep. Per-endpoint writers keep the S7 evidence honest: a night that one writer starts and another ends is flagged, never pooled. Real-stage onset refuses to invent an onset a stageless session never measured. Deferring start semantics avoids repeating #127's failure mode (a device clock mistaken for a recalled moment) on a new device.
 
-**Status.** Chat-briefed 2026-09-25 (sleep brief PR2, S4–S6). Migration `f7a2c9e1d3b5` is HELD for operator release (hold (a)). PR1 (same-day gates, #327 extension) landed as `275f391`. S7 is a report owed after release plus a 30-day deep sync. S8 is an audit table in the PR, with readers not fixed here (Q#NEXT).
+**Status.** Chat-briefed 2026-09-25 (sleep brief PR2, S4–S6). Migration `f7a2c9e1d3b5` was released by the operator on 2026-09-25 (hold (a) lifted), with number-at-merge `#328` from master max `#327` @ `275f391`. Generic `SLEEPING` outside the asleep set is Q174. PR1 (same-day gates, #327 extension) landed as `275f391`. S7 is a report owed after release plus a 30-day deep sync. S8 is an audit table in the PR, with readers not fixed here (Q173).
 
 **How you know.** `backend/tests/test_hc_sleep_clocks.py`:
 - G3 Garmin-only and G4 Samsung-Health-only nights take the identical path and are labelled by lookup.
