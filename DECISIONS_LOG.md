@@ -12258,6 +12258,7 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 2. **Per-endpoint writer.** `sleep_start_source_package` / `sleep_end_source_package` each carry the package of the segment that supplies that edge. A mixed-writer night is represented as it is, never collapsed to one writer. On an exact tie, the lexically first package wins.
 3. **Real-stage onset.** `sleep_onset` = the start of the first ASLEEP (LIGHT/DEEP/REM, the #254 TST set) segment from a real stage record. The synthetic LIGHT span a stageless session contributes to the duration never counts, so with no real stages `sleep_onset` is NULL.
 4. **Diary wake is source-agnostic.** `final_wake` prefills from today's `sleep_end` as local (AEST) `HH:MM`, whatever the writer. The same-day Samsung scrape is the fallback. The label is a package lookup, `sleep_end_source_package` → device name; no consumer branches per device.
+   **Amendment (#259 ruling 3):** `out_of_bed` comes from the same-day scrape only when that scrape also supplied `final_wake`. With an HC `final_wake`, `out_of_bed` is empty, because mixed sources can give `out_of_bed` < `final_wake` (time in bed ending before the wake, which corrupts diary SE). `got_into_bed` is unchanged. The #110 gate still suppresses only the scraped clocks (ruling 2). "First non-AWAKE" = the first LIGHT/DEEP/REM stage (ruling 1).
 5. **Session-start meaning is per source and ruled from evidence.** Nothing maps `sleep_start` or `sleep_onset` to `got_into_bed` / `lights_out` / `out_of_bed` (#127 stands). S7 measures, per source, how start and onset relate to recalled diary entries, and a follow-up ruling decides which entry-side fields a source may fill (Q#NEXT).
 
 **Rationale.** Reading the clocks off the duration's own period means the stored start, end and duration always describe the same sleep. Per-endpoint writers keep the S7 evidence honest: a night that one writer starts and another ends is flagged, never pooled. Real-stage onset refuses to invent an onset a stageless session never measured. Deferring start semantics avoids repeating #127's failure mode (a device clock mistaken for a recalled moment) on a new device.
@@ -12269,6 +12270,7 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 - G5 mixed-writer: start from the Samsung Health edge, end from the Garmin edge, end-writer label.
 - G6 onset: a real stage sets it; a stageless session gives NULL with the duration unchanged at 450.
 - G7: 06:00 AEST is stored as 20:00 UTC and prefilled as "06:00".
-- G3–G7 fail on master's code. Backend 1937 → 1945.
+- Amendment: HC `final_wake` 06:12 plus a same-day scrape waking at 06:00 leaves `out_of_bed` empty; a scrape-only night fills both. Negative control: this fails on head `602cfff`.
+- G3–G7 fail on master's code. Backend 1937 → 1947.
 
 **Do not revisit unless.** S7's evidence rules a source's `sleep_start` or `sleep_onset` fit for an entry-side diary field (then that field gains a per-source mapping, recorded as its own decision). Or the duration model's period selection changes, in which case the clocks follow it and are not re-derived separately.

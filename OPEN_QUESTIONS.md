@@ -2395,6 +2395,16 @@ Raised 2026-09-25 with the HC sleep-clocks decision (#NEXT). This is an audit (t
 
 ---
 
+## Q#NEXT. Generic SLEEPING (stage 2) is outside the asleep set: a SLEEPING-only writer yields TST 0
+
+Raised 2026-09-25 with the HC sleep-clocks decision (#NEXT), accepted as #259 ruling 1. `_ASLEEP_STAGES` (#254/#256) is LIGHT/DEEP/REM. Health Connect's generic `SLEEPING` (2) is not in it. So a writer that emits only `SLEEPING` stages contributes no asleep minutes. Its night has TST 0, no main period is selected on asleep time, and `sleep_onset` is NULL. This is pre-existing and latent: Garmin and Samsung Health both write detailed stages. It is not fixed with the clocks because it changes #256's TST semantics.
+
+**To decide:** whether `SLEEPING` counts as asleep for TST, period selection and onset (and how it combines with a detailed-stage writer on the same night), or whether a SLEEPING-only writer is treated as stageless.
+
+**State:** OPEN. Latent; no current writer triggers it.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
