@@ -12314,3 +12314,65 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 **How you know.** `backend/tests/test_mcp_cbti_diary.py` (9 tests) runs the tool's real SQL against the create_all SQLite schema. It checks the prescription in force across a change (rx 1 → rx 2) and the D-1 nap shift (20 min logged 09-09 served on night 09-10). A ratings-only day and the nap-lookup day are not served as nights. Another user's diary, prescription and ISI are excluded, and a NULL-block ISI is not served. ISI canonical 15 vs reported 16 is shown, with 09:10 UTC rendered 19:10 Brisbane. The I1 checks: a seeded `passive_sleep_min=999` never renders, and no query names `passive_` / `health_connect` / `hrv_readings` / `sleep_start`. Backend 1945 → 1954 passing locally. The one failure, `test_current_state`, is pre-existing and environmental: a shallow clone lacks `3360ed5`.
 
 **Do not revisit unless.** `daily_records` gains stored prefill provenance (then serve it per field), or the CBT-I policy admits a sensor field into titration (then I1 is re-ruled first, as its own decision).
+
+### 331. Block id 2's wake anchor is 05:45 — rx 11–17 understate the window run by 45 min; operator-correction row appended; the check-in reads the anchor from the prescription
+
+**Context.** rx 11 (2026-07-27) moved the ledger's wake anchor from 05:45 to 05:00, as an operator correction to the opening prescription. Every engine-produced row after it (rx 12–17) inherited 05:00. On 2026-09-26 the operator confirmed that 05:00 was never used: the anchor actually run throughout block 3 [`cbti_blocks.id` 2] has been 05:45 (±15). The diary agrees: final wake and out-of-bed cluster at 05:30–06:00. **Root cause (Certain):** `routers/checkin_v2._cbti_context` served `wake_anchor=block.wake_anchor`, the block row's opening anchor, which is frozen append-only at 05:45. Lights-out and window came from the prescription. So the AM check-in showed "21:48–05:45" while the ledger and engine held 21:48→05:00.
+
+**Decision.**
+1. **Correction row.** An operator correction is appended by `backend/correct_cbti_block3_anchor.py` (dry-run by default; the operator runs it with `--apply`). It inserts decision `adopt` with lights-out 21:48 (unchanged), anchor 05:45 and window 477, and supersedes the live row. It is not a titration move, and `basis_*` is NULL. Its rationale lists each affected row as recorded→actual window, resolved from the ledger. rx 11–17 are not edited (append-only), and the block row is untouched.
+2. **Identity guard (#103).** The script aborts unless the live row is exactly 21:48→05:00 / 432. If an evaluation is accepted before the correction runs, it refuses rather than correcting a row it never saw.
+3. **Root-cause fix.** `_cbti_context` reads `wake_anchor` from the prescription in force, and falls back to the block only when none is in force. Lights-out, window and anchor now always describe one window.
+
+**Re-evaluation — what consumed the understated window.**
+- **Titration: yes.** `evaluate_cycle` sets target = mean basis TST + 30 and move = target − current window (±15 cap). Each move out of rx 11–17 used a current window 45 min too small, which biases toward extend. Recomputed per decision, using the ledger's own basis TST and the window actually run (arithmetic only; guard (b) could at most turn a move into hold):
+
+  | produced | basis TST | recorded: current→target → move | actual: current→target → move |
+  |---|---|---|---|
+  | rx 12 | — (2 nights) | hold (insufficient) | hold (insufficient) |
+  | rx 13 | 440 | 390→470 → extend | 435→470 → extend |
+  | rx 14 | 405 | 405→435 → extend | 450→435 → **compress** |
+  | rx 15 | 369 | 420→399 → compress | 465→399 → compress |
+  | rx 16 | 387 | 405→417 → extend | 450→417 → **compress** |
+  | rx 17 | 406 | 417→436 → extend | 462→436 → **compress** |
+
+  **Three of five adjudicated moves flip direction.** Under the anchor actually run, the rule would have compressed at rx 14, 16 and 17, but lights-out moved 42 min earlier (22:30 → 21:48). The ±15 cap means these are directional verdicts, not a replayable trajectory, because the nights themselves would have differed.
+- **Exit / convergence logic: no.** Plateau is judged on the basis TST series and the SE floor (both window-independent), and the engine no longer emits `close`. Gate 2 (adherence) differences lights-out only. The `training_constrained` check reads lights-out only. Diary SE is computed from the recalled lights-out → out-of-bed, so it is correct as stored.
+- **Instrumented quantities: yes, contaminated.** `basis_tib_over_run_min` on rows produced from rx 11–17 windows is overstated by about 45 (mean TIB − understated window). The early-morning-awakening count used the 05:00 anchor and under-counted. `centre_estimate` (the check-in's "sleep need" readout) averages windows understated by 45, and after the correction it will mix 477 with the understated values for up to four cycles. All three are open in Q177.
+
+**Rationale.** The ledger must state the window actually run, or every later move titrates against a fiction. Appending, rather than editing, keeps rx 11–17 as the record of what the engine was told. The rationale carries the correction arithmetic, so a reader of any of those rows can recover the true window. The display fix removes the only path by which the block's frozen anchor reached the screen.
+
+**Status.** Operator-directed 2026-09-26. The code and script land here. **The prod write is OWED:** the operator runs the script (commands in the session report), **before accepting any pending evaluation on rx 17**. Once applied, the next evaluation titrates from 477. By the rule, and on current basis TST, that is likely a compress (Likely, not computed on real cycle nights). Whether to act on the flipped history sooner is Q177.
+
+**How you know.**
+- `tests/test_cbti_block_context.py::test_wake_anchor_comes_from_the_prescription_not_the_block` fails on master's `_cbti_context`, which returns 05:45 for a 05:00 prescription. It passes with the fix. A fallback test covers the no-prescription case.
+- `tests/test_cbti_anchor_correction.py` (5 tests) runs `correct()` on the SQLite schema:
+  - a dry-run writes nothing and resolves rx 11–17 from the ledger;
+  - apply appends one `adopt` row and supersedes only the live row, with rx 10–17 values and the block anchor unchanged;
+  - the identity guard aborts after a simulated accepted evaluation;
+  - a double-apply and a backdated correction are refused.
+- Ledger values in the table come from `get_cbti_diary` (as_of 2026-09-26T09:20+10:00). The move arithmetic reproduces every recorded rx 13–17 window exactly, so the model of `evaluate_cycle` used here is the engine's.
+
+**Do not revisit unless.** The operator finds a night series inconsistent with a 05:45 anchor (then the correction's size, not its existence, is revisited), or a future row's anchor again diverges from the anchor shown on the check-in.
+
+### 332. Waking-cause columns hold MINUTES of WASO by cause, not counts — form relabelled; semantics follow the data; the rename is owed
+
+**Context.** `wakings_nocturia_n` / `_pain_n` / `_spontaneous_n` were minted as a count split of `night_wakings_n`. The AM form showed them as three unlabelled boxes ("Toilet / Pain / Other") directly beneath "Time awake in night (min)", under a "Times woken" hint that said "split the count". The operator entered minutes. In block id 2's diary (`get_cbti_diary`, 2026-07-25..09-26) the cause values sum to `waso_min` on every night where both exist (e.g. 09-25: 25 + 20 = 45). One exception, 08-13 (`wakings_nocturia_n`=1, `waso_min`=35, one waking), reads as a count.
+
+**Decision.** The **semantics change to minutes**: each column is the minutes of `waso_min` attributable to that cause. The form is relabelled to fit, and not the reverse.
+- The split sits under "Time awake in night (min)", labelled "Toilet (min) / Pain (min) / Other (min)", with "Of that time awake, minutes by cause — need not add up exactly".
+- "Times woken" stays the count and loses the split hint.
+- The model, schema comments and `get_cbti_diary` header now say minutes (`waso_nocturia_min`, `waso_pain_min`, `waso_spontaneous_min`), and the output note names `night_wakings_n` as the count.
+- No sum constraint, as before. The engine still reads none of these.
+- **Not in scope:** the column rename (`*_n` → `*_min`) is a schema migration and so a hold. It is owed as Q178, along with the 08-13 value.
+
+**Rationale.**
+1. The history is minutes. Relabelling the form to counts would leave about two months of clean minute data sitting in columns redefined as counts, which is worse than a misleading name.
+2. Minutes answer the question the data exists for. The CBT-I policy rule is "time awake during the night rising, **nocturia excluded** → pull bedtime back 15". That is `waso_min` minus nocturia minutes, which the minute split gives directly and a count split cannot.
+3. The count is not lost: `night_wakings_n` carries it.
+
+**Status.** Operator asked Code to decide (2026-09-26). The label, comment and served-header changes land here. The rename and the 08-13 value are owed (Q178).
+
+**How you know.** The diary audit above comes from `get_cbti_diary` rows 07-26..09-26. `tests/test_mcp_cbti_diary.py` pins the served header (`waso_nocturia_min`, and no `wakings_nocturia_n`). Frontend vitest passes 229/229; the form has no unit test.
+
+**Do not revisit unless.** The CBT-I policy starts needing per-cause waking counts (then add count columns; do not re-purpose these).

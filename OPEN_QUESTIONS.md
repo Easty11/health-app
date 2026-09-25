@@ -2409,6 +2409,31 @@ Raised 2026-09-25 with #329. The ring and Samsung start semantics are unruled be
 
 ---
 
+## Q177. After the #331 anchor correction — act on the flipped titration history, and clean the contaminated instruments?
+
+Raised 2026-09-26 with #331. rx 11–17 were titrated against windows 45 min shorter than the one run (anchor 05:00 recorded, 05:45 used). With the window actually run, three of five adjudicated moves flip from extend to compress (rx 14, 16, 17). Lights-out moved 42 min earlier when the rule, correctly applied, pointed later.
+
+**To decide:**
+1. Wait for the engine's next 4-night cycle from the corrected 477, or make an immediate operator move now. The rule's current reading is 406 + 30 = 436 against 477, so a capped compress to 462 / 22:03 is Likely. This is a clinical call (operator/chat), not an engine change.
+2. Should `centre_estimate` (the check-in's sleep-need readout) exclude or 45-min-adjust rx 11–17? After the correction it mixes true and understated windows for up to four cycles.
+3. `basis_tib_over_run_min` on rows produced from rx 11–17 windows is overstated by about 45, and it is the dataset a future TIB threshold is meant to be set against. Should it be annotated, or excluded from that distribution?
+
+**State:** OPEN.
+
+---
+
+## Q178. Rename the waking-cause columns to `*_min`, and settle the one count-shaped value (08-13)
+
+Raised 2026-09-26 with #332. `wakings_nocturia_n` / `_pain_n` / `_spontaneous_n` now mean minutes of WASO by cause. The `_n` suffix misstates the unit to every reader of the schema. The MCP header already relabels them.
+
+**To decide:**
+1. Rename to `waso_nocturia_min` / `waso_pain_min` / `waso_spontaneous_min`. That is a migration (hold (a)) touching the model, the check-in schema, the form payload and the MCP projection.
+2. The 2026-08-13 row (`wakings_nocturia_n`=1, `waso_min`=35, one waking) reads as a count. Either correct it to 35, which is an operator witnessed data fix on an AM-frozen field, or annotate it as unit-ambiguous.
+
+**State:** OWED. Loop-close: a migration PR released by the operator, plus the 08-13 disposition.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
