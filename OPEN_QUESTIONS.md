@@ -2418,6 +2418,8 @@ Raised 2026-09-26 with #331. rx 11–17 were titrated against windows 45 min sho
 2. Should `centre_estimate` (the check-in's sleep-need readout) exclude or 45-min-adjust rx 11–17? After the correction it mixes true and understated windows for up to four cycles.
 3. `basis_tib_over_run_min` on rows produced from rx 11–17 windows is overstated by about 45, and it is the dataset a future TIB threshold is meant to be set against. Should it be annotated, or excluded from that distribution?
 
+**Item 2 resolved → #333** (centre restarts at the latest `adopt`, operator-ratified 2026-09-26). Items 1 and 3 remain open.
+
 **State:** OPEN.
 
 ---

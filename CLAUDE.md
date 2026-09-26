@@ -275,11 +275,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **CBT-I anchor correction + waking-cause units (#331/#332).** The check-in showed the block's frozen anchor (05:45) while rx 11–17 recorded 05:00, so their windows understate the one run by 45 and 3 of 5 titration moves flip extend→compress (Q177); `_cbti_context` now reads the prescription's anchor; `correct_cbti_block3_anchor.py` appends the `adopt` correction (21:48→05:45, 477) — prod write OWED to the operator. Waking-cause columns are minutes of WASO by cause; form + MCP header relabelled, rename owed (Q178). Code, self-merged on green - Handoff: `closeout.md`.
+- **Sleep-need centre restarts at the latest `adopt` (#333).** The close-out's "Estimated need" averages only windows from the most recent `adopt` (block opening or operator correction) on, so rx 18 no longer blends with rx 15–17's understated windows; Q177 item 2 closed, items 1/3 open. Code, operator-ratified, self-merged on green - Handoff: `closeout.md`.
+
+- **CBT-I anchor correction + waking-cause units (#331/#332).** The check-in showed the block's frozen anchor (05:45) while rx 11–17 recorded 05:00, so their windows understate the one run by 45 and 3 of 5 titration moves flip extend→compress (Q177); `_cbti_context` now reads the prescription's anchor; `correct_cbti_block3_anchor.py` appended the `adopt` correction (rx 18, 21:48→05:45, 477), applied 2026-09-26. Waking-cause columns are minutes of WASO by cause; form + MCP header relabelled, rename owed (Q178). Code, self-merged on green - Handoff: `closeout.md`.
 
 - **CBT-I diary read-back — `get_cbti_diary` MCP tool (#330).** Read-only: per-night recall diary (prescription in force, wakings by cause incl. nocturia, D-1 nap shift per #219), block + prescription ledger, ISI items + canonical total; user-scoped through `cbti_blocks`. I1 enforced at SELECT and formatter — no sensor field. Code, self-merged on green - Handoff: `closeout.md`.
-
-- **HC sleep session clocks persisted source-agnostically; diary final_wake from HC (#328).** `health_connect_syncs` gains `sleep_start`/`sleep_end`/`sleep_onset` + per-endpoint writer packages, read off the SAME main period the duration comes from (#254/#256); onset = first LIGHT/DEEP/REM from a real stage record (stageless → NULL). The AM diary's `final_wake` prefills from today's `sleep_end` whatever the device (label by package lookup); `out_of_bed` only alongside a scrape-supplied `final_wake`; entry-side fields never from HC (#127). Preceded by same-day sleep gates (PR1, #258). S7 per-source ruling OWED (Q172). Code, operator-released migration (`#259`) - Handoff: `closeout.md`.
 
 ---
 

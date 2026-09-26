@@ -12376,3 +12376,20 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 **How you know.** The diary audit above comes from `get_cbti_diary` rows 07-26..09-26. `tests/test_mcp_cbti_diary.py` pins the served header (`waso_nocturia_min`, and no `wakings_nocturia_n`). Frontend vitest passes 229/229; the form has no unit test.
 
 **Do not revisit unless.** The CBT-I policy starts needing per-cause waking counts (then add count columns; do not re-purpose these).
+
+### 333. The sleep-need centre restarts at the latest `adopt` — Q177 item 2; #331's correction applied (rx 18)
+
+**Context.** `centre_estimate` (the nightly close-out's "Estimated need ≈") averages the last four prescribed windows. After #331, that series mixed rx 15–17, which understate the window run by 45 min, with rx 18, the 477 correction. It would have shown about 7h13 against about 7h47 on the windows actually run, self-healing over about three cycles (~12 nights). The centre is display-only; no engine or evaluation path reads it (Certain: `grep centre_estimate|centre_minutes` finds only `routers/checkin_v2.py` and `NightlyCloseOut.jsx`).
+
+**Decision.** The centre's window series **restarts at the latest `adopt`** in force for the date (`_cbti_context`). An `adopt` is a block opening or an operator correction. It already resets the titration chain (basis NULL, new cycle), so earlier windows are not samples of the current dither. The centre rests on fewer windows until the chain refills. `centre_cycles_n` reports how many, and the close-out already says "from the last cycle only" at n=1.
+
+**Rationale.** It is generic rather than incident-specific. There is no hard-coded +45 adjustment to rx 11–17, and it would equally have been right at rx 11. It uses the meaning `adopt` already carries in the engine, so the display and the engine agree on where a chain begins.
+
+**Status.** Ratified by the operator 2026-09-26 (option (c) of Q177 item 2). Q177 stays OPEN on items 1 (act on the flipped history; recommendation: wait for the engine's capped compress and take the jump to the psych review) and 3 (`basis_tib_over_run_min` contamination). **#331's owed prod write is DONE:** the operator ran `correct_cbti_block3_anchor.py --apply` on 2026-09-26. It inserted rx 18 (2026-09-27 →, 21:48→05:45, 477, `adopt`) and superseded rx 17 (`effective_to` 2026-09-26, `superseded_by` 18).
+
+**How you know.**
+- `tests/test_cbti_block_context.py::test_sleep_need_centre_restarts_at_the_latest_adopt` checks the rx 15–18 ledger shape. The centre is 477 with n=1, where master gives 432.75 with n=4. After a 462 compress it is 469.5 with n=2. It fails on master.
+- A second test pins that a date before the adopt still reads the earlier chain.
+- The rx 18 apply was verified by the script's read-back, and independently through `get_cbti_diary` (as_of 2026-09-26T10:01+10:00), which shows rx 17 ending 09-26 and rx 18 live with the #331 rationale.
+
+**Do not revisit unless.** A non-correction `adopt` is ever emitted mid-chain by the engine (today it never is), or the centre starts feeding a decision rather than a display.
