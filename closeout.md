@@ -1,76 +1,90 @@
-# Close-out — chat context renders the resolver POSITION (#308, completes #307 A2)
+# Close-out — Stability quota miscount → taxonomy v0.1 + exercise-tag coverage (#334–#338)
 
 ## Real commits this session
 
-Session-open ref: master `4611f96` (the #307 PR2 merge). One PR, branch
-`feat/resolver-position-chat-context`:
+Session-open ref: master `57e858d` (the #333 merge). Two PRs, branch
+`claude/stability-quota-classification-jk8n1k` (harness-pinned), each merged + remote-deleted:
 
 ```
-<gov>    gov(#308): DECISIONS, FEEDBACK §44, ROADMAP/closeout wording corrections, BRANCHES, Recent-landings
-c98c014  feat(context): chat sees the resolver POSITION, not just the declared quota (#308, #307 A2)
-1379b30  docs(handoff): S6b receipt — resolver position in chat context (completes #307 A2)
+5e0eb36 Merge pull request #265 from Easty11/claude/stability-quota-classification-jk8n1k
+cf31f20 gov(tags): #338, Q179 (unconfirmed-tag ruling), Q27 restrictions-not-planes note
+94e19e4 feat(tags): IR/ER sided variants, Deficit KB RDL -> mobility, seed preflight + prune, vote explainer
+d772db4 Merge pull request #264 from Easty11/claude/stability-quota-classification-jk8n1k
+5fbbb6a gov(taxonomy): #334-#337 decisions, Q27 scope extension, roadmap/branches/landings
+4de5e0c feat(taxonomy): v0.1 tag-coverage regions + ID-keyed seed, sided-variant inheritance, --dry-run
 ```
 
-Branch merged + remote-deleted at land. Non-schema, read-only over `resolve()`. Self-merges on
-green under § Merge disposition — chat-ratified brief, A2 already ratified, no new judgment.
+This close-out lands as a third, governance-only PR on the same branch (`chore: session close-out`).
+There is no migration anywhere. Both code PRs self-merged on green (placeholder guard, pytest, vitest). The Railway deploy of
+`5e0eb36` reports SUCCESS on both services (2026-09-26 22:28 UTC).
 
 ## Pending-queue reconciliation
 
-No `;cc` queue carried in — the S6b brief was the Chat→Code handoff. Everything it named LANDED:
+No `;cc` queue was carried in. Chat handed off two briefs in-session; each item is reconciled below:
 
-- S1 `CurrentState.resolver_position = resolve(db, uid, today=today)`, try/except→None+log — `c98c014`.
-- S2 `_section_training_phase(phase, resolver_position)` renders the window, per-slot done/quota
-  across both kinds, `◀ DUE` via `due_slot`, counted conditioning sessions (`unzoned` when trimp 0),
-  the four uncounted reasons in words, an all-met line; `_conditioning_line` folded out — `c98c014`.
-- S3 the one instruction sentence (authoritative count; don't infer from history; flag intent≠quota) — `c98c014`.
-- Governance: DECISIONS #308, FEEDBACK §44, the two wording corrections, BRANCHES row, Recent-landings — `<gov>`.
-
-Gates: G1 render content + the §18 mutation EXERCISED (swap `due_slot`→`due_capacity` → the
-conditioning-due assertion fails); G2 parity (`state.resolver_position == resolve()` and the section
-carries those numbers); G3 null window byte-identical (golden context test green); G4 resolver raises
-→ context still builds, position omitted; G5 full backend suite **1724 passed** on a 3.12 venv.
+- **Diagnosis (the Stability 0/3 read).** Rule 1 counts PRIMARY tags only. Routine, folder and title are never read. The tag
+  seed was frozen at 2026-07 history. This was reported in chat, and the finding is recorded in #334's Context.
+- **Brief 1, D1 five regions.** LANDED `4de5e0c` → #334. `shoulder_stability` shipped as `shoulder_er_ir`, with capacity
+  STRENGTH by operator ruling (Q27's read), not STABILITY. All five are probe-inert. `TAXONOMY_VERSION` is `v0.1`.
+- **Brief 1, D2 admission guardrail.** LANDED `5fbbb6a` → #335. Its tension with #76 is recorded, not left implicit.
+- **Brief 1, D3 IR/ER reversal.** LANDED → #336. Also moved by operator ruling: the leg curls, Hip Adduction (Machine)
+  and Copenhagen (Short Lever), the last flagged as Code's inclusion.
+- **Brief 1, D4 sided-variant inheritance.** LANDED `4de5e0c` → #337, together with ID-keyed entries and `--dry-run`.
+- **Brief 1, D5 34 tags.** LANDED across `4de5e0c` and `94e19e4`. The 4 IR/ER variants landed once the full parent IDs arrived.
+- **Brief 1, Q27 slot-keying scope.** LANDED `5fbbb6a`.
+- **Brief 2, item 1 (IR/ER parent IDs).** LANDED `94e19e4` → #338. The parents are now ID-keyed, so a wrong ID shows as
+  UNRESOLVED. **Near-twin check against the DB: owed.** Code cannot reach prod, so the dry-run prints `NEAR-TWIN` lines
+  and the result has not been relayed.
+- **Brief 2, item 2 (unconfirmed tags).** Tooling LANDED `94e19e4` (dry-run report, opt-in `--prune-unconfirmed`), with the
+  proposed ruling as Q179. **The ruling is PROVISIONAL.** The operator reports the seed complete but has not relayed
+  whether prune was used. Q179 stays OPEN in the store until that is relayed.
+- **Brief 2, item 3 (Deficit KB RDL → MOBILITY).** LANDED `94e19e4` → #338. The router consequence is recorded: that
+  region now routes TRAIN, not the ASLR screen.
+- **Brief 2, item 4 (Q27 restrictions are not planes).** LANDED `cf31f20`. Q27 stays OPEN.
+- **Operator prod seed + recount.** The operator reports it DONE (2026-09-27). **Unverified by Code**, because the output
+  was not relayed. The per-capacity votes for 09-21 / 09-24 are therefore **not yet reported**.
 
 ## Cold-resume handoff
 
-**Sprint — v1 test 2 (Know): "what's due, enforced against the plan."** The lane is now complete
-end to end: the due-slot resolver (#276), the metabolic `load_window` slot kind backend + frontend
-(#307), and the resolver POSITION in the coach's chat context (#308). The coach can now read what
-has been done against the declared plan this window — the half of Know the operator actually uses.
+**Sprint: v1 test 2 (Know), "what's due, enforced against the plan."** This session fixed *what the
+quota counts*:
+- five STRENGTH regions, probe-inert (#334);
+- ID-keyed tags covering the 21-day audit's 34 untagged movements (#334/#338);
+- sided L/R variants inheriting through an explicit parent ID (#337);
+- the first MOBILITY tag (#338);
+- a seeder that can preview (`--dry-run`) and report its own preconditions.
 
-**Single clearest next action.** The metabolic INGEST bridge is now the ceiling and the
-highest-leverage next brief (an operator brief). #307/#308 count canonical `aerobic_sessions` from
-BOTH Polar sources (`polar_flow_export` + `polar_v4`), but Garmin/Samsung/HC exercise write no
-`aerobic_sessions` row (HC exercise is source-captured only, `#189`'s ingestion Status unbuilt), so
-those sessions are invisible to the quota and the load model. Stage-1 HC-workout ingest (zones
-derived from the posted HR) vs a direct `garminconnect` pull is the fork; that brief mints the
-gap's own `Q#` and is where OPEN CALL 1's session-floor becomes real.
+It did not fix *what a slot means*. Decompression's intent is a permission ("strength, but not the provocative
+movements"), and a capacity slot cannot express it. That is now Q27's scope. The recorded restrictions (#338 / Q27
+note) are lumbar EOR flexion + rotation, L-knee depth and L-thumb position. None is plane-level, which is evidence
+against capacity × plane and toward a counting/permission split plus a restriction record.
 
-**Still gated (operator).** Do not open the block-2 conditioning phase until the frontend bundle
-(#307 PR2) is deployed and the served bundle is confirmed rendering the `load_window` slot (`#121`
-grep for the "Conditioning" string on the live `assets/index-*.js`). Chat position (#308) reads
-the same `resolve()` regardless, so it is correct as soon as a phase carries a conditioning slot —
-but the panel must render before the phase is opened.
+**Open questions touched:**
+- **OPEN:** Q27, now v1 axes + slot keying + restriction record, which gates the decompression phase's real design.
+- **OPEN:** Q179, the unconfirmed-tag ruling; closes on the operator's relay.
+- **OPEN:** Q145 (typo'd `b4bab549…4166…`). Unchanged; the preflight now surfaces the twin if it is live.
+- **PENDING (operator):** Q27 lumbar item 1, whether any operator-chosen ceiling remains on heavy / end-range hinge.
 
-**Wording corrections landed this session (do not re-propagate the old forms).** (a) The
-HC-exercise ingest gap is NOT `Q154` — `Q154` is Polar ingest AUTOMATION; the HC gap is `#189`'s
-unbuilt Status and gets its own `Q#` from the stage-1 ingest brief. (b) The count is not
-"Polar-Flow-export only" — `polar_v4` rows are `aerobic_sessions` too (`connectors/polar.py:241`),
-and canonical-session counting includes them.
+**Single clearest next action.** Relay the four seed outputs named in the ROADMAP NOW row: dry-run
+`UNRESOLVED`/`NEAR-TWIN`, whether prune was used, the `explain_quota_votes` 09-21/09-24 votes, and the coverage audit.
+That closes Q179 and confirms whether Stability now reads correctly. Until then the Stability figure on the card is
+unconfirmed.
 
-**Open questions gating.** Q106 — the `minutes` reading keeps dose LATER; nothing reads `minutes`.
-Q158 — uncoupled chronic denominator (unrelated). The HC-ingest `Q#` — not yet minted (owed by the
-stage-1 ingest brief).
+**What was NOT touched this session (named, not implied finished):**
+- **Know, the plan of record.** The interim swap (the Stability slot becomes a Strength slot until Q27) is an operator
+  action on the Phase card. It was recommended, not done, and nothing in the tree records it as done.
+- **Know, the metabolic INGEST bridge.** The prior close-out's named ceiling; untouched.
+- **See (visuals lane), Walk in (appointment brief), Loop (surface-debt sweep).** All untouched. The lab upload
+  pipeline, the interpretation-layer build and the appointment brief sit in NOW unchanged.
+- **CBT-I** (Q177 items 1/3, Q178 migration). Untouched.
+- **Honest pattern note.** This session went to *classification instrument*: taxonomy, tags, seeder tooling and
+  governance. That was warranted, because the quota was reporting a false 0/3, but it was not Know's product surface.
+  The next Know step is Q27's slot-keying design, not more tagging.
 
-**NOT touched.** No prod queries this session (pure code over an existing read). The wrap-vs-plan
-view (surfacing item 2, increment 4) and the interpretation / appointment-brief lanes stood still —
-substrate-complete, unstarted. Operator's own owed (not Code): plan-of-record v2 (pending knee-consult
-+ club-start dates); the HCA HR-lag brief go-ahead; the stage-1 metabolic-ingest brief.
-
-**v1-triage (NOW lanes).** The exposure/Know lane served **Know** and is now demonstrable end to end
-(resolver + slot kind + frontend + chat position). No NOW lane rode by momentum without a v1 test.
-The metabolic-ingest bridge, once briefed, serves Know AND the load model (readiness).
-
-**Process note (FEEDBACK §44).** #307's S6 narrowed A2 to the declaration and I reported it as "a
-bounded shape" — a divergence that should have been flagged at the gate, not folded into prose. #308
-lands the real A2; §44 encodes the rule (a step landing smaller than its brief is REPORTED as a
-divergence, "done" has no totality check).
+**v1 triage of NOW:**
+- **Training seed row:** serves Know (test 2).
+- **Lab upload pipeline, interpretation-layer build:** serve Walk in (test 3); they feed the brief.
+- **Appointment brief:** serves Walk in (test 3).
+- **Cross-repo shared-block edit (owed):** serves no v1 test. It is in NOW only by #112's pin for cross-repo debt, which
+  makes it a demotion candidate if the pin is revisited.
+- **The two CBT-I rows:** both DONE and should drop out of NOW at the next ROADMAP sweep.
