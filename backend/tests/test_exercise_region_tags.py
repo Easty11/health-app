@@ -467,4 +467,102 @@ def test_shipped_reference_capacity_split(db_session):
         primary = [r["key"] for r in e["regions"] if r["role"] == "primary"]
         caps.setdefault(taxonomy.by_key(primary[0]).capacity.value, []).append(e["title"])
     assert len(caps["stability"]) == 8
-    assert len(caps["strength"]) == 14
+    assert len(caps["strength"]) == 15      # 14 (#334) - Deficit KB RDL + Shoulder IR/ER parents (#338)
+    assert caps["mobility"] == ["Deficit KB RDL"]
+
+
+# --------------------------------------------------------------------------- #
+# #338: IR/ER parents by id, Deficit KB RDL mobility, preflight, prune, votes.  #
+# --------------------------------------------------------------------------- #
+
+IR_PARENT = "b4bab549-a143-4186-9615-249165e5a4a2"
+ER_PARENT = "f5f7ecfb-68b8-44d6-99c4-f2dc7b183072"
+
+
+def test_shipped_reference_ir_er_variants_bind_to_id_keyed_parents(db_session):
+    """The four IR/ER sided variants name the parents by id, and the parent entries are
+    themselves id-keyed - so a wrong id is UNRESOLVED, never a silent fallback to the
+    parent's old no-pattern DB state."""
+    proposal = seeder.load_proposal()
+    parents = {e["template_id"]: e for e in proposal["tags"] if e.get("template_id")}
+    assert parents[IR_PARENT]["title"] == "Shoulder Internal Rotation"
+    assert parents[ER_PARENT]["title"] == "Shoulder External Rotation"
+    by_parent = {}
+    for v in proposal["sided_variants"]:
+        by_parent.setdefault(v["parent_template_id"], []).append(v["template_id"])
+    assert sorted(by_parent[IR_PARENT]) == sorted([
+        "934c52a0-8c5a-4a05-a149-4752bcdb6e61", "6ba537fa-d7dd-41e6-bc54-e5c13f8cb4f9"])
+    assert sorted(by_parent[ER_PARENT]) == sorted([
+        "c06b41ae-4ebf-4675-9c27-d4a367e101ed", "1af7297b-ba1f-429e-aef2-e78250e403b2"])
+    rdl = next(e for e in proposal["tags"]
+               if e.get("template_id") == "d724248e-29a8-41b0-8463-e3d8f8fff8c1")
+    assert rdl["regions"] == [{"key": "hip_flexion_pc_length", "role": "primary"},
+                              {"key": "hinge", "role": "secondary"}]
+
+
+def test_ir_variant_unresolved_parent_is_loud_not_no_pattern(db_session):
+    """Parent id absent from the catalogue (the typo'd twin is live instead): the parent
+    entry is UNRESOLVED and the variant does not inherit the old no-pattern verdict."""
+    twin = "b4bab549-a143-4166-9615-249185e5a4a2"
+    _tmpl(db_session, twin, "Shoulder Internal Rotation", custom=True, owner=1, adjudicated=True)
+    _tmpl(db_session, "934c", "Shoulder Internal Rotation L", custom=True, owner=1)
+    db_session.commit()
+    prop = {"tags": [{"template_id": IR_PARENT, "title": "Shoulder Internal Rotation",
+                      "regions": [{"key": "shoulder_er_ir", "role": "primary"}]}],
+            "sided_variants": [{"template_id": "934c", "title": "IR L",
+                                "parent_template_id": IR_PARENT}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, dry_run=True)
+    assert "Shoulder Internal Rotation" in r["unresolved_titles"]
+    assert any("not adjudicated" in t for t in r["unresolved_titles"])
+    assert r["near_twins"] == [{"referenced": IR_PARENT, "twin": twin,
+                                "twin_title": "Shoulder Internal Rotation"}]
+    assert "934c" not in r["plan"]
+
+
+def test_unconfirmed_rows_reported_and_pruned_only_on_opt_in(db_session):
+    _tmpl(db_session, "K1", "Kept")
+    _tmpl(db_session, "S1", "Stale")
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="K1", region_key="hinge",
+                                            role="primary", source="llm_proposed"))
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="S1", region_key="squat",
+                                            role="primary", source="llm_proposed"))
+    db_session.commit()
+    prop = {"tags": [{"title": "Kept", "regions": [{"key": "hinge", "role": "primary"}]}]}
+
+    dry = seeder.seed_tags(db_session, 1, proposal=prop, dry_run=True, prune_unconfirmed=True)
+    assert {u["template_id"] for u in dry["unconfirmed_existing"]} == {"K1", "S1"}
+    assert [u["template_id"] for u in dry["prune"]] == ["S1"]
+    assert db_session.query(models.ExerciseRegionTag).count() == 2, "dry run deleted rows"
+
+    with pytest.raises(ValueError):
+        seeder.seed_tags(db_session, 1, proposal=prop, prune_unconfirmed=True)
+
+    kept = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)       # no prune
+    assert kept["pruned"] == 0 and _rows(db_session, "S1") == {("squat", "primary")}
+
+    r = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True, prune_unconfirmed=True)
+    assert r["pruned"] == 1 and _rows(db_session, "S1") == set()
+    left = db_session.query(models.ExerciseRegionTag).all()
+    assert [(t.hevy_exercise_template_id, t.source) for t in left] == [("K1", "human_confirmed")]
+
+
+def test_explain_quota_votes_matches_rule_1(db_session):
+    """The read-only explainer reports the per-capacity primary votes Rule 1 used."""
+    import explain_quota_votes
+    _tmpl(db_session, "LLR", "Lying Leg Raise", owner=1)
+    _tmpl(db_session, "BD", "Bird Dog")
+    _tmpl(db_session, "KLC", "Kneeling Leg Curl L")
+    for tid, key in (("LLR", "trunk_stability_sagittal"), ("BD", "rotary_stability"),
+                     ("KLC", "knee_flexion")):
+        db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id=tid, region_key=key,
+                                                role="primary", source="human_confirmed"))
+    db_session.add(models.HevyWorkout(
+        hevy_id="w1", user_id=1, title="Mixed/Movement Quality",
+        start_time=datetime(2026, 9, 21, 0, 0, tzinfo=timezone.utc),
+        raw={"exercises": [{"exercise_template_id": t, "title": t}
+                           for t in ("LLR", "BD", "KLC", "NOPE")]}))
+    db_session.commit()
+    from datetime import date
+    [r] = explain_quota_votes.explain(db_session, 1, [date(2026, 9, 21)])
+    assert r["votes"] == {"stability": 2, "strength": 1}
+    assert r["dominant"] == "stability" and r["untagged"] == 1

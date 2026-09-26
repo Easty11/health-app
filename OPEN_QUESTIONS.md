@@ -161,6 +161,31 @@ allow/deny set per slot. Which one is enough turns on an operator input not yet 
 loads plane-level (e.g. all transverse loading) or finer (specific regions within a plane)? If Q27 closes on region
 definitions alone, the phase gets rebuilt on the same flawed base.
 
+**Scope note (2026-09-27): the real restrictions are not planes.** The operator's current restrictions, recorded as
+evidence for the slot-keying question above:
+1. **Lumbar** (clinician: Dr Aubrey). DENY end-of-range flexion COMBINED with rotation. All other lumbar movement is
+   PERMITTED under a pain-gated progression rule (start small, build up; pain halts progression). Heavy or end-range
+   hinge (flexion without rotation) is clinically cleared; whether an operator-chosen ceiling remains is PENDING the
+   operator. Deficit KB RDL (20 kg, flossing, #338) sits inside the clearance.
+2. **L knee → squat.** RANGE-LIMITED (depth). Likely extends to leg-press depth and step-up height.
+3. **L thumb.** EXERCISE- or POSITION-specific, only under direct thumb load: renegade row (worst), dead bug with a
+   dumbbell overhead (angle), dip hand position. Carries and pulls are unaffected.
+
+None of these is plane-level. That is evidence against option **(b) capacity × plane**: planes never appear in the
+restrictions actually in force.
+
+Design direction (chat proposal, not ruled):
+- **Separate counting from permission.** Quota counting keys on region/capacity and stays ungated. Hevy exposes load
+  but not range, depth or hand position, so range gates cannot be enforced at count time.
+- **Permission lives in a restriction record**, enforced at prescription, probe and warning time:
+  `{target, qualifier, side, reason, source, review_date}`.
+  - `target` = region → a load ceiling and/or a range limit (expressible as "end-range permitted below load X").
+  - `target` = movement combination → deny (e.g. EOR flexion + rotation).
+  - `target` = exercise → a position/setup note the engine cannot detect, carried wherever the exercise is
+    prescribed or shown.
+- **Qualifier type PROGRESSION RULE (pain-gated).** Enforceable only if a pain signal is captured (a check-in field or
+  a per-session flag); otherwise advisory. Q27 decides the capture point.
+
 **State:** OPEN — the v1 taxonomy bump is its own design pass: externally grounded (HAGOS / adductor
 squeeze; ER:IR isokinetic references; return-to-sport LSI), with adductor:abductor and ER:IR as first-class
 reads. NOT a bolt-on from a tag file (the taxonomy is external-authority so its breadth does not inherit the
@@ -2448,6 +2473,24 @@ Raised 2026-09-26 with #332. `wakings_nocturia_n` / `_pain_n` / `_spontaneous_n`
 2. The 2026-08-13 row (`wakings_nocturia_n`=1, `waso_min`=35, one waking) reads as a count. Either correct it to 35, which is an operator witnessed data fix on an AM-frozen field, or annotate it as unit-ambiguous.
 
 **State:** OWED. Loop-close: a migration PR released by the operator, plus the 08-13 disposition.
+
+---
+
+## Q179. Pre-existing unconfirmed exercise tags — confirm or remove before the v0.1 seed?
+
+Raised 2026-09-27 with #338. A plain (non-`--confirm`) seed run writes `llm_proposed` rows, and Rule 1
+(`engine/resolver.py`) counts every tag regardless of `source`. So rows from earlier plain runs may already be
+crediting quotas with nothing a human signed. Code cannot see prod. `seed_exercise_region_tags.py 1 --dry-run` now
+lists every such row and marks each one either **re-stamped by --confirm** (the reference still plans it) or
+**PRUNE** (it does not).
+
+**Proposed ruling (one, covering all of them):** run the seed as `--confirm --prune-unconfirmed`. Rows the reference
+still plans pass through the confirm gate and become `human_confirmed`; every other unconfirmed row is deleted. After
+the run no unconfirmed row remains, so Rule 1 counts only what the reference, as confirmed, says. Deletion is
+recoverable by adding the entry to the reference and re-seeding. Keeping an unreviewed row is not recoverable, because
+it keeps counting silently. The alternative, `--confirm` without prune, leaves the PRUNE rows counting as `llm_proposed`.
+
+**State:** OPEN — operator ruling, read against the dry-run's list before `--confirm`.
 
 ---
 
