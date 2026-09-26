@@ -25,10 +25,20 @@ Plan, then write: every entry is resolved into one plan first; `--dry-run` print
 that plan (resolved ids, regions, inheritance source) and writes NOTHING. A plain
 run is NOT a dry run — it writes `llm_proposed` rows, and Rule 1 counts them.
 
+Preflight (#338), reported on every run and printed by --dry-run:
+  * `near_twins` — a catalogue id sharing the first 8 characters of an id the reference
+    names (Q145's `b4bab549-…4166…` vs `…4186…`), so a typo'd-but-live twin is surfaced,
+    never silently mapped.
+  * `unconfirmed_existing` — tag rows already in the table that are NOT human-confirmed
+    (a plain run writes `llm_proposed`, and Rule 1 counts them). `--confirm` re-stamps the
+    ones this run plans; `--prune-unconfirmed` (only with `--confirm`) DELETES the rest
+    (`prune` lists them). Opt-in: which to do is an operator ruling (Q179).
+
 Re-runnable CLI:
     python backend/seed_exercise_region_tags.py <user_id> --dry-run  # resolve + print, no writes
     python backend/seed_exercise_region_tags.py <user_id>            # seed as llm_proposed
     python backend/seed_exercise_region_tags.py <user_id> --confirm  # stamp human_confirmed + confirmed_at
+    python backend/seed_exercise_region_tags.py <user_id> --confirm --prune-unconfirmed
 """
 import json
 import logging
@@ -187,6 +197,36 @@ def build_plan(db: Session, user_id: int, proposal: dict) -> dict:
     return {"plan": plan, "unresolved": unresolved}
 
 
+def _near_twins(db: Session, proposal: dict) -> list[dict]:
+    """Catalogue ids that share an 8-char prefix with a referenced id but are not it."""
+    refs = {e[k] for key in ("tags", "no_pattern", "sided_variants")
+            for e in proposal.get(key, [])
+            for k in ("template_id", "parent_template_id") if e.get(k)}
+    Template = models.HevyExerciseTemplate
+    out = []
+    for ref in sorted(refs):
+        if len(ref) < 9:          # 8-char Hevy default ids have no room for a twin
+            continue
+        for tid, title in (db.query(Template.id, Template.title)
+                           .filter(Template.id.like(ref[:8] + "%"), Template.id != ref).all()):
+            out.append({"referenced": ref, "twin": tid, "twin_title": title})
+    return out
+
+
+def _unconfirmed_rows(db: Session) -> list[dict]:
+    """Every tag row not human-confirmed, with its template title (for the report)."""
+    Tag, Template = models.ExerciseRegionTag, models.HevyExerciseTemplate
+    rows = (
+        db.query(Tag, Template.title)
+        .outerjoin(Template, Template.id == Tag.hevy_exercise_template_id)
+        .filter((Tag.source != "human_confirmed") | (Tag.confirmed_at.is_(None)))
+        .all()
+    )
+    return [{"template_id": t.hevy_exercise_template_id, "title": title,
+             "region_key": t.region_key, "role": t.role, "source": t.source}
+            for t, title in rows]
+
+
 def seed_tags(
     db: Session,
     user_id: int,
@@ -194,6 +234,7 @@ def seed_tags(
     proposal: dict | None = None,
     confirm: bool = False,
     dry_run: bool = False,
+    prune_unconfirmed: bool = False,
 ) -> dict:
     """Upsert tags + laterality for one user's resolved templates.
 
@@ -201,7 +242,11 @@ def seed_tags(
     `confirmed_at` — the authoritative-confirmation step. Otherwise the proposal's
     `source` (default 'llm_proposed') is written with confirmed_at NULL.
     `dry_run=True` resolves and returns the plan, writing nothing.
+    `prune_unconfirmed=True` (requires `confirm`, or `dry_run` to preview) deletes every
+    non-confirmed tag row this run does not plan — after it, no unconfirmed row remains.
     """
+    if prune_unconfirmed and not (confirm or dry_run):
+        raise ValueError("--prune-unconfirmed requires --confirm (or --dry-run to preview)")
     proposal = proposal or load_proposal()
     _validate_fail_closed(proposal)
 
@@ -216,6 +261,10 @@ def seed_tags(
 
     built = build_plan(db, user_id, proposal)
     plan, unresolved_titles = built["plan"], built["unresolved"]
+    near_twins = _near_twins(db, proposal)
+    unconfirmed = _unconfirmed_rows(db)
+    planned_pairs = {(tid, r["key"]) for tid, p in plan.items() for r in p["regions"]}
+    prune = [u for u in unconfirmed if (u["template_id"], u["region_key"]) not in planned_pairs]
 
     default_source = proposal.get("_meta", {}).get("source", "llm_proposed")
     now = datetime.now(timezone.utc)
@@ -271,6 +320,12 @@ def seed_tags(
             row.source = "human_confirmed" if confirm else default_source
             row.confirmed_at = now if confirm else None
 
+    if prune_unconfirmed and not dry_run:
+        for u in prune:
+            row = db.get(models.ExerciseRegionTag, (u["template_id"], u["region_key"]))
+            if row is not None:
+                db.delete(row)
+
     if dry_run:
         db.rollback()
     else:
@@ -286,11 +341,16 @@ def seed_tags(
         "no_pattern_adjudicated": 0 if dry_run else no_pattern,
         "confirmed": confirm,
         "unresolved_titles": unresolved_titles,
+        "near_twins": near_twins,
+        "unconfirmed_existing": unconfirmed,
+        "prune": prune,
+        "pruned": 0 if (dry_run or not prune_unconfirmed) else len(prune),
         "plan": {tid: {k: p[k] for k in ("label", "kind", "via", "regions")}
                  for tid, p in plan.items()},
     }
     logger.info("seed_exercise_region_tags: %s",
-                {k: v for k, v in summary.items() if k != "plan"})
+                {k: v for k, v in summary.items()
+                 if k not in ("plan", "unconfirmed_existing", "prune")})
     return summary
 
 
@@ -301,30 +361,45 @@ def _print_plan(summary: dict) -> None:
         print(f"  {tid:<38} {p['label'][:44]:<44} {regions}{via}")
     for title in summary["unresolved_titles"]:
         print(f"  UNRESOLVED  {title}")
+    for t in summary["near_twins"]:
+        print(f"  NEAR-TWIN   {t['twin']} ({t['twin_title']}) shares a prefix with "
+              f"referenced {t['referenced']} - rule on it, never map it silently")
+    print(f"  pre-existing unconfirmed tag rows: {len(summary['unconfirmed_existing'])} "
+          f"({len(summary['prune'])} not re-planned -> what --prune-unconfirmed would delete)")
+    for u in summary["unconfirmed_existing"]:
+        fate = "PRUNE" if u in summary["prune"] else "re-stamped by --confirm"
+        print(f"    {u['template_id']:<38} {str(u['title'])[:34]:<34} "
+              f"{u['region_key']}({u['role']}) [{u['source']}] -> {fate}")
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     if len(sys.argv) < 2:
         print("usage: python backend/seed_exercise_region_tags.py <user_id> "
-              "[--dry-run | --confirm]")
+              "[--dry-run | --confirm] [--prune-unconfirmed]")
         raise SystemExit(2)
     uid = int(sys.argv[1])
     flags = sys.argv[2:]
     do_confirm = "--confirm" in flags
     do_dry = "--dry-run" in flags
+    do_prune = "--prune-unconfirmed" in flags
     if do_confirm and do_dry:
         print("--dry-run and --confirm are exclusive")
+        raise SystemExit(2)
+    if do_prune and not (do_confirm or do_dry):
+        print("--prune-unconfirmed requires --confirm (or --dry-run to preview)")
         raise SystemExit(2)
 
     from database import SessionLocal
 
     _db = SessionLocal()
     try:
-        result = seed_tags(_db, uid, confirm=do_confirm, dry_run=do_dry)
+        result = seed_tags(_db, uid, confirm=do_confirm, dry_run=do_dry,
+                           prune_unconfirmed=do_prune)
         if do_dry:
             _print_plan(result)
-        print({k: v for k, v in result.items() if k != "plan"})
+        print({k: v for k, v in result.items()
+               if k not in ("plan", "unconfirmed_existing", "prune")})
     except (EmptyTemplateStoreError, OrphanRegionKeyError, MalformedProposalError) as exc:
         logging.error("%s", exc)
         raise SystemExit(1)
