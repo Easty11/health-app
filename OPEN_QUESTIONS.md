@@ -146,6 +146,21 @@ flagged deficit he is actively fortifying, and the platform currently has no axi
 `capability_state` is already per-region-per-side, so ratio reads are natively supported once the vocabulary
 exists — the schema is ready, the vocabulary is not.
 
+**Interim axes landed (2026-09-26, #334/#336).** `shoulder_er_ir`, `hip_adduction` and `knee_flexion` (plus
+`trunk_lateral_flexion` and `dip`) now exist as STRENGTH regions so tagged exercises stop falling to the keyword
+fallback. They are probe-inert bolt-ons, explicitly NOT this question's answer. Shoulder ER/IR, Copenhagen, Hip
+Adduction and the leg curls moved off no-pattern onto them; calf and hip abduction stay no-pattern. The v1 pass
+supersedes them.
+
+**Scope extension (2026-09-26): what does a quota slot KEY on?** Region definitions alone do not close this.
+The decompression phase exposed a second hole: its real intent is a PLANE PERMISSION on strength work ("strength in
+these planes, not the provocative ones"), and a `capacity` slot (Rule 1, `engine/resolver.py`) counts every
+STRENGTH-dominant workout the same, provocative-plane work included. Regions already carry a `Plane`, so v1 must also
+decide the slot key: **(a)** capacity alone (today), **(b)** capacity × plane, or **(c)** an explicit region
+allow/deny set per slot. Which one is enough turns on an operator input not yet given: are the currently provocative
+loads plane-level (e.g. all transverse loading) or finer (specific regions within a plane)? If Q27 closes on region
+definitions alone, the phase gets rebuilt on the same flawed base.
+
 **State:** OPEN — the v1 taxonomy bump is its own design pass: externally grounded (HAGOS / adductor
 squeeze; ER:IR isokinetic references; return-to-sport LSI), with adductor:abductor and ER:IR as first-class
 reads. NOT a bolt-on from a tag file (the taxonomy is external-authority so its breadth does not inherit the
