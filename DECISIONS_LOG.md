@@ -12393,3 +12393,61 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 - The rx 18 apply was verified by the script's read-back, and independently through `get_cbti_diary` (as_of 2026-09-26T10:01+10:00), which shows rx 17 ending 09-26 and rx 18 live with the #331 rationale.
 
 **Do not revisit unless.** A non-correction `adopt` is ever emitted mid-chain by the engine (today it never is), or the centre starts feeding a decision rather than a display.
+
+### 334. Taxonomy v0.1 — five tag-coverage regions (all STRENGTH, all probe-inert); Shoulder ER/IR is STRENGTH, not stability
+
+**Context.** Quota A showed Stability 0/3 despite two in-folder sessions (09-21 Mixed/Movement Quality, 09-24 Upper Fortify). The resolver's Rule 1 (`engine/resolver.py`) credits a workout to the capacity with the most PRIMARY-tagged exercises; routine, folder and title are never read. The tag seed was frozen at 2026-07 history, so 09-21 had zero tagged exercises (`untagged · 15`) and 09-24 resolved to Strength (`off_plan`). The ID-keyed audit (user 1, 21 days) found 34/43 movements untagged, a fallback hit-rate of 79.1%. The operator ruled to expand the taxonomy rather than force-fit exercises into existing regions.
+
+**Decision.** `engine/taxonomy.py` gains five group-A regions, all `Capacity.STRENGTH`: `shoulder_er_ir` (transverse), `trunk_lateral_flexion` (frontal; loaded flexion THROUGH range, distinct from `anti_lateral_flexion`), `knee_flexion` (sagittal), `hip_adduction` (frontal) and `dip` (sagittal; distinct from `vertical_push`). Each sets `measures=()`, `queue_eligible=False`, `probe_priority=False`, `per_side` and `confidence` explicitly, so none becomes a probe or observation candidate until deliberately admitted. `shoulder_er_ir.gates = ("dip",)`. `TAXONOMY_VERSION` becomes `v0.1`. The brief's `shoulder_stability` (group C, STABILITY) is shipped as `shoulder_er_ir` (group A, STRENGTH), by the operator's ruling that Q27's read stands: cable ER/IR at load is rotator-cuff strength, and the ER:IR ratio is the read.
+
+**Rationale.** A region whose key says "stability" but whose capacity is STRENGTH would invite exactly the misclassification this fixes, so the key follows the capacity. Crediting cuff work to STABILITY would also have filled the Stability quota by relabelling rather than by what was trained; four of the brief's twelve new stability credits were IR/ER. `v0.1` records that the axis list changed (the constant's own comment requires a bump), without claiming the `v1` that Q27 reserves for the externally grounded redesign. `dip` gating is written in the code's direction: `Region.gates` lists what THIS region gates. The brief's "dip: gates shoulder_stability" read the other way. Gates are advisory only (`selection.py` probe `gated_note`), so this is inert while `shoulder_er_ir` is not queue-eligible.
+
+**Beyond Rule 1 (what a new region or tag changes).** `GET /engine/taxonomy` lists the five new regions. `queue_eligible_regions()` (the probe queue and `coverage_summary`) is unchanged. New TAGS, not regions, move three other consumers: `infer_loaded_regions` marks their regions as loaded, which suppresses probing of e.g. anti_rotation, trunk_stability_sagittal and rotary_stability; `region_exercise.resolve_region` gains prescribable vehicles; and the keyword fallback stops firing for the tagged templates.
+
+**Status.** Operator-ratified in chat 2026-09-26 (expand the taxonomy; IR/ER = Strength; v0.1). Q27 stays OPEN: these are interim axes, not its v1 answer, and its scope is extended (quota slot keying) in the same landing. Tags apply to prod only after the operator runs the seeder (#337).
+
+**How you know.** `tests/test_exercise_region_tags.py::test_v01_regions_are_inert_for_probing` pins: all five exist, are STRENGTH, are not queue-eligible, have no measures, are not probe-priority, `shoulder_er_ir.gates == ("dip",)`, and every gate target resolves. `::test_shipped_reference_capacity_split` pins the reference's new ID-keyed credits at 8 stability / 14 strength. Full backend suite on Python 3.12: 1977 passed, and the 1 red (`test_current_state`) is the shallow-clone `git show 3360ed5`, which CI's `fetch-depth: 0` covers.
+
+**Do not revisit unless.** Q27's v1 design pass lands (it supersedes these as interim axes), or a region here is admitted to probing (then it needs a measure and norms, per #161).
+
+---
+
+### 335. Region-admission guardrail — a region earns its place if the program deliberately trains, tests or protects that quality
+
+**Decision.** A new taxonomy region is admitted only if it names a quality the program deliberately trains, tests or protects. Isolation work outside that set stays adjudicated no-pattern (#76's three-state coverage is unchanged). Applied first in #334: hip abduction, calf, arm and delt isolation, and knee extension remain no-pattern.
+
+**Rationale.** Without a rule, expanding coverage drifts into one region per exercise and Rule 1 dilutes. This rule is **program-grounded**, which departs from #76's premise that the taxonomy is external-authority so its breadth does not inherit the user's blind spots. The departure is deliberate and bounded: the admitted regions are named, externally referenced qualities (Q27 cites HAGOS, isokinetic ER:IR and hamstring-eccentric literature), and admission never makes a region a probe target (#334's inert defaults). Program-grounding decides what gets **tagged**; external grounding still governs what gets **probed and normed**.
+
+**Status.** Chat-ratified 2026-09-26 (brief D2); Code recorded the #76 tension above rather than leaving it implicit.
+
+**How you know.** Applied in #334's reference: 19 no-pattern entries remain, each isolation or lacking an admitted region (`backend/reference/exercise_region_tags_v0.json`).
+
+**Do not revisit unless.** Q27's v1 pass re-grounds the axis list externally, or the tagged set starts driving probe selection rather than coverage.
+
+---
+
+### 336. Shoulder Internal / External Rotation — adjudicated no-pattern reversed to primary `shoulder_er_ir`
+
+**Decision.** Supersedes the interim no-pattern verdict in the reference (DECISIONS #76 lineage, Q27 table). `Shoulder Internal Rotation` and `Shoulder External Rotation` are tagged primary `shoulder_er_ir` (STRENGTH, #334). By the same logic, and with operator agreement, the other interim no-patterns whose quality now has a region move too: `Copenhagen Plank (Short Lever)` and `Hip Adduction (Machine)` go to `hip_adduction`, and `Lying Leg Curl (Machine)` and `Seated Leg Curl (Machine)` go to `knee_flexion`. Each moved entry keeps its prior note verbatim after a `v0.1` prefix, so the rejected `shoulder_mobility` / `rotation` reasoning survives.
+
+**Rationale.** The no-pattern verdicts were explicitly INTERIM, "blocked on the v1 strength axis" (Q27). A region now exists for each. Leaving them no-pattern would tag Kneeling Leg Curl while leaving Seated Leg Curl untagged. `Copenhagen Plank (Short Lever)` was not in the operator's retag list; Code included it as the identical case (Q27 row 1), and this entry names it so it can be reversed on its own.
+
+**Status.** Operator-ratified 2026-09-26 (retag: yes). It lands in prod on the next `--confirm` seed. The brief's D3 IDs (`b4bab549-…`, `f5f7ecfb-…`) are TRUNCATED. These entries resolve by catalogue title (#79), and `--dry-run` prints each resolved ID for the operator to check against those prefixes. Q145 records two near-identical `b4bab549` IDs, so check the full ID.
+
+**How you know.** `::test_sided_variant_mirrors_parent_planned_in_same_run` exercises a no-pattern → `shoulder_er_ir` retag and shows it propagates. The reference diff shows the six lines moved and every other original line carried byte-for-byte (checked by script at edit time).
+
+**Do not revisit unless.** Q27's v1 pass replaces `shoulder_er_ir` / `hip_adduction` / `knee_flexion` with ratio-first axes.
+
+---
+
+### 337. Sided-variant inheritance by explicit `parent_template_id`; ID-keyed seed entries; `--dry-run`
+
+**Decision.** (a) A custom L/R template gets a new Hevy ID and so loses its parent's tags. It inherits them through an EXPLICIT, operator-confirmed `sided_variants[]` mapping (`template_id` → `parent_template_id`) in the seed reference, never by stripping titles at runtime, because titles drift (#79). A variant MIRRORS its parent: tagged gives the same regions and roles (rows the parent lacks are removed), and no-pattern gives no-pattern. The parent's state is taken from this run's plan, otherwise from its human-adjudicated DB state; an unadjudicated parent is refused, not guessed. (b) A reference entry may carry `template_id`, which makes it the key. Its title becomes a label and is never resolved, and it must be visible to the user (`_visible_to`). (c) The seeder plans, then writes. `--dry-run` prints the resolved plan and writes nothing. It fails closed on a variant carrying its own regions, a missing parent, a variant-of-a-variant, or a template ID claimed twice.
+
+**Rationale.** The 2026-09 audit keyed its 34 untagged templates by ID (#79's method), and most are sided customs whose titles are labels like "Suitcase Carry L". Title resolution could not reach them, and it prefers a same-titled default, which is the wrong template. A plain seed run is **not** a dry run: it writes `llm_proposed` rows, and Rule 1 counts every tag regardless of `source`. So before this there was no way to verify IDs against prod without changing the quota.
+
+**Status.** Chat-ratified 2026-09-26 (brief D4). Seeded pairs: Single Arm Lat Pulldown L/R → `2EE45F81` and Single Leg Hip Thrust L/R → `68CE0B9B` (catalogued as `Hip Thrust (Machine)`, hinge, per `probe_resolver.py`). **OWED:** the four Shoulder IR/ER L/R variants (`934c52a0…`/`6ba537fa…` IR, `c06b41ae…`/`1af7297b…` ER) wait on the parents' full template IDs from the operator. The brief gives them truncated.
+
+**How you know.** `tests/test_exercise_region_tags.py`: `::test_id_keyed_entry_resolves_by_id_not_title` (a same-titled default does not win), `::test_id_keyed_entry_refuses_another_users_custom`, `::test_sided_variant_mirrors_parent_planned_in_same_run` (a stale `rotation` row on the variant is removed), `::test_sided_variant_inherits_from_adjudicated_db_parent`, `::test_sided_variant_refuses_unadjudicated_parent`, `::test_sided_variant_of_no_pattern_parent_is_no_pattern`, `::test_malformed_proposal_fails_closed` (4 cases), `::test_dry_run_writes_nothing_but_reports_the_plan`, and the updated `::test_seed_is_idempotent_and_confirm_stamps_provenance` over the shipped reference. 26/26 green.
+
+**Do not revisit unless.** Hevy exposes a parent/variant link on custom templates (then read it, don't map it), or the resolver adopts fuzzy title matching (#60/#79).

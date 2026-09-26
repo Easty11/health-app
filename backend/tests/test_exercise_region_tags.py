@@ -257,14 +257,19 @@ def test_proposal_reference_validates_fail_closed(db_session):
 
 def test_seed_is_idempotent_and_confirm_stamps_provenance(db_session):
     proposal = seeder.load_proposal()
-    # Seed a template for every title in BOTH lists so all resolve.
-    all_titles = ([e["title"] for e in proposal["tags"]]
-                  + [e["title"] for e in proposal["no_pattern"]])
-    for i, title in enumerate(all_titles):
+    # Seed a template for every entry in all three lists so all resolve: id-keyed and
+    # sided-variant entries under their own id, title-keyed ones under a synthetic id —
+    # except the two sided-variant PARENTS, which carry the ids the reference names
+    # (fixture assumption mirroring the proposal; prod proves it via --dry-run).
+    parent_ids = {"Single Arm Lat Pulldown": "2EE45F81", "Hip Thrust (Machine)": "68CE0B9B"}
+    entries = proposal["tags"] + proposal["no_pattern"] + proposal["sided_variants"]
+    for i, e in enumerate(entries):
+        tid = e.get("template_id") or parent_ids.get(e["title"]) or f"T{i:03d}"
         db_session.add(models.HevyExerciseTemplate(
-            id=f"T{i:03d}", title=title, is_custom=False, owner_user_id=None,
+            id=tid, title=e["title"], is_custom=False, owner_user_id=None,
         ))
     db_session.commit()
+    all_titles = entries
 
     # A plain (non-confirm) run writes llm-proposed tags but stamps NO
     # adjudication — coverage is not claimed until human confirmation.
@@ -275,6 +280,7 @@ def test_seed_is_idempotent_and_confirm_stamps_provenance(db_session):
     assert r1["titles_unresolved"] == 0
     assert n1 == n2 == r1["tags_written"], "re-seed duplicated rows"
     assert r1["no_pattern_adjudicated"] == 0, "no_pattern must not persist without --confirm"
+    assert r1["inherited_variants"] == len(proposal["sided_variants"])
     assert db_session.query(models.HevyExerciseTemplate).filter(
         models.HevyExerciseTemplate.adjudicated_at.isnot(None)).count() == 0
 
@@ -303,3 +309,162 @@ def test_seed_is_idempotent_and_confirm_stamps_provenance(db_session):
     assert db_session.get(models.HevyExerciseTemplate, calf_tid).adjudicated_at is not None
     assert db_session.query(models.ExerciseRegionTag).filter_by(
         hevy_exercise_template_id=calf_tid).count() == 0
+
+
+# --------------------------------------------------------------------------- #
+# v0.1 (#337): id-keyed entries, sided-variant inheritance, --dry-run.         #
+# --------------------------------------------------------------------------- #
+
+def _tmpl(db, tid, title, *, custom=False, owner=None, adjudicated=False):
+    if owner is not None and db.get(models.User, owner) is None:
+        db.add(models.User(id=owner, email=f"u{owner}@test", hashed_password="x"))
+        db.flush()
+    db.add(models.HevyExerciseTemplate(
+        id=tid, title=title, is_custom=custom, owner_user_id=owner,
+        adjudicated_at=datetime.now(timezone.utc) if adjudicated else None,
+    ))
+    db.flush()
+
+
+def _rows(db, tid):
+    return {(r.region_key, r.role) for r in
+            db.query(models.ExerciseRegionTag).filter_by(hevy_exercise_template_id=tid)}
+
+
+def test_id_keyed_entry_resolves_by_id_not_title(db_session):
+    """The title on an id-keyed entry is a LABEL: a same-titled default must not win."""
+    _tmpl(db_session, "DEF1", "Plank Pull Through")                       # decoy default
+    _tmpl(db_session, "c-uuid", "Plank Pull Through", custom=True, owner=1)
+    db_session.commit()
+    prop = {"tags": [{"template_id": "c-uuid", "title": "Plank Pull Through",
+                      "regions": [{"key": "anti_rotation", "role": "primary"}]}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop)
+    assert r["titles_unresolved"] == 0
+    assert _rows(db_session, "c-uuid") == {("anti_rotation", "primary")}
+    assert _rows(db_session, "DEF1") == set()
+
+
+def test_id_keyed_entry_refuses_another_users_custom(db_session):
+    _tmpl(db_session, "other", "Bird Dog", custom=True, owner=2)
+    db_session.commit()
+    prop = {"tags": [{"template_id": "other", "title": "Bird Dog",
+                      "regions": [{"key": "rotary_stability", "role": "primary"}]}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop)
+    assert r["unresolved_titles"] == ["Bird Dog"]
+    assert _rows(db_session, "other") == set()
+
+
+def test_sided_variant_mirrors_parent_planned_in_same_run(db_session):
+    """Parent retagged in this run -> the variant copies the NEW tags and loses rows the
+    parent no longer carries (it mirrors, it does not accumulate)."""
+    _tmpl(db_session, "P1", "Shoulder Internal Rotation", custom=True, owner=1)
+    _tmpl(db_session, "V1", "Shoulder Internal Rotation L", custom=True, owner=1)
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="V1",
+                                            region_key="rotation", role="primary"))
+    db_session.commit()
+    prop = {"tags": [{"title": "Shoulder Internal Rotation",
+                      "regions": [{"key": "shoulder_er_ir", "role": "primary"}]}],
+            "sided_variants": [{"template_id": "V1", "title": "Shoulder IR L",
+                                "parent_template_id": "P1"}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert r["inherited_variants"] == 1
+    assert _rows(db_session, "V1") == {("shoulder_er_ir", "primary")}
+    assert r["plan"]["V1"]["via"] == "P1"
+
+
+def test_sided_variant_inherits_from_adjudicated_db_parent(db_session):
+    _tmpl(db_session, "68CE0B9B", "Hip Thrust (Machine)", adjudicated=True)
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="68CE0B9B",
+                                            region_key="hinge", role="primary"))
+    _tmpl(db_session, "slht-l", "Single Leg Hip Thrust L", custom=True, owner=1)
+    db_session.commit()
+    prop = {"sided_variants": [{"template_id": "slht-l", "title": "SL Hip Thrust L",
+                                "parent_template_id": "68CE0B9B"}]}
+    seeder.seed_tags(db_session, 1, proposal=prop)
+    assert _rows(db_session, "slht-l") == {("hinge", "primary")}
+
+
+def test_sided_variant_refuses_unadjudicated_parent(db_session):
+    """An unconfirmed parent is not a source: fail soft into `unresolved`, write nothing."""
+    _tmpl(db_session, "P2", "Parent")                      # never adjudicated
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="P2",
+                                            region_key="hinge", role="primary"))
+    _tmpl(db_session, "V2", "Parent L", custom=True, owner=1)
+    db_session.commit()
+    prop = {"sided_variants": [{"template_id": "V2", "title": "Parent L",
+                                "parent_template_id": "P2"}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop)
+    assert r["titles_unresolved"] == 1 and "not adjudicated" in r["unresolved_titles"][0]
+    assert _rows(db_session, "V2") == set()
+
+
+def test_sided_variant_of_no_pattern_parent_is_no_pattern(db_session):
+    _tmpl(db_session, "LE", "Leg Extension (Machine)")
+    _tmpl(db_session, "LE-L", "Leg Extension L", custom=True, owner=1)
+    db_session.commit()
+    prop = {"no_pattern": [{"title": "Leg Extension (Machine)"}],
+            "sided_variants": [{"template_id": "LE-L", "title": "LE L",
+                                "parent_template_id": "LE"}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert r["no_pattern_adjudicated"] == 2
+    assert db_session.get(models.HevyExerciseTemplate, "LE-L").adjudicated_at is not None
+    assert _rows(db_session, "LE-L") == set()
+
+
+@pytest.mark.parametrize("bad", [
+    {"sided_variants": [{"template_id": "V", "parent_template_id": "P",
+                         "regions": [{"key": "hinge", "role": "primary"}]}]},
+    {"sided_variants": [{"template_id": "V"}]},
+    {"sided_variants": [{"template_id": "V", "parent_template_id": "W"},
+                        {"template_id": "W", "parent_template_id": "P"}]},
+    {"tags": [{"template_id": "X", "regions": [{"key": "hinge", "role": "primary"}]}],
+     "no_pattern": [{"template_id": "X"}]},
+])
+def test_malformed_proposal_fails_closed(db_session, bad):
+    with pytest.raises(seeder.MalformedProposalError):
+        seeder._validate_fail_closed(bad)
+
+
+def test_dry_run_writes_nothing_but_reports_the_plan(db_session):
+    """A plain run is NOT a dry run (it writes llm_proposed rows Rule 1 counts);
+    --dry-run resolves the same plan and leaves tags, laterality and adjudication alone."""
+    _tmpl(db_session, "A1", "Plank")
+    _tmpl(db_session, "A2", "Suitcase Carry L", custom=True, owner=1)
+    db_session.commit()
+    prop = {"tags": [{"title": "Plank", "laterality": "bilateral",
+                      "regions": [{"key": "trunk_stability_sagittal", "role": "primary"}]}],
+            "sided_variants": [{"template_id": "A2", "title": "Suitcase L",
+                                "parent_template_id": "A1"}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, dry_run=True)
+    assert r["dry_run"] and r["tags_written"] == 0 and r["tags_planned"] == 2
+    assert r["plan"]["A2"]["regions"] == [{"key": "trunk_stability_sagittal", "role": "primary"}]
+    assert db_session.query(models.ExerciseRegionTag).count() == 0
+    assert db_session.get(models.HevyExerciseTemplate, "A1").laterality is None
+
+
+def test_v01_regions_are_inert_for_probing(db_session):
+    """The five tag-coverage axes (#334) never enter the probe queue or observations until
+    deliberately admitted; shoulder_er_ir gates dip (gates lists what THIS region gates)."""
+    new = ("shoulder_er_ir", "trunk_lateral_flexion", "knee_flexion", "hip_adduction", "dip")
+    eligible = {r.key for r in taxonomy.queue_eligible_regions()}
+    for key in new:
+        region = taxonomy.by_key(key)
+        assert region is not None and region.capacity is taxonomy.Capacity.STRENGTH
+        assert key not in eligible and not region.probe_priority and region.measures == ()
+    assert taxonomy.by_key("shoulder_er_ir").gates == ("dip",)
+    for region in taxonomy.all_regions():
+        for gated in region.gates:
+            assert taxonomy.by_key(gated) is not None, (region.key, gated)
+
+
+def test_shipped_reference_capacity_split(db_session):
+    """Pins what the v0.1 additions credit under Rule 1: IR/ER is STRENGTH (Q27's read),
+    so the new STABILITY credit is exactly the 8 trunk/anti-movement exercises."""
+    proposal = seeder.load_proposal()
+    new_ids = [e for e in proposal["tags"] if e.get("template_id")]
+    caps = {}
+    for e in new_ids:
+        primary = [r["key"] for r in e["regions"] if r["role"] == "primary"]
+        caps.setdefault(taxonomy.by_key(primary[0]).capacity.value, []).append(e["title"])
+    assert len(caps["stability"]) == 8
+    assert len(caps["strength"]) == 14
