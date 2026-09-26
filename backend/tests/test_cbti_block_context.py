@@ -98,6 +98,33 @@ def test_wake_anchor_comes_from_the_prescription_not_the_block(db_session):
     assert (ctx.prescribed_lights_out, ctx.wake_anchor, ctx.window_minutes) == ("21:48", "05:00", 432)
 
 
+def test_sleep_need_centre_restarts_at_the_latest_adopt(db_session):
+    """#333. rx 11-17 understated the window run by 45 (#331); rx 18 is an adopt correction.
+    The centre must not blend the superseded series: it averages from the latest adopt on."""
+    u = _user(db_session, "centre@x.io")
+    b = _block(db_session, u.id, opened=date(2026, 7, 24), anchor="05:45")
+    _rx(db_session, b.id, eff=date(2026, 9, 4), lo="22:15", win=405, decision="compress")
+    _rx(db_session, b.id, eff=date(2026, 9, 12), lo="22:03", win=417, decision="extend")
+    _rx(db_session, b.id, eff=date(2026, 9, 20), lo="21:48", win=432, decision="extend")
+    _rx(db_session, b.id, eff=date(2026, 9, 27), lo="21:48", win=477, anchor="05:45")  # adopt
+    ctx = _cbti_context(u.id, date(2026, 9, 27), db_session)
+    assert ctx.centre_minutes == 477 and ctx.centre_cycles_n == 1   # was 432.75 over 4
+    _rx(db_session, b.id, eff=date(2026, 10, 1), lo="22:03", win=462, anchor="05:45",
+        decision="compress")
+    ctx = _cbti_context(u.id, date(2026, 10, 1), db_session)
+    assert ctx.centre_minutes == 469.5 and ctx.centre_cycles_n == 2
+
+
+def test_sleep_need_centre_before_the_adopt_date_still_reads_the_old_series(db_session):
+    u = _user(db_session, "centre2@x.io")
+    b = _block(db_session, u.id, opened=date(2026, 7, 24))
+    _rx(db_session, b.id, eff=date(2026, 7, 24), lo="22:30", win=390)                    # adopt
+    _rx(db_session, b.id, eff=date(2026, 8, 1), lo="22:15", win=405, decision="extend")
+    _rx(db_session, b.id, eff=date(2026, 9, 27), lo="21:48", win=477)                    # adopt
+    ctx = _cbti_context(u.id, date(2026, 9, 26), db_session)
+    assert ctx.centre_minutes == 397.5 and ctx.centre_cycles_n == 2
+
+
 def test_block_anchor_is_the_fallback_when_no_prescription_is_in_force(db_session):
     u = _user(db_session, "anchorfb@x.io")
     _block(db_session, u.id, opened=date(2026, 7, 24), anchor="05:45")

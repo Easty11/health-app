@@ -398,13 +398,20 @@ def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
     # the history of what was PRESCRIBED, not an adjudication of nights against it, so
     # it does not go through the replay's effective-prescription read (#128) — there is
     # no cycle being decided here and nothing for the two paths to diverge about.
-    windows = [
-        w for (w,) in db.query(models.CBTIPrescription.window_minutes)
+    series = (
+        db.query(models.CBTIPrescription.window_minutes, models.CBTIPrescription.decision)
         .filter(models.CBTIPrescription.block_id == block.id,
                 models.CBTIPrescription.effective_from <= for_date)
-        .order_by(models.CBTIPrescription.effective_from)
+        .order_by(models.CBTIPrescription.effective_from, models.CBTIPrescription.id)
         .all()
-    ]
+    )
+    # The series RESTARTS at the latest `adopt` (#333). An adopt (block opening or operator
+    # correction) resets the titration chain — basis NULL, new cycle — so the windows before
+    # it are not samples of the current dither, and after #331 they were not even the windows
+    # run. The centre then rests on fewer windows (centre_cycles_n says how many) until the
+    # chain refills, rather than blending a superseded series into "sleep need".
+    last_adopt = max((i for i, (_, d) in enumerate(series) if d == "adopt"), default=0)
+    windows = [w for w, _ in series[last_adopt:]]
     return CBTIContextOut(
         block_open=True,
         block_id=block.id,
