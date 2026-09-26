@@ -27,7 +27,7 @@ from typing import Any
 
 # Matches the companion doc Capability_Taxonomy_v0.md. Bump when the axis list
 # changes so capability_state rows can record which version scored them.
-TAXONOMY_VERSION = "v0"
+TAXONOMY_VERSION = "v0.1"   # v0.1: +5 tag-coverage axes (#334); "v1" is reserved for Q27
 
 
 class Plane(str, Enum):
@@ -99,7 +99,8 @@ class Region:
     expectation: str            # reference expectation — a FLAG, not a verdict
     confidence: Confidence
     per_side: bool = True       # readable per-side (§F)
-    gates: tuple[str, ...] = () # region keys this one gates (mobility reserves, §B)
+    gates: tuple[str, ...] = () # region keys THIS region gates (mobility reserves, §B;
+                                # shoulder_er_ir -> dip) — never the regions that gate it
     probe_priority: bool = False  # §E + the seed comfort-gap — Probe targets first
     needs_norm: bool = False    # normative grounding still missing ("populate")
     # §G longevity-end axes are flagged but "need normative grounding before they
@@ -162,6 +163,37 @@ _REGIONS: tuple[Region, ...] = (
     Region("anti_rotation", "Anti-rotation", "A", Capacity.STABILITY, Plane.TRANSVERSE,
            "Pallof / rotary-stability (FMS pattern 7)",
            "Resist rotation under load symmetrically", Confidence.LIKELY),
+
+    # ---- A (v0.1). Tag-coverage axes (#334). Admitted under the region-admission (#335)
+    # guardrail: each names a quality the program deliberately trains, tests or protects.
+    # Every probe/observation field is EXPLICIT and inert — no measure, not queue-eligible,
+    # not probe-priority — so none becomes a probe candidate until deliberately admitted.
+    # They exist so tagged exercises stop falling to the keyword fallback / Rule 1 `untagged`.
+    # Q27 (joint-level strength ratios, v1) stays open: these are interim axes, not its answer.
+    Region("shoulder_er_ir", "Shoulder ER / IR (rotator cuff)", "A", Capacity.STRENGTH,
+           Plane.TRANSVERSE, "Cable / band ER and IR at load",
+           "ER:IR ratio is the read (~0.66-0.75 reference, Q27); symmetry L/R",
+           Confidence.LIKELY, per_side=True, gates=("dip",), probe_priority=False,
+           queue_eligible=False, measures=()),
+    Region("trunk_lateral_flexion", "Trunk lateral flexion (loaded, through range)", "A",
+           Capacity.STRENGTH, Plane.FRONTAL, "Weighted side bend / lateral flexion-extension",
+           "Loaded lateral flexion THROUGH range - distinct from anti_lateral_flexion "
+           "(resisting it); symmetry L/R", Confidence.LIKELY, per_side=True,
+           probe_priority=False, queue_eligible=False, measures=()),
+    Region("knee_flexion", "Knee flexion (hamstring)", "A", Capacity.STRENGTH,
+           Plane.SAGITTAL, "Nordic curl / leg curl",
+           "Eccentric hamstring quality; symmetry L/R", Confidence.LIKELY, per_side=True,
+           probe_priority=False, queue_eligible=False, measures=()),
+    Region("hip_adduction", "Hip adduction (adductor)", "A", Capacity.STRENGTH,
+           Plane.FRONTAL, "Copenhagen plank / adductor squeeze",
+           "Groin protection; adductor:abductor is the read (Q27); symmetry L/R",
+           Confidence.LIKELY, per_side=True, probe_priority=False, queue_eligible=False,
+           measures=()),
+    Region("dip", "Dip", "A", Capacity.STRENGTH, Plane.SAGITTAL,
+           "Dip / dip machine (gated by shoulder ER/IR)",
+           "Depth without anterior-shoulder compensation; distinct from vertical_push",
+           Confidence.LIKELY, per_side=False, probe_priority=False, queue_eligible=False,
+           measures=()),
 
     # ---- B. Mobility reserves (ROM gates — these gate the patterns above) ----
     Region("ankle_df", "Ankle dorsiflexion", "B", Capacity.MOBILITY, Plane.SAGITTAL,

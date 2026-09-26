@@ -1,10 +1,10 @@
 {
   "_meta": {
-    "taxonomy_version": "v0",
+    "taxonomy_version": "v0.1",
     "source": "llm_proposed",
     "provenance": "Proposed by Code from the user's last-90d Hevy history (2026-05-26..07-13, 51 distinct titles). LLM-proposed; PENDING human confirmation (DECISIONS_LOG #74/#76). Run the seeder with --confirm to stamp human_confirmed + adjudicated_at.",
     "three_states": "Coverage is three-state (DECISIONS_LOG #76). `tags` = adjudicated → maps to N regions. `no_pattern` = adjudicated → demonstrates NO screenable taxonomy region (isolation, or a joint-level STRENGTH lift v0 has no axis for). A title absent from BOTH lists is untagged/unlooked → keyword fallback. G2: 100% of active-window templates adjudicated (tags + no_pattern), fallback hit-count 0 — achieved only after a --confirm seed.",
-    "how_to_use": "Keyed by exact Hevy title (byte-exact — note U+2011/U+2013 in some titles). seed_exercise_region_tags.py resolves title -> hevy_exercise_templates.id (default-wins). region_key validated fail-closed vs engine/taxonomy.py. no_pattern entries persist (adjudicated_at + laterality, zero tag rows) ONLY on --confirm.",
+    "how_to_use": "Keyed by exact Hevy title (byte-exact — note U+2011/U+2013 in some titles). seed_exercise_region_tags.py resolves title -> hevy_exercise_templates.id (default-wins). region_key validated fail-closed vs engine/taxonomy.py. no_pattern entries persist (adjudicated_at + laterality, zero tag rows) ONLY on --confirm. v0.1 (#337): an entry may instead carry `template_id` (the key; title becomes a label), and `sided_variants` inherit a parent's adjudication by explicit parent_template_id. Preview any change with --dry-run (writes nothing).",
     "review_flags": "Entries carrying a `note` are judgment calls — confirm before seeding. The no_pattern strength-lifts (calf, shoulder ER/IR, Copenhagen, hip add/abd) are BLOCKED on the v1 strength-ratio axis (OPEN_QUESTIONS Q27); no-pattern is the correct INTERIM verdict, not a permanent one."
   },
 
@@ -50,20 +50,44 @@
     {"title": "Weighted Dead Bug", "laterality": "bilateral", "regions": [{"key": "trunk_stability_sagittal", "role": "primary"}], "note": "anti-extension core; closest sagittal-trunk region"},
     {"title": "Cable Crunch", "laterality": "bilateral", "regions": [{"key": "trunk_stability_sagittal", "role": "secondary"}], "note": "spinal flexion, not anti-movement stability — secondary; candidate for no_pattern, confirm"},
 
-    {"title": "Air Bike", "laterality": "bilateral", "regions": [{"key": "aerobic_base", "role": "primary"}], "note": "conditioning; aerobic_base is currently GUESSING/needs_norm"}
+    {"title": "Air Bike", "laterality": "bilateral", "regions": [{"key": "aerobic_base", "role": "primary"}], "note": "conditioning; aerobic_base is currently GUESSING/needs_norm"},
+
+    {"template_id": "09C9F635", "title": "Lying Leg Raise", "regions": [{"key": "trunk_stability_sagittal", "role": "primary"}]},
+    {"template_id": "2FA77B28", "title": "Flutter Kicks", "regions": [{"key": "trunk_stability_sagittal", "role": "primary"}]},
+    {"template_id": "B4F2FF72", "title": "Ab Scissors", "regions": [{"key": "trunk_stability_sagittal", "role": "primary"}]},
+    {"template_id": "4197ce86-4d3b-43be-b6b6-64fcbc94f13e", "title": "Plank Pull Through", "regions": [{"key": "anti_rotation", "role": "primary"}]},
+    {"template_id": "1B89CA1B", "title": "Renegade Row (Dumbbell)", "regions": [{"key": "anti_rotation", "role": "primary"}, {"key": "horizontal_pull", "role": "secondary"}]},
+    {"template_id": "808af23b-a14f-48b3-bbc4-8f73d380c96a", "title": "Bird Dog (Scrum Style)", "regions": [{"key": "rotary_stability", "role": "primary"}]},
+    {"template_id": "2663229f-5b6c-4b23-9b6d-a75449244b6a", "title": "Suitcase Carry L", "regions": [{"key": "anti_lateral_flexion", "role": "primary"}, {"key": "carry", "role": "secondary"}]},
+    {"template_id": "c212dddd-114a-4781-9792-25c537f3a247", "title": "Suitcase Carry R", "regions": [{"key": "anti_lateral_flexion", "role": "primary"}, {"key": "carry", "role": "secondary"}]},
+    {"template_id": "0dd081f1-960e-4bf0-87ca-14cf0ed217ff", "title": "Iso-Lateral Lat Pulldown (Supinated)", "regions": [{"key": "vertical_pull", "role": "primary"}]},
+    {"template_id": "13ed3b41-dc6c-4554-bc78-24833bb80a26", "title": "Iso-Lateral Lat Pulldown (Neutral)", "regions": [{"key": "vertical_pull", "role": "primary"}]},
+    {"template_id": "5122E7D9", "title": "Seated Dip Machine", "regions": [{"key": "dip", "role": "primary"}]},
+    {"template_id": "d45d5805-762f-411c-a279-55393c821949", "title": "Dumbbell Step Up L", "regions": [{"key": "lunge_single_leg", "role": "primary"}]},
+    {"template_id": "71b28b78-c5ad-4500-bd0c-11bc217b7c2b", "title": "Dumbbell Step Up R", "regions": [{"key": "lunge_single_leg", "role": "primary"}]},
+    {"template_id": "d724248e-29a8-41b0-8463-e3d8f8fff8c1", "title": "Deficit KB RDL", "regions": [{"key": "hinge", "role": "primary"}]},
+    {"template_id": "cd1268a6-a90d-42fd-b99a-2f800dab5a00", "title": "Seated Leg Press", "regions": [{"key": "squat", "role": "primary"}]},
+    {"template_id": "500ad271-19e6-4894-9f58-039e77da0e9c", "title": "Assisted Nordic Curls", "regions": [{"key": "knee_flexion", "role": "primary"}]},
+    {"template_id": "bb1aa298-c18a-4702-b4c8-1b8dc97b28a8", "title": "Kneeling Leg Curl L", "regions": [{"key": "knee_flexion", "role": "primary"}]},
+    {"template_id": "14dcc62b-4548-4cb9-a935-e07885969dda", "title": "Kneeling Leg Curl R", "regions": [{"key": "knee_flexion", "role": "primary"}]},
+    {"template_id": "587000b5-f27c-4520-aef0-bf67f74fd4b4", "title": "Copenhagen Plank L", "regions": [{"key": "hip_adduction", "role": "primary"}]},
+    {"template_id": "b091e9d8-54c6-4083-aae3-00384e8a571a", "title": "Copenhagen Plank R", "regions": [{"key": "hip_adduction", "role": "primary"}]},
+    {"template_id": "97f85861-2a0b-45e3-a85e-401b0e0fd403", "title": "Weighted Lateral Flexion/Ext L", "regions": [{"key": "trunk_lateral_flexion", "role": "primary"}]},
+    {"template_id": "668914db-e8b2-42aa-94a9-53e2f149b229", "title": "Weighted Lateral Flexion/Ext R", "regions": [{"key": "trunk_lateral_flexion", "role": "primary"}]},
+
+    {"title": "Copenhagen Plank (Short Lever)", "laterality": "unilateral", "regions": [{"key": "hip_adduction", "role": "primary"}], "note": "v0.1 (#334/#336): was adjudicated no-pattern pending a v0 axis; now primary hip_adduction. Q27 ratio read still open. Prior no-pattern note: INTERIM. Adductor strength — frontal_single_leg_stability is closed-chain balance, anti_lateral_flexion is trunk; a side-lying adduction load demonstrates neither. Correct region is a hip-adductor STRENGTH axis that v0 lacks. Wrong→empty is a strict improvement (was mistagged trunk_stability_sagittal). BLOCKED on Q27."},
+    {"title": "Shoulder External Rotation", "laterality": "unilateral", "regions": [{"key": "shoulder_er_ir", "role": "primary"}], "note": "v0.1 (#334/#336): was adjudicated no-pattern pending a v0 axis; now primary shoulder_er_ir. Q27 ratio read still open. Prior no-pattern note: INTERIM. Cable ER is rotator-cuff STRENGTH; shoulder_mobility is a mobility screen (wrong capacity). REJECTED shoulder_mobility. Correct read is an ER:IR strength ratio v0 has no axis for (user ER:IR ~0.56 vs 0.66-0.75 ref — an active fortification target). Wrong→empty kills the false `rotation` (a _RADICULAR_BLOCKS region). BLOCKED on Q27."},
+    {"title": "Shoulder Internal Rotation", "laterality": "unilateral", "regions": [{"key": "shoulder_er_ir", "role": "primary"}], "note": "v0.1 (#334/#336): was adjudicated no-pattern pending a v0 axis; now primary shoulder_er_ir. Q27 ratio read still open. Prior no-pattern note: INTERIM. IR strength; pairs with ER for the ER:IR ratio (Q27). Same false-`rotation` neutralisation."},
+    {"title": "Hip Adduction (Machine)", "laterality": "bilateral", "regions": [{"key": "hip_adduction", "role": "primary"}], "note": "v0.1 (#334/#336): was adjudicated no-pattern pending a v0 axis; now primary hip_adduction. Q27 ratio read still open. Prior no-pattern note: Open-chain frontal-hip adductor STRENGTH (pes-anserine-relevant). Not frontal_single_leg_stability (closed-chain stability). No v0 axis — the adductor:abductor ratio is a first-class Q27 read (HAGOS / adductor squeeze)."},
+    {"title": "Lying Leg Curl (Machine)", "laterality": "bilateral", "regions": [{"key": "knee_flexion", "role": "primary"}], "note": "v0.1 (#334/#336): was adjudicated no-pattern pending a v0 axis; now primary knee_flexion. Q27 ratio read still open. Prior no-pattern note: Knee-flexion isolation — no v0 axis."},
+    {"title": "Seated Leg Curl (Machine)", "laterality": "bilateral", "regions": [{"key": "knee_flexion", "role": "primary"}], "note": "v0.1 (#334/#336): was adjudicated no-pattern pending a v0 axis; now primary knee_flexion. Q27 ratio read still open. Prior no-pattern note: Knee-flexion isolation — no v0 axis."}
   ],
 
   "no_pattern": [
-    {"title": "Copenhagen Plank (Short Lever)", "laterality": "unilateral", "note": "INTERIM. Adductor strength — frontal_single_leg_stability is closed-chain balance, anti_lateral_flexion is trunk; a side-lying adduction load demonstrates neither. Correct region is a hip-adductor STRENGTH axis that v0 lacks. Wrong→empty is a strict improvement (was mistagged trunk_stability_sagittal). BLOCKED on Q27."},
-    {"title": "Shoulder External Rotation", "laterality": "unilateral", "note": "INTERIM. Cable ER is rotator-cuff STRENGTH; shoulder_mobility is a mobility screen (wrong capacity). REJECTED shoulder_mobility. Correct read is an ER:IR strength ratio v0 has no axis for (user ER:IR ~0.56 vs 0.66-0.75 ref — an active fortification target). Wrong→empty kills the false `rotation` (a _RADICULAR_BLOCKS region). BLOCKED on Q27."},
-    {"title": "Shoulder Internal Rotation", "laterality": "unilateral", "note": "INTERIM. IR strength; pairs with ER for the ER:IR ratio (Q27). Same false-`rotation` neutralisation."},
     {"title": "Calf Extension (Machine)", "laterality": "bilateral", "note": "REJECTED calf→ankle_df: category error. Plantarflexion STRENGTH ≠ dorsiflexion MOBILITY, and tagging it ankle_df would mark a live Tier-B screening region as loaded on the exact opposite movement (same failure class as Shoulder-Rotation→rotation, and it would suppress ankle-DF probing). BLOCKED on Q27 (plantarflexion strength axis)."},
     {"title": "Standing Calf Raise (Machine)", "laterality": "bilateral", "note": "REJECTED calf→ankle_df — as Calf Extension. Plantarflexion strength, no v0 axis."},
-    {"title": "Hip Adduction (Machine)", "laterality": "bilateral", "note": "Open-chain frontal-hip adductor STRENGTH (pes-anserine-relevant). Not frontal_single_leg_stability (closed-chain stability). No v0 axis — the adductor:abductor ratio is a first-class Q27 read (HAGOS / adductor squeeze)."},
     {"title": "Hip Abduction (Machine)", "laterality": "bilateral", "note": "Frontal-hip abductor strength; pairs with adduction for the adductor:abductor ratio (Q27)."},
     {"title": "Leg Extension (Machine)", "laterality": "bilateral", "note": "Knee-extension isolation — no movement-pattern axis in v0."},
-    {"title": "Lying Leg Curl (Machine)", "laterality": "bilateral", "note": "Knee-flexion isolation — no v0 axis."},
-    {"title": "Seated Leg Curl (Machine)", "laterality": "bilateral", "note": "Knee-flexion isolation — no v0 axis."},
     {"title": "Bicep Curl (Dumbbell)", "laterality": "unilateral", "note": "Arm isolation — no v0 axis."},
     {"title": "Hammer Curl (Dumbbell)", "laterality": "unilateral", "note": "Arm isolation — no v0 axis."},
     {"title": "Preacher Curl (Barbell)", "laterality": "bilateral", "note": "Arm isolation — no v0 axis."},
@@ -74,6 +98,18 @@
     {"title": "Rear Delt Reverse Fly (Dumbbell)", "laterality": "bilateral", "note": "Shoulder isolation — no v0 axis."},
     {"title": "Single Arm Rear Delt Cable Fly", "laterality": "unilateral", "note": "Shoulder isolation — no v0 axis."},
     {"title": "Band Pullaparts", "laterality": "bilateral", "note": "Scapular isolation — no v0 axis."},
-    {"title": "Pullover (Dumbbell)", "laterality": "bilateral", "note": "Lat/serratus isolation — no v0 axis."}
+    {"title": "Pullover (Dumbbell)", "laterality": "bilateral", "note": "Lat/serratus isolation — no v0 axis."},
+
+    {"template_id": "78e66969-e5fe-4519-82d5-dcd25f5dcff6", "title": "Single Leg Extension L", "note": "Knee-extension isolation - no axis."},
+    {"template_id": "c2b71fa9-46ae-4b35-9aa8-68c58c6c2f18", "title": "Single Leg Extension R", "note": "Knee-extension isolation - no axis."},
+    {"template_id": "78683336", "title": "Chest Fly (Machine)", "note": "Pec isolation - no axis."},
+    {"template_id": "D8281C62", "title": "Rear Delt Reverse Fly (Machine)", "note": "Shoulder isolation - no axis."}
+  ],
+
+  "sided_variants": [
+    {"template_id": "71257f1e-0c2c-4a33-aed1-83f0be54783e", "title": "Single Arm Lat Pulldown L", "parent_template_id": "2EE45F81"},
+    {"template_id": "afdbdf48-b8eb-4023-9809-465dc7e63b3a", "title": "Single Arm Lat Pulldown R", "parent_template_id": "2EE45F81"},
+    {"template_id": "6686a46d-8687-4385-996f-f71fc47be330", "title": "Single Leg Hip Thrust L", "parent_template_id": "68CE0B9B"},
+    {"template_id": "7fadcf65-6f0a-4a22-a7b3-5621c09398d4", "title": "Single Leg Hip Thrust R", "parent_template_id": "68CE0B9B"}
   ]
 }

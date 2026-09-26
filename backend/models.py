@@ -917,7 +917,7 @@ class ExerciseRegionTag(Base):
     region_key: Mapped[str] = mapped_column(String(100), primary_key=True)  # validated vs taxonomy Region.key
     # primary | secondary — explicit primacy for deliberate multi-region tags
     role: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'primary'"))
-    # mirrors engine.taxonomy.TAXONOMY_VERSION (currently 'v0')
+    # mirrors engine.taxonomy.TAXONOMY_VERSION (currently 'v0.1'; server_default 'v0' is legacy)
     taxonomy_version: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'v0'"))
     # llm_proposed | human_confirmed — the labs-style extract→confirm provenance
     source: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'llm_proposed'"))
