@@ -1943,6 +1943,8 @@ def build_system_prompt(
         _section_integrations(connected_integrations),
     ]
 
+    # Known limit (G1 ruling 4, not guarded): any active row suppresses onboarding, so a user whose
+    # only entry is a `constraint` / `finding` (even a proposal) skips the interview.
     if not state.knowledge_entries:
         sections.append(_section_onboarding_interview())
 

@@ -539,6 +539,11 @@ CONSTRAINT_KINDS = ("block", "cap", "caution")
 CONSTRAINT_EXIT_FIELDS = ("on_date", "on_condition", "with_parent")
 CONSTRAINT_STATUS_VALUES = ("proposed", "confirmed")
 
+# Stamped by a route, never written (G1 ruling 2): `confirmed_on` by `/confirm`, `resolution` (the
+# #223 block — `resolved_on` / `basis` / `resolved_by`, the field names injuries already carry) by
+# `/resolve` and `/retract`. A writer supplying one would be forging the route's record.
+TYPED_STAMPED_FIELDS = ("confirmed_on", "resolution")
+
 
 def _iso_date(value: Any, where: str) -> None:
     try:
@@ -579,9 +584,20 @@ def _validate_asserted_by(value: dict[str, Any], label: str, confirmed_statuses:
         )
 
 
+def _refuse_stamped(value: Any, label: str) -> None:
+    if isinstance(value, dict):
+        stamped = sorted(set(value) & set(TYPED_STAMPED_FIELDS))
+        if stamped:
+            raise ValueError(
+                f"{label}: {stamped} is stamped by its route (/confirm, /resolve, /retract), "
+                f"never written"
+            )
+
+
 def validate_constraint(value: Any) -> dict[str, Any]:
     """Validate a `constraint` value — shape only, no DB (the parent / chat / transition rules
     are `_validate_typed_write`'s). Returned UNCHANGED (byte-identical write→read)."""
+    _refuse_stamped(value, "constraint")
     _closed_keys(value, CONSTRAINT_FIELDS, "constraint")
     missing = [f for f in CONSTRAINT_REQUIRED if f not in value]
     if missing:
@@ -655,16 +671,103 @@ def validate_constraint(value: Any) -> dict[str, Any]:
     return value
 
 
+# ---------- typed entries: finding (#NEXT) ----------
+#
+# An interpretation is a `type="finding"` row: a statement with an `as_of`, a basis and a status,
+# optionally parented to any entry (G0 R1 — separate rows, not nested in the injury value). Evidence
+# cites READ DOORS and canonical ids only (Q22): never a Hevy template id or a source-native id.
+# `derived_from_labs: true` marks an interpretation of lab results; it is held behind the #60
+# firewall wherever it would render (the coach never interprets a lab result — G0 D2).
+#
+# Status (G1 ruling 3): a write may carry `proposed | open | confirmed`. `confirmed` is reached
+# from a proposal only via `/confirm`; `retracted` only via `/retract`; `superseded` only by a
+# same-key rewrite, which stamps it on the replaced row alongside `superseded_by`. Chat writes are
+# `proposed` and chat may never promote one (proposed → open is an operator write). Readers render
+# `open` and `confirmed`; `proposed` never.
+FINDING_FIELDS = (
+    "statement", "domain", "status", "parent_key", "as_of", "basis",
+    "marker_status", "derived_from_labs", "review_by", "asserted_by",
+)
+FINDING_REQUIRED = ("statement", "domain", "status", "as_of", "basis", "derived_from_labs", "asserted_by")
+FINDING_DOMAINS = ("injury", "clinical", "training", "analysis")
+FINDING_STATUS_VALUES = ("proposed", "open", "confirmed", "retracted", "superseded")
+FINDING_WRITE_STATUSES = ("proposed", "open", "confirmed")
+FINDING_BASIS_FIELDS = ("text", "evidence")
+FINDING_EVIDENCE_FIELDS = ("door", "ref")
+# The canonical read doors (Q22) an evidence ref may cite. A source-native store is not a door.
+FINDING_EVIDENCE_DOORS = ("counted_workouts", "arbitrated_sessions", "lab_results", "document")
+MARKER_STATUS_VALUES = ("provocative", "clear", "untested")   # Q20's three-valued status
+
+
+def validate_finding(value: Any) -> dict[str, Any]:
+    """Validate a `finding` value — shape only, no DB. Returned UNCHANGED."""
+    _refuse_stamped(value, "finding")
+    _closed_keys(value, FINDING_FIELDS, "finding")
+    missing = [f for f in FINDING_REQUIRED if f not in value]
+    if missing:
+        raise ValueError(f"finding: missing required field(s) {missing}")
+
+    _nonempty_str(value["statement"], "finding.statement")
+    if value["domain"] not in FINDING_DOMAINS:
+        raise ValueError(f"finding.domain: {value['domain']!r} is not one of {list(FINDING_DOMAINS)}")
+
+    st = value["status"]
+    if st not in FINDING_STATUS_VALUES:
+        raise ValueError(f"finding.status: {st!r} is not one of {list(FINDING_STATUS_VALUES)}")
+    if st not in FINDING_WRITE_STATUSES:
+        raise ValueError(
+            f"finding.status {st!r} is never written -- 'retracted' is POST /knowledge/findings/"
+            f"{{id}}/retract; 'superseded' is stamped when a same-key rewrite replaces the row"
+        )
+
+    if value.get("parent_key") is not None:
+        _nonempty_str(value["parent_key"], "finding.parent_key")
+    _iso_date(value["as_of"], "finding.as_of")
+
+    basis = value["basis"]
+    _closed_keys(basis, FINDING_BASIS_FIELDS, "finding.basis")
+    if basis.get("text") is not None:
+        _nonempty_str(basis["text"], "finding.basis.text")
+    evidence = basis.get("evidence")
+    if evidence is not None:
+        if not isinstance(evidence, list):
+            raise ValueError("finding.basis.evidence must be a list")
+        for i, ev in enumerate(evidence):
+            _closed_keys(ev, FINDING_EVIDENCE_FIELDS, f"finding.basis.evidence[{i}]")
+            if ev.get("door") not in FINDING_EVIDENCE_DOORS:
+                raise ValueError(
+                    f"finding.basis.evidence[{i}].door: {ev.get('door')!r} is not a canonical read "
+                    f"door -- one of {list(FINDING_EVIDENCE_DOORS)} (Q22)"
+                )
+            _nonempty_str(ev.get("ref"), f"finding.basis.evidence[{i}].ref")
+    if basis.get("text") is None and not evidence:
+        raise ValueError("finding.basis needs text or >=1 evidence ref -- a finding states its grounds")
+
+    ms = value.get("marker_status")
+    if ms is not None and ms not in MARKER_STATUS_VALUES:
+        raise ValueError(f"finding.marker_status: {ms!r} is not one of {list(MARKER_STATUS_VALUES)}")
+    if not isinstance(value["derived_from_labs"], bool):
+        raise ValueError(
+            f"finding.derived_from_labs must be a strict boolean, got {value['derived_from_labs']!r}"
+        )
+    if value.get("review_by") is not None:
+        _iso_date(value["review_by"], "finding.review_by")
+    # `open` is an operator's standing hypothesis, so it carries an authority like `confirmed` does.
+    _validate_asserted_by(value, "finding", ("open", "confirmed"))
+    return value
+
+
 # Per-type shape validators for the typed entries. The DB-aware rules shared by both types live
 # in `_validate_typed_write`.
 _TYPED_VALIDATORS = {
     "constraint": validate_constraint,
+    "finding": validate_finding,
 }
 
 # The statuses a CHAT write may carry, and the statuses reachable only through an explicit
 # operator route (never by a plain upsert). Keyed by type.
-_TYPED_CHAT_STATUS = {"constraint": "proposed"}
-_TYPED_CONFIRMED = {"constraint": ("confirmed",)}
+_TYPED_CHAT_STATUS = {"constraint": "proposed", "finding": "proposed"}
+_TYPED_CONFIRMED = {"constraint": ("confirmed",), "finding": ("confirmed",)}
 
 
 class TypedEntryRefused(ValueError):
@@ -1006,6 +1109,10 @@ def _stage_upsert_entry(
     if existing:
         existing.superseded_by = new_entry.id
         existing.active = False
+        if existing.type == "finding":
+            # G1 ruling 3: the replaced finding reads `superseded` in its own value too, so a history
+            # reader of the JSON alone cannot mistake it for a live status. Reassign — plain JSON.
+            existing.value = {**(existing.value or {}), "status": "superseded"}
 
     # An explicit `supersedes` retires a row under a DIFFERENT key -- which is the
     # case the key-based supersede above cannot reach, and precisely how the duplicate
@@ -1204,6 +1311,7 @@ _RESOLVE_LABELS = {
     "injury": "Injury entry",
     "schedule_item": "schedule_item entry",
     "constraint": "Constraint entry",
+    "finding": "Finding entry",
 }
 
 
@@ -1213,9 +1321,12 @@ def _resolve_entry(
     entry_type: str,
     user_id: int,
     db: Session,
+    terminal_status: str | None = None,
 ) -> models.UserKnowledgeEntry:
     """Retire one entry of `entry_type`: it is no longer true. The shared body behind
-    the per-type resolve routes (injury, schedule_item).
+    the per-type resolve routes (injury, schedule_item, constraint) and the finding
+    retract route, which also passes `terminal_status="retracted"` so the value's own
+    status is stamped in the same write as the `resolution` block.
 
     THE TYPE SCOPE IS A DELIBERATE 404-LEAK DEFENCE. The query filters on
     `type=entry_type` as well as the caller, so a resolve route can only ever retire a
@@ -1271,6 +1382,7 @@ def _resolve_entry(
             "basis": body.basis,
             "resolved_by": body.resolved_by,
         },
+        **({"status": terminal_status} if terminal_status is not None else {}),
     }
     entry.active = False
     # `superseded_by` is deliberately left untouched — resolution has no successor.
@@ -1544,7 +1656,8 @@ def _confirm_entry(
     db: Session,
 ) -> models.UserKnowledgeEntry:
     """Move one typed entry to its confirmed status — the ONLY such path (a confirmed status on
-    a plain upsert over a proposal is refused in `_validate_typed_write`).
+    a plain upsert over a proposal is refused in `_validate_typed_write`). A finding may be
+    confirmed from `proposed` or `open`. Stamps `confirmed_on` (G1 ruling 2).
 
     Type-scoped exactly as `_resolve_entry` is: an id of another type is a 404 that reveals
     nothing (the cross-type 404-leak defence). Confirming twice is a 409, not a no-op. A
@@ -1589,8 +1702,14 @@ def _confirm_entry(
                 detail=f"{label}'s parent {parent_key!r} is no longer active — its with_parent exit "
                        f"has already fired; resolve the entry instead",
             )
-    # REASSIGN, never mutate in place (plain JSON column — see `_resolve_entry`).
-    entry.value = {**value, "status": _TYPED_CONFIRMED[entry_type][0], "asserted_by": body.asserted_by}
+    # REASSIGN, never mutate in place (plain JSON column — see `_resolve_entry`). `confirmed_on` is
+    # the operator-local (AEST) day, like `resolved_on` (Q42); stamped here and nowhere else.
+    entry.value = {
+        **value,
+        "status": _TYPED_CONFIRMED[entry_type][0],
+        "asserted_by": body.asserted_by,
+        "confirmed_on": str(_local_day()),
+    }
     db.commit()
     db.refresh(entry)
     return entry
@@ -1627,3 +1746,34 @@ def resolve_constraint(
     injury / schedule_item resolve contract (#222).
     """
     return _resolve_entry(entry_id, body, "constraint", current_user.id, db)
+
+
+@router.post("/findings/{entry_id}/confirm", response_model=KnowledgeEntryOut)
+def confirm_finding(
+    entry_id: int,
+    body: ConfirmIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Confirm one finding (from `proposed` or `open`): the explicit operator write that stands
+    behind an interpretation, stamped with its authority (`asserted_by`, #227). The only path to
+    `confirmed` from a proposal; nothing confirms itself.
+    """
+    return _confirm_entry(entry_id, body, "finding", current_user.id, db)
+
+
+@router.post("/findings/{entry_id}/retract", response_model=KnowledgeEntryOut)
+def retract_finding(
+    entry_id: int,
+    body: ResolutionIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retract one finding: it is no longer held to be true. `basis` is mandatory (#223's
+    resolve contract — a retraction with no stated grounds is the thing that later reads as an
+    accident). Stamps `status: "retracted"` with the `resolution` block and sets `active=False`.
+
+    NEVER DELETES. A retracted interpretation stays in the table: that it was once held, and why
+    it was dropped, is itself context. Per-type route (the 404-leak defence).
+    """
+    return _resolve_entry(entry_id, body, "finding", current_user.id, db, terminal_status="retracted")

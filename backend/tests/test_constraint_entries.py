@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 import models
 from auth import get_current_user
 from database import get_db
+from load_metrics import _local_day
 from routers import knowledge as knowledge_router
 from routers.chat import _process_knowledge_updates
 from routers.knowledge import (
@@ -138,6 +139,15 @@ def test_every_unknown_key_is_refused(where, bad):
         v[where] = {**v[where], **bad}
     with pytest.raises(ValueError, match="unknown field"):
         validate_constraint(v)
+
+
+@pytest.mark.parametrize("stamped", [
+    {"confirmed_on": "2026-09-27"},
+    {"resolution": {"resolved_on": "2026-09-27", "basis": "x", "resolved_by": "user"}},
+])
+def test_route_stamped_fields_are_refused_on_write(stamped):
+    with pytest.raises(ValueError, match="stamped by its route"):
+        validate_constraint(_engine(**stamped))
 
 
 @pytest.mark.parametrize("field", CONSTRAINT_REQUIRED)
@@ -287,6 +297,7 @@ def test_confirm_route_confirms_and_stamps_authority(db_session):
     assert r.json()["value"]["asserted_by"] == "clinician"
     fresh = db_session.query(models.UserKnowledgeEntry).filter_by(id=row.id).one()
     assert fresh.value["status"] == "confirmed" and fresh.active
+    assert fresh.value["confirmed_on"] == str(_local_day())       # G1 ruling 2 — stamped here only
     # Twice is an error, not a no-op.
     assert c.post(f"/knowledge/constraints/{row.id}/confirm",
                   json={"asserted_by": "user"}).status_code == 409
