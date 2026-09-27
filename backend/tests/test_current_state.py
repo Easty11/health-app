@@ -382,6 +382,35 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     )
     old_prompt = old_prompt.replace(_OLD_GUIDE, _NEW_GUIDE)
 
+    # NARROWED AGAIN (injury clearance sweep, S3): `_section_knowledge_update` is rewritten BY
+    # INTENT — "Injury History" and "Constraints" leave the free-text categories and injury facts
+    # are pointed at the structured `type="injury"` ledger, because a free-text injury line can
+    # never be resolved and keeps re-imposing the injury after the ledger row is retired.
+    # Declared byte difference: the section goes 1032 → 1510 bytes (+478); nothing else in the
+    # prompt changes. Same reasoning as the #82/#230/#233/#292/#327 narrowings: old==new can never
+    # hold for this section again and PRE_REFACTOR_SHA cannot move. It is the LAST section, so it
+    # is excised from its heading to the end — the tail-anchoring asserts below prove nothing
+    # after it is hidden. Pinned by tests/test_knowledge_update_prompt.py.
+    _KU_HEAD = "## Updating the Knowledge Base\n"
+    _ku_new = context_builder._section_knowledge_update()
+    assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
+        "the knowledge-update section is no longer the prompt's tail — this excision would hide "
+        "whatever now follows it"
+    )
+    _ku_old = old_prompt[old_prompt.find(_KU_HEAD):]
+    assert old_prompt.count(_KU_HEAD) == 1 and "Valid categories: Injury History" in _ku_old, (
+        "the knowledge-update narrowing lost its anchor in the pre-refactor prompt"
+    )
+    assert _ku_old != _ku_new, (
+        "the excised knowledge-update section is identical on both sides — this narrowing is "
+        "now a no-op and should be removed rather than left hiding drift"
+    )
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 1510), (
+        "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
+    )
+    old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]
+    new_prompt = new_prompt[:new_prompt.find(_KU_HEAD)]
+
     assert old_prompt == new_prompt
 
 

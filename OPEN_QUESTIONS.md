@@ -16,6 +16,18 @@ retire `routers/knowledge.py`'s legacy write path + `context_builder`'s parallel
 `current_state` — or keep them permanently distinct (free-text notes vs typed declared
 state)? Deferred by #44; not urgent.
 
+**Annotation (2026-09-27, injury clearance sweep; #340, #341).**
+The fork now has a live cost. Verified on master `360b385`: `user_knowledge` has no active flag and no
+resolution; chat loads it unfiltered (`chat.py`) and `_section_knowledge` renders every row every turn; and the
+legacy write path APPENDS to one row per category, so a row mixes facts about several injuries (prod row 2,
+Injury History, is 66 lines). A resolved injury therefore keeps re-imposing itself from here. Mitigations landed
+without deciding this Q: the coach no longer writes "Injury History"/"Constraints" (prompt-only;
+`VALID_CATEGORIES` untouched), and the sweep finds the copies per line for the operator to edit. Retirement, or a
+render gate on this store, is still this Q.
+- **Forward-compat (G2 ruling):** the sweep's `reaches_context` label is currently a per-store constant (`"yes"`
+  for `user_knowledge`, `injury_sweep.sweep_user_knowledge`). When this Q render-gates the free-text store, that
+  label must be DERIVED from the renderer's actual inclusion rule, not the constant, so it flips with the gate.
+
 **State:** OPEN — undecided design fork (fold the legacy KB in as `type="note"` vs keep the two
 permanently distinct). Deferred by #44, not urgent. No blocker.
 
@@ -2486,6 +2498,24 @@ Raised 2026-09-26 with #332. `wakings_nocturia_n` / `_pain_n` / `_spontaneous_n`
 2. The 2026-08-13 row (`wakings_nocturia_n`=1, `waso_min`=35, one waking) reads as a count. Either correct it to 35, which is an operator witnessed data fix on an AM-frozen field, or annotate it as unit-ambiguous.
 
 **State:** OWED. Loop-close: a migration PR released by the operator, plus the 08-13 disposition.
+
+---
+
+## Q180. Browser chat history is a single non-expiring conversation re-sent every turn
+
+Raised 2026-09-27 with the injury clearance sweep (#340; G0 ruling 5). The chat panel keeps ONE conversation per user in
+browser `localStorage` (`chat_history_{sub}`, `ChatPanel.jsx`) and sends all of it as `conversation_history` on every
+turn (`chat.py`). Nothing expires or trims it. Two costs:
+1. **Unsearchable copy store.** A resolved injury (or any retired fact) discussed in chat stays in context on every
+   later turn, re-imposing it. The backend never sees the history at rest, so the clearance sweep cannot search it;
+   it is on the sweep's fixed manual checklist ("browser chat history") only.
+2. **Unbounded token growth.** Every turn re-sends the whole conversation.
+
+**To decide:** a server-side, bounded history (summarised, or windowed with older turns behind a tool), or a
+client-side window/expiry, or an explicit "new conversation" affordance — and whether resolved-fact copies in it
+are handled by the summary or by the operator.
+
+**State:** OPEN. No blocker.
 
 ---
 

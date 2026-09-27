@@ -944,24 +944,41 @@ Once basic scope + device profile are captured, proceed with the conversation
 normally — you don't need every field before being useful."""
 
 
+# Free-text categories the coach may write. "Injury History" and "Constraints" are DELIBERATELY
+# absent: the free-text store has no active flag and no resolution and renders unfiltered every
+# turn, so an injury written there can never be retired and keeps re-imposing itself after the
+# ledger row is resolved. Injury facts go only to the structured `type="injury"` ledger.
+# Prompt-only: `routers.knowledge.VALID_CATEGORIES` (the manual POST) is untouched (Q9).
+# Pinned by tests/test_knowledge_update_prompt.py.
+KNOWLEDGE_UPDATE_CATEGORIES = ("Training Background", "Goals", "Nutrition", "Recovery", "Other")
+
+
 def _section_knowledge_update() -> str:
-    return """## Updating the Knowledge Base
+    return f"""## Updating the Knowledge Base
 
 You can save new information about the user to their knowledge base by embedding
 a JSON block anywhere in your response:
 
 <knowledge_update>
-{"category": "Injury History", "content": "new detail to save"}
+{{"category": "Training Background", "content": "new detail to save"}}
 </knowledge_update>
 
-Valid categories: Injury History, Training Background, Goals, Constraints,
-Nutrition, Recovery, Other.
+Valid categories: {", ".join(KNOWLEDGE_UPDATE_CATEGORIES)}.
+
+INJURIES AND EXERCISE RESTRICTIONS NEVER GO IN A FREE-TEXT CATEGORY. A free-text
+line cannot be resolved, so it keeps re-imposing the injury after it heals. Write
+each injury as ONE structured entry in the injury ledger, reusing its key to
+update it:
+
+<knowledge_update>
+{{"type": "injury", "key": "injury_calf_left", "value": {{"body_part": "calf", "side": "left", "signal_type": "mechanical", "restrictions": ["no heel raises for reps"]}}}}
+</knowledge_update>
 
 Use this proactively — whenever the user mentions something new about their
 training, body, or preferences, save it without being asked. Examples:
-- They mention a niggling pain → save to "Injury History"
+- They mention a niggling pain → a structured `type="injury"` entry, not free text
 - They share a new goal or target → save to "Goals"
-- They discover an exercise they can't do → save to "Constraints"
+- They discover an exercise they can't do → add it to that injury's `restrictions`
 - They describe what works well for recovery → save to "Recovery"
 
 If an entry for that category already exists, the new content will be appended.

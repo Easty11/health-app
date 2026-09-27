@@ -7,7 +7,10 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 import models
+import hevy_routine_cache
+import injury_sweep
 from auth import get_current_user
+from connectors.hevy import HevyClient
 from database import get_db
 from load_metrics import _local_day  # operator-local (AEST) day — Q42 single source
 # `satisfies` (#312) validates against the SAME vocabularies the microcycle slot validator
@@ -1035,6 +1038,194 @@ def resolve_injury(
     hamstring tear is still a fact about the user and still context for the next one.
     """
     return _resolve_entry(entry_id, body, "injury", current_user.id, db)
+
+
+class SweepOtherInjury(BaseModel):
+    entry_id: int
+    key: str
+    active: bool                # true = the line is still in use by a live injury
+    matched_terms: list[str]
+
+
+class SweepHit(BaseModel):
+    store: str                  # user_knowledge | user_knowledge_entries | hevy_routines
+    row_id: Any                 # int for app stores; Hevy routine id (str) for hevy_routines
+    line_index: int
+    location: str
+    snippet: str
+    matched_terms: list[str]    # primary terms found (why this line is a hit)
+    restriction_terms: list[str]  # restriction words also on the line — the stale-order signal
+    sides_mentioned: list[str]
+    opposite_side: bool         # names only the opposite side — flagged, never dropped
+    marked_resolved: bool       # the line says "resolved"/"historical" — history, not an order
+    other_injuries: list[SweepOtherInjury]  # other ledger rows the line also names
+    reaches_context: str        # yes | no | conditional | unverified
+    action: str                 # edit | resolve | none  (none → the UI shows "manual")
+    action_route: str | None
+
+
+class SweepStore(BaseModel):
+    store: str
+    status: str                 # searched | not_connected | unavailable | stale
+    hits: int
+
+
+class RadicularWarning(BaseModel):
+    signal_type: str
+    fires: list[str]
+    message: str
+
+
+class RehomedTo(BaseModel):
+    entry_id: int
+    key: str
+    body_part: str | None
+    signal_type: str
+    radicular_warning: RadicularWarning | None
+
+
+class RestrictionAudit(BaseModel):
+    restriction: str
+    match_stems: list[str]
+    covered_by_basis: bool
+    rehomed_to: list[RehomedTo]
+    status: str                 # covered | rehomed | orphan
+
+
+class SweepChecklistItem(BaseModel):
+    store: str
+    where: str
+    why: str
+
+
+class InjurySweepOut(BaseModel):
+    entry_id: int
+    key: str
+    body_part: str | None
+    side: str | None
+    active: bool
+    terms: list[str]              # PRIMARY: names the injury; a hit needs >= 1
+    restriction_terms: list[str]  # SECONDARY: annotates a hit, never creates one
+    # Restrictions that would drop out of chat context with this row (orphan), are
+    # addressed by its resolution basis (covered), or live on another active row (rehomed).
+    restriction_audit: list[RestrictionAudit]
+    restrictions_note: str
+    stores: list[SweepStore]
+    hits: list[SweepHit]
+    manual_checklist: list[SweepChecklistItem]   # always present, always last
+
+
+@router.get("/injuries/{entry_id}/sweep", response_model=InjurySweepOut)
+async def sweep_injury(
+    entry_id: int,
+    terms: str | None = Query(
+        None, description="Extra comma-separated match terms, case-insensitive."),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Find every copy of one injury outside the ledger — SURFACING-ONLY, never edits.
+
+    The ledger is the only authority on injury state; every other store holding the injury
+    is a copy the operator clears by hand. A line is a hit only if it names the injury — a
+    PRIMARY term: body_part, its `BODY_PART_ALIASES`, key tokens, or `?terms=`. Restriction
+    words are SECONDARY: they annotate a hit (`restriction_terms`, the stale-order signal) and
+    never create one. Searched: the free-text `user_knowledge` rows (per line), non-injury
+    structured entries (`value` leaves and `notes`), and Hevy routine/exercise notes via the
+    routine cache. Each hit carries the store's EXISTING action, or `none`. The response
+    always ends with a fixed checklist of stores the app cannot search.
+
+    Also audits the entry's `restrictions`: each is `covered` by the resolution basis,
+    `rehomed` onto another active injury row, or an `orphan` about to leave chat context
+    (restriction strings are chat-rendered only; the engine gates on body_part +
+    signal_type). A re-homed destination typed neural/radicular on a spinal part carries a
+    `_RADICULAR_BLOCKS` warning. The resolve route's contract is untouched: the frontend
+    calls this straight after a resolve.
+
+    Works for resolved entries — the point is sweeping after a resolve. Scoped to
+    `type='injury'` like the resolve route: any other id, or another user's, is a 404.
+    """
+    # Local: `encryption` builds its Fernet at import, which this router has never required.
+    from encryption import decrypt
+
+    entry = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(id=entry_id, user_id=current_user.id, type="injury")
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Injury entry not found")
+
+    value = entry.value or {}
+    own_side = (str(value.get("side") or "").lower() or None)
+    extra = (terms or "").split(",")
+    primary_terms, restriction_terms = injury_sweep.derive_terms(entry, extra)
+    rx = injury_sweep.term_regex(primary_terms)
+
+    all_injuries = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=current_user.id, type="injury")
+        .order_by(models.UserKnowledgeEntry.id)
+        .all()
+    )
+    audit = injury_sweep.audit_restrictions(entry, [i for i in all_injuries if i.active])
+    ctx = injury_sweep.line_context(entry, all_injuries, restriction_terms)
+
+    stores: list[dict[str, Any]] = []
+    hits: list[dict[str, Any]] = []
+    if rx is not None:
+        uk_rows = (
+            db.query(models.UserKnowledge)
+            .filter_by(user_id=current_user.id)
+            .order_by(models.UserKnowledge.category, models.UserKnowledge.id)
+            .all()
+        )
+        uk_hits = injury_sweep.sweep_user_knowledge(uk_rows, rx, ctx)
+        stores.append({"store": "user_knowledge", "status": "searched", "hits": len(uk_hits)})
+
+        entries = (
+            db.query(models.UserKnowledgeEntry)
+            .filter(models.UserKnowledgeEntry.user_id == current_user.id,
+                    models.UserKnowledgeEntry.type != "injury")
+            .order_by(models.UserKnowledgeEntry.id)
+            .all()
+        )
+        e_hits = injury_sweep.sweep_entries(entries, rx, ctx)
+        stores.append({"store": "user_knowledge_entries", "status": "searched", "hits": len(e_hits)})
+
+        integration = (
+            db.query(models.UserIntegration)
+            .filter_by(user_id=current_user.id, provider="hevy")
+            .first()
+        )
+        h_hits: list[dict[str, Any]] = []
+        if integration is None:
+            h_status = "not_connected"
+        else:
+            # The chat turn's own cache + 3s budget — never waits on Hevy, never raises.
+            cached = await hevy_routine_cache.get_routines_cached(
+                HevyClient(decrypt(integration.api_key_encrypted)), current_user.id)
+            if cached.get("unavailable"):
+                h_status = "unavailable"
+            else:
+                h_status = "stale" if cached.get("stale") else "searched"
+                h_hits = injury_sweep.sweep_hevy_routines(cached.get("routines"), rx, ctx)
+        stores.append({"store": "hevy_routines", "status": h_status, "hits": len(h_hits)})
+        hits = uk_hits + e_hits + h_hits
+
+    return {
+        "entry_id": entry.id,
+        "key": entry.key,
+        "body_part": value.get("body_part"),
+        "side": own_side,
+        "active": entry.active,
+        "terms": primary_terms,
+        "restriction_terms": restriction_terms,
+        "restriction_audit": audit,
+        "restrictions_note": injury_sweep.RESTRICTIONS_NOTE,
+        "stores": stores,
+        "hits": hits,
+        "manual_checklist": list(injury_sweep.MANUAL_CHECKLIST),
+    }
 
 
 @router.post("/schedule/{entry_id}/resolve", response_model=KnowledgeEntryOut)

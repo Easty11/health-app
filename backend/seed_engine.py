@@ -125,9 +125,12 @@ _INJURY_SEED = [
 def _seed_injuries(db, user_id: int) -> int:
     written = 0
     for inj in _INJURY_SEED:
+        # Keyed on `key` REGARDLESS of `active`: a resolved injury (active=False, #222) is
+        # still "present". Filtering on active=True here meant one seed run re-created every
+        # resolved injury as active, undoing the resolution and the clearance sweep behind it.
         existing = (
             db.query(models.UserKnowledgeEntry)
-            .filter_by(user_id=user_id, key=inj["key"], active=True)
+            .filter_by(user_id=user_id, type="injury", key=inj["key"])
             .first()
         )
         if existing is not None:
