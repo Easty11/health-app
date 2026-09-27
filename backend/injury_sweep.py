@@ -140,11 +140,25 @@ def identity_terms(entry: models.UserKnowledgeEntry) -> list[str]:
 def line_context(entry: models.UserKnowledgeEntry,
                  all_injuries: list[models.UserKnowledgeEntry]) -> dict[str, Any]:
     """Per-sweep context for labelling each hit line: the swept entry's side, and every OTHER
-    injury row (active or resolved) with a regex over its identity terms."""
-    others = []
+    injury (active or resolved) with a regex over its identity terms.
+
+    Two exclusions keep the label about a DIFFERENT injury:
+      * same body_part as the swept entry (the other-side hamstring) — the side flag already
+        discriminates those, and labelling every hamstring line with its twin is noise;
+      * superseded rows sharing a key collapse to ONE per key — the active row, else the
+        highest id (the latest statement of that injury)."""
+    own_body = str((entry.value or {}).get("body_part") or "").strip().lower()
+    by_key: dict[str, models.UserKnowledgeEntry] = {}
     for o in all_injuries:
         if o.id == entry.id:
             continue
+        if own_body and str((o.value or {}).get("body_part") or "").strip().lower() == own_body:
+            continue
+        cur = by_key.get(o.key)
+        if cur is None or (o.active, o.id) > (cur.active, cur.id):
+            by_key[o.key] = o
+    others = []
+    for o in sorted(by_key.values(), key=lambda r: r.id):
         rx = term_regex(identity_terms(o))
         if rx is not None:
             others.append({"entry_id": o.id, "key": o.key, "active": bool(o.active), "rx": rx})

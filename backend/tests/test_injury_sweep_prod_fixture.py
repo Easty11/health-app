@@ -250,3 +250,46 @@ def test_audit_never_writes(prod):
     after = [(r.id, r.active, r.value) for r in db.query(models.UserKnowledgeEntry)
              .order_by(models.UserKnowledgeEntry.id)]
     assert after == before
+
+
+# ── the prod ledger's other rows (operator listing, 2026-09-27) ────────────────
+#
+# ids/keys/active are verbatim prod; body_part values follow the seed (the listing did not
+# carry them) except id 94, which is verbatim. Superseded pairs share a key: 16/77 finger,
+# 17/78 shoulder, 30/75 pes anserine.
+PROD_LEDGER = [
+    (16, "injury_finger_left", False, "finger"),
+    (17, "injury_shoulder_right", False, "shoulder"),
+    (30, "injury_pes_anserine_left", False, "pes anserine"),
+    (75, "injury_pes_anserine_left", False, "pes anserine"),
+    (76, "injury_calf_left", False, "calf"),
+    (77, "injury_finger_left", True, "finger"),
+    (78, "injury_shoulder_right", False, "shoulder"),
+]
+
+
+@pytest.fixture
+def ledger(prod):
+    for id_, key, active, body in PROD_LEDGER:
+        _row(prod["db"], id=id_, user_id=prod["user"].id, key=key, active=active,
+             value={"body_part": body, "signal_type": "mechanical", "restrictions": []})
+    _lumbar_94(prod["db"], prod["user"].id)
+    return prod
+
+
+def test_labels_against_the_prod_ledger(ledger):
+    """SYNTHETIC lines (shape only) until the raw 15 arrive: each checks one labelling rule."""
+    row = models.UserKnowledge(id=900, user_id=ledger["user"].id, category="Other",
+                               content="\n".join([
+        "Calf tear: zero sprints for 3 weeks",                 # 0 → resolved calf 76
+        "Pes anserine flared after sprint work",               # 1 → ONE row for the key: 75
+        "Lumbar flare after sprinting",                        # 2 → active 94
+        "Hamstring tight after sprinting",                     # 3 → nothing: 18 is the twin
+    ]))
+    ledger["db"].add(row)
+    ledger["db"].commit()
+    hits = {h["line_index"]: h for h in _sweep(ledger, 29)["hits"]
+            if h["store"] == "user_knowledge" and h["row_id"] == 900}
+    label = {i: [(o["entry_id"], o["active"]) for o in h["other_injuries"]]
+             for i, h in hits.items()}
+    assert label == {0: [(76, False)], 1: [(75, False)], 2: [(94, True)], 3: []}
