@@ -42,6 +42,7 @@ from routers.knowledge import (
     KnowledgeEntryIn,
     ScheduleItemInvalid,
     ScheduleItemOverlap,
+    chat_may_not_retire,
     expire_stale_entries,
     upsert_knowledge_entry,
 )
@@ -128,7 +129,9 @@ class WriteResult(BaseModel):
     """
     saved: bool
     # Stable, type-derived (never message-parsed): saved | deactivated | not_found |
-    # day_time_clash | unknown_field | invalid_shape | invalid_json | error.
+    # day_time_clash | unknown_field | invalid_shape | invalid_json | error, plus the typed-entry
+    # lifecycle codes (`routers.knowledge.TypedEntryRefused.code`): proposal_only |
+    # confirm_via_route | key_collision | operator_only | invalid_parent | expires_at_refused.
     reason_code: str
     reason: str             # the human string, identical to the `actions_taken` entry
     key: str | None = None  # the schedule_item / knowledge key, when the block named one
@@ -815,6 +818,8 @@ def _entry_noun(entry_type: str | None) -> str:
         "injury": "Injury entry",
         "load_context": "Context entry",
         "preference": "Preference entry",
+        "constraint": "Constraint entry",
+        "finding": "Finding entry",
     }.get(entry_type or "", "Knowledge entry")
 
 
@@ -875,7 +880,14 @@ def _process_knowledge_updates(
                         .filter_by(user_id=user_id, key=key, active=True)
                         .first()
                     )
-                    if existing:
+                    if existing is not None and chat_may_not_retire(existing):
+                        # A typed entry past `proposed` is operator territory (G0 D4): chat
+                        # retiring it by key would be a side door around the resolve route.
+                        record(False, "operator_only",
+                               f"✗ {_entry_noun(existing.type)} NOT removed: {key} — it is "
+                               f"{(existing.value or {}).get('status')!r}; the operator retires "
+                               f"it via its resolve route", key=key)
+                    elif existing:
                         existing.active = False
                         db.commit()
                         record(True, "deactivated", f"✓ Schedule entry removed: {key}", key=key)

@@ -18,7 +18,10 @@ from load_metrics import _local_day  # operator-local (AEST) day — Q42 single 
 # `engine.taxonomy` imports only stdlib; `load_events_metabolic` imports only models+stdlib.
 # `engine.training_phase` (which owns `_SLOT_LOAD_WINDOWS`) imports `routers.knowledge`, so
 # importing IT back would cycle — hence the token `WINDOW_METABOLIC` at its own source.
-from engine.taxonomy import capacity_tokens, resolve_capacity
+from engine.taxonomy import by_key as region_by_key, capacity_tokens, resolve_capacity
+# The authority vocabulary (#227) — imported from its one definition. `engine.profile` imports
+# only `models` + `engine.taxonomy`, so this is acyclic from here too.
+from engine.profile import ASSERTED_BY_VALUES
 from load_events_metabolic import WINDOW_METABOLIC
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -504,6 +507,265 @@ def validate_training_plan(value: Any) -> dict[str, Any]:
     return value
 
 
+# ---------- typed entries: constraint (#NEXT) ----------
+#
+# An instruction to the engine or the coach is a `type="constraint"` row, never free text: free
+# text cannot be retired or enforced. Closed shape, unknown keys refused (the #233 discipline),
+# the value stored exactly as written. Two tiers make "enforced" vs "advisory" explicit:
+#   * `engine`   — scoped to taxonomy `Region.key`s; `selection.is_contraindicated` reads it.
+#                  Region keys are the ONLY engine vocabulary in v1 (G0 ruling D1): there is no
+#                  pattern layer distinct from region keys, and the only template ids are Hevy's,
+#                  which the engine never gates on. `pattern_keys` / `exercise_template_ids` are
+#                  therefore refused as unknown until a pattern layer exists.
+#   * `advisory` — `text`, rendered to the coach verbatim and labelled advisory; no engine effect.
+# Every constraint carries an exit (≥1 of on_date / on_condition / with_parent) AND a
+# `review_by` — the pawl on the add-easy/remove-hard ratchet. Nothing lifts one automatically
+# (#223): an exit is surfaced for the operator, who retires the row via its resolve route.
+#
+# `status` proposed → confirmed is ONE path only: `POST /knowledge/constraints/{id}/confirm`.
+# A chat write is always `proposed` with `asserted_by: null` (G0 R5). Only `active=True AND
+# status="confirmed"` rows are read by anything.
+TYPED_ENTRY_TYPES = ("constraint", "finding")
+
+CONSTRAINT_FIELDS = (
+    "scope", "kind", "parent_key", "exit", "review_by", "status", "asserted_by", "detail",
+)
+# `parent_key` and `detail` are optional (absent == null). `asserted_by` is REQUIRED as a key but
+# may be null while `proposed` — the writer states "no authority yet" rather than omitting it.
+CONSTRAINT_REQUIRED = ("scope", "kind", "exit", "review_by", "status", "asserted_by")
+CONSTRAINT_SCOPE_FIELDS = ("tier", "region_keys", "text")
+CONSTRAINT_TIERS = ("engine", "advisory")
+CONSTRAINT_KINDS = ("block", "cap", "caution")
+CONSTRAINT_EXIT_FIELDS = ("on_date", "on_condition", "with_parent")
+CONSTRAINT_STATUS_VALUES = ("proposed", "confirmed")
+
+
+def _iso_date(value: Any, where: str) -> None:
+    try:
+        date.fromisoformat(str(value))
+    except ValueError:
+        raise ValueError(f"{where} must be an ISO date (YYYY-MM-DD), got {value!r}") from None
+    if not isinstance(value, str):
+        raise ValueError(f"{where} must be an ISO date string (YYYY-MM-DD), got {value!r}")
+
+
+def _nonempty_str(value: Any, where: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{where} must be a non-empty string")
+
+
+def _closed_keys(obj: Any, fields: tuple[str, ...], where: str) -> None:
+    if not isinstance(obj, dict):
+        raise ValueError(f"{where} must be an object")
+    extra = sorted(set(obj) - set(fields))
+    if extra:
+        raise ValueError(f"{where}: unknown field(s) {extra} -- one of {list(fields)}")
+
+
+def _validate_asserted_by(value: dict[str, Any], label: str, confirmed_statuses: tuple[str, ...]) -> None:
+    """`asserted_by` is the #227 authority tier. Null is legal only while the row is not yet
+    confirmed (a chat proposal carries no authority until the operator stamps one)."""
+    ab = value["asserted_by"]
+    if ab is None:
+        if value["status"] in confirmed_statuses:
+            raise ValueError(
+                f"{label}.asserted_by is required once status is {value['status']!r} -- one of "
+                f"{list(ASSERTED_BY_VALUES)}"
+            )
+        return
+    if ab not in ASSERTED_BY_VALUES:
+        raise ValueError(
+            f"{label}.asserted_by: {ab!r} is not one of {list(ASSERTED_BY_VALUES)} (or null while proposed)"
+        )
+
+
+def validate_constraint(value: Any) -> dict[str, Any]:
+    """Validate a `constraint` value — shape only, no DB (the parent / chat / transition rules
+    are `_validate_typed_write`'s). Returned UNCHANGED (byte-identical write→read)."""
+    _closed_keys(value, CONSTRAINT_FIELDS, "constraint")
+    missing = [f for f in CONSTRAINT_REQUIRED if f not in value]
+    if missing:
+        raise ValueError(f"constraint: missing required field(s) {missing}")
+
+    scope = value["scope"]
+    _closed_keys(scope, CONSTRAINT_SCOPE_FIELDS, "constraint.scope")
+    tier = scope.get("tier")
+    if tier not in CONSTRAINT_TIERS:
+        raise ValueError(f"constraint.scope.tier: {tier!r} is not one of {list(CONSTRAINT_TIERS)}")
+    if tier == "engine":
+        keys = scope.get("region_keys")
+        if not isinstance(keys, list) or not keys:
+            raise ValueError(
+                "constraint.scope: an engine-tier constraint needs >=1 scoping key "
+                "(`region_keys`, a non-empty list of taxonomy region keys)"
+            )
+        unknown = [k for k in keys if not isinstance(k, str) or region_by_key(k) is None]
+        if unknown:
+            raise ValueError(f"constraint.scope.region_keys: unknown region key(s) {unknown}")
+        if len(set(keys)) != len(keys):
+            raise ValueError("constraint.scope.region_keys must not repeat a key")
+        if "text" in scope and scope["text"] is not None:
+            _nonempty_str(scope["text"], "constraint.scope.text")
+    else:
+        # Advisory: the instruction itself, rendered verbatim. No scoping keys — an advisory row
+        # carrying region keys would read as enforced when nothing enforces it.
+        if "region_keys" in scope:
+            raise ValueError(
+                "constraint.scope.region_keys is engine-tier only -- an advisory constraint has no "
+                "engine effect, so it carries no scoping keys"
+            )
+        if "text" not in scope:
+            raise ValueError("constraint.scope.text is required for an advisory constraint")
+        _nonempty_str(scope["text"], "constraint.scope.text")
+
+    if value["kind"] not in CONSTRAINT_KINDS:
+        raise ValueError(f"constraint.kind: {value['kind']!r} is not one of {list(CONSTRAINT_KINDS)}")
+
+    parent_key = value.get("parent_key")
+    if parent_key is not None:
+        _nonempty_str(parent_key, "constraint.parent_key")
+
+    exit_ = value["exit"]
+    _closed_keys(exit_, CONSTRAINT_EXIT_FIELDS, "constraint.exit")
+    if exit_.get("on_date") is not None:
+        _iso_date(exit_["on_date"], "constraint.exit.on_date")
+    if exit_.get("on_condition") is not None:
+        _nonempty_str(exit_["on_condition"], "constraint.exit.on_condition")
+    with_parent = exit_.get("with_parent")
+    if with_parent is not None and not isinstance(with_parent, bool):
+        raise ValueError(f"constraint.exit.with_parent must be a strict boolean, got {with_parent!r}")
+    if exit_.get("on_date") is None and exit_.get("on_condition") is None and with_parent is not True:
+        raise ValueError(
+            "constraint.exit: at least one exit is required -- on_date, on_condition, or "
+            "with_parent: true. A constraint that cannot end is the ratchet this type exists to stop"
+        )
+    if with_parent is True and parent_key is None:
+        raise ValueError("constraint.exit.with_parent: true requires a parent_key")
+
+    _iso_date(value["review_by"], "constraint.review_by")
+
+    if value["status"] not in CONSTRAINT_STATUS_VALUES:
+        raise ValueError(
+            f"constraint.status: {value['status']!r} is not one of {list(CONSTRAINT_STATUS_VALUES)}"
+        )
+    _validate_asserted_by(value, "constraint", ("confirmed",))
+
+    if value.get("detail") is not None and not isinstance(value["detail"], str):
+        raise ValueError("constraint.detail must be a string or null")
+    return value
+
+
+# Per-type shape validators for the typed entries. The DB-aware rules shared by both types live
+# in `_validate_typed_write`.
+_TYPED_VALIDATORS = {
+    "constraint": validate_constraint,
+}
+
+# The statuses a CHAT write may carry, and the statuses reachable only through an explicit
+# operator route (never by a plain upsert). Keyed by type.
+_TYPED_CHAT_STATUS = {"constraint": "proposed"}
+_TYPED_CONFIRMED = {"constraint": ("confirmed",)}
+
+
+class TypedEntryRefused(ValueError):
+    """A write refused by a typed-entry lifecycle rule (not a shape fault). Subclasses
+    ValueError so the HTTP 422 and chat refusal paths catch it unchanged; carries a stable
+    `code` for the #283 write-result contract."""
+
+    def __init__(self, message: str, code: str):
+        self.code = code
+        super().__init__(message)
+
+
+def _validate_typed_write(
+    user_id: int,
+    entry_in: "KnowledgeEntryIn",
+    existing: models.UserKnowledgeEntry | None,
+    db: Session,
+) -> None:
+    """The DB-aware rules for a `constraint` / `finding` write, after the shape validator.
+
+    * `expires_at` must be null — the exit is the lifecycle, and `expire-stale` would otherwise
+      retire the row silently with no operator in the loop (#223).
+    * `parent_key` (optional, ANY entry type — G0 R3) must name one of THIS user's ACTIVE rows,
+      and never the row itself.
+    * A chat write is `proposed` with `asserted_by: null` (G0 R5) — refused otherwise, never
+      coerced (the value is stored as written).
+    * proposed → confirmed has ONE path, the type's `/confirm` route: an upsert carrying a
+      confirmed status over an active not-yet-confirmed row of the same key is refused.
+    """
+    t = entry_in.type
+    value = entry_in.value
+    if entry_in.expires_at is not None:
+        raise TypedEntryRefused(
+            f"{t}.expires_at must be null -- a {t} ends through its own lifecycle, never a silent expiry",
+            "expires_at_refused",
+        )
+
+    parent_key = value.get("parent_key")
+    if parent_key is not None:
+        if parent_key == entry_in.key:
+            raise TypedEntryRefused(f"{t}.parent_key must not name the entry itself", "invalid_parent")
+        parent = (
+            db.query(models.UserKnowledgeEntry)
+            .filter_by(user_id=user_id, key=parent_key, active=True)
+            .first()
+        )
+        if parent is None:
+            raise TypedEntryRefused(
+                f"{t}.parent_key {parent_key!r} names no active entry for this user",
+                "invalid_parent",
+            )
+
+    if entry_in.source == "chat":
+        if value.get("status") != _TYPED_CHAT_STATUS[t] or value.get("asserted_by") is not None:
+            raise TypedEntryRefused(
+                f"a {t} written from chat is a PROPOSAL: status must be "
+                f"{_TYPED_CHAT_STATUS[t]!r} and asserted_by null -- the operator confirms it "
+                f"via POST /knowledge/{t}s/{{id}}/confirm",
+                "proposal_only",
+            )
+    elif value.get("status") in _TYPED_CONFIRMED[t] and existing is not None \
+            and existing.type == t \
+            and (existing.value or {}).get("status") not in _TYPED_CONFIRMED[t]:
+        raise TypedEntryRefused(
+            f"{t} {entry_in.key!r} is {(existing.value or {}).get('status')!r} -- confirming it is "
+            f"POST /knowledge/{t}s/{existing.id}/confirm, never an upsert",
+            "confirm_via_route",
+        )
+
+
+def _typed_supersede_guard(entry_in: "KnowledgeEntryIn", existing: models.UserKnowledgeEntry | None) -> None:
+    """Same-key supersession rules whenever a typed entry is on EITHER side (G0 D4).
+
+    Supersede-by-key matches on (user, key) alone, so without this a constraint reusing an
+    injury's key would silently retire the injury (or the reverse). And a chat write must never
+    retire an operator-confirmed row by rewriting its key — R5's proposal gate would otherwise
+    be a side door. Rows with no typed entry on either side are untouched (byte-identical)."""
+    if existing is None:
+        return
+    if existing.type != entry_in.type and (
+        existing.type in TYPED_ENTRY_TYPES or entry_in.type in TYPED_ENTRY_TYPES
+    ):
+        raise TypedEntryRefused(
+            f"key {entry_in.key!r} is held by an active {existing.type!r} entry -- a "
+            f"{entry_in.type!r} write must use its own key",
+            "key_collision",
+        )
+    if entry_in.source == "chat" and chat_may_not_retire(existing):
+        raise TypedEntryRefused(
+            f"{existing.type} {entry_in.key!r} is {(existing.value or {}).get('status')!r} -- chat may "
+            f"only rewrite its own proposals; the operator retires it via its resolve route",
+            "operator_only",
+        )
+
+
+def chat_may_not_retire(row: models.UserKnowledgeEntry) -> bool:
+    """A typed entry past `proposed` is operator territory: chat may neither supersede nor
+    deactivate it (G0 D4). Shared by the upsert guard and the chat `active: false` path."""
+    return row.type in TYPED_ENTRY_TYPES and (row.value or {}).get("status") != "proposed"
+
+
 class KnowledgeEntryIn(BaseModel):
     type: str
     key: str
@@ -715,12 +977,18 @@ def _stage_upsert_entry(
             k: v for k, v in entry_in.value.items()
             if k not in SCHEDULE_ITEM_WRITE_ONLY_FIELDS
         }
+    if entry_in.type in _TYPED_VALIDATORS:
+        _TYPED_VALIDATORS[entry_in.type](entry_in.value)
 
     existing = (
         db.query(models.UserKnowledgeEntry)
         .filter_by(user_id=user_id, key=entry_in.key, active=True)
         .first()
     )
+    # Typed-entry rules run BEFORE `db.add` (#221's ordering): a refusal leaves no pending row.
+    _typed_supersede_guard(entry_in, existing)
+    if entry_in.type in _TYPED_VALIDATORS:
+        _validate_typed_write(user_id, entry_in, existing, db)
 
     new_entry = models.UserKnowledgeEntry(
         user_id=user_id,
@@ -935,6 +1203,7 @@ def expire_stale(
 _RESOLVE_LABELS = {
     "injury": "Injury entry",
     "schedule_item": "schedule_item entry",
+    "constraint": "Constraint entry",
 }
 
 
@@ -1256,3 +1525,105 @@ def resolve_schedule_item(
     block; `GET /knowledge/schedule` (active-only) simply stops returning it.
     """
     return _resolve_entry(entry_id, body, "schedule_item", current_user.id, db)
+
+
+# ---------- typed entries: confirm + resolve (#NEXT) ----------
+
+class ConfirmIn(BaseModel):
+    """The operator's confirmation of a proposed typed entry. `asserted_by` is the #227 authority
+    tier stamped on the row — who stands behind the claim, which is not necessarily who typed it
+    (`source` stays the channel). No default: an unattributed confirmation is refused."""
+    asserted_by: str
+
+
+def _confirm_entry(
+    entry_id: int,
+    body: ConfirmIn,
+    entry_type: str,
+    user_id: int,
+    db: Session,
+) -> models.UserKnowledgeEntry:
+    """Move one typed entry to its confirmed status — the ONLY such path (a confirmed status on
+    a plain upsert over a proposal is refused in `_validate_typed_write`).
+
+    Type-scoped exactly as `_resolve_entry` is: an id of another type is a 404 that reveals
+    nothing (the cross-type 404-leak defence). Confirming twice is a 409, not a no-op. A
+    `with_parent` constraint whose parent is no longer active is a 409 — confirming it would mint
+    a rule whose own exit has already fired.
+    """
+    label = _RESOLVE_LABELS[entry_type]
+    if body.asserted_by not in ASSERTED_BY_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"asserted_by must be one of: {', '.join(ASSERTED_BY_VALUES)}",
+        )
+    entry = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(id=entry_id, user_id=user_id, type=entry_type)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{label} not found")
+    if not entry.active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{label} is inactive — only an active entry can be confirmed",
+        )
+    value = entry.value or {}
+    current = value.get("status")
+    if current in _TYPED_CONFIRMED[entry_type]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{label} is already {current!r} — confirming twice is an error, not a no-op",
+        )
+    parent_key = value.get("parent_key")
+    if parent_key is not None and (value.get("exit") or {}).get("with_parent") is True:
+        parent = (
+            db.query(models.UserKnowledgeEntry)
+            .filter_by(user_id=user_id, key=parent_key, active=True)
+            .first()
+        )
+        if parent is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{label}'s parent {parent_key!r} is no longer active — its with_parent exit "
+                       f"has already fired; resolve the entry instead",
+            )
+    # REASSIGN, never mutate in place (plain JSON column — see `_resolve_entry`).
+    entry.value = {**value, "status": _TYPED_CONFIRMED[entry_type][0], "asserted_by": body.asserted_by}
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@router.post("/constraints/{entry_id}/confirm", response_model=KnowledgeEntryOut)
+def confirm_constraint(
+    entry_id: int,
+    body: ConfirmIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Confirm one proposed constraint: the explicit operator write (#223 pattern) that makes it
+    readable by the engine and the coach, stamped with its authority (`asserted_by`, #227).
+
+    THE ONLY PROPOSED → CONFIRMED PATH. A chat write is always `proposed`; an upsert carrying
+    `status: "confirmed"` over a proposal is refused. Nothing confirms itself.
+    """
+    return _confirm_entry(entry_id, body, "constraint", current_user.id, db)
+
+
+@router.post("/constraints/{entry_id}/resolve", response_model=KnowledgeEntryOut)
+def resolve_constraint(
+    entry_id: int,
+    body: ResolutionIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retire one constraint: its exit has fired, or it is withdrawn (a proposal the operator
+    declines is resolved the same way, with its basis). The operator's act, never automatic —
+    a passed `exit.on_date` or `review_by` SURFACES the row; it does not lift it (#223).
+
+    Per-type (the 404-leak defence), never deletes, `superseded_by` untouched — exactly the
+    injury / schedule_item resolve contract (#222).
+    """
+    return _resolve_entry(entry_id, body, "constraint", current_user.id, db)
