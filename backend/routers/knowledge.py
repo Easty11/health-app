@@ -1060,6 +1060,28 @@ class SweepStore(BaseModel):
     hits: int
 
 
+class RadicularWarning(BaseModel):
+    signal_type: str
+    fires: list[str]
+    message: str
+
+
+class RehomedTo(BaseModel):
+    entry_id: int
+    key: str
+    body_part: str | None
+    signal_type: str
+    radicular_warning: RadicularWarning | None
+
+
+class RestrictionAudit(BaseModel):
+    restriction: str
+    match_stems: list[str]
+    covered_by_basis: bool
+    rehomed_to: list[RehomedTo]
+    status: str                 # covered | rehomed | orphan
+
+
 class SweepChecklistItem(BaseModel):
     store: str
     where: str
@@ -1073,6 +1095,10 @@ class InjurySweepOut(BaseModel):
     side: str | None
     active: bool
     terms: list[str]
+    # Restrictions that would drop out of chat context with this row (orphan), are
+    # addressed by its resolution basis (covered), or live on another active row (rehomed).
+    restriction_audit: list[RestrictionAudit]
+    restrictions_note: str
     stores: list[SweepStore]
     hits: list[SweepHit]
     manual_checklist: list[SweepChecklistItem]   # always present, always last
@@ -1095,6 +1121,13 @@ async def sweep_injury(
     routine cache. Each hit carries the store's EXISTING action, or `none`. The response
     always ends with a fixed checklist of stores the app cannot search.
 
+    Also audits the entry's `restrictions`: each is `covered` by the resolution basis,
+    `rehomed` onto another active injury row, or an `orphan` about to leave chat context
+    (restriction strings are chat-rendered only; the engine gates on body_part +
+    signal_type). A re-homed destination typed neural/radicular on a spinal part carries a
+    `_RADICULAR_BLOCKS` warning. The resolve route's contract is untouched: the frontend
+    calls this straight after a resolve.
+
     Works for resolved entries — the point is sweeping after a resolve. Scoped to
     `type='injury'` like the resolve route: any other id, or another user's, is a 404.
     """
@@ -1114,6 +1147,14 @@ async def sweep_injury(
     extra = (terms or "").split(",")
     term_list = injury_sweep.derive_terms(entry, extra)
     rx = injury_sweep.term_regex(term_list)
+
+    other_injuries = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=current_user.id, type="injury", active=True)
+        .order_by(models.UserKnowledgeEntry.id)
+        .all()
+    )
+    audit = injury_sweep.audit_restrictions(entry, other_injuries)
 
     stores: list[dict[str, Any]] = []
     hits: list[dict[str, Any]] = []
@@ -1164,6 +1205,8 @@ async def sweep_injury(
         "side": own_side,
         "active": entry.active,
         "terms": term_list,
+        "restriction_audit": audit,
+        "restrictions_note": injury_sweep.RESTRICTIONS_NOTE,
         "stores": stores,
         "hits": hits,
         "manual_checklist": list(injury_sweep.MANUAL_CHECKLIST),

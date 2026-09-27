@@ -157,6 +157,94 @@ def _entry_action(e: models.UserKnowledgeEntry) -> tuple[str, str | None]:
     return "none", None
 
 
+# ── restriction audit — does anything drop out of context on resolve? ───────
+#
+# WHAT A RESTRICTION STRING DOES. Restriction strings are SURFACED, not gated: they render
+# into chat context (`context_builder._section_schedule`, "avoid: …") and the MCP injury
+# summary, and nothing else reads them — the engine's §8 filters (`selection.is_contraindicated`)
+# gate on `body_part` + `signal_type` (+ side), with the one exception of the literal
+# `ra_flare` token. So when an injury row is resolved its restrictions vanish from the only
+# place they act: the coach's prompt. A restriction the resolution basis never addressed is
+# an ORPHAN — still true (e.g. a neural limiter recorded on a tissue row) but about to go
+# unsaid. The audit names each one so the operator can re-home it before resolving, or
+# confirm it has been. It never writes.
+#
+# RE-HOMING HAS A TRAP. The destination row's `signal_type` changes what the engine does:
+# a spinal (or body-part-less) row typed `neural`/`radicular` fires `_RADICULAR_BLOCKS` —
+# a hinge/rotation/carry/gait stand-down — where the same words on a `mechanical` row are
+# chat-only. The audit surfaces that as a warning on the destination; it never decides.
+
+RESTRICTIONS_NOTE = (
+    "Restriction strings are chat-rendered only (context_builder schedule section, MCP injury "
+    "summary). The engine gates on body_part + signal_type (+ side, + the ra_flare token), "
+    "never on restriction text."
+)
+
+
+def _distinguishing_stems(restriction: str, body_words: set[str]) -> list[str]:
+    """The words that identify WHAT is restricted, stemmed. Body-part words are dropped
+    ("static end-range hamstring stretching" → ["stretch"]) so a basis that merely names the
+    body part does not read as addressing the restriction; if nothing is left, keep them."""
+    words = _words(restriction)
+    distinct = [w for w in words if w not in body_words]
+    return [w if w in body_words else _stem(w) for w in (distinct or words)]
+
+
+def _mentions_all(stems: list[str], text: str) -> bool:
+    return bool(stems) and all(
+        re.search(r"\b" + re.escape(s), text or "", re.IGNORECASE) for s in stems)
+
+
+def _radicular_warning(dest: models.UserKnowledgeEntry) -> dict[str, Any] | None:
+    from engine.selection import _RADICULAR_BLOCKS, _is_spinal  # the gate's own definitions
+    val = dest.value or {}
+    signal = str(val.get("signal_type", "mechanical")).lower()
+    body = str(val.get("body_part") or "").lower()
+    if signal in ("radicular", "neural") and _is_spinal(body):
+        return {
+            "signal_type": signal,
+            "fires": sorted(_RADICULAR_BLOCKS),
+            "message": (f"'{dest.key}' is a spinal row typed '{signal}': the engine hard-stops "
+                        f"every region in _RADICULAR_BLOCKS while it is active. Type it "
+                        f"'mechanical' if the restriction should be chat-only."),
+        }
+    return None
+
+
+def audit_restrictions(entry: models.UserKnowledgeEntry,
+                       other_injuries: list[models.UserKnowledgeEntry]) -> list[dict[str, Any]]:
+    """One row per restriction on `entry`: is it addressed by the resolution basis, carried by
+    another ACTIVE injury row (re-homed), or neither (orphan)? For an unresolved entry the basis
+    is empty, so the audit reads as "what would orphan if resolved now"."""
+    value = entry.value or {}
+    basis = ((value.get("resolution") or {}).get("basis") or "")
+    body_words = set(_words(str(value.get("body_part") or "")))
+    out = []
+    for r in value.get("restrictions") or []:
+        r = str(r)
+        stems = _distinguishing_stems(r, body_words)
+        covered = _mentions_all(stems, basis)
+        rehomed = []
+        for dest in other_injuries:
+            if dest.id == entry.id or not dest.active:
+                continue
+            if any(_mentions_all(stems, str(dr)) for dr in (dest.value or {}).get("restrictions") or []):
+                rehomed.append({
+                    "entry_id": dest.id, "key": dest.key,
+                    "body_part": (dest.value or {}).get("body_part"),
+                    "signal_type": str((dest.value or {}).get("signal_type", "mechanical")).lower(),
+                    "radicular_warning": _radicular_warning(dest),
+                })
+        out.append({
+            "restriction": r,
+            "match_stems": stems,
+            "covered_by_basis": covered,
+            "rehomed_to": rehomed,
+            "status": "rehomed" if rehomed else ("covered" if covered else "orphan"),
+        })
+    return out
+
+
 def sweep_user_knowledge(rows, rx, own_side) -> list[dict[str, Any]]:
     hits = []
     for row in rows:
