@@ -1053,7 +1053,8 @@ class SweepHit(BaseModel):
     line_index: int
     location: str
     snippet: str
-    matched_terms: list[str]
+    matched_terms: list[str]    # primary terms found (why this line is a hit)
+    restriction_terms: list[str]  # restriction words also on the line — the stale-order signal
     sides_mentioned: list[str]
     opposite_side: bool         # names only the opposite side — flagged, never dropped
     marked_resolved: bool       # the line says "resolved"/"historical" — history, not an order
@@ -1103,7 +1104,8 @@ class InjurySweepOut(BaseModel):
     body_part: str | None
     side: str | None
     active: bool
-    terms: list[str]
+    terms: list[str]              # PRIMARY: names the injury; a hit needs >= 1
+    restriction_terms: list[str]  # SECONDARY: annotates a hit, never creates one
     # Restrictions that would drop out of chat context with this row (orphan), are
     # addressed by its resolution basis (covered), or live on another active row (rehomed).
     restriction_audit: list[RestrictionAudit]
@@ -1124,8 +1126,10 @@ async def sweep_injury(
     """Find every copy of one injury outside the ledger — SURFACING-ONLY, never edits.
 
     The ledger is the only authority on injury state; every other store holding the injury
-    is a copy the operator clears by hand. Matches on body_part, key tokens, restriction
-    words and `?terms=`, across the free-text `user_knowledge` rows (per line), non-injury
+    is a copy the operator clears by hand. A line is a hit only if it names the injury — a
+    PRIMARY term: body_part, its `BODY_PART_ALIASES`, key tokens, or `?terms=`. Restriction
+    words are SECONDARY: they annotate a hit (`restriction_terms`, the stale-order signal) and
+    never create one. Searched: the free-text `user_knowledge` rows (per line), non-injury
     structured entries (`value` leaves and `notes`), and Hevy routine/exercise notes via the
     routine cache. Each hit carries the store's EXISTING action, or `none`. The response
     always ends with a fixed checklist of stores the app cannot search.
@@ -1154,8 +1158,8 @@ async def sweep_injury(
     value = entry.value or {}
     own_side = (str(value.get("side") or "").lower() or None)
     extra = (terms or "").split(",")
-    term_list = injury_sweep.derive_terms(entry, extra)
-    rx = injury_sweep.term_regex(term_list)
+    primary_terms, restriction_terms = injury_sweep.derive_terms(entry, extra)
+    rx = injury_sweep.term_regex(primary_terms)
 
     all_injuries = (
         db.query(models.UserKnowledgeEntry)
@@ -1164,7 +1168,7 @@ async def sweep_injury(
         .all()
     )
     audit = injury_sweep.audit_restrictions(entry, [i for i in all_injuries if i.active])
-    ctx = injury_sweep.line_context(entry, all_injuries)
+    ctx = injury_sweep.line_context(entry, all_injuries, restriction_terms)
 
     stores: list[dict[str, Any]] = []
     hits: list[dict[str, Any]] = []
@@ -1214,7 +1218,8 @@ async def sweep_injury(
         "body_part": value.get("body_part"),
         "side": own_side,
         "active": entry.active,
-        "terms": term_list,
+        "terms": primary_terms,
+        "restriction_terms": restriction_terms,
         "restriction_audit": audit,
         "restrictions_note": injury_sweep.RESTRICTIONS_NOTE,
         "stores": stores,

@@ -69,23 +69,58 @@ def _words(text: str) -> list[str]:
             if len(w) >= 4 and w not in _GENERIC_WORDS and w not in _SIDES]
 
 
-def derive_terms(entry: models.UserKnowledgeEntry, extra: Iterable[str] = ()) -> list[str]:
-    """Match terms for an injury entry: body_part (as a phrase and its words), the key's
-    tokens, the words of `restrictions`, plus operator-supplied `extra` terms verbatim.
-    Lower-cased, de-duplicated, order-preserving."""
+# Named constituents of a body part — ONE definition, read by both term builders. A line that
+# names the injury only by a constituent ("RIGHT PROXIMAL SEMIMEMBRANOSUS RUPTURE") is about that
+# injury. Phrases only: an alias's single words are never terms ("biceps" alone is not the
+# hamstring). Extend per body part ONLY by ruling (G1 ruling A/B) — a new alias changes what the
+# sweep calls "the same injury".
+BODY_PART_ALIASES: dict[str, tuple[str, ...]] = {
+    "hamstring": ("semimembranosus", "semitendinosus", "biceps femoris"),
+}
+
+
+def _dedupe(terms: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    return [t for t in terms if not (t in seen or seen.add(t))]
+
+
+def identity_terms(entry: models.UserKnowledgeEntry) -> list[str]:
+    """What NAMES an injury, as opposed to what it restricts: body_part (phrase + words), its
+    declared aliases, and the key's tokens. Restriction words are left out on purpose — a lumbar
+    row restricting "hamstring stretching" is not a hamstring injury."""
     value = entry.value or {}
     terms: list[str] = []
     body_part = str(value.get("body_part") or "").strip().lower()
     if body_part:
         terms.append(body_part)
         terms.extend(_words(body_part))
+        terms.extend(BODY_PART_ALIASES.get(body_part, ()))
     terms.extend(_words((entry.key or "").replace("_", " ")))
+    return _dedupe(terms)
+
+
+def derive_terms(entry: models.UserKnowledgeEntry,
+                 extra: Iterable[str] = ()) -> tuple[list[str], list[str]]:
+    """(PRIMARY, SECONDARY) match terms for an injury entry.
+
+    PRIMARY names the injury: `identity_terms` plus operator-supplied `extra` terms verbatim (an
+    operator term is an explicit ask to find, so it can create a hit). A line is a hit ONLY if it
+    carries >= 1 primary term.
+
+    SECONDARY are the stemmed words of `restrictions` ("sprint", "strid", "stretch"). They never
+    create a hit on their own — "stretch" alone found swim-rehab lines and a calf line that name no
+    hamstring. They annotate a hit as `restriction_terms`: the stale-ORDER signal ("no sprinting")
+    on a line already about this injury."""
+    value = entry.value or {}
+    primary = identity_terms(entry) + [t.strip().lower() for t in extra if t and t.strip()]
+    primary = _dedupe(primary)
+    secondary: list[str] = []
     for r in value.get("restrictions") or []:
-        # A word already a term (the body part) is kept whole: "hamstring" is not an -ing verb.
-        terms.extend(w if w in terms else _stem(w) for w in _words(str(r)))
-    terms.extend(t.strip().lower() for t in extra if t and t.strip())
-    seen: set[str] = set()
-    return [t for t in terms if not (t in seen or seen.add(t))]
+        for w in _words(str(r)):
+            if w in primary:       # the body part inside a restriction is identity, not restriction
+                continue
+            secondary.append(_stem(w))
+    return primary, _dedupe(secondary)
 
 
 def term_regex(terms: list[str]) -> re.Pattern | None:
@@ -121,24 +156,9 @@ def _side_fields(line: str, own_side: str | None) -> dict[str, Any]:
 _HISTORY_RE = re.compile(r"\b(resolved|historical)\b", re.IGNORECASE)
 
 
-def identity_terms(entry: models.UserKnowledgeEntry) -> list[str]:
-    """What names an injury, as opposed to what it restricts: body_part (phrase + words) and
-    key tokens only. Restriction words are left out on purpose — a lumbar row restricting
-    "hamstring stretching" is not a hamstring injury, and matching on it would label every
-    hamstring line as the lumbar row's."""
-    value = entry.value or {}
-    terms: list[str] = []
-    body_part = str(value.get("body_part") or "").strip().lower()
-    if body_part:
-        terms.append(body_part)
-        terms.extend(_words(body_part))
-    terms.extend(_words((entry.key or "").replace("_", " ")))
-    seen: set[str] = set()
-    return [t for t in terms if not (t in seen or seen.add(t))]
-
-
 def line_context(entry: models.UserKnowledgeEntry,
-                 all_injuries: list[models.UserKnowledgeEntry]) -> dict[str, Any]:
+                 all_injuries: list[models.UserKnowledgeEntry],
+                 secondary: list[str] = ()) -> dict[str, Any]:
     """Per-sweep context for labelling each hit line: the swept entry's side, and every OTHER
     injury (active or resolved) with a regex over its identity terms.
 
@@ -163,7 +183,8 @@ def line_context(entry: models.UserKnowledgeEntry,
         if rx is not None:
             others.append({"entry_id": o.id, "key": o.key, "active": bool(o.active), "rx": rx})
     return {"own_side": (str((entry.value or {}).get("side") or "").lower() or None),
-            "others": others}
+            "others": others,
+            "secondary_rx": term_regex(list(secondary))}
 
 
 def _line_fields(line: str, ctx: dict[str, Any]) -> dict[str, Any]:
@@ -173,7 +194,10 @@ def _line_fields(line: str, ctx: dict[str, Any]) -> dict[str, Any]:
         if found:
             other_hits.append({"entry_id": o["entry_id"], "key": o["key"],
                                "active": o["active"], "matched_terms": found})
+    srx = ctx.get("secondary_rx")
     return {
+        # Restriction words on a line already about this injury — the stale-order signal.
+        "restriction_terms": sorted({m.group(0).lower() for m in srx.finditer(line)}) if srx else [],
         **_side_fields(line, ctx.get("own_side")),
         "marked_resolved": bool(_HISTORY_RE.search(line)),
         # The line also names another injury. `active` true = a line still in use by a live
@@ -183,7 +207,8 @@ def _line_fields(line: str, ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 def _line_hits(text: str, rx: re.Pattern, ctx: dict[str, Any]):
-    """Yield (line_index, snippet, matched_terms, line_fields) for every matching line."""
+    """Yield (line_index, snippet, matched_terms, line_fields) for every line carrying a PRIMARY
+    term (`rx`); restriction words are reported in line_fields, never matched here."""
     for idx, line in enumerate((text or "").split("\n")):
         found = list(rx.finditer(line))
         if not found:

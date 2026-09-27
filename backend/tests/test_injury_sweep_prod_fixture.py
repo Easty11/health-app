@@ -157,7 +157,9 @@ def test_right_hamstring_hits_the_hamstring_lines_and_not_calf_or_lumbar(prod):
     hits = _uk_hits(_sweep(prod, 29))
     assert sorted(hits) == [0, 1, 2, 4]           # A B C E; not D (calf) nor F (live lumbar)
     assert all(h["row_id"] == 2 and h["action"] == "edit" for h in hits.values())
-    assert hits[2]["matched_terms"] == ["sprint"]  # (C) never says "hamstring"
+    # (C) never says "hamstring": it hits via the semimembranosus alias; "sprint" only annotates.
+    assert hits[2]["matched_terms"] == ["semimembranosus"]
+    assert hits[2]["restriction_terms"] == ["sprint"]
     assert not any(h["opposite_side"] for h in hits.values())
 
 
@@ -278,12 +280,13 @@ def ledger(prod):
 
 
 def test_labels_against_the_prod_ledger(ledger):
-    """SYNTHETIC lines (shape only) until the raw 15 arrive: each checks one labelling rule."""
+    """SYNTHETIC lines (shape only): each checks one labelling rule. Every line names the
+    hamstring, so each is a hit and only the label varies."""
     row = models.UserKnowledge(id=900, user_id=ledger["user"].id, category="Other",
                                content="\n".join([
-        "Calf tear: zero sprints for 3 weeks",                 # 0 → resolved calf 76
-        "Pes anserine flared after sprint work",               # 1 → ONE row for the key: 75
-        "Lumbar flare after sprinting",                        # 2 → active 94
+        "Calf tear after hamstring cramp",                     # 0 → resolved calf 76
+        "Pes anserine flared, hamstring fine",                 # 1 → ONE row for the key: 75
+        "Lumbar flare after hamstring stretching",             # 2 → active 94
         "Hamstring tight after sprinting",                     # 3 → nothing: 18 is the twin
     ]))
     ledger["db"].add(row)
@@ -332,14 +335,26 @@ def test_fixture_reproduces_the_prod_diagnosis_count():
     assert sum(1 for r, _ in got if r == 2) == 13
 
 
-def test_raw_right_sweep_hit_set(raw):
-    hits = _raw_hits(raw, 29)
-    assert set(hits) == {
-        (2, 0), (2, 34), (2, 36), (2, 47), (2, 48), (2, 52), (2, 53), (2, 56), (2, 58), (2, 64),
-        (2, 65), (3, 2), (3, 10), (3, 12), (5, 37),
-    }
-    # Negative controls stay out: pes anserine (semitendinosus), calf history, left-knee leg curl.
-    assert not {(2, 54), (2, 57), (2, 63)} & set(hits)
+# The G1 result, both sweeps: the operator's 15 minus the calf line (2/56: names no hamstring
+# term — a different injury) plus the pes anserine line (2/54: "semitendinosus", a hamstring
+# alias — accepted by ruling, labelled row 75).
+RAW_EXPECTED = (PROD_REGEX_HITS - {(2, 56)}) | {(2, 54)}
+
+
+@pytest.mark.parametrize("entry_id", [29, 18])
+def test_raw_sweep_hit_set_vs_the_operators_15(raw, entry_id):
+    hits = _raw_hits(raw, entry_id)
+    assert set(hits) == RAW_EXPECTED and len(hits) == 15
+    assert set(hits) - PROD_REGEX_HITS == {(2, 54)}
+    assert PROD_REGEX_HITS - set(hits) == {(2, 56)}
+    # The rest of the negatives stay out, including the "stretch"-only swim lines.
+    assert not {(2, 57), (2, 63), (3, 10), (3, 12)} & set(hits)
+
+
+def test_pes_anserine_line_hits_via_alias_and_is_labelled_75(raw):
+    h = _raw_hits(raw, 29)[(2, 54)]
+    assert h["matched_terms"] == ["semitendinosus"]
+    assert [(o["entry_id"], o["active"]) for o in h["other_injuries"]] == [(75, False)]
 
 
 def test_raw_before_is_all_stale_prose_after_is_all_history(raw):
@@ -355,39 +370,35 @@ def test_both_near_duplicate_04_jun_tweak_lines_hit(raw):
     assert (2, 0) in hits   # a third 04 June record, the original
 
 
-def test_11_jul_synthesis_line_hits_via_sprinting(raw):
+def test_11_jul_synthesis_line_hits_and_carries_sprinting(raw):
     h = _raw_hits(raw, 29)[(2, 52)]
-    assert "sprint" in h["matched_terms"]
+    assert h["matched_terms"] == ["hamstring", "semimembranosus"]
+    assert h["restriction_terms"] == ["sprint", "stretch"]       # the stale-order signal
     assert [(o["entry_id"], o["active"]) for o in h["other_injuries"]] == [
         (75, False), (76, False), (94, True)]
 
 
-def test_calf_line_is_returned_and_labelled_a_different_injury(raw):
-    right = _raw_hits(raw, 29)[(2, 56)]
-    left = _raw_hits(raw, 18)[(2, 56)]
-    assert left["matched_terms"] == ["sprint"]                 # "zero sprints"
-    assert right["matched_terms"] == ["sprint", "stretch"]     # + "no stretching" (29's restriction)
-    for h in (right, left):
-        assert [(o["entry_id"], o["key"], o["active"]) for o in h["other_injuries"]] == [
-            (76, "injury_calf_left", False)]
-        assert h["marked_resolved"] is False                    # "UNRESOLVED" is not "resolved"
-    assert right["opposite_side"] is True and left["opposite_side"] is False
+def test_calf_line_is_not_a_hit(raw):
+    """Reverses the G0 expectation (returned-and-labelled), by G1 ruling: the calf line names
+    no hamstring term, only "zero sprints" / "no stretching" — restriction words, which never
+    create a hit. It is a different injury (row 76)."""
+    assert (2, 56) not in _raw_hits(raw, 29)
+    assert (2, 56) not in _raw_hits(raw, 18)
 
 
 def test_lumbar_line_hits_only_on_terms_it_contains_and_is_in_use_by_94(raw):
     right = _raw_hits(raw, 29)[(2, 65)]
     left = _raw_hits(raw, 18)[(2, 65)]
-    assert right["matched_terms"] == ["hamstring", "stretch"]  # "hamstring tightness", "stretching"
-    assert left["matched_terms"] == ["hamstring"]
     for h in (right, left):
+        assert h["matched_terms"] == ["hamstring"]           # "hamstring tightness", "…stretching"
         assert [(o["entry_id"], o["active"]) for o in h["other_injuries"]] == [(94, True)]
+    assert right["restriction_terms"] == ["stretch"]         # 29 restricts stretching; 18 does not
+    assert left["restriction_terms"] == []
 
 
-def test_semimembranosus_lines_need_the_operator_term(raw):
-    """KNOWN GAP: rows 2/8 and 2/55 name the injury only as 'semimembranosus', which no derived
-    term reaches (body_part is 'hamstring'). They are two of the 15 prod-regex lines. ?terms=
-    brings them in; whether the matcher should know hamstring constituents is an open ruling."""
-    assert not {(2, 8), (2, 55)} & set(_raw_hits(raw, 29))
-    hits = _raw_hits(raw, 29, terms="semimembranosus")
-    assert {(2, 8), (2, 55)} <= set(hits)
-    assert set(hits) >= PROD_REGEX_HITS
+def test_semimembranosus_lines_hit_via_alias(raw):
+    """Rows 2/8 and 2/55 name the injury only as 'semimembranosus' — reached by the declared
+    hamstring alias (G1 ruling B), no operator term needed."""
+    hits = _raw_hits(raw, 29)
+    for key in ((2, 8), (2, 55)):
+        assert hits[key]["matched_terms"] == ["semimembranosus"]

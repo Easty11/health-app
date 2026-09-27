@@ -144,10 +144,18 @@ def test_free_text_hits_are_per_line_with_edit_never_delete(world):
     assert {h["action"] for h in hits} == {"edit"}
     assert {h["action_route"] for h in hits} == {f"PUT /knowledge/{world['history'].id}"}
     assert {h["reaches_context"] for h in hits} == {"yes"}
-    # Restriction words are stemmed: "striding" finds "Strides".
+    # Restriction words never create a hit: "Strides on Tuesdays" names no hamstring.
     bg = [h for h in _sweep(world)["hits"] if h["row_id"] == world["background"].id
           and h["store"] == "user_knowledge"]
-    assert [h["line_index"] for h in bg] == [0]
+    assert bg == []
+
+
+def test_restriction_words_annotate_a_hit_never_create_one(world):
+    hits = {h["line_index"]: h for h in _sweep(world)["hits"]
+            if h["store"] == "user_knowledge" and h["row_id"] == world["history"].id}
+    assert hits[0]["matched_terms"] == ["hamstring", "semimembranosus"]   # alias reached
+    assert hits[0]["restriction_terms"] == ["sprint"]     # "no sprinting" — the stale order
+    assert hits[3]["restriction_terms"] == []
 
 
 def test_opposite_side_is_flagged_not_dropped_and_no_side_is_unflagged(world):
@@ -173,8 +181,8 @@ def test_structured_entries_carry_their_existing_action(world):
 
 def test_hevy_routine_and_exercise_notes_are_searched_via_the_cache(world):
     hits = [h for h in _sweep(world)["hits"] if h["store"] == "hevy_routines"]
-    assert {h["location"] for h in hits} == {
-        "routine 'Lower A' · notes", "routine 'Lower A' · Nordic Curl · notes"}
+    # "Skip strides this block" carries only a restriction word — not a hit.
+    assert {h["location"] for h in hits} == {"routine 'Lower A' · Nordic Curl · notes"}
     assert {h["action"] for h in hits} == {"none"}
     assert {h["reaches_context"] for h in hits} == {"conditional"}
 
@@ -267,13 +275,21 @@ def test_resolve_route_contract_is_untouched():
 
 # ── unit: term derivation ────────────────────────────────────────────────────
 
-def test_terms_derive_from_body_part_key_and_restriction_words():
+def test_terms_split_into_primary_identity_and_secondary_restriction():
     e = models.UserKnowledgeEntry(type="injury", key="injury_hamstring_right", value=HAMSTRING)
-    terms = injury_sweep.derive_terms(e, ["Semimembranosus"])
-    assert terms == ["hamstring", "strid", "sprint", "stretch", "semimembranosus"]
-    # Generic restriction words and side words never become terms on their own.
-    for t in ("static", "range", "right", "injury", "end"):
-        assert t not in terms
+    primary, secondary = injury_sweep.derive_terms(e, ["Footy"])
+    # PRIMARY: body_part, its declared aliases (phrases only), key tokens, operator terms.
+    assert primary == ["hamstring", "semimembranosus", "semitendinosus", "biceps femoris", "footy"]
+    # SECONDARY: stemmed restriction words; the body part inside a restriction is identity.
+    assert secondary == ["strid", "sprint", "stretch"]
+    # Generic restriction words and side words never become terms of either tier.
+    for t in ("static", "range", "right", "injury", "end", "biceps"):
+        assert t not in primary + secondary
+
+
+def test_aliases_are_one_declared_constant():
+    assert injury_sweep.BODY_PART_ALIASES == {
+        "hamstring": ("semimembranosus", "semitendinosus", "biceps femoris")}
 
 
 # ── line labels: history vs order, and other injuries named on the line ─────
@@ -290,7 +306,7 @@ def test_lines_are_labelled_history_and_by_other_injuries_named(db_session):
         "No sprinting until the hamstring settles",                  # 0 — a stale ORDER
         "Hamstring tweak — RESOLVED Aug 2026",                       # 1 — history
         "Lumbar flare after hamstring stretching",                   # 2 — names the live lumbar row
-        "Calf tear: zero sprints for 3 weeks",                       # 3 — names the resolved calf row
+        "Calf tear after hamstring cramp",                           # 3 — also names the resolved calf row
         "Hamstring tight after footy",                               # 4 — restriction words ≠ identity
     ]))
     body = _client(db_session, u).get(f"/knowledge/injuries/{inj.id}/sweep").json()
@@ -301,5 +317,9 @@ def test_lines_are_labelled_history_and_by_other_injuries_named(db_session):
                                           "active": True, "matched_terms": ["lumbar"]}]
     assert hits[3]["other_injuries"] == [{"entry_id": calf.id, "key": "injury_calf_left",
                                           "active": False, "matched_terms": ["calf"]}]
+    # A line naming ONLY another injury plus a restriction word is not a hit at all.
+    row2 = _uk(db_session, u.id, "Other", "Calf tear: zero sprints for 3 weeks")
+    body = _client(db_session, u).get(f"/knowledge/injuries/{inj.id}/sweep").json()
+    assert not any(h["row_id"] == row2.id for h in body["hits"])
     # The lumbar row RESTRICTS hamstring stretching; that does not make a hamstring line its own.
     assert hits[4]["other_injuries"] == [] and hits[0]["other_injuries"] == []
