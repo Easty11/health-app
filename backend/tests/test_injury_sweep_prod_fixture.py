@@ -7,10 +7,14 @@ carry the shapes a synthetic fixture would miss: mixed-injury lines (hamstring +
 lines naming both sides, a resolved-history line next to a live one, and a live lumbar line
 the hamstring sweep must NOT hit.
 
-Restriction audit G1 case: the right hamstring's "static end-range hamstring stretching" is a
-neural, lumbar-origin limiter recorded on a tissue row. Its resolution basis does not address
-it, so it is an ORPHAN until the operator re-homes it to `injury_lumbar_spine` (mechanical).
-The basis text used here is a fixture, not the prod value.
+Restriction audit G1 case: the right hamstring's end-range stretching restriction is a neural,
+lumbar-origin limiter recorded on a tissue row. Its resolution basis does not address it, so it
+is an ORPHAN until re-homed — which the operator did, to id 94 `injury_lumbar_spine`
+(mechanical). Both resolution bases and the id 94 row are VERBATIM prod values.
+
+UNCONFIRMED: id 29's `restrictions` array is still the seed value (`ASSUMED_29_RESTRICTIONS`),
+pending the operator's prod read (`SELECT value->'restrictions' FROM user_knowledge_entries
+WHERE id = 29`). Replace it with the prod array; do not treat the seed as prod.
 """
 import pytest
 from fastapi import FastAPI
@@ -59,6 +63,22 @@ LINES = [
 ]
 
 STRETCH = "static end-range hamstring stretching"
+# UNCONFIRMED — the seed array, not a prod read (see module docstring).
+ASSUMED_29_RESTRICTIONS = ["striding", "sprinting", STRETCH]
+
+# Verbatim prod (operator-supplied).
+BASIS_18 = "Velocity provocation cleared - striding and sprinting symptom-free."
+BASIS_29 = ("Right hamstring tear is resolved, really has been for sometime, no issues running "
+            "due to the tear. ")
+LUMBAR_94 = {
+    "body_part": "lumbar", "signal_type": "mechanical",
+    "restrictions": [
+        "static hamstring stretching \u2014 neural (S1 tract from lumbar lesion); flossing, "
+        "sliders and dynamic mobility only",
+        "end-range lumbar flexion combined with twisting",
+        "heavy hinge at end of range",
+    ],
+}
 
 
 def _user(db):
@@ -99,13 +119,12 @@ def prod(db_session):
                 value={"body_part": "hamstring", "side": "left", "signal_type": "mechanical",
                        "restrictions": ["striding", "sprinting"],
                        "resolution": {"resolved_on": "2026-08-19", "resolved_by": "user",
-                                      "basis": "Asymptomatic; full-speed striding and sprinting"}})
+                                      "basis": BASIS_18}})
     right = _row(db_session, id=29, user_id=u.id, key="injury_hamstring_right", active=False,
                  value={"body_part": "hamstring", "side": "right", "signal_type": "mechanical",
-                        "restrictions": ["striding", "sprinting", STRETCH],
+                        "restrictions": ASSUMED_29_RESTRICTIONS,
                         "resolution": {"resolved_on": "2026-08-25", "resolved_by": "user",
-                                       "basis": "Tear resolved; cleared for striding and "
-                                                "sprinting, no velocity gating"}})
+                                       "basis": BASIS_29}})
     row2 = models.UserKnowledge(id=2, user_id=u.id, category="Injury History",
                                 content="\n".join(LINES))
     db_session.add(row2)
@@ -157,43 +176,55 @@ def _audit(body):
     return {a["restriction"]: a for a in body["restriction_audit"]}
 
 
-def test_stretching_is_an_orphan_before_rehoming(prod):
-    body = _sweep(prod, 29)
-    a = _audit(body)
+def _lumbar_94(db, user_id, **over):
+    value = {**LUMBAR_94, **over}
+    return _row(db, id=94, user_id=user_id, key="injury_lumbar_spine", active=True,
+                value=value)
+
+
+def test_left_basis_covers_both_velocity_restrictions(prod):
+    a = _audit(_sweep(prod, 18))
     assert a["striding"]["status"] == "covered"
     assert a["sprinting"]["status"] == "covered"
+
+
+def test_right_basis_addresses_none_of_its_restrictions(prod):
+    """The real id 29 basis speaks to the tear and to running. "running" is not "sprint" or
+    "stride" — no synonym expansion, deliberately: the audit surfaces, the operator judges."""
+    body = _sweep(prod, 29)
+    a = _audit(body)
+    assert {r: x["status"] for r, x in a.items()} == {
+        "striding": "orphan", "sprinting": "orphan", STRETCH: "orphan"}
     # Naming the hamstring is not addressing the stretch: body-part words are not evidence.
     assert a[STRETCH]["match_stems"] == ["stretch"]
-    assert a[STRETCH]["status"] == "orphan" and a[STRETCH]["rehomed_to"] == []
     assert "chat-rendered only" in body["restrictions_note"]
 
 
-def test_rehomed_to_a_mechanical_lumbar_row_carries_no_warning(prod):
-    lumbar = _row(prod["db"], user_id=prod["user"].id, key="injury_lumbar_spine", active=True,
-                  value={"body_part": "lumbar spine", "side": "bilateral",
-                         "signal_type": "mechanical", "restrictions": [STRETCH]})
-    a = _audit(_sweep(prod, 29))[STRETCH]
-    assert a["status"] == "rehomed"
-    assert a["covered_by_basis"] is False
-    assert [d["key"] for d in a["rehomed_to"]] == ["injury_lumbar_spine"]
-    assert a["rehomed_to"][0]["entry_id"] == lumbar.id
-    assert a["rehomed_to"][0]["radicular_warning"] is None
+def test_stretch_rehomed_to_prod_row_94_with_no_warning(prod):
+    _lumbar_94(prod["db"], prod["user"].id)
+    a = _audit(_sweep(prod, 29))
+    assert a[STRETCH]["status"] == "rehomed" and a[STRETCH]["covered_by_basis"] is False
+    [dest] = a[STRETCH]["rehomed_to"]
+    assert (dest["entry_id"], dest["key"], dest["body_part"], dest["signal_type"]) == (
+        94, "injury_lumbar_spine", "lumbar", "mechanical")
+    assert dest["radicular_warning"] is None
+    # Striding/sprinting are carried by no active row — still orphans for the operator to judge.
+    assert a["striding"]["status"] == "orphan" and a["sprinting"]["status"] == "orphan"
 
 
 @pytest.mark.parametrize("signal", ["neural", "radicular"])
-def test_rehomed_to_a_neural_spinal_row_warns_radicular_blocks(prod, signal):
-    _row(prod["db"], user_id=prod["user"].id, key="injury_lumbar_spine", active=True,
-         value={"body_part": "lumbar spine", "side": "bilateral",
-                "signal_type": signal, "restrictions": [STRETCH]})
+def test_row_94_typed_neural_would_warn_radicular_blocks(prod, signal):
+    """`body_part: lumbar` is spinal to `_is_spinal`, so the same row typed neural/radicular
+    would hard-stop hinge/rotation/carry/gait. The audit says so; it never retypes."""
+    _lumbar_94(prod["db"], prod["user"].id, signal_type=signal)
     w = _audit(_sweep(prod, 29))[STRETCH]["rehomed_to"][0]["radicular_warning"]
     assert w is not None and w["signal_type"] == signal
     assert {"hinge", "rotation", "carry", "gait_load_carriage"} <= set(w["fires"])
 
 
 def test_inactive_destination_is_not_a_rehome(prod):
-    _row(prod["db"], user_id=prod["user"].id, key="injury_lumbar_spine", active=False,
-         value={"body_part": "lumbar spine", "signal_type": "mechanical",
-                "restrictions": [STRETCH]})
+    _row(prod["db"], id=94, user_id=prod["user"].id, key="injury_lumbar_spine", active=False,
+         value=LUMBAR_94)
     assert _audit(_sweep(prod, 29))[STRETCH]["status"] == "orphan"
 
 
