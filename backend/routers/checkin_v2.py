@@ -366,6 +366,10 @@ class CBTIContextOut(BaseModel):
     # centre is the mean of the last `centre_cycles_n` prescribed windows.
     centre_minutes: Optional[float] = None
     centre_cycles_n: int = 0
+    # True while the ONLY window since the latest correction `adopt` is that operator-set
+    # window itself (no engine row after it, basis_* NULL): the centre is then just the
+    # hand-set time in bed, untested by any night, so no number is shown (#333 follow-up).
+    centre_rebaselining: bool = False
     dither_minutes: int = MAX_MOVE_MIN
 
 
@@ -399,7 +403,8 @@ def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
     # it does not go through the replay's effective-prescription read (#128) — there is
     # no cycle being decided here and nothing for the two paths to diverge about.
     series = (
-        db.query(models.CBTIPrescription.window_minutes, models.CBTIPrescription.decision)
+        db.query(models.CBTIPrescription.window_minutes, models.CBTIPrescription.decision,
+                 models.CBTIPrescription.basis_tst_min)
         .filter(models.CBTIPrescription.block_id == block.id,
                 models.CBTIPrescription.effective_from <= for_date)
         .order_by(models.CBTIPrescription.effective_from, models.CBTIPrescription.id)
@@ -410,8 +415,17 @@ def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
     # it are not samples of the current dither, and after #331 they were not even the windows
     # run. The centre then rests on fewer windows (centre_cycles_n says how many) until the
     # chain refills, rather than blending a superseded series into "sleep need".
-    last_adopt = max((i for i, (_, d) in enumerate(series) if d == "adopt"), default=0)
-    windows = [w for w, _ in series[last_adopt:]]
+    last_adopt = max((i for i, (_, d, _b) in enumerate(series) if d == "adopt"), default=0)
+    windows = [w for w, _, _b in series[last_adopt:]]
+    # Re-baselining (#333 follow-up): right after a CORRECTION adopt (an adopt that is not the block's
+    # opening row) and before the engine has written anything after it, the "centre" would be
+    # the operator-set window alone — the time in bed, not a sleep need — so it is withheld.
+    # The first engine row after the adopt resumes the #333 fill (the adopt window included).
+    rebaselining = (
+        last_adopt > 0
+        and len(windows) == 1
+        and series[last_adopt][2] is None
+    )
     return CBTIContextOut(
         block_open=True,
         block_id=block.id,
@@ -424,8 +438,9 @@ def _cbti_context(user_id: int, for_date: date, db: Session) -> CBTIContextOut:
         prescribed_lights_out=rx.prescribed_lights_out if rx else None,
         window_minutes=rx.window_minutes if rx else None,
         effective_from=rx.effective_from if rx else None,
-        centre_minutes=centre_estimate(windows),
-        centre_cycles_n=min(len(windows), CENTRE_CYCLES),
+        centre_minutes=None if rebaselining else centre_estimate(windows),
+        centre_cycles_n=0 if rebaselining else min(len(windows), CENTRE_CYCLES),
+        centre_rebaselining=rebaselining,
     )
 
 
