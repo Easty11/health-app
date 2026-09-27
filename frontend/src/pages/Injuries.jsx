@@ -22,6 +22,7 @@
 
 import { useEffect, useState } from 'react'
 import HubLayout from '../components/HubLayout'
+import InjurySweep from '../components/InjurySweep'
 import api from '../api'
 
 // Mirrors backend injury_trajectory.injury_soreness_key. Kept in sync deliberately: the endpoint
@@ -92,10 +93,12 @@ function Chip({ children, tone = 'gray' }) {
 // multi-row resolve in disguise). Submit is unreachable until a non-whitespace basis clears a ≥15-char
 // client floor (a speed bump; the server floor is only non-empty) AND a resolved_by tier is chosen.
 // resolved_on is omitted — the server defaults to today. On any failure the typed basis is kept.
+// A successful resolve hands the row to onResolved, which opens its clearance sweep: resolving
+// retires the ledger row, but copies elsewhere keep re-imposing the injury until cleared by hand.
 
 const BASIS_MIN = 15
 
-function ResolvePanel({ row, onDone }) {
+function ResolvePanel({ row, onDone, onResolved }) {
   const [open, setOpen] = useState(false)
   const [basis, setBasis] = useState('')
   const [resolvedBy, setResolvedBy] = useState('')
@@ -127,6 +130,7 @@ function ResolvePanel({ row, onDone }) {
       })
       setOpen(false)
       onDone()
+      onResolved(row)
     } catch (err) {
       // Keep the typed basis on every failure. A 409 means the row is already inactive — the list
       // is stale and the resolve did NOT succeed — so surface it AND refetch.
@@ -223,7 +227,7 @@ function ResolvePanel({ row, onDone }) {
 
 // --- active row --------------------------------------------------------------------------------
 
-function ActiveRow({ row, onRecord, onDone }) {
+function ActiveRow({ row, onRecord, onDone, onResolved }) {
   const value = row.value || {}
   const key = sorenessKey(value)
   const restrictions = Array.isArray(value.restrictions) ? value.restrictions : []
@@ -283,7 +287,7 @@ function ActiveRow({ row, onRecord, onDone }) {
           </p>
           <p className="text-[11px] text-gray-400">earliest date on the ledger for this injury</p>
         </div>
-        <ResolvePanel row={row} onDone={onDone} />
+        <ResolvePanel row={row} onDone={onDone} onResolved={onResolved} />
       </div>
     </div>
   )
@@ -296,7 +300,7 @@ function ActiveRow({ row, onRecord, onDone }) {
 // active=false; superseded_by is the only signal that tells them apart, and a basis written and
 // never read is a compliance gesture, so resolutions are shown verbatim.
 
-function HistoryRow({ row }) {
+function HistoryRow({ row, onSweep }) {
   const value = row.value || {}
   const resolution = value.resolution
   const isResolved = row.superseded_by == null
@@ -309,9 +313,19 @@ function HistoryRow({ row }) {
           ? <Chip tone="indigo">resolved</Chip>
           : <Chip>superseded → #{row.superseded_by}</Chip>}
       </div>
-      <p className="text-[11px] text-gray-400">
-        #{row.id} · {row.source} · added {fmtDate(row.added_at)}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] text-gray-400">
+          #{row.id} · {row.source} · added {fmtDate(row.added_at)}
+        </p>
+        {/* Resolved rows only: a superseded row's injury lives on in its successor, so its
+            copies are not stale. */}
+        {isResolved && (
+          <button onClick={() => onSweep(row)}
+            className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
+            Sweep again
+          </button>
+        )}
+      </div>
       {isResolved && resolution && (
         <div className="text-xs text-gray-600 rounded-lg bg-gray-50 px-3 py-2 space-y-0.5">
           <p><span className="text-gray-400">basis:</span> {resolution.basis}</p>
@@ -331,6 +345,8 @@ export default function Injuries() {
   const [rows, setRows] = useState(null) // null = loading
   const [error, setError] = useState('')
   const [showHistory, setShowHistory] = useState(false)
+  // The open clearance sweep: { id, title, loading, data, error } or null. One at a time.
+  const [sweep, setSweep] = useState(null)
 
   function load() {
     // ONE request. include_resolved=true always — the toggle only controls display.
@@ -340,6 +356,16 @@ export default function Injuries() {
   }
 
   useEffect(() => { load() }, [])
+
+  function runSweep(row) {
+    const id = row.id
+    setSweep({ id, title: `${injuryTitle(row.value)} · #${id}`, loading: true, data: null, error: '' })
+    api.get(`/knowledge/injuries/${id}/sweep`)
+      // A slower earlier sweep must not overwrite a later one — apply only to the sweep still open.
+      .then(({ data }) => setSweep((s) => (s && s.id === id ? { ...s, loading: false, data } : s)))
+      .catch(() => setSweep((s) => (s && s.id === id
+        ? { ...s, loading: false, error: 'Could not run the sweep. Try again.' } : s)))
+  }
 
   const all = rows || []
   const predecessorOf = new Map()
@@ -361,12 +387,21 @@ export default function Injuries() {
       <div className="max-w-lg mx-auto px-4 py-5 space-y-4">
         {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>}
 
+        {sweep && (
+          <InjurySweep
+            title={sweep.title}
+            state={sweep}
+            onAgain={() => runSweep({ id: sweep.id, value: all.find((r) => r.id === sweep.id)?.value })}
+            onClose={() => setSweep(null)}
+          />
+        )}
+
         {rows && active.length === 0 && !error && (
           <p className="text-sm text-gray-500 text-center py-8">No active injuries.</p>
         )}
 
         {active.map(({ row, onRecord }) => (
-          <ActiveRow key={row.id} row={row} onRecord={onRecord} onDone={load} />
+          <ActiveRow key={row.id} row={row} onRecord={onRecord} onDone={load} onResolved={runSweep} />
         ))}
 
         {rows && history.length > 0 && (
@@ -379,7 +414,7 @@ export default function Injuries() {
             </button>
             {showHistory && (
               <div className="mt-3 space-y-2">
-                {history.map((row) => <HistoryRow key={row.id} row={row} />)}
+                {history.map((row) => <HistoryRow key={row.id} row={row} onSweep={runSweep} />)}
               </div>
             )}
           </div>
