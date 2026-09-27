@@ -49,7 +49,7 @@ function SliderField({ label, value, onChange, min = 0, max = 10 }) {
 // Tonight's prescribed sleep window, surfaced from /today's `cbti` block. Renders only
 // while a titration block is open — the whole point of the PM page in a block is to show
 // the operator when to go to bed. `window_minutes` is display-only (360 -> "6h00").
-function PrescriptionCard({ cbti }) {
+export function PrescriptionCard({ cbti }) {
   if (!cbti?.block_open) return null
   const w = cbti.window_minutes
   const win = w != null ? `${Math.floor(w / 60)}h${String(w % 60).padStart(2, '0')}` : null
@@ -64,7 +64,15 @@ function PrescriptionCard({ cbti }) {
           labelled as a centre. The window above dithers by +/-`dither_minutes` every
           cycle; without this line those nudges read as the app changing its mind, when
           they are the search. The band is what the window hunts within. */}
-      {cbti.centre_minutes != null && (
+      {/* Right after a correction adopt, the only window is the hand-set time in bed —
+          untested by any night — so no "need" number is shown until the engine writes its
+          first row after it (the #333 fill then resumes). */}
+      {cbti.centre_rebaselining && (
+        <p className="text-[11px] text-indigo-400/90 mt-2 border-t border-indigo-100 pt-2">
+          Estimated need: re-baselining after correction
+        </p>
+      )}
+      {!cbti.centre_rebaselining && cbti.centre_minutes != null && (
         <p className="text-[11px] text-indigo-400/90 mt-2 border-t border-indigo-100 pt-2">
           Estimated need ≈ <span className="font-semibold">{formatMinutes(cbti.centre_minutes)}</span>
           {' '}· {centreBasisNote(cbti.centre_cycles_n)}

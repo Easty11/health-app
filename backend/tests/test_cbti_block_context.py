@@ -108,11 +108,15 @@ def test_sleep_need_centre_restarts_at_the_latest_adopt(db_session):
     _rx(db_session, b.id, eff=date(2026, 9, 20), lo="21:48", win=432, decision="extend")
     _rx(db_session, b.id, eff=date(2026, 9, 27), lo="21:48", win=477, anchor="05:45")  # adopt
     ctx = _cbti_context(u.id, date(2026, 9, 27), db_session)
-    assert ctx.centre_minutes == 477 and ctx.centre_cycles_n == 1   # was 432.75 over 4
+    # Re-baselining (#333 follow-up): rx 18 alone is the operator-set window, so no
+    # number (was 477 with n=1 under #333; 432.75 over 4 before it).
+    assert ctx.centre_minutes is None and ctx.centre_cycles_n == 0
+    assert ctx.centre_rebaselining is True
     _rx(db_session, b.id, eff=date(2026, 10, 1), lo="22:03", win=462, anchor="05:45",
         decision="compress")
     ctx = _cbti_context(u.id, date(2026, 10, 1), db_session)
     assert ctx.centre_minutes == 469.5 and ctx.centre_cycles_n == 2
+    assert ctx.centre_rebaselining is False
 
 
 def test_sleep_need_centre_before_the_adopt_date_still_reads_the_old_series(db_session):
@@ -199,3 +203,14 @@ def test_context_lookup_writes_nothing(db_session):
         _cbti_context(u.id, date(2026, 7, 1) + timedelta(days=d), db_session)
     assert db_session.query(models.CBTIBlock).count() == before_b
     assert db_session.query(models.CBTIPrescription).count() == before_r
+
+
+def test_block_opening_adopt_alone_still_shows_its_window(db_session):
+    """The re-baselining state is for a CORRECTION adopt only: a newly opened block's first
+    window keeps the pre-existing behaviour (centre = that window, n=1)."""
+    u = _user(db_session, "open@x.io")
+    b = _block(db_session, u.id, opened=date(2026, 7, 24))
+    _rx(db_session, b.id, eff=date(2026, 7, 24), lo="22:30", win=390)                    # adopt
+    ctx = _cbti_context(u.id, date(2026, 7, 25), db_session)
+    assert ctx.centre_minutes == 390 and ctx.centre_cycles_n == 1
+    assert ctx.centre_rebaselining is False
