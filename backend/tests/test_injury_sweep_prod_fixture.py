@@ -293,3 +293,101 @@ def test_labels_against_the_prod_ledger(ledger):
     label = {i: [(o["entry_id"], o["active"]) for o in h["other_injuries"]]
              for i, h in hits.items()}
     assert label == {0: [(76, False)], 1: [(75, False)], 2: [(94, True)], 3: []}
+
+
+# ── G1: the RAW prod lines (the "before" of the before/after pair) ─────────────
+#
+# `uk_raw_2026_09_27` carries the 15 lines the S0(c) prod regex matches, verbatim, at their real
+# (row_id, line_index), plus controls. It asserts itself against the prod regex below, so a
+# transcription slip fails here rather than silently shifting a hit.
+
+import re  # noqa: E402
+
+from tests.uk_raw_2026_09_27 import (  # noqa: E402
+    PROD_REGEX_HITS, ROW_CATEGORIES, ROW_LENGTHS, row_content,
+)
+
+
+@pytest.fixture
+def raw(ledger):
+    db = ledger["db"]
+    db.query(models.UserKnowledge).delete()
+    for rid, cat in ROW_CATEGORIES.items():
+        db.add(models.UserKnowledge(id=rid, user_id=ledger["user"].id, category=cat,
+                                    content=row_content(rid)))
+    db.commit()
+    return ledger
+
+
+def _raw_hits(ledger, entry_id, **params):
+    return {(h["row_id"], h["line_index"]): h for h in _sweep(ledger, entry_id, **params)["hits"]
+            if h["store"] == "user_knowledge"}
+
+
+def test_fixture_reproduces_the_prod_diagnosis_count():
+    rx = re.compile("hamstring|semimembranosus|striding|sprint", re.IGNORECASE)
+    got = {(r, i) for r in ROW_LENGTHS for i, line in enumerate(row_content(r).split("\n"))
+           if rx.search(line)}
+    assert got == PROD_REGEX_HITS and len(got) == 15
+    assert sum(1 for r, _ in got if r == 2) == 13
+
+
+def test_raw_right_sweep_hit_set(raw):
+    hits = _raw_hits(raw, 29)
+    assert set(hits) == {
+        (2, 0), (2, 34), (2, 36), (2, 47), (2, 48), (2, 52), (2, 53), (2, 56), (2, 58), (2, 64),
+        (2, 65), (3, 2), (3, 10), (3, 12), (5, 37),
+    }
+    # Negative controls stay out: pes anserine (semitendinosus), calf history, left-knee leg curl.
+    assert not {(2, 54), (2, 57), (2, 63)} & set(hits)
+
+
+def test_raw_before_is_all_stale_prose_after_is_all_history(raw):
+    """The before/after pair: raw lines carry no resolved/historical marker; the operator's
+    cleaned-up (A)-(F) carry one on every hit (test_after_cleanup_…)."""
+    hits = _raw_hits(raw, 29)
+    assert hits and not any(h["marked_resolved"] for h in hits.values())
+
+
+def test_both_near_duplicate_04_jun_tweak_lines_hit(raw):
+    hits = _raw_hits(raw, 29)
+    assert (2, 34) in hits and (2, 36) in hits
+    assert (2, 0) in hits   # a third 04 June record, the original
+
+
+def test_11_jul_synthesis_line_hits_via_sprinting(raw):
+    h = _raw_hits(raw, 29)[(2, 52)]
+    assert "sprint" in h["matched_terms"]
+    assert [(o["entry_id"], o["active"]) for o in h["other_injuries"]] == [
+        (75, False), (76, False), (94, True)]
+
+
+def test_calf_line_is_returned_and_labelled_a_different_injury(raw):
+    right = _raw_hits(raw, 29)[(2, 56)]
+    left = _raw_hits(raw, 18)[(2, 56)]
+    assert left["matched_terms"] == ["sprint"]                 # "zero sprints"
+    assert right["matched_terms"] == ["sprint", "stretch"]     # + "no stretching" (29's restriction)
+    for h in (right, left):
+        assert [(o["entry_id"], o["key"], o["active"]) for o in h["other_injuries"]] == [
+            (76, "injury_calf_left", False)]
+        assert h["marked_resolved"] is False                    # "UNRESOLVED" is not "resolved"
+    assert right["opposite_side"] is True and left["opposite_side"] is False
+
+
+def test_lumbar_line_hits_only_on_terms_it_contains_and_is_in_use_by_94(raw):
+    right = _raw_hits(raw, 29)[(2, 65)]
+    left = _raw_hits(raw, 18)[(2, 65)]
+    assert right["matched_terms"] == ["hamstring", "stretch"]  # "hamstring tightness", "stretching"
+    assert left["matched_terms"] == ["hamstring"]
+    for h in (right, left):
+        assert [(o["entry_id"], o["active"]) for o in h["other_injuries"]] == [(94, True)]
+
+
+def test_semimembranosus_lines_need_the_operator_term(raw):
+    """KNOWN GAP: rows 2/8 and 2/55 name the injury only as 'semimembranosus', which no derived
+    term reaches (body_part is 'hamstring'). They are two of the 15 prod-regex lines. ?terms=
+    brings them in; whether the matcher should know hamstring constituents is an open ruling."""
+    assert not {(2, 8), (2, 55)} & set(_raw_hits(raw, 29))
+    hits = _raw_hits(raw, 29, terms="semimembranosus")
+    assert {(2, 8), (2, 55)} <= set(hits)
+    assert set(hits) >= PROD_REGEX_HITS
