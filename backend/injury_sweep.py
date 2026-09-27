@@ -114,14 +114,68 @@ def _side_fields(line: str, own_side: str | None) -> dict[str, Any]:
     }
 
 
-def _line_hits(text: str, rx: re.Pattern, own_side: str | None):
-    """Yield (line_index, snippet, matched_terms, side_fields) for every matching line."""
+# A line that says it is history. Surfacing-only label: it separates a resolved-history line
+# ("… RESOLVED Aug 2026") from a stale ORDER ("no sprinting") so the operator can tell which
+# copies still instruct. Whole-word `resolved` / `historical` only — "cleared" is excluded
+# because live clearance prose uses it ("all back movements cleared except …").
+_HISTORY_RE = re.compile(r"\b(resolved|historical)\b", re.IGNORECASE)
+
+
+def identity_terms(entry: models.UserKnowledgeEntry) -> list[str]:
+    """What names an injury, as opposed to what it restricts: body_part (phrase + words) and
+    key tokens only. Restriction words are left out on purpose — a lumbar row restricting
+    "hamstring stretching" is not a hamstring injury, and matching on it would label every
+    hamstring line as the lumbar row's."""
+    value = entry.value or {}
+    terms: list[str] = []
+    body_part = str(value.get("body_part") or "").strip().lower()
+    if body_part:
+        terms.append(body_part)
+        terms.extend(_words(body_part))
+    terms.extend(_words((entry.key or "").replace("_", " ")))
+    seen: set[str] = set()
+    return [t for t in terms if not (t in seen or seen.add(t))]
+
+
+def line_context(entry: models.UserKnowledgeEntry,
+                 all_injuries: list[models.UserKnowledgeEntry]) -> dict[str, Any]:
+    """Per-sweep context for labelling each hit line: the swept entry's side, and every OTHER
+    injury row (active or resolved) with a regex over its identity terms."""
+    others = []
+    for o in all_injuries:
+        if o.id == entry.id:
+            continue
+        rx = term_regex(identity_terms(o))
+        if rx is not None:
+            others.append({"entry_id": o.id, "key": o.key, "active": bool(o.active), "rx": rx})
+    return {"own_side": (str((entry.value or {}).get("side") or "").lower() or None),
+            "others": others}
+
+
+def _line_fields(line: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    other_hits = []
+    for o in ctx.get("others", []):
+        found = sorted({m.group(0).lower() for m in o["rx"].finditer(line)})
+        if found:
+            other_hits.append({"entry_id": o["entry_id"], "key": o["key"],
+                               "active": o["active"], "matched_terms": found})
+    return {
+        **_side_fields(line, ctx.get("own_side")),
+        "marked_resolved": bool(_HISTORY_RE.search(line)),
+        # The line also names another injury. `active` true = a line still in use by a live
+        # injury: clearing it would drop that injury's copy too — edit, don't delete.
+        "other_injuries": other_hits,
+    }
+
+
+def _line_hits(text: str, rx: re.Pattern, ctx: dict[str, Any]):
+    """Yield (line_index, snippet, matched_terms, line_fields) for every matching line."""
     for idx, line in enumerate((text or "").split("\n")):
         found = list(rx.finditer(line))
         if not found:
             continue
         matched = sorted({m.group(0).lower() for m in found})
-        yield idx, _snippet(line, found[0]), matched, _side_fields(line, own_side)
+        yield idx, _snippet(line, found[0]), matched, _line_fields(line, ctx)
 
 
 def _walk_strings(obj: Any, path: str):
@@ -245,14 +299,14 @@ def audit_restrictions(entry: models.UserKnowledgeEntry,
     return out
 
 
-def sweep_user_knowledge(rows, rx, own_side) -> list[dict[str, Any]]:
+def sweep_user_knowledge(rows, rx, ctx) -> list[dict[str, Any]]:
     hits = []
     for row in rows:
-        for idx, snippet, matched, side in _line_hits(row.content, rx, own_side):
+        for idx, snippet, matched, fields in _line_hits(row.content, rx, ctx):
             hits.append({
                 "store": "user_knowledge", "row_id": row.id, "line_index": idx,
                 "location": f"category: {row.category}", "snippet": snippet,
-                "matched_terms": matched, **side,
+                "matched_terms": matched, **fields,
                 # _section_knowledge renders every row, unfiltered, every turn.
                 "reaches_context": "yes",
                 "action": "edit", "action_route": f"PUT /knowledge/{row.id}",
@@ -260,24 +314,24 @@ def sweep_user_knowledge(rows, rx, own_side) -> list[dict[str, Any]]:
     return hits
 
 
-def sweep_entries(entries, rx, own_side) -> list[dict[str, Any]]:
+def sweep_entries(entries, rx, ctx) -> list[dict[str, Any]]:
     hits = []
     for e in entries:
         fields = list(_walk_strings(e.value, "value")) + ([("notes", e.notes)] if e.notes else [])
         action, route = _entry_action(e)
         for path, text in fields:
-            for idx, snippet, matched, side in _line_hits(text, rx, own_side):
+            for idx, snippet, matched, fields in _line_hits(text, rx, ctx):
                 hits.append({
                     "store": "user_knowledge_entries", "row_id": e.id, "line_index": idx,
                     "location": f"{e.type} {e.key} · {path}" + ("" if e.active else " (inactive)"),
-                    "snippet": snippet, "matched_terms": matched, **side,
+                    "snippet": snippet, "matched_terms": matched, **fields,
                     "reaches_context": _entry_reach(e, path),
                     "action": action, "action_route": route,
                 })
     return hits
 
 
-def sweep_hevy_routines(routines, rx, own_side) -> list[dict[str, Any]]:
+def sweep_hevy_routines(routines, rx, ctx) -> list[dict[str, Any]]:
     hits = []
     for r in routines or []:
         rtitle = r.get("title") or "Untitled routine"
@@ -286,10 +340,10 @@ def sweep_hevy_routines(routines, rx, own_side) -> list[dict[str, Any]]:
             fields.append((f"routine '{rtitle}' · {ex.get('title') or 'exercise'} · notes",
                            ex.get("notes") or ""))
         for location, text in fields:
-            for idx, snippet, matched, side in _line_hits(text, rx, own_side):
+            for idx, snippet, matched, fields in _line_hits(text, rx, ctx):
                 hits.append({
                     "store": "hevy_routines", "row_id": r.get("id"), "line_index": idx,
-                    "location": location, "snippet": snippet, "matched_terms": matched, **side,
+                    "location": location, "snippet": snippet, "matched_terms": matched, **fields,
                     # Full routine detail (notes included) renders only for the working-set
                     # folder; other routines appear by title only.
                     "reaches_context": "conditional",

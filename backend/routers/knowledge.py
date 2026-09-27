@@ -1040,6 +1040,13 @@ def resolve_injury(
     return _resolve_entry(entry_id, body, "injury", current_user.id, db)
 
 
+class SweepOtherInjury(BaseModel):
+    entry_id: int
+    key: str
+    active: bool                # true = the line is still in use by a live injury
+    matched_terms: list[str]
+
+
 class SweepHit(BaseModel):
     store: str                  # user_knowledge | user_knowledge_entries | hevy_routines
     row_id: Any                 # int for app stores; Hevy routine id (str) for hevy_routines
@@ -1049,6 +1056,8 @@ class SweepHit(BaseModel):
     matched_terms: list[str]
     sides_mentioned: list[str]
     opposite_side: bool         # names only the opposite side — flagged, never dropped
+    marked_resolved: bool       # the line says "resolved"/"historical" — history, not an order
+    other_injuries: list[SweepOtherInjury]  # other ledger rows the line also names
     reaches_context: str        # yes | no | conditional | unverified
     action: str                 # edit | resolve | none  (none → the UI shows "manual")
     action_route: str | None
@@ -1148,13 +1157,14 @@ async def sweep_injury(
     term_list = injury_sweep.derive_terms(entry, extra)
     rx = injury_sweep.term_regex(term_list)
 
-    other_injuries = (
+    all_injuries = (
         db.query(models.UserKnowledgeEntry)
-        .filter_by(user_id=current_user.id, type="injury", active=True)
+        .filter_by(user_id=current_user.id, type="injury")
         .order_by(models.UserKnowledgeEntry.id)
         .all()
     )
-    audit = injury_sweep.audit_restrictions(entry, other_injuries)
+    audit = injury_sweep.audit_restrictions(entry, [i for i in all_injuries if i.active])
+    ctx = injury_sweep.line_context(entry, all_injuries)
 
     stores: list[dict[str, Any]] = []
     hits: list[dict[str, Any]] = []
@@ -1165,7 +1175,7 @@ async def sweep_injury(
             .order_by(models.UserKnowledge.category, models.UserKnowledge.id)
             .all()
         )
-        uk_hits = injury_sweep.sweep_user_knowledge(uk_rows, rx, own_side)
+        uk_hits = injury_sweep.sweep_user_knowledge(uk_rows, rx, ctx)
         stores.append({"store": "user_knowledge", "status": "searched", "hits": len(uk_hits)})
 
         entries = (
@@ -1175,7 +1185,7 @@ async def sweep_injury(
             .order_by(models.UserKnowledgeEntry.id)
             .all()
         )
-        e_hits = injury_sweep.sweep_entries(entries, rx, own_side)
+        e_hits = injury_sweep.sweep_entries(entries, rx, ctx)
         stores.append({"store": "user_knowledge_entries", "status": "searched", "hits": len(e_hits)})
 
         integration = (
@@ -1194,7 +1204,7 @@ async def sweep_injury(
                 h_status = "unavailable"
             else:
                 h_status = "stale" if cached.get("stale") else "searched"
-                h_hits = injury_sweep.sweep_hevy_routines(cached.get("routines"), rx, own_side)
+                h_hits = injury_sweep.sweep_hevy_routines(cached.get("routines"), rx, ctx)
         stores.append({"store": "hevy_routines", "status": h_status, "hits": len(h_hits)})
         hits = uk_hits + e_hits + h_hits
 

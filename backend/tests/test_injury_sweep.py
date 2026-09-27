@@ -274,3 +274,32 @@ def test_terms_derive_from_body_part_key_and_restriction_words():
     # Generic restriction words and side words never become terms on their own.
     for t in ("static", "range", "right", "injury", "end"):
         assert t not in terms
+
+
+# ── line labels: history vs order, and other injuries named on the line ─────
+
+def test_lines_are_labelled_history_and_by_other_injuries_named(db_session):
+    u = _user(db_session, "sweep-labels@example.com")
+    inj = _entry(db_session, u.id, active=False)
+    lumbar = _entry(db_session, u.id, key="injury_lumbar_spine",
+                    value={"body_part": "lumbar", "signal_type": "mechanical",
+                           "restrictions": ["static hamstring stretching"]})
+    calf = _entry(db_session, u.id, key="injury_calf_left", active=False,
+                  value={"body_part": "calf", "side": "left", "restrictions": []})
+    row = _uk(db_session, u.id, "Injury History", "\n".join([
+        "No sprinting until the hamstring settles",                  # 0 — a stale ORDER
+        "Hamstring tweak — RESOLVED Aug 2026",                       # 1 — history
+        "Lumbar flare after hamstring stretching",                   # 2 — names the live lumbar row
+        "Calf tear: zero sprints for 3 weeks",                       # 3 — names the resolved calf row
+        "Hamstring tight after footy",                               # 4 — restriction words ≠ identity
+    ]))
+    body = _client(db_session, u).get(f"/knowledge/injuries/{inj.id}/sweep").json()
+    hits = {h["line_index"]: h for h in body["hits"] if h["row_id"] == row.id}
+    assert sorted(hits) == [0, 1, 2, 3, 4]
+    assert [hits[i]["marked_resolved"] for i in range(5)] == [False, True, False, False, False]
+    assert hits[2]["other_injuries"] == [{"entry_id": lumbar.id, "key": "injury_lumbar_spine",
+                                          "active": True, "matched_terms": ["lumbar"]}]
+    assert hits[3]["other_injuries"] == [{"entry_id": calf.id, "key": "injury_calf_left",
+                                          "active": False, "matched_terms": ["calf"]}]
+    # The lumbar row RESTRICTS hamstring stretching; that does not make a hamstring line its own.
+    assert hits[4]["other_injuries"] == [] and hits[0]["other_injuries"] == []

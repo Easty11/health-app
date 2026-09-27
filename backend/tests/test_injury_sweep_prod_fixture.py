@@ -1,11 +1,12 @@
-"""Injury sweep against the REAL `user_knowledge` Injury History lines (operator-run prod read,
-G0 addendum), plus the restriction audit's G1 case.
+"""Injury sweep against real operator data — the AFTER-CLEANUP fixture — plus the restriction
+audit's G1 case.
 
 The prod ledger: both hamstring rows resolved — id 18 left (2026-08-19), id 29 right
-(2026-08-25). The lines below are verbatim from `user_knowledge` row 2 (Injury History). They
-carry the shapes a synthetic fixture would miss: mixed-injury lines (hamstring + shoulder),
-lines naming both sides, a resolved-history line next to a live one, and a live lumbar line
-the hamstring sweep must NOT hit.
+(2026-08-25). LINES (A)-(F) are the operator's intended END STATE for `user_knowledge` row 2
+(Injury History) after cleanup: already RESOLVED-labelled, duplicates removed. They are NOT the
+raw prod lines (that fixture is the 15 raw lines, G1 ruling 2). Their job is the "after" half
+of a before/after pair: swept for the resolved hamstrings, cleaned-up text must yield ZERO
+stale-order hits — every hit is a history line (`marked_resolved`).
 
 Restriction audit G1 case: the right hamstring's end-range stretching restriction is a neural,
 lumbar-origin limiter recorded on a tissue row. Its resolution basis does not address it, so it
@@ -144,6 +145,14 @@ def _uk_hits(body):
 
 # ── the real lines ───────────────────────────────────────────────────────────
 
+@pytest.mark.parametrize("entry_id", [18, 29])
+def test_after_cleanup_leaves_zero_stale_orders_only_history(prod, entry_id):
+    hits = _uk_hits(_sweep(prod, entry_id))
+    assert hits, "the history lines should still be found"
+    stale = [h["snippet"] for h in hits.values() if not h["marked_resolved"]]
+    assert stale == []
+
+
 def test_right_hamstring_hits_the_hamstring_lines_and_not_calf_or_lumbar(prod):
     hits = _uk_hits(_sweep(prod, 29))
     assert sorted(hits) == [0, 1, 2, 4]           # A B C E; not D (calf) nor F (live lumbar)
@@ -188,8 +197,11 @@ def test_left_basis_covers_both_velocity_restrictions(prod):
 
 
 def test_right_basis_addresses_none_of_its_restrictions(prod):
-    """The real id 29 basis speaks to the tear and to running. "running" is not "sprint" or
-    "stride" — no synonym expansion, deliberately: the audit surfaces, the operator judges."""
+    """KNOWN LIMIT (G1 ruling 1): the real id 29 basis — "no issues running" — does cover
+    striding/sprinting by operator intent (the right-side velocity limit was neural and is
+    cleared), but literal word matching misses the paraphrase, so both read as orphans. That is
+    the expected result: a false orphan costs one glance and is never dropped. The matcher is
+    NOT to be tuned to this sentence."""
     body = _sweep(prod, 29)
     a = _audit(body)
     assert {r: x["status"] for r, x in a.items()} == {
