@@ -275,7 +275,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Tag seed follow-up (#338).** IR/ER sided variants bound to ID-keyed parents; Deficit KB RDL is a MOBILITY tag (flossing, bound to the template's use); the seed dry-run now reports near-twin ids and pre-existing unconfirmed rows (`--prune-unconfirmed`, Q179); `explain_quota_votes.py`; Q27 records that the real restrictions are not planes. Code, self-merged on green - Handoff: `closeout.md`.
+- **Tag seed follow-up (#338).** IR/ER sided variants bound to ID-keyed parents; Deficit KB RDL is a MOBILITY tag (flossing, bound to the template's use); the seed dry-run now reports near-twin ids and pre-existing unconfirmed rows (`--prune-unconfirmed`, Q179); `explain_quota_votes.py`; Q27 records that the real restrictions are not planes. Verified in prod: 0 untagged, 09-21 now counts Stability (#339). Code, self-merged on green - Handoff: `closeout.md`.
 
 - **Taxonomy v0.1 + exercise-tag coverage (#334–#337).** Quota A read Stability 0/3 because Rule 1 counts primary tags and the seed froze at July history (79% fallback). Five probe-inert STRENGTH regions (IR/ER stays Strength, per Q27), 22 ID-keyed tags, sided variants inherit by explicit parent id, seeder `--dry-run`; Q27 scope now includes quota slot keying. Prod seed OWED (operator). Code, self-merged on green - Handoff: `closeout.md`.
 
