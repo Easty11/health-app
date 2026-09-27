@@ -12,9 +12,8 @@ lumbar-origin limiter recorded on a tissue row. Its resolution basis does not ad
 is an ORPHAN until re-homed — which the operator did, to id 94 `injury_lumbar_spine`
 (mechanical). Both resolution bases and the id 94 row are VERBATIM prod values.
 
-UNCONFIRMED: id 29's `restrictions` array is still the seed value (`ASSUMED_29_RESTRICTIONS`),
-pending the operator's prod read (`SELECT value->'restrictions' FROM user_knowledge_entries
-WHERE id = 29`). Replace it with the prod array; do not treat the seed as prod.
+Id 29's `restrictions` array is the prod read (`SELECT value->'restrictions' FROM
+user_knowledge_entries WHERE id = 29`, operator-run 2026-09-27); it matches the seed.
 """
 import pytest
 from fastapi import FastAPI
@@ -63,8 +62,8 @@ LINES = [
 ]
 
 STRETCH = "static end-range hamstring stretching"
-# UNCONFIRMED — the seed array, not a prod read (see module docstring).
-ASSUMED_29_RESTRICTIONS = ["striding", "sprinting", STRETCH]
+# Verbatim prod read (see module docstring).
+RESTRICTIONS_29 = ["striding", "sprinting", STRETCH]
 
 # Verbatim prod (operator-supplied).
 BASIS_18 = "Velocity provocation cleared - striding and sprinting symptom-free."
@@ -122,7 +121,7 @@ def prod(db_session):
                                       "basis": BASIS_18}})
     right = _row(db_session, id=29, user_id=u.id, key="injury_hamstring_right", active=False,
                  value={"body_part": "hamstring", "side": "right", "signal_type": "mechanical",
-                        "restrictions": ASSUMED_29_RESTRICTIONS,
+                        "restrictions": RESTRICTIONS_29,
                         "resolution": {"resolved_on": "2026-08-25", "resolved_by": "user",
                                        "basis": BASIS_29}})
     row2 = models.UserKnowledge(id=2, user_id=u.id, category="Injury History",
