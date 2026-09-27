@@ -6,6 +6,8 @@ Session-open ref: master `57e858d` (the #333 merge). Two PRs, branch
 `claude/stability-quota-classification-jk8n1k` (harness-pinned), each merged + remote-deleted:
 
 ```
+8986157 Merge pull request #266 from Easty11/claude/stability-quota-classification-jk8n1k
+a303cd6 chore: session close-out
 5e0eb36 Merge pull request #265 from Easty11/claude/stability-quota-classification-jk8n1k
 cf31f20 gov(tags): #338, Q179 (unconfirmed-tag ruling), Q27 restrictions-not-planes note
 94e19e4 feat(tags): IR/ER sided variants, Deficit KB RDL -> mobility, seed preflight + prune, vote explainer
@@ -14,7 +16,7 @@ d772db4 Merge pull request #264 from Easty11/claude/stability-quota-classificati
 4de5e0c feat(taxonomy): v0.1 tag-coverage regions + ID-keyed seed, sided-variant inheritance, --dry-run
 ```
 
-This close-out lands as a third, governance-only PR on the same branch (`chore: session close-out`).
+The close-out landed as a third, governance-only PR (#266). This refresh lands as a fourth (`gov(tags): #339 …`) after the operator relayed the seed outputs.
 There is no migration anywhere. Both code PRs self-merged on green (placeholder guard, pytest, vitest). The Railway deploy of
 `5e0eb36` reports SUCCESS on both services (2026-09-26 22:28 UTC).
 
@@ -33,16 +35,18 @@ No `;cc` queue was carried in. Chat handed off two briefs in-session; each item 
 - **Brief 1, D5 34 tags.** LANDED across `4de5e0c` and `94e19e4`. The 4 IR/ER variants landed once the full parent IDs arrived.
 - **Brief 1, Q27 slot-keying scope.** LANDED `5fbbb6a`.
 - **Brief 2, item 1 (IR/ER parent IDs).** LANDED `94e19e4` → #338. The parents are now ID-keyed, so a wrong ID shows as
-  UNRESOLVED. **Near-twin check against the DB: owed.** Code cannot reach prod, so the dry-run prints `NEAR-TWIN` lines
-  and the result has not been relayed.
-- **Brief 2, item 2 (unconfirmed tags).** Tooling LANDED `94e19e4` (dry-run report, opt-in `--prune-unconfirmed`), with the
-  proposed ruling as Q179. **The ruling is PROVISIONAL.** The operator reports the seed complete but has not relayed
-  whether prune was used. Q179 stays OPEN in the store until that is relayed.
+  UNRESOLVED. The near-twin check came back clean (#339).
+- **Brief 2, item 2 (unconfirmed tags).** Tooling LANDED `94e19e4` (dry-run report, opt-in `--prune-unconfirmed`).
+  Q179 is CLOSED as moot → #339: prod held 0 unconfirmed rows, and the seed ran `--confirm` without prune.
 - **Brief 2, item 3 (Deficit KB RDL → MOBILITY).** LANDED `94e19e4` → #338. The router consequence is recorded: that
   region now routes TRAIN, not the ASLR screen.
 - **Brief 2, item 4 (Q27 restrictions are not planes).** LANDED `cf31f20`. Q27 stays OPEN.
-- **Operator prod seed + recount.** The operator reports it DONE (2026-09-27). **Unverified by Code**, because the output
-  was not relayed. The per-capacity votes for 09-21 / 09-24 are therefore **not yet reported**.
+- **Operator prod seed + recount.** VERIFIED → #339 (outputs relayed 2026-09-27):
+  - 0 unresolved and 0 near-twins; Q145's `…4166…` is not live.
+  - 0 pre-existing unconfirmed rows, so Q179 closed as moot (DONE → #339).
+  - 77 tags + 19 no-pattern confirmed; the audit shows 0 untagged (fallback 0.0%).
+  - 09-21 votes stability 6 / strength 6 / mobility 1, so it is COUNTED as Stability via the tie-break.
+  - 09-24 votes strength 9 / stability 3, so it is off_plan.
 
 ## Cold-resume handoff
 
@@ -61,18 +65,26 @@ against capacity × plane and toward a counting/permission split plus a restrict
 
 **Open questions touched:**
 - **OPEN:** Q27, now v1 axes + slot keying + restriction record, which gates the decompression phase's real design.
-- **OPEN:** Q179, the unconfirmed-tag ruling; closes on the operator's relay.
-- **OPEN:** Q145 (typo'd `b4bab549…4166…`). Unchanged; the preflight now surfaces the twin if it is live.
+- **DONE → #339:** Q179 (moot).
+- **OPEN:** Q145 (directly-supplied IDs not catalogue-validated). The `…4166…` twin is confirmed not live; the
+  validation fork itself is unchanged.
+- **Q27 now also carries** (#339): the operator ruling that capacity is the wrong quota key for this program (capacity
+  stays as a descriptor); sided pairs voting twice in Rule 1; and the principle that exposure must not suppress
+  periodic screening of measured regions.
 - **PENDING (operator):** Q27 lumbar item 1, whether any operator-chosen ceiling remains on heavy / end-range hinge.
 
-**Single clearest next action.** Relay the four seed outputs named in the ROADMAP NOW row: dry-run
-`UNRESOLVED`/`NEAR-TWIN`, whether prune was used, the `explain_quota_votes` 09-21/09-24 votes, and the coverage audit.
-That closes Q179 and confirms whether Stability now reads correctly. Until then the Stability figure on the card is
-unconfirmed.
+**Single clearest next action.** Q27's slot-keying design pass. It needs three things, and the operator ruling says
+capacity alone is not the key:
+- a quota key that is not capacity alone;
+- the counting/permission split, with a restriction record;
+- no double vote for sided pairs, and exposure that does not suppress screening.
+
+The next exercise-tag pass (ROADMAP NEXT) is the smaller follow-on. The interim phase card stays on Stability ×3, read
+as approximate.
 
 **What was NOT touched this session (named, not implied finished):**
-- **Know, the plan of record.** The interim swap (the Stability slot becomes a Strength slot until Q27) is an operator
-  action on the Phase card. It was recommended, not done, and nothing in the tree records it as done.
+- **Know, the plan of record.** The operator chose to keep Stability ×3 (read as approximate) and not to add a
+  two-slot split (#339).
 - **Know, the metabolic INGEST bridge.** The prior close-out's named ceiling; untouched.
 - **See (visuals lane), Walk in (appointment brief), Loop (surface-debt sweep).** All untouched. The lab upload
   pipeline, the interpretation-layer build and the appointment brief sit in NOW unchanged.
@@ -82,7 +94,7 @@ unconfirmed.
   The next Know step is Q27's slot-keying design, not more tagging.
 
 **v1 triage of NOW:**
-- **Training seed row:** serves Know (test 2).
+- **Training seed row:** serves Know (test 2); DONE → #339 and drops out at the next sweep.
 - **Lab upload pipeline, interpretation-layer build:** serve Walk in (test 3); they feed the brief.
 - **Appointment brief:** serves Walk in (test 3).
 - **Cross-repo shared-block edit (owed):** serves no v1 test. It is in NOW only by #112's pin for cross-repo debt, which

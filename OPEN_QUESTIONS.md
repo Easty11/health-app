@@ -186,6 +186,19 @@ Design direction (chat proposal, not ruled):
 - **Qualifier type PROGRESSION RULE (pain-gated).** Enforceable only if a pain signal is captured (a check-in field or
   a per-session flag); otherwise advisory. Q27 decides the capture point.
 
+**Findings after the v0.1 seed (2026-09-27, #339). Q27 stays OPEN.**
+- **Operator ruling: capacity is the wrong quota key for this program.** Here the stability/strength split is a
+  misnomer, because all "stability" work is strength work. Capacity STAYS in the taxonomy as a descriptor (#76's
+  external grounding; other users may need it), but it is not necessarily what a slot keys on. This narrows the
+  slot-keying question above; it does not close it.
+- **Sided pairs vote twice in Rule 1.** On 09-21 the split was 5–3 for Stability per MOVEMENT but a 6–6 tie in VOTES.
+  The slot-order tie-break resolved it to Stability, and the Deficit KB RDL's move off primary `hinge` (#338) alone
+  decided the tie. Folded in here rather than fixed separately, because dominant-capacity counting itself is under
+  review.
+- **Training exposure must not suppress screening (generalised from #338).** Tagging an exercise to a region makes the
+  router prescribe that exercise instead of the region's screen, and logging it removes the region from probe
+  candidates. Principle for the redesign: exposure never suppresses periodic screening of a MEASURED region.
+
 **State:** OPEN — the v1 taxonomy bump is its own design pass: externally grounded (HAGOS / adductor
 squeeze; ER:IR isokinetic references; return-to-sport LSI), with adductor:abductor and ER:IR as first-class
 reads. NOT a bolt-on from a tag file (the taxonomy is external-authority so its breadth does not inherit the
@@ -2473,24 +2486,6 @@ Raised 2026-09-26 with #332. `wakings_nocturia_n` / `_pain_n` / `_spontaneous_n`
 2. The 2026-08-13 row (`wakings_nocturia_n`=1, `waso_min`=35, one waking) reads as a count. Either correct it to 35, which is an operator witnessed data fix on an AM-frozen field, or annotate it as unit-ambiguous.
 
 **State:** OWED. Loop-close: a migration PR released by the operator, plus the 08-13 disposition.
-
----
-
-## Q179. Pre-existing unconfirmed exercise tags — confirm or remove before the v0.1 seed?
-
-Raised 2026-09-27 with #338. A plain (non-`--confirm`) seed run writes `llm_proposed` rows, and Rule 1
-(`engine/resolver.py`) counts every tag regardless of `source`. So rows from earlier plain runs may already be
-crediting quotas with nothing a human signed. Code cannot see prod. `seed_exercise_region_tags.py 1 --dry-run` now
-lists every such row and marks each one either **re-stamped by --confirm** (the reference still plans it) or
-**PRUNE** (it does not).
-
-**Proposed ruling (one, covering all of them):** run the seed as `--confirm --prune-unconfirmed`. Rows the reference
-still plans pass through the confirm gate and become `human_confirmed`; every other unconfirmed row is deleted. After
-the run no unconfirmed row remains, so Rule 1 counts only what the reference, as confirmed, says. Deletion is
-recoverable by adding the entry to the reference and re-seeding. Keeping an unreviewed row is not recoverable, because
-it keeps counting silently. The alternative, `--confirm` without prune, leaves the PRUNE rows counting as `llm_proposed`.
-
-**State:** OPEN — operator ruling, read against the dry-run's list before `--confirm`.
 
 ---
 
@@ -5034,3 +5029,23 @@ Raised 2026-09-25 with the HC sleep-clocks decision (#328). `health_connect_sync
 - 08-26: the main-period start was 04:22 against `got_into_bed` 22:35. A main period can be a late fragment.
 
 **State:** DONE → #329. Garmin start = onset and fills no entry-side field. Garmin end is validated for `final_wake`. Ring and Samsung are unruled (#127 stands; validation window Q176). Future rules key on the recording device (Q175). Any start-based prefill must guard against a late-fragment main period.
+
+---
+
+## Q179. Pre-existing unconfirmed exercise tags — confirm or remove before the v0.1 seed?
+
+Raised 2026-09-27 with #338. A plain (non-`--confirm`) seed run writes `llm_proposed` rows, and Rule 1
+(`engine/resolver.py`) counts every tag regardless of `source`. So rows from earlier plain runs may already be
+crediting quotas with nothing a human signed. Code cannot see prod. `seed_exercise_region_tags.py 1 --dry-run` now
+lists every such row and marks each one either **re-stamped by --confirm** (the reference still plans it) or
+**PRUNE** (it does not).
+
+**Proposed ruling (one, covering all of them):** run the seed as `--confirm --prune-unconfirmed`. Rows the reference
+still plans pass through the confirm gate and become `human_confirmed`; every other unconfirmed row is deleted. After
+the run no unconfirmed row remains, so Rule 1 counts only what the reference, as confirmed, says. Deletion is
+recoverable by adding the entry to the reference and re-seeding. Keeping an unreviewed row is not recoverable, because
+it keeps counting silently. The alternative, `--confirm` without prune, leaves the PRUNE rows counting as `llm_proposed`.
+
+**Evidence (operator, 2026-09-27):** `--dry-run --prune-unconfirmed` reported **0 pre-existing unconfirmed tag rows**, so there was nothing to prune. The seed then ran as `--confirm` without prune.
+
+**State:** DONE → #339. Moot: prod held 0 unconfirmed tags on 2026-09-27, so neither branch of the ruling applied. The flag stays available for a future non-confirm run.

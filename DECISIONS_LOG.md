@@ -12465,3 +12465,34 @@ The phase ledger is untouched (actuals only, #223); days remain a PREFERENCE (#2
 **How you know.** `tests/test_exercise_region_tags.py`: `::test_shipped_reference_ir_er_variants_bind_to_id_keyed_parents`, `::test_ir_variant_unresolved_parent_is_loud_not_no_pattern` (a live `…4166…` twin: the parent is UNRESOLVED, the twin is reported, the variant is not planned), `::test_unconfirmed_rows_reported_and_pruned_only_on_opt_in`, `::test_explain_quota_votes_matches_rule_1`, and `::test_shipped_reference_capacity_split` (8 stability / 15 strength / 1 mobility). 30/30. Full backend suite on Python 3.12: 1981 passed, and the 1 red is the shallow-clone `test_current_state` (`git show 3360ed5`).
 
 **Do not revisit unless.** The operator starts loading the same template heavily (then split the template, never widen the tag), or the router gains screen→train promotion (Q148a), after which a tagged region's screen stays reachable.
+
+### 339. v0.1 exercise tags verified in prod (seed 2026-09-27); Q179 moot
+
+**Decision.** The v0.1 reference (#334–#338) is confirmed live for user 1, and Q179 closes as moot. This is a
+verification record; it changes no behaviour.
+
+**How you know (operator runs, 2026-09-27, deploy `5e0eb36` SUCCESS on both services).**
+- **Dry run** (`--dry-run --prune-unconfirmed`): 90 entries resolved, 0 unresolved, `near_twins` empty (so Q145's
+  `b4bab549-…4166…` is not a live template), 77 tags planned, 8 inherited variants. The IR/ER parents resolved to
+  `b4bab549-a143-4186-…` and `f5f7ecfb-68b8-44d6-…`, and `2EE45F81` = Single Arm Lat Pulldown. Pre-existing
+  unconfirmed tag rows: 0.
+- **Seed** (`--confirm`, no prune): `tags_written` 77, `no_pattern_adjudicated` 19, `confirmed` True.
+- **Rule 1 recount** (`explain_quota_votes.py 1 2026-09-21 2026-09-24`):
+  - 09-21 Mixed/Movement Quality: votes stability 6 / strength 6 / mobility 1, untagged 2. The slot-order tie-break
+    gives stability, so it is **COUNTED**.
+  - 09-24 Upper Fortify: strength 9 / stability 3, untagged 1, so **off_plan**.
+- **Coverage audit** (`audit_exercise_tag_coverage.py 1 --days 21`): 43 distinct movements, of which 38 are tagged,
+  5 adjudicated no-pattern and 0 untagged. Fallback hit-rate 0.0% (79.1% before the seed).
+
+**Status.** DONE. The Stability quota now reads 1 counted session (09-21) for the window, where it read 0/3 before.
+The 09-24 off_plan is correct under the current capacity key. The phase card stays on Stability ×3, read as
+approximate until Q27 (operator: no two-slot split).
+
+**Caveats carried forward.**
+- 09-21 counted on a tie that sided-pair double votes produced (Q27).
+- The audit and Rule 1 disagree on "tagged". The audit counts Cable Crunch as TAGGED because it has a secondary tag,
+  but Rule 1 credits primary tags only. The next tag pass either gives every counted exercise a primary or the audit
+  reports primary coverage separately (ROADMAP).
+
+**Do not revisit unless.** The reference changes (re-run `--dry-run`, then `--confirm`, then the audit), or Q27
+replaces capacity as the slot key.
