@@ -12496,3 +12496,33 @@ approximate until Q27 (operator: no two-slot split).
 
 **Do not revisit unless.** The reference changes (re-run `--dry-run`, then `--confirm`, then the audit), or Q27
 replaces capacity as the slot key.
+
+### 340. Injury resolution triggers a surfacing-only clearance sweep; the ledger is the only authority
+
+**Decision.** The injury ledger (`user_knowledge_entries`, `type="injury"`) is the only authority on injury state. Every other store holding injury prose is a copy, found and cleared by the operator, never automatically. `GET /knowledge/injuries/{id}/sweep` (type-scoped like the resolve route; any other id 404s; works on resolved rows) returns, read-only:
+- **Hits**, per line: free-text `user_knowledge` (row id + line index, action `edit`, never delete: rows are one per category), non-injury structured entries (`value` leaves + `notes`; `schedule_item` → its resolve route, else `none`), and Hevy routine/exercise notes via the routine cache (`none`). A line is a hit only if it carries a PRIMARY term: `body_part`, its declared `BODY_PART_ALIASES` (hamstring → semimembranosus / semitendinosus / biceps femoris, extended per body part only by ruling), key tokens, or operator `?terms=`. SECONDARY terms (stemmed restriction words) never create a hit; they annotate one as `restriction_terms`, the stale-order signal.
+- **Labels** per hit: `opposite_side` (flagged, never dropped), `marked_resolved` (whole-word resolved/historical: history, not an order), `other_injuries` (other ledger rows the line names by identity terms, one per key, same body part excluded; `active` = a live injury still uses the line), `reaches_context`.
+- **A restriction audit**: each restriction on the swept row is `covered` (its distinguishing stems appear in the resolution basis), `rehomed` (carried by another active injury row; a spinal destination typed neural/radicular carries a `_RADICULAR_BLOCKS` warning) or `orphan`.
+- **A fixed manual checklist**, always last: project knowledge files, Claude memory, browser chat history, Hevy workout notes.
+
+The Injuries page runs the sweep after a successful resolve and offers "Sweep again" on resolved rows; it adds no write action. Also: `seed_engine._seed_injuries` now skips on key regardless of `active`, so a re-seed cannot resurrect a resolved injury.
+
+**Rationale.** Adding injuries was easy and removing them was hard. The resolve route (#222) retired the ledger row, but copies elsewhere kept re-imposing the constraint. Verified on master `360b385`: every ledger reader (`current_state`, `selection`, `checkin_v2`, `injury_trajectory`) reads `active=True` only, while chat loads `user_knowledge` unfiltered and `_section_knowledge` renders all of it every turn. Auto-editing copies would put the app in the clearing role (#133). Restriction strings are chat-rendered only (`_section_schedule`, MCP summary); the engine gates on `body_part` + `signal_type` (+ side, + the `ra_flare` token), so a restriction on a resolved row silently leaves context unless re-homed — hence the audit.
+
+**Status.** Built + test-proven; no migration; no production data edited.
+
+**How you know.** Real prod data (operator reads, 2026-09-27): the 15 `user_knowledge` lines the prod regex `hamstring|semimembranosus|striding|sprint` matches (13 in row 2, 1 each in rows 3 and 5) are carried verbatim at their real indexes in `tests/uk_raw_2026_09_27.py`, which asserts itself against that regex. Both hamstring sweeps (ids 18, 29) return exactly that set minus the calf line 2/56 (no hamstring term) plus the pes anserine line 2/54 (semitendinosus alias, labelled row 75); none carries a resolved marker, while the operator's cleaned-up after-text returns only history lines. Audit against the real bases and re-home row 94: id 18's striding/sprinting `covered`; id 29's stretching `rehomed` → 94 (mechanical, no warning); id 29's striding/sprinting `orphan` — a KNOWN LIMIT (its basis "no issues running" covers them by operator intent; literal matching misses the paraphrase; not tuned to the sentence). Seed fix: the new test fails on the old `active=True` filter. Backend 1983 → 2031, frontend 231 → 240.
+
+**Do not revisit unless.** Injury prose is confined to the ledger by construction (no free-text copies can exist), making the sweep redundant.
+
+### 341. Chat no longer writes injury facts to free-text `user_knowledge`
+
+**Decision.** "Injury History" and "Constraints" are removed from the free-text `<knowledge_update>` categories (`context_builder.KNOWLEDGE_UPDATE_CATEGORIES`, one definition). The section now tells the coach that injuries and exercise restrictions never go in a free-text category and shows a worked structured `type="injury"` block. Prompt-only: `routers.knowledge.VALID_CATEGORIES` (the manual POST) is untouched, and existing free-text rows are untouched — they are cleared per line through the #340 clearance sweep, the operator choosing each.
+
+**Rationale.** The free-text store has no active flag and no resolution and renders unfiltered every turn, so every injury written there can never be retired. It is a store built to create copies; the sweep clears the copies already made, this stops new ones.
+
+**Status.** Built + test-proven; prompt change. Declared byte difference: `_section_knowledge_update` 1032 → 1510 bytes (+478); nothing else in the prompt changes.
+
+**How you know.** The #43 parity guard is narrowed at the section (the prompt's tail, tail-anchored), with a no-op positive control and the byte counts pinned; verified it refuses when run against the old section. `tests/test_knowledge_update_prompt.py` fails if "Injury History" reappears anywhere in the section, and runs the prompt's own injury example through `_process_knowledge_updates`, asserting a ledger row is written and no free-text row.
+
+**Do not revisit unless.** `user_knowledge` gains an active/resolution lifecycle, or is retired (Q9).
