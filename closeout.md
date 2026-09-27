@@ -78,7 +78,9 @@ fed the appointment brief's injury section. It was debt, not product surface.
 
 **Open questions touched:**
 - **OPEN, annotated:** Q9 (retire or render-gate the free-text store). Now carries a live cost and the
-  derived-label requirement. This is the structural fix the sweep only mitigates.
+  derived-label requirement. **Step 1 ruled GO (2026-09-27):** render and write path retired together in a
+  separate brief (not yet cut); #341 stands and is a subset of it. This is the structural fix the sweep only
+  mitigates.
 - **OPEN, new:** Q180 (browser chat history: one non-expiring conversation re-sent every turn; unsearchable copy
   store, unbounded tokens).
 

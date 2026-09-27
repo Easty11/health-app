@@ -27,6 +27,10 @@ render gate on this store, is still this Q.
 - **Forward-compat (G2 ruling):** the sweep's `reaches_context` label is currently a per-store constant (`"yes"`
   for `user_knowledge`, `injury_sweep.sweep_user_knowledge`). When this Q render-gates the free-text store, that
   label must be DERIVED from the renderer's actual inclusion rule, not the constant, so it flips with the gate.
+- **Step-1 ruling (operator, 2026-09-27): GO.** The `user_knowledge` render path and write path are retired
+  TOGETHER, in a separate brief (not yet cut). #341 (the prompt no longer offers "Injury History"/"Constraints")
+  stands as landed and is now a subset of that retirement. The typed `constraint`/`finding` brief is a separate,
+  parallel lane.
 
 **State:** OPEN — undecided design fork (fold the legacy KB in as `type="note"` vs keep the two
 permanently distinct). Deferred by #44, not urgent. No blocker.
