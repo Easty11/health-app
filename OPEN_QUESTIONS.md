@@ -5175,3 +5175,35 @@ refused block is re-emitted, and no other write re-runs.
 - how it interacts with narrate-after-write, which already costs one extra call on failed-write turns.
 
 **State:** DONE → #344 (ruled 2026-09-28: yes, scoped — shape refusals only, cap 1 per write per turn, the validator's message verbatim, every outcome logged; the region list also leaves the prompt).
+
+---
+
+## Q187. Chat asks "Do you confirm?" before a typed write, then the "yes" turn writes nothing and renders empty
+
+Raised 2026-09-28 (operator, prod). Before a finding write (`finding_mri_cervical_20260918`) the coach asked a
+conversational "Do you confirm?". The operator's "yes" came back as an EMPTY bubble and nothing was written.
+Re-sending the original request wrote the row first time. This matches the "first attempt never writes" pattern
+seen since #273. It is not a shape refusal, so the #344 retry never fires.
+
+**Evidence.**
+- *Transport.* Every `POST /chat` on 28 Sep (Railway http log, 03:29–09:53Z) returned 200. The empty bubble was
+  a 200 with an empty `response`, not a server error.
+- *What the model returned is unrecoverable.* The backend deploy log carries one Anthropic `HTTP Request: POST` per
+  turn (two when pass-2 fires) and no reply content, stop reason or block count. Scope of this negative: the deploy
+  stream of `health-app-backend`, 28 Sep.
+- *H3, previous instance (operator):* the "yes" turn wrote nothing. This instance's duplicate check is OWED to the
+  operator (Code cannot see prod): `SELECT id, key, active, source, added_at, superseded_by, value->>'status' AS status FROM user_knowledge_entries WHERE user_id = 1 AND type = 'finding' AND key LIKE 'finding_mri_cervical%' ORDER BY id;`
+  (columns read from `models.UserKnowledgeEntry`; an upsert on a reused key supersedes, so a second write shows
+  as an inactive row with `superseded_by` set).
+- *H1, mechanism (operator, prod, 28 Sep):* appending "Write it now; don't ask me to confirm." made the write land
+  on the first turn. The in-chat confirm step is prompt-induced. The typed-entry guidance said "You only ever
+  PROPOSE one: the user confirms it themselves", and SCHEDULE INTELLIGENCE STEP 1 ("ASK BEFORE WRITING") covers
+  "injury management". The confirm gate is the Injuries page's Confirm button (`Injuries.jsx:312-314`, #346), not chat.
+- *H2, code reading.* Paths that give a 200 with no text, no write and no footer: a reply made only of a mimicked
+  save line ("✓ Finding entry saved: …", eaten by the #314/#316 echo strip); a reply of only `<thinking>` (eaten
+  by #313's strip); an empty reply. Two further silent drops: a typed block with no top-level `key` fell through to the
+  legacy branch and was dropped unrecorded; a legacy block with empty `content` was dropped unrecorded. Which path
+  fired on 28 Sep is not determined. A mimicked save line is the likeliest, since the history carries prior footers.
+
+**State:** DONE → #347 (prompt: write proposals directly, never confirm in chat; a turn never renders empty; silent
+drops become reported refusals; per-turn metadata logged).
