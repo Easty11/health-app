@@ -411,6 +411,12 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # GENERATED from the validator's tuples (#45) with one placeholder template, because the brief
     # names chat as a writer of the row (plan, add or edit asks; never attended/closed). Declared:
     # 4969 → 7484 (+2515); same excision, nothing else moves. Pinned by tests/test_appointment_entries.py.
+    # RE-DECLARED (Q187, the yes-turn hang, 28 Sep): "the user confirms it themselves" read as "ask
+    # for consent in chat", so the coach asked "Do you confirm?" and the "yes" turn wrote nothing. The
+    # typed-entry lines now say write the proposal directly, confirm on the Injuries page, and a chat
+    # "yes" writes nothing; one closing line says a write happens only when the reply carries the block.
+    # Declared: 7484 → 8059 (+575); same excision, nothing else moves. Pinned by
+    # tests/test_chat_no_silent_turn.py.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -425,7 +431,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 7484), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 8059), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]

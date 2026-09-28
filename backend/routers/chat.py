@@ -879,7 +879,13 @@ def _process_knowledge_updates(
 
         key = data.get("key") if isinstance(data, dict) else None
         try:
-            if "type" in data and "key" in data:
+            if isinstance(data, dict) and "type" in data and not data.get("key"):
+                # A typed block with no top-level key used to fall through to the legacy branch,
+                # find no `content`, and vanish with no record: a silent no-write (Q187).
+                record(False, "invalid_shape",
+                       f"✗ {_entry_noun(data.get('type'))} NOT saved — the block had no top-level `key`.",
+                       validator_message="a structured entry needs a top-level `key`")
+            elif "type" in data and "key" in data:
                 # Structured format → UserKnowledgeEntry
                 key = data["key"]
 
@@ -971,6 +977,11 @@ def _process_knowledge_updates(
                 new_content = data.get("content", "").strip()
 
                 if not new_content:
+                    # Reported, never swallowed (Q187): an empty block is still a write the
+                    # model asked for, and dropping it silently reads as "saved" to nobody.
+                    record(False, "invalid_shape",
+                           f"✗ Knowledge entry NOT saved: {category} — the block had no content.",
+                           key=category)
                     cleaned = cleaned.replace(match.group(0), "")
                     continue
 
@@ -1256,6 +1267,34 @@ def _strip_footer_echo(reply: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", cleaned).rstrip()
 
 
+# ---------- a turn never ends silent (Q187) ----------
+#
+# Prod, 28 Sep: the coach asked "Do you confirm?" before a finding write; the operator's "yes" came
+# back as an EMPTY bubble and nothing was written. Each of these paths gave a 200 with no text, no write
+# and no footer: a reply the model wrote as only a mimicked "✓ … saved" line (the echo strip ate it),
+# only <thinking> scratch, or nothing at all. The fixed lines below make that visible. They are
+# computed from `write_results`, never from prose.
+_NO_WRITE_NOTICE = "⚠ Nothing was saved this turn."
+_EMPTY_TURN_NOTICE = (
+    "⚠ No response came back for that message, and nothing was saved. Send it again."
+)
+
+
+def _claims_a_save(reply: str) -> bool:
+    """True when the MODEL's own text carries a line in the system's save grammar (tally or per-entry)."""
+    return bool(_FOOTER_ECHO_RE.search(reply) or _ACTION_ECHO_RE.search(reply))
+
+
+def _ensure_visible(reply: str, write_results: list[WriteResult]) -> str:
+    """The floor under every turn: a reply is never empty. Empty with no write → the empty-turn notice.
+    Empty with writes cannot happen (the footer is appended), but it is covered anyway."""
+    if reply.strip():
+        return reply
+    if write_results:
+        return _render_write_footer(write_results)
+    return _EMPTY_TURN_NOTICE
+
+
 # Pass-2 is bounded: it reproduces the turn's conversational content and corrects only the
 # write claims, so it needs far fewer tokens than the open-ended first pass. Kept well below
 # the first pass's 4096 to cap the added cost of the (failed-write only) second call.
@@ -1374,6 +1413,10 @@ def _compose_response(
             write_results=write_results,
         )
 
+    # A save-grammar line in the model's own text with NO write this turn is a claimed write that
+    # did not happen (Q187). The strip below removes the claim, so say plainly that nothing saved.
+    claimed_unwritten = not all_actions and not write_results and _claims_a_save(reply)
+
     # Strip any footer-tally line the model wrote itself, so the authoritative footer appended
     # below is the ONLY one (#314). Kept prose on an all-saved turn is where the duplicate came
     # from; pass-2 is told not to add one, but stripping here covers both paths.
@@ -1385,6 +1428,9 @@ def _compose_response(
     footer = _render_write_footer(write_results)
     if footer:
         reply = reply + "\n\n" + footer
+
+    if claimed_unwritten:
+        reply = (reply + "\n\n" + _NO_WRITE_NOTICE) if reply.strip() else _NO_WRITE_NOTICE
 
     return reply, second_call_fired
 
@@ -1541,8 +1587,15 @@ async def chat(
         messages=messages,
     )
 
-    reply = response.content[0].text
+    # Every text block, not `content[0]`: a reply with no content blocks was an IndexError, and one
+    # whose first block is not text would drop the rest (Q187). Empty is handled at the end.
+    reply = "".join(getattr(b, "text", "") or "" for b in (response.content or []))
     raw_reply = reply  # the model's own draft, blocks intact — the Q185 retry replays it as context
+    # Metadata only, never the text (health data stays out of the logs). Before Q187 nothing
+    # recorded what the model returned, so an empty prod turn could not be diagnosed afterwards.
+    logger.info("chat turn: stop_reason=%s content_blocks=%d chars=%d write_blocks=%d",
+                getattr(response, "stop_reason", None), len(response.content or []), len(reply),
+                len(_KNOWLEDGE_BLOCK_RE.findall(reply)))
 
     # Parse and execute any embedded action blocks.
     # Exercise creation runs FIRST and the order is load-bearing: a custom minted this
@@ -1596,6 +1649,10 @@ async def chat(
     # Final display sanitation: strip any raw <thinking> scratch the model emitted (it is not an
     # action block, so nothing above removed it) before the reply reaches the user (#313).
     reply = _strip_thinking(reply)
+    # A turn never renders empty (Q187): if nothing visible is left, say what happened.
+    if not reply.strip():
+        logger.warning("chat turn: empty reply after processing (writes=%d)", len(all_write_results))
+    reply = _ensure_visible(reply, all_write_results)
 
     # `write_results` is the machine-checkable outcome of the write lanes — a client (or a
     # later turn) hard-gates on `saved` rather than trusting the reply's prose. Every write
