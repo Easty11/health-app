@@ -391,6 +391,11 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # hold for this section again and PRE_REFACTOR_SHA cannot move. It is the LAST section, so it
     # is excised from its heading to the end — the tail-anchoring asserts below prove nothing
     # after it is hidden. Pinned by tests/test_knowledge_update_prompt.py.
+    # RE-DECLARED (typed entries, S4 — G1 ruling 1): the same section gains the constraint /
+    # finding PROPOSAL guidance (chat proposes, never sets status or authority, never confirms,
+    # resolves, retracts or deactivates) with one example block of each type, because a proposal
+    # path the coach is never told about is not built. Declared byte difference: 1510 → 2623
+    # (+1113); the excision is unchanged and nothing else in the prompt moves.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -405,7 +410,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 1510), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 2623), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]

@@ -247,6 +247,9 @@ def _entry_reach(e: models.UserKnowledgeEntry, field: str) -> str:
 def _entry_action(e: models.UserKnowledgeEntry) -> tuple[str, str | None]:
     if e.type == "schedule_item" and e.active:
         return "resolve", f"POST /knowledge/schedule/{e.id}/resolve"
+    if e.type == "constraint" and e.active:
+        # The typed constraint's own operator route (#342, G0 D4) — still never called from here.
+        return "resolve", f"POST /knowledge/constraints/{e.id}/resolve"
     return "none", None
 
 
@@ -266,6 +269,8 @@ def _entry_action(e: models.UserKnowledgeEntry) -> tuple[str, str | None]:
 # a spinal (or body-part-less) row typed `neural`/`radicular` fires `_RADICULAR_BLOCKS` —
 # a hinge/rotation/carry/gait stand-down — where the same words on a `mechanical` row are
 # chat-only. The audit surfaces that as a warning on the destination; it never decides.
+
+SURVIVES_SUGGESTION = "re-parent or resolve — constraint keeps enforcing"
 
 RESTRICTIONS_NOTE = (
     "Restriction strings are chat-rendered only (context_builder schedule section, MCP injury "
@@ -304,11 +309,46 @@ def _radicular_warning(dest: models.UserKnowledgeEntry) -> dict[str, Any] | None
     return None
 
 
+def _constraint_home(c: dict[str, Any], entry: models.UserKnowledgeEntry,
+                     live_keys: set[str]) -> str | None:
+    """Where a confirmed constraint stands relative to the injury being swept (G4/S5 ruling):
+      * `rehomed`          — its parent is a DIFFERENT active entry, or it has no parent and no
+                             `with_parent` exit: it outlives this injury's resolution;
+      * `dies_with_parent` — parented to THIS injury with a `with_parent` exit: it leaves with
+                             it, so it re-homes nothing (the S6 seed's rows are this shape);
+      * `parent_resolved_survives` — parented to THIS injury WITHOUT a `with_parent` exit: it
+                             outlives the resolution and keeps enforcing, but under a parent that
+                             no longer holds (G5 ruling 1). Cautious outcome: it re-homes nothing
+                             either — the operator re-parents or resolves it;
+      * None               — parented to an entry that is itself no longer active."""
+    parent = c.get("parent_key")
+    if parent == entry.key:
+        if (c.get("exit") or {}).get("with_parent") is True:
+            return "dies_with_parent"
+        return "parent_resolved_survives"
+    if parent is None:
+        return None if (c.get("exit") or {}).get("with_parent") is True else "rehomed"
+    return "rehomed" if parent in live_keys else None
+
+
 def audit_restrictions(entry: models.UserKnowledgeEntry,
-                       other_injuries: list[models.UserKnowledgeEntry]) -> list[dict[str, Any]]:
+                       other_injuries: list[models.UserKnowledgeEntry],
+                       constraints: list[dict[str, Any]] | None = None,
+                       live_keys: set[str] | None = None) -> list[dict[str, Any]]:
     """One row per restriction on `entry`: is it addressed by the resolution basis, carried by
-    another ACTIVE injury row (re-homed), or neither (orphan)? For an unresolved entry the basis
-    is empty, so the audit reads as "what would orphan if resolved now"."""
+    another ACTIVE injury row or a confirmed constraint that outlives this row (re-homed), or
+    neither (orphan)? For an unresolved entry the basis is empty, so the audit reads as "what
+    would orphan if resolved now".
+
+    `constraints` are the user's active CONFIRMED constraint rows, lifted
+    (`typed_entries.lift_constraints`); a match is the restriction's stems in `scope.text`. A
+    constraint parented to THIS injury does NOT re-home — the restriction still reads as an
+    orphan — and is listed under `dies_with_parent` (with_parent exit) or
+    `parent_resolved_survives` (any other exit; it keeps enforcing). An orphan's suggested action
+    is "re-parent or resolve — constraint keeps enforcing" when a surviving constraint already
+    carries it, else "propose as constraint". Surfacing only: nothing here writes."""
+    constraints = constraints or []
+    live_keys = live_keys or set()
     value = entry.value or {}
     basis = ((value.get("resolution") or {}).get("basis") or "")
     body_words = set(_words(str(value.get("body_part") or "")))
@@ -328,12 +368,34 @@ def audit_restrictions(entry: models.UserKnowledgeEntry,
                     "signal_type": str((dest.value or {}).get("signal_type", "mechanical")).lower(),
                     "radicular_warning": _radicular_warning(dest),
                 })
+        via_constraint, dies_with_parent, survives = [], [], []
+        for c in constraints:
+            if not _mentions_all(stems, str((c.get("scope") or {}).get("text") or "")):
+                continue
+            home = _constraint_home(c, entry, live_keys)
+            ref = {"entry_id": c["id"], "key": c["key"], "kind": c.get("kind"),
+                   "tier": (c.get("scope") or {}).get("tier"), "parent_key": c.get("parent_key")}
+            if home == "rehomed":
+                via_constraint.append(ref)
+            elif home == "dies_with_parent":
+                dies_with_parent.append(ref)
+            elif home == "parent_resolved_survives":
+                survives.append(ref)
+        status_ = ("rehomed" if (rehomed or via_constraint)
+                   else ("covered" if covered else "orphan"))
+        suggestion = None
+        if status_ == "orphan":
+            suggestion = SURVIVES_SUGGESTION if survives else "propose as constraint"
         out.append({
             "restriction": r,
             "match_stems": stems,
             "covered_by_basis": covered,
             "rehomed_to": rehomed,
-            "status": "rehomed" if rehomed else ("covered" if covered else "orphan"),
+            "rehomed_to_constraints": via_constraint,
+            "dies_with_parent": dies_with_parent,
+            "parent_resolved_survives": survives,
+            "status": status_,
+            "suggested_action": suggestion,
         })
     return out
 

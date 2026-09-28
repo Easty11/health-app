@@ -101,7 +101,19 @@ function Audit({ audit, note }) {
               {a.status === 'rehomed' && a.rehomed_to.map((d) => (
                 <Tag key={d.entry_id} tone="indigo">re-homed → #{d.entry_id} {d.key} ({d.signal_type})</Tag>
               ))}
+              {a.status === 'rehomed' && (a.rehomed_to_constraints || []).map((c) => (
+                <Tag key={`c${c.entry_id}`} tone="indigo">re-homed → constraint #{c.entry_id} {c.key} ({c.tier})</Tag>
+              ))}
+              {(a.dies_with_parent || []).map((c) => (
+                <Tag key={`d${c.entry_id}`} tone="amber">constraint #{c.entry_id} {c.key} ends with this injury</Tag>
+              ))}
+              {(a.parent_resolved_survives || []).map((c) => (
+                <Tag key={`s${c.entry_id}`} tone="amber">constraint #{c.entry_id} {c.key} outlives this injury</Tag>
+              ))}
             </div>
+            {a.suggested_action && (
+              <p className="text-[11px] text-gray-500">suggested: {a.suggested_action} (manual)</p>
+            )}
             {a.rehomed_to.filter((d) => d.radicular_warning).map((d) => (
               <p key={d.entry_id} className="text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
                 {d.radicular_warning.message}

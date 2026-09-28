@@ -7,36 +7,6 @@ definition). The label is `**State:**` (never `**Status:**`). `DONE → #N` name
 
 ---
 
-## Q9. Consolidate legacy free-text `user_knowledge` into `user_knowledge_entries`?
-
-Legacy `user_knowledge` (free-text category/content) coexists with structured
-`user_knowledge_entries` per #44. Fold the legacy KB in as a `type="note"` entry and
-retire `routers/knowledge.py`'s legacy write path + `context_builder`'s parallel
-`knowledge_entries` param — making `context_builder` a true single-source formatter over
-`current_state` — or keep them permanently distinct (free-text notes vs typed declared
-state)? Deferred by #44; not urgent.
-
-**Annotation (2026-09-27, injury clearance sweep; #340, #341).**
-The fork now has a live cost. Verified on master `360b385`: `user_knowledge` has no active flag and no
-resolution; chat loads it unfiltered (`chat.py`) and `_section_knowledge` renders every row every turn; and the
-legacy write path APPENDS to one row per category, so a row mixes facts about several injuries (prod row 2,
-Injury History, is 66 lines). A resolved injury therefore keeps re-imposing itself from here. Mitigations landed
-without deciding this Q: the coach no longer writes "Injury History"/"Constraints" (prompt-only;
-`VALID_CATEGORIES` untouched), and the sweep finds the copies per line for the operator to edit. Retirement, or a
-render gate on this store, is still this Q.
-- **Forward-compat (G2 ruling):** the sweep's `reaches_context` label is currently a per-store constant (`"yes"`
-  for `user_knowledge`, `injury_sweep.sweep_user_knowledge`). When this Q render-gates the free-text store, that
-  label must be DERIVED from the renderer's actual inclusion rule, not the constant, so it flips with the gate.
-- **Step-1 ruling (operator, 2026-09-27): GO.** The `user_knowledge` render path and write path are retired
-  TOGETHER, in a separate brief (not yet cut). #341 (the prompt no longer offers "Injury History"/"Constraints")
-  stands as landed and is now a subset of that retirement. The typed `constraint`/`finding` brief is a separate,
-  parallel lane.
-
-**State:** OPEN — undecided design fork (fold the legacy KB in as `type="note"` vs keep the two
-permanently distinct). Deferred by #44, not urgent. No blocker.
-
----
-
 ## Q10. Build AccessLink per-second ingest for the Metabolic-load window (HC/companion lane)?
 
 #35 established the dependency: HC carries no per-second R-R/HR-zone; only AccessLink
@@ -90,26 +60,6 @@ half-column, which the repro did not stage.
 **State:** OPEN — frontend layout fork: decide direction (a) / (b) / (c), then implement. Branch
 `fix/desktop-column-scroll` was cut then discarded (zero commits; deleted). No DECISIONS_LOG entry.
 No blocker — the decision is Luke's to make at will, nothing external gates it.
-
----
-
-## Q20. Clinical findings vs restrictions — `user_knowledge_entries.value` conflates them
-
-Restrictions are structured (`restrictions[]`, enforced by `selection.py`); **findings are not**.
-Positive right slump, S1-pattern referral, frontal-plane deficit have no first-class home in the injury
-`value` JSON — they ride as `signal_type` + free-text `detail`. The constraint-consumption brief added a
-`trajectory` key to `value` but deliberately did **not** model findings. Note the split surfaces
-elsewhere too: FEEDBACK §5 documents these findings clinically, but the structured ledger the engine and
-snapshot read does not carry them. Q7 territory.
-
-**State:** OPEN — **decoupled from Q7 (2026-08-03).** The "resolve jointly with Q7 / Q7 is itself
-UNSTARTED" framing is now stale: Q7's authoring is discharged at `#72`, so there is nothing left to
-resolve jointly *with*. Q20 stands alone.
-
-The question is unchanged in substance: give clinical findings — positive slump, S1-pattern referral,
-frontal-plane deficit, "pressing untested" — a first-class structured home in the injury `value` JSON,
-specifically the three-valued **provocative / clear / untested** status that FEEDBACK §5 carries as a
-table column and the ledger does not. No blocker. Owner: Luke.
 
 ---
 
@@ -2519,7 +2469,74 @@ turn (`chat.py`). Nothing expires or trims it. Two costs:
 client-side window/expiry, or an explicit "new conversation" affordance — and whether resolved-fact copies in it
 are handled by the summary or by the operator.
 
+**Annotation (2026-09-28, typed entries #342/#343).** The typed-entries brief's "server-side, summarised chat
+history" item IS this question — routed here rather than minted twice. LATER per #275 ("chat not required" for
+v1); ROADMAP LATER row.
+
 **State:** OPEN. No blocker.
+
+---
+
+## Q181. Retire or render-gate the legacy free-text `user_knowledge` store
+
+Successor to Q9, which closed DONE → #343 on its fork only (the legacy KB folds into typed `finding` /
+`constraint` rows; no `note` type). What Q9 still carried moves here verbatim:
+
+- **Forward-compat (G2 ruling):** the sweep's `reaches_context` label is currently a per-store constant (`"yes"`
+  for `user_knowledge`, `injury_sweep.sweep_user_knowledge`). When this Q render-gates the free-text store, that
+  label must be DERIVED from the renderer's actual inclusion rule, not the constant, so it flips with the gate.
+- **Step-1 ruling (operator, 2026-09-27): GO.** The `user_knowledge` render path and write path are retired
+  TOGETHER, in a separate brief (not yet cut). #341 (the prompt no longer offers "Injury History"/"Constraints")
+  stands as landed and is now a subset of that retirement. The typed `constraint`/`finding` brief is a separate,
+  parallel lane.
+
+The cost is Q9's 2026-09-27 annotation: the store has no active flag and no resolution, and renders unfiltered
+every turn, so a retired fact re-imposes itself from here. Typed rows now exist to fold into (#342, #343); the
+S6 seed covers injury `restrictions[]` only, not free-text lines.
+
+**State:** OWED — settled GO (Step-1 ruling); loop-close: the `user_knowledge` retirement brief (brief 2), not yet
+cut.
+
+---
+
+## Q182. Default constraint templates from `_ACUTE_TISSUE_BLOCKS` / `_RADICULAR_BLOCKS`
+
+Raised with #342 (the brief kept both maps unchanged). `engine/selection.py` hard-codes body-part → region
+blocks (the acute-tissue and radicular seed heuristics, spec §8). They have no exit, no review date and no
+visible authority — the gap #342 closes for everything else. Convert them into default ENGINE-tier `block`
+constraints seeded per injury at creation (`asserted_by: "engine"`, `with_parent` exit), so the coach and the
+sweep see them as rows.
+
+**To decide:** seeded as proposals (the operator confirms) or confirmed with engine authority; how existing
+active injuries migrate; whether the in-code maps then retire; and the byte-identity gate against the current
+arms (#342's pinned-SHA pattern).
+
+**State:** OPEN. No blocker.
+
+---
+
+## Q183. Engine-tier `cap` and `caution` constraints
+
+Raised with #342 (G2 ruling 2): the engine tier accepts `block` only in v1. `cap` means a load ceiling and the
+engine has no dose seam to enforce one (Q106 / the Banister dosing wire), so an engine cap would silently become a
+block. `caution` through the boolean `is_contraindicated` (#72: it stays boolean) is indistinguishable from a block.
+Both remain advisory-tier kinds.
+
+**To decide, when its trigger fires:** engine `cap` when the dose seam lands (what the cap bounds, and how it is
+enforced); engine `caution` only if `is_contraindicated` becomes graded.
+
+**State:** OPEN — watch; no action until the dose seam lands or #72's boolean changes.
+
+---
+
+## Q184. Budgeted context builder with history behind a tool
+
+Raised with #342/#343 (brief S7). The standing prompt grows section by section, each with its own cap: the
+#314 routines budget, the #343 findings budget (2,000 chars, overflow named), and the knowledge-update guidance
+(+1113 bytes at #342). A whole-prompt budget with lower-priority and historical material behind read tools
+(the `get_findings` pattern) would replace per-section caps.
+
+**State:** OPEN — LATER per #275 ("chat not required" for v1); ROADMAP LATER row.
 
 ---
 
@@ -2781,6 +2798,37 @@ lab pipeline.
 
 ---
 
+## Q9. Consolidate legacy free-text `user_knowledge` into `user_knowledge_entries`?
+
+Legacy `user_knowledge` (free-text category/content) coexists with structured
+`user_knowledge_entries` per #44. Fold the legacy KB in as a `type="note"` entry and
+retire `routers/knowledge.py`'s legacy write path + `context_builder`'s parallel
+`knowledge_entries` param — making `context_builder` a true single-source formatter over
+`current_state` — or keep them permanently distinct (free-text notes vs typed declared
+state)? Deferred by #44; not urgent.
+
+**Annotation (2026-09-27, injury clearance sweep; #340, #341).**
+The fork now has a live cost. Verified on master `360b385`: `user_knowledge` has no active flag and no
+resolution; chat loads it unfiltered (`chat.py`) and `_section_knowledge` renders every row every turn; and the
+legacy write path APPENDS to one row per category, so a row mixes facts about several injuries (prod row 2,
+Injury History, is 66 lines). A resolved injury therefore keeps re-imposing itself from here. Mitigations landed
+without deciding this Q: the coach no longer writes "Injury History"/"Constraints" (prompt-only;
+`VALID_CATEGORIES` untouched), and the sweep finds the copies per line for the operator to edit. Retirement, or a
+render gate on this store, is still this Q.
+- **Forward-compat (G2 ruling):** the sweep's `reaches_context` label is currently a per-store constant (`"yes"`
+  for `user_knowledge`, `injury_sweep.sweep_user_knowledge`). When this Q render-gates the free-text store, that
+  label must be DERIVED from the renderer's actual inclusion rule, not the constant, so it flips with the gate.
+- **Step-1 ruling (operator, 2026-09-27): GO.** The `user_knowledge` render path and write path are retired
+  TOGETHER, in a separate brief (not yet cut). #341 (the prompt no longer offers "Injury History"/"Constraints")
+  stands as landed and is now a subset of that retirement. The typed `constraint`/`finding` brief is a separate,
+  parallel lane.
+
+**State:** DONE → #343 (ruled 2026-09-28 on the fork only: the legacy KB folds into typed `finding` /
+`constraint` rows — there is NO `note` type). The store's retirement / render gate is NOT closed by this: the
+Forward-compat note and the Step-1 ruling above move verbatim to **Q181**, which the retirement brief closes.
+
+---
+
 ## Q11. Lab store — where per-marker observed results live
 
 Fork: `lab_result` typed table vs `user_knowledge_entries type="lab"` vs `health_events`.
@@ -2945,6 +2993,27 @@ numeric schema, not just efficiency.
 `2026-06-28` trigger row's `sleep_efficiency_pct` is already NULL. No historical violator existed, so no
 backfill was required and no rows were written. Closes the `BRANCHES.md` `fix/hrv-sleep-integrity` Task 3
 loop. Independent of Q17.
+
+---
+
+## Q20. Clinical findings vs restrictions — `user_knowledge_entries.value` conflates them
+
+Restrictions are structured (`restrictions[]`, enforced by `selection.py`); **findings are not**.
+Positive right slump, S1-pattern referral, frontal-plane deficit have no first-class home in the injury
+`value` JSON — they ride as `signal_type` + free-text `detail`. The constraint-consumption brief added a
+`trajectory` key to `value` but deliberately did **not** model findings. Note the split surfaces
+elsewhere too: FEEDBACK §5 documents these findings clinically, but the structured ledger the engine and
+snapshot read does not carry them. Q7 territory.
+
+**State:** DONE → #343 (ruled 2026-09-28): findings are separate `type="finding"` rows with an optional
+`parent_key` (any entry), not nested in the injury value, carrying Q20's three-valued `marker_status`
+(`provocative | clear | untested`). (Was OPEN, decoupled from Q7 on 2026-08-03 when Q7's authoring was
+discharged at `#72`.)
+
+The question is unchanged in substance: give clinical findings — positive slump, S1-pattern referral,
+frontal-plane deficit, "pressing untested" — a first-class structured home in the injury `value` JSON,
+specifically the three-valued **provocative / clear / untested** status that FEEDBACK §5 carries as a
+table column and the ledger does not. No blocker. Owner: Luke.
 
 ---
 

@@ -12,6 +12,7 @@ from typing import Any
 import pytz
 
 import models
+import typed_entries
 from current_state import CurrentState, HRVBaseline
 from hevy_format import format_set
 from hevy_routine_format import format_routine_compact, format_routine_full  # shared renderers (#314)
@@ -981,6 +982,22 @@ training, body, or preferences, save it without being asked. Examples:
 - They discover an exercise they can't do → add it to that injury's `restrictions`
 - They describe what works well for recovery → save to "Recovery"
 
+CONSTRAINTS AND FINDINGS ARE PROPOSALS. A lasting instruction (an exercise or
+load restriction that should end one day) is a `type="constraint"`; your
+interpretation of their data is a `type="finding"`. You only ever PROPOSE one:
+the user confirms it themselves. Never include `status` or `asserted_by`, and
+never confirm, resolve, retract or deactivate a constraint or finding. A
+constraint needs an exit and a review date; a finding needs a basis, and
+`derived_from_labs: true` if it rests on any lab result at all:
+
+<knowledge_update>
+{{"type": "constraint", "key": "constraint_no_overhead_pressing", "value": {{"scope": {{"tier": "advisory", "text": "no overhead pressing"}}, "kind": "block", "exit": {{"on_condition": "pain-free overhead reach"}}, "review_by": "2026-10-15"}}}}
+</knowledge_update>
+
+<knowledge_update>
+{{"type": "finding", "key": "finding_right_er_weaker", "value": {{"statement": "Right shoulder external rotation is painful at 11.25 kg; left is clean", "domain": "training", "as_of": "2026-09-27", "basis": {{"text": "user report after the session"}}, "derived_from_labs": false}}}}
+</knowledge_update>
+
 If an entry for that category already exists, the new content will be appended.
 The block will be removed from your visible response and replaced with a
 confirmation line. You do not need to ask permission to save — just do it and
@@ -1825,6 +1842,45 @@ def _section_fortification(profile: dict[str, Any] | None) -> str:
     return "\n".join(lines)
 
 
+def _section_constraints(constraints: list[dict[str, Any]], live_keys: set[str], today: date) -> str:
+    """Active, CONFIRMED constraints (#342) — every one, always: UNBUDGETED by ruling (G3), since a
+    constraint that does not render cannot be obeyed. Each line carries its tier (engine-enforced vs
+    advisory), exit, review date and authority; a passed exit / review is TAGGED, never lifted
+    (#223). Formatted by `typed_entries.constraint_line`, the same formatter the MCP uses. Empty →
+    "" and the caller appends nothing (input-gated, byte-identical without rows)."""
+    if not constraints:
+        return ""
+    lines = [
+        "## Constraints (active, confirmed — honour every one)",
+        "Engine-enforced rows already filter what the engine selects; advisory rows are yours to "
+        "apply — say so when one shapes a recommendation. EXIT DUE / REVIEW DUE means ask the user "
+        "whether it still holds; it stays in force until they resolve it.",
+    ]
+    lines += [typed_entries.constraint_line(c, live_keys, today) for c in constraints]
+    return "\n".join(lines)
+
+
+def _section_findings(findings: dict[str, Any]) -> str:
+    """Open / confirmed findings (#343), newest `as_of` first, within `FINDINGS_CHAR_BUDGET` (G3);
+    each statement capped at `FINDING_STATEMENT_MAX_CHARS` with "…". Overflow is NAMED by statement,
+    never dropped; the full rows are readable through the `get_findings` MCP tool. Lab-derived
+    findings never reach this section (#60 firewall) — one pointer line counts them, outside the
+    budget. Proposals never render. Empty → "" (input-gated)."""
+    visible = (findings or {}).get("visible") or []
+    withheld = (findings or {}).get("withheld_labs") or 0
+    if not visible and not withheld:
+        return ""
+    lines = ["## Findings (recorded interpretations — cite with their date and status)"]
+    shown, overflow = typed_entries.budget_findings(visible)
+    lines += shown
+    if overflow:
+        lines.append("Beyond this section's budget (named only — the full rows are available): "
+                     + "; ".join(overflow))
+    if withheld:
+        lines.append(typed_entries.withheld_labs_line(withheld, _LAB_INTERPRETATION_VIEW_LABEL))
+    return "\n".join(lines)
+
+
 def _section_probe(selection: dict[str, Any] | None) -> str:
     """Surface this session's one Probe suggestion + the Fortify recommendation
     (spec §2, §2.1). Education idiom; never presented as a verdict."""
@@ -1943,6 +1999,8 @@ def build_system_prompt(
         _section_integrations(connected_integrations),
     ]
 
+    # Known limit (G1 ruling 4, not guarded): any active row suppresses onboarding, so a user whose
+    # only entry is a `constraint` / `finding` (even a proposal) skips the interview.
     if not state.knowledge_entries:
         sections.append(_section_onboarding_interview())
 
@@ -1972,6 +2030,19 @@ def build_system_prompt(
         probe_section = _section_probe(engine_selection)
         if probe_section:
             sections.append(probe_section)
+
+    # Typed constraints and findings (#342/#343). Both input-gated: with no confirmed constraint and no
+    # readable finding, nothing is appended and the section list is byte-identical (the #43 parity
+    # discipline).
+    constraints_section = _section_constraints(
+        getattr(state, "constraints", None) or [], getattr(state, "live_keys", None) or set(),
+        now.date(),
+    )
+    if constraints_section:
+        sections.append(constraints_section)
+    findings_section = _section_findings(getattr(state, "findings", None) or {})
+    if findings_section:
+        sections.append(findings_section)
 
     if knowledge_entries:
         sections.append(_section_knowledge(knowledge_entries))
