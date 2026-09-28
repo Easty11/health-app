@@ -12,6 +12,9 @@
 // (localStorage, per appointment) and are never written back in v1. Audience `clinician` drops the
 // tick boxes and uses the fuller headings; the content is never rewritten.
 //
+// Neutral framing (#349): every constraint and finding shows who set it (`Authority`), so a row the
+// operator set is never read as a clinician's order.
+//
 // Print / Save PDF is the browser's own (window.print). The print styles drop the app header, the
 // chat and every scroll container (HubLayout's print: classes), print black on white (`.brief-print`
 // in index.css), render tick boxes as empty squares to fill in by hand, and keep each ask on one page.
@@ -20,7 +23,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import HubLayout from '../components/HubLayout'
 import api from '../api'
-import { HEADINGS } from '../components/appointment/headings'
+import { AUTHORITY, HEADINGS } from '../components/appointment/headings'
 
 const tickKey = (key) => `appointment-ticks:${key}`
 
@@ -85,7 +88,18 @@ function AskLine({ id, anchor, text, ctx, children, badge }) {
   )
 }
 
-function RowInline({ row }) {
+// Who set a row, as a visible tag. Null for rows with no authority (injuries).
+function Authority({ row, audience }) {
+  const label = AUTHORITY[audience]?.[row?.asserted_by] ?? row?.authority
+  if (!label) return null
+  return (
+    <span data-authority className="ml-1.5 whitespace-nowrap text-xs font-medium text-gray-600 border border-gray-300 rounded px-1 py-px align-middle">
+      {label}
+    </span>
+  )
+}
+
+function RowInline({ row, audience }) {
   if (!row) return null
   return (
     <p className="text-sm text-gray-600 mt-1">
@@ -93,6 +107,7 @@ function RowInline({ row }) {
       {row.exit && <> — ends {row.exit}</>}
       {row.review_by && <> — review by {row.review_by}</>}
       {row.status && row.type !== 'constraint' && <> — {row.status}</>}
+      <Authority row={row} audience={audience} />
     </p>
   )
 }
@@ -130,7 +145,7 @@ const RENDERERS = {
       <ul className="space-y-4">
         {s.authored.map((a) => (
           <AskLine key={a.id} id={a.id} anchor={askAnchor(a.id)} text={a.text} ctx={ctx}>
-            <RowInline row={a.resolves.row} />
+            <RowInline row={a.resolves.row} audience={ctx.audience} />
             {a.resolves.unresolved && (
               <p className="text-xs text-gray-400 mt-1">linked row not found: <code className="font-mono">{a.resolves.entry_key}</code></p>
             )}
@@ -143,7 +158,7 @@ const RENDERERS = {
         {s.derived.map((d) => (
           <AskLine key={`${d.rule}:${d.entry_key}`} id={`ledger:${d.rule}:${d.entry_key}`} text={d.text}
             ctx={ctx} badge="from ledger">
-            <RowInline row={d.row} />
+            <RowInline row={d.row} audience={ctx.audience} />
           </AskLine>
         ))}
       </ul>
@@ -165,7 +180,7 @@ const RENDERERS = {
     </ul>
   ),
 
-  since: (s) => (
+  since: (s, ctx) => (
     s.since === null ? <Empty>{s.note}</Empty> : (
       <div className="space-y-3 text-base text-gray-800">
         <p className="text-sm text-gray-500">Since {fmtDate(s.since)}</p>
@@ -174,26 +189,26 @@ const RENDERERS = {
           <p key={`i:${i.key}`}>{i.text}: {i.change} {fmtDate(i.on)}{i.basis ? ` — ${i.basis}` : ''}</p>
         ))}
         {s.findings.map((f) => (
-          <p key={`f:${f.key}`}>Finding ({f.status}, {fmtDate(f.as_of)}): {f.text}</p>
+          <p key={`f:${f.key}`}>Finding ({f.status}, {fmtDate(f.as_of)}): {f.text}<Authority row={f} audience={ctx.audience} /></p>
         ))}
         {s.constraints.map((c) => (
-          <p key={`c:${c.key}:${c.change}`}>Constraint {c.change} {fmtDate(c.on)}: {c.text}{c.basis ? ` — ${c.basis}` : ''}</p>
+          <p key={`c:${c.key}:${c.change}`}>Constraint {c.change} {fmtDate(c.on)}: {c.text}{c.basis ? ` — ${c.basis}` : ''}<Authority row={c} audience={ctx.audience} /></p>
         ))}
       </div>
     )
   ),
 
-  changes_vs_history: (s) => (
+  changes_vs_history: (s, ctx) => (
     s.since === null ? <Empty>{s.note}</Empty> : (
       <div className="space-y-4 text-base">
         {s.findings.length + s.injuries.length === 0 && <Empty>No changes recorded.</Empty>}
         {s.findings.map((f) => (
           <div key={`f:${f.key}`}>
-            <p className="text-gray-900">Now ({fmtDate(f.as_of)}): {f.text}</p>
+            <p className="text-gray-900">Now ({fmtDate(f.as_of)}): {f.text}<Authority row={f} audience={ctx.audience} /></p>
             {f.previous.length === 0
               ? <p className="text-sm text-gray-500">New — nothing recorded before.</p>
               : f.previous.map((p) => (
-                <p key={p.id} className="text-sm text-gray-500">Was ({fmtDate(p.as_of)}): {p.statement}</p>
+                <p key={p.id} className="text-sm text-gray-500">Was ({fmtDate(p.as_of)}): {p.statement}<Authority row={p} audience={ctx.audience} /></p>
               ))}
           </div>
         ))}
@@ -208,20 +223,20 @@ const RENDERERS = {
     )
   ),
 
-  current_constraints: (s) => (
+  current_constraints: (s, ctx) => (
     s.items.length === 0 ? <Empty>No confirmed constraints.</Empty> : (
       <ul className="space-y-3">
         {s.items.map((c) => (
           <li key={c.key} className="text-base text-gray-800">
             <p>{c.text}</p>
-            <p className="text-sm text-gray-500">Ends {c.exit} — review by {c.review_by}{c.authority ? ` — ${c.authority}` : ''}</p>
+            <p className="text-sm text-gray-500">Ends {c.exit} — review by {c.review_by}<Authority row={c} audience={ctx.audience} /></p>
           </li>
         ))}
       </ul>
     )
   ),
 
-  background: (s) => (
+  background: (s, ctx) => (
     <div className="space-y-3 text-base text-gray-800">
       {s.injuries.map((i) => (
         <div key={i.key}>
@@ -229,7 +244,7 @@ const RENDERERS = {
           {i.detail && <p className="text-sm text-gray-600">{i.detail}</p>}
         </div>
       ))}
-      {s.findings.map((f) => <p key={f.key}>Confirmed ({fmtDate(f.as_of)}): {f.text}</p>)}
+      {s.findings.map((f) => <p key={f.key}>Confirmed ({fmtDate(f.as_of)}): {f.text}<Authority row={f} audience={ctx.audience} /></p>)}
       <p className="text-sm text-gray-400">{s.note}</p>
     </div>
   ),
@@ -306,7 +321,7 @@ export default function Appointment() {
   }
 
   const audience = brief?.audience === 'clinician' ? 'clinician' : 'operator'
-  const ctx = { ticks, toggle, showTicks: audience === 'operator' }
+  const ctx = { ticks, toggle, showTicks: audience === 'operator', audience }
 
   return (
     <HubLayout title="Appointment brief" back="/dashboard">

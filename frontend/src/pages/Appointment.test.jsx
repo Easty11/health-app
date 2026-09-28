@@ -8,6 +8,7 @@
 //     (localStorage), never POSTed, and a blocked storage never breaks the page;
 //   - each row once, statements in full, "option → implication", and a quiet "linked row not
 //     found" under an ask whose resolves row the brief could not show (#348);
+//   - neutral framing (#349): every constraint/finding row shows who set it, voiced per audience;
 //   - print mode: Print / Save PDF calls window.print; header, chat and scroll containers are
 //     released for print; tick boxes print as empty squares; an ask never breaks across pages;
 //   - audience `clinician` drops the tick boxes and uses the fuller headings;
@@ -41,16 +42,20 @@ const BRIEF = {
       { key: 'c2', type: 'constraint', text: 'CAP — movement B', change: 'confirmed', on: '2025-12-03' }] },
     { module: 'changes_vs_history', since: '2025-12-01', injuries: [], findings: [
       { key: 'f1', type: 'finding', text: 'Statement v2', as_of: '2025-12-05', status: 'open',
-        previous: [{ id: 3, statement: 'Statement v1', as_of: '2025-11-01' }] }] },
+        asserted_by: 'user', authority: 'set by you',
+        previous: [{ id: 3, statement: 'Statement v1', as_of: '2025-11-01', asserted_by: 'user', authority: 'set by you' }] }] },
     { module: 'asks', authored: [
       { id: 'a1', text: 'Ask one short. And the rest of ask one.', priority: 1, folded: [],
         resolves: { entry_key: null, note: null, row: null, unresolved: false } }],
     derived: [{ rule: 'undated_exit', entry_key: 'c1', source: 'ledger',
-      text: 'Confirm or date the exit condition: condition A',
-      row: { key: 'c1', type: 'constraint', text: 'CAP — movement A', exit: 'when condition A', review_by: '2026-03-01' } }] },
+      text: 'Does this condition still apply? condition A',
+      row: { key: 'c1', type: 'constraint', text: 'CAP — movement A', exit: 'when condition A', review_by: '2026-03-01',
+        asserted_by: 'user', authority: 'set by you' } }] },
     { module: 'current_constraints', items: [
       { key: 'c1', type: 'constraint', tier: 'advisory', kind: 'cap', text: 'CAP — movement A',
-        exit: 'when condition A', review_by: '2026-03-01', authority: 'set by you' }] },
+        exit: 'when condition A', review_by: '2026-03-01', asserted_by: 'user', authority: 'set by you' },
+      { key: 'c3', type: 'constraint', tier: 'advisory', kind: 'cap', text: 'CAP — movement C',
+        exit: 'on 2026-04-01', review_by: '2026-03-01', asserted_by: 'clinician', authority: 'set by your clinician' }] },
     { module: 'logistics', items: ['Bring report A'] },
   ],
 }
@@ -268,6 +273,33 @@ describe('print mode', () => {
     expect(brief.className).toMatch(/brief-print/)
     const indexCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.css'), 'utf8')
     expect(indexCss).toMatch(/@media print[\s\S]*\.brief-print[\s\S]*color: #000[\s\S]*background: #fff/)
+  })
+})
+
+describe('neutral framing: authority is visible on every row', () => {
+  test('linked, derived, current and changed rows each say who set them', async () => {
+    await act(async () => { renderAt('/appointments/appt_a') })
+    const asks = await screen.findByRole('region', { name: 'Asks' })
+    const derived = within(asks).getByText('Does this condition still apply? condition A').closest('li')
+    expect(within(derived).getByText('set by you')).toBeTruthy()
+    const current = screen.getByRole('region', { name: 'Current constraints' })
+    const mine = within(current).getByText('CAP — movement A').closest('li')
+    const theirs = within(current).getByText('CAP — movement C').closest('li')
+    expect(within(mine).getByText('set by you')).toBeTruthy()
+    expect(within(theirs).getByText('set by your clinician')).toBeTruthy()
+    expect(within(mine).queryByText(/clinician/)).toBeNull()
+    const changes = screen.getByRole('region', { name: 'Changes since last visit' })
+    expect(within(changes).getAllByText('set by you')).toHaveLength(2)
+    const since = screen.getByRole('region', { name: 'Since last visit' })
+    expect(within(since).queryAllByText(/set by/)).toHaveLength(0) // fixture row carries no asserted_by
+  })
+
+  test('the clinician audience reads the operator in the first person, never "set by you"', async () => {
+    await act(async () => { renderAt('/appointments/appt_c') })
+    const current = await screen.findByRole('region', { name: HEADINGS.current_constraints.clinician })
+    expect(within(within(current).getByText('CAP — movement A').closest('li')).getByText('set by me')).toBeTruthy()
+    expect(within(within(current).getByText('CAP — movement C').closest('li')).getByText('set by my clinician')).toBeTruthy()
+    expect(screen.queryAllByText('set by you')).toHaveLength(0)
   })
 })
 

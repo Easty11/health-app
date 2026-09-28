@@ -12,6 +12,8 @@ Gates, each with its boundary or negative control:
     module is not in the brief;
   * statements render in full (no 280-char cap); injury labels are human words;
   * an authored ask whose `resolves` row cannot be shown is flagged `unresolved`, not dropped;
+  * neutral framing (#349): derived asks are open questions, never a presumed gate or instruction,
+    and every constraint/finding row carries its `asserted_by` authority;
   * each kind's default list; add/drop; options only as authored; request only with its block;
   * background never reads free-text `user_knowledge`;
   * ONE assembly function feeds the route and the MCP (same object).
@@ -138,7 +140,7 @@ def test_undated_exit_fires_only_when_the_condition_is_the_only_exit(db_session,
          _constraint(exit_={"on_condition": "condition C", "with_parent": True}))
     d = [x for x in _derived(_brief(db_session, world.id)) if x["rule"] == "undated_exit"]
     assert [x["entry_key"] for x in d] == ["c_cond"]
-    assert d[0]["text"] == "Confirm or date the exit condition: condition A" and d[0]["source"] == "ledger"
+    assert d[0]["text"] == "Does this condition still apply? condition A" and d[0]["source"] == "ledger"
 
 
 def test_unsettled_marker_fires_for_open_provocative_and_untested_only(db_session, world):
@@ -315,7 +317,7 @@ def test_statements_render_in_full_everywhere(db_session, world):
     chv = _section(b, "changes_vs_history")["findings"]
     f = next(x for x in chv if x["key"] == "f_long")
     assert f["text"] == long_v2 and f["previous"][0]["statement"] == long_v1
-    assert next(d for d in _derived(b) if d["entry_key"] == "f_long")["text"] == f"Rule on: {long_v2}"
+    assert next(d for d in _derived(b) if d["entry_key"] == "f_long")["text"] == f"What does this mean? {long_v2}"
     assert _section(b, "background")["findings"][0]["text"] == long_v2 + " C"
     assert "…" not in json.dumps(b, ensure_ascii=False)
 
@@ -543,3 +545,43 @@ def test_list_filters_by_status_soonest_first(db_session, world):
         "appt_soon", "appt_late"]
     assert len(c.get("/appointments").json()) == 3
     assert c.get("/appointments", params={"status": "maybe"}).status_code == 422
+
+
+# ── neutral framing (#349) ────────────────────────────────────────────────────
+
+def test_derived_asks_are_open_questions_never_presumed_instructions(db_session, world):
+    _put(db_session, world.id, "constraint", "c_due", _constraint(review_by="2026-01-20"))
+    _put(db_session, world.id, "constraint", "c_cond", _constraint(exit_={"on_condition": "condition A"}))
+    _put(db_session, world.id, "finding", "f_due", _finding(review_by="2026-01-20", statement="Finding D"))
+    _put(db_session, world.id, "finding", "f_prov", _finding(marker="provocative", statement="Finding P"))
+    texts = {(d["rule"], d["entry_key"]): d["text"] for d in _derived(_brief(db_session, world.id))}
+    assert texts == {
+        ("review_due", "c_due"): "Is this still appropriate? CAP (advisory — not engine-enforced) — cap on movement A",
+        ("undated_exit", "c_cond"): "Does this condition still apply? condition A",
+        ("review_due", "f_due"): "Is this still appropriate? Finding D",
+        ("unsettled_marker", "f_prov"): "What does this mean? Finding P",
+    }
+    for t in texts.values():
+        head = t.split("?")[0]
+        assert t.split(" ", 1)[0] in ("Is", "Does", "What"), t
+        assert not any(w in head.lower() for w in ("set ", "confirm", "rule on", "date ", "must", "clear")), t
+
+
+def test_every_constraint_and_finding_row_carries_its_authority(db_session, world):
+    _put(db_session, world.id, "constraint", "c_mine", _constraint(exit_={"on_condition": "condition A"}),
+         added_at=date(2025, 12, 3))
+    _put(db_session, world.id, "constraint", "c_clin", _constraint(asserted_by="clinician"))
+    _put(db_session, world.id, "finding", "f_chain", _finding(statement="v1", as_of="2025-11-01"))
+    _put(db_session, world.id, "finding", "f_chain", _finding(statement="v2", as_of="2025-12-05",
+                                                              marker="provocative", asserted_by="clinician"))
+    b = _brief(db_session, world.id, asks=[
+        {"id": "a1", "text": "Ask", "priority": 1, "resolves": {"entry_key": "c_mine", "note": None}}])
+    a1 = _section(b, "asks")["authored"][0]
+    assert (a1["resolves"]["row"]["asserted_by"], a1["resolves"]["row"]["authority"]) == ("user", "set by you")
+    assert a1["folded"][0]["row"]["asserted_by"] == "user"
+    by_key = {c["key"]: (c["asserted_by"], c["authority"]) for c in _section(b, "current_constraints")["items"]}
+    assert by_key == {"c_mine": ("user", "set by you"), "c_clin": ("clinician", "set by your clinician")}
+    f = _section(b, "changes_vs_history")["findings"][0]
+    assert (f["asserted_by"], f["authority"]) == ("clinician", "set by your clinician")
+    assert (f["previous"][0]["asserted_by"], f["previous"][0]["authority"]) == ("user", "set by you")
+    assert next(d for d in _derived(b) if d["entry_key"] == "f_chain")["row"]["asserted_by"] == "clinician"

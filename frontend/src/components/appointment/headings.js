@@ -19,3 +19,12 @@ export const HEADINGS = {
   request: { operator: 'The request', clinician: "What I'm requesting, and why" },
   logistics: { operator: 'Logistics', clinician: 'Before we finish' },
 }
+
+// Who a row's authority belongs to (#349 neutral framing): every constraint and finding the brief
+// shows carries it, so an operator-held precaution is never read as a clinical order. Keyed by the
+// row's `asserted_by`, voiced per audience like the headings — the clinician audience reads the
+// brief in the operator's first person, where "set by you" would name the clinician.
+export const AUTHORITY = {
+  operator: { user: 'set by you', clinician: 'set by your clinician', engine: 'set by the engine' },
+  clinician: { user: 'set by me', clinician: 'set by my clinician', engine: 'set by the engine' },
+}
