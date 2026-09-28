@@ -39,7 +39,13 @@ const SWEEP = {
   terms: ['hamstring', 'semimembranosus', 'semitendinosus', 'biceps femoris'],
   restriction_terms: ['strid', 'sprint', 'stretch'],
   restriction_audit: [
-    { restriction: 'sprinting', match_stems: ['sprint'], covered_by_basis: false, rehomed_to: [], status: 'orphan' },
+    { restriction: 'sprinting', match_stems: ['sprint'], covered_by_basis: false, rehomed_to: [],
+      rehomed_to_constraints: [], status: 'orphan', suggested_action: 'propose as constraint',
+      dies_with_parent: [{ entry_id: 201, key: 'constraint_no_sprinting', kind: 'block', tier: 'advisory',
+        parent_key: 'injury_hamstring_right' }] },
+    { restriction: 'striding', match_stems: ['strid'], covered_by_basis: false, rehomed_to: [],
+      rehomed_to_constraints: [{ entry_id: 202, key: 'constraint_no_striding', kind: 'block', tier: 'advisory',
+        parent_key: null }], dies_with_parent: [], status: 'rehomed', suggested_action: null },
     { restriction: 'static end-range hamstring stretching', match_stems: ['stretch'], covered_by_basis: false,
       status: 'rehomed',
       rehomed_to: [{ entry_id: 94, key: 'injury_lumbar_spine', body_part: 'lumbar', signal_type: 'neural',
@@ -143,10 +149,21 @@ describe('resolve → sweep', () => {
     await renderView()
     await resolveHamstring()
     const card = within(await screen.findByRole('region', { name: /clearance sweep/i }))
-    expect(card.getAllByTestId('sweep-audit')).toHaveLength(2)
+    expect(card.getAllByTestId('sweep-audit')).toHaveLength(3)
     expect(card.getByText(/orphan — leaves chat context/)).toBeTruthy()
     expect(card.getByText(/re-homed → #94 injury_lumbar_spine \(neural\)/)).toBeTruthy()
     expect(card.getByText(/RADICULAR-WARNING-TEXT/)).toBeTruthy()
+  })
+
+  test('constraints: a surviving one re-homes; one parented to this injury is named and the orphan stays', async () => {
+    await renderView()
+    await resolveHamstring()
+    const card = within(await screen.findByRole('region', { name: /clearance sweep/i }))
+    expect(card.getByText(/re-homed → constraint #202 constraint_no_striding \(advisory\)/)).toBeTruthy()
+    expect(card.getByText(/constraint #201 constraint_no_sprinting ends with this injury/)).toBeTruthy()
+    expect(card.getByText('suggested: propose as constraint (manual)')).toBeTruthy()
+    // Still surfacing only: no new control.
+    expect(card.getAllByRole('button').map((b) => b.textContent).sort()).toEqual(['Close', 'Sweep again'])
   })
 
   test('a failed resolve runs no sweep', async () => {

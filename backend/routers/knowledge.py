@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import models
 import hevy_routine_cache
 import injury_sweep
+import typed_entries
 from auth import get_current_user
 from connectors.hevy import HevyClient
 from database import get_db
@@ -1487,12 +1488,25 @@ class RehomedTo(BaseModel):
     radicular_warning: RadicularWarning | None
 
 
+class ConstraintRef(BaseModel):
+    entry_id: int
+    key: str
+    kind: str | None
+    tier: str | None
+    parent_key: str | None
+
+
 class RestrictionAudit(BaseModel):
     restriction: str
     match_stems: list[str]
     covered_by_basis: bool
     rehomed_to: list[RehomedTo]
+    # S5: a confirmed constraint that outlives this row re-homes it; one parented to THIS row is
+    # listed under `dies_with_parent` and re-homes nothing (the restriction stays an orphan).
+    rehomed_to_constraints: list[ConstraintRef] = []
+    dies_with_parent: list[ConstraintRef] = []
     status: str                 # covered | rehomed | orphan
+    suggested_action: str | None = None   # "propose as constraint" on an orphan; never performed
 
 
 class SweepChecklistItem(BaseModel):
@@ -1570,7 +1584,18 @@ async def sweep_injury(
         .order_by(models.UserKnowledgeEntry.id)
         .all()
     )
-    audit = injury_sweep.audit_restrictions(entry, [i for i in all_injuries if i.active])
+    # Confirmed constraints re-home a restriction when they outlive this row (S5). One query of the
+    # user's active entries, lifted through the shared `typed_entries` definition.
+    live_entries = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=current_user.id, active=True)
+        .all()
+    )
+    audit = injury_sweep.audit_restrictions(
+        entry, [i for i in all_injuries if i.active],
+        constraints=typed_entries.lift_constraints(live_entries),
+        live_keys=typed_entries.active_keys(live_entries),
+    )
     ctx = injury_sweep.line_context(entry, all_injuries, restriction_terms)
 
     stores: list[dict[str, Any]] = []

@@ -247,6 +247,9 @@ def _entry_reach(e: models.UserKnowledgeEntry, field: str) -> str:
 def _entry_action(e: models.UserKnowledgeEntry) -> tuple[str, str | None]:
     if e.type == "schedule_item" and e.active:
         return "resolve", f"POST /knowledge/schedule/{e.id}/resolve"
+    if e.type == "constraint" and e.active:
+        # The typed constraint's own operator route (#NEXT, G0 D4) — still never called from here.
+        return "resolve", f"POST /knowledge/constraints/{e.id}/resolve"
     return "none", None
 
 
@@ -304,11 +307,38 @@ def _radicular_warning(dest: models.UserKnowledgeEntry) -> dict[str, Any] | None
     return None
 
 
+def _constraint_home(c: dict[str, Any], entry: models.UserKnowledgeEntry,
+                     live_keys: set[str]) -> str | None:
+    """Where a confirmed constraint stands relative to the injury being swept (G4/S5 ruling):
+      * `rehomed`          — its parent is a DIFFERENT active entry, or it has no parent and no
+                             `with_parent` exit: it outlives this injury's resolution;
+      * `dies_with_parent` — it is parented to THIS injury: it leaves with it, so it re-homes
+                             nothing (the S6 seed's rows are exactly this shape);
+      * None               — parented to an entry that is itself no longer active."""
+    parent = c.get("parent_key")
+    if parent == entry.key:
+        return "dies_with_parent"
+    if parent is None:
+        return None if (c.get("exit") or {}).get("with_parent") is True else "rehomed"
+    return "rehomed" if parent in live_keys else None
+
+
 def audit_restrictions(entry: models.UserKnowledgeEntry,
-                       other_injuries: list[models.UserKnowledgeEntry]) -> list[dict[str, Any]]:
+                       other_injuries: list[models.UserKnowledgeEntry],
+                       constraints: list[dict[str, Any]] | None = None,
+                       live_keys: set[str] | None = None) -> list[dict[str, Any]]:
     """One row per restriction on `entry`: is it addressed by the resolution basis, carried by
-    another ACTIVE injury row (re-homed), or neither (orphan)? For an unresolved entry the basis
-    is empty, so the audit reads as "what would orphan if resolved now"."""
+    another ACTIVE injury row or a confirmed constraint that outlives this row (re-homed), or
+    neither (orphan)? For an unresolved entry the basis is empty, so the audit reads as "what
+    would orphan if resolved now".
+
+    `constraints` are the user's active CONFIRMED constraint rows, lifted
+    (`typed_entries.lift_constraints`); a match is the restriction's stems in `scope.text`. A
+    constraint parented to THIS injury is listed under `dies_with_parent` and does NOT re-home —
+    the restriction still reads as an orphan. An orphan's suggested action is "propose as
+    constraint". Surfacing only: nothing here writes."""
+    constraints = constraints or []
+    live_keys = live_keys or set()
     value = entry.value or {}
     basis = ((value.get("resolution") or {}).get("basis") or "")
     body_words = set(_words(str(value.get("body_part") or "")))
@@ -328,12 +358,28 @@ def audit_restrictions(entry: models.UserKnowledgeEntry,
                     "signal_type": str((dest.value or {}).get("signal_type", "mechanical")).lower(),
                     "radicular_warning": _radicular_warning(dest),
                 })
+        via_constraint, dies_with_parent = [], []
+        for c in constraints:
+            if not _mentions_all(stems, str((c.get("scope") or {}).get("text") or "")):
+                continue
+            home = _constraint_home(c, entry, live_keys)
+            ref = {"entry_id": c["id"], "key": c["key"], "kind": c.get("kind"),
+                   "tier": (c.get("scope") or {}).get("tier"), "parent_key": c.get("parent_key")}
+            if home == "rehomed":
+                via_constraint.append(ref)
+            elif home == "dies_with_parent":
+                dies_with_parent.append(ref)
+        status_ = ("rehomed" if (rehomed or via_constraint)
+                   else ("covered" if covered else "orphan"))
         out.append({
             "restriction": r,
             "match_stems": stems,
             "covered_by_basis": covered,
             "rehomed_to": rehomed,
-            "status": "rehomed" if rehomed else ("covered" if covered else "orphan"),
+            "rehomed_to_constraints": via_constraint,
+            "dies_with_parent": dies_with_parent,
+            "status": status_,
+            "suggested_action": "propose as constraint" if status_ == "orphan" else None,
         })
     return out
 
