@@ -103,6 +103,9 @@ OPEN · OWED · DONE → #N, under the label `**State:**`.
   (`git log --format="%ad %s" --date=short -10`); reconciles every PENDING item;
   branch terminal-state gate — every touched branch ends merged+deleted or in
   `BRANCHES.md`, else HALT.
+- **Paste addressing:** Operator paste blocks are addressed to a session by name on their
+  first line. A block whose address names a different session, or carries none while more
+  than one session is live, is NOT acted on — report it back and wait.
 
 ### Project-wide standing rules
 - Windows / PowerShell only for operator commands. No Linux syntax. Avoid embedded double
@@ -275,11 +278,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Typed constraints and findings (#342/#343).** Instructions and interpretations become typed `user_knowledge_entries` rows (no migration): a constraint has two tiers (engine = region-keyed `block`, side-aware, read by `is_contraindicated`; advisory = text), a mandatory exit, `review_by` and visible authority; a finding has `as_of`, canonical-door evidence and a status, lab-derived ones held behind the #60 firewall. Chat only proposes; `/confirm`, `/resolve`, `/retract` are operator routes. Rendered in `## Constraints` / `## Findings` and the MCP; the sweep re-homes via constraints; `seed_constraints.py` seeds advisory rows (G6 operator-owed). Q9/Q20 ruled; Q181–Q184. Code, self-merged on green - Handoff: `closeout.md`.
+
 - **Injury clearance sweep + free-text bleed (#340/#341).** Resolving an injury retired the ledger row but copies in free-text `user_knowledge` (rendered unfiltered every turn) kept re-imposing it. `GET /knowledge/injuries/{id}/sweep` finds them per line (primary/secondary term tiers, hamstring aliases, restriction orphan audit) for the operator to clear; the Injuries page runs it after resolve; the coach no longer writes injury facts to free text; the injury seed no longer resurrects resolved rows. Code, self-merged on green - Handoff: `closeout.md`.
 
 - **Tag seed follow-up (#338).** IR/ER sided variants bound to ID-keyed parents; Deficit KB RDL is a MOBILITY tag (flossing, bound to the template's use); the seed dry-run now reports near-twin ids and pre-existing unconfirmed rows (`--prune-unconfirmed`, Q179); `explain_quota_votes.py`; Q27 records that the real restrictions are not planes. Verified in prod: 0 untagged, 09-21 now counts Stability (#339). Code, self-merged on green - Handoff: `closeout.md`.
-
-- **Taxonomy v0.1 + exercise-tag coverage (#334–#337).** Quota A read Stability 0/3 because Rule 1 counts primary tags and the seed froze at July history (79% fallback). Five probe-inert STRENGTH regions (IR/ER stays Strength, per Q27), 22 ID-keyed tags, sided variants inherit by explicit parent id, seeder `--dry-run`; Q27 scope now includes quota slot keying. Prod seed OWED (operator). Code, self-merged on green - Handoff: `closeout.md`.
 
 
 ---

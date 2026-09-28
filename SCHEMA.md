@@ -1553,3 +1553,81 @@ ALTER TABLE health_connect_syncs ADD COLUMN sleep_end_source_package   TEXT;    
 - **Onset.** A stageless session contributes a synthetic LIGHT span to the duration (so its sleep time is not lost), but that span never sets `sleep_onset`. With no real asleep stage, `sleep_onset` is NULL.
 - **Stored as UTC instants.** Rendered in AEST at read time: the diary `final_wake` prefill uses today's `sleep_end` as local `HH:MM`.
 - **Meaning of `sleep_start` per source is not ruled.** Nothing maps it to `got_into_bed` / `lights_out` / `out_of_bed` (#127). That ruling comes from S7 evidence (Q172).
+
+### 037 — user_knowledge_entries.constraint
+
+No migration. As with §024/§033, this records the `value` shape for one `user_knowledge_entries.type` — here `type='constraint'` (#342): an instruction to the engine or the coach, with a mandatory exit, a review date and a visible authority. Validated at write by `routers/knowledge.py::validate_constraint` (shape) and `_validate_typed_write` / `_typed_supersede_guard` (lifecycle), inside the shared write path; stored verbatim.
+
+```json
+{
+  "scope": {"tier": "engine", "region_keys": ["shoulder_er_ir"], "side": "right"},
+  "kind": "block",
+  "parent_key": "injury_shoulder_right",
+  "exit": {"on_condition": "right ER pain-free at 11.25 kg", "with_parent": true},
+  "review_by": "2026-10-12",
+  "status": "confirmed",
+  "asserted_by": "user",
+  "confirmed_on": "2026-09-28"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `scope.tier` | `engine` \| `advisory` | yes | |
+| `scope.region_keys` | list of taxonomy `Region.key` | engine: yes (≥1, no repeats) | advisory: **refused** |
+| `scope.side` | `left` \| `right` \| `bilateral` | no (absent = bilateral) | engine only; matched by `selection._side_conflict` |
+| `scope.text` | str | advisory: yes | engine: optional description; the advisory instruction, rendered verbatim |
+| `kind` | `block` \| `cap` \| `caution` | yes | engine tier: **`block` only** (Q183) |
+| `parent_key` | str \| null | no | must name one of the user's ACTIVE rows, any type, never itself |
+| `exit.on_date` / `exit.on_condition` / `exit.with_parent` | date / str / strict bool | ≥1 set | `with_parent: true` requires `parent_key` |
+| `review_by` | date | yes | always |
+| `status` | `proposed` \| `confirmed` | yes | confirmed from a proposal ONLY via `/confirm` |
+| `asserted_by` | `user` \| `engine` \| `clinician` \| null | yes (key) | null only while `proposed` (#227) |
+| `detail` | str \| null | no | |
+| `confirmed_on` | date | — | **stamped** by `/confirm`; refused on write |
+| `resolution` | `{resolved_on, basis, resolved_by}` | — | **stamped** by `/resolve` (#223 block); refused on write |
+| any other key (incl. `pattern_keys`, `exercise_template_ids`) | — | — | **REFUSED** |
+
+**Row rules.** `expires_at` must be null. A constraint key may not take an active row of another type (either direction). A `source="chat"` write must be `proposed` with `asserted_by: null` — the chat channel stamps both when absent — and chat may neither supersede nor deactivate a row past `proposed`.
+
+**Routes.** `POST /knowledge/constraints/{id}/confirm` (`{asserted_by}`), `POST /knowledge/constraints/{id}/resolve` (`ResolutionIn`); both type-scoped (404 across types).
+
+**Readers.** Only `active AND status='confirmed'`. `typed_entries.lift_constraints` (zero queries) → `CurrentState.constraints` → `context_builder._section_constraints` (unbudgeted; EXIT DUE / REVIEW DUE tags) and the MCP `get_readiness_snapshot`. Engine: `selection.gather_active_constraints` (engine tier only; one indexed query per `compute_probe_queue`) → `is_contraindicated`'s last arm. The #340 sweep's restriction audit reads them for re-homing. Seeded advisory rows come from `backend/scripts/seed_constraints.py` (operator-run).
+
+### 038 — user_knowledge_entries.finding
+
+No migration. The `value` shape for `type='finding'` (#343): an interpretation with an `as_of`, a basis and a status. Validated by `routers/knowledge.py::validate_finding` + the shared typed-entry lifecycle rules; stored verbatim.
+
+```json
+{
+  "statement": "Right ER painful at 11.25 kg; left clean",
+  "domain": "training",
+  "status": "open",
+  "parent_key": null,
+  "as_of": "2026-09-27",
+  "basis": {"text": "session report", "evidence": [{"door": "counted_workouts", "ref": "2026-09-27"}]},
+  "marker_status": "provocative",
+  "derived_from_labs": false,
+  "review_by": "2026-10-27",
+  "asserted_by": "user"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `statement` | str | yes | non-empty |
+| `domain` | `injury` \| `clinical` \| `training` \| `analysis` | yes | |
+| `status` | `proposed` \| `open` \| `confirmed` \| `retracted` \| `superseded` | yes | write: `proposed`/`open`/`confirmed` only |
+| `parent_key` | str \| null | no | any ACTIVE entry of the user |
+| `as_of` | date | yes | |
+| `basis.text` / `basis.evidence[]` | str / `[{door, ref}]` | ≥1 | `door` ∈ `counted_workouts`, `arbitrated_sessions`, `lab_results`, `document` (Q22 canonical read doors) |
+| `marker_status` | `provocative` \| `clear` \| `untested` | no | Q20 |
+| `derived_from_labs` | strict bool | yes | true → withheld behind the #60 firewall |
+| `review_by` | date | no | |
+| `asserted_by` | `user` \| `engine` \| `clinician` \| null | yes (key) | null only while `proposed` |
+| `confirmed_on`, `resolution` | — | — | **stamped** by `/confirm` / `/retract`; refused on write |
+| any other key | — | — | **REFUSED** |
+
+**Status transitions.** `confirmed` from `proposed`/`open` only via `POST /knowledge/findings/{id}/confirm`; `retracted` only via `POST /knowledge/findings/{id}/retract` (basis mandatory; row kept, `active=False`); `superseded` stamped on the replaced row by a same-key rewrite, beside `superseded_by`. Chat writes proposals only and never promotes one.
+
+**Readers.** `open` and `confirmed`, active only; `proposed` never. `typed_entries.lift_findings` → `CurrentState.findings` → `context_builder._section_findings` (2,000-char budget, statements capped at 280 with "…", overflow named) and the MCP `get_findings(domain?, since?, status?)` (full statements). A `derived_from_labs` finding — or one whose flag is absent — is never rendered; only its count, with a pointer to the Labs page.
