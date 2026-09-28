@@ -1567,6 +1567,36 @@ def list_injuries(
                       models.UserKnowledgeEntry.id.desc()).all()
 
 
+@router.get("/proposals", response_model=list[KnowledgeEntryOut])
+def list_proposals(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Active PROPOSED constraints and findings — the confirm half of the proposal loop (#346).
+
+    Chat writes typed entries as proposals only, and every reader skips `proposed`, so nothing
+    showed the operator what was awaiting confirmation. This lists them for the Injuries page's
+    Confirm buttons, and nothing else reads it: the readers are unchanged. A finding not
+    explicitly `derived_from_labs: false` is left out (the #60 firewall) — a lab interpretation is
+    never rendered here either.
+    """
+    rows = (
+        db.query(models.UserKnowledgeEntry)
+        .filter(
+            models.UserKnowledgeEntry.user_id == current_user.id,
+            models.UserKnowledgeEntry.type.in_(TYPED_ENTRY_TYPES),
+            models.UserKnowledgeEntry.active == True,
+        )
+        .order_by(models.UserKnowledgeEntry.added_at.desc(), models.UserKnowledgeEntry.id.desc())
+        .all()
+    )
+    return [
+        r for r in rows
+        if (r.value or {}).get("status") == "proposed"
+        and (r.type != "finding" or (r.value or {}).get("derived_from_labs") is False)
+    ]
+
+
 @router.post("/entry", response_model=KnowledgeEntryOut, status_code=status.HTTP_201_CREATED)
 def create_entry(
     body: KnowledgeEntryIn,
