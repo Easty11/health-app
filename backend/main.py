@@ -27,6 +27,7 @@ from routers import labs as labs_router
 from routers import interpretation as interpretation_router
 from routers import series as series_router
 from routers import load as load_router
+from routers import appointments as appointments_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -103,6 +104,7 @@ app.include_router(labs_router.router)
 app.include_router(interpretation_router.router)
 app.include_router(series_router.router)
 app.include_router(load_router.router)
+app.include_router(appointments_router.router)
 
 
 @app.get("/health")

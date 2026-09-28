@@ -39,6 +39,7 @@ from hevy_templates import (
 from engine import adaptation, selection
 from reads.labs_reads import find_marker
 from routers.knowledge import (
+    APPOINTMENT_CHAT_DEFAULTS,
     KnowledgeEntryIn,
     ScheduleItemInvalid,
     ScheduleItemOverlap,
@@ -826,6 +827,7 @@ def _entry_noun(entry_type: str | None) -> str:
         "preference": "Preference entry",
         "constraint": "Constraint entry",
         "finding": "Finding entry",
+        "appointment": "Appointment entry",
     }.get(entry_type or "", "Knowledge entry")
 
 
@@ -923,6 +925,10 @@ def _process_knowledge_updates(
                         # them when absent; a model-supplied non-proposal status or authority is
                         # still REFUSED by `_validate_typed_write`, never overwritten.
                         value = {**TYPED_CHAT_DEFAULTS, **value}
+                    elif data.get("type") == "appointment" and isinstance(value, dict):
+                        # Chat plans an appointment; it never records one as attended (the
+                        # stamped default; a model-supplied later status is REFUSED at write).
+                        value = {**APPOINTMENT_CHAT_DEFAULTS, **value}
                     entry_in = KnowledgeEntryIn(
                         type=data.get("type", "schedule_item"),
                         key=key,
