@@ -26,6 +26,7 @@ call, so the two surfaces return the same object.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any, Callable
@@ -41,14 +42,17 @@ from routers.knowledge import (
 )
 
 # Section B: the authored asks the operator leaves with — all of them up to this many, else the
-# first this many by priority.
+# first this many by priority. Each is a one-line pointer to its ask (first sentence, capped near
+# this many characters); the full text and the tick box live only under Asks.
 LEAVE_WITH_MAX = 5
+LEAVE_WITH_SHORT_CHARS = 90
 # Derived ask (i): a row whose review falls due within this many days after the appointment (or has
 # already passed) is worth settling in the room.
 REVIEW_HORIZON_DAYS = 30
 # Derived ask (iii): an open finding whose provocation marker is not yet settled.
 UNSETTLED_MARKERS = ("provocative", "untested")
-STATEMENT_MAX_CHARS = typed_entries.FINDING_STATEMENT_MAX_CHARS
+# No statement cap here: the 280-char cap belongs to the chat context builder. The brief is read in
+# the room and renders every statement in full.
 
 LIMITS = (
     "Scope is one hop: the injuries named by the appointment and the constraints and findings "
@@ -67,15 +71,34 @@ def _iso(d: Any) -> str | None:
     return None if d is None else str(d)
 
 
-def _cap(s: Any) -> str:
-    s = str(s or "")
-    return s if len(s) <= STATEMENT_MAX_CHARS else s[:STATEMENT_MAX_CHARS].rstrip() + "…"
+def _human(token: Any) -> str:
+    """A stored token as words: `cervical_spine` → `cervical spine`."""
+    return " ".join(str(token or "").replace("_", " ").split())
 
 
 def _injury_label(value: dict[str, Any]) -> str:
-    side = str(value.get("side") or "").strip()
-    part = str(value.get("body_part") or "injury").strip()
-    return f"{side} {part}".strip() if side and side != "bilateral" else part
+    """The human label for an injury everywhere in the brief: "right shoulder", "cervical spine" —
+    never the raw `body_part` token."""
+    side = _human(value.get("side")).lower()
+    part = _human(value.get("body_part")) or "injury"
+    return f"{side} {part}" if side and side not in ("bilateral", "both") else part
+
+
+_SENTENCE_END = re.compile(r"(?<=[.?!])\s+(?=[A-Z0-9\"'(])")
+
+
+def _short(text: Any) -> str:
+    """An ask's first sentence, cut at a word boundary near `LEAVE_WITH_SHORT_CHARS` with "…"."""
+    s = " ".join(str(text or "").split())
+    m = _SENTENCE_END.search(s)
+    first = s[:m.start()] if m else s
+    if len(first) <= LEAVE_WITH_SHORT_CHARS:
+        return first
+    cut = first[:LEAVE_WITH_SHORT_CHARS]
+    space = cut.rfind(" ")
+    if space > LEAVE_WITH_SHORT_CHARS // 2:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:-—") + "…"
 
 
 def _resolved_on(value: dict[str, Any]) -> date | None:
@@ -103,6 +126,7 @@ class BriefContext:
     at: datetime
     since: date | None
     parent_keys: list[str]
+    sections: list[str] = field(default_factory=list)                     # resolved module order
     # Per parent key in scope: {"key", "row", "history": [older rows, newest first]}.
     injuries: list[dict[str, Any]] = field(default_factory=list)
     missing_parent_keys: list[str] = field(default_factory=list)
@@ -142,6 +166,7 @@ def scope_context(appointment: dict[str, Any], current_state: CurrentState, ledg
         at=datetime.fromisoformat(value["at"]),
         since=typed_entries.parse_date(value.get("since")),
         parent_keys=pks,
+        sections=resolve_sections(value),
     )
 
     for pk in pks:
@@ -170,7 +195,7 @@ def scope_context(appointment: dict[str, Any], current_state: CurrentState, ledg
             continue
         older = _predecessors(current, [r for r in finding_rows if r.key == f["key"]])
         ctx.finding_history[f["key"]] = [
-            {"statement": _cap(_v(r).get("statement")), "as_of": _v(r).get("as_of"), "id": r.id}
+            {"statement": _v(r).get("statement"), "as_of": _v(r).get("as_of"), "id": r.id}
             for r in older if _visible_history_finding(r)
         ]
     ctx.derived_asks = _derived_asks(ctx)
@@ -195,7 +220,7 @@ def _constraint_summary(c: dict[str, Any]) -> dict[str, Any]:
 def _finding_summary(f: dict[str, Any]) -> dict[str, Any]:
     return {
         "key": f.get("key"), "type": "finding",
-        "text": _cap(f.get("statement")),
+        "text": f.get("statement"),
         "as_of": f.get("as_of"), "status": f.get("status"),
         "marker_status": f.get("marker_status"),
         "review_by": f.get("review_by"),
@@ -268,13 +293,17 @@ def _authored_asks(ctx: BriefContext) -> list[dict[str, Any]]:
     out = []
     for _, a in asks:
         entry_key = (a.get("resolves") or {}).get("entry_key")
+        row = _row_in_scope(ctx, entry_key)
         out.append({
             "id": a["id"], "text": a["text"], "priority": a["priority"],
             "resolves": {
                 "entry_key": entry_key,
                 "note": (a.get("resolves") or {}).get("note"),
                 # None when unset, or when the key is not an in-scope row a reader may see.
-                "row": _row_in_scope(ctx, entry_key),
+                "row": row,
+                # The ask names a row the brief cannot show (missing, proposed, inactive or out of
+                # scope): the page says so under the ask rather than dropping the link silently.
+                "unresolved": bool(entry_key) and row is None,
             },
             "folded": [d for d in ctx.derived_asks if entry_key and d["entry_key"] == entry_key],
         })
@@ -297,9 +326,11 @@ def module_header(ctx: BriefContext) -> dict[str, Any]:
 
 
 def module_leave_with(ctx: BriefContext) -> dict[str, Any]:
+    """A compact pointer list: each item is its ask's first sentence (`short`), linked by `id` to the
+    full ask under Asks. The full text is not repeated here."""
     asks = _authored_asks(ctx)
     return {
-        "items": [{"id": a["id"], "text": a["text"], "priority": a["priority"]}
+        "items": [{"id": a["id"], "short": _short(a["text"]), "priority": a["priority"]}
                   for a in asks[:LEAVE_WITH_MAX]],
         "total": len(asks),
     }
@@ -327,25 +358,42 @@ def _since_missing() -> dict[str, Any]:
     return {"since": None, "note": "This appointment has no `since` date, so nothing is compared."}
 
 
-def module_since(ctx: BriefContext) -> dict[str, Any]:
+def module_since(ctx: BriefContext) -> dict[str, Any] | None:
+    """What happened since the last visit, each row ONCE, in the most specific module present.
+    When `changes_vs_history` is in the brief it owns the findings and the injury status changes
+    (resolved, rewritten), so this keeps only what it does not carry: constraints confirmed or
+    resolved, and injury rows newly recorded. A constraint an ask already names (a derived ask, when
+    Asks is in the brief) is not repeated as "confirmed" here; Current constraints is its home.
+    Nothing left → None (renders nothing)."""
+    history_owns = "changes_vs_history" in ctx.sections
     if ctx.since is None:
-        return _since_missing()
+        # changes_vs_history already carries the same note.
+        return None if history_owns else _since_missing()
     since = ctx.since
+    asked = ({d["entry_key"] for d in ctx.derived_asks if d["row"]["type"] == "constraint"}
+             if "asks" in ctx.sections else set())
     injuries = []
     for inj in ctx.injuries:
         row, v = inj["row"], _v(inj["row"])
         resolved = _resolved_on(v)
         if not row.active and resolved is not None and resolved >= since:
-            injuries.append({"key": inj["key"], "text": _injury_label(v), "change": "resolved",
-                             "on": resolved.isoformat(), "basis": (v.get("resolution") or {}).get("basis")})
+            if not history_owns:
+                injuries.append({"key": inj["key"], "text": _injury_label(v), "change": "resolved",
+                                 "on": resolved.isoformat(),
+                                 "basis": (v.get("resolution") or {}).get("basis")})
         elif row.active and getattr(row, "added_at", None) is not None and row.added_at >= since:
+            if inj["history"] and history_owns:
+                continue
             injuries.append({"key": inj["key"], "text": _injury_label(v),
                              "change": "updated" if inj["history"] else "recorded",
                              "on": _iso(row.added_at)})
-    findings = [_finding_summary(f) for f in ctx.findings
-                if (d := typed_entries.parse_date(f.get("as_of"))) is not None and d >= since]
+    findings = [] if history_owns else [
+        _finding_summary(f) for f in ctx.findings
+        if (d := typed_entries.parse_date(f.get("as_of"))) is not None and d >= since]
     constraints = []
     for c in ctx.constraints:
+        if c.get("key") in asked:
+            continue
         on = typed_entries.parse_date(c.get("confirmed_on")) or c.get("added_at")
         if on is not None and on >= since:
             constraints.append({**_constraint_summary(c), "change": "confirmed", "on": _iso(on)})
@@ -355,6 +403,8 @@ def module_since(ctx: BriefContext) -> dict[str, Any]:
             constraints.append({**_constraint_summary({"key": r.key, **_v(r)}), "change": "resolved",
                                 "on": resolved.isoformat(),
                                 "basis": (_v(r).get("resolution") or {}).get("basis")})
+    if not (injuries or findings or constraints):
+        return None
     return {"since": since.isoformat(), "injuries": injuries, "findings": findings,
             "constraints": constraints}
 

@@ -3,8 +3,13 @@
 // The appointment brief page (#345). Gates:
 //   - /appointments/:key renders ONLY its own surface (the brief sections, in the order the server
 //     gave), never hub tiles; the hub renders no brief — the RouteSurfaces discipline (FEEDBACK §41);
-//   - "Leave with" is pinned at the top; ticks are local-only (localStorage), never POSTed, and a
-//     blocked storage never breaks the page;
+//   - "Leave with" is in normal flow (never sticky, never an inner scroll box) and is a compact
+//     pointer list linking to Asks, with no tick boxes; ticks live only under Asks, are local-only
+//     (localStorage), never POSTed, and a blocked storage never breaks the page;
+//   - each row once, statements in full, "option → implication", and a quiet "linked row not
+//     found" under an ask whose resolves row the brief could not show (#348);
+//   - print mode: Print / Save PDF calls window.print; header, chat and scroll containers are
+//     released for print; tick boxes print as empty squares; an ask never breaks across pages;
 //   - audience `clinician` drops the tick boxes and uses the fuller headings;
 //   - the hub lists `planned` appointments as doorways to their briefs, and nothing when none.
 // Fixture is SYNTHETIC (placeholder text) and shaped like the backend's brief.
@@ -13,6 +18,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { act } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 vi.mock('../api', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 
@@ -28,14 +36,15 @@ const BRIEF = {
   sections: [
     { module: 'header', clinician: 'Clinician A', practice: 'Practice A', at: '2026-01-15T13:00',
       date: '2026-01-15', time: '13:00', status: 'planned', kind: 'follow_up', audience: 'operator', detail: null },
-    { module: 'leave_with', items: [{ id: 'a1', text: 'Ask one', priority: 1 }], total: 1 },
-    { module: 'since', since: '2025-12-01', injuries: [], findings: [], constraints: [] },
+    { module: 'leave_with', items: [{ id: 'a1', short: 'Ask one short', priority: 1 }], total: 1 },
+    { module: 'since', since: '2025-12-01', injuries: [], findings: [], constraints: [
+      { key: 'c2', type: 'constraint', text: 'CAP — movement B', change: 'confirmed', on: '2025-12-03' }] },
     { module: 'changes_vs_history', since: '2025-12-01', injuries: [], findings: [
       { key: 'f1', type: 'finding', text: 'Statement v2', as_of: '2025-12-05', status: 'open',
         previous: [{ id: 3, statement: 'Statement v1', as_of: '2025-11-01' }] }] },
     { module: 'asks', authored: [
-      { id: 'a1', text: 'Ask one', priority: 1, folded: [],
-        resolves: { entry_key: null, note: null, row: null } }],
+      { id: 'a1', text: 'Ask one short. And the rest of ask one.', priority: 1, folded: [],
+        resolves: { entry_key: null, note: null, row: null, unresolved: false } }],
     derived: [{ rule: 'undated_exit', entry_key: 'c1', source: 'ledger',
       text: 'Confirm or date the exit condition: condition A',
       row: { key: 'c1', type: 'constraint', text: 'CAP — movement A', exit: 'when condition A', review_by: '2026-03-01' } }] },
@@ -93,10 +102,29 @@ describe('/appointments/:key renders the brief and only the brief', () => {
     expect(within(scope).getByText('injury_gone (not found)')).toBeTruthy()
   })
 
-  test('Leave with is pinned', async () => {
+  test('Leave with is in normal flow: not sticky, no inner scroll, at any width', async () => {
     await act(async () => { renderAt('/appointments/appt_a') })
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Leave with' })).toBeTruthy())
-    expect(screen.getByRole('region', { name: 'Leave with' }).className).toContain('sticky')
+    const lw = await screen.findByRole('region', { name: 'Leave with' })
+    for (const el of [lw, ...lw.querySelectorAll('*')]) {
+      expect(el.className).not.toMatch(/(^|\s|:)(sticky|fixed|overflow-(y-)?(auto|scroll)|max-h-)/)
+    }
+    // It is the first section after the header, in the page's own flow.
+    const regions = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+    expect(regions.indexOf('Leave with')).toBe(1)
+  })
+
+  test('Leave with is a compact pointer list: short text, linked to its ask, no tick boxes', async () => {
+    await act(async () => { renderAt('/appointments/appt_a') })
+    const lw = await screen.findByRole('region', { name: 'Leave with' })
+    expect(within(lw).queryAllByRole('checkbox')).toHaveLength(0)
+    const link = within(lw).getByRole('link', { name: 'Ask one short' })
+    expect(link.getAttribute('href')).toBe('#ask-a1')
+    expect(within(lw).queryByText(/the rest of ask one/)).toBeNull()
+    // The link target is the full ask under Asks, which carries the one tick box.
+    const target = document.getElementById('ask-a1')
+    expect(screen.getByRole('region', { name: 'Asks' }).contains(target)).toBe(true)
+    expect(within(target).getByText(/the rest of ask one/)).toBeTruthy()
+    expect(within(target).getAllByRole('checkbox')).toHaveLength(1)
   })
 
   test('no hub tiles bleed through', async () => {
@@ -117,13 +145,11 @@ describe('/appointments/:key renders the brief and only the brief', () => {
 describe('ticks are local-only', () => {
   test('a tick persists in localStorage and is never written back', async () => {
     await act(async () => { renderAt('/appointments/appt_a') })
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Leave with' })).toBeTruthy())
-    const box = within(screen.getByRole('region', { name: 'Leave with' })).getByRole('checkbox')
+    const asks = await screen.findByRole('region', { name: 'Asks' })
+    const box = within(asks).getAllByRole('checkbox')[0]
     fireEvent.click(box)
     expect(box.checked).toBe(true)
     expect(JSON.parse(localStorage.getItem('appointment-ticks:appt_a'))).toEqual(['a1'])
-    // The same ask is ticked in the full Asks list too.
-    expect(within(screen.getByRole('region', { name: 'Asks' })).getAllByRole('checkbox')[0].checked).toBe(true)
     expect(api.post).not.toHaveBeenCalled()
   })
 
@@ -131,10 +157,117 @@ describe('ticks are local-only', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
     await act(async () => { renderAt('/appointments/appt_a') })
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Leave with' })).toBeTruthy())
-    const box = within(screen.getByRole('region', { name: 'Leave with' })).getByRole('checkbox')
+    const asks = await screen.findByRole('region', { name: 'Asks' })
+    const box = within(asks).getAllByRole('checkbox')[0]
     fireEvent.click(box)
     expect(box.checked).toBe(true)
+  })
+})
+
+// Shaped like the first real brief (prod row 107: nine authored asks, ask 1 linked to a row the
+// brief cannot show, options, a statement longer than the chat's 280-char cap). SYNTHETIC text.
+const LONG = `Synthetic imaging statement, possible lesion at level A ${'x'.repeat(300)} END-OF-STATEMENT`
+const NINE = Array.from({ length: 9 }, (_, i) => ({
+  id: `q${i + 1}`, text: `Ask ${i + 1} full text. Detail for ask ${i + 1}.`, priority: i + 1, folded: [],
+  resolves: i === 0
+    ? { entry_key: 'constraint_gone_a', note: null, row: null, unresolved: true }
+    : { entry_key: null, note: null, row: null, unresolved: false },
+}))
+const REAL = {
+  ...BRIEF,
+  sections: [
+    BRIEF.sections[0],
+    { module: 'leave_with', total: 9,
+      items: NINE.slice(0, 5).map((a) => ({ id: a.id, short: `Ask ${a.priority} full text.`, priority: a.priority })) },
+    { module: 'changes_vs_history', since: '2025-12-01', injuries: [
+      { key: 'injury_cervical_spine', text: 'cervical spine', before: 'active', after: 'resolved 2025-12-20', on: '2025-12-20' }],
+    findings: [{ key: 'f1', type: 'finding', text: LONG, as_of: '2025-12-05', status: 'open', previous: [] }] },
+    { module: 'asks', authored: NINE, derived: [] },
+    { module: 'options_prep', items: [{ ask_id: 'q2', text: 'Ask 2 full text.',
+      options: [{ option: 'Cleared with conditions', implication: 'Technique change A' }] }] },
+  ],
+}
+
+describe('first real use (row-107 shape)', () => {
+  beforeEach(() => {
+    api.get.mockImplementation(() => Promise.resolve({ data: REAL }))
+  })
+
+  test('each ask appears in full once; Leave with carries five pointers and a count', async () => {
+    await act(async () => { renderAt('/appointments/appt_a') })
+    const lw = await screen.findByRole('region', { name: 'Leave with' })
+    expect(within(lw).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(
+      ['#ask-q1', '#ask-q2', '#ask-q3', '#ask-q4', '#ask-q5'])
+    expect(within(lw).getByText('+ 4 more under Asks')).toBeTruthy()
+    for (let i = 1; i <= 9; i += 1) {
+      expect(screen.getAllByText(`Ask ${i} full text. Detail for ask ${i}.`)).toHaveLength(1)
+    }
+    expect(within(screen.getByRole('region', { name: 'Asks' })).getAllByRole('checkbox')).toHaveLength(9)
+  })
+
+  test('an ask whose linked row is not found says so, quietly, under that ask', async () => {
+    await act(async () => { renderAt('/appointments/appt_a') })
+    await screen.findByRole('region', { name: 'Asks' })
+    const q1 = document.getElementById('ask-q1')
+    expect(q1.textContent).toContain('linked row not found: constraint_gone_a')
+    expect(document.getElementById('ask-q2').textContent).not.toContain('linked row not found')
+  })
+
+  test('statements render in full; options read "option → implication"', async () => {
+    await act(async () => { renderAt('/appointments/appt_a') })
+    const changes = await screen.findByRole('region', { name: 'Changes since last visit' })
+    expect(within(changes).getByText(/END-OF-STATEMENT/)).toBeTruthy()
+    expect(within(changes).getByText(/cervical spine/)).toBeTruthy()
+    const opts = screen.getByRole('region', { name: 'If the answer is…' })
+    expect(within(opts).getByText('Cleared with conditions → Technique change A')).toBeTruthy()
+    expect(within(opts).queryByText(/then likely/)).toBeNull()
+  })
+})
+
+describe('print mode', () => {
+  test('Print / Save PDF calls the browser print', async () => {
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {})
+    await act(async () => { renderAt('/appointments/appt_a') })
+    fireEvent.click(await screen.findByRole('button', { name: 'Print / Save PDF' }))
+    expect(print).toHaveBeenCalledTimes(1)
+  })
+
+  test('the print render drops header, chat and scroll containers; ticks print as empty squares', async () => {
+    api.get.mockImplementation(() => Promise.resolve({ data: REAL }))
+    let view
+    await act(async () => { view = renderAt('/appointments/appt_a') })
+    const asks = await screen.findByRole('region', { name: 'Asks' })
+    const { container } = view
+    // App chrome: the header (and its Chat button) and the chat rail/sheet are print:hidden.
+    const header = container.querySelector('header')
+    expect(header.className).toMatch(/(^|\s)print:hidden(\s|$)/)
+    expect(within(header).getByText(/Chat/)).toBeTruthy()
+    expect(container.querySelector('aside').className).toMatch(/(^|\s)print:hidden(\s|$)/)
+    expect(screen.getByRole('button', { name: 'Print / Save PDF' }).parentElement.className).toMatch(/print:hidden/)
+    // Every scroll container between the page and the brief is released for print.
+    const brief = screen.getByTestId('appointment-brief')
+    for (let el = brief.parentElement; el && el !== container; el = el.parentElement) {
+      if (/overflow-(y-)?(auto|scroll|hidden)/.test(el.className)) expect(el.className).toMatch(/print:overflow-visible/)
+      if (/(^|\s)(md:)?h-screen/.test(el.className)) expect(el.className).toMatch(/print:h-auto/)
+    }
+    for (const el of brief.querySelectorAll('*')) {
+      expect(el.className?.toString() ?? '').not.toMatch(/(^|\s)(sticky|max-h-\S+|overflow-(y-)?(auto|scroll))(\s|$)/)
+    }
+    // Tick boxes: the checkbox is screen-only; a print-only empty square stands in, even when ticked.
+    fireEvent.click(within(asks).getAllByRole('checkbox')[0])
+    const items = asks.querySelectorAll('li[id^="ask-"]')
+    expect(items).toHaveLength(9)
+    for (const li of items) {
+      expect(li.className).toMatch(/break-inside-avoid/)
+      expect(li.querySelector('input[type="checkbox"]').className).toMatch(/print:hidden/)
+      const square = li.querySelector('[data-print-tick]')
+      expect(square.className).toMatch(/hidden print:inline-block/)
+      expect(square.textContent).toBe('')
+    }
+    // Black on white lives in the print stylesheet, scoped to the brief.
+    expect(brief.className).toMatch(/brief-print/)
+    const indexCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.css'), 'utf8')
+    expect(indexCss).toMatch(/@media print[\s\S]*\.brief-print[\s\S]*color: #000[\s\S]*background: #fff/)
   })
 })
 
