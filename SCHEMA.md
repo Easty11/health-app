@@ -1631,3 +1631,46 @@ No migration. The `value` shape for `type='finding'` (#343): an interpretation w
 **Status transitions.** `confirmed` from `proposed`/`open` only via `POST /knowledge/findings/{id}/confirm`; `retracted` only via `POST /knowledge/findings/{id}/retract` (basis mandatory; row kept, `active=False`); `superseded` stamped on the replaced row by a same-key rewrite, beside `superseded_by`. Chat writes proposals only and never promotes one.
 
 **Readers.** `open` and `confirmed`, active only; `proposed` never. `typed_entries.lift_findings` → `CurrentState.findings` → `context_builder._section_findings` (2,000-char budget, statements capped at 280 with "…", overflow named) and the MCP `get_findings(domain?, since?, status?)` (full statements). A `derived_from_labs` finding — or one whose flag is absent — is never rendered; only its count, with a pointer to the Labs page.
+
+### 039 — user_knowledge_entries.appointment
+
+No migration. The `value` shape for `type='appointment'` (#345): the operator's planning data for one clinical appointment. Not a bodily assertion — no proposed/confirm gate, no `asserted_by`. Validated at write by `routers/knowledge.py::validate_appointment` (shape) and `_validate_appointment_write` (DB rules), inside the shared write path; stored verbatim. One row per appointment, key e.g. `appt_<yyyymmdd>_<slug>`.
+
+```json
+{
+  "clinician": "<clinician>",
+  "practice": null,
+  "at": "2026-01-15T13:00",
+  "kind": "follow_up",
+  "since": "2025-12-01",
+  "scope": {"parent_keys": ["<injury key>"]},
+  "asks": [{"id": "a1", "text": "<what to leave with>", "priority": 1,
+            "resolves": {"entry_key": "<constraint or finding key>", "note": null},
+            "options": [{"option": "<answer>", "implication": "<what it would mean>"}]}],
+  "logistics": ["<what to bring>"],
+  "status": "planned"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `clinician` | str | yes | display only, free text |
+| `practice` | str \| null | no | |
+| `at` | ISO datetime | yes | Brisbane local wall time; no offset, or `+10:00` |
+| `kind` | `intro` \| `follow_up` \| `request` | yes | picks the default section list + audience |
+| `audience` | `operator` \| `clinician` | no | absent = the kind's default (`follow_up`/`request` → operator, `intro` → clinician); heading voice + tick boxes only |
+| `since` | date | `follow_up`: yes | the "since last visit" start |
+| `scope.parent_keys` | list of str | yes (≥1, no repeats) | each an ACTIVE injury row of the user, or one resolved on/after `since` |
+| `asks[]` | `{id, text, priority, resolves?, options?}` | no (absent = none) | `id` unique; `priority` int 1..len(asks); `resolves` `{entry_key, note}`; `options[]` `{option, implication}` — authored, never generated |
+| `logistics` | list of str | no | |
+| `sections` | `{add: [module], drop: [module]}` | no | modules: `header leave_with asks options_prep since changes_vs_history current_constraints background imaging_timeline request logistics`; none in both lists |
+| `request` | `{ask, justification, evidence?, alternatives?}` | iff `kind='request'` | `evidence[]` `{door, ref}` on the §038 doors; refused on other kinds |
+| `status` | `planned` \| `attended` \| `closed` | yes | chat: `planned` only |
+| `detail` | str \| null | no | |
+| any other key | — | — | **REFUSED** |
+
+**Row rules.** `expires_at` must be null. An appointment key may not take another type's active row, nor another type an appointment's (`_typed_supersede_guard`). A `source="chat"` write is stamped `status: "planned"` when absent and refused with any other status; chat may not rewrite or deactivate a row whose status is past `planned`.
+
+**Default section lists.** `follow_up`: header, leave_with, since, changes_vs_history, asks, options_prep, current_constraints, logistics. `intro`: header, background, imaging_timeline, current_constraints, asks, logistics. `request`: header, request, leave_with, asks, options_prep, logistics. `add` appends in the order given; `options_prep` and `request` render nothing when empty.
+
+**Readers.** `appointment_brief.load_appointment_brief` (one query of the user's appointment / injury / constraint / finding rows, active and inactive) → `build_appointment_brief` (pure) → `GET /appointments/{key}/brief` and the MCP `get_appointment_brief`. `GET /appointments` lists active rows (`?status=`). `context_builder._section_appointments` renders active `planned` rows' values to the coach (input-gated). Nothing else reads this type; the engine never does.
