@@ -43,7 +43,6 @@ from routers.knowledge import (
     TYPED_STAMPED_FIELDS,
     _SATISFIES_VALIDATORS,
 )
-from engine.taxonomy import all_regions
 # Week-planner derivation (#316), ONE definition shared with the chat consistency line —
 # engine.week_plan imports resolver/load_metrics/models, never context_builder (acyclic).
 from engine.week_plan import consistency_rows, schedule_sessions_per_week
@@ -991,7 +990,6 @@ def _typed_entry_write_shape() -> str:
     engine_only = [k for k in CONSTRAINT_SCOPE_FIELDS if k not in _ADVISORY_SCOPE_KEYS]
     adv, eng = CONSTRAINT_TIERS[1], CONSTRAINT_TIERS[0]
     exits = "; ".join(f"`{k}` ({_EXIT_MEANING[k]})" for k in CONSTRAINT_EXIT_FIELDS)
-    regions = ", ".join(r.key for r in all_regions())
     ev = "{" + ", ".join(f'"{k}": …' for k in FINDING_EVIDENCE_FIELDS) + "}"
     return f"""CONSTRAINTS AND FINDINGS ARE PROPOSALS. A lasting instruction (an exercise or
 load restriction that should end one day) is a `type="constraint"`; your
@@ -1009,18 +1007,20 @@ Never send {", ".join(never)} or any other key.
   - {{"tier": "{eng}", "region_keys": ["<region key>", …], "side": {_q(CONSTRAINT_SIDES)}}}
     — `side` optional (absent = bilateral), `text` optional; only with "kind": {_q(CONSTRAINT_ENGINE_KINDS)}.
   `tier` is exactly {_q(CONSTRAINT_TIERS)} — no other spelling. `text` goes INSIDE
-  `scope`, never at the top level of `value`.
+  `scope`, never at the top level of `value`. Choose "{eng}" only when the region must
+  not be probed at all (it leaves the probe queue); a load limit on a region still
+  being trained is an "{adv}" "cap" with the side written into the text.
 - `kind`: {_q(CONSTRAINT_KINDS)}.
 - `exit`: an object with at least one of {exits}.
 - `review_by`: YYYY-MM-DD, always.
-- Region keys for the engine tier: {regions}.
+- `region_keys` are taxonomy region keys; an unknown one is refused with the valid list.
 
 <knowledge_update>
-{{"type": "constraint", "key": "constraint_no_overhead_pressing", "value": {{"scope": {{"tier": "{adv}", "text": "no overhead pressing"}}, "kind": "block", "exit": {{"on_condition": "pain-free overhead reach"}}, "review_by": "2026-10-15"}}}}
+{{"type": "constraint", "key": "constraint_right_er_cap", "value": {{"scope": {{"tier": "{adv}", "text": "right shoulder external rotation capped at 11.25 kg; left unrestricted"}}, "kind": "cap", "exit": {{"on_condition": "right ER pain-free at 11.25 kg"}}, "review_by": "2026-10-15"}}}}
 </knowledge_update>
 
 <knowledge_update>
-{{"type": "constraint", "key": "constraint_right_er_block", "value": {{"scope": {{"tier": "{eng}", "region_keys": ["shoulder_er_ir"], "side": "right"}}, "kind": "block", "exit": {{"on_condition": "right ER pain-free at 11.25 kg"}}, "review_by": "2026-10-15"}}}}
+{{"type": "constraint", "key": "constraint_no_hinge_probe", "value": {{"scope": {{"tier": "{eng}", "region_keys": ["hinge"]}}, "kind": "block", "exit": {{"on_condition": "cleared by the physio"}}, "review_by": "2026-10-15"}}}}
 </knowledge_update>
 
 FINDING `value` — allowed keys, and ONLY these: {", ".join(f_allowed)}.

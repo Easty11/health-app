@@ -35,11 +35,31 @@ def _words(text):
     [f for f in FINDING_FIELDS if f not in TYPED_CHAT_OMITTED_FIELDS],
     CONSTRAINT_SCOPE_FIELDS, CONSTRAINT_TIERS, CONSTRAINT_KINDS, CONSTRAINT_SIDES,
     CONSTRAINT_EXIT_FIELDS, FINDING_DOMAINS, FINDING_EVIDENCE_DOORS, MARKER_STATUS_VALUES,
-    [r.key for r in all_regions()],
 ])
 def test_every_validator_name_is_in_the_section(vocab):
     missing = [v for v in vocab if v not in _words(SHAPE)]
     assert missing == []
+
+
+def test_no_region_list_rides_the_prompt():
+    """Q185 prompt-cost ruling: region keys are engine-tier only; the refusal names the valid set
+    and the in-turn retry feeds it back, so the section carries no list."""
+    # Underscored keys cannot occur as ordinary prose (plain ones like "rotation" can).
+    listed = [r.key for r in all_regions() if "_" in r.key and r.key in SHAPE]
+    assert listed == []
+    with pytest.raises(ValueError, match="valid keys:.*shoulder_er_ir"):
+        validate_constraint({"scope": {"tier": "engine", "region_keys": ["shoulder"]}, "kind": "block",
+                             "exit": {"on_condition": "x"}, "review_by": "2026-10-15",
+                             "status": "proposed", "asserted_by": None})
+
+
+def test_the_right_shoulder_example_is_an_advisory_cap():
+    """Operator correction (Q185 rulings): a load limit on a region still being trained is an advisory
+    cap with the side in the text — an engine block would pull shoulder_er_ir out of the probe queue."""
+    ex = {e["key"]: e["value"] for e in (json.loads(b) for b in _blocks(SHAPE))}
+    cap = ex["constraint_right_er_cap"]
+    assert cap["scope"]["tier"] == "advisory" and cap["kind"] == "cap" and "right" in cap["scope"]["text"]
+    assert not any("shoulder_er_ir" in json.dumps(v) for v in ex.values())
 
 
 def test_the_section_is_the_generated_block():
