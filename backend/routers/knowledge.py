@@ -1505,6 +1505,8 @@ class RestrictionAudit(BaseModel):
     # listed under `dies_with_parent` and re-homes nothing (the restriction stays an orphan).
     rehomed_to_constraints: list[ConstraintRef] = []
     dies_with_parent: list[ConstraintRef] = []
+    # Parented to THIS row without a with_parent exit: outlives it and keeps enforcing (G5 ruling 1).
+    parent_resolved_survives: list[ConstraintRef] = []
     status: str                 # covered | rehomed | orphan
     suggested_action: str | None = None   # "propose as constraint" on an orphan; never performed
 

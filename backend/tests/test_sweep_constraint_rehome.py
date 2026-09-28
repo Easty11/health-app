@@ -94,9 +94,21 @@ def test_constraint_parented_to_the_swept_injury_dies_with_it(db_session, world)
                     parent="injury_hamstring_right", with_parent=True)
     a = _audit(db_session, world)["sprinting"]
     assert a["status"] == "orphan"
-    assert a["rehomed_to_constraints"] == []
+    assert a["rehomed_to_constraints"] == [] and a["parent_resolved_survives"] == []
     assert [x["entry_id"] for x in a["dies_with_parent"]] == [c.id]
     assert a["suggested_action"] == "propose as constraint"
+
+
+def test_constraint_parented_here_without_with_parent_survives_under_its_own_label(db_session, world):
+    """G5 ruling 1: an on_condition exit outlives the injury. Cautious outcome (still ORPHAN), but
+    it does NOT die — its own label and suggestion. `dies_with_parent` stays with_parent-only."""
+    c = _constraint(db_session, world["user"].id, "c_sprint", "no sprinting",
+                    parent="injury_hamstring_right", with_parent=False)
+    a = _audit(db_session, world)["sprinting"]
+    assert a["status"] == "orphan"
+    assert a["dies_with_parent"] == [] and a["rehomed_to_constraints"] == []
+    assert [x["entry_id"] for x in a["parent_resolved_survives"]] == [c.id]
+    assert a["suggested_action"] == "re-parent or resolve — constraint keeps enforcing"
 
 
 def test_after_the_injury_resolves_its_child_still_does_not_rehome(db_session, world):

@@ -270,6 +270,8 @@ def _entry_action(e: models.UserKnowledgeEntry) -> tuple[str, str | None]:
 # a hinge/rotation/carry/gait stand-down — where the same words on a `mechanical` row are
 # chat-only. The audit surfaces that as a warning on the destination; it never decides.
 
+SURVIVES_SUGGESTION = "re-parent or resolve — constraint keeps enforcing"
+
 RESTRICTIONS_NOTE = (
     "Restriction strings are chat-rendered only (context_builder schedule section, MCP injury "
     "summary). The engine gates on body_part + signal_type (+ side, + the ra_flare token), "
@@ -312,12 +314,18 @@ def _constraint_home(c: dict[str, Any], entry: models.UserKnowledgeEntry,
     """Where a confirmed constraint stands relative to the injury being swept (G4/S5 ruling):
       * `rehomed`          — its parent is a DIFFERENT active entry, or it has no parent and no
                              `with_parent` exit: it outlives this injury's resolution;
-      * `dies_with_parent` — it is parented to THIS injury: it leaves with it, so it re-homes
-                             nothing (the S6 seed's rows are exactly this shape);
+      * `dies_with_parent` — parented to THIS injury with a `with_parent` exit: it leaves with
+                             it, so it re-homes nothing (the S6 seed's rows are this shape);
+      * `parent_resolved_survives` — parented to THIS injury WITHOUT a `with_parent` exit: it
+                             outlives the resolution and keeps enforcing, but under a parent that
+                             no longer holds (G5 ruling 1). Cautious outcome: it re-homes nothing
+                             either — the operator re-parents or resolves it;
       * None               — parented to an entry that is itself no longer active."""
     parent = c.get("parent_key")
     if parent == entry.key:
-        return "dies_with_parent"
+        if (c.get("exit") or {}).get("with_parent") is True:
+            return "dies_with_parent"
+        return "parent_resolved_survives"
     if parent is None:
         return None if (c.get("exit") or {}).get("with_parent") is True else "rehomed"
     return "rehomed" if parent in live_keys else None
@@ -334,9 +342,11 @@ def audit_restrictions(entry: models.UserKnowledgeEntry,
 
     `constraints` are the user's active CONFIRMED constraint rows, lifted
     (`typed_entries.lift_constraints`); a match is the restriction's stems in `scope.text`. A
-    constraint parented to THIS injury is listed under `dies_with_parent` and does NOT re-home —
-    the restriction still reads as an orphan. An orphan's suggested action is "propose as
-    constraint". Surfacing only: nothing here writes."""
+    constraint parented to THIS injury does NOT re-home — the restriction still reads as an
+    orphan — and is listed under `dies_with_parent` (with_parent exit) or
+    `parent_resolved_survives` (any other exit; it keeps enforcing). An orphan's suggested action
+    is "re-parent or resolve — constraint keeps enforcing" when a surviving constraint already
+    carries it, else "propose as constraint". Surfacing only: nothing here writes."""
     constraints = constraints or []
     live_keys = live_keys or set()
     value = entry.value or {}
@@ -358,7 +368,7 @@ def audit_restrictions(entry: models.UserKnowledgeEntry,
                     "signal_type": str((dest.value or {}).get("signal_type", "mechanical")).lower(),
                     "radicular_warning": _radicular_warning(dest),
                 })
-        via_constraint, dies_with_parent = [], []
+        via_constraint, dies_with_parent, survives = [], [], []
         for c in constraints:
             if not _mentions_all(stems, str((c.get("scope") or {}).get("text") or "")):
                 continue
@@ -369,8 +379,13 @@ def audit_restrictions(entry: models.UserKnowledgeEntry,
                 via_constraint.append(ref)
             elif home == "dies_with_parent":
                 dies_with_parent.append(ref)
+            elif home == "parent_resolved_survives":
+                survives.append(ref)
         status_ = ("rehomed" if (rehomed or via_constraint)
                    else ("covered" if covered else "orphan"))
+        suggestion = None
+        if status_ == "orphan":
+            suggestion = SURVIVES_SUGGESTION if survives else "propose as constraint"
         out.append({
             "restriction": r,
             "match_stems": stems,
@@ -378,8 +393,9 @@ def audit_restrictions(entry: models.UserKnowledgeEntry,
             "rehomed_to": rehomed,
             "rehomed_to_constraints": via_constraint,
             "dies_with_parent": dies_with_parent,
+            "parent_resolved_survives": survives,
             "status": status_,
-            "suggested_action": "propose as constraint" if status_ == "orphan" else None,
+            "suggested_action": suggestion,
         })
     return out
 

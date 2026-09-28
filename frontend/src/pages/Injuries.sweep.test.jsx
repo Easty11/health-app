@@ -43,6 +43,11 @@ const SWEEP = {
       rehomed_to_constraints: [], status: 'orphan', suggested_action: 'propose as constraint',
       dies_with_parent: [{ entry_id: 201, key: 'constraint_no_sprinting', kind: 'block', tier: 'advisory',
         parent_key: 'injury_hamstring_right' }] },
+    { restriction: 'static stretching', match_stems: ['static'], covered_by_basis: false, rehomed_to: [],
+      rehomed_to_constraints: [], dies_with_parent: [], status: 'orphan',
+      suggested_action: 're-parent or resolve — constraint keeps enforcing',
+      parent_resolved_survives: [{ entry_id: 203, key: 'constraint_no_static', kind: 'block', tier: 'advisory',
+        parent_key: 'injury_hamstring_right' }] },
     { restriction: 'striding', match_stems: ['strid'], covered_by_basis: false, rehomed_to: [],
       rehomed_to_constraints: [{ entry_id: 202, key: 'constraint_no_striding', kind: 'block', tier: 'advisory',
         parent_key: null }], dies_with_parent: [], status: 'rehomed', suggested_action: null },
@@ -149,8 +154,8 @@ describe('resolve → sweep', () => {
     await renderView()
     await resolveHamstring()
     const card = within(await screen.findByRole('region', { name: /clearance sweep/i }))
-    expect(card.getAllByTestId('sweep-audit')).toHaveLength(3)
-    expect(card.getByText(/orphan — leaves chat context/)).toBeTruthy()
+    expect(card.getAllByTestId('sweep-audit')).toHaveLength(4)
+    expect(card.getAllByText(/orphan — leaves chat context/)).toHaveLength(2)
     expect(card.getByText(/re-homed → #94 injury_lumbar_spine \(neural\)/)).toBeTruthy()
     expect(card.getByText(/RADICULAR-WARNING-TEXT/)).toBeTruthy()
   })
@@ -162,6 +167,9 @@ describe('resolve → sweep', () => {
     expect(card.getByText(/re-homed → constraint #202 constraint_no_striding \(advisory\)/)).toBeTruthy()
     expect(card.getByText(/constraint #201 constraint_no_sprinting ends with this injury/)).toBeTruthy()
     expect(card.getByText('suggested: propose as constraint (manual)')).toBeTruthy()
+    // with_parent:false, parented here — it survives the resolution: its own label (G5 ruling 1).
+    expect(card.getByText(/constraint #203 constraint_no_static outlives this injury/)).toBeTruthy()
+    expect(card.getByText('suggested: re-parent or resolve — constraint keeps enforcing (manual)')).toBeTruthy()
     // Still surfacing only: no new control.
     expect(card.getAllByRole('button').map((b) => b.textContent).sort()).toEqual(['Close', 'Sweep again'])
   })

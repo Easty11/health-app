@@ -107,6 +107,9 @@ function Audit({ audit, note }) {
               {(a.dies_with_parent || []).map((c) => (
                 <Tag key={`d${c.entry_id}`} tone="amber">constraint #{c.entry_id} {c.key} ends with this injury</Tag>
               ))}
+              {(a.parent_resolved_survives || []).map((c) => (
+                <Tag key={`s${c.entry_id}`} tone="amber">constraint #{c.entry_id} {c.key} outlives this injury</Tag>
+              ))}
             </div>
             {a.suggested_action && (
               <p className="text-[11px] text-gray-500">suggested: {a.suggested_action} (manual)</p>
