@@ -396,6 +396,11 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # resolves, retracts or deactivates) with one example block of each type, because a proposal
     # path the coach is never told about is not built. Declared byte difference: 1510 → 2623
     # (+1113); the excision is unchanged and nothing else in the prompt moves.
+    # RE-DECLARED AGAIN (typed-entry write-shape fix, prod 28 Sep 2026): three chat constraint
+    # writes were refused for shape because the guidance was prose + one example. The block is now
+    # GENERATED from the validators' tuples (the #313 pattern) — allowed keys, the two scope shapes,
+    # tier literals, exit keys, the region-key list and a finding shape. Declared: 2623 → 5226
+    # (+2603); same excision, nothing else moves. Pinned by tests/test_typed_write_shape_docs.py.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -410,7 +415,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 2623), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 5226), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]

@@ -21,13 +21,29 @@ from hevy_routine_format import format_routine_compact, format_routine_full  # s
 # imports engine.taxonomy / load_events_metabolic / models / auth / database / load_metrics —
 # none import `context_builder`.
 from routers.knowledge import (
+    CONSTRAINT_ENGINE_KINDS,
+    CONSTRAINT_EXIT_FIELDS,
+    CONSTRAINT_FIELDS,
+    CONSTRAINT_KINDS,
+    CONSTRAINT_SCOPE_FIELDS,
+    CONSTRAINT_SIDES,
+    CONSTRAINT_TIERS,
+    FINDING_BASIS_FIELDS,
+    FINDING_DOMAINS,
+    FINDING_EVIDENCE_DOORS,
+    FINDING_EVIDENCE_FIELDS,
+    FINDING_FIELDS,
     MACRO_MAX_CHARS,
+    MARKER_STATUS_VALUES,
     REVISED_BY_VALUES,
     SCHEDULE_ITEM_FIELDS,
     TRAINING_PLAN_FIELDS,
     TRAINING_PLAN_KEY,
+    TYPED_CHAT_OMITTED_FIELDS,
+    TYPED_STAMPED_FIELDS,
     _SATISFIES_VALIDATORS,
 )
+from engine.taxonomy import all_regions
 # Week-planner derivation (#316), ONE definition shared with the chat consistency line —
 # engine.week_plan imports resolver/load_metrics/models, never context_builder (acyclic).
 from engine.week_plan import consistency_rows, schedule_sessions_per_week
@@ -945,6 +961,81 @@ Once basic scope + device profile are captured, proceed with the conversation
 normally — you don't need every field before being useful."""
 
 
+# ---------- typed-entry write shape (#342/#343), GENERATED from the validators' tuples ----------
+#
+# Prod, 28 Sep 2026: three chat constraint writes in a row were refused for shape — `side` on an
+# advisory scope, `tier: "engine-enforced"`, `text` at the top level. The guidance was prose plus one
+# example, so the model rebuilt the shape from memory each turn. This is the #313 remedy: every key
+# name, tier literal and allowed value below is interpolated from `routers.knowledge`, and the tier
+# rules are stated as the two scope shapes the validator accepts, so the text cannot drift from what
+# is refused. Pinned by `tests/test_typed_write_shape_docs.py`.
+
+# One-line meaning per exit key. Keyed by name; the test asserts the keys equal CONSTRAINT_EXIT_FIELDS.
+_EXIT_MEANING = {
+    "on_date": "YYYY-MM-DD",
+    "on_condition": "text — the condition that ends it",
+    "with_parent": "true — ends when `parent_key`'s entry is resolved; requires `parent_key`",
+}
+# The scope keys an ADVISORY scope carries; everything else in CONSTRAINT_SCOPE_FIELDS is engine-only.
+_ADVISORY_SCOPE_KEYS = ("tier", "text")
+
+
+def _q(values) -> str:
+    return " | ".join(f'"{v}"' for v in values)
+
+
+def _typed_entry_write_shape() -> str:
+    c_allowed = [f for f in CONSTRAINT_FIELDS if f not in TYPED_CHAT_OMITTED_FIELDS]
+    f_allowed = [f for f in FINDING_FIELDS if f not in TYPED_CHAT_OMITTED_FIELDS]
+    never = list(TYPED_CHAT_OMITTED_FIELDS) + list(TYPED_STAMPED_FIELDS)
+    engine_only = [k for k in CONSTRAINT_SCOPE_FIELDS if k not in _ADVISORY_SCOPE_KEYS]
+    adv, eng = CONSTRAINT_TIERS[1], CONSTRAINT_TIERS[0]
+    exits = "; ".join(f"`{k}` ({_EXIT_MEANING[k]})" for k in CONSTRAINT_EXIT_FIELDS)
+    regions = ", ".join(r.key for r in all_regions())
+    ev = "{" + ", ".join(f'"{k}": …' for k in FINDING_EVIDENCE_FIELDS) + "}"
+    return f"""CONSTRAINTS AND FINDINGS ARE PROPOSALS. A lasting instruction (an exercise or
+load restriction that should end one day) is a `type="constraint"`; your
+interpretation of their data is a `type="finding"`. You only ever PROPOSE one:
+the user confirms it themselves. Never confirm, resolve, retract or deactivate a
+constraint or finding. A block that does not match the shape below is REFUSED
+whole and nothing retries it — the save happens only if you emit a corrected
+block in a later reply, so never promise a retry.
+
+CONSTRAINT `value` — allowed keys, and ONLY these: {", ".join(c_allowed)}.
+Never send {", ".join(never)} or any other key.
+- `scope` is an object in EXACTLY one of two shapes:
+  - {{"tier": "{adv}", "text": "<the instruction>"}} — nothing else inside scope:
+    no {" or ".join(engine_only)} (write any side into the text).
+  - {{"tier": "{eng}", "region_keys": ["<region key>", …], "side": {_q(CONSTRAINT_SIDES)}}}
+    — `side` optional (absent = bilateral), `text` optional; only with "kind": {_q(CONSTRAINT_ENGINE_KINDS)}.
+  `tier` is exactly {_q(CONSTRAINT_TIERS)} — no other spelling. `text` goes INSIDE
+  `scope`, never at the top level of `value`.
+- `kind`: {_q(CONSTRAINT_KINDS)}.
+- `exit`: an object with at least one of {exits}.
+- `review_by`: YYYY-MM-DD, always.
+- Region keys for the engine tier: {regions}.
+
+<knowledge_update>
+{{"type": "constraint", "key": "constraint_no_overhead_pressing", "value": {{"scope": {{"tier": "{adv}", "text": "no overhead pressing"}}, "kind": "block", "exit": {{"on_condition": "pain-free overhead reach"}}, "review_by": "2026-10-15"}}}}
+</knowledge_update>
+
+<knowledge_update>
+{{"type": "constraint", "key": "constraint_right_er_block", "value": {{"scope": {{"tier": "{eng}", "region_keys": ["shoulder_er_ir"], "side": "right"}}, "kind": "block", "exit": {{"on_condition": "right ER pain-free at 11.25 kg"}}, "review_by": "2026-10-15"}}}}
+</knowledge_update>
+
+FINDING `value` — allowed keys, and ONLY these: {", ".join(f_allowed)}.
+Never send {", ".join(never)} or any other key.
+- `statement`: text. `domain`: {_q(FINDING_DOMAINS)}. `as_of`: YYYY-MM-DD.
+- `basis`: an object with {" and/or ".join(f"`{k}`" for k in FINDING_BASIS_FIELDS)} (at least one); each evidence
+  item is {ev} with `door` one of {_q(FINDING_EVIDENCE_DOORS)}.
+- `marker_status` (optional): {_q(MARKER_STATUS_VALUES)}.
+- `derived_from_labs`: true or false, always — true if it rests on any lab result at all.
+
+<knowledge_update>
+{{"type": "finding", "key": "finding_right_er_weaker", "value": {{"statement": "Right shoulder external rotation is painful at 11.25 kg; left is clean", "domain": "training", "as_of": "2026-09-27", "basis": {{"text": "user report after the session"}}, "derived_from_labs": false}}}}
+</knowledge_update>"""
+
+
 # Free-text categories the coach may write. "Injury History" and "Constraints" are DELIBERATELY
 # absent: the free-text store has no active flag and no resolution and renders unfiltered every
 # turn, so an injury written there can never be retired and keeps re-imposing itself after the
@@ -982,21 +1073,7 @@ training, body, or preferences, save it without being asked. Examples:
 - They discover an exercise they can't do → add it to that injury's `restrictions`
 - They describe what works well for recovery → save to "Recovery"
 
-CONSTRAINTS AND FINDINGS ARE PROPOSALS. A lasting instruction (an exercise or
-load restriction that should end one day) is a `type="constraint"`; your
-interpretation of their data is a `type="finding"`. You only ever PROPOSE one:
-the user confirms it themselves. Never include `status` or `asserted_by`, and
-never confirm, resolve, retract or deactivate a constraint or finding. A
-constraint needs an exit and a review date; a finding needs a basis, and
-`derived_from_labs: true` if it rests on any lab result at all:
-
-<knowledge_update>
-{{"type": "constraint", "key": "constraint_no_overhead_pressing", "value": {{"scope": {{"tier": "advisory", "text": "no overhead pressing"}}, "kind": "block", "exit": {{"on_condition": "pain-free overhead reach"}}, "review_by": "2026-10-15"}}}}
-</knowledge_update>
-
-<knowledge_update>
-{{"type": "finding", "key": "finding_right_er_weaker", "value": {{"statement": "Right shoulder external rotation is painful at 11.25 kg; left is clean", "domain": "training", "as_of": "2026-09-27", "basis": {{"text": "user report after the session"}}, "derived_from_labs": false}}}}
-</knowledge_update>
+{_typed_entry_write_shape()}
 
 If an entry for that category already exists, the new content will be appended.
 The block will be removed from your visible response and replaced with a

@@ -252,8 +252,9 @@ SECTION = context_builder._section_knowledge_update()
 
 def test_guidance_states_the_proposal_rules():
     assert "You only ever PROPOSE one" in SECTION
-    assert "Never include `status` or `asserted_by`" in SECTION
-    assert "never confirm, resolve, retract or deactivate a constraint or finding" in SECTION
+    assert "Never send status, asserted_by" in SECTION
+    flat = " ".join(SECTION.split())
+    assert "Never confirm, resolve, retract or deactivate a constraint or finding" in flat
 
 
 @pytest.mark.parametrize("type_", ["constraint", "finding"])

@@ -42,6 +42,7 @@ from routers.knowledge import (
     KnowledgeEntryIn,
     ScheduleItemInvalid,
     ScheduleItemOverlap,
+    TYPED_CHAT_DEFAULTS,
     TYPED_ENTRY_TYPES,
     chat_may_not_retire,
     expire_stale_entries,
@@ -915,7 +916,7 @@ def _process_knowledge_updates(
                         # tells the coach never to set these (G1 ruling 1), so the channel supplies
                         # them when absent; a model-supplied non-proposal status or authority is
                         # still REFUSED by `_validate_typed_write`, never overwritten.
-                        value = {"status": "proposed", "asserted_by": None, **value}
+                        value = {**TYPED_CHAT_DEFAULTS, **value}
                     entry_in = KnowledgeEntryIn(
                         type=data.get("type", "schedule_item"),
                         key=key,
@@ -1171,9 +1172,10 @@ _PASS2_SYSTEM = (
     "- Act on the affordance tag attached to each item:\n"
     "  - user_resolvable: the user must choose. State the clash and ask whether the new "
     "entry REPLACES the existing one or sits alongside it. Do not decide for them.\n"
-    "  - system_issue: a fault on OUR side. Say briefly it wasn't recorded and that you'll "
-    "sort it out. NEVER tell the user to fix a format, field, or block — they cannot see "
-    "or edit one.\n"
+    "  - system_issue: a fault on OUR side. Say briefly it wasn't recorded. Do NOT promise "
+    "to retry, fix or sort it out later — nothing retries a refused write; it is saved only "
+    "if it is written again in a later reply. NEVER tell the user to fix a format, field, "
+    "or block — they cannot see or edit one.\n"
     "  - informational: state the fact plainly (e.g. there was nothing matching to remove).\n"
     "- Do NOT append a tally or a '✓ N saved' line; that is added separately.\n"
 )
