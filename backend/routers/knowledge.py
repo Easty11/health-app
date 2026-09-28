@@ -554,6 +554,11 @@ CONSTRAINT_STATUS_VALUES = ("proposed", "confirmed")
 # #223 block — `resolved_on` / `basis` / `resolved_by`, the field names injuries already carry) by
 # `/resolve` and `/retract`. A writer supplying one would be forging the route's record.
 TYPED_STAMPED_FIELDS = ("confirmed_on", "resolution")
+# Stamped by the CHAT CHANNEL when absent (the #342 chat-channel rule, #230 pattern): a chat write is
+# a proposal with no authority. One definition for the stamping (`routers.chat`) and the coach's
+# write-shape docs (`context_builder`), so the prompt can never tell the model to send them.
+TYPED_CHAT_DEFAULTS = {"status": "proposed", "asserted_by": None}
+TYPED_CHAT_OMITTED_FIELDS = tuple(TYPED_CHAT_DEFAULTS)
 
 
 def _iso_date(value: Any, where: str) -> None:
