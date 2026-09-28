@@ -18,7 +18,9 @@ from load_metrics import _local_day  # operator-local (AEST) day — Q42 single 
 # `engine.taxonomy` imports only stdlib; `load_events_metabolic` imports only models+stdlib.
 # `engine.training_phase` (which owns `_SLOT_LOAD_WINDOWS`) imports `routers.knowledge`, so
 # importing IT back would cycle — hence the token `WINDOW_METABOLIC` at its own source.
-from engine.taxonomy import by_key as region_by_key, capacity_tokens, resolve_capacity
+from engine.taxonomy import (
+    SIDE_BILATERAL, SIDE_LEFT, SIDE_RIGHT, by_key as region_by_key, capacity_tokens, resolve_capacity,
+)
 # The authority vocabulary (#227) — imported from its one definition. `engine.profile` imports
 # only `models` + `engine.taxonomy`, so this is acyclic from here too.
 from engine.profile import ASSERTED_BY_VALUES
@@ -533,9 +535,17 @@ CONSTRAINT_FIELDS = (
 # `parent_key` and `detail` are optional (absent == null). `asserted_by` is REQUIRED as a key but
 # may be null while `proposed` — the writer states "no authority yet" rather than omitting it.
 CONSTRAINT_REQUIRED = ("scope", "kind", "exit", "review_by", "status", "asserted_by")
-CONSTRAINT_SCOPE_FIELDS = ("tier", "region_keys", "text")
+CONSTRAINT_SCOPE_FIELDS = ("tier", "region_keys", "side", "text")
+# `side` (G2 ruling 1): engine tier only, optional, absent == bilateral; matched by the engine's own
+# `selection._side_conflict`. A right-shoulder constraint must not block the clean left shoulder.
+CONSTRAINT_SIDES = (SIDE_LEFT, SIDE_RIGHT, SIDE_BILATERAL)
 CONSTRAINT_TIERS = ("engine", "advisory")
 CONSTRAINT_KINDS = ("block", "cap", "caution")
+# G2 ruling 2: the engine tier is `block` ONLY in v1. `cap` is a load ceiling and the engine has no
+# dose seam to enforce one (Q106 / the Banister dosing wire is unbuilt) — an engine cap would
+# silently become a block. `caution` through a boolean `is_contraindicated` (#72: it stays boolean)
+# is a block with a softer name. Both remain advisory-tier kinds.
+CONSTRAINT_ENGINE_KINDS = ("block",)
 CONSTRAINT_EXIT_FIELDS = ("on_date", "on_condition", "with_parent")
 CONSTRAINT_STATUS_VALUES = ("proposed", "confirmed")
 
@@ -620,22 +630,34 @@ def validate_constraint(value: Any) -> dict[str, Any]:
             raise ValueError(f"constraint.scope.region_keys: unknown region key(s) {unknown}")
         if len(set(keys)) != len(keys):
             raise ValueError("constraint.scope.region_keys must not repeat a key")
+        if "side" in scope and scope["side"] not in CONSTRAINT_SIDES:
+            raise ValueError(
+                f"constraint.scope.side: {scope['side']!r} is not one of {list(CONSTRAINT_SIDES)} "
+                f"(absent = bilateral)"
+            )
         if "text" in scope and scope["text"] is not None:
             _nonempty_str(scope["text"], "constraint.scope.text")
     else:
         # Advisory: the instruction itself, rendered verbatim. No scoping keys — an advisory row
         # carrying region keys would read as enforced when nothing enforces it.
-        if "region_keys" in scope:
-            raise ValueError(
-                "constraint.scope.region_keys is engine-tier only -- an advisory constraint has no "
-                "engine effect, so it carries no scoping keys"
-            )
+        for k in ("region_keys", "side"):
+            if k in scope:
+                raise ValueError(
+                    f"constraint.scope.{k} is engine-tier only -- an advisory constraint has no "
+                    f"engine effect, so it carries no scoping keys (state the side in its text)"
+                )
         if "text" not in scope:
             raise ValueError("constraint.scope.text is required for an advisory constraint")
         _nonempty_str(scope["text"], "constraint.scope.text")
 
     if value["kind"] not in CONSTRAINT_KINDS:
         raise ValueError(f"constraint.kind: {value['kind']!r} is not one of {list(CONSTRAINT_KINDS)}")
+    if tier == "engine" and value["kind"] not in CONSTRAINT_ENGINE_KINDS:
+        raise ValueError(
+            f"constraint.kind {value['kind']!r} is advisory-tier only -- the engine enforces "
+            f"{list(CONSTRAINT_ENGINE_KINDS)} in v1 (no dose seam for a cap; a boolean gate cannot "
+            f"express a caution)"
+        )
 
     parent_key = value.get("parent_key")
     if parent_key is not None:

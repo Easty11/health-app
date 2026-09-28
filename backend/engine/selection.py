@@ -26,6 +26,7 @@ from typing import Any, Iterable
 from sqlalchemy.orm import Session
 
 import models
+import typed_entries  # the shared constraint/finding lift (imports only `models`)
 from . import taxonomy
 from .taxonomy import Region, SIDE_BILATERAL
 
@@ -300,6 +301,33 @@ def gather_active_injuries(db: Session, user_id: int) -> list[dict[str, Any]]:
     return out
 
 
+def gather_active_constraints(db: Session, user_id: int) -> list[dict[str, Any]]:
+    """Confirmed, active ENGINE-tier constraints (#NEXT), normalised to
+        {key, region_keys, side, kind}
+
+    Read through `typed_entries.lift_constraints` — the one definition of "which constraint rows
+    are read" (active + confirmed) that the chat and MCP also use — then narrowed to the engine
+    tier. An advisory constraint has no engine effect by construction; a proposal changes nothing.
+    """
+    rows = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=user_id, type="constraint", active=True)
+        .all()
+    )
+    out: list[dict[str, Any]] = []
+    for c in typed_entries.lift_constraints(rows):
+        scope = c.get("scope") or {}
+        if scope.get("tier") != "engine":
+            continue
+        out.append({
+            "key": c["key"],
+            "region_keys": list(scope.get("region_keys") or []),
+            "side": str(scope.get("side") or SIDE_BILATERAL).lower(),
+            "kind": c.get("kind"),
+        })
+    return out
+
+
 def _is_spinal(body_part: str) -> bool:
     """Does this body part implicate the spine, for `_RADICULAR_BLOCKS` scoping?
 
@@ -328,9 +356,16 @@ def is_contraindicated(
     *,
     profile_hard_stops: list[dict[str, Any]] | None,
     active_injuries: list[dict[str, Any]],
+    active_constraints: list[dict[str, Any]] | None = None,
 ) -> tuple[bool, str | None]:
     """Apply the §8 hard filters. Probe never samples a contraindicated region —
-    'don't discover your way into a flagged nerve'."""
+    'don't discover your way into a flagged nerve'.
+
+    `active_constraints` (#NEXT) is the typed-constraint arm, from `gather_active_constraints`:
+    confirmed engine-tier `block` rows scoped to `Region.key`, side-matched by `_side_conflict`.
+    It runs LAST, so every existing arm returns exactly what it returned before (same reason
+    string), and with none/empty constraints this function is byte-identical to pre-#NEXT.
+    `_ACUTE_TISSUE_BLOCKS` / `_RADICULAR_BLOCKS` are untouched (their conversion is its own Q)."""
     # Explicit profile hard-stops that name a concrete region (not a pattern rule).
     for hs in profile_hard_stops or []:
         rk = hs.get("region_key")
@@ -357,6 +392,9 @@ def is_contraindicated(
         for part, blocked in _ACUTE_TISSUE_BLOCKS.items():
             if part in inj["body_part"] and region.key in blocked:
                 return True, f"acute {inj['body_part']} — provoking range excluded"
+    for c in active_constraints or []:
+        if region.key in c["region_keys"] and _side_conflict(c["side"], side):
+            return True, f"constraint {c['key']} — {c['kind']}"
     return False, None
 
 
@@ -383,10 +421,13 @@ def compute_probe_queue(
     profile: models.FortificationProfile | None,
     loaded_region_keys: set[str],
     active_injuries: list[dict[str, Any]] | None = None,
+    active_constraints: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """The §4 set expression, ranked. One entry per (region, side)."""
     if active_injuries is None:
         active_injuries = gather_active_injuries(db, user_id)
+    if active_constraints is None:
+        active_constraints = gather_active_constraints(db, user_id)
     hard_stops = list(profile.hard_stops) if (profile and profile.hard_stops) else []
 
     # Current map contents: (region_key, side) -> status.
@@ -409,6 +450,7 @@ def compute_probe_queue(
                 region, side,
                 profile_hard_stops=hard_stops,
                 active_injuries=active_injuries,
+                active_constraints=active_constraints,
             )
             if blocked:                          # − contraindicated
                 continue

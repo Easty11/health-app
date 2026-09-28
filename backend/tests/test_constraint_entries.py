@@ -179,6 +179,26 @@ def test_engine_tier_refuses_an_unknown_region_key():
         validate_constraint(_engine(scope={"tier": "engine", "region_keys": ["hamstring"]}))
 
 
+@pytest.mark.parametrize("kind", ["cap", "caution"])
+def test_engine_tier_accepts_block_only(kind):
+    """G2 ruling 2: no dose seam for an engine cap; a boolean gate cannot express a caution."""
+    with pytest.raises(ValueError, match="advisory-tier only"):
+        validate_constraint(_engine(kind=kind))
+    assert validate_constraint(_advisory(kind=kind))                   # control: advisory takes them
+
+
+@pytest.mark.parametrize("side", ["left", "right", "bilateral"])
+def test_engine_tier_side_is_optional_and_closed(side):
+    assert validate_constraint(_engine(scope={"tier": "engine", "region_keys": ["hinge"], "side": side}))
+    with pytest.raises(ValueError, match="scope.side"):
+        validate_constraint(_engine(scope={"tier": "engine", "region_keys": ["hinge"], "side": "both"}))
+
+
+def test_advisory_tier_carries_no_side():
+    with pytest.raises(ValueError, match="engine-tier only"):
+        validate_constraint(_advisory(scope={"tier": "advisory", "text": "x", "side": "right"}))
+
+
 def test_advisory_tier_requires_text_and_carries_no_scoping_keys():
     with pytest.raises(ValueError, match="text is required"):
         validate_constraint(_advisory(scope={"tier": "advisory"}))
@@ -393,7 +413,7 @@ def test_chat_may_rewrite_its_own_proposal(db_session):
     first = _write(db_session, u.id, _engine(status="proposed", asserted_by=None), source="chat")
     _, _, results = _chat(db_session, u.id, {"type": "constraint", "key": "c_hinge",
                                              "value": _engine(status="proposed", asserted_by=None,
-                                                              kind="caution")})
+                                                              review_by="2026-10-30")})
     assert results[0].saved is True
     db_session.refresh(first)
     assert not first.active and first.superseded_by is not None
