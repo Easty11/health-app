@@ -1,114 +1,109 @@
-# Close-out — Injury clearance sweep (surfacing-only) + legacy free-text bleed (#340, #341)
+# Close-out — Typed `constraint` and `finding` entries (#342, #343)
 
 ## Real commits this session
 
-Session-open ref: master `360b385` (the PR #268 merge). One PR, branch `claude/zealous-wozniak-b3f2g8`
-(harness-assigned; the brief's `feat/injury-clearance-sweep` yielded to it and the name is recorded in
-BRANCHES), merged with `--merge` and remote-deleted:
+Session open: master `360b385` at G0 (read-only). Reset onto `11be50e` after #269 merged, then onto `8324a28`
+after #270, before any commit. Branch `claude/blissful-brahmagupta-mk7hcf` (harness-assigned; recorded in BRANCHES).
+
+`git log --format="%h %ad %s" --date=short 8324a28..a363061`:
 
 ```
-11be50e Merge pull request #269 from Easty11/claude/zealous-wozniak-b3f2g8
-244528b gov(injury-sweep): #340 clearance sweep, #341 free-text bleed; Q9 annotated; Q180
-ab2617c feat(prompt): injury facts leave the free-text knowledge_update categories
-718d261 feat(injuries): clearance sweep card after resolve; Sweep again on resolved rows
-b879e22 feat(sweep): hamstring aliases + primary/secondary term tiers (G1 ruling)
-aeaad29 test(sweep): G1 raw prod fixture -- the 15 regex lines at their real indexes
-9ac86fa feat(sweep): other-injury labels collapse superseded keys, skip same body part
-e200716 feat(sweep): label hit lines as history and by other injuries named
-51fbfcf test(sweep): id 29 restrictions confirmed from prod (matches seed)
-30a5017 test(sweep): prod resolution bases and re-home row 94 in the audit fixture
-560f1a1 feat(knowledge): sweep audits restrictions for orphans; real-data fixture
-f6ec3a2 feat(knowledge): injury clearance sweep (surfacing-only)
-0711535 fix(seed): injury seed keys on key regardless of active
+a363061 2026-09-28 Merge pull request #271 from Easty11/claude/blissful-brahmagupta-mk7hcf
+580d8d2 2026-09-28 gov(typed-entries): #342/#343, Q9/Q20 ruled, Q181–Q184, SCHEMA §037/§038, paste addressing (S7)
+85ce419 2026-09-28 chore: resolve this branch's #NEXT code references to #342 (constraint) / #343 (finding)
+0b63466 2026-09-28 feat(scripts): seed_constraints.py — injury restrictions to advisory constraints, dry-run first (S6)
+ce16bb6 2026-09-28 fix(sweep): a constraint parented to the swept injury without with_parent survives it (G5 ruling 1)
+5d1b732 2026-09-28 feat(sweep): the restriction audit recognises typed constraints (S5)
+1f64edc 2026-09-28 feat(context,mcp): render typed constraints and findings; chat proposal guidance (S4)
+24273cb 2026-09-28 feat(engine): is_contraindicated reads confirmed engine-tier constraints (S3)
+e1ace6c 2026-09-27 feat(knowledge): typed `finding` entries, confirm/retract, and the read lift (S2)
+814fe01 2026-09-27 feat(knowledge): typed `constraint` entries — validator, confirm/resolve routes, chat guards (S1)
 ```
 
-This close-out lands as a second, governance-only PR from the same branch, re-cut from master `11be50e`.
-No migration. No production data was written by Code at any step; every prod read was operator-run.
-Self-merged on green (placeholder guard, pytest, vitest); master was re-read at the merge instant
-(#339 / Q179, unmoved) so #340, #341 and Q180 were claimed on the branch. Backend 1983 → 2031,
-frontend 231 → 240; eslint clean on touched files (6 pre-existing errors elsewhere, unchanged).
+PR #271 merged `--merge` on green as `a363061`, and the remote branch was auto-deleted. Master's maxima were
+re-read immediately before the merge: #341 / Q180 → #342/#343, Q181–Q184. Deploys `196d3121` (backend) and
+`8ee3b839` (frontend) both show SUCCESS. Plus this close-out commit (`chore: session close-out`) on the same
+branch, restarted from `a363061`.
+
+Tests: backend 2031 → 2216, frontend 240 → 241; eslint clean on the touched frontend files.
 
 ## Pending-queue reconciliation
 
-No `;cc` queue was carried in. Chat handed off one gated brief plus rulings in-session; each item:
+No `;cc` pending-commit queue was carried in. The brief and the chat rulings below arrived as addressed paste
+blocks, and every one landed:
 
-- **S0 verification (G0).** Reported. (a)/(b) held; (c) prod read OPERATOR-RUN, later relayed; (d) store
-  inventory reported; **(e) was FALSE on master**: `_seed_injuries` skipped only on an ACTIVE key, so a re-seed
-  would resurrect a resolved injury. Ruled into S1.
-- **G0 ruling 1 (seed fix).** LANDED `0711535`. Test fails on the old filter.
-- **G0 rulings 2–3 (line-level hits, action edit; side as a flag).** LANDED `f6ec3a2`.
-- **G0 ruling 4 (S3, prompt only).** LANDED `ab2617c` → #341. Byte difference declared (1032 → 1510, +478);
-  parity guard narrowed at the section with a no-op control, verified to refuse the old section.
-- **G0 ruling 5 (Q9 annotate, new Q, browser chat history on the checklist).** LANDED: checklist item
-  `f6ec3a2`; Q9 annotation + **Q180** `244528b`.
-- **G0 addendum (restriction orphan audit, radicular warning, raw-data fixture).** LANDED `560f1a1`,
-  `30a5017`, `51fbfcf` (prod bases, row 94, id 29 restrictions confirmed = seed), `aeaad29` (the 15 raw lines at
-  their real indexes; rows 3/5 personal and medication detail omitted from the repo).
-- **G1 ruling 1 (id 29 striding/sprinting orphans).** RECORDED as a known limit in tests, PR and #340; matcher
-  not tuned.
-- **G1 ruling 2 (raw set is the fixture; (A)-(F) is the after-set).** LANDED `e200716`/`aeaad29`: labels
-  `marked_resolved` + `other_injuries` built; before/after pair asserted.
-- **G1 ruling A/B (aliases + term tiers).** LANDED `b879e22`. Raw result, both sweeps: 15 hits = operator's 15
-  − 2/56 (calf, no hamstring term) + 2/54 (semitendinosus alias → row 75); 2/8 and 2/55 hit via alias; swim
-  lines 3/10, 3/12 dropped. Reverses the G0 calf-line expectation, by ruling.
-- **G2 (frontend).** LANDED `718d261`; operator GO given.
-- **G2 forward-compat note** (`reaches_context` must be derived from the renderer's inclusion rule, not a
-  per-store constant). RECORDED in the Q9 annotation `244528b`; no rework, by instruction. **Still a constant
-  in code** — it flips only when Q9 lands.
-- **S4 governance.** LANDED `244528b`: #340, #341, Q9 annotation, Q180, BRANCHES, CLAUDE.md Recent landings.
-- **A second brief (typed `constraint` / `finding` entries) was received mid-session and WITHDRAWN by the
-  operator** ("finish this work; new session for the subsequent brief"). Nothing was built for it: a local
-  `feat/constraint-finding-types` branch was cut from `360b385` for the anchor check only, never committed to,
-  never pushed, and deleted. It is **not provisional work** — it is unstarted, and its brief lives in chat.
-- **Operator-owed (not Code's):** the post-deploy clearance itself — now a ROADMAP NOW row.
+- **G0 rulings.** R1–R5 yes. D1 (engine tier = region keys only), D2 (#60 firewall, not #181), D3 (shared pure
+  lift), D4 (key-collision + chat-cannot-retire guards, resolve route), D5 (36 regions). S5 parent rule. Q9 split.
+  CLAUDE.md paste-addressing rule. ROADMAP step-(3) narrowing. → `814fe01`…`580d8d2`.
+- **G1 rulings.** Chat guidance with a declared byte difference; `confirmed_on` stamped by the route only;
+  finding statuses; the onboarding edge left as a known limit (comment only). → `1f64edc`, `e1ace6c`.
+- **G2 rulings.** Optional engine-tier `side`; engine tier = `block` only (Q183); due tags. → `24273cb`,
+  `1f64edc`.
+- **G3 ruling.** Findings budget 2,000 chars with 280-char statements; Constraints unbudgeted; the extra
+  probe-queue query noted in #342. → `1f64edc`, `580d8d2`.
+- **G4 ratification.** The chat channel stamps the proposal defaults (#230 pattern). → recorded in #342
+  (`580d8d2`).
+- **G5 rulings.** `parent_resolved_survives` label (`ce16bb6`); G6 operator-run; #121 literal.
+- **G5/S6 sequencing.** Merge before G6; G6 becomes a post-deploy gate. → #342 Status (`580d8d2`).
+- **G6 (prod, operator, 2026-09-28).** The served bundle carries `ends with this injury`. The dry-run planned 4
+  rows (3 × #94 lumbar, 1 × #77 finger); I reviewed it against the fixture expectation. The only divergence is
+  #77's restriction, absent from the fixture listing. `--confirm` wrote ids 95–98 and constraints went 0 → 4. The
+  counts are recorded in #342's How-you-know by this close-out commit.
+- **Not done, owed:** propagating the shared paste-addressing rule to `health-connect-app` (ROADMAP NOW row;
+  Code, next HCA session).
+- **One deviation from the S7 checklist, flagged at merge:** no new Q for server-side chat history. Q180
+  already asks it, so it was annotated and given the ROADMAP LATER row. New Qs are therefore Q181–Q184, not
+  Q181–Q185.
+
+**Nits (batched, no gate):** the seed stamps `kind: "block"` on every row, so #77 ("requires buddy taping…")
+renders as BLOCK where `caution` fits. This is an optional operator rewrite; advisory rows have no engine effect.
 
 ## Cold-resume handoff
 
-**What landed.** The injury ledger is the only authority on injury state (#340). `GET
-/knowledge/injuries/{id}/sweep` finds every copy of an injury outside the ledger — free-text `user_knowledge`
-per line, non-injury structured entries, Hevy routine notes via the cache — labelled (restriction terms =
-stale order, history, other side, other injuries named, reach), with a restriction audit
-(covered / rehomed / orphan, radicular warning) and a fixed manual checklist. The Injuries page runs it after a
-resolve and on "Sweep again". The coach no longer writes injury facts to free text (#341). A re-seed can no
-longer resurrect a resolved injury.
+**Where things stand.** v1 = See (MET) / Know / Walk in / Loop (ROADMAP "v1 — definition of done"). Master is
+`a363061` plus this close-out. Decisions max **#343**, questions max **Q184**. Typed constraints and findings are
+live in prod. Four advisory constraints are seeded for user 1 (ids 95–98, rendered in the coach's
+`## Constraints`). No engine-tier constraint exists yet. No findings exist yet.
 
-**Sprint position.** v1 is See (MET) / Know / Walk in / Loop. This session served **Know** and **Walk in**
-indirectly: stale injury copies were re-imposing a resolved hamstring on the coach every turn and would have
-fed the appointment brief's injury section. It was debt, not product surface.
+**NOW lanes — the v1 test each serves:**
+- **Injury clearance (operator)** — Know + Walk in. OWED: step (3) is now the narrowed per-line plan (delete
+  2/0, 5/37, 2/52 after checking row 94's detail, 2/53; rewrite 2/65; retitle row 5's bloods header).
+- **Typed constraints G6** — Know. DONE → #342.
+- **Lab upload pipeline** — Walk in. Substrate largely built; the row is long-lived.
+- **Interpretation layer build** — Walk in. Increments 2/3/5 remain.
+- **Appointment brief** — Walk in. **NOT STARTED; substrate complete.** It can now read constraints and
+  findings through `current_state`.
+- **Cross-repo rows** — no v1 test. Pinned in NOW by #112 as the canonical home for cross-repo debt. The new
+  paste-addressing propagation row is one of these.
+- **Triage flag:** three rows sitting in NOW are already DONE and are demotion/cleanup candidates, not work:
+  the tags seed (#339), CBT-I Q45 (#219) and the eval trigger (#213).
 
-**Open questions touched:**
-- **OPEN, annotated:** Q9 (retire or render-gate the free-text store). Now carries a live cost and the
-  derived-label requirement. **Step 1 ruled GO (2026-09-27):** render and write path retired together in a
-  separate brief (not yet cut); #341 stands and is a subset of it. This is the structural fix the sweep only
-  mitigates.
-- **OPEN, new:** Q180 (browser chat history: one non-expiring conversation re-sent every turn; unsearchable copy
-  store, unbounded tokens).
+**Open questions.** 100 OPEN, 4 OWED:
+- **OWED:** Q78 (nap exclusion at a 4-night cadence), Q176 (ring validation window), Q178 (waking-cause
+  rename, migration), Q181 (retire the `user_knowledge` store — brief 2, GO ruled, not yet cut).
+- **New OPEN this session:** Q182 (default engine constraints from the in-code block maps), Q183 (engine-tier
+  cap/caution — watch, no action until the dose seam lands), Q184 (budgeted context builder — LATER, #275).
+- **Closed this session:** Q9 and Q20 → DONE → #343.
 
-**Single clearest next action.** Operator: after the #269 deploy settles, do the ROADMAP NOW "Injury
-clearance" row — bundle grep `Clearance sweep —`, then sweep ids 18 and 29 and edit each flagged line in
-Settings (stale orders first; lines naming active row 94 are edited, never cleared). For Code, the next
-brief is the one the operator withdrew into a new session: typed `constraint` / `finding` entries, which is
-where Q9 is ruled.
+**What was NOT touched this session (and the questions gating it).**
+- **Appointment brief v1 (Walk in, sequence position 3):** no design brief, no code. It is the synthesising
+  consumer that sets build order, and it has stood still through #334–#343. Those were four consecutive
+  sessions of instrument work: taxonomy tagging, the injury clearance sweep, and now typed entries. Each was
+  justified as substrate for Know / Walk in, but the brief itself has not moved. Name it plainly: the next
+  session's default should be the brief, not more substrate.
+- **Interpretation layer increments 2/3/5** (rephrase pass, lever-tap threads, go-live) and the **lab pipeline
+  residuals** (Q104): untouched.
+- **Loop test surface-debt** (session cards, dual-panel scroll, chat persistence — Q180 now also carries the
+  server-side history item): untouched.
+- **Q27** (quota slot keying / restrictions-are-not-planes): untouched, and it still gates the Stability quota
+  reading.
+- **Q181 / brief 2** (retire free-text `user_knowledge`): ruled GO, not cut. Until it lands, the coach still
+  reads the 66-line free-text rows every turn beside the new typed rows.
+- **Engine-tier constraints:** none written. The right-shoulder ER one (right painful at 11.25 kg, left clean)
+  is the first candidate: an explicit operator write via `POST /knowledge/entry` then `/confirm`, with
+  `scope.side: "right"`.
 
-**What was NOT touched this session (named, not implied finished):**
-- **Walk in — appointment brief, lab upload pipeline, interpretation-layer build.** All three NOW rows
-  unchanged. The brief remains the synthesising consumer that sets build order.
-- **Know — the plan of record and Q27's slot-keying design.** The prior close-out's single next action;
-  untouched. The decompression phase's real design still waits on it.
-- **Know — the metabolic INGEST bridge.** Untouched for a second session running.
-- **Loop — the surface-debt sweep and persistent conversation history.** Untouched; Q180 now names the
-  history problem but builds nothing.
-- **CBT-I** (Q177 items 1/3, Q178 migration). Untouched.
-- **Honest pattern note.** Two consecutive sessions went to instrument over product: last session to
-  classification tooling, this one to a clearance instrument for data the app itself had duplicated. Both
-  were warranted — each fixed a live false signal — but neither advanced a v1 test's own surface. The next
-  Code session should be the typed-entries brief only if it is on the path to Walk in (the brief reads
-  findings and constraints); otherwise Q27 or the appointment brief.
-
-**v1 triage of NOW:**
-- **Injury clearance (operator), new:** serves Know and Walk in (true injury state for coach and brief).
-- **Training seed row:** DONE → #339; drops out at the next ROADMAP sweep.
-- **Two CBT-I rows:** both DONE; drop out at the next sweep.
-- **Lab upload pipeline, interpretation-layer build, appointment brief:** serve Walk in (test 3).
-- **Cross-repo shared-block edit (owed):** serves no v1 test; in NOW only by #112's pin for cross-repo debt —
-  a demotion candidate if that pin is revisited.
+**Single clearest next action.** Chat cuts the **Appointment brief v1 design brief** (Walk in). The substrate is
+complete: labs, interpretation, the injury ledger, typed constraints and findings, and training state are all
+readable through `current_state`. In parallel, operator-side: injury clearance step (3), then write the
+right-shoulder engine constraint.
