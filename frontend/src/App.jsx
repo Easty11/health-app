@@ -15,6 +15,7 @@ import InterpretationView from './pages/InterpretationView'
 import Recovery from './pages/Recovery'
 import Training from './pages/Training'
 import Injuries from './pages/Injuries'
+import Appointment from './pages/Appointment'
 
 function RequireAuth({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/labs" element={<RequireAuth><Labs /></RequireAuth>} />
         <Route path="/interpretation" element={<RequireAuth><InterpretationView /></RequireAuth>} />
         <Route path="/injuries" element={<RequireAuth><Injuries /></RequireAuth>} />
+        <Route path="/appointments/:key" element={<RequireAuth><Appointment /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

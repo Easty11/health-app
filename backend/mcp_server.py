@@ -1,5 +1,6 @@
 import functools
 import inspect
+import json
 import re
 from datetime import date, datetime, timezone, timedelta
 
@@ -24,6 +25,7 @@ from hevy_routine_format import (  # shared renderers (#314) — one home, also 
 from hevy_templates import catalogue_titles_by_id
 from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
+import appointment_brief
 import models
 import typed_entries
 from routers.knowledge import FINDING_DOMAINS
@@ -1174,6 +1176,24 @@ def get_findings(domain: str | None = None, since: str | None = None,
     if withheld:
         lines.append(typed_entries.withheld_labs_line(withheld, "Labs page"))
     return "\n".join(lines)
+
+
+@mcp.tool()
+@_stamped
+def get_appointment_brief(key: str) -> str:
+    """The assembled brief for one appointment (by its entry key, e.g. `appt_<yyyymmdd>_<slug>`),
+    as JSON — the SAME object the app's /appointments/<key> page renders (one assembly function).
+
+    Sections are listed in reading order by `module` (header, leave_with, asks, since,
+    changes_vs_history, current_constraints, …); which appear depends on the appointment's `kind`.
+    Asks labelled `"source": "ledger"` are derived from the ledger, not written by the user.
+    Scope is the injuries the appointment names plus rows parented directly to them; proposals
+    and lab-derived findings are never included."""
+    with SessionLocal() as sess:
+        brief = appointment_brief.load_appointment_brief(sess, _current_user_id(), key)
+    if brief is None:
+        return f"No active appointment with key {key!r}."
+    return json.dumps(brief, indent=1, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------

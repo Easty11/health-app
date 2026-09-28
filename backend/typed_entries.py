@@ -112,16 +112,20 @@ def constraint_due_tags(c: dict[str, Any], live_keys: set[str], today: date) -> 
     return tags
 
 
-def constraint_line(c: dict[str, Any], live_keys: set[str], today: date) -> str:
-    """One constraint, with its tier, scope, exit, review date and — always — its authority."""
+def constraint_what(c: dict[str, Any]) -> str:
+    """A constraint's kind, tier and scope in one phrase (shared by the chat line and the brief)."""
     scope = c.get("scope") or {}
     kind = str(c.get("kind") or "").upper()
     if scope.get("tier") == "engine":
         side = scope.get("side") or "bilateral"
         side_str = "" if side == "bilateral" else f", {side} side only"
-        what = f"{kind} (engine-enforced) — regions: {', '.join(scope.get('region_keys') or [])}{side_str}"
-    else:
-        what = f"{kind} (advisory — not engine-enforced) — {scope.get('text')}"
+        return f"{kind} (engine-enforced) — regions: {', '.join(scope.get('region_keys') or [])}{side_str}"
+    return f"{kind} (advisory — not engine-enforced) — {scope.get('text')}"
+
+
+def constraint_exits(c: dict[str, Any]) -> str:
+    """A constraint's exits joined as one phrase: "on <date> or when <condition> or when <parent> is
+    resolved"."""
     exit_ = c.get("exit") or {}
     exits = []
     if exit_.get("on_date"):
@@ -130,8 +134,14 @@ def constraint_line(c: dict[str, Any], live_keys: set[str], today: date) -> str:
         exits.append(f"when {exit_['on_condition']}")
     if exit_.get("with_parent") is True:
         exits.append(f"when {c.get('parent_key')} is resolved")
+    return " or ".join(exits)
+
+
+def constraint_line(c: dict[str, Any], live_keys: set[str], today: date) -> str:
+    """One constraint, with its tier, scope, exit, review date and — always — its authority."""
+    what = constraint_what(c)
     authority = AUTHORITY_LABELS.get(c.get("asserted_by"), f"asserted by {c.get('asserted_by')}")
-    line = (f"- {what} — ends {' or '.join(exits)} — review by {c.get('review_by')} — {authority}"
+    line = (f"- {what} — ends {constraint_exits(c)} — review by {c.get('review_by')} — {authority}"
             f" [{c.get('key')}]")
     if c.get("detail"):
         line += f" — {c['detail']}"

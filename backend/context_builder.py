@@ -6,6 +6,7 @@ GameTraka, etc.) write a new async `_section_<name>` function that returns a
 string block, then call it inside `build_system_prompt`.
 """
 
+import json
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -21,6 +22,18 @@ from hevy_routine_format import format_routine_compact, format_routine_full  # s
 # imports engine.taxonomy / load_events_metabolic / models / auth / database / load_metrics —
 # none import `context_builder`.
 from routers.knowledge import (
+    APPOINTMENT_ASK_FIELDS,
+    APPOINTMENT_AUDIENCES,
+    APPOINTMENT_CHAT_DEFAULTS,
+    APPOINTMENT_FIELDS,
+    APPOINTMENT_KINDS,
+    APPOINTMENT_MODULES,
+    APPOINTMENT_OPTION_FIELDS,
+    APPOINTMENT_REQUEST_FIELDS,
+    APPOINTMENT_RESOLVES_FIELDS,
+    APPOINTMENT_SCOPE_FIELDS,
+    APPOINTMENT_SECTIONS_FIELDS,
+    APPOINTMENT_SINCE_REQUIRED_KINDS,
     CONSTRAINT_ENGINE_KINDS,
     CONSTRAINT_EXIT_FIELDS,
     CONSTRAINT_FIELDS,
@@ -1038,6 +1051,65 @@ Never send {", ".join(never)} or any other key.
 </knowledge_update>"""
 
 
+# ---------- appointment write shape (#345), GENERATED from the validator's tuples ----------
+#
+# The #313/#45 rule: a prompt sentence that instructs a write sits beside that write's shape,
+# interpolated from `routers.knowledge` so the text cannot drift from what is refused. Examples are
+# placeholder templates (never user-specific values). Pinned by `tests/test_appointment_entries.py`.
+
+def _appointment_write_shape() -> str:
+    allowed = [f for f in APPOINTMENT_FIELDS if f not in APPOINTMENT_CHAT_DEFAULTS]
+    stamped = ", ".join(f'`{k}` ("{v}")' for k, v in APPOINTMENT_CHAT_DEFAULTS.items())
+    since_kinds = _q(APPOINTMENT_SINCE_REQUIRED_KINDS)
+    ask = "{" + ", ".join(f'"{k}": …' for k in APPOINTMENT_ASK_FIELDS) + "}"
+    opt = "{" + ", ".join(f'"{k}": …' for k in APPOINTMENT_OPTION_FIELDS) + "}"
+    res = "{" + ", ".join(f'"{k}": …' for k in APPOINTMENT_RESOLVES_FIELDS) + "}"
+    sec = "{" + ", ".join(f'"{k}": [<module>, …]' for k in APPOINTMENT_SECTIONS_FIELDS) + "}"
+    req = "{" + ", ".join(f'"{k}": …' for k in APPOINTMENT_REQUEST_FIELDS) + "}"
+    scope = "{" + ", ".join(f'"{k}": ["<injury key>", …]' for k in APPOINTMENT_SCOPE_FIELDS) + "}"
+    return f"""APPOINTMENTS ARE THE USER'S PLANS. When they want to prepare for a clinical
+appointment, or add or change the asks for one, write ONE `type="appointment"` row
+per appointment, keyed `appt_<yyyymmdd>_<slug>`. To edit one, rewrite its WHOLE
+value under the same key, starting from the value shown under ## Appointments.
+You only plan: {stamped} is stamped for you — never send `status`, and never mark
+an appointment attended or closed (the user records that themselves).
+
+APPOINTMENT `value` — allowed keys, and ONLY these: {", ".join(allowed)}.
+- `clinician`: text. `practice`: text or null. `at`: YYYY-MM-DDTHH:MM, Brisbane local time.
+- `kind`: {_q(APPOINTMENT_KINDS)}. `since`: YYYY-MM-DD, the last visit — required for {since_kinds}.
+- `scope`: {scope} — keys of the user's injury ledger rows, at least one.
+- `asks`: a list of {ask}; `priority` is 1..(number of asks), 1 = first;
+  `resolves` (optional) is {res} naming the constraint or finding the ask settles;
+  `options` (optional) is a list of {opt} — only as the user states them or asks you
+  to draft them, framed as what each answer would mean, never as a recommendation.
+- `logistics`: a list of text. `detail`: text or null. `audience` (optional): {_q(APPOINTMENT_AUDIENCES)}.
+- `sections` (optional): {sec}, modules from {_q(APPOINTMENT_MODULES)}.
+- `request`: {req} — required for "request", refused for any other kind; each
+  `evidence` item is {{"door": …, "ref": …}} with `door` one of {_q(FINDING_EVIDENCE_DOORS)}.
+Placeholder template — every <…> and value is a placeholder, never a fact about this user:
+
+<knowledge_update>
+{{"type": "appointment", "key": "appt_20260101_example", "value": {{"clinician": "<clinician>", "practice": null, "at": "2026-01-01T09:00", "kind": "follow_up", "since": "2025-12-01", "scope": {{"parent_keys": ["<injury key>"]}}, "asks": [{{"id": "a1", "text": "<what to leave with>", "priority": 1}}], "logistics": ["<what to bring>"]}}}}
+</knowledge_update>"""
+
+
+def _section_appointments(entries: list[Any]) -> str:
+    """Active `planned` appointments (#345), each as its stored value, so a chat edit can rewrite the
+    whole value (an upsert replaces it). Input-gated: none planned → "" and nothing is appended."""
+    def _f(e, name):  # entries may be ORM rows or plain dicts (as `_section_schedule` tolerates)
+        return getattr(e, name) if hasattr(e, name) else e.get(name)
+
+    rows = [e for e in entries
+            if _f(e, "type") == "appointment" and _f(e, "active") is not False
+            and (_f(e, "value") or {}).get("status") == "planned"]
+    if not rows:
+        return ""
+    lines = ["## Appointments (planned — the full brief is on the Appointments page)"]
+    for e in sorted(rows, key=lambda e: str((_f(e, "value") or {}).get("at") or "")):
+        lines.append(f"- {_f(e, 'key')}: {json.dumps(_f(e, 'value'), ensure_ascii=False)}")
+    return "\n".join(lines)
+
+
 # Free-text categories the coach may write. "Injury History" and "Constraints" are DELIBERATELY
 # absent: the free-text store has no active flag and no resolution and renders unfiltered every
 # turn, so an injury written there can never be retired and keeps re-imposing itself after the
@@ -1076,6 +1148,8 @@ training, body, or preferences, save it without being asked. Examples:
 - They describe what works well for recovery → save to "Recovery"
 
 {_typed_entry_write_shape()}
+
+{_appointment_write_shape()}
 
 If an entry for that category already exists, the new content will be appended.
 The block will be removed from your visible response and replaced with a
@@ -2122,6 +2196,9 @@ def build_system_prompt(
     findings_section = _section_findings(getattr(state, "findings", None) or {})
     if findings_section:
         sections.append(findings_section)
+    appointments_section = _section_appointments(state.knowledge_entries or [])
+    if appointments_section:
+        sections.append(appointments_section)
 
     if knowledge_entries:
         sections.append(_section_knowledge(knowledge_entries))

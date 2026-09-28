@@ -16,6 +16,7 @@ import HubLayout from '../components/HubLayout'
 import Tile from '../components/hub/Tile'
 import InterpretationTile from '../components/hub/InterpretationTile'
 import ExposureTile from '../components/hub/ExposureTile'
+import AppointmentsDoorway from '../components/hub/AppointmentsDoorway'
 import api from '../api'
 
 function CheckInButtons() {
@@ -65,6 +66,7 @@ export default function Dashboard() {
     <HubLayout title="Health &amp; Performance">
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-5">
         <CheckInButtons />
+        <AppointmentsDoorway />
 
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <Tile to="/recovery" icon="🌙" label="Recovery" detail="HRV, sleep and overnight vitals" />

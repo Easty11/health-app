@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -791,6 +791,203 @@ def validate_finding(value: Any) -> dict[str, Any]:
     return value
 
 
+# ---------- appointment (#345 — appointment brief v1) ----------
+#
+# A `type="appointment"` row is the OPERATOR'S PLANNING DATA for one clinical appointment — who, when,
+# which injuries it is about, and the asks to leave with. It is not a bodily assertion, so it has no
+# proposed/confirm gate and no `asserted_by`: the operator (or chat) writes it as it is. The brief
+# (`appointment_brief.build_appointment_brief`) is DERIVED from it plus the ledger on every read and
+# is never stored.
+#
+# `kind` picks the brief's default section list and audience (Amendment 1): the row may add or drop
+# sections; assembly builds each one from the same module set. `status` planned → attended → closed;
+# chat writes `planned` only and may not rewrite or retire a row past it (`attended` / `closed` are
+# operator writes — `POST /knowledge/entry` with `source: "api"`).
+APPOINTMENT_FIELDS = (
+    "clinician", "practice", "at", "kind", "audience", "since", "scope", "asks", "logistics",
+    "sections", "request", "status", "detail",
+)
+APPOINTMENT_REQUIRED = ("clinician", "at", "kind", "scope", "status")
+APPOINTMENT_KINDS = ("intro", "follow_up", "request")
+APPOINTMENT_AUDIENCES = ("operator", "clinician")
+APPOINTMENT_STATUS_VALUES = ("planned", "attended", "closed")
+APPOINTMENT_SCOPE_FIELDS = ("parent_keys",)
+APPOINTMENT_ASK_FIELDS = ("id", "text", "priority", "resolves", "options")
+APPOINTMENT_ASK_REQUIRED = ("id", "text", "priority")
+APPOINTMENT_RESOLVES_FIELDS = ("entry_key", "note")
+APPOINTMENT_OPTION_FIELDS = ("option", "implication")
+APPOINTMENT_SECTIONS_FIELDS = ("add", "drop")
+APPOINTMENT_REQUEST_FIELDS = ("ask", "justification", "evidence", "alternatives")
+APPOINTMENT_REQUEST_REQUIRED = ("ask", "justification")
+# The section modules, in no particular order — a kind's list (below) is the order.
+APPOINTMENT_MODULES = (
+    "header", "leave_with", "asks", "options_prep", "since", "changes_vs_history",
+    "current_constraints", "background", "imaging_timeline", "request", "logistics",
+)
+APPOINTMENT_DEFAULT_SECTIONS = {
+    "follow_up": ("header", "leave_with", "since", "changes_vs_history", "asks", "options_prep",
+                  "current_constraints", "logistics"),
+    "intro": ("header", "background", "imaging_timeline", "current_constraints", "asks", "logistics"),
+    "request": ("header", "request", "leave_with", "asks", "options_prep", "logistics"),
+}
+APPOINTMENT_DEFAULT_AUDIENCE = {"follow_up": "operator", "intro": "clinician", "request": "operator"}
+# `since` bounds "since last visit"; required where the kind's point is what changed.
+APPOINTMENT_SINCE_REQUIRED_KINDS = ("follow_up",)
+# Brisbane has no DST: an offset, when given, can only be this one.
+APPOINTMENT_AT_OFFSET = "+10:00"
+# Stamped by the chat channel when absent (the #342 pattern): a chat write is a plan, never a record
+# that the appointment happened.
+APPOINTMENT_CHAT_DEFAULTS = {"status": "planned"}
+
+
+def _str_or_null(value: Any, where: str) -> None:
+    if value is not None:
+        _nonempty_str(value, where)
+
+
+def _str_list(value: Any, where: str) -> None:
+    if not isinstance(value, list):
+        raise ValueError(f"{where} must be a list of strings")
+    for i, s in enumerate(value):
+        _nonempty_str(s, f"{where}[{i}]")
+
+
+def _validate_appointment_at(value: Any) -> None:
+    if not isinstance(value, str):
+        raise ValueError(f"appointment.at must be an ISO datetime string, got {value!r}")
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError(
+            f"appointment.at must be an ISO datetime (YYYY-MM-DDTHH:MM, Brisbane local), got {value!r}"
+        ) from None
+    if "T" not in value:
+        raise ValueError(f"appointment.at needs a time (YYYY-MM-DDTHH:MM), got {value!r}")
+    if dt.tzinfo is not None and dt.strftime("%z") != APPOINTMENT_AT_OFFSET.replace(":", ""):
+        raise ValueError(
+            f"appointment.at is Brisbane local time: no offset, or {APPOINTMENT_AT_OFFSET}; got {value!r}"
+        )
+
+
+def validate_appointment(value: Any) -> dict[str, Any]:
+    """Validate an `appointment` value — shape only, no DB (the parent / chat / expiry rules are
+    `_validate_appointment_write`'s). Returned UNCHANGED (stored verbatim)."""
+    _closed_keys(value, APPOINTMENT_FIELDS, "appointment")
+    missing = [f for f in APPOINTMENT_REQUIRED if f not in value]
+    if missing:
+        raise ValueError(f"appointment: missing required field(s) {missing}")
+
+    _nonempty_str(value["clinician"], "appointment.clinician")
+    _str_or_null(value.get("practice"), "appointment.practice")
+    _validate_appointment_at(value["at"])
+
+    kind = value["kind"]
+    if kind not in APPOINTMENT_KINDS:
+        raise ValueError(f"appointment.kind: {kind!r} is not one of {list(APPOINTMENT_KINDS)}")
+    if value.get("audience") is not None and value["audience"] not in APPOINTMENT_AUDIENCES:
+        raise ValueError(
+            f"appointment.audience: {value['audience']!r} is not one of {list(APPOINTMENT_AUDIENCES)} "
+            f"(absent = the kind's default)"
+        )
+
+    if value.get("since") is not None:
+        _iso_date(value["since"], "appointment.since")
+    elif kind in APPOINTMENT_SINCE_REQUIRED_KINDS:
+        raise ValueError(f"appointment.since is required for kind {kind!r} -- the 'since last visit' start")
+
+    scope = value["scope"]
+    _closed_keys(scope, APPOINTMENT_SCOPE_FIELDS, "appointment.scope")
+    pks = scope.get("parent_keys")
+    if not isinstance(pks, list) or not pks:
+        raise ValueError(
+            "appointment.scope.parent_keys must be a non-empty list of injury keys -- the brief "
+            "reads only what these injuries parent"
+        )
+    for i, pk in enumerate(pks):
+        _nonempty_str(pk, f"appointment.scope.parent_keys[{i}]")
+    if len(set(pks)) != len(pks):
+        raise ValueError("appointment.scope.parent_keys must not repeat a key")
+
+    asks = value.get("asks", [])
+    if not isinstance(asks, list):
+        raise ValueError("appointment.asks must be a list")
+    seen_ids: set[str] = set()
+    for i, ask in enumerate(asks):
+        where = f"appointment.asks[{i}]"
+        _closed_keys(ask, APPOINTMENT_ASK_FIELDS, where)
+        miss = [f for f in APPOINTMENT_ASK_REQUIRED if f not in ask]
+        if miss:
+            raise ValueError(f"{where}: missing required field(s) {miss}")
+        _nonempty_str(ask["id"], f"{where}.id")
+        if ask["id"] in seen_ids:
+            raise ValueError(f"{where}.id {ask['id']!r} repeats -- ask ids are unique per appointment")
+        seen_ids.add(ask["id"])
+        _nonempty_str(ask["text"], f"{where}.text")
+        p = ask["priority"]
+        if isinstance(p, bool) or not isinstance(p, int) or not 1 <= p <= len(asks):
+            raise ValueError(f"{where}.priority must be an integer 1..{len(asks)} (1 = first), got {p!r}")
+        if ask.get("resolves") is not None:
+            _closed_keys(ask["resolves"], APPOINTMENT_RESOLVES_FIELDS, f"{where}.resolves")
+            _str_or_null(ask["resolves"].get("entry_key"), f"{where}.resolves.entry_key")
+            _str_or_null(ask["resolves"].get("note"), f"{where}.resolves.note")
+        if ask.get("options") is not None:
+            if not isinstance(ask["options"], list):
+                raise ValueError(f"{where}.options must be a list")
+            for j, opt in enumerate(ask["options"]):
+                _closed_keys(opt, APPOINTMENT_OPTION_FIELDS, f"{where}.options[{j}]")
+                for f in APPOINTMENT_OPTION_FIELDS:
+                    _nonempty_str(opt.get(f), f"{where}.options[{j}].{f}")
+
+    if value.get("logistics") is not None:
+        _str_list(value["logistics"], "appointment.logistics")
+
+    if value.get("sections") is not None:
+        sec = value["sections"]
+        _closed_keys(sec, APPOINTMENT_SECTIONS_FIELDS, "appointment.sections")
+        for f in APPOINTMENT_SECTIONS_FIELDS:
+            mods = sec.get(f, [])
+            if not isinstance(mods, list):
+                raise ValueError(f"appointment.sections.{f} must be a list of section modules")
+            unknown = [m for m in mods if m not in APPOINTMENT_MODULES]
+            if unknown:
+                raise ValueError(
+                    f"appointment.sections.{f}: unknown module(s) {unknown} -- one of {list(APPOINTMENT_MODULES)}"
+                )
+        both = sorted(set(sec.get("add", [])) & set(sec.get("drop", [])))
+        if both:
+            raise ValueError(f"appointment.sections: {both} is both added and dropped")
+
+    req = value.get("request")
+    if kind == "request":
+        if req is None:
+            raise ValueError("appointment.request is required for kind 'request' -- the ask and its justification")
+        _closed_keys(req, APPOINTMENT_REQUEST_FIELDS, "appointment.request")
+        miss = [f for f in APPOINTMENT_REQUEST_REQUIRED if f not in req]
+        if miss:
+            raise ValueError(f"appointment.request: missing required field(s) {miss}")
+        _nonempty_str(req["ask"], "appointment.request.ask")
+        _nonempty_str(req["justification"], "appointment.request.justification")
+        for i, ev in enumerate(req.get("evidence") or []):
+            _closed_keys(ev, FINDING_EVIDENCE_FIELDS, f"appointment.request.evidence[{i}]")
+            if ev.get("door") not in FINDING_EVIDENCE_DOORS:
+                raise ValueError(
+                    f"appointment.request.evidence[{i}].door: {ev.get('door')!r} is not a canonical read "
+                    f"door -- one of {list(FINDING_EVIDENCE_DOORS)} (Q22)"
+                )
+            _nonempty_str(ev.get("ref"), f"appointment.request.evidence[{i}].ref")
+        if req.get("alternatives") is not None:
+            _str_list(req["alternatives"], "appointment.request.alternatives")
+    elif req is not None:
+        raise ValueError(f"appointment.request is only for kind 'request' (this is {kind!r})")
+
+    if value["status"] not in APPOINTMENT_STATUS_VALUES:
+        raise ValueError(
+            f"appointment.status: {value['status']!r} is not one of {list(APPOINTMENT_STATUS_VALUES)}"
+        )
+    _str_or_null(value.get("detail"), "appointment.detail")
+    return value
+
+
 # Per-type shape validators for the typed entries. The DB-aware rules shared by both types live
 # in `_validate_typed_write`.
 _TYPED_VALIDATORS = {
@@ -882,12 +1079,18 @@ def _typed_supersede_guard(entry_in: "KnowledgeEntryIn", existing: models.UserKn
     if existing is None:
         return
     if existing.type != entry_in.type and (
-        existing.type in TYPED_ENTRY_TYPES or entry_in.type in TYPED_ENTRY_TYPES
+        existing.type in _KEY_GUARDED_TYPES or entry_in.type in _KEY_GUARDED_TYPES
     ):
         raise TypedEntryRefused(
             f"key {entry_in.key!r} is held by an active {existing.type!r} entry -- a "
             f"{entry_in.type!r} write must use its own key",
             "key_collision",
+        )
+    if entry_in.source == "chat" and chat_may_not_retire(existing) and existing.type == "appointment":
+        raise TypedEntryRefused(
+            f"appointment {entry_in.key!r} is {(existing.value or {}).get('status')!r} -- chat edits "
+            f"only a 'planned' appointment; past that it is the operator's record",
+            "operator_only",
         )
     if entry_in.source == "chat" and chat_may_not_retire(existing):
         raise TypedEntryRefused(
@@ -899,8 +1102,71 @@ def _typed_supersede_guard(entry_in: "KnowledgeEntryIn", existing: models.UserKn
 
 def chat_may_not_retire(row: models.UserKnowledgeEntry) -> bool:
     """A typed entry past `proposed` is operator territory: chat may neither supersede nor
-    deactivate it (G0 D4). Shared by the upsert guard and the chat `active: false` path."""
+    deactivate it (G0 D4). Shared by the upsert guard and the chat `active: false` path. An
+    appointment past `planned` is the same: it records that the visit happened, which is the
+    operator's to write."""
+    if row.type == "appointment":
+        return (row.value or {}).get("status") != "planned"
     return row.type in TYPED_ENTRY_TYPES and (row.value or {}).get("status") != "proposed"
+
+
+# Types whose key may not be taken by a row of another type (either direction): same-key supersede
+# would otherwise silently retire one with the other.
+_KEY_GUARDED_TYPES = TYPED_ENTRY_TYPES + ("appointment",)
+
+
+def _validate_appointment_write(
+    user_id: int,
+    entry_in: "KnowledgeEntryIn",
+    db: Session,
+) -> None:
+    """The DB-aware rules for an `appointment` write, after `validate_appointment`.
+
+    * `expires_at` must be null — an appointment ends by its own `status`, never a silent expiry.
+    * Every `scope.parent_keys` entry names one of THIS user's injury rows that is ACTIVE, or was
+      RESOLVED on/after `since` (a follow-up can be about an injury cleared since the last visit).
+    * A chat write is `planned` only (the chat channel stamps it when absent). Chat rewriting or
+      retiring a row past `planned` is refused by `_typed_supersede_guard` via `chat_may_not_retire`.
+    """
+    value = entry_in.value
+    if entry_in.expires_at is not None:
+        raise TypedEntryRefused(
+            "appointment.expires_at must be null -- an appointment ends through its status "
+            "(planned → attended → closed), never a silent expiry",
+            "expires_at_refused",
+        )
+    if entry_in.source == "chat" and value.get("status") != "planned":
+        raise TypedEntryRefused(
+            f"an appointment written from chat is 'planned' -- {value.get('status')!r} records that "
+            f"the visit happened, which is the operator's write",
+            "operator_only",
+        )
+    since = typed_entries.parse_date(value.get("since"))
+    injuries = (
+        db.query(models.UserKnowledgeEntry)
+        .filter(
+            models.UserKnowledgeEntry.user_id == user_id,
+            models.UserKnowledgeEntry.type == "injury",
+            models.UserKnowledgeEntry.key.in_(value["scope"]["parent_keys"]),
+        )
+        .all()
+    )
+    for pk in value["scope"]["parent_keys"]:
+        rows = [r for r in injuries if r.key == pk]
+        if any(r.active for r in rows):
+            continue
+        resolved_on = [
+            typed_entries.parse_date(((r.value or {}).get("resolution") or {}).get("resolved_on"))
+            for r in rows
+        ]
+        if since is not None and any(d is not None and d >= since for d in resolved_on):
+            continue
+        raise TypedEntryRefused(
+            f"appointment.scope.parent_keys: {pk!r} names no active injury"
+            + (f", nor one resolved on/after since ({since})" if since is not None
+               else " (a resolved injury is in scope only with a `since` it was resolved after)"),
+            "invalid_parent",
+        )
 
 
 class KnowledgeEntryIn(BaseModel):
@@ -1116,6 +1382,8 @@ def _stage_upsert_entry(
         }
     if entry_in.type in _TYPED_VALIDATORS:
         _TYPED_VALIDATORS[entry_in.type](entry_in.value)
+    if entry_in.type == "appointment":
+        validate_appointment(entry_in.value)
 
     existing = (
         db.query(models.UserKnowledgeEntry)
@@ -1126,6 +1394,8 @@ def _stage_upsert_entry(
     _typed_supersede_guard(entry_in, existing)
     if entry_in.type in _TYPED_VALIDATORS:
         _validate_typed_write(user_id, entry_in, existing, db)
+    if entry_in.type == "appointment":
+        _validate_appointment_write(user_id, entry_in, db)
 
     new_entry = models.UserKnowledgeEntry(
         user_id=user_id,
