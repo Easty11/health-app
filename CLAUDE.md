@@ -278,11 +278,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Chat write-shape repair + bounded in-turn retry (#344).** Prod chat constraint writes were refused for shape; the coach's write shape is now generated from the validators (placeholder examples, no region list), a shape refusal gets one in-turn retry fed the validator's message, and the narrator no longer promises retries. Q185 ruled. Code, self-merged on green - Handoff: `closeout.md`.
+
 - **Typed constraints and findings (#342/#343).** Instructions and interpretations become typed `user_knowledge_entries` rows (no migration): a constraint has two tiers (engine = region-keyed `block`, side-aware, read by `is_contraindicated`; advisory = text), a mandatory exit, `review_by` and visible authority; a finding has `as_of`, canonical-door evidence and a status, lab-derived ones held behind the #60 firewall. Chat only proposes; `/confirm`, `/resolve`, `/retract` are operator routes. Rendered in `## Constraints` / `## Findings` and the MCP; the sweep re-homes via constraints; `seed_constraints.py` seeded the advisory rows in prod (G6, #342). Q9/Q20 ruled; Q181–Q184. Code, self-merged on green - Handoff: `closeout.md`.
 
 - **Injury clearance sweep + free-text bleed (#340/#341).** Resolving an injury retired the ledger row but copies in free-text `user_knowledge` (rendered unfiltered every turn) kept re-imposing it. `GET /knowledge/injuries/{id}/sweep` finds them per line (primary/secondary term tiers, hamstring aliases, restriction orphan audit) for the operator to clear; the Injuries page runs it after resolve; the coach no longer writes injury facts to free text; the injury seed no longer resurrects resolved rows. Code, self-merged on green - Handoff: `closeout.md`.
-
-- **Tag seed follow-up (#338).** IR/ER sided variants bound to ID-keyed parents; Deficit KB RDL is a MOBILITY tag (flossing, bound to the template's use); the seed dry-run now reports near-twin ids and pre-existing unconfirmed rows (`--prune-unconfirmed`, Q179); `explain_quota_votes.py`; Q27 records that the real restrictions are not planes. Verified in prod: 0 untagged, 09-21 now counts Stability (#339). Code, self-merged on green - Handoff: `closeout.md`.
 
 
 ---
