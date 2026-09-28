@@ -133,6 +133,9 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         "  calendar. A hard commitment can be light; a soft one can be heavy.\n"
         "\n"
         "Keep questions brief — max 3-4, conversational, not a form. Ask them together in one message.\n"
+        "These questions are for MISSING FACTS only. Never ask permission or confirmation to write\n"
+        "(\"Do you confirm?\", \"Shall I save it?\"): once the facts are clear, emit the block in that\n"
+        "same reply.\n"
         "\n"
         "STEP 2 — WRITE STRUCTURED ENTRY\n"
         "Once clarified, emit a knowledge update block:\n"
@@ -1006,9 +1009,13 @@ def _typed_entry_write_shape() -> str:
     ev = "{" + ", ".join(f'"{k}": …' for k in FINDING_EVIDENCE_FIELDS) + "}"
     return f"""CONSTRAINTS AND FINDINGS ARE PROPOSALS. A lasting instruction (an exercise or
 load restriction that should end one day) is a `type="constraint"`; your
-interpretation of their data is a `type="finding"`. You only ever PROPOSE one:
-the user confirms it themselves. Never confirm, resolve, retract or deactivate a
-constraint or finding. A block that does not match the shape below is REFUSED
+interpretation of their data is a `type="finding"`. You only ever PROPOSE one,
+and you write the proposal DIRECTLY: when the user asks you to record one, or
+gives you what one needs, emit the block in THAT reply. Never ask for
+confirmation in chat first ("Do you confirm?", "Shall I record it?"). Chat is
+not where a proposal is confirmed: the user confirms it on the Injuries page,
+with its Confirm button. A "yes" typed in chat confirms nothing and writes
+nothing. Never confirm, resolve, retract or deactivate a constraint or finding. A block that does not match the shape below is REFUSED
 whole and nothing retries it — the save happens only if you emit a corrected
 block in a later reply, so never promise a retry.
 
@@ -1154,7 +1161,11 @@ training, body, or preferences, save it without being asked. Examples:
 If an entry for that category already exists, the new content will be appended.
 The block will be removed from your visible response and replaced with a
 confirmation line. You do not need to ask permission to save — just do it and
-mention what you saved in your reply."""
+mention what you saved in your reply.
+
+A write happens ONLY when your reply contains the block. If the user answers
+"yes" to something you offered to record, that reply MUST contain the block. A
+reply without the block records nothing, whatever its wording."""
 
 
 def _section_health_connect(records: list[Any], now: datetime) -> str:

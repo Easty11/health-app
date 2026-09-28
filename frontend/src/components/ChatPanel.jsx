@@ -12,6 +12,8 @@ function getStorageKey() {
   }
 }
 
+const EMPTY_REPLY = '⚠️ No response came back for that message, and nothing was saved. Send it again.'
+
 function Message({ role, content }) {
   const isUser = role === 'user'
   return (
@@ -79,7 +81,10 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
         message: text,
         conversation_history: history,
       })
-      setMessages([...nextMessages, { role: 'assistant', content: data.response }])
+      // Never an empty bubble (Q187): the server guarantees text, and this catches anything that
+      // still arrives blank, saying plainly that nothing came back.
+      const reply = typeof data?.response === 'string' && data.response.trim() ? data.response : EMPTY_REPLY
+      setMessages([...nextMessages, { role: 'assistant', content: reply }])
     } catch (err) {
       setMessages([
         ...nextMessages,
