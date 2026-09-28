@@ -2540,6 +2540,29 @@ Raised with #342/#343 (brief S7). The standing prompt grows section by section, 
 
 ---
 
+## Q185. Bounded in-turn retry for a refused chat write?
+
+Raised 2026-09-28 with the typed-entry write-shape fix. A `<knowledge_update>` refused for shape is final for
+the turn: the model cannot see the validator message until the NEXT turn, so the user must ask again.
+Prod, 28 Sep: three constraint writes refused in a row. Retries with the user's corrected block also failed,
+because the server parses blocks only in the MODEL's reply, never in the user's message, and the model
+re-emitted its own shape. The generated write-shape docs remove the cause. This question is about the
+remaining recovery path.
+
+**Proposal (not built):** on a 422-class refusal (`invalid_shape` / `unknown_field` / typed lifecycle codes),
+hand the model the validator message once and let it re-emit the block before replying. Cap: 1. Only the
+refused block is re-emitted, and no other write re-runs.
+
+**To decide:**
+- whether at all;
+- which codes qualify (never `day_time_clash` or `operator_only`, which are user or operator decisions);
+- the cost: one more model call on a refused turn, on top of pass-2;
+- how it interacts with narrate-after-write, which already costs one extra call on failed-write turns.
+
+**State:** OPEN — operator ruling owed. No blocker.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
