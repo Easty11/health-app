@@ -83,6 +83,16 @@ describe('/appointments/:key renders the brief and only the brief', () => {
     expect(within(screen.getByRole('region', { name: 'Asks' })).getByText('from ledger')).toBeTruthy()
   })
 
+  test('the header lists the scope by ledger key, flagging a missing one', async () => {
+    api.get.mockImplementation(() => Promise.resolve({ data: { ...BRIEF, scope: {
+      parent_keys: ['injury_part_a_left', 'injury_gone'], missing_parent_keys: ['injury_gone'], hops: 1 } } }))
+    await act(async () => { renderAt('/appointments/appt_a') })
+    const header = await screen.findByRole('region', { name: 'Appointment' })
+    const scope = within(header).getByLabelText('Scope')
+    expect(within(scope).getByText('injury_part_a_left').tagName).toBe('CODE')
+    expect(within(scope).getByText('injury_gone (not found)')).toBeTruthy()
+  })
+
   test('Leave with is pinned', async () => {
     await act(async () => { renderAt('/appointments/appt_a') })
     await waitFor(() => expect(screen.getByRole('region', { name: 'Leave with' })).toBeTruthy())
@@ -149,7 +159,7 @@ describe('the hub doorway', () => {
       return Promise.resolve({ data: {} })
     })
     await act(async () => { render(<MemoryRouter><Dashboard /></MemoryRouter>) })
-    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Upcoming appointments' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Appointments' })).toBeTruthy())
     const links = screen.getAllByRole('link').filter((a) => a.getAttribute('href') === '/appointments/appt_a')
     expect(links).toHaveLength(1)
     expect(links[0].textContent).toContain('Clinician A')
@@ -157,9 +167,27 @@ describe('the hub doorway', () => {
     expect(screen.queryByRole('region', { name: 'Leave with' })).toBeNull()
   })
 
+  test('a planned appointment whose time has passed reads "Awaiting report", a future one does not', async () => {
+    api.get.mockImplementation((url) => (url === '/appointments'
+      ? Promise.resolve({ data: [
+        { key: 'appt_past', clinician: 'Clinician P', at: '2020-01-01T09:00', kind: 'follow_up', status: 'planned' },
+        { key: 'appt_next', clinician: 'Clinician N', at: '2099-01-01T09:00', kind: 'follow_up', status: 'planned' },
+      ] })
+      : Promise.resolve({ data: {} })))
+    await act(async () => { render(<MemoryRouter><Dashboard /></MemoryRouter>) })
+    const nav = await screen.findByRole('navigation', { name: 'Appointments' })
+    const past = within(nav).getByText(/Clinician P/).closest('li')
+    const next = within(nav).getByText(/Clinician N/).closest('li')
+    expect(within(past).getByText(/^Awaiting report · \d+ days$/)).toBeTruthy()
+    expect(within(next).queryByText(/Awaiting report/)).toBeNull()
+    // Still a doorway to its brief — surfacing only, no status change.
+    expect(within(past).getByRole('link').getAttribute('href')).toBe('/appointments/appt_past')
+    expect(api.post).not.toHaveBeenCalled()
+  })
+
   test('renders nothing when none is planned', async () => {
     await act(async () => { render(<MemoryRouter><Dashboard /></MemoryRouter>) })
     await waitFor(() => expect(screen.getByText('Labs')).toBeTruthy())
-    expect(screen.queryByRole('navigation', { name: 'Upcoming appointments' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Appointments' })).toBeNull()
   })
 })

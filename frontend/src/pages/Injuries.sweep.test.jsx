@@ -85,6 +85,7 @@ const SWEEP = {
 function routeGets({ sweep = SWEEP } = {}) {
   api.get.mockImplementation((url) => {
     if (url === '/knowledge/injuries') return Promise.resolve({ data: ROWS })
+    if (url === '/knowledge/proposals') return Promise.resolve({ data: [] })
     if (/^\/knowledge\/injuries\/\d+\/sweep$/.test(url)) {
       return sweep instanceof Error ? Promise.reject(sweep) : Promise.resolve({ data: sweep })
     }

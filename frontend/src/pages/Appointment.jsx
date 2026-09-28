@@ -240,6 +240,25 @@ const RENDERERS = {
   ),
 }
 
+// The injuries this brief is about, by LEDGER KEY (monospace, selectable) — the values the row's
+// `scope.parent_keys` holds, so what the brief reads can be checked against /injuries (#346).
+function ScopeKeys({ scope }) {
+  const keys = scope?.parent_keys || []
+  const missing = new Set(scope?.missing_parent_keys || [])
+  if (keys.length === 0) return null
+  return (
+    <div aria-label="Scope" className="text-sm text-gray-600 flex flex-wrap items-center gap-1.5">
+      <span>Injuries in scope:</span>
+      {keys.map((k) => (
+        <code key={k} className={`select-all font-mono text-xs rounded px-1.5 py-0.5 ${
+          missing.has(k) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-800'}`}>
+          {k}{missing.has(k) ? ' (not found)' : ''}
+        </code>
+      ))}
+    </div>
+  )
+}
+
 export default function Appointment() {
   const { key } = useParams()
   const [brief, setBrief] = useState(undefined) // undefined = loading, null = failed
@@ -273,6 +292,7 @@ export default function Appointment() {
       <div className="max-w-2xl mx-auto px-4 py-5 space-y-6" data-testid="appointment-brief">
         {brief === undefined && <p className="text-base text-gray-400">Loading…</p>}
         {brief === null && <p className="text-base text-red-600">{error}</p>}
+        {brief && !brief.sections.some((s) => s.module === 'header') && <ScopeKeys scope={brief.scope} />}
         {brief && brief.sections.map((s) => {
           const render = RENDERERS[s.module]
           if (!render) return null
@@ -289,6 +309,7 @@ export default function Appointment() {
                 {HEADINGS[s.module][audience]}
               </h2>
               {render(s, ctx)}
+              {s.module === 'header' && <div className="mt-3"><ScopeKeys scope={brief.scope} /></div>}
             </section>
           )
         })}

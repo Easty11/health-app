@@ -171,7 +171,7 @@ _Rewritten at the v1 triage (2026-09-09): every row re-examined against in-tree 
 
 | Item | Notes |
 |------|-------|
-| **Appointment brief PR2 — post-visit transcript reconciliation** (#345) | Next after v1: a MeetGeek transcript pasted into chat → chat PROPOSES constraints/findings from it → each ask is marked answered / unanswered against the transcript. Needs an answered-state on asks (the v1 row has none). |
+| **Appointment brief PR2 — post-visit transcript reconciliation** (#345) | Next after v1: a MeetGeek transcript pasted into chat → chat PROPOSES constraints/findings from it → each ask is marked answered / unanswered against the transcript. Needs an answered-state on asks (the v1 row has none). **Post-visit writes take `as_of` from the appointment's `at`, never from "today"** — the operator often reports days late (Q186 is the reason; the hub now shows such rows as "Awaiting report", #346). |
 | Appointment brief — MeetGeek API / connector (#345) | Pull the transcript instead of pasting it. After PR2 proves the reconciliation on pasted text. |
 | Appointment brief — `since` from the prior appointment (#345) | v1 requires `since` on a follow-up; derive it from the previous `attended`/`closed` appointment on the same scope. |
 | Appointment brief — multi-hop scope (#345) | v1 reads one hop (rows parented directly to the scoped injuries); walk grandchildren only if a real brief shows a missed row. |

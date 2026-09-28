@@ -20,6 +20,12 @@
 // zero flags could fire. Re-implementing _review_message client-side is refused — a second copy of
 // the exit-condition rule drifts from the one #222's gates pin. (#brief §1.4)
 
+// #346 additions: each card shows its LEDGER KEY (`injury_<part>_<side>`, the value an
+// appointment's `scope.parent_keys` needs), copyable — distinct from the soreness key below it. And
+// PROPOSED constraints / findings (chat writes proposals only; every reader skips them) are listed
+// under their parent injury with one Confirm action each, POSTing the existing /confirm route with
+// an authority tier. Nothing else about a proposal is editable here.
+
 import { useEffect, useState } from 'react'
 import HubLayout from '../components/HubLayout'
 import InjurySweep from '../components/InjurySweep'
@@ -225,9 +231,109 @@ function ResolvePanel({ row, onDone, onResolved }) {
   )
 }
 
+// --- ledger key -------------------------------------------------------------------------------
+
+function LedgerKey({ entryKey }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(entryKey)
+      setCopied(true)
+    } catch {
+      setCopied(false) // clipboard blocked — the key is still selectable text
+    }
+  }
+  return (
+    <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1.5">
+      <span>Ledger key</span>
+      <code className="select-all font-mono text-[11px] text-gray-800 bg-gray-100 rounded px-1 py-0.5">{entryKey}</code>
+      <button type="button" onClick={copy} aria-label={`Copy ${entryKey}`}
+        className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800">
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </p>
+  )
+}
+
+// --- proposals — confirm only ------------------------------------------------------------------
+//
+// A proposal is shown with the one action the operator owns: Confirm, with an authority tier chosen
+// each time (nothing pre-selected). The route stamps `confirmed_on`; refusals are shown verbatim.
+
+function proposalText(p) {
+  const v = p.value || {}
+  if (p.type === 'finding') return `${v.statement} (as of ${v.as_of})`
+  const scope = v.scope || {}
+  const what = scope.tier === 'engine'
+    ? `${String(v.kind || '').toUpperCase()} (engine) — regions: ${(scope.region_keys || []).join(', ')}${scope.side && scope.side !== 'bilateral' ? `, ${scope.side} side` : ''}`
+    : `${String(v.kind || '').toUpperCase()} (advisory) — ${scope.text}`
+  const ex = v.exit || {}
+  const exits = [
+    ex.on_date && `on ${ex.on_date}`,
+    ex.on_condition && `when ${ex.on_condition}`,
+    ex.with_parent === true && 'when the injury is resolved',
+  ].filter(Boolean).join(' or ')
+  return `${what} — ends ${exits} — review by ${v.review_by}`
+}
+
+function ProposalItem({ p, onDone }) {
+  const [by, setBy] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function confirm() {
+    if (!by || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.post(`/knowledge/${p.type}s/${p.id}/confirm`, { asserted_by: by })
+      onDone()
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Could not confirm. Try again.')
+      if (err?.response?.status === 409) onDone()
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-3 py-2 space-y-2">
+      <p className="text-xs text-gray-800">
+        <Chip tone="amber">proposed {p.type}</Chip>{' '}{proposalText(p)}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {['user', 'clinician'].map((v) => (
+          <button key={v} type="button" onClick={() => setBy(v)} aria-pressed={by === v}
+            className={`text-[11px] font-medium rounded px-2 py-1 border ${
+              by === v ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300'}`}>
+            {titleCase(v)}
+          </button>
+        ))}
+        <button type="button" onClick={confirm} disabled={!by || busy}
+          className="text-[11px] font-semibold rounded px-2 py-1 bg-indigo-600 text-white disabled:opacity-40">
+          {busy ? 'Confirming…' : 'Confirm proposal'}
+        </button>
+      </div>
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+    </li>
+  )
+}
+
+function ProposalList({ items, onDone }) {
+  if (!items || items.length === 0) return null
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] uppercase tracking-wide text-amber-700">Awaiting your confirmation</p>
+      <ul className="space-y-2">
+        {items.map((p) => <ProposalItem key={p.id} p={p} onDone={onDone} />)}
+      </ul>
+    </div>
+  )
+}
+
 // --- active row --------------------------------------------------------------------------------
 
-function ActiveRow({ row, onRecord, onDone, onResolved }) {
+function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
   const value = row.value || {}
   const key = sorenessKey(value)
   const restrictions = Array.isArray(value.restrictions) ? value.restrictions : []
@@ -245,6 +351,7 @@ function ActiveRow({ row, onRecord, onDone, onResolved }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-gray-900">{injuryTitle(value)}</h3>
+          <LedgerKey entryKey={row.key} />
           {value.detail && (
             <p className="text-xs text-gray-500 mt-0.5">{value.detail}</p>
           )}
@@ -279,6 +386,8 @@ function ActiveRow({ row, onRecord, onDone, onResolved }) {
         )}
       </div>
 
+      <ProposalList items={proposals} onDone={onDone} />
+
       <div className="flex items-end justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-gray-400">On record since</p>
@@ -308,7 +417,10 @@ function HistoryRow({ row, onSweep }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 space-y-1.5 opacity-90">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-gray-700">{injuryTitle(value)}</h3>
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium text-gray-700">{injuryTitle(value)}</h3>
+          <LedgerKey entryKey={row.key} />
+        </div>
         {isResolved
           ? <Chip tone="indigo">resolved</Chip>
           : <Chip>superseded → #{row.superseded_by}</Chip>}
@@ -347,12 +459,21 @@ export default function Injuries() {
   const [showHistory, setShowHistory] = useState(false)
   // The open clearance sweep: { id, title, loading, data, error } or null. One at a time.
   const [sweep, setSweep] = useState(null)
+  const [proposals, setProposals] = useState([])
+  const [proposalError, setProposalError] = useState('')
 
   function load() {
-    // ONE request. include_resolved=true always — the toggle only controls display.
+    // ONE injuries request. include_resolved=true always — the toggle only controls display.
     api.get('/knowledge/injuries', { params: { include_resolved: true } })
       .then(({ data }) => { setRows(data); setError('') })
       .catch(() => setError('Could not load injuries.'))
+    // Proposals are a separate resource; a failure here never hides the ledger.
+    api.get('/knowledge/proposals')
+      .then(({ data }) => {
+        setProposals(Array.isArray(data) ? data.filter((p) => p.type === 'constraint' || p.type === 'finding') : [])
+        setProposalError('')
+      })
+      .catch(() => setProposalError('Could not load proposals awaiting confirmation.'))
   }
 
   useEffect(() => { load() }, [])
@@ -378,6 +499,12 @@ export default function Injuries() {
     .map((r) => ({ row: r, onRecord: chainEarliest(r, predecessorOf) }))
     .sort((a, b) => (a.onRecord < b.onRecord ? -1 : a.onRecord > b.onRecord ? 1 : 0))
 
+  // Proposals under their ACTIVE parent injury; anything else (no parent, or a parent that is not an
+  // active injury) is listed on its own below, so no proposal is unreachable.
+  const activeKeys = new Set(all.filter((r) => r.active).map((r) => r.key))
+  const proposalsFor = (key) => proposals.filter((p) => p.value?.parent_key === key)
+  const otherProposals = proposals.filter((p) => !activeKeys.has(p.value?.parent_key))
+
   const history = all
     .filter((r) => !r.active)
     .sort((a, b) => (a.added_at > b.added_at ? -1 : a.added_at < b.added_at ? 1 : 0))
@@ -401,8 +528,17 @@ export default function Injuries() {
         )}
 
         {active.map(({ row, onRecord }) => (
-          <ActiveRow key={row.id} row={row} onRecord={onRecord} onDone={load} onResolved={runSweep} />
+          <ActiveRow key={row.id} row={row} onRecord={onRecord} onDone={load} onResolved={runSweep}
+            proposals={proposalsFor(row.key)} />
         ))}
+
+        {proposalError && <p className="text-xs text-red-600">{proposalError}</p>}
+        {otherProposals.length > 0 && (
+          <section aria-label="Other proposals" className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+            <p className="text-xs text-gray-500">Not attached to an active injury</p>
+            <ProposalList items={otherProposals} onDone={load} />
+          </section>
+        )}
 
         {rows && history.length > 0 && (
           <div className="pt-2">
