@@ -2540,6 +2540,66 @@ Raised with #342/#343 (brief S7). The standing prompt grows section by section, 
 
 ---
 
+## Q186. App chat has no current date — anchors "today" to the newest data
+
+The 27 Sep weekly summary reported Fri/Sat as "scheduled" after Saturday's Pilates had
+landed, and computed "11 days to 05 Oct" from 24 Sep (the last logged session). A second
+instance on 28 Sep: asked for an injury row's key, chat said the row was saved "on
+18 Sep" (the MRI date in its context); the ledger shows 28 Sep. The MCP layer emits
+`as_of` (Brisbane); the chat handler's system-prompt assembly is the suspect
+(hypothesis — verify against `routers/chat.py`). Browser chat history (Q180) re-sends
+old "today" references every turn and may compound it. Session status should be derived
+in code (planned vs logged), not read by the model.
+
+**State:** OPEN — brief owed. Owner: Luke (rule), Code (verify + fix).
+
+---
+
+## Q188. Session card shows the UTC date, MCP shows the local date
+
+Saturday 26 Sep Pilates renders as 2026-09-25 on the Training session card and as
+2026-09-26 in `get_training_sessions`. Hypothesis: card renders UTC `start_time`; before
+10:00 AEST a session lands on the previous day. Affects which day load is booked to.
+
+**State:** OPEN — one-line fix once verified (`_local_day` is the single source, #276).
+
+---
+
+## Q189. Session-RPE for device-only sessions (Pilates, swim) with no logged sets
+
+HC Pilates sessions arrive with no HR/kcal and no sets, so they deposit nothing in the
+neural/tissue lanes. Proposal: capture one session RPE (card field, or next AM check-in
+prompt), load = RPE × minutes, with a declared conversion into lane units. HR remains a
+quality signal, not a load driver. Garmin → Health Connect HR absence is unverified
+(operator check in HC app pending; Q159 adjacent).
+
+**State:** OPEN — design fork (capture surface; scaling rule). Owner: Luke.
+
+---
+
+## Q190. Two devices, one session: source-wins rule and overlap dedupe
+
+Operator intends watch (Garmin/HC) for runs and Polar H10 for training/games. A run
+recorded on both arrives as a Polar row and an HC row; whether ingestion merges
+overlapping sessions across sources is unverified. Proposal: per-activity source
+priority + overlap dedupe surfaced (never silent), mirroring the Hevy `dedup_flag` door.
+
+**State:** OPEN — verify current arbitration first (#309 writer-class ladder is
+same-source only). Owner: Code (verify), Luke (rule).
+
+---
+
+## Q191. Standing review sweep — entries past `review_by` or with a resolved parent
+
+#340 sweeps on resolution only. The design (chat, 28 Sep) adds a scheduled/check-in
+sweep listing constraints and findings past `review_by`, or whose parent resolved
+(`parent_resolved_survives`). Surfacing only (#223). Six live constraints share
+`review_by` 2026-10-26; align them to the outcome of the 1 Oct 2026 follow-up.
+
+**State:** OPEN — small brief; belongs with Q181 or after. Owner: Luke.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
@@ -5204,6 +5264,10 @@ seen since #273. It is not a shape refusal, so the #344 retry never fires.
   by #313's strip); an empty reply. Two further silent drops: a typed block with no top-level `key` fell through to the
   legacy branch and was dropped unrecorded; a legacy block with empty `content` was dropped unrecorded. Which path
   fired on 28 Sep is not determined. A mimicked save line is the likeliest, since the history carries prior footers.
+
+H3 answered 28 Sep: operator prod query returned one row (id 105,
+finding_mri_cervical_20260918, active, confirmed); no duplicate. The "yes" turn wrote
+nothing. PR #278 prod proof: the next chat write lands on the first turn.
 
 **State:** DONE → #347 (prompt: write proposals directly, never confirm in chat; a turn never renders empty; silent
 drops become reported refusals; per-turn metadata logged).
