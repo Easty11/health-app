@@ -21,6 +21,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 import models
+import typed_entries
 from declared_state import lift_declared_state
 from engine import profile as profile_mod
 from engine import resolver as resolver_mod
@@ -88,6 +89,13 @@ class CurrentState:
     # resolver window is null (baseline) OR the read failed (logged) — the chat week block is then
     # omitted (context byte-identical). Stateless, derived on read; no new store.
     week_plan: dict | None = None
+    # Typed entries (#NEXT), lifted from the SAME loaded entries (zero queries): active CONFIRMED
+    # constraints (a proposal changes nothing), and `{"visible": [open/confirmed findings, newest
+    # first], "withheld_labs": n}` — lab-derived findings held behind the #60 firewall, counted
+    # only. `live_keys` = every active entry's key, so a `with_parent` exit can be seen to fire.
+    constraints: list[dict] = field(default_factory=list)
+    findings: dict = field(default_factory=lambda: {"visible": [], "withheld_labs": 0})
+    live_keys: set[str] = field(default_factory=set)
     capability_state: list[models.CapabilityState] = field(default_factory=list)
     hrv_baseline: HRVBaseline | None = None   # per-source rolling baseline (#292)
     # Current wake-day HRV (#327): `select_wakeday_hrv(require_current_day=True)` for `today`,
@@ -190,6 +198,9 @@ def current_state(user_id: int, db: Session, today: date) -> CurrentState:
         knowledge_entries=entries,
         device_profile=device_profile,
         declared_state=lift_declared_state(entries, today),
+        constraints=typed_entries.lift_constraints(entries),
+        findings=typed_entries.lift_findings(entries),
+        live_keys=typed_entries.active_keys(entries),
         fortification_profile=profile_mod.profile_to_dict(fort_profile_orm),
         fortification_profile_orm=fort_profile_orm,
         training_phase=training_phase_mod.phase_to_dict(phase_orm, on=today),

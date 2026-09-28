@@ -25,6 +25,8 @@ from hevy_templates import catalogue_titles_by_id
 from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
 import models
+import typed_entries
+from routers.knowledge import FINDING_DOMAINS
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from reads.labs_reads import latest_lab_results
 from reads.aerobic_reads import arbitrated_sessions   # the canonical read-door (#Q161)
@@ -832,6 +834,16 @@ def get_readiness_snapshot() -> str:
     else:
         lines.append("Active injury constraints: none recorded.")
 
+    # Typed constraints (#NEXT): active CONFIRMED rows through the shared lift and line formatter
+    # (the chat section renders the same lines). Input-gated — no confirmed constraint → nothing
+    # appended, so the snapshot is unchanged for a user without one.
+    constraints, _findings, live_keys = _typed_entries_read(user_id)
+    if constraints:
+        lines.append("")
+        lines.append("Active constraints (confirmed):")
+        today = _aest_wake_day()
+        lines.extend(typed_entries.constraint_line(c, live_keys, today) for c in constraints)
+
     # Plan-review flags — trajectory divergence + symptom-gated review (Step 3).
     # Surfacing only: these never alter restrictions or gate selection.
     with SessionLocal() as sess:
@@ -863,6 +875,24 @@ def get_readiness_snapshot() -> str:
 _METAB_FORMULA_VERSION = "metab-v1"
 _METAB_METRICS_VERSION = "banister-v4"
 _METAB_WINDOW = "metabolic"
+
+
+def _typed_entries_read(user_id: int, rows_filter=None):
+    """ONE query of the user's active entries, lifted through `typed_entries` — the same lifts
+    `current_state` applies, so the MCP reads exactly what the chat reads (G0 ruling D3) without
+    running the whole `current_state()` (resolver, week plan, HRV). `rows_filter` narrows the rows
+    BEFORE the finding lift, so a filtered read still counts only its own withheld rows."""
+    with SessionLocal() as sess:
+        entries = (
+            sess.query(models.UserKnowledgeEntry)
+            .filter_by(user_id=user_id, active=True)
+            .order_by(models.UserKnowledgeEntry.added_at.desc(), models.UserKnowledgeEntry.id.desc())
+            .all()
+        )
+        live = typed_entries.active_keys(entries)
+        constraints = typed_entries.lift_constraints(entries)
+        findings = typed_entries.lift_findings([e for e in entries if rows_filter is None or rows_filter(e)])
+    return constraints, findings, live
 
 
 def _format_training_load(rows: list[dict]) -> str:
@@ -1095,6 +1125,55 @@ def get_lab_results(marker: str | None = None, limit: int | None = None,
         # brief's belt-and-suspenders: read and format inside the session.
         reports = _read_lab_results(current_user=user, db=sess)
         return _format_lab_results(reports, marker=marker, limit=limit)
+
+
+@mcp.tool()
+@_stamped
+def get_findings(domain: str | None = None, since: str | None = None,
+                 status: str | None = None) -> str:
+    """The user's recorded findings — interpretations of their data, each with its date
+    (`as_of`), status (open | confirmed), basis and evidence, newest first. Full statements
+    (the chat's standing section truncates them). Proposals are never included.
+
+    Optional filters: `domain` (injury | clinical | training | analysis), `since` (ISO date —
+    `as_of` on or after it), `status` (open | confirmed).
+
+    Findings derived from lab results are withheld and only counted: lab results are never
+    interpreted here — see the Labs page."""
+    if domain is not None and domain not in FINDING_DOMAINS:
+        return f"Unknown domain {domain!r} — one of {', '.join(FINDING_DOMAINS)}."
+    if status is not None and status not in typed_entries.FINDING_READ_STATUSES:
+        return f"Unknown status {status!r} — one of {', '.join(typed_entries.FINDING_READ_STATUSES)}."
+    since_d = None
+    if since is not None:
+        try:
+            since_d = date.fromisoformat(since)
+        except ValueError:
+            return f"`since` must be an ISO date (YYYY-MM-DD), got {since!r}."
+
+    def _keep(e) -> bool:
+        if e.type != "finding":
+            return False
+        v = e.value or {}
+        if domain is not None and v.get("domain") != domain:
+            return False
+        if status is not None and v.get("status") != status:
+            return False
+        if since_d is not None:
+            as_of = typed_entries.parse_date(v.get("as_of"))
+            if as_of is None or as_of < since_d:
+                return False
+        return True
+
+    _constraints, findings, _live = _typed_entries_read(_current_user_id(), rows_filter=_keep)
+    visible, withheld = findings["visible"], findings["withheld_labs"]
+    if not visible and not withheld:
+        return "No findings recorded" + (" for these filters." if (domain or since or status) else ".")
+    lines = [f"Findings ({len(visible)}), newest first:"] if visible else []
+    lines += [typed_entries.finding_line(f, full=True) for f in visible]
+    if withheld:
+        lines.append(typed_entries.withheld_labs_line(withheld, "Labs page"))
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

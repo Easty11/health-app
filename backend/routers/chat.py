@@ -42,6 +42,7 @@ from routers.knowledge import (
     KnowledgeEntryIn,
     ScheduleItemInvalid,
     ScheduleItemOverlap,
+    TYPED_ENTRY_TYPES,
     chat_may_not_retire,
     expire_stale_entries,
     upsert_knowledge_entry,
@@ -907,10 +908,18 @@ def _process_knowledge_updates(
                         except ValueError:
                             pass
 
+                    value = data.get("value", {})
+                    if data.get("type") in TYPED_ENTRY_TYPES and isinstance(value, dict):
+                        # A typed entry from chat is a PROPOSAL by construction of this channel —
+                        # the same reasoning that stamps `source="chat"` below (#230). The prompt
+                        # tells the coach never to set these (G1 ruling 1), so the channel supplies
+                        # them when absent; a model-supplied non-proposal status or authority is
+                        # still REFUSED by `_validate_typed_write`, never overwritten.
+                        value = {"status": "proposed", "asserted_by": None, **value}
                     entry_in = KnowledgeEntryIn(
                         type=data.get("type", "schedule_item"),
                         key=key,
-                        value=data.get("value", {}),
+                        value=value,
                         # Not `data.get("source", ...)`. This block was parsed out
                         # of an assistant turn by `_KNOWLEDGE_BLOCK_RE`, so it arrived
                         # via chat BY CONSTRUCTION OF THIS ROUTER -- there is no case
