@@ -195,7 +195,9 @@ def scope_context(appointment: dict[str, Any], current_state: CurrentState, ledg
             continue
         older = _predecessors(current, [r for r in finding_rows if r.key == f["key"]])
         ctx.finding_history[f["key"]] = [
-            {"statement": _v(r).get("statement"), "as_of": _v(r).get("as_of"), "id": r.id}
+            {"statement": _v(r).get("statement"), "as_of": _v(r).get("as_of"), "id": r.id,
+             "asserted_by": _v(r).get("asserted_by"),
+             "authority": typed_entries.AUTHORITY_LABELS.get(_v(r).get("asserted_by"))}
             for r in older if _visible_history_finding(r)
         ]
     ctx.derived_asks = _derived_asks(ctx)
@@ -212,6 +214,7 @@ def _constraint_summary(c: dict[str, Any]) -> dict[str, Any]:
         "text": typed_entries.constraint_what(c),
         "exit": typed_entries.constraint_exits(c),
         "review_by": c.get("review_by"),
+        "asserted_by": c.get("asserted_by"),
         "authority": typed_entries.AUTHORITY_LABELS.get(c.get("asserted_by")),
         "detail": c.get("detail"),
     }
@@ -224,6 +227,7 @@ def _finding_summary(f: dict[str, Any]) -> dict[str, Any]:
         "as_of": f.get("as_of"), "status": f.get("status"),
         "marker_status": f.get("marker_status"),
         "review_by": f.get("review_by"),
+        "asserted_by": f.get("asserted_by"),
         "authority": typed_entries.AUTHORITY_LABELS.get(f.get("asserted_by")),
     }
 
@@ -259,6 +263,11 @@ def _row_in_scope(ctx: BriefContext, key: str | None) -> dict[str, Any] | None:
 
 
 # ── derived asks (computed, never stored) ─────────────────────────────────────
+#
+# NEUTRAL FRAMING (#349, operator ruling). A brief presents facts and asks open questions; it
+# never presumes a clinical answer, a gate or a requirement. The templates below are questions
+# about the row, never instructions to set, date or rule on it — a row may be the operator's own
+# precaution, and phrasing it as something the clinician must settle reads it as a clinical order.
 
 def _derived_asks(ctx: BriefContext) -> list[dict[str, Any]]:
     horizon = ctx.appointment_date + timedelta(days=REVIEW_HORIZON_DAYS)
@@ -271,18 +280,18 @@ def _derived_asks(ctx: BriefContext) -> list[dict[str, Any]]:
         s = _constraint_summary(c)
         review_by = typed_entries.parse_date(c.get("review_by"))
         if review_by is not None and review_by <= horizon:
-            add("review_due", s, f"Set exit / review date for: {s['text']}")
+            add("review_due", s, f"Is this still appropriate? {s['text']}")
         exit_ = c.get("exit") or {}
         # "Only exit is on_condition": a condition with no date and no parent to end with.
         if exit_.get("on_condition") and not exit_.get("on_date") and exit_.get("with_parent") is not True:
-            add("undated_exit", s, f"Confirm or date the exit condition: {exit_['on_condition']}")
+            add("undated_exit", s, f"Does this condition still apply? {exit_['on_condition']}")
     for f in ctx.findings:
         s = _finding_summary(f)
         review_by = typed_entries.parse_date(f.get("review_by"))
         if review_by is not None and review_by <= horizon:
-            add("review_due", s, f"Set exit / review date for: {s['text']}")
+            add("review_due", s, f"Is this still appropriate? {s['text']}")
         if f.get("status") == "open" and f.get("marker_status") in UNSETTLED_MARKERS:
-            add("unsettled_marker", s, f"Rule on: {s['text']}")
+            add("unsettled_marker", s, f"What does this mean? {s['text']}")
     return out
 
 
