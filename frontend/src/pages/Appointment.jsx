@@ -5,10 +5,16 @@
 // returns); this page only lays it out. It renders the brief's `sections` in the order given, one
 // renderer per module; the appointment's `kind` decided which modules are there.
 //
-// Phone-first: one column, large type. "Leave with" stays pinned at the top while the rest scrolls.
-// Each ask carries a tick box for use in the room. Ticks are LOCAL ONLY (localStorage, per
-// appointment) and are never written back in v1. Audience `clinician` drops the tick boxes and uses
-// the fuller headings; the content is never rewritten.
+// Phone-first: one column, large type. "Leave with" renders in normal flow at the top — never
+// sticky, never its own scroll box (a pinned, inner-scrolling box trapped the desktop page scroll).
+// It is a compact numbered list: each ask's first sentence, linking down to the full ask. Each row
+// renders ONCE: the full text and the tick box live only under Asks. Ticks are LOCAL ONLY
+// (localStorage, per appointment) and are never written back in v1. Audience `clinician` drops the
+// tick boxes and uses the fuller headings; the content is never rewritten.
+//
+// Print / Save PDF is the browser's own (window.print). The print styles drop the app header, the
+// chat and every scroll container (HubLayout's print: classes), print black on white (`.brief-print`
+// in index.css), render tick boxes as empty squares to fill in by hand, and keep each ask on one page.
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -46,24 +52,30 @@ function Empty({ children = 'Nothing here.' }) {
   return <p className="text-base text-gray-400">{children}</p>
 }
 
+const askAnchor = (id) => `ask-${id}`
+
 function Tick({ id, ticks, onToggle, label }) {
   return (
-    <input
-      type="checkbox"
-      className="mt-1 h-6 w-6 flex-none accent-indigo-600"
-      checked={ticks.has(id)}
-      onChange={() => onToggle(id)}
-      aria-label={`Done: ${label}`}
-    />
+    <>
+      <input
+        type="checkbox"
+        className="mt-1 h-6 w-6 flex-none accent-indigo-600 print:hidden"
+        checked={ticks.has(id)}
+        onChange={() => onToggle(id)}
+        aria-label={`Done: ${label}`}
+      />
+      {/* On paper every box is empty, to tick by pen — whatever was ticked on screen. */}
+      <span aria-hidden="true" data-print-tick className="hidden print:inline-block mt-1 h-5 w-5 flex-none border-2 border-black" />
+    </>
   )
 }
 
-function AskLine({ id, text, ctx, children, badge }) {
+function AskLine({ id, anchor, text, ctx, children, badge }) {
   return (
-    <li className="flex gap-3 items-start">
+    <li id={anchor} className="flex gap-3 items-start scroll-mt-16 break-inside-avoid">
       {ctx.showTicks && <Tick id={id} ticks={ctx.ticks} onToggle={ctx.toggle} label={text} />}
       <div className="min-w-0">
-        <p className={`text-lg leading-snug ${ctx.ticks.has(id) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+        <p className={`text-lg leading-snug ${ctx.ticks.has(id) ? 'text-gray-400 line-through print:no-underline' : 'text-gray-900'}`}>
           {text}
           {badge && <span className="ml-2 align-middle text-xs font-medium text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">{badge}</span>}
         </p>
@@ -96,14 +108,20 @@ const RENDERERS = {
     </div>
   ),
 
-  leave_with: (s, ctx) => (
+  leave_with: (s) => (
     s.items.length === 0 ? <Empty>No asks written yet.</Empty> : (
-      <ol className="space-y-2">
-        {s.items.map((a) => <AskLine key={a.id} id={a.id} text={a.text} ctx={ctx} />)}
+      <div>
+        <ol className="list-decimal pl-6 space-y-1 text-base text-gray-900">
+          {s.items.map((a) => (
+            <li key={a.id}>
+              <a href={`#${askAnchor(a.id)}`} className="text-indigo-800 hover:underline">{a.short}</a>
+            </li>
+          ))}
+        </ol>
         {s.total > s.items.length && (
-          <li className="text-sm text-gray-500">+ {s.total - s.items.length} more under Asks</li>
+          <p className="mt-2 text-sm text-gray-500">+ {s.total - s.items.length} more under Asks</p>
         )}
-      </ol>
+      </div>
     )
   ),
 
@@ -111,8 +129,11 @@ const RENDERERS = {
     s.authored.length === 0 && s.derived.length === 0 ? <Empty>No asks.</Empty> : (
       <ul className="space-y-4">
         {s.authored.map((a) => (
-          <AskLine key={a.id} id={a.id} text={a.text} ctx={ctx}>
+          <AskLine key={a.id} id={a.id} anchor={askAnchor(a.id)} text={a.text} ctx={ctx}>
             <RowInline row={a.resolves.row} />
+            {a.resolves.unresolved && (
+              <p className="text-xs text-gray-400 mt-1">linked row not found: <code className="font-mono">{a.resolves.entry_key}</code></p>
+            )}
             {a.resolves.note && <p className="text-sm text-gray-600 mt-1">{a.resolves.note}</p>}
             {a.folded.map((d) => (
               <p key={`${d.rule}:${d.entry_key}`} className="text-sm text-amber-800 mt-1">From ledger: {d.text}</p>
@@ -132,11 +153,11 @@ const RENDERERS = {
   options_prep: (s) => (
     <ul className="space-y-4">
       {s.items.map((a) => (
-        <li key={a.ask_id}>
+        <li key={a.ask_id} className="break-inside-avoid">
           <p className="text-lg font-medium text-gray-900">{a.text}</p>
           <ul className="mt-1 space-y-1">
             {a.options.map((o, i) => (
-              <li key={i} className="text-base text-gray-700">If {o.option}, then likely {o.implication}</li>
+              <li key={i} className="text-base text-gray-700">{o.option} → {o.implication}</li>
             ))}
           </ul>
         </li>
@@ -289,23 +310,35 @@ export default function Appointment() {
 
   return (
     <HubLayout title="Appointment brief" back="/dashboard">
-      <div className="max-w-2xl mx-auto px-4 py-5 space-y-6" data-testid="appointment-brief">
+      <div className="brief-print max-w-2xl mx-auto px-4 py-5 space-y-6 print:max-w-none print:p-0" data-testid="appointment-brief">
         {brief === undefined && <p className="text-base text-gray-400">Loading…</p>}
         {brief === null && <p className="text-base text-red-600">{error}</p>}
+        {brief && (
+          <div className="flex justify-end print:hidden">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="text-sm font-medium text-indigo-700 border border-indigo-200 rounded-lg px-3 py-1.5 hover:bg-indigo-50"
+            >
+              Print / Save PDF
+            </button>
+          </div>
+        )}
         {brief && !brief.sections.some((s) => s.module === 'header') && <ScopeKeys scope={brief.scope} />}
         {brief && brief.sections.map((s) => {
           const render = RENDERERS[s.module]
           if (!render) return null
-          const pinned = s.module === 'leave_with'
+          // Normal flow at every width: no sticky, no max-height, no inner scroll (the desktop bug).
+          const lead = s.module === 'leave_with'
           return (
             <section
               key={s.module}
               aria-label={HEADINGS[s.module][audience]}
-              className={pinned
-                ? 'sticky top-12 md:top-0 z-[5] bg-indigo-50 border border-indigo-200 rounded-2xl p-4 max-h-[45vh] overflow-y-auto shadow-sm'
+              className={lead
+                ? 'bg-indigo-50 border border-indigo-200 rounded-2xl p-4'
                 : 'bg-white border border-gray-200 rounded-2xl p-4'}
             >
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3 break-after-avoid">
                 {HEADINGS[s.module][audience]}
               </h2>
               {render(s, ctx)}

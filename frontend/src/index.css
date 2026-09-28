@@ -4,3 +4,18 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Appointment brief on paper (Print / Save PDF): black on white, no tints or shadows, links as
+   plain text. Layout release (no header, chat, or scroll containers) is HubLayout's print: classes. */
+@media print {
+  @page { margin: 14mm; }
+  .brief-print,
+  .brief-print * {
+    color: #000 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+  .brief-print section { border-color: #000 !important; break-inside: auto; }
+  .brief-print a { text-decoration: none !important; }
+  .brief-print li { break-inside: avoid; }
+}

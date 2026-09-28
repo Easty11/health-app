@@ -12,6 +12,10 @@
 //
 // The sheet stays MOUNTED when closed and slides out via translate, so chat state survives being
 // dismissed. `md:translate-y-0` clears the closed transform at the rail breakpoint.
+//
+// PRINT: the header (with the Chat button) and the chat rail/sheet are dropped, and the h-screen
+// frame and the scrolling <main> are released, so a printed page carries the module area in full
+// rather than the one viewport the scroll container clips to.
 
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
@@ -36,8 +40,8 @@ export default function HubLayout({ title, back, fill = false, children }) {
 
   return (
     <HubChatContext.Provider value={{ sendToChat }}>
-      <div className={`bg-gray-50 flex flex-col ${fill ? 'h-screen' : 'min-h-screen md:h-screen'}`}>
-        <header className="flex-none bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+      <div className={`bg-gray-50 flex flex-col ${fill ? 'h-screen' : 'min-h-screen md:h-screen'} print:block print:h-auto print:min-h-0 print:bg-white`}>
+        <header className="print:hidden flex-none bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-2 min-w-0">
             {back && (
               <Link to={back} className="text-gray-400 hover:text-gray-700 transition-colors" aria-label="Back">
@@ -61,8 +65,8 @@ export default function HubLayout({ title, back, fill = false, children }) {
           </div>
         </header>
 
-        <div className="flex-1 flex flex-col md:flex-row min-h-0">
-          <main className={`flex-1 min-h-0 ${fill ? '' : 'overflow-y-auto'}`}>{children}</main>
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 print:block">
+          <main className={`flex-1 min-h-0 ${fill ? '' : 'overflow-y-auto'} print:overflow-visible`}>{children}</main>
 
           {/* Backdrop — sheet only, never the rail. */}
           {chatOpen && (
@@ -76,7 +80,7 @@ export default function HubLayout({ title, back, fill = false, children }) {
               with md: resets — at the rail breakpoint this element is simply a static flex child
               with a width and a border, and there is no rounded/shadow/fixed/translate to cancel. */}
           <aside
-            className={`bg-white flex flex-col overflow-hidden
+            className={`print:hidden bg-white flex flex-col overflow-hidden
               max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30
               max-md:h-[calc(60vh+2.25rem)] max-md:rounded-t-2xl max-md:shadow-2xl
               max-md:transition-transform max-md:duration-200

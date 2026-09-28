@@ -6,6 +6,12 @@ Gates, each with its boundary or negative control:
   * a derived ask on a row an authored ask resolves is FOLDED into it, not repeated;
   * proposed rows, lab-derived findings (not even a count) and out-of-scope rows never render;
   * an appointment with no asks still renders every section coherently;
+  * each row renders ONCE (#348): Leave with is a pointer list (first sentence, no full text);
+    `since` yields findings and injury status changes to `changes_vs_history`, drops a constraint a
+    derived ask already names, and renders nothing when empty — but keeps them when the owning
+    module is not in the brief;
+  * statements render in full (no 280-char cap); injury labels are human words;
+  * an authored ask whose `resolves` row cannot be shown is flagged `unresolved`, not dropped;
   * each kind's default list; add/drop; options only as authored; request only with its block;
   * background never reads free-text `user_knowledge`;
   * ONE assembly function feeds the route and the MCP (same object).
@@ -203,8 +209,10 @@ def test_grandchildren_are_not_read(db_session, world):
 
 def test_an_empty_asks_follow_up_still_renders_every_section(db_session, world):
     b = _brief(db_session, world.id)
+    # options_prep: no options authored. since: its only row (GONE resolved) belongs to
+    # changes_vs_history, so it renders nothing.
     assert [s["module"] for s in b["sections"]] == [
-        m for m in APPOINTMENT_DEFAULT_SECTIONS["follow_up"] if m != "options_prep"]
+        m for m in APPOINTMENT_DEFAULT_SECTIONS["follow_up"] if m not in ("options_prep", "since")]
     assert _section(b, "header")["clinician"] == "Clinician A" and _section(b, "header")["time"] == "13:00"
     assert _section(b, "leave_with") == {"module": "leave_with", "items": [], "total": 0}
     assert _section(b, "asks") == {"module": "asks", "authored": [], "derived": []}
@@ -221,6 +229,24 @@ def test_leave_with_is_the_first_five_by_priority(db_session, world):
     assert [a["priority"] for a in _section(b, "asks")["authored"]] == [1, 2, 3, 4, 5, 6, 7]
 
 
+def test_leave_with_is_a_pointer_list_not_a_second_copy(db_session, world):
+    long_first = ("Ask whether the synthetic movement A progression can continue at the current load "
+                  "while condition B is still being monitored weekly")
+    b = _brief(db_session, world.id, asks=[
+        {"id": "a1", "text": "Short ask one. Second sentence with detail A.", "priority": 1},
+        {"id": "a2", "text": long_first + ". Then more.", "priority": 2},
+        {"id": "a3", "text": "Ask about e.g. the synthetic thing without a break", "priority": 3}])
+    items = _section(b, "leave_with")["items"]
+    assert [i["id"] for i in items] == ["a1", "a2", "a3"]
+    assert all("text" not in i for i in items), "Leave with must not carry the full ask text"
+    assert items[0]["short"] == "Short ask one."
+    assert items[1]["short"].endswith("…") and len(items[1]["short"]) <= ab.LEAVE_WITH_SHORT_CHARS + 1
+    assert long_first.startswith(items[1]["short"][:-1])
+    assert items[2]["short"] == "Ask about e.g. the synthetic thing without a break"
+    # The full text is under Asks, once.
+    assert _section(b, "asks")["authored"][0]["text"] == "Short ask one. Second sentence with detail A."
+
+
 def test_since_and_changes_vs_history(db_session, world):
     # A finding rewritten since the last visit, over an open predecessor and a chat proposal.
     _put(db_session, world.id, "finding", "f_chain", _finding(statement="Statement v1", as_of="2025-11-01"))
@@ -231,18 +257,107 @@ def test_since_and_changes_vs_history(db_session, world):
     gone_c = _put(db_session, world.id, "constraint", "c_gone", _constraint(parent=IN))
     _resolve_entry(gone_c.id, ResolutionIn(basis="lifted", resolved_by="user", resolved_on="2025-12-12"),
                    "constraint", world.id, db_session)
-    b = _brief(db_session, world.id)
+    _injury(db_session, world.id, "injury_part_d_right", "part d", side="right", added_at=date(2025, 12, 4))
+    b = _brief(db_session, world.id, scope={"parent_keys": [IN, GONE, "injury_part_d_right"]})
 
-    since = _section(b, "since")
-    assert since["since"] == SINCE
-    assert [(i["key"], i["change"], i["on"]) for i in since["injuries"]] == [(GONE, "resolved", "2025-12-20")]
-    assert [f["key"] for f in since["findings"]] == ["f_chain"]
-    assert {(c["key"], c["change"]) for c in since["constraints"]} == {("c_new", "confirmed"), ("c_gone", "resolved")}
-
+    # changes_vs_history owns the findings and the injury status changes...
     chv = _section(b, "changes_vs_history")
     assert [(f["key"], f["text"], [p["statement"] for p in f["previous"]]) for f in chv["findings"]] == [
         ("f_chain", "Statement v2", ["Statement v1"])]
     assert [(i["key"], i["before"], i["after"]) for i in chv["injuries"]] == [(GONE, "active", "resolved 2025-12-20")]
+    # ...so since keeps only what it does not carry: constraints confirmed / resolved, new injuries.
+    since = _section(b, "since")
+    assert since["since"] == SINCE
+    assert [(i["key"], i["change"]) for i in since["injuries"]] == [("injury_part_d_right", "recorded")]
+    assert since["findings"] == []
+    assert {(c["key"], c["change"]) for c in since["constraints"]} == {("c_new", "confirmed"), ("c_gone", "resolved")}
+    # Each row once across the two modules.
+    since_keys = {i["key"] for i in since["injuries"]} | {c["key"] for c in since["constraints"]}
+    chv_keys = {i["key"] for i in chv["injuries"]} | {f["key"] for f in chv["findings"]}
+    assert not since_keys & chv_keys
+
+
+def test_since_keeps_findings_and_status_changes_when_changes_vs_history_is_dropped(db_session, world):
+    # Negative control for the dedup: with the owning module absent, since is the most specific home.
+    _put(db_session, world.id, "finding", "f_new", _finding(as_of="2025-12-05"))
+    since = _section(_brief(db_session, world.id, sections={"drop": ["changes_vs_history"]}), "since")
+    assert [f["key"] for f in since["findings"]] == ["f_new"]
+    assert [(i["key"], i["change"]) for i in since["injuries"]] == [(GONE, "resolved")]
+
+
+def test_a_constraint_already_asked_about_is_not_repeated_as_confirmed(db_session, world):
+    _put(db_session, world.id, "constraint", "c_asked", _constraint(exit_={"on_condition": "condition A"}),
+         added_at=date(2025, 12, 3))
+    _put(db_session, world.id, "constraint", "c_plain", _constraint(), added_at=date(2025, 12, 3))
+    b = _brief(db_session, world.id)
+    assert [d["entry_key"] for d in _derived(b)] == ["c_asked"]
+    assert [c["key"] for c in _section(b, "since")["constraints"]] == ["c_plain"]
+    # Current constraints is still its home.
+    assert {c["key"] for c in _section(b, "current_constraints")["items"]} == {"c_asked", "c_plain"}
+
+
+def test_an_empty_since_renders_nothing(db_session, world):
+    _put(db_session, world.id, "constraint", "c_asked", _constraint(exit_={"on_condition": "condition A"}),
+         added_at=date(2025, 12, 3))
+    b = _brief(db_session, world.id, scope={"parent_keys": [IN]})
+    assert _section(b, "since") is None
+    assert _section(b, "changes_vs_history") is not None
+
+
+def test_statements_render_in_full_everywhere(db_session, world):
+    long_v1 = "Earlier synthetic statement " + "x" * 300 + " END-V1"
+    long_v2 = "Synthetic statement about a possible lesion " + "y" * 300 + " END-V2"
+    _put(db_session, world.id, "finding", "f_long", _finding(statement=long_v1, as_of="2025-11-01"))
+    _put(db_session, world.id, "finding", "f_long", _finding(statement=long_v2, as_of="2025-12-05",
+                                                             marker="provocative", status="open"))
+    _put(db_session, world.id, "finding", "f_conf", _finding(statement=long_v2 + " C", status="confirmed"))
+    b = _brief(db_session, world.id, sections={"add": ["background"]})
+    chv = _section(b, "changes_vs_history")["findings"]
+    f = next(x for x in chv if x["key"] == "f_long")
+    assert f["text"] == long_v2 and f["previous"][0]["statement"] == long_v1
+    assert next(d for d in _derived(b) if d["entry_key"] == "f_long")["text"] == f"Rule on: {long_v2}"
+    assert _section(b, "background")["findings"][0]["text"] == long_v2 + " C"
+    assert "…" not in json.dumps(b, ensure_ascii=False)
+
+
+def test_injury_labels_are_human_words_everywhere(db_session, world):
+    _put(db_session, world.id, "injury", "injury_cervical_spine", {
+        "body_part": "cervical_spine", "side": "bilateral", "signal_type": "mechanical",
+        "restrictions": [], "detail": "d"}, added_at=date(2025, 12, 4))
+    b = _brief(db_session, world.id, scope={"parent_keys": [IN, GONE, "injury_cervical_spine"]},
+               sections={"add": ["background"]})
+    since = _section(b, "since")
+    assert [(i["key"], i["text"]) for i in since["injuries"]] == [("injury_cervical_spine", "cervical spine")]
+    assert [i["text"] for i in _section(b, "background")["injuries"]] == [
+        "left part a", "left part c", "cervical spine"]
+
+    def texts(o):
+        if isinstance(o, dict):
+            yield from ([o["text"]] if isinstance(o.get("text"), str) else [])
+            for v in o.values():
+                yield from texts(v)
+        elif isinstance(o, list):
+            for v in o:
+                yield from texts(v)
+    assert not [t for t in texts(b["sections"]) if "_" in t], "a raw token reached a rendered label"
+
+
+def test_an_ask_whose_resolves_row_is_not_found_is_flagged_not_dropped(db_session, world):
+    _put(db_session, world.id, "constraint", "c_prop", _constraint(status="proposed"))
+    gone_c = _put(db_session, world.id, "constraint", "c_inactive", _constraint())
+    _resolve_entry(gone_c.id, ResolutionIn(basis="lifted", resolved_by="user", resolved_on="2025-12-12"),
+                   "constraint", world.id, db_session)
+    _put(db_session, world.id, "constraint", "c_ok", _constraint())
+    b = _brief(db_session, world.id, asks=[
+        {"id": "a1", "text": "Missing", "priority": 1, "resolves": {"entry_key": "c_nowhere", "note": None}},
+        {"id": "a2", "text": "Proposed", "priority": 2, "resolves": {"entry_key": "c_prop", "note": None}},
+        {"id": "a3", "text": "Inactive", "priority": 3, "resolves": {"entry_key": "c_inactive", "note": None}},
+        {"id": "a4", "text": "Found", "priority": 4, "resolves": {"entry_key": "c_ok", "note": None}},
+        {"id": "a5", "text": "Unlinked", "priority": 5}])
+    got = [(a["id"], a["resolves"]["entry_key"], a["resolves"]["row"] is None, a["resolves"]["unresolved"])
+           for a in _section(b, "asks")["authored"]]
+    assert got == [("a1", "c_nowhere", True, True), ("a2", "c_prop", True, True),
+                   ("a3", "c_inactive", True, True), ("a4", "c_ok", False, False), ("a5", None, True, False)]
 
 
 def test_a_superseded_proposal_is_not_history(db_session, world):
@@ -276,6 +391,8 @@ def test_current_constraints_are_confirmed_in_scope_with_tier_exit_review(db_ses
     ("request", {"request": {"ask": "Referral A", "justification": "Reason A"}}, "operator"),
 ])
 def test_each_kind_renders_its_default_list(db_session, world, kind, extra, audience):
+    # A constraint confirmed since the last visit, asked about by nothing, so `since` has a row.
+    _put(db_session, world.id, "constraint", "c_new", _constraint(), added_at=date(2025, 12, 3))
     asks = [{"id": "a1", "text": "Ask", "priority": 1, "options": [{"option": "If A", "implication": "Then B"}]}]
     b = _brief(db_session, world.id, kind=kind, asks=asks, **extra)
     assert [s["module"] for s in b["sections"]] == list(APPOINTMENT_DEFAULT_SECTIONS[kind])
