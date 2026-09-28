@@ -401,6 +401,9 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # GENERATED from the validators' tuples (the #313 pattern) — allowed keys, the two scope shapes,
     # tier literals, exit keys, the region-key list and a finding shape. Declared: 2623 → 5226
     # (+2603); same excision, nothing else moves. Pinned by tests/test_typed_write_shape_docs.py.
+    # RE-DECLARED (Q185 rulings, 28 Sep): the 36-region list is dropped (engine-tier only; the
+    # refusal names the valid set and the bounded in-turn retry feeds it back), the right-shoulder
+    # example becomes an advisory cap, and one tier-choice line is added. Declared: 5226 → 4887 (−339).
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -415,7 +418,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 5226), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 4887), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]

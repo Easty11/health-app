@@ -137,6 +137,10 @@ class WriteResult(BaseModel):
     reason_code: str
     reason: str             # the human string, identical to the `actions_taken` entry
     key: str | None = None  # the schedule_item / knowledge key, when the block named one
+    # Q185: the type validator's own message on a shape refusal (verbatim — what the bounded
+    # in-turn retry hands back), and whether this result is the outcome of that retry.
+    validator_message: str | None = None
+    retried: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -848,10 +852,12 @@ def _process_knowledge_updates(
     actions_taken: list[str] = []
     write_results: list[WriteResult] = []
 
-    def record(saved: bool, reason_code: str, message: str, *, key: str | None = None):
+    def record(saved: bool, reason_code: str, message: str, *, key: str | None = None,
+               validator_message: str | None = None):
         actions_taken.append(message)
         write_results.append(
-            WriteResult(saved=saved, reason_code=reason_code, reason=message, key=key)
+            WriteResult(saved=saved, reason_code=reason_code, reason=message, key=key,
+                        validator_message=validator_message)
         )
 
     matches = list(_KNOWLEDGE_BLOCK_RE.finditer(reply))
@@ -951,7 +957,7 @@ def _process_knowledge_updates(
                         record(False, code,
                                f"✗ {noun} NOT saved: {key} — {exc}. "
                                f"State this back to the user and retry with a corrected block.",
-                               key=key)
+                               key=key, validator_message=str(exc))
 
             else:
                 # Legacy format → UserKnowledge (free-text categories)
@@ -1033,6 +1039,96 @@ def _process_capability_updates(
 
     return cleaned.strip(), actions_taken
 
+
+
+# ---------- bounded in-turn retry for a refused shape (Q185) ----------
+#
+# Ruled 2026-09-28 (Q185): a knowledge write refused FOR SHAPE by its type validator gets ONE
+# in-turn retry — the model is handed the validator's message verbatim and may re-emit that one
+# block before the reply is composed. Prod, 28 Sep: a refusal was final for the turn, the model could
+# not see why until the next one, and "retries" typed by the user were never parsed (only the MODEL's
+# reply carries blocks). Scope, per the ruling:
+#   * trigger = a shape refusal only (`invalid_shape` / `unknown_field`, carrying the validator's
+#     message). NEVER a key clash (`day_time_clash`, `key_collision`) and NEVER an operator-only
+#     refusal (`proposal_only`, `operator_only`, `confirm_via_route`) — those are decisions, not typos;
+#   * cap 1 per write per turn: the retry's outcome is final, it is never itself retried;
+#   * only ONE block for the SAME key is accepted from the retry reply — any other block or prose in
+#     it is ignored, so a retry can fix the refused write and nothing else;
+#   * every retry outcome is logged.
+_RETRYABLE_SHAPE_CODES = frozenset({"invalid_shape", "unknown_field"})
+_RETRY_MAX_TOKENS = 1024
+
+
+def _retry_instruction(result: WriteResult) -> str:
+    return (
+        f"Your <knowledge_update> block for key `{result.key}` was REFUSED by the validator, "
+        f"which said (verbatim):\n{result.validator_message}\n\n"
+        "Reply with ONLY one corrected <knowledge_update> block for that same key — no other "
+        "text and no other block. Follow the write shape in your instructions exactly."
+    )
+
+
+def _retry_block_key(raw_json: str) -> str | None:
+    """The key of a structured WRITE block, or None (legacy free-text, deactivation, bad JSON)."""
+    try:
+        data = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict) or "type" not in data or data.get("active") is False:
+        return None
+    return data.get("key")
+
+
+def _retry_refused_shapes(
+    *,
+    client: Any,
+    model: str,
+    system_prompt: str,
+    messages: list[dict[str, str]],
+    draft_reply: str,
+    actions: list[str],
+    results: list[WriteResult],
+    user_id: int,
+    db: Session,
+) -> tuple[list[str], list[WriteResult], int]:
+    """Q185: one retry per shape-refused knowledge write. Returns (actions, results, retry_calls);
+    a retried write's action string and WriteResult are REPLACED in place by the retry's outcome
+    (`retried=True`), so the 1:1 action/result pairing holds and narrate-after-write sees the final
+    truth. Client-injected, faked at the transport layer in tests (#166)."""
+    out_actions, out_results = list(actions), list(results)
+    calls = 0
+    for i, r in enumerate(results):
+        if r.saved or r.reason_code not in _RETRYABLE_SHAPE_CODES or not r.validator_message or not r.key:
+            continue
+        calls += 1
+        try:
+            resp = client.messages.create(
+                model=model,
+                max_tokens=_RETRY_MAX_TOKENS,
+                system=system_prompt,
+                messages=[
+                    *messages,
+                    {"role": "assistant", "content": draft_reply},
+                    {"role": "user", "content": _retry_instruction(r)},
+                ],
+            )
+            text = resp.content[0].text
+        except Exception as exc:  # noqa: BLE001 — the original refusal stands; never raise the turn
+            logger.warning("knowledge-write retry key=%s code=%s: transport error, refusal kept: %s",
+                           r.key, r.reason_code, exc)
+            continue
+        blocks = [m for m in _KNOWLEDGE_BLOCK_RE.finditer(text)
+                  if _retry_block_key(m.group(1)) == r.key]
+        if len(blocks) != 1:
+            logger.info("knowledge-write retry key=%s code=%s: outcome=no_single_block (refusal kept)",
+                        r.key, r.reason_code)
+            continue
+        _, retry_actions, retry_results = _process_knowledge_updates(blocks[0].group(0), user_id, db)
+        final = retry_results[0].model_copy(update={"retried": True})
+        out_actions[i], out_results[i] = retry_actions[0], final
+        logger.info("knowledge-write retry key=%s code=%s: outcome=%s", r.key, r.reason_code,
+                    "saved" if final.saved else final.reason_code)
+    return out_actions, out_results, calls
 
 # ---------- narrate-after-write (Q143a / WS4 in-repo gate) ----------
 
@@ -1440,6 +1536,7 @@ async def chat(
     )
 
     reply = response.content[0].text
+    raw_reply = reply  # the model's own draft, blocks intact — the Q185 retry replays it as context
 
     # Parse and execute any embedded action blocks.
     # Exercise creation runs FIRST and the order is load-bearing: a custom minted this
@@ -1456,6 +1553,12 @@ async def chat(
         reply, hevy_client, current_user.id, db)
     reply, knowledge_actions, knowledge_write_results = _process_knowledge_updates(
         reply, current_user.id, db)
+    # Q185: one in-turn retry per shape-refused knowledge write, before the reply is composed.
+    knowledge_actions, knowledge_write_results, _retry_calls = _retry_refused_shapes(
+        client=client, model=MODEL, system_prompt=system_prompt, messages=messages,
+        draft_reply=raw_reply, actions=knowledge_actions, results=knowledge_write_results,
+        user_id=current_user.id, db=db,
+    )
     reply, capability_actions = _process_capability_updates(reply, current_user.id, db)
 
     all_actions = (exercise_actions + routine_actions + routine_update_actions

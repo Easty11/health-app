@@ -20,7 +20,8 @@ from load_metrics import _local_day  # operator-local (AEST) day — Q42 single 
 # `engine.training_phase` (which owns `_SLOT_LOAD_WINDOWS`) imports `routers.knowledge`, so
 # importing IT back would cycle — hence the token `WINDOW_METABOLIC` at its own source.
 from engine.taxonomy import (
-    SIDE_BILATERAL, SIDE_LEFT, SIDE_RIGHT, by_key as region_by_key, capacity_tokens, resolve_capacity,
+    SIDE_BILATERAL, SIDE_LEFT, SIDE_RIGHT, all_regions, by_key as region_by_key, capacity_tokens,
+    resolve_capacity,
 )
 # The authority vocabulary (#227) — imported from its one definition. `engine.profile` imports
 # only `models` + `engine.taxonomy`, so this is acyclic from here too.
@@ -633,7 +634,12 @@ def validate_constraint(value: Any) -> dict[str, Any]:
             )
         unknown = [k for k in keys if not isinstance(k, str) or region_by_key(k) is None]
         if unknown:
-            raise ValueError(f"constraint.scope.region_keys: unknown region key(s) {unknown}")
+            # Names the VALID set: the coach's prompt carries no region list (Q185 ruling), so this
+            # message — handed back verbatim by the bounded in-turn retry — is where it learns them.
+            valid = [r.key for r in all_regions()]
+            raise ValueError(
+                f"constraint.scope.region_keys: unknown region key(s) {unknown} -- valid keys: {valid}"
+            )
         if len(set(keys)) != len(keys):
             raise ValueError("constraint.scope.region_keys must not repeat a key")
         if "side" in scope and scope["side"] not in CONSTRAINT_SIDES:
