@@ -834,7 +834,7 @@ def get_readiness_snapshot() -> str:
     else:
         lines.append("Active injury constraints: none recorded.")
 
-    # Typed constraints (#NEXT): active CONFIRMED rows through the shared lift and line formatter
+    # Typed constraints (#342): active CONFIRMED rows through the shared lift and line formatter
     # (the chat section renders the same lines). Input-gated — no confirmed constraint → nothing
     # appended, so the snapshot is unchanged for a user without one.
     constraints, _findings, live_keys = _typed_entries_read(user_id)

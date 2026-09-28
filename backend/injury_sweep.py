@@ -248,7 +248,7 @@ def _entry_action(e: models.UserKnowledgeEntry) -> tuple[str, str | None]:
     if e.type == "schedule_item" and e.active:
         return "resolve", f"POST /knowledge/schedule/{e.id}/resolve"
     if e.type == "constraint" and e.active:
-        # The typed constraint's own operator route (#NEXT, G0 D4) — still never called from here.
+        # The typed constraint's own operator route (#342, G0 D4) — still never called from here.
         return "resolve", f"POST /knowledge/constraints/{e.id}/resolve"
     return "none", None
 

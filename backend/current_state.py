@@ -89,7 +89,7 @@ class CurrentState:
     # resolver window is null (baseline) OR the read failed (logged) — the chat week block is then
     # omitted (context byte-identical). Stateless, derived on read; no new store.
     week_plan: dict | None = None
-    # Typed entries (#NEXT), lifted from the SAME loaded entries (zero queries): active CONFIRMED
+    # Typed entries (#342/#343), lifted from the SAME loaded entries (zero queries): active CONFIRMED
     # constraints (a proposal changes nothing), and `{"visible": [open/confirmed findings, newest
     # first], "withheld_labs": n}` — lab-derived findings held behind the #60 firewall, counted
     # only. `live_keys` = every active entry's key, so a `with_parent` exit can be seen to fire.

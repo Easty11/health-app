@@ -510,7 +510,7 @@ def validate_training_plan(value: Any) -> dict[str, Any]:
     return value
 
 
-# ---------- typed entries: constraint (#NEXT) ----------
+# ---------- typed entries: constraint (#342) ----------
 #
 # An instruction to the engine or the coach is a `type="constraint"` row, never free text: free
 # text cannot be retired or enforced. Closed shape, unknown keys refused (the #233 discipline),
@@ -694,7 +694,7 @@ def validate_constraint(value: Any) -> dict[str, Any]:
     return value
 
 
-# ---------- typed entries: finding (#NEXT) ----------
+# ---------- typed entries: finding (#343) ----------
 #
 # An interpretation is a `type="finding"` row: a statement with an `as_of`, a basis and a status,
 # optionally parented to any entry (G0 R1 — separate rows, not nested in the injury value). Evidence
@@ -1688,7 +1688,7 @@ def resolve_schedule_item(
     return _resolve_entry(entry_id, body, "schedule_item", current_user.id, db)
 
 
-# ---------- typed entries: confirm + resolve (#NEXT) ----------
+# ---------- typed entries: confirm + resolve (#342/#343) ----------
 
 class ConfirmIn(BaseModel):
     """The operator's confirmation of a proposed typed entry. `asserted_by` is the #227 authority

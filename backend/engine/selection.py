@@ -302,7 +302,7 @@ def gather_active_injuries(db: Session, user_id: int) -> list[dict[str, Any]]:
 
 
 def gather_active_constraints(db: Session, user_id: int) -> list[dict[str, Any]]:
-    """Confirmed, active ENGINE-tier constraints (#NEXT), normalised to
+    """Confirmed, active ENGINE-tier constraints (#342), normalised to
         {key, region_keys, side, kind}
 
     Read through `typed_entries.lift_constraints` — the one definition of "which constraint rows
@@ -361,10 +361,10 @@ def is_contraindicated(
     """Apply the §8 hard filters. Probe never samples a contraindicated region —
     'don't discover your way into a flagged nerve'.
 
-    `active_constraints` (#NEXT) is the typed-constraint arm, from `gather_active_constraints`:
+    `active_constraints` (#342) is the typed-constraint arm, from `gather_active_constraints`:
     confirmed engine-tier `block` rows scoped to `Region.key`, side-matched by `_side_conflict`.
     It runs LAST, so every existing arm returns exactly what it returned before (same reason
-    string), and with none/empty constraints this function is byte-identical to pre-#NEXT.
+    string), and with none/empty constraints this function is byte-identical to pre-#342.
     `_ACUTE_TISSUE_BLOCKS` / `_RADICULAR_BLOCKS` are untouched (their conversion is its own Q)."""
     # Explicit profile hard-stops that name a concrete region (not a pattern rule).
     for hs in profile_hard_stops or []:

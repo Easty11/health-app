@@ -1,4 +1,4 @@
-"""Typed `constraint` entries — S1 of the typed-entries brief (#NEXT).
+"""Typed `constraint` entries — S1 of the typed-entries brief (#342).
 
 G1's gates, each with its negative control:
   * the validator refuses every unknown key (top level, `scope`, `exit`) and each missing

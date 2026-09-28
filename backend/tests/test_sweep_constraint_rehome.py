@@ -1,4 +1,4 @@
-"""The clearance sweep recognises constraints — S5 of the typed-entries brief (#NEXT).
+"""The clearance sweep recognises constraints — S5 of the typed-entries brief (#342).
 
 G5 (ruled at G0, "S5 parent rule"):
   * `rehomed` also accepts a confirmed ACTIVE constraint whose `scope.text` carries the

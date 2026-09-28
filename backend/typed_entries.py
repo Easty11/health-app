@@ -1,4 +1,4 @@
-"""Typed entries — the read half of `constraint` / `finding` (#NEXT).
+"""Typed entries — the read half of `constraint` / `finding` (#342/#343).
 
 Pure lifts over an ALREADY-LOADED list of `user_knowledge_entries` rows — the
 `declared_state.lift_declared_state` pattern: zero queries of their own, so `current_state`

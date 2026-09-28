@@ -1,4 +1,4 @@
-"""Rendering and reads for typed constraints / findings — S4 of the typed-entries brief (#NEXT).
+"""Rendering and reads for typed constraints / findings — S4 of the typed-entries brief (#342/#343).
 
 G4's gates:
   * NO ROWS → BYTE-IDENTICAL. The #43 parity guard (`test_current_state`) passes unchanged except

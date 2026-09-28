@@ -1,4 +1,4 @@
-"""The engine reads engine-tier constraints — S3 of the typed-entries brief (#NEXT).
+"""The engine reads engine-tier constraints — S3 of the typed-entries brief (#342).
 
 G3's gates:
   * ZERO ROWS → BYTE-IDENTICAL. With no constraint rows, `is_contraindicated` returns exactly what

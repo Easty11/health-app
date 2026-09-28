@@ -1,4 +1,4 @@
-"""The operator seed script — S6 of the typed-entries brief (#NEXT).
+"""The operator seed script — S6 of the typed-entries brief (#342).
 
 Built against the id-29 / prod-ledger fixture (`test_injury_sweep_prod_fixture`, verbatim prod
 shapes). THE FIXTURE EXPECTATION the operator's dry-run is reviewed against:

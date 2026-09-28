@@ -1,5 +1,5 @@
 """Seed typed `constraint` rows from active injuries' `restrictions[]` — S6 of the typed-entries
-brief (#NEXT). Operator-run; dry-run first; Code never runs it against production.
+brief (#342). Operator-run; dry-run first; Code never runs it against production.
 
 For each ACTIVE injury, each `restrictions[]` string becomes ONE advisory constraint:
 

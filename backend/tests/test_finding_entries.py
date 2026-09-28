@@ -1,4 +1,4 @@
-"""Typed `finding` entries — S2 of the typed-entries brief (#NEXT).
+"""Typed `finding` entries — S2 of the typed-entries brief (#343).
 
 G2's gates, each with its negative control:
   * the validator refuses every unknown key (top level, `basis`, an evidence item) and each missing

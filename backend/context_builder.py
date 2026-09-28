@@ -1843,7 +1843,7 @@ def _section_fortification(profile: dict[str, Any] | None) -> str:
 
 
 def _section_constraints(constraints: list[dict[str, Any]], live_keys: set[str], today: date) -> str:
-    """Active, CONFIRMED constraints (#NEXT) — every one, always: UNBUDGETED by ruling (G3), since a
+    """Active, CONFIRMED constraints (#342) — every one, always: UNBUDGETED by ruling (G3), since a
     constraint that does not render cannot be obeyed. Each line carries its tier (engine-enforced vs
     advisory), exit, review date and authority; a passed exit / review is TAGGED, never lifted
     (#223). Formatted by `typed_entries.constraint_line`, the same formatter the MCP uses. Empty →
@@ -1861,7 +1861,7 @@ def _section_constraints(constraints: list[dict[str, Any]], live_keys: set[str],
 
 
 def _section_findings(findings: dict[str, Any]) -> str:
-    """Open / confirmed findings (#NEXT), newest `as_of` first, within `FINDINGS_CHAR_BUDGET` (G3);
+    """Open / confirmed findings (#343), newest `as_of` first, within `FINDINGS_CHAR_BUDGET` (G3);
     each statement capped at `FINDING_STATEMENT_MAX_CHARS` with "…". Overflow is NAMED by statement,
     never dropped; the full rows are readable through the `get_findings` MCP tool. Lab-derived
     findings never reach this section (#60 firewall) — one pointer line counts them, outside the
@@ -2031,7 +2031,7 @@ def build_system_prompt(
         if probe_section:
             sections.append(probe_section)
 
-    # Typed constraints and findings (#NEXT). Both input-gated: with no confirmed constraint and no
+    # Typed constraints and findings (#342/#343). Both input-gated: with no confirmed constraint and no
     # readable finding, nothing is appended and the section list is byte-identical (the #43 parity
     # discipline).
     constraints_section = _section_constraints(
