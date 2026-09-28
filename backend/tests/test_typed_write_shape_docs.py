@@ -53,13 +53,21 @@ def test_no_region_list_rides_the_prompt():
                              "status": "proposed", "asserted_by": None})
 
 
-def test_the_right_shoulder_example_is_an_advisory_cap():
+def test_the_side_cap_example_is_an_advisory_cap():
     """Operator correction (Q185 rulings): a load limit on a region still being trained is an advisory
-    cap with the side in the text — an engine block would pull shoulder_er_ir out of the probe queue."""
+    cap with the side in the text — an engine block would pull the region out of the probe queue."""
     ex = {e["key"]: e["value"] for e in (json.loads(b) for b in _blocks(SHAPE))}
-    cap = ex["constraint_right_er_cap"]
-    assert cap["scope"]["tier"] == "advisory" and cap["kind"] == "cap" and "right" in cap["scope"]["text"]
+    cap = ex["constraint_example_side_cap"]
+    assert cap["scope"]["tier"] == "advisory" and cap["kind"] == "cap" and "<side>" in cap["scope"]["text"]
     assert not any("shoulder_er_ir" in json.dumps(v) for v in ex.values())
+
+
+def test_examples_carry_no_user_specific_values():
+    """Prod, 28 Sep: the examples read "right shoulder ER capped at 11.25 kg" while the user's real,
+    confirmed cap (row 104) is 9.5 kg — the coach reads this section every turn and could cite the
+    example as fact. Examples are placeholder templates, and the section says so."""
+    assert "kg" not in SHAPE and "shoulder" not in SHAPE.lower()
+    assert "SHAPE TEMPLATES" in SHAPE and "never a fact about this user" in SHAPE
 
 
 def test_the_section_is_the_generated_block():

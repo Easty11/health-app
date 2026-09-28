@@ -1014,9 +1014,11 @@ Never send {", ".join(never)} or any other key.
 - `exit`: an object with at least one of {exits}.
 - `review_by`: YYYY-MM-DD, always.
 - `region_keys` are taxonomy region keys; an unknown one is refused with the valid list.
+The examples below are SHAPE TEMPLATES: every <…> and value in them is a placeholder,
+never a fact about this user — take the values from the conversation and the data above.
 
 <knowledge_update>
-{{"type": "constraint", "key": "constraint_right_er_cap", "value": {{"scope": {{"tier": "{adv}", "text": "right shoulder external rotation capped at 11.25 kg; left unrestricted"}}, "kind": "cap", "exit": {{"on_condition": "right ER pain-free at 11.25 kg"}}, "review_by": "2026-10-15"}}}}
+{{"type": "constraint", "key": "constraint_example_side_cap", "value": {{"scope": {{"tier": "{adv}", "text": "<side>: <movement> capped at <load>"}}, "kind": "cap", "exit": {{"on_condition": "<the condition that lifts it>"}}, "review_by": "2026-01-15"}}}}
 </knowledge_update>
 
 <knowledge_update>
@@ -1032,7 +1034,7 @@ Never send {", ".join(never)} or any other key.
 - `derived_from_labs`: true or false, always — true if it rests on any lab result at all.
 
 <knowledge_update>
-{{"type": "finding", "key": "finding_right_er_weaker", "value": {{"statement": "Right shoulder external rotation is painful at 11.25 kg; left is clean", "domain": "training", "as_of": "2026-09-27", "basis": {{"text": "user report after the session"}}, "derived_from_labs": false}}}}
+{{"type": "finding", "key": "finding_example", "value": {{"statement": "<what the data shows>", "domain": "training", "as_of": "2026-01-01", "basis": {{"text": "<where it comes from>"}}, "derived_from_labs": false}}}}
 </knowledge_update>"""
 
 
