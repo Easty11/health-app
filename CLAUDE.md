@@ -278,11 +278,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Appointment brief neutral framing (#349).** Operator ruling: a brief presents facts and asks open questions, never a presumed clinical answer, gate or requirement. Derived asks are questions ("Is this still appropriate?" / "Does this condition still apply?" / "What does this mean?") and every constraint/finding row shows who set it. `FEEDBACK` §54. Code, self-merged on green - Handoff: `closeout.md`.
+
 - **Appointment brief polish (#348).** From first real use (row 107): Leave with sits in normal flow as a pointer list to Asks (ticks only in Asks), each row renders once (`since` yields to `changes_vs_history`), statements render in full, Print / Save PDF with a print stylesheet, human injury labels, and a quiet "linked row not found" under an ask whose link can't be shown. Code, self-merged on green - Handoff: `closeout.md`.
 
 - **Chat write-hang fix (#347).** The coach asked "Do you confirm?" before a typed write and the "yes" turn came back empty with nothing written. The prompt now says to write proposals directly (confirmation is the Injuries page), a chat turn never renders empty, silent block drops are reported refusals, and each turn logs its metadata. Q187 closed. Code, self-merged on green - Handoff: `closeout.md`.
-
-- **Appointment brief v1 (#345).** A `type='appointment'` planning row (no migration) drives a kind-driven brief (follow_up / intro / request) assembled on read from the injuries it names and the constraints/findings parented to them (one hop; proposals and lab-derived findings never render). `/appointments/:key` page (Leave with pinned, local ticks), hub doorway, MCP `get_appointment_brief` on the same loader. Code, self-merged on green - Handoff: `closeout.md`.
 
 
 
