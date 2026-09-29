@@ -23,6 +23,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import models
+import polar_ingest
 from auth import get_current_user
 from connectors.polar import PolarV4Client
 from database import get_db
@@ -141,7 +142,7 @@ def test_sync_enriches_v4_only_bout_and_emits_exactly_once(db_session, monkeypat
     start = _recent_naive()
     summary = [_training_session("v4solo", start, zones_seconds=None, cardio_load=None)]  # zoneless summary
     zoned = [_training_session("v4solo", start, zones_seconds=(600, 300, 0, 0, 120))]     # feature-mode split
-    monkeypatch.setattr(polar, "_valid_client", lambda uid, db: _FakeClient(summary, zoned=zoned))
+    monkeypatch.setattr(polar_ingest, "valid_client", lambda uid, db: _FakeClient(summary, zoned=zoned))
 
     body = _client(db_session, user).post("/integrations/polar/sync").json()
 
@@ -167,7 +168,7 @@ def test_sync_second_run_reenriches_nothing(db_session, monkeypatch):
     summary = [_training_session("v4solo", start, zones_seconds=None, cardio_load=None)]
     zoned = [_training_session("v4solo", start, zones_seconds=(600, 300, 0, 0, 120))]
     ovr = lambda uid, db: _FakeClient(summary, zoned=zoned)
-    monkeypatch.setattr(polar, "_valid_client", ovr)
+    monkeypatch.setattr(polar_ingest, "valid_client", ovr)
 
     _client(db_session, user).post("/integrations/polar/sync")
     body2 = _client(db_session, user).post("/integrations/polar/sync").json()
@@ -203,7 +204,7 @@ def test_enriched_v4_twin_stays_non_canonical_behind_flow_export(db_session, mon
     # sync brings nothing new in the summary (both twins already stored); enrichment
     # targets the zoneless v4 row and fills it from the feature fetch.
     zoned = [_training_session("dual", start, zones_seconds=(600, 300, 0, 0, 120))]
-    monkeypatch.setattr(polar, "_valid_client", lambda uid, db: _FakeClient([], zoned=zoned))
+    monkeypatch.setattr(polar_ingest, "valid_client", lambda uid, db: _FakeClient([], zoned=zoned))
 
     body = _client(db_session, user).post("/integrations/polar/sync").json()
 

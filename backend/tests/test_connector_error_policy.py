@@ -17,6 +17,7 @@ import pytest
 from fastapi import HTTPException, status
 
 import models
+import polar_ingest
 from connectors.hevy import HevyAuthError, HevyForbiddenError
 from cors_errors import add_cors_error_handler
 from encryption import encrypt
@@ -117,7 +118,8 @@ def test_polar_refresh_failure_returns_424(db_session, monkeypatch):
     def _boom(refresh_token):
         raise RuntimeError("Polar refresh endpoint returned 400")
 
-    monkeypatch.setattr(polar, "refresh_access_token", _boom)
+    # The refresh lives in the Polar ingest core (Q154); the router maps its failure to 424.
+    monkeypatch.setattr(polar_ingest, "refresh_access_token", _boom)
 
     with pytest.raises(HTTPException) as ei:
         polar._valid_client(user_id, db_session)
