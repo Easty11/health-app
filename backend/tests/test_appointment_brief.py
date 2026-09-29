@@ -467,7 +467,9 @@ def test_the_brief_never_reads_free_text_user_knowledge(db_session, world):
     assert statements, "the capture saw no query — the negative below would pass vacuously"
     assert not any("user_knowledge " in s or "user_knowledge\n" in s or s.rstrip().endswith("user_knowledge")
                    for s in statements)
-    assert all("user_knowledge_entries" in s for s in statements)
+    # The ledger query, plus one read of the user's `full_name` (the print subtitle, #350) — nothing else.
+    others = [s for s in statements if "user_knowledge_entries" not in s]
+    assert len(others) == 1 and "users.full_name" in others[0] and "FROM users" in others[0], others
     assert "FREE TEXT SENTINEL" not in json.dumps(b)
 
 
@@ -585,3 +587,70 @@ def test_every_constraint_and_finding_row_carries_its_authority(db_session, worl
     assert (f["asserted_by"], f["authority"]) == ("clinician", "set by your clinician")
     assert (f["previous"][0]["asserted_by"], f["previous"][0]["authority"]) == ("user", "set by you")
     assert next(d for d in _derived(b) if d["entry_key"] == "f_chain")["row"]["asserted_by"] == "clinician"
+
+
+# ── print-document fields (#350): plain words beside the chat phrasing ──────
+
+def _no_token(s):
+    return s is None or "_" not in s
+
+
+def test_a_finding_carries_its_parent_key_and_label(db_session, world):
+    _put(db_session, world.id, "finding", "f_a", _finding(as_of="2025-12-05", marker="provocative"))
+    b = _brief(db_session, world.id, sections={"add": ["background"]})
+    f = _section(b, "changes_vs_history")["findings"][0]
+    assert (f["parent_key"], f["parent_label"]) == (IN, "left part a")
+    assert next(d for d in _derived(b) if d["entry_key"] == "f_a")["row"]["parent_label"] == "left part a"
+    assert _no_token(f["parent_label"])
+
+
+def test_parent_label_falls_back_to_the_key_in_words(db_session, world):
+    s = ab._finding_summary({"key": "f_x", "statement": "S", "parent_key": "injury_part_z_left"}, {})
+    assert s["parent_label"] == "injury part z left" and _no_token(s["parent_label"])
+    assert ab._finding_summary({"key": "f_y", "statement": "S"}, {})["parent_label"] is None
+
+
+def test_an_advisory_restriction_is_its_own_text(db_session, world):
+    _put(db_session, world.id, "constraint", "c_adv", _constraint(exit_={"with_parent": True, "on_date": "2026-04-01"}))
+    c = _section(_brief(db_session, world.id), "current_constraints")["items"][0]
+    assert c["restriction"] == "cap on movement A"
+    assert "engine-enforced" not in c["restriction"]
+    # exit_label names the parent injury in words; exit and text stay the chat phrasing.
+    assert c["exit_label"] == "on 2026-04-01 or when left part a is resolved"
+    assert c["exit"] == f"on 2026-04-01 or when {IN} is resolved"
+    assert c["text"] == "CAP (advisory — not engine-enforced) — cap on movement A"
+    assert (c["parent_key"], c["parent_label"]) == (IN, "left part a")
+    assert _no_token(c["restriction"]) and _no_token(c["exit_label"])
+
+
+def test_an_engine_restriction_is_kind_regions_and_side_in_words(db_session, world):
+    _put(db_session, world.id, "constraint", "c_eng", _constraint(
+        kind="block", scope={"tier": "engine", "region_keys": ["shoulder_er_ir", "vertical_push"], "side": "right"}))
+    _put(db_session, world.id, "constraint", "c_bi", _constraint(
+        kind="block", scope={"tier": "engine", "region_keys": ["hinge"]}))
+    items = {c["key"]: c for c in _section(_brief(db_session, world.id), "current_constraints")["items"]}
+    assert items["c_eng"]["restriction"] == "Block: Shoulder ER / IR (rotator cuff), Vertical push, right side only"
+    assert items["c_bi"]["restriction"] == "Block: Hinge (hip-dominant)"
+    for c in items.values():
+        assert "engine-enforced" not in c["restriction"] and _no_token(c["restriction"])
+        assert "engine-enforced" in c["text"]      # the chat phrasing is unchanged
+
+
+def test_a_derived_ask_carries_its_question_alone(db_session, world):
+    _put(db_session, world.id, "constraint", "c_due", _constraint(review_by="2026-01-20"))
+    _put(db_session, world.id, "constraint", "c_cond", _constraint(exit_={"on_condition": "condition A"}))
+    _put(db_session, world.id, "finding", "f_prov", _finding(marker="provocative", statement="Finding P"))
+    got = {(d["rule"], d["entry_key"]): (d["question"], d["text"]) for d in _derived(_brief(db_session, world.id))}
+    assert got[("review_due", "c_due")][0] == "Is this still appropriate?"
+    assert got[("undated_exit", "c_cond")] == ("Does this condition still apply?",
+                                               "Does this condition still apply? condition A")
+    assert got[("unsettled_marker", "f_prov")] == ("What does this mean?", "What does this mean? Finding P")
+    assert all(_no_token(q) for q, _ in got.values())
+
+
+def test_patient_name_is_the_users_full_name_or_null(db_session, world):
+    assert _brief(db_session, world.id)["patient"] == {"name": None}
+    world.full_name = "Person A"
+    db_session.commit()
+    b = ab.load_appointment_brief(db_session, world.id, "appt_a")
+    assert b["patient"] == {"name": "Person A"}
