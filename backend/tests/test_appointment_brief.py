@@ -266,7 +266,8 @@ def test_since_and_changes_vs_history(db_session, world):
     chv = _section(b, "changes_vs_history")
     assert [(f["key"], f["text"], [p["statement"] for p in f["previous"]]) for f in chv["findings"]] == [
         ("f_chain", "Statement v2", ["Statement v1"])]
-    assert [(i["key"], i["before"], i["after"]) for i in chv["injuries"]] == [(GONE, "active", "resolved 2025-12-20")]
+    assert [(i["key"], i["change"], i["before"], i["after"]) for i in chv["injuries"]] == [
+        (GONE, "resolved", "active", "resolved 2025-12-20")]
     # ...so since keeps only what it does not carry: constraints confirmed / resolved, new injuries.
     since = _section(b, "since")
     assert since["since"] == SINCE
@@ -374,7 +375,8 @@ def test_an_injury_rewritten_since_shows_before_and_after(db_session, world):
                                                "restrictions": [], "detail": "part a detail v2"},
          added_at=date(2025, 12, 8))
     chv = _section(_brief(db_session, world.id), "changes_vs_history")
-    assert (IN, "part a detail", "part a detail v2") in [(i["key"], i["before"], i["after"]) for i in chv["injuries"]]
+    assert (IN, "updated", "part a detail", "part a detail v2") in [
+        (i["key"], i["change"], i["before"], i["after"]) for i in chv["injuries"]]
 
 
 def test_current_constraints_are_confirmed_in_scope_with_tier_exit_review(db_session, world):

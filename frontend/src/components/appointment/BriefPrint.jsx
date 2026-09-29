@@ -36,7 +36,15 @@ function setBy(row) {
   return label ? label[0].toUpperCase() + label.slice(1) : ''
 }
 
+// Capitalises the first letter for print (Area cells, change words); stored labels are unchanged.
 const capital = (s) => (s ? String(s)[0].toUpperCase() + String(s).slice(1) : '')
+
+// An injury row's change, in words (template wording only; the stored `change` token is unchanged).
+const INJURY_CHANGE = {
+  resolved: 'Recorded as resolved',
+  recorded: 'Injury first recorded',
+  updated: 'Injury record updated',
+}
 
 // A row as plain words: a constraint by its restriction (never the tier boilerplate), else its text.
 const rowText = (row) => (row?.type === 'constraint' ? row.restriction : row?.text) || ''
@@ -74,13 +82,22 @@ function sinceRows(bySection) {
       ),
     })
   }
+  // Injury cells are template words, never the stored before/after tokens: no ISO date (the Date
+  // column carries it) and no arrow. A rewrite shows the new detail, the old one as a grey sub-line.
   for (const i of chv?.injuries || []) {
     rows.push({ id: `ci:${i.key}`, key: i.key, date: i.on, area: i.text, setBy: '',
-      what: <>{i.before} → {i.after}</> })
+      what: i.change === 'resolved'
+        ? <>{INJURY_CHANGE.resolved}</>
+        : (
+          <>
+            Updated: {i.after}
+            {i.before && <span className="brief-doc-sub">Previously: {i.before}</span>}
+          </>
+        ) })
   }
   for (const i of since?.injuries || []) {
     rows.push({ id: `si:${i.key}`, key: i.key, date: i.on, area: i.text, setBy: '',
-      what: <>{capital(i.change)}{i.basis ? ` — ${i.basis}` : ''}</> })
+      what: <>{INJURY_CHANGE[i.change] ?? capital(i.change)}{i.basis ? ` — ${i.basis}` : ''}</> })
   }
   for (const f of since?.findings || []) {
     rows.push({ id: `sf:${f.key}`, key: f.key, date: f.as_of, area: f.parent_label, setBy: setBy(f),
@@ -141,7 +158,7 @@ export default function BriefPrint({ brief, printedOn = todayIso() }) {
             rows={sinceTable.map((r) => (
               <tr key={r.id}>
                 <td className="brief-doc-nowrap">{fmtDay(r.date)}</td>
-                <td>{r.area}</td>
+                <td>{capital(r.area)}</td>
                 <td>{r.what}</td>
                 <td>{r.setBy}</td>
               </tr>
@@ -274,7 +291,7 @@ function BackgroundBlock({ s, shownIn }) {
           columns={['Area', 'Detail']}
           rows={s.injuries.map((i) => (
             <tr key={i.key}>
-              <td>{i.text}{i.resolved_on ? ` (resolved ${fmtDay(i.resolved_on)})` : ''}</td>
+              <td>{capital(i.text)}{i.resolved_on ? ` (resolved ${fmtDay(i.resolved_on)})` : ''}</td>
               <td>{i.detail}</td>
             </tr>
           ))}
@@ -286,7 +303,7 @@ function BackgroundBlock({ s, shownIn }) {
           rows={findings.map((f) => (
             <tr key={f.key}>
               <td className="brief-doc-nowrap">{fmtDay(f.as_of)}</td>
-              <td>{f.parent_label}</td>
+              <td>{capital(f.parent_label)}</td>
               <td>{f.text}</td>
               <td>{setBy(f)}</td>
             </tr>
