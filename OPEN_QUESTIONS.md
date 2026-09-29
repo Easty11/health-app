@@ -2247,21 +2247,6 @@ history worth reflecting, then run it as-of each past date. Watch-point, not owe
 
 ---
 
-## Q154. Aerobic ingest is not automatable — the metabolic branch of the scheduled load chain rolls stale `aerobic_sessions`
-
-The #296 scheduled orchestrator (`scripts/refresh_load.py`) automates the resistance ingest (Hevy API → `hevy_workouts`) but NOT the aerobic ingest. Step 3 (`load_events_metabolic`) only ROLLS whatever is already in `aerobic_sessions`; nothing in the nightly sweep refreshes that table, so metabolic load silently ages to the last manual Polar pull. Verified 2026-09-14: the two writers of `aerobic_sessions` are both unautomatable as-is —
-
-- `routers/polar.py::sync_polar_sessions` — the Polar AccessLink **API** pull, the only path that fetches fresh sessions. Request-coupled: `current_user` dependency + a per-request OAuth client (`_valid_client(current_user.id, db)`). Making it batch-callable crosses the router/contract boundary #296 was explicitly scoped OUT of.
-- `import_polar.py::import_flow_export` — a batch-callable **ZIP-export** CLI, but it needs a human-downloaded Polar Flow export ZIP per run (no API pull). Not a recurring automation candidate.
-
-So v1 scopes to rolling existing aerobic sessions only (#296 decision), leaving a freshness gap on the metabolic window.
-
-**Trigger to close / options:** extract the Polar AccessLink fetch+persist core out of `sync_polar_sessions` into a per-user batch callable (token read from `UserIntegration(provider="polar")`, refresh handled outside the request), then add it as the aerobic counterpart to step 1 in `refresh_load.py` (Hevy and Polar ingests side by side, each per-user isolated). The refactor must preserve the endpoint's contract (the router keeps calling the extracted core). Until then the nightly metabolic figure is only as fresh as the last manual Polar sync.
-
-**State:** OPEN (deferred — filed by #296; not solved there. Blocks fully-fresh nightly metabolic load, not the resistance chain.)
-
----
-
 ## Q156. Criterion/sensitivity harness for the Banister τ-set — no wire-up exists (P4)
 
 Preregistered 2026-09-16 with banister-v2 (#301). The normalised stocks (#301) restore #18 but nothing yet VALIDATES the τ-set against an observable. The model needs a **criterion series** the fitness trace must eventually agree with, plus a way to sweep τ and read the divergence. Per `docs/load-governor-trajectory-design.md` §3.2, the mechanical/NM criterion is **rolling per-template e1RM** — ALREADY computed (`rolling_e1rm`, `load_events.py`, 60-day window); §3.2 marks it **"wire-up only"** (the observable exists; it just needs connecting to a trace-vs-criterion comparison). The metabolic window has no built criterion yet (§3.2).
@@ -2597,6 +2582,23 @@ sweep listing constraints and findings past `review_by`, or whose parent resolve
 `review_by` 2026-10-26; align them to the outcome of the 1 Oct 2026 follow-up.
 
 **State:** OPEN — small brief; belongs with Q181 or after. Owner: Luke.
+
+---
+
+## Q193. Polar webhook trigger for aerobic ingest — feasible, and likely blind to Flow-app sessions
+
+#353 closes the freshness gap by pulling. The pull runs when the Training page opens and in the 02:00 sweep. A webhook would push instead: a session would land without the page being opened. Brief C S4 asked for feasibility only: no handler, and no prod registration.
+
+**Findings (29 Sep 2026, docs-only).** The official AccessLink docs (`www.polar.com/accesslink-api`) are blocked by this container's egress policy. The findings below come from third-party sources, so they are tagged. Sources for polar.sh (a payments company) turned up in the same searches and were discarded: their `webhook-id` / `webhook-timestamp` signature scheme is not AccessLink's (#103).
+
+- **(a) Registration.** *Likely.* Webhooks are a **v3** client-level resource, `POST/GET/PATCH/DELETE /v3/webhooks`, authenticated with the client's Basic credentials, not a user token. The create body is `{events, url}`, with EXERCISE and ACTIVITY_SUMMARY as defaults. On create or update, AccessLink sends a PING to the URL, and the endpoint must answer 200 or the webhook is refused. Third-party code states there is **one webhook per client**. Whether this app's client, which today uses v4 OAuth at `auth.polar.com`, can also hold a v3 webhook: *Guessing*, untested.
+  - **Decisive caveat.** *Likely.* The EXERCISE event belongs to v3's exercise pipeline. The repo's own v4 rationale (`connectors/polar.py` header, Decision 17) records that v3 exercise-transactions exclude sessions recorded in the Polar Flow **phone app**, returning 204. That is how the operator records H10 sessions. So an EXERCISE webhook would probably never fire for exactly the sessions this is for. Nothing found shows a v4 (Dynamic API) webhook.
+- **(b) User identifier.** *Likely.* The payload carries `event`, `user_id` (Polar's user id), `entity_id`, `timestamp` and `url`. *Certain:* we store nothing that maps a Polar user id to our `user_id`. `polar_ingest.store_tokens` persists only `access_token`, `refresh_token`, `expires_at`, `scope` and `token_type`. The OAuth `state` carries our id only during the callback. v4 has no user-registration step. Whether the v4 token response carries a Polar user id (the v3 flow's `x_user_id`): *Guessing*. Capturing one is possible with no schema change, inside the encrypted token payload, but it would need a lookup that decrypts every row. Adding a column is a migration, which is hold (a).
+- **(c) Verification.** *Likely.* A `Polar-Webhook-Signature` header carries an HMAC-SHA256 of the raw body, keyed by `signature_secret_key`. That key is returned **only once**, in the create response. The PING arrives before the key exists, so it is unsigned. A handler would read the raw body, compare in constant time, and fetch the data with the user's token rather than trust the payload. The payload is a pointer, not data.
+
+**Recommendation: do not build now.** The pull triggers in #353 already give freshness on page open and a nightly guarantee. The webhook's value depends on caveat (a), which is probably fatal. Reopen only once a **non-prod probe** shows that an EXERCISE event fires for a Flow-app H10 session. The probe would register a separate test client in `admin.polaraccesslink.com`, because the one-webhook-per-client limit and the one-time secret make registering on the prod client a hard-to-undo act (#166). The probe would also establish (a) and whether (b)'s id is available from v4.
+
+**State:** OPEN — probe owed before any build. Owner: Luke (test client + probe decision), Code (probe script + handler if green).
 
 ---
 
@@ -5054,6 +5056,23 @@ double-write, no idempotency bug. The write path was truthful throughout; the ea
 scare was a truncated-key verification query, not missing data (§43).
 
 **State:** DONE → #289 (Concern B closed, verified not inferred)
+
+---
+
+## Q154. Aerobic ingest is not automatable — the metabolic branch of the scheduled load chain rolls stale `aerobic_sessions`
+
+The #296 scheduled orchestrator (`scripts/refresh_load.py`) automates the resistance ingest (Hevy API → `hevy_workouts`) but NOT the aerobic ingest. Step 3 (`load_events_metabolic`) only ROLLS whatever is already in `aerobic_sessions`; nothing in the nightly sweep refreshes that table, so metabolic load silently ages to the last manual Polar pull. Verified 2026-09-14: the two writers of `aerobic_sessions` are both unautomatable as-is —
+
+- `routers/polar.py::sync_polar_sessions` — the Polar AccessLink **API** pull, the only path that fetches fresh sessions. Request-coupled: `current_user` dependency + a per-request OAuth client (`_valid_client(current_user.id, db)`). Making it batch-callable crosses the router/contract boundary #296 was explicitly scoped OUT of.
+- `import_polar.py::import_flow_export` — a batch-callable **ZIP-export** CLI, but it needs a human-downloaded Polar Flow export ZIP per run (no API pull). Not a recurring automation candidate.
+
+So v1 scopes to rolling existing aerobic sessions only (#296 decision), leaving a freshness gap on the metabolic window.
+
+**Trigger to close / options:** extract the Polar AccessLink fetch+persist core out of `sync_polar_sessions` into a per-user batch callable (token read from `UserIntegration(provider="polar")`, refresh handled outside the request), then add it as the aerobic counterpart to step 1 in `refresh_load.py` (Hevy and Polar ingests side by side, each per-user isolated). The refactor must preserve the endpoint's contract (the router keeps calling the extracted core). Until then the nightly metabolic figure is only as fresh as the last manual Polar sync.
+
+**Resolution (#353).** Brief C extracted the Polar v4 fetch+persist core (`backend/polar_ingest.py::sync_user`), as the trigger above proposed. The token store and refresh moved with it. The manual route delegates and keeps its contract: the response is byte-identical, with 404 / 424 / 502 as before. The load chain now runs `polar_sync` after `hevy_sync` and before `load_events_metabolic`, so a new session lands on Training-page open or pull-to-refresh (30-day window) and in the 02:00 sweep (180 days). It runs with no cascade, because the chain's own metabolic steps recompute. It is soft-fail (ruled): a missing Polar connection or a failed pull is recorded in the step and never fails or stalls the chain. The webhook alternative is split out as Q193, feasibility only. The prod check (record a session, don't press Sync, open Training) is OWED (operator).
+
+**State:** DONE → #353
 
 ---
 
