@@ -3,8 +3,8 @@
 Proves the four things the brief's Step-1 gate asks for, on the FK-enforced SQLite
 substrate (conftest `db_session`):
 
-  * ORDER — the five steps run per user in the fixed chain order (Hevy ingest ->
-    load_events tier0 -> load_events_metabolic -> load_metrics tier0-v2 ->
+  * ORDER — the six steps run per user in the fixed chain order (Hevy ingest ->
+    Polar ingest -> load_events tier0 -> load_events_metabolic -> load_metrics tier0-v2 ->
     load_metrics metab-v1);
   * NON-ZERO — a Hevy-keyed user with a resistance workout gets non-zero resistance
     events and non-zero mechanical/NM metrics (real compute for steps 2-5; only the
@@ -13,7 +13,10 @@ substrate (conftest `db_session`):
     the per-user counts are identical;
   * ISOLATION — one user's failure is caught, recorded against the failing step with the
     rest of that user's chain skipped, and never aborts the sweep (mirrors
-    `scripts/garmin_sync.py`).
+    `scripts/garmin_sync.py`);
+  * POLAR SOFT-FAIL (Q154) — the `polar_sync` step never fails the user or skips a later
+    step: a Polar error is recorded in its entry, a user with no Polar connection records
+    `{"skipped": "no_polar"}`, and it runs with the chain's `days` and the cascade off.
 """
 from datetime import date, datetime, timezone
 
@@ -23,6 +26,7 @@ import hevy_templates
 import hevy_workouts
 import load_events
 import models
+import polar_ingest
 from scripts import refresh_load
 
 AS_OF = date(2026, 9, 14)
@@ -64,7 +68,7 @@ def _mock_hevy_noop(monkeypatch):
 
 # ── ORDER ───────────────────────────────────────────────────────────────────────
 
-def test_chain_runs_five_steps_in_order(db_session, monkeypatch):
+def test_chain_runs_six_steps_in_order(db_session, monkeypatch):
     _user(db_session, 1)
     _hevy_key(db_session, 1)
 
@@ -73,6 +77,10 @@ def test_chain_runs_five_steps_in_order(db_session, monkeypatch):
     async def _sync(db, *, only_user_id=None, days=None):
         calls.append("hevy_sync")
         return {"users": 1, "per_user": {only_user_id: {"workouts_upserted": 0}}}
+
+    def _polar(db, user_id, *, days, run_cascade=True):
+        calls.append(f"polar_sync:days={days}:cascade={run_cascade}")
+        return {"synced": 0, "enriched": 0, "available": 0}
 
     def _events(db, *, only_user_id=None):
         calls.append("load_events_tier0")
@@ -87,20 +95,28 @@ def test_chain_runs_five_steps_in_order(db_session, monkeypatch):
         return {"users": 1, "per_user": {only_user_id: {"rows_written": 3, "formula_version": formula_version}}}
 
     monkeypatch.setattr(hevy_workouts, "sync_workouts", _sync)
+    monkeypatch.setattr(polar_ingest, "sync_user", _polar)
     monkeypatch.setattr(load_events, "compute_all_users", _events)
     monkeypatch.setattr(refresh_load.load_events_metabolic, "compute_all_users_metabolic", _metab)
     monkeypatch.setattr(refresh_load.load_metrics, "compute_all_users", _metrics)
 
-    refresh_load.refresh_load(db_session, as_of=AS_OF)
+    summary = refresh_load.refresh_load(db_session, as_of=AS_OF)
 
     # Steps 4/5 pass the module version constants (P3: tier0-v2 for strength, metab-v1
     # unchanged) rather than literals — reference the constants so this can't drift on a bump.
+    # polar_sync sits after hevy_sync and BEFORE load_events_metabolic (which rolls what it
+    # stored), with the chain's `days` (default window here) and the cascade OFF.
     assert calls == [
         "hevy_sync",
+        f"polar_sync:days={hevy_workouts.DEFAULT_BACKFILL_DAYS}:cascade=False",
         "load_events_tier0",
         "load_events_metabolic",
         f"load_metrics:{load_events.FORMULA_VERSION}",
         f"load_metrics:{refresh_load.load_events_metabolic.FORMULA_VERSION_METABOLIC}",
+    ]
+    assert list(summary["per_user"][1]["steps"]) == [
+        "hevy_sync", "polar_sync", "load_events_tier0", "load_events_metabolic",
+        "load_metrics_tier0", "load_metrics_metab",
     ]
 
 
@@ -190,3 +206,124 @@ def test_only_user_scopes_to_one(db_session, monkeypatch):
     assert summary["users_attempted"] == 1
     assert list(summary["per_user"]) == [7]
     assert summary["per_user"][7]["status"] == "succeeded"
+
+
+# ── POLAR SOFT-FAIL (Q154) ──────────────────────────────────────────────────────
+
+def test_no_polar_user_records_skipped_marker(db_session, monkeypatch):
+    """Real core, no `UserIntegration(provider="polar")` row → NotConnected → marker."""
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _mock_hevy_noop(monkeypatch)
+
+    summary = refresh_load.refresh_load(db_session, as_of=AS_OF)
+
+    u1 = summary["per_user"][1]
+    assert u1["status"] == "succeeded"
+    assert u1["steps"]["polar_sync"] == {"skipped": "no_polar"}
+
+
+def test_polar_failure_is_soft_and_later_steps_run(db_session, monkeypatch, capsys):
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _resistance_workout(db_session, "w1", 1)
+    _mock_hevy_noop(monkeypatch)
+
+    rolled_back: list[bool] = []
+    real_rollback = db_session.rollback
+
+    def _spy_rollback():
+        rolled_back.append(True)
+        real_rollback()
+
+    monkeypatch.setattr(db_session, "rollback", _spy_rollback)
+
+    def _polar_down(db, user_id, *, days, run_cascade=True):
+        raise polar_ingest.PolarApiError("Polar v4 API error: 503 upstream")
+
+    monkeypatch.setattr(polar_ingest, "sync_user", _polar_down)
+
+    summary = refresh_load.refresh_load(db_session, as_of=AS_OF)
+
+    u1 = summary["per_user"][1]
+    assert u1["status"] == "succeeded"                 # never marks the chain failed
+    assert summary["users_succeeded"] == 1 and summary["users_failed"] == 0
+    assert u1["steps"]["polar_sync"] == {"error": "PolarApiError: Polar v4 API error: 503 upstream"}
+    assert rolled_back == [True]                       # half-written ingest never leaks on
+    # every later step RAN (real compute), none skipped
+    for key in ("load_events_tier0", "load_events_metabolic", "load_metrics_tier0", "load_metrics_metab"):
+        assert isinstance(u1["steps"][key], dict) and "error" not in u1["steps"][key], key
+    assert u1["steps"]["load_events_tier0"]["events_written"] > 0
+    # the per-user line surfaces the Polar error without reading as a chain failure
+    out = capsys.readouterr().out
+    assert "user 1: OK" in out and "polar_synced=error(PolarApiError" in out
+
+
+def test_unexpected_polar_exception_is_also_soft(db_session, monkeypatch):
+    """Soft-fail covers ANY core exception, not only the declared PolarIngestError family."""
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _mock_hevy_noop(monkeypatch)
+
+    def _polar_bug(db, user_id, *, days, run_cascade=True):
+        raise KeyError("access_token")
+
+    monkeypatch.setattr(polar_ingest, "sync_user", _polar_bug)
+
+    u1 = refresh_load.refresh_load(db_session, as_of=AS_OF)["per_user"][1]
+    assert u1["status"] == "succeeded"
+    assert u1["steps"]["polar_sync"] == {"error": "KeyError: 'access_token'"}
+
+
+def test_later_hard_failure_is_attributed_to_its_step_not_polar(db_session, monkeypatch, capsys):
+    """With a soft Polar error AND a later hard failure, the FAILED line names the hard step."""
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _mock_hevy_noop(monkeypatch)
+
+    def _polar_down(db, user_id, *, days, run_cascade=True):
+        raise polar_ingest.TokenRefreshFailed("Polar token refresh failed: 400")
+
+    def _events_boom(db, *, only_user_id=None):
+        raise RuntimeError("tier0 boom")
+
+    monkeypatch.setattr(polar_ingest, "sync_user", _polar_down)
+    monkeypatch.setattr(load_events, "compute_all_users", _events_boom)
+
+    u1 = refresh_load.refresh_load(db_session, as_of=AS_OF)["per_user"][1]
+    assert u1["status"] == "failed"
+    assert "error" in u1["steps"]["polar_sync"]
+    assert u1["steps"]["load_events_metabolic"] == "skipped"
+    assert "FAILED at load_events_tier0 -- RuntimeError: tier0 boom" in capsys.readouterr().err
+
+
+def test_hevy_hard_failure_skips_polar_like_every_later_step(db_session, monkeypatch):
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+
+    async def _hevy_boom(db, *, only_user_id=None, days=None):
+        raise RuntimeError("hevy down")
+
+    polar_calls: list[int] = []
+    monkeypatch.setattr(hevy_workouts, "sync_workouts", _hevy_boom)
+    monkeypatch.setattr(polar_ingest, "sync_user",
+                        lambda db, uid, *, days, run_cascade=True: polar_calls.append(uid))
+
+    u1 = refresh_load.refresh_load(db_session, as_of=AS_OF)["per_user"][1]
+    assert u1["status"] == "failed"
+    assert u1["steps"]["polar_sync"] == "skipped"
+    assert polar_calls == []
+
+
+def test_polar_sync_uses_the_chain_days(db_session, monkeypatch):
+    _user(db_session, 1)
+    _mock_hevy_noop(monkeypatch)
+    seen: list[tuple[int, bool]] = []
+
+    def _polar(db, user_id, *, days, run_cascade=True):
+        seen.append((days, run_cascade))
+        return {"synced": 0, "enriched": 0, "available": 0}
+
+    monkeypatch.setattr(polar_ingest, "sync_user", _polar)
+    refresh_load.refresh_load(db_session, only_user_id=1, days=30, as_of=AS_OF)
+    assert seen == [(30, False)]
