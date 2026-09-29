@@ -278,11 +278,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Appointment brief print wording (#351).** Print injury cells read in words ("Recorded as resolved", "Updated: …" with "Previously: …"), with no ISO date or arrow, and Area cells are capitalised. Parenting row 104 to its resolved injury is HALTED on Q192: the write path requires an active parent. Code, self-merged on green - Handoff: `closeout.md`.
+
 - **Appointment brief print document (#350).** Operator ruling: Print / Save PDF prints a dedicated one-to-two page A4 document built from the same brief object — clinician voice, tables for changes and restrictions, numbered asks with an "If time allows" divider, no tick boxes. Supersedes #348(4) for print only; the screen layout is unchanged. Code, self-merged on green - Handoff: `closeout.md`.
 
 - **Appointment brief neutral framing (#349).** Operator ruling: a brief presents facts and asks open questions, never a presumed clinical answer, gate or requirement. Derived asks are questions ("Is this still appropriate?" / "Does this condition still apply?" / "What does this mean?") and every constraint/finding row shows who set it. `FEEDBACK` §54. Code, self-merged on green - Handoff: `closeout.md`.
-
-- **Appointment brief polish (#348).** From first real use (row 107): Leave with sits in normal flow as a pointer list to Asks (ticks only in Asks), each row renders once (`since` yields to `changes_vs_history`), statements render in full, Print / Save PDF with a print stylesheet, human injury labels, and a quiet "linked row not found" under an ask whose link can't be shown. Code, self-merged on green - Handoff: `closeout.md`.
 
 
 

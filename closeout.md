@@ -1,89 +1,82 @@
-# Close-out — Chat write-shape repair + bounded in-turn retry (#344)
+# Close-out — Appointment brief print wording (#351); row-104 parenting halted (Q192)
 
 ## Real commits this session
 
-Continuation of the typed-entries session: the previous close-out landed as `56c2197` (PR #272). Branch
-`claude/blissful-brahmagupta-mk7hcf` (harness-assigned; restarted from master before each PR). Each PR was
-merged `--merge` on green and its remote branch auto-deleted. Master's maxima were re-read immediately before
-every merge.
+Session `brief-print-polish`, on branch `claude/elegant-hamilton-kuc1og` (harness-assigned), cut from master
+`f0bcc80`. Master's maxima at open and again before the governance commit: decisions **#350**, questions
+**Q191**.
 
-`git log --format="%h %ad %s" --date=short 56c2197..HEAD`:
+`git log --format="%h %ad %s" --date=short f0bcc80..HEAD` (before this commit):
 
 ```
-9652c58 2026-09-28 fix(chat): write-shape examples are placeholder templates, never user-specific values
-ddca1dc 2026-09-28 Merge pull request #274 from Easty11/claude/blissful-brahmagupta-mk7hcf
-ff4e3c5 2026-09-28 gov(q185): #344 records the bounded in-turn retry and prompt-cost rulings; Q185 -> DONE; BRANCHES
-43211f2 2026-09-28 feat(chat): bounded in-turn retry for shape-refused knowledge writes (Q185); drop the region list from the prompt
-7e68f58 2026-09-28 Merge pull request #273 from Easty11/claude/blissful-brahmagupta-mk7hcf
-3b8b636 2026-09-28 gov(write-shape): Q185 (bounded in-turn retry, ruling owed); BRANCHES row
-c88cc48 2026-09-28 fix(chat): generate the constraint/finding write shape from the validators; pass-2 stops promising retries
+8d6970d 2026-09-29 feat(appointment): print wording for injury changes; capitalised Area
 ```
 
-Plus this close-out commit (`chore: session close-out`), landing with `9652c58` in one PR.
+This close-out lands as one governance commit (`gov(appointment): #351 print wording; Q192; BRANCHES row;
+Recent landings; close-out`) in the same PR.
 
-- **Deploys:** `7e68f58` and `ddca1dc` both show SUCCESS on backend and frontend. Every change here is
-  backend-only, so there is no served-bundle literal to check.
-- **Tests:** backend 2216 → 2250; frontend 241, unchanged.
+- **Tests:** backend 2370 passed (1 deselected: it needs commit `3360ed5`, absent from this shallow clone);
+  frontend 298 → 302; eslint clean on touched files. Real-browser print: the fixture is 1 A4 page.
+- **Deploy:** not checked from here. The frontend check is a #121 served-bundle grep for `Recorded as resolved`.
 
 ## Pending-queue reconciliation
 
-No `;cc` queue was carried in. The operator paste blocks and where each landed:
+No `;cc` queue was carried in. The operator paste blocks (both addressed to this session) and where each landed:
 
-- **BUG, prod 28 Sep: constraint writes refused for shape.** The guidance is now generated from the validators
-  (#313 pattern), and pass-2 no longer promises retries. → `c88cc48` (PR #273).
-- **BUG, prod 28 Sep: stuck loading bubble after a retry.** NOT reproduced; the server logs contradict it.
-  Every `/chat` POST from 03:29 to 04:21 UTC returned 200 (6–56 s). The retries were refused again server-side,
-  because blocks the user types are never parsed. Locally, a refusal then a retry completes in milliseconds.
-  Recorded in BRANCHES; the operator reports a UTC time if the bubble recurs.
-- **Q185 ruling:** yes, scoped. → `43211f2`, #344 (`ff4e3c5`, PR #274). Q185 → DONE → #344.
-- **Prompt-cost ruling:** drop the region list. → `43211f2`. The unknown-region refusal now names the valid
-  set, a prerequisite the ruling assumed and the code lacked.
-- **Correction:** the right-shoulder ER constraint is an advisory cap, not an engine block. → examples fixed
-  in `43211f2`, then made placeholder templates in `9652c58`. The operator reported the confirmed 9.5 kg cap
-  (row 104), so the "11.25 kg" example values were user-specific and contradicted live data.
-- **Instruction:** do not run the 11.25 kg test; Q185 is proven by its tests; the next real chat write is the
-  prod check. → no test write was made.
+- **STEP 1, print wording in the Since table** ("Recorded as resolved"; "Updated: <after>" with a grey
+  "Previously: <before>"; "Injury first recorded"; "Injury record updated"). → `8d6970d`.
+- **STEP 2, capital Area in print only.** → `8d6970d`.
+- **VERIFY (original):** `BriefPrint.jsx` rendered `changes_vs_history.injuries` as "<before> → <after>" and
+  `since.injuries` as the change word. Confirmed on `f0bcc80`. The prod row-104 read (null parent, 29 Sep) is
+  the operator's own; this container cannot see prod.
+- **Addendum STEP 3a, parent row 104 via the typed supersede path.** **NOT written: HALTED.** The standard
+  path refuses a `parent_key` that names an inactive row (`routers/knowledge.py:1039-1052`), and a resolved
+  injury is `active=False`. The brief forbids raw SQL. The fork is raised as **Q192** (needs a ruling), and
+  the ledger is unchanged.
+- **Addendum VERIFY 1 (row 104's exit and review_by) and 3 (injury in the appointment's scope):** **OWED
+  (operator).** There is no prod route here (no Railway CLI, no database URL, no API token). The queries are
+  in Q192.
+- **Addendum VERIFY 2 (does any path end or hide a constraint under a resolved parent):** done from code.
+  None does, unless the exit is `with_parent` alone. File:line citations are in #351.
+- **Addendum STEP 3b and the prod-brief gates:** not exercised; they depend on 3a.
+- **Addendum STEP 3c (orphan report, read-only):** **OWED (operator).** The query is in Q192.
+- **GUARD:** no ledger write, and print and ledger work kept in separate commits: held (there is no ledger
+  commit). The decision entry is #351, landed with this close-out.
 
-**Nits (no gate):** the `ff4e3c5` commit message reads "decisions max on master is #341... #343" (a stray
-fragment; #343 was the max). This is cosmetic in history only.
+**Divergences (named in #351):** a backend `change` field (additive); since-resolved wording extended to match;
+capital Area applied to the Background tables too.
 
 ## Cold-resume handoff
 
 **Where things stand.**
-- Master is `ddca1dc`, plus this PR (`9652c58` and this close-out).
-- Decisions max **#344**; questions max **Q185** (DONE).
-- Typed constraints and findings are live, with 4 seeded advisory constraints (ids 95–98) and the
-  operator-confirmed right-shoulder 9.5 kg cap (row 104).
-- The coach's constraint/finding write shape is generated from the validators, with placeholder examples and
-  no region list. A shape refusal gets one in-turn retry.
-- **Open prod check:** the next real chat constraint or finding write. The operator reports it.
+- Master is `f0bcc80`, plus this PR (`8d6970d` and this close-out). Decisions max **#351**; questions max
+  **Q192**.
+- The print document prints injury changes in words. The 1 Oct brief still cannot show the right-shoulder ER
+  load cap (row 104), because its parent is null and the fix is blocked on Q192.
+- The appointment (`appt_20261001_aubrey`) is **Thu 1 Oct 2026**, two days from this close-out. If Q192 is not
+  ruled and built by then, the cap will not print under Restrictions. The operator can carry it by hand, or by
+  a note on the ask.
 
-**NOW lanes and the v1 test each serves** (unchanged this session apart from #344):
-- **Injury clearance (operator)** — Know / Walk in. OWED: the narrowed step (3).
-- **Typed constraints G6** — Know. DONE → #342.
-- **Lab upload pipeline** — Walk in.
-- **Interpretation layer build** — Walk in. Increments 2, 3 and 5 remain.
-- **Appointment brief** — Walk in. **Not started; substrate complete.**
-- **Cross-repo rows** — no v1 test; pinned by #112. They include the paste-addressing propagation to HCA.
-- **Demotion candidates:** the DONE rows still sitting in NOW (tags seed #339, CBT-I Q45 #219, eval trigger
-  #213).
+**NOW lanes and the v1 test each serves:**
+- **Appointment brief** — Walk in. Built through #351. Blocked residue: Q192 (row 104 in scope).
+- **Injury clearance (operator)** — Know / Walk in. OWED: step (3).
+- **Lab upload pipeline** and **Interpretation layer build** — Walk in. Untouched.
+- **Cross-repo rows** — no v1 test; pinned by #112. The paste-addressing propagation to HCA is still owed.
+- **Demotion candidates:** DONE rows still in NOW (tags seed #339, CBT-I Q45 #219, eval trigger #213, G6 #342).
 
-**Open questions:** 100 OPEN, 4 OWED — Q78, Q176, Q178, and Q181 (retire `user_knowledge`: brief 2, GO ruled,
-not cut). Closed this segment: Q185 → #344.
+**Open questions:** 106 OPEN (Q192 new), 4 OWED (Q78, Q176, Q178, Q181).
 
 **What was NOT touched this session (and what gates it).**
-- **Appointment brief v1 (Walk in, sequence position 3):** still no design brief. Five consecutive sessions
-  (#334–#344) have gone to substrate and repair — taxonomy tagging, the clearance sweep, typed entries, and now
-  chat-write repair. None moved the synthesising consumer. Say it plainly: the default next session is the
-  brief.
-- **Interpretation layer increments 2, 3 and 5, and the lab pipeline residuals (Q104):** untouched.
-- **Loop surface debt**, including Q180 (server-side chat history). The stuck-bubble report may belong here if
-  it recurs.
-- **Q181 / brief 2** (retire free-text `user_knowledge`): GO, not cut. Until it lands, the coach still reads
-  the free-text rows beside the typed ones.
-- **Q182** (default engine constraints from the in-code maps), **Q183** (engine cap/caution, watch) and
-  **Q184** (budgeted context builder, LATER): untouched.
-- **Cross-repo:** the paste-addressing rule is still not propagated to `health-connect-app`.
+- **The ledger:** no write of any kind. Row 104's parent waits on the Q192 ruling. Other orphaned constraints
+  are unknown until the operator runs the Q192 orphan query.
+- **Appointment brief PR2** (post-visit transcript reconciliation, LATER): untouched. It needs the 1 Oct visit
+  to have happened.
+- **Interpretation layer increments 2, 3 and 5; lab pipeline residuals (Q104):** untouched.
+- **Q181 / brief 2** (retire free-text `user_knowledge`), **Q191** (standing review sweep), **Q182–Q184**:
+  untouched.
+- Six consecutive sessions (#345–#351) have gone to the appointment brief. That is deliberate, since it is
+  v1's synthesising consumer with a dated visit, but every other Walk-in lane has stood still meanwhile.
 
-**Single clearest next action.** Chat cuts the **Appointment brief v1 design brief** (Walk in). Operator side:
-report the next real chat constraint or finding write (the Q185 prod check), then injury-clearance step (3).
+**Single clearest next action.** Chat rules **Q192** (recommended: option (a), allow a resolved, unsuperseded
+parent when `with_parent` is not true). The operator runs the Q192 row-104 exit read first. If the exit is
+`with_parent` alone, set a new exit before any parenting.
