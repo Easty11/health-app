@@ -19,8 +19,9 @@ column is needed. `?force=true` bypasses the gate (pull-to-refresh). The gate is
 SERVER-AUTHORITATIVE: the client always calls, the server decides.
 
 Window. On-demand uses a NARROW `days` (recent sessions only) rather than the orchestrator's
-180-day default, so an open-page refresh is not a multi-hundred-day Hevy pull. The nightly sweep
-keeps the default window.
+180-day default, so an open-page refresh is not a multi-hundred-day Hevy pull. The same window
+bounds the chain's Polar ingest step (`polar_sync`, Q154). The nightly sweep keeps the default
+window.
 """
 from datetime import datetime, timedelta, timezone
 
@@ -37,7 +38,7 @@ router = APIRouter(prefix="/load", tags=["load"])
 
 # A caller whose freshest load metric is younger than this skips the refresh (unless forced).
 LOAD_REFRESH_STALE_AFTER = timedelta(minutes=15)
-# On-demand Hevy backfill window — recent sessions only, NOT hevy_workouts.DEFAULT_BACKFILL_DAYS.
+# On-demand Hevy + Polar ingest window — recent sessions only, NOT hevy_workouts.DEFAULT_BACKFILL_DAYS.
 ON_DEMAND_BACKFILL_DAYS = 30
 
 

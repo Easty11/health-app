@@ -26,6 +26,7 @@ _HEVY_RE = re.compile(r"\bHevyWorkout\b|(?:FROM|INTO|UPDATE|JOIN|TABLE)\s+hevy_w
 ALLOW_AEROBIC = {
     "reads/aerobic_reads.py": "THE canonical read-door (arbitrated_sessions + arbitrate).",
     "routers/polar.py": "Writer (Polar v4 sync / Flow-export); its GET reads via the door.",
+    "polar_ingest.py": "Writer (Polar v4 sync core, Q154 — moved out of routers/polar.py); reads existing rows only for source_session_id dedup and to target zoneless v4 rows for enrichment, never a count.",
     "routers/health_connect.py": "Writer (HC exercise ingest); reads existing rows for mirror-drop/upsert.",
     "import_polar.py": "Writer (Polar Flow-export ZIP ingest).",
     "load_events_metabolic.py": "Sources rows via arbitrated_sessions (the door); the only direct query is the distinct-user-id worklist.",

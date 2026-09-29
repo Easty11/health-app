@@ -22,6 +22,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import models
+import polar_ingest
 from auth import get_current_user
 from database import get_db
 from import_polar import _parse_session, import_flow_export
@@ -272,7 +273,7 @@ def test_sync_route_fires_cascade_and_surfaces_stale_notice(db_session, monkeypa
         _training_session("v4a", old, zones_seconds=None, cardio_load=None),
         _training_session("v4b", old + timedelta(hours=2), zones_seconds=None, cardio_load=None),
     ]
-    monkeypatch.setattr(polar, "_valid_client", lambda uid, db: _FakeClient(raws))
+    monkeypatch.setattr(polar_ingest, "valid_client", lambda uid, db: _FakeClient(raws))
 
     resp = _client(db_session, user).post("/integrations/polar/sync")
     assert resp.status_code == 200, resp.text

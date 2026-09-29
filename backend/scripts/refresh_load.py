@@ -5,34 +5,39 @@ four independently-run manual modules (#296).
 Sweeps every Hevy-keyed user and, per user, runs the load chain IN ORDER:
 
     1. hevy_workouts.sync_workouts                        Hevy API -> hevy_workouts   (async)
-    2. load_events.compute_all_users                     resistance events   tier0-v2
-    3. load_events_metabolic.compute_all_users_metabolic metabolic events    metab-v1
-    4. load_metrics.compute_all_users (tier0-v2)         mechanical / neuromuscular metrics
-    5. load_metrics.compute_all_users (metab-v1)         metabolic metrics
+    2. polar_ingest.sync_user (run_cascade=False)         Polar v4 -> aerobic_sessions (soft-fail)
+    3. load_events.compute_all_users                     resistance events   tier0-v2
+    4. load_events_metabolic.compute_all_users_metabolic metabolic events    metab-v1
+    5. load_metrics.compute_all_users (tier0-v2)         mechanical / neuromuscular metrics
+    6. load_metrics.compute_all_users (metab-v1)         metabolic metrics
 
-Version labels above track the module constants — steps 4/5 pass
+Version labels above track the module constants — steps 5/6 pass
 `load_events.FORMULA_VERSION` / `load_events_metabolic.FORMULA_VERSION_METABOLIC` rather than
 literals, so a formula bump (e.g. tier0-v1 → tier0-v2, P3) propagates without editing here.
 
 Per-user isolation mirrors `scripts/garmin_sync.py`: one user's failure is caught,
-recorded, and skipped -- it never aborts the sweep. Steps 2-5 depend on their
+recorded, and skipped -- it never aborts the sweep. Steps 3-6 depend on their
 predecessor, so once a step fails the rest of that user's chain is marked skipped.
 An aggregate summary (users attempted / succeeded / failed + per-user, per-step
 outcomes) is printed and returned.
 
-Idempotent: step 1 upserts; steps 2-3 delete-then-insert their `(user, formula_version)`
-`load_events` rows; steps 4-5 delete-then-insert their `(user, formula_version,
+Aerobic ingest (Q154): step 2 pulls new Polar sessions (summary upsert + v4 zone
+enrichment) through the same core the manual Sync route uses, over the chain's `days`
+window, with the cascade OFF — step 4 and step 6 recompute metabolic load from what it
+stored, so nothing is computed twice. It is SOFT-FAIL: a user with no Polar connection
+records `{"skipped": "no_polar"}`, and any ingest failure (token refresh, v4 API) records
+`{"error": "<Type>: <msg>"}` while the chain carries on. It never marks the user failed
+and never skips a later step, so a Polar outage cannot stall resistance load, and step 4
+still rolls the aerobic sessions already stored.
+
+Idempotent: steps 1-2 upsert (Polar dedups by `source_session_id`; enrichment targets
+zoneless rows only); steps 3-4 delete-then-insert their `(user, formula_version)`
+`load_events` rows; steps 5-6 delete-then-insert their `(user, formula_version,
 metrics_version)` `load_metrics` rows. A second run does not duplicate.
 
-Async shape: step 1 is `async`; steps 2-5 are sync. The Hevy ingest is driven with
+Async shape: step 1 is `async`; steps 2-6 are sync. The Hevy ingest is driven with
 `asyncio.run` per user (the proven `hevy_workouts.__main__` pattern), so each user's
 event loop is created and torn down in isolation.
-
-Aerobic scope (v1): step 3 ROLLS whatever is already in `aerobic_sessions`; this
-orchestrator does NOT ingest aerobic data. The only automated aerobic ingest
-(`routers/polar.py::sync_polar_sessions`) is request-coupled to `current_user` + its
-OAuth client and is out of scope to refactor here. The aerobic-ingest-automation gap
-is tracked in OPEN_QUESTIONS Q154.
 
 Triggers (#297, supersedes #296's dedicated Railway cron service): the per-user
 `POST /load/refresh` route (`routers/load.py`) on Training-page open, and the in-process
@@ -42,7 +47,7 @@ runs after the AEST day boundary. This `__main__` entry point remains for manual
 
     /opt/venv/bin/python -m scripts.refresh_load                    # all keyed users
     /opt/venv/bin/python -m scripts.refresh_load --user 4          # one user only
-    /opt/venv/bin/python -m scripts.refresh_load --days 30         # Hevy backfill window
+    /opt/venv/bin/python -m scripts.refresh_load --days 30         # Hevy + Polar window
     /opt/venv/bin/python -m scripts.refresh_load --as-of 2026-09-13
 """
 import argparse
@@ -55,6 +60,7 @@ import hevy_workouts
 import load_events
 import load_events_metabolic
 import load_metrics
+import polar_ingest
 from database import SessionLocal
 from hevy_templates import users_with_hevy_key
 
@@ -67,6 +73,25 @@ def _per_user(result: dict[str, Any], uid: int) -> dict[str, Any]:
     if isinstance(per_user, dict) and uid in per_user:
         return per_user[uid]
     return result
+
+
+# Steps whose failure is recorded but never fails the user or skips later steps.
+SOFT_STEPS = frozenset({"polar_sync"})
+
+
+def _polar_sync(db, uid: int, days: int) -> dict[str, Any]:
+    """The chain's aerobic ingest: `polar_ingest.sync_user` with the cascade off (the
+    chain's own metabolic steps recompute). Soft-fail by construction -- it never raises:
+    no Polar connection -> `{"skipped": "no_polar"}`; any other failure -> the chain's
+    `{"error": "<Type>: <msg>"}` shape, with the session rolled back so a half-written
+    ingest cannot leak into the later steps' transactions."""
+    try:
+        return polar_ingest.sync_user(db, uid, days=days, run_cascade=False)
+    except polar_ingest.NotConnected:
+        return {"skipped": "no_polar"}
+    except Exception as exc:  # noqa: BLE001 -- soft-fail: a Polar failure never stops the chain
+        db.rollback()
+        return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 def run_user_chain(
@@ -82,11 +107,15 @@ def run_user_chain(
     Steps are recorded as they complete. On the first step that raises, that step's
     entry becomes `{"error": "<Type>: <msg>"}`, every later step is marked `"skipped"`,
     and `status` is `"failed"` -- the exception does NOT propagate, so the sweep goes on.
+    `polar_sync` (a SOFT_STEPS member) never raises, so its own failure is recorded in
+    its entry and neither fails the user nor skips anything; it is still skipped when an
+    earlier step (hevy_sync) fails, like every step after a failure.
     """
     # (key, callable) in strict chain order. Each callable returns this user's outcome.
     steps: list[tuple[str, Callable[[], dict[str, Any]]]] = [
         ("hevy_sync", lambda: _per_user(
             asyncio.run(hevy_workouts.sync_workouts(db, only_user_id=uid, days=days)), uid)),
+        ("polar_sync", lambda: _polar_sync(db, uid, days)),
         ("load_events_tier0", lambda: _per_user(
             load_events.compute_all_users(db, only_user_id=uid), uid)),
         ("load_events_metabolic", lambda: _per_user(
@@ -151,6 +180,7 @@ def refresh_load(
             summary["users_failed"] += 1
 
         steps = outcome["steps"]
+        ps = steps.get("polar_sync")
         ev = steps.get("load_events_tier0")
         mev = steps.get("load_events_metabolic")
         m0 = steps.get("load_metrics_tier0")
@@ -159,15 +189,23 @@ def refresh_load(
         def _n(d: Any, key: str) -> Any:
             return d.get(key) if isinstance(d, dict) else "-"
 
+        def _polar(d: Any) -> Any:
+            if isinstance(d, dict) and "error" in d:
+                return f"error({d['error']})"
+            if isinstance(d, dict) and "skipped" in d:
+                return d["skipped"]
+            return _n(d, "synced")
+
         if outcome["status"] == "succeeded":
             print(f"  user {uid}: OK  "
+                  f"polar_synced={_polar(ps)} "
                   f"tier0_events={_n(ev, 'events_written')} "
                   f"metab_events={_n(mev, 'events_written')} "
                   f"tier0_metrics={_n(m0, 'rows_written')} "
                   f"metab_metrics={_n(mm, 'rows_written')}")
         else:
             failed_key = next((k for k, v in steps.items()
-                               if isinstance(v, dict) and "error" in v), "?")
+                               if k not in SOFT_STEPS and isinstance(v, dict) and "error" in v), "?")
             err = steps[failed_key]["error"] if failed_key in steps else "?"
             print(f"  user {uid}: FAILED at {failed_key} -- {err}", file=sys.stderr)
 
@@ -178,12 +216,12 @@ def refresh_load(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run the full load chain (Hevy ingest -> load_events -> load_metrics) "
+        description="Run the full load chain (Hevy + Polar ingest -> load_events -> load_metrics) "
                     "for all Hevy-keyed users. Nightly Railway cron entry point (#296).")
     parser.add_argument("--user", type=int, default=None,
                         help="only this user id (default: all Hevy-keyed users)")
     parser.add_argument("--days", type=int, default=hevy_workouts.DEFAULT_BACKFILL_DAYS,
-                        help="Hevy backfill window in days "
+                        help="Hevy + Polar ingest window in days "
                              f"(default {hevy_workouts.DEFAULT_BACKFILL_DAYS})")
     parser.add_argument("--as-of", dest="as_of", default=None,
                         help="ISO date the metrics rollup is computed as-of "
