@@ -257,6 +257,88 @@ def test_parent_must_name_an_active_row_of_this_user(db_session, case):
     assert _rows(db_session, u.id, type="constraint") == []
 
 
+# ── Q192 ruling: a constraint may name a RESOLVED injury, never with with_parent ──
+
+def _resolved_injury(db, user_id, key="hamstring_right"):
+    """An injury retired through the real resolve path, not a hand-set `active=False`."""
+    row = _injury(db, user_id, key=key)
+    return knowledge_router._resolve_entry(
+        row.id, knowledge_router.ResolutionIn(basis="cleared", resolved_by="clinician",
+                                              resolved_on=date(2026, 9, 24)),
+        "injury", user_id, db,
+    )
+
+
+@pytest.mark.parametrize("exit_", [
+    {"on_date": "2026-11-01", "with_parent": False},
+    {"on_date": "2026-11-01"},
+    {"on_condition": "physio clears loaded ER"},
+])
+def test_constraint_may_name_a_resolved_injury_without_with_parent(db_session, exit_):
+    u = _user(db_session)
+    parent = _resolved_injury(db_session, u.id)
+    assert not parent.active and parent.superseded_by is None
+    row = _write(db_session, u.id, _engine(parent_key="hamstring_right", exit=exit_))
+    assert row.active and row.value["parent_key"] == "hamstring_right"
+
+
+def test_constraint_under_a_resolved_parent_supersedes_its_orphan(db_session):
+    """The row-104 shape: a live orphan re-parented by a same-key rewrite, every other field kept."""
+    u = _user(db_session)
+    _resolved_injury(db_session, u.id)
+    orphan = _write(db_session, u.id, _engine(), key="c_er_cap")
+    fixed = _write(db_session, u.id, _engine(parent_key="hamstring_right"), key="c_er_cap")
+    db_session.refresh(orphan)
+    assert not orphan.active and orphan.superseded_by == fixed.id
+    assert fixed.active and fixed.value == _engine(parent_key="hamstring_right")
+
+
+def test_with_parent_true_on_a_resolved_parent_is_refused_with_its_own_message(db_session):
+    u = _user(db_session)
+    _resolved_injury(db_session, u.id)
+    with pytest.raises(TypedEntryRefused, match="born already ended") as exc:
+        _write(db_session, u.id, _engine(parent_key="hamstring_right",
+                                         exit={"on_date": "2026-11-01", "with_parent": True}))
+    assert exc.value.code == "invalid_parent"
+    assert _rows(db_session, u.id, type="constraint") == []
+
+
+@pytest.mark.parametrize("case", ["missing", "superseded", "proposed", "rejected",
+                                  "inactive_unresolved", "resolved_constraint"])
+def test_constraint_parent_that_is_not_a_resolved_injury_is_refused(db_session, case):
+    u = _user(db_session)
+    key = "hamstring_right"
+    if case in ("superseded", "proposed", "rejected"):
+        # Each carries a resolution block, so only the discriminating field refuses it.
+        row = _resolved_injury(db_session, u.id)
+        if case == "superseded":
+            row.superseded_by = _injury(db_session, u.id, key="hamstring_right_v2", active=False).id
+        else:
+            row.value = {**row.value, "status": case}
+        db_session.commit()
+    elif case == "inactive_unresolved":
+        _injury(db_session, u.id, active=False)
+    elif case == "resolved_constraint":
+        key = "c_parent"
+        c = _write(db_session, u.id, _engine(), key=key)
+        knowledge_router._resolve_entry(
+            c.id, knowledge_router.ResolutionIn(basis="done", resolved_by="user"),
+            "constraint", u.id, db_session)
+    with pytest.raises(TypedEntryRefused) as exc:
+        _write(db_session, u.id, _engine(parent_key=key), key="c_child")
+    assert exc.value.code == "invalid_parent"
+    assert _rows(db_session, u.id, key="c_child") == []
+
+
+def test_active_parent_still_passes_with_with_parent(db_session):
+    """Control: the active-parent path is unchanged by the Q192 narrowing."""
+    u = _user(db_session)
+    _injury(db_session, u.id)
+    row = _write(db_session, u.id, _engine(parent_key="hamstring_right",
+                                           exit={"with_parent": True}))
+    assert row.active
+
+
 def test_expires_at_is_refused(db_session):
     u = _user(db_session)
     with pytest.raises(TypedEntryRefused, match="expires_at"):

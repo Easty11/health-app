@@ -1011,6 +1011,18 @@ class TypedEntryRefused(ValueError):
         super().__init__(message)
 
 
+def _is_resolved_injury(row: models.UserKnowledgeEntry | None) -> bool:
+    """An injury row retired by RESOLUTION (Q192): inactive, no successor, a `resolution` block
+    with its date, and no non-terminal or rejected status. Reads the row's state, not `active`
+    alone — a superseded or proposed row is inactive too, and is not a resolved fact."""
+    if row is None or row.type != "injury" or row.active or row.superseded_by is not None:
+        return False
+    v = row.value or {}
+    if v.get("status") in ("proposed", "rejected", "superseded", "retracted"):
+        return False
+    return typed_entries.parse_date((v.get("resolution") or {}).get("resolved_on")) is not None
+
+
 def _validate_typed_write(
     user_id: int,
     entry_in: "KnowledgeEntryIn",
@@ -1022,7 +1034,10 @@ def _validate_typed_write(
     * `expires_at` must be null — the exit is the lifecycle, and `expire-stale` would otherwise
       retire the row silently with no operator in the loop (#223).
     * `parent_key` (optional, ANY entry type — G0 R3) must name one of THIS user's ACTIVE rows,
-      and never the row itself.
+      and never the row itself. One exception (Q192 ruling): a CONSTRAINT may name an injury
+      whose current row is RESOLVED, only when its `exit.with_parent` is not true — that shape
+      is `parent_resolved_survives` (G5 ruling 1) written directly. Superseded, proposed or
+      missing parents stay refused, and a finding still needs an active parent.
     * A chat write is `proposed` with `asserted_by: null` (G0 R5) — refused otherwise, never
       coerced (the value is stored as written).
     * proposed → confirmed has ONE path, the type's `/confirm` route: an upsert carrying a
@@ -1040,16 +1055,26 @@ def _validate_typed_write(
     if parent_key is not None:
         if parent_key == entry_in.key:
             raise TypedEntryRefused(f"{t}.parent_key must not name the entry itself", "invalid_parent")
-        parent = (
+        rows = (
             db.query(models.UserKnowledgeEntry)
-            .filter_by(user_id=user_id, key=parent_key, active=True)
-            .first()
+            .filter_by(user_id=user_id, key=parent_key)
+            .all()
         )
-        if parent is None:
-            raise TypedEntryRefused(
-                f"{t}.parent_key {parent_key!r} names no active entry for this user",
-                "invalid_parent",
-            )
+        if not any(r.active for r in rows):
+            current = max(rows, key=lambda r: r.id, default=None)
+            if t != "constraint" or not _is_resolved_injury(current):
+                raise TypedEntryRefused(
+                    f"{t}.parent_key {parent_key!r} names no active entry for this user"
+                    + (" (a constraint may also name a resolved injury)" if t == "constraint" else ""),
+                    "invalid_parent",
+                )
+            if (value.get("exit") or {}).get("with_parent") is True:
+                raise TypedEntryRefused(
+                    f"{t}.parent_key {parent_key!r} names a RESOLVED injury -- exit.with_parent: true "
+                    f"would make this constraint born already ended; drop with_parent and end it by "
+                    f"on_date / on_condition",
+                    "invalid_parent",
+                )
 
     if entry_in.source == "chat":
         if value.get("status") != _TYPED_CHAT_STATUS[t] or value.get("asserted_by") is not None:
