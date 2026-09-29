@@ -170,6 +170,23 @@ def test_bad_values_are_refused(over, match):
         validate_finding(_finding(**over))
 
 
+def test_finding_with_a_resolved_injury_parent_is_refused(db_session):
+    """Q192 widens CONSTRAINT parenting only: a finding still needs an active parent."""
+    u = _user(db_session)
+    inj = models.UserKnowledgeEntry(
+        user_id=u.id, type="injury", key="hamstring_left", value={"body_part": "hamstring"},
+        source="api", added_at=date.today(), active=True,
+    )
+    db_session.add(inj)
+    db_session.commit()
+    knowledge_router._resolve_entry(
+        inj.id, knowledge_router.ResolutionIn(basis="cleared", resolved_by="clinician"),
+        "injury", u.id, db_session)
+    with pytest.raises(TypedEntryRefused, match="names no active entry") as exc:
+        _write(db_session, u.id, _finding(parent_key="hamstring_left"))
+    assert exc.value.code == "invalid_parent"
+
+
 # ── lifecycle ────────────────────────────────────────────────────────────────
 
 def test_chat_proposal_saves_as_proposed(db_session):
