@@ -471,7 +471,8 @@ def module_since(ctx: BriefContext) -> dict[str, Any] | None:
 
 def module_changes_vs_history(ctx: BriefContext) -> dict[str, Any]:
     """The "flag against history" module: each new finding beside the statement(s) it replaced, and
-    each in-scope injury whose status changed since, before → after."""
+    each in-scope injury whose status changed since, before → after. An injury's `change` says
+    which (`resolved` | `updated`), so the print document never reads it off the `after` text."""
     if ctx.since is None:
         return _since_missing()
     since = ctx.since
@@ -486,12 +487,12 @@ def module_changes_vs_history(ctx: BriefContext) -> dict[str, Any]:
         row, v = inj["row"], _v(inj["row"])
         resolved = _resolved_on(v)
         if not row.active and resolved is not None and resolved >= since:
-            injuries.append({"key": inj["key"], "text": _injury_label(v),
+            injuries.append({"key": inj["key"], "text": _injury_label(v), "change": "resolved",
                              "before": "active", "after": f"resolved {resolved.isoformat()}",
                              "on": resolved.isoformat()})
         elif row.active and inj["history"] and row.added_at is not None and row.added_at >= since:
             prev = _v(inj["history"][0])
-            injuries.append({"key": inj["key"], "text": _injury_label(v),
+            injuries.append({"key": inj["key"], "text": _injury_label(v), "change": "updated",
                              "before": prev.get("detail") or ", ".join(prev.get("restrictions") or []),
                              "after": v.get("detail") or ", ".join(v.get("restrictions") or []),
                              "on": _iso(row.added_at)})

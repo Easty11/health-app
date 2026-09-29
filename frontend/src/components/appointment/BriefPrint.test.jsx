@@ -105,16 +105,66 @@ describe('layout', () => {
       "What I'd like to ask", 'Before we finish'])
   })
 
-  test('since: one table, date ascending, finding area in words, new/before→after, set by', async () => {
+  test('since: one table, date ascending, finding area in words, new/updated/first recorded, set by', async () => {
     const doc = await renderPage()
     const table = doc.querySelector('table.brief-doc-since')
     expect([...table.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['Date', 'Area', 'What changed', 'Set by'])
     const rows = [...table.querySelectorAll('tbody tr')].map((tr) => [...tr.children].map(text))
     expect(rows).toEqual([
-      ['1 Jul 2026', 'part b', 'Part b detail, version one (synthetic) → Part b detail, version two (synthetic)', ''],
-      ['10 Jul 2026', 'left part c', 'Recorded', ''],
-      ['20 Aug 2026', 'right part a', `${FINDING_TEXT} (new)`, 'My clinician'],
+      ['1 Jul 2026', 'Part b', 'Updated: Part b detail, version two (synthetic)Previously: Part b detail, version one (synthetic)', ''],
+      ['10 Jul 2026', 'Left part c', 'Injury first recorded', ''],
+      ['20 Aug 2026', 'Right part a', `${FINDING_TEXT} (new)`, 'My clinician'],
     ])
+    // The rewrite's old detail is its own grey sub-line, not run on after the new one.
+    const sub = table.querySelector('tbody tr .brief-doc-sub')
+    expect(sub.textContent).toBe('Previously: Part b detail, version one (synthetic)')
+  })
+
+  describe('injury cells: template words, no ISO date and no arrow', () => {
+    const ISO = /\d{4}-\d{2}-\d{2}/
+    const injuryCells = (doc) => [...doc.querySelectorAll('table.brief-doc-since tbody tr')]
+      .filter((tr) => text(tr.children[3]) === '')
+      .map((tr) => text(tr.children[2]))
+    const withInjuries = (chv, since) => withSections((ss) => ss.map((s) => (
+      s.module === 'changes_vs_history' ? { ...s, findings: [], injuries: chv }
+        : s.module === 'since' ? { ...s, injuries: since } : s)))
+
+    test.each([
+      ['a resolved injury (changes_vs_history)',
+        [{ key: 'injury_part_b', text: 'part b', change: 'resolved', before: 'active', after: 'resolved 2026-09-24', on: '2026-09-24' }], [],
+        ['Recorded as resolved']],
+      ['a rewritten injury (changes_vs_history)',
+        [{ key: 'injury_part_b', text: 'part b', change: 'updated', before: 'Old detail (synthetic)', after: 'New detail (synthetic)', on: '2026-07-01' }], [],
+        ['Updated: New detail (synthetic)Previously: Old detail (synthetic)']],
+      ['since: recorded, updated and resolved', [],
+        [{ key: 'injury_part_c_left', text: 'left part c', change: 'recorded', on: '2026-07-10' },
+          { key: 'injury_part_b', text: 'part b', change: 'updated', on: '2026-07-11' },
+          { key: 'injury_part_a_right', text: 'right part a', change: 'resolved', on: '2026-09-24', basis: 'Basis A (synthetic)' }],
+        ['Injury first recorded', 'Injury record updated', 'Recorded as resolved — Basis A (synthetic)']],
+    ])('%s', async (_, chv, since, expected) => {
+      const cells = injuryCells(await renderPage(withInjuries(chv, since)))
+      expect(cells).toEqual(expected)
+      for (const c of cells) {
+        expect(c).not.toMatch(ISO)
+        expect(c).not.toContain('→')
+      }
+    })
+  })
+
+  test('Area values start with a capital letter; stored labels are unchanged', async () => {
+    const brief = withSections((ss) => [...ss, { module: 'background', note: 'x',
+      injuries: [{ key: 'injury_part_b', type: 'injury', text: 'part b', status: 'resolved',
+        resolved_on: '2026-09-24', detail: 'Detail B (synthetic)', restrictions: [] }],
+      findings: [{ key: 'finding_other', type: 'finding', text: 'Finding B (synthetic)', parent_key: 'injury_part_b',
+        parent_label: 'part b', as_of: '2026-05-01', status: 'confirmed', asserted_by: 'clinician' }] }])
+    const doc = await renderPage(brief)
+    const areaCells = [...doc.querySelectorAll('table')].flatMap((t) => {
+      const col = [...t.querySelectorAll('th')].findIndex((th) => th.textContent === 'Area')
+      return col < 0 ? [] : [...t.querySelectorAll('tbody tr')].map((tr) => text(tr.children[col]))
+    })
+    expect(areaCells).toEqual(['Part b', 'Left part c', 'Right part a', 'Part b (resolved 24 Sep 2026)', 'Part b'])
+    for (const a of areaCells) expect(a).toMatch(/^[A-Z]/)
+    expect(brief.sections.find((s) => s.module === 'changes_vs_history').injuries[0].text).toBe('part b')
   })
 
   test('a replaced finding shows what it replaced', async () => {

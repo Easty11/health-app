@@ -1197,7 +1197,7 @@ def get_appointment_brief(key: str) -> str:
     `parent_label` (the injury in words); on a constraint `restriction` (advisory: its own text;
     engine: kind, regions and side, without tier boilerplate), `exit_label` (the exits with the
     parent injury named in words) and `parent_key`/`parent_label`; on a derived ask `question` (the template alone, e.g. "Is this
-    still appropriate?")."""
+    still appropriate?"); on a `changes_vs_history` injury `change` (`resolved` | `updated`)."""
     with SessionLocal() as sess:
         brief = appointment_brief.load_appointment_brief(sess, _current_user_id(), key)
     if brief is None:

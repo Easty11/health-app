@@ -61,7 +61,7 @@ export const PRINT_BRIEF = {
       injuries: [{ key: 'injury_part_c_left', text: 'left part c', change: 'recorded', on: '2026-07-10' }] },
     { module: 'changes_vs_history', since: '2026-06-01',
       findings: [{ ...FINDING, previous: [] }],
-      injuries: [{ key: 'injury_part_b', text: 'part b', before: 'Part b detail, version one (synthetic)',
+      injuries: [{ key: 'injury_part_b', text: 'part b', change: 'updated', before: 'Part b detail, version one (synthetic)',
         after: 'Part b detail, version two (synthetic)', on: '2026-07-01' }] },
     { module: 'asks', authored: AUTHORED,
       derived: [{ rule: 'review_due', entry_key: CONSTRAINT.key, source: 'ledger', row: CONSTRAINT,
