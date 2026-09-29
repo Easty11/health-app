@@ -12713,3 +12713,59 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 **Do not revisit unless.** A resolved-parent constraint is found ending or hiding by some path #351's VERIFY 2 did not cover; or a type other than injury needs to parent a live row after resolving. That would be a new ruling, not a widening of this one.
 
 ---
+
+### 353. Polar aerobic ingest runs in the load chain as a soft-fail step; the manual Sync route's contract is kept (closes Q154)
+
+**Decision.** Chat brief C (session `aerobic-ingest`), with two rulings made in the brief: soft-fail and window. The Polar AccessLink v4 fetch+persist body of `POST /integrations/polar/sync` moves into a request-free core, `backend/polar_ingest.py::sync_user(db, user_id, *, days, run_cascade=True)`. The core covers the summary upsert, the v4 zone enrichment (#261) and the optional metabolic cascade. The token store and refresh move with it (`get_polar_row`, `load_tokens`, `store_tokens`, `valid_client`). The core raises plain exceptions, never `HTTPException`: `NotConnected`, `TokenRefreshFailed` and `PolarApiError`, all under `PolarIngestError`.
+- **Route.** The manual route delegates with `run_cascade=True`. It keeps `days=365` and maps the exceptions to the statuses it already returned, with the same `detail` strings: 404 "Polar not connected", 424 "Polar token refresh failed: …", 502 "Polar v4 API error: …" and 502 "Polar v4 zone fetch error: …". The response is unchanged.
+- **Chain.** `scripts/refresh_load.run_user_chain` gains a `polar_sync` step. It runs directly after `hevy_sync` and before `load_events_tier0` and `load_events_metabolic`. It calls `sync_user(db, uid, days=<chain days>, run_cascade=False)`, because the chain's own `load_events_metabolic` and `load_metrics_metab` steps recompute, so the cascade never runs twice.
+- **[RULED: soft-fail]** `polar_sync` never raises. A user with no Polar connection records `{"skipped": "no_polar"}`. Any other exception records `{"error": "<Type>: <msg>"}` after `db.rollback()`. The step never sets the user's status to `failed` and never skips a later step.
+  - A hard failure BEFORE it (`hevy_sync`) still skips it, like every step after a failure. That is the existing first-failure rule, unchanged.
+  - The per-user log line reports `polar_synced=<n>|no_polar|error(…)`. The FAILED-at attribution ignores the soft step (`SOFT_STEPS`).
+- **[RULED: window]** `polar_sync` uses the chain's `days`: 30 on demand (`routers/load.ON_DEMAND_BACKFILL_DAYS`) and **180 in the nightly sweep**, which calls `refresh_load` with its default `hevy_workouts.DEFAULT_BACKFILL_DAYS`.
+
+**Rationale.** The 28 Sep H10 session reached `aerobic_sessions` fully zoned and deposited TRIMP once the operator pressed Sync (confirmed 30 Sep), so enrichment works. The gap was only that nothing triggered the pull, and the metabolic window aged to the last manual press (Q154).
+- The load chain already has both triggers: the Training-page open and pull-to-refresh (#297), and the 02:00 sweep. Adding the Polar pull there fixes freshness without a new scheduler.
+- Soft-fail keeps a Polar outage (dead token, v4 5xx) from stalling resistance load. The later metabolic steps still roll the aerobic sessions already stored.
+- The rollback stops a half-written ingest from leaking into the next step's transaction.
+- The route keeps its own cascade because a manual Sync has no chain after it.
+
+**Scope (recorded, not changed).**
+- The nightly sweep covers Hevy-keyed users only (`users_with_hevy_key`). A Polar-connected user with no Hevy key is refreshed on Training-page open, but never nightly. Both current operator accounts are Hevy-keyed.
+- No change to arbitration (`_SOURCE_RANK`), enrichment logic, the metabolic transform or sport exclusion. The sport-exclusion ruling that supersedes #322 belongs to brief B.
+- No schema change and no migration. No webhook (see Q193).
+
+**Status.** Built and merged; non-schema. Commits: `c8b544c` (core and route), `49bb3c3` (chain step), `1fb8650` (comment corrections). Merged via PR #287 (merge `9b3098a`). The backend deploy reached SUCCESS, and the startup sweep exercised the step in prod (see How you know). The operator's new-session check is OWED (G4).
+
+**How you know.**
+- *Verify (brief V1–V3, against master `7155448`).*
+  - `sync_polar_sessions` had the two-pass shape: summary upsert, then `_enrich_v4_zones`, then `run_metabolic_cascade`.
+  - `_valid_client(user_id, db)` was as the brief described.
+  - `run_user_chain` ran hevy_sync, load_events_tier0, load_events_metabolic, load_metrics_tier0, load_metrics_metab in that order, and the first failure skipped every later step.
+  - `POST /load/refresh` (`days=30`) and `load_sweep._sweep` (the default, 180) both call `refresh_load`, which calls `run_user_chain`.
+- *Route contract.* The response was **byte-identical** to master's router across two calls in one fixture (a first sync of 3 sessions with 1 enriched, then a deduped `days=5` re-sync). The probe ran master in a worktree against this branch with the same fake client. `tests/test_polar_ingest.py` pins the key order, the 365-day window, and the 404 / 424 / 502 statuses with their exact details.
+- *Core tests.* `tests/test_polar_ingest.py` covers:
+  - not connected, refresh failure, summary API error, and zone-fetch error (the pass-1 rows stay committed);
+  - the happy path, which stores and enriches;
+  - `run_cascade=False` never calls the cascade, and `True` calls it exactly once;
+  - one faked-transport happy path through the real token row, `valid_client` and `PolarV4Client`, asserting the `features=zones` one-day call (#166).
+- *Chain tests.* `tests/test_refresh_load.py` covers:
+  - six-step order, with `polar_sync` before `load_events_metabolic` and called with the chain's days and `run_cascade=False`;
+  - the no-Polar marker from the real core;
+  - a soft error, where the status stays `succeeded`, the rollback is called, the 4 later steps run for real and the log line shows the error;
+  - an unexpected exception, which is also soft;
+  - a later hard failure, attributed to its own step rather than to polar;
+  - a hevy hard failure, which skips polar;
+  - `days=30` passed through.
+- *Mutation check.* Making `_polar_sync` re-raise fails 3 chain tests.
+- *Suite.* 2401 passed locally. One test failed because this shallow clone lacks `3360ed5` (`test_context_builder_output_unchanged_pre_post_refactor`). CI was green on PR #287.
+- *Prod, 29 Sep (after deploy).* The Railway `health-app-backend` deploy from `9b3098a` reached SUCCESS. The new image answered (#116): its startup self-heal sweep logged a per-user `polar_synced=` field, which only this code emits. `refresh_load: 3 Hevy-keyed user(s) in scope; days=180`, and 3 of 3 succeeded:
+  - user 1: `polar_synced=0`. The v4 summary list ran over three windows from 2026-04-02 to 2026-09-30, then made one `features=zones` fetch for 2026-06-15. Metabolic events 49.
+  - users 4 and 5: `polar_synced=no_polar`.
+
+  The 06-15 fetch shows a zoneless v4 row whose feature fetch returns no qualifying split. Under the #261 rule that row stays a target, so every run inside its window re-fetches that date: one extra call per such date per run. This is not changed here.
+- *OWED (operator, G4).* Record a Polar session and do NOT press Sync. Open the Training page, or pull to refresh. The session should appear in `aerobic_sessions` with zones and a metabolic bar. Next morning, the 02:00 sweep's per-user log line should show `polar_synced=`. The startup sweep above already showed the field; the scheduled 02:00 run has not been observed yet.
+
+**Do not revisit unless.** A v4 outage or token failure is found stalling the chain despite soft-fail. Or the nightly 180-day Polar pull is found hitting a v4 rate limit. Or a Polar-only (no Hevy key) user needs nightly freshness, which would widen the sweep set: a new ruling, not a fix.
+
+---
