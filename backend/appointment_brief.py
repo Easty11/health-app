@@ -18,11 +18,12 @@ HARD EXCLUSIONS, inherited from the lifts (`typed_entries`) and re-applied to hi
   * a finding whose `derived_from_labs` is not explicitly `False` never renders — not even as a
     count (labs are out of v1; the #60 firewall applies anyway);
   * free-text `user_knowledge` is never read (being retired, Q181) — this module takes no session,
-    so it cannot read any table; the loader reads `user_knowledge_entries` only.
+    so it cannot read any table; the loader reads `user_knowledge_entries` (and the user's
+    `full_name`, for the print subtitle) only.
 
 PURE. `build_appointment_brief` takes loaded rows and returns a JSON-safe dict: no queries, no
-clock. `load_appointment_brief` is the one loader (one query) the API route and the MCP tool both
-call, so the two surfaces return the same object.
+clock. `load_appointment_brief` is the one loader (one ledger query, plus the user's name) the API
+route and the MCP tool both call, so the two surfaces return the same object.
 """
 from __future__ import annotations
 
@@ -36,6 +37,7 @@ from sqlalchemy.orm import Session
 import models
 import typed_entries
 from current_state import CurrentState
+from engine.taxonomy import by_key as region_by_key
 from routers.knowledge import (
     APPOINTMENT_DEFAULT_AUDIENCE,
     APPOINTMENT_DEFAULT_SECTIONS,
@@ -130,6 +132,7 @@ class BriefContext:
     # Per parent key in scope: {"key", "row", "history": [older rows, newest first]}.
     injuries: list[dict[str, Any]] = field(default_factory=list)
     missing_parent_keys: list[str] = field(default_factory=list)
+    parent_labels: dict[str, str] = field(default_factory=dict)          # in-scope injury key → label
     constraints: list[dict[str, Any]] = field(default_factory=list)       # active, confirmed
     findings: list[dict[str, Any]] = field(default_factory=list)          # open/confirmed, visible
     resolved_constraints: list[Any] = field(default_factory=list)        # inactive, confirmed, resolved
@@ -179,6 +182,7 @@ def scope_context(appointment: dict[str, Any], current_state: CurrentState, ledg
             ctx.missing_parent_keys.append(pk)
             continue
         ctx.injuries.append({"key": pk, "row": current, "history": _predecessors(current, rows)})
+        ctx.parent_labels[pk] = _injury_label(_v(current))
 
     ctx.constraints = [c for c in current_state.constraints if c.get("parent_key") in pk_set]
     ctx.findings = [f for f in (current_state.findings or {}).get("visible", [])
@@ -205,14 +209,51 @@ def scope_context(appointment: dict[str, Any], current_state: CurrentState, ledg
 
 
 # ── row summaries ─────────────────────────────────────────────────────────────
+#
+# `text` / `exit` are the shared chat phrasing (`typed_entries`) and stay as they are. The print
+# document (#350) reads the plain fields beside them: `restriction`, `exit_label`, `parent_label` —
+# the same row in words, with no stored tokens and no tier boilerplate.
 
-def _constraint_summary(c: dict[str, Any]) -> dict[str, Any]:
+def _parent_label(key: Any, labels: dict[str, str]) -> str | None:
+    return None if not key else labels.get(key) or _human(key)
+
+
+def _restriction(c: dict[str, Any]) -> str:
+    """A constraint as the restriction itself. Advisory: its own text, verbatim. Engine: its kind
+    and regions (taxonomy labels) and side, in words — never the "engine-enforced" boilerplate."""
     scope = c.get("scope") or {}
+    if scope.get("tier") != "engine":
+        return str(scope.get("text") or "")
+    regions = ", ".join(getattr(region_by_key(k), "label", None) or _human(k)
+                        for k in scope.get("region_keys") or [])
+    side = scope.get("side") or "bilateral"
+    side_str = "" if side == "bilateral" else f", {side} side only"
+    kind = _human(c.get("kind")).capitalize()
+    return f"{kind}: {regions}{side_str}" if kind else f"{regions}{side_str}"
+
+
+def _exit_label(c: dict[str, Any], labels: dict[str, str]) -> str:
+    """`constraint_exits` with the parent key replaced by the injury's label."""
+    exit_ = c.get("exit") or {}
+    parent = c.get("parent_key")
+    if exit_.get("with_parent") is True and parent:
+        return typed_entries.constraint_exits(
+            {**c, "parent_key": _parent_label(parent, labels)})
+    return typed_entries.constraint_exits(c)
+
+
+def _constraint_summary(c: dict[str, Any], labels: dict[str, str] | None = None) -> dict[str, Any]:
+    scope = c.get("scope") or {}
+    labels = labels or {}
     return {
         "key": c.get("key"), "type": "constraint",
         "tier": scope.get("tier"), "kind": c.get("kind"),
         "text": typed_entries.constraint_what(c),
+        "restriction": _restriction(c),
         "exit": typed_entries.constraint_exits(c),
+        "exit_label": _exit_label(c, labels),
+        "parent_key": c.get("parent_key"),
+        "parent_label": _parent_label(c.get("parent_key"), labels),
         "review_by": c.get("review_by"),
         "asserted_by": c.get("asserted_by"),
         "authority": typed_entries.AUTHORITY_LABELS.get(c.get("asserted_by")),
@@ -220,10 +261,12 @@ def _constraint_summary(c: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _finding_summary(f: dict[str, Any]) -> dict[str, Any]:
+def _finding_summary(f: dict[str, Any], labels: dict[str, str] | None = None) -> dict[str, Any]:
     return {
         "key": f.get("key"), "type": "finding",
         "text": f.get("statement"),
+        "parent_key": f.get("parent_key"),
+        "parent_label": _parent_label(f.get("parent_key"), labels or {}),
         "as_of": f.get("as_of"), "status": f.get("status"),
         "marker_status": f.get("marker_status"),
         "review_by": f.get("review_by"),
@@ -252,10 +295,10 @@ def _row_in_scope(ctx: BriefContext, key: str | None) -> dict[str, Any] | None:
         return None
     for c in ctx.constraints:
         if c.get("key") == key:
-            return _constraint_summary(c)
+            return _constraint_summary(c, ctx.parent_labels)
     for f in ctx.findings:
         if f.get("key") == key:
-            return _finding_summary(f)
+            return _finding_summary(f, ctx.parent_labels)
     for inj in ctx.injuries:
         if inj["key"] == key:
             return _injury_summary(inj)
@@ -269,29 +312,36 @@ def _row_in_scope(ctx: BriefContext, key: str | None) -> dict[str, Any] | None:
 # about the row, never instructions to set, date or rule on it — a row may be the operator's own
 # precaution, and phrasing it as something the clinician must settle reads it as a clinical order.
 
+REVIEW_QUESTION = "Is this still appropriate?"
+CONDITION_QUESTION = "Does this condition still apply?"
+MARKER_QUESTION = "What does this mean?"
+
 def _derived_asks(ctx: BriefContext) -> list[dict[str, Any]]:
     horizon = ctx.appointment_date + timedelta(days=REVIEW_HORIZON_DAYS)
     out: list[dict[str, Any]] = []
 
-    def add(rule: str, row: dict[str, Any], text: str) -> None:
-        out.append({"rule": rule, "entry_key": row["key"], "text": text, "row": row, "source": "ledger"})
+    def add(rule: str, row: dict[str, Any], question: str, subject: str) -> None:
+        # `question` is the template alone (the print document shows it beside the row it names);
+        # `text` is the question with its subject, as the screen and the chat read it.
+        out.append({"rule": rule, "entry_key": row["key"], "question": question,
+                    "text": f"{question} {subject}", "row": row, "source": "ledger"})
 
     for c in ctx.constraints:
-        s = _constraint_summary(c)
+        s = _constraint_summary(c, ctx.parent_labels)
         review_by = typed_entries.parse_date(c.get("review_by"))
         if review_by is not None and review_by <= horizon:
-            add("review_due", s, f"Is this still appropriate? {s['text']}")
+            add("review_due", s, REVIEW_QUESTION, s["text"])
         exit_ = c.get("exit") or {}
         # "Only exit is on_condition": a condition with no date and no parent to end with.
         if exit_.get("on_condition") and not exit_.get("on_date") and exit_.get("with_parent") is not True:
-            add("undated_exit", s, f"Does this condition still apply? {exit_['on_condition']}")
+            add("undated_exit", s, CONDITION_QUESTION, exit_["on_condition"])
     for f in ctx.findings:
-        s = _finding_summary(f)
+        s = _finding_summary(f, ctx.parent_labels)
         review_by = typed_entries.parse_date(f.get("review_by"))
         if review_by is not None and review_by <= horizon:
-            add("review_due", s, f"Is this still appropriate? {s['text']}")
+            add("review_due", s, REVIEW_QUESTION, s["text"])
         if f.get("status") == "open" and f.get("marker_status") in UNSETTLED_MARKERS:
-            add("unsettled_marker", s, f"What does this mean? {s['text']}")
+            add("unsettled_marker", s, MARKER_QUESTION, s["text"])
     return out
 
 
@@ -397,7 +447,7 @@ def module_since(ctx: BriefContext) -> dict[str, Any] | None:
                              "change": "updated" if inj["history"] else "recorded",
                              "on": _iso(row.added_at)})
     findings = [] if history_owns else [
-        _finding_summary(f) for f in ctx.findings
+        _finding_summary(f, ctx.parent_labels) for f in ctx.findings
         if (d := typed_entries.parse_date(f.get("as_of"))) is not None and d >= since]
     constraints = []
     for c in ctx.constraints:
@@ -405,11 +455,12 @@ def module_since(ctx: BriefContext) -> dict[str, Any] | None:
             continue
         on = typed_entries.parse_date(c.get("confirmed_on")) or c.get("added_at")
         if on is not None and on >= since:
-            constraints.append({**_constraint_summary(c), "change": "confirmed", "on": _iso(on)})
+            constraints.append({**_constraint_summary(c, ctx.parent_labels), "change": "confirmed", "on": _iso(on)})
     for r in ctx.resolved_constraints:
         resolved = _resolved_on(_v(r))
         if resolved >= since:
-            constraints.append({**_constraint_summary({"key": r.key, **_v(r)}), "change": "resolved",
+            constraints.append({**_constraint_summary({"key": r.key, **_v(r)}, ctx.parent_labels),
+                                "change": "resolved",
                                 "on": resolved.isoformat(),
                                 "basis": (_v(r).get("resolution") or {}).get("basis")})
     if not (injuries or findings or constraints):
@@ -429,7 +480,7 @@ def module_changes_vs_history(ctx: BriefContext) -> dict[str, Any]:
         as_of = typed_entries.parse_date(f.get("as_of"))
         if as_of is None or as_of < since:
             continue
-        findings.append({**_finding_summary(f), "previous": ctx.finding_history.get(f["key"], [])})
+        findings.append({**_finding_summary(f, ctx.parent_labels), "previous": ctx.finding_history.get(f["key"], [])})
     injuries = []
     for inj in ctx.injuries:
         row, v = inj["row"], _v(inj["row"])
@@ -448,7 +499,7 @@ def module_changes_vs_history(ctx: BriefContext) -> dict[str, Any]:
 
 
 def module_current_constraints(ctx: BriefContext) -> dict[str, Any]:
-    return {"items": [_constraint_summary(c) for c in ctx.constraints]}
+    return {"items": [_constraint_summary(c, ctx.parent_labels) for c in ctx.constraints]}
 
 
 def module_background(ctx: BriefContext) -> dict[str, Any]:
@@ -457,7 +508,7 @@ def module_background(ctx: BriefContext) -> dict[str, Any]:
     which new code must not read; full background waits on the Q181 migration."""
     return {
         "injuries": [_injury_summary(inj) for inj in ctx.injuries],
-        "findings": [_finding_summary(f) for f in ctx.findings if f.get("status") == "confirmed"],
+        "findings": [_finding_summary(f, ctx.parent_labels) for f in ctx.findings if f.get("status") == "confirmed"],
         "note": "Background is the injury ledger and confirmed findings only; fuller history waits on Q181.",
     }
 
@@ -526,8 +577,10 @@ def _json_safe(obj: Any) -> Any:
 
 def build_appointment_brief(
     appointment: dict[str, Any], current_state: CurrentState, ledger: list[Any],
+    patient_name: str | None = None,
 ) -> dict[str, Any]:
-    """Assemble the brief: pure, JSON-safe. See the module docstring for scope and exclusions."""
+    """Assemble the brief: pure, JSON-safe. See the module docstring for scope and exclusions.
+    `patient_name` is the user's `full_name` (None if unset) — the print document's subtitle."""
     ctx = scope_context(appointment, current_state, ledger)
     sections = []
     for name in resolve_sections(ctx.value):
@@ -539,6 +592,7 @@ def build_appointment_brief(
         "kind": ctx.kind,
         "audience": ctx.audience,
         "status": ctx.value["status"],
+        "patient": {"name": patient_name or None},
         "scope": {"parent_keys": ctx.parent_keys, "missing_parent_keys": ctx.missing_parent_keys,
                   "hops": 1},
         "sections": sections,
@@ -574,7 +628,8 @@ def load_appointment_brief(db: Session, user_id: int, key: str) -> dict[str, Any
         live_keys=typed_entries.active_keys(active),
     )
     ledger = [r for r in rows if r.type != "appointment"]
-    return build_appointment_brief({"key": appt.key, "value": appt.value}, state, ledger)
+    name = db.query(models.User.full_name).filter(models.User.id == user_id).scalar()
+    return build_appointment_brief({"key": appt.key, "value": appt.value}, state, ledger, name)
 
 
 def list_appointments(db: Session, user_id: int, status: str | None = None) -> list[dict[str, Any]]:

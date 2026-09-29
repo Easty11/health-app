@@ -10,7 +10,8 @@
 //     found" under an ask whose resolves row the brief could not show (#348);
 //   - neutral framing (#349): every constraint/finding row shows who set it, voiced per audience;
 //   - print mode: Print / Save PDF calls window.print; header, chat and scroll containers are
-//     released for print; tick boxes print as empty squares; an ask never breaks across pages;
+//     released for print; the screen layout is print:hidden and the dedicated print document
+//     (#350, BriefPrint — its own tests) is print-only; no tick box reaches paper;
 //   - audience `clinician` drops the tick boxes and uses the fuller headings;
 //   - the hub lists `planned` appointments as doorways to their briefs, and nothing when none.
 // Fixture is SYNTHETIC (placeholder text) and shaped like the backend's brief.
@@ -204,8 +205,10 @@ describe('first real use (row-107 shape)', () => {
     expect(within(lw).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(
       ['#ask-q1', '#ask-q2', '#ask-q3', '#ask-q4', '#ask-q5'])
     expect(within(lw).getByText('+ 4 more under Asks')).toBeTruthy()
+    // On screen (the print document, print-only, carries its own copy — #350).
+    const onScreen = within(screen.getByTestId('appointment-brief'))
     for (let i = 1; i <= 9; i += 1) {
-      expect(screen.getAllByText(`Ask ${i} full text. Detail for ask ${i}.`)).toHaveLength(1)
+      expect(onScreen.getAllByText(`Ask ${i} full text. Detail for ask ${i}.`)).toHaveLength(1)
     }
     expect(within(screen.getByRole('region', { name: 'Asks' })).getAllByRole('checkbox')).toHaveLength(9)
   })
@@ -237,7 +240,7 @@ describe('print mode', () => {
     expect(print).toHaveBeenCalledTimes(1)
   })
 
-  test('the print render drops header, chat and scroll containers; ticks print as empty squares', async () => {
+  test('print shows only the print document: chrome and screen layout hidden, no tick boxes', async () => {
     api.get.mockImplementation(() => Promise.resolve({ data: REAL }))
     let view
     await act(async () => { view = renderAt('/appointments/appt_a') })
@@ -249,28 +252,27 @@ describe('print mode', () => {
     expect(within(header).getByText(/Chat/)).toBeTruthy()
     expect(container.querySelector('aside').className).toMatch(/(^|\s)print:hidden(\s|$)/)
     expect(screen.getByRole('button', { name: 'Print / Save PDF' }).parentElement.className).toMatch(/print:hidden/)
-    // Every scroll container between the page and the brief is released for print.
+    // The screen layout is print:hidden; the print document is print-only (#350).
     const brief = screen.getByTestId('appointment-brief')
-    for (let el = brief.parentElement; el && el !== container; el = el.parentElement) {
+    expect(brief.className).toMatch(/(^|\s)print:hidden(\s|$)/)
+    const doc = screen.getByTestId('brief-print')
+    expect(doc.className).toMatch(/(^|\s)hidden(\s|$)/)
+    expect(doc.className).toMatch(/(^|\s)print:block(\s|$)/)
+    // Every scroll container between the page and the print document is released for print.
+    for (let el = doc.parentElement; el && el !== container; el = el.parentElement) {
       if (/overflow-(y-)?(auto|scroll|hidden)/.test(el.className)) expect(el.className).toMatch(/print:overflow-visible/)
       if (/(^|\s)(md:)?h-screen/.test(el.className)) expect(el.className).toMatch(/print:h-auto/)
     }
-    for (const el of brief.querySelectorAll('*')) {
+    for (const el of doc.querySelectorAll('*')) {
       expect(el.className?.toString() ?? '').not.toMatch(/(^|\s)(sticky|max-h-\S+|overflow-(y-)?(auto|scroll))(\s|$)/)
     }
-    // Tick boxes: the checkbox is screen-only; a print-only empty square stands in, even when ticked.
+    // Ticks stay on screen: no tick box or print square in the print document, even when ticked.
     fireEvent.click(within(asks).getAllByRole('checkbox')[0])
-    const items = asks.querySelectorAll('li[id^="ask-"]')
-    expect(items).toHaveLength(9)
-    for (const li of items) {
-      expect(li.className).toMatch(/break-inside-avoid/)
-      expect(li.querySelector('input[type="checkbox"]').className).toMatch(/print:hidden/)
-      const square = li.querySelector('[data-print-tick]')
-      expect(square.className).toMatch(/hidden print:inline-block/)
-      expect(square.textContent).toBe('')
-    }
-    // Black on white lives in the print stylesheet, scoped to the brief.
+    expect(asks.querySelectorAll('li[id^="ask-"]')).toHaveLength(9)
+    expect(doc.querySelectorAll('input, [data-print-tick]')).toHaveLength(0)
+    // The screen layout keeps its black-on-white print rule (#348); the print document is exempt.
     expect(brief.className).toMatch(/brief-print/)
+    expect(brief.contains(doc)).toBe(false)
     const indexCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.css'), 'utf8')
     expect(indexCss).toMatch(/@media print[\s\S]*\.brief-print[\s\S]*color: #000[\s\S]*background: #fff/)
   })

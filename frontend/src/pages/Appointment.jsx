@@ -15,15 +15,17 @@
 // Neutral framing (#349): every constraint and finding shows who set it (`Authority`), so a row the
 // operator set is never read as a clinician's order.
 //
-// Print / Save PDF is the browser's own (window.print). The print styles drop the app header, the
-// chat and every scroll container (HubLayout's print: classes), print black on white (`.brief-print`
-// in index.css), render tick boxes as empty squares to fill in by hand, and keep each ask on one page.
+// Print / Save PDF is the browser's own (window.print), and prints a DEDICATED document (#350,
+// `BriefPrint`) built from the same brief object — not this screen layout, which is print:hidden.
+// Paper has no tick boxes and always speaks in the clinician voice. HubLayout's print: classes still
+// drop the app header, the chat and every scroll container around it.
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import HubLayout from '../components/HubLayout'
 import api from '../api'
 import { AUTHORITY, HEADINGS } from '../components/appointment/headings'
+import BriefPrint from '../components/appointment/BriefPrint'
 
 const tickKey = (key) => `appointment-ticks:${key}`
 
@@ -59,17 +61,13 @@ const askAnchor = (id) => `ask-${id}`
 
 function Tick({ id, ticks, onToggle, label }) {
   return (
-    <>
-      <input
-        type="checkbox"
-        className="mt-1 h-6 w-6 flex-none accent-indigo-600 print:hidden"
-        checked={ticks.has(id)}
-        onChange={() => onToggle(id)}
-        aria-label={`Done: ${label}`}
-      />
-      {/* On paper every box is empty, to tick by pen — whatever was ticked on screen. */}
-      <span aria-hidden="true" data-print-tick className="hidden print:inline-block mt-1 h-5 w-5 flex-none border-2 border-black" />
-    </>
+    <input
+      type="checkbox"
+      className="mt-1 h-6 w-6 flex-none accent-indigo-600"
+      checked={ticks.has(id)}
+      onChange={() => onToggle(id)}
+      aria-label={`Done: ${label}`}
+    />
   )
 }
 
@@ -325,7 +323,7 @@ export default function Appointment() {
 
   return (
     <HubLayout title="Appointment brief" back="/dashboard">
-      <div className="brief-print max-w-2xl mx-auto px-4 py-5 space-y-6 print:max-w-none print:p-0" data-testid="appointment-brief">
+      <div className="brief-print max-w-2xl mx-auto px-4 py-5 space-y-6 print:hidden" data-testid="appointment-brief">
         {brief === undefined && <p className="text-base text-gray-400">Loading…</p>}
         {brief === null && <p className="text-base text-red-600">{error}</p>}
         {brief && (
@@ -367,6 +365,7 @@ export default function Appointment() {
           </footer>
         )}
       </div>
+      {brief && <BriefPrint brief={brief} />}
     </HubLayout>
   )
 }

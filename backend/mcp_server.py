@@ -1190,7 +1190,14 @@ def get_appointment_brief(key: str) -> str:
     Each row appears once: `leave_with` items are one-line pointers (`short`) to asks by `id`, and
     `since` omits what `changes_vs_history` carries. `resolves.unresolved: true` marks an ask whose
     linked row is not shown (missing, proposed, inactive or out of scope). Scope is the injuries the appointment names plus rows parented directly to them; proposals
-    and lab-derived findings are never included."""
+    and lab-derived findings are never included.
+
+    Plain-words fields (the print document reads these; `text`/`exit` keep the chat phrasing):
+    `patient.name` (the user's full name, null if unset); on a finding `parent_key` and
+    `parent_label` (the injury in words); on a constraint `restriction` (advisory: its own text;
+    engine: kind, regions and side, without tier boilerplate), `exit_label` (the exits with the
+    parent injury named in words) and `parent_key`/`parent_label`; on a derived ask `question` (the template alone, e.g. "Is this
+    still appropriate?")."""
     with SessionLocal() as sess:
         brief = appointment_brief.load_appointment_brief(sess, _current_user_id(), key)
     if brief is None:
