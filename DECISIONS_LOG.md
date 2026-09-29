@@ -12681,3 +12681,35 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 **Do not revisit unless.** A real printed brief shows an injury cell a clinician misreads, or the brief adds an injury change kind beyond `resolved` / `updated` / `recorded` (then add its words to `INJURY_CHANGE`, never print the token). The parenting half is revisited through Q192, not here.
 
 ---
+
+### 352. A constraint may name a resolved injury as its parent (rules Q192); row 104 parented
+
+**Decision.** Operator ruling, 29 Sep 2026 (Q192, option (a) narrowed; session `q192-resolved-parent`). `_validate_typed_write` (`backend/routers/knowledge.py`) still requires `parent_key` to name one of the user's ACTIVE rows, with one exception. A **constraint** may name an injury key whose CURRENT row is RESOLVED, provided its `exit.with_parent` is not true. "Current row" means the active row if the key has one; otherwise it is the highest-id row. "Resolved" (`_is_resolved_injury`) means all of these hold: `type` is `injury`; the row is inactive; `superseded_by` is null; `resolution.resolved_on` parses as a date; and `status` is not `proposed`, `rejected`, `superseded` or `retracted`. The check reads the row's state, not `active` alone. With `with_parent: true`, a resolved parent is refused with its own message ("would make this constraint born already ended"), still under code `invalid_parent`; no new contract code was minted. The following stay `invalid_parent` exactly as before: a missing key; a superseded, proposed or rejected current row; an inactive row that was never resolved; a resolved row of any type other than injury; and any **finding** with an inactive parent. The active-parent path is unchanged. So is the brief's one-hop scope (#345). Option (b), scoping by ask links, is rejected: an ask must not widen brief scope, and doing so would hide orphans rather than fix them. Option (c), reopening the injury, was already ruled out.
+
+**Ledger write (after deploy, separate from the validator commit).** Row 104 (`constraint_shoulder_right_er_load_cap`) is superseded by **row 110** through the standard typed-entry path, which is the function `POST /knowledge/entry` calls. The operator ran it in-container via `railway ssh` (`/opt/venv/bin/python`) with `source='api'`. Every field was carried byte-identical except `parent_key`, now `injury_shoulder_right` (current row id 78, resolved). `with_parent` stays absent. There was no `/confirm` call: the row carries `status: confirmed` as written. Row 104 was superseded, not deleted (`active` false, `superseded_by` 110).
+
+**Rationale.** The target state already exists in the model: `parent_resolved_survives` (G5 ruling 1, `injury_sweep._constraint_home`). Before this change it was reachable only when a parent resolved after being parented. A restriction the clinician set under an injury that has since resolved is still live, and it belongs in that injury's appointment scope. The `with_parent` refusal stops a write whose own exit has already fired. That is the same guard the `/confirm` route's 409 enforces. Narrowing the exception to constraints, and to a resolved injury, keeps orphans visible: nothing that was refused before is admitted, apart from the ruled case.
+
+**Status.** Built, deployed and exercised in prod; non-schema. Validator: `0a2c138`, merged via PR #285 (merge `091ad5b`). Railway backend deploy from `091ad5b` reached SUCCESS before the ledger write.
+
+**How you know.**
+- *Tests.* `backend/tests/test_constraint_entries.py` gained 12 tests and `test_finding_entries.py` gained 1:
+  - allowed on a resolved injury, with `exit` of `on_date` plus `with_parent: false`, `on_date` alone, or `on_condition` alone;
+  - a same-key supersede re-parents an orphan, value otherwise identical;
+  - `with_parent: true` refused with its own message;
+  - refused for a missing, superseded, proposed, rejected, inactive-unresolved or resolved-constraint parent;
+  - a finding with a resolved parent refused;
+  - control: an active parent with `with_parent: true` still passes.
+- *Mutation check.* All 5 allow/own-message tests fail on master's validator. Deleting each discriminator in turn (the `superseded_by` check, the status check, the injury-type check, the constraint-only check, the `with_parent` check, the resolution-date check) fails at least one test each. Backend suite: 2383 passed. One test was deselected, `test_context_builder_output_unchanged_pre_post_refactor`, because it needs commit `3360ed5`, which this shallow clone lacks. CI green on PR #285.
+- *`confirmed_on` probe (local).* A constraint confirmed via `/confirm` carries `confirmed_on`, and a verbatim rewrite of that value is refused as a stamped field. The operator's prod read found row 104 has no `confirmed_on` key; the prod value keys were `asserted_by, exit, kind, parent_key, review_by, scope, status`. The verbatim supersede therefore applied.
+- *Prod, 29 Sep.* Pre-write check `ok: True`. This covered:
+  - the new image answered (`_is_resolved_injury` present, #116);
+  - row 104 active with a null parent and no `with_parent`;
+  - row 78 resolved;
+  - `injury_shoulder_right` in `appt_20261001_aubrey`'s `scope.parent_keys`.
+
+  Row 104's exit is `{"on_condition": "Dr Aubrey reviews posterior shoulder pain"}` with `review_by` 2026-10-26 and `asserted_by` user, so the HALT case did not apply. The write returned `new: 110 True True | 104 active: False superseded_by: 110`. `load_appointment_brief` then returned `in current_constraints: 1`, and the ask resolving the constraint (id `shoulder`) returned `unresolved: false` with `folded: ["review_due", "undated_exit"]`. `review_due` also fires because 2026-10-26 falls within the appointment date plus 30 days (`REVIEW_HORIZON_DAYS`). That is correct under #345 rule (i), even though the operator had forecast `undated_exit` alone. The print line "(see Restrictions I'm working under above)" follows from the row being in scope and shown under Restrictions (`BriefPrint.jsx:218-221`). A printed-copy read is OWED (operator).
+
+**Do not revisit unless.** A resolved-parent constraint is found ending or hiding by some path #351's VERIFY 2 did not cover; or a type other than injury needs to parent a live row after resolving. That would be a new ruling, not a widening of this one.
+
+---

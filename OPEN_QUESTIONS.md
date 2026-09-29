@@ -2600,32 +2600,6 @@ sweep listing constraints and findings past `review_by`, or whose parent resolve
 
 ---
 
-## Q192. A live restriction under an already-resolved injury cannot be parented
-
-The operator ruled (29 Sep) that `constraint_shoulder_right_er_load_cap` (prod id 104, active,
-confirmed, `parent_key` null) is a live restriction to be parented to `injury_shoulder_right`,
-which stays resolved (2026-09-24). With a null parent the row sits in no appointment's scope,
-so no brief can ever show it (`appointment_brief.py:187`). The standard write path refuses the
-fix: `_validate_typed_write` requires `parent_key` to name an ACTIVE row
-(`routers/knowledge.py:1039-1052`), and a resolved injury is `active=False`. The target state
-already exists in the model (`parent_resolved_survives`, `injury_sweep.py:313-331`), but only
-when a parent resolves after parenting. Options: (a) allow `parent_key` to name a resolved,
-unsuperseded injury when `exit.with_parent` is not true (recommended; narrow, and it matches
-G5 ruling 1); (b) scope the brief by ask links as well as parents; (c) reopen the injury
-(ruled out by the operator). No ledger write until ruled (#351).
-
-Operator reads owed (psql via `railway connect` to `health-app-DB`, one statement each):
-- `SELECT id, key, active, value->'exit' AS exit, value->>'review_by' AS review_by, value->>'parent_key' AS parent_key, value->>'status' AS status, value->>'asserted_by' AS asserted_by FROM user_knowledge_entries WHERE id = 104;`
-  (HALT the write if `exit` is `with_parent` alone, with no `on_date` or `on_condition`.)
-- `SELECT id, active, value->'scope'->'parent_keys' AS parent_keys FROM user_knowledge_entries WHERE key = 'appt_20261001_aubrey' ORDER BY id DESC LIMIT 1;`
-- `SELECT id, active, value->'resolution' AS resolution FROM user_knowledge_entries WHERE key = 'injury_shoulder_right' ORDER BY id DESC LIMIT 1;`
-- Orphans: `SELECT id, key, value->>'status' AS status, value->'exit' AS exit FROM user_knowledge_entries WHERE type = 'constraint' AND active AND COALESCE(value->>'parent_key', '') = '' ORDER BY id;`
-- Asks pointing at one: `SELECT a.key AS appointment, ask->>'id' AS ask_id, ask->'resolves'->>'entry_key' AS entry_key FROM user_knowledge_entries a, json_array_elements(a.value->'asks') ask WHERE a.type = 'appointment' AND a.active AND ask->'resolves'->>'entry_key' IN (SELECT key FROM user_knowledge_entries WHERE type = 'constraint' AND active AND COALESCE(value->>'parent_key', '') = '');`
-
-**State:** OPEN — ruling owed (chat). Owner: Luke (ruling, prod reads); Code (build once ruled).
-
----
-
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
@@ -5297,3 +5271,38 @@ nothing. PR #278 prod proof: the next chat write lands on the first turn.
 
 **State:** DONE → #347 (prompt: write proposals directly, never confirm in chat; a turn never renders empty; silent
 drops become reported refusals; per-turn metadata logged).
+
+---
+
+## Q192. A live restriction under an already-resolved injury cannot be parented
+
+The operator ruled (29 Sep) that `constraint_shoulder_right_er_load_cap` (prod id 104, active,
+confirmed, `parent_key` null) is a live restriction to be parented to `injury_shoulder_right`,
+which stays resolved (2026-09-24). With a null parent the row sits in no appointment's scope,
+so no brief can ever show it (`appointment_brief.py:187`). The standard write path refuses the
+fix: `_validate_typed_write` requires `parent_key` to name an ACTIVE row
+(`routers/knowledge.py:1039-1052`), and a resolved injury is `active=False`. The target state
+already exists in the model (`parent_resolved_survives`, `injury_sweep.py:313-331`), but only
+when a parent resolves after parenting. Options: (a) allow `parent_key` to name a resolved,
+unsuperseded injury when `exit.with_parent` is not true (recommended; narrow, and it matches
+G5 ruling 1); (b) scope the brief by ask links as well as parents; (c) reopen the injury
+(ruled out by the operator). No ledger write until ruled (#351).
+
+Operator reads owed (psql via `railway connect` to `health-app-DB`, one statement each):
+- `SELECT id, key, active, value->'exit' AS exit, value->>'review_by' AS review_by, value->>'parent_key' AS parent_key, value->>'status' AS status, value->>'asserted_by' AS asserted_by FROM user_knowledge_entries WHERE id = 104;`
+  (HALT the write if `exit` is `with_parent` alone, with no `on_date` or `on_condition`.)
+- `SELECT id, active, value->'scope'->'parent_keys' AS parent_keys FROM user_knowledge_entries WHERE key = 'appt_20261001_aubrey' ORDER BY id DESC LIMIT 1;`
+- `SELECT id, active, value->'resolution' AS resolution FROM user_knowledge_entries WHERE key = 'injury_shoulder_right' ORDER BY id DESC LIMIT 1;`
+- Orphans: `SELECT id, key, value->>'status' AS status, value->'exit' AS exit FROM user_knowledge_entries WHERE type = 'constraint' AND active AND COALESCE(value->>'parent_key', '') = '' ORDER BY id;`
+- Asks pointing at one: `SELECT a.key AS appointment, ask->>'id' AS ask_id, ask->'resolves'->>'entry_key' AS entry_key FROM user_knowledge_entries a, json_array_elements(a.value->'asks') ask WHERE a.type = 'appointment' AND a.active AND ask->'resolves'->>'entry_key' IN (SELECT key FROM user_knowledge_entries WHERE type = 'constraint' AND active AND COALESCE(value->>'parent_key', '') = '');`
+
+**Ruling (operator, 29 Sep 2026):** option (a), narrowed. A constraint may name an injury whose current row is
+resolved, only when `exit.with_parent` is not true; `with_parent` true on a resolved parent is refused with its own
+message. Missing, superseded, proposed and rejected parents stay `invalid_parent`, and so does a finding with an
+inactive parent. (b) is rejected: an ask must not widen brief scope (#345), and it would hide orphans rather than fix
+them. (c) was already ruled out. Row 104's exit read: `on_condition` only, so the HALT case did not apply. Row 110
+supersedes row 104 under `injury_shoulder_right`. The orphan query above is still OWED (operator), carried in
+`closeout.md`.
+
+**State:** DONE → #352 (validator `0a2c138`, PR #285; row 104 superseded by row 110; the prod brief lists the cap once and
+the ask resolving it has `unresolved: false`).
