@@ -41,12 +41,15 @@ OVERLAP_THRESHOLD = 0.50
 # Fidelity rank — higher wins when two sources describe the same bout.
 # polar_flow_export > polar_v4 > health_connect. Both Polar rows come off the
 # same sensor, but the two transports do NOT carry the same payload: the v4
-# *list* endpoint omits trainingLoadReport/zones (cardio_load, muscle_load and
+# *summary* list omits trainingLoadReport/zones (cardio_load, muscle_load and
 # z*_seconds come back null — see connectors/polar.PolarV4Client.parse_session),
-# while the Flow-export ZIP carries them. So for a same-bout v4/flow_export twin
-# the export row is STRICTLY richer and must be the canonical one — otherwise the
-# id-order tie-break can leave the zoneless v4 row canonical, which the metabolic
-# transform then skips fail-closed (INV-7), dropping the bout entirely (#260/Q127).
+# while the Flow-export ZIP carries them. The sync's v4 zone enrichment (#261) later
+# fills z*_seconds on zoneless v4 rows in its window, but never cardio_load or
+# muscle_load, and a v4 row outside that window (or whose fetch returned no split)
+# stays zoneless. So for a same-bout v4/flow_export twin the export row is at least
+# as rich and must be the canonical one — otherwise the id-order tie-break can leave
+# a zoneless v4 row canonical, which the metabolic transform then skips fail-closed
+# (INV-7), dropping the bout entirely (#260/Q127).
 # health_connect carries duration + type only. An unknown source ranks below all
 # known ones rather than above.
 _SOURCE_RANK = {

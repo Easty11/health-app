@@ -232,8 +232,11 @@ class PolarV4Client:
         The v4 session schema is identical to the Polar Flow ZIP-export session
         JSON, so we reuse import_polar._parse_session for byte-for-byte parity
         between live-sync and ZIP-import data. The only difference is source.
-        (The v4 *list* endpoint omits trainingLoadReport/zones, so cardio_load,
-        muscle_load and z*_seconds come back null — those remain ZIP-only.)"""
+        (The v4 *summary* list omits trainingLoadReport/zones, so a summary row's
+        cardio_load, muscle_load and z*_seconds come back null. z*_seconds are then
+        filled by the sync's second pass — the `features='zones'` fetch
+        (`list_zoned_sessions`), parsed by this same method (#261). cardio_load and
+        muscle_load remain ZIP-only.)"""
         from import_polar import _parse_session
         fields = _parse_session(raw)
         if fields is None:
