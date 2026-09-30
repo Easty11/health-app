@@ -12935,3 +12935,37 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 **Do not revisit unless.** A real attach in prod returns something other than #358 specifies (409 for a linked account, 503 when unresolvable), or a retired account is found to have backed a live connection.
 
 ---
+
+### 363. Quota counting moves from capacity classification to plan-conformance
+
+**Decision.** (Operator ruling, chat 2026-10-01.) A quota slot is satisfied by doing the PLANNED session, not by the
+logged session's dominant capacity. Sessions are designed with intent, and the plan carries that intent: done as
+planned = counted. Deviations from the plan are adjudicated; that design is open (Q197).
+- **Folds in the Q27 finding (#339 aftermath).** Capacity is the wrong quota key for this program. The
+  stability/strength split is a misnomer, because all "stability" work here is strength work. Capacity STAYS in the
+  taxonomy as a descriptor (#76's external grounding; other users may need it). It stops being a counting key.
+- **Supersedes** Rule 1 dominant-capacity voting (`engine/resolver.py`) as the counting mechanism, once plan↔log
+  reconciliation exists. **Rule 1 stays live until then.** The current phase is transitioning out and is NOT
+  re-counted; the next phase is the first under this model.
+- **Sided-pair double votes (#339 caveat) become moot.** They were an artefact of counting by vote.
+- **Frame: #75.** The Plan wraps the engine, and slots are Plan-owned. Plan-conformance is the Plan owning its own
+  slot's satisfaction.
+
+**Rationale.** The 09-24 Upper Fortify session went `off_plan` (strength 9 / stability 3) after #334 correctly
+reclassed cuff ER/IR to STRENGTH. A correct descriptor change broke the quota, so the quota was keyed on the wrong
+thing: a classification that is free to be refined cannot also be the thing that decides whether a session counts.
+Keying on the plan separates the two. The descriptor can keep improving without moving anyone's quota.
+
+**Status.** Operator-ruled in chat 2026-10-01. Recorded, not built. No code or schema changes in this entry. The
+mechanism (plan↔log reconciliation, the consumer Q24 names) does not exist yet, so Rule 1 is unchanged today. How
+deviations are judged is NOT ruled: Q197 holds the chat proposal. Q27 is narrowed to vocabulary and measurement
+route, and its slot-keying and restriction-record blocks are marked superseded / moved.
+
+**How you know.** The #339 prod recount (`explain_quota_votes.py 1 2026-09-21 2026-09-24`, operator runs,
+2026-09-27): 09-24 Upper Fortify read strength 9 / stability 3, untagged 1, so `off_plan`, and 09-21 counted only on
+a 6–6 vote tie broken by slot order. #334 is the reclass that moved the cuff ER/IR votes. Both are read in the log
+above, not re-derived here. The principle is a ruling; its workability is untested until reconciliation exists.
+
+**Do not revisit unless.** Plan-conformance proves unworkable without a classification fallback.
+
+---
