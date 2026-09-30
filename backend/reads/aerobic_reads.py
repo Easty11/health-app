@@ -52,6 +52,14 @@ OVERLAP_THRESHOLD = 0.50
 # (INV-7), dropping the bout entirely (#260/Q127).
 # health_connect carries duration + type only. An unknown source ranks below all
 # known ones rather than above.
+#
+# RICHNESS FIRST (Brief A A6): source rank orders rows only WITHIN a data tier (`_data_tier`).
+# The rank above is a prior about which source usually carries more; the tier is what the row
+# actually carries. The order was source-rank blind to HR/zone presence, so a zoneless
+# flow_export row could suppress a same-bout v4 row that had zones — and the metabolic transform,
+# which consumes canonical rows only and skips zoneless ones fail-closed (INV-7), then dropped
+# the bout. Operator invariant: a row without HR never suppresses a same-bout row with HR.
+# This refines #260/#309 (their source-rank / writer-class ladders now decide within a tier).
 _SOURCE_RANK = {
     "polar_flow_export": 3,
     "polar_v4": 2,
@@ -114,13 +122,35 @@ def _ts(dt: Optional[datetime]) -> Optional[float]:
     return dt.timestamp()
 
 
+def _data_tier(session) -> int:
+    """How much physiological signal the row carries — the FIRST term of `_win_key` (Brief A A6,
+    operator invariant: a row without HR never suppresses a same-bout row with HR).
+
+        2  usable zones (the metabolic transform can score it — `_has_usable_zones`)
+        1  avg HR present, no usable zones
+        0  neither
+
+    "Usable zones" reuses the transform's own INV-7 predicate, so the tier and the transform can
+    never disagree about which row is scoreable. `hr_avg` presence is `is not None`."""
+    if _has_usable_zones(session):
+        return 2
+    if session.hr_avg is not None:
+        return 1
+    return 0
+
+
 def _win_key(session, dur: float, start_ts: float, *, by_writer: bool) -> tuple:
     """Ordering key for 'which row of a same-bout pair is canonical'. LARGER
-    wins: higher rank, then longer duration, then earlier start, then lower id.
-    The id is a final deterministic discriminator so a fully-tied pair still
-    yields exactly ONE canonical (never zero — which would drop the bout
-    entirely). The tie chain is rank -> duration -> start; id only breaks a
-    residual exact tie.
+    wins: richer data tier, then higher rank, then longer duration, then earlier
+    start, then lower id. The id is a final deterministic discriminator so a
+    fully-tied pair still yields exactly ONE canonical (never zero — which would
+    drop the bout entirely). Within a tier the chain is rank -> duration -> start;
+    id only breaks a residual exact tie.
+
+    RICHNESS FIRST (Brief A A6): the data tier (`_data_tier`) leads, in BOTH regimes below. A row
+    carrying HR/zones is never suppressed by a same-bout row that carries less, whatever the
+    source or writer class; only among rows of the SAME tier does the ranking that stood before
+    (#260/#309) decide. All-tier-0 pairs therefore order exactly as they did.
 
     Two rank bases, selected by the PAIR being compared (#309): a CROSS-source
     pair ranks by `source` fidelity (`_SOURCE_RANK`, e.g. polar_flow_export >
@@ -129,6 +159,7 @@ def _win_key(session, dur: float, start_ts: float, *, by_writer: bool) -> tuple:
     always use the same basis, so the ordering stays a total order."""
     rank = writer_class_rank(session.source_package) if by_writer else _rank(session.source)
     return (
+        _data_tier(session),
         rank,
         dur,
         -start_ts,
