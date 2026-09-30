@@ -21,6 +21,7 @@ from connectors.hevy import (
     RoutineNumericError,
 )
 from context_builder import build_system_prompt, render_asked_lab_value
+from session_focus import FocusSession, build_focus_block
 from current_state import current_state as compute_current_state
 from database import get_db
 import hevy_routine_cache
@@ -115,6 +116,9 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     conversation_history: list[ChatMessage] = []
+    # A reference to the session under review (Brief A / A1): the server loads and renders it,
+    # pinned regardless of the ten-workout window. Absent = the context is exactly as before.
+    focus_session: FocusSession | None = None
 
 
 class WriteResult(BaseModel):
@@ -1571,6 +1575,15 @@ async def chat(
     asked_marker = find_marker(state.labs, body.message)
     if asked_marker is not None:
         system_prompt += "\n\n" + render_asked_lab_value(asked_marker)
+
+    # Session under review (Brief A / A1): a pinned block for THIS turn, appended like the on-ask
+    # lab value above — never merged into the standing render, so with no focus the prompt is
+    # byte-identical to before. Loaded for the calling user only; a missing/foreign id yields a
+    # block that says so and the turn proceeds.
+    if body.focus_session is not None:
+        system_prompt += "\n\n" + build_focus_block(
+            db, current_user.id, body.focus_session, annotate_hevy=_annotate_canonical_titles,
+        )
 
     # Build messages list: history + current user message
     messages = [

@@ -31,6 +31,7 @@ import typed_entries
 from routers.knowledge import FINDING_DOMAINS
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from reads.labs_reads import latest_lab_results
+from aerobic_format import format_aerobic_session   # one aerobic renderer, shared with the in-app chat (A2)
 from reads.aerobic_reads import arbitrated_sessions   # the canonical read-door (#Q161)
 from reads.recovery_reads import hrv_deviation, representative_source
 from engine.training_phase import current_training_phase
@@ -568,25 +569,7 @@ def get_training_sessions(days: int = 28) -> str:
         lines.append("Note: Polar data accumulates from June 2026 onward.\n")
 
         for s in sessions:
-            dur_min = f"{s.duration_minutes:.0f} min" if s.duration_minutes else "—"
-            avg_hr = f"{s.hr_avg:.0f}" if s.hr_avg is not None else "—"
-            max_hr = f"{s.hr_max:.0f}" if s.hr_max is not None else "—"
-            cal = f"{s.calories:.0f} kcal" if s.calories is not None else "—"
-
-            zone_summary = ""
-            if s.z1_seconds is not None:
-                zones = {
-                    "1": round((s.z1_seconds or 0) / 60), "2": round((s.z2_seconds or 0) / 60),
-                    "3": round((s.z3_seconds or 0) / 60), "4": round((s.z4_seconds or 0) / 60),
-                    "5": round((s.z5_seconds or 0) / 60),
-                }
-                zone_parts = [f"Z{k}={v}min" for k, v in zones.items() if v]
-                zone_summary = " zones=[" + " ".join(zone_parts) + "]"
-
-            lines.append(
-                f"{s.session_date} [{s.source}] {s.sport_name or 'unknown'}: "
-                f"{dur_min} HR={avg_hr}/{max_hr} dist=— cal={cal}{zone_summary}"
-            )
+            lines.append(format_aerobic_session(s))
 
     return "\n".join(lines)
 

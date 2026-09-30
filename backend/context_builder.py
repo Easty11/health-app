@@ -340,6 +340,77 @@ def _section_integrations(connected: list[str]) -> str:
     return f"The user has the following integrations connected: {joined}."
 
 
+def render_workout(w: dict[str, Any], now: datetime) -> list[str]:
+    """One raw Hevy workout as the chat context's full-fidelity lines (header, description,
+    every exercise with its notes/rest, every set via `hevy_format.format_set`), ending with the
+    blank separator line.
+
+    The single per-workout renderer: `_section_hevy` maps it over the ten most recent workouts and
+    `session_focus` calls it for the ONE workout an operator asks to review, so a pinned session
+    reads exactly as the standing history does (one renderer per kind, Brief A A2)."""
+    lines: list[str] = []
+    title = w.get("title") or w.get("name") or "Untitled"
+    start = w.get("start_time") or w.get("created_at") or ""
+    end = w.get("end_time") or ""
+    date_label = _days_ago_label(start, now)
+    date_short = start[:10] if start else "unknown"
+
+    # Duration
+    duration_str = ""
+    if start and end:
+        try:
+            s_dt = datetime.fromisoformat(start[:19])
+            e_dt = datetime.fromisoformat(end[:19])
+            mins = int((e_dt - s_dt).total_seconds() // 60)
+            duration_str = f"\n   Duration: {mins} minutes"
+        except (ValueError, AttributeError):
+            pass
+
+    lines.append(f"WORKOUT: {title} — {date_label} ({date_short}){duration_str}")
+
+    description = (w.get("description") or "").strip()
+    if description:
+        lines.append(f"   Note: {description}")
+
+    lines.append("   Exercises:")
+
+    exercises = w.get("exercises", [])  # all exercises, no truncation
+    for ex_idx, ex in enumerate(exercises):
+        # Render the CURRENT catalogue title (DECISIONS_LOG #81), annotated
+        # upstream as `canonical_title` — Hevy's logged `title` is a snapshot
+        # from when the workout was logged and drifts as Hevy renames its
+        # templates, so a title echoed back from the log may resolve to
+        # nothing. Fall back to the logged title only when the id is absent
+        # from the catalogue, and mark that case: an unmarked fallback would
+        # read as canonical and be echoed back as if resolvable.
+        canonical = ex.get("canonical_title")
+        logged = ex.get("title")
+        template_id = ex.get("exercise_template_id", "")
+        if canonical:
+            ex_title = canonical
+            uncatalogued_str = ""
+        else:
+            ex_title = logged or template_id or "Unknown exercise"
+            uncatalogued_str = " [UNCATALOGUED — logged title, may not resolve]"
+
+        notes = ex.get("notes", "").strip()
+        rest = ex.get("rest_seconds")
+
+        notes_str = f" — {notes}" if notes else ""
+        rest_str = f" (rest {rest}s)" if rest else ""
+        id_str = f" [ID: {template_id}]" if template_id else ""
+        lines.append(
+            f"   {ex_idx + 1}. {ex_title}{id_str}{uncatalogued_str}{notes_str}{rest_str}"
+        )
+
+        sets = ex.get("sets", [])
+        for set_idx, s in enumerate(sets):
+            lines.append(format_set(s, set_idx))
+
+    lines.append("")  # blank line between workouts
+    return lines
+
+
 def _section_hevy(
     workout_count: int,
     recent_workouts: list[dict[str, Any]],
@@ -354,65 +425,7 @@ def _section_hevy(
     lines.append(f"\nThe {len(recent_workouts)} most recent workouts:\n")
 
     for w in recent_workouts:
-        title = w.get("title") or w.get("name") or "Untitled"
-        start = w.get("start_time") or w.get("created_at") or ""
-        end = w.get("end_time") or ""
-        date_label = _days_ago_label(start, now)
-        date_short = start[:10] if start else "unknown"
-
-        # Duration
-        duration_str = ""
-        if start and end:
-            try:
-                s_dt = datetime.fromisoformat(start[:19])
-                e_dt = datetime.fromisoformat(end[:19])
-                mins = int((e_dt - s_dt).total_seconds() // 60)
-                duration_str = f"\n   Duration: {mins} minutes"
-            except (ValueError, AttributeError):
-                pass
-
-        lines.append(f"WORKOUT: {title} — {date_label} ({date_short}){duration_str}")
-
-        description = (w.get("description") or "").strip()
-        if description:
-            lines.append(f"   Note: {description}")
-
-        lines.append("   Exercises:")
-
-        exercises = w.get("exercises", [])  # all exercises, no truncation
-        for ex_idx, ex in enumerate(exercises):
-            # Render the CURRENT catalogue title (DECISIONS_LOG #81), annotated
-            # upstream as `canonical_title` — Hevy's logged `title` is a snapshot
-            # from when the workout was logged and drifts as Hevy renames its
-            # templates, so a title echoed back from the log may resolve to
-            # nothing. Fall back to the logged title only when the id is absent
-            # from the catalogue, and mark that case: an unmarked fallback would
-            # read as canonical and be echoed back as if resolvable.
-            canonical = ex.get("canonical_title")
-            logged = ex.get("title")
-            template_id = ex.get("exercise_template_id", "")
-            if canonical:
-                ex_title = canonical
-                uncatalogued_str = ""
-            else:
-                ex_title = logged or template_id or "Unknown exercise"
-                uncatalogued_str = " [UNCATALOGUED — logged title, may not resolve]"
-
-            notes = ex.get("notes", "").strip()
-            rest = ex.get("rest_seconds")
-
-            notes_str = f" — {notes}" if notes else ""
-            rest_str = f" (rest {rest}s)" if rest else ""
-            id_str = f" [ID: {template_id}]" if template_id else ""
-            lines.append(
-                f"   {ex_idx + 1}. {ex_title}{id_str}{uncatalogued_str}{notes_str}{rest_str}"
-            )
-
-            sets = ex.get("sets", [])
-            for set_idx, s in enumerate(sets):
-                lines.append(format_set(s, set_idx))
-
-        lines.append("")  # blank line between workouts
+        lines.extend(render_workout(w, now))
 
     return "\n".join(lines)
 

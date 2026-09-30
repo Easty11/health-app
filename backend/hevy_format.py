@@ -59,3 +59,35 @@ def format_set(s: dict[str, Any], idx: int, indent: str = "       ") -> str:
     type_tag = f" [{set_type}]" if set_type != "normal" else ""
     body = " — ".join(parts) if parts else "no data"
     return f"{indent}Set {idx + 1}{type_tag}: {body}"
+
+
+def format_workout_compact(w: dict[str, Any], when: str) -> str:
+    """One raw Hevy workout as a single compact line, for a review's SURROUNDING-load window
+    (`session_focus`, context scope) — where the point is what else was done, not the set-by-set
+    detail the pinned session itself carries via `context_builder.render_workout`.
+
+    Per exercise: the logged title, the working-set count (warmups excluded), the heaviest
+    weight×reps working set and the highest RPE logged, when present. `when` is the caller's local
+    date/time label. A workout with no exercises still renders (title + when), so a session never
+    silently vanishes from the window."""
+    title = w.get("title") or w.get("name") or "Untitled"
+    parts: list[str] = []
+    for ex in w.get("exercises") or []:
+        name = ex.get("canonical_title") or ex.get("title") or ex.get("exercise_template_id") or "Unknown exercise"
+        sets = [s for s in (ex.get("sets") or []) if s.get("type", "normal") != "warmup"]
+        seg = f"{name} ×{len(sets)}"
+        loaded = [s for s in sets if s.get("weight_kg") is not None and s.get("reps") is not None]
+        if loaded:
+            top = max(loaded, key=lambda s: (s["weight_kg"], s["reps"]))
+            seg += f" (top {top['weight_kg']}kg × {top['reps']}"
+            rpes = [s["rpe"] for s in sets if s.get("rpe") is not None]
+            if rpes:
+                seg += f", peak RPE {max(rpes)}"
+            seg += ")"
+        else:
+            rpes = [s["rpe"] for s in sets if s.get("rpe") is not None]
+            if rpes:
+                seg += f" (peak RPE {max(rpes)})"
+        parts.append(seg)
+    body = "; ".join(parts) if parts else "no exercises logged"
+    return f"{when} [hevy] {title}: {body}"
