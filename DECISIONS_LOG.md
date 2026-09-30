@@ -12921,3 +12921,17 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 **Do not revisit unless.** `garminconnect` is upgraded and the seams move (the value-guard test fails first).
 
 ---
+
+### 362. The account-repair follow-ups are verified: the guard records distinct fingerprints in prod, class B is Deb's and stays, user 7 is retired (supersedes the PENDING statuses in #358, #359 and #360)
+
+**Decision.** (1) **The attach guard is verified in prod (#358).** Operator, 30 Sep 2026: `garmin_sync --user-id 1` pulled 2 readings / 181 samples and `--user-id 4` 1 reading / 117 samples; `user_integrations` (provider `garmin`) then read `has_fp = true` for both, with fingerprint prefixes `283aeee9…` (user 1) and `96ff6301…` (user 4): recorded, and distinct. That also settles the caveat that the resolver had never met Garmin's real response: the lazy-recording path resolved a profile id through `extract_profile_id` from the live social-profile response for two different accounts. Which candidate key matched is still unrecorded. **Not exercised in prod:** the attach path's 409 and 503 responses (the operator did not re-attach, by design); the resolver they share is what was verified. (2) **Class B is Deb's and stays (#359).** Deb's Garmin app shows 31 Aug = 48 ms and 2 Sep = 39 ms, matching the stored user-4 rows. The 8 rows (2026-08-28 to 2026-09-04, the 4 Sep row empty) stay on user 4; **no reassignment, ever**, so `--reassign-b` is not to be run for them. (3) **User 7 ("Luke Public") is RETIRED (#360)**, the operator having confirmed it a test account: 8 rows removed (7 knowledge entries and the user row), no integrations, users 1/4/5 asserted identical in-transaction, executed with the printed confirm token. With users 6 and 8, all three retirement candidates are retired.
+
+**Rationale.** Each of the three items marked PENDING in #358–#360 waited on a fact only the operator could establish: a prod query, Deb's own app, a test-account confirmation. Entries are append-only, so the outcomes are a new entry rather than an edit to the locked ones.
+
+**Status.** Recorded 30 Sep 2026 from the operator's messages; nothing here is a code change. The account repair is complete. Still open: Q195 (the Hevy re-own, dormant, to be fixed before any further user joins) and Q196 (the in-memory MCP provider).
+
+**How you know.** The operator's pasted prod results: the two sync outputs, the `user_integrations` query (`has_fp` and the prefixes), Deb's app values against the stored rows, and the executed retirement with its in-transaction assertion. The prefixes are the first 8 characters of a SHA-256 digest of the namespaced profile id, not an identifier. Code has no prod access and did not verify any of it independently.
+
+**Do not revisit unless.** A real attach in prod returns something other than #358 specifies (409 for a linked account, 503 when unresolvable), or a retired account is found to have backed a live connection.
+
+---
