@@ -61,6 +61,16 @@ half-column, which the repro did not stage.
 `fix/desktop-column-scroll` was cut then discarded (zero commits; deleted). No DECISIONS_LOG entry.
 No blocker — the decision is Luke's to make at will, nothing external gates it.
 
+**Re-measured 30 Sep 2026 (Brief A G7, after the A3/A5 changes to `WorkoutPanel`, #355).** On the built app in
+Chromium, `/training` (the panel no longer sits in the Dashboard's 50/50 column; it lives in an
+`h-[75vh] min-h-[420px]` box beside the docked chat), API mocked, a 9-exercise Hevy workout open in
+`WorkoutDetail`: the exercise scroller (`flex-1 overflow-y-auto`) measures **361 px tall x 819 px wide** at
+1280x779 (`scrollHeight` 1479) and **452 x 926** at 1440x900, `overflow-y: auto`. That is not the 36 px of the
+original measurement, so on the route the panel now occupies the starvation is not reproduced; the Dashboard
+column it was measured in no longer hosts `WorkoutPanel`. Not measured: a phone-width viewport, and a workout
+with a long session-analysis block. State unchanged (the fork is moot on `/training` unless the panel returns
+to a half-height column).
+
 ---
 
 ## Q22. Promote exercise-region tags to a source-agnostic canonical exercise layer
@@ -2599,6 +2609,22 @@ sweep listing constraints and findings past `review_by`, or whose parent resolve
 **Recommendation: do not build now.** The pull triggers in #353 already give freshness on page open and a nightly guarantee. The webhook's value depends on caveat (a), which is probably fatal. Reopen only once a **non-prod probe** shows that an EXERCISE event fires for a Flow-app H10 session. The probe would register a separate test client in `admin.polaraccesslink.com`, because the one-webhook-per-client limit and the one-time secret make registering on the prod client a hard-to-undo act (#166). The probe would also establish (a) and whether (b)'s id is available from v4.
 
 **State:** OPEN — probe owed before any build. Owner: Luke (test client + probe decision), Code (probe script + handler if green).
+
+---
+
+## Q194. Should the session focus persist across follow-up turns of a review conversation?
+
+#354's `focus_session` rides the trigger turn only: the pinned session block is appended to that turn's system
+prompt and is not in `conversation_history` (history carries only the short "Session review: ..." message and
+the model's reply). A follow-up such as "why was set 3 at RPE 9?" therefore sees the earlier reply but not the
+session record, so the model may only be able to answer from what it said last time.
+
+Fork: (a) leave as briefed (one turn; follow-ups reference the reply); (b) `ChatPanel` keeps the focus for the
+conversation and re-sends it with every subsequent turn until the conversation is cleared or a new review
+replaces it (cost: one DB read per turn); (c) the server re-pins from a focus id echoed back in the response.
+Not decided in Brief A; chosen (a) by default because (b) changes chat's request contract beyond the brief.
+
+**State:** OPEN - decision is Luke's; nothing external gates it. Recommendation: (b), a few lines in `ChatPanel`.
 
 ---
 
