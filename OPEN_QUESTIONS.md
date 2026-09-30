@@ -2612,6 +2612,28 @@ sweep listing constraints and findings past `review_by`, or whose parent resolve
 
 ---
 
+## Q195. The Hevy sync re-owns a workout (and a template) to whichever user synced last
+
+`hevy_workouts.py:189` says a resync never re-owns a workout to another user; `:190` does exactly that (`row.user_id = user_id`). `hevy_workouts.hevy_id` is the primary key ALONE (globally unique) and `hevy_sets` hangs off it, so two users whose syncs fetch the same Hevy workout id fight for one row: the later sync owns it, the other user silently loses it, and the operator-owned annotations that ride the row (`excluded_at`, and on templates `laterality`, `adjudicated_at`, `bw_fraction`, `exercise_region_tags`) go with it. `hevy_templates._upsert_template` has the same shape (`row.owner_user_id = owner_user_id` on a table keyed on the Hevy id alone).
+
+**Dormant today (operator-verified, 30 Sep 2026).** Users 1, 4 and 5 hold distinct Hevy accounts: the credential digests differ, and user 4's 54 workouts (2026-04-06 to 2026-09-28) were checked against Deb's own Hevy app and are hers, with no overlap with user 1's 65. The prod evidence agrees: user 4's sync ran 12 seconds after user 1's and user 1 still owned every one of its workouts. It bites only when two users' Hevy fetches return the same id (one Hevy account behind two keys, or a shared workout). **Fix required before any further user joins.**
+
+Options (a proposal, not a ruling): (a) never re-own: ownership is set on insert only, and a same-id-different-user conflict is logged at ERROR and skipped; no migration. (b) key by `(user_id, hevy_id)`: a migration touching the `hevy_sets` FK. (c) an attach-time guard for Hevy like #358's (the `account_fingerprint` column and the provider-keyed index already exist), which prevents the shared-account case but not a shared workout id.
+
+**State:** OPEN — a fork on the fix, and a defect to fix before user-count grows. Owner: Luke (rule the option), Code (fix + a test that runs two users' syncs over one id).
+
+---
+
+## Q196. The MCP OAuth provider is in-memory: tokens never expire, outlive a deleted user until restart, and are lost on every redeploy
+
+`oauth_provider.PersonalOAuthProvider` keeps its clients, authorization codes, access and refresh tokens and pending logins in process dicts, and issues tokens with `expires_at=None`. Consequences, each read from the code and pinned by `test_mcp_provider_really_persists_nothing`: (1) every deploy or restart drops every MCP session (at least five backend deploys on 30 Sep alone: 01:51, 04:05, 08:42, 08:55 and 10:10 UTC); (2) a token for a deleted user keeps resolving to that `user_id` (finding no rows, failing on writes) until the process restarts; (3) nothing can be revoked or inventoried from the database, so `retire_user`'s dry run can only state that it cannot see them; (4) tokens never expire. MCP sign-in itself verifies email and password against `users` each time. Found while building the retirement dry run (#360); user 7 is held partly because the database cannot show whether it backs an MCP or demo sign-in.
+
+Options (not a ruling): persist tokens in a table (hashed, with expiry and revocation; a migration), give the in-memory tokens an expiry only, or accept and document it. If persistence is added, the retirement dry run's MCP paragraph and the pinning test must change with it.
+
+**State:** OPEN — needs a ruling on whether MCP sessions must survive a deploy and be revocable. Owner: Luke (rule), Code (build).
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
