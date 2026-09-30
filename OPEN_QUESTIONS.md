@@ -128,6 +128,10 @@ fallback. They are probe-inert bolt-ons, explicitly NOT this question's answer. 
 Adduction and the leg curls moved off no-pattern onto them; calf and hip abduction stay no-pattern. The v1 pass
 supersedes them.
 
+> **SUPERSEDED (2026-10-01, #363).** The slot-keying question below (options a / b / c) is moot: a quota slot is
+> satisfied by doing the PLANNED session, not by the logged session's capacity, plane or region set. Kept verbatim as
+> the record of how the question was framed.
+
 **Scope extension (2026-09-26): what does a quota slot KEY on?** Region definitions alone do not close this.
 The decompression phase exposed a second hole: its real intent is a PLANE PERMISSION on strength work ("strength in
 these planes, not the provocative ones"), and a `capacity` slot (Rule 1, `engine/resolver.py`) counts every
@@ -150,6 +154,11 @@ evidence for the slot-keying question above:
 None of these is plane-level. That is evidence against option **(b) capacity × plane**: planes never appear in the
 restrictions actually in force.
 
+> **MOVED to Q197 (2026-10-01).** The restriction-record design below, including the pain-gated progression
+> qualifier and its capture point, now lives in Q197 (a "pain" reason on a deviation is the per-session capture
+> point). The restrictions listed above stay here as evidence. The counting half of "Separate counting from
+> permission" is SUPERSEDED by #363: counting keys on plan-conformance, not on region/capacity.
+
 Design direction (chat proposal, not ruled):
 - **Separate counting from permission.** Quota counting keys on region/capacity and stays ungated. Hevy exposes load
   but not range, depth or hand position, so range gates cannot be enforced at count time.
@@ -161,6 +170,10 @@ Design direction (chat proposal, not ruled):
     prescribed or shown.
 - **Qualifier type PROGRESSION RULE (pain-gated).** Enforceable only if a pain signal is captured (a check-in field or
   a per-session flag); otherwise advisory. Q27 decides the capture point.
+
+> **Partly SUPERSEDED (2026-10-01, #363).** Bullet 1 (the capacity-ruling finding) is folded into #363: capacity is
+> the wrong quota key, and it stays a descriptor only. Bullet 2 (sided pairs voting twice) is moot once counting
+> leaves Rule 1. Bullet 3 (exposure never suppresses screening of a MEASURED region) STANDS and is retained below.
 
 **Findings after the v0.1 seed (2026-09-27, #339). Q27 stays OPEN.**
 - **Operator ruling: capacity is the wrong quota key for this program.** Here the stability/strength split is a
@@ -175,10 +188,29 @@ Design direction (chat proposal, not ruled):
   router prescribe that exercise instead of the region's screen, and logging it removes the region from probe
   candidates. Principle for the redesign: exposure never suppresses periodic screening of a MEASURED region.
 
+**Scope after #363 (2026-10-01).** Q27 is narrowed to the v1 VOCABULARY and how each axis is MEASURED. It no longer
+decides what a quota slot keys on (superseded by #363) or how restrictions are recorded (moved to Q197).
+- **v1 vocabulary (ratio-first axes):** ER:IR, adductor:abductor, plantarflexion; hamstring is a candidate.
+- **Region tags stay load-bearing.** Substitution equivalence in Q197's adjudication runs on them, so the tags keep
+  their job even though capacity no longer keys the quota.
+- **Exposure never suppresses screening of a MEASURED region** (retained from #338; see Findings above, bullet 3).
+
+**Sub-question (2026-10-01): MEASUREMENT ROUTE per axis.** The ER:IR comparison above is not like-for-like. The
+logged 0.56 is a cable-load ratio (6.25 : 11.25 kg); the 0.66–0.75 band is an isokinetic-torque reference. Different
+units, so the gap between them does not size a deficit. Each axis needs a route chosen:
+- **(i) Log-derived ratio.** Same setup both sides, e1RM-normalised, judged against an INTERNAL band (the user's own
+  baseline and trend). Literature is used for DIRECTION only, never as a threshold.
+- **(ii) Protocol probe.** A handheld dynamometer or squeeze test, read against literature norms. The norm and the
+  measurement share a unit, so the literature band is usable as a threshold.
+
+Decide per axis (ER:IR, adductor:abductor, plantarflexion, hamstring if admitted). **Pending operator:** whether a
+dynamometer or squeeze gauge is available. Route (ii) cannot be chosen for any axis until that is known.
+
 **State:** OPEN — the v1 taxonomy bump is its own design pass: externally grounded (HAGOS / adductor
 squeeze; ER:IR isokinetic references; return-to-sport LSI), with adductor:abductor and ER:IR as first-class
 reads. NOT a bolt-on from a tag file (the taxonomy is external-authority so its breadth does not inherit the
-user's blind spots — #76). No blocker — the external references are named and nothing gates starting it.
+user's blind spots — #76). Narrowed by #363 to vocabulary plus measurement route. The vocabulary work has no
+blocker. Measurement route: blocker for route (ii) only is the operator's equipment answer (Owner: Luke).
 Unblocks the interim no-pattern verdicts on the four families above.
 
 ---
@@ -2631,6 +2663,61 @@ Options (a proposal, not a ruling): (a) never re-own: ownership is set on insert
 Options (not a ruling): persist tokens in a table (hashed, with expiry and revocation; a migration), give the in-memory tokens an expiry only, or accept and document it. If persistence is added, the retirement dry run's MCP paragraph and the pinning test must change with it.
 
 **State:** OPEN — needs a ruling on whether MCP sessions must survive a deploy and be revocable. Owner: Luke (rule), Code (build).
+
+---
+
+## Q197. Plan-conformance adjudication: how deviations from a planned session are judged
+
+#363 rules that a quota slot is satisfied by doing the PLANNED session. That leaves the judgment of a session that
+does not match its plan: moved, substituted, added to, cut short. This question is that judgment. **Everything below
+is a chat proposal, not ruled.** The thresholds are placeholders.
+
+**Proposal (2026-10-01).**
+- **Match by identity, within the week, not by date.** A logged workout is matched to a planned session by routine
+  and exercise overlap. A session done on another day is recorded as MOVED, not as a deviation.
+- **Per planned exercise, one of four outcomes:**
+  - *done*: logged as planned.
+  - *substituted*: a different exercise with the same PRIMARY region (region tags carry this; see Q27).
+  - *added*: in-brief if its region is in the session's planned region set. Out-of-brief neither counts nor
+    penalises.
+  - *dropped*.
+- **Drops: auto-credit first.** If a same-window activity covers the dropped regions, the drop is credited. This
+  needs a coarse activity-type → region map for non-Hevy activities (Pilates → trunk/core, for example). Worked case:
+  the Monday session moves to Tuesday; core is dropped because a fixed Pilates appointment followed. Covered, counted.
+- **Bands.** Region-matched share of planned working sets ≥ ~80% with no restriction hit → auto-tick. < ~50% → not
+  done. Between → the operator gets a one-tap confirm with a REASON CODE: covered elsewhere / time / pain / fatigue /
+  equipment.
+- **Pain reason = the per-session pain capture point** (moved from Q27). A "pain" reason routes to the restriction
+  record `{target, qualifier, side, reason, source, review_date}`, including the pain-gated progression qualifier.
+  The restrictions in force at the move are recorded in Q27 (lumbar, L knee squat depth, L thumb) as evidence.
+- **Repeat drops flag the plan.** A drop reason repeating across weeks on sessions done ON their planned day flags
+  the plan for revision. Drops in MOVED sessions do not.
+- **No LLM in the verdict.** It is deterministic. An LLM may write the one-line explanation shown on the confirm.
+
+**Hypothesis to verify before the design relies on it.** Does the Hevy workout payload carry the source routine id?
+If not, matching falls back to date window + exercise overlap. Findings (2026-10-01, this session):
+- *Certain:* nothing in this repo reads a workout-side routine id. `routine_id` appears only on the routine
+  read/update paths (`connectors/hevy.py`, `routers/chat.py`, `mcp_server.py`, `context_builder.py`), which take a
+  routine id as INPUT.
+- *Certain:* the untouched workout payload is already stored. `hevy_workouts.raw` is JSONB and `hevy_workouts.py`
+  writes `row.raw = w`. If Hevy sends the field, it is in prod storage now and needs no re-fetch.
+- *Not verified:* whether Hevy sends it. The public API docs (`api.hevyapp.com`) are blocked by this container's
+  egress policy. From memory the public Workout object includes `routine_id` (*Guessing*, not evidence). This is an
+  instruction to verify, not a fact.
+- **Verification query (operator, via `railway connect` to `health-app-DB`):**
+
+      SELECT count(*) AS n,
+             count(*) FILTER (WHERE raw ? 'routine_id') AS has_key,
+             count(*) FILTER (WHERE coalesce(raw->>'routine_id','') <> '') AS non_empty
+      FROM hevy_workouts WHERE user_id = 1;
+
+  Read `has_key` against `non_empty`: a key that is present but always null means Hevy sends the field and only
+  workouts started FROM a routine fill it. That is still usable for matching, but it cannot cover workouts started empty.
+
+**Dependency.** Plan↔log reconciliation, the unbuilt consumer named in Q24 (`laterality` and any `capability_state.side`
+join wait on it too). This is the same component. Q27's region tags feed the substitution test.
+
+**State:** OPEN — chat proposal, not ruled; the Hevy routine-id check is owed before design relies on it. Owner: Luke.
 
 ---
 
