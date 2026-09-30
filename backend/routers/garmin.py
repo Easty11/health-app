@@ -3,7 +3,8 @@ Garmin integration — server-side HRV pull (the metrics Garmin withholds from H
 Connect). See `connectors/garmin.py` for the why and the credential model.
 
 Endpoints (all authenticated, self-scoped):
-  POST   /integrations/garmin/token        → store the out-of-band login token blob
+  POST   /integrations/garmin/token        → verify + store the out-of-band login token blob
+                                             (refuses an account already linked to another user)
   POST   /integrations/garmin/sync?from&to → pull + upsert HRV for a date range
   GET    /integrations/garmin/status       → {connected: bool}
   DELETE /integrations/garmin              → disconnect (drop the token)
@@ -20,11 +21,17 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
-from connectors.garmin import GarminClient, GarminReconnectError
+from connectors.garmin import (
+    GarminClient,
+    GarminProfileUnresolvable,
+    GarminReconnectError,
+    account_fingerprint,
+)
 from database import get_db
 from encryption import decrypt, encrypt
 
@@ -56,6 +63,15 @@ def garmin_wake_day() -> date:
 
 class GarminTokenIn(BaseModel):
     token: str
+
+
+# Attach-guard responses. Neither names another user: the caller learns only that the ACCOUNT is
+# taken, never by whom.
+_ATTACH_CONFLICT = "This Garmin account is already connected to a different user."
+_ATTACH_UNVERIFIED = (
+    "Could not verify which Garmin account this token belongs to, so it was not saved. "
+    "Please retry in a few minutes."
+)
 
 
 # ── token storage helpers (mirror the Hevy/Polar UserIntegration pattern) ──────
@@ -117,6 +133,28 @@ def _upsert_hrv_day(db: Session, user_id: int, source: str, day: dict) -> int:
     return len(day["samples"])
 
 
+def _record_account_fingerprint(db: Session, row: models.UserIntegration, client: GarminClient) -> None:
+    """Best-effort: record which Garmin account this connection is, so the attach guard can protect
+    it. Never raises and never fails a sync (bookkeeping must not cost HRV).
+
+    A unique-index conflict here means ANOTHER user already holds this same Garmin account: the
+    mix-up condition itself. It is logged at ERROR (the alert) and left unrecorded; nothing is
+    changed. An unresolvable profile is logged by the connector at ERROR too."""
+    uid = row.user_id
+    try:
+        row.account_fingerprint = account_fingerprint(client.profile_id())
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.error(
+            "garmin account fingerprint: user %s's Garmin account is ALREADY connected to another "
+            "user (the account mix-up condition); left unrecorded, needs the operator", uid,
+        )
+    except Exception as exc:  # noqa: BLE001 -- includes GarminProfileUnresolvable
+        db.rollback()
+        logger.warning("garmin account fingerprint not recorded for user %s: %s", uid, type(exc).__name__)
+
+
 def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date) -> dict:
     """Pull Garmin HRV for one user over [start, end] and upsert it. Commits.
 
@@ -132,6 +170,9 @@ def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date) -> dict
     # before the pull, so the refresh is never lost to a later pull failure.
     _store_token(db, row, client.dump_token())
     db.commit()
+
+    if row.account_fingerprint is None:
+        _record_account_fingerprint(db, row, client)
 
     days = client.get_hrv_range(start, end)
 
@@ -183,17 +224,41 @@ def _reconnect_http(exc: GarminReconnectError) -> HTTPException:
 
 # ── endpoints ──────────────────────────────────────────────────────────────────
 
+def _fingerprint_linked_elsewhere(db: Session, fingerprint: str, user_id: int) -> bool:
+    return (
+        db.query(models.UserIntegration.id)
+        .filter(
+            models.UserIntegration.provider == "garmin",
+            models.UserIntegration.account_fingerprint == fingerprint,
+            models.UserIntegration.user_id != user_id,
+        )
+        .first()
+        is not None
+    )
+
+
 @router.post("/token", status_code=status.HTTP_201_CREATED)
 def connect_garmin_token(
     body: GarminTokenIn,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Store the token blob minted out-of-band by `scripts/garmin_login.py`.
+    """Verify and store the token blob minted out-of-band by `scripts/garmin_login.py`.
 
-    The platform never receives the Garmin password — only this garminconnect token blob,
-    stored Fernet-encrypted in UserIntegration(provider="garmin"), upserted on
-    uq_user_provider. Mirrors the Hevy register path; no migration.
+    The platform never receives the Garmin password: only this garminconnect token blob, stored
+    Fernet-encrypted in UserIntegration(provider="garmin"), upserted on uq_user_provider.
+
+    The root-cause guard for the Garmin account mix-up: the token is used ONCE to resolve which
+    Garmin account it belongs to, and the attach is refused when that account is already
+    connected to a DIFFERENT user (409; the message names no user). Re-attaching the same account
+    to the same user, or a different account to this user, is allowed. FAILS CLOSED: when the
+    account cannot be resolved (Garmin unreachable, or its profile response changed shape) the
+    token is NOT stored and the caller gets 503 to retry; a shape change also logs an ERROR (the
+    alert), so attaches stop loudly instead of silently bypassing the guard. A token that cannot
+    authenticate is 424 (reconnect), as on the sync path.
+
+    The blob stored is the client's own dump after login, which may be newer than the one
+    submitted (a refresh during login), the same writeback contract as the sync path.
     """
     token = body.token.strip()
     if not token:
@@ -202,17 +267,43 @@ def connect_garmin_token(
             detail="token must not be empty",
         )
 
+    try:
+        client = GarminClient.from_token(token)
+        profile_id = client.profile_id()
+    except GarminReconnectError as exc:
+        raise _reconnect_http(exc)
+    except GarminProfileUnresolvable:
+        # ERROR already logged by the connector (key names only).
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_ATTACH_UNVERIFIED)
+    except Exception:  # noqa: BLE001 -- fail closed on ANY inability to verify the account
+        logger.exception(
+            "garmin attach BLOCKED for user %s: could not verify the Garmin account", current_user.id
+        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_ATTACH_UNVERIFIED)
+
+    fingerprint = account_fingerprint(profile_id)
+    if _fingerprint_linked_elsewhere(db, fingerprint, current_user.id):
+        logger.warning("garmin attach REFUSED for user %s: account already connected to another user",
+                       current_user.id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_ATTACH_CONFLICT)
+
+    blob = client.dump_token()
     row = _get_garmin_row(current_user.id, db)
     if row:
-        row.api_key_encrypted = encrypt(token)
+        _store_token(db, row, blob)
+        row.account_fingerprint = fingerprint
     else:
-        row = models.UserIntegration(
+        db.add(models.UserIntegration(
             user_id=current_user.id,
             provider="garmin",
-            api_key_encrypted=encrypt(token),
-        )
-        db.add(row)
-    db.commit()
+            api_key_encrypted=encrypt(blob),
+            account_fingerprint=fingerprint,
+        ))
+    try:
+        db.commit()
+    except IntegrityError:  # a concurrent attach won the unique index between the check and the commit
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_ATTACH_CONFLICT)
     return {"detail": "Garmin integration saved"}
 
 

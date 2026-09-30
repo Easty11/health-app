@@ -1674,3 +1674,20 @@ No migration. The `value` shape for `type='appointment'` (#345): the operator's 
 **Default section lists.** `follow_up`: header, leave_with, since, changes_vs_history, asks, options_prep, current_constraints, logistics. `intro`: header, background, imaging_timeline, current_constraints, asks, logistics. `request`: header, request, leave_with, asks, options_prep, logistics. `add` appends in the order given; `options_prep` and `request` render nothing when empty.
 
 **Readers.** `appointment_brief.load_appointment_brief` (one query of the user's appointment / injury / constraint / finding rows, active and inactive) → `build_appointment_brief` (pure) → `GET /appointments/{key}/brief` and the MCP `get_appointment_brief`. `GET /appointments` lists active rows (`?status=`). `context_builder._section_appointments` renders active `planned` rows' values to the coach (input-gated). Nothing else reads this type; the engine never does.
+
+### 040 — user_integrations.account_fingerprint (one external account, one user)
+
+Migration `a9c3e5f7b1d2` (revises `f7a2c9e1d3b5`). The root-cause guard for the Garmin account mix-up (30 Sep 2026): one Garmin account was connected to two users because nothing tied a stored token to the account it belongs to. Additive and non-destructive: one nullable column and one **partial** unique index. No backfill in the migration; existing rows stay NULL (unconstrained).
+
+```sql
+ALTER TABLE user_integrations ADD COLUMN account_fingerprint VARCHAR(64);   -- SHA-256 of sha256("garmin:" + profile id); NULL = not recorded
+CREATE UNIQUE INDEX uq_user_integrations_provider_fingerprint
+    ON user_integrations (provider, account_fingerprint)
+    WHERE account_fingerprint IS NOT NULL;                                   -- hand-written: autogenerate never produces partial indexes
+```
+
+- **Digest, not identifier.** Only equality is needed, so the raw Garmin profile id is never stored (`connectors.garmin.account_fingerprint`). `provider` is in the key so two providers can never collide on one digest; Hevy and Polar rows leave it NULL.
+- **Attach refuses a taken account.** `POST /integrations/garmin/token` resolves the profile id once (`GarminClient.profile_id`, the social-profile call `scripts/garmin_identity.py` shares via `connectors.garmin.extract_profile_id`), then: another user already holds the fingerprint -> **409**, message names no user; same user re-attaching, or a different account for this user -> allowed. The index is the backstop for a concurrent attach (also 409).
+- **Fails closed.** Profile id unresolvable (Garmin unreachable, or its response changed shape) -> **503**, nothing stored, retry message; a shape change also logs an ERROR with the response's KEY NAMES only (never values). A token that cannot authenticate is 424. Attaches stop loudly rather than silently bypass the guard.
+- **Stored blob** is the client's dump after login (may be newer than the submitted one), the same refresh-writeback contract as the sync path.
+- **Recorded lazily for existing connections.** `sync_hrv_for_user` records the fingerprint on the next sync when it is NULL (`_record_account_fingerprint`): best-effort, never fails a sync. A unique-index conflict there means another user already holds the same Garmin account (the mix-up condition): logged at ERROR, left unrecorded.

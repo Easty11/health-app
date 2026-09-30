@@ -252,9 +252,24 @@ def test_sync_endpoint_404_when_not_connected(db_session):
 
 # ── token endpoint stores encrypted, never plaintext ─────────────────────────────
 
-def test_token_endpoint_stores_encrypted_blob(db_session):
+class _AttachFake:
+    """The attach path verifies the account first (G4): a client with a profile id and a dump."""
+
+    def __init__(self, blob):
+        self._blob = blob
+
+    def profile_id(self):
+        return "555001"
+
+    def dump_token(self):
+        return self._blob
+
+
+def test_token_endpoint_stores_encrypted_blob(db_session, monkeypatch):
     user = _user(db_session)
     client = _client(db_session, user)
+    monkeypatch.setattr(garmin.GarminClient, "from_token",
+                        classmethod(lambda cls, token_json: _AttachFake(token_json)))
     resp = client.post("/integrations/garmin/token", json={"token": "TOKEN_BLOB_XYZ"})
     assert resp.status_code == 201
 
