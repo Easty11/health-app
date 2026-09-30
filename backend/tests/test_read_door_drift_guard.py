@@ -33,6 +33,7 @@ ALLOW_AEROBIC = {
     "cbti/replay.py": "Allow-listed: keeps its pre-migration raw-SQL isolation, and reads training_end DETERMINISTICALLY — MAX(stop_time) per session_date with non-training sports (sport_classes.NON_TRAINING_SPORTS) EXCLUDED, all sources (#322, closing Q162) — so no order-dependent wrong-pick (#311).",
     "engine/week_plan.py": "Derived week plan (#316) does NOT count — every `done` is resolve()'s (doored). Its only direct aerobic reads are day-attribution of the exact session ids resolve() ALREADY counted (never a membership/count decision) and the freshness aggregate max(created_at) for Polar rows, which no door exposes (ruling 4).",
     "session_focus.py": "Session focus (Brief A A1): the ONE row the operator asked to review, fetched by (user_id, id) — a lookup, never a membership/count decision. Its surrounding window goes through arbitrated_sessions (the door) and drops non-canonical rows.",
+    "scripts/arbitration_flip_report.py": "Read-only dry run for the A6 tier (Brief A): it needs the user's FULL raw set so it can run the door's own pure core (`reads.aerobic_reads.arbitrate`) twice, with and without the data tier, and list the bouts that flip. Writes nothing; never a count or membership decision for any reader.",
 }
 ALLOW_HEVY = {
     "reads/hevy_reads.py": "THE counted-workouts read-door.",
