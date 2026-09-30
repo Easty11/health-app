@@ -62,7 +62,7 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
     scrollToBottom()
   }, [messages, loading])
 
-  async function sendMessage(text, currentMessages) {
+  async function sendMessage(text, currentMessages, focus = null) {
     if (!text || loading) return
 
     const base = currentMessages ?? messages
@@ -80,6 +80,8 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
       const { data } = await api.post('/chat', {
         message: text,
         conversation_history: history,
+        // A session review names its session; the server loads and renders it (server-side `session_focus`).
+        ...(focus ? { focus_session: focus } : {}),
       })
       // Never an empty bubble (Q187): the server guarantees text, and this catches anything that
       // still arrives blank, saying plainly that nothing came back.
@@ -95,10 +97,14 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
     }
   }
 
-  // Auto-send when a feedback message is injected from WorkoutPanel
+  // Auto-send when a message is pushed in from a panel (`{ message, focus }`; a bare string is a message
+  // with no session focus). The user bubble shows only the short message; the session rides as a reference.
   useEffect(() => {
     if (pendingFeedback) {
-      sendMessage(pendingFeedback, messages)
+      const { message, focus } = typeof pendingFeedback === 'string'
+        ? { message: pendingFeedback, focus: null }
+        : pendingFeedback
+      sendMessage(message, messages, focus)
       onFeedbackSent?.()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

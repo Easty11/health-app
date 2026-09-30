@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api'
 import { formatApiError } from '../lib/apiError'
+import { localDate } from '../lib/sessionDates'
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -27,9 +28,10 @@ function fmtSeconds(secs) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
+// Local (Brisbane) calendar date — never `iso.slice(0, 10)`, which is the UTC date and shows a session
+// before 10:00 AEST a day early (lib/sessionDates.js).
 function fmtDate(iso) {
-  if (!iso) return '—'
-  return iso.slice(0, 10)
+  return localDate(iso)
 }
 
 function sportColour(sport) {
@@ -44,41 +46,15 @@ function sportColour(sport) {
   return 'border-gray-300 bg-gray-50'
 }
 
-function formatHevyMessage(workout) {
-  const title = workout.title || workout.name || 'Untitled'
-  const date = (workout.start_time || '').slice(0, 10)
-  const duration = fmtDuration(workout.start_time, workout.end_time)
-  const durationStr = duration ? ` (${duration})` : ''
-  let totalVolume = 0
-  let totalSets = 0
-  const lines = []
-  for (const ex of workout.exercises || []) {
-    const exTitle = ex.title || ex.exercise_template_id || 'Unknown'
-    const workingSets = (ex.sets || []).filter(s => s.type !== 'warmup')
-    const setDescs = workingSets.map(s => {
-      const rm = epley1RM(s.weight_kg, s.reps)
-      const rmStr = rm ? ` (est. 1RM: ${rm}kg)` : ''
-      if (s.weight_kg && s.reps) { totalVolume += s.weight_kg * s.reps; totalSets++ }
-      return s.weight_kg && s.reps ? `${s.reps}×${s.weight_kg}kg${rmStr}` : null
-    }).filter(Boolean)
-    if (setDescs.length) lines.push(`${exTitle}: ${setDescs.join(', ')}`)
-  }
-  return [
-    `Can you give me feedback on this session?`,
-    ``,
-    `${title} — ${date}${durationStr}`,
-    ``,
-    ...lines,
-    ``,
-    `Total volume: ${Math.round(totalVolume)}kg across ${totalSets} sets`,
-  ].join('\n')
-}
-
 // aerobic_sessions schema → shape the Polar card/detail components consume
 function normalizePolar(s) {
   return {
     id: s.id,
     sport: s.sport_name || 'Session',
+    source: s.source,
+    // `session_date` is the backend's LOCAL calendar date for the bout; the list shows it as is.
+    date: s.session_date,
+    canonical: s.canonical !== false,
     start_time: s.start_time || s.session_date,
     duration_seconds: s.duration_minutes != null ? Math.round(s.duration_minutes * 60) : null,
     avg_hr: s.hr_avg,
@@ -93,25 +69,17 @@ function normalizePolar(s) {
   }
 }
 
-function formatPolarMessage(session) {
-  const sport = session.sport || 'Session'
-  const date = fmtDate(session.start_time)
-  const duration = fmtSeconds(session.duration_seconds)
-  const parts = [
-    `Can you give me feedback on this aerobic session?`,
-    ``,
-    `${sport} — ${date}${duration ? ` (${duration})` : ''}`,
-  ]
-  if (session.avg_hr) parts.push(`Avg HR: ${session.avg_hr} bpm`)
-  if (session.max_hr) parts.push(`Max HR: ${session.max_hr} bpm`)
-  if (session.calories) parts.push(`Calories: ${session.calories}`)
-  if (session.cardio_load != null) parts.push(`Cardio load: ${Math.round(session.cardio_load)}`)
-  if (session.recovery_hours != null) parts.push(`Recovery: ${Math.round(session.recovery_hours)}h`)
-  const z = session.hr_zones || {}
-  const zones = ['z1_seconds','z2_seconds','z3_seconds','z4_seconds','z5_seconds']
-    .map((k, i) => z[k] ? `Z${i+1}: ${fmtSeconds(z[k])}` : null).filter(Boolean)
-  if (zones.length) parts.push(`HR Zones: ${zones.join(', ')}`)
-  return parts.join('\n')
+// One row per bout: the endpoint returns every source's row with a derived `canonical` flag (read-time
+// arbitration); the list shows canonical rows only, so a same-bout twin never appears twice.
+function canonicalOnly(rows) {
+  return (rows || []).filter(r => r.canonical !== false)
+}
+
+// A session review is a REFERENCE, not a rendering: chat gets a short message plus `focus_session`, and the
+// server loads and renders the session itself (RPE, notes, set types, carries, zones — all of it). The
+// client no longer formats a session, so it cannot drop fields.
+function reviewMessage(kind, title, dateLabel) {
+  return `${kind === 'context' ? 'Context' : 'Session'} review: ${title}, ${dateLabel}`
 }
 
 // ── Hevy components ────────────────────────────────────────────────────────────
@@ -182,9 +150,14 @@ function WorkoutDetail({ workout, onBack, onFeedback }) {
 
   async function handleFeedback() {
     setAnalysing(true)
+    // Stored analysis still feeds this card's "Session Analysis" block and the "Last Analysis" strip; it does
+    // not reach chat context (no prompt section renders `session_analysis`), so chat gets the reference below.
     try { await api.post('/health/analyse-session', { workout_id: workoutId, workout_data: workout }) }
     catch { /* optional */ }
-    onFeedback(formatHevyMessage(workout))
+    onFeedback(
+      reviewMessage('session', title, date),
+      { kind: 'hevy', id: String(workout.id ?? workoutId), scope: 'session' },
+    )
     onBack()
   }
 
@@ -219,7 +192,7 @@ function WorkoutDetail({ workout, onBack, onFeedback }) {
         )}
         <button onClick={handleFeedback} disabled={analysing}
           className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl py-2.5 transition-colors">
-          {analysing ? 'Analysing…' : 'Get AI Feedback'}
+          {analysing ? 'Analysing…' : 'Session feedback'}
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
@@ -257,7 +230,7 @@ function PolarSessionCard({ session, onSelect }) {
     >
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-800 capitalize">{session.sport || 'Session'}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{fmtDate(session.start_time)}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{session.date}</p>
         {(session.avg_hr || session.max_hr) && (
           <p className="text-xs text-gray-500 mt-1">
             {session.avg_hr ? `Avg ${session.avg_hr} bpm` : ''}
@@ -306,10 +279,15 @@ function PolarDetail({ session, onBack, onFeedback }) {
   const colour = sportColour(session.sport)
   const duration = fmtSeconds(session.duration_seconds)
   const zones = session.hr_zones || {}
+  // A row with no HR at all (e.g. a zoneless Flow-export twin) says so, rather than showing bare dashes.
+  const noHr = session.avg_hr == null && session.max_hr == null
 
   async function handleFeedback() {
     setSending(true)
-    onFeedback(formatPolarMessage(session))
+    onFeedback(
+      reviewMessage('session', session.sport || 'Session', session.date),
+      { kind: 'aerobic', id: String(session.id), scope: 'session' },
+    )
     onBack()
   }
 
@@ -318,22 +296,36 @@ function PolarDetail({ session, onBack, onFeedback }) {
       <div className={`flex-none px-4 py-3 border-b border-gray-200 border-l-4 ${colour}`}>
         <button onClick={onBack} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium mb-1">← Back</button>
         <h2 className="text-sm font-semibold text-gray-800 capitalize">{session.sport || 'Session'}</h2>
-        <p className="text-xs text-gray-400 mt-0.5">{fmtDate(session.start_time)}{duration ? ` · ${duration}` : ''}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{session.date}{duration ? ` · ${duration}` : ''}</p>
       </div>
 
       <div className="flex-none px-4 pt-3 pb-3 space-y-3 border-b border-gray-100">
         <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="bg-red-50 rounded-xl p-3">
-            <p className="text-base font-bold text-red-600">{session.avg_hr ?? '—'}</p>
-            <p className="text-xs text-red-400">Avg HR</p>
-          </div>
-          <div className="bg-red-50 rounded-xl p-3">
-            <p className="text-base font-bold text-red-600">{session.max_hr ?? '—'}</p>
-            <p className="text-xs text-red-400">Max HR</p>
-          </div>
+          {noHr ? (
+            <div className="bg-red-50 rounded-xl p-3 col-span-2 flex items-center justify-center">
+              <p className="text-xs text-red-400">No HR from this source</p>
+            </div>
+          ) : (
+            <>
+              <div className="bg-red-50 rounded-xl p-3">
+                <p className="text-base font-bold text-red-600">{session.avg_hr ?? '—'}</p>
+                <p className="text-xs text-red-400">Avg HR</p>
+              </div>
+              <div className="bg-red-50 rounded-xl p-3">
+                <p className="text-base font-bold text-red-600">{session.max_hr ?? '—'}</p>
+                <p className="text-xs text-red-400">Max HR</p>
+              </div>
+            </>
+          )}
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-base font-bold text-gray-700">{session.calories ?? '—'}</p>
-            <p className="text-xs text-gray-400">kcal</p>
+            {session.calories != null ? (
+              <>
+                <p className="text-base font-bold text-gray-700">{session.calories}</p>
+                <p className="text-xs text-gray-400">kcal</p>
+              </>
+            ) : (
+              <p className="text-xs text-gray-400">No kcal from this source</p>
+            )}
           </div>
         </div>
 
@@ -363,10 +355,22 @@ function PolarDetail({ session, onBack, onFeedback }) {
 
         <button onClick={handleFeedback} disabled={sending}
           className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl py-2.5 transition-colors">
-          {sending ? 'Sending…' : 'Get AI Feedback'}
+          {sending ? 'Sending…' : 'Session feedback'}
         </button>
       </div>
     </div>
+  )
+}
+
+// "Review in context" — the surrounding-load review of the card's session (the most recent one it shows):
+// judged against the active phase, the prior week's sessions and the next 72 hours. A sibling of the
+// card, not nested in it, so it never opens the detail view.
+function ContextReviewButton({ onClick }) {
+  return (
+    <button onClick={onClick}
+      className="mt-1.5 w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium border border-indigo-100 hover:border-indigo-200 rounded-lg py-1.5 transition-colors">
+      Review in context
+    </button>
   )
 }
 
@@ -402,11 +406,13 @@ export default function WorkoutPanel({ onFeedback }) {
       const [countRes, workoutsRes, polarRes] = await Promise.all([
         api.get('/integrations/hevy/workout-count'),
         api.get('/integrations/hevy/workouts?page=1&page_size=1'),
-        api.get('/integrations/polar/aerobic-sessions?limit=1').catch(() => ({ data: [] })),
+        // Newest few, not one: the newest ROW can be a non-canonical same-bout twin, so take the first canonical.
+        api.get('/integrations/polar/aerobic-sessions?limit=10').catch(() => ({ data: [] })),
       ])
       setHevyCount(countRes.data.workout_count ?? countRes.data.count ?? 0)
       setLatestHevy((workoutsRes.data.workouts || [])[0] || null)
-      setLatestPolar(polarRes.data[0] ? normalizePolar(polarRes.data[0]) : null)
+      const latestCanonical = canonicalOnly(polarRes.data)[0]
+      setLatestPolar(latestCanonical ? normalizePolar(latestCanonical) : null)
       setNotConnected(false)
     } catch (err) {
       if (err.response?.status === 404) setNotConnected(true)
@@ -448,7 +454,7 @@ export default function WorkoutPanel({ onFeedback }) {
   async function openPolarHistory() {
     if (polarSessions.length === 0) {
       const res = await api.get('/integrations/polar/aerobic-sessions?limit=200').catch(() => ({ data: [] }))
-      setPolarSessions(res.data.map(normalizePolar))
+      setPolarSessions(canonicalOnly(res.data).map(normalizePolar))
     }
     setView('polar-history')
   }
@@ -458,7 +464,7 @@ export default function WorkoutPanel({ onFeedback }) {
     try {
       await api.post('/integrations/polar/sync')
       const res = await api.get('/integrations/polar/aerobic-sessions?limit=200').catch(() => ({ data: [] }))
-      const norm = res.data.map(normalizePolar)
+      const norm = canonicalOnly(res.data).map(normalizePolar)
       setPolarSessions(norm)
       if (norm.length) setLatestPolar(norm[0])
     } catch { /* ignore */ }
@@ -481,7 +487,7 @@ export default function WorkoutPanel({ onFeedback }) {
       setPolarImportResult({ import: res.data.import, notice: res.data.notice })
       // Re-fetch so imported bouts appear (same pattern as post-Sync).
       const list = await api.get('/integrations/polar/aerobic-sessions?limit=200').catch(() => ({ data: [] }))
-      const norm = list.data.map(normalizePolar)
+      const norm = canonicalOnly(list.data).map(normalizePolar)
       setPolarSessions(norm)
       if (norm.length) setLatestPolar(norm[0])
     } catch (err) {
@@ -540,7 +546,7 @@ export default function WorkoutPanel({ onFeedback }) {
         <div className="flex-none px-4 py-3 border-b border-gray-200 bg-white flex items-start justify-between">
           <div>
             <button onClick={() => setView('list')} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium mb-1">← Back</button>
-            <h2 className="text-sm font-semibold text-gray-800">Polar History</h2>
+            <h2 className="text-sm font-semibold text-gray-800">Aerobic sessions</h2>
             <p className="text-xs text-gray-400 mt-0.5">{polarSessions.length} sessions</p>
           </div>
           <div className="flex items-center gap-3 mt-5">
@@ -630,7 +636,17 @@ export default function WorkoutPanel({ onFeedback }) {
             {loading
               ? <p className="text-xs text-gray-400">Loading…</p>
               : latestHevy
-                ? <WorkoutCard workout={latestHevy} onSelect={w => openHevyDetail(w, 'list')} />
+                ? (
+                  <>
+                    <WorkoutCard workout={latestHevy} onSelect={w => openHevyDetail(w, 'list')} />
+                    <ContextReviewButton
+                      onClick={() => (onFeedback ?? (() => {}))(
+                        reviewMessage('context', latestHevy.title || latestHevy.name || 'Untitled', fmtDate(latestHevy.start_time || latestHevy.created_at)),
+                        { kind: 'hevy', id: String(latestHevy.id), scope: 'context' },
+                      )}
+                    />
+                  </>
+                )
                 : <p className="text-xs text-gray-400">No workouts found</p>
             }
           </div>
@@ -646,7 +662,17 @@ export default function WorkoutPanel({ onFeedback }) {
               </button>
             </div>
             {latestPolar
-              ? <PolarSessionCard session={latestPolar} onSelect={s => openPolarDetail(s, 'list')} />
+              ? (
+                <>
+                  <PolarSessionCard session={latestPolar} onSelect={s => openPolarDetail(s, 'list')} />
+                  <ContextReviewButton
+                    onClick={() => (onFeedback ?? (() => {}))(
+                      reviewMessage('context', latestPolar.sport || 'Session', latestPolar.date),
+                      { kind: 'aerobic', id: String(latestPolar.id), scope: 'context' },
+                    )}
+                  />
+                </>
+              )
               : <p className="text-xs text-gray-400">No sessions yet</p>
             }
           </div>

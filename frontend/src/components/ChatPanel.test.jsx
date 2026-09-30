@@ -38,3 +38,44 @@ describe('ChatPanel reply rendering', () => {
     expect(screen.queryByText(/No response came back/)).toBeNull()
   })
 })
+
+
+// Brief A A1/A3: a session review rides as a REFERENCE. The panel pushes `{ message, focus }`; the request
+// carries `focus_session`, and the bubble shows only the short message.
+describe('ChatPanel session focus', () => {
+  beforeEach(() => { localStorage.clear(); api.post.mockReset() })
+  afterEach(() => cleanup())
+
+  const REPLY = { data: { response: 'Reviewing.', actions_taken: [], write_results: [] } }
+
+  test('a pushed review sends focus_session with the short message', async () => {
+    api.post.mockResolvedValue(REPLY)
+    const focus = { kind: 'hevy', id: 'hv1', scope: 'context' }
+    await act(async () => {
+      render(<ChatPanel pendingFeedback={{ message: 'Context review: Lower, 2026-09-29', focus }} />)
+    })
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1))
+    expect(api.post).toHaveBeenCalledWith('/chat', {
+      message: 'Context review: Lower, 2026-09-29', conversation_history: [], focus_session: focus,
+    })
+    expect(screen.getAllByText('Context review: Lower, 2026-09-29')).toHaveLength(1)   // the bubble: message only
+  })
+
+  test('a bare-string push (the exposure panel) and a typed message carry no focus_session', async () => {
+    api.post.mockResolvedValue(REPLY)
+    await act(async () => { render(<ChatPanel pendingFeedback="Discuss this recommendation" />) })
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1))
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty('focus_session')
+
+    await send('and a typed follow-up')
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2))
+    expect(api.post.mock.calls[1][1]).not.toHaveProperty('focus_session')
+  })
+
+  test('an object push with no focus sends none', async () => {
+    api.post.mockResolvedValue(REPLY)
+    await act(async () => { render(<ChatPanel pendingFeedback={{ message: 'hello', focus: null }} />) })
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1))
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty('focus_session')
+  })
+})
