@@ -45,6 +45,7 @@ ALLOW_HEVY = {
     "load_events.py": "Fetches non-excluded candidates, filters via counted_workouts (byte-identical on adjudicated data).",
     "audit_bodyweight_templates.py": "Allow-listed: operator CLI; GROUP-BY aggregate — dupes move only the usage count/sort, never worklist membership.",
     "audit_laterality_coverage.py": "Allow-listed: operator CLI; GROUP-BY aggregate — dupes move only count/sort, never membership.",
+    "scripts/retire_user.py": "Account-retirement inventory: a read-only GROUP-BY-owner count of hevy_workouts INCLUDING excluded/dedup-flagged rows ON PURPOSE — it reports what a cascade delete would destroy, and the door would hide exactly those rows. Never a count or membership decision for any reader; the only write is the guarded DELETE of the user row (cascade).",
     "engine/week_plan.py": "Derived week plan (#316) does NOT count — every `done` is resolve()'s (doored). Its only direct hevy read is day-attribution of the exact workout ids resolve() ALREADY counted via counted_workouts (the door); never a membership/count decision of its own.",
     "session_focus.py": "Session focus (Brief A A1): the ONE workout the operator asked to review, fetched by (user_id, hevy_id) — a lookup, never a membership/count decision. Its surrounding window fetches in-window candidates and partitions them via counted_workouts (the door).",
 }
