@@ -278,7 +278,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Session fidelity into chat and the session views, built, PR held (#354-#357).** A session review carries a `focus_session` reference the server renders at full fidelity (session or context scope); the aerobic list is canonical-only and locally dated; arbitration is richness-first; ingest steps soft-fail. Held for the prod dry-run list and three defaults to ratify. Code - Handoff: `closeout.md`.
+- **Session fidelity into chat and the session views, built, PR held (#354-#357).** A session review carries a `focus_session` reference the server renders at full fidelity (session or context scope, the context window either side of the session's day, the focus persisting for the conversation); the aerobic list is canonical-only and locally dated; arbitration is richness-first; ingest steps soft-fail. Held for the prod dry-run list. Code - Handoff: `closeout.md`.
 
 - **Polar aerobic ingest automated (#353).** New Polar sessions reach `aerobic_sessions` without a Sync press: a soft-fail `polar_sync` step in the load chain (Training-page open and the 02:00 sweep) calls the extracted core `polar_ingest.sync_user`; the manual route keeps its contract. Closes Q154; the webhook question is Q193. Code, self-merged on green - Handoff: `closeout.md`.
 

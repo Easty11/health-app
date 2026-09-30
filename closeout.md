@@ -1,4 +1,4 @@
-# Close-out — Session fidelity into chat and the session views (#354–#357); PR held for the A6 dry run and three defaults
+# Close-out — Session fidelity into chat and the session views (#354–#357); PR held for the A6 dry run
 
 ## Real commits this session
 
@@ -21,14 +21,30 @@ for #287/#288, and the branch is rowed in `BRANCHES.md`). It was cut from master
 0f75211 2026-09-30 feat(chat): focus_session pins the session under review, rendered by the backend (Brief A A1/A2/A4)
 ```
 
-The governance batch is one further commit, `gov(session-fidelity): #354–#357 …`, per the one-`gov`-per-session rule.
+The first governance commit, and the two follow-on feature commits for the operator's rulings of 30 Sep (they
+arrived after the close-out was pushed):
 
-- **Tests:** backend **2442 passed** (baseline 2403); frontend **323 passed** (baseline 302). CI has not run yet
-  (the PR is held).
+```
+85898ed 2026-09-30 feat(chat): the session focus persists for the conversation (Q194 ruled option b)
+8d9c602 2026-09-30 feat(chat): context window is [anchor - 7, anchor + 3] local days, same day included (operator ruling on #354)
+c75fe77 2026-09-30 gov(session-fidelity): #354-#357 session focus, canonical list, richness-first arbitration, ingest soft-fail; Q194; Q19 re-measure; FEEDBACK 55; close-out
+```
+
+A second `gov(session-fidelity)` commit records the rulings (DECISIONS #354, Q194 closed, ROADMAP, BRANCHES,
+CLAUDE.md, this file). That is one more than the one-`gov`-per-session rule allows: the rulings arrived after the
+close-out commit was pushed, so a second commit was the alternative to rewriting pushed history. Named here as a
+deviation, not folded in.
+
+- **Tests:** backend **2443 passed** (baseline 2403); frontend **329 passed** (baseline 302). CI was green on
+  `c75fe77` (all three required checks); it has not yet run on the ruling commits.
 - **Mutation checks (each proven to fail the suite, then restored):** focus window 7→5 days; the focus anchor on the
   UTC date; dropping the canonical filter from the window; deleting the tier from `_win_key` (6 tests);
   removing `hevy_sync` from `SOFT_STEPS` (4); frontend UTC-slice date (3), no canonical filter (5), context sent as
   session (2), UTC date on the aerobic card (1), HubLayout dropping the focus (3), ChatPanel dropping it (4).
+  For the rulings: same-day-and-later aerobic dropped (2), Hevy window ending at the anchor (2), the anchor day's
+  schedule skipped (2); typed turns not carrying the focus (4), focus not persisted (1), New chat keeping it (2),
+  a new review not replacing it (5). One weak assertion was found by its mutation (a recurring "Tuesday" item also
+  matched 22 Sep) and rewritten as a dated one-off.
 - **Caught by the full suite, not the targeted runs:** the read-door drift guard failed twice (`session_focus.py`,
   then `scripts/arbitration_flip_report.py`); both are allow-listed with reasons (`5957bf4`, `53ce6ff`).
 - **Not deployed.** Nothing is on master; no Railway check was possible or owed yet.
@@ -46,6 +62,11 @@ landed:
   ruled: the **WorkoutPanel list cards** (the Strength latest-Hevy card and the Aerobic latest-session card).
 - **A1** → `0f75211` (`backend/session_focus.py`, `routers/chat.py`). **A2** → `0f75211` (`aerobic_format.py`,
   `context_builder.render_workout`; MCP output and `_section_hevy` proven byte-identical).
+- **Operator rulings, 30 Sep (addressed to this session):** (1) window anchored on the session's local date: RATIFIED;
+  (2) window amended to [anchor − 7, anchor + 3] local days, same day included, both lanes and scheduled items, only
+  the focused session excluded → `8d9c602`; (3) Q194 → option (b), the focus persists for the conversation, close
+  Q194 as RULED (b) → `85898ed`, Q194 moved below `## CLOSED` as `DONE → #354`. Tests added and mutation-checked:
+  a same-day later session appears (both lanes); a follow-up turn carries the focus. #354's text updated.
 - **A3** → `9021367`. **A4** → `0f75211` (test) + `9021367`: `session_analysis` does **not** reach chat context,
   so the `analyse-session` call was **left as-is** (the ruling's "if not").
 - **A5 (a)–(d)** → `9021367`. **A6** → `3633bbc` (+ the dry-run script). **C.1** → `961107f`.
@@ -61,20 +82,24 @@ landed:
   its entries untouched. Chat context outside the pinned blocks is unchanged (proven: `with_focus == without + block`).
 
 **Divergences and calls (named at the gate, §44):**
-- **Merge held, deliberately.** CLAUDE.md says self-merge on green. Two things override it here: the brief's own
-  pre-merge dry-run requirement, and three un-ratified data-meaning defaults (below). The PR is opened
-  **ready-for-review, not draft** (CLAUDE.md wins over the harness default).
-- **Three defaults chosen in implementation, not in the brief** (in #354, for chat to ratify or amend): the context
-  window is anchored on the **session's** local date, not today; "72 h" is the next **3 local calendar days**, with
-  same-day scheduled items not repeated; the focus rides the **trigger turn only** (Q194).
+- **Merge held, deliberately.** CLAUDE.md says self-merge on green. The brief's own pre-merge dry-run requirement
+  overrides it here (the three build-time defaults that also held it were resolved by the operator on 30 Sep). The
+  PR is opened **ready-for-review, not draft** (CLAUDE.md wins over the harness default).
+- **One reading of the ruling to confirm.** "For both completed sessions and scheduled items" was implemented
+  literally: the scheduled list covers the whole window, including the 7 days before the anchor and the anchor day.
+  A schedule item cannot be matched to the session that satisfied it, so the anchor day's list normally includes
+  the focused session's own slot. It is one line per matching item per day. If only the forward half was meant,
+  it is a one-line change (`_scheduled_window`'s start day).
+- **A "New chat" control and a "Reviewing: …" chip were added** to `ChatPanel` as part of ruling (3): "until cleared/new"
+  needs a way to clear, and the panel had none. Cost of the persisted focus: one DB read per turn while pinned.
 - **The aerobic pin is one line** (the MCP renderer, plus a local start time). It carries no `cardio_load`,
   `muscle_load` or `recovery_hours`, because the shared renderer does not, on either surface. "Exactly as the
   backend renders it" was read literally.
 - **A Hevy focus needs the workout in `hevy_workouts`.** One not yet synced reads as not-found. Not verified against prod.
 - **The latest aerobic card now requests `limit=10`** and takes the first canonical row, not `limit=1`: the newest
   row can be a non-canonical twin.
-- **`week_plan`'s day-coverage helpers became module-level** (`item_days`, `event_span`, `item_covers`) so the 72 h
-  list and the planner share one definition. Behaviour of `plan_week` is unchanged (its suite passes untouched).
+- **`week_plan`'s day-coverage helpers became module-level** (`item_days`, `event_span`, `item_covers`) so the
+  scheduled window and the planner share one definition. Behaviour of `plan_week` is unchanged (its suite passes untouched).
 - **`test_hevy_hard_failure_skips_polar_like_every_later_step` was replaced**, not deleted: it pinned the behaviour
   C.1 supersedes (#357).
 
@@ -83,16 +108,16 @@ landed:
 **Current sprint.** Surfacing phase toward the four v1 tests (See MET; Know, Walk in, Loop open). This session added
 the session-review path (chat sees the whole session, from any surface) and fixed the aerobic list.
 
-**Single clearest next action (owner: Luke).** Run the A6 dry run and post the list:
+**Single clearest next action (owner: Luke).** Run the A6 dry run and post the list (the only thing holding the merge):
 `\copy (SELECT id, user_id, source, source_package, session_date, start_time, stop_time, sport_name, duration_minutes,
 hr_avg, hr_max, z1_seconds, z2_seconds, z3_seconds, z4_seconds, z5_seconds FROM aerobic_sessions ORDER BY id) TO
 'aerobic_sessions.csv' CSV HEADER` via `railway connect` to `health-app-DB`, then, in the backend venv,
-`python -m scripts.arbitration_flip_report --csv aerobic_sessions.csv`. Put the table in the PR and in #356. In the same
-message, ratify or amend the three defaults. Then a landing session re-reads master's max, re-resolves #354–#357 if
-master advanced, pushes, merges, and verifies both deploys (served-bundle grep for `Review in context`, #121).
+`python -m scripts.arbitration_flip_report --csv aerobic_sessions.csv`. Put the table in the PR and in #356. Then a
+landing session re-reads master's max, re-resolves #354–#357 if master advanced, pushes, merges, and verifies both
+deploys (served-bundle grep for `Review in context` and `New chat`, #121).
 
 **Open questions, by status** (from `OPEN_QUESTIONS.md`):
-- **OPEN, new this session:** Q194 (does the focus persist across follow-up turns; recommendation (b)).
+- **Closed this session:** Q194 → `DONE → #354` (ruled option b, 30 Sep).
 - **OPEN, touched:** Q19 (desktop scroller; re-measured, not reproduced on `/training`, fork moot unless the panel
   returns to a half-height column).
 - **OPEN, unchanged and relevant:** Q193 (Polar webhook; recommendation: don't build), Q10, Q22.

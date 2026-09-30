@@ -2612,22 +2612,6 @@ sweep listing constraints and findings past `review_by`, or whose parent resolve
 
 ---
 
-## Q194. Should the session focus persist across follow-up turns of a review conversation?
-
-#354's `focus_session` rides the trigger turn only: the pinned session block is appended to that turn's system
-prompt and is not in `conversation_history` (history carries only the short "Session review: ..." message and
-the model's reply). A follow-up such as "why was set 3 at RPE 9?" therefore sees the earlier reply but not the
-session record, so the model may only be able to answer from what it said last time.
-
-Fork: (a) leave as briefed (one turn; follow-ups reference the reply); (b) `ChatPanel` keeps the focus for the
-conversation and re-sends it with every subsequent turn until the conversation is cleared or a new review
-replaces it (cost: one DB read per turn); (c) the server re-pins from a focus id echoed back in the response.
-Not decided in Brief A; chosen (a) by default because (b) changes chat's request contract beyond the brief.
-
-**State:** OPEN - decision is Luke's; nothing external gates it. Recommendation: (b), a few lines in `ChatPanel`.
-
----
-
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
@@ -5351,3 +5335,19 @@ supersedes row 104 under `injury_shoulder_right`. The orphan query above is stil
 
 **State:** DONE → #352 (validator `0a2c138`, PR #285; row 104 superseded by row 110; the prod brief lists the cap once and
 the ask resolving it has `unresolved: false`).
+
+## Q194. Should the session focus persist across follow-up turns of a review conversation?
+
+#354's `focus_session` rode the trigger turn only: the pinned session block was appended to that turn's system
+prompt and was not in `conversation_history`, so a follow-up such as "why was set 3 at RPE 9?" saw the earlier
+reply but not the session record.
+
+Fork was: (a) leave as briefed (one turn); (b) `ChatPanel` keeps the focus for the conversation and re-sends it
+with every subsequent turn until the conversation is cleared or a new review replaces it (cost: one DB read per
+turn); (c) the server re-pins from a focus id echoed back in the response.
+
+**State:** DONE → #354. **RULED (operator, 30 Sep): option (b).** The frontend holds `focus_session` and resends it
+on every turn until a new focus is set or the chat is cleared/new. Built with a dismissible "Reviewing: ..." chip
+and a "New chat" control, since the panel had no way to clear a chat.
+
+---
