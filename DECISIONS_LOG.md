@@ -12857,3 +12857,67 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 **Do not revisit unless.** A soft ingest failure is found hiding a defect that should stop compute (for example a partial Hevy write corrupting the counted set).
 
 ---
+
+### 358. A Garmin attach resolves which account the token belongs to, refuses one already linked to another user, and fails closed
+
+**Decision.** `POST /integrations/garmin/token` uses the submitted token once to resolve the Garmin profile id (the social-profile call `scripts/garmin_identity.py` shares, through `connectors.garmin.extract_profile_id`), stores a SHA-256 of the namespaced id as `user_integrations.account_fingerprint` (never the raw id), and refuses (409, naming no user) an account whose fingerprint another user already holds. Re-attaching the same account to the same user, or a different account to this user, is allowed. **It fails closed:** an unresolvable profile id (Garmin unreachable, or its response changed shape) is a 503 with a retry message, nothing is stored, and an ERROR is logged with the response's key NAMES only, so attaches stop loudly rather than silently bypass the guard. A token that cannot authenticate stays a 424. The database enforces it: migration `a9c3e5f7b1d2` adds the nullable column and a partial unique index on `(provider, account_fingerprint) WHERE account_fingerprint IS NOT NULL`. Existing connections are recorded lazily: `sync_hrv_for_user` sets a NULL fingerprint on its next sync, best-effort, never failing a sync; a unique-index conflict there is the mix-up condition itself and logs ERROR. Design ratified by the operator on 30 Sep 2026, including "if Garmin's profile response changes shape, failing closed is intended". The lazy recording was not in the ratified text; the operator released the PR with it.
+
+**Rationale.** The root cause of the mix-up was that nothing tied a stored token to the account it belonged to: the endpoint stored whatever it was given (its own docstring said "no migration"), so user 1's Garmin account was attached to user 4 and both pulled the same nightly HRV. A guard that passes when it cannot tell which account it is looking at is no guard, hence fail closed. A digest, not the identifier, because only equality is needed. The unique index is the backstop for a concurrent attach; the application pre-check exists so the ordinary refusal attempts no write.
+
+**Status.** Landed via PR #293 (merge commit). The migration applied at boot on that deploy (boot log: `Running upgrade f7a2c9e1d3b5 -> a9c3e5f7b1d2`) and both services reached SUCCESS. **Not yet verified in prod:** that fingerprints are recorded for users 1 and 4 and are distinct (PENDING, operator: two syncs and two read-only queries, follow-up commit), and which profile-id key Garmin's real response carries (G1 resolved an id in prod, so at least one candidate matches; which one is unrecorded).
+
+**How you know.** `tests/test_garmin_attach_guard.py` (23): user 1's account attached to user 4 is refused and the body names no one; same-user re-attach and a different account are allowed; disconnecting frees the account; unresolvable and unreachable both give 503 and store nothing; a dead token gives 424; a concurrent attach that beats the pre-check is a 409 through the index; a conflict is refused before any commit is attempted; the resolver is tested against the REAL `garminconnect` client faked at the transport, including a changed response shape (key names logged, values not); the DDL is rendered through alembic's offline machinery for Postgres. Mutation checks: fail-open on unresolvable, same-user re-attach refused, a conflict message naming a user, the index dropped, the submitted blob stored, lazy-record errors escaping the sync, and the pre-check dropped each fail the suite. One trap found: a test that ran `command.upgrade` executed `migrations/env.py`, whose `fileConfig(...)` disables every existing logger and broke six unrelated log-asserting tests only in the full run (FEEDBACK §59).
+
+**Do not revisit unless.** Garmin's social-profile response stops carrying a profile id (attaches then refuse; the ERROR names the keys), or a second provider needs the same guard (generalise: `provider` is already in the index key).
+
+---
+
+### 359. The Garmin mix-up repair sorts by provable copy; only class A is ever purged, class C halts, class B is a ruling
+
+**Decision.** `scripts/garmin_purge_copies.py` sorts each of the wrong user's `garmin` nights against the owner's. **A:** the owner has the same night with the identical `rmssd_ms`, a provable copy: `--execute` purges these with their `hrv_samples` and deletes the wrong user's garmin integration. **B:** the owner has no reading that night: never touched by `--execute`; reassignable to the owner only through `--reassign-b`, with its own token, after the operator's explicit ruling. **C:** the owner has the night but a different (or missing) value: HALT, every execute refuses, no override flag. Dry run is the default; tokens digest the exact rows (ids, nights, values, classes), so anything that changes after the dry run invalidates them; in-transaction guards roll back on violation (class A leaves the owner's garmin rows, samples, rmssd sum and integrations identical; class B adds to the owner exactly the class B readings and samples); the wrong user can never be user 1; only source `garmin`; the credential column is never selected. `scripts/garmin_verify.py` is the read-only stored-vs-app check (`--night --expect user=ms`, a missing reading is a FAIL).
+
+**Outcome (30 Sep 2026).** The shared Garmin account was **user 1's**: Deb's own Garmin app showed 31 ms overnight for 27 Sep, while both users stored 39 ms, matching the operator's app. The operator executed class A: 21 readings and 1645 samples purged, user 4's garmin integration disconnected, user 1 asserted identical; the post-run dry run read A=0, B=8, C=0. Deb then re-minted her own Garmin (G3, with her present; the first two login strategies returned 429 and the fallback succeeded): `garmin_sync --user-id 4 --days 7` pulled 7 readings and 656 samples, and `garmin_verify` for 2026-09-27 read user 1 = 39 PASS, user 4 = 31 PASS, identical nights = 0. `daily_records.passive_hrv_ms` (frozen at AM capture) is reported by the dry run and not touched: user 4 has one such record and it does not equal user 1's reading for that date.
+
+**Rationale.** Only a row that is provably a copy (same night, same value) is removed. A row the owner lacks may be the wrong user's own or the owner's own history; deleting or moving it is a ruling, not a default. A class C row means the assumption behind the tool is wrong for that night, so it stops. The live sync reaches back about 7 days and the export backfill skips nights that already exist, so a purge is the only way to clear an older wrong row before a backfill.
+
+**Status.** Landed via PR #291 (merge commit). **Class B (8 rows, 2026-08-28 to 2026-09-04, the 4 Sep row empty) stays on user 4 pending Deb's confirmation against her app (31 Aug = 48, 2 Sep = 39); no `--reassign-b` has been run (PENDING, follow-up commit).**
+
+**How you know.** `tests/test_garmin_purge_copies.py` (19) and `tests/test_garmin_verify.py` (6), FK-enforced SQLite; six guard mutations (class B deleted in mode A, the class C halt, the invariant, user 1 as the wrong user, another source, the token) each fail the suite; the operator's pasted dry runs, the executed outcome and the `garmin_verify` ALL PASS. Not exercised by tests: Postgres.
+
+**Do not revisit unless.** Class B is ruled and executed, or a second mix-up needs this generalised beyond source `garmin`.
+
+---
+
+### 360. Account retirement is dry-run-first with the real accounts hard-protected; the test-account retirement was hygiene, not an API-pull fix
+
+**Decision.** `scripts/retire_user.py`: dry run by default; the FK graph is read from the LIVE schema (not `models.py`) and followed transitively over ON DELETE CASCADE; SET NULL survivors, NO ACTION/RESTRICT blockers and FK-less `*user_id` columns are reported and refuse `--execute`; `--execute` needs the 12-character confirm token (a digest of id and email), runs in one transaction (integration tokens first, then the user row), and asserts users **1, 4 and 5** (`PROTECTED_USER_IDS`, refused at four layers) identical before and after or rolls back. A refuse-by-default `--accept-loss` gate covers non-re-derivable Hevy-keyed rows (operator ratified, 30 Sep). The dry run reports full name and masked email, providers, per-table counts and latest activity, knowledge entries, `password_reset_tokens`, Hevy ownership, and states that the MCP OAuth provider persists nothing and that no last-login is recorded (Q196).
+
+**Outcome (30 Sep 2026, operator-run).** User 8 ("Test account") RETIRED: 9 rows across 3 tables, users 1/4/5 identical (asserted). User 6 ("Deb", a duplicate login; Deb confirmed it is not required) RETIRED: 1 row, the user only. User 7 ("Luke Public": 7 knowledge entries, 2 of them injury) is HELD until its injury entries are reviewed and connectors are checked, since the database cannot show whether it backs an MCP or demo sign-in (PENDING, follow-up commit).
+
+**Correction recorded.** The brief's anchor said user 4 was a test account on the operator's own Garmin/Hevy credentials, doubling API pulls. It was wrong twice: user 4 is Deb's real account, and users 6, 7 and 8 held no integrations, so none was in the sweep and retiring them changes no API pull. The doubled pull was users 1 and 4 sharing one Garmin account (#358, #359). The Hevy ownership-drain rulings (a shared Hevy account behind users 1 and 4) were withdrawn: their Hevy keys and accounts are distinct, the 54 workouts on user 4 (2026-04-06 to 2026-09-28) verified by the operator against Deb's own Hevy app as hers. Q195 is therefore dormant.
+
+**Rationale.** Retirement is irreversible, so it is inventory first, an identity-pinned token second, and the protected accounts asserted rather than assumed. The live-schema graph exists because the deployed constraints, not the ORM's view, decide what a delete does.
+
+**Status.** Landed via PR #290 (merge commit); users 6 and 8 executed by the operator; user 7 held.
+
+**How you know.** `tests/test_retire_user.py` (26) on FK-enforced SQLite: protected users refused at every layer, a candidate retired beside fully seeded 1/4/5 leaves them identical, an invariant failure rolls the whole transaction back, blockers and non-re-derivable rows refuse, the report is ASCII and carries no credential; mutation checks (protected set shrunk, invariant dropped, transitive scope dropped, blockers ignored, MCP and knowledge report sections removed) each fail the suite. The operator's pasted dry runs for 6, 7 and 8 and the executed results.
+
+**Do not revisit unless.** User 7 is ruled, or Q196 changes what a delete means for a signed-in MCP session.
+
+---
+
+### 361. Identity checks are read-only and never refresh a Garmin token
+
+**Decision.** `scripts/garmin_identity.py` reports, per user, a 12-character SHA-256 digest of each stored credential (Garmin token blob, Hevy key) and which users match, plus for Garmin the display name masked beyond its first 3 characters and the last 4 digits of the profile id from the social-profile endpoint; a failure prints the error class only, Hevy is digest-only and never called. It never refreshes the token: the client refreshes when the access token is within 15 minutes of expiry and again on a 401, and a refresh response may carry a NEW refresh token, so `_refresh_session` is overridden on the instance to raise, the blob is loaded with `client.loads` and never `Garmin.login`, and an expiring token is reported as needing a refresh (open the app's Garmin card, which refreshes and saves, then re-run). A digest MATCH means an identical stored credential; a mismatch is not evidence of different accounts (two logins mint different blobs), so the identity evidence is the display name and profile-id tail.
+
+**Result (30 Sep 2026).** Users 1 and 4: garmin display `cbe***`, profile id `...3854` for both, different credential digests; hevy digests different. Consistent with one Garmin account behind both, which the HRV and Deb's app then confirmed (#359).
+
+**Rationale.** An unpersisted refresh could rotate the refresh token and strand a real account's stored credential; a read-only check must not be able to do that.
+
+**Status.** Landed via PR #290 (merge commit); the profile-id resolver it shares with the attach guard is #358.
+
+**How you know.** `tests/test_garmin_identity.py` (15): the report logic with a faked source; and the REAL `garminconnect` client faked at the transport for both refresh paths (expiry and 401-retry send nothing to the token endpoint); a value guard pins the private seams the guarantee rests on (`_refresh_session`, `_api_session`, the pinned 0.3.11); every statement issued is a SELECT. Mutations (override removed, full name printed, full profile id printed, the Hevy key sent to the Garmin client, a write added) each fail the suite.
+
+**Do not revisit unless.** `garminconnect` is upgraded and the seams move (the value-guard test fails first).
+
+---

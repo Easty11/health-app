@@ -1,162 +1,77 @@
-# Close-out — Session fidelity into chat and the session views (#354–#357); landed via PR #289
+# Close-out — Garmin account mix-up repaired and guarded; test-account retirement tooling (#358–#361); landed via PRs #290–#294
 
 ## Real commits this session
 
-The session is `session-fidelity` (Brief A + C.1), on branch `claude/nifty-hopper-s8m3kc`, a name the harness
-assigned and pinned (CLAUDE.md bans `claude/<hash>` names for in-flight work; the harness pin won here, as it did
-for #287/#288, and the branch is rowed in `BRANCHES.md`). It was cut from master `6d8f098`.
-- Master's maxima at open were decisions **#353** and questions **Q193**, re-read at governance time (master had
-  not advanced). That gives **#354–#357** and **Q194**.
-- Local setup at open: `core.hooksPath` and `alias.land` were both unset (fresh clone) and were set. The clone was
-  shallow; `git fetch --unshallow` was needed for `test_context_builder_output_unchanged_pre_post_refactor`.
+Range: `ce75ee6` (master when the session opened, PR #289) to `44fcf55` (PR #294), real `git log`, 14 commits (merge commits included). This close-out's own commit follows it; `git log` names it once landed.
 
-`git log --format="%h %ad %s" --date=short 6d8f098..HEAD` (before the governance commit):
+- `44fcf55` 2026-09-30 Merge pull request #294 from Easty11/fix/garmin-login-blob-check
+- `847756c` 2026-09-30 Merge remote-tracking branch 'origin/master' into fix/garmin-login-blob-check
+- `0ccd20d` 2026-09-30 Merge pull request #293 from Easty11/claude/gracious-franklin-v4khwd
+- `e3e0ad4` 2026-09-30 fix(scripts): garmin_login refuses to exit 0 without a usable blob; document prerequisites and a check that can fail
+- `11e657a` 2026-09-30 feat(garmin): attach guard - one Garmin account, one user (G4, migration; HELD)
+- `11f470c` 2026-09-30 Merge pull request #292 from Easty11/claude/gracious-franklin-v4khwd
+- `a77ec86` 2026-09-30 fix(scripts): garmin_login prompts go to stderr so stdout is exactly the token blob
+- `46e51e7` 2026-09-30 Merge pull request #291 from Easty11/claude/gracious-franklin-v4khwd
+- `6ce2ee2` 2026-09-30 feat(scripts): garmin_purge_copies (G2) and garmin_verify - repair the Garmin account mix-up
+- `a84b449` 2026-09-30 Merge pull request #290 from Easty11/claude/gracious-franklin-v4khwd
+- `95b470f` 2026-09-30 gov(retire-test-user): BRANCHES row for the retire_user / garmin_identity branch (#176 (b))
+- `72e08dd` 2026-09-30 feat(scripts): garmin_identity - read-only Garmin/Hevy credential identity check (G1)
+- `f0b7217` 2026-09-30 feat(scripts): retire_user - protect real accounts 1/4/5; report sign-in artefacts and knowledge
+- `3c61a7f` 2026-09-30 feat(scripts): retire_user - guarded dry-run/execute account retirement
 
-```
-53ce6ff 2026-09-30 test(read-door): register the A6 dry-run script as a raw-set toucher (Brief A)
-9021367 2026-09-30 feat(training): session review by reference; the session list shows one correct row per bout (Brief A A3/A5)
-3633bbc 2026-09-30 feat(arbitration): richness-first - a row without HR never suppresses a same-bout row with HR (Brief A A6)
-5957bf4 2026-09-30 test(read-door): register session_focus as a by-id lookup toucher (Brief A A1)
-961107f 2026-09-30 feat(load): hevy_sync soft-fails like polar_sync — ingest steps soft-fail, compute steps hard-fail (Brief A C.1)
-0f75211 2026-09-30 feat(chat): focus_session pins the session under review, rendered by the backend (Brief A A1/A2/A4)
-```
-
-The first governance commit, the two feature commits for the operator's rulings of 30 Sep, and the landing
-commits (all after the close-out was first pushed):
-
-```
-(landing record) gov(session-fidelity): A6 dry run recorded (0 flips); landing; close-out refreshed
-f2a4da8 2026-09-30 chore(gitignore): ignore *_token.json - OAuth token files are live credentials
-44c9d37 2026-09-30 gov(session-fidelity): operator rulings on #354 - window [anchor-7, anchor+3] same day included; Q194 ruled (b), closed
-85898ed 2026-09-30 feat(chat): the session focus persists for the conversation (Q194 ruled option b)
-8d9c602 2026-09-30 feat(chat): context window is [anchor - 7, anchor + 3] local days, same day included (operator ruling on #354)
-c75fe77 2026-09-30 gov(session-fidelity): #354-#357 session focus, canonical list, richness-first arbitration, ingest soft-fail; Q194; Q19 re-measure; FEEDBACK 55; close-out
-```
-
-Three `gov(session-fidelity)` commits in all (`c75fe77`, `44c9d37`, and the landing record). That is more than the
-one-`gov`-per-session rule allows: the rulings and then the operator's dry-run result arrived after earlier gov
-commits were pushed, so further commits were the alternative to rewriting pushed history. Named here as a
-deviation, not folded in. The `.gitignore` entry is its own commit, not gov, as the operator asked.
-
-- **Tests:** backend **2443 passed** (baseline 2403); frontend **329 passed** (baseline 302). CI was green on
-  `c75fe77` and on `44c9d37` (all three required checks each time); the landing head's CI is reported in the PR.
-- **Mutation checks (each proven to fail the suite, then restored):** focus window 7→5 days; the focus anchor on the
-  UTC date; dropping the canonical filter from the window; deleting the tier from `_win_key` (6 tests);
-  removing `hevy_sync` from `SOFT_STEPS` (4); frontend UTC-slice date (3), no canonical filter (5), context sent as
-  session (2), UTC date on the aerobic card (1), HubLayout dropping the focus (3), ChatPanel dropping it (4).
-  For the rulings: same-day-and-later aerobic dropped (2), Hevy window ending at the anchor (2), the anchor day's
-  schedule skipped (2); typed turns not carrying the focus (4), focus not persisted (1), New chat keeping it (2),
-  a new review not replacing it (5). One weak assertion was found by its mutation (a recurring "Tuesday" item also
-  matched 22 Sep) and rewritten as a dated one-off.
-- **Caught by the full suite, not the targeted runs:** the read-door drift guard failed twice (`session_focus.py`,
-  then `scripts/arbitration_flip_report.py`); both are allow-listed with reasons (`5957bf4`, `53ce6ff`).
-- **Deploy verification** (both Railway services and the served-bundle grep, #116/#121) happens after the merge and
-  cannot ride the merged branch; its result is posted on PR #289 and reported to the operator.
+Session origin: harness-assigned branch `claude/gracious-franklin-v4khwd`, restarted from master after each merge (five uses); one concern-named branch, `fix/garmin-login-blob-check`, pushed with the operator's explicit permission.
 
 ## Pending-queue reconciliation
 
-No `;cc` queue was carried in. The brief (one paste block, addressed to this session by name) and where each item
-landed:
+No `;cc` PENDING queue was carried in; the session ran from the `retire-test-user` brief and the operator's rulings in chat, several of which arrived out of order (the G3 amendment reached me before the G3 it amended). Each brief step and ruling, against the commit that landed it or the reason it did not:
 
-- **V1** (feedback wiring, `formatHevyMessage`, `fmtDate` as described): confirmed.
-- **V2** (`ChatRequest` = `{message, conversation_history}`): confirmed.
-- **V3** (`arbitrated_sessions` rows carry `canonical` and `session_date`; `_win_key` as described): confirmed.
-- **V4** (`polar_sync` soft, `hevy_sync` hard): confirmed.
-- **V5** (identify the "exercise card"): **ambiguous, halted and asked.** No component is named that. The operator
-  ruled: the **WorkoutPanel list cards** (the Strength latest-Hevy card and the Aerobic latest-session card).
-- **A1** → `0f75211` (`backend/session_focus.py`, `routers/chat.py`). **A2** → `0f75211` (`aerobic_format.py`,
-  `context_builder.render_workout`; MCP output and `_section_hevy` proven byte-identical).
-- **Operator rulings, 30 Sep (addressed to this session):** (1) window anchored on the session's local date: RATIFIED;
-  (2) window amended to [anchor − 7, anchor + 3] local days, same day included, both lanes and scheduled items, only
-  the focused session excluded → `8d9c602`; (3) Q194 → option (b), the focus persists for the conversation, close
-  Q194 as RULED (b) → `85898ed`, Q194 moved below `## CLOSED` as `DONE → #354`. Tests added and mutation-checked:
-  a same-day later session appears (both lanes); a follow-up turn carries the focus. #354's text updated.
-- **A3** → `9021367`. **A4** → `0f75211` (test) + `9021367`: `session_analysis` does **not** reach chat context,
-  so the `analyse-session` call was **left as-is** (the ruling's "if not").
-- **A5 (a)–(d)** → `9021367`. **A6** → `3633bbc` (+ the dry-run script). **C.1** → `961107f`.
-- **G1–G5** → met by tests (see #354–#357). **G7** → measured and recorded on Q19 (361 px × 819 px at 1280×779).
-- **G6 (prod, operator)** → **OWED**, after deploy. It has a ROADMAP NOW row.
-- **A6 dry-run flip list** → **DONE (operator, prod, 30 Sep):** 91 sessions arbitrated, **0 flips**. Recorded in #356
-  as operator-reported (Code did not run it). 0 is expected: no `health_connect` row carries HR/zones yet, so the tier
-  is a forward guard for Q159 stage 2 and zoneless v4 rows. Landing therefore changes no canonical row today.
-- **`*_token.json` gitignore** (operator, 30 Sep) → `f2a4da8`, its own commit. Verified no `*_token.json` is tracked
-  on master or the branch (`git ls-tree` / `git ls-files`: empty).
-- **LOG:** FEEDBACK §55; DECISIONS #354–#357 (headings written as integers, not `#NEXT`, because the pre-push hook
-  refuses `#NEXT`; re-resolve if master advances); Q194 opened; Q19 note (G7); BRANCHES row; ROADMAP NOW row;
-  CLAUDE.md Recent landings.
-- **GUARD:** held. No schema change or migration. Arbitration changed only by the A6 tier (overlap threshold,
-  writer-class table, source ranks, transform untouched). No sport-exclusion change. `/health/analyse-session` and
-  its entries untouched. Chat context outside the pinned blocks is unchanged (proven: `with_focus == without + block`).
-
-**Divergences and calls (named at the gate, §44):**
-- **Merge was held, then released.** The brief's own pre-merge dry-run requirement held it (the three build-time
-  defaults that also held it were resolved by the operator on 30 Sep); the operator posted the dry run and cleared
-  all holds. The PR was opened **ready-for-review, not draft** (CLAUDE.md wins over the harness default).
-- **One reading of the ruling to confirm.** "For both completed sessions and scheduled items" was implemented
-  literally: the scheduled list covers the whole window, including the 7 days before the anchor and the anchor day.
-  A schedule item cannot be matched to the session that satisfied it, so the anchor day's list normally includes
-  the focused session's own slot. It is one line per matching item per day. If only the forward half was meant,
-  it is a one-line change (`_scheduled_window`'s start day).
-- **A "New chat" control and a "Reviewing: …" chip were added** to `ChatPanel` as part of ruling (3): "until cleared/new"
-  needs a way to clear, and the panel had none. Cost of the persisted focus: one DB read per turn while pinned.
-- **The aerobic pin is one line** (the MCP renderer, plus a local start time). It carries no `cardio_load`,
-  `muscle_load` or `recovery_hours`, because the shared renderer does not, on either surface. "Exactly as the
-  backend renders it" was read literally.
-- **A Hevy focus needs the workout in `hevy_workouts`.** One not yet synced reads as not-found. Not verified against prod.
-- **The latest aerobic card now requests `limit=10`** and takes the first canonical row, not `limit=1`: the newest
-  row can be a non-canonical twin.
-- **`week_plan`'s day-coverage helpers became module-level** (`item_days`, `event_span`, `item_covers`) so the
-  scheduled window and the planner share one definition. Behaviour of `plan_week` is unchanged (its suite passes untouched).
-- **`test_hevy_hard_failure_skips_polar_like_every_later_step` was replaced**, not deleted: it pinned the behaviour
-  C.1 supersedes (#357).
+- **S1 inventory, users 4 and 5:** SUPERSEDED. The operator's scope update made 6, 7, 8 the candidates and 1, 4, 5 real. The dry run built for it reports what S1 asked for (`3c61a7f`, `f0b7217`; PR #290).
+- **S2 retirement mechanism:** LANDED. `scripts/retire_user.py`, dry-run default, users 1/4/5 protected, refuse-by-default `--accept-loss` gate ratified (`3c61a7f`, `f0b7217`; PR #290, merge `a84b449`).
+- **S3 operator execution:** user 8 RETIRED (9 rows / 3 tables), user 6 RETIRED (1 row; Deb confirmed not required), both operator-run with users 1/4/5 asserted identical. **User 7 HELD** (its 2 injury entries and the connector check). PENDING follow-up.
+- **S4 sweep verification:** MOOT. Users 6, 7, 8 held no integrations, so none was in the sweep; retiring them changes no API pull (#360).
+- **LOG instruction (FEEDBACK or DECISIONS):** in THIS commit: DECISIONS #358–#361, OPEN_QUESTIONS Q195–Q196, FEEDBACK §56–§59. **Provisional until this commit lands.**
+- **G1 identity check:** LANDED (`72e08dd`; PR #290). Users 1 and 4: `cbe***`, profile id `...3854` both, different digests.
+- **G2 purge:** LANDED (`6ce2ee2`; PR #291, merge `46e51e7`). Class A executed by the operator (21 readings, 1645 samples; user 4's garmin disconnected; user 1 asserted identical). **Class B (8 rows) PENDING** Deb's confirmation; no `--reassign-b`. Class C = 0.
+- **G3 (the operator's; amended: no `deb_token.json`):** DONE by the operator: Deb re-minted with her email, 7 readings / 656 samples, `garmin_verify` 27 Sep user 1 = 39 PASS, user 4 = 31 PASS, identical nights 0. Tooling fixes it needed: `a77ec86` (PR #292, stdout was the prompts) and `e3e0ad4` (PR #294, refuses an empty blob, documents the prerequisites).
+- **G4 attach guard (migration; held, then released):** LANDED (`11e657a`; PR #293, merge `0ccd20d`). Migration applied at boot (boot log), both services SUCCESS. **Fingerprint check in prod PENDING** (two syncs, two read-only queries).
+- **Withdrawn rulings:** the Hevy ownership-drain rulings (user 4 is not a duplicate of user 1) and the original G3 use of `deb_token.json`: superseded, recorded in #360 and #359.
+- **Decided but uncommitted:** nothing beyond this close-out commit. **PENDING follow-up commit (do not hold this one):** the fingerprint check result (#358), class B (#359), user 7 (#360).
 
 ## Cold-resume handoff
 
-**Current sprint.** Surfacing phase toward the four v1 tests (See MET; Know, Walk in, Loop open). This session added
-the session-review path (chat sees the whole session, from any surface) and fixed the aerobic list.
+### Current sprint (ROADMAP NOW)
 
-**Single clearest next action (owner: Luke).** G6, after the deploy (below); nothing else is owed from this brief.
-The A6 dry-run tool, for reference (it is what produced the 0-flip result):
-`\copy (SELECT id, user_id, source, source_package, session_date, start_time, stop_time, sport_name, duration_minutes,
-hr_avg, hr_max, z1_seconds, z2_seconds, z3_seconds, z4_seconds, z5_seconds FROM aerobic_sessions ORDER BY id) TO
-'aerobic_sessions.csv' CSV HEADER` via `railway connect` to `health-app-DB`, then, in the backend venv,
-`python -m scripts.arbitration_flip_report --csv aerobic_sessions.csv`. Re-run it when Q159 stage-2 rows land, since
-that is when the tier can first change an outcome. G6: session feedback on the 29 Sep lower cites the hip thrust RPE
-7.5/8/9 and the suitcase carries; the context review on it references the same-day pilates and what is scheduled
-around it; a follow-up in the same chat still sees the session; the list shows one 28 Sep elliptical and the 26 Sep
-Pilates dated 26 Sep.
+Live NOW lanes: injury clearance (operator), aerobic ingest automated (operator check), session fidelity G6 (operator, after deploy), the new **Garmin account mix-up** row (three operator follow-ups), the lab upload pipeline, the interpretation layer build, the appointment brief (Thu 1 Oct 2026, tomorrow at the time of writing), and the cross-repo shared-block propagation debt. The rest of NOW is DONE or DISCHARGED.
 
-**Open questions, by status** (from `OPEN_QUESTIONS.md`):
-- **Closed this session:** Q194 → `DONE → #354` (ruled option b, 30 Sep).
-- **OPEN, touched:** Q19 (desktop scroller; re-measured, not reproduced on `/training`, fork moot unless the panel
-  returns to a half-height column).
-- **OPEN, unchanged and relevant:** Q193 (Polar webhook; recommendation: don't build), Q10, Q22.
-- **OWED (operator):** #353's G4 (record a Polar session, no Sync press); G6 for this brief; the #269 injury-sweep
-  clearance; the appointment brief's owed items.
+### Open questions, grouped by status
 
-**What was NOT touched (named on purpose).**
-- **Brief B.** The metabolic sport-exclusion ruling (supersedes #322) and the fate of `/health/analyse-session`
-  were explicitly out of this brief and did not move. The analyse-session endpoint is now known to feed nothing the
-  chat model reads (A4), which is input to that decision.
-- **The appointment brief (v1 test 3, Walk in).** Its OWED operator items did not move, including the date-anchored
-  one: the Thu **1 Oct** follow-up row and the served-bundle grep of `Leave with` / `Changes since`. Today is 30 Sep.
-- **The lab upload pipeline and the interpretation layer** (`Lab upload pipeline`, `Interpretation layer build` NOW rows).
-  No work; both are gated by their own design/consumer questions and by the 28 Sep ruling that labs are out of v1.
-- **Injury clearance (#340 sweep, OWED operator)** and the **Polar new-session check (#353 G4, OWED operator)**:
-  unchanged; both are prod actions only the operator can take.
-- **Cross-repo shared-block propagation** to `health-connect-app` (two OWED rows): unchanged.
-- **The companion app** (`health-connect-app`): untouched.
-- **Instrument vs the thing instrumented.** This session was product work (fidelity, list correctness, ingest
-  resilience), not governance tooling. The recent run before it (#345–#353) was mixed; no instrument-only drift to
-  flag, but the arbitration dry-run tool is itself instrumentation for a change that is not yet live.
+OPEN 107 (105 before this session, plus **Q195** the Hevy sync re-owns a workout to whichever user synced last, dormant but to be fixed before any further user joins; and **Q196** the MCP OAuth provider is in-memory, so tokens never expire, outlive a deleted user until restart, and are lost on every redeploy). OWED 4. CLOSED 84. Nothing was closed this session.
 
-**v1-triage of NOW lanes** (which test each serves; a lane serving none is a demotion candidate):
-- **Session fidelity (this brief)** — **Loop** (a review that sees the whole session) and **Know** (context scope
-  judges against phase and load). Stays.
-- **Aerobic ingest automated (#353 check)** — **See** and **Loop**. Stays (an operator check, cheap).
-- **Injury clearance (#340 sweep)** — **Know** and **Walk in**. Stays.
-- **Appointment brief** — **Walk in**. Stays; date-sensitive.
-- **Lab upload pipeline** and **Interpretation layer build** — serve **no v1 test** under the 28 Sep reframe (labs
-  out of v1). They are in NOW by lane momentum. **Demotion candidates: surfaced for the operator, not moved.**
-- **Cross-repo propagation rows (OWED)** — serve no v1 test; they are shared-loop housekeeping pinned by #112.
-  Stay, but they are not v1 work.
+### The single clearest next action
+
+The operator runs the G4 fingerprint check in prod (`garmin_sync --user-id 1 --days 1` and `--user-id 4 --days 1` in the container, then the two read-only queries against `user_integrations`) and pastes the result; a follow-up commit records it in #358 together with the class B ruling (#359) and the user 7 decision (#360).
+
+### NOT touched this session (named on purpose)
+
+Every product lane stood still, and none of their gating questions moved: the **lab upload pipeline** and the **interpretation layer** (both feed the appointment brief), the **appointment brief** itself (the 1 Oct appointment is tomorrow; its owed operator checks are in BRANCHES rows, untouched), the **weekly resolver and Know enforcement** work (#276/#307), the **surface-debt sweep** (the Loop test), the **offseason phase sequence** (#270, operator-held), and the coach/MCP surface (Q196 is new here, nothing built). The session's whole output is repair and instrumentation around accounts (retirement, identity, purge, guard tooling). That is warranted by the integrity fault it repaired, but it is instrument work, not the thing being instrumented: a session opened from this handoff should not read the governance and tooling written down here as the queue.
+
+### v1-triage (which test each live NOW lane serves)
+
+- **Injury clearance:** Know and Walk in.
+- **Aerobic ingest automated (operator check):** See and Loop.
+- **Session fidelity G6:** Loop and Know.
+- **Garmin account mix-up (new):** Know (restores whose HRV the engine and the coach act on). It is a correctness repair rather than a v1 feature and sits in NOW for its date-anchored operator follow-ups; a demotion candidate once the fingerprint check, class B and user 7 land.
+- **Lab upload pipeline, interpretation layer, appointment brief:** Walk in.
+- **Cross-repo shared-block propagation:** serves no v1 test. It is in NOW because `#112` names ROADMAP NOW the canonical home for cross-repo debt, not by lane momentum; the standing question is whether that debt still needs a NOW row.
+
+### What a cold session must know
+
+- **Real accounts are protected:** users 1, 4 and 5 are hard-refused by `scripts/retire_user.py` and asserted identical in-transaction. User 4 is Deb's real account; user 1's Garmin account is the one that had been shared.
+- **Prod is operator-only** (`railway ssh --service health-app-backend`, then `cd /app` and `/opt/venv/bin/python -m scripts.<name>`). Code has no prod DB access; every prod write this session was the operator's own run.
+- **`scripts/garmin_login` runs on the operator's machine** and needs Python >= 3.12 and `garminconnect==0.3.11`; it now exits 1 without a usable blob.
+- **The dry runs are the source for the retirement and purge outcomes recorded in #359 and #360;** they were pasted into chat, not stored in the repo.
+- **The migration `a9c3e5f7b1d2` is live;** `SCHEMA.md` §040 documents it.
+
+### Nits (batched, not gates)
+
+64 older `BRANCHES.md` rows have a cell count other than five (literal pipes in their text), from line 45 down; not touched here. The class B `daily_records.passive_hrv_ms` check covered one record only.

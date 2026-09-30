@@ -278,11 +278,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Garmin account mix-up repaired and guarded (#358-#361).** One Garmin account had been connected to two users; the copies are purged, the wrong user re-minted her own, and an attach now refuses an account already linked to another user and fails closed. Users 6 and 8 retired, 7 held; the fingerprint check, class B and user 7 are PENDING follow-ups. Code, self-merged on green (the migration released by the operator) - Handoff: `closeout.md`.
+
 - **Session fidelity into chat and the session views (#354-#357).** A session review carries a `focus_session` reference the server renders at full fidelity (session or context scope, the context window either side of the session's day, the focus persisting for the conversation); the aerobic list is canonical-only and locally dated; arbitration is richness-first (dry run: 0 flips); ingest steps soft-fail. Code, landed after the operator's rulings and dry run - Handoff: `closeout.md`.
 
 - **Polar aerobic ingest automated (#353).** New Polar sessions reach `aerobic_sessions` without a Sync press: a soft-fail `polar_sync` step in the load chain (Training-page open and the 02:00 sweep) calls the extracted core `polar_ingest.sync_user`; the manual route keeps its contract. Closes Q154; the webhook question is Q193. Code, self-merged on green - Handoff: `closeout.md`.
-
-- **Resolved-injury parent for constraints (#352).** Rules Q192: a constraint may name a resolved injury as its parent when `exit.with_parent` is not true (with_parent true there is refused). Row 104 was superseded by row 110 under `injury_shoulder_right`, so the 1 Oct brief lists the ER load cap under Restrictions. Code, self-merged on green - Handoff: `closeout.md`.
 
 
 
