@@ -35,11 +35,26 @@ class User(Base):
 
 class UserIntegration(Base):
     __tablename__ = "user_integrations"
-    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_user_provider"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_user_provider"),
+        # One external account, one user. Partial: rows with no fingerprint (Hevy, Polar, and Garmin
+        # rows not yet recorded) are unconstrained. `provider` is in the key so two providers can
+        # never collide on the same digest.
+        Index("uq_user_integrations_provider_fingerprint", "provider", "account_fingerprint",
+              unique=True,
+              postgresql_where=text("account_fingerprint IS NOT NULL"),
+              sqlite_where=text("account_fingerprint IS NOT NULL")),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    # SHA-256 of the external account's id (Garmin: the profile id), so "is this account already
+    # connected to another user?" is answerable without decrypting anyone's credential and without
+    # storing the raw identifier. NULL = not recorded (yet). Root-cause guard for the Garmin
+    # account mix-up: `routers/garmin.py` refuses an attach whose fingerprint is linked to another
+    # user, and refuses (503) when the id cannot be resolved. Backfilled lazily on the next sync.
+    account_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Fernet-encrypted credential payload (base64). TEXT, not varchar — v4 OAuth
     # tokens (long JWT access_token + refresh_token) exceed 512 chars encrypted.
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)

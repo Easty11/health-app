@@ -43,8 +43,10 @@ from typing import Any, Callable, Protocol
 
 from sqlalchemy import text
 
-_SOCIAL_PROFILE_PATH = "/userprofile-service/socialProfile"
-_PROFILE_ID_KEYS = ("profileId", "id", "userProfileId", "userProfilePk")
+from connectors.garmin import PROFILE_ID_KEYS as _PROFILE_ID_KEYS  # one implementation of "which account"
+from connectors.garmin import SOCIAL_PROFILE_PATH as _SOCIAL_PROFILE_PATH
+from connectors.garmin import extract_profile_id
+
 _PROVIDERS = ("garmin", "hevy")
 
 
@@ -101,11 +103,11 @@ def mask_display_name(name: Any) -> str:
 
 def profile_id_tail(prof: dict[str, Any]) -> str:
     """Last 4 DIGITS of the profile id, or a statement that no id key was present."""
-    for key in _PROFILE_ID_KEYS:
-        if prof.get(key) is not None:
-            digits = re.sub(r"\D", "", str(prof[key]))
-            return f"...{digits[-4:]}" if digits else "(no digits)"
-    return "(no id key in response)"
+    pid = extract_profile_id(prof)
+    if pid is None:
+        return "(no id key in response)"
+    digits = re.sub(r"\D", "", pid)
+    return f"...{digits[-4:]}" if digits else "(no digits)"
 
 
 def _garmin_identity(blob: str, factory: SourceFactory) -> dict[str, str]:
