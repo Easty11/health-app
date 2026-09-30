@@ -17,6 +17,9 @@ substrate (conftest `db_session`):
   * POLAR SOFT-FAIL (Q154) — the `polar_sync` step never fails the user or skips a later
     step: a Polar error is recorded in its entry, a user with no Polar connection records
     `{"skipped": "no_polar"}`, and it runs with the chain's `days` and the cascade off.
+  * HEVY SOFT-FAIL (Brief A C.1) — ingest steps soft-fail, compute steps hard-fail: a
+    `hevy_sync` exception is recorded in its entry, rolls the session back, and neither fails
+    the user nor skips a later step; a compute step's failure still fails the user.
 """
 from datetime import date, datetime, timezone
 
@@ -297,7 +300,10 @@ def test_later_hard_failure_is_attributed_to_its_step_not_polar(db_session, monk
     assert "FAILED at load_events_tier0 -- RuntimeError: tier0 boom" in capsys.readouterr().err
 
 
-def test_hevy_hard_failure_skips_polar_like_every_later_step(db_session, monkeypatch):
+def test_hevy_failure_no_longer_skips_polar(db_session, monkeypatch):
+    """Supersedes `test_hevy_hard_failure_skips_polar_like_every_later_step` (Brief A C.1): while
+    `hevy_sync` hard-failed, a Hevy outage skipped the Polar pull too — two independent ingests coupled
+    for no reason. Ingest steps soft-fail now, so the Polar step still runs and the chain succeeds."""
     _user(db_session, 1)
     _hevy_key(db_session, 1)
 
@@ -305,14 +311,18 @@ def test_hevy_hard_failure_skips_polar_like_every_later_step(db_session, monkeyp
         raise RuntimeError("hevy down")
 
     polar_calls: list[int] = []
+
+    def _polar(db, uid, *, days, run_cascade=True):
+        polar_calls.append(uid)
+        return {"synced": 0, "enriched": 0, "available": 0}
+
     monkeypatch.setattr(hevy_workouts, "sync_workouts", _hevy_boom)
-    monkeypatch.setattr(polar_ingest, "sync_user",
-                        lambda db, uid, *, days, run_cascade=True: polar_calls.append(uid))
+    monkeypatch.setattr(polar_ingest, "sync_user", _polar)
 
     u1 = refresh_load.refresh_load(db_session, as_of=AS_OF)["per_user"][1]
-    assert u1["status"] == "failed"
-    assert u1["steps"]["polar_sync"] == "skipped"
-    assert polar_calls == []
+    assert u1["status"] == "succeeded"
+    assert u1["steps"]["polar_sync"] == {"synced": 0, "enriched": 0, "available": 0}
+    assert polar_calls == [1]
 
 
 def test_polar_sync_uses_the_chain_days(db_session, monkeypatch):
@@ -327,3 +337,89 @@ def test_polar_sync_uses_the_chain_days(db_session, monkeypatch):
     monkeypatch.setattr(polar_ingest, "sync_user", _polar)
     refresh_load.refresh_load(db_session, only_user_id=1, days=30, as_of=AS_OF)
     assert seen == [(30, False)]
+
+
+# ── HEVY SOFT-FAIL (Brief A C.1) — ingest steps soft-fail, compute steps hard-fail ──
+
+def test_hevy_failure_is_soft_and_later_steps_run(db_session, monkeypatch, capsys):
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _resistance_workout(db_session, "w1", 1)   # already stored: the compute steps still have this to roll
+
+    async def _hevy_down(db, *, only_user_id=None, days=None):
+        raise RuntimeError("Hevy API: 503 upstream")
+
+    monkeypatch.setattr(hevy_workouts, "sync_workouts", _hevy_down)
+
+    rolled_back: list[bool] = []
+    real_rollback = db_session.rollback
+
+    def _spy_rollback():
+        rolled_back.append(True)
+        real_rollback()
+
+    monkeypatch.setattr(db_session, "rollback", _spy_rollback)
+
+    summary = refresh_load.refresh_load(db_session, as_of=AS_OF)
+
+    u1 = summary["per_user"][1]
+    assert u1["status"] == "succeeded"                       # never marks the chain failed
+    assert summary["users_succeeded"] == 1 and summary["users_failed"] == 0
+    assert u1["steps"]["hevy_sync"] == {"error": "RuntimeError: Hevy API: 503 upstream"}   # recorded
+    assert rolled_back == [True]                             # a half-written ingest never leaks on
+    # every later step RAN (polar_sync included — no Polar connection here), none skipped
+    assert u1["steps"]["polar_sync"] == {"skipped": "no_polar"}
+    for key in ("load_events_tier0", "load_events_metabolic", "load_metrics_tier0", "load_metrics_metab"):
+        assert isinstance(u1["steps"][key], dict) and "error" not in u1["steps"][key], key
+    assert u1["steps"]["load_events_tier0"]["events_written"] > 0   # computed over what was already stored
+    # not silent: the soft failure is named on stderr, the user line still reads as a completed chain
+    cap = capsys.readouterr()
+    assert "user 1: OK" in cap.out
+    assert "soft-fail (chain continued) -- hevy_sync: RuntimeError: Hevy API: 503 upstream" in cap.err
+
+
+def test_both_ingest_steps_failing_still_runs_the_compute_steps(db_session, monkeypatch):
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _resistance_workout(db_session, "w1", 1)
+
+    async def _hevy_down(db, *, only_user_id=None, days=None):
+        raise RuntimeError("hevy down")
+
+    def _polar_down(db, user_id, *, days, run_cascade=True):
+        raise polar_ingest.PolarApiError("polar down")
+
+    monkeypatch.setattr(hevy_workouts, "sync_workouts", _hevy_down)
+    monkeypatch.setattr(polar_ingest, "sync_user", _polar_down)
+
+    u1 = refresh_load.refresh_load(db_session, as_of=AS_OF)["per_user"][1]
+    assert u1["status"] == "succeeded"
+    assert "error" in u1["steps"]["hevy_sync"] and "error" in u1["steps"]["polar_sync"]
+    assert u1["steps"]["load_metrics_metab"] != "skipped"
+
+
+def test_a_compute_step_failure_still_fails_the_user_after_a_soft_ingest_failure(db_session, monkeypatch):
+    """The other half of the principle: soft applies to INGEST only. A compute step's own failure is
+    ours, so it fails the user and skips what depends on it — with or without an ingest outage."""
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+
+    async def _hevy_down(db, *, only_user_id=None, days=None):
+        raise RuntimeError("hevy down")
+
+    def _metab_fail(db, *, only_user_id=None):
+        raise RuntimeError("metabolic compute broke")
+
+    monkeypatch.setattr(hevy_workouts, "sync_workouts", _hevy_down)
+    monkeypatch.setattr(refresh_load.load_events_metabolic, "compute_all_users_metabolic", _metab_fail)
+
+    u1 = refresh_load.refresh_load(db_session, as_of=AS_OF)["per_user"][1]
+    assert u1["status"] == "failed"
+    assert "error" in u1["steps"]["hevy_sync"]                      # the soft one is still recorded
+    assert "metabolic compute broke" in u1["steps"]["load_events_metabolic"]["error"]
+    assert u1["steps"]["load_metrics_tier0"] == "skipped" and u1["steps"]["load_metrics_metab"] == "skipped"
+
+
+def test_soft_steps_are_exactly_the_ingest_steps():
+    """Ingest = the two steps that pull from a third-party API; everything after them computes."""
+    assert refresh_load.SOFT_STEPS == frozenset({"hevy_sync", "polar_sync"})

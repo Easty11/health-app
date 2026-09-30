@@ -4,7 +4,7 @@ four independently-run manual modules (#296).
 
 Sweeps every Hevy-keyed user and, per user, runs the load chain IN ORDER:
 
-    1. hevy_workouts.sync_workouts                        Hevy API -> hevy_workouts   (async)
+    1. hevy_workouts.sync_workouts                        Hevy API -> hevy_workouts   (async, soft-fail)
     2. polar_ingest.sync_user (run_cascade=False)         Polar v4 -> aerobic_sessions (soft-fail)
     3. load_events.compute_all_users                     resistance events   tier0-v2
     4. load_events_metabolic.compute_all_users_metabolic metabolic events    metab-v1
@@ -17,18 +17,27 @@ literals, so a formula bump (e.g. tier0-v1 → tier0-v2, P3) propagates without 
 
 Per-user isolation mirrors `scripts/garmin_sync.py`: one user's failure is caught,
 recorded, and skipped -- it never aborts the sweep. Steps 3-6 depend on their
-predecessor, so once a step fails the rest of that user's chain is marked skipped.
+predecessor, so once a COMPUTE step fails the rest of that user's chain is marked skipped.
 An aggregate summary (users attempted / succeeded / failed + per-user, per-step
 outcomes) is printed and returned.
+
+Ingest steps soft-fail, compute steps hard-fail (Brief A C.1). Steps 1-2 pull from third-party APIs
+(Hevy, Polar): an outage there must not stall load compute, because the compute steps still have
+everything already stored to roll. A soft step's failure is recorded in its own entry
+(`{"error": "<Type>: <msg>"}`), printed, and the chain carries on -- it never marks the user failed
+and never skips a later step. A compute step (3-6) reads and writes our own tables; its failure is
+ours, so it fails the user and skips what depends on it. `SOFT_STEPS` is the one place that
+membership lives.
 
 Aerobic ingest (Q154): step 2 pulls new Polar sessions (summary upsert + v4 zone
 enrichment) through the same core the manual Sync route uses, over the chain's `days`
 window, with the cascade OFF — step 4 and step 6 recompute metabolic load from what it
-stored, so nothing is computed twice. It is SOFT-FAIL: a user with no Polar connection
-records `{"skipped": "no_polar"}`, and any ingest failure (token refresh, v4 API) records
-`{"error": "<Type>: <msg>"}` while the chain carries on. It never marks the user failed
-and never skips a later step, so a Polar outage cannot stall resistance load, and step 4
-still rolls the aerobic sessions already stored.
+stored, so nothing is computed twice. A user with no Polar connection records
+`{"skipped": "no_polar"}`; any other ingest failure (token refresh, v4 API) records
+`{"error": "<Type>: <msg>"}` (soft-fail, above), so a Polar outage cannot stall resistance
+load, and step 4 still rolls the aerobic sessions already stored. Hevy ingest (step 1)
+soft-fails the same way: a Hevy outage leaves `hevy_workouts` as last synced and the compute
+steps run over it.
 
 Idempotent: steps 1-2 upsert (Polar dedups by `source_session_id`; enrichment targets
 zoneless rows only); steps 3-4 delete-then-insert their `(user, formula_version)`
@@ -75,8 +84,9 @@ def _per_user(result: dict[str, Any], uid: int) -> dict[str, Any]:
     return result
 
 
-# Steps whose failure is recorded but never fails the user or skips later steps.
-SOFT_STEPS = frozenset({"polar_sync"})
+# INGEST steps: their failure is recorded but never fails the user or skips later steps (Brief A C.1 —
+# ingest steps soft-fail, compute steps hard-fail). Every other step is a compute step.
+SOFT_STEPS = frozenset({"hevy_sync", "polar_sync"})
 
 
 def _polar_sync(db, uid: int, days: int) -> dict[str, Any]:
@@ -104,12 +114,12 @@ def run_user_chain(
     """Run the full ordered load chain for one user. Returns a per-user outcome
     `{"status": "succeeded"|"failed", "steps": {step_key: outcome_or_error}}`.
 
-    Steps are recorded as they complete. On the first step that raises, that step's
+    Steps are recorded as they complete. On the first COMPUTE step that raises, that step's
     entry becomes `{"error": "<Type>: <msg>"}`, every later step is marked `"skipped"`,
     and `status` is `"failed"` -- the exception does NOT propagate, so the sweep goes on.
-    `polar_sync` (a SOFT_STEPS member) never raises, so its own failure is recorded in
-    its entry and neither fails the user nor skips anything; it is still skipped when an
-    earlier step (hevy_sync) fails, like every step after a failure.
+    A SOFT_STEPS member (an ingest step: `hevy_sync`, `polar_sync`) that raises has the same
+    `{"error": ...}` entry, but the session is rolled back, `status` is untouched, and every
+    later step still runs -- an ingest outage never blocks load compute.
     """
     # (key, callable) in strict chain order. Each callable returns this user's outcome.
     steps: list[tuple[str, Callable[[], dict[str, Any]]]] = [
@@ -139,8 +149,13 @@ def run_user_chain(
         try:
             outcome["steps"][key] = fn()
         except Exception as exc:  # noqa: BLE001 -- one user's failure never aborts the sweep
-            outcome["status"] = "failed"
             outcome["steps"][key] = {"error": f"{type(exc).__name__}: {exc}"}
+            if key in SOFT_STEPS:
+                # Ingest step: roll back a half-written ingest so it cannot leak into the compute
+                # steps' transactions, record the error, carry on.
+                db.rollback()
+                continue
+            outcome["status"] = "failed"
             failed_at = i
     return outcome
 
@@ -196,6 +211,10 @@ def refresh_load(
                 return d["skipped"]
             return _n(d, "synced")
 
+        # A soft-failed ingest step is not a chain failure, but it must not be silent: name it.
+        soft_errors = [f"{k}: {v['error']}" for k in sorted(SOFT_STEPS)
+                       if isinstance(v := steps.get(k), dict) and "error" in v]
+
         if outcome["status"] == "succeeded":
             print(f"  user {uid}: OK  "
                   f"polar_synced={_polar(ps)} "
@@ -203,6 +222,8 @@ def refresh_load(
                   f"metab_events={_n(mev, 'events_written')} "
                   f"tier0_metrics={_n(m0, 'rows_written')} "
                   f"metab_metrics={_n(mm, 'rows_written')}")
+            for err in soft_errors:
+                print(f"    soft-fail (chain continued) -- {err}", file=sys.stderr)
         else:
             failed_key = next((k for k, v in steps.items()
                                if k not in SOFT_STEPS and isinstance(v, dict) and "error" in v), "?")
