@@ -12785,7 +12785,7 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 
 **Rationale.** The client formatter kept only sets with weight and reps and dropped RPE, exercise notes, set types, carries/distance/duration and the workout description, while the backend already renders all of it (`hevy_format.format_set`) - but only for the ten most recent workouts, and it never rendered aerobic sessions into chat at all. A reference plus one server-side renderer per kind means a session reads the same on every surface and no client can drop a field again.
 
-**Status.** Built on `claude/nifty-hopper-s8m3kc`. The defaults chosen at build time were ratified or amended by the operator on 30 Sep (above); the PR stays held only for #356's dry-run list.
+**Status.** Landed via PR #289 (merge commit). The defaults chosen at build time were ratified or amended by the operator on 30 Sep (above).
 
 **How you know.**
 - `tests/test_session_focus.py` (17), through the real `/chat` with the model faked at the transport layer (#166): a Hevy workout older than the ten-workout window is pinned with RPE 7.5/8/9, exercise notes, the description, `[warmup]`/`[failure]`/`[dropset]` tags, a loaded carry (`24kg - 40m`), a distance-only set, a duration-only set; aerobic focus renders zones; context scope includes a 6-day-old session, a same-day session both earlier and later than the focus (both lanes), a session 3 days after, a compact prior Hevy workout, and schedule items on the anchor day, the next day, 3 days out and 3 days back, and excludes sessions 8 days back and 4 days after, a non-canonical twin, the focus itself, and schedule items 4 days out and 8 days back; unknown, foreign-user and non-numeric ids give 200 with a not-found block and no leak; no focus leaves the prompt byte-identical (`with_focus == without + block`); malformed focus is a 422; a loader exception still proceeds.
@@ -12805,7 +12805,7 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 
 **Rationale.** The endpoint returns every source's row with a derived `canonical` flag that the list ignored, so a same-bout twin appeared twice (a 28 Sep elliptical twice). `iso.slice(0, 10)` is the UTC date, so any session before 10:00 AEST showed a day early (26 Sep Pilates read the 25th). The MCP read-door (`get_training_sessions`, Q161) already filtered canonical and used `session_date`; the UI now matches it.
 
-**Status.** Built on `claude/nifty-hopper-s8m3kc`; PR held (see #354).
+**Status.** Landed via PR #289 (merge commit).
 
 **How you know.**
 - `WorkoutPanel.test.jsx` (10), `sessionDates.test.js` (5), `ChatPanel.test.jsx` (+3), `Training.review.test.jsx` (3): a 07:00 AEST session (21:00 UTC the previous day) shows its AEST date; the list has one row per bout; the latest card is the canonical row when a twin is newest; the header no longer says Polar; the zoneless row shows the labels; the triggers send the right scope and reference; no set lines appear in any message; the reference survives the real Training page to HubLayout to ChatPanel to `POST /chat` chain.
@@ -12821,13 +12821,18 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 **Decision.** Brief A step A6, on an **operator invariant**: a row without HR never suppresses a same-bout row with HR. `reads/aerobic_reads._win_key` gains a data tier as its FIRST term, in BOTH regimes (cross-source and HC-HC writer-class): tier 2 = usable zones (`_has_usable_zones`, the transform's own INV-7 predicate), tier 1 = avg HR present (`hr_avg is not None`) with no usable zones, tier 0 = neither. Within a tier the key is unchanged: source rank or writer class, then duration, then start, then id. All-tier-0 pairs order exactly as on master. This refines the #260 source-rank and #309 writer-class ladders (they now decide within a tier); it does not supersede them. The overlap threshold, the writer-class table, the source ranks and the metabolic transform are untouched.
 - **No formula bump.** `load_events_metabolic.compute_metabolic_load_events` reads the user's FULL history through `arbitrated_sessions` and delete-then-inserts its `(user, metab-v1)` rows on every chain run, and `load_metrics` recomputes from those events. A flip is therefore picked up by the chain's next run with no separate recompute. The TRIMP formula does not change, only which row's zones feed it. (Read-time consumers - the resolver, the psychological reads, the MCP - see the new order immediately, with nothing stored to refresh.)
 - **Dry run.** `backend/scripts/arbitration_flip_report.py` arbitrates each user's full set with the tier neutralised (master) and as shipped, and lists every bout whose canonical row flips (user, date, sport, old and new `#id source (tier)`, metabolic effect). It writes nothing. DB mode, or CSV mode over a psql `\copy` export (the runbook's `railway connect` route).
-- **Flip list (prod): OWED.** Chat's brief requires it in the PR before merge. This session has no prod access (no Railway CLI, no Health_app_data authorization), so the list is **not** recorded here; the operator runs the script and it is inserted below before merge.
+- **Flip list (prod): NONE.** Chat's brief required the dry run before merge. The building session has no prod access, so the operator ran it (30 Sep 2026, against the branch head `claude/nifty-hopper-s8m3kc`, prod data) and reported the result; it is recorded here as **operator-reported**, not re-run by Code:
 
-  `<flip list: OWED - operator>`
+  ```
+  Sessions arbitrated: 91. Bouts whose canonical row flips: 0.
+  No flips: every bout keeps its canonical row.
+  ```
+
+  **0 is expected (operator): no `health_connect` row carries HR or zones yet, so the tier is a forward guard - for Q159 stage 2 and for zoneless v4 rows - not a fix for live data.** The tier changes an outcome only when a same-bout pair differs in what it carries. With 0 flips, landing it changes no canonical row today, and therefore no metabolic event or metric.
 
 **Rationale.** The ordering was source-rank first and blind to HR/zone presence, so a zoneless Flow-export row could suppress a same-bout v4 row that had zones, and the transform (canonical rows only, zoneless skipped fail-closed) then dropped the bout. #260 patched the flow_export-versus-v4 case by rank; the general invariant is that what a row carries outranks what its source usually carries.
 
-**Status.** Built on `claude/nifty-hopper-s8m3kc`; **HELD for the prod dry-run list.**
+**Status.** Landed via PR #289 (merge commit). Dry run: 0 flips (above), so the merge changes no canonical row today.
 
 **How you know.**
 - `tests/test_aerobic_arbitration_richness.py` (12): zoned v4 beats zoneless flow_export; HC-with-HR beats zoneless v4; both zoned, source rank decides; two HC rows with one carrying HR, HR wins regardless of duration and of writer class; a 300-set random property test over zoneless, HR-less rows equals a frozen copy of master's ordering; end to end through the metabolic transform the zoned twin's bout is scored (on master it was skipped).
@@ -12835,7 +12840,7 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 - `tests/test_arbitration_flip_report.py` (6): lists exactly the flipped bout with old/new/tiers, lists nothing for unchanged bouts, writes nothing, restores the real tier, CSV mode (psql timestamp shape) agrees with DB mode.
 - The existing arbitration, resolver and metabolic suites pass unchanged.
 
-**Do not revisit unless.** The dry run shows a flip the operator rules wrong, or `hr_avg` presence is found to be a poor proxy for a real HR signal on some source (for example a source writing 0 for missing).
+**Do not revisit unless.** A future flip (when Q159 stage-2 rows or a richer twin of a zoneless v4 row appear) is ruled wrong by the operator, or `hr_avg` presence is found to be a poor proxy for a real HR signal on some source (for example a source writing 0 for missing).
 
 ---
 
@@ -12845,7 +12850,7 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 
 **Rationale.** Ingest steps pull from third-party APIs and their outage says nothing about our own data; the compute steps still have everything already stored to roll. Compute steps read and write our tables, so their failure is a real fault and the dependent steps must not run on a partial result.
 
-**Status.** Built on `claude/nifty-hopper-s8m3kc`; PR held (see #354).
+**Status.** Landed via PR #289 (merge commit).
 
 **How you know.** `tests/test_refresh_load.py`: a `hevy_sync` exception leaves the chain `succeeded`, records the error, calls `rollback` once, runs all later steps for real (resistance events written from what was already stored) and names the failure on stderr; both ingests failing still runs compute; a metabolic compute failure after a Hevy outage still fails the user and skips the metrics steps. The old `test_hevy_hard_failure_skips_polar_like_every_later_step`, which pinned the superseded behaviour, is replaced by `test_hevy_failure_no_longer_skips_polar`. Mutation check: removing `hevy_sync` from `SOFT_STEPS` fails 4 tests.
 
