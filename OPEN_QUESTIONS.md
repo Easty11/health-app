@@ -61,6 +61,16 @@ half-column, which the repro did not stage.
 `fix/desktop-column-scroll` was cut then discarded (zero commits; deleted). No DECISIONS_LOG entry.
 No blocker — the decision is Luke's to make at will, nothing external gates it.
 
+**Re-measured 30 Sep 2026 (Brief A G7, after the A3/A5 changes to `WorkoutPanel`, #355).** On the built app in
+Chromium, `/training` (the panel no longer sits in the Dashboard's 50/50 column; it lives in an
+`h-[75vh] min-h-[420px]` box beside the docked chat), API mocked, a 9-exercise Hevy workout open in
+`WorkoutDetail`: the exercise scroller (`flex-1 overflow-y-auto`) measures **361 px tall x 819 px wide** at
+1280x779 (`scrollHeight` 1479) and **452 x 926** at 1440x900, `overflow-y: auto`. That is not the 36 px of the
+original measurement, so on the route the panel now occupies the starvation is not reproduced; the Dashboard
+column it was measured in no longer hosts `WorkoutPanel`. Not measured: a phone-width viewport, and a workout
+with a long session-analysis block. State unchanged (the fork is moot on `/training` unless the panel returns
+to a half-height column).
+
 ---
 
 ## Q22. Promote exercise-region tags to a source-agnostic canonical exercise layer
@@ -5325,3 +5335,19 @@ supersedes row 104 under `injury_shoulder_right`. The orphan query above is stil
 
 **State:** DONE → #352 (validator `0a2c138`, PR #285; row 104 superseded by row 110; the prod brief lists the cap once and
 the ask resolving it has `unresolved: false`).
+
+## Q194. Should the session focus persist across follow-up turns of a review conversation?
+
+#354's `focus_session` rode the trigger turn only: the pinned session block was appended to that turn's system
+prompt and was not in `conversation_history`, so a follow-up such as "why was set 3 at RPE 9?" saw the earlier
+reply but not the session record.
+
+Fork was: (a) leave as briefed (one turn); (b) `ChatPanel` keeps the focus for the conversation and re-sends it
+with every subsequent turn until the conversation is cleared or a new review replaces it (cost: one DB read per
+turn); (c) the server re-pins from a focus id echoed back in the response.
+
+**State:** DONE → #354. **RULED (operator, 30 Sep): option (b).** The frontend holds `focus_session` and resends it
+on every turn until a new focus is set or the chat is cleared/new. Built with a dismissible "Reviewing: ..." chip
+and a "New chat" control, since the panel had no way to clear a chat.
+
+---

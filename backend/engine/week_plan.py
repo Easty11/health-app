@@ -47,6 +47,36 @@ _DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"
 _POLAR_SOURCES = ("polar_flow_export", "polar_v4")
 
 
+def item_days(v: dict[str, Any]) -> list[str]:
+    """A schedule item's lowercase weekday names (non-string entries dropped)."""
+    return [d.lower() for d in (v.get("days") or []) if isinstance(d, str)]
+
+
+def event_span(v: dict[str, Any]) -> tuple[date, date] | None:
+    """A dated one-off's [event_date, event_end] span (#317/Q165), or None if not dated /
+    malformed. `event_end` defaults to `event_date` (a single-day event)."""
+    ev = v.get("event_date")
+    if ev is None:
+        return None
+    try:
+        s = date.fromisoformat(str(ev))
+        e = date.fromisoformat(str(v["event_end"])) if v.get("event_end") else s
+    except (ValueError, TypeError, KeyError):
+        return None
+    return (s, e)
+
+
+def item_covers(v: dict[str, Any], d_: date) -> bool:
+    """Does this schedule item fall on local day `d_`? A dated one-off covers its span; a
+    recurring item covers its weekdays. (An event whose span excludes `d_` contributes nothing —
+    so a past event is ignored on read, nothing retires itself.) The single definition: the week
+    planner and `session_focus`'s next-72-hours list both call it."""
+    span = event_span(v)
+    if span is not None:
+        return span[0] <= d_ <= span[1]
+    return _DAY_ORDER[d_.weekday()] in item_days(v)
+
+
 def schedule_sessions_per_week(value: dict[str, Any]) -> int:
     """A `schedule_item`'s weekly session count (#312): `sessions_per_week` when present (days are
     CANDIDATES, not a count — "Mon/Wed/Fri, 2 a week" is 2), else the number of listed `days`.
@@ -216,30 +246,8 @@ def plan_week(
     keys = consistency_rows(slots, schedule_vals)
     actuals = _actuals_by_day(db, slots)
 
-    def _item_days(v: dict[str, Any]) -> list[str]:
-        return [d.lower() for d in (v.get("days") or []) if isinstance(d, str)]
-
-    def _event_span(v: dict[str, Any]) -> tuple[date, date] | None:
-        """A dated one-off's [event_date, event_end] span (#317/Q165), or None if not dated /
-        malformed. `event_end` defaults to `event_date` (a single-day event)."""
-        ev = v.get("event_date")
-        if ev is None:
-            return None
-        try:
-            s = date.fromisoformat(str(ev))
-            e = date.fromisoformat(str(v["event_end"])) if v.get("event_end") else s
-        except (ValueError, TypeError, KeyError):
-            return None
-        return (s, e)
-
     def _covers(v: dict[str, Any], d_: date, wd_: str) -> bool:
-        """Does this item fall on local day `d_`? A dated one-off covers its span; a recurring item
-        covers its weekdays. (An event whose span excludes the window contributes nothing — so a
-        past event is ignored on read, nothing retires itself.)"""
-        span = _event_span(v)
-        if span is not None:
-            return span[0] <= d_ <= span[1]
-        return wd_ in _item_days(v)
+        return item_covers(v, d_)
 
     def _heavy_on(d_: date) -> bool:
         wd_ = _DAY_ORDER[d_.weekday()]

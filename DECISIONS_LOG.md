@@ -12769,3 +12769,91 @@ Read-path check for the ruling (VERIFY 2). No sweep, job or read path auto-resol
 **Do not revisit unless.** A v4 outage or token failure is found stalling the chain despite soft-fail. Or the nightly 180-day Polar pull is found hitting a v4 rate limit. Or a Polar-only (no Hevy key) user needs nightly freshness, which would widen the sweep set: a new ruling, not a fix.
 
 ---
+
+### 354. A session review reaches chat as a reference the server renders: `focus_session`, two scopes, one renderer per kind
+
+**Decision.** Brief A (session `session-fidelity`), steps A1, A2, A4. `ChatRequest` gains an optional `focus_session = {kind: "hevy"|"aerobic", id, scope: "session"|"context"}` (`backend/session_focus.py`). The client names the session; the server loads it **for the calling user** and appends a pinned block to that turn's system prompt, regardless of the ten-workout window. With no `focus_session` the prompt is unchanged.
+- **Kinds.** `hevy`: `hevy_workouts.raw` by `hevy_id`, rendered by `context_builder.render_workout` (extracted from `_section_hevy`, byte-identical, so it reads as the standing history does: every set through `hevy_format.format_set`, with RPE, set types, notes, distance and duration). `aerobic`: the `aerobic_sessions` row by id, rendered by `aerobic_format.format_aerobic_session` (extracted from `mcp_server.get_training_sessions`, MCP output byte-identical).
+- **Scope `session`.** "Session under review": the session alone, with a framing line that the review is of its execution and must not invent unrecorded fields.
+- **Scope `context`.** The same pinned session PLUS a guaranteed window, framed as a review against the phase, the surrounding load and what is coming next. **[RULED: operator, 30 Sep]** The window is **[anchor - 7, anchor + 3] local days, the anchor's own day INCLUDED**, for both completed sessions and scheduled items, and **only the focused session itself is excluded** (the reference case is gym then pilates the same day, so another session that day, before or after, is in). Completed sessions: every **canonical** aerobic session and every **counted** Hevy workout (compact rendering, `hevy_format.format_workout_compact`), both lanes. Scheduled items: date-resolved through `engine.week_plan.item_covers` (the week planner's own coverage rule, now module-level), soft items included. The window is a calendar-day range, so a later day is in whether or not it has happened (a review of an old session sees what followed it). The anchor is the **session's** local date, not today **[RULED: operator, 30 Sep]**.
+  - *Reading of the ruling, for confirmation:* "for both completed sessions and scheduled items" was implemented literally, so the scheduled list also covers the 7 days BEFORE the anchor (what was planned then, beside what was done) and the anchor day (which normally includes the focused session's own slot, since a schedule item cannot be matched to the session that satisfied it). It is one weekday item per matching day, so a weekly template adds a few lines a week; trimming the past half is a one-line change (`_scheduled_window`'s start day).
+- **Already carried, so not re-pinned (report of A1).** Active phase and resolver position (`_section_training_phase`), the weekly grid with hard commitments and dated one-offs (`_section_schedule`), typed constraints and findings, the ten most recent Hevy workouts. **Not carried before:** any aerobic session, and a date-resolved list of soft items. Those are what context scope adds.
+- **Missing or foreign id.** The block says the session was not found and not to invent one; the turn proceeds (200). An unexpected loader failure is logged and reported inside the block the same way.
+- **A4.** `session_analysis` knowledge entries do **not** reach chat context: `state.knowledge_entries` carries them, but no prompt renderer has a section for the type. So the client's `POST /health/analyse-session` fed nothing the model reads, and it is **left as-is** (the ruling's "if not: leave as-is"): it still feeds the detail card's analysis block and the "Last Analysis" strip. Brief B decides the endpoint's fate.
+
+- **[RULED: option b, Q194 closed]** The **focus persists for the conversation.** `ChatPanel` holds the pinned `{focus, label}` and resends `focus_session` on every turn until a new review replaces it, the operator dismisses it (the "Reviewing: ..." chip's x), or the chat is cleared. It is stored beside the history in localStorage, so a reload keeps both. A push that names no session (the exposure panel) leaves it in place. A "New chat" control (history and focus both cleared) is part of the change: the panel had no way to clear a chat, and a focus that could never be dropped would pin a stale session onto unrelated questions. Cost: one DB read per turn while a focus is pinned.
+
+**Rationale.** The client formatter kept only sets with weight and reps and dropped RPE, exercise notes, set types, carries/distance/duration and the workout description, while the backend already renders all of it (`hevy_format.format_set`) - but only for the ten most recent workouts, and it never rendered aerobic sessions into chat at all. A reference plus one server-side renderer per kind means a session reads the same on every surface and no client can drop a field again.
+
+**Status.** Landed via PR #289 (merge commit). The defaults chosen at build time were ratified or amended by the operator on 30 Sep (above).
+
+**How you know.**
+- `tests/test_session_focus.py` (17), through the real `/chat` with the model faked at the transport layer (#166): a Hevy workout older than the ten-workout window is pinned with RPE 7.5/8/9, exercise notes, the description, `[warmup]`/`[failure]`/`[dropset]` tags, a loaded carry (`24kg - 40m`), a distance-only set, a duration-only set; aerobic focus renders zones; context scope includes a 6-day-old session, a same-day session both earlier and later than the focus (both lanes), a session 3 days after, a compact prior Hevy workout, and schedule items on the anchor day, the next day, 3 days out and 3 days back, and excludes sessions 8 days back and 4 days after, a non-canonical twin, the focus itself, and schedule items 4 days out and 8 days back; unknown, foreign-user and non-numeric ids give 200 with a not-found block and no leak; no focus leaves the prompt byte-identical (`with_focus == without + block`); malformed focus is a 422; a loader exception still proceeds.
+- Mutation checks each fail the suite: window 7 to 5 days, the anchor on the UTC date instead of the local date, dropping the canonical filter; and for the ruled window: dropping same-day-and-later aerobic sessions (2 fail), ending the Hevy window at the anchor (2), skipping the anchor day's schedule (2).
+- Focus persistence (`ChatPanel.test.jsx`, `Training.review.test.jsx`): a typed follow-up carries the focus on every turn, including through the real Training page to HubLayout to ChatPanel to `/chat` chain; a new review replaces it; dismiss and New chat stop it; it survives a reload. Mutation checks: typed turns not carrying it (4 fail), not persisted (1), New chat keeping it (2), a new review not replacing it (5).
+- G2: `get_training_sessions` output equals a frozen copy of the pre-extraction inline rendering across null, zero and partial-zone rows; `_section_hevy` output is byte-identical to master's across a spread of workouts (one-off probe against master's file).
+- A4: a seeded `session_analysis` entry's values are absent from the rendered prompt (pinned by test; if a renderer for the type is ever added the test fails and A4 must be re-decided).
+- Full suites at this commit: backend 2443 passed (baseline 2403), frontend 329 passed (baseline 302).
+
+**Do not revisit unless.** A prompt section is added that renders `session_analysis` (re-decide A4). Or a review is found missing a field the backend renders. Or the window is ruled otherwise (for example the scheduled list trimmed to the forward half, see the reading of the ruling above). Or a pinned focus is found weighing on turns that no longer concern the session.
+
+---
+
+### 355. The aerobic session list shows canonical rows only, dated locally, and says so when a row has no HR
+
+**Decision.** Brief A step A5 (RULED: canonical-only). The Training aerobic list (`WorkoutPanel`) renders rows with `canonical !== false` only, so one row per bout. The latest-session card takes the first canonical of the newest ten (the newest row can itself be a same-bout twin). Every displayed date is the local (Brisbane) calendar date: aerobic uses the backend's `session_date`; Hevy converts `start_time` through `frontend/src/lib/sessionDates.localDate` (fixed to Australia/Brisbane, never the device zone, never `iso.slice(0, 10)`). "Polar History" is now "Aerobic sessions". A row with no HR or no kcal shows "No HR from this source" / "No kcal from this source" instead of bare dashes.
+
+**Rationale.** The endpoint returns every source's row with a derived `canonical` flag that the list ignored, so a same-bout twin appeared twice (a 28 Sep elliptical twice). `iso.slice(0, 10)` is the UTC date, so any session before 10:00 AEST showed a day early (26 Sep Pilates read the 25th). The MCP read-door (`get_training_sessions`, Q161) already filtered canonical and used `session_date`; the UI now matches it.
+
+**Status.** Landed via PR #289 (merge commit).
+
+**How you know.**
+- `WorkoutPanel.test.jsx` (10), `sessionDates.test.js` (5), `ChatPanel.test.jsx` (+3), `Training.review.test.jsx` (3): a 07:00 AEST session (21:00 UTC the previous day) shows its AEST date; the list has one row per bout; the latest card is the canonical row when a twin is newest; the header no longer says Polar; the zoneless row shows the labels; the triggers send the right scope and reference; no set lines appear in any message; the reference survives the real Training page to HubLayout to ChatPanel to `POST /chat` chain.
+- Mutation checks each fail their tests: UTC-slice date (3), no canonical filter (5), context sent as session (2), UTC date on the aerobic card (1), HubLayout dropping the focus (3), ChatPanel dropping it (4).
+- G7 verification note: measured on the built app in Chromium (`/training`, API mocked, a 9-exercise Hevy workout open), the detail view's exercise scroller is **361 px tall x 819 px wide** at 1280x779 (scrollHeight 1479, `overflow-y: auto`) and 452 x 926 at 1440x900. Recorded on Q19.
+
+**Do not revisit unless.** A surface other than the aerobic list is found rendering a non-canonical row or a UTC-sliced date.
+
+---
+
+### 356. Arbitration is richness-first: a row without HR never suppresses a same-bout row with HR (refines #260 / #309)
+
+**Decision.** Brief A step A6, on an **operator invariant**: a row without HR never suppresses a same-bout row with HR. `reads/aerobic_reads._win_key` gains a data tier as its FIRST term, in BOTH regimes (cross-source and HC-HC writer-class): tier 2 = usable zones (`_has_usable_zones`, the transform's own INV-7 predicate), tier 1 = avg HR present (`hr_avg is not None`) with no usable zones, tier 0 = neither. Within a tier the key is unchanged: source rank or writer class, then duration, then start, then id. All-tier-0 pairs order exactly as on master. This refines the #260 source-rank and #309 writer-class ladders (they now decide within a tier); it does not supersede them. The overlap threshold, the writer-class table, the source ranks and the metabolic transform are untouched.
+- **No formula bump.** `load_events_metabolic.compute_metabolic_load_events` reads the user's FULL history through `arbitrated_sessions` and delete-then-inserts its `(user, metab-v1)` rows on every chain run, and `load_metrics` recomputes from those events. A flip is therefore picked up by the chain's next run with no separate recompute. The TRIMP formula does not change, only which row's zones feed it. (Read-time consumers - the resolver, the psychological reads, the MCP - see the new order immediately, with nothing stored to refresh.)
+- **Dry run.** `backend/scripts/arbitration_flip_report.py` arbitrates each user's full set with the tier neutralised (master) and as shipped, and lists every bout whose canonical row flips (user, date, sport, old and new `#id source (tier)`, metabolic effect). It writes nothing. DB mode, or CSV mode over a psql `\copy` export (the runbook's `railway connect` route).
+- **Flip list (prod): NONE.** Chat's brief required the dry run before merge. The building session has no prod access, so the operator ran it (30 Sep 2026, against the branch head `claude/nifty-hopper-s8m3kc`, prod data) and reported the result; it is recorded here as **operator-reported**, not re-run by Code:
+
+  ```
+  Sessions arbitrated: 91. Bouts whose canonical row flips: 0.
+  No flips: every bout keeps its canonical row.
+  ```
+
+  **0 is expected (operator): no `health_connect` row carries HR or zones yet, so the tier is a forward guard - for Q159 stage 2 and for zoneless v4 rows - not a fix for live data.** The tier changes an outcome only when a same-bout pair differs in what it carries. With 0 flips, landing it changes no canonical row today, and therefore no metabolic event or metric.
+
+**Rationale.** The ordering was source-rank first and blind to HR/zone presence, so a zoneless Flow-export row could suppress a same-bout v4 row that had zones, and the transform (canonical rows only, zoneless skipped fail-closed) then dropped the bout. #260 patched the flow_export-versus-v4 case by rank; the general invariant is that what a row carries outranks what its source usually carries.
+
+**Status.** Landed via PR #289 (merge commit). Dry run: 0 flips (above), so the merge changes no canonical row today.
+
+**How you know.**
+- `tests/test_aerobic_arbitration_richness.py` (12): zoned v4 beats zoneless flow_export; HC-with-HR beats zoneless v4; both zoned, source rank decides; two HC rows with one carrying HR, HR wins regardless of duration and of writer class; a 300-set random property test over zoneless, HR-less rows equals a frozen copy of master's ordering; end to end through the metabolic transform the zoned twin's bout is scored (on master it was skipped).
+- Mutation check: deleting the tier from `_win_key` fails exactly the 6 discriminating tests, and `_data_tier` patched to a constant reproduces master's answers in-suite.
+- `tests/test_arbitration_flip_report.py` (6): lists exactly the flipped bout with old/new/tiers, lists nothing for unchanged bouts, writes nothing, restores the real tier, CSV mode (psql timestamp shape) agrees with DB mode.
+- The existing arbitration, resolver and metabolic suites pass unchanged.
+
+**Do not revisit unless.** A future flip (when Q159 stage-2 rows or a richer twin of a zoneless v4 row appear) is ruled wrong by the operator, or `hr_avg` presence is found to be a poor proxy for a real HR signal on some source (for example a source writing 0 for missing).
+
+---
+
+### 357. Ingest steps soft-fail, compute steps hard-fail (supersedes #353's "a hevy hard failure skips polar")
+
+**Decision.** Brief C.1. `scripts/refresh_load.SOFT_STEPS` is `{hevy_sync, polar_sync}`. A raising soft step records `{"error": "<Type>: <msg>"}`, rolls the session back, leaves the user's status untouched and lets every later step run; the failure is printed to stderr, not silent. Compute steps (`load_events_tier0`, `load_events_metabolic`, `load_metrics_tier0`, `load_metrics_metab`) keep hard-fail: their failure is ours, fails the user and skips what depends on it. This supersedes the line in #353 that a hard `hevy_sync` failure still skips `polar_sync`: two independent third-party ingests were coupled for no reason, and a Hevy outage stalled load compute over data already stored.
+
+**Rationale.** Ingest steps pull from third-party APIs and their outage says nothing about our own data; the compute steps still have everything already stored to roll. Compute steps read and write our tables, so their failure is a real fault and the dependent steps must not run on a partial result.
+
+**Status.** Landed via PR #289 (merge commit).
+
+**How you know.** `tests/test_refresh_load.py`: a `hevy_sync` exception leaves the chain `succeeded`, records the error, calls `rollback` once, runs all later steps for real (resistance events written from what was already stored) and names the failure on stderr; both ingests failing still runs compute; a metabolic compute failure after a Hevy outage still fails the user and skips the metrics steps. The old `test_hevy_hard_failure_skips_polar_like_every_later_step`, which pinned the superseded behaviour, is replaced by `test_hevy_failure_no_longer_skips_polar`. Mutation check: removing `hevy_sync` from `SOFT_STEPS` fails 4 tests.
+
+**Do not revisit unless.** A soft ingest failure is found hiding a defect that should stop compute (for example a partial Hevy write corrupting the counted set).
+
+---

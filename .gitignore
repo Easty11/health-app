@@ -53,6 +53,11 @@ pnpm-debug.log*
 cbti_user_data_*.xlsx
 cbti_assessment_data_*.xlsx
 
+# OAuth token files - NEVER commit. Both repos are public; an OAuth token file (e.g. a
+# `backend/<name>_token.json` from a local connector auth run) is a live credential. Defence-in-depth
+# against an accidental in-tree copy + `git add -A`; a token file belongs outside the tree.
+*_token.json
+
 # OS
 .DS_Store
 Thumbs.db

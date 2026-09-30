@@ -12,6 +12,13 @@ function getStorageKey() {
   }
 }
 
+// The session under review persists with the conversation (Q194, ruled option b): once a review pushes a
+// `focus_session`, every later turn resends it until a new focus replaces it, the operator dismisses it,
+// or the chat is cleared. Stored beside the history so a reload keeps both.
+function getFocusKey() {
+  return `${getStorageKey()}_focus`
+}
+
 const EMPTY_REPLY = '⚠️ No response came back for that message, and nothing was saved. Send it again.'
 
 function Message({ role, content }) {
@@ -40,6 +47,15 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
       return []
     }
   })
+  // `{ focus: {kind, id, scope}, label }` or null. The label is the review's own short message.
+  const [pinned, setPinned] = useState(() => {
+    try {
+      const saved = localStorage.getItem(getFocusKey())
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -59,11 +75,30 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
   }, [messages])
 
   useEffect(() => {
+    try {
+      if (pinned) localStorage.setItem(getFocusKey(), JSON.stringify(pinned))
+      else localStorage.removeItem(getFocusKey())
+    } catch { /* storage unavailable: the focus simply does not survive a reload */ }
+  }, [pinned])
+
+  useEffect(() => {
     scrollToBottom()
   }, [messages, loading])
 
-  async function sendMessage(text, currentMessages) {
+  // A fresh conversation: history and the pinned session both go.
+  function newChat() {
+    setMessages([])
+    setPinned(null)
+    setInput('')
+  }
+
+  // `newPin` ({ focus, label }) is a review that sets a NEW focus; without one the turn carries the pinned
+  // focus, if any (a typed follow-up, or a push that names no session).
+  async function sendMessage(text, currentMessages, newPin = null) {
     if (!text || loading) return
+
+    const active = newPin ?? pinned
+    if (newPin) setPinned(newPin)
 
     const base = currentMessages ?? messages
     const userMsg = { role: 'user', content: text }
@@ -80,6 +115,8 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
       const { data } = await api.post('/chat', {
         message: text,
         conversation_history: history,
+        // A session review names its session; the server loads and renders it (server-side `session_focus`).
+        ...(active ? { focus_session: active.focus } : {}),
       })
       // Never an empty bubble (Q187): the server guarantees text, and this catches anything that
       // still arrives blank, saying plainly that nothing came back.
@@ -95,10 +132,14 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
     }
   }
 
-  // Auto-send when a feedback message is injected from WorkoutPanel
+  // Auto-send when a message is pushed in from a panel (`{ message, focus }`; a bare string is a message
+  // with no session focus). The user bubble shows only the short message; the session rides as a reference.
   useEffect(() => {
     if (pendingFeedback) {
-      sendMessage(pendingFeedback, messages)
+      const { message, focus } = typeof pendingFeedback === 'string'
+        ? { message: pendingFeedback, focus: null }
+        : pendingFeedback
+      sendMessage(message, messages, focus ? { focus, label: message } : null)
       onFeedbackSent?.()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -118,8 +159,25 @@ export default function ChatPanel({ pendingFeedback, onFeedbackSent }) {
 
       {/* Header */}
       <div className="flex-none px-4 py-3 border-b border-gray-200 bg-white">
-        <h2 className="text-sm font-semibold text-gray-800">AI Assistant</h2>
-        <p className="text-xs text-gray-400 mt-0.5">Ask anything about your training</p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">AI Assistant</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Ask anything about your training</p>
+          </div>
+          {(messages.length > 0 || pinned) && (
+            <button onClick={newChat} disabled={loading}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40 shrink-0">
+              New chat
+            </button>
+          )}
+        </div>
+        {pinned && (
+          <div className="mt-2 flex items-center justify-between gap-2 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5">
+            <span className="text-xs text-indigo-700 truncate">Reviewing: {pinned.label}</span>
+            <button onClick={() => setPinned(null)} aria-label="Stop reviewing this session"
+              className="text-indigo-400 hover:text-indigo-700 text-sm leading-none shrink-0">×</button>
+          </div>
+        )}
       </div>
 
       {/* Scroll container — this div scrolls independently, not the page.

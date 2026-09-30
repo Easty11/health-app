@@ -33,8 +33,10 @@ export default function HubLayout({ title, back, fill = false, children }) {
   }
 
   // A message pushed into a closed sheet would send invisibly, so opening is part of sending.
-  function sendToChat(message) {
-    setPendingFeedback(message)
+  // `focus` is an optional session reference ({kind, id, scope}) the chat request carries as
+  // `focus_session`; the server renders the session, the client only names it.
+  function sendToChat(message, focus = null) {
+    setPendingFeedback({ message, focus })
     setChatOpen(true)
   }
 
