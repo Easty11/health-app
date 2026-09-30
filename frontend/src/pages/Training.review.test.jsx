@@ -74,4 +74,15 @@ describe('Training page -> chat carries the session reference', () => {
     expect(body.focus_session).toEqual({ kind: 'hevy', id: 'hv1', scope: 'session' })
     expect(JSON.stringify(body)).not.toMatch(/kg|×|Hip Thrust/)
   })
+
+  test('a typed follow-up in the docked chat carries the review\'s focus (Q194)', async () => {
+    await openTraining()
+    await act(async () => { fireEvent.click(screen.getAllByText('Review in context')[0]) })
+    await waitFor(() => expect(chatCalls()).toHaveLength(1))
+    const box = screen.getByPlaceholderText('Message…')
+    fireEvent.change(box, { target: { value: 'why was set 3 at RPE 9?' } })
+    await act(async () => { fireEvent.click(screen.getByText('Send')) })
+    await waitFor(() => expect(chatCalls()).toHaveLength(2))
+    expect(chatCalls()[1][1].focus_session).toEqual({ kind: 'hevy', id: 'hv1', scope: 'context' })
+  })
 })
