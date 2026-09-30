@@ -24,9 +24,20 @@ def _err(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
 
+def _ask(prompt: str) -> str:
+    """Prompt on STDERR and read one line from stdin.
+
+    Plain `input(prompt)` writes its prompt to STDOUT whenever stdout is redirected, and the whole
+    point of this script is `python -m scripts.garmin_login > token.json`: the prompts
+    ("Garmin email: ", "MFA code: ") would land in the token file ahead of the JSON and corrupt it.
+    (`getpass` talks to the console directly, so the password prompt was never affected.)"""
+    print(prompt, end="", file=sys.stderr, flush=True)
+    return sys.stdin.readline().strip()
+
+
 def main() -> int:
     _err("Garmin Connect login (out-of-band). Nothing but the token blob is emitted to stdout.")
-    email = input("Garmin email: ").strip() if sys.stdin.isatty() else sys.stdin.readline().strip()
+    email = _ask("Garmin email: ")
     password = getpass.getpass("Garmin password (not stored): ")
 
     garmin = Garmin(email=email, password=password, return_on_mfa=True)
@@ -37,7 +48,7 @@ def main() -> int:
         return 1
 
     if mfa_status == "needs_mfa":
-        mfa_code = input("MFA code: ").strip()
+        mfa_code = _ask("MFA code: ")
         try:
             garmin.resume_login(client_state, mfa_code)
         except Exception as exc:  # noqa: BLE001
