@@ -39,6 +39,7 @@ Library mechanism (garminconnect 0.3.11, curl_cffi-era, read from source):
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
@@ -58,6 +59,39 @@ logger = logging.getLogger(__name__)
 # logged; the rest of the night's data is kept. All HRV fields here are RMSSD-domain.
 _RMSSD_MIN = 1.0
 _RMSSD_MAX = 400.0
+
+
+# The account-identity call: `garminconnect` itself fetches this endpoint at login to learn the
+# display name. The profile-id key name is not documented by the library, so candidates are tried
+# in order; if none is present the id is UNRESOLVABLE, which the attach guard treats as a refusal
+# (fail closed), never as "no conflict". Shared with `scripts/garmin_identity.py` on purpose: one
+# implementation of "which Garmin account is this token".
+SOCIAL_PROFILE_PATH = "/userprofile-service/socialProfile"
+PROFILE_ID_KEYS = ("profileId", "id", "userProfileId", "userProfilePk")
+
+
+class GarminProfileUnresolvable(Exception):
+    """The social-profile response carried no usable profile id (shape changed, or empty).
+
+    Deliberately distinct from `GarminReconnectError`: the token authenticated, but we cannot say
+    WHICH Garmin account it belongs to, so the attach guard cannot do its job and must refuse."""
+
+
+def extract_profile_id(prof: Any) -> Optional[str]:
+    """The profile id from a social-profile response, as a string, or None if absent/unusable."""
+    if not isinstance(prof, dict):
+        return None
+    for key in PROFILE_ID_KEYS:
+        value = prof.get(key)
+        if value is not None and str(value).strip() != "":
+            return str(value)
+    return None
+
+
+def account_fingerprint(profile_id: str) -> str:
+    """SHA-256 of the Garmin profile id (namespaced). Equality is all the guard needs, so the raw
+    identifier is never stored."""
+    return hashlib.sha256(f"garmin:{profile_id}".encode("utf-8")).hexdigest()
 
 
 class GarminReconnectError(Exception):
@@ -184,6 +218,26 @@ class GarminClient:
             # Auth dead / MFA needed / rate-limited-into-reauth — operator must reconnect.
             raise GarminReconnectError(f"Garmin token can no longer authenticate: {exc}") from exc
         return cls(garmin)
+
+    def profile_id(self) -> str:
+        """The Garmin profile id behind this token (one social-profile call).
+
+        Raises GarminProfileUnresolvable when the response has no usable id: an ERROR is logged with
+        the response's KEY NAMES only (never values), so a shape change is diagnosable and alerts."""
+        try:
+            prof = self._garmin.client.connectapi(SOCIAL_PROFILE_PATH)
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError) as exc:
+            raise GarminReconnectError(f"Garmin auth lost fetching the profile: {exc}") from exc
+        pid = extract_profile_id(prof)
+        if pid is None:
+            keys = sorted(prof) if isinstance(prof, dict) else type(prof).__name__
+            logger.error(
+                "garmin profile id UNRESOLVABLE: none of %s in the socialProfile response (keys: %s); "
+                "attach guard cannot verify the account, so attaches are refused until this is fixed",
+                PROFILE_ID_KEYS, keys,
+            )
+            raise GarminProfileUnresolvable("no profile id in the Garmin social-profile response")
+        return pid
 
     def dump_token(self) -> str:
         """The current (possibly refreshed) token blob, for re-encryption + writeback."""
