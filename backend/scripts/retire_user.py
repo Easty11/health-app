@@ -1,14 +1,13 @@
 """Retire a user account -- inventory, dry run (the default), and --execute.
 
-Built for retiring the duplicate test account (user 4: the operator's own Garmin/Hevy
-credentials under a second user row, doubling the per-sweep API pulls). Generic over the
-user id, with user 1 hard-refused at every layer.
+Built for retiring test/demo accounts (candidates: users 6, 7, 8). Generic over the user
+id, with the real accounts (users 1, 4, 5: PROTECTED_USER_IDS) hard-refused at every layer.
 
     # Dry run / inventory (the default; changes nothing). Run once per candidate user.
-    /opt/venv/bin/python -m scripts.retire_user --user-id 4
+    /opt/venv/bin/python -m scripts.retire_user --user-id 7
 
     # Execute (one transaction; needs the confirm token the dry run printed).
-    /opt/venv/bin/python -m scripts.retire_user --user-id 4 --execute --confirm <token>
+    /opt/venv/bin/python -m scripts.retire_user --user-id 7 --execute --confirm <token>
 
 In the container: `railway ssh --service health-app-backend`, `cd /app`, then the venv
 interpreter above (CLAUDE.md "Prod psql route"). The target database is `DATABASE_URL`,
@@ -24,7 +23,7 @@ the delete, and any `*user_id` column with no FK to users (rows a delete would o
 blocker or orphan makes `--execute` refuse.
 
 The execute path, in ONE transaction:
-  1. refuse user 1 (and any id in PROTECTED_USER_IDS), an unknown user, a wrong confirm token;
+  1. refuse any id in PROTECTED_USER_IDS, an unknown user, a wrong confirm token;
   2. refuse on blockers / orphan-risk references / non-re-derivable rows (see below);
   3. snapshot the protected users' per-table row counts;
   4. delete the target's stored integration tokens (`user_integrations`), then the user row
@@ -41,6 +40,13 @@ the operator's `excluded_at` adjudications, template `laterality` / `adjudicated
 `bw_fraction`, and `exercise_region_tags`. The dry run counts them; `--execute` refuses while
 any exist unless `--accept-loss` is passed (an explicit decision, never a default).
 
+Sign-in artefacts. Web/API auth is a stateless JWT keyed on email: deleting the user row ends
+it. The MCP `PersonalOAuthProvider` persists NOTHING (in-process dicts, tokens never expire):
+the DB cannot say whether an account backs an MCP session, a live token for a deleted user
+survives until the backend restarts, and MCP sign-in verifies email + password against `users`,
+so the delete ends that sign-in path. No last-login is recorded anywhere. The dry run prints
+all of this, plus the account's knowledge entries, so the operator can decide.
+
 Never prints a secret: the credential column is never selected (integrations are listed by
 provider and timestamps only), the email is masked, and the confirm token is a 12-char
 SHA-256 digest. Output is pure ASCII (PowerShell mojibake, FEEDBACK section 30).
@@ -56,8 +62,9 @@ from typing import Any
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Connection, Engine
 
-# User ids this script must never touch, at any layer. User 1 is the operator.
-PROTECTED_USER_IDS: frozenset[int] = frozenset({1})
+# User ids this script must never touch, at any layer: the real accounts (operator ruling,
+# 30 Sep 2026: users 1, 4 and 5 are real and never in scope).
+PROTECTED_USER_IDS: frozenset[int] = frozenset({1, 4, 5})
 
 # Columns tried, in order, for a table's "latest activity" line.
 _ACTIVITY_COLUMNS = ("updated_at", "synced_at", "computed_at", "created_at", "added_at")
@@ -256,6 +263,9 @@ class Plan:
     orphans: list[tuple[str, str, int]]   # (table, column, rows a delete would orphan)
     hevy: list[dict[str, Any]]            # per-owner Hevy ownership, all owners
     at_risk: list[tuple[str, int]]        # non-re-derivable rows a cascade would destroy
+    knowledge: list[dict[str, Any]] = field(default_factory=list)  # user_knowledge_entries breakdown
+    legacy_knowledge: int = 0             # user_knowledge rows (legacy category store)
+    reset_tokens: dict[str, Any] | None = None  # password_reset_tokens: the one persisted auth table
 
     @property
     def total_rows(self) -> int:
@@ -360,13 +370,30 @@ def build_plan(conn: Connection, engine: Engine, graph: Graph, uid: int) -> Plan
         if n:
             at_risk.append((f"{_REGION_TAGS_TABLE} on templates owned by the target", n))
 
+    knowledge: list[dict[str, Any]] = []
+    if "user_knowledge_entries" in graph.tables:
+        knowledge = [dict(r) for r in conn.execute(text(
+            "SELECT type, source, active, COUNT(*) AS n, MAX(added_at) AS latest"
+            " FROM user_knowledge_entries WHERE user_id = :uid"
+            " GROUP BY type, source, active ORDER BY type, source, active"
+        ), {"uid": uid}).mappings()]
+    legacy = counts.get("user_knowledge", 0)
+    reset_tokens = None
+    if "password_reset_tokens" in graph.tables:
+        r = conn.execute(text(
+            "SELECT COUNT(*) AS n, SUM(CASE WHEN used THEN 0 ELSE 1 END) AS unused,"
+            " MAX(created_at) AS latest FROM password_reset_tokens WHERE user_id = :uid"
+        ), {"uid": uid}).mappings().first()
+        reset_tokens = {"n": int(r["n"] or 0), "unused": int(r["unused"] or 0), "latest": r["latest"]}
+
     return Plan(
         user_id=uid,
         user={"email_masked": _mask(u["email"]), "created_at": u["created_at"],
-              "has_full_name": bool(u["full_name"])},
+              "full_name": u["full_name"]},
         token=_confirm_token(uid, u["email"]),
         integrations=integrations, rows=rows, nulled=nulled, blockers=blockers,
         orphans=orphans, hevy=hevy, at_risk=at_risk,
+        knowledge=knowledge, legacy_knowledge=legacy, reset_tokens=reset_tokens,
     )
 
 
@@ -374,9 +401,30 @@ def format_plan(plan: Plan, target: str) -> str:
     out: list[str] = []
     w = out.append
     w(f"Target database: {target}")
-    w(f"User {plan.user_id}: email={plan.user['email_masked']}  created_at={plan.user['created_at']}"
-      f"  full_name={'set' if plan.user['has_full_name'] else 'unset'}")
-    w("(No last-login is recorded on the users table; per-table latest activity is below.)")
+    w(f"User {plan.user_id}: full_name={ascii(plan.user['full_name'])}  email={plan.user['email_masked']}"
+      f"  created_at={plan.user['created_at']}")
+    w("No last-login is recorded anywhere; per-table latest activity is below.")
+    w("")
+    w("Sign-in artefacts:")
+    if plan.reset_tokens is not None:
+        rt = plan.reset_tokens
+        w(f"  password_reset_tokens: {rt['n']} row(s), {rt['unused']} unused, latest {rt['latest'] or '-'}"
+          " (the only auth table persisted in the DB)")
+    w("  web/API login: stateless JWT keyed on email; ends the moment the user row is deleted.")
+    w("  MCP OAuth (oauth_provider.PersonalOAuthProvider): NOT persisted (in-process dicts, tokens never")
+    w("    expire), so it cannot be inventoried here. A live MCP token for this user keeps resolving to")
+    w(f"    user_id {plan.user_id} (finding no rows) until the backend restarts. MCP sign-in checks this")
+    w("    account's email + password against `users`, so a delete ends that sign-in path: if this")
+    w("    account backs an MCP / demo connection, that connection stops working.")
+    w("")
+    w("Knowledge:")
+    if plan.knowledge:
+        for k in plan.knowledge:
+            w(f"  user_knowledge_entries type={k['type']} source={k['source']} active={bool(k['active'])}:"
+              f" {k['n']} (latest added {k['latest']})")
+    else:
+        w("  user_knowledge_entries: (none)")
+    w(f"  user_knowledge (legacy category store): {plan.legacy_knowledge}")
     w("")
     w("Stored integrations (credentials are not read; deleted first on execute):")
     if plan.integrations:
