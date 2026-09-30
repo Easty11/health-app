@@ -204,25 +204,29 @@ def test_aerobic_focus_renders_zones_through_the_shared_renderer(world):
     assert "## Surrounding load" not in pinned
 
 
-# ── G1 — context scope: the guaranteed window ────────────────────────────────
+# ── G1 — context scope: the guaranteed window [anchor - 7, anchor + 3] local days, same day included ──
 
-def test_context_scope_pins_the_prior_week_and_the_next_72_hours(world):
+def test_context_scope_pins_the_window_minus_7_to_plus_3_local_days(world):
     db, me = world.db, world.me
     focus = _hevy(db, me, "hv-focus", FOCUS_START, title="FOCUS LOWER", exercises=LOWER_EXERCISES)
-    # performed, inside [22 Sep .. 29 Sep]
+    # performed, inside [22 Sep .. 2 Oct]
     _aerobic(db, me, "polar_v4", date(2026, 9, 23), start=_utc(2026, 9, 22, 22, 0), sport="SIX-DAY-OLD ROW")
-    _aerobic(db, me, "polar_v4", FOCUS_DAY, start=_utc(2026, 9, 29, 5, 0), sport="SAME-DAY PILATES")
+    _aerobic(db, me, "polar_v4", FOCUS_DAY, start=_utc(2026, 9, 29, 5, 0), sport="SAME-DAY LATER PILATES")
+    _aerobic(db, me, "polar_v4", FOCUS_DAY, start=_utc(2026, 9, 28, 19, 0), sport="SAME-DAY EARLIER WALK")
+    _aerobic(db, me, "polar_v4", date(2026, 10, 2), start=_utc(2026, 10, 1, 22, 0), sport="PLUS-THREE-DAYS RUN")
     _hevy(db, me, "hv-prev", _utc(2026, 9, 26, 22, 0), title="PREV UPPER", exercises=[
         {"title": "Bench Press", "exercise_template_id": "B1", "notes": "",
          "sets": [{"type": "warmup", "weight_kg": 40, "reps": 8},
                   {"type": "normal", "weight_kg": 80, "reps": 5, "rpe": 8.5}]}])
+    _hevy(db, me, "hv-next", _utc(2026, 9, 30, 22, 0), title="NEXT-DAY UPPER")           # 1 Oct local
     # performed, OUTSIDE the window
     _aerobic(db, me, "polar_v4", date(2026, 9, 21), start=_utc(2026, 9, 20, 22, 0), sport="EIGHT-DAY-OLD RIDE")
-    _aerobic(db, me, "polar_v4", date(2026, 10, 2), start=_utc(2026, 10, 1, 22, 0), sport="AFTER-THE-SESSION RUN")
-    # a non-canonical twin of the same-day pilates (HC, no zones) must not appear twice
-    _aerobic(db, me, "health_connect", FOCUS_DAY, start=_utc(2026, 9, 29, 5, 2), sport="SAME-DAY PILATES HC TWIN",
+    _aerobic(db, me, "polar_v4", date(2026, 10, 3), start=_utc(2026, 10, 2, 22, 0), sport="PLUS-FOUR-DAYS RUN")
+    _hevy(db, me, "hv-far", _utc(2026, 10, 3, 22, 0), title="PLUS-FOUR-DAYS LIFT")        # 4 Oct local
+    # a non-canonical twin of the same-day later pilates (HC, no zones) must not appear twice
+    _aerobic(db, me, "health_connect", FOCUS_DAY, start=_utc(2026, 9, 29, 5, 2), sport="PILATES HC TWIN",
              zones=None, package="com.sec.android.app.shealth")
-    # scheduled: weekday item next day (Wed 30 Sep), a dated one-off in the window, one outside (+4 days)
+    # scheduled
     _schedule(db, me, "physio", {"activity": "NEXT-DAY PHYSIO", "days": ["wednesday"], "hard": True,
                                  "expected_load": "none", "time_of_day": "morning"})
     _schedule(db, me, "swim", {"activity": "DATED SWIM", "event_date": "2026-10-02", "hard": False,
@@ -231,47 +235,75 @@ def test_context_scope_pins_the_prior_week_and_the_next_72_hours(world):
                               "expected_load": "light", "time_of_day": "evening"})
     _schedule(db, me, "same-day", {"activity": "SAME-DAY SCHEDULED", "days": ["tuesday"], "hard": False,
                                    "expected_load": "moderate", "time_of_day": "evening"})
+    _schedule(db, me, "past", {"activity": "THREE-DAYS-BACK CLASS", "event_date": "2026-09-26", "hard": False,
+                               "expected_load": "light", "time_of_day": "unknown"})
+    _schedule(db, me, "old", {"activity": "TOO-OLD EVENT", "event_date": "2026-09-21", "hard": False,
+                              "expected_load": "light", "time_of_day": "unknown"})
 
     pinned = _pinned(world.send({"kind": "hevy", "id": "hv-focus", "scope": "context"}))
 
     assert "review of this session IN CONTEXT" in pinned
     assert "FOCUS LOWER" in pinned and "RPE 9" in pinned                       # the pinned session, full
-    window = pinned.split("## Surrounding load")[1].split("## Scheduled next")[0]
-    assert "SIX-DAY-OLD ROW" in window                                         # 6 days back — in
-    assert "SAME-DAY PILATES" in window                                        # same local day — in
-    assert "PREV UPPER" in window and "top 80kg × 5, peak RPE 8.5" in window  # compact Hevy rendering
-    assert "EIGHT-DAY-OLD RIDE" not in window and "AFTER-THE-SESSION RUN" not in window
-    assert "HC TWIN" not in window                                             # non-canonical twin: once only
-    assert "FOCUS LOWER" not in window                                         # the session isn't its own context
+    assert "2026-09-22 to 2026-10-02" in pinned                                # [anchor - 7, anchor + 3]
+    window = pinned.split("## Surrounding load")[1].split("## Scheduled")[0]
+    for kept in ("SIX-DAY-OLD ROW", "SAME-DAY LATER PILATES", "SAME-DAY EARLIER WALK", "PLUS-THREE-DAYS RUN",
+                 "PREV UPPER", "NEXT-DAY UPPER"):
+        assert kept in window, kept
+    assert "top 80kg × 5, peak RPE 8.5" in window                              # compact Hevy rendering
+    for dropped in ("EIGHT-DAY-OLD RIDE", "PLUS-FOUR-DAYS RUN", "PLUS-FOUR-DAYS LIFT", "PILATES HC TWIN"):
+        assert dropped not in window, dropped                                  # outside the window / non-canonical
+    assert "FOCUS LOWER" not in window                                         # the ONLY exclusion: the session itself
     assert "Set 1" not in window                                               # compact, not set-by-set
-    nxt = pinned.split("## Scheduled next")[1]
-    assert "2026-09-30 (Wed): NEXT-DAY PHYSIO (hard) [morning]" in nxt         # next-day scheduled item
-    assert "2026-10-02 (Fri): DATED SWIM (soft, light)" in nxt                 # dated one-off, soft included
-    assert "FOUR-DAYS-OUT CLASS" not in nxt and "SAME-DAY SCHEDULED" not in nxt
+    planned = pinned.split("## Scheduled")[1]
+    assert "2026-09-30 (Wed): NEXT-DAY PHYSIO (hard) [morning]" in planned     # next-day scheduled item
+    assert "2026-10-02 (Fri): DATED SWIM (soft, light)" in planned             # dated one-off, soft included
+    assert "2026-09-29 (Tue): SAME-DAY SCHEDULED (soft, moderate) [evening]" in planned   # the anchor day, included
+    assert "2026-09-26 (Sat): THREE-DAYS-BACK CLASS" in planned                # the window is both sides of the anchor
+    assert "FOUR-DAYS-OUT CLASS" not in planned and "TOO-OLD EVENT" not in planned
     assert focus["title"] == "FOCUS LOWER"
 
 
+def test_a_later_session_the_same_day_is_in_the_window_for_both_lanes(world):
+    """The reference case (G6): gym at 07:00 then pilates the same day. Whichever lane is focused, the
+    other lane's same-day session — before or after — is in the context window."""
+    db, me = world.db, world.me
+    _hevy(db, me, "hv-gym", FOCUS_START, title="GYM LOWER", exercises=LOWER_EXERCISES[:1])
+    pilates = _aerobic(db, me, "polar_v4", FOCUS_DAY, start=_utc(2026, 9, 29, 7, 30), sport="PILATES 17:30")
+
+    gym_view = _pinned(world.send({"kind": "hevy", "id": "hv-gym", "scope": "context"}))
+    assert "PILATES 17:30" in gym_view.split("## Surrounding load")[1].split("## Scheduled")[0]
+
+    pilates_view = _pinned(world.send({"kind": "aerobic", "id": str(pilates.id), "scope": "context"}))
+    window = pilates_view.split("## Surrounding load")[1].split("## Scheduled")[0]
+    assert "GYM LOWER" in window                       # the Hevy lane's earlier session that day
+    assert "PILATES 17:30" not in window               # itself excluded
+
+
 def test_context_window_anchors_on_the_session_local_date_not_the_utc_date(world):
-    """07:00 AEST on 29 Sep is 21:00 UTC on 28 Sep. The window is [22 Sep..29 Sep] and the schedule
-    starts 30 Sep — a UTC anchor would shift both a day early."""
+    """07:00 AEST on 29 Sep is 21:00 UTC on 28 Sep. The window is [22 Sep..2 Oct] — a UTC anchor would
+    shift both ends a day early."""
     db, me = world.db, world.me
     _hevy(db, me, "hv-focus", FOCUS_START, exercises=LOWER_EXERCISES[:1])
-    _schedule(db, me, "a", {"activity": "ON-THE-29TH", "days": ["tuesday"], "hard": False,
+    _schedule(db, me, "a", {"activity": "ON-THE-29TH", "event_date": "2026-09-29", "hard": False,
                             "expected_load": "light", "time_of_day": "unknown"})
-    _schedule(db, me, "b", {"activity": "ON-THE-2ND", "days": ["friday"], "hard": False,
+    _schedule(db, me, "b", {"activity": "ON-THE-3RD", "event_date": "2026-10-03", "hard": False,
+                            "expected_load": "light", "time_of_day": "unknown"})
+    _schedule(db, me, "c", {"activity": "ON-THE-22ND", "event_date": "2026-09-22", "hard": False,
+                            "expected_load": "light", "time_of_day": "unknown"})
+    _schedule(db, me, "d", {"activity": "ON-THE-21ST", "event_date": "2026-09-21", "hard": False,
                             "expected_load": "light", "time_of_day": "unknown"})
     pinned = _pinned(world.send({"kind": "hevy", "id": "hv-focus", "scope": "context"}))
-    assert "up to and including 2026-09-29" in pinned
-    assert "2026-09-30 to 2026-10-02" in pinned
-    nxt = pinned.split("## Scheduled next")[1]
-    assert "ON-THE-2ND" in nxt and "ON-THE-29TH" not in nxt
+    assert "2026-09-22 to 2026-10-02" in pinned
+    planned = pinned.split("## Scheduled")[1]
+    assert "ON-THE-29TH" in planned and "ON-THE-22ND" in planned          # the anchor day, and the first window day
+    assert "ON-THE-3RD" not in planned and "ON-THE-21ST" not in planned   # one day past either end
 
 
 def test_context_scope_with_nothing_around_says_so_explicitly(world):
     row = _aerobic(world.db, world.me, "polar_v4", FOCUS_DAY, start=_utc(2026, 9, 29, 5, 0))
     pinned = _pinned(world.send({"kind": "aerobic", "id": str(row.id), "scope": "context"}))
     assert "None recorded in this window." in pinned
-    assert "No schedule items fall on these days." in pinned
+    assert "No schedule items fall in this window." in pinned
 
 
 # ── G1 — graceful on unknown / foreign ids; no focus = unchanged ─────────────

@@ -12,9 +12,10 @@ carries/distance/duration, and the workout description).
                         `aerobic_format.format_aerobic_session` (the MCP tool's renderer)
     scope  "session"  → "Session under review": the session alone, framed as a review of its EXECUTION
            "context"  → the same pinned session PLUS a guaranteed window — every canonical aerobic
-                        session and every counted Hevy workout in the 7 days up to the session, and the
-                        schedule items on the 3 local days after it (the next 72 h) — framed as a review
-                        judged against the phase, the surrounding load and what is coming next
+                        session and every counted Hevy workout, and the schedule items, in the window
+                        [session's local day - 7, session's local day + 3] — the SAME DAY INCLUDED, the
+                        focused session itself the only exclusion — framed as a review judged against the
+                        phase, the surrounding load and what is coming next
 
 The block is appended to the system prompt on that turn only, regardless of the ten-workout window the
 standing history carries. A session that is not found or not this user's yields a block that SAYS so and the
@@ -27,8 +28,8 @@ WHAT THE STANDING CONTEXT ALREADY CARRIES (so context scope pins only what is mi
   - typed constraints and findings (`_section_constraints`, `_section_findings`)                       → carried
   - the ten most recent Hevy workouts                                                                  → carried
   - aerobic sessions of any kind                                                                       → NOT carried
-So context scope pins the surrounding performed sessions (aerobic + Hevy) and the date-resolved 72-hour
-schedule, and does not restate phase or constraints.
+So context scope pins the surrounding performed sessions (aerobic + Hevy) and the date-resolved
+schedule over the window, and does not restate phase or constraints.
 
 Pure read; no schema. The renderers are shared, never copied.
 """
@@ -55,10 +56,12 @@ logger = logging.getLogger(__name__)
 
 AEST = pytz.timezone("Australia/Brisbane")
 
-# Context scope's guaranteed window. Prior: the 7 local days up to and including the session's own
-# day (other sessions the same day count — the bout before or after it). Next: the 3 local days
-# AFTER the session's day — 72 h. Same-day scheduled items are not repeated (the session itself is
-# usually one of them; what was performed that day is in the prior window).
+# Context scope's guaranteed window (operator ruling on #354, 30 Sep): [anchor - 7, anchor + 3] LOCAL
+# days, the anchor's own day INCLUDED, for completed sessions (both lanes; canonical aerobic, counted
+# Hevy) and for scheduled items alike. Only the focused session itself is excluded — the reference case
+# is gym then pilates the same day, so another session on the anchor day, before or after the focused
+# one, is in. The window is a calendar-day range, so a later day is included whether or not it has
+# happened yet (a review of an old session sees what followed it).
 CONTEXT_PRIOR_DAYS = 7
 CONTEXT_NEXT_DAYS = 3
 
@@ -149,15 +152,20 @@ def _load_aerobic(db: Session, user_id: int, ident: str):
 
 # ── context scope: the surrounding window ─────────────────────────────────────
 
-def _prior_window(db: Session, user_id: int, anchor: date, *, exclude_hevy: Optional[str],
-                  exclude_aerobic: Optional[int]) -> list[str]:
-    """Every canonical aerobic session and every counted Hevy workout from `anchor - 7 days`
-    through the end of `anchor`, oldest first, the focus session itself excluded."""
-    start_day = anchor - timedelta(days=CONTEXT_PRIOR_DAYS)
+def _window_bounds(anchor: date) -> tuple[date, date]:
+    """The context window's first and last local day (both inclusive)."""
+    return anchor - timedelta(days=CONTEXT_PRIOR_DAYS), anchor + timedelta(days=CONTEXT_NEXT_DAYS)
+
+
+def _completed_window(db: Session, user_id: int, anchor: date, *, exclude_hevy: Optional[str],
+                      exclude_aerobic: Optional[int]) -> list[str]:
+    """Every canonical aerobic session and every counted Hevy workout in the window, oldest first,
+    the focus session itself the only exclusion."""
+    start_day, end_day = _window_bounds(anchor)
     items: list[tuple[str, str, str]] = []   # (iso date, hh:mm, line) — sorted, then rendered
 
     for s in arbitrated_sessions(user_id, db, since=start_day):
-        if not getattr(s, "canonical", True) or s.session_date > anchor:
+        if not getattr(s, "canonical", True) or s.session_date > end_day:
             continue
         if exclude_aerobic is not None and s.id == exclude_aerobic:
             continue
@@ -167,7 +175,7 @@ def _prior_window(db: Session, user_id: int, anchor: date, *, exclude_hevy: Opti
             line += f" (start {_hhmm(started)})"
         items.append((s.session_date.isoformat(), _hhmm(started), line))
 
-    lo, hi = _local_day_start_utc(start_day), _local_day_start_utc(anchor + timedelta(days=1))
+    lo, hi = _local_day_start_utc(start_day), _local_day_start_utc(end_day + timedelta(days=1))
     candidates = (
         db.query(models.HevyWorkout)
         .filter(models.HevyWorkout.user_id == user_id,
@@ -186,17 +194,19 @@ def _prior_window(db: Session, user_id: int, anchor: date, *, exclude_hevy: Opti
     return [f"- {line}" for _d, _t, line in items]
 
 
-def _next_schedule(db: Session, user_id: int, anchor: date) -> list[str]:
-    """Schedule items falling on the 3 local days after `anchor`, date-resolved (weekday items and
-    dated one-offs through the same `item_covers` the week planner uses), soft items included."""
+def _scheduled_window(db: Session, user_id: int, anchor: date) -> list[str]:
+    """Schedule items falling on each local day of the window, date-resolved (weekday items and dated
+    one-offs through the same `item_covers` the week planner uses), soft items included. The whole
+    window, as ruled: days before the anchor show what was planned then, beside what was done."""
     entries = (
         db.query(models.UserKnowledgeEntry)
         .filter_by(user_id=user_id, type="schedule_item", active=True)
         .all()
     )
     lines: list[str] = []
-    for offset in range(1, CONTEXT_NEXT_DAYS + 1):
-        d = anchor + timedelta(days=offset)
+    start_day, end_day = _window_bounds(anchor)
+    for offset in range((end_day - start_day).days + 1):
+        d = start_day + timedelta(days=offset)
         for e in entries:
             v = e.value or {}
             if not item_covers(v, d):
@@ -222,8 +232,8 @@ _FRAME_SESSION = (
 _FRAME_CONTEXT = (
     "The operator has asked for a review of this session IN CONTEXT. Judge it against the active phase, "
     "the surrounding load, and what is coming next: the phase, weekly schedule and constraints are in "
-    "the sections above; the sessions in the days around it and the schedule for the next 72 hours follow "
-    "the session. Judge from the record only — if something is not recorded, say so."
+    "the sections above; the sessions performed and the items scheduled in the days around it, including "
+    "the same day, follow the session. Judge from the record only — if something is not recorded, say so."
 )
 
 
@@ -250,23 +260,23 @@ def build_focus_block(
         parts = ["## Session under review", frame, "", *session_lines]
 
         if focus.scope == "context":
-            prior = _prior_window(
+            done = _completed_window(
                 db, user_id, anchor,
                 exclude_hevy=focus_pk if focus.kind == "hevy" else None,
                 exclude_aerobic=focus_pk if focus.kind == "aerobic" else None,
             )
+            first, last = _window_bounds(anchor)
             parts += [
                 "",
-                f"## Surrounding load — the {CONTEXT_PRIOR_DAYS} days up to and including {anchor.isoformat()} "
+                f"## Surrounding load — {first.isoformat()} to {last.isoformat()}, the session's day included "
                 "(canonical aerobic sessions and counted Hevy workouts; the session above excluded)",
-                *(prior or ["- None recorded in this window."]),
+                *(done or ["- None recorded in this window."]),
             ]
-            nxt = _next_schedule(db, user_id, anchor)
-            first, last = anchor + timedelta(days=1), anchor + timedelta(days=CONTEXT_NEXT_DAYS)
+            planned = _scheduled_window(db, user_id, anchor)
             parts += [
                 "",
-                f"## Scheduled next — {first.isoformat()} to {last.isoformat()} (the next 72 hours)",
-                *(nxt or ["- No schedule items fall on these days."]),
+                f"## Scheduled — {first.isoformat()} to {last.isoformat()}, the session's day included",
+                *(planned or ["- No schedule items fall in this window."]),
             ]
         return "\n".join(parts)
     except Exception:  # noqa: BLE001 — the review turn must proceed; the failure is loud in the block
