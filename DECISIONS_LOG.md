@@ -13005,3 +13005,30 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** The G2 per-band comparison shows Polar applies different percentages or a different HRmax (an operator ruling on bands/HRmax, then a recompute); a measured HRmax replaces the observed seed (Q199); the passive 2-minute sessions should deposit (a `MAX_SAMPLE_GAP_S` change, which moves the metabolic series); or HR samples for a pathway other than `health_connect` are zoned (Q198).
 
 ---
+
+### 365. Device source hierarchy: the watch owns running, Catapult SPT3 is the preferred but optional field source, and missing device data must be explicit
+
+**Decision.** Agreed with the operator in chat on 2 Oct 2026. Recorded as policy and principle; nothing is built by this entry.
+- **Running.** The Garmin Instinct 3 Solar owns running sessions (GPS, HR, running dynamics). The Polar H10 may pair to the watch as an HR sensor; the session is recorded on the watch only, never in parallel in Polar. Evidence (operator-reported): the 1 Oct 2026 run, wrist against H10, average HR 145/145 and max 158/157.
+- **Field work** (training and games, where the watch cannot be worn). The Catapult SPT3 is the preferred source. It alone provides acceleration/deceleration, high-speed running and impact/contact data. It is OPTIONAL, not guaranteed: battery is unreliable, and using it is a deliberate trade-off (best information, least reliable). The H10 is the field HR source.
+- **Principle: missing device data must be explicit, never silent.** "SPT expected but absent" must not read as a light or low-contact session.
+- **Context only, not app configuration.** Garmin zones are now %HRR (max 180, resting 66, LTHR 157; the LTHR is estimated, not measured; auto-detect on). That is a setting on the watch. The app's zones stay its own (#364: %HRmax bands over `user_hrmax`) and the watch's maximum is not an input to them.
+- **What this entry does not do.** No code, schema or data change. It does not alter arbitration (`_win_key`, source ranks, writer classes, overlap threshold), the Edwards formula, ingest, or any consumer, and it supersedes no earlier entry (#260, #309, #322, #356, #364 all stand). Whether and how the app should implement the hierarchy is open: Q201 to Q204.
+
+**Rationale.** The operator's earlier intent (Q190) was the watch for runs and the H10 for training and games, with both able to record the same run. Pairing the H10 to the watch removes the second record at the source, so a run produces one row instead of two that must be reconciled after the fact. The SPT is chosen for field work because no other device on the stack measures accel/decel, high-speed running or contact; its unreliability is accepted, which is exactly why the missing-data principle is recorded with it. Without that principle an absent SPT file would be indistinguishable from a quiet session (see Q203).
+
+**Status.** Ratified in chat (operator, 2 Oct 2026); recorded, not built. The four app-behaviour questions the brief asked to verify are filed as Q201 (cross-source dedup), Q202 (RPE floor), Q203 (missingness) and Q204 (activity-type mapping), each with findings read from master `054d2d9`. Numbers resolved at master max #364 / Q200 at `054d2d9`; re-read master's max and re-resolve if it advances before landing.
+
+**How you know.**
+- *The hierarchy and the 1 Oct HR comparison are operator-reported.* No pushed ref carries them. They are recorded as the operator's statement, not as a measurement read from the DB (the unseeable-surface rule).
+- *Code facts that bear on it, read from master `054d2d9`* (file:line, details in Q201 to Q204):
+  - Cross-source dedup is read-time, not ingest-time: both rows persist (`routers/health_connect.py:679-681`, `polar_ingest.py:155-168`), and the load transform emits canonical rows only (`load_events_metabolic.py:177,197`). Arbitration ranks richness first, then source (`reads/aerobic_reads.py:63-67,125-167`), so when both rows carry zones a `polar_v4` row outranks a `health_connect` Garmin row. That is the reverse of this hierarchy for running.
+  - The metabolic load is zone-seconds only; a session with no usable zones deposits nothing (`load_events_metabolic.py:24-29,204-206`). There is no RPE floor, and no manual path writes `aerobic_sessions`.
+  - A day with no events is an exact zero in the series (`load_metrics.py:207`). There is no completeness field, and nothing in any vocabulary names Catapult as an expected device (`engine/training_phase.py:71`).
+  - Health Connect has no trail-running exercise type (`routers/health_connect.py:66-127`), and the row's `title` is parsed but not stored (`:238`, `:753-762`).
+- *Simulation, not prod data.* The real `arbitrate()` run on rows shaped like the 1 Oct pair (reported durations 21:33 and 22:05) leaves exactly one canonical row whenever the Polar start is within about 640 s of the Garmin start, and two canonical rows at about 700 s or more or when either start or stop is NULL.
+- *Not verified here.* The 1 Oct rows themselves: this session had no route to the prod DB (no Railway CLI, no database variables, the data MCP unauthorised). The check is owed to the operator (the queries are in Q201 and Q204).
+
+**Do not revisit unless.** The watch or the SPT is replaced, or an SPT ingest path is built (Q124) and its preferred-source ordering has to be decided in code; a wrist-against-strap comparison on a field-type session diverges from the 1 Oct agreement; or the prod rows for the 1 Oct run show a state this entry's code reading does not predict (Q201).
+
+---
