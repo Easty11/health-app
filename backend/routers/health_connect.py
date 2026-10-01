@@ -570,6 +570,68 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     return inserted, unattributed
 
 
+# Raw HR persistence chunk: 1000 rows x 5 bound params stays under both engines' parameter limits.
+HR_SAMPLE_CHUNK = 1000
+
+
+def _persist_hr_samples(payload: SyncPayload, user_id: int, db: Session) -> dict:
+    """Persist every `payload.heartRate` record to `hr_samples` (Q159 stage 2, S2).
+
+    Source-neutral store: `source='health_connect'`, `source_package` the writer (coalesced to
+    'unknown' like `_capture_record_sources`, because a NULL there would be UNIQUE-distinct and
+    duplicate on every re-sync). Runs after the pre-2020 reject, so epoch-zero records never land.
+    NOT bounded by the sync's date window: a deep sync re-posts history and every sample of it
+    is kept. `bpm` is stored as received; plausibility is applied at zone time, never here.
+
+    Idempotent: chunked `INSERT ... ON CONFLICT DO NOTHING` on `uq_hr_sample`
+    (user, sample_time, source, source_package), on both engines. A re-posted sample changes
+    nothing, so the 7-day rolling re-post HCA sends every sync costs no duplicate rows.
+    Sample times are parsed with `_parse_dt` (UTC-aware, fractional seconds stripped), so two
+    samples of one writer inside the same second collapse to one — counted as `deduped`.
+    An unparseable `time` is dropped and counted, never guessed.
+
+    Failure isolation: the insert runs in a SAVEPOINT and a failure is logged and reported in
+    the sync response (`{"error": ...}`), never raised — a fill of a new table must not roll back
+    the day aggregates and exercise rows riding the same commit. The zone step reports
+    `no_same_writer_hr` for any row this left without samples, so the gap is visible downstream.
+    """
+    # `received` here is what reached this step — AFTER the pre-2020 reject; the as-posted count is
+    # the sync response's top-level `received["heartRate"]` (the two reconcile via `rejected_pre_2020`).
+    counts = {"received": len(payload.heartRate), "stored": 0, "deduped": 0, "unparseable": 0}
+    rows: dict[tuple[datetime, str], dict] = {}
+    for r in payload.heartRate:
+        t = _parse_dt(r.time)
+        if t is None:
+            counts["unparseable"] += 1
+            continue
+        pkg = r.sourcePackage or "unknown"
+        key = (t, pkg)
+        if key in rows:
+            counts["deduped"] += 1
+            continue
+        rows[key] = {"user_id": user_id, "sample_time": t, "bpm": r.bpm,
+                     "source": HEALTH_CONNECT, "source_package": pkg}
+    if not rows:
+        return counts
+
+    from sqlalchemy.dialects import postgresql, sqlite
+    dialect = db.get_bind().dialect.name
+    insert = postgresql.insert if dialect == "postgresql" else sqlite.insert
+    table = models.HrSample.__table__
+    values = list(rows.values())
+    try:
+        with db.begin_nested():
+            for i in range(0, len(values), HR_SAMPLE_CHUNK):
+                stmt = (insert(table).values(values[i:i + HR_SAMPLE_CHUNK])
+                        .on_conflict_do_nothing(index_elements=["user_id", "sample_time", "source", "source_package"]))
+                res = db.execute(stmt)
+                counts["stored"] += max(res.rowcount, 0)
+    except Exception as exc:  # noqa: BLE001 -- a fill must not fail the sync (see docstring)
+        logger.exception("HC sync user=%s hr_samples persist failed", user_id)
+        return {**counts, "stored": 0, "error": f"{type(exc).__name__}: {exc}"}
+    return counts
+
+
 # `com.hevy` mirrors Hevy workouts into Health Connect, but the direct Hevy connector
 # already owns those bouts (hevy_workouts). A Hevy-mirrored exercise record is dropped at
 # admission — counted in the sync response, never ingested as an HC aerobic session
@@ -602,9 +664,11 @@ def _ingest_exercise_sessions(payload: "SyncPayload", user_id: int, db: Session)
     """Stage-1 HC exercise ingest — discharges #189's hold (#309).
 
     Each surviving exercise record becomes ONE `aerobic_sessions` row
-    (source='health_connect'), ZONELESS: every `z*_seconds` is NULL, not 0, so the
+    (source='health_connect'), ZONELESS on INSERT: every `z*_seconds` is NULL, not 0, so the
     metabolic transform reads "not measured" and stays fail-closed (INV-7) — a 0 would
-    read as "measured, none". Zones are stage 2, out of scope.
+    read as "measured, none". The nulls are written on INSERT ONLY (Q159 stage 2): an UPDATE
+    never touches `z*_seconds`, `hr_avg` or `hr_max`, which `hc_zone_enrich` owns once the row
+    exists — a re-sync used to rewrite `z*_seconds` back to NULL and wipe the enrichment.
 
     Admission (S1), write-time, drops two kinds of record — both COUNTED in the response,
     never silent:
@@ -695,16 +759,17 @@ def _ingest_exercise_sessions(payload: "SyncPayload", user_id: int, db: Session)
             duration_minutes=_exercise_duration_minutes(start, stop, r.durationMinutes),
             source_package=pkg,
             recording_method=r.recordingMethod,
-            # SQL NULL, not the column default 0 — INV-7 keys on "not measured" and a 0
-            # would read as "measured, none". A plain None triggers the Python-side
-            # default=0; sqlalchemy.null() forces the INSERT to write NULL instead.
-            z1_seconds=null(), z2_seconds=null(), z3_seconds=null(),
-            z4_seconds=null(), z5_seconds=null(),
         )
         row = existing_by_ssid.get(ssid)
         if row is None:
             row = models.AerobicSession(
                 user_id=user_id, source=HEALTH_CONNECT, source_session_id=ssid, **fields,
+                # SQL NULL, not the column default 0 — INV-7 keys on "not measured" and a 0
+                # would read as "measured, none". A plain None triggers the Python-side
+                # default=0; sqlalchemy.null() forces the INSERT to write NULL instead.
+                # INSERT ONLY: the UPDATE branch below never lists z*, hr_avg or hr_max.
+                z1_seconds=null(), z2_seconds=null(), z3_seconds=null(),
+                z4_seconds=null(), z5_seconds=null(),
             )
             db.add(row)
             existing_by_ssid[ssid] = row
@@ -1102,6 +1167,10 @@ def sync(
     # counted, never silent. Runs after pre-2020 reject (payload.workouts already filtered).
     exercise_ingest = _ingest_exercise_sessions(payload, current_user.id, db)
 
+    # Raw HR into the source-neutral `hr_samples` store (Q159 stage 2). Every record, after the
+    # pre-2020 reject, idempotent, failure-isolated (see _persist_hr_samples).
+    hr_samples = _persist_hr_samples(payload, current_user.id, db)
+
     # Collect all unique dates across all record types
     dates: set[date] = set()
     for r in payload.steps:
@@ -1205,6 +1274,9 @@ def sync(
         # drops (Hevy mirrors, writer-class mirrors), the null-id fallback count, and how
         # many surviving records carried a writer outside the class table (Ruling 2).
         "exercise_ingest": exercise_ingest,
+        # Raw HR persisted this sync (Q159 stage 2): received, newly stored, intra-payload
+        # duplicates, unparseable times; an `error` key when the isolated insert failed.
+        "hr_samples": hr_samples,
         "renewed_token": renewed_token,
     }
 

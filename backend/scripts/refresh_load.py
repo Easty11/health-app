@@ -6,17 +6,24 @@ Sweeps every Hevy-keyed user and, per user, runs the load chain IN ORDER:
 
     1. hevy_workouts.sync_workouts                        Hevy API -> hevy_workouts   (async, soft-fail)
     2. polar_ingest.sync_user (run_cascade=False)         Polar v4 -> aerobic_sessions (soft-fail)
-    3. load_events.compute_all_users                     resistance events   tier0-v2
-    4. load_events_metabolic.compute_all_users_metabolic metabolic events    metab-v1
-    5. load_metrics.compute_all_users (tier0-v2)         mechanical / neuromuscular metrics
-    6. load_metrics.compute_all_users (metab-v1)         metabolic metrics
+    3. hc_zone_enrich.enrich_user                        hr_samples -> HC row zones (soft-fail, fill)
+    4. load_events.compute_all_users                     resistance events   tier0-v2
+    5. load_events_metabolic.compute_all_users_metabolic metabolic events    metab-v1
+    6. load_metrics.compute_all_users (tier0-v2)         mechanical / neuromuscular metrics
+    7. load_metrics.compute_all_users (metab-v1)         metabolic metrics
 
 Version labels above track the module constants — steps 5/6 pass
 `load_events.FORMULA_VERSION` / `load_events_metabolic.FORMULA_VERSION_METABOLIC` rather than
 literals, so a formula bump (e.g. tier0-v1 → tier0-v2, P3) propagates without editing here.
 
+HC zone fill (Q159 stage 2): step 3 zones every `health_connect` row from its same-writer raw HR
+samples and the HRmax in force, BEFORE step 5 reads `aerobic_sessions`, so a row zoned this run deposits
+this run. It is an ingest-class FILL step and soft-fails like steps 1-2 — deliberately distinct from
+#357's hard-fail compute steps: a failure leaves rows in the stage-1 state (zoneless, INV-7
+fail-closed), so it can only withhold information, never corrupt a computed value.
+
 Per-user isolation mirrors `scripts/garmin_sync.py`: one user's failure is caught,
-recorded, and skipped -- it never aborts the sweep. Steps 3-6 depend on their
+recorded, and skipped -- it never aborts the sweep. Steps 4-7 depend on their
 predecessor, so once a COMPUTE step fails the rest of that user's chain is marked skipped.
 An aggregate summary (users attempted / succeeded / failed + per-user, per-step
 outcomes) is printed and returned.
@@ -69,6 +76,7 @@ import hevy_workouts
 import load_events
 import load_events_metabolic
 import load_metrics
+import hc_zone_enrich
 import polar_ingest
 from database import SessionLocal
 from hevy_templates import users_with_hevy_key
@@ -86,7 +94,7 @@ def _per_user(result: dict[str, Any], uid: int) -> dict[str, Any]:
 
 # INGEST steps: their failure is recorded but never fails the user or skips later steps (Brief A C.1 —
 # ingest steps soft-fail, compute steps hard-fail). Every other step is a compute step.
-SOFT_STEPS = frozenset({"hevy_sync", "polar_sync"})
+SOFT_STEPS = frozenset({"hevy_sync", "polar_sync", "hc_zone_enrich"})
 
 
 def _polar_sync(db, uid: int, days: int) -> dict[str, Any]:
@@ -104,6 +112,18 @@ def _polar_sync(db, uid: int, days: int) -> dict[str, Any]:
         return {"error": f"{type(exc).__name__}: {exc}"}
 
 
+def _hc_zone_enrich(db, uid: int) -> dict[str, Any]:
+    """The chain's HC zone fill: `hc_zone_enrich.enrich_user`. Soft-fail by construction (same
+    shape as `_polar_sync`): any failure -> `{"error": "<Type>: <msg>"}` with the session rolled
+    back, so a half-written fill cannot leak into the compute steps' transactions and the rows it
+    did not reach stay in the stage-1 state (zoneless, INV-7 fail-closed)."""
+    try:
+        return hc_zone_enrich.enrich_user(db, uid)
+    except Exception as exc:  # noqa: BLE001 -- soft-fail: a fill failure never stops the chain
+        db.rollback()
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
 def run_user_chain(
     db,
     uid: int,
@@ -117,7 +137,7 @@ def run_user_chain(
     Steps are recorded as they complete. On the first COMPUTE step that raises, that step's
     entry becomes `{"error": "<Type>: <msg>"}`, every later step is marked `"skipped"`,
     and `status` is `"failed"` -- the exception does NOT propagate, so the sweep goes on.
-    A SOFT_STEPS member (an ingest step: `hevy_sync`, `polar_sync`) that raises has the same
+    A SOFT_STEPS member (an ingest/fill step: `hevy_sync`, `polar_sync`, `hc_zone_enrich`) that raises has the same
     `{"error": ...}` entry, but the session is rolled back, `status` is untouched, and every
     later step still runs -- an ingest outage never blocks load compute.
     """
@@ -126,6 +146,7 @@ def run_user_chain(
         ("hevy_sync", lambda: _per_user(
             asyncio.run(hevy_workouts.sync_workouts(db, only_user_id=uid, days=days)), uid)),
         ("polar_sync", lambda: _polar_sync(db, uid, days)),
+        ("hc_zone_enrich", lambda: _hc_zone_enrich(db, uid)),
         ("load_events_tier0", lambda: _per_user(
             load_events.compute_all_users(db, only_user_id=uid), uid)),
         ("load_events_metabolic", lambda: _per_user(
@@ -196,6 +217,7 @@ def refresh_load(
 
         steps = outcome["steps"]
         ps = steps.get("polar_sync")
+        hz = steps.get("hc_zone_enrich")
         ev = steps.get("load_events_tier0")
         mev = steps.get("load_events_metabolic")
         m0 = steps.get("load_metrics_tier0")
@@ -211,6 +233,17 @@ def refresh_load(
                 return d["skipped"]
             return _n(d, "synced")
 
+        def _hc(d: Any) -> Any:
+            if isinstance(d, dict) and "error" in d:
+                return f"error({d['error']})"
+            if not isinstance(d, dict):
+                return "-"
+            # .get throughout: a report line must never be able to crash a sweep.
+            r = d.get("reasons") or {}
+            return (f"{d.get('zoned', '-')}/{d.get('rows', '-')} (sparse={r.get('sparse', '-')} "
+                    f"no_same_writer_hr={r.get('no_same_writer_hr', '-')} no_hrmax={r.get('no_hrmax', '-')} "
+                    f"over_ceiling={d.get('over_ceiling', '-')})")
+
         # A soft-failed ingest step is not a chain failure, but it must not be silent: name it.
         soft_errors = [f"{k}: {v['error']}" for k in sorted(SOFT_STEPS)
                        if isinstance(v := steps.get(k), dict) and "error" in v]
@@ -218,6 +251,7 @@ def refresh_load(
         if outcome["status"] == "succeeded":
             print(f"  user {uid}: OK  "
                   f"polar_synced={_polar(ps)} "
+                  f"hc_zoned={_hc(hz)} "
                   f"tier0_events={_n(ev, 'events_written')} "
                   f"metab_events={_n(mev, 'events_written')} "
                   f"tier0_metrics={_n(m0, 'rows_written')} "

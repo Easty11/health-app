@@ -315,6 +315,63 @@ class HealthConnectRecordSource(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class HrSample(Base):
+    """One raw heart-rate sample, source-neutral (Q159 stage 2).
+
+    Source-neutral by name and shape: `source` names the pathway ('health_connect' today) and
+    `source_package` the writer inside it, so a later Polar / other-pathway re-zoning writes
+    into the same table. `health_connect_record_sources` keeps the identity of a record but
+    never its bpm; this is where the bpm lives. Zoning (`hr_zones`) reads these rows and
+    nothing else about the source.
+
+    Unique on (user_id, sample_time, source, source_package): a re-posted sample is
+    insert-or-ignore, and two writers' samples at one instant persist as two rows (the
+    same-writer rule needs them apart). `source_package` is NOT NULL and coalesced to
+    'unknown' at write — a NULL would be UNIQUE-distinct on both engines and duplicate on
+    every re-sync (the `uq_hc_record_source` reasoning). `bpm` is stored as received:
+    plausibility (30-240) is applied at zone time, never at storage, so a wrong bound can be
+    corrected by a recompute rather than a lost sample.
+    """
+    __tablename__ = "hr_samples"
+    __table_args__ = (
+        UniqueConstraint("user_id", "sample_time", "source", "source_package", name="uq_hr_sample"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    sample_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    bpm: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)             # 'health_connect'
+    source_package: Mapped[str] = mapped_column(String(255), nullable=False)    # writer; 'unknown' when absent
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserHrmax(Base):
+    """A user's HRmax in force from a date — the one constant that scales every zone (Q159).
+
+    Append-only: a new value is a NEW row (a later `effective_from`, or the same date refused),
+    followed by a recompute; a row is never edited or deleted. The zone calc uses the row with
+    the greatest `effective_from` <= the session date, so a session before a new value zones
+    under the old one. `provenance` is a closed set: `tested` (a maximal-effort test) or
+    `observed` (a session maximum from a chest strap — measured). There is no `estimated`:
+    SCHEMA.md forbids age-predicted HRmax. No route and no UI writes this table and the chat
+    knowledge lane cannot reach it; the only writer is `scripts/set_hrmax.py` (operator).
+    """
+    __tablename__ = "user_hrmax"
+    __table_args__ = (
+        UniqueConstraint("user_id", "effective_from", name="uq_user_hrmax_effective"),
+        CheckConstraint("provenance IN ('tested', 'observed')", name="ck_user_hrmax_provenance"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    hrmax_bpm: Mapped[int] = mapped_column(Integer, nullable=False)
+    provenance: Mapped[str] = mapped_column(String(20), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class HealthConnectSyncEvent(Base):
     """One row PER POST to /health-connect/sync — the client build fingerprint plus
     the fetch telemetry HCA sends under `client` / `fetchMeta` (HCA DECISIONS #40).

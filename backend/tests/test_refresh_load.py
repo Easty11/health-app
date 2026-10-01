@@ -3,8 +3,8 @@
 Proves the four things the brief's Step-1 gate asks for, on the FK-enforced SQLite
 substrate (conftest `db_session`):
 
-  * ORDER — the six steps run per user in the fixed chain order (Hevy ingest ->
-    Polar ingest -> load_events tier0 -> load_events_metabolic -> load_metrics tier0-v2 ->
+  * ORDER — the seven steps run per user in the fixed chain order (Hevy ingest ->
+    Polar ingest -> HC zone fill -> load_events tier0 -> load_events_metabolic -> load_metrics tier0-v2 ->
     load_metrics metab-v1);
   * NON-ZERO — a Hevy-keyed user with a resistance workout gets non-zero resistance
     events and non-zero mechanical/NM metrics (real compute for steps 2-5; only the
@@ -71,7 +71,7 @@ def _mock_hevy_noop(monkeypatch):
 
 # ── ORDER ───────────────────────────────────────────────────────────────────────
 
-def test_chain_runs_six_steps_in_order(db_session, monkeypatch):
+def test_chain_runs_seven_steps_in_order(db_session, monkeypatch):
     _user(db_session, 1)
     _hevy_key(db_session, 1)
 
@@ -84,6 +84,10 @@ def test_chain_runs_six_steps_in_order(db_session, monkeypatch):
     def _polar(db, user_id, *, days, run_cascade=True):
         calls.append(f"polar_sync:days={days}:cascade={run_cascade}")
         return {"synced": 0, "enriched": 0, "available": 0}
+
+    def _hc_zones(db, user_id):
+        calls.append("hc_zone_enrich")
+        return {"rows": 0, "zoned": 0}
 
     def _events(db, *, only_user_id=None):
         calls.append("load_events_tier0")
@@ -99,26 +103,28 @@ def test_chain_runs_six_steps_in_order(db_session, monkeypatch):
 
     monkeypatch.setattr(hevy_workouts, "sync_workouts", _sync)
     monkeypatch.setattr(polar_ingest, "sync_user", _polar)
+    monkeypatch.setattr(refresh_load.hc_zone_enrich, "enrich_user", _hc_zones)
     monkeypatch.setattr(load_events, "compute_all_users", _events)
     monkeypatch.setattr(refresh_load.load_events_metabolic, "compute_all_users_metabolic", _metab)
     monkeypatch.setattr(refresh_load.load_metrics, "compute_all_users", _metrics)
 
     summary = refresh_load.refresh_load(db_session, as_of=AS_OF)
 
-    # Steps 4/5 pass the module version constants (P3: tier0-v2 for strength, metab-v1
+    # Steps 5/6 pass the module version constants (P3: tier0-v2 for strength, metab-v1
     # unchanged) rather than literals — reference the constants so this can't drift on a bump.
     # polar_sync sits after hevy_sync and BEFORE load_events_metabolic (which rolls what it
     # stored), with the chain's `days` (default window here) and the cascade OFF.
     assert calls == [
         "hevy_sync",
         f"polar_sync:days={hevy_workouts.DEFAULT_BACKFILL_DAYS}:cascade=False",
+        "hc_zone_enrich",           # after polar_sync, BEFORE the metabolic transform reads the rows
         "load_events_tier0",
         "load_events_metabolic",
         f"load_metrics:{load_events.FORMULA_VERSION}",
         f"load_metrics:{refresh_load.load_events_metabolic.FORMULA_VERSION_METABOLIC}",
     ]
     assert list(summary["per_user"][1]["steps"]) == [
-        "hevy_sync", "polar_sync", "load_events_tier0", "load_events_metabolic",
+        "hevy_sync", "polar_sync", "hc_zone_enrich", "load_events_tier0", "load_events_metabolic",
         "load_metrics_tier0", "load_metrics_metab",
     ]
 
@@ -420,6 +426,49 @@ def test_a_compute_step_failure_still_fails_the_user_after_a_soft_ingest_failure
     assert u1["steps"]["load_metrics_tier0"] == "skipped" and u1["steps"]["load_metrics_metab"] == "skipped"
 
 
-def test_soft_steps_are_exactly_the_ingest_steps():
-    """Ingest = the two steps that pull from a third-party API; everything after them computes."""
-    assert refresh_load.SOFT_STEPS == frozenset({"hevy_sync", "polar_sync"})
+def test_soft_steps_are_exactly_the_ingest_and_fill_steps():
+    """Ingest = the two steps that pull from a third-party API; the HC zone fill joins them (Q159
+    stage 2): a failure leaves rows in the stage-1 state, so it can only withhold information.
+    Everything after them computes."""
+    assert refresh_load.SOFT_STEPS == frozenset({"hevy_sync", "polar_sync", "hc_zone_enrich"})
+
+
+def test_hc_zone_enrich_failure_is_soft_and_later_steps_still_run(db_session, monkeypatch, capsys):
+    """A raising fill is recorded, the session rolled back, the user stays `succeeded`, and the
+    four compute steps still run for real over what is stored. Mutation: re-raising from
+    `_hc_zone_enrich` (or dropping it from SOFT_STEPS) fails this."""
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _resistance_workout(db_session, "w1", 1)
+    _mock_hevy_noop(monkeypatch)
+    monkeypatch.setattr(polar_ingest, "sync_user",
+                        lambda db, uid, *, days, run_cascade=True: {"synced": 0})
+
+    def _boom(db, uid):
+        raise RuntimeError("zone fill broke")
+    monkeypatch.setattr(refresh_load.hc_zone_enrich, "enrich_user", _boom)
+    rollbacks: list[int] = []
+    real_rollback = db_session.rollback
+    monkeypatch.setattr(db_session, "rollback", lambda: (rollbacks.append(1), real_rollback())[1])
+
+    u1 = refresh_load.refresh_load(db_session, as_of=AS_OF)["per_user"][1]
+    assert u1["status"] == "succeeded"
+    assert u1["steps"]["hc_zone_enrich"] == {"error": "RuntimeError: zone fill broke"}
+    assert rollbacks, "a failed fill must roll the session back"
+    assert u1["steps"]["load_events_tier0"]["events_written"] > 0       # compute ran for real
+    assert "hc_zone_enrich: RuntimeError: zone fill broke" in capsys.readouterr().err
+
+
+def test_hc_zone_enrich_report_line_names_reasons_and_over_ceiling(db_session, monkeypatch, capsys):
+    """The chain's per-user line surfaces the closed-set reason counts and the over-ceiling count."""
+    _user(db_session, 1)
+    _hevy_key(db_session, 1)
+    _mock_hevy_noop(monkeypatch)
+    monkeypatch.setattr(polar_ingest, "sync_user",
+                        lambda db, uid, *, days, run_cascade=True: {"synced": 0})
+    monkeypatch.setattr(refresh_load.hc_zone_enrich, "enrich_user", lambda db, uid: {
+        "rows": 16, "zoned": 8, "over_ceiling": 1,
+        "reasons": {"sparse": 3, "no_same_writer_hr": 2, "no_hrmax": 3, "none": 8}})
+    refresh_load.refresh_load(db_session, as_of=AS_OF)
+    out = capsys.readouterr().out
+    assert "hc_zoned=8/16 (sparse=3 no_same_writer_hr=2 no_hrmax=3 over_ceiling=1)" in out

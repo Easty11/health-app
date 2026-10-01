@@ -1,9 +1,9 @@
 # Load-constants provenance
 
 **Standing rule (gate).** Every module-level numeric constant, coefficient table, and
-formula coefficient in `backend/load_events.py`, `backend/load_events_metabolic.py`, and
-`backend/load_metrics.py` has exactly one row here. **A PR that adds or changes a coefficient
-in those three modules adds or changes its row in the same PR** — enforced by
+formula coefficient in `backend/load_events.py`, `backend/load_events_metabolic.py`,
+`backend/load_metrics.py`, and (Q159 stage 2) `backend/hr_zones.py` has exactly one row here.
+**A PR that adds or changes a coefficient in those four modules adds or changes its row in the same PR** — enforced by
 `backend/tests/test_load_constants_provenance.py` (set-equality drift guard) and gated in
 DECISIONS_LOG #305. No new coefficient lands in these modules unlabelled.
 
@@ -24,8 +24,9 @@ DECISIONS_LOG #305. No new coefficient lands in these modules unlabelled.
 **Not in this table (deliberately).** `FORMULA_VERSION` / `FORMULA_VERSION_METABOLIC` /
 `METRICS_VERSION` and the `WINDOW_*` / `UNIT_*` strings are version keys and labels, not
 coefficients — they are the keys this table is versioned *under*, not entries in it. HR-zone
-boundaries and any HRmax derivation are set upstream in aerobic ingestion (the metabolic lane
-consumes pre-computed `z*_seconds`), so there are no HR-zone rows here. The EWMA decay
+boundaries and the HR-sample credit rules are `hr_zones.py`'s (Q159 stage 2; rows below). HRmax is
+NOT a constant of any module: it is per-user data in `user_hrmax` (append-only, dated, provenance
+`tested`/`observed`, never age-predicted), so it has no row here. The EWMA decay
 `decay_x = e^(−1/τ_x)` is a formula fully determined by the τ rows, not an independent prior,
 so it carries no row of its own.
 
@@ -56,7 +57,12 @@ so it carries no row of its own.
 | `CHRONIC_DAYS` | load_metrics | 28 | ΔLoad chronic window (coupled trailing mean per #249) | operator prior (uncited) | 7-in-28 spike primitive; coupling effect small in practice (Coyne 2019, WP-B) | #33 (windows #249) | uncoupled-chronic OQ (WP-B) |
 | `MATURITY_DAYS` | load_metrics | 42 | a window's curve reads 'low' confidence until this much continuous history (≈ one fitness τ) | operator prior (uncited) | chosen ≈ 1·τ_fit; coincides numerically with `TAU_FITNESS_DAYS` but is a separate literal | #18 | Q156 |
 | `seed_window (banister-v4)` | load_metrics | = `ACUTE_DAYS` (7) | first-week-mean stock seed window | derived | = `ACUTE_DAYS` (#304); motivated by the EWMA initial-load problem — Wang 2020 Sports Med (chat-verified 17 Sep 2026, Consensus) | #304 | window length on a series restart (Q156) |
+| `BAND_PCT` | hr_zones | (50, 60, 70, 80, 90) | lower edge of HR bands z1..z5 as an integer % of the HRmax in force (lower-inclusive, z5 open-topped) | operator prior (uncited) | the platform zone definition in SCHEMA.md § HR Zone Computation (50/60/70/80/90-100% HRmax); Edwards 1993 uses the same five bands. Whether Polar applies these same percentages to its profile HRmax is UNVERIFIED (the v4/Flow payload's limits are not persisted) — the G2 per-band comparison on the 28 Sep bout is the check | Q159 stage 2 | G2 divergence from Polar on the reference bout (an operator ruling: bands/HRmax change + recompute, never an edit) |
+| `MAX_SAMPLE_GAP_S` | hr_zones | 60 | longest gap one HR sample is credited for (s); the excess is dropped | operator prior (uncited) | the invention guard (operator, 1 Oct 2026): unobserved time is never credited. Prod shows two sampling populations — in-activity max gaps 1-44 s, passive exactly 120 s — and any cap in 45-119 s separates them identically | Q159 stage 2 | the operator deciding passive 2-minute rows should deposit (a cap >= 120 s; changes the metabolic series, a recompute) |
+| `MIN_ZONE_COVERAGE` | hr_zones | 0.6 | credited / session seconds below which a row stays zoneless (`sparse`) | operator prior (uncited) | operator, 1 Oct 2026: below the cap the model credits only observed seconds, so a partial row under-counts rather than invents; 0.6 sits above the ~0.5 that 120 s passive sampling yields under a 60 s cap by construction. Prod rows 79/81-83 (Samsung walks, 3.5 min HR lead-in) sit at 0.67-0.81 | Q159 stage 2 | rows within +-0.05 of the floor changing the answer (G2 reports them) |
+| `PLAUSIBLE_BPM` | hr_zones | (30, 240) | inclusive bpm a sample must fall in to count; applied at zone time, never at storage | operator prior (uncited) | operator, 1 Oct 2026 (call 5): a physiological plausibility bound; dropped samples are counted per run | Q159 stage 2 | a real reading outside it, or an artefact inside it |
+| `REASONS` | hr_zones | (sparse, no_same_writer_hr, no_hrmax, none) | the closed set of per-row zoning outcomes the chain counts | derived | structural — labels for the outcome, not a tunable weight | Q159 stage 2 | a new withholding reason (extend the set, never overload one) |
 
-_23 rows. 13 module-level `UPPER_CASE` constants (auto-collected by the drift guard) + 10
+_28 rows. 18 module-level `UPPER_CASE` constants (auto-collected by the drift guard) + 10
 function-embedded / derived coefficients (the guard's explicit allow-list). See
 `backend/tests/test_load_constants_provenance.py`._

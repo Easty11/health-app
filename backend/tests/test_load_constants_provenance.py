@@ -1,6 +1,7 @@
 """Drift guard for `docs/load-constants-provenance.md` (DECISIONS_LOG #305).
 
-The standing rule: every coefficient in the three load modules has exactly one row in the
+The standing rule: every coefficient in the load modules (the three load modules and, since Q159 stage 2,
+`hr_zones`) has exactly one row in the
 provenance table. This test enforces set-equality, per module, between:
 
   * the table's `constant` column (parsed from the markdown), and
@@ -24,6 +25,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import hr_zones
 import load_events
 import load_events_metabolic
 import load_metrics
@@ -34,6 +36,7 @@ _MODULES = {
     "load_events": load_events,
     "load_events_metabolic": load_events_metabolic,
     "load_metrics": load_metrics,
+    "hr_zones": hr_zones,           # Q159 stage 2: the zone model's own constants
 }
 
 # Function-embedded / derived coefficients that a module-level name scan cannot see. Keyed
@@ -47,6 +50,7 @@ _ALLOW = {
     },
     "load_events_metabolic": {"TRIMP minute divisor"},
     "load_metrics": {"seed_window (banister-v4)"},
+    "hr_zones": set(),
 }
 
 
