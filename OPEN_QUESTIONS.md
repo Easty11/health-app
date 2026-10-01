@@ -2325,24 +2325,6 @@ Raised 2026-09-17 with #306. `load_ratio = acute(7d)/chronic(28d)` is a COUPLED 
 
 ---
 
-## Q159. Stage-2 HC exercise zones — load treatment of a zoned activity session
-
-Raised 2026-09-18 with #309 (HC exercise ingest stage 1). Stage 1 ingests HC exercise records as ZONELESS `aerobic_sessions` rows (`z*_seconds` NULL, INV-7 fail-closed → no metabolic `load_event`). Stage 2 would derive HR-zone seconds from the HC heart-rate samples posted alongside the workout, at which point a session deposits metabolic TRIMP like any Polar row.
-
-**Named blocker:** the HCA HR-lag finding — HR samples arrive ~6 days behind the sync that carries the workout (observed ~15 s sample spacing during Garmin activities on user 4, ~2 min outside them), so a zone reconstruction on the workout's sync would score an empty window. Stage 2 cannot be built until the lag is characterised and the reconstruction reads the later-arriving HR.
-
-**Coupled load-model decision (NOT a resolver one, #302 series invariance):** a zoned pilates or walk session would deposit metabolic TRIMP. Whether some sports (rehab swimming, pilates, walks) are EXCLUDED from the metabolic window is a LOAD-MODEL call — it changes what the transform computes, not what the resolver counts — and is explicitly NOT made in #309. The resolver's `activity`-slot brief (v2, queued) decides what a session MEANS for the plan; it never alters the load model.
-
-**To close (if built):** characterise the HR-lag, reconstruct zones from the posted HR onto the existing zoneless row (a recompute, not a new row), and rule the sport-exclusion question at the load layer. Schema-neutral if it only fills existing `z*_seconds`; the recompute/versioning discipline (#248) applies.
-
-Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). HC sessions still carry null `hr_avg`/`hr_max` by stage-1 design; this is the stage-2 join.
-
-#302 sport call ruled #322: no sport exclusion for the metabolic deposit. Stage 2 unblocked on the load-model side.
-
-**State:** OPEN. Blocks nothing — stage 1 ships zoneless-but-counted under #309/#307; this is the load-deposit upgrade.
-
----
-
 ## Q163. A real tool-use runtime for the in-app chat?
 
 Raised 2026-09-20 with #314. The in-app coach has NO tool loop — it acts through embedded tags (`<hevy_create_routine>`, `<hevy_update_routine>`, `<knowledge_update>`, `<capability_update>`) parsed out of a single completion, and reads everything it needs (routines included, #314) from the prepared context. The MCP tools (`search_hevy_routines`, `get_hevy_routine`, …) exist only for EXTERNAL MCP clients. #314's GUARD: do NOT build a tool runtime there — it is a larger decision.
@@ -2718,6 +2700,75 @@ If not, matching falls back to date window + exercise overlap. Findings (2026-10
 join wait on it too). This is the same component. Q27's region tags feed the substitution test.
 
 **State:** OPEN — chat proposal, not ruled; the Hevy routine-id check is owed before design relies on it. Owner: Luke.
+
+---
+
+## Q198. Source-neutral re-zoning from raw HR (Polar and any other pathway the inventory shows)
+
+Raised 2026-10-01 with #364. #364 zones `health_connect` rows only; Polar rows keep the zones Polar computed, under Polar's own
+HRmax and limits. This follow-on is to re-zone Polar (and any other pathway with raw per-sample HR) onto the same model from
+`hr_samples`, with a full-history recompute. The follow-on brief is scoped from the inventory below, not from chat's
+assumptions. The table is the S0(e) inventory carried verbatim, updated with the prod reads of 1 Oct 2026 (operator-run
+queries Q1/Q3/Q4/Q7 on `health_connect_record_sources`, `aerobic_sessions` and `health_connect_sync_events`). A negative
+covers only the exact pathway tested; anything not tested says "untested".
+
+| pathway | raw per-sample HR available? | resolution (in activity / outside) | typical lag to arrival | history depth reachable | currently persisted? (where, or "discarded at <file:line>") | evidence | exact endpoint / path tested |
+|---|---|---|---|---|---|---|---|
+| Health Connect · `com.garmin.android.apps.connectmobile` | Y | in activity: median gap 7-16 s, max 25-44 s; passive (outside activity, and Pilates rows 69/85/92): exactly 120 s | newest sample 0.0-7.6 h old at each of 47 POSTs; every POST re-sends ~7 days, so late in-bout HR reflows for 7 days | 17,828 records since 2026-08-23; deepest re-post seen 30.9 days (a `periodDays=30` POST) | before #364: discarded at `routers/health_connect.py` `_capture_record_sources` (keeps type, timestamp, writer only; bpm fed only the daily median in `_aggregate_day`). From #364's deploy: `hr_samples` | prod queries Q1, Q3, Q4 (operator, 1 Oct 2026) | `POST /health-connect/sync`, `heartRate[]` of `{time, bpm, sourcePackage}` |
+| Health Connect · `com.sec.android.app.shealth` (Samsung Health / Galaxy Ring) | Y until 2026-09-14 | median 10 s, max 10 s; the HR stream starts ~3.5 min after the walk's start (rows 79-83) | as above | 28,511 records, 2026-06-27 to 2026-09-14, 76 days; none after 14 Sep (Samsung exercise rows 68/84 have no same-writer HR) | as above | Q1, Q4 | same |
+| Health Connect · `fi.polar.polarflow` (H10 via the Polar Flow app) | Y | median 1 s, max gap 1-5 s (row 88: 2,026 samples in 33.8 min) | as above | 24,332 records on 9 days since 2026-06-30; 14 Polar bouts have an HC copy (operator-reported, Q7); sessions before 30 Jun (rows 29-42 and their twins) have no HC copy | as above | Q1, Q4, Q7 | same |
+| Health Connect · `unknown` writer | Y, no identity | untested | n/a | 13,939 records, 2026-06-24 to 2026-07-04 (before the identity cutover); never attributable | as above | Q4 | same |
+| Health Connect · `nl.appyhapps.healthsync`, `com.withings.wiscale2` | Y | untested | n/a | 468 records (27-28 Jun) and 14 records (29 Jul to 26 Aug) | as above | Q4 | same |
+| Polar AccessLink v4 `samples` | untested. Third-party summaries (one web search; `polar.com` is egress-blocked here) say a `samples` feature exists returning per-second HR inline: a hypothesis, not evidence | untested | untested | untested. The `zones` feature caps `to - from` at one day (#261, live-probed); the cap for `samples` is untested | never requested: `connectors/polar.py` `list_zoned_sessions` sends `features='zones'` only; if fetched, `import_polar._parse_session` reads only `exercises[0].zones[].inZone` and would drop it | tree; one web search | `GET /v4/data/training-sessions/list?features=samples`; read OWED: `s0_polar_read.py --mode samples` (may refresh the Polar token via the app's own `store_tokens`) |
+| Polar Flow export (ZIP) | untested | untested | manual upload (user-triggered) | the whole account at export time (Likely) | discarded: `import_polar.import_flow_export` opens only `training-session_*.json` members and `_parse_session` reads only `exercises[0].zones[].inZone` | tree | read OWED (local, no token): list the ZIP's members and one session's `exercises[0]` keys |
+| Garmin direct connector (`scripts/garmin_sync`, `connectors/garmin.py`) | untested | n/a | n/a | n/a | not fetched: the connector calls only `get_hrv_data` (5-min RMSSD, not HR) and the social-profile call; no HR or activity endpoint is called anywhere | tree | none. Stays untested; no client built (operator, 1 Oct). A live read must follow #361 (never refresh a Garmin token) and build on `scripts/garmin_identity.py`'s no-refresh seam |
+
+Separate from raw HR but needed to compare with Polar: the per-zone LIMITS Polar applied. They are not persisted (`_parse_session`
+reads `inZone` only, for both v4 and the Flow export), and whether either payload carries them is untested; read OWED:
+`s0_polar_read.py --mode zones` (prints the zone dicts raw, derives the implied HRmax and % bands).
+
+**What the data already shows.** The 28 Sep elliptical is three rows (HC `fi.polar.polarflow` #88, HC Garmin #89, `polar_v4` #91, the
+only one zoned before #364). Row 88 is the same H10 stream Polar zoned, at 1 s: it isolates the zone MODEL (HRmax and bands) from the
+sensor. #364's G2 report compares HC-zoned minutes per band against Polar's stored zones for every HC row that shares a bout with a
+Polar row, as the interim invariance check.
+
+**To decide.** (a) Whether Polar rows with an HC copy are re-zoned from `hr_samples` (a series-wide change: it moves the metabolic
+series, so it needs a ruling and a recompute, never an edit). (b) The pathway for sessions with no HC copy (the Flow ZIP's samples if
+the read shows they exist, or keep Polar's zones). (c) Whether Polar raw HR through the API is worth fetching at all, given HC already
+carries 1 s Polar H10 HR from 30 Jun.
+
+**State:** OPEN. Not blocking; #364 stands without it.
+
+---
+
+## Q199. HRmax benchmark test (Echo Bike) to replace the observed seed
+
+Raised 2026-10-01 with #364. User 1's HRmax is seeded at 173 bpm, provenance `observed`: the highest chest-strap session maximum
+in a year (Fitness sessions 2026-06-17 and 2026-07-17; the next two are 172 and 173). An observed training maximum is a floor on
+true HRmax, not an estimate of it, and every zone boundary is a fraction of it. A maximal-effort Echo Bike test would give a
+`tested` value. It lands as a NEW `user_hrmax` row with a later `effective_from` (never an edit), after which the chain run reflows
+the affected rows. Until then the over-ceiling count in the chain report is the evidence: a plausible sample above 173 flags its row
+and never raises HRmax.
+
+**To decide.** The protocol and date, who supervises it, and the `effective_from` convention for a tested value (from the test date
+forward, or backward over the seed's range as the seed does).
+
+**State:** OPEN. Not blocking.
+
+---
+
+## Q200. `health_connect_syncs.resting_heart_rate` is the day's median of all HR samples, but the coach reads it as "Resting HR"
+
+Raised 2026-10-01 with #364 (operator-recorded; found while tracing where HR bpm is used). `routers/health_connect._aggregate_day`
+stores the MEDIAN of EVERY heart-rate sample posted for the day in `health_connect_syncs.resting_heart_rate` (the "Heart rate" block,
+`:1012-1019`). `context_builder.py:1214-1215` presents it to the coach as "Resting HR: N bpm"; `routers/recovery.py:131` and
+`mcp_server.py:228` (aliased `sleep_hr_bpm`) carry the same value. A day with a hard session posts a higher median than a rest day
+with the same true resting rate, so the coach is told a training-contaminated number is a resting one. No decision here relies on it.
+
+**To decide.** Rename or relabel it honestly (for example "median HR"), or derive a true resting value (for example the lowest
+sustained overnight stretch, which `hr_samples` can now supply).
+
+**State:** OPEN. Not blocking; a read-surface honesty question.
 
 ---
 
@@ -5206,6 +5257,26 @@ Diagnosed 2026-09-15 (#298): Garmin overnight HRV reaches `hrv_readings` only wh
 **Resolution (#299).** Both triggers, on #297's in-process rail (not a dedicated cron — #297 removed that as the fragile part): (a) on-read `POST /integrations/garmin/refresh` fires on Recovery-card open, staleness-gated, `force`-bypassable — the freshness leg that lands this morning's HRV after Garmin's ~6am sync; (b) `garmin_sync` added as a second per-user job in the 02:00 Brisbane sweep — the guarantee for un-opened mornings, accepted as landing only the prior night. Per-user isolation reused from `garmin_sync.py` (dead token caught, rolled back, skipped). No schema change: the gate reads `max(hrv_readings.created_at)` (data-recency; no attempt-recency marker exists — `UserIntegration.updated_at` reads fresh right after connecting). The two ops notes above stay open as their own concerns: the get_hrv_range ~7-day self-heal ceiling is a known limit (not fixed here), and the duplicate Garmin `UserIntegration` for users 1 & 4 is data hygiene (per-user isolation keeps the sweep clean regardless).
 
 **State:** DONE → #299 (both triggers landed; the read-path composite decision — Garmin HRV vs Samsung sleep coherence on one record — is deliberately out of scope, falls due only if Garmin sleep ingestion is added).
+
+---
+
+## Q159. Stage-2 HC exercise zones — load treatment of a zoned activity session
+
+Raised 2026-09-18 with #309 (HC exercise ingest stage 1). Stage 1 ingests HC exercise records as ZONELESS `aerobic_sessions` rows (`z*_seconds` NULL, INV-7 fail-closed → no metabolic `load_event`). Stage 2 would derive HR-zone seconds from the HC heart-rate samples posted alongside the workout, at which point a session deposits metabolic TRIMP like any Polar row.
+
+**Named blocker:** the HCA HR-lag finding — HR samples arrive ~6 days behind the sync that carries the workout (observed ~15 s sample spacing during Garmin activities on user 4, ~2 min outside them), so a zone reconstruction on the workout's sync would score an empty window. Stage 2 cannot be built until the lag is characterised and the reconstruction reads the later-arriving HR.
+
+**Coupled load-model decision (NOT a resolver one, #302 series invariance):** a zoned pilates or walk session would deposit metabolic TRIMP. Whether some sports (rehab swimming, pilates, walks) are EXCLUDED from the metabolic window is a LOAD-MODEL call — it changes what the transform computes, not what the resolver counts — and is explicitly NOT made in #309. The resolver's `activity`-slot brief (v2, queued) decides what a session MEANS for the plan; it never alters the load model.
+
+**To close (if built):** characterise the HR-lag, reconstruct zones from the posted HR onto the existing zoneless row (a recompute, not a new row), and rule the sport-exclusion question at the load layer. Schema-neutral if it only fills existing `z*_seconds`; the recompute/versioning discipline (#248) applies.
+
+Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). HC sessions still carry null `hr_avg`/`hr_max` by stage-1 design; this is the stage-2 join.
+
+#302 sport call ruled #322: no sport exclusion for the metabolic deposit. Stage 2 unblocked on the load-model side.
+
+**Resolution (#364, 1 Oct 2026).** Stage 2 is built as a source-neutral HR zoning: raw samples in `hr_samples`, a per-user dated HRmax in `user_hrmax`, our own %HRmax bands, zones filled onto `health_connect` rows by the soft-fail chain step `hc_zone_enrich`. The named blocker did not hold: the newest HR sample is 0.0-7.6 h old at each POST (not ~6 days) and every POST re-sends about 7 days. The sport-exclusion question was ruled #322 S2 and reaffirmed by the operator on 1 Oct (no exclusion; zone weighting prices every zoned session). Polar re-zoning from raw HR is the follow-on, Q198.
+
+**State:** DONE → #364.
 
 ---
 
