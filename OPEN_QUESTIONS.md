@@ -1875,6 +1875,8 @@ work.
 
 **State:** OPEN
 
+**Cross-reference (#365, Q203).** #365 makes the Catapult SPT3 the preferred field source, optional and not guaranteed. The missing-data side of that (an expected SPT absent) is Q203.
+
 ---
 
 ## Q126. `_sleep_score` has no total-sleep-adequacy or awakening term — it clamps to 10 on a badly-disrupted night
@@ -2584,6 +2586,8 @@ quality signal, not a load driver. Garmin → Health Connect HR absence is unver
 
 **State:** OPEN — design fork (capture surface; scaling rule). Owner: Luke.
 
+**Cross-reference (#365, Q202).** The running case the device hierarchy creates, a watch-owned run with no usable HR zones, is filed as Q202. Resolve the two together.
+
 ---
 
 ## Q190. Two devices, one session: source-wins rule and overlap dedupe
@@ -2595,6 +2599,8 @@ priority + overlap dedupe surfaced (never silent), mirroring the Hevy `dedup_fla
 
 **State:** OPEN — verify current arbitration first (#309 writer-class ladder is
 same-source only). Owner: Code (verify), Luke (rule).
+
+**Update (#365, Q201).** Arbitration was verified against master `054d2d9`. The premise above is stale: cross-source arbitration exists (#260) and #309 added a same-source `health_connect` arm. The findings, the gaps and the live-case queries are in Q201, and the device rule is recorded as #365. This entry stays OPEN for the arbitration and surfacing ruling, which Q201 now carries; close the two together.
 
 ---
 
@@ -2769,6 +2775,103 @@ with the same true resting rate, so the coach is told a training-contaminated nu
 sustained overnight stretch, which `hr_samples` can now supply).
 
 **State:** OPEN. Not blocking; a read-surface honesty question.
+
+---
+
+## Q201. Two sources for one bout: cross-source dedup is read-time and silent, and ranks by richness, not by the #365 hierarchy
+
+Raised with #365. Verified against master `054d2d9` by reading code and running the real `arbitrate()` on synthetic rows; the prod rows were not read (no DB route in that session).
+
+**Question.** When one session arrives from two sources (Garmin through Health Connect, and Polar), does ingestion or load dedupe it? Live case: 1 Oct 2026, about 18:49. Garmin "Trail Running" 3.34 km 21:33; Polar "Jogging" 3.36 km 22:05.
+
+**Findings.**
+- **Ingestion does not dedupe across sources.** Both rows persist. HC admission drops only `com.hevy` mirrors and a lower-writer-class record whose start instant is identical to a higher one's (`routers/health_connect.py:689-731`); two independent detections are deliberately left to read time (`:679-681`). Polar sync skips a session only when the same `source_session_id` already exists under a Polar source (`polar_ingest.py:155-168`), and never looks at HC rows.
+- **Load dedupes at read time.** `compute_metabolic_load_events` reads through `arbitrated_sessions` (`load_events_metabolic.py:177`) and skips non-canonical rows (`:197-199`). Felt load, the MCP session tools and session focus read canonical rows only (`reads/psychological_reads.py:312`, `mcp_server.py:559,749`, `session_focus.py:168`).
+- **The rule.** Two rows are one bout when they overlap by at least 50% of the shorter duration (`reads/aerobic_reads.py:38,218`). The winner is the richer data tier (zones, then HR only, then neither), then source rank (`polar_flow_export` > `polar_v4` > `health_connect`), then the longer duration (`:63-67,125-167`).
+- **Simulation (real `arbitrate()`, synthetic rows at the reported durations; not prod data).** Exactly one canonical row when the Polar start is within about 640 s of the Garmin start, whatever the zone state of either row. Two canonical rows, so two metabolic deposits, at about 700 s or more, or when either row has no usable start/stop (`:186-187,194-198`). Polar wins when both rows are zoned or when the Garmin row has no HR; Garmin wins only when it is zoned and the Polar row has HR only.
+- **Suppression is silent.** `sessions_skipped_non_canonical` exists only in the transform's return dict (`load_events_metabolic.py:230-238`) and no non-test code reads it. The `canonical` flag is exposed on the Polar aerobic list only (`routers/polar.py:316-335`).
+
+**Gaps.**
+1. #365 makes the watch the owner of running, but when both rows are zoned the Polar row is canonical and the Garmin row is dropped. The rule is richness-first (#356); the hierarchy is not an input.
+2. Nothing tells the operator or the coach that a recorded session was suppressed as a twin.
+3. A pair whose starts are more than roughly ten minutes apart, or that lacks a time, double-deposits. The tolerance follows from the 50% rule and the two durations; it is not a declared number.
+
+**Live case (owed, operator).** Over `railway connect` to `health-app-DB`, user 1:
+
+    SELECT id, source, source_package, sport_id, sport_name, start_time, stop_time, duration_minutes, hr_avg, z1_seconds FROM aerobic_sessions WHERE user_id = 1 AND session_date = '2026-10-01' ORDER BY start_time;
+    SELECT source_ref, load, occurred_at, provenance->>'zone_source' AS zone_source FROM load_events WHERE user_id = 1 AND load_window = 'metabolic' AND occurred_at >= '2026-09-30' ORDER BY occurred_at;
+
+The two start times settle which side of the tolerance the pair falls. One metabolic row for the run means dedup held, and `source_ref` is the winning `aerobic_sessions.id`. Two rows for the run is a data defect: report it and rule before anything is touched, and nothing is deleted without that ruling.
+
+**To decide (Luke).** (a) Does the hierarchy enter arbitration, and where relative to the data tier (today a row without HR never suppresses a row with HR)? (b) Must suppression be surfaced, for example an "also recorded by" note on the canonical row? (c) Is the start-offset tolerance acceptable as it stands?
+
+Code's lean, not a ruling: leave arbitration alone. With the H10 paired to the watch (#365) a run produces one record and the question stops arising for runs; surface suppression instead, after the live case is read.
+
+**State:** OPEN. Owner: operator (live case), Luke (rule). Not blocking.
+
+---
+
+## Q202. RPE floor: a session with no usable device HR deposits no load, and nothing floors it
+
+Raised with #365. Verified against master `054d2d9`.
+
+**Question.** Does the load model compute sRPE × duration when a session has no device HR? Can a session with zero device data exist in load at all?
+
+**Findings.**
+- **No floor.** The metabolic load is Edwards zone-seconds TRIMP only; a session with no usable zones emits no `load_events` row and is counted in `sessions_skipped_no_zones`, which is in the return dict only (`load_events_metabolic.py:24-29,99-112,204-206`). There is no HR-based fallback and no RPE term in any physical load.
+- **sRPE × duration exists in one place:** the regression target of `psychological_residual`, from the day's whole-day `daily_records.session_rpe` (`reads/psychological_reads.py:363-392`, `models.py:164`). It is a diagnostic, not a load input.
+- **A session with zero device data cannot exist in `aerobic_sessions`.** Its only writers are HC ingest (`routers/health_connect.py:765`), Polar sync (`polar_ingest.py:169`) and Polar import (`import_polar.py:196`). No manual path writes it. A Hevy strength session is the exception that needs no device: Tier-0 loads from logged sets, and a per-set RPE only bands RIR (`load_events.py:129-141,180-200`).
+- **What puts a watch-owned run into load (#365).** A Garmin HC row is zoned by `hc_zone_enrich` from same-writer HR samples (#364). It deposits only if a `user_hrmax` row is in force and the credited coverage reaches 0.6; otherwise it stays zoneless and deposits nothing (`hr_zones.py:48`, #364).
+
+**Gap.** A watch-owned run without usable HR reads as zero load, silently.
+
+**To decide (Luke).** For a zoneless watch-owned run: (a) stay fail-closed but make the absence explicit (Q203); (b) floor it with RPE × minutes, which is Q189's design fork (capture surface, scaling into lane units); (c) both. Q189 covers device-only sessions such as Pilates and swimming; this entry is the running case the hierarchy creates. Resolve together.
+
+**State:** OPEN. Owner: Luke. Not blocking.
+
+---
+
+## Q203. Missingness: the load model cannot tell "expected device data absent" from "low load"
+
+Raised with #365. Verified against master `054d2d9`.
+
+**Question.** Can the model distinguish expected device data being absent from a light session? Is there a data-completeness field?
+
+**Findings.**
+- **No.** A day with no events is an exact zero (`load_metrics.py:207`), and the trailing means count such days as zero (`:148-153`). `DayMetric` has no completeness field (`:136-145`); `maturity` records only how long the series is (`:229`).
+- **Partial signals exist; none reaches the series or the coach.** `sessions_skipped_no_zones` and `sessions_skipped_non_canonical` (return dict only, `load_events_metabolic.py:230-238`); the `hc_zone_enrich` reasons `sparse | no_same_writer_hr | no_hrmax` (`hr_zones.py:48`), printed by the chain (`scripts/refresh_load.py:236-245`) and not stored per row; the resolver's "(unzoned)" note on a counted conditioning session (`context_builder.py:1805`); the Polar zone-coverage counts (`reads/aerobic_reads.py:324-376`).
+- **No concept of an expected device.** `recorded_via` on a slot is metadata with no consumer, and its closed set has no Catapult value (`engine/training_phase.py:65-71,235`). Catapult appears only as a `source` tag on capability observations (`engine/observations.py:47`). Q124 (field-session ingestion) is OPEN, so the load model has no external-load lane (accel/decel, high-speed running, contact). No consumer reads contact data, so nothing today reads an absent SPT as low contact; the #365 principle binds the first consumer that does.
+- **Related and ratified, not built.** Q169 (#326) records a date-range "trained, not fully recorded" marker; the build is OWED and no table or code exists on master. It covers a day on which nothing was recorded, not a session captured by one device while another was expected.
+
+**Gap.** Absence has no representation that survives into a consumer. A missing SPT file, a zoneless watch run and a rest day all read as zero.
+
+**To decide (Luke).** The shape of an explicit expected-but-absent signal. (a) Extend #326's marker with a closed kind for device-absent. (b) Derive it at read time from a declared expectation: add a Catapult value to `recorded_via` (a validator-only change, like #317) and flag a window in which the declared source has no row. (c) A per-session operator status.
+
+Code's lean, not a ruling: (b) for the declared case, being read-time with no schema, and #326's marker kept for days with nothing recorded.
+
+**State:** OPEN. Owner: Luke. Not blocking.
+
+---
+
+## Q204. Activity type: Garmin "Trail Running" arrives through Health Connect as a code, not a label
+
+Raised with #365. Verified against master `054d2d9`.
+
+**Question.** How does Garmin "Trail Running" map through Health Connect into the app's session type and the metabolic load window? Does it differ from "Running"?
+
+**Findings.**
+- **The label does not survive Health Connect.** HC's exercise enum has no trail-running member; the running members are `RUNNING` (56), `RUNNING_TREADMILL` (57) and `HIKING` (37) (`routers/health_connect.py:66-127`). `sport_name` is derived from the integer `type` alone (`:130-145`, written at `:758`). `title` is accepted (`:238`) and then dropped: it is not among the stored fields (`:753-762`). Which code Garmin writes for a trail run is not known from master (Guessing: 56, stored as "Running"); the row's `sport_id` settles it.
+- **Effect on the metabolic load window: none.** The transform scores zone seconds and uses `sport_name` only as provenance (`load_events_metabolic.py:216-222`), and there is no sport exclusion (#322 S2). "Running", "Running Treadmill" and "Hiking" deposit identically when zoned.
+- **Effect on string-matching consumers.** `device_sports` matching is exact and casefolded (`engine/resolver.py:394-405`), so a slot declaring "Running" does not claim "Running Treadmill" or "Hiking". `NON_TRAINING_SPORTS` is Walking, Pilates, Yoga and Stretching only (`sport_classes.py:27`). A NULL sport is reported as `unclaimed_session` with detail `no_sport` (`engine/resolver.py:394-397`).
+- **Polar side.** `SPORT_NAMES` has no "Jogging" (`import_polar.py:31-52`); a sport id outside the map stores `sport_name` NULL with the id retained (`:105-106`). The id on the 1 Oct Polar row is unread. Arbitration ignores sport, so dedup is unaffected.
+
+**Gap.** There is no trail/road distinction in the app, the same activity carries a different name by source, and the operator's own label is lost at ingest.
+
+**To decide (Luke).** (a) Accept it, since load is unaffected, and declare every running name a slot should claim. (b) Persist `title` on `aerobic_sessions`, which is a schema migration and so a hold under § Merge disposition. (c) Add a source-neutral activity class above `sport_name` for the string-matching consumers.
+
+**Live check (owed, operator):** the first query in Q201 returns `sport_id`, `sport_name` and `source_package` for both rows of the 1 Oct run.
+
+**State:** OPEN. Owner: Luke (rule), operator (live check). Not blocking.
 
 ---
 
