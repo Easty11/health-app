@@ -278,13 +278,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **HC sessions zoned from raw HR on a zone model we own (#364).** `hr_samples` keeps every posted HR sample; a per-user, dated `user_hrmax` and our %HRmax bands turn a session's same-writer samples into zones, filled by the soft-fail chain step `hc_zone_enrich`; a re-sync no longer wipes the fill. Closes Q159; the #322 no-sport-exclusion ruling stands. Code; the PR holds for the operator at the schema migration - Handoff: `closeout.md`.
+
 - **Garmin account mix-up repaired and guarded (#358-#362).** One Garmin account had been connected to two users; the copies are purged, the wrong user re-minted her own, and an attach now refuses an account already linked to another user and fails closed. Users 6, 7 and 8 retired; the guard is verified in prod and class B stays with Deb. Code, self-merged on green (the migration released by the operator) - Handoff: `closeout.md`.
 
 - **Session fidelity into chat and the session views (#354-#357).** A session review carries a `focus_session` reference the server renders at full fidelity (session or context scope, the context window either side of the session's day, the focus persisting for the conversation); the aerobic list is canonical-only and locally dated; arbitration is richness-first (dry run: 0 flips); ingest steps soft-fail. Code, landed after the operator's rulings and dry run - Handoff: `closeout.md`.
-
-- **Polar aerobic ingest automated (#353).** New Polar sessions reach `aerobic_sessions` without a Sync press: a soft-fail `polar_sync` step in the load chain (Training-page open and the 02:00 sweep) calls the extracted core `polar_ingest.sync_user`; the manual route keeps its contract. Closes Q154; the webhook question is Q193. Code, self-merged on green - Handoff: `closeout.md`.
-
-
 
 ---
 
