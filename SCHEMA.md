@@ -39,6 +39,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 029 — hrv_readings             FK to users (CASCADE) — source-agnostic nightly HRV summary; unique (user, night, source)
 030 — hrv_samples              FK to hrv_readings (CASCADE) — 5-min RMSSD series; Garmin-populated
 032 — aerobic_sessions         FK to users (CASCADE) — canonical aerobic/conditioning sessions; unique (user, source, source_session_id); read-time cross-source + writer-class arbitration
+041 — hr_samples + user_hrmax  FK to users (CASCADE) — source-neutral raw HR (unique user, sample_time, source, source_package) + append-only dated HRmax (unique user, effective_from); HC zone fill (Q159 stage 2)
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1392,6 +1393,8 @@ def compute_zones(hr_series: list[tuple], hrmax: int) -> dict:
 
 Hard constraint: HRmax must be measured from Polar H10 session data. Age-predicted formulas (220 − age) are explicitly forbidden. One bad HRmax value propagates error into every zone calculation, TRIMP, and VO₂max estimate indefinitely.
 
+**Implemented for `health_connect` rows (Q159 stage 2, §041).** The bands above are `hr_zones.BAND_PCT` (integer percents 50/60/70/80/90, lower-inclusive, z5 open-topped); the sample source is `hr_samples`, not `health_metrics`; HRmax is the per-user dated `user_hrmax` row in force on the session date, provenance `tested` or `observed` (a chest-strap session maximum is measured) — `estimated` does not exist. The hard constraint above stands unchanged.
+
 ## Sleep Stage Confidence
 
 Sleep staging is accepted as input (no raw EEG alternative for consumer hardware) but confidence is systematically lower for deep sleep across all devices.
@@ -1437,7 +1440,7 @@ async def build_ai_context(user_id, lookback_days=90,
 
 Canonical aerobic / conditioning sessions — the metabolic-window load source (Edwards TRIMP → `load_events` → Banister, #251) and the resolver's `load_window` session count (#307/Amendment 1). One row per `(user_id, source, source_session_id)` (`uq_aerobic_session_source`). Fed by two lanes: **Polar** (`source='polar_flow_export'` from the Flow-export ZIP, `source='polar_v4'` from the v4 list endpoint) and, since **#189/#309**, **Health Connect** (`source='health_connect'`) — a synced HC exercise record becomes one row here (`routers/health_connect._ingest_exercise_sessions`).
 
-**Zones are provenance-gated.** `z*_seconds` carry the HR-zone split when the source measured it (Polar Flow export). A source that did not — `polar_v4` list rows, and every `health_connect` row (stage-1 ingest is zoneless; HR zones are stage 2, deferred, blocked on the HCA HR-lag finding, Q159) — leaves them **NULL, not 0**: NULL reads as "not measured", 0 as "measured, none", and the metabolic transform is fail-closed on NULL (INV-7 — no zones ⇒ no `load_events` row). The HC ingest writes `sqlalchemy.null()` to defeat the column's Python-side `default=0`.
+**Zones are provenance-gated.** `z*_seconds` carry the HR-zone split when the source measured it (Polar Flow export). A source that did not — `polar_v4` list rows, and a `health_connect` row that has not been zoned — leaves them **NULL, not 0**: NULL reads as "not measured", 0 as "measured, none", and the metabolic transform is fail-closed on NULL (INV-7 — no zones ⇒ no `load_events` row). The HC ingest writes `sqlalchemy.null()` on INSERT to defeat the column's Python-side `default=0`; its UPDATE never touches `z*_seconds`, `hr_avg` or `hr_max` (a re-sync used to rewrite `z*` to NULL). **HC zones are filled by `hc_zone_enrich`** (Q159 stage 2, §041): from the row's SAME-WRITER raw samples in `hr_samples` and the HRmax in force in `user_hrmax`, recomputed on every load-chain run — a row that zones gets z1–z5 + `hr_avg` + `hr_max`; a row that does not (`sparse`, `no_same_writer_hr`, `no_hrmax`) is written back to the NULL stage-1 state. A wholly sub-band session is covered time and writes z1–z5 = 0 ("measured, none": no TRIMP, `hr_avg` present).
 
 **Two-tier read-time arbitration** (`reads/aerobic_reads.arbitrate`, derived `canonical` flag, never persisted — there is no `canonical` column):
 - **Cross-source** pairs describing one bout rank by `source` fidelity (`polar_flow_export` > `polar_v4` > `health_connect`) — the richer row is canonical (#260/Q127).
@@ -1691,3 +1694,41 @@ CREATE UNIQUE INDEX uq_user_integrations_provider_fingerprint
 - **Fails closed.** Profile id unresolvable (Garmin unreachable, or its response changed shape) -> **503**, nothing stored, retry message; a shape change also logs an ERROR with the response's KEY NAMES only (never values). A token that cannot authenticate is 424. Attaches stop loudly rather than silently bypass the guard.
 - **Stored blob** is the client's dump after login (may be newer than the submitted one), the same refresh-writeback contract as the sync path.
 - **Recorded lazily for existing connections.** `sync_hrv_for_user` records the fingerprint on the next sync when it is NULL (`_record_account_fingerprint`): best-effort, never fails a sync. A unique-index conflict there means another user already holds the same Garmin account (the mix-up condition): logged at ERROR, left unrecorded.
+
+### 041 — hr_samples + user_hrmax (Q159 stage 2: source-neutral HR zoning)
+
+Migration `b4d6f8a1c3e5` (revises `a9c3e5f7b1d2`). Two new tables, nothing altered; both empty until the code that fills them deploys. Engine parity: the migration was applied on Postgres 16 and diffed against `Base.metadata.create_all` (identical `\d` for both tables), and `tests/test_hr_zones_schema.py` asserts column/nullability/unique/FK parity on every run.
+
+```sql
+CREATE TABLE hr_samples (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sample_time    TIMESTAMPTZ NOT NULL,        -- UTC; fractional seconds stripped at write
+    bpm            INTEGER NOT NULL,            -- as received; plausibility (30-240) is applied at zone time, never here
+    source         VARCHAR(50) NOT NULL,        -- the pathway: 'health_connect' today (source-neutral by name)
+    source_package VARCHAR(255) NOT NULL,       -- the writer; 'unknown' when absent (never NULL: NULL is UNIQUE-distinct)
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_hr_sample UNIQUE (user_id, sample_time, source, source_package)
+);
+CREATE INDEX ix_hr_samples_id ON hr_samples (id);
+CREATE INDEX ix_hr_samples_user_id ON hr_samples (user_id);
+
+CREATE TABLE user_hrmax (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    effective_from DATE NOT NULL,               -- in force from this LOCAL date; the zone calc takes the greatest <= the session date
+    hrmax_bpm      INTEGER NOT NULL,
+    provenance     VARCHAR(20) NOT NULL,        -- 'tested' | 'observed'  (no 'estimated': SCHEMA.md forbids age-predicted HRmax)
+    note           VARCHAR(1000),               -- the evidence
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_user_hrmax_effective UNIQUE (user_id, effective_from),
+    CONSTRAINT ck_user_hrmax_provenance CHECK (provenance IN ('tested', 'observed'))   -- hand-written: autogenerate never produces CHECKs
+);
+CREATE INDEX ix_user_hrmax_id ON user_hrmax (id);
+CREATE INDEX ix_user_hrmax_user_id ON user_hrmax (user_id);
+```
+
+- **`hr_samples` is the only place a raw HR bpm lives.** `health_connect_record_sources` keeps a record's identity (type, start, writer) and never its bpm; before this table the only use of `bpm` was the daily median in `_aggregate_day`. The unique key lets a re-posted sample be insert-or-ignore on both engines (`INSERT ... ON CONFLICT DO NOTHING`, chunked), so HCA's 7-day rolling re-post costs no duplicate rows. Two writers' samples at one instant are two rows: the same-writer rule needs them apart. The HC sync fills it (`routers/health_connect._persist_hr_samples`, SAVEPOINT-isolated: a failure is reported in the sync response and never rolls back the day rows).
+- **`user_hrmax` is append-only.** A new value is a new row (a later `effective_from`; the same date is refused) followed by a recompute; a row is never edited or deleted. No route, no UI and no chat write path reaches it — the one writer is the operator script `scripts/set_hrmax.py` (`tests/test_hr_zones_schema.py` asserts nothing else constructs, updates or deletes the model).
+- **Readers.** `hc_zone_enrich.enrich_user` (the chain step) and the G2 projection in `scripts/arbitration_flip_report.py --hc-zones`; both call the pure `hr_zones.zone_session`. Nothing else reads either table.
+

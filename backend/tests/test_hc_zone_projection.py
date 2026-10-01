@@ -267,3 +267,17 @@ def test_a_user_without_hrmax_projects_no_hrmax_and_the_report_says_so(db_sessio
     assert {r["reason"] for r in recs} == {"no_hrmax"}
     text = rep.render_hc_zone_report(recs, [], [], [])
     assert "no_hrmax=5" in text and "Projected zoned: 0" in text
+
+
+def test_the_projection_never_touches_the_rows_it_was_given(db_session):
+    """In-memory too, not just in the database: the report works on transient clones, so the real
+    (session-attached) rows keep their values and are never marked dirty. Mutation: projecting onto
+    the given rows instead of clones fails this (a rollback alone would hide it)."""
+    _mixed_scenario(db_session)
+    rows = _all_rows(db_session)
+    snap = [(r.id, r.z1_seconds, r.z2_seconds, r.hr_avg, r.hr_max) for r in rows]
+    recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX)
+    assert any(r["zones"] for r in recs)                                       # the projection did zone something
+    assert [(r.id, r.z1_seconds, r.z2_seconds, r.hr_avg, r.hr_max) for r in rows] == snap
+    assert not db_session.dirty
+    assert all(a is not r for a, r in zip(after, rows))

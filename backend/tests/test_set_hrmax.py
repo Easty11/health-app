@@ -50,7 +50,8 @@ def test_a_duplicate_key_is_refused_and_the_existing_row_is_untouched(db_session
 @pytest.mark.parametrize("prov", ["estimated", "age_predicted", "", "OBSERVED"])
 def test_provenance_is_the_closed_set_and_estimated_is_refused(db_session, prov):
     _user(db_session)
-    with pytest.raises(ValueError, match="provenance"):
+    # The SCRIPT refuses it before the database does (the CHECK is a second layer, not the first).
+    with pytest.raises(ValueError, match="provenance must be one of"):
         _write(db_session, provenance=prov)
     assert db_session.query(models.UserHrmax).count() == 0
 
