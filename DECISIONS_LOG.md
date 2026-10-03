@@ -13032,3 +13032,25 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** The watch or the SPT is replaced, or an SPT ingest path is built (Q124) and its preferred-source ordering has to be decided in code; a wrist-against-strap comparison on a field-type session diverges from the 1 Oct agreement; or the prod rows for the 1 Oct run show a state this entry's code reading does not predict (Q201).
 
 ---
+
+### 366. Polar sport ids map to the Polar Flow sport list; the trail/road label is not kept (closes Q204)
+
+**Decision.** Ruled by the operator in chat on 3 Oct 2026.
+- **Map.** `import_polar.SPORT_NAMES` is the Polar Flow sport-id list: ids 1-142, 122 entries, names verbatim. An id outside the list (21, 26, 31, 37, 72-82, 93, 97-99, 106, and anything Polar adds) keeps `sport_name` NULL with `sport_id` retained, never guessed. One table serves both transports, because the v4 parser reuses the export parser. No per-row exceptions.
+- **Existing rows** change only through the operator-run `scripts/polar_sport_backfill.py`: report by default, `--apply` the single write (`sport_name` only), covering `polar_v4` and `polar_flow_export`. A deploy labels new rows only.
+- **Q204 is accepted as it stands (its option (a)).** Garmin "Trail Running" reaches Health Connect as code 56 and is stored "Running"; the title is dropped at ingest; no title is persisted (no migration) and no source-neutral activity class is added. A slot declares every running name it should claim.
+- **What this does not do.** No change to arbitration (`_win_key`, source ranks, writer classes, the overlap threshold), to the Edwards formula (`metab-v1` stays the metric), or to any load value. The #365 hierarchy tie-break that was scoped for this session was dropped, not built: the reasoning is the Q201 note.
+
+**Rationale.** The old table disagreed with Polar on 17 of its 20 entries (it stored the 1 Oct run as "Walking" where Polar Flow shows "Jogging", and had carried "Fitness" for id 55 where Flow shows "Cross-trainer" since June). The operator confirms the labels Polar shows are the sport profile chosen at the start of a recording, so the Flow list is the accurate name for an id. Replacing the table whole, rather than patching id 4, is what makes the other 16 wrong entries right. The rename moves a data-meaning default, which is why it was ruled and not assumed.
+
+**Status.** Landed: the map, the script and its tests (PR #300, code). Owed to the operator: the backfill report and `--apply`, then a load refresh for the stored provenance label (no load value changes). The v4 list is not yet verified against Polar's own endpoint (Q205).
+
+**How you know.**
+- *The table is a secondary copy of Polar's list.* It reproduces Polar Flow's sports settings page (`flow.polar.com/settings/sports`) at https://github.com/pcolby/bipolar/wiki/Polar-Sport-Types (read 2 Oct 2026; `polar.com` is egress-blocked from the build environment). Two independent live datapoints match it and contradict the old table: id 4 is "Jogging" in Polar Flow (operator, row 95), and id 55 is "Cross-trainer" (the June known-issue 11 note).
+- *Prod, operator-reported 2 Oct 2026; not read from the DB by Code.* Row 93: `health_connect`, Garmin package, `sport_id` 56, stored "Running", `hr_avg` 145, zoned. Row 95: `polar_v4`, `sport_id` 4, stored "Walking", `hr_avg` 145, zoned. The metabolic `load_events` has one row for the run, `source_ref` 95, load 81.85. The grouped `sport_id` query returned 19 rows: id 16 is NULL in both sources (one row each) and id 43 is one row (2026-06-04). The only active phase that declares `device_sports` is phase 8 (`["Pilates"]`, via Garmin), so no slot is affected by the rename.
+- *Tests* (`tests/test_polar_sport_map.py`, full suite 2689 passed under Python 3.12): the table and its gaps, the ids seen in prod through both transports, the non-training flips through the real parser and the felt-load reader (old id 4 Walking is now Jogging and counts; old id 3 is now Walking and does not; old id 36 Yoga is now Track&field running and counts), and the backfill's plan, apply, idempotence and report-only default.
+- *Not verified here.* Polar's own v4 list. `/v4/data/sports/list` needs the `sports:read` scope, which `connectors/polar.py` does not request and this entry does not add (Q205).
+
+**Do not revisit unless.** `/v4/data/sports/list` disagrees with the table (Q205); a consumer needs the trail/road distinction or the operator's own activity title (Q204's options (b) and (c) reopen then); or Polar changes its id list.
+
+---

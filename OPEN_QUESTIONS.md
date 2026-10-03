@@ -2807,7 +2807,11 @@ The two start times settle which side of the tolerance the pair falls. One metab
 
 Code's lean, not a ruling: leave arbitration alone. With the H10 paired to the watch (#365) a run produces one record and the question stops arising for runs; surface suppression instead, after the live case is read.
 
-**State:** OPEN. Owner: operator (live case), Luke (rule). Not blocking.
+**Update (3 Oct 2026, with #366).** The operator read the live case in prod on 2 Oct (operator-reported; Code has no DB route). Row 93 (`health_connect`, Garmin package, HC sport 56, stored "Running") and row 95 (`polar_v4`, `sport_id` 4) were both zoned, `hr_avg` 145 each, starts 9 s apart. **Dedup held:** `load_events` carries one metabolic row for the run, `source_ref` 95, load 81.85. Polar won on source rank, which is what the findings above predict for two zoned rows, and the canonical row was labelled "Walking": id 4 had been mis-mapped (it is "Jogging" in Polar Flow), fixed by the corrected Polar sport-id map (#366). The row with the watch's own label (93) was the suppressed twin, so gap 1 above is now observed, not only predicted, for the running class.
+
+**The tie-break was scoped and dropped, not built.** The scoped change was: when candidates tie on data tier, prefer the #365 owner for the running class (HC sport 56/57 from the Garmin package) before source rank. It is deferred because a chat design for a source-agnostic input layer (day-level merged per-second HR with a source precedence) is pending and would make session-level metabolic arbitration redundant. `_win_key` is untouched; `metab-v1` (Edwards zone-seconds) stays the metric. Decision (a) is therefore deferred to that design rather than ruled here; (b) and (c) are unchanged.
+
+**State:** OPEN. Owner: Luke (rule, with the input-layer design). The live case is read and no longer owed. Not blocking.
 
 ---
 
@@ -2853,25 +2857,57 @@ Code's lean, not a ruling: (b) for the declared case, being read-time with no sc
 
 ---
 
-## Q204. Activity type: Garmin "Trail Running" arrives through Health Connect as a code, not a label
+## Q205. Verify the Polar sport-id table against Polar's own v4 list
 
-Raised with #365. Verified against master `054d2d9`.
+Raised with #366. `import_polar.SPORT_NAMES` is the Polar Flow sport-id list (ids 1-142), but the copy read is a secondary one: Polar Flow's sports settings page as reproduced at https://github.com/pcolby/bipolar/wiki/Polar-Sport-Types. Polar's own page and its v4 docs are egress-blocked from the build environment, so the table has not been compared with anything Polar publishes directly. Two live datapoints agree with it (id 4 "Jogging", id 55 "Cross-trainer"), and the operator confirms the labels Polar shows are the sport profile chosen at the start of a recording.
 
-**Question.** How does Garmin "Trail Running" map through Health Connect into the app's session type and the metabolic load window? Does it differ from "Running"?
+**To do.** At the next Polar re-auth, call `GET /v4/data/sports/list` and diff it against `SPORT_NAMES`. A mismatch means a corrected table and a backfill (`scripts/polar_sport_backfill.py` is reusable as it stands: it relabels from the retained `sport_id`).
 
-**Findings.**
-- **The label does not survive Health Connect.** HC's exercise enum has no trail-running member; the running members are `RUNNING` (56), `RUNNING_TREADMILL` (57) and `HIKING` (37) (`routers/health_connect.py:66-127`). `sport_name` is derived from the integer `type` alone (`:130-145`, written at `:758`). `title` is accepted (`:238`) and then dropped: it is not among the stored fields (`:753-762`). Which code Garmin writes for a trail run is not known from master (Guessing: 56, stored as "Running"); the row's `sport_id` settles it.
-- **Effect on the metabolic load window: none.** The transform scores zone seconds and uses `sport_name` only as provenance (`load_events_metabolic.py:216-222`), and there is no sport exclusion (#322 S2). "Running", "Running Treadmill" and "Hiking" deposit identically when zoned.
-- **Effect on string-matching consumers.** `device_sports` matching is exact and casefolded (`engine/resolver.py:394-405`), so a slot declaring "Running" does not claim "Running Treadmill" or "Hiking". `NON_TRAINING_SPORTS` is Walking, Pilates, Yoga and Stretching only (`sport_classes.py:27`). A NULL sport is reported as `unclaimed_session` with detail `no_sport` (`engine/resolver.py:394-397`).
-- **Polar side.** `SPORT_NAMES` has no "Jogging" (`import_polar.py:31-52`); a sport id outside the map stores `sport_name` NULL with the id retained (`:105-106`). The id on the 1 Oct Polar row is unread. Arbitration ignores sport, so dedup is unaffected.
+**The dependency to surface.** That endpoint sits behind the `sports:read` scope, which `connectors/polar.py:39` does not request, and the ruling for #366 is not to add it. So the check can run only if the scope is requested at a re-auth deliberately, which is Luke's call at that point. Without the scope, the cheaper evidence is the operator's grouped `sport_id` query (19 rows on 2 Oct) read against the labels Polar Flow shows for those ids: each id seen in prod can be confirmed that way, and an id never seen in prod cannot be wrong in a way that shows.
 
-**Gap.** There is no trail/road distinction in the app, the same activity carries a different name by source, and the operator's own label is lost at ingest.
+**State:** OWED. Loop-close: the next Polar re-auth. Owner: operator (re-auth), Luke (whether to request `sports:read`). Not blocking.
 
-**To decide (Luke).** (a) Accept it, since load is unaffected, and declare every running name a slot should claim. (b) Persist `title` on `aerobic_sessions`, which is a schema migration and so a hold under § Merge disposition. (c) Add a source-neutral activity class above `sport_name` for the string-matching consumers.
+---
 
-**Live check (owed, operator):** the first query in Q201 returns `sport_id`, `sport_name` and `source_package` for both rows of the 1 Oct run.
+## Q206. Polar H10 rows that are whole Hevy gym sessions: what the app does with them today, and what the input-layer design has to reckon with
 
-**State:** OPEN. Owner: Luke (rule), operator (live check). Not blocking.
+Raised with #366 as a report-only investigation: nothing is built and no design is proposed. **Operator-reported (2 Oct 2026; not read by Code):** most Polar rows are H10 recordings of WHOLE Hevy gym sessions, warm-up cardio included, not standalone aerobic sessions. Example: 2026-04-25, Hevy "Back-Safe Full Body", 07:40 local, 2h19m, with the Polar zones attached to the Hevy session as an image only. Code facts below are read from master `7087026` (file:line). The entry is framed as input to the pending source-agnostic input-layer design (day-level merged per-second HR, source precedence); `metab-v1` stays the metric and the baseline any alternative is compared with. Queries were checked with a Postgres parser (`pglast`); none was run.
+
+**(a) Which Polar rows overlap a Hevy workout. OWED (operator), unmeasured.** The app's test is strict interval intersection, all four endpoints present (`reads/aerobic_reads.py:279-298`); a row with a NULL start or stop never counts as overlapping. This mirrors it (it keeps non-canonical rows, and filters Hevy on `excluded_at IS NULL` only, where the door also drops an unadjudicated dedup pair). Detail, one row per overlapping workout (a row with no overlap shows NULL Hevy columns):
+
+    SELECT a.id AS aerobic_id, a.source, a.session_date, a.sport_id, a.sport_name, round(a.duration_minutes::numeric, 1) AS dur_min, a.start_time, a.stop_time, h.hevy_id, h.title, h.start_time AS hevy_start, h.end_time AS hevy_end FROM aerobic_sessions a LEFT JOIN hevy_workouts h ON h.user_id = a.user_id AND h.excluded_at IS NULL AND a.start_time < h.end_time AND h.start_time < a.stop_time WHERE a.source IN ('polar_v4', 'polar_flow_export') ORDER BY a.start_time;
+
+Counts, with the untimed rows split out:
+
+    SELECT a.source, (h.hevy_id IS NOT NULL) AS overlaps_hevy, count(DISTINCT a.id) AS sessions, count(DISTINCT a.id) FILTER (WHERE a.start_time IS NULL OR a.stop_time IS NULL) AS untimed FROM aerobic_sessions a LEFT JOIN hevy_workouts h ON h.user_id = a.user_id AND h.excluded_at IS NULL AND a.start_time < h.end_time AND h.start_time < a.stop_time WHERE a.source IN ('polar_v4', 'polar_flow_export') GROUP BY 1, 2 ORDER BY 1, 2;
+
+**(b) How an overlapping row is treated today.**
+- **Metabolic load: deposited.** The transform has no overlap test. It emits one row per canonical, zoned `aerobic_sessions` row (`load_events_metabolic.py:177-206`), and its header says a session captured by both Hevy and Polar deposits into different windows by design (`:31-33`). A gym-session H10 trace therefore becomes metabolic load over the whole recorded interval, rests between sets included.
+- **Felt load: nothing.** An aerobic session overlapping a counted Hevy workout contributes no minutes and no tally; the Hevy minutes count (`reads/psychological_reads.py:316`).
+- **Resolver and quota: not claimed.** An overlapping canonical session is `concurrent_strength` and never reaches an activity or `load_window` slot (`engine/resolver.py:391-392`); it is listed in `uncounted[]` and rendered "conditioning session overlapping a gym workout" in the chat context (`context_builder.py:1657-1658`). Capacity slots count Hevy only.
+- **Coach and MCP visibility: inconsistent.** `get_training_sessions` lists canonical sessions with zones and no overlap marker (`mcp_server.py:547-572`), and the readiness summary counts them as sessions (`:738-758`). Nothing in `aerobic_format.py`, `session_focus.py` or `mcp_server.py` tests overlap. So the resolver and chat context read the row as strength, while the MCP reader sees a standalone aerobic session.
+
+**(c) Does Hevy expose per-set or per-exercise timestamps.** The app stores workout-level `start_time` and `end_time` (`hevy_workouts.py:191-192`) and the full payload verbatim in `hevy_workouts.raw` (`models.py:1148-1200`, JSONB). The set reader takes `type`, `weight_kg`, `reps`, `duration_seconds`, `distance_meters` and `rpe` only, and nothing in the code or the test fixtures reads a timestamp at exercise or set level (`hevy_workouts.py:80-103`). **Not confirmed from Hevy's schema:** its docs host is egress-blocked from the build environment (Guessing: the public API has workout-level start, end, created and updated times and nothing finer). Because `raw` is stored untouched, one query settles it on real payloads:
+
+    SELECT 'workout' AS level, k FROM (SELECT DISTINCT jsonb_object_keys(raw) AS k FROM hevy_workouts) w UNION ALL SELECT 'exercise', k FROM (SELECT DISTINCT jsonb_object_keys(e) AS k FROM hevy_workouts h, jsonb_array_elements(h.raw -> 'exercises') e) x UNION ALL SELECT 'set', k FROM (SELECT DISTINCT jsonb_object_keys(s) AS k FROM hevy_workouts h, jsonb_array_elements(h.raw -> 'exercises') e, jsonb_array_elements(e -> 'sets') s) y ORDER BY 1, 2;
+
+**(d) Exercise-window HR inventory.**
+
+| source | raw samples kept? | where / precision / retention |
+|---|---|---|
+| `health_connect`, any writer (Garmin `com.garmin.android.apps.connectmobile`; `fi.polar.polarflow` for the H10 via the Polar Flow app) | Yes | `hr_samples (user_id, sample_time timestamptz, bpm, source, source_package)`, unique on those four (`models.py:318-346`). Every posted sample is kept, with no window bound, `bpm` as received (`routers/health_connect.py:577-633`). Timestamps are parsed to UTC with the fraction stripped, so precision is 1 s and two same-writer samples in one second collapse to one (`:424-438`). No retention or delete path exists besides the user cascade. |
+| `polar_v4` | No: zone-seconds only | `list_zoned_sessions` requests `features='zones'` (`connectors/polar.py:162-200`); the parser keeps `exercises[0].zones[].inZone` (`import_polar.py`, `_parse_session`). Per-sample HR through the API is untested (Q198). `ppi_data:read` is requested (`connectors/polar.py:39`) and nothing in the backend reads PPI. |
+| `polar_flow_export` | No: zone-seconds only | Same parser. Whether the ZIP carries samples is untested (Q198). |
+
+Resolution and depth, from the operator's 1 Oct prod reads recorded in Q198: Garmin in activity median gap 7-16 s and max 25-44 s (passive exactly 120 s), records since 2026-08-23; Polar H10 through HC median 1 s and max gap 1-5 s (row 88: 2,026 samples in 33.8 min), 24,332 records on 9 days since 2026-06-30, 14 Polar bouts with an HC copy. **Consequence:** a gym session before 30 Jun, such as 2026-04-25, has no HR timeline in the app at all, only five zone-second totals, so no per-exercise or per-set window can be computed for it from any stored data. Only the HC-covered days have a timeline to window.
+
+**Gap distribution across stored sessions. OWED (operator).** Q198 gives per-writer medians and maxima, not a per-session distribution. This returns, for the 30 most recent timed `health_connect` sessions, each writer's sample count, median gap, longest gap and the number of gaps over 10 s and over 60 s (60 s is `hr_zones.MAX_SAMPLE_GAP_S`, the most credit a single gap earns):
+
+    WITH s AS (SELECT id AS sid, user_id, start_time AS st, stop_time AS sp FROM aerobic_sessions WHERE user_id = 1 AND source = 'health_connect' AND start_time IS NOT NULL AND stop_time IS NOT NULL ORDER BY start_time DESC LIMIT 30), g AS (SELECT s.sid, h.source_package AS pkg, h.sample_time - lag(h.sample_time) OVER (PARTITION BY s.sid, h.source_package ORDER BY h.sample_time) AS gap FROM s JOIN hr_samples h ON h.user_id = s.user_id AND h.sample_time BETWEEN s.st AND s.sp) SELECT sid, pkg, count(*) AS n_samples, round(extract(epoch FROM percentile_cont(0.5) WITHIN GROUP (ORDER BY gap))::numeric, 1) AS median_gap_s, round(extract(epoch FROM max(gap))::numeric) AS max_gap_s, count(*) FILTER (WHERE gap > interval '10 seconds') AS gaps_gt_10s, count(*) FILTER (WHERE gap > interval '60 seconds') AS gaps_gt_60s FROM g GROUP BY sid, pkg ORDER BY sid, pkg;
+
+**A parallel metric version beside `metab-v1`: yes by reading, not exercised.** `load_events` is unique on `(source, source_ref, load_window, formula_version)` (`models.py:1274-1278`) and its docstring says a new version's rows coexist beside the old until the rollup switches. The metabolic transform deletes and reinserts only `(user, FORMULA_VERSION_METABOLIC)` (`load_events_metabolic.py:19-21,181-184`), so another version's rows are untouched by it. The rollup takes `formula_version` as a parameter (`load_metrics.py:247,361-368`) and `load_metrics` is unique on both version axes. Every consumer pins the constant (`reads/psychological_reads.py:59`, `scripts/refresh_load.py:157-161`), so a shadow version is invisible until a reader is pointed at it. Two constraints: `source`, `unit` and `formula_version` are VARCHAR(20), and `source_ref` names one session, so a day-level metric needs a convention for what it points at. No schema change is implied.
+
+**State:** OPEN. Owner: operator ((a), (c) and the gap query), Luke (the input-layer design). Not blocking. Related: Q198 (re-zoning from raw HR), Q201, Q203, Q124.
 
 ---
 
@@ -5632,5 +5668,29 @@ turn); (c) the server re-pins from a focus id echoed back in the response.
 **State:** DONE → #354. **RULED (operator, 30 Sep): option (b).** The frontend holds `focus_session` and resends it
 on every turn until a new focus is set or the chat is cleared/new. Built with a dismissible "Reviewing: ..." chip
 and a "New chat" control, since the panel had no way to clear a chat.
+
+---
+
+## Q204. Activity type: Garmin "Trail Running" arrives through Health Connect as a code, not a label
+
+Raised with #365. Verified against master `054d2d9`.
+
+**Question.** How does Garmin "Trail Running" map through Health Connect into the app's session type and the metabolic load window? Does it differ from "Running"?
+
+**Findings.**
+- **The label does not survive Health Connect.** HC's exercise enum has no trail-running member; the running members are `RUNNING` (56), `RUNNING_TREADMILL` (57) and `HIKING` (37) (`routers/health_connect.py:66-127`). `sport_name` is derived from the integer `type` alone (`:130-145`, written at `:758`). `title` is accepted (`:238`) and then dropped: it is not among the stored fields (`:753-762`). Which code Garmin writes for a trail run is not known from master (Guessing: 56, stored as "Running"); the row's `sport_id` settles it.
+- **Effect on the metabolic load window: none.** The transform scores zone seconds and uses `sport_name` only as provenance (`load_events_metabolic.py:216-222`), and there is no sport exclusion (#322 S2). "Running", "Running Treadmill" and "Hiking" deposit identically when zoned.
+- **Effect on string-matching consumers.** `device_sports` matching is exact and casefolded (`engine/resolver.py:394-405`), so a slot declaring "Running" does not claim "Running Treadmill" or "Hiking". `NON_TRAINING_SPORTS` is Walking, Pilates, Yoga and Stretching only (`sport_classes.py:27`). A NULL sport is reported as `unclaimed_session` with detail `no_sport` (`engine/resolver.py:394-397`).
+- **Polar side.** `SPORT_NAMES` has no "Jogging" (`import_polar.py:31-52`); a sport id outside the map stores `sport_name` NULL with the id retained (`:105-106`). The id on the 1 Oct Polar row is unread. Arbitration ignores sport, so dedup is unaffected.
+
+**Gap.** There is no trail/road distinction in the app, the same activity carries a different name by source, and the operator's own label is lost at ingest.
+
+**To decide (Luke).** (a) Accept it, since load is unaffected, and declare every running name a slot should claim. (b) Persist `title` on `aerobic_sessions`, which is a schema migration and so a hold under § Merge disposition. (c) Add a source-neutral activity class above `sport_name` for the string-matching consumers.
+
+**Live check (owed, operator):** the first query in Q201 returns `sport_id`, `sport_name` and `source_package` for both rows of the 1 Oct run.
+
+**Resolution (3 Oct 2026).** The live check was read by the operator on 2 Oct (operator-reported; Code has no DB route). Garmin "Trail Running" arrives through Health Connect as sport 56, so it is stored "Running": row 93, `health_connect`, Garmin package, `sport_id` 56, `sport_name` "Running", `hr_avg` 145, zoned (`z1_seconds` 30). That settles the Guessing above. The activity title is dropped at ingest (`routers/health_connect.py:238` accepts it; the stored fields at `:753-762` omit it), so the operator's "Trail Running" label is not kept. There is no load effect: the metabolic transform scores zone seconds and uses `sport_name` as provenance only, with no sport exclusion (#322 S2). Option (a) is taken: accept the loss and declare every running name a slot should claim; options (b) (persist `title`, a schema migration) and (c) (a source-neutral activity class) are not pursued. The Polar half of the finding ("`SPORT_NAMES` has no Jogging") was a wrong-table defect, not a gap: the whole Polar map was replaced from the Polar Flow list (#366).
+
+**State:** `DONE → #366`.
 
 ---
