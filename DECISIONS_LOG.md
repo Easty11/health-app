@@ -13054,3 +13054,41 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** `/v4/data/sports/list` disagrees with the table (Q205); a consumer needs the trail/road distinction or the operator's own activity title (Q204's options (b) and (c) reopen then); or Polar changes its id list.
 
 ---
+
+### 367. A Polar H10 trace over a gym session stays in the metabolic window; the MCP readers must show what the resolver shows (Q206)
+
+**Decision.** Ruled by the operator in chat on 3 Oct 2026, on the Q206 prod reads.
+- **The treatment stays.** HR from a Polar row that overlaps a Hevy workout stays in the metabolic window: the transform deposits it as it does today, with no overlap test (`load_events_metabolic.py:177-206`). No exclusion, no trimming to the lifting block, and no change to `metab-v1`, arbitration or any load value.
+- **Required fix, filed OWED (Q206).** Expose the `concurrent_strength` marker, which the resolver already computes (`engine/resolver.py:391-392`), in `get_training_sessions` (`mcp_server.py:547-572`) and in the readiness summary's session count (`:738-758`). Today the resolver and the chat context read an overlapping row as "conditioning session overlapping a gym workout" (`context_builder.py:1657-1658`) while the MCP reader lists it as a standalone aerobic session. Display and counting only; no load effect.
+- **Convention, recorded.** The operator records one activity per block: warm-up/conditioning as one recorded activity, lifting as another.
+- **No per-exercise HR window.** A Hevy workout payload carries no exercise- or set-level timestamps, so HR cannot be windowed to an exercise or a set from Hevy data.
+
+**Rationale.** The operator ruled; no separate rationale was stated. The ruling rests on the Q206 reads: overlap is the norm for Polar rows (25 of 50 `polar_flow_export`, 9 of 22 `polar_v4`), a gym session arrives as two Polar segments (Cross-trainer then Circuit training), and Hevy offers nothing finer than the workout, so HR cannot be cut to the lifting block. Deposit-as-now keeps existing behaviour rather than adding a heuristic the data cannot ground. The marker fix removes the one inconsistency the reads found: one reader says strength, another says standalone aerobic.
+
+**Status.** Ruled 3 Oct 2026. The deposit: unchanged, nothing to build. The marker exposure: OWED, unbuilt (Q206; a Code build on a brief from Luke). The convention: recorded, not enforced.
+
+**How you know.**
+- *Prod reads, operator-reported 3 Oct 2026; not read from the DB by Code.* Overlap counts as above, no untimed rows, the 15 Jun to 12 Aug twins collapsed by arbitration, and the Hevy key inventory (exercise: `index`, `notes`, `sets`, `superset_id`, `title`, `exercise_template_id`; set: `index`, `type`, `reps`, `weight_kg`, `duration_seconds`, `distance_meters`, `rpe`, `custom_metric`).
+- *Code facts,* read on master `5b3363b`: `load_events_metabolic.py:177-206` and its header at `:31-33`; `engine/resolver.py:391-392`; `context_builder.py:1657-1658`; `mcp_server.py:547-572` and `:738-758` (the MCP side as recorded in Q206 (b); only the first lines of each range were re-read).
+- *Not verified here.* Whether any reader of `aerobic_sessions` besides the two named needs the marker. Q206 (b) names those two; no audit of the rest was run.
+
+**Do not revisit unless.** The input-layer design (Q201) replaces session-level metabolic arbitration; HR can be windowed per exercise (a capture or a Hevy payload that carries timestamps); or exposing the marker turns out to need a load effect.
+
+---
+
+### 368. Request `sports:read` at the next Polar re-auth, whatever its reason, and verify the sport table then (Q205)
+
+**Decision.** Ruled by the operator in chat on 3 Oct 2026. The `sports:read` scope is requested at the next Polar re-authorisation, for any reason that occasions it, and the sport table is verified then: `GET /v4/data/sports/list` diffed against `import_polar.SPORT_NAMES`. Nothing is done before. No re-auth is forced for this, no scope change lands now, and the table stands unverified until then. This settles the question Q205 and #366 left to Luke (whether to request the scope); #366's statement that it does not add the scope holds for today and is superseded for that re-auth.
+- *Mechanics, which follow from the ruling and are not a further ruling.* The scope is the `SCOPES` constant at `connectors/polar.py:39`, so the one-line change is made as the first step of that re-auth, before the authorise URL is built, and the brief for that re-auth names it.
+
+**Rationale.** The ruling's own terms: the check rides a re-auth that is happening anyway, so it costs the operator nothing extra, and nothing is forced for a label check. Until then the cheaper evidence in Q205 stands (each `sport_id` seen in prod read against the label Polar Flow shows).
+
+**Status.** Ruled 3 Oct 2026. Q205 stays OWED with the loop-close named: the next Polar re-auth.
+
+**How you know.**
+- *Code,* master `5b3363b`: `connectors/polar.py:39` reads `SCOPES = "training_sessions:read ppi_data:read nightly_recharge:read sleep:read"`, with no `sports:read`.
+- *Not verified here.* That `GET /v4/data/sports/list` requires `sports:read`. That is as recorded in Q205 and #366; Polar's docs are egress-blocked from the build environment. The re-auth shows it.
+
+**Do not revisit unless.** The endpoint rejects the scope, or lists ids or names that differ from `SPORT_NAMES` (a corrected table and `scripts/polar_sport_backfill.py` follow, per Q205); or a re-auth happens without the scope having been added.
+
+---

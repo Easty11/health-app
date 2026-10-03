@@ -1,55 +1,51 @@
-# Close-out — Polar sport ids mapped from Polar's own list (#366); the H10-vs-Hevy facts filed (Q205, Q206); Q204 closed
+# Close-out — Q206 read and ruled (#367); `sports:read` at the next Polar re-auth (#368); Q207 filed; the harness-ref wording fixed
 
 ## Real commits this session
 
-Range: `b447ed4` (master when the session opened; the merge of PR #299) to this close-out. Two concern-named branches, approved by the operator (3 Oct 2026) in place of the harness-assigned `claude/vigilant-wozniak-ompbx9`:
+Range: `5b3363b` (master when the session opened; the merge of PR #301) to this close-out. One branch, the harness-assigned `claude/epic-carson-xsmx2a`, kept per the harness instruction (it is rowed in `BRANCHES.md`).
 
-- `polar-sport-map`: `f4ef81e fix(polar): SPORT_NAMES is the Polar Flow sport-id list; add report-first relabel script`. Merged by Code on green as PR #300, merge commit `7087026`; the remote ref was already gone when I went to delete it after the merge, and the local branch is deleted.
-- `gov-polar-sport-map`: one `gov(polar-sport-map): ...` commit carrying DECISIONS #366, OPEN_QUESTIONS (Q204 closed, a Q201 update, new Q205 and Q206), the CLAUDE.md `load_window` note fix and Recent-landings pointer, one ROADMAP NOW row plus an edit to the Source-hierarchy row, the BRANCHES rows, and this file. Its hash is on the branch; a file cannot name its own commit. The brief asked for a single gov commit at close-out, so the close-out artifacts ride in it.
-
-`claude/vigilant-wozniak-ompbx9` (the harness name) was never committed to: local and remote both sit at `b447ed4` and `git cherry origin/master` is empty. It is rowed in `BRANCHES.md` as DONE with no work, and the remote ref was left in place because the harness created it.
-
-No schema migration, no prod data write, no `refresh_load` run, no backfill run.
+- `claude/epic-carson-xsmx2a`: one `gov(srpe-floor): ...` commit carrying DECISIONS #367 and #368, OPEN_QUESTIONS (the Q206 results and OWED State, new Q207, a ruling note and new State line on Q205, a HRmax-provenance note on Q199), the BRANCHES edits, one ROADMAP row edit, the CLAUDE.md Recent-landings pointer, and this file. Its hash is on the branch; a file cannot name its own commit. The standing rule is one gov commit per session, so the close-out artifacts ride in it.
+- No code commit, no migration, no data write. Nothing was run against prod: every prod fact below is the operator's own query read, recorded as operator-reported.
 
 ## Pending-queue reconciliation
 
-No `PENDING` items were carried in: the input was a chat brief and its rulings, not a `;cc` queue. Where each landed:
+The pasted block "GOV CARRY (Q206 results, operator, 3 Oct)" carried six items. Each landed in the commit above, or is named below as not landed.
 
-- **Ruling 3 (full-table rename, ids 1-142, gaps NULL, names verbatim, no per-row exceptions):** PR #300 (`import_polar.py`), recorded as DECISIONS #366. Both transports use the one table (the v4 parser calls `_parse_session`).
-- **Ruling 1 (backfill covers `polar_v4` and `polar_flow_export`):** `scripts/polar_sport_backfill.py` in PR #300. Report by default, `--apply` the single write. Not run.
-- **Ruling 4 (tie-break dropped, `_win_key` untouched, record as a Q201 note):** the Q201 update. Nothing was built for it.
-- **Q204 closed with the brief's evidence:** moved below `## CLOSED` as `DONE → #366`.
-- **New OQs:** Q205 (verify the table against `/v4/data/sports/list`) and Q206 (the S7 findings, framed as input to the input-layer design).
-- **CLAUDE.md `load_window` note:** corrected; the migration `1341a2cf6938` and the column rename were verified in the migration file before the edit. This closes the "found, not fixed" item the previous close-out carried.
-- **Decision added beyond the brief's list:** DECISIONS #366. Q204 needs a `DONE → #N`, and the rename is a data-meaning default, so it is recorded as a decision; its content is only what the operator ruled.
-- **Flagged for Luke (a tension in the rulings, not resolved by Code):** ruling 3 says verify against `/v4/data/sports/list` at the next re-auth and not to add `sports:read`. That endpoint needs the scope, and `connectors/polar.py:39` does not request it. Q205 records this; the check can run only if the scope is requested at a re-auth on purpose.
-- **Source caveat, in #366 and Q205:** the id list is a secondary copy (Polar Flow's sports settings page as reproduced on the bipolar wiki). `polar.com` is egress-blocked from the build environment, so Polar's own page was not read. Two live datapoints (id 4 "Jogging", id 55 "Cross-trainer") match it.
-- **Test-guard change in PR #300:** `test_no_second_list_anywhere` tripped on the new table (it quotes Yoga, Pilates and Stretching as names), so it gained a reasoned `NAME_TABLES` allow-list entry with a stale-entry check; the read-door drift guard registers the new script.
-- **Operator-reported, not read by Code:** the prod facts for rows 93 and 95, the load row (source_ref 95, load 81.85), the grouped `sport_id` result, the slot query (phase 8 declares `["Pilates"]` only) and `user_hrmax` (173, observed, H10, 2026-03-01). All are recorded as the operator's statement.
+1. **Q206 (a) overlap, (c) Hevy payload keys, (d) gap distribution** — landed as a "Results" block in Q206, tagged operator-reported.
+2. **Q206 (b) ruling** — landed as DECISIONS #367. The deposit stays as it is. The required fix (expose `concurrent_strength` in `get_training_sessions` and the readiness summary) is filed OWED as Q206's State, with the loop-close named. It is not built; this was a governance session.
+3. **New OQ: which writer owns sessions 68, 69, 71, 80-85 and 92, and why Garmin wrote no activity HR for them** — landed as Q207, OPEN, report-only, with one parser-checked read query for the operator. Not run.
+4. **HRmax note** — landed as an Update on Q199, not a new question: Q199 already is the HRmax benchmark test, and a second entry would split it. Operator-reported: the observed 173 came from Polar rows 35 and 47, both short conditioning segments; only three field sessions were recorded through Polar all season (31, 67, 90).
+5. **Q205 ruling** — landed as DECISIONS #368 and a Ruling note on Q205, whose State stays OWED with the loop-close restated. One derived point is flagged, not ruled: the scope is `SCOPES` at `connectors/polar.py:39`, so the one-line change has to be made before the re-auth's authorise URL is built. #368 records this as mechanics that follow from the ruling. If "nothing before" meant something else, #368 and Q205 are the two places to correct.
+6. **Nit: "was left in place" versus pruned** — landed in the `BRANCHES.md` row for `claude/vigilant-wozniak-ompbx9`, after checking it: `git ls-remote --heads origin claude/vigilant-wozniak-ompbx9` returns nothing and there is no local ref. The prior `closeout.md` carried the same sentence; this file replaces it.
+
+Housekeeping that rode along: the two `BRANCHES.md` cells that read "SHA resolved at next close-out" now carry the merges (`gov-polar-sport-map` = PR #301, `5b3363b`; `ccr-e19d34fa-k09fxb` = PR #299, `b447ed4`), both checked against `git log` and `git ls-remote` (both remote refs are gone). The stale "Operator: Q206 (a), (c) and the gap query" sentence on the `gov-polar-sport-map` row was replaced.
+
+Provisional until merged: everything above. Nothing decided in the paste was left uncommitted.
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** One new row from this session: **Polar sport-id relabel, and the H10-vs-Hevy facts (#366, Q205, Q206), OWED (operator).** The Source-hierarchy row was rewritten: the live case is read, Q204 is closed, and Q201-Q203 are Luke's to rule (Q201 with the pending input-layer design). Unchanged by this session and still in NOW: HC zones (#364) deploy/seed/verify steps, injury clearance via the #340 sweep, aerobic ingest automated check (#353), session fidelity G6.
+**Sprint (ROADMAP NOW).** One row was edited this session: **Polar sport-id relabel, and the H10-vs-Hevy facts (#366, #367, #368, Q205-Q207).** Its step (4), the Q206 queries, is done and recorded. Its remaining steps are the backfill report and `--apply` plus `refresh_load` (unchanged, operator), the marker-exposure build (new, Luke briefs and Code builds), Q205 at the next Polar re-auth, the Q207 read (operator), and the max test (Q199). Unchanged and still in NOW: Source hierarchy (#365), HC zones (#364) deploy/seed/verify steps, injury clearance via the #340 sweep, aerobic ingest automated check (#353), session fidelity G6.
 
-**State.** PR #300 is merged. The gov branch is a governance-only change (no code, no migration), so it self-merges on green under CLAUDE.md § Merge disposition. Numbers #366, Q205 and Q206 were resolved at master max #365 / Q204 (`7087026`); re-read master's max and re-resolve if it advances before the merge.
+**State.** The PR is governance-only (no code, no migration), so it self-merges on green under CLAUDE.md § Merge disposition. Numbers #367, #368 and Q207 were resolved at master max #366 / Q206 (`5b3363b`); re-read master's max and re-resolve if it advances before the merge.
 
-**Single clearest next action.** The operator runs the backfill report from `backend/`: `railway run python -m scripts.polar_sport_backfill`. Read the rows marked `[class flips]` (they change what the psychological window and the CBT-I training-end read), then `--apply`, then `railway run python -m scripts.refresh_load --user 1`. The new map labels only NEW rows until the backfill runs, so new and old sessions carry different names for the same id in the meantime.
+**Single clearest next action.** Luke writes the brief for the marker exposure (Q206 / #367): `concurrent_strength` into `get_training_sessions` (`mcp_server.py:547-572`) and the readiness summary's session count (`:738-758`), display and counting only. It is the one ruled item with no open design question, and it removes the only place the app currently tells two stories about a gym-overlapping Polar row. The operator-side queue, in order: the backfill report (`railway run python -m scripts.polar_sport_backfill`, read the `[class flips]` rows, then `--apply`, then `railway run python -m scripts.refresh_load --user 1`), then the Q207 read.
 
-**Operator actions owed.** (1) Backfill report, then `--apply`, then `refresh_load` (above). (2) The Q206 queries: (a) Polar rows against Hevy overlap (detail and counts), (c) the Hevy payload key inventory, and the gap-distribution query. All four were syntax-checked with a Postgres parser and none was run. (3) Q205 at the next Polar re-auth.
+**Operator actions owed.** (1) The backfill report, `--apply`, and `refresh_load` (see above; the 3 Oct paste does not say whether this has run, so it is carried as not done). (2) The Q207 query in `railway connect`. (3) Q205 at the next Polar re-auth, with `sports:read` requested then (#368). (4) A maximal-effort HRmax test (Q199), unscheduled.
 
-**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`): 114 OPEN, 5 OWED (Q78, Q176, Q178, Q181, Q205). New this session: Q205 (OWED), Q206 (OPEN). Closed this session: Q204. Q201 got an update and stays OPEN with the dedup live case read.
+**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`): 114 OPEN, 6 OWED (Q78, Q176, Q178, Q181, Q205, Q206). New this session: Q207 (OPEN). Q206 moved from OPEN to OWED with its results recorded. Q199 got a note and stays OPEN. Closed this session: none.
 
 **What was NOT touched (named so absence does not read as finished).**
-- **The hierarchy tie-break and any arbitration change.** Dropped by ruling and not built; `_win_key`, the source ranks and the Edwards formula are unchanged. The source-agnostic input-layer design that replaces it is a pending chat design with no repo artifact yet.
-- **Q202, Q203 and Q189** (an RPE floor, an expected-but-absent signal) have not moved, and neither has Q198 (re-zoning Polar from raw HR) or Q124 (Catapult SPT3 ingest). Q206 adds facts to the same cluster and decides nothing.
+- **The input-layer design and any arbitration change.** Q201 is still waiting on a chat design with no repo artifact. `_win_key`, the source ranks and the Edwards formula are unchanged. #367 adds one constraint for that design: HR recorded over a gym session must still deposit.
+- **Q202, Q203 and Q189** (an RPE floor, an expected-but-absent signal) did not move, and neither did Q198 (re-zoning Polar from raw HR) or Q124 (Catapult SPT3 ingest). The session name carries "SRPE floor", but this carry did not touch the floor: the paste held Q206 results, not an sRPE decision. Q206 (d) adds one fact to that cluster: sessions 68, 69, 71, 80-85 and 92 deposit nothing because they have no same-writer HR, which is the same shape as the Q202 gap (a session with no usable HR deposits nothing), though whether they are watch-owned runs is not known (Q207 asks why they have none).
+- **The marker exposure is not built.** It is filed, ruled and unstarted.
 - **Know / the plan:** plan-conformance adjudication (Q197) is still a chat proposal; Q27 and the Rule 1 vote counter are unchanged.
 - **Walk in:** the lab upload pipeline, the interpretation layer's remaining increments and the appointment brief stood still.
-- **Medical protocol:** CBT-I (Q46, Q48, Q55, Q170 and the gate constants) and the injury ledger (Q52, Q111, Q120, the #340 sweep) did not move. The backfill can change the CBT-I training-end read for rows that cross the non-training line, but that happens only when the operator applies it.
+- **Medical protocol:** CBT-I (Q46, Q48, Q55, Q170 and the gate constants) and the injury ledger (Q52, Q111, Q120, the #340 sweep) did not move.
 - **Loop / Fitness UI:** no frontend work.
-- **Pattern to say out loud:** this is another session on load and ingest plumbing (a mapping table, a relabel script, the inventory of what HR the app keeps). The plan-versus-log judgement (Q197) and the Walk-in surfaces the plumbing feeds have now gone untouched for several sessions. The queue after the backfill is rulings (Q201-Q203, the input-layer design), not more instrument work.
+- **Pattern to say out loud:** this is another session on load and ingest plumbing and its evidence (a mapping table, a relabel script, an inventory of what HR the app keeps, now the results of the queries that inventory asked for). The plan-versus-log judgement (Q197) and the Walk-in surfaces the plumbing feeds have gone untouched for several sessions. The queue after the backfill and the marker build is rulings (Q201-Q203, the input-layer design), not more instrument work.
 
 **v1-triage of the NOW lanes** (which test each serves; DONE rows are demotion candidates by lane momentum):
-- Polar sport-id relabel and the H10-vs-Hevy facts (#366, OWED): **Know** (a session carries the name Polar shows) and **See** (a gym-session HR trace is visible as one).
+- Polar sport-id relabel and the H10-vs-Hevy facts (#366-#368, OWED): **Know** (a session carries the name Polar shows) and **See** (a gym-session HR trace is visible as one, in the MCP as in the chat context).
 - Source hierarchy (#365, OWED to Luke): **See** and **Know**.
 - HC zones (#364, OWED): **See**, **Know** and **Loop**.
 - Aerobic ingest automated (#353, OWED check): **See** and **Loop**.

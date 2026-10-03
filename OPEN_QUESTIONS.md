@@ -2759,6 +2759,8 @@ and never raises HRmax.
 **To decide.** The protocol and date, who supervises it, and the `effective_from` convention for a tested value (from the test date
 forward, or backward over the seed's range as the seed does).
 
+**Update (3 Oct 2026, with #367).** Operator-reported, not read by Code (no DB route). The observed 173 came from Polar rows 35 and 47, both short conditioning segments, not rugby (Guessing: the two Fitness sessions named above, 2026-06-17 and 2026-07-17; the row dates were not given). Only three field sessions were recorded through Polar all season (rows 31, 67 and 90). So the seed is a maximum seen in conditioning segments, not in field play, and a maximal-effort test is owed. This entry is the home for that test; its "To decide" is unchanged.
+
 **State:** OPEN. Not blocking.
 
 ---
@@ -2865,7 +2867,9 @@ Raised with #366. `import_polar.SPORT_NAMES` is the Polar Flow sport-id list (id
 
 **The dependency to surface.** That endpoint sits behind the `sports:read` scope, which `connectors/polar.py:39` does not request, and the ruling for #366 is not to add it. So the check can run only if the scope is requested at a re-auth deliberately, which is Luke's call at that point. Without the scope, the cheaper evidence is the operator's grouped `sport_id` query (19 rows on 2 Oct) read against the labels Polar Flow shows for those ids: each id seen in prod can be confirmed that way, and an id never seen in prod cannot be wrong in a way that shows.
 
-**State:** OWED. Loop-close: the next Polar re-auth. Owner: operator (re-auth), Luke (whether to request `sports:read`). Not blocking.
+**Ruling (3 Oct 2026, #368).** Add `sports:read` at the next Polar re-auth, whatever occasions it, and verify the sport table then. Nothing before: no re-auth is forced for this, and no scope change lands now. The scope is the `SCOPES` constant at `connectors/polar.py:39`, so the one-line change is made as the first step of that re-auth, before the authorise URL is built; the brief for that re-auth names it.
+
+**State:** OWED. Loop-close: the next Polar re-auth, whatever its reason; request `sports:read` then and diff `GET /v4/data/sports/list` against `SPORT_NAMES` (#368). Owner: operator (the re-auth). Not blocking.
 
 ---
 
@@ -2907,7 +2911,30 @@ Resolution and depth, from the operator's 1 Oct prod reads recorded in Q198: Gar
 
 **A parallel metric version beside `metab-v1`: yes by reading, not exercised.** `load_events` is unique on `(source, source_ref, load_window, formula_version)` (`models.py:1274-1278`) and its docstring says a new version's rows coexist beside the old until the rollup switches. The metabolic transform deletes and reinserts only `(user, FORMULA_VERSION_METABOLIC)` (`load_events_metabolic.py:19-21,181-184`), so another version's rows are untouched by it. The rollup takes `formula_version` as a parameter (`load_metrics.py:247,361-368`) and `load_metrics` is unique on both version axes. Every consumer pins the constant (`reads/psychological_reads.py:59`, `scripts/refresh_load.py:157-161`), so a shadow version is invisible until a reader is pointed at it. Two constraints: `source`, `unit` and `formula_version` are VARCHAR(20), and `source_ref` names one session, so a day-level metric needs a convention for what it points at. No schema change is implied.
 
-**State:** OPEN. Owner: operator ((a), (c) and the gap query), Luke (the input-layer design). Not blocking. Related: Q198 (re-zoning from raw HR), Q201, Q203, Q124.
+**Results (3 Oct 2026).** Operator-run queries, reported by the operator; Code has no DB route and did not read them.
+- **(a) Overlap.** `polar_flow_export`: 25 of 50 rows overlap a Hevy workout. `polar_v4`: 9 of 22. No untimed rows. The sessions from 15 Jun to 12 Aug exist in both Polar sources (twins) and arbitration collapses them. The pattern: a gym session is recorded as two Polar segments, a warm-up as Cross-trainer (id 55) followed by Circuit training (id 20). The VO2 bike blocks (17 and 24 Jun) sit inside Hevy sessions.
+- **(b) Ruling, #367.** Gym-overlapping HR stays in the metabolic window: the transform deposits it as it does today. The fix is to expose the `concurrent_strength` marker in `get_training_sessions` and in the readiness summary so the MCP agrees with the resolver. Filed OWED, below.
+- **(c) Hevy payload keys, confirmed on real payloads.** There is no exercise- or set-level timestamp. Exercise keys: `index`, `notes`, `sets`, `superset_id`, `title`, `exercise_template_id`. Set keys: `index`, `type`, `reps`, `weight_kg`, `duration_seconds`, `distance_meters`, `rpe`, `custom_metric`. Per-exercise HR windowing is therefore not possible from Hevy data, which settles the Guessing in (c). The operator's convention is one recorded activity per block: warm-up/conditioning is one recorded activity and lifting another.
+- **(d) Gap distribution, the 30 most recent HC sessions.** `fi.polar.polarflow`: median gap 1 s, max 1-5 s, no gap over 10 s. Garmin in activity: median 6-16 s, max 25-44 s, none over 60 s, so the 60 s cap (`hr_zones.MAX_SAMPLE_GAP_S`) did not bind on any of them. Sessions 68, 69, 71, 80-85 and 92 contain only Garmin passive samples (120 s) and are the `no_same_writer_hr` rows; that is Q207. `com.sec.android.app.shealth` writes 10 s samples on 79-83. Paired Garmin and H10 samples exist on 88, 89, 93 and 96 (calibration pairs).
+- **Input to the pending design (Q201).** Whatever replaces session-level metabolic arbitration must still deposit HR recorded over a gym session (#367).
+
+**State:** OWED. Ruled in #367: the deposit stays as it is, and the marker exposure is the fix. Loop-close: expose `concurrent_strength` in `get_training_sessions` (`mcp_server.py:547-572`) and in the readiness summary's session count (`:738-758`), so an MCP reader sees what the resolver and the chat context see. Display and counting only; no load value changes. Owner: Luke (brief), Code (build). The input-layer design stays with Luke (Q201). Not blocking. Related: Q198 (re-zoning from raw HR), Q201, Q203, Q124, Q207.
+
+---
+
+## Q207. Which writer owns sessions 68, 69, 71, 80-85 and 92, and why did Garmin write no activity HR for them?
+
+Raised 3 Oct 2026 with #367 from the Q206 gap-distribution read. Report-only: nothing is built and nothing is proposed. **Operator-reported, not read by Code:** across the 30 most recent HC sessions, sessions 68, 69, 71, 80-85 and 92 contain only Garmin passive HR samples (120 s apart), and they are the `no_same_writer_hr` rows. `com.sec.android.app.shealth` writes 10 s samples on 79-83.
+
+**What the code says the reason means.** `hr_zones.zone()` returns `no_same_writer_hr` only when there are no plausible same-writer samples inside `[start, stop]` (`hr_zones.py:112-114`); a writer with passive 120 s samples inside the window would return `sparse` (coverage about 0.5 against 0.6, `:130`). So a row reported as `no_same_writer_hr` with only Garmin passive samples around it is a row whose session writer is not the writer of those samples, or whose window holds none of them. Which of those it is has not been read.
+
+**Question.** For each of these sessions, which package wrote the exercise record (`aerobic_sessions.source_package`), which packages wrote HR inside its window, and why did the Garmin watch write no activity-rate HR for it? Guessing, to be tested not assumed: (i) the exercise record's writer is not Garmin (Samsung Health on 79-83 is the obvious candidate); (ii) the writer is Garmin but the session is shorter than the passive interval, so no sample falls inside it; (iii) Garmin recorded the activity but its activity HR never reached Health Connect.
+
+**First read (owed, operator).** One row per session and HR writer, with zero HR rows showing as a NULL `hr_pkg`. Parser-checked with `pglast` and against `SCHEMA.md`; not run:
+
+    WITH s AS (SELECT id AS sid, user_id, source_package AS session_pkg, sport_name, start_time AS st, stop_time AS sp, round(duration_minutes::numeric, 1) AS dur_min FROM aerobic_sessions WHERE user_id = 1 AND id IN (68, 69, 71, 80, 81, 82, 83, 84, 85, 92)), g AS (SELECT s.sid, h.source_package AS hr_pkg, h.sample_time, h.sample_time - lag(h.sample_time) OVER (PARTITION BY s.sid, h.source_package ORDER BY h.sample_time) AS gap FROM s JOIN hr_samples h ON h.user_id = s.user_id AND h.sample_time BETWEEN s.st AND s.sp) SELECT s.sid, s.session_pkg, s.sport_name, s.dur_min, g.hr_pkg, count(g.sample_time) AS n_samples, round(extract(epoch FROM percentile_cont(0.5) WITHIN GROUP (ORDER BY g.gap))::numeric, 1) AS median_gap_s FROM s LEFT JOIN g ON g.sid = s.sid GROUP BY s.sid, s.session_pkg, s.sport_name, s.dur_min, g.hr_pkg ORDER BY s.sid, g.hr_pkg;
+
+**State:** OPEN. Owner: operator (the read), Luke (any ruling that follows). Not blocking. Related: Q198, Q202, Q203, Q206.
 
 ---
 
