@@ -13092,3 +13092,67 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** The endpoint rejects the scope, or lists ids or names that differ from `SPORT_NAMES` (a corrected table and `scripts/polar_sport_backfill.py` follow, per Q205); or a re-auth happens without the scope having been added.
 
 ---
+
+### 369. Q207 closed: in-activity HR was not lost in the app; Garmin exports it to Health Connect about 7 days late and the scheduled sync was not reading (Q159 reopened)
+
+**Decision.** Ruled by the operator in chat on 4 Oct 2026, on the operator's own prod reads.
+- **Q207 is CLOSED.** There is no app-side loss. Two causes: (i) Garmin writes in-activity HR to Health Connect about 7 days after the session, and (ii) the scheduled (background) sync has been failing with "Health Connect client is not initialized" and reading nothing (#370).
+- **Q159 is reopened** with the measured lag. #364's evidence that the lag blocker "does not hold" (the freshest HR sample is 0.0-7.6 h old at each POST) measured the freshest passive sample. It does not cover in-activity lateness and is not evidence against the lag.
+- **Rows 85 and 92** (the 22 and 29 Sep retrospective entries) have no HR in any store, so they are correctly unzoned.
+- **Scope note for the coming Q202 brief (operator).** Its case A is rows inside the Garmin lag window. It is not a cover for the scheduled-sync failure (#370).
+
+**Rationale.** The operator located the 26 Sep Pilates (sid 86). Its 241 Garmin `health_connect_record_sources` rows carry a `synced_at` of 13:47:40Z on 3 Oct (event 63, a 7-day manual sync), and `hr_samples` holds them at 13 s spacing. After the 30-day manual sync (event 61, 03:33Z, 28,885 HR samples, oldest 2 Sep, no truncation) `hr_samples` still held only the Garmin passive 120 s rows for that window. So the in-activity samples reached Health Connect after that sync ran, about 7 days after the session. Events 59 and 60 (background runs) show `hr_received` 0 with the error on every day. Together these close the "Health Connect to app loss" reading: the phone read what Health Connect held, and Health Connect did not yet hold the in-activity HR.
+
+**Status.** Ruled 4 Oct 2026. Q207 closed here. Q159 reopened: what the app does for a session inside the lag window, and how deep the re-read window must be. The scheduled-sync fix is #370; the server race fix is #371.
+
+**How you know.**
+- *Operator-reported prod reads, 4 Oct 2026; not read from the DB by Code.* Events 57-64 (59 and 60: `hr_received` 0 and the error on every day; 61: the 30-day manual, 28,885 HR, oldest 2 Sep, not truncated; 63: the 7-day manual at 13:47Z); sid 86 and its 241 rows; rows 85 and 92 as retrospective entries.
+- *The arrival time is bounded, not exact.* `synced_at` on `record_sources` was refreshed on every re-post until PR #305 (#371), so 13:47:40Z is the latest the keys could have first arrived. The `hr_samples` read after the 30-day sync puts the earliest after 03:33Z. Either bound gives a lag of about 7 days (26 Sep to 3 Oct).
+- *Q159's own record.* It named an in-activity lag of about 6 days (the HCA Q22 finding, user 4) before #364 set it aside. The measured case agrees with it.
+- *Not individually read.* Sid 69 (a Garmin Pilates with passive samples only). The closure rests on rows 86, 85 and 92 and on the earlier accounts of 68 and 84 (Samsung HR ended 14 Sep, Q198) and of 71 and 80-83 (a history gap in `hr_samples`, filled by the 30-day sync).
+
+**Do not revisit unless.** In-activity HR for a session is still missing more than 30 days after it, with Health Connect showing it (a read-path fault, not lag); or Garmin changes when it exports to Health Connect.
+
+---
+
+### 370. The scheduled sync must read Health Connect before its window is widened: client init first, then 30 days (P1, phone)
+
+**Decision.** Ruled by the operator on 4 Oct 2026. A brief follows; this entry records the ruling and the verified path. Nothing is built.
+- **Order.** First the background task initialises the Health Connect client. Then the scheduled window goes from 7 to 30 days.
+- **The path (Code, companion `health-connect-app` at `0c2f982`, read-only; the installed build is unverified).** `backgroundSync.js:49-67` calls `runSync` (`syncRunner.js:66`), which calls `fetchAllData` (`healthConnect.js:418`), which calls `readRecords`, with no `initialize()` on the way. `initialize()` is called only in `initializeHealthConnect` (`healthConnect.js:59-72`), `requestPermissions` (`:127-128`) and `requestBackgroundPermission` (`:166`), all reached from the foreground UI. `ensureBackgroundSyncRegistered` (`backgroundSync.js:78-91`) calls `getGrantedPermissions()` before any init, from `Root.js:78`, and its result is not read. `runSync` returns `ok:true` whenever the POST succeeds and does not inspect `data.errors` or `fetchMeta` (`syncRunner.js:110`), so an all-failed fetch reports Success and WorkManager never retries.
+- **Proposal reported, not ruled.** Init at the top of `fetchAllData`; an all-streams-failed fetch returns `ok:false` with the telemetry POST kept; then `days: 30` at `backgroundSync.js:52`. The brief decides.
+
+**Rationale.** A wider window on a task that reads nothing widens nothing, so the order is the ruling. The 30-day depth then covers a Garmin export lag of about 7 days with margin (#369).
+
+**Status.** Ruled 4 Oct 2026. OWED: the build is in the companion repo, which this session can read but not push to.
+
+**How you know.**
+- *Operator-reported:* events 59 and 60 (`hr_received` 0, "Health Connect client is not initialized" on every day).
+- *Railway HTTP log, read by Code:* `POST /health-connect/sync` at 18:50Z on 2 Oct and 00:51Z on 3 Oct took 40 and 42 ms of server time, against 12-22 s for syncs carrying data. Guessing: these are the empty background payloads.
+- *Code:* the citations above.
+- *Not verified here.* That the Health Connect library raises the message because `initialize()` was never called in the headless context (its source is not in the clone; the string is absent from the app's own `src`), and which build the phone runs.
+
+**Do not revisit unless.** A background run on a fixed build still reads nothing (`hr_received` 0 with no error), or the library's initialisation model changes.
+
+---
+
+### 371. record_sources capture is ON CONFLICT DO NOTHING, so its `synced_at` is when a key was FIRST captured; the hr_samples handler no longer masks a failure
+
+**Decision.** Ruled by the operator on 4 Oct 2026 and landed in PR #305 (code, self-merged on green).
+- `_capture_record_sources` is a chunked `INSERT ... ON CONFLICT DO NOTHING` on `uq_hc_record_source`. The preload of every existing key is gone.
+- `_persist_hr_samples` flushes pending work before its savepoint, so a failure from earlier work surfaces as itself and not as "hr_samples persist failed".
+- **Consequence recorded.** `synced_at` on `health_connect_record_sources` is when a key was first captured, no longer the last re-post. Nothing in the backend reads it (checked by grep). `hr_samples.created_at` was already insert-once.
+- **Not changed.** `_ingest_exercise_sessions` (`uq_aerobic_session_source`) and the per-day `HealthConnectSync` upsert have the same read-then-add shape. A per-user advisory lock would close the class; it was an option and is not ruled (Q208).
+
+**Rationale.** On 3 Oct, 07:05-07:07 UTC, four overlapping `POST /health-connect/sync` requests produced one 200 and three 500s, each a `UniqueViolation` on `uq_hc_record_source`. The old code read every existing key and then added the missing ones through the ORM; a concurrent POST that committed the same keys in between made the flush raise, and the whole sync rolled back. The flush ran at `begin_nested()` inside `_persist_hr_samples`, whose catch-all logged it against the wrong table and left the session unusable, so the next query raised.
+
+**Status.** Landed: PR #305, merge `f695591`. The backend deploy `19a26b44` reached SUCCESS at 23:12Z on 3 Oct. No sync had reached it when this was written, so the live proof (an overlapping pair of syncs both returning 200) is owed.
+
+**How you know.**
+- *Railway deploy logs, read by Code:* the `uq_hc_record_source` violation with key `(1, heart_rate, 2026-10-03T02:32:00Z, com.garmin...)` on three requests, logged from `health_connect.py:630`; the HTTP log's four overlapping requests.
+- *Tests:* `tests/test_hc_sync_concurrency.py` (8). Three fail on the old code with that signature (the violation, the mislabelled log, `PendingRollbackError`) and pass on the new. Four characterise the new behaviour and fail on the old only because it deferred writes to flush. One ties the conflict target to the model's own constraint. Full backend suite: 2,700 passed.
+- *Not verified here.* Behaviour under a real concurrent pair on Postgres: the suite runs SQLite, which cannot overlap two requests.
+
+**Do not revisit unless.** A second overlap failure appears on another path (Q208), or `synced_at` is needed as last-seen (then add a column; do not revert this).
+
+---
