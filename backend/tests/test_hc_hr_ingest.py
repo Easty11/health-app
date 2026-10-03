@@ -159,8 +159,13 @@ def test_the_postgres_dialect_path_emits_on_conflict_do_nothing():
 def test_an_hr_insert_failure_is_reported_and_does_not_roll_back_the_rest_of_the_sync(db_session, monkeypatch):
     u = _user(db_session)
 
-    def _boom(*_a, **_k):
-        raise RuntimeError("hr insert broke")
+    real_insert = sqlite_dialect.insert
+
+    def _boom(table, *a, **k):
+        # Selective: record_sources capture shares this insert path and must keep working.
+        if table.name == "hr_samples":
+            raise RuntimeError("hr insert broke")
+        return real_insert(table, *a, **k)
     monkeypatch.setattr(sqlite_dialect, "insert", _boom)
 
     ex = ExerciseRecord(startTime=_iso(), endTime=_iso(minutes=30), type=79, sourcePackage=GARMIN, id="w1")
