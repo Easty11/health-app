@@ -269,8 +269,9 @@ self-merge on green under § Merge disposition.
   query ran this way). Transform recomputes run in-container: `railway ssh --service
   health-app-backend` → `cd /app` → `/opt/venv/bin/python load_events.py`. Use the venv interpreter
   and `cd /app` explicitly — bare `python` is the system interpreter (no sqlalchemy), and the cwd is
-  `/app`, not `/app/backend`. `load_events.window` is a Postgres reserved word — quote it (`"window"`)
-  in hand queries. Windows psql needs `\encoding UTF8` for session titles to render.
+  `/app`, not `/app/backend`. The `load_events` window column is `load_window` (migration
+  `1341a2cf6938`, #246), not `window`: the rename took it off the Postgres reserved word, so hand
+  queries use `load_window` unquoted. Windows psql needs `\encoding UTF8` for session titles to render.
 
 ### Recent landings
 
@@ -278,11 +279,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Polar sport ids mapped from Polar's own list; a report-first relabel script; the Polar-row-vs-Hevy questions filed (#366, Q205-Q206).** The Polar sport-id map now follows the Polar Flow list for both transports (id 4 is Jogging, not Walking), and stored rows relabel only through the operator-run `scripts/polar_sport_backfill.py`. The hierarchy tie-break was dropped for the source-agnostic input-layer design (Q201). Code plus governance, no schema - Handoff: `closeout.md`.
+
 - **Device source hierarchy recorded; four app-behaviour questions verified against master (#365, Q201-Q204).** The watch owns running, the Catapult SPT3 is the preferred but optional field source, and missing device data must be explicit. Cross-source dedup is read-time and silent, nothing floors a session with no device HR, absence has no representation, and the trail-run label is lost at Health Connect. Governance only, no code and no schema - Handoff: `closeout.md`.
 
 - **HC sessions zoned from raw HR on a zone model we own (#364).** `hr_samples` keeps every posted HR sample; a per-user, dated `user_hrmax` and our %HRmax bands turn a session's same-writer samples into zones, filled by the soft-fail chain step `hc_zone_enrich`; a re-sync no longer wipes the fill. Closes Q159; the #322 no-sport-exclusion ruling stands. Code; the PR holds for the operator at the schema migration - Handoff: `closeout.md`.
-
-- **Garmin account mix-up repaired and guarded (#358-#362).** One Garmin account had been connected to two users; the copies are purged, the wrong user re-minted her own, and an attach now refuses an account already linked to another user and fails closed. Users 6, 7 and 8 retired; the guard is verified in prod and class B stays with Deb. Code, self-merged on green (the migration released by the operator) - Handoff: `closeout.md`.
 
 ---
 
