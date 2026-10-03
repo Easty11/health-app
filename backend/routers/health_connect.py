@@ -489,6 +489,13 @@ def _reject_pre2020(payload: SyncPayload) -> int:
     return total
 
 
+def _dialect_insert(db: Session):
+    """The ON CONFLICT-capable `insert` for this session's engine: Postgres in prod, SQLite in the
+    suite. Looked up at call time so both engines run the same statement shape."""
+    from sqlalchemy.dialects import postgresql, sqlite
+    return postgresql.insert if db.get_bind().dialect.name == "postgresql" else sqlite.insert
+
+
 def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> int:
     """Persist per-record writer identity BEFORE _aggregate_day collapses the night.
 
@@ -499,12 +506,22 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     and Postgres, which would defeat both dedup and re-sync idempotency.
 
     Two apps writing the same (type, timestamp) now persist as two distinct rows
-    (the multi-writer signal F1 needs); re-syncing the same (type, timestamp,
-    package) refreshes synced_at rather than duplicating. Capture only — no
-    filtering, and the aggregated row is untouched (#36/#37).
+    (the multi-writer signal F1 needs). Capture only — no filtering, and the
+    aggregated row is untouched (#36/#37).
 
     Records with no primary timestamp are skipped (they carry no usable key and
     aggregation already ignores them).
+
+    Race-free by construction: chunked `INSERT ... ON CONFLICT DO NOTHING` on
+    `uq_hc_record_source`, so overlapping syncs of one user cannot collide. The earlier form
+    read every existing key, then added the missing ones through the ORM; a concurrent POST that
+    committed the same keys in between made the flush raise UniqueViolation, and the whole sync
+    rolled back to a 500 (prod, 3 Oct 2026: four overlapping POSTs, three 500s). The existing-row
+    preload went with it, so a sync no longer reads the whole table.
+
+    Semantics change, deliberate: a re-synced key is left alone, so `synced_at` is when the key
+    was FIRST captured, no longer when it was last re-posted. Nothing in the backend reads it
+    (the readers use source_package, record_type and record_start only).
 
     Returns (new_rows_inserted, unattributed): the second is the count of captured
     records this sync whose writer degraded to 'unknown' (#234/#235). It is tallied
@@ -539,34 +556,20 @@ def _capture_record_sources(payload: SyncPayload, user_id: int, db: Session) -> 
     if not captured:
         return 0, unattributed
 
-    # One query for this user's existing keys; upsert in memory (dialect-agnostic —
-    # local is SQLite, prod Postgres). At personal/family scale this table is small.
-    existing = {
-        (o.record_type, o.record_start, o.source_package): o
-        for o in db.query(models.HealthConnectRecordSource)
-                   .filter_by(user_id=user_id)
-                   .all()
-    }
     now = datetime.now(timezone.utc)
+    # Collapse intra-payload key collisions in order; ON CONFLICT handles collisions with stored rows.
+    keys = list(dict.fromkeys(captured))
+    values = [{"user_id": user_id, "record_type": rtype, "record_start": rstart,
+               "source_package": pkg, "synced_at": now} for rtype, rstart, pkg in keys]
+
+    insert = _dialect_insert(db)
+    table = models.HealthConnectRecordSource.__table__
     inserted = 0
-    seen: set[tuple[str, str, str]] = set()
-    for rtype, rstart, pkg in captured:
-        key = (rtype, rstart, pkg)
-        if key in seen:
-            continue                       # collapse intra-payload key collisions
-        seen.add(key)
-        obj = existing.get(key)
-        if obj:
-            obj.synced_at = now            # same writer re-synced — refresh only
-        else:
-            db.add(models.HealthConnectRecordSource(
-                user_id=user_id,
-                record_type=rtype,
-                record_start=rstart,
-                source_package=pkg,
-                synced_at=now,
-            ))
-            inserted += 1
+    for i in range(0, len(values), HR_SAMPLE_CHUNK):
+        stmt = (insert(table).values(values[i:i + HR_SAMPLE_CHUNK])
+                .on_conflict_do_nothing(
+                    index_elements=["user_id", "record_type", "record_start", "source_package"]))
+        inserted += max(db.execute(stmt).rowcount, 0)
     return inserted, unattributed
 
 
@@ -590,10 +593,16 @@ def _persist_hr_samples(payload: SyncPayload, user_id: int, db: Session) -> dict
     samples of one writer inside the same second collapse to one — counted as `deduped`.
     An unparseable `time` is dropped and counted, never guessed.
 
-    Failure isolation: the insert runs in a SAVEPOINT and a failure is logged and reported in
+    Failure isolation: the INSERT runs in a SAVEPOINT and a failure of it is logged and reported in
     the sync response (`{"error": ...}`), never raised — a fill of a new table must not roll back
     the day aggregates and exercise rows riding the same commit. The zone step reports
     `no_same_writer_hr` for any row this left without samples, so the gap is visible downstream.
+
+    What it does NOT isolate: work already pending in the session (exercise rows, the sync event).
+    `begin_nested()` flushes pending objects first, so a failure THERE used to land in the handler
+    below, get logged as an hr_samples failure (the wrong table), and leave the session unusable:
+    the next query raised and the sync returned a 500 (prod, 3 Oct 2026). The explicit `flush()`
+    before the savepoint makes such a failure surface as itself, with its own traceback.
     """
     # `received` here is what reached this step — AFTER the pre-2020 reject; the as-posted count is
     # the sync response's top-level `received["heartRate"]` (the two reconcile via `rejected_pre_2020`).
@@ -614,11 +623,10 @@ def _persist_hr_samples(payload: SyncPayload, user_id: int, db: Session) -> dict
     if not rows:
         return counts
 
-    from sqlalchemy.dialects import postgresql, sqlite
-    dialect = db.get_bind().dialect.name
-    insert = postgresql.insert if dialect == "postgresql" else sqlite.insert
+    insert = _dialect_insert(db)
     table = models.HrSample.__table__
     values = list(rows.values())
+    db.flush()   # pending work fails as ITSELF here, outside the handler below (see docstring)
     try:
         with db.begin_nested():
             for i in range(0, len(values), HR_SAMPLE_CHUNK):
