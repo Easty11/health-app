@@ -393,7 +393,9 @@ def render_workout(w: dict[str, Any], now: datetime) -> list[str]:
             ex_title = logged or template_id or "Unknown exercise"
             uncatalogued_str = " [UNCATALOGUED — logged title, may not resolve]"
 
-        notes = ex.get("notes", "").strip()
+        # `or ""`, not a `.get` default: Hevy sends `"notes": null` for an exercise with no note,
+        # and a default applies only when the key is ABSENT.
+        notes = (ex.get("notes") or "").strip()
         rest = ex.get("rest_seconds")
 
         notes_str = f" — {notes}" if notes else ""
