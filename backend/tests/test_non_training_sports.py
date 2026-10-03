@@ -16,6 +16,14 @@ BACKEND = Path(__file__).resolve().parents[1]
 CONSUMERS = ("reads/psychological_reads.py", "cbti/replay.py")
 _IMPORT_RE = re.compile(r"^from sport_classes import\b", re.M)
 
+# Files that legitimately quote several members without declaring the SET: an id -> display-name
+# table carries every sport name Polar publishes (Yoga, Pilates and Stretching are three of its ids)
+# and attaches no non-training meaning to any of them - `sport_classes` decides that, on the stored
+# name, at read time. An entry the detector no longer trips on is stale and fails, so the list stays honest.
+NAME_TABLES = {
+    "import_polar.py": "Polar Flow sport-id -> name table (SPORT_NAMES); names only, no set semantics.",
+}
+
 
 def test_set_is_the_ratified_four():
     assert NON_TRAINING_SPORTS == {"Walking", "Pilates", "Yoga", "Stretching"}
@@ -47,6 +55,9 @@ def test_no_second_list_anywhere():
         src = path.read_text(encoding="utf-8", errors="replace")
         if any(p.search(src) for p in pats):
             offenders.append(rel)
+    stale = sorted(set(NAME_TABLES) - set(offenders))
+    assert stale == [], f"NAME_TABLES entries no longer quote the set members (remove them): {stale}"
+    offenders = [o for o in offenders if o not in NAME_TABLES]
     assert offenders == [], f"declare non-training sports only in sport_classes.py: {offenders}"
 
 
