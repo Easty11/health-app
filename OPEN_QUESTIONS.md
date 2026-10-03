@@ -2327,6 +2327,30 @@ Raised 2026-09-17 with #306. `load_ratio = acute(7d)/chronic(28d)` is a COUPLED 
 
 ---
 
+## Q159. Stage-2 HC exercise zones — load treatment of a zoned activity session
+
+Raised 2026-09-18 with #309 (HC exercise ingest stage 1). Stage 1 ingests HC exercise records as ZONELESS `aerobic_sessions` rows (`z*_seconds` NULL, INV-7 fail-closed → no metabolic `load_event`). Stage 2 would derive HR-zone seconds from the HC heart-rate samples posted alongside the workout, at which point a session deposits metabolic TRIMP like any Polar row.
+
+**Named blocker:** the HCA HR-lag finding — HR samples arrive ~6 days behind the sync that carries the workout (observed ~15 s sample spacing during Garmin activities on user 4, ~2 min outside them), so a zone reconstruction on the workout's sync would score an empty window. Stage 2 cannot be built until the lag is characterised and the reconstruction reads the later-arriving HR.
+
+**Coupled load-model decision (NOT a resolver one, #302 series invariance):** a zoned pilates or walk session would deposit metabolic TRIMP. Whether some sports (rehab swimming, pilates, walks) are EXCLUDED from the metabolic window is a LOAD-MODEL call — it changes what the transform computes, not what the resolver counts — and is explicitly NOT made in #309. The resolver's `activity`-slot brief (v2, queued) decides what a session MEANS for the plan; it never alters the load model.
+
+**To close (if built):** characterise the HR-lag, reconstruct zones from the posted HR onto the existing zoneless row (a recompute, not a new row), and rule the sport-exclusion question at the load layer. Schema-neutral if it only fills existing `z*_seconds`; the recompute/versioning discipline (#248) applies.
+
+Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). HC sessions still carry null `hr_avg`/`hr_max` by stage-1 design; this is the stage-2 join.
+
+#302 sport call ruled #322: no sport exclusion for the metabolic deposit. Stage 2 unblocked on the load-model side.
+
+**Resolution (#364, 1 Oct 2026).** Stage 2 is built as a source-neutral HR zoning: raw samples in `hr_samples`, a per-user dated HRmax in `user_hrmax`, our own %HRmax bands, zones filled onto `health_connect` rows by the soft-fail chain step `hc_zone_enrich`. The named blocker did not hold: the newest HR sample is 0.0-7.6 h old at each POST (not ~6 days) and every POST re-sends about 7 days. The sport-exclusion question was ruled #322 S2 and reaffirmed by the operator on 1 Oct (no exclusion; zone weighting prices every zoned session). Polar re-zoning from raw HR is the follow-on, Q198.
+
+**Reopened (4 Oct 2026, #369).** Measured lag: the 26 Sep Pilates in-activity HR (241 Garmin samples at 13 s) reached `hr_samples` only after the 7-day manual sync at 13:47Z on 3 Oct, about 7 days after the session, and was absent after the 30-day manual sync at 03:33Z. That agrees with the lag named above (about 6 days, HCA Q22, user 4). The Resolution above set the blocker aside on "the newest HR sample is 0.0-7.6 h old at each POST"; that measures the freshest passive sample and does not cover in-activity lateness. What stays open: what the app shows and deposits for a session inside the lag window (a zoneless row reads as zero load, silently: Q202, Q203), and the re-read depth that covers it (#370 sets the scheduled window to 30 days). The recompute on every chain run (#364) is what fills such a row once its HR is stored.
+
+**State:** OPEN. Owner: Luke. Not blocking. Related: #369, #370, Q202, Q203, Q207.
+
+---
+
+---
+
 ## Q163. A real tool-use runtime for the in-app chat?
 
 Raised 2026-09-20 with #314. The in-app coach has NO tool loop — it acts through embedded tags (`<hevy_create_routine>`, `<hevy_update_routine>`, `<knowledge_update>`, `<capability_update>`) parsed out of a single completion, and reads everything it needs (routines included, #314) from the prepared context. The MCP tools (`search_hevy_routines`, `get_hevy_routine`, …) exist only for EXTERNAL MCP clients. #314's GUARD: do NOT build a tool runtime there — it is a larger decision.
@@ -2833,6 +2857,8 @@ Raised with #365. Verified against master `054d2d9`.
 
 **To decide (Luke).** For a zoneless watch-owned run: (a) stay fail-closed but make the absence explicit (Q203); (b) floor it with RPE × minutes, which is Q189's design fork (capture surface, scaling into lane units); (c) both. Q189 covers device-only sessions such as Pilates and swimming; this entry is the running case the hierarchy creates. Resolve together.
 
+**Scope note (4 Oct 2026, operator, with #369).** The Q202 brief is to follow. Its case A is rows inside the Garmin in-activity HR lag window (about 7 days from the session). It is not a cover for the scheduled-sync failure (#370).
+
 **State:** OPEN. Owner: Luke. Not blocking.
 
 ---
@@ -2922,46 +2948,17 @@ Resolution and depth, from the operator's 1 Oct prod reads recorded in Q198: Gar
 
 ---
 
-## Q207. Which writer owns sessions 68, 69, 71, 80-85 and 92, and why did Garmin write no activity HR for them?
+## Q208. Overlapping Health Connect syncs: the sibling read-then-add paths, and whether to serialise syncs per user
 
-Raised 3 Oct 2026 with #367 from the Q206 gap-distribution read. Report-only: nothing is built and nothing is proposed. **Operator-reported, not read by Code:** across the 30 most recent HC sessions, sessions 68, 69, 71, 80-85 and 92 contain only Garmin passive HR samples (120 s apart), and they are the `no_same_writer_hr` rows. `com.sec.android.app.shealth` writes 10 s samples on 79-83.
+Raised 4 Oct 2026 with #371, which fixed the `record_sources` race (PR #305). The same shape remains on two paths. `_ingest_exercise_sessions` loads the user's existing `health_connect` rows and adds the missing ones through the ORM (unique `uq_aerobic_session_source`), and `sync()` does `.first()` then `add` for the per-day `HealthConnectSync` row. Two overlapping POSTs that both carry a new exercise or a new day can still collide. Since #305's `flush()` the failure surfaces as itself, but the sync still returns 500 and rolls back whole.
 
-**What the code says the reason means.** `hr_zones.zone()` returns `no_same_writer_hr` only when there are no plausible same-writer samples inside `[start, stop]` (`hr_zones.py:112-114`); a writer with passive 120 s samples inside the window would return `sparse` (coverage about 0.5 against 0.6, `:130`). So a row reported as `no_same_writer_hr` with only Garmin passive samples around it is a row whose session writer is not the writer of those samples, or whose window holds none of them. Which of those it is has not been read.
+**What is known about the overlap.** Four POSTs started within 15 s on 3 Oct, two at the same instant (Railway HTTP log). The manual buttons are disabled while a sync runs (`SyncScreen.js:269,279`), so one tap cannot overlap itself, and the background task has no coordination with them (`backgroundSync.js:51`, `syncRunner.js:66`). The source is unknown (Guessing: the background task overlapping a manual run).
 
-**Question.** For each of these sessions, which package wrote the exercise record (`aerobic_sessions.source_package`), which packages wrote HR inside its window, and why did the Garmin watch write no activity-rate HR for it? Guessing, to be tested not assumed: (i) the exercise record's writer is not Garmin (Samsung Health on 79-83 is the obvious candidate); (ii) the writer is Garmin but the session is shorter than the passive interval, so no sample falls inside it; (iii) Garmin recorded the activity but its activity HR never reached Health Connect.
+**To decide.** (a) A per-user advisory lock at the start of `sync()` (`pg_advisory_xact_lock`; Postgres only, no schema), so overlapping syncs queue. (b) `ON CONFLICT` upserts for the exercise and day rows: more change, and the exercise upsert carries the mirror-drop and the "never touch z*" rules. (c) A phone-side single-flight guard (companion repo). (d) Nothing until a second failure is seen.
 
-**First read (owed, operator).** One row per session and HR writer, with zero HR rows showing as a NULL `hr_pkg`. Parser-checked with `pglast` and against `SCHEMA.md`; not run:
+Code's lean, not a ruling: (a), as the one change that closes the whole class, and (c) alongside P1 (#370).
 
-    WITH s AS (SELECT id AS sid, user_id, source_package AS session_pkg, sport_name, start_time AS st, stop_time AS sp, round(duration_minutes::numeric, 1) AS dur_min FROM aerobic_sessions WHERE user_id = 1 AND id IN (68, 69, 71, 80, 81, 82, 83, 84, 85, 92)), g AS (SELECT s.sid, h.source_package AS hr_pkg, h.sample_time, h.sample_time - lag(h.sample_time) OVER (PARTITION BY s.sid, h.source_package ORDER BY h.sample_time) AS gap FROM s JOIN hr_samples h ON h.user_id = s.user_id AND h.sample_time BETWEEN s.st AND s.sp) SELECT s.sid, s.session_pkg, s.sport_name, s.dur_min, g.hr_pkg, count(g.sample_time) AS n_samples, round(extract(epoch FROM percentile_cont(0.5) WITHIN GROUP (ORDER BY g.gap))::numeric, 1) AS median_gap_s FROM s LEFT JOIN g ON g.sid = s.sid GROUP BY s.sid, s.session_pkg, s.sport_name, s.dur_min, g.hr_pkg ORDER BY s.sid, g.hr_pkg;
-
-**Findings (3 Oct 2026).** Report-only; nothing is built. **Operator-reported, not read by Code:** the loss is located for the Pilates session (53:45, average about 100 bpm). Garmin Connect holds the full wrist HR; Health Connect holds Garmin HR for the same span at about 5 records a minute; the app's `hr_samples` holds only the Garmin passive 120 s rows there. The loss is HC to app. Code read both repos: this one on master `3b275c1`, and the companion `health-connect-app` at `0c2f982` (24 Sep; shallow, read-only). The phone runs whichever build the operator installed, and `health_connect_sync_events.git_sha` names it; that was not read.
-
-**(1) Does the sync re-read HR for past windows? Yes, to a fixed depth. It is not read once at arrival.**
-- *Phone.* `fetchAllData(days)` reads the whole window, `daysAgo(days)` to now, for every stream on every sync, with no cursor and no last-sync state (`src/healthConnect.js:418-444`, `daysAgo` at `:91-96`). The windows are 7 days for the background task (`src/backgroundSync.js:52`) and for the manual button (`src/SyncScreen.js:268`), and 30 days for the second manual button (`:278`). HR is read as `HeartRate` records with every sample flattened (`healthConnect.js:252-255`), paged at 1000 and ascending, capped at 100 pages (`src/fetchMeta.js:8-15`). A mapper that kept one sample per record is ruled out for that commit.
-- *Server.* It stores any sample time, with no bound from the sync window, and an existing sample is left alone (`routers/health_connect.py:577-632`; `periodDays` bounds only the daily aggregation, `:1113`, `:1192`). `hc_zone_enrich` recomputes every HC row from stored samples on every chain run (`hc_zone_enrich.py:12-14`, `:64-68`), and `zone_session` withholds a row below coverage 0.6 (`hr_zones.py:43`, `:129-130`). So "defer zoning until coverage reaches 0.6" is already the server's behaviour: a row stays zoneless until enough samples arrive, then fills.
-- *So the lead hypothesis is half right.* HR that Garmin writes to HC after the exercise record is re-read, but only for 7 days (30 by the manual button). An in-activity write later than that is never re-posted.
-- *The loss is upstream of this server's storage, not a persistence defect.* Q198 (operator, 1 Oct) read `health_connect_record_sources`, which has captured one row per POSTed HR sample time since before `hr_samples` existed, and already recorded rows 69, 85 and 92 as passive 120 s only. The in-activity samples were not in the POSTs the server received, and the `hr_samples` result repeats that.
-- *What is not known:* when Garmin wrote those samples to HC. Q159 recorded in-activity HR arriving about 6 days behind the workout's sync (the HCA Q22 finding, user 4), one day inside the 7-day window. #364 set that blocker aside because "the newest HR sample is 0.0-7.6 h old at each POST". That measures the freshest sample of the stream, which passive sampling refreshes constantly, and it cannot see how late in-activity HR is. So #364's dismissal does not rule the lag out, and this case is the one it would have caught (Likely; no decision changes, #364 is append-only).
-
-**(2) Can a back-window re-sync recover 69, 85 and 92 from the phone's Health Connect store?** Probably, if they are within 30 days; it is untested.
-- *Mechanism.* The 30-day button re-reads 30 days, and a `periodDays=30` POST is on record (Q198). The server inserts what arrives and the next chain run re-zones each row. Nothing re-reads beyond 30 days: there is no control for it. The start dates of 69, 85 and 92 were not read here; if any is older than 30 days at the time of the sync, the app cannot fetch it (Guessing: 69 is the oldest of the three, by id order).
-- *HC side, unverified.* Whether HC still serves the older records. The manifest declares `READ_HEALTH_DATA_IN_BACKGROUND` and no history permission (`android/app/src/main/AndroidManifest.xml:18`). Guessing: without it, HC limits an app to 30 days before its first grant, which a 30-day window would not hit.
-- *The test that answers it (operator).* Press the 30-day sync, then re-run the first read above. In-activity samples appearing for those rows means they were written to HC later than the re-read window. Samples still absent while HC holds them means the phone's read path is at fault, not lateness; the next read is then `health_connect_sync_events.fetch_meta -> 'heartRate'` (`truncated`, `pages`, `oldestAt`) for the POSTs after the session.
-
-**(3) Design note for the fix. No build; Luke rules.**
-- *What constrains it.* The server already defers zoning, so the gap is only the phone's fixed window. The server knows which rows are starved (`sparse` and `no_same_writer_hr` in the `hc_zone_enrich` return dict) and never tells the phone. Nothing stored before `hr_samples` records lateness; `hr_samples.created_at` is the arrival time, insert-once, so it measures lateness for every session recorded after the #364 deploy (the deploy date was not read here). For sessions before it, `created_at` is the first sync after the deploy, which is meaningless as a lag.
-- *Option A: widen the scheduled window,* `days` 7 to 30 at `backgroundSync.js:52`. One line, a phone release only, no server change. It costs about 4 times the HR payload per scheduled sync, and every POST re-runs `_capture_record_sources`, which loads all of the user's existing keys (`routers/health_connect.py:544-549`) and grows with the table. The depth is still fixed, so a lag longer than the window recurs.
-- *Option B: a targeted re-read.* The server names its unzoned HC session windows within N days (the sync response or a GET; no schema) and the phone re-reads HR for just those windows until covered or N days pass. It closes the gap for any lag inside N with a bounded payload, but it is a cross-repo contract change, and the server read must soft-fail.
-- *Option C: measure first.* Read the lateness distribution on the next non-GPS Garmin sessions with the second query below, then size A from data.
-- *Code's lean, not a ruling:* C, then A if the lag is bounded (under about 14 days), because A is one line and reversible; B only if the lag is unbounded or A's payload shows up as a cost. Whatever is chosen, a starved row is silent today (Q202, Q203), so making absence visible stands apart from recovering it.
-
-**What this does not settle.** The located case covers the Pilates rows. Q198 already attributes 68 and 84 to Samsung exercise rows with no same-writer HR (the Samsung HR stream ends 14 Sep), and notes the Samsung HR on 79-83 starts about 3.5 minutes after the walk's start. Rows 71 and 80-83 are not accounted for by the located case. The first read, which prints each session's own writer beside the HR writers in its window, covers them.
-
-**Second read, the lateness instrument (owed, operator; useful for sessions after the #364 deploy).** One row per HC session and HR writer among the 30 most recent, with the hours from the session's end to the first arrival of that writer's HR. Parser-checked with `pglast` and against `SCHEMA.md`; not run:
-
-    WITH s AS (SELECT id AS sid, user_id, source_package AS session_pkg, start_time AS st, stop_time AS sp FROM aerobic_sessions WHERE user_id = 1 AND source = 'health_connect' ORDER BY start_time DESC LIMIT 30) SELECT s.sid, s.st, s.session_pkg, h.source_package AS hr_pkg, count(h.id) AS n_samples, min(h.created_at) AS first_arrived, round(extract(epoch FROM (min(h.created_at) - s.sp)) / 3600.0, 1) AS first_arrival_lag_h FROM s LEFT JOIN hr_samples h ON h.user_id = s.user_id AND h.sample_time BETWEEN s.st AND s.sp GROUP BY s.sid, s.st, s.sp, s.session_pkg, h.source_package ORDER BY s.sid, h.source_package;
-
-**State:** OPEN. Located for the Pilates rows (HC to app; the cause is the phone's fixed re-read window or a read-path fault, to be told apart by the 30-day sync test); not located for 71 and 80-83. Owner: operator (the 30-day sync test, then the first read again; the second read on the next non-GPS Garmin session), Luke (the choice among options A, B and C). Not blocking. Related: Q159 (closed at #364; its original lag blocker is not ruled out), Q198, Q202, Q203, Q206.
+**State:** OPEN. Owner: Luke. Not blocking. Related: #371, #370, Q207.
 
 ---
 
@@ -5453,26 +5450,6 @@ Diagnosed 2026-09-15 (#298): Garmin overnight HRV reaches `hrv_readings` only wh
 
 ---
 
-## Q159. Stage-2 HC exercise zones — load treatment of a zoned activity session
-
-Raised 2026-09-18 with #309 (HC exercise ingest stage 1). Stage 1 ingests HC exercise records as ZONELESS `aerobic_sessions` rows (`z*_seconds` NULL, INV-7 fail-closed → no metabolic `load_event`). Stage 2 would derive HR-zone seconds from the HC heart-rate samples posted alongside the workout, at which point a session deposits metabolic TRIMP like any Polar row.
-
-**Named blocker:** the HCA HR-lag finding — HR samples arrive ~6 days behind the sync that carries the workout (observed ~15 s sample spacing during Garmin activities on user 4, ~2 min outside them), so a zone reconstruction on the workout's sync would score an empty window. Stage 2 cannot be built until the lag is characterised and the reconstruction reads the later-arriving HR.
-
-**Coupled load-model decision (NOT a resolver one, #302 series invariance):** a zoned pilates or walk session would deposit metabolic TRIMP. Whether some sports (rehab swimming, pilates, walks) are EXCLUDED from the metabolic window is a LOAD-MODEL call — it changes what the transform computes, not what the resolver counts — and is explicitly NOT made in #309. The resolver's `activity`-slot brief (v2, queued) decides what a session MEANS for the plan; it never alters the load model.
-
-**To close (if built):** characterise the HR-lag, reconstruct zones from the posted HR onto the existing zoneless row (a recompute, not a new row), and rule the sport-exclusion question at the load layer. Schema-neutral if it only fills existing `z*_seconds`; the recompute/versioning discipline (#248) applies.
-
-Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). HC sessions still carry null `hr_avg`/`hr_max` by stage-1 design; this is the stage-2 join.
-
-#302 sport call ruled #322: no sport exclusion for the metabolic deposit. Stage 2 unblocked on the load-model side.
-
-**Resolution (#364, 1 Oct 2026).** Stage 2 is built as a source-neutral HR zoning: raw samples in `hr_samples`, a per-user dated HRmax in `user_hrmax`, our own %HRmax bands, zones filled onto `health_connect` rows by the soft-fail chain step `hc_zone_enrich`. The named blocker did not hold: the newest HR sample is 0.0-7.6 h old at each POST (not ~6 days) and every POST re-sends about 7 days. The sport-exclusion question was ruled #322 S2 and reaffirmed by the operator on 1 Oct (no exclusion; zone weighting prices every zoned session). Polar re-zoning from raw HR is the follow-on, Q198.
-
-**State:** DONE → #364.
-
----
-
 ## Q160. Do non-training activity minutes belong in the psychological felt-load term?
 
 Raised 2026-09-18 with #309 (HC exercise ingest) at PR review. `reads/psychological_reads._duration_min_by_day` sums per-day training minutes; that Σminutes × `session_rpe` is the "felt" load — the target `y` of the ridge regression in `psychological_residual` (the subjective-vs-objective decoupling marker, #28; a down-only diagnostic, consumer deferred) — and its session count flags a multi-session day.
@@ -5746,5 +5723,50 @@ Raised with #365. Verified against master `054d2d9`.
 **Resolution (3 Oct 2026).** The live check was read by the operator on 2 Oct (operator-reported; Code has no DB route). Garmin "Trail Running" arrives through Health Connect as sport 56, so it is stored "Running": row 93, `health_connect`, Garmin package, `sport_id` 56, `sport_name` "Running", `hr_avg` 145, zoned (`z1_seconds` 30). That settles the Guessing above. The activity title is dropped at ingest (`routers/health_connect.py:238` accepts it; the stored fields at `:753-762` omit it), so the operator's "Trail Running" label is not kept. There is no load effect: the metabolic transform scores zone seconds and uses `sport_name` as provenance only, with no sport exclusion (#322 S2). Option (a) is taken: accept the loss and declare every running name a slot should claim; options (b) (persist `title`, a schema migration) and (c) (a source-neutral activity class) are not pursued. The Polar half of the finding ("`SPORT_NAMES` has no Jogging") was a wrong-table defect, not a gap: the whole Polar map was replaced from the Polar Flow list (#366).
 
 **State:** `DONE → #366`.
+
+---
+
+## Q207. Which writer owns sessions 68, 69, 71, 80-85 and 92, and why did Garmin write no activity HR for them?
+
+Raised 3 Oct 2026 with #367 from the Q206 gap-distribution read. Report-only: nothing is built and nothing is proposed. **Operator-reported, not read by Code:** across the 30 most recent HC sessions, sessions 68, 69, 71, 80-85 and 92 contain only Garmin passive HR samples (120 s apart), and they are the `no_same_writer_hr` rows. `com.sec.android.app.shealth` writes 10 s samples on 79-83.
+
+**What the code says the reason means.** `hr_zones.zone()` returns `no_same_writer_hr` only when there are no plausible same-writer samples inside `[start, stop]` (`hr_zones.py:112-114`); a writer with passive 120 s samples inside the window would return `sparse` (coverage about 0.5 against 0.6, `:130`). So a row reported as `no_same_writer_hr` with only Garmin passive samples around it is a row whose session writer is not the writer of those samples, or whose window holds none of them. Which of those it is has not been read.
+
+**Question.** For each of these sessions, which package wrote the exercise record (`aerobic_sessions.source_package`), which packages wrote HR inside its window, and why did the Garmin watch write no activity-rate HR for it? Guessing, to be tested not assumed: (i) the exercise record's writer is not Garmin (Samsung Health on 79-83 is the obvious candidate); (ii) the writer is Garmin but the session is shorter than the passive interval, so no sample falls inside it; (iii) Garmin recorded the activity but its activity HR never reached Health Connect.
+
+**First read (owed, operator).** One row per session and HR writer, with zero HR rows showing as a NULL `hr_pkg`. Parser-checked with `pglast` and against `SCHEMA.md`; not run:
+
+    WITH s AS (SELECT id AS sid, user_id, source_package AS session_pkg, sport_name, start_time AS st, stop_time AS sp, round(duration_minutes::numeric, 1) AS dur_min FROM aerobic_sessions WHERE user_id = 1 AND id IN (68, 69, 71, 80, 81, 82, 83, 84, 85, 92)), g AS (SELECT s.sid, h.source_package AS hr_pkg, h.sample_time, h.sample_time - lag(h.sample_time) OVER (PARTITION BY s.sid, h.source_package ORDER BY h.sample_time) AS gap FROM s JOIN hr_samples h ON h.user_id = s.user_id AND h.sample_time BETWEEN s.st AND s.sp) SELECT s.sid, s.session_pkg, s.sport_name, s.dur_min, g.hr_pkg, count(g.sample_time) AS n_samples, round(extract(epoch FROM percentile_cont(0.5) WITHIN GROUP (ORDER BY g.gap))::numeric, 1) AS median_gap_s FROM s LEFT JOIN g ON g.sid = s.sid GROUP BY s.sid, s.session_pkg, s.sport_name, s.dur_min, g.hr_pkg ORDER BY s.sid, g.hr_pkg;
+
+**Findings (3 Oct 2026).** Report-only; nothing is built. **Operator-reported, not read by Code:** the loss is located for the Pilates session (53:45, average about 100 bpm). Garmin Connect holds the full wrist HR; Health Connect holds Garmin HR for the same span at about 5 records a minute; the app's `hr_samples` holds only the Garmin passive 120 s rows there. The loss is HC to app. Code read both repos: this one on master `3b275c1`, and the companion `health-connect-app` at `0c2f982` (24 Sep; shallow, read-only). The phone runs whichever build the operator installed, and `health_connect_sync_events.git_sha` names it; that was not read.
+
+**(1) Does the sync re-read HR for past windows? Yes, to a fixed depth. It is not read once at arrival.**
+- *Phone.* `fetchAllData(days)` reads the whole window, `daysAgo(days)` to now, for every stream on every sync, with no cursor and no last-sync state (`src/healthConnect.js:418-444`, `daysAgo` at `:91-96`). The windows are 7 days for the background task (`src/backgroundSync.js:52`) and for the manual button (`src/SyncScreen.js:268`), and 30 days for the second manual button (`:278`). HR is read as `HeartRate` records with every sample flattened (`healthConnect.js:252-255`), paged at 1000 and ascending, capped at 100 pages (`src/fetchMeta.js:8-15`). A mapper that kept one sample per record is ruled out for that commit.
+- *Server.* It stores any sample time, with no bound from the sync window, and an existing sample is left alone (`routers/health_connect.py:577-632`; `periodDays` bounds only the daily aggregation, `:1113`, `:1192`). `hc_zone_enrich` recomputes every HC row from stored samples on every chain run (`hc_zone_enrich.py:12-14`, `:64-68`), and `zone_session` withholds a row below coverage 0.6 (`hr_zones.py:43`, `:129-130`). So "defer zoning until coverage reaches 0.6" is already the server's behaviour: a row stays zoneless until enough samples arrive, then fills.
+- *So the lead hypothesis is half right.* HR that Garmin writes to HC after the exercise record is re-read, but only for 7 days (30 by the manual button). An in-activity write later than that is never re-posted.
+- *The loss is upstream of this server's storage, not a persistence defect.* Q198 (operator, 1 Oct) read `health_connect_record_sources`, which has captured one row per POSTed HR sample time since before `hr_samples` existed, and already recorded rows 69, 85 and 92 as passive 120 s only. The in-activity samples were not in the POSTs the server received, and the `hr_samples` result repeats that.
+- *What is not known:* when Garmin wrote those samples to HC. Q159 recorded in-activity HR arriving about 6 days behind the workout's sync (the HCA Q22 finding, user 4), one day inside the 7-day window. #364 set that blocker aside because "the newest HR sample is 0.0-7.6 h old at each POST". That measures the freshest sample of the stream, which passive sampling refreshes constantly, and it cannot see how late in-activity HR is. So #364's dismissal does not rule the lag out, and this case is the one it would have caught (Likely; no decision changes, #364 is append-only).
+
+**(2) Can a back-window re-sync recover 69, 85 and 92 from the phone's Health Connect store?** Probably, if they are within 30 days; it is untested.
+- *Mechanism.* The 30-day button re-reads 30 days, and a `periodDays=30` POST is on record (Q198). The server inserts what arrives and the next chain run re-zones each row. Nothing re-reads beyond 30 days: there is no control for it. The start dates of 69, 85 and 92 were not read here; if any is older than 30 days at the time of the sync, the app cannot fetch it (Guessing: 69 is the oldest of the three, by id order).
+- *HC side, unverified.* Whether HC still serves the older records. The manifest declares `READ_HEALTH_DATA_IN_BACKGROUND` and no history permission (`android/app/src/main/AndroidManifest.xml:18`). Guessing: without it, HC limits an app to 30 days before its first grant, which a 30-day window would not hit.
+- *The test that answers it (operator).* Press the 30-day sync, then re-run the first read above. In-activity samples appearing for those rows means they were written to HC later than the re-read window. Samples still absent while HC holds them means the phone's read path is at fault, not lateness; the next read is then `health_connect_sync_events.fetch_meta -> 'heartRate'` (`truncated`, `pages`, `oldestAt`) for the POSTs after the session.
+
+**(3) Design note for the fix. No build; Luke rules.**
+- *What constrains it.* The server already defers zoning, so the gap is only the phone's fixed window. The server knows which rows are starved (`sparse` and `no_same_writer_hr` in the `hc_zone_enrich` return dict) and never tells the phone. Nothing stored before `hr_samples` records lateness; `hr_samples.created_at` is the arrival time, insert-once, so it measures lateness for every session recorded after the #364 deploy (the deploy date was not read here). For sessions before it, `created_at` is the first sync after the deploy, which is meaningless as a lag.
+- *Option A: widen the scheduled window,* `days` 7 to 30 at `backgroundSync.js:52`. One line, a phone release only, no server change. It costs about 4 times the HR payload per scheduled sync, and every POST re-runs `_capture_record_sources`, which loads all of the user's existing keys (`routers/health_connect.py:544-549`) and grows with the table. The depth is still fixed, so a lag longer than the window recurs.
+- *Option B: a targeted re-read.* The server names its unzoned HC session windows within N days (the sync response or a GET; no schema) and the phone re-reads HR for just those windows until covered or N days pass. It closes the gap for any lag inside N with a bounded payload, but it is a cross-repo contract change, and the server read must soft-fail.
+- *Option C: measure first.* Read the lateness distribution on the next non-GPS Garmin sessions with the second query below, then size A from data.
+- *Code's lean, not a ruling:* C, then A if the lag is bounded (under about 14 days), because A is one line and reversible; B only if the lag is unbounded or A's payload shows up as a cost. Whatever is chosen, a starved row is silent today (Q202, Q203), so making absence visible stands apart from recovering it.
+
+**What this does not settle.** The located case covers the Pilates rows. Q198 already attributes 68 and 84 to Samsung exercise rows with no same-writer HR (the Samsung HR stream ends 14 Sep), and notes the Samsung HR on 79-83 starts about 3.5 minutes after the walk's start. Rows 71 and 80-83 are not accounted for by the located case. The first read, which prints each session's own writer beside the HR writers in its window, covers them.
+
+**Second read, the lateness instrument (owed, operator; useful for sessions after the #364 deploy).** One row per HC session and HR writer among the 30 most recent, with the hours from the session's end to the first arrival of that writer's HR. Parser-checked with `pglast` and against `SCHEMA.md`; not run:
+
+    WITH s AS (SELECT id AS sid, user_id, source_package AS session_pkg, start_time AS st, stop_time AS sp FROM aerobic_sessions WHERE user_id = 1 AND source = 'health_connect' ORDER BY start_time DESC LIMIT 30) SELECT s.sid, s.st, s.session_pkg, h.source_package AS hr_pkg, count(h.id) AS n_samples, min(h.created_at) AS first_arrived, round(extract(epoch FROM (min(h.created_at) - s.sp)) / 3600.0, 1) AS first_arrival_lag_h FROM s LEFT JOIN hr_samples h ON h.user_id = s.user_id AND h.sample_time BETWEEN s.st AND s.sp GROUP BY s.sid, s.st, s.sp, s.session_pkg, h.source_package ORDER BY s.sid, h.source_package;
+
+**Resolution (4 Oct 2026, #369).** No app-side loss. The operator's reads show two causes: Garmin writes in-activity HR to Health Connect about 7 days after the session, and the scheduled sync was failing with "Health Connect client is not initialized" and reading nothing (#370). The 26 Sep Pilates is sid 86: its 241 Garmin samples reached `hr_samples` only after the 7-day manual sync at 13:47Z on 3 Oct, and were absent after the 30-day manual sync at 03:33Z. Rows 85 and 92 are the 22 and 29 Sep retrospective entries; no HR exists for them in any store, so they are correctly unzoned. The Findings above named the phone's fixed re-read window or a read-path fault; the reads show the window mattered only because Garmin's export lag is about its length, and no read-path fault was found. Sid 69 was not individually read. Rows 71 and 80-83 are accounted for earlier (a history gap in `hr_samples`, filled by the 30-day sync) and 68 and 84 in Q198 (Samsung HR ended 14 Sep). Q159 is reopened with the measured lag.
+
+**State:** `DONE → #369`.
 
 ---
