@@ -357,3 +357,28 @@ test('placement: clearing the slot on a Keep item is a change (Relink to no slot
   const ops = await saveFromStep5()
   expect(ops[0]).toMatchObject({ action: 'upsert', key: 'gym', value: { satisfies: null } })
 })
+
+
+// ---- the kind hints: a slot claims sessions to COUNT them; load accrues from the device data regardless ----
+// Q210 ruled (a): activity slots claim first for per-category counts, one metabolic load_window takes the
+// remainder, and load deposits for every device session whichever slot counted it. The activity hint used to
+// say "never deposits load", which read as the session carrying no load.
+
+test('hints: the activity kind says the slot counts sessions and load still accrues (not "never deposits load")', async () => {
+  await toStep4()
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'activity' } }) })
+  const hint = screen.getByText(/^activity — a recorded session/)
+  expect(hint.textContent).toMatch(/claims sessions for counting only/)
+  expect(hint.textContent).toMatch(/their load still accrues/)
+  expect(screen.queryByText(/never deposits load/i)).toBeNull()
+})
+
+test('hints: the load_window kind says it takes the remainder after activity slots, and load accrues either way', async () => {
+  await toStep4()
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'load_window' } }) })
+  const hint = screen.getByText(/^load_window — H10/)
+  expect(hint.textContent).toMatch(/no activity slot claims first/)
+  expect(hint.textContent).toMatch(/load accrues from every session either way/)
+})
