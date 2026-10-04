@@ -279,7 +279,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **The Garmin per-activity self-evaluation read is built, read-only and insert-only, inside the Garmin sweep (#372); the srpe-floor rulings are recorded (#373, #374); Q209 is closed, and the migration is held in PR #309 for the operator.** Code plus governance, one migration - Handoff: `closeout.md`.
+- **The Garmin per-activity self-evaluation read is built, read-only and insert-only, inside the Garmin sweep (#372); the srpe-floor rulings are recorded (#373, #374); Q209 is closed, and the migration is released and landed (PR #309).** Code plus governance, one migration - Handoff: `closeout.md`.
 
 - **The sRPE-floor brief was verified and halted: #326 stands, Case B is dropped, and the paired sessions number 2, so nothing was built; per-session sRPE capture is filed (Q202, Q209, Q159).** A read-only Garmin self-evaluation probe landed (PR #307) and its operator run is owed. Code plus governance, no schema - Handoff: `closeout.md`.
 

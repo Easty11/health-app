@@ -2347,7 +2347,7 @@ Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). H
 
 **Garmin activity read as a lag-bypass candidate (4 Oct 2026, operator; a note, not a decision).** The 1 Oct "no client built" position for a direct Garmin read (the Q198 inventory table) is REOPENED, scoped to a read-only activity read: self-evaluation first (Q209), and in-activity HR as a candidate fix for the lag measured in #369. The operator reports Garmin Connect holds the full wrist HR for the 26 Sep Pilates (Q207), where Health Connect delivered it about 7 days late. `garminconnect` 0.3.11 exposes `get_activity_details` (`__init__.py:2957`) and `download_activity` (`:2839`); which of them carries per-sample HR, and how soon after a session, is unverified. Any live read follows #361 (never refresh a Garmin token), and the library is an unofficial, ToS-grey lane (`requirements.txt:22`). The ruling follows the Q209 probe and is tied to it. Related: Q209.
 
-**Garmin activity read built for self-evaluation only (4 Oct 2026, #372).** The read-only Garmin activity read now exists, scoped to perceived effort and feel (Q209, held in PR #309). It does NOT read in-activity HR: the HR read stays a separate candidate for the lag measured above, still unbuilt and unruled.
+**Garmin activity read built for self-evaluation only (4 Oct 2026, #372).** The read-only Garmin activity read now exists, scoped to perceived effort and feel (Q209, landed via PR #309). It does NOT read in-activity HR: the HR read stays a separate candidate for the lag measured above, still unbuilt and unruled.
 
 **State:** OPEN. Owner: Luke. Not blocking. Related: #369, #370, Q202, Q203, Q207.
 
@@ -2612,7 +2612,7 @@ prompt), load = RPE × minutes, with a declared conversion into lane units. HR r
 quality signal, not a load driver. Garmin → Health Connect HR absence is unverified
 (operator check in HC app pending; Q159 adjacent).
 
-**Garmin-watch sessions get a captured rating (4 Oct 2026, #372).** A per-session RPE and feel, immutable and linked to the Health Connect row, is built for sessions the Garmin watch records, held in PR #309 until released. It does not cover H10-only sessions, and Q209's path (b) (a companion-app notification on Polar session arrival) is undecided; this question's own fork (what a device-only session's effort is worth in load) is unchanged.
+**Garmin-watch sessions get a captured rating (4 Oct 2026, #372).** A per-session RPE and feel, immutable and linked to the Health Connect row, is built for sessions the Garmin watch records, landed via PR #309. It does not cover H10-only sessions, and Q209's path (b) (a companion-app notification on Polar session arrival) is undecided; this question's own fork (what a device-only session's effort is worth in load) is unchanged.
 
 **State:** OPEN — design fork (capture surface; scaling rule). Owner: Luke.
 
@@ -2879,7 +2879,7 @@ Raised with #365. Verified against master `054d2d9`.
 
 **Scope note (4 Oct 2026, operator, with #369).** The Q202 brief is to follow. Its case A is rows inside the Garmin in-activity HR lag window (about 7 days from the session). It is not a cover for the scheduled-sync failure (#370).
 
-**Floor input now exists for watch sessions (4 Oct 2026, #372, #373, #374).** The per-session capture this entry was waiting on is built for Garmin-watch sessions (Q209, closed): an immutable per-activity RPE (CR-10) and feel, linked to the Health Connect row, held in PR #309 until the operator releases its migration. No kappa fit is possible until paired data accumulates (n = 2 paired days when read). The two rulings recorded above are now decisions: #326 stands and Case B is dropped (#373); the rollup reads both formula versions, when the floor is built (#374). H10-only sessions have no captured rating (Q189).
+**Floor input now exists for watch sessions (4 Oct 2026, #372, #373, #374).** The per-session capture this entry was waiting on is built for Garmin-watch sessions (Q209, closed): an immutable per-activity RPE (CR-10) and feel, linked to the Health Connect row, landed via PR #309, first live run owed. No kappa fit is possible until paired data accumulates (n = 2 paired days when read). The two rulings recorded above are now decisions: #326 stands and Case B is dropped (#373); the rollup reads both formula versions, when the floor is built (#374). H10-only sessions have no captured rating (Q189).
 
 **State:** OPEN. Owner: Luke. Not blocking.
 
@@ -5807,7 +5807,7 @@ Raised 4 Oct 2026 with the Q202 sRPE-floor brief. The brief's S1 found n = 2 pai
 
 **To decide (Luke).** After the probe: whether (a) is built and where its value is stored as an immutable snapshot (a schema change, held for review when it comes); whether (b) is briefed to the companion repo; and how Q202's floor and Q189 use a per-session value. No kappa fit is possible until paired data exists.
 
-**Resolution (4 Oct 2026, #372).** Path (a) is built and closed here. The probe ran (operator-reported): `summaryDTO.directWorkoutRpe` 40 and `directWorkoutFeel` 25 for activity 24564069469, which the operator rated 4/10 and "Weak". RPE is 0-100 in steps of 10 (CR-10 x 10); feel is 0/25/50/75/100; both are on the activity detail, not the list. The 1 Oct "no client built" position (Q198) is superseded for a read-only self-evaluation read only. The value is stored in an insert-only, capture-timed table linked to the Health Connect row (SCHEMA §042), read inside the Garmin sweep after its token refresh (#372). Built on `feat/garmin-selfeval-read`, PR #309, HELD for the migration; not live. Path (b), a companion-app notification on Polar session arrival, is NOT decided here: H10-only sessions (no Garmin activity) have no captured rating, and the question stays a note on Q189. How Q202's floor and Q189 use a per-session value is not decided; the input now exists for watch sessions once #372 is released and rated.
+**Resolution (4 Oct 2026, #372).** Path (a) is built and closed here. The probe ran (operator-reported): `summaryDTO.directWorkoutRpe` 40 and `directWorkoutFeel` 25 for activity 24564069469, which the operator rated 4/10 and "Weak". RPE is 0-100 in steps of 10 (CR-10 x 10); feel is 0/25/50/75/100; both are on the activity detail, not the list. The 1 Oct "no client built" position (Q198) is superseded for a read-only self-evaluation read only. The value is stored in an insert-only, capture-timed table linked to the Health Connect row (SCHEMA §042), read inside the Garmin sweep after its token refresh (#372). Landed via PR #309 (merge `bd92191`), released by the operator on 4 Oct 2026; the first live run is owed (ROADMAP NOW). Path (b), a companion-app notification on Polar session arrival, is NOT decided here: H10-only sessions (no Garmin activity) have no captured rating, and the question stays a note on Q189. How Q202's floor and Q189 use a per-session value is not decided; the input now exists for watch sessions once the first live run has captured a rated activity.
 
 **State:** `DONE → #372`.
 
