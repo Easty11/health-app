@@ -13210,3 +13210,25 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** The floor is built and a version-aware rollup proves wrong (for example the Banister read mixes two versions' units), or the floor is dropped.
 
 ---
+
+### 375. The phase-change save validates the whole write before it creates a Hevy folder; slot keys are pickers (supersedes #317's folder-first order)
+
+**Decision.** Ruled by the operator on 4 Oct 2026, from the first real save, and landed in PR #311. It supersedes the "Order of operations (operator)" bullet of #317 (the Hevy folder create runs FIRST, before the transaction); the rest of #317 stands.
+- **Order now.** (1) Natural-state idempotency, unchanged. (2) When a NEW folder is asked for, a validate-only pass of the whole transaction runs before any external call: the same `_apply_phase_transition` code path (`commit=False`), rolled back. (3) The Hevy folder create, still the only external call. (4) The real write. A refused form never reaches Hevy, and its 422 no longer carries orphan wording; that wording remains only for a fault in step 4 after the folder exists. With no new folder (an existing `folder_id`, or none) there is one pass, as before.
+- **No compensation.** `connectors/hevy.py` has `create_routine_folder` and `get_routine_folders` and no folder delete, so an orphan cannot be undone from the app. Ordering is therefore the only protection.
+- **Form, step 4.** `GET /engine/phase/transition/draft` carries `slot_options` (capacity tokens in their stored lowercase spelling, and the load windows), read from the validator's own sources. The slot name is a picker for `capacity` and `load_window`, free text only for `activity` (open vocabulary, #315). A kind change resets the key. Step 4 names and blocks the refusals the save would raise: a value not offered, a duplicate within the sub-cycle, a `load_window` or `activity` slot with no device sport. A draft without `slot_options` keeps the text box, and only duplicates are checked.
+- **Not changed.** A retry with the same `new_folder_name` still creates another folder (no reuse by title); step 7's picker lists the existing folders, so an orphan can be chosen instead. The folder is still created outside the database transaction, so a database fault or a race between the two passes can still orphan one. Whether several `load_window` slots are a supported shape is Q210, not decided here.
+
+**Rationale.** On 4 Oct the form's save created the Hevy folder 'Aerobic Base Phase', and the transaction then refused the microcycle (`slots[1].capacity: unknown capacity 'Gym'`) and wrote nothing; the retry hit the `load_window` enum and created a second orphan (operator-reported). Every validator ran inside the transaction, after the external call. The slot name was a free-text box for all three kinds, and a kind change left the old key in place, so an invalid slot was easy to build and invisible until step 8.
+
+**Status.** Landed: PR #311, merge `c6bae6c` (4 Oct 2026). Railway deploys for `c6bae6c` reached SUCCESS: backend `3c2123ad`, frontend `d71a7781`. The live behaviour is owed (a real save), as is the served-bundle probe (#121), which this session could not run (its egress proxy denies the frontend host).
+
+**How you know.**
+- *Read by Code on master `7bfdb0a`:* the old order in `routers/training_phase.py` (idempotency, folder create, then `_apply_phase_transition`), and #317's bullet.
+- *Tests, run by Code:* `tests/test_phase_transition_order.py` (12) observes ORDER through one log of Hevy calls and commits: the 4 Oct capacity refusal and a second metabolic slot reach Hevy zero times and commit nothing; a valid form is `create_folder` then one commit; a Hevy failure writes nothing; a fault in the real write names the orphan. 8 mutations each fail a test. Frontend: 11 new tests; 10 mutations each fail a test, and an 11th survived (a confirm-step gate on invalid slots), which was unreachable and so was removed. Backend suite 2,800 passed, 1 skipped, 1 failed (`test_context_builder_output_unchanged_pre_post_refactor`, the shallow-clone `git show 3360ed5` artifact; green on CI); frontend 342 passed.
+- *Operator-reported, not seen by Code:* the orphan folders, the two error texts, and the retry.
+- *Not verified here:* that Hevy's public API has no folder delete. Likely: the connector wraps none and no code path uses one, but Hevy's own documentation was not read.
+
+**Do not revisit unless.** Hevy gains a folder delete (compensation then becomes possible), or validation gains an external dependency (a validate-only pass could then no longer be complete).
+
+---
