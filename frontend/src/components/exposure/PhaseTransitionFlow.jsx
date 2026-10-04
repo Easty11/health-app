@@ -32,11 +32,13 @@ const RECORDED_VIA = ['hevy', 'polar_h10', 'garmin', 'samsung_health', 'manual']
 const NO_LOAD_PATH = new Set(['garmin', 'samsung_health'])
 const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
-// What each quota KIND records — one-line evidence hint (F4).
+// What each quota KIND records — one-line evidence hint (F4). A slot only CLAIMS sessions to count them (an
+// activity slot claims first, then the load_window slot takes the remainder); load comes from the device
+// data itself, whichever slot a session is counted in (Q210).
 const KIND_EVIDENCE = {
   capacity: 'capacity — Hevy workouts',
-  load_window: 'load_window — H10 / Garmin sessions of the sports you pick',
-  activity: 'activity — a recorded session of the sports you pick; never deposits load',
+  load_window: 'load_window — H10 / Garmin sessions of the sports you pick that no activity slot claims first (the remainder); load accrues from every session either way',
+  activity: 'activity — a recorded session of the sports you pick; the slot claims sessions for counting only, and their load still accrues',
 }
 
 const STEP_TITLES = [
