@@ -21,7 +21,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../api'
 import { todayLocal } from './phaseTime'
 import {
-  NO_SLOT_OPTIONS, TIME_BUCKETS, buildMicrocycle, defaultSlotKey, deriveTimeOfDay, diffSlots, microcycleSlots,
+  NO_SLOT_OPTIONS, TIME_BUCKETS, buildMicrocycle, defaultSlotKey, deriveTimeOfDay, diffSlots, dispositionAfterSlotChange, microcycleSlots,
   normaliseActivityName, normaliseTimeRange, removesAllCapacity, slotIdentity, slotKeyOptions, validateSlots,
 } from './phaseTransitionLib'
 
@@ -702,12 +702,18 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
                       onChange={(e) => {
                         const key = e.target.value
                         const slot = slots.find((s) => s.key === key)
-                        updatePlacement(i, { satisfies: slot ? { [slot.kind]: key } : null })
+                        const satisfies = slot ? { [slot.kind]: key } : null
+                        // On "Keep" the stored link wins and this dropdown would be ignored: a different
+                        // choice switches the item to "Relink" so it is counted and saved.
+                        updatePlacement(i, { satisfies, disposition: dispositionAfterSlotChange(p, satisfies) })
                       }} className={fieldCls}>
                       <option value="">— fills no quota slot —</option>
                       {slots.map((s) => <option key={s.key} value={s.key}>{s.kind}: {s.key}</option>)}
                     </select>
                   </label>
+                  {p.isExisting && p.disposition === 'keep' && (
+                    <p className="text-[11px] text-gray-400">Kept as on file. Picking a different slot switches this to Relink.</p>
+                  )}
                   {!p.isExisting && (
                     <>
                       <span className="text-[11px] text-gray-500">Days</span>

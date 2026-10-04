@@ -244,11 +244,13 @@ test('slots: changing a slot kind resets its key to one valid for the new kind',
   await act(async () => { fireEvent.click(addSlotBtn()) })
   await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'load_window' } }) })
   const key = screen.getByLabelText('slot 2 key')
-  expect(key.tagName).toBe('SELECT') && expect(optionValues(key)).toEqual(['metabolic'])
+  expect(key.tagName).toBe('SELECT')
+  expect(optionValues(key)).toEqual(['metabolic'])
   expect(key.value).toBe('metabolic')                                 // not the stale 'mobility'
   await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'activity' } }) })
   const act2 = screen.getByLabelText('slot 2 key')
-  expect(act2.tagName).toBe('INPUT') && expect(act2.value).toBe('')    // the open kind stays free text
+  expect(act2.tagName).toBe('INPUT')                                   // the open kind stays free text
+  expect(act2.value).toBe('')
 })
 
 test('slots: a duplicate capacity names the clash and blocks Next until fixed', async () => {
@@ -298,4 +300,60 @@ test('slots: a draft without slot_options (an older backend) keeps the text box 
   await act(async () => { fireEvent.change(key, { target: { value: 'Gym' } }) })
   expect(screen.queryByRole('alert')).toBeNull()                      // not knowable here: the save decides
   expect(nextBtn().disabled).toBe(false)
+})
+
+
+// ---- step 5: a slot picked on an existing item left on "Keep" must reach the counter and the save ----
+// 4 Oct 2026: Keep retains the stored link and ignores the dropdown, and the dropdown was editable anyway,
+// so a choice looked applied and was dropped (the counter read UNPLACED, and the save sent nothing).
+
+async function toStep5WithSecondSlot() {
+  api.get.mockResolvedValue({ data: { ...DRAFT, slot_options: SLOT_OPTIONS } })
+  await renderFlow()
+  await next(); await next(); await next()                                   // -> step 4
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /\+ quota slot/i })) })   // adds mobility
+  await next()                                                               // -> step 5
+  expect(screen.getByText(/step 5 of 8/i)).toBeTruthy()
+}
+const pressed = (name) => screen.getByRole('button', { name }).getAttribute('aria-pressed')
+const lastPreviewValues = () => {
+  const calls = api.post.mock.calls.filter(([u]) => u.includes('preview'))
+  return calls[calls.length - 1][1].schedule_item_values
+}
+async function saveFromStep5() {
+  for (let i = 0; i < 3; i++) await next()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm — save phase change/i })) })
+  await waitFor(() => expect(transitionCalls().length).toBe(1))
+  return transitionCalls()[0][1].schedule_items
+}
+
+test('placement: a different slot on a Keep item switches it to Relink, and the counter and save carry the choice', async () => {
+  await toStep5WithSecondSlot()
+  expect(pressed('Keep')).toBe('true')
+  expect(screen.getByText(/Picking a different slot switches this to Relink/i)).toBeTruthy()
+  await act(async () => { fireEvent.change(screen.getByLabelText('placement 1 satisfies slot'), { target: { value: 'mobility' } }) })
+  expect(pressed('Relink')).toBe('true')
+  expect(pressed('Keep')).toBe('false')
+  expect(screen.queryByText(/Picking a different slot switches this to Relink/i)).toBeNull()
+  await waitFor(() => expect(lastPreviewValues().map((v) => v.satisfies)).toEqual([{ capacity: 'mobility' }]))
+  const ops = await saveFromStep5()
+  expect(ops).toHaveLength(1)
+  expect(ops[0]).toMatchObject({ action: 'upsert', key: 'gym', value: { satisfies: { capacity: 'mobility' } } })
+})
+
+test('placement: picking the stored slot again leaves the item on Keep and sends no schedule op', async () => {
+  await toStep5WithSecondSlot()
+  await act(async () => { fireEvent.change(screen.getByLabelText('placement 1 satisfies slot'), { target: { value: 'mobility' } }) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Keep' })) })        // back to Keep: stored link restored
+  expect(pressed('Keep')).toBe('true')
+  await waitFor(() => expect(lastPreviewValues().map((v) => v.satisfies)).toEqual([{ capacity: 'stability' }]))
+  expect(await saveFromStep5()).toEqual([])
+})
+
+test('placement: clearing the slot on a Keep item is a change (Relink to no slot), not a silent no-op', async () => {
+  await toStep5WithSecondSlot()
+  await act(async () => { fireEvent.change(screen.getByLabelText('placement 1 satisfies slot'), { target: { value: '' } }) })
+  expect(pressed('Relink')).toBe('true')
+  const ops = await saveFromStep5()
+  expect(ops[0]).toMatchObject({ action: 'upsert', key: 'gym', value: { satisfies: null } })
 })
