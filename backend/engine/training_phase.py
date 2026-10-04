@@ -47,6 +47,17 @@ from load_events_metabolic import WINDOW_METABOLIC
 
 _SLOT_LOAD_WINDOWS = (WINDOW_METABOLIC,)
 
+
+def slot_options() -> dict[str, list[str]]:
+    """The closed vocabularies a microcycle slot's key may take, for the phase-change form's pickers
+    (4 Oct 2026): the capacity tokens in their stored lowercase spelling, and the declared load windows.
+    `activity` is open (a sport name, #315) and so is not listed. Read from the validator's own
+    sources, so a picker cannot offer what `validate_microcycle` refuses."""
+    return {
+        "capacity": [t.lower() for t in taxonomy.capacity_tokens()],
+        "load_window": list(_SLOT_LOAD_WINDOWS),
+    }
+
 # ── domains local to the phase ledger ────────────────────────────────────────
 PROBE_POSTURE_VALUES = ("suppressed", "held")
 
