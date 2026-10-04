@@ -13232,3 +13232,25 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** Hevy gains a folder delete (compensation then becomes possible), or validation gains an external dependency (a validate-only pass could then no longer be complete).
 
 ---
+
+### 376. Q210 ruled (a): count each sport group with an activity slot, one metabolic load_window for the remainder; load accrues for every device session whichever slot counts it
+
+**Decision.** Ruled by the operator on 4 Oct 2026. Q210 asked whether several metabolic `load_window` slots with disjoint sport filters are a supported shape; the phase needs run, speed, VO2 and aerobic work counted separately. Option (a) is ruled.
+- **Counts per category** through `activity` slots, one per sport group, each with its own `device_sports`. They claim first.
+- **One `metabolic` `load_window` slot, sized to the remainder:** the sessions no activity slot claims. It is not a total-conditioning quota, and its quota is set accordingly.
+- **Load** deposits for every device session with usable zones, whichever slot (or none) counted it.
+- **No validator or resolver change.** Option (b), several `load_window` slots told apart by a slot name (an identity extension through the validator, the resolver's `Slot`, `satisfies`, `consistency_rows`, `_actuals_by_day`, the form and the coach write-shape docs), is not built.
+- **Form copy.** The activity hint said "never deposits load". It now says the slot claims sessions for counting only and their load still accrues; the load_window hint says it counts what no activity slot claims first, and that load accrues either way (PR #315).
+
+**Rationale.** The operator's worry was that an exclusive claim would drop load, which would force (b). It does not: the load transform never reads a slot (Code, below), so a claim only decides which slot COUNTS a session. The one real consequence is the one Q210's first text missed: because the claim is exclusive and ordered, an aggregate metabolic slot over all conditioning sports counts only the remainder (1 of 3 with a run and a bike claimed first). The ruling sizes it that way.
+
+**Status.** Ruled 4 Oct 2026; Q210 closed here (`DONE → #376`). Landed: PR #315 (the hint copy; merge `0574072`; deploys SUCCESS: backend `6ce7f5ae`, frontend `20985025`) and PR #316 (the pinning tests; merge `c6b5c89`; tests only, its deploys were still building at the last read). Three related form fixes landed the same day, each its own PR and none a decision: #313 (a slot picked on a Keep placement switches it to Relink; merge `bfa58f1`), #314 (the Phase card's history read the wrong response shape and always said "No phases recorded yet"; merge `f38ec24`), and #311 under #375.
+
+**How you know.**
+- *Tests, run by Code:* `tests/test_slot_claim_vs_load.py` (4): with an aggregate metabolic slot plus `run` and `bike` activity slots, the metabolic slot counts only the rowing session (1/3), `run` is 1/1 and `bike` is 1/1; all three sessions emit a load event of 50.0 (`trimp_edw_au`); the load is identical with no phase and with a different slot set; a session no slot names is `unclaimed_session` yet still deposits. 3 mutations (the claim order flipped; the transform skipping a slot-claimable sport; skipping when a phase exists) each fail at least one test. The two hint wordings are pinned by two frontend tests, each failing if its phrase is reverted.
+- *Read by Code:* `load_events_metabolic.py` reads `aerobic_sessions` through the read-door and never references a phase, microcycle or slot; the resolver's claim code (`engine/resolver.py`, activity slots then load_window slots, one claim per session).
+- *Not verified here:* real data. Load deposits only for a session with usable zones (INV-7), claimed or not. The operator's ledger rows (the Phase card's history, the `training_phases` read) are owed, so "the decompression rows are in the ledger" is Likely, not seen: Code has no database access.
+
+**Do not revisit unless.** The operator needs a TOTAL conditioning quota across sport groups, or two metabolic quotas that cannot be expressed as activity slots plus a remainder (then (b)), or the resolver's claim order changes.
+
+---

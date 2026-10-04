@@ -2984,25 +2984,6 @@ Code's lean, not a ruling: (a), as the one change that closes the whole class, a
 
 ---
 
-## Q210. Several metabolic `load_window` slots with disjoint sport filters in one sub-cycle: a supported shape?
-
-Raised 4 Oct 2026 (operator, from the first real phase-change save). The phase needs run, speed, VO2 and aerobic work counted separately.
-
-**Verified on master `c6bae6c`.**
-- **Refused today.** `validate_microcycle` allows one slot per `load_window` per sub-cycle, and the only load window is `metabolic`: a second raises "duplicate load_window 'metabolic' within this sub-cycle" (pinned in `tests/test_phase_transition_order.py`). The form now refuses it at step 4 (PR #311).
-- **Slot identity is `(kind, key)`.** `schedule_item.satisfies` is `{kind: key}`; `consistency_rows` (`engine/week_plan.py`) matches on it, and `_actuals_by_day` attributes each counted session to its `(kind, key)`. Two metabolic slots would share one identity, so an item satisfying `metabolic` would count against both. Likely the reason the duplicate rule exists; #307's text states the rule, not this reason.
-- **The resolver already expects several.** #315's claim order: exclusions first; `activity` slots claim by sport in declared order; "the remainder -> sport-scoped `load_window` slots in declared order"; one session claims at most one slot.
-- **An existing alternative.** An `activity` slot (#315) is one per activity name (casefolded), each with its own `device_sports`, counted separately. #315 says it "deposits NO load by virtue of the slot (counted sessions carry no `trimp`)".
-- **Not examined before.** #307 rejected a `sport_name` filter as out of scope (revisit at preseason) and #315 then added `device_sports` scoping; no decision considered several `load_window` slots with disjoint filters.
-
-**Options (not decided).** (a) Keep the shape: one `metabolic` slot plus one `activity` slot per sport group (run, speed, VO2, aerobic), counted separately today. (b) Allow several `load_window` slots, each given a slot name besides the window: an identity extension through the validator, the resolver's `Slot`, `satisfies`, `consistency_rows`, `_actuals_by_day`, the form and the coach write-shape docs. (c) Something else.
-
-**To decide (Luke).** Which option; and what "counted separately" must mean for load, in particular whether a run slot's sessions need to differ from an activity slot's in what the plan reads as load.
-
-**State:** OPEN. Owner: Luke. Not blocking. Related: #307, #315, #317, #375.
-
----
-
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
@@ -5829,5 +5810,28 @@ Raised 4 Oct 2026 with the Q202 sRPE-floor brief. The brief's S1 found n = 2 pai
 **Resolution (4 Oct 2026, #372).** Path (a) is built and closed here. The probe ran (operator-reported): `summaryDTO.directWorkoutRpe` 40 and `directWorkoutFeel` 25 for activity 24564069469, which the operator rated 4/10 and "Weak". RPE is 0-100 in steps of 10 (CR-10 x 10); feel is 0/25/50/75/100; both are on the activity detail, not the list. The 1 Oct "no client built" position (Q198) is superseded for a read-only self-evaluation read only. The value is stored in an insert-only, capture-timed table linked to the Health Connect row (SCHEMA §042), read inside the Garmin sweep after its token refresh (#372). Landed via PR #309 (merge `bd92191`), released by the operator on 4 Oct 2026; the first live run is owed (ROADMAP NOW). Path (b), a companion-app notification on Polar session arrival, is NOT decided here: H10-only sessions (no Garmin activity) have no captured rating, and the question stays a note on Q189. How Q202's floor and Q189 use a per-session value is not decided; the input now exists for watch sessions once the first live run has captured a rated activity.
 
 **State:** `DONE → #372`.
+
+---
+
+## Q210. Several metabolic `load_window` slots with disjoint sport filters in one sub-cycle: a supported shape?
+
+Raised 4 Oct 2026 (operator, from the first real phase-change save). The phase needs run, speed, VO2 and aerobic work counted separately.
+
+**Verified on master `c6bae6c`.**
+- **Refused today.** `validate_microcycle` allows one slot per `load_window` per sub-cycle, and the only load window is `metabolic`: a second raises "duplicate load_window 'metabolic' within this sub-cycle" (pinned in `tests/test_phase_transition_order.py`). The form now refuses it at step 4 (PR #311).
+- **Slot identity is `(kind, key)`.** `schedule_item.satisfies` is `{kind: key}`; `consistency_rows` (`engine/week_plan.py`) matches on it, and `_actuals_by_day` attributes each counted session to its `(kind, key)`. Two metabolic slots would share one identity, so an item satisfying `metabolic` would count against both. Likely the reason the duplicate rule exists; #307's text states the rule, not this reason.
+- **The resolver already expects several.** #315's claim order: exclusions first; `activity` slots claim by sport in declared order; "the remainder -> sport-scoped `load_window` slots in declared order"; one session claims at most one slot.
+- **An existing alternative.** An `activity` slot (#315) is one per activity name (casefolded), each with its own `device_sports`, counted separately. #315 says it "deposits NO load by virtue of the slot (counted sessions carry no `trimp`)".
+- **Not examined before.** #307 rejected a `sport_name` filter as out of scope (revisit at preseason) and #315 then added `device_sports` scoping; no decision considered several `load_window` slots with disjoint filters.
+
+**Options (not decided).** (a) Keep the shape: one `metabolic` slot plus one `activity` slot per sport group (run, speed, VO2, aerobic), counted separately today. (b) Allow several `load_window` slots, each given a slot name besides the window: an identity extension through the validator, the resolver's `Slot`, `satisfies`, `consistency_rows`, `_actuals_by_day`, the form and the coach write-shape docs. (c) Something else.
+
+**To decide (Luke).** Which option; and what "counted separately" must mean for load, in particular whether a run slot's sessions need to differ from an activity slot's in what the plan reads as load.
+
+**Correction (4 Oct 2026, Code).** The facts above omit what the claim does to an aggregate slot, and the option (a) line understated it. The claim is exclusive and ordered: activity slots claim first and one session claims at most one slot, so an aggregate metabolic slot counts only the REMAINDER (a run and a bike claimed first leave 1 of 3). Load is unaffected: the load transform never reads a slot, so all three sessions deposit load (3 events of 50.0 in the check, since pinned by `tests/test_slot_claim_vs_load.py`). The form's "never deposits load" wording was misleading and is corrected (PR #315).
+
+**Resolution (4 Oct 2026, #376).** Option (a), ruled by the operator: per-category counts through activity slots (they claim first); one metabolic `load_window` slot sized to the remainder; load accrues for every device session whichever slot counts it. No validator or resolver change; (b) is not built.
+
+**State:** `DONE → #376`.
 
 ---
