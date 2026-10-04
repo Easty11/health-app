@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
@@ -588,6 +588,39 @@ class AerobicSession(Base):
     z4_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
     z5_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GarminActivitySelfEval(Base):
+    """One observation of a Garmin Connect activity's self-evaluation (perceived effort, feel).
+
+    INSERT-ONLY, capture-timed (Q209 path a). A row is what Garmin said at `captured_at`; it is never
+    updated, and the only writer is `garmin_selfeval.record_observation`, which inserts a row only
+    when the observed tuple (rpe, feel, link) differs from the activity's latest row (or, for a
+    still-unrated activity, as the daily re-check marker). The CURRENT value of an activity is its
+    latest row by `captured_at`; older rows are the history a later revision must not rewrite.
+
+    `rpe_cr10` is Garmin's 0-100 `directWorkoutRpe` / 10 (CR-10, a float); `feel` is
+    `directWorkoutFeel` 0-100 (0/25/50/75/100). Both are NULL on an UNRATED sighting (a row exists so
+    the activity is not re-fetched daily). `aerobic_session_id` links the Health Connect row of the
+    same bout; the DB's ON DELETE SET NULL is the one non-insert change a row can see, and it
+    touches the link only, never a Garmin value.
+    """
+    __tablename__ = "garmin_activity_selfevals"
+    __table_args__ = (
+        UniqueConstraint("user_id", "garmin_activity_id", "captured_at", name="uq_garmin_selfeval_capture"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    garmin_activity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)   # > int32 (e.g. 24564069469)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    rpe_cr10: Mapped[float | None] = mapped_column(Float, nullable=True)           # Garmin 0-100 / 10; NULL = unrated
+    feel: Mapped[int | None] = mapped_column(Integer, nullable=True)               # Garmin 0-100; NULL = unrated
+    garmin_type: Mapped[str | None] = mapped_column(String(100), nullable=True)    # activityType.typeKey
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    stop_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    aerobic_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("aerobic_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
 
 
 class SamsungHRVReading(Base):

@@ -22,6 +22,7 @@ import sys
 from datetime import date, timedelta
 from typing import Any
 
+import garmin_selfeval
 from connectors.garmin import GarminReconnectError
 from database import SessionLocal
 import models
@@ -34,6 +35,22 @@ logger = logging.getLogger(__name__)
 _DEFAULT_SWEEP_DAYS = 7
 
 
+_SELFEVAL_COUNTS = ("fetched", "rated", "unrated", "linked", "relinked", "skipped_needs_refresh", "errors")
+
+
+def _selfeval_step(db, uid: int, factory) -> dict[str, Any]:
+    """The Garmin self-evaluation capture (Q209 path a) for one user: soft-fail by construction (the
+    chain's ingest-step shape). It runs AFTER `sync_hrv_for_user`, which has refreshed the token and
+    committed it back, through a client that cannot refresh (#361). Any failure -> `{"error": ...}`,
+    session rolled back; it never changes the user's HRV outcome."""
+    try:
+        return garmin_selfeval.sync_user(db, uid, factory=factory)
+    except Exception as exc:  # noqa: BLE001 -- soft-fail: a self-evaluation failure never costs the HRV sweep
+        db.rollback()
+        logger.warning("garmin sweep: user %s selfeval step failed: %s", uid, type(exc).__name__)
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
 def sweep_garmin_hrv(
     db,
     *,
@@ -41,13 +58,20 @@ def sweep_garmin_hrv(
     days: int = _DEFAULT_SWEEP_DAYS,
     start: date | None = None,
     end: date | None = None,
+    selfeval_factory=garmin_selfeval.ProbeSource,
 ) -> dict[str, Any]:
     """Pull + upsert Garmin HRV for every connected user (or just `only_user_id`) over the
     window, isolating per-user failures. Returns an aggregate summary (mirrors `refresh_load`).
 
     Not a route and not CLI-shaped, so it is callable from the nightly sweep. `db` is caller-owned
     (the CLI opens its own; the sweep passes its `SessionLocal()`); a per-user failure rolls the
-    session back so the next user starts clean."""
+    session back so the next user starts clean.
+
+    After each user's HRV pull, `garmin_selfeval` reads that user's per-activity self-evaluation
+    (Q209) from the freshly written-back token, through a no-refresh client: it skips a user whose
+    token is dead (`reconnect_required`: nothing fresh to read with), is soft-fail, and reports its
+    counts under `per_user[uid]["selfeval"]` and summed under `summary["selfeval"]`
+    (`skipped_needs_refresh` is the visible sign of a stale token)."""
     today = garmin_wake_day()   # AEST wake-day, not UTC (#327 follow-up)
     end = end or today
     start = start or (end - timedelta(days=days))
@@ -79,6 +103,17 @@ def sweep_garmin_hrv(
             per_user[uid] = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
             logger.exception("garmin sweep: user %s failed", uid)
             db.rollback()
+        if per_user[uid]["status"] != "reconnect_required":
+            per_user[uid]["selfeval"] = _selfeval_step(db, uid, selfeval_factory)
+
+    selfeval_total = {k: 0 for k in _SELFEVAL_COUNTS}
+    for detail in per_user.values():
+        ev = detail.get("selfeval")
+        if isinstance(ev, dict) and "error" not in ev:
+            for k in _SELFEVAL_COUNTS:
+                selfeval_total[k] += ev.get(k, 0)
+        elif isinstance(ev, dict):
+            selfeval_total["errors"] += 1
 
     return {
         "users_attempted": len(user_ids),
@@ -86,6 +121,7 @@ def sweep_garmin_hrv(
         "users_failed": failed,
         "from": start.isoformat(),
         "to": end.isoformat(),
+        "selfeval": selfeval_total,
         "per_user": per_user,
     }
 
@@ -127,6 +163,13 @@ def main() -> int:
                 print(f"  user {uid}: {detail['readings_upserted']} readings, "
                       f"{detail['samples_upserted']} samples "
                       f"({detail['days_with_data']} days with data)")
+                ev = detail.get("selfeval", {})
+                if "error" in ev:
+                    print(f"    selfeval: error ({ev['error']})", file=sys.stderr)
+                elif ev:
+                    print(f"    selfeval: fetched={ev['fetched']} rated={ev['rated']} unrated={ev['unrated']} "
+                          f"linked={ev['linked']} skipped_needs_refresh={ev['skipped_needs_refresh']} "
+                          f"errors={ev['errors']}")
             else:
                 print(f"  user {uid}: {detail['status'].upper()} — {detail.get('error', '')}",
                       file=sys.stderr)
