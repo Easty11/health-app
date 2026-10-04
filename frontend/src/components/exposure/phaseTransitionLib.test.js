@@ -4,8 +4,8 @@
 
 import { expect, test } from 'vitest'
 import {
-  buildMicrocycle, defaultSlotKey, deriveTimeOfDay, diffSlots, microcycleSlots, normaliseActivityName,
-  normaliseTimeRange, removesAllCapacity, slotKeyOptions, validateSlots,
+  buildMicrocycle, defaultSlotKey, deriveTimeOfDay, diffSlots, dispositionAfterSlotChange, microcycleSlots,
+  normaliseActivityName, normaliseTimeRange, removesAllCapacity, sameSatisfies, slotKeyOptions, validateSlots,
 } from './phaseTransitionLib'
 
 test('deriveTimeOfDay never yields unknown — a bucket, or a bucket derived from a range (B1/F10)', () => {
@@ -134,4 +134,33 @@ test('validateSlots: load_window and activity need a device sport; an activity n
 test('validateSlots with no options known (an older backend) only checks what it can', () => {
   expect(validateSlots([slot('capacity', 'Gym')], undefined)).toEqual([''])           // cannot know: the save decides
   expect(validateSlots([slot('capacity', '')], undefined)).toEqual(['Pick a capacity.'])
+})
+
+
+// ---- step-5 placement links: a slot picked on a "Keep" item must not be silently ignored ---- //
+
+test('sameSatisfies: null, undefined and {} are one "no slot"; a pair compares kind and value, case-insensitively', () => {
+  expect(sameSatisfies(null, undefined)).toBe(true)
+  expect(sameSatisfies(null, {})).toBe(true)
+  expect(sameSatisfies({ capacity: 'stability' }, { capacity: 'Stability' })).toBe(true)
+  expect(sameSatisfies({ capacity: 'stability' }, { capacity: 'mobility' })).toBe(false)
+  expect(sameSatisfies({ capacity: 'stability' }, { activity: 'stability' })).toBe(false)   // same key, different kind
+  expect(sameSatisfies({ capacity: 'stability' }, null)).toBe(false)
+})
+
+const existing = (disposition, satisfies = { capacity: 'stability' }) =>
+  ({ isExisting: true, disposition, value: { activity: 'gym', satisfies } })
+
+test('dispositionAfterSlotChange: a different slot on Keep becomes Relink; the stored slot again stays Keep', () => {
+  expect(dispositionAfterSlotChange(existing('keep'), { capacity: 'mobility' })).toBe('relink')
+  expect(dispositionAfterSlotChange(existing('keep'), { capacity: 'stability' })).toBe('keep')
+  expect(dispositionAfterSlotChange(existing('keep'), null)).toBe('relink')                  // clearing the link is a change
+  expect(dispositionAfterSlotChange(existing('keep', null), null)).toBe('keep')              // nothing stored, nothing chosen
+  expect(dispositionAfterSlotChange(existing('keep', null), { capacity: 'mobility' })).toBe('relink')
+})
+
+test('dispositionAfterSlotChange leaves the operator\'s own Relink / Retire and every new row alone', () => {
+  expect(dispositionAfterSlotChange(existing('relink'), { capacity: 'stability' })).toBe('relink')
+  expect(dispositionAfterSlotChange(existing('retire'), { capacity: 'mobility' })).toBe('retire')
+  expect(dispositionAfterSlotChange({ isExisting: false, disposition: 'keep' }, { capacity: 'mobility' })).toBe('keep')
 })

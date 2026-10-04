@@ -175,3 +175,25 @@ export function validateSlots(slots, options) {
     return ''
   })
 }
+
+
+// ---- step-5 placement links (4 Oct 2026: a slot picked on a "Keep" item was silently ignored) ---- //
+
+// Do two `satisfies` values name the same quota slot? `satisfies` is `{kind: key}` or null. Null, undefined
+// and {} all mean "fills no slot". Keys compare case-insensitively on the value, as the backend matches them.
+export function sameSatisfies(a, b) {
+  const pair = (s) => {
+    const e = s && typeof s === 'object' ? Object.entries(s) : []
+    return e.length ? `${e[0][0]}:${String(e[0][1]).trim().toLowerCase()}` : ''
+  }
+  return pair(a) === pair(b)
+}
+
+// The disposition an EXISTING placement should carry after its slot is changed. "Keep" retains the stored
+// link and ignores the dropdown, so picking a different slot while on Keep must become "Relink" (the choice
+// would otherwise be dropped by both the counter and the save). Picking the stored slot again stays Keep;
+// Relink and Retire are the operator's own choice and are never changed here.
+export function dispositionAfterSlotChange(placement, nextSatisfies) {
+  if (!placement.isExisting || placement.disposition !== 'keep') return placement.disposition
+  return sameSatisfies(placement.value?.satisfies, nextSatisfies) ? 'keep' : 'relink'
+}
