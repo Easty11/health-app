@@ -2984,6 +2984,25 @@ Code's lean, not a ruling: (a), as the one change that closes the whole class, a
 
 ---
 
+## Q210. Several metabolic `load_window` slots with disjoint sport filters in one sub-cycle: a supported shape?
+
+Raised 4 Oct 2026 (operator, from the first real phase-change save). The phase needs run, speed, VO2 and aerobic work counted separately.
+
+**Verified on master `c6bae6c`.**
+- **Refused today.** `validate_microcycle` allows one slot per `load_window` per sub-cycle, and the only load window is `metabolic`: a second raises "duplicate load_window 'metabolic' within this sub-cycle" (pinned in `tests/test_phase_transition_order.py`). The form now refuses it at step 4 (PR #311).
+- **Slot identity is `(kind, key)`.** `schedule_item.satisfies` is `{kind: key}`; `consistency_rows` (`engine/week_plan.py`) matches on it, and `_actuals_by_day` attributes each counted session to its `(kind, key)`. Two metabolic slots would share one identity, so an item satisfying `metabolic` would count against both. Likely the reason the duplicate rule exists; #307's text states the rule, not this reason.
+- **The resolver already expects several.** #315's claim order: exclusions first; `activity` slots claim by sport in declared order; "the remainder -> sport-scoped `load_window` slots in declared order"; one session claims at most one slot.
+- **An existing alternative.** An `activity` slot (#315) is one per activity name (casefolded), each with its own `device_sports`, counted separately. #315 says it "deposits NO load by virtue of the slot (counted sessions carry no `trimp`)".
+- **Not examined before.** #307 rejected a `sport_name` filter as out of scope (revisit at preseason) and #315 then added `device_sports` scoping; no decision considered several `load_window` slots with disjoint filters.
+
+**Options (not decided).** (a) Keep the shape: one `metabolic` slot plus one `activity` slot per sport group (run, speed, VO2, aerobic), counted separately today. (b) Allow several `load_window` slots, each given a slot name besides the window: an identity extension through the validator, the resolver's `Slot`, `satisfies`, `consistency_rows`, `_actuals_by_day`, the form and the coach write-shape docs. (c) Something else.
+
+**To decide (Luke).** Which option; and what "counted separately" must mean for load, in particular whether a run slot's sessions need to differ from an activity slot's in what the plan reads as load.
+
+**State:** OPEN. Owner: Luke. Not blocking. Related: #307, #315, #317, #375.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
