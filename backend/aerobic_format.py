@@ -41,3 +41,18 @@ def format_aerobic_session(s: Any) -> str:
         f"{s.session_date} [{s.source}] {s.sport_name or 'unknown'}: "
         f"{dur_min} HR={avg_hr}/{max_hr} dist=— cal={cal}{zone_summary}"
     )
+
+
+def format_selfeval(row: Any) -> str:
+    """The Garmin self-evaluation suffix for a session line, e.g. ` selfeval=[RPE 4/10 feel 25/100 garmin]`.
+
+    `row` is the latest `garmin_activity_selfevals` row linked to the session (rated: at least one of
+    `rpe_cr10` / `feel` is set). RPE is CR-10 (Garmin's 0-100 / 10); feel is Garmin's 0-100 as sent, no
+    label (only 25 = "Weak" is verified). The shared `format_aerobic_session` line is NOT changed, so the
+    in-app chat's pinned session block reads as before; only `get_training_sessions` appends this."""
+    parts = []
+    if row.rpe_cr10 is not None:
+        parts.append(f"RPE {row.rpe_cr10:g}/10")
+    if row.feel is not None:
+        parts.append(f"feel {row.feel}/100")
+    return f" selfeval=[{' '.join(parts)} garmin]"

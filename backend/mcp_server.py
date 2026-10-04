@@ -31,7 +31,8 @@ import typed_entries
 from routers.knowledge import FINDING_DOMAINS
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from reads.labs_reads import latest_lab_results
-from aerobic_format import format_aerobic_session   # one aerobic renderer, shared with the in-app chat (A2)
+from aerobic_format import format_aerobic_session, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
+from garmin_selfeval import selfeval_by_session   # Garmin per-activity RPE/feel for a linked session (Q209)
 from reads.aerobic_reads import arbitrated_sessions   # the canonical read-door (#Q161)
 from reads.recovery_reads import hrv_deviation, representative_source
 from engine.training_phase import current_training_phase
@@ -555,8 +556,9 @@ def get_training_sessions(days: int = 28) -> str:
     # local `session_date` (untimed sessions, which the old `start_time >=` filter dropped,
     # are now included). Rendered inside the session so attributes are materialised.
     with SessionLocal() as _db:
-        sessions = [s for s in arbitrated_sessions(user_id, _db, since=since)
-                    if getattr(s, "canonical", True)]
+        arbitrated = arbitrated_sessions(user_id, _db, since=since)
+        selfevals = selfeval_by_session(_db, user_id, arbitrated)   # before the canonical filter: a lost twin's value moves to the winner
+        sessions = [s for s in arbitrated if getattr(s, "canonical", True)]
 
         if not sessions:
             return (
@@ -569,7 +571,10 @@ def get_training_sessions(days: int = 28) -> str:
         lines.append("Note: Polar data accumulates from June 2026 onward.\n")
 
         for s in sessions:
-            lines.append(format_aerobic_session(s))
+            line = format_aerobic_session(s)
+            if s.id in selfevals:
+                line += format_selfeval(selfevals[s.id])
+            lines.append(line)
 
     return "\n".join(lines)
 
