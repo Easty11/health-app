@@ -137,7 +137,7 @@ def _summary_brief(summary: dict[str, Any]) -> dict[str, Any]:
         },
         "garmin": {
             k: garmin.get(k)
-            for k in ("users_attempted", "users_succeeded", "users_failed")
+            for k in ("users_attempted", "users_succeeded", "users_failed", "selfeval")
         },
     }
 
