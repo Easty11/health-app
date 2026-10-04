@@ -40,6 +40,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 030 — hrv_samples              FK to hrv_readings (CASCADE) — 5-min RMSSD series; Garmin-populated
 032 — aerobic_sessions         FK to users (CASCADE) — canonical aerobic/conditioning sessions; unique (user, source, source_session_id); read-time cross-source + writer-class arbitration
 041 — hr_samples + user_hrmax  FK to users (CASCADE) — source-neutral raw HR (unique user, sample_time, source, source_package) + append-only dated HRmax (unique user, effective_from); HC zone fill (Q159 stage 2)
+042 — garmin_activity_selfevals  FK to users (CASCADE) + aerobic_sessions (SET NULL) — insert-only, capture-timed Garmin per-activity self-evaluation (RPE CR-10, feel); unique (user, garmin_activity_id, captured_at) (Q209 path a)
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1732,3 +1733,31 @@ CREATE INDEX ix_user_hrmax_user_id ON user_hrmax (user_id);
 - **`user_hrmax` is append-only.** A new value is a new row (a later `effective_from`; the same date is refused) followed by a recompute; a row is never edited or deleted. No route, no UI and no chat write path reaches it — the one writer is the operator script `scripts/set_hrmax.py` (`tests/test_hr_zones_schema.py` asserts nothing else constructs, updates or deletes the model).
 - **Readers.** `hc_zone_enrich.enrich_user` (the chain step) and the G2 projection in `scripts/arbitration_flip_report.py --hc-zones`; both call the pure `hr_zones.zone_session`. Nothing else reads either table.
 
+
+### 042 — garmin_activity_selfevals (Q209 path a: immutable per-activity Garmin self-evaluation)
+
+Migration `c5e7a9b1d3f2` (revises `b4d6f8a1c3e5`). One new table, nothing altered; empty until the code that fills it deploys.
+
+```sql
+CREATE TABLE garmin_activity_selfevals (
+    id                 SERIAL PRIMARY KEY,
+    user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    garmin_activity_id BIGINT NOT NULL,                -- Garmin ids exceed int32
+    captured_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    rpe_cr10           DOUBLE PRECISION,               -- Garmin directWorkoutRpe (0-100, steps of 10) / 10; NULL = unrated
+    feel               INTEGER,                        -- Garmin directWorkoutFeel (0/25/50/75/100); NULL = unrated
+    garmin_type        VARCHAR(100),                   -- activityType.typeKey
+    start_time         TIMESTAMPTZ NOT NULL,
+    stop_time          TIMESTAMPTZ,                    -- start + the list's duration; NULL when absent
+    aerobic_session_id INTEGER REFERENCES aerobic_sessions(id) ON DELETE SET NULL,
+    CONSTRAINT uq_garmin_selfeval_capture UNIQUE (user_id, garmin_activity_id, captured_at)
+);
+CREATE INDEX ix_garmin_activity_selfevals_id ON garmin_activity_selfevals (id);
+CREATE INDEX ix_garmin_activity_selfevals_user_id ON garmin_activity_selfevals (user_id);
+CREATE INDEX ix_garmin_activity_selfevals_aerobic_session_id ON garmin_activity_selfevals (aerobic_session_id);
+```
+
+- **Insert-only, capture-timed.** A row is what Garmin said at `captured_at`. A changed value inserts a new row; no code path updates one (`garmin_selfeval.record_observation` is the only writer, and a test fails on any UPDATE). An activity's CURRENT value is its latest row by `captured_at`; earlier rows are the history. The one change a row can see is the database's own `ON DELETE SET NULL` on the link, which never touches a Garmin value.
+- **Unrated sightings are rows.** `rpe_cr10` and `feel` are NULL when Garmin sent none; the row records that the activity was seen so it is not re-fetched daily. A still-unrated activity inside its 7-day re-check window gets a fresh NULL row per due check (at most about 7), because insert-only forbids a last-checked update.
+- **The link is late by design.** `aerobic_session_id` is the Health Connect row (`source='health_connect'`, `source_package='com.garmin.android.apps.connectmobile'`) overlapping the activity by at least 50% of the shorter interval. Health Connect often lands after the Garmin read, so a DB-only relink pass inserts a new linked row (same values) when the match appears.
+- **Writer and reader.** Written by the Garmin sweep (`scripts/garmin_sync.sweep_garmin_hrv`, after its token refresh) through a no-refresh client (#361). Read by `get_training_sessions`, which shows `rpe_cr10` and `feel` for a linked session.
