@@ -12,7 +12,7 @@
 // string 422 shown verbatim, a new placement shipping a resolved time (never 'unknown', B1).
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { act } from 'react'
 
 vi.mock('../../api', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
@@ -212,4 +212,90 @@ test('a string 422 detail is shown verbatim (server is the validator)', async ()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm — save phase change/i })) })
   await waitFor(() => expect(screen.getByText(detail)).toBeTruthy())
   expect(onWritten).not.toHaveBeenCalled()
+})
+
+
+// ---- step 4 slot keys: pickers from the backend's vocabularies, and the checks that used to wait for step 8 ----
+
+const SLOT_OPTIONS = { capacity: ['stability', 'mobility', 'strength'], load_window: ['metabolic'] }
+
+async function toStep4(options = SLOT_OPTIONS) {
+  api.get.mockResolvedValue({ data: { ...DRAFT, ...(options ? { slot_options: options } : {}) } })
+  await renderFlow()
+  await next(); await next(); await next()
+  expect(screen.getByText(/step 4 of 8/i)).toBeTruthy()
+}
+const addSlotBtn = () => screen.getByRole('button', { name: /\+ quota slot/i })
+const nextBtn = () => screen.getByRole('button', { name: /^next$/i })
+const optionValues = (sel) => within(sel).getAllByRole('option').map((o) => o.value)
+
+test('slots: a new capacity slot is a picker of the backend capacities, defaulting to one not yet used', async () => {
+  await toStep4()
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  const key = screen.getByLabelText('slot 2 key')
+  expect(key.tagName).toBe('SELECT')                                  // not a free-text box
+  expect(optionValues(key)).toEqual(SLOT_OPTIONS.capacity)            // exactly the offered vocabulary; 'gym' is not in it
+  expect(key.value).toBe('mobility')                                  // stability is already slot 1
+  expect(nextBtn().disabled).toBe(false)
+})
+
+test('slots: changing a slot kind resets its key to one valid for the new kind', async () => {
+  await toStep4()
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'load_window' } }) })
+  const key = screen.getByLabelText('slot 2 key')
+  expect(key.tagName).toBe('SELECT') && expect(optionValues(key)).toEqual(['metabolic'])
+  expect(key.value).toBe('metabolic')                                 // not the stale 'mobility'
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'activity' } }) })
+  const act2 = screen.getByLabelText('slot 2 key')
+  expect(act2.tagName).toBe('INPUT') && expect(act2.value).toBe('')    // the open kind stays free text
+})
+
+test('slots: a duplicate capacity names the clash and blocks Next until fixed', async () => {
+  await toStep4()
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 key'), { target: { value: 'stability' } }) })
+  expect(screen.getByRole('alert').textContent).toMatch(/Already a capacity slot for "stability" \(slot 1\)/)
+  expect(nextBtn().disabled).toBe(true)
+  expect(screen.getByText(/Fix the quota slot\(s\) marked above/i)).toBeTruthy()
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 key'), { target: { value: 'strength' } }) })
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(nextBtn().disabled).toBe(false)
+})
+
+test('slots: a second metabolic slot is refused at step 4 with the activity-slot hint (the 4 Oct retry)', async () => {
+  await toStep4()
+  for (let i = 0; i < 2; i += 1) {
+    await act(async () => { fireEvent.click(addSlotBtn()) })
+    const slotNo = i + 2
+    await act(async () => { fireEvent.change(screen.getByLabelText(`slot ${slotNo} kind`), { target: { value: 'load_window' } }) })
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Pilates' })[i]) })   // a device sport, so only the duplicate remains
+  }
+  const alert = screen.getByRole('alert')
+  expect(alert.textContent).toMatch(/Already a load_window slot for "metabolic" \(slot 2\)/)
+  expect(alert.textContent).toMatch(/activity slot/)
+  expect(nextBtn().disabled).toBe(true)
+})
+
+test('slots: a load_window or activity slot with no device sport blocks Next until one is picked', async () => {
+  await toStep4()
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'load_window' } }) })
+  expect(screen.getByRole('alert').textContent).toMatch(/at least one device sport/)
+  expect(nextBtn().disabled).toBe(true)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Pilates' })) })
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(nextBtn().disabled).toBe(false)
+})
+
+test('slots: a draft without slot_options (an older backend) keeps the text box and does not block', async () => {
+  await toStep4(null)
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  const key = screen.getByLabelText('slot 2 key')
+  expect(key.tagName).toBe('INPUT')                                   // fallback: the save stays the validator
+  // The default 'stability' still duplicates slot 1, and a duplicate is knowable without the options.
+  expect(screen.getByRole('alert').textContent).toMatch(/Already a capacity slot for "stability"/)
+  await act(async () => { fireEvent.change(key, { target: { value: 'Gym' } }) })
+  expect(screen.queryByRole('alert')).toBeNull()                      // not knowable here: the save decides
+  expect(nextBtn().disabled).toBe(false)
 })

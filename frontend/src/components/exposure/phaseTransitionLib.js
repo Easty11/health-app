@@ -117,3 +117,61 @@ export function buildMicrocycle(slots) {
     }],
   }
 }
+
+
+// ---- step-4 slot keys: the closed vocabularies, and the checks that used to fire only at step 8 ---- //
+//
+// 4 Oct 2026: the slot name was a free-text box for every kind, so 'Gym' (not a capacity) and a second
+// 'metabolic' load_window both reached the save and were refused there, after the Hevy folder step.
+// The backend's `slot_options` (from the draft) is the one source of the closed vocabularies; nothing here
+// keeps a copy. `activity` is open (a sport name), so it has no list.
+
+export const NO_SLOT_OPTIONS = { capacity: [], load_window: [] }
+
+// The picker's options for a slot kind, or [] when the kind is open (activity) or the draft carried none
+// (the form then falls back to a text box, so an older backend still works).
+export function slotKeyOptions(kind, options) {
+  const list = options && Array.isArray(options[kind]) ? options[kind] : []
+  return kind === 'capacity' || kind === 'load_window' ? list : []
+}
+
+const _norm = (k) => String(k ?? '').trim().toLowerCase()
+
+// The key a slot takes when it is added or its kind changes: the first option of that kind no other slot
+// already holds (so a fresh slot is not an instant duplicate), else the first option; '' for an open kind.
+// `skip` is the index of the slot being changed (its own current key is not "taken").
+export function defaultSlotKey(kind, options, slots, skip = -1) {
+  const opts = slotKeyOptions(kind, options)
+  if (opts.length === 0) return kind === 'load_window' ? 'metabolic' : ''
+  const taken = new Set(slots.filter((s, j) => j !== skip && s.kind === kind).map((s) => _norm(s.key)))
+  return opts.find((o) => !taken.has(_norm(o))) ?? opts[0]
+}
+
+// One problem string per slot ('' when it is fine): exactly the refusals `validate_microcycle` would raise
+// at save, found at step 4 instead. Mirrors the backend rules: a capacity / load_window key must be one of
+// the offered values; an activity needs a name; one slot per (kind, key) within the sub-cycle; a
+// load_window or activity slot needs at least one device sport.
+export function validateSlots(slots, options) {
+  const seen = new Map()
+  return slots.map((s, i) => {
+    const key = String(s.key ?? '').trim()
+    const opts = slotKeyOptions(s.kind, options)
+    if (s.kind === 'activity' && !key) return 'Name the activity.'
+    if (opts.length > 0 && !opts.includes(key.toLowerCase())) {
+      return `${key ? `"${key}"` : 'Nothing'} is not a ${s.kind === 'capacity' ? 'capacity' : 'load window'}: pick one of ${opts.join(', ')}.`
+    }
+    if (s.kind === 'capacity' && !key) return 'Pick a capacity.'
+    const id = `${s.kind}:${key.toLowerCase() || (s.kind === 'load_window' ? 'metabolic' : '')}`
+    if (seen.has(id)) {
+      const hint = s.kind === 'load_window'
+        ? ' A phase takes one load_window slot per window; count a further sport with an activity slot.'
+        : ''
+      return `Already a ${s.kind} slot for "${key || 'metabolic'}" (slot ${seen.get(id) + 1}): one per sub-cycle.${hint}`
+    }
+    seen.set(id, i)
+    if ((s.kind === 'load_window' || s.kind === 'activity') && !(Array.isArray(s.device_sports) && s.device_sports.length)) {
+      return 'Pick at least one device sport that counts.'
+    }
+    return ''
+  })
+}

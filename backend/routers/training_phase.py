@@ -138,7 +138,7 @@ class ScheduleOpIn(BaseModel):
 class PhaseTransitionIn(BaseModel):
     """The form's single confirm. `phase` opens the new phase (and closes the outgoing one, via the
     shared `_apply_open_phase`); `schedule_items` are the ops; a folder is either an existing
-    `folder_id` or a `new_folder_name` to create FIRST (outside the transaction)."""
+    `folder_id` or a `new_folder_name` to create (outside the transaction, only AFTER a validate-only pass, the 4 Oct 2026 ruling)."""
     phase: PhaseIn
     schedule_items: list[ScheduleOpIn] = []
     folder_id: str | None = None
@@ -168,17 +168,27 @@ def _matching_open_phase(db: Session, user_id: int, phase_payload: dict[str, Any
     return None
 
 
+# A stand-in folder id for the validate-only pass: the `phase_folders` preference is staged (and so
+# validated) with it, then the whole pass is rolled back. Never stored; never sent to Hevy.
+_DRY_RUN_FOLDER_ID = "dry-run"
+
+
 def _apply_phase_transition(
     db: Session, user_id: int, *,
     phase_payload: dict[str, Any],
     schedule_ops: list[ScheduleOpIn],
     folder_id: str | None,
+    commit: bool = True,
 ) -> models.TrainingPhase:
     """ONE transaction (G1): stage the close-outgoing + open-new (shared `_apply_open_phase`), the
     schedule retires (first, flushed) then upserts, and the `phase_folders` merge — then a single
     commit. Any ValueError / overlap rolls the WHOLE set back (the caller does `db.rollback()`), so
     a rejected part writes nothing. Retires precede upserts so a replacement item does not collide
-    on the overlap check with the row it replaces."""
+    on the overlap check with the row it replaces.
+
+    `commit=False` is the VALIDATE-ONLY pass (the route runs it before any external call): every
+    validator and overlap check runs exactly as in the real write, the rows are staged and flushed,
+    and the caller rolls the session back. One code path, so "validated" cannot drift from "writable"."""
     phase = phase_mod._apply_open_phase(db, user_id, phase_payload)   # stages close+open; may raise
 
     for op in schedule_ops:
@@ -227,9 +237,37 @@ def _apply_phase_transition(
             db,
         )
 
+    if not commit:
+        db.flush()
+        return phase
     db.commit()
     db.refresh(phase)
     return phase
+
+
+def _transition_error(exc: Exception, *, orphan_folder: str | None) -> HTTPException:
+    """The 422 for a rejected transition. `orphan_folder` is passed ONLY when a Hevy folder was
+    actually created before the failure, so a validation refusal never talks about an orphan."""
+    if isinstance(exc, ScheduleItemOverlap):
+        # STRUCTURED 422 (F17): a day+time clash carries the colliding rows (id / activity /
+        # days / time_of_day) and the offending schedule key, so the form can name the clash
+        # and offer "these are separate sessions" -> a `distinct_from` resubmit. `error` keeps a
+        # readable string for any caller that does not special-case the structure.
+        detail: dict[str, Any] = {
+            "code": exc.code,
+            "error": str(exc),
+            "key": getattr(exc, "key", None),
+            "overlapping": exc.overlapping,
+            "resolve_with": ["distinct_from"],
+        }
+        if orphan_folder:
+            detail["orphan_folder"] = orphan_folder
+        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+    detail_str = str(exc)
+    if orphan_folder:
+        detail_str += (f" — NOTHING was written, but the Hevy folder "
+                       f"'{orphan_folder}' was already created (orphan; reuse or delete it)")
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail_str)
 
 
 @router.post("/transition")
@@ -239,11 +277,14 @@ async def phase_transition(
     db: Session = Depends(get_db),
 ):
     """The phase-change form's single confirm. ONE atomic write closes the outgoing phase, opens the
-    new one, writes the schedule items and the `phase_folders` entry. Order of operations: the Hevy
-    folder create (the ONLY external call) runs FIRST, before the transaction — so on its failure
-    nothing is written; if the transaction then fails, the created folder is reported by name as an
-    orphan (nothing else written). Natural-state idempotency: a re-submit identical to the open
-    phase returns it 200 and writes nothing (no second folder)."""
+    new one, writes the schedule items and the `phase_folders` entry. Order of operations (the 4 Oct 2026
+    ruling, superseding #317's folder-first order): (1) natural-state idempotency; (2) when a NEW folder is
+    asked for, a VALIDATE-ONLY pass of the whole transaction (rolled back), so a refused form never
+    reaches Hevy; (3) the Hevy folder create, the ONLY external call, so its failure writes nothing;
+    (4) the real transaction. A failure at (4) can now only be a database fault or a race, and names
+    the created folder as an orphan (the Hevy API has no folder delete, so it cannot be undone from
+    here). A re-submit identical to the open phase returns it 200 and writes nothing (no second
+    folder)."""
     phase_payload = body.phase.model_dump(exclude_unset=True)
 
     # (1) Idempotency FIRST — before any folder create (ruling 3).
@@ -251,7 +292,6 @@ async def phase_transition(
     if match is not None:
         return {"training_phase": phase_mod.phase_to_dict(match), "no_op": True}
 
-    # (2) Hevy folder create FIRST (the only external call); abort clean on failure.
     folder_id = body.folder_id
     if body.new_folder_name:
         integ = (
@@ -262,6 +302,23 @@ async def phase_transition(
         if integ is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                                 detail="cannot create a Hevy folder — Hevy is not connected")
+
+        # (2) Validate the WHOLE write before the only external call. Same code path as the real
+        # write, rolled back: nothing is kept, and nothing has left the building if it refuses.
+        try:
+            _apply_phase_transition(
+                db, current_user.id,
+                phase_payload=phase_payload,
+                schedule_ops=body.schedule_items,
+                folder_id=_DRY_RUN_FOLDER_ID,
+                commit=False,
+            )
+        except (ScheduleItemOverlap, ValueError) as exc:
+            db.rollback()
+            raise _transition_error(exc, orphan_folder=None)
+        db.rollback()   # the validate-only pass never keeps a row
+
+        # (3) Hevy folder create (the only external call); abort clean on failure.
         try:
             client = HevyClient(decrypt(integ.api_key_encrypted))
             created = await client.create_routine_folder(body.new_folder_name)
@@ -270,7 +327,7 @@ async def phase_transition(
                                 detail=f"Hevy folder create failed — nothing written: {exc}")
         folder_id = str((created.get("routine_folder") or created).get("id"))
 
-    # (3) The single transaction. On failure, roll back; if a folder was created, name the orphan.
+    # (4) The single transaction. On failure, roll back; if a folder was created, name the orphan.
     try:
         phase = _apply_phase_transition(
             db, current_user.id,
@@ -278,29 +335,9 @@ async def phase_transition(
             schedule_ops=body.schedule_items,
             folder_id=folder_id,
         )
-    except ScheduleItemOverlap as exc:
-        # STRUCTURED 422 (F17): a day+time clash carries the colliding rows (id / activity /
-        # days / time_of_day) and the offending schedule key, so the form can name the clash
-        # and offer "these are separate sessions" → a `distinct_from` resubmit. `error` keeps a
-        # readable string for any caller that does not special-case the structure.
+    except (ScheduleItemOverlap, ValueError) as exc:
         db.rollback()
-        detail: dict[str, Any] = {
-            "code": exc.code,
-            "error": str(exc),
-            "key": getattr(exc, "key", None),
-            "overlapping": exc.overlapping,
-            "resolve_with": ["distinct_from"],
-        }
-        if body.new_folder_name:
-            detail["orphan_folder"] = body.new_folder_name
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
-    except ValueError as exc:
-        db.rollback()
-        detail_str = str(exc)
-        if body.new_folder_name:
-            detail_str += (f" — NOTHING was written, but the Hevy folder "
-                           f"'{body.new_folder_name}' was already created (orphan; reuse or delete it)")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail_str)
+        raise _transition_error(exc, orphan_folder=body.new_folder_name or None)
     return {"training_phase": phase_mod.phase_to_dict(phase), "no_op": False}
 
 
@@ -394,6 +431,9 @@ async def phase_transition_draft(
         "schedule_items": schedule_items,
         "sport_names_seen": sport_names_seen(current_user.id, db),
         "routine_folders": folders,
+        # The closed vocabularies the step-4 slot pickers offer, from the validator's own source, so
+        # the form never keeps a copy that can drift (a free-text key was the 4 Oct refusal).
+        "slot_options": phase_mod.slot_options(),
         "freshness": week_plan_mod._freshness(db, current_user.id, today),
         # The outgoing window's per-day availability + `caution: day after heavy` (F12), so
         # step 5 can show which days a hard commitment blocks. `None` at baseline (no window).

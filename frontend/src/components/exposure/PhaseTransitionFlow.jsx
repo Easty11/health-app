@@ -21,8 +21,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../api'
 import { todayLocal } from './phaseTime'
 import {
-  TIME_BUCKETS, buildMicrocycle, deriveTimeOfDay, diffSlots, microcycleSlots,
-  normaliseActivityName, normaliseTimeRange, removesAllCapacity, slotIdentity,
+  NO_SLOT_OPTIONS, TIME_BUCKETS, buildMicrocycle, defaultSlotKey, deriveTimeOfDay, diffSlots, microcycleSlots,
+  normaliseActivityName, normaliseTimeRange, removesAllCapacity, slotIdentity, slotKeyOptions, validateSlots,
 } from './phaseTransitionLib'
 
 const CAPACITIES = ['mobility', 'stability', 'strength', 'power', 'endurance']
@@ -200,12 +200,23 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
   const hasMismatch = mismatchRows.length > 0
 
   // ---- quota slots (step 4) ---------------------------------------------- //
+  // The closed vocabularies come from the backend's own validator (the draft's `slot_options`); the
+  // per-slot problems are the refusals the save would raise, shown here instead (4 Oct 2026).
+  const slotOptions = draft?.slot_options ?? NO_SLOT_OPTIONS
+  const slotProblems = useMemo(() => validateSlots(slots, slotOptions), [slots, slotOptions])
+  const slotsInvalid = slotProblems.some(Boolean)
+
   function addSlot() {
-    setSlots((p) => [...p, { kind: 'capacity', key: 'stability', sessions: 2, minutes: 30,
-                             device_sports: [], recorded_via: '', origin: 'new' }])
+    setSlots((p) => [...p, { kind: 'capacity', key: defaultSlotKey('capacity', slotOptions, p) || 'stability',
+                             sessions: 2, minutes: 30, device_sports: [], recorded_via: '', origin: 'new' }])
   }
   function updateSlot(i, patch) {
     setSlots((p) => p.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+  }
+  // A kind change resets the key to a value valid for the NEW kind (a capacity key left under
+  // load_window was one way a refused slot reached the save).
+  function changeSlotKind(i, kind) {
+    setSlots((p) => p.map((s, j) => (j === i ? { ...s, kind, key: defaultSlotKey(kind, slotOptions, p, i) } : s)))
   }
   function removeSlot(i) {
     setSlots((p) => p.filter((_, j) => j !== i))
@@ -356,6 +367,9 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
   let nextBlockedReason = ''
   if (step === 5 && hasMismatch && !ackMismatch) {
     nextBlockedReason = 'Acknowledge the schedule ≠ quota mismatch below to continue.'
+  }
+  if (step === 4 && slotsInvalid) {
+    nextBlockedReason = 'Fix the quota slot(s) marked above to continue: the save refuses them, so they are checked here.'
   }
   const nextDisabled = !!nextBlockedReason
   const confirmDisabled = submitting || !label.trim() || (mustAckCapacity && !ackRemoveCapacity)
@@ -562,7 +576,7 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
                         className="text-[11px] text-indigo-600 underline">change kind / target</button>
                     </div>
                   ) : (
-                    <select value={s.kind} aria-label={`slot ${i + 1} kind`} onChange={(e) => updateSlot(i, { kind: e.target.value })} className={fieldCls}>
+                    <select value={s.kind} aria-label={`slot ${i + 1} kind`} onChange={(e) => changeSlotKind(i, e.target.value)} className={fieldCls}>
                       {SLOT_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
                     </select>
                   )}
@@ -571,6 +585,14 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
                   <span className="text-[11px] text-gray-500">Capacity / name</span>
                   {s.origin === 'prefill' ? (
                     <span className="text-xs text-gray-700 py-1.5">{s.key}</span>
+                  ) : slotKeyOptions(s.kind, slotOptions).length > 0 ? (
+                    <select value={String(s.key ?? '').trim().toLowerCase()} aria-label={`slot ${i + 1} key`}
+                      onChange={(e) => updateSlot(i, { key: e.target.value })} className={fieldCls}>
+                      {!slotKeyOptions(s.kind, slotOptions).includes(String(s.key ?? '').trim().toLowerCase()) && (
+                        <option value={String(s.key ?? '').trim().toLowerCase()}>— pick one —</option>
+                      )}
+                      {slotKeyOptions(s.kind, slotOptions).map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
                   ) : (
                     <input type="text" value={s.key} aria-label={`slot ${i + 1} key`}
                       placeholder={s.kind === 'capacity' ? 'stability' : s.kind === 'activity' ? 'pilates' : 'metabolic'}
@@ -578,6 +600,9 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
                   )}
                 </div>
               </div>
+              {slotProblems[i] && (
+                <p role="alert" className="text-[11px] text-red-600">{slotProblems[i]}</p>
+              )}
               {slotPrompt && slotPrompt.index === i && (
                 <div className="flex flex-col gap-1 bg-amber-50 border border-amber-200 rounded-lg p-2">
                   <span className="text-[11px] text-amber-800">This slot came from the outgoing phase. Replace it, or add a new one?</span>
