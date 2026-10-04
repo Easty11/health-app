@@ -279,11 +279,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The sRPE-floor brief was verified and halted: #326 stands, Case B is dropped, and the paired sessions number 2, so nothing was built; per-session sRPE capture is filed (Q202, Q209, Q159).** A read-only Garmin self-evaluation probe landed (PR #307) and its operator run is owed. Code plus governance, no schema - Handoff: `closeout.md`.
+
 - **The missing in-activity HR is Garmin's 7-day export lag plus a scheduled sync that never read; the chat outage and the sync race are fixed (#369-#371, Q159 reopened, Q207 closed, Q208).** Q207 is closed with no app-side loss; Q159 is reopened with the measured lag; the phone-side fix is ruled and owed as a brief (#370). Two code fixes landed: a Hevy exercise with null notes no longer 500s `POST /chat`, and overlapping syncs no longer race on `record_sources`. Code plus governance, no schema - Handoff: `closeout.md`.
 
 - **Q206 read and ruled: gym-overlap HR stays metabolic, the MCP marker exposure is owed, `sports:read` rides the next Polar re-auth (#367, #368, Q207).** The operator's overlap, payload-key and gap reads are recorded; the HRmax seed's conditioning-segment provenance is noted on Q199 and a writer-ownership question is filed (Q207). Governance only, no code and no schema - Handoff: `closeout.md`.
-
-- **Polar sport ids mapped from Polar's own list; a report-first relabel script; the Polar-row-vs-Hevy questions filed (#366, Q205-Q206).** The Polar sport-id map now follows the Polar Flow list for both transports (id 4 is Jogging, not Walking), and stored rows relabel only through the operator-run `scripts/polar_sport_backfill.py`. The hierarchy tie-break was dropped for the source-agnostic input-layer design (Q201). Code plus governance, no schema - Handoff: `closeout.md`.
 
 ---
 

@@ -2345,6 +2345,8 @@ Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). H
 
 **Reopened (4 Oct 2026, #369).** Measured lag: the 26 Sep Pilates in-activity HR (241 Garmin samples at 13 s) reached `hr_samples` only after the 7-day manual sync at 13:47Z on 3 Oct, about 7 days after the session, and was absent after the 30-day manual sync at 03:33Z. That agrees with the lag named above (about 6 days, HCA Q22, user 4). The Resolution above set the blocker aside on "the newest HR sample is 0.0-7.6 h old at each POST"; that measures the freshest passive sample and does not cover in-activity lateness. What stays open: what the app shows and deposits for a session inside the lag window (a zoneless row reads as zero load, silently: Q202, Q203), and the re-read depth that covers it (#370 sets the scheduled window to 30 days). The recompute on every chain run (#364) is what fills such a row once its HR is stored.
 
+**Garmin activity read as a lag-bypass candidate (4 Oct 2026, operator; a note, not a decision).** The 1 Oct "no client built" position for a direct Garmin read (the Q198 inventory table) is REOPENED, scoped to a read-only activity read: self-evaluation first (Q209), and in-activity HR as a candidate fix for the lag measured in #369. The operator reports Garmin Connect holds the full wrist HR for the 26 Sep Pilates (Q207), where Health Connect delivered it about 7 days late. `garminconnect` 0.3.11 exposes `get_activity_details` (`__init__.py:2957`) and `download_activity` (`:2839`); which of them carries per-sample HR, and how soon after a session, is unverified. Any live read follows #361 (never refresh a Garmin token), and the library is an unofficial, ToS-grey lane (`requirements.txt:22`). The ruling follows the Q209 probe and is tied to it. Related: Q209.
+
 **State:** OPEN. Owner: Luke. Not blocking. Related: #369, #370, Q202, Q203, Q207.
 
 ---
@@ -2612,6 +2614,8 @@ quality signal, not a load driver. Garmin → Health Connect HR absence is unver
 
 **Cross-reference (#365, Q202).** The running case the device hierarchy creates, a watch-owned run with no usable HR zones, is filed as Q202. Resolve the two together.
 
+**Case A lean (4 Oct 2026, the `srpe-floor` session; a lean, not a ruling).** If a floor is ever built (Q202), it fires only where the unzoned session is the day's only counted session, and a non-training sport (Walking, Pilates, Yoga, Stretching; #322 S3) is excluded, because `session_rpe` is one whole-day rating (`daily_records.session_rpe`). The consequence for this question's own example: a Pilates session does not floor until a session-specific capture surface exists, which is Q209. The brief's S1 found only 2 paired days (Q202), so there is no kappa to apply either way.
+
 ---
 
 ## Q190. Two devices, one session: source-wins rule and overlap dedupe
@@ -2857,6 +2861,18 @@ Raised with #365. Verified against master `054d2d9`.
 
 **To decide (Luke).** For a zoneless watch-owned run: (a) stay fail-closed but make the absence explicit (Q203); (b) floor it with RPE × minutes, which is Q189's design fork (capture surface, scaling into lane units); (c) both. Q189 covers device-only sessions such as Pilates and swimming; this entry is the running case the hierarchy creates. Resolve together.
 
+**Brief verified and halted (4 Oct 2026, the `srpe-floor` session; master `53f5925`).** The sRPE-floor brief (A: an Edwards-skipped unzoned device session emits a floor event; B: an "unrecorded session" marker row carrying date, class, minutes and sRPE; C: a per-athlete kappa fitted from paired sessions) was verified before any build, and nothing was built. Findings:
+- **#326 forbids Case B.** Its Context says "no self-reported session rows, no load and no TRIMP", its Rationale says "The marker changes confidence, not values", and the Q169 principle it ratifies says "No per-session detail, RPE, duration, or time" and rejects "an sRPE variant". **Ruled (operator, 4 Oct): #326 stands, Case B is dropped, Q169's rejection is not superseded.**
+- **sRPE is one rating per day, overwritten, with no snapshot.** `daily_records.session_rpe` (Float, 0-10, `models.py:164`) is written by `POST /pm` (`routers/checkin_v2.py:758`, nulled when `trained_today` is false; `pm_timestamp` is overwritten too, `:755`). A delete-and-reinsert transform (`load_events_metabolic.py:180-185`) would follow a revised rating, so "sRPE at recording time only" needs an immutable capture (Q209). `users.rpe_complete_from` is the Hevy set-RPE epoch (`load_metrics.py:297`), not a `session_rpe` capture epoch.
+- **The rollup does not pick up a new formula version without wiring.** `compute_load_metrics` reads `load_events` for one `formula_version` (`load_metrics.py:277-283`), and the chain calls the metabolic step with `metab-v1` only (`scripts/refresh_load.py:158-161`), so `srpe-floor-v1` rows would never roll up. **Ruled (operator, 4 Oct): option (a), when the floor is built: the metabolic rollup reads both versions and the event rows keep their own. Nothing now.**
+- **A day's RPE does not describe every session.** Felt-load already leaves Walking, Pilates, Yoga and Stretching out of its RPE minutes (#322 S3, `reads/psychological_reads.py:290-294`) and skips an aerobic row that overlaps a counted Hevy workout (`:316-317`). The Case A lean is recorded on Q189.
+- `load_events.provenance` is JSONB (`models.py:12,1295`; migration `c7d9e2f14a86:55`). MCP `get_training_load` reads `load_metrics` only (`mcp_server.py:917-941`), so a floor event's `provenance.method` would not show there without a new read.
+- The brief's "3 Oct: 10 skipped for no zones, 12 of 26 HC rows unzoned" is operator-reported and appears in no repo text; it was not used.
+
+**S1 result (operator-reported, 4 Oct).** The paired-session query returned **n = 2** pair-days (2026-06-17 and 2026-09-09). No fit is possible; the gate was n >= 20. The operator confirmed the cause: the bedtime check-in is the only RPE surface and is often skipped. **Scope change (operator): report and governance only. No migration, nothing built. The floor and kappa wait on a capture surface (Q209).**
+
+**Capture rate, OWED (operator).** The count of training days that carry a `session_rpe` has not been read. Read-only, one statement; a training day is any non-excluded Hevy workout day or `aerobic_sessions` day (walks included): `WITH tr AS (SELECT session_date AS day FROM aerobic_sessions WHERE user_id = 1 UNION SELECT (start_time AT TIME ZONE 'Australia/Brisbane')::date FROM hevy_workouts WHERE user_id = 1 AND excluded_at IS NULL AND start_time IS NOT NULL) SELECT date_trunc('month', tr.day)::date AS month, count(*) AS training_days, count(*) FILTER (WHERE d.session_rpe IS NOT NULL) AS with_session_rpe, count(*) FILTER (WHERE d.pm_timestamp IS NOT NULL) AS with_pm_checkin FROM tr LEFT JOIN daily_records d ON d.user_id = 1 AND d.date = tr.day GROUP BY 1 ORDER BY 1;` Append the result here when pasted.
+
 **Scope note (4 Oct 2026, operator, with #369).** The Q202 brief is to follow. Its case A is rows inside the Garmin in-activity HR lag window (about 7 days from the session). It is not a cover for the scheduled-sync failure (#370).
 
 **State:** OPEN. Owner: Luke. Not blocking.
@@ -2959,6 +2975,24 @@ Raised 4 Oct 2026 with #371, which fixed the `record_sources` race (PR #305). Th
 Code's lean, not a ruling: (a), as the one change that closes the whole class, and (c) alongside P1 (#370).
 
 **State:** OPEN. Owner: Luke. Not blocking. Related: #371, #370, Q207.
+
+---
+
+## Q209. Per-session sRPE capture at session save
+
+Raised 4 Oct 2026 with the Q202 sRPE-floor brief. The brief's S1 found n = 2 paired days (Q202); the operator confirmed the cause: the bedtime check-in (`POST /pm`, one `daily_records.session_rpe` per day, overwritten on re-save, `routers/checkin_v2.py:758`) is the only RPE surface and is often skipped. Capture has to happen at session save, per session, and the value has to be an immutable snapshot at capture: a later revision must not change what a derived event was computed from (a delete-and-reinsert transform follows the live column, `load_events_metabolic.py:180-185`).
+
+**Paths.** (a) Garmin self-evaluation (perceived effort, feel) read from Garmin Connect for watch sessions. This reopens the 1 Oct "no client built" position (Q198 inventory table), scoped to a read-only activity read; the ruling follows the probe below. (b) A companion-app notification on Polar session arrival, for H10-only sessions (companion repo, out of this tree). (c) Hevy set RPE, unchanged.
+
+**Library fact (Code, `garminconnect==0.3.11`).** No named self-evaluation field exists, but `get_activity` and `get_activities` return Garmin's JSON unmodelled and the typed `Activity` model allows extra keys (`typed.py:77-80,396-458`), so a field Garmin sends is not dropped. The library has no RPE setter (`__init__.py:2376-2404` set name, type and description only). Operator-reported external evidence: a third-party MCP server on `python-garminconnect` exposes "perceived effort" and "feel" write tools on activities, so the fields exist; their key names and scale are unconfirmed.
+
+**Probe status.** `scripts/garmin_selfeval_probe.py` (PR #307) is read-only: two GET requests through #361's no-refresh seam, printing only keys whose name matches `rpe|feel|eval`. **OWED (operator):** rate one recent activity in Garmin Connect, open the app's Garmin card (it refreshes and saves the token), then run the probe with that activity's `--activity-id`. A negative on an unrated activity proves nothing (FEEDBACK §17); a hit on the known rating gives the key and the scale.
+
+**Reopened fork (4 Oct 2026, operator; a note, not a decision).** The 1 Oct position is reopened for a read-only activity read: self-evaluation now, in-activity HR as a Q159 candidate. The ruling follows the probe.
+
+**To decide (Luke).** After the probe: whether (a) is built and where its value is stored as an immutable snapshot (a schema change, held for review when it comes); whether (b) is briefed to the companion repo; and how Q202's floor and Q189 use a per-session value. No kappa fit is possible until paired data exists.
+
+**State:** OPEN. Owner: Luke. Not blocking. Related: Q202, Q189, Q159, Q198, #326, #361.
 
 ---
 
