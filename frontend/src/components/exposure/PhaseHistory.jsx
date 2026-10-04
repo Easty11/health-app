@@ -28,7 +28,10 @@ export default function PhaseHistory() {
       setStatus('loading')
       api.get('/engine/phase/history')
         .then((res) => {
-          setRows(Array.isArray(res.data) ? res.data : [])
+          // The server wraps the ledger: `{history: [...]}` (routers/training_phase.get_phase_history),
+          // the same envelope `PhaseMarkers` reads. A bare-array read here showed "No phases recorded yet"
+          // for every user, whatever the ledger held.
+          setRows(Array.isArray(res.data?.history) ? res.data.history : [])
           setStatus('ready')
         })
         .catch(() => setStatus('error'))
