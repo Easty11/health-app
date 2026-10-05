@@ -2354,9 +2354,9 @@ Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). H
 **Scheduled-sync evidence (5 Oct 2026, Code, Railway HTTP log; #370 stays OWED, this does not confirm it).** The operator saw HRV and sleep update overnight 4 to 5 Oct with no manual sync, on build `e3e2333`. What the log shows:
 - *HRV is not phone evidence.* It reaches the app by the server-side Garmin sweep (`garmin sweep: user 1 OK`, 16:00:26Z = 02:00 Brisbane on 5 Oct) and by the web app's own `POST /integrations/garmin/refresh` on open (`useRecoveryRefresh.js`; 20:56Z and 23:49Z, 06:56 and 09:49 Brisbane). Neither involves the phone's scheduled sync, so an updated HRV says nothing about it.
 - *Sleep is the phone's* (HC `SleepSession` through `POST /health-connect/sync`). Phone POSTs since 4 Oct 14:00 Brisbane: 06:04Z (10.5 s), 12:08Z (237 s), 18:09Z (8.5 s, 04:09 Brisbane on 5 Oct), all 200; none since, as of 00:14Z on 5 Oct. About 6 hours apart (Likely a scheduled cadence). The pre-fix empty background POSTs took 40 and 42 ms (2 Oct 18:50Z, 3 Oct 00:51Z), so 8.5 s means the 18:09Z POST carried data.
-- *The server cannot say what triggered a POST.* The payload carries `client` and `fetchMeta` and no trigger, the user agent is `okhttp/4.9.2` on all of them, and the deploy log holds only the access line. So scheduled versus app-open cannot be read from the logs. Data-carrying POSTs also come from app-open (3 Oct 19:48Z, 12.6 s).
+- *The server cannot say what triggered a POST, though the phone does.* Build `e3e2333` stamps `client.trigger` (`'manual'` or `'background'`) on every POST (companion `syncRunner.js:93`, `backgroundSync.js:57`, `SyncScreen.js:177`). `ClientInfo` accepts it (`extra="allow"`) and the sync-event row drops it (`routers/health_connect.py:1152-1159`; there is no column), so it is not stored (Q214). The user agent is `okhttp/4.9.2` on all of them and the deploy log holds only the access line, so scheduled versus app-open cannot be read from the logs. Data-carrying POSTs also come from app-open (3 Oct 19:48Z, 12.6 s).
 - *Open points.* A sleep that ended after 04:09 Brisbane cannot be in the 18:09Z POST, and no POST followed it, so the sleep's end time against 04:09 decides whether it arrived by that POST. The row that settles the build and the read is the `health_connect_sync_events` row for 18:09:30Z: `git_sha` (is it `e3e2333`), `period_days`, and `fetch_meta` (hr received above 0 and no "not initialized" error, as on events 59 and 60). The operator knows whether the app was open at 04:09.
-- *A suggestion for the P1 brief, not ruled:* a `client.trigger` label (background or manual) in the payload would make this readable; today it is inferred.
+- *P1 is built, not owed as a brief.* The companion's PR #64 (merge `e3e2333`) initialises Health Connect in the background task, returns `ok:false` on an all-failed fetch, and widens the scheduled window from 7 to 30 days (companion `ROADMAP.md`, read by Code on 5 Oct). Its acceptance read (the companion's G2) is the newest `health_connect_sync_events` row: `git_sha` `e3e2333` with no `-dirty`, `hr_received` above 0, no error, `period_days` 30, server time in seconds not milliseconds. #370 stays OWED until that row is read; the 18:09:30Z POST (8.5 s) is consistent with it and is not it.
 
 **State:** OPEN. Owner: Luke. Not blocking. Related: #369, #370, Q202, Q203, Q207.
 
@@ -3003,10 +3003,11 @@ Raised 5 Oct 2026 (operator, from the 4 Oct real use). Advanced -> "Open a new p
 - **What a no-microcycle phase does.** The resolver falls back to the weekly template (`tests/test_resolver.py:272`, `window.source == "weekly"`), or a null window with no template. So the quota silently becomes the weekly one; nothing says so.
 - **It does close the prior phase.** Direct open and the wizard both go through `_apply_open_phase`, which sets `closed_on = new.entered_on` and a reason on the open row in the same transaction (`engine/training_phase.py:428-436`; pinned by `test_opening_a_second_closes_the_first_in_one_txn`, `tests/test_training_phase.py:134`). So by the code the direct open did NOT fail to close decompression. The empty history on 4 Oct was the read-shape bug (#314), not a missing closure. **What prod holds is not read** (Code has no database access); the read is owed, ROADMAP row 39.
 - **The wizard already has a "carry" form:** it prefills every slot from the outgoing microcycle, each editable, none silently applied (`PhaseTransitionFlow.jsx:125`).
+- **The direct path is kept on purpose, for now.** `PhaseCard.jsx:15-17`: it stays mounted "until the 8-step flow has completed one real transition in prod" and is to be removed in a later PR "once the flow is confirmed". By the operator's 4 Oct report that condition is met (a real transition was saved through the wizard), so option (d) is the removal the code already plans. That is not a ruling.
 
 **Options (not decided).** (a) Require a microcycle on direct open (422 without). Forbids a state the resolver's weekly fallback exists to serve. (b) Carry the prior phase's microcycle onto the new row at direct open. The new phase silently inherits the old phase's quota, the same stale-default shape as Q212. (c) Warn on save and keep allowing none; the warning names the weekly fallback. (d) Remove the direct path and leave the wizard as the one way in; this loses the escape hatch and the review-date-only phase.
 
-**To decide (Luke).** Which option. Code's lean, not a ruling: (c), because a phase with no microcycle is a state the resolver supports, and (b) is a silent default.
+**To decide (Luke).** Which option. Code's lean, not a ruling: (c), because a phase with no microcycle is a state the resolver supports, and (b) is a silent default. (d) needs no new design, since the comment above already schedules it; the cost is the escape hatch.
 
 **State:** OPEN. Owner: Luke. Not blocking. Related: #276, #317, #375, Q210 (closed), Q212.
 
@@ -3018,10 +3019,12 @@ Raised 5 Oct 2026 (operator observation, 5 Oct: "recovery vehicles ranked first"
 
 **Source of the note, verified on master `21839a4`.**
 - The note is emitted only when the OPEN phase's stored `probe_posture` is `suppressed` (`engine/selection.py:578-581`, `:687-691`). So by the code the open `aerobic base` row carries `suppressed`. It is not derived from the label: no backend code branches on a phase label, and there is no default for an unmatched name.
-- `suppressed` does more than re-rank vehicles. It forces probe budget 0 and mode fortify and drops the probe block (`selection.py:695-700`, `:737`), so a posture carried by mistake also silences probing.
+- **One value drives three behaviours.** (1) The effective probe budget is forced to 0 and the mode to fortify (`selection.py:574-581`; the note at `:695-700`). (2) The probe block is withheld (`:733-737`). (3) The recovery-first vehicle re-rank (`:646-650`; the note at `:687-691`). The re-rank fires on `probe_suppressed` alone, with no read of the label. So a posture carried by mistake also silences probing, and a phase cannot ask for the re-rank without the other two.
 - **Where the value comes from, by path.** The wizard seeds `label`, `intent` and `probe_posture` from the current phase (`PhaseTransitionFlow.jsx:118-123`), so a Move keeps the outgoing posture unless the operator toggles it. The direct form has no default and refuses submit until one is chosen (`PhaseForm.jsx:22`, `canSubmit`). **Which one set it on 4 Oct is not read:** it depends on the row's `probe_posture` in the ledger, per row, which is owed (ROADMAP row 39).
 
 **Question.** On a Move, should the new phase's posture be (a) seeded from the outgoing phase (today), (b) defaulted to `held`, or (c) left unset so the operator must choose, as the direct form does? Slots are seeded on purpose and marked as a prefill (F6); a posture is a quieter default with a bigger effect.
+
+**If the three behaviours should come apart** (a separate question from the seeding, raised by the same observation). Options: (i) a third posture value. `training_phases` has a database `CHECK` on `probe_posture IN ('suppressed','held')` (`models.py:1107`, `ck_training_phase_probe_posture`), so this is a migration (held) plus the validator constant (`engine/training_phase.py:62`). (ii) A separate per-phase ranking field: a new column, also a migration. (iii) Drop the phase from the re-rank triggers, leaving readiness and life-load; no schema, but it changes decompression, whose re-rank the T2 tests pin (`tests/test_training_phase.py:478-513`). Code's lean, not a ruling: none yet; fix the seeding first (a)-(c) and see whether the coupling ever bites.
 
 **State:** OPEN. Owner: Luke. Not blocking, but while the row reads `suppressed` the coach output is recovery-first with the probe off. Related: #317, #375, Q211.
 
@@ -3038,6 +3041,22 @@ Raised 5 Oct 2026 (operator; carried from the 1-4 Oct close-out). **Not drafted;
 **To decide (Luke).** When to draft, and whether it is one brief or follows Q10's trigger. A related brief, instrument datasheets, is not drafted either (ROADMAP LATER).
 
 **State:** OPEN. Owner: Luke. Not blocking; waits on Q10. Related: Q10, Q198, Q201, Q202, Q203, Q189, Q206.
+
+---
+
+## Q214. Persist `client.trigger` on `health_connect_sync_events`: the phone already stamps it, the server drops it
+
+Raised 5 Oct 2026 (a duplicate session's finding, verified here against both repos). The companion build `e3e2333` stamps `client.trigger` (`'manual'` or `'background'`) on every POST (`health-connect-app` `src/syncRunner.js:93`; `backgroundSync.js:57`; `SyncScreen.js:177`). Its comment at `:92` calls persisting it "the owed health-app follow-up (OPEN_QUESTIONS)", and the companion's own stores hold it as its Q23 (migration = HOLD). **No store in this repo held it until now.**
+
+**Verified on master `9fc2973`.** `ClientInfo` has `extra="allow"`, so the field is accepted (`routers/health_connect.py:303-312`). The row written per POST takes `gitSha`, `builtAt`, `appVersion`, `platform`, `periodDays` and `fetchMeta` only (`:1152-1159`), and `HealthConnectSyncEvent` has no column for it (`models.py:393-414`). So the trigger is dropped, and the event table cannot say which POSTs were scheduled.
+
+**What it would settle, by data and not by timestamp.** The device read for #370 (the companion's G2), the overlap proof for #371 (the companion's own note says to distinguish the two syncs by timestamp "because Q23 is held"), and the 4-5 Oct question of whether a given POST was a background run (the note on Q159).
+
+**Options (not decided).** (a) A nullable `trigger` column on `health_connect_sync_events`, clipped like its sibling fields; old builds send none, so NULL. A migration: HOLD, full human review. (b) Write it into `fetch_meta` under a reserved key. No migration, but `fetch_meta` is stored verbatim by contract (`SCHEMA.md` §035), so this is a data-meaning default. (c) Nothing; keep inferring from timestamps.
+
+**To decide (Luke).** Which option. Code's lean, not a ruling: (a), the shape the phone's own comment assumes.
+
+**State:** OPEN. Owner: Luke. Not blocking. Related: #370, #371, Q159, Q208, HCA Q23.
 
 ---
 

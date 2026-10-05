@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The phone's `client.trigger` is filed as dropped by the server (Q214), the HC phone fix (#370) is built and its device read is owed, and operator-script docstrings give the container recipe.** Governance plus a docstring-only change, no schema - Handoff: `closeout.md`.
+
 - **Three phase-machinery questions are filed (Q211 direct open and quota, Q212 posture carried on a Move, Q213 the per-second HR input layer), and the 4-5 Oct sync and Garmin read evidence is recorded; the HC scheduled-sync fix is not confirmed.** Governance plus a test-only date fix, no schema - Handoff: `closeout.md`.
 
 - **Q210 is ruled (a): sport groups are counted with activity slots, one metabolic slot takes the remainder, and load accrues for every device session (#376); the phase form's placement trap, history read and kind hints are fixed.** Code plus governance, no schema - Handoff: `closeout.md`.
-
-- **The phase-change save now validates the whole write before it creates a Hevy folder, and step 4's capacity and load_window names are pickers (#375); the several-metabolic-slots question is filed (Q210).** Code plus governance, no schema - Handoff: `closeout.md`.
 
 ---
 
