@@ -23,6 +23,7 @@ import pytz
 import current_state as current_state_mod
 import context_builder
 import models
+from tests.phase_fixtures import open_phase
 from routers.knowledge import KnowledgeEntryIn, upsert_knowledge_entry
 
 AEST = pytz.timezone("Australia/Brisbane")
@@ -517,10 +518,9 @@ def test_resolver_position_parity_state_equals_resolve(db_session):
     computation), and the phase section renders those very numbers."""
     from datetime import date as _date
     from engine import resolver as resolver_mod
-    from engine import training_phase as phase_mod
 
     user = _make_user(db_session, email="parity-pos@example.com")
-    phase_mod.open_phase(db_session, user.id, {
+    open_phase(db_session, user.id, {
         "label": "cond", "probe_posture": "held",
         "microcycle": {"sub_cycle_days": 7, "sub_cycles": [
             {"label": "A", "slots": [

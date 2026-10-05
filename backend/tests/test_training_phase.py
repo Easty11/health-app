@@ -17,6 +17,7 @@ import models
 from engine import profile as profile_mod
 from engine import selection, taxonomy
 from engine import training_phase as phase_mod
+from tests.phase_fixtures import open_phase
 from load_metrics import _local_day
 
 
@@ -77,7 +78,7 @@ def test_model_check_domains_match_the_canonical_tuples():
 
 def test_open_then_roundtrip(db_session):
     u = _user(db_session)
-    phase = phase_mod.open_phase(db_session, u.id, _payload())
+    phase = open_phase(db_session, u.id, _payload())
     assert phase.id is not None
     assert phase.closed_on is None and phase.close_reason is None
     assert phase.capacities == ["mobility", "stability"]        # verbatim
@@ -119,7 +120,7 @@ def test_closure_updates_only_closure_columns(db_session):
     """The ONLY permitted UPDATE: closed_on + close_reason. Every other column of the closed
     row is unchanged — the append-only invariant stated positively."""
     u = _user(db_session)
-    p = phase_mod.open_phase(db_session, u.id, _payload())
+    p = open_phase(db_session, u.id, _payload())
     before = {c.name: getattr(p, c.name) for c in models.TrainingPhase.__table__.columns}
 
     closed = phase_mod.close_phase(db_session, u.id, "block complete")
@@ -135,8 +136,8 @@ def test_opening_a_second_closes_the_first_in_one_txn(db_session):
     """One-open invariant: opening a phase closes the current open row. The prior row's only
     mutated columns are closed_on (= new.entered_on, half-open handoff) and close_reason."""
     u = _user(db_session)
-    first = phase_mod.open_phase(db_session, u.id, _payload(label="decompression"))
-    second = phase_mod.open_phase(
+    first = open_phase(db_session, u.id, _payload(label="decompression"))
+    second = open_phase(
         db_session, u.id,
         _payload(label="aerobic_base", entered_on="2026-09-09", capacities=None,
                  microcycle=None, close_prior_reason="moving to base"),
@@ -155,8 +156,8 @@ def test_opening_a_second_closes_the_first_in_one_txn(db_session):
 
 def test_default_close_prior_reason_names_the_new_label(db_session):
     u = _user(db_session)
-    phase_mod.open_phase(db_session, u.id, _payload(label="decompression"))
-    phase_mod.open_phase(db_session, u.id,
+    open_phase(db_session, u.id, _payload(label="decompression"))
+    open_phase(db_session, u.id,
                          _payload(label="aerobic_base", entered_on="2026-09-09"))
     first = db_session.query(models.TrainingPhase).filter_by(
         user_id=u.id, label="decompression").first()
@@ -168,7 +169,7 @@ def test_close_with_nothing_open_raises_no_open_phase(db_session):
     with pytest.raises(phase_mod.NoOpenPhase):
         phase_mod.close_phase(db_session, u.id, "nothing to close")
     # And after a close, the next close is a NoOpenPhase too (zero-open baseline).
-    phase_mod.open_phase(db_session, u.id, _payload())
+    open_phase(db_session, u.id, _payload())
     phase_mod.close_phase(db_session, u.id, "done")
     assert phase_mod.current_training_phase(db_session, u.id) is None
     with pytest.raises(phase_mod.NoOpenPhase):
@@ -178,7 +179,7 @@ def test_close_with_nothing_open_raises_no_open_phase(db_session):
 def test_zero_open_is_a_valid_baseline(db_session):
     u = _user(db_session)
     assert phase_mod.current_training_phase(db_session, u.id) is None
-    phase_mod.open_phase(db_session, u.id, _payload())
+    open_phase(db_session, u.id, _payload())
     phase_mod.close_phase(db_session, u.id, "done")
     assert phase_mod.current_training_phase(db_session, u.id) is None
 
@@ -307,15 +308,15 @@ def test_null_capacities_and_microcycle_are_valid():
 def test_non_monotonic_entered_on_is_refused(db_session):
     """entered_on >= the open phase's entered_on — history is monotonic."""
     u = _user(db_session)
-    phase_mod.open_phase(db_session, u.id, _payload(entered_on="2026-09-07"))
+    open_phase(db_session, u.id, _payload(entered_on="2026-09-07"))
     with pytest.raises(ValueError, match="monotonic"):
-        phase_mod.open_phase(db_session, u.id,
+        open_phase(db_session, u.id,
                              _payload(label="earlier", entered_on="2026-09-01"))
 
 
 def test_entered_on_defaults_to_local_day(db_session):
     u = _user(db_session)
-    p = phase_mod.open_phase(db_session, u.id, _payload(entered_on=...))
+    p = open_phase(db_session, u.id, _payload(entered_on=...))
     assert p.entered_on == _local_day()
 
 
@@ -323,9 +324,9 @@ def test_entered_on_defaults_to_local_day(db_session):
 
 def test_phase_at_half_open_and_same_day_boundary(db_session):
     u = _user(db_session)
-    first = phase_mod.open_phase(db_session, u.id, _payload(label="a", entered_on="2026-09-07"))
+    first = open_phase(db_session, u.id, _payload(label="a", entered_on="2026-09-07"))
     # Same-day close/open boundary: second enters the day the first closes.
-    second = phase_mod.open_phase(db_session, u.id, _payload(label="b", entered_on="2026-09-09"))
+    second = open_phase(db_session, u.id, _payload(label="b", entered_on="2026-09-09"))
     db_session.refresh(first)
     assert first.closed_on == date(2026, 9, 9)
 
@@ -363,7 +364,7 @@ def test_none_phase_is_byte_identical(db_session):
 def test_suppressed_forces_fortify_and_zero_probe_budget(db_session):
     """E2: suppressed → effective probe budget 0, mode fortify; stored 0.25 intact."""
     u, p, queue = _seeded(db_session)
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="suppressed", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -382,7 +383,7 @@ def test_suppressed_forces_fortify_and_zero_probe_budget(db_session):
 
 def test_held_posture_keeps_probe_budget(db_session):
     u, p, queue = _seeded(db_session)
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="held", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -394,7 +395,7 @@ def test_capacities_filter_removes_only_never_readmits(db_session):
     a member of the unconstrained set and carries the allowed capacity (Q105 resolve-first)."""
     u, p, queue = _seeded(db_session)
     unconstrained = {(c["region_key"], c["side"]) for c in queue}
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="held", capacities=["stability"], microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -408,7 +409,7 @@ def test_capacities_resolve_before_compare_uppercase_tokens(db_session):
     carries — a verbatim compare would silently empty the queue."""
     u, p, queue = _seeded(db_session)
     stability_exists = any(c["capacity"] == "stability" for c in queue)
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="held", capacities=["STABILITY"], microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -423,14 +424,14 @@ def test_fortify_target_within_phase(db_session):
     u, p, queue = _seeded(db_session)
     assert taxonomy.by_key("anti_lateral_flexion").capacity is taxonomy.Capacity.STABILITY
 
-    within = phase_mod.open_phase(db_session, u.id, _payload(
+    within = open_phase(db_session, u.id, _payload(
         label="a", probe_posture="held", capacities=["stability"], microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=within)
     assert out["training_phase"]["fortify_target_within_phase"] is True
     assert out["fortify"]["target"] == "anti_lateral_flexion"       # still served
 
-    excl = phase_mod.open_phase(db_session, u.id, _payload(
+    excl = open_phase(db_session, u.id, _payload(
         label="b", probe_posture="held", capacities=["endurance"], microcycle=None))
     out2 = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=excl)
@@ -441,7 +442,7 @@ def test_fortify_target_within_phase(db_session):
 
 def test_null_capacities_target_within_phase_true(db_session):
     u, p, queue = _seeded(db_session)
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="held", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -455,7 +456,7 @@ def test_suppressed_withholds_probe_block(db_session):
     queue is non-empty and `has_priority`/the E3 capacity filter still ran over it."""
     u, p, queue = _seeded(db_session)
     assert queue, "fixture precondition: a non-empty probe queue"
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="suppressed", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -467,7 +468,7 @@ def test_held_keeps_probe_block_identical_to_no_phase(db_session):
     the emission changes only under suppression."""
     u, p, queue = _seeded(db_session)
     baseline = selection.select_next(db_session, u.id, profile=p, probe_queue=list(queue))
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="held", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -482,7 +483,7 @@ def test_suppressed_reranks_vehicles_recovery_first(db_session):
     first (their original relative order preserved), loaded vehicles after (order
     preserved), nothing dropped (#8). Its own reason is surfaced in notes."""
     u, p, queue = _seeded(db_session)
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="suppressed", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -503,7 +504,7 @@ def test_held_phase_does_not_rerank_vehicles(db_session):
     """T2: `held` posture never triggers the recovery re-rank — the seed's order stands and
     no recovery note is surfaced."""
     u, p, queue = _seeded(db_session)
-    phase = phase_mod.open_phase(db_session, u.id, _payload(
+    phase = open_phase(db_session, u.id, _payload(
         probe_posture="held", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
@@ -698,8 +699,10 @@ def test_http_open_get_history_and_close(db_session):
 
     # A review date relative to the operator-local day: the helper's fixed 2026-10-05 stopped being
     # "in the future" on 5 Oct 2026, which turned this assertion red for every PR.
-    opened = c.post("/engine/phase", json=_payload(review_on=str(_local_day() + timedelta(days=30))))
-    assert opened.status_code == 201, opened.text
+    # The transition is the one route that enters a phase (#378); the direct POST /engine/phase is gone.
+    opened = c.post("/engine/phase/transition",
+                    json={"phase": _payload(review_on=str(_local_day() + timedelta(days=30)))})
+    assert opened.status_code == 200, opened.text
     body = opened.json()["training_phase"]
     assert body["label"] == "decompression"
     assert body["capacities"] == ["mobility", "stability"]     # verbatim
@@ -719,7 +722,7 @@ def test_http_open_get_history_and_close(db_session):
 def test_http_open_bad_payload_is_422(db_session):
     u = _user(db_session)
     c = _client(db_session, u)
-    r = c.post("/engine/phase", json=_payload(capacities=["cardio"]))
+    r = c.post("/engine/phase/transition", json={"phase": _payload(capacities=["cardio"])})
     assert r.status_code == 422, r.text
     assert "unknown capacity" in r.json()["detail"]
 
@@ -745,8 +748,9 @@ def test_http_next_injects_the_open_phase(db_session):
 
     # A past review_on → review_due True, and the router folds review_on into the block
     # (selection.py never reads it, #228).
-    c.post("/engine/phase", json=_payload(probe_posture="suppressed", capacities=None,
-                                          microcycle=None, review_on="2026-09-08"))
+    c.post("/engine/phase/transition",
+           json={"phase": _payload(probe_posture="suppressed", capacities=None,
+                                   microcycle=None, review_on="2026-09-08")})
     withphase = c.get("/engine/next").json()
     assert withphase["mode_recommended"] == "fortify"
     assert withphase["budget"] == {"probe": 0.0, "fortify": 1.0}
@@ -754,3 +758,45 @@ def test_http_next_injects_the_open_phase(db_session):
     assert tp["label"] == "decompression"
     assert tp["review_on"] == "2026-09-08"       # folded in by the router
     assert tp["review_due"] is True              # 2026-09-08 <= today (2026-09-09+)
+
+
+# ── #378: the direct-open route and wrapper are gone ─────────────────────────
+
+def test_direct_open_route_is_gone(db_session):
+    """R2 (#378): Review / change phase is the only way a phase is entered. POST /engine/phase
+    no longer exists (the path still serves GET, so it answers 405), and the engine's direct
+    `open_phase` wrapper is gone; `_apply_open_phase` stays as the transition's shared core."""
+    u = _user(db_session)
+    c = _client(db_session, u)
+    r = c.post("/engine/phase", json=_payload())
+    assert r.status_code == 405, r.text
+    assert c.get("/engine/phase").json()["training_phase"] is None   # nothing was opened
+    assert not hasattr(phase_mod, "open_phase")
+    assert callable(phase_mod._apply_open_phase)
+    assert {m for route in phase_router.router.routes for m in getattr(route, "methods", ())
+            if getattr(route, "path", "") == "/engine/phase"} == {"GET"}
+
+
+# ── #379: the derived zero_length flag on the history read ───────────────────
+
+def test_history_flags_zero_length_rows_and_only_there(db_session):
+    """R4 (#379): `zero_length` (closed_on == entered_on) is computed on GET /engine/phase/history
+    only. Nothing is hidden or removed; the current-phase read and phase_to_dict are unchanged."""
+    u = _user(db_session)
+    c = _client(db_session, u)
+    first = open_phase(db_session, u.id, _payload(label="first", entered_on="2026-09-01"))
+    open_phase(db_session, u.id, _payload(label="mistake", entered_on="2026-09-07"))    # closes first, 6 days
+    open_phase(db_session, u.id, _payload(label="corrected", entered_on="2026-09-07"))  # closes mistake, 0 days
+
+    hist = c.get("/engine/phase/history").json()["history"]
+    by_label = {r["label"]: r for r in hist}
+    assert set(by_label) == {"first", "mistake", "corrected"}          # nothing hidden
+    assert by_label["mistake"]["zero_length"] is True
+    assert by_label["mistake"]["close_reason"] == "opened corrected"   # the reason is still there
+    assert by_label["first"]["zero_length"] is False                   # closed on a later day
+    assert by_label["corrected"]["zero_length"] is False               # open: no closed_on at all
+    assert by_label["first"]["id"] == first.id
+
+    cur = c.get("/engine/phase").json()["training_phase"]
+    assert "zero_length" not in cur                                    # current read unchanged
+    assert "zero_length" not in phase_mod.phase_to_dict(first)

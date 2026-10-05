@@ -1,7 +1,9 @@
 // PhaseHistory — the phase ledger, read-only (Exposure UI increment 2, W3).
 //
 // Append-only is the ledger's invariant and the UI must not imply otherwise: nothing here is
-// editable. Collapsed by default; the rows are fetched from /engine/phase/history on the first
+// editable. A row the server flags `zero_length` (a same-day correction: it closed on the day it was
+// entered, #379) is LABELLED, not collapsed or hidden: muted, with a "same-day correction" chip, and
+// its close reason still shown. Collapsed by default; the rows are fetched from /engine/phase/history on the first
 // expand and then kept — re-expanding does not refetch. Rows render newest first exactly as served
 // (entered_on desc); no client-side re-sort.
 
@@ -63,10 +65,14 @@ export default function PhaseHistory() {
       {open && status === 'ready' && rows.length > 0 && (
         <ul className="flex flex-col divide-y divide-gray-100">
           {rows.map((r) => (
-            <li key={r.id} className="py-2 flex flex-col gap-1">
+            <li key={r.id} data-zero-length={r.zero_length ? 'true' : undefined}
+              className={`py-2 flex flex-col gap-1 ${r.zero_length ? 'opacity-60' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-medium text-gray-800">{r.label}</span>
-                <span className="text-[11px] text-gray-500">{r.probe_posture}</span>
+                <span className="flex items-center gap-1">
+                  {r.zero_length && <Chip>same-day correction</Chip>}
+                  <span className="text-[11px] text-gray-500">{r.probe_posture}</span>
+                </span>
               </div>
               <p className="text-[11px] text-gray-500">
                 {r.entered_on} → {r.closed_on || 'open'}

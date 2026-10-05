@@ -137,8 +137,8 @@ export default function ExposurePanel({ onDiscuss }) {
 
       {/* 2. Phase card (#318) — the phase surface: current phase + week N + review badge, the quota
           position, the #312/#316 week line, history, and ONE action → the structured 8-step change
-          flow. Replaces the ad-hoc Open/Close buttons + inline PhaseForm/ClosePhaseDialog: a phase
-          change is the form's single confirmed atomic write now (#317). */}
+          flow. A phase is entered only through that flow (#378); "End phase → baseline" is the card's
+          own control. A phase change is the form's single confirmed atomic write (#317). */}
       <PhaseCard phase={phase} refetchKey={refetchKey} onReviewChange={() => setFlowOpen(true)} onWritten={onWritten} />
       {phase?.fortify_target_within_phase === false && (
         <p className="text-xs text-amber-700 leading-snug px-1">

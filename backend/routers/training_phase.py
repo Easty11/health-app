@@ -1,10 +1,11 @@
 """Training-phase ledger API (Q112, #270) — the exposure engine's DOING-NOW axis.
 
 Endpoints (mounted at /engine/phase):
-  POST /engine/phase          — open a phase (closes the current open row in one txn)
+  POST /engine/phase/transition — the ONE way a phase is entered (#378): close the outgoing phase,
+                                  open the new one, write the schedule and folder, atomically
   POST /engine/phase/close    — close the current open phase to zero-open baseline
   GET  /engine/phase          — the current open phase | null, with review_due
-  GET  /engine/phase/history  — every phase for the user, newest first
+  GET  /engine/phase/history  — every phase for the user, newest first, each with `zero_length`
 
 Write paths are fail-closed (422 on shape, 404 on close-with-nothing-open). The ledger is
 append-only: the only mutation any of these performs is setting `closed_on` / `close_reason`
@@ -66,21 +67,6 @@ class CloseIn(BaseModel):
     close_reason: str
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def open_phase(
-    body: PhaseIn,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    try:
-        phase = phase_mod.open_phase(
-            db, current_user.id, body.model_dump(exclude_unset=True)
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-    return {"training_phase": phase_mod.phase_to_dict(phase)}
-
-
 @router.post("/close")
 def close_phase(
     body: CloseIn,
@@ -119,7 +105,14 @@ def get_phase_history(
         )
         .all()
     )
-    return {"history": [phase_mod.phase_to_dict(r) for r in rows]}
+    # `zero_length` is DERIVED here and only here (#379): a same-day correction closes the row it
+    # replaces on the day that row was entered, so it never covered a day. The row stays in the
+    # ledger (append-only); the flag lets the card label it. Not on `phase_to_dict`, so the current
+    # phase read is unchanged.
+    return {"history": [
+        {**phase_mod.phase_to_dict(r), "zero_length": r.closed_on is not None and r.closed_on == r.entered_on}
+        for r in rows
+    ]}
 
 
 # --------------------------------------------------------------------------- #
