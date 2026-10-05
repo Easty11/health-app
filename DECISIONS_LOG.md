@@ -13292,3 +13292,42 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** A phase the wizard cannot express is needed (a review-date-only phase, or one with no microcycle), or the route turns out to have a caller that cannot use the wizard.
 
 ---
+
+### 379. Q215 ruled: same-day corrections keep appending; zero-length rows get a derived flag; the wizard skips the block-verdict review on a same-day correction and names the row it closes; the zero-length exclusion gets a tests-only pin
+
+**Decision.** Ruled by the operator on 5 Oct 2026 (Q215): adopt Code's lean.
+1. **Same-day correction keeps appending.** #317 stands; nothing is edited in place.
+2. **Zero-length rows get a derived flag.** A row with `closed_on == entered_on` is flagged on the history route (`GET /engine/phase/history`), and the history card collapses or labels it. No schema, no migration, no deletion; the ledger stays append-only.
+3. **The wizard changes in two ways.** It skips the "did the block do its job" review when the open row was entered today, and it names the row the save will close (label, entered date, how it was opened).
+4. **A tests-only pin** of the zero-length exclusion in `phase_at` and the open-phase readers.
+
+Recorded now; **the build is not scheduled**, and it may share one brief with #378 (the same wizard and route surface). Not taken: a stored marker (`superseded_by` or `voided_on`: a migration, held), supersede in place, deletion, leaving the rows as they are.
+
+**Left for the build brief.** The flag's name and shape (a computed boolean per row); whether the card collapses or labels ("collapses or labels" was ruled, not which); and what close reason a skipped review leaves (the server's default "opened <label>", unless the brief keeps a short note box). The pin needs no further ruling and can ship first.
+
+**Rationale.** The zero-length rows are #317's ruled behaviour, so the ledger worked as ruled; the cost is noise on the history card and a close reason that can land on an artefact row. A derived flag removes the noise without touching the append-only invariant, and skipping the verdict on a same-day correction stops the note attaching to a row that is not the block it describes. #378 removes one source (the direct open); this removes the rest.
+
+**Status.** Ruled 5 Oct 2026; Q215 closed here (`DONE → #379`). Nothing is built. ROADMAP NEXT carries one shared brief with #378, UNSTARTED.
+
+**How you know.** The operator's ruling. The facts are recorded on Q215 (PR #324): the ledger is append-only by model and application invariant (three write sites, no DELETE, no database trigger); a scratch reproduction of the 4 Oct sequence gave the operator's ledger; `phase_at` cannot return a zero-length row and the open-phase readers never see a closed row; `phase_at` has no non-test caller; the chart overlay collapses same-category boundaries. Not verified: the operator's prod ledger rows (operator-reported).
+
+**Do not revisit unless.** A mistaken row that lasted days needs voiding (then Q215's option (c), the stored marker), or a phase-aware reader appears that cannot use the derived flag.
+
+---
+
+### 380. The #371 overlap proof waits on a natural overlap in the HTTP log or a debug control that fires two syncs back to back; a manual sync during a scheduled one is dropped as the method
+
+**Decision.** Ruled by the operator on 5 Oct 2026. (1) **"Trigger a manual sync during a scheduled one" is dropped as the method.** A sync now takes about 8 s (the HTTP log: 8.5 s and 8.1 s on the last two), while the scheduled worker's start drifts by minutes, so a hand-timed overlap is not reliably hittable. (2) **#371's live proof stays OWED** until either (a) a natural overlap shows in the Railway HTTP log (two `POST /health-connect/sync` whose [start, end] intervals overlap, start being the log time minus `totalDuration`, both 200), or (b) a debug control fires two syncs back to back and both return 200. (3) **The criterion is unchanged:** an overlapping pair, both 200, where the 3 Oct race gave one 200 and three 500s. Only the way of getting the pair changes.
+
+**Rationale.** The proof needs two requests in flight at once on Postgres, which the SQLite test suite cannot produce (#371). By hand it depends on landing an 8 s sync inside a worker whose start moves by minutes. The log already records every request's start and end, so a natural overlap is readable without an operator step.
+
+**Status.** Recorded 5 Oct 2026. #371 stays OWED; neither route has happened.
+- (a) None in the log since #371's deploy (23:12Z on 3 Oct) through 00:09:50Z on 5 Oct: four POSTs (10.5 s, 237 s, 8.5 s and 8.1 s), no two overlap, start-to-start gaps 6 h 0 m 30 s, 6 h 4 m 31 s and 6 h 0 m 20 s. Code can read the log at any session; no operator step.
+- (b) Not built. It is a companion (phone) change, and the two sync buttons are disabled while a sync runs (`SyncScreen.js:284,294` on companion `52f9d4d`), so it would have to bypass that guard.
+- **Cross-repo.** The companion's stores still name the dropped method (`ROADMAP.md:127`, `closeout.md:53`, and its locked DECISIONS #48 at `:1821`). Its next close-out should drop it; not edited from here.
+
+**How you know.** The operator's ruling. Read by Code: the Railway HTTP log (the four POSTs and their durations; the gaps computed from the log times) and the companion repo (the button guard and the three text locations). #371's own text, which sets the criterion. Not verified: the cause of the worker's drift (operator-stated, "minutes"; the computed gaps show 0 to 4.5 minutes).
+
+**Do not revisit unless.** A route to a reliable overlap appears (for example a server-side harness that can overlap two requests on Postgres), or a second overlap failure appears on another path (Q208).
+
+---
