@@ -41,6 +41,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 032 — aerobic_sessions         FK to users (CASCADE) — canonical aerobic/conditioning sessions; unique (user, source, source_session_id); read-time cross-source + writer-class arbitration
 041 — hr_samples + user_hrmax  FK to users (CASCADE) — source-neutral raw HR (unique user, sample_time, source, source_package) + append-only dated HRmax (unique user, effective_from); HC zone fill (Q159 stage 2)
 042 — garmin_activity_selfevals  FK to users (CASCADE) + aerobic_sessions (SET NULL) — insert-only, capture-timed Garmin per-activity self-evaluation (RPE CR-10, feel); unique (user, garmin_activity_id, captured_at) (Q209 path a)
+043 — user_hrmax restatement path  self-FK (restates_id -> id) — dated vs restatement rows, partial unique keys, `adjusted` provenance with base_bpm + rationale (#383, #384)
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1394,7 +1395,7 @@ def compute_zones(hr_series: list[tuple], hrmax: int) -> dict:
 
 Hard constraint: HRmax must be measured from Polar H10 session data. Age-predicted formulas (220 − age) are explicitly forbidden. One bad HRmax value propagates error into every zone calculation, TRIMP, and VO₂max estimate indefinitely.
 
-**Implemented for `health_connect` rows (Q159 stage 2, §041).** The bands above are `hr_zones.BAND_PCT` (integer percents 50/60/70/80/90, lower-inclusive, z5 open-topped); the sample source is `hr_samples`, not `health_metrics`; HRmax is the per-user dated `user_hrmax` row in force on the session date, provenance `tested` or `observed` (a chest-strap session maximum is measured) — `estimated` does not exist. The hard constraint above stands unchanged.
+**Implemented for `health_connect` rows (Q159 stage 2, §041).** The bands above are `hr_zones.BAND_PCT` (integer percents 50/60/70/80/90, lower-inclusive, z5 open-topped); the sample source is `hr_samples`, not `health_metrics`; HRmax is the per-user dated `user_hrmax` row in force on the session date, provenance `tested`, `observed` (a chest-strap session maximum is measured) or `adjusted` (an observed maximum plus a documented correction, §043) — `estimated` does not exist. The hard constraint above stands unchanged.
 
 ## Sleep Stage Confidence
 
@@ -1730,7 +1731,7 @@ CREATE INDEX ix_user_hrmax_user_id ON user_hrmax (user_id);
 ```
 
 - **`hr_samples` is the only place a raw HR bpm lives.** `health_connect_record_sources` keeps a record's identity (type, start, writer) and never its bpm; before this table the only use of `bpm` was the daily median in `_aggregate_day`. The unique key lets a re-posted sample be insert-or-ignore on both engines (`INSERT ... ON CONFLICT DO NOTHING`, chunked), so HCA's 7-day rolling re-post costs no duplicate rows. Two writers' samples at one instant are two rows: the same-writer rule needs them apart. The HC sync fills it (`routers/health_connect._persist_hr_samples`, SAVEPOINT-isolated: a failure is reported in the sync response and never rolls back the day rows).
-- **`user_hrmax` is append-only.** A new value is a new row (a later `effective_from`; the same date is refused) followed by a recompute; a row is never edited or deleted. No route, no UI and no chat write path reaches it — the one writer is the operator script `scripts/set_hrmax.py` (`tests/test_hr_zones_schema.py` asserts nothing else constructs, updates or deletes the model).
+- **`user_hrmax` is append-only.** *(Amended by §043: a restatement may share its target's date, and the plain unique key is replaced.)* A new value is a new row (a later `effective_from`; the same date is refused) followed by a recompute; a row is never edited or deleted. No route, no UI and no chat write path reaches it — the one writer is the operator script `scripts/set_hrmax.py` (`tests/test_hr_zones_schema.py` asserts nothing else constructs, updates or deletes the model).
 - **Readers.** `hc_zone_enrich.enrich_user` (the chain step) and the G2 projection in `scripts/arbitration_flip_report.py --hc-zones`; both call the pure `hr_zones.zone_session`. Nothing else reads either table.
 
 
@@ -1761,3 +1762,31 @@ CREATE INDEX ix_garmin_activity_selfevals_aerobic_session_id ON garmin_activity_
 - **Unrated sightings are rows.** `rpe_cr10` and `feel` are NULL when Garmin sent none; the row records that the activity was seen so it is not re-fetched daily. A still-unrated activity inside its 7-day re-check window gets a fresh NULL row per due check (at most about 7), because insert-only forbids a last-checked update.
 - **The link is late by design.** `aerobic_session_id` is the Health Connect row (`source='health_connect'`, `source_package='com.garmin.android.apps.connectmobile'`) overlapping the activity by at least 50% of the shorter interval. Health Connect often lands after the Garmin read, so a DB-only relink pass inserts a new linked row (same values) when the match appears.
 - **Writer and reader.** Written by the Garmin sweep (`scripts/garmin_sync.sweep_garmin_hrv`, after its token refresh) through a no-refresh client (#361). Read by `get_training_sessions`, which shows `rpe_cr10` and `feel` for a linked session.
+
+
+### 043 — user_hrmax restatement path and the `adjusted` provenance (#383, #384)
+
+Migration `d6f8b1a3c5e7` (revises `c5e7a9b1d3f2`). Three nullable columns on `user_hrmax`, the plain `(user_id, effective_from)` key replaced by two partial ones, a self-referencing FK, and the provenance CHECK widened. Every existing row (user 1's seed: 173, `observed`, no link) satisfies all of it; no backfill, no data touched. Applied and diffed against `Base.metadata.create_all` on Postgres 16 (identical columns, uniques, indexes with predicates, FKs and CHECK text), with the seed row present before the upgrade; `tests/test_user_hrmax_restatement_schema.py::test_postgres_*` re-run that comparison on demand (they skip unless `HEALTH_APP_TEST_PG_URL` is set; CI is SQLite-only).
+
+```sql
+ALTER TABLE user_hrmax ADD COLUMN restates_id INTEGER;        -- the row this one corrects; NULL = a DATED row
+ALTER TABLE user_hrmax ADD COLUMN base_bpm    INTEGER;        -- adjusted only: the observed maximum the correction starts from
+ALTER TABLE user_hrmax ADD COLUMN rationale   VARCHAR(1000);  -- adjusted and restatements: the correction / why the old value was wrong
+ALTER TABLE user_hrmax ADD CONSTRAINT fk_user_hrmax_restates FOREIGN KEY (restates_id) REFERENCES user_hrmax (id);
+CREATE UNIQUE INDEX uq_user_hrmax_dated    ON user_hrmax (user_id, effective_from) WHERE restates_id IS NULL;      -- one DATED row per user and date
+CREATE UNIQUE INDEX uq_user_hrmax_restates ON user_hrmax (restates_id)             WHERE restates_id IS NOT NULL;  -- a row is restated at most once
+ALTER TABLE user_hrmax DROP CONSTRAINT uq_user_hrmax_effective;                                                    -- the old plain key
+ALTER TABLE user_hrmax DROP CONSTRAINT ck_user_hrmax_provenance;
+ALTER TABLE user_hrmax ADD CONSTRAINT ck_user_hrmax_provenance CHECK (provenance IN ('tested', 'observed', 'adjusted'));   -- amends #364 R2's closed set
+ALTER TABLE user_hrmax ADD CONSTRAINT ck_user_hrmax_adjusted_base CHECK
+    ((provenance = 'adjusted' AND base_bpm IS NOT NULL) OR (provenance <> 'adjusted' AND base_bpm IS NULL));
+ALTER TABLE user_hrmax ADD CONSTRAINT ck_user_hrmax_rationale CHECK
+    ((provenance <> 'adjusted' AND restates_id IS NULL) OR rationale IS NOT NULL);
+```
+
+- **Two kinds of row (#383).** A DATED row (`restates_id` NULL) applies from its `effective_from` forward only; at most one per user and date. A RESTATEMENT (`restates_id` set) corrects the row it points at (same physiology, better evidence): it carries that row's date, stands in for it over its whole span, and so reflows history. The corrected row is kept, never edited; the new row links to it and records the reason.
+- **One resolver, an explicit rank.** `hr_zones.hrmax_in_force` takes `HrmaxEntry`s (or plain `(date, bpm)` pairs): an entry that any other entry restates is superseded, so a chain resolves to its latest; among what remains, the greatest `effective_from` on or before the day wins. The answer does not depend on input order. It raises on two live entries on the winning date where neither restates the other (the old silent first-in-input-order tie), on a restatement of an entry that is not in the set, and on a restatement on a different date than its target.
+- **What the database enforces and what it does not.** Enforced: the target exists (FK), a row is restated at most once (so chains are linear), one dated row per user and date, `adjusted` if and only if `base_bpm`, a rationale on every adjustment and restatement, and the closed provenance set. NOT enforced by the database: that a restatement is for the same user and carries the same date as its target. A composite FK `(restates_id, user_id, effective_from)` would enforce both, and was built and then removed, because `scripts/retire_user.py` refuses composite foreign keys (it raised `GraphError` and 22 of its tests failed): the user-deletion tool would have refused to run in prod. Those two rules are held by `scripts/set_hrmax.py` (it finds its target by user and date, so the row it writes always carries both) and by the resolver's refusal above; a row written around the script makes the chain step raise (a soft step, reported in the chain output) and leaves every zone as it was.
+- **Writer.** `scripts/set_hrmax.py` stays the only writer. `--restate` corrects the latest row dated `--effective-from` (the date must already have a row); without it, a date that has a row is still refused. `--provenance adjusted` requires `--base-bpm` (plausible, and different from `--bpm`) and `--rationale`. `--dry-run` prints the row it would restate and the health_connect rows whose HRmax in force changes.
+- **Downgrade refuses** while any restatement or `adjusted` row exists: dropping the columns would silently destroy an append-only ledger, and the old key cannot hold two rows on one date.
+- **Readers** are unchanged in role: `hc_zone_enrich.enrich_user` and `scripts/arbitration_flip_report.py --hc-zones`, both now building `HrmaxEntry`s from the rows (`hr_zones.entry_from_row`). A `--hrmax` projection dated on a stored row's date is now refused as ambiguous instead of silently ignored; date it after the stored row.

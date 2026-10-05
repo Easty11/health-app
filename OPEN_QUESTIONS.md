@@ -2820,6 +2820,8 @@ forward, or backward over the seed's range as the seed does).
 
 **Update (5 Oct 2026, #384).** The operator ruled that HRmax changes: target 177 as a #383 restatement (retroactive from 2026-03-01, 173 and the reason kept), bands unchanged, because 173 was observed only on an Echo bike and is a modality-limited lower bound. Nothing is applied yet; the corrective-path design is owed as its own proposal. This test remains the route to a `tested` value, which would restate again.
 
+**Update (5 Oct 2026, #385).** The operator set the target at 175, not 177 (#385 supersedes #384's value). The basis is that 173 is an Echo-bike lower bound corrected upward, and that 175 aligns HC zoning with Polar rows; Polar Flow's profile HRmax, read by the operator, is 175 as an age-predicted estimate, so it corroborates nothing about the true maximum, and this test remains the only route to a measured value. The restatement path and the `adjusted` provenance are built and released. A `tested` value from this test would be a further restatement: `set_hrmax --restate --provenance tested`.
+
 **State:** OPEN. Not blocking.
 
 ---

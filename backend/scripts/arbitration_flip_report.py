@@ -41,6 +41,8 @@ minutes per band HC-zoned vs Polar-zoned (the interim invariance check). It WRIT
           --record-sources-csv hc_hr_times.csv --hrmax 1=173@2026-06-01
   `--hrmax USER=BPM@YYYY-MM-DD` (repeatable) supplies HRmax entries in CSV mode, or adds to `user_hrmax`
   in DB mode; zones are shown as `-` in the timestamps-only mode (the row's reason and coverage are exact).
+  A `--hrmax` entry is a projected DATED change (forward only). One dated on a date that already has a
+  stored row is refused as ambiguous (it used to be silently ignored): date it after, e.g. 2026-03-02.
 """
 from __future__ import annotations
 
@@ -57,7 +59,7 @@ from typing import Any, Iterable, Optional
 from sqlalchemy import text
 
 import models
-from hr_zones import MIN_ZONE_COVERAGE, hrmax_in_force, zone_session
+from hr_zones import MIN_ZONE_COVERAGE, entry_from_row, hrmax_in_force, zone_session
 from load_events_metabolic import compute_metabolic_load
 from reads import aerobic_reads
 
@@ -447,7 +449,10 @@ def render_hc_zone_report(records, flips, deltas, twins, *, timestamps_only: boo
 def hc_zone_report_from_rows(rows: list, samples: SampleIndex, hrmax: dict, *, timestamps_only: bool = False) -> str:
     """The whole G2 report for ONE user's full session set."""
     before = [_clone(s) for s in rows]
-    records, after = project_hc_zones(rows, samples, hrmax, timestamps_only=timestamps_only)
+    try:
+        records, after = project_hc_zones(rows, samples, hrmax, timestamps_only=timestamps_only)
+    except ValueError as exc:       # `hrmax_in_force` refuses an ambiguous or incoherent entry set
+        raise SystemExit(f"HRmax entries cannot be resolved: {exc}")
     return render_hc_zone_report(records, canonical_flips(before, after), trimp_delta(before, after),
                                  [] if timestamps_only else polar_twin_comparison(after, records),
                                  timestamps_only=timestamps_only)
@@ -488,7 +493,7 @@ def _hc_zones_main(args) -> int:
             samples = SampleIndex(triples)
             hrmax = defaultdict(list)
             for h in stored:
-                hrmax[h.user_id].append((h.effective_from, h.hrmax_bpm))
+                hrmax[h.user_id].append(entry_from_row(h))
             for u, v in extra.items():
                 hrmax[u].extend(v)
             hrmax = dict(hrmax)

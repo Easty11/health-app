@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, ForeignKeyConstraint, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
@@ -349,18 +349,48 @@ class HrSample(Base):
 class UserHrmax(Base):
     """A user's HRmax in force from a date — the one constant that scales every zone (Q159).
 
-    Append-only: a new value is a NEW row (a later `effective_from`, or the same date refused),
-    followed by a recompute; a row is never edited or deleted. The zone calc uses the row with
-    the greatest `effective_from` <= the session date, so a session before a new value zones
-    under the old one. `provenance` is a closed set: `tested` (a maximal-effort test) or
-    `observed` (a session maximum from a chest strap — measured). There is no `estimated`:
-    SCHEMA.md forbids age-predicted HRmax. No route and no UI writes this table and the chat
-    knowledge lane cannot reach it; the only writer is `scripts/set_hrmax.py` (operator).
+    Append-only: a row is never edited or deleted, and every change is a NEW row followed by a
+    recompute. There are two kinds (#383). A DATED change (`restates_id` NULL) applies from its
+    `effective_from` forward only; at most one per user and date. A RESTATEMENT (`restates_id` set)
+    corrects the row it points at (same physiology, better evidence): it carries that row's
+    `effective_from` and stands in for it over its whole span, so it reflows history; the restated
+    row is kept untouched and each row is restated at most once, so a chain is linear and resolves
+    to its latest (`hr_zones.hrmax_in_force` is the one resolver). The database enforces that the
+    target exists and is restated once; "same user, same date" is NOT a database rule (see the
+    foreign key below): `scripts/set_hrmax.py` finds its target by user and date, and the resolver
+    raises on any chain that breaks either rule rather than guessing.
+
+    `provenance` is a closed set: `tested` (a maximal-effort test), `observed` (a session maximum
+    from a chest strap — measured) or `adjusted` (an observed maximum plus a documented correction,
+    #383/#384; `base_bpm` is the observation it starts from and `rationale` the correction, both
+    required). There is no `estimated`: SCHEMA.md forbids age-predicted HRmax. A restatement also
+    requires its `rationale`. No route and no UI writes this table and the chat knowledge lane
+    cannot reach it; the only writer is `scripts/set_hrmax.py` (operator).
     """
     __tablename__ = "user_hrmax"
     __table_args__ = (
-        UniqueConstraint("user_id", "effective_from", name="uq_user_hrmax_effective"),
-        CheckConstraint("provenance IN ('tested', 'observed')", name="ck_user_hrmax_provenance"),
+        # One DATED row per user and date. Partial: a restatement shares its target's date, so the
+        # old plain (user_id, effective_from) key had to go (#383).
+        Index("uq_user_hrmax_dated", "user_id", "effective_from", unique=True,
+              postgresql_where=text("restates_id IS NULL"),
+              sqlite_where=text("restates_id IS NULL")),
+        # A row is restated at most once: chains are linear, so "the latest" is well defined.
+        Index("uq_user_hrmax_restates", "restates_id", unique=True,
+              postgresql_where=text("restates_id IS NOT NULL"),
+              sqlite_where=text("restates_id IS NOT NULL")),
+        # The row a restatement corrects must exist. A plain single-column self-reference on purpose:
+        # `scripts/retire_user.py` refuses composite foreign keys, so a composite (id, user_id,
+        # effective_from) key that would also have made "same user, same date" a database fact was
+        # given up. Those two rules are the script's and the resolver's (see the docstring).
+        ForeignKeyConstraint(["restates_id"], ["user_hrmax.id"], name="fk_user_hrmax_restates"),
+        CheckConstraint("provenance IN ('tested', 'observed', 'adjusted')", name="ck_user_hrmax_provenance"),
+        # `adjusted` names the observation it adjusts; no other provenance carries one.
+        CheckConstraint("(provenance = 'adjusted' AND base_bpm IS NOT NULL) "
+                        "OR (provenance <> 'adjusted' AND base_bpm IS NULL)",
+                        name="ck_user_hrmax_adjusted_base"),
+        # An adjustment and a restatement each say why.
+        CheckConstraint("(provenance <> 'adjusted' AND restates_id IS NULL) OR rationale IS NOT NULL",
+                        name="ck_user_hrmax_rationale"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -369,6 +399,9 @@ class UserHrmax(Base):
     hrmax_bpm: Mapped[int] = mapped_column(Integer, nullable=False)
     provenance: Mapped[str] = mapped_column(String(20), nullable=False)
     note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    restates_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    base_bpm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

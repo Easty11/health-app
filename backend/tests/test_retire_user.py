@@ -234,6 +234,31 @@ def test_execute_removes_target_tree_and_leaves_user_1_identical(two_users):
     assert len(tables) > 5
 
 
+def test_a_user_with_an_hrmax_restatement_chain_retires_cleanly(two_users):
+    """`user_hrmax` carries a self-referencing FK (a restatement points at the row it corrects). The graph
+    must accept it (a composite FK here would be refused outright), and deleting a user must remove the
+    whole chain at once - the self-FK is checked at end of statement - without touching another user's."""
+    db, e = two_users, _engine(two_users)
+    for uid, bpm in ((7, 170), (1, 173)):
+        db.add(models.UserHrmax(user_id=uid, effective_from=date(2026, 3, 1), hrmax_bpm=bpm,
+                                provenance="observed", note="n"))
+        db.commit()
+        root = db.query(models.UserHrmax).filter_by(user_id=uid).one()
+        db.add(models.UserHrmax(user_id=uid, effective_from=date(2026, 3, 1), hrmax_bpm=bpm + 2,
+                                provenance="adjusted", note="n", restates_id=root.id, base_bpm=bpm, rationale="r"))
+        db.commit()
+        mid = db.query(models.UserHrmax).filter_by(user_id=uid, restates_id=root.id).one()
+        db.add(models.UserHrmax(user_id=uid, effective_from=date(2026, 3, 1), hrmax_bpm=bpm + 4,
+                                provenance="observed", note="n", restates_id=mid.id, rationale="r2"))
+        db.commit()
+    graph = ru.discover_graph(e)                                   # raises GraphError on a composite FK
+    assert any(ed.child == "user_hrmax" and ed.parent == "user_hrmax" for ed in graph.edges)
+    ru.execute_retirement(e, 7, _token(db, 7), graph=graph)
+    db.expire_all()
+    assert _counts(db, "user_hrmax", uid=7) == 0
+    assert _counts(db, "user_hrmax", uid=1) == 3                   # the other user's chain is untouched
+
+
 def test_execute_is_idempotent_refusal_second_time(two_users):
     db, e = two_users, _engine(two_users)
     tok = _token(db, 7)

@@ -27,7 +27,7 @@ from sqlalchemy import null
 from sqlalchemy.orm import Session
 
 import models
-from hr_zones import PLAUSIBLE_BPM, REASONS, hrmax_in_force, zone_session
+from hr_zones import PLAUSIBLE_BPM, REASONS, entry_from_row, hrmax_in_force, zone_session
 from reads.aerobic_reads import HEALTH_CONNECT
 
 
@@ -59,7 +59,7 @@ def enrich_user(db: Session, user_id: int) -> dict[str, Any]:
     [start, stop] — not evaluable, not a reason), `changed` (rows whose stored values moved),
     `over_ceiling` (rows holding a plausible sample above the HRmax in force — counted and listed,
     HRmax never auto-raised), `dropped_implausible` (samples outside the plausibility bounds)."""
-    hrmax_rows = [(h.effective_from, h.hrmax_bpm)
+    hrmax_rows = [entry_from_row(h)
                   for h in db.query(models.UserHrmax).filter(models.UserHrmax.user_id == user_id).all()]
     rows = (db.query(models.AerobicSession)
             .filter(models.AerobicSession.user_id == user_id,
