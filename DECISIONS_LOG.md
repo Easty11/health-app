@@ -13390,3 +13390,31 @@ Recorded now; **the build is not scheduled**, and it may share one brief with #3
 **Do not revisit unless.** The corrective-path design finds no observable that separates a restatement from a dated change (the operator re-rules the distinction), or Q216 moves zoning to heart-rate reserve (which changes what a restatement restates).
 
 ---
+
+### 384. User 1's HRmax is restated to 177 (retroactive from 2026-03-01, with 173 and the reason kept), bands unchanged; the corrective path is a proposal owed for release; `s0_polar_read.py` is retired as owed
+
+**Decision.** Ruled by the operator on 5 Oct 2026, session `hc-zones-verify`: the full item 2 / 2b text that #383 amends. #383 stands as the amendment.
+1. **Value: HRmax changes.** 173 is a modality-limited lower bound: every observation was on an Echo bike (seated; the operator's reasoning is that bike HRmax runs about 5 bpm below running or field sport). A too-low HRmax inflates load and steers training below true threshold. **Target 177**, applied as a #383 restatement: retroactive from 2026-03-01, with 173 and the reason kept in history. **Bands unchanged:** 50/60/70/80/90 (`hr_zones.BAND_PCT`).
+2. **Design: owed as a proposal for operator release; not merged before the operator's ruling on it.**
+   - (a) A provenance for "observed max plus a documented modality correction" (for example `adjusted`), requiring the base observation and the rationale. Distinct from the banned age-predicted `estimated`.
+   - (b) The corrective path per #383 (restatement versus dated change). It must work at the seed's own date despite the `(user_id, effective_from)` unique key. A schema change is expected, held for release.
+   - (c) The HC and Polar boundary: Polar zones against its profile HRmax, which the parity gap puts above 173. Show whether 177 narrows or widens the per-band divergence by re-running the 28 Sep comparison at 177 as a projection, writing nothing.
+3. **`s0_polar_read.py` is retired as owed.** The file is in no repo, ref or container. The operator will read Polar Flow's profile HRmax setting by hand and report it as context.
+4. **Low priority, the next pass:** the deposits of the single-row HC bouts (79-83, 70, 86, 87, 94, 101). User 4's `no_hrmax` is untested, not failed.
+5. **Scope.** The design is a build session. This entry records the ruling; 2(a)-(c) can be its own session.
+
+**Rationale.** The operator's, in 1: an observed maximum from one modality is a floor, not the maximum, and a floor used as the maximum pushes every zone boundary down and every session's load up. #383 supplies the reason it is a retroactive restatement and not a dated change.
+
+**What this means for the table** (read on master `3785666`; Code's findings, not rulings).
+- **Nothing is applied yet.** `user_hrmax` holds one row (id 1: 173, `observed`, effective 2026-03-01). No row was written and nothing was recomputed. 173 stands until the mechanism in 2(b) exists.
+- **The unique key is not the only obstacle at the seed's date.** `hrmax_in_force` (`hr_zones.py:74-82`) compares with a strict `>`, so on two entries with the same `effective_from` the first one in input order wins (run: `[(2026-03-01, 173), (2026-03-01, 177)]` gives 173; reversed gives 177). The stored row is read first. Removing the key alone would therefore leave 173 in force; (b) needs an explicit rank rule between a restatement and the row it restates.
+- **2(a) changes a closed set.** `provenance` is `tested` or `observed` by a CHECK constraint (`ck_user_hrmax_provenance`, `models.py:363` and the migration). A third value is a migration, and it amends #364 R2's closed set.
+- **2(c) projection command.** The `--hc-zones` DB mode appends `--hrmax` entries after the stored ones, so a projection at 177 must be dated after 2026-03-01 (every HC row is from 25 Aug on): `--hrmax 1=177@2026-03-02`. A same-date entry would be ignored for the reason above.
+
+**Status.** Recorded 5 Oct 2026. OWED: the 2(a)-(c) proposal session, its release, then applying 177. Numbers resolved at master max #383 / Q216 (`3785666`).
+
+**How you know.** The operator's ruling in chat, 5 Oct 2026, in the terms above; the premise about the Echo bike and the 5 bpm is the operator's and was not tested here. Code reads on master `3785666`: `hr_zones.py:74-82` and the tie cases above (run in a Python shell against the real function), `models.py:363` and migration `b4d6f8a1c3e5` for the CHECK, and `arbitration_flip_report.py` for the order of `--hrmax` entries. The seed row and the parity figures are the operator-run reads recorded under #383 and in the ROADMAP HC zones row.
+
+**Do not revisit unless.** Polar Flow's profile HRmax, read by the operator, or the 177 projection contradicts the premise that 173 is a modality-limited lower bound; or a measured maximum (Q199's test) or a plausible sample above 177 (the over-ceiling flag at the new value) appears.
+
+---
