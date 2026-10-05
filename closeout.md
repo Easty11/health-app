@@ -1,11 +1,12 @@
-# Close-out — #364 (HC zones) is verified in prod after the seed: 17 of 29 HC rows zoned, the 28 Sep elliptical deposits once; the Polar band-edge parity divergence is reported for the operator's ruling and nothing was edited
+# Close-out — #364 (HC zones) is verified in prod after the seed (17 of 29 HC rows zoned, the 28 Sep elliptical deposits once); the Polar band-edge divergence is reported, and the operator's HRmax-restatement ruling is recorded as #383 with Q216 (HC zoning on heart-rate reserve) filed; nothing built
 
 ## Real commits this session
 
-Session `hc-zones-verify`. Range: `b81cebd` (master at open) to this close-out. Fresh-clone settings were unset at open and were set and verified (`core.hooksPath` = `.githooks`, local `alias.land`). Maxima at open and now: decisions 382, questions 215 (no decision or question was added).
+Session `hc-zones-verify`. Range: `b81cebd` (master at open) to this close-out. Fresh-clone settings were unset at open and were set and verified (`core.hooksPath` = `.githooks`, local `alias.land`). Maxima at open: decisions 382, questions 215. Maxima now: decisions 383 (#383), questions 216 (Q216).
 
-- `4ff652d` `gov(hc-zones-verify): #364 verified in prod after the seed; Polar-parity divergence reported for the operator` — ROADMAP HC zones row, BRANCHES (the `hc-zones-ingest` row resolved to DONE `054d2d9`, plus this branch's row), a Q199 update, the CLAUDE.md Recent-landings pointer. Governance only.
-- The close-out commit (`chore: session close-out`; the hash is on the branch, a file cannot name its own commit): this file.
+- `4ff652d` `gov(hc-zones-verify): #364 verified in prod after the seed; Polar-parity divergence reported for the operator` — ROADMAP HC zones row, BRANCHES (the `hc-zones-ingest` row resolved to DONE `054d2d9`, plus this branch's row), a Q199 update, the CLAUDE.md Recent-landings pointer. Governance only. Landed with `861b392` (`chore: session close-out`) as merge `2236cd4` (PR #328); the branch was deleted from the remote.
+- **Second round, on the same branch name restarted from master `2236cd4`** (the first PR had merged): one `gov(...)` commit and one close-out commit, hashes on the branch (a file cannot name its own commit). It records the operator's amendment of 5 Oct 2026 as DECISIONS #383 and files Q216, with the ROADMAP row, the BRANCHES rows, the Recent-landings pointer and this file.
+- **Disclosure: two `gov(...)` commits this session** (`4ff652d` and the second round). CLAUDE.md allows one. The second records a ruling that arrived after the first PR landed; each was a single commit on its own branch. Stated here, not hidden.
 - **Code and schema: none.** No migration, no code change. The six #364 test files (102 tests) were run on master `b81cebd` and passed (Python 3.11, installed without `garminconnect`; not the full suite). A scratch Postgres 16 built from `models.py` validated the operator's queries and the `--hc-zones` command; it was dropped and stopped.
 - **No prod write by Code.** The DB reads and the container report were run by the operator and pasted; Code read the Railway deploy list and logs (read-only).
 - Disclosure: one `gov(...)` commit, as CLAUDE.md allows. The branch name `claude/nice-mccarthy-jd2yw8` is the harness's, kept per the harness instruction (recorded in BRANCHES).
@@ -26,7 +27,10 @@ The brief's four items and the correction, one by one. Nothing here came from th
 5. **The seed correction: recorded; no longer OWED.** `user_hrmax` id 1: user 1, effective 2026-03-01 (equal to user 1's earliest `aerobic_sessions` date, read), 173 bpm, `observed`, the #364 note verbatim. `created_at` 2026-10-01 07:49:05.495922Z (17:49 AEST), 17 minutes after the migration ran (07:31:52Z) and before the first stored HR arrived (08:14:35Z). Who: the operator, with `scripts/set_hrmax` (the only writer; a test asserts nothing else touches the table). The table has no author column, so the actor is inferred from the code path, not read. The 5 Oct re-seed was refused by the append-only guard and wrote nothing.
 - **Cross-checks that corroborate, from the Railway logs (Certain):** the migration line, the first chain line `no_hrmax=23` (07:32:21Z) and the first `no_hrmax=0` (16:00:24Z), bracketing `created_at`. The 4 Oct 12:08:48Z POST took 237 s against about 8 s normally, so it is probably a deep sync (Likely, not confirmed); the zoned count did not move across it.
 
-Provisional until merged: everything in this PR.
+6. **The operator's amendment to item 2 (5 Oct 2026, addressed to this session): recorded as #383; the new question filed as Q216.** (a) A `user_hrmax` correction from better evidence is a restatement: retroactive, prior value and reason kept. (b) A value that genuinely changes with fitness is a dated change, forward only. (c) The corrective path (the operator's 2b) must tell the two apart: owed as a design, not built, and no HRmax value changed. **Code's findings on master `2236cd4`, not rulings:** a restatement cannot be appended at the seed's own date (`uq_user_hrmax_effective`, `set_hrmax`), nothing on a row marks it as a restatement, so a marker is likely a schema change and a hold, and a restatement reflows HC rows only (Polar keeps its own zones, Q198). (d) **Q216, OPEN:** should HC zoning move to heart-rate reserve? Its first finding: the app has no resting-HR input today, because `resting_heart_rate` is the day's median of every sample (Q200).
+- **Not visible to Code:** the text of the operator's "item 2" and "2b" beyond the amendment. The amendment is recorded as given. Whether the value or bands change at all is not in it, so that stays OWED.
+
+Provisional until merged: everything in the second PR.
 
 ## Cold-resume handoff
 
@@ -34,17 +38,17 @@ Provisional until merged: everything in this PR.
 
 **State.** This PR is governance only and self-merges on green; no `#NEXT` placeholders, no migration. Open: Q212 OWED to the 16 Nov review; Q213 and Q214 OPEN with Luke.
 
-**Single clearest next action.** The operator rules on the Polar band-edge parity (item 2), ideally after running `s0_polar_read.py --mode zones` to read Polar's implied HRmax. If the ruling changes bands or HRmax, it is a new `user_hrmax` row or a `BAND_PCT` change plus a recompute, never an edit. Until then nothing blocks.
+**Single clearest next action.** The operator rules whether the HRmax value or the bands change, ideally after running `s0_polar_read.py --mode zones` to read Polar's implied HRmax. Under #383 a correction from better evidence is a restatement, and the current table cannot express one at the seed's date, so the corrective path needs its design brief first (likely a schema change, a hold). A `BAND_PCT` change would be a recompute, never an edit. Until then nothing blocks.
 
-**Operator actions owed.** (1) The parity ruling and the two `s0_polar_read.py` reads. (2) The Q159 in-activity HR read on or after 9 Oct (the stores carry the query; sessions 69, 85 and 92 are the unzoned `sparse` rows it concerns, and now each has 26-30 samples in `hr_samples`). (3) Still open from earlier: the instrument datasheets brief's scope; the capture-rate query (Q202); the Polar backfill report, `--apply` and `refresh_load`; Q205 at the next Polar re-auth; the `concurrent_strength` marker build (Q206); the #371 overlap proof (a natural overlap or a debug control, #380).
+**Operator actions owed.** (1) The value-or-bands ruling and the two `s0_polar_read.py` reads; and, when scheduled, the corrective-path design brief (#383). (2) The Q159 in-activity HR read on or after 9 Oct (the stores carry the query; sessions 69, 85 and 92 are the unzoned `sparse` rows it concerns, and now each has 26-30 samples in `hr_samples`). (3) Still open from earlier: the instrument datasheets brief's scope; the capture-rate query (Q202); the Polar backfill report, `--apply` and `refresh_load`; Q205 at the next Polar re-auth; the `concurrent_strength` marker build (Q206); the #371 overlap proof (a natural overlap or a debug control, #380).
 
-**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 117 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). Unchanged; Q199 gained an update note and stays OPEN.
+**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 118 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). This session: Q216 opened; Q199 gained an update note and stays OPEN.
 
 **What was NOT touched (named so absence does not read as finished).**
 - **Single-row HC bout deposits:** whether rows 79-83, 70, 86, 87, 94 and 101 each deposit a metabolic event was not read; only the multi-row bouts and 28 Sep were.
 - **The seven pre-reach unzoned rows (72-78):** recorded, not ruled, no recovery attempted; whether the deposit gap on 72, 77 and 78 matters is the operator's call.
 - **User 4's `no_hrmax`:** untested until she has an HC aerobic row; no seed for her, no change.
-- **The Polar re-zoning (Q198), the HRmax benchmark test (Q199's "to decide"), the "Resting HR" label (Q200):** unmoved.
+- **The corrective-path design and build (#383):** not started; the table is as #364 left it. **Q216's resting-HR derivation, the Polar re-zoning (Q198), the HRmax benchmark test (Q199's "to decide"), the "Resting HR" label (Q200):** unmoved.
 - **The shared phase-entry and ledger build (#378, #379), Q213, Q214, Q212:** unmoved; the queue of unbuilt phase-form work is where it was.
 - **The sRPE floor, Source hierarchy (Q201, Q203), the marker exposure (#367, Q206), the sibling sync races (Q208), the Garmin self-evaluation read, #371's proof:** unmoved.
 - **Walk in:** the lab upload pipeline, the interpretation layer's remaining increments and the appointment brief stood still.
@@ -53,7 +57,7 @@ Provisional until merged: everything in this PR.
 - **Pattern to say out loud:** this was a verification session: it moved a record, not a product. The recent sessions have gone to plumbing, ledgers and verification of them (HC sync, source hierarchy, the phase form, now zones) rather than Walk in; the unbuilt phase-form work (#378, #379) still outweighs what shipped this week.
 
 **v1-triage of the NOW lanes** (which test each serves; DONE rows are demotion candidates by lane momentum):
-- HC zones (#364, now OWED only for the ruling and a local read): **See**, **Know** and **Loop**.
+- HC zones (#364, now OWED for the value ruling, a local read and the #383 corrective-path design): **See**, **Know** and **Loop**.
 - Phase-change form (#375, #376, #378, #379; the build in NEXT): **Know** and **Loop**.
 - Garmin self-evaluation read (#372, OWED): **Know** and **Loop**.
 - HC sync reliability (#369-#371, #377, #380, Q159, Q202, Q208, Q214, OWED): **See** and **Loop**.
