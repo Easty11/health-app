@@ -13503,7 +13503,7 @@ The lines as they now read in `CLAUDE.md`: "One branch per concern. Harness-assi
 
 ---
 
-### #NEXT. The phase-entry build settles #378 and #379: the direct open is removed, close-to-baseline stays as its own control, the wizard requires a quota slot and handles a same-day correction, and the history labels zero-length rows
+### 389. The phase-entry build settles #378 and #379: the direct open is removed, close-to-baseline stays as its own control, the wizard requires a quota slot and handles a same-day correction, and the history labels zero-length rows
 
 **Decision.** The operator's inline rulings R1-R6 (5 Oct 2026), built in two PRs (the pin, then the build) as the settlement of what #378 and #379 left to the brief. No new judgment by Code; the rulings are the operator's.
 - **R1. Close to baseline stays.** `ClosePhaseDialog` (`POST /engine/phase/close`) is re-housed as its own small control on the Phase card, "End phase → baseline", shown while a phase is open and not under a disclosure. The Advanced disclosure and its open path are gone. At baseline the card keeps "Open a phase", which opens the wizard.
