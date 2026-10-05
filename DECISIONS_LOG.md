@@ -13482,3 +13482,21 @@ The lines as they now read in `CLAUDE.md`: "One branch per concern. Harness-assi
 **Do not revisit unless.** A harness-assigned name causes a branch to be mistaken for another concern's (a mis-landed or mis-deleted branch), or per-ruling `gov(...)` commits fragment a close-out until it cannot be read.
 
 ---
+
+### 388. #385 is applied: user 1's HRmax is 175 (`adjusted`, restating row 1) from 2026-03-01, and HC/Polar parity at 175 is closed, with one residual z2/z3 difference that is not built against
+
+**Decision.** A record of an operator-run write on 5 Oct 2026 (the commands #385 and the ROADMAP HC zones row owed), plus one operator call. Code rules nothing here.
+1. **Applied.** `scripts/set_hrmax --restate` wrote one `user_hrmax` row: user 1, 175 bpm, `adjusted`, restating row #1 (173, `observed`), effective 2026-03-01. 29 health_connect rows moved 173 -> 175. `refresh_load --user 1` then ran OK: 17 of 29 HC rows zoned and 15 changed; the TRIMP series against Polar's cardio-load reads r = 0.974 over n = 46.
+2. **Parity at 175, closed (the operator's call).** On the H10-stream bouts, HC minus Polar in minutes, z1..z5: 20 Sep #71/#90 [0, 0, 0, 0, 0]; 28 Sep #88/#91 [0, +0.43, -0.45, 0, 0]; 1 Oct #96/#95 [0, +0.06, -0.05, 0, 0]; 2 Oct #100/#97 [0, +3.04, -3.05, 0, 0]. The 28 Sep z5 gap was +0.88 at 173 and -1.04 at 177, so it is 0.00 at 175.
+3. **Residual, no build (the operator's call).** Every remaining gap is a z2/z3 swap at the 70% edge, 70% of 175 = 122.5 bpm: HC puts 122 bpm in z2 and 123 in z3. The operator's reading is a half-bpm rounding-convention difference between HC zoning and Polar. Rows written by the Garmin differ more, which is expected (wrist optical against the H10).
+4. **Polar Flow's max HR is being locked at 175 as a user-set value** (the operator; #385 item 1 and its do-not-revisit condition).
+
+**Rationale.** None of Code's: this is a status record, filed as a fold-in so that the HC zones row's owed items can close. One note on reading it: parity at 175 is the expected result of having chosen 175 to align with Polar (#385), so it shows that HC zoning matches Polar's implementation at the same maximum. It is not evidence that 175 is the true maximum, which only Q199's maximal-effort test can give.
+
+**Status.** DONE: applied 5 Oct 2026. Still OWED: the operator's confirmation that Polar Flow's lock is set; the low-priority read of the single-row HC bout deposits (#384 item 4). Numbers resolved at master max #387 / Q216 (`28bd699`); re-read master's max and re-resolve if it advances before landing.
+
+**How you know.** The operator's report in chat, 5 Oct 2026. Every figure above (the write, the 29 and 17 and 15, r = 0.974 and n = 46, the four parity rows) is relayed: a session has no prod access, and Code re-ran none of it. What Code did check, in `hr_zones.band_for` at HRmax 175: 122 bpm is z2 and 123 is z3, and 157 is z4 and 158 is z5; HC's lower edge at each of the three half-bpm edges (87.5, 122.5, 157.5) is the next whole bpm up (88, 123, 158). **Likely, not tested:** the operator's gaps are zero at the 87.5 and 157.5 edges and non-zero only at 122.5, which fits Polar rounding half to even (88, 122, 158) and does not fit rounding down (it would also split z1 and z4/z5, if samples sit at 87 and 157 bpm). A count of `hr_samples` at exactly 122, 87 and 157 bpm in the affected bouts would test it, and Polar's own convention is not documented here.
+
+**Do not revisit unless.** Polar's zoning convention is read and contradicts the half-to-even reading, or a bout shows a z2/z3 gap that 122 bpm cannot explain; Polar Flow's max HR moves off 175 (the seam reopens, #385); or Q216 moves HC zoning to heart-rate reserve, which makes the edges different edges.
+
+---
