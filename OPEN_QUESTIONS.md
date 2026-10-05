@@ -2814,6 +2814,8 @@ forward, or backward over the seed's range as the seed does).
 
 **Update (3 Oct 2026, with #367).** Operator-reported, not read by Code (no DB route). The observed 173 came from Polar rows 35 and 47, both short conditioning segments, not rugby (Guessing: the two Fitness sessions named above, 2026-06-17 and 2026-07-17; the row dates were not given). Only three field sessions were recorded through Polar all season (rows 31, 67 and 90). So the seed is a maximum seen in conditioning segments, not in field play, and a maximal-effort test is owed. This entry is the home for that test; its "To decide" is unchanged.
 
+**Update (5 Oct 2026, session `hc-zones-verify`).** The seed row is `user_hrmax` id 1 (user 1, effective 2026-03-01, 173, `observed`), written 2026-10-01 07:49:05Z by the operator's `scripts/set_hrmax` run. The first post-deploy read of the zones against Polar's own is in the ROADMAP HC zones row. On the 28 Sep H10 bout (HC row 88 against Polar row 91, same stream, same `hr_max` 167) our 50/60/70/80/90-of-173 bands put more time in z1 and z5 and less in z3 and z4 than Polar's stored zones, and in all seven HC-with-Polar-twin bouts HC z5 is at or above Polar's while z3 and z4 are at or below. That is what a Polar HRmax above 173 would produce (Likely, not shown); `s0_polar_read.py --mode zones` would print it. It bears on this test: a higher true maximum would move every boundary. The ruling on bands or HRmax is the operator's and nothing was edited.
+
 **State:** OPEN. Not blocking.
 
 ---
