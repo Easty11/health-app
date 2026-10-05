@@ -19,7 +19,7 @@ from pathlib import Path
 
 _TESTS = Path(__file__).parent
 _BACKEND = _TESTS.parent
-_LITERAL = re.compile(r"\b202[67]-\d{2}-\d{2}\b")
+_LITERAL = re.compile(r"\b202[67]-\d{2}-\d{2}")   # no trailing \b: also matches 2026-09-28T05:00:00Z
 _CLOCK = re.compile(
     r"_local_day\(|date\.today\(|datetime\.now\(|datetime\.utcnow\(|\b_today\(|_today_aest|time\.time\(|utcnow"
 )
