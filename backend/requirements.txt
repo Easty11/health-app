@@ -30,3 +30,4 @@ openpyxl==3.1.5
 # track curl_cffi-era garminconnect (0.3.11), drop garth".
 garminconnect==0.3.11
 pytest==9.1.1
+time-machine==3.5.1
