@@ -8,7 +8,7 @@ pinned byte-identical to pre-Q112.
 Refusal batteries carry NEGATIVE CONTROLS (a payload the validator MUST accept), so a
 validator that refused everything could not report green (FEEDBACK §17).
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -696,12 +696,14 @@ def test_http_open_get_history_and_close(db_session):
 
     assert c.get("/engine/phase").json()["training_phase"] is None
 
-    opened = c.post("/engine/phase", json=_payload())
+    # A review date relative to the operator-local day: the helper's fixed 2026-10-05 stopped being
+    # "in the future" on 5 Oct 2026, which turned this assertion red for every PR.
+    opened = c.post("/engine/phase", json=_payload(review_on=str(_local_day() + timedelta(days=30))))
     assert opened.status_code == 201, opened.text
     body = opened.json()["training_phase"]
     assert body["label"] == "decompression"
     assert body["capacities"] == ["mobility", "stability"]     # verbatim
-    assert body["review_due"] is False                          # review_on 2026-10-05 > today
+    assert body["review_due"] is False                          # review_on is 30 days ahead
 
     cur = c.get("/engine/phase").json()["training_phase"]
     assert cur["id"] == body["id"]
