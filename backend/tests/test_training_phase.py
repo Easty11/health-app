@@ -316,7 +316,9 @@ def test_non_monotonic_entered_on_is_refused(db_session):
 
 def test_entered_on_defaults_to_local_day(db_session):
     u = _user(db_session)
-    p = open_phase(db_session, u.id, _payload(entered_on=...))
+    # No review_on: the helper's fixed 2026-10-05 falls BEFORE the defaulted entered_on (today) from
+    # 6 Oct AEST on, which this test is not about (the same clock rollover as the http-open test below).
+    p = open_phase(db_session, u.id, _payload(entered_on=..., review_on=None))
     assert p.entered_on == _local_day()
 
 
