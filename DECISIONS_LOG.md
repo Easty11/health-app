@@ -13447,3 +13447,20 @@ Recorded now; **the build is not scheduled**, and it may share one brief with #3
 **Do not revisit unless.** The operator's lock on Polar's 175 as a user-set value is lifted, or Polar reverts to an age estimate (the November birthday moves 220 minus age to 174), because the alignment reason and the seam reopen; the post-apply per-band report at 175 shows a wider HC/Polar divergence than 173 did; a measured maximum (Q199) or a plausible sample above 175 (the over-ceiling flag) appears; a restatement needs a date other than its target's; or `retire_user` learns composite foreign keys and the same-user, same-date rules should become the database's.
 
 ---
+
+### 386. v1 test 3 (Walk in) is met and is reframed as prepare, prompt, capture, reconcile; post-visit transcript reconciliation moves from LATER to NEXT, with a "Mark attended" transition
+
+**Decision.** Ruled by the operator on 5 Oct 2026, session `hrmax-restatement`. It amends #275 (the v1 definition of done) for test 3 only; tests 1, 2 and 4 are untouched.
+1. **Test 3 is MET**, on the evidence of the 1 Oct 2026 sports-medicine follow-up (`appt_20261001_aubrey`). The value was in the preparation; the brief acted as an in-room prompt; and the MeetGeek capture freed the operator from taking notes.
+2. **Test 3 is reframed.** It was "an auto-generated pre-appointment brief synthesising labs, interpretation, injuries, protocol and training state" (labs already left v1 under #345). It is now **prepare, prompt, capture, reconcile**: the operator prepares from the brief, reads it in the room as a prompt, the visit is captured, and the capture is reconciled afterwards against what was asked. The first three legs are met by the 1 Oct evidence. **The reconcile leg is not built.** It is carried as NEXT work, not as a condition on "met".
+3. **Post-visit transcript reconciliation is promoted from LATER to NEXT.** Reconcile from the TRANSCRIPT, not the AI summary. It includes a **"Mark attended" transition**: `appt_20261001_aubrey` is still `planned`, and there is no route to change it. The MeetGeek API or connector stays LATER, after reconciliation is proven on pasted text (#345).
+
+**Rationale.** The operator's: the test was written when the brief was imagined as a synthesis; its real value turned out to be a loop around the visit, and the reconcile leg is where the remaining value is. Marking the test met while the reconcile leg is unbuilt is the operator's call, recorded as made.
+
+**Status.** Recorded 5 Oct 2026, governance only: ROADMAP (the v1 definition, surfacing item 3, the Appointment brief row, a NEXT row moved from LATER). No code and no schema change. The build brief for the reconcile leg and the "Mark attended" route is UNSTARTED. Numbers resolved at master max #384 / Q216 (`98b8f8b`); #385 is on the same branch.
+
+**How you know.** The operator's ruling in chat, 5 Oct 2026. The 1 Oct evidence (the brief acting as a prompt, the MeetGeek capture) is the operator's report and was not tested here. That `appt_20261001_aubrey` is still `planned` is the operator's report; Code read no prod row. What Code did read, on `98b8f8b`: `routers/appointments.py` has two routes, `GET ""` (the list, `?status=` filter) and `GET /{key}/brief`, and no route that changes a status. Not checked: whether the chat knowledge lane can rewrite the row's `status`, which the build brief must settle before it adds a route.
+
+**Do not revisit unless.** The reconcile leg is built and shows that the transcript, not the AI summary, cannot be the source (the operator re-rules the leg); or a v1 test is re-opened by a new steer (a new decision, superseding #275 again).
+
+---
