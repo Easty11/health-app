@@ -15,7 +15,7 @@ written; the injury rows are untouched.
 """
 import importlib.util
 import os
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -30,7 +30,9 @@ _SPEC = importlib.util.spec_from_file_location(
 seed = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(seed)
 
-REVIEW = date(2026, 12, 1)
+# Relative to the engine's clock: the script refuses a --review-by in the past, so a fixed date
+# (this was 2026-12-01) turns every test that goes through main() red once the day passes.
+REVIEW = _local_day() + timedelta(days=60)
 
 
 def _row(db, **kw):
@@ -63,7 +65,7 @@ def _snapshot(db):
             db.query(models.UserKnowledgeEntry).order_by(models.UserKnowledgeEntry.id)]
 
 
-def _run(ledger, *flags, review="2026-12-01"):
+def _run(ledger, *flags, review=str(REVIEW)):
     db = ledger["db"]
     return seed.main([str(ledger["user"].id), "--review-by", review, *flags],
                      db_factory=lambda: _NoClose(db))
@@ -103,7 +105,7 @@ def test_id_29_active_would_plan_its_three_restrictions(ledger):
     v = planned[0]["value"]
     assert v["scope"] == {"tier": "advisory", "text": "striding"}
     assert v["exit"] == {"with_parent": True} and v["parent_key"] == "injury_hamstring_right"
-    assert (v["status"], v["asserted_by"], v["kind"], v["review_by"]) == ("confirmed", "user", "block", "2026-12-01")
+    assert (v["status"], v["asserted_by"], v["kind"], v["review_by"]) == ("confirmed", "user", "block", REVIEW.isoformat())
 
 
 # ── dry-run / confirm ────────────────────────────────────────────────────────
@@ -188,8 +190,8 @@ def test_confirm_is_one_transaction(ledger, monkeypatch):
 
 
 @pytest.mark.parametrize("argv", [
-    ["--review-by", "2026-12-01"],                               # neither mode
-    ["--review-by", "2026-12-01", "--dry-run", "--confirm"],     # both
+    ["--review-by", str(REVIEW)],                                # neither mode
+    ["--review-by", str(REVIEW), "--dry-run", "--confirm"],      # both
     ["--dry-run"],                                               # no review_by
     ["--review-by", "December", "--dry-run"],
     ["--review-by", "2020-01-01", "--dry-run"],                   # past
