@@ -71,11 +71,14 @@ def _shape(engine, table):
     return cols, uniques, fks
 
 
-@pytest.mark.parametrize("table", ["hr_samples", "user_hrmax"])
+@pytest.mark.parametrize("table", ["hr_samples"])
 def test_the_migration_builds_the_same_table_the_model_does(table):
     """Engine parity: apply the real migration on SQLite and compare with `create_all` from the
     models — columns, types, nullability, unique keys, FKs. (It caught `created_at` nullable in the
-    migration vs NOT NULL in the model; the Postgres `\\d` diff of the two was identical after the fix.)"""
+    migration vs NOT NULL in the model; the Postgres `\\d` diff of the two was identical after the fix.)
+
+    `user_hrmax` is no longer compared here: `d6f8b1a3c5e7` reshaped it (partial keys, a composite FK,
+    CHECKs: Postgres-only DDL), so its parity lives in `test_user_hrmax_restatement_schema.py`."""
     via_mig = create_engine("sqlite://")
     models.User.__table__.create(via_mig)
     with via_mig.begin() as conn:

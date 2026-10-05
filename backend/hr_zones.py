@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, Union
 
 # Lower edge of z1..z5 as an INTEGER percent of HRmax (z5 has no upper edge).
 BAND_PCT = (50, 60, 70, 80, 90)
@@ -71,15 +71,60 @@ def band_for(bpm: int, hrmax: int, bands: Sequence[int] = BAND_PCT) -> int:
     return band
 
 
-def hrmax_in_force(entries: Iterable[tuple[date, int]], day: date) -> Optional[int]:
-    """The HRmax in force on `day`: the entry with the greatest `effective_from` <= `day`, else
-    None (no value was in force yet — the row is withheld as `no_hrmax`, never given a default).
-    `entries` are `(effective_from, hrmax_bpm)` pairs in any order."""
-    best: Optional[tuple[date, int]] = None
-    for eff, bpm in entries:
-        if eff <= day and (best is None or eff > best[0]):
-            best = (eff, bpm)
-    return None if best is None else best[1]
+@dataclass(frozen=True)
+class HrmaxEntry:
+    """One `user_hrmax` row as the resolver sees it. `id` and `restates` carry the restatement link
+    (#383): `restates` is the `id` of the entry this one corrects. A plain `(effective_from, bpm)`
+    pair is an entry with neither: it can restate nothing and cannot be restated."""
+    effective_from: date
+    bpm: int
+    id: Optional[int] = None
+    restates: Optional[int] = None
+
+
+def entry_from_row(row) -> HrmaxEntry:
+    """A `HrmaxEntry` from a `models.UserHrmax` (duck-typed: this module stays free of the ORM)."""
+    return HrmaxEntry(row.effective_from, row.hrmax_bpm, row.id, row.restates_id)
+
+
+def hrmax_in_force(entries: Iterable[Union[HrmaxEntry, tuple[date, int]]], day: date) -> Optional[int]:
+    """The HRmax in force on `day`, else None (no value was in force yet: the row is withheld as
+    `no_hrmax`, never given a default). `entries` are `HrmaxEntry`s or `(effective_from, bpm)`
+    pairs, in any order: the answer never depends on input order.
+
+    Two kinds of change, ranked explicitly (#383):
+
+    * A DATED change applies from its `effective_from` forward only. Among the entries live on `day`,
+      the greatest `effective_from` <= `day` wins.
+    * A RESTATEMENT (`restates` set) is a correction from better evidence. It stands in for the entry
+      it restates over that entry's whole span, so the restated entry is never in force once a
+      restatement of it exists, even on the same date. Chains resolve to the latest: an entry that
+      any other entry restates is superseded, and what remains is the end of each chain.
+
+    Incoherent input raises ValueError rather than guessing: a restatement of an entry that is not
+    in `entries` or that sits on a different date (the database refuses both), or two live entries on
+    the winning date where neither restates the other (the old silent first-in-input-order tie)."""
+    es = [e if isinstance(e, HrmaxEntry) else HrmaxEntry(*e) for e in entries]
+    by_id = {e.id: e for e in es if e.id is not None}
+    for e in es:
+        if e.restates is None:
+            continue
+        target = by_id.get(e.restates)
+        if target is None:
+            raise ValueError(f"HRmax entry {e.id} restates {e.restates}, which is not among the entries")
+        if target.effective_from != e.effective_from:
+            raise ValueError(f"HRmax entry {e.id} ({e.effective_from}) restates {e.restates} "
+                             f"({target.effective_from}): a restatement shares its target's date")
+    superseded = {e.restates for e in es if e.restates is not None}
+    eligible = [e for e in es if e.effective_from <= day and (e.id is None or e.id not in superseded)]
+    if not eligible:
+        return None
+    top = max(e.effective_from for e in eligible)
+    winners = [e for e in eligible if e.effective_from == top]
+    if len(winners) > 1:
+        raise ValueError(f"ambiguous HRmax on {top}: {len(winners)} entries "
+                         f"({', '.join(str(e.bpm) for e in winners)} bpm), none restating another")
+    return winners[0].bpm
 
 
 def zone_session(

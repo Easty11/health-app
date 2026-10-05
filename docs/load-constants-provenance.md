@@ -26,7 +26,7 @@ DECISIONS_LOG #305. No new coefficient lands in these modules unlabelled.
 coefficients — they are the keys this table is versioned *under*, not entries in it. HR-zone
 boundaries and the HR-sample credit rules are `hr_zones.py`'s (Q159 stage 2; rows below). HRmax is
 NOT a constant of any module: it is per-user data in `user_hrmax` (append-only, dated, provenance
-`tested`/`observed`, never age-predicted), so it has no row here. The EWMA decay
+`tested`/`observed`/`adjusted`, never age-predicted; a correction is a restatement row, SCHEMA.md §043), so it has no row here. The EWMA decay
 `decay_x = e^(−1/τ_x)` is a formula fully determined by the τ rows, not an independent prior,
 so it carries no row of its own.
 

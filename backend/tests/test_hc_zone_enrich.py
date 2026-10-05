@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import null
 
 import hc_zone_enrich
+import hr_zones
 import load_events_metabolic
 import models
 from reads import aerobic_reads
@@ -391,3 +392,86 @@ def test_the_reference_bout_still_deposits_once_if_the_polar_row_were_unzoned(db
     ev = load_events_metabolic.compute_metabolic_load_events(db_session, 1)
     assert ev["events_written"] == 1
     assert db_session.query(models.LoadEvent).one().source_ref == str(r88.id)
+
+
+# ---- a restatement reflows through the chain step (#383, #384) ---------------------------------------
+# 157 bpm sits on the boundary that matters: 157/173 = 90.75% (z5) but 157/175 = 89.71% (z4).
+
+def _bout(db, ssid, start, bpm=157):
+    r = _row(db, 1, ssid, start, start + timedelta(minutes=10))
+    _samples(db, 1, GARMIN, start, 10, [bpm] * 61)
+    return r
+
+
+def test_a_restatement_at_the_seed_date_reflows_every_row_through_enrich(db_session):
+    from scripts import set_hrmax
+    _user(db_session)
+    spring = _bout(db_session, "spring", _utc(2026, 5, 4, 6))
+    autumn = _bout(db_session, "autumn", _utc(2026, 9, 28, 6))
+    _hrmax(db_session, 1, date(2026, 3, 1), 173)
+    hc_zone_enrich.enrich_user(db_session, 1)
+    assert _zones(_fresh(db_session, spring))[4] == 600 and _zones(_fresh(db_session, autumn))[4] == 600   # z5 at 173
+
+    set_hrmax.set_hrmax(db_session, user_id=1, effective_from=date(2026, 3, 1), bpm=175, provenance="adjusted",
+                        restate=True, base_bpm=173, rationale="bike lower bound", note="Echo bike")
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["changed"] == 2 and out["reasons"]["none"] == 2
+    for r in (spring, autumn):
+        z = _zones(_fresh(db_session, r))
+        assert z[4] == 0 and z[3] == 600                          # z5 -> z4 across the WHOLE history: no step
+
+
+def test_a_dated_change_through_enrich_reflows_forward_only(db_session):
+    """The same new value as a dated change from 1 Sep: the spring row keeps its 173 zones."""
+    _user(db_session)
+    spring = _bout(db_session, "spring", _utc(2026, 5, 4, 6))
+    autumn = _bout(db_session, "autumn", _utc(2026, 9, 28, 6))
+    _hrmax(db_session, 1, date(2026, 3, 1), 173)
+    _hrmax(db_session, 1, date(2026, 9, 1), 175, prov="tested")
+    hc_zone_enrich.enrich_user(db_session, 1)
+    assert _zones(_fresh(db_session, spring))[4] == 600           # still z5 at 173
+    assert _zones(_fresh(db_session, autumn))[3] == 600           # z4 at 175
+
+
+def test_chained_restatements_through_enrich_use_the_latest(db_session):
+    from scripts import set_hrmax
+    _user(db_session)
+    row = _bout(db_session, "r", _utc(2026, 9, 28, 6), bpm=160)    # 160/173 = 92.5%, /175 = 91.4%, /178 = 89.9%
+    _hrmax(db_session, 1, date(2026, 3, 1), 173)
+    kw = dict(user_id=1, effective_from=date(2026, 3, 1), provenance="observed", restate=True)
+    set_hrmax.set_hrmax(db_session, bpm=175, rationale="first", note="n", **kw)
+    set_hrmax.set_hrmax(db_session, bpm=178, rationale="second", note="n", **kw)
+    hc_zone_enrich.enrich_user(db_session, 1)
+    assert _zones(_fresh(db_session, row))[3] == 600              # 178 is the chain's end: z4
+
+
+def test_the_entry_order_the_database_returns_does_not_matter(db_session):
+    """The restatement is inserted AFTER the seed, so a plain query returns the seed first - the very
+    order that made the old resolver keep 173. Assert the DB order is the bad one and 175 still wins."""
+    from scripts import set_hrmax
+    _user(db_session)
+    _hrmax(db_session, 1, date(2026, 3, 1), 173)
+    set_hrmax.set_hrmax(db_session, user_id=1, effective_from=date(2026, 3, 1), bpm=175, provenance="observed",
+                        restate=True, rationale="r", note="n")
+    entries = [hr_zones.entry_from_row(h) for h in db_session.query(models.UserHrmax).order_by(models.UserHrmax.id)]
+    assert [e.bpm for e in entries] == [173, 175]                  # seed first, as stored
+    assert hr_zones.hrmax_in_force(entries, date(2026, 9, 28)) == 175
+
+
+def test_an_incoherent_restatement_fails_the_step_loudly_and_changes_no_row(db_session):
+    """The database does not enforce 'a restatement shares its target's date' (a composite FK would break
+    `retire_user`), so a row written around the script must fail LOUD here, not be silently guessed at: the
+    step raises (the chain's soft-step wrapper reports it) and every row keeps the zones it had."""
+    _user(db_session)
+    row = _bout(db_session, "r", _utc(2026, 9, 28, 6))
+    _hrmax(db_session, 1, date(2026, 3, 1), 173)
+    hc_zone_enrich.enrich_user(db_session, 1)
+    before = _zones(_fresh(db_session, row))
+    seed = db_session.query(models.UserHrmax).one()
+    db_session.add(models.UserHrmax(user_id=1, effective_from=date(2026, 5, 1), hrmax_bpm=175, provenance="observed",
+                                    note="n", restates_id=seed.id, rationale="r"))      # a different date: incoherent
+    db_session.commit()
+    with pytest.raises(ValueError, match="shares its target's date"):
+        hc_zone_enrich.enrich_user(db_session, 1)
+    db_session.rollback()
+    assert _zones(_fresh(db_session, row)) == before

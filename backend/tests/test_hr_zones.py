@@ -11,7 +11,7 @@ import pytest
 
 import hr_zones
 from hr_zones import (BAND_PCT, MAX_SAMPLE_GAP_S, MIN_ZONE_COVERAGE, PLAUSIBLE_BPM, REASONS,
-                      band_for, hrmax_in_force, zone_session)
+                      HrmaxEntry, band_for, hrmax_in_force, zone_session)
 
 T0 = datetime(2026, 9, 28, 5, 0, 0, tzinfo=timezone.utc)
 
@@ -209,6 +209,88 @@ def test_hrmax_in_force_picks_the_greatest_effective_from_not_after_the_day():
     assert hrmax_in_force(entries, date(2026, 9, 28)) == 180
     assert hrmax_in_force(entries, date(2027, 1, 1)) == 180
     assert hrmax_in_force([], date(2026, 9, 28)) is None
+
+
+# ---- restatement versus dated change (#383) -------------------------------------------------------------
+# A restatement stands in for the entry it restates over that entry's whole span, even on the same
+# date; a dated change applies forward only. The rank is explicit (ids), never input order.
+
+D0, D1 = date(2026, 3, 1), date(2026, 9, 1)
+
+
+def _seed_and_restatement():
+    return [HrmaxEntry(D0, 173, id=1), HrmaxEntry(D0, 175, id=2, restates=1)]
+
+
+@pytest.mark.parametrize("order", [(0, 1), (1, 0)])
+def test_a_restatement_wins_on_the_date_it_shares_whatever_the_input_order(order):
+    """The old resolver kept the FIRST of two same-date entries (strict `>`): [173, 177] gave 173 and
+    the reverse gave 177. Now the restatement outranks what it restates in both orders."""
+    base = _seed_and_restatement()
+    entries = [base[i] for i in order]
+    assert hrmax_in_force(entries, D0) == 175                  # on the shared date itself
+    assert hrmax_in_force(entries, date(2026, 6, 1)) == 175    # and across the whole span
+    assert hrmax_in_force(entries, date(2026, 2, 28)) is None  # a restatement reaches no earlier than its date
+
+
+def test_a_restatement_reflows_history_a_dated_change_does_not():
+    """Same new value, two kinds. Restated (retroactive): every day from the seed reads 175, so no step
+    in the series. Dated (forward only): days before the date keep 173 and the step is real."""
+    restated = _seed_and_restatement()
+    dated = [HrmaxEntry(D0, 173, id=1), HrmaxEntry(D1, 175, id=2)]
+    days = [date(2026, 3, 1), date(2026, 5, 15), date(2026, 8, 31), date(2026, 9, 1), date(2026, 12, 1)]
+    assert [hrmax_in_force(restated, d) for d in days] == [175, 175, 175, 175, 175]
+    assert [hrmax_in_force(dated, d) for d in days] == [173, 173, 173, 175, 175]
+
+
+def test_a_dated_change_after_a_restatement_still_applies_forward_only():
+    """Restate the seed (173 -> 175), then a later genuine change (178 from 1 Sep): the restated value
+    holds up to 31 Aug, the dated change from 1 Sep. Restating the seed does not touch the later date."""
+    entries = _seed_and_restatement() + [HrmaxEntry(D1, 178, id=3)]
+    assert hrmax_in_force(entries, date(2026, 8, 31)) == 175
+    assert hrmax_in_force(entries, D1) == 178
+    assert hrmax_in_force(list(reversed(entries)), D1) == 178
+
+
+@pytest.mark.parametrize("order", [(0, 1, 2), (2, 1, 0), (1, 2, 0), (1, 0, 2)])
+def test_chained_restatements_resolve_to_the_latest(order):
+    """173 restated to 175, then 175 restated to 177: only the end of the chain is live, in any order."""
+    chain = [HrmaxEntry(D0, 173, id=1), HrmaxEntry(D0, 175, id=2, restates=1),
+             HrmaxEntry(D0, 177, id=3, restates=2)]
+    entries = [chain[i] for i in order]
+    assert hrmax_in_force(entries, D0) == 177
+    assert hrmax_in_force(entries, date(2026, 10, 5)) == 177
+
+
+def test_restating_an_old_row_leaves_a_later_row_in_force():
+    """Restate the seed AFTER a later dated change exists: the later row still wins from its date."""
+    entries = [HrmaxEntry(D0, 173, id=1), HrmaxEntry(D1, 180, id=2), HrmaxEntry(D0, 175, id=3, restates=1)]
+    assert hrmax_in_force(entries, date(2026, 8, 31)) == 175
+    assert hrmax_in_force(entries, D1) == 180
+
+
+def test_plain_pairs_still_work_and_mix_with_entries():
+    assert hrmax_in_force([(D1, 180), (D0, 173)], date(2026, 9, 2)) == 180
+    assert hrmax_in_force([HrmaxEntry(D0, 175, id=2, restates=1), HrmaxEntry(D0, 173, id=1), (D1, 180)],
+                          date(2026, 6, 1)) == 175
+
+
+def test_two_unranked_entries_on_one_date_are_refused_not_resolved_by_input_order():
+    """Neither restates the other: the resolver will not guess (the old behaviour silently kept the
+    first, which is how a same-date `--hrmax` projection used to be ignored)."""
+    with pytest.raises(ValueError, match="ambiguous"):
+        hrmax_in_force([(D0, 173), (D0, 177)], D0)
+    with pytest.raises(ValueError, match="ambiguous"):
+        hrmax_in_force([HrmaxEntry(D0, 173, id=1), HrmaxEntry(D0, 177, id=2)], D0)
+    # ambiguity on a date that is not the winning date is not this day's problem
+    assert hrmax_in_force([(D0, 173), (D0, 177), (D1, 180)], D1) == 180
+
+
+def test_an_incoherent_restatement_is_refused():
+    with pytest.raises(ValueError, match="not among the entries"):
+        hrmax_in_force([HrmaxEntry(D0, 175, id=2, restates=99)], D0)
+    with pytest.raises(ValueError, match="shares its target's date"):
+        hrmax_in_force([HrmaxEntry(D0, 173, id=1), HrmaxEntry(D1, 175, id=2, restates=1)], D1)
 
 
 def test_the_same_samples_zone_differently_under_a_different_hrmax():

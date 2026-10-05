@@ -281,3 +281,40 @@ def test_the_projection_never_touches_the_rows_it_was_given(db_session):
     assert [(r.id, r.z1_seconds, r.z2_seconds, r.hr_avg, r.hr_max) for r in rows] == snap
     assert not db_session.dirty
     assert all(a is not r for a, r in zip(after, rows))
+
+
+# ---- restated HRmax in the projection (#383, #384) -----------------------------------------------------------
+
+def _restated_seed(db, bpm=175):
+    db.add(models.UserHrmax(user_id=1, effective_from=date(2026, 6, 1), hrmax_bpm=173, provenance="observed", note="t"))
+    db.commit()
+    seed = db.query(models.UserHrmax).one()
+    db.add(models.UserHrmax(user_id=1, effective_from=date(2026, 6, 1), hrmax_bpm=bpm, provenance="adjusted",
+                            note="t", restates_id=seed.id, base_bpm=173, rationale="r"))
+    db.commit()
+
+
+def test_db_mode_projects_under_the_restated_hrmax_not_the_seed_read_first(db_session, monkeypatch, capsys):
+    _mixed_scenario(db_session)
+    _restated_seed(db_session)
+    import database
+    monkeypatch.setattr(database, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
+    assert rep.main(["--hc-zones"]) == 0
+    out = capsys.readouterr().out
+    assert " 175 |" in out and " 173 |" not in out                     # the HRmax column reads the restatement
+
+
+def test_a_hrmax_projection_on_a_stored_date_is_refused_clearly_and_a_later_date_still_works(
+        db_session, monkeypatch, capsys):
+    """It used to be ignored without a word (the tie kept the stored row). It is now an error that names
+    the way out; dating the projection after the stored row is the supported shape and projects."""
+    _mixed_scenario(db_session)
+    _restated_seed(db_session)
+    import database
+    monkeypatch.setattr(database, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
+    with pytest.raises(SystemExit, match="cannot be resolved"):
+        rep.main(["--hc-zones", "--hrmax", "1=177@2026-06-01"])
+    assert rep.main(["--hc-zones", "--hrmax", "1=177@2026-06-02"]) == 0
+    assert " 177 |" in capsys.readouterr().out
