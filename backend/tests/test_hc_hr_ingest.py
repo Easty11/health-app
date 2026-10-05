@@ -41,9 +41,11 @@ def _stored(db):
     return db.query(models.HrSample).order_by(models.HrSample.sample_time, models.HrSample.source_package).all()
 
 
-def _iso(minutes=0, seconds=0, day=28):
-    return (datetime(2026, 9, day, 5, 0, 0, tzinfo=timezone.utc)
-            + timedelta(minutes=minutes, seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+def _iso(minutes=0, seconds=0):
+    # Yesterday 05:00Z, relative to the clock: the sync only counts days inside its window
+    # (`since = today - periodDays`), so a fixed date silently stopped syncing a week on (6 Oct 2026).
+    base = (datetime.now(timezone.utc) - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
+    return (base + timedelta(minutes=minutes, seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # ---- every record is stored ---------------------------------------------------------------------
