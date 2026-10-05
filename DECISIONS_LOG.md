@@ -13254,3 +13254,22 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** The operator needs a TOTAL conditioning quota across sport groups, or two metabolic quotas that cannot be expressed as activity slots plus a remainder (then (b)), or the resolver's claim order changes.
 
 ---
+
+### 377. The scheduled Health Connect sync reads on a build containing e3e2333: #370 is device-confirmed (supersedes the OWED status in #370)
+
+**Decision.** (1) **#370's device read is confirmed.** The newest three `health_connect_sync_events` rows (ids 66, 67, 68; operator read, 5 Oct 2026) all carry `git_sha` `52f9d4d`, `built_at` 2026-10-04T00:02:06Z, `period_days` 30 and no error on any stream, with this receipt per stream: heartRate 29,475 / 29,357 / 29,569, sleep 48 / 47 / 48, steps 31, workouts 30, hrv 0. They arrived at 12:08:42Z and 18:09:24Z on 4 Oct and 00:09:43Z on 5 Oct, six hours apart; the 06:04Z POST in the server's HTTP log fits the same cadence (its event row was not read). (2) **The scheduled run is the background worker.** The operator reports that the companion app's "Last background sync" line read 05/10/2026 04:09:31 at its first open on 5 Oct, with no manual sync. That line is written only by a background run (`backgroundSync.js:36-38`), and 04:09:31 Brisbane is 18:09:31Z, the end of row 67's POST. The server stores no trigger (Q214), so the cadence and that line are the evidence, not a stored field. (3) **The acceptance criterion is amended to "a build containing `e3e2333`"** (operator, 5 Oct), from the companion's G2 text "`git_sha` = the new merge SHA". The installed build is `52f9d4d`, a descendant: the same fix plus the companion's governance close-out. (4) **`hrv` 0 is expected.** Garmin withholds HRV from Health Connect by design; the Garmin HRV lane reads it server-side. (5) **Not confirmed here: #371**, the overlap proof (two syncs overlapping, both 200). Nothing overlapped.
+
+**Rationale.** #370 was ruled with a device read as its loop-close, and its status was OWED until that read existed. Entries are append-only, so the outcome is a new entry rather than an edit to the locked one (precedent #362).
+
+**Status.** Recorded 5 Oct 2026 from the operator's pasted rows and the Railway HTTP log; nothing here is a code change. #370's OWED is closed by this entry. Still open: Q159 (the lag: whether the 30-day window recovers the in-activity HR rows was not read), Q208 (the sibling races), Q214 (the trigger is not stored), and #371's overlap proof.
+
+**How you know.**
+- *Operator-pasted:* `SELECT * FROM health_connect_sync_events ORDER BY id DESC LIMIT 3` (ids 68, 67, 66) with the full `fetch_meta` objects, `error: null` on every stream of every row; and the GitHub compare of `e3e2333...52f9d4d`, which returned `ahead`.
+- *Read by Code, Railway HTTP log (4-5 Oct):* `POST /health-connect/sync` 200 at 06:04:32Z (10.5 s), 12:08:48Z (237 s), 18:09:30Z (8.5 s) and 00:09:50Z (8.1 s). Each of the three row timestamps falls inside its request (the log time minus the duration is the start).
+- *Read by Code, a clone of `health-connect-app`:* `e3e2333` is an ancestor of `52f9d4d` (`git merge-base --is-ancestor`); `52f9d4d` is the PR #65 merge of 2026-10-03T23:44Z, 18 minutes before `built_at`; `backgroundSync.js:36-38` writes the "Last background sync" line only when `trigger === 'background'`.
+- *Operator-reported, not read by Code:* the value on the "Last background sync" line, and that no manual sync was run.
+- *Not verified here:* the build behind the 06:04Z POST (its row was not read), and any recovery of in-activity HR from the wider window.
+
+**Do not revisit unless.** A background run on a build containing the fix posts heartRate received 0 with no error, or an error naming initialisation (that reopens #370's Do-not-revisit); or the library's initialisation model changes.
+
+---

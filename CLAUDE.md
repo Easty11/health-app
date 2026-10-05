@@ -284,7 +284,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **The phone's `client.trigger` is filed as dropped by the server (Q214), the HC phone fix (#370) is built and its device read is owed, and operator-script docstrings give the container recipe.** Governance plus a docstring-only change, no schema - Handoff: `closeout.md`.
+- **The phone's `client.trigger` is filed as dropped by the server (Q214), the HC phone fix (#370) is device-confirmed (#377), and operator-script docstrings give the container recipe.** Governance plus a docstring-only change, no schema - Handoff: `closeout.md`.
 
 - **Three phase-machinery questions are filed (Q211 direct open and quota, Q212 posture carried on a Move, Q213 the per-second HR input layer), and the 4-5 Oct sync and Garmin read evidence is recorded; the HC scheduled-sync fix is not confirmed.** Governance plus a test-only date fix, no schema - Handoff: `closeout.md`.
 
