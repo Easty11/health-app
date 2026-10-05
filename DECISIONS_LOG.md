@@ -13500,3 +13500,27 @@ The lines as they now read in `CLAUDE.md`: "One branch per concern. Harness-assi
 **Do not revisit unless.** Polar's zoning convention is read and contradicts the half-to-even reading, or a bout shows a z2/z3 gap that 122 bpm cannot explain; Polar Flow's max HR moves off 175 (the seam reopens, #385); or Q216 moves HC zoning to heart-rate reserve, which makes the edges different edges.
 
 ---
+
+---
+
+### #NEXT. The phase-entry build settles #378 and #379: the direct open is removed, close-to-baseline stays as its own control, the wizard requires a quota slot and handles a same-day correction, and the history labels zero-length rows
+
+**Decision.** The operator's inline rulings R1-R6 (5 Oct 2026), built in two PRs (the pin, then the build) as the settlement of what #378 and #379 left to the brief. No new judgment by Code; the rulings are the operator's.
+- **R1. Close to baseline stays.** `ClosePhaseDialog` (`POST /engine/phase/close`) is re-housed as its own small control on the Phase card, "End phase → baseline", shown while a phase is open and not under a disclosure. The Advanced disclosure and its open path are gone. At baseline the card keeps "Open a phase", which opens the wizard.
+- **R2. The direct open is removed.** The route `POST /engine/phase`, `PhaseForm.jsx` and its test, and the engine's `open_phase()` wrapper are deleted. `_apply_open_phase` stays: the transition is now its only caller. The operator confirmed no caller outside the tree.
+- **R3. The wizard requires at least one quota slot.** Step 4 blocks Next with "A phase needs at least one quota slot." No quota-less phase is creatable by any route (#378's do-not-revisit stays closed).
+- **R4. Zero-length rows are labelled, not collapsed.** `GET /engine/phase/history` carries a computed `zero_length` (`closed_on == entered_on`) per row; `phase_to_dict` and the current-phase read are unchanged. The card shows such a row muted with a "same-day correction" chip, its close reason still shown. Nothing is hidden.
+- **R5. A same-day correction skips the block verdict.** When the open row's `entered_on` is today, step 1 hides "Did the block do its job?", relabels the note box "What are you correcting? (optional)", and an empty note omits `close_prior_reason`, so the server default "opened <label>" applies. The Then choice stays.
+- **R6. The row the save closes is named.** Step 1 and the step-8 confirm show label and entered date, plus "opened today" for a same-day correction. No how-it-was-opened field (no column distinguishes it: both routes wrote `source='api'`, `asserted_by='user'`).
+
+Not taken: a stored marker (a migration, held), collapsing the row, keeping the Advanced disclosure for close.
+
+**Rationale.** The wizard is the one path that validates the whole write before it creates a Hevy folder (#375) and the only one that can carry a quota; the direct form could create a quota-less phase, which the 4 Oct retry did. Closing to baseline is not a phase entry, so removing the open path does not touch it. A derived flag and a label keep the ledger append-only and visible (#379).
+
+**Status.** DONE: pin merged as PR #333 (tests only); build in the PR that carries this entry. Deploy checks owed once it deploys (#116, #121): backend SUCCESS, then the served bundle contains "End phase", "same-day correction" and "A phase needs at least one quota slot".
+
+**How you know.** The operator's rulings. Code read the tree on master `3f46582` and confirmed the brief's four hypotheses: (a) the wizard has only the `continue` and `move` modes and always posts `/transition`, so `ClosePhaseDialog` was the only baseline route; (b) zero slots build `slots: []`, which `validate_microcycle` refuses ("must be a non-empty list"), with no client-side block before this build; (c) `PhaseForm` and the wizard both write `source='api'`, `asserted_by='user'`; (d) `POST /engine/phase` had one non-test caller (`PhaseForm.jsx:98`) and `open_phase()` had no other production caller (the transition uses `_apply_open_phase`). Tests: each of R1-R6 has one that fails if reverted; mutation-checked R3 (the step-4 block removed: 2 tests fail), R4 (the flag forced false or inverted: 1 backend test; the chip removed: 1 frontend test) and R5 (never same-day: 3 tests fail). The same-day check compares the open row's `entered_on` with `todayLocal()`, the value the wizard sends as the new row's `entered_on`; a vitest case with `TZ=Australia/Brisbane` at 14:30Z shows 00:30 on the next AEST date counting as today and the UTC date not. Backend fixtures that used `open_phase()` (about 33 call sites) now use `tests/phase_fixtures.open_phase`, a test-only wrapper over `_apply_open_phase`.
+
+**Not verified here.** Callers of `POST /engine/phase` outside the tree (operator-confirmed none). The server's `_local_day()` and the browser's `todayLocal()` agree only when the browser is in the operator's zone; for the same-day test that does not matter (it is the value the form sends), but a browser in another zone near midnight would send an `entered_on` the server may refuse as future-dated (existing behaviour, not changed here). The R5 payload rule (no verdict prefix, empty note omitted) is asserted, but cannot fail independently of the hidden verdict control, which is the R5 UI test. The live deploy.
+
+**Do not revisit unless.** A phase the wizard cannot express is needed, the route turns out to have a caller that cannot use the wizard (#378), or a mistaken row that lasted days needs voiding (then Q215's stored marker, #379).
