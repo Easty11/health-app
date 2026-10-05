@@ -13273,3 +13273,22 @@ above, not re-derived here. The principle is a ruling; its workability is untest
 **Do not revisit unless.** A background run on a build containing the fix posts heartRate received 0 with no error, or an error naming initialisation (that reopens #370's Do-not-revisit); or the library's initialisation model changes.
 
 ---
+
+### 378. The direct "Open a new phase" path is removed: Review / change phase is the only way a phase is entered (Q211 option (d))
+
+**Decision.** Ruled by the operator on 5 Oct 2026 (Q211): option (d). The Advanced "Open a new phase" path is to be removed, and Review / change phase (the 8-step flow) is the only phase-entry route. **Recorded now; the build is not scheduled** (operator: "build when scheduled"). Not taken: (a) require a microcycle at direct open, (b) carry the prior microcycle, (c) warn on save.
+
+**Not decided here.** These are the build brief's to settle, after it reads them.
+- *The backend route `POST /engine/phase`.* Its only non-test caller in this tree is `PhaseForm.jsx:98`; MCP and chat only read the phase (`mcp_server.py:728`, `routers/chat.py:1620`). Callers outside the tree (a script, a curl) were not searched.
+- *The direct CLOSE path* (`ClosePhaseDialog.jsx`, `POST /engine/phase/close`). `PhaseCard.jsx:15-17` pairs it with direct open as one "advanced" link; this ruling names open only.
+- *What the wizard can express.* A phase with no microcycle, or one carrying only a review date, is creatable today by the direct path. Whether the wizard's quota step permits either was not read.
+
+**Rationale.** On 4 Oct a direct-opened phase had no quota and the operator fixed it by re-running Review / change. The code's own comment (`PhaseCard.jsx:15-17`) keeps the direct path "until the 8-step flow has completed one real transition in prod" and schedules its removal; the operator reports that condition was met on 4 Oct. The wizard is also the path that validates the whole write before it creates a Hevy folder (#375), which the direct form never did.
+
+**Status.** Ruled 5 Oct 2026; Q211 closed here (`DONE → #378`). Nothing is built. ROADMAP NEXT carries the build, UNSTARTED.
+
+**How you know.** The operator's ruling, 5 Oct 2026. Code facts, read on master `a0c9376`: the backend treats `microcycle` and `capacities` as optional (`engine/training_phase.py:280-297`; `routers/training_phase.py:55`); the form sends a microcycle only if the Advanced JSON box is filled; a phase with none falls back to the weekly template (`tests/test_resolver.py:272`); direct open closes the prior phase in the same transaction (`tests/test_training_phase.py:134`); the callers above (a grep of `.py`, `.js` and `.jsx` outside tests). Not verified: callers outside the tree, and the wizard's handling of an empty quota.
+
+**Do not revisit unless.** A phase the wizard cannot express is needed (a review-date-only phase, or one with no microcycle), or the route turns out to have a caller that cannot use the wizard.
+
+---

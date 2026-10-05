@@ -1,65 +1,69 @@
-# Close-out — three phase-machinery questions and the trigger-drop question are filed (Q211-Q214); the HC phone fix (#370) is device-confirmed (#377); the 4-5 Oct evidence and the corrections to my own first notes are recorded
+# Close-out — the direct-open path is ruled out (#378, build not scheduled), Q212 is deferred to the aerobic base review, the HC phone fix is device-confirmed (#377), and the in-activity HR read is owed from about 9 Oct
 
 ## Real commits this session
 
-Session `phase-open-path-and-carried-items` (the `phase-form-save-order` session had closed out and merged at `21839a4`). Range: `21839a4` (master at open) to this close-out. Fresh-clone settings verified set at open (`core.hooksPath` = `.githooks`, local `land` alias). Maxima at open: decisions 376, questions 210. Maxima now: decisions 377 (#377, a confirmation), questions 214.
+Session `phase-open-path-and-carried-items` (the `phase-form-save-order` session had closed out and merged at `21839a4`). Range: `21839a4` (master at open) to this close-out. Fresh-clone settings verified set at open (`core.hooksPath` = `.githooks`, local `land` alias). Maxima at open: decisions 376, questions 210. Maxima now: decisions 378 (#377, #378), questions 214.
 
-Five PRs, each self-merged on green (guard, vitest, pytest read as success on the pinned head) with a merge commit and the branch deleted:
-- **#318** `gov/phase-open-path-and-carried-items` (merge `9fc2973`): Q211, Q212, Q213, two dated notes on Q159, ROADMAP rows 37-39 and two LATER rows, the CLAUDE.md operator-scripts note. Governance only.
-- **#319** `fix/phase-test-review-date-not-hardcoded`: `276ca7a test(phase): give the HTTP open test a review date relative to today` (merge `0c04611`). Tests only, not in the brief. `test_http_open_get_history_and_close` asserted `review_due is False` against the shared helper's fixed `review_on` of 2026-10-05, which became today at 00:00Z on 5 Oct, so the backend check went red on #318 and would have on every PR. Reproduced locally, fixed in the test only; a review date of yesterday fails it.
-- **#320** `docs/operator-script-container-recipe`: `998d63c docs(scripts): point operator-script docstrings at the container recipe, not railway run` (merge `27e601e`). Docstrings only; the four files compile and their two test files pass (22).
-- **#321** `gov/hc-trigger-and-phase-question-corrections` (merge `461dfff`): Q214, the Q159 and ROADMAP row 37 corrections, the Q211 and Q212 additions, ROADMAP rows 36 and 56, the BRANCHES rows, the CLAUDE.md pointer, a whole-session `closeout.md`. Governance only.
-- **This PR** `gov/hc-sync-device-confirmation`: one governance commit (the hash is on the branch; a file cannot name its own commit): DECISIONS #377, the Q159 and ROADMAP row 37 text it supersedes, the BRANCHES rows, the CLAUDE.md pointer, this file.
+Six PRs, each self-merged on green (guard, vitest, pytest read as success on the pinned head) with a merge commit and the branch deleted:
+- **#318** `gov/phase-open-path-and-carried-items` (merge `9fc2973`): Q211-Q213, the first Q159 notes, ROADMAP rows 37-39, the CLAUDE.md operator-scripts note. Governance only.
+- **#319** `fix/phase-test-review-date-not-hardcoded`: `276ca7a test(phase): give the HTTP open test a review date relative to today` (merge `0c04611`). Tests only, not in the brief: `test_http_open_get_history_and_close` asserted against the shared helper's fixed `review_on` of 2026-10-05, which became today at 00:00Z on 5 Oct and turned the backend check red for every PR.
+- **#320** `docs/operator-script-container-recipe`: `998d63c docs(scripts): point operator-script docstrings at the container recipe, not railway run` (merge `27e601e`). Docstrings only.
+- **#321** `gov/hc-trigger-and-phase-question-corrections` (merge `461dfff`): Q214 (the phone stamps `client.trigger`, the server drops it), the corrections to my first notes, the Q211 and Q212 additions.
+- **#322** `gov/hc-sync-device-confirmation` (merge `a0c9376`): DECISIONS #377, the #370 device confirmation.
+- **This PR** `gov/q211-ruled-q212-deferred`: one governance commit (the hash is on the branch; a file cannot name its own commit): DECISIONS #378, Q211 closed, Q212 evidence and deferral, the owed Q159 read, ROADMAP rows 37 and 39 and a NEXT block, the BRANCHES rows, the CLAUDE.md pointer, this file.
 
-**Disclosure: three `gov(...)` commits this session** (#318, #321 and this one). CLAUDE.md allows one. The second answered the duplicate session's findings and the third records the operator's artifact; each arrived after the previous landed. Each was amended on my own unmerged branch to keep one commit per PR. Stated here, not hidden.
+**Disclosure: four `gov(...)` commits this session** (#318, #321, #322 and this one). CLAUDE.md allows one. Each answered input that arrived after the previous landed (the duplicate session's findings, then the operator's artifact, then the operator's rulings); the operator asked for this last batch as one commit, and it is one. Each was amended on my own unmerged branch to keep one commit per PR. Stated here, not hidden.
 
-- Migration: none. No prod write. Code has no database access; every prod fact is read by Code from Railway or marked operator-owed. The companion repo (`health-connect-app`) was read-only, cloned shallow for this round.
-- Deploys: #319 backend `8c6542a2` SUCCESS. The deploys for #318, #320 and this PR were not re-read; all three touch only governance files or docstrings, so nothing served changes.
+- Migration: none. No prod write. Code has no database access; every prod fact is read by Code from Railway or marked operator-reported or operator-owed.
+- Deploys: #319 backend `8c6542a2` SUCCESS. The deploys for the governance and docstring merges were not re-read; they alter nothing served.
 
 ## Pending-queue reconciliation
 
-**Round 1, the 5 Oct brief** (landed in #318; see the Q211-Q213 and Q159 entries): the phase-history fix was already #314 (deployed; the ledger read and the card check are owed); Q211 filed; the "recovery vehicles" source reported and filed as Q212; the scheduled-sync evidence recorded on Q159 and ROADMAP row 37 (it does not confirm #370); the carried items located or added (Q213, the datasheets LATER row with no scope stated); the PENDING notes landed (CLAUDE.md recipe, the first live self-evaluation read).
+This round (the operator's 5 Oct message clearing my "still yours" list and ruling).
+1. **`probe_posture` `suppressed` on `aerobic base` is intended** (operator: to stop probes while run, sprint and VO2 all start). No change. Recorded on Q212 as evidence for separating the three behaviours: the operator wants probe-off without the recovery-first ranking.
+2. **Served-bundle probe — done by the operator from chat:** the live bundle contains "Kept as on file", so #313 is live. Operator-reported; Code's proxy still blocks the host. Only #313's string was probed; #314 and #315 were not separately.
+3. **Duplicate Aerobic Base Phase folders — deleted by the operator** in the Hevy app.
+4. **Instrument datasheets brief — scope to follow from the operator;** the LATER row is left as it is.
+5. **Q211 ruled: option (d)** — remove the direct-open path; Review / change is the only phase-entry route. Recorded as **#378**; Q211 closed. **Build not scheduled** (ROADMAP NEXT, UNSTARTED). Left for the build brief: the backend route (its only non-test caller in the tree is `PhaseForm.jsx:98`; MCP and chat only read the phase), the direct close path (the ruling names open only), and whether the wizard can express a no-microcycle or review-date-only phase.
+6. **Q212 deferred** to the aerobic base review (16 Nov 2026): `suppressed` stays and the recovery-first ranking is accepted for this phase. Q212 is now OWED (loop-close: that review), not OPEN. No DECISIONS entry: a deferral resolves nothing.
+7. **Q159 read owed — recorded with its query** (parser-checked with `pglast` 8.5, not run). **One challenge, recorded on Q159:** the read as framed is probably premature. Garmin writes in-activity HR about 7 days after the session (#369), so the 1 Oct run's late write is expected about 8 Oct; a read on 5 Oct should show passive samples only. The receipt counts in rows 66-68 cannot answer it either (the window slides: 29,475, then 29,357, then 29,569). Read it on or after 9 Oct. A test that can run now: sessions 69, 85 and 92 (older than 7 days, no in-activity HR in Q207's first read).
+- **Not reported, so still owed:** the Phase card's history check (the card should list the ledger rows). The operator closed the posture question; the history render was not mentioned.
 
-**Round 2, the duplicate session's findings.** Each verified against the code before landing.
-1. **`client.trigger` — the real gap is server-side. Filed as Q214.** The phone stamps it (companion `syncRunner.js:93`, `backgroundSync.js:57`, `SyncScreen.js:177`; its comment calls persisting it "the owed health-app follow-up (OPEN_QUESTIONS)", and the companion holds it as its Q23). The server accepts it (`ClientInfo` `extra="allow"`) and drops it (`routers/health_connect.py:1152-1159`; no column in `models.py:393-414`). A column is a migration: HOLD. **My round-1 text was wrong on this:** I wrote that the server "records no trigger" and suggested a label "for the P1 brief". Corrected on Q159 and ROADMAP row 37.
-2. **`railway run` in the stores and docstrings — fixed.** ROADMAP rows 36 and 56 and the four docstrings (set_hrmax, polar_sport_backfill, garmin_sync, arbitration_flip_report) now give the container recipe; `verify_series_integrity.py` already documented why. **Stray, not changed:** its runtime message at `:56` still says "run via `railway run`".
-3. **Q212 — added.** One `probe_posture` value drives three behaviours (budget 0 and fortify at `selection.py:574-581`, probe block withheld at `:733-737`, the recovery-first re-rank at `:646-650`), and the re-rank fires on `probe_suppressed` alone. Options to separate them are on Q212. **Verified, not copied:** a third posture value is a migration, because `training_phases` has a database `CHECK` on `probe_posture IN ('suppressed','held')` (`models.py:1107`).
-4. **#370 "device confirmation" — DONE → #377.** The operator supplied the artifact after #321 landed: sync events 66-68 (build `52f9d4d`, `period_days` 30, no error on any stream, heart rate 29.4-29.6k received, `hrv` 0 as expected), the GitHub compare `ahead`, and the app's "Last background sync 04:09:31" line. Verified by Code against the Railway HTTP log (the three row times fall inside their requests; a fourth POST at 00:09:50Z), a clone of the companion (`e3e2333` is an ancestor of `52f9d4d`; the stamp is written only by a background run). The acceptance criterion is amended to "a build containing `e3e2333`" (operator). **One correction of mine:** the first reading said no POST followed the 18:09Z one; the 00:09Z POST existed and the log had not caught up. **#371's overlap proof stays owed.**
-5. **`PhaseCard.jsx:15-17` — added to Q211.** The direct path is kept "until the 8-step flow has completed one real transition in prod", to be removed once confirmed. By the operator's 4 Oct report that condition is met, so option (d) is the removal the code already plans. Not a ruling.
-
-- **Not landed:** the ledger read, the served-bundle probe, the phase posture check; the duplicate Hevy folders; whether the phase was renamed `aerobic base` before Mon 5 Oct.
+Earlier rounds, as recorded: the phase-history fix is #314 (deployed); Q211-Q214 filed; #370 confirmed on a device (#377, sync events 66-68); #371's overlap proof stays owed; the carried items located or added; the operator-scripts recipe landed with its docstrings (#320).
 
 Provisional until merged: everything in this PR.
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** Rows 36 and 56 give the container recipe; row 37 now says P1 is DONE → #377 and carries Q214; rows 38 and 39 are as #318 left them. LATER holds the HR input layer (Q213), the datasheets brief (no scope stated) and the `review_by: 2026-10-15` test fixtures watch row.
+**Sprint (ROADMAP NOW).** Row 39 rewritten: the phase-change form lane is closed except the history check; the posture, bundle probe and folders are closed by the operator; Q211 and Q212 are ruled. Row 37 carries the Q159 read. NEXT carries the #378 build, UNSTARTED. LATER holds the HR input layer (Q213), the datasheets brief (scope to follow) and the `review_by` fixtures watch row.
 
-**State.** This PR self-merges on green. Q211-Q214 are OPEN with Luke. #377 records a confirmation, not a ruling.
+**State.** This PR self-merges on green. #378 resolved at master max #377. Open: Q212 OWED to the 16 Nov review; Q213, Q214 OPEN with Luke.
 
-**Single clearest next action.** The operator runs the ledger query and reads `probe_posture` on the open `aerobic base` row first: if it is `suppressed` and that was not intended, re-run Review / change and set `held` (a same-day correction is allowed, #317). Until then the coach output is recovery-first with the probe off.
+**Single clearest next action.** Nothing blocks. When the operator schedules it, the #378 build starts with a brief that reads the three open points first. Until then the next dated item is the Q159 in-activity HR read on or after 9 Oct.
 
-**Operator actions owed.** (1) The ledger query (`SELECT id, label, probe_posture, entered_on, closed_on, close_reason, (microcycle IS NOT NULL) AS has_microcycle, source FROM training_phases WHERE user_id = 1 ORDER BY entered_on, id;`, `PGCLIENTENCODING=UTF8` set first) and the Phase card's history check. (2) The served-bundle probe (the line in ROADMAP row 39). (3) The duplicate Aerobic Base Phase folders in the Hevy app. (4) Still open from earlier: the capture-rate query (Q202); the overlapping-sync live proof for #371; the Polar backfill report, `--apply` and `refresh_load` (now from the container); Q205 at the next Polar re-auth; the `concurrent_strength` marker build (Q206).
+**Operator actions owed.** (1) The Q159 read (query on Q159) on or after 9 Oct, and now the 69 / 85 / 92 variant. (2) The Phase card's history check. (3) #371's overlap proof: a manual sync during a scheduled one, both 200. (4) The datasheets brief's scope. (5) Still open from earlier: the capture-rate query (Q202); the Polar backfill report, `--apply` and `refresh_load` (from the container); Q205 at the next Polar re-auth; the `concurrent_strength` marker build (Q206).
 
-**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 119 OPEN, 6 OWED (Q78, Q176, Q178, Q181, Q205, Q206). This session: Q211, Q212, Q213, Q214 opened; none closed or moved.
+**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 117 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). This round: Q211 closed (`DONE → #378`); Q212 moved from OPEN to OWED. This session: Q211-Q214 opened; Q211 closed.
 
 **What was NOT touched (named so absence does not read as finished).**
-- **Any fix for Q211, Q212 or Q214.** All three are filed with options; Q214's column is a migration and a hold.
-- **The companion repo.** Read only; the `client.trigger` stamping and the P1 build are its, and landed.
-- **The HR input layer (Q213) and the instrument datasheets brief:** recorded, not drafted; the datasheets scope was not stated.
-- **The next date-bomb candidates:** `test_constraint_engine_arm.py`, `test_sweep_constraint_rehome.py` and `test_typed_write_shape_docs.py` hardcode `review_by: 2026-10-15` without pinning today, and `typed_entries.py:110` tags `review due` once it passes. Whether any assertion flips on the 15th was not checked.
-- **`verify_series_integrity.py:56`:** the runtime `railway run` message.
-- **The stale-looking amber warning** on a Garmin or Samsung `load_window` slot ("deposits no load until Health Connect stage 2"): left, as before.
-- **The sRPE floor, the Garmin in-activity HR read (Q159), the sibling sync races (Q208), the Source hierarchy (Q201, Q203), the marker exposure (#367, Q206):** unmoved.
+- **The #378 build:** not scheduled, nothing built; the phase form, `PhaseCard` and the backend route are as they were.
+- **Q212's separation and seeding:** deferred to 16 Nov; no change to the posture machinery.
+- **Q214:** `client.trigger` is still dropped by the server; a column is a migration and a hold.
+- **The Q159 in-activity HR read and #371's overlap proof:** owed, not run.
+- **The datasheets brief and the HR input layer (Q213):** recorded, not drafted.
+- **The next date-bomb candidates:** `test_constraint_engine_arm.py`, `test_sweep_constraint_rehome.py` and `test_typed_write_shape_docs.py` hardcode `review_by: 2026-10-15` without pinning today; whether any assertion flips on the 15th was not checked.
+- **`verify_series_integrity.py:56`:** its runtime message still says `railway run`.
+- **The stale-looking amber warning** on a Garmin or Samsung `load_window` slot ("deposits no load until Health Connect stage 2"): left.
+- **The sRPE floor, the sibling sync races (Q208), the Source hierarchy (Q201, Q203), the marker exposure (#367, Q206):** unmoved.
 - **Know / the plan:** plan-conformance adjudication (Q197), Q27 and the Rule 1 vote counter did not move.
 - **Walk in:** the lab upload pipeline, the interpretation layer's remaining increments and the appointment brief stood still.
 - **Medical protocol:** CBT-I (Q46, Q48, Q55, Q170 and the gate constants) and the injury ledger (Q52, Q111, Q120, the #340 sweep) did not move.
-- **Pattern to say out loud:** a fourth session in a row on the plan's input form and the sync plumbing, and this round was mostly correcting my own first notes against the companion's stores. Two of the three corrections (the trigger, the P1 state) came from a store this repo does not hold. Walk in is where it was.
+- **Pattern to say out loud:** a fifth session in a row on the plan's input form and the sync plumbing, this one mostly rulings and corrections. Two of my own first readings were wrong (the server's trigger, the 00:09Z POST) and were fixed from the companion's stores and a later log read. Walk in is where it was.
 
 **v1-triage of the NOW lanes** (which test each serves; DONE rows are demotion candidates by lane momentum):
-- Phase-change form: save order, placements and slot pickers (#375, #376; Q211, Q212, OWED): **Know** and **Loop**.
+- Phase-change form (#375, #376, #378; Q211 closed, Q212 deferred; OWED the history check only): **Know** and **Loop**.
 - Garmin self-evaluation read (#372, OWED, first live read reported 4 Oct): **Know** and **Loop**.
-- HC sync reliability (#369-#371, #377, Q159, Q202, Q208, Q214, OWED; #370 DONE, #371's overlap proof owed): **See** and **Loop**.
+- HC sync reliability (#369-#371, #377, Q159, Q202, Q208, Q214, OWED; #370 DONE, #371's overlap proof and the Q159 read owed): **See** and **Loop**.
 - Polar sport-id relabel and the H10-vs-Hevy facts (#366-#368, OWED): **Know** and **See**.
 - Source hierarchy (#365, OWED to Luke): **See** and **Know**.
 - HC zones (#364, OWED): **See**, **Know** and **Loop**.
@@ -67,6 +71,6 @@ Provisional until merged: everything in this PR.
 - Session fidelity (#354-#357, G6 OWED): **Loop** and **Know**.
 - Injury clearance (OWED): **Know** and **Walk in**.
 - Lab upload pipeline, Interpretation layer build, Appointment brief: **Walk in** (the hero consumer; unstarted).
-- HR input layer per second (Q213), the instrument datasheets brief and the `review_by` fixtures watch row (LATER): no v1 test; **See** if built, off the v1 path.
+- The #378 build (NEXT), HR input layer per second (Q213), the instrument datasheets brief and the `review_by` fixtures watch row (LATER): no v1 test; **Loop** for the #378 build.
 - Cross-repo shared-block rows: no v1 test; pinned in NOW by #112 as the canonical home of cross-repo debt, so they stay.
 - DONE rows still sitting in NOW with no remaining work (#339 tag seed, #219 nap attribution, #213 PM-offer trigger, #342 typed-constraint G6, #362 Garmin repair): **serve no test now; demotion candidates**, surfaced here rather than left to ride.
