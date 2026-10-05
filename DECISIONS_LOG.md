@@ -13366,3 +13366,27 @@ Recorded now; **the build is not scheduled**, and it may share one brief with #3
 **Do not revisit unless.** The mark or palette changes (a new decision, with new masters), or the worker is ever asked to cache anything beyond the shell (then the exclusion of API responses needs its own ruling).
 
 ---
+
+### 383. An HRmax correction from better evidence is a restatement and applies retroactively, with the prior value and the reason kept; a value that genuinely changes with fitness is a dated change and applies forward only
+
+**Decision.** Ruled by the operator on 5 Oct 2026, as an amendment to the Polar-parity ruling (item 2), in session `hc-zones-verify`.
+1. **A `user_hrmax` correction from better evidence is a RESTATEMENT.** HRmax is quasi-fixed physiologically, so a later, higher observation is evidence about the past maximum too. It applies retroactively, and the prior value and the reason are kept in history.
+2. **Forward-only application is wrong for it.** It would put a spurious step into the load trend and the ACWR at the switch date.
+3. **A dated change stays forward-only.** `effective_from` applying from its date forward remains correct for a value that genuinely changes with fitness.
+4. **The corrective path (the operator's 2b) must tell the two apart:** a restatement (same physiology, better evidence) versus a dated change. Its design is owed. It is not built here, and no HRmax value was changed.
+
+**Rationale.** #364's R2 gave one rule for every new value: a new row, then a recompute, never an edit. This ruling says the rule needs a second kind of row. The reasons in 1 and 2 are the operator's.
+
+**What the current table can and cannot say** (read on master `2236cd4`; Code's finding, not a ruling).
+- *Reach is expressible.* `hr_zones.hrmax_in_force` (`hr_zones.py:74-82`) takes the entry with the greatest `effective_from` on or before the session date, and `hc_zone_enrich` recomputes every HC row on every run (#364 call 6), so a row dated early enough reflows history.
+- *A restatement cannot be appended at the seed's own date.* The seed (`user_hrmax` id 1) sits at 2026-03-01, user 1's earliest session date, and `uq_user_hrmax_effective` plus `set_hrmax` (`test_a_duplicate_key_is_refused_and_the_existing_row_is_untouched`) both refuse a second row on that key. A restatement dated after 2026-03-01 leaves the span between at the old value, which is forward-only in effect.
+- *Nothing on a row says whether it restates or changes.* The columns are `effective_from`, `hrmax_bpm`, `provenance` (`tested` or `observed`) and `note`. "The prior value and the reason kept in history" is a convention on `note` today, not a field. Naming a row as a restatement, and how the resolver ranks it against a dated row, is a schema change (Likely), so a hold under CLAUDE.md § Merge disposition.
+- *A restatement reflows HC rows only.* Polar rows keep the zones Polar computed under its own limits (Q198), so the step the ruling guards against could reappear at the HC and Polar boundary of the series. The design has to say what that boundary does.
+
+**Status.** Recorded 5 Oct 2026. Not built: no `user_hrmax` row written, no recompute, HRmax 173 stands. Whether the value should change at all (the Polar-parity outcome, and the `s0_polar_read.py --mode zones` read) is separate and stays OWED to the operator. Q216 (heart-rate reserve) was filed with this ruling, OPEN. Numbers resolved at master max #382 / Q215 (`2236cd4`).
+
+**How you know.** The operator's ruling in chat, 5 Oct 2026, in the terms above. The code reads cited above, on master `2236cd4`. The seed row, read from prod by the operator on 5 Oct 2026 (psql): id 1, user 1, effective 2026-03-01, 173, `observed`, `created_at` 2026-10-01 07:49:05Z; and `min(session_date)` for user 1 is 2026-03-01. The duplicate-key refusal is pinned by the test named above; a restatement design that needs a second row at that date has not been run.
+
+**Do not revisit unless.** The corrective-path design finds no observable that separates a restatement from a dated change (the operator re-rules the distinction), or Q216 moves zoning to heart-rate reserve (which changes what a restatement restates).
+
+---

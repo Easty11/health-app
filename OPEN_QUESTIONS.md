@@ -3058,6 +3058,24 @@ Raised 5 Oct 2026 (a duplicate session's finding, verified here against both rep
 
 ---
 
+## Q216. Should HC zoning move to heart-rate reserve (Karvonen: resting HR to HRmax), so zones adapt forward with fitness through resting HR?
+
+Raised 5 Oct 2026 (operator, with #383). The platform's zones are %HRmax: `hr_zones.BAND_PCT` 50/60/70/80/90 of the HRmax in force (#364; SCHEMA.md HR Zone Computation). Garmin already zones by %HRR on the watch (max 180, resting 66, LTHR 157, the LTHR estimated; the context note in #365), and none of that is an input to the app. The proposal: derive HC zones from reserve, so a falling resting HR through fitness moves the zones forward without anyone writing a new HRmax, while HRmax stays a quasi-fixed constant that is restated, not dated (#383).
+
+**What a reserve model needs, checked on master `2236cd4`.**
+- **A resting-HR input the app does not have.** `health_connect_syncs.resting_heart_rate` is the day's median of every HR sample, not a resting value (Q200), so it cannot be the input. Q200's own "derive a true resting value" from `hr_samples` is the candidate, and it is untested. SCHEMA.md forbids age-predicted values, so a resting HR would have to be measured.
+- **A dated resting-HR store** the way HRmax has `user_hrmax`, or a rolling derivation; which, and what a row before the first value does, is open (an unseeded user reads `no_hrmax` today; the equivalent state would be a new reason in the closed set).
+- **The band edges.** Karvonen's target is resting HR plus a percentage of (HRmax minus resting HR). Whether the platform keeps 50/60/70/80/90 of reserve or adopts the edges Garmin uses is open; Garmin's edges are not read anywhere in this repo.
+- **Series effect.** Every HC row's zones would move, and with them the metabolic TRIMP series and the ACWR. The step at the switch is what #383 warns about; a full-history recompute is the only way to avoid one, and it is a series-wide change that needs a ruling.
+- **Comparability.** Polar rows keep Polar's own zones (Q198), so a reserve model for HC rows changes the HC-against-Polar read recorded in the ROADMAP HC zones row, and Q198's re-zoning question moves with it.
+- **Supersession.** SCHEMA.md's HR Zone Computation (`ZONE_BOUNDARIES_PCT_HRMAX`) and #364 R3 would be superseded by a new decision, not edited.
+
+**To decide (Luke).** Whether to move at all; if so the resting-HR source and its provenance, whether it is dated like HRmax, the band edges, and the recompute. Not this session's build.
+
+**State:** OPEN. Not blocking; nothing built. Related: #364, #383, Q198, Q199, Q200.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
