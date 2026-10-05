@@ -13331,3 +13331,20 @@ Recorded now; **the build is not scheduled**, and it may share one brief with #3
 **Do not revisit unless.** A route to a reliable overlap appears (for example a server-side harness that can overlap two requests on Postgres), or a second overlap failure appears on another path (Q208).
 
 ---
+
+### 381. The product's display name is "Pocket EP"; "EP" is a brand, and user-facing copy never states or implies the product is, or is supervised by, an exercise physiologist
+
+**Decision.** Ruled by the operator on 5 Oct 2026 (brief `pocket-ep-rebrand`).
+1. **Display name.** The product is shown to users as **"Pocket EP"**, replacing "Health & Performance".
+2. **Deliberately unchanged.** Repo names (`health-app`, `health-connect-app`), Railway services and their URLs, the connector and backend URLs, package names and DB identifiers. Also out of scope and untouched: icon, manifest and PWA.
+3. **Guardrail.** User-facing copy must not state or imply that the product is, or is supervised by, an exercise physiologist. "EP" is a brand, not a credential claim. This sits beside the existing regulatory line (`FEEDBACK` §1: explain mechanisms, list evidence-ranked levers, stop there).
+
+**Rationale.** The name is a display choice. The infrastructure names are referenced by connectors, OAuth issuer URLs, the generated mobile client and the operator's runbooks, so renaming them costs more than a display change and buys nothing the user sees. The guardrail is recorded with the name because "EP" reads as a professional title to a user who does not know it is a brand, and the product's regulatory position depends on not implying a credential.
+
+**Status.** Landed 5 Oct 2026 with the rebrand commit `5d16882`. Changed: the page title, the Login, Register, Forgot-password and Reset-password headings, the Dashboard hub title, the password-reset email subject and the README title (`frontend/index.html`, `frontend/src/pages/{Login,Register,ForgotPassword,ResetPassword,Dashboard}.jsx`, `backend/routers/password_reset.py`, `README.md`). Left alone by design, for the operator to rule if wanted: the FastAPI title "Health & Performance API" (`backend/main.py:59`; developer-facing in `/docs`, and it is `info.title` in the OpenAPI spec the companion vendors, which this repo cannot see the drift check for); the MCP server name "Health Intelligence" (`backend/mcp_server.py:48`; the connector's own name, and the brief lists the connector as unchanged); the in-app coach's persona line "personal health and performance assistant" (`backend/context_builder.py:2171`; a description of its job, not the product name); "health intelligence platform" as a category phrase (`CLAUDE.md`, `STACK.md`, `SCHEMA.md` title, `FEEDBACK` §1); every historical entry.
+
+**How you know.** Read by Code on master `dee5c1c`: a grep of the tree for `Health (&|&amp;|and) Performance` found eleven hits, and the changed set above is every user-visible one. The frontend suite passes (44 files, 352 tests); no test pinned any of the old strings. The `PLATFORM.md` the brief names does not exist in this tree (no tracked file by that name); it is not edited. Not verified: the companion repo (`health-connect-app` is not in this tree or this session's scope), the served bundle after deploy (#121 check owed once Railway settles), and any copy held outside the repo (project knowledge, the Resend dashboard template, the Railway frontend's own settings).
+
+**Do not revisit unless.** The brand changes again, or a user-facing surface turns up that implies a credential (then the copy changes, not the name).
+
+---
