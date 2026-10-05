@@ -48,7 +48,7 @@ def _send_reset_email(to_email: str, token: str) -> None:
     resend.Emails.send({
         "from": from_email,
         "to": to_email,
-        "subject": "Reset your Health & Performance password",
+        "subject": "Reset your Pocket EP password",
         "html": f"""
             <p>Hi,</p>
             <p>We received a request to reset your password.</p>

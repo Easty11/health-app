@@ -1,4 +1,4 @@
-# Health & Performance Platform
+# Pocket EP
 
 A multi-user health and performance platform that aggregates data from multiple sources and surfaces insights via a Claude AI layer.
 
