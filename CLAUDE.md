@@ -126,14 +126,14 @@ OPEN · OWED · DONE → #N, under the label `**State:**`.
 - Branch disposition by patch-id, never SHA: `git cherry origin/master <branch>`
   (`-` delete, `+` real work). Alias `stale` is global; each repo defines its own `land`
   locally and documents its fresh-clone setup below END SHARED LOOP RULES.
-- One branch per concern, concern-named. `claude/<hash>` auto-names banned for
-  in-flight work.
+- One branch per concern. Harness-assigned names (`claude/<hash>`) are accepted; the PR title
+  and the `BRANCHES.md` row carry the meaning, not the branch name.
 - **Severity gate on review:** raise as a gate only defects that change an outcome,
   corrupt data, leak a secret, or block the next step. Cosmetic, consistency, and
   wording defects batch into a single trailing "nits" note — never a reason to withhold
   a green-light or halt a land.
-- **Governance batching:** at most one `gov(...)` commit per session, at close-out.
-  Governance edits never interleave with feature work mid-session.
+- **Governance batching:** one `gov(...)` commit per landed ruling, written when that ruling
+  lands (not one per session). Governance edits never interleave with feature work mid-session.
 - Full corrections live in `FEEDBACK.md`; full history in `DECISIONS_LOG.md` and
   `FEEDBACK_ARCHIVE.md`. This file points at them; it does not duplicate them.
 
@@ -284,7 +284,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **User 1's HRmax is ruled to be 175, superseding #384's 177, and the restatement path with the `adjusted` provenance is built on a PR held for operator release (#385); applying 175 is owed after release.** Schema migration, held - Handoff: `closeout.md`.
+- **User 1's HRmax is ruled to be 175 (#385) and the restatement path with the `adjusted` provenance is landed, apply owed; v1 test 3 (Walk in) is met and reframed (#386); harness branch names are accepted and `gov(...)` commits are one per landed ruling (#387).** Schema migration, released - Handoff: `closeout.md`.
 
 - **User 1's HRmax is ruled to change to 177 as a retroactive restatement with the bands unchanged (#384); the corrective-path design is owed as its own proposal for release, and `s0_polar_read.py` is retired as owed.** Governance only - Handoff: `closeout.md`.
 

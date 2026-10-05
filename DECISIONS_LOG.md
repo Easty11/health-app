@@ -13464,3 +13464,21 @@ Recorded now; **the build is not scheduled**, and it may share one brief with #3
 **Do not revisit unless.** The reconcile leg is built and shows that the transcript, not the AI summary, cannot be the source (the operator re-rules the leg); or a v1 test is re-opened by a new steer (a new decision, superseding #275 again).
 
 ---
+
+### 387. Harness-assigned branch names are accepted, and the governance-commit limit is one per landed ruling, not one per session
+
+**Decision.** Ruled by the operator on 5 Oct 2026, session `hrmax-restatement`. Two edits to the shared loop rules in `CLAUDE.md`:
+1. **Branch names.** The ban on `claude/<hash>` auto-names for in-flight work is dropped. Harness-assigned names are accepted; the PR title and the `BRANCHES.md` row carry the meaning, not the branch name. "One branch per concern" stays.
+2. **Governance commits.** "At most one `gov(...)` commit per session, at close-out" becomes one `gov(...)` commit per landed ruling. The sentence that governance edits never interleave with feature work mid-session is kept.
+
+The lines as they now read in `CLAUDE.md`: "One branch per concern. Harness-assigned names (`claude/<hash>`) are accepted; the PR title and the `BRANCHES.md` row carry the meaning, not the branch name." and "**Governance batching:** one `gov(...)` commit per landed ruling, written when that ruling lands (not one per session). Governance edits never interleave with feature work mid-session." The clause "written when that ruling lands" is Code's wording for the operator's "per landed ruling", because a ruling can arrive after a close-out; the operator can tighten it.
+
+**Rationale.** The operator's, and the record agrees: 56 `BRANCHES.md` rows already keep a harness-assigned name "per the harness instruction", the ban was overridden in practice more often than it was kept, and a session whose rulings arrived after each landing disclosed the extra `gov(...)` commits every time (#383 and #384 went in three).
+
+**Status.** Landed with PR #331 (edits to `CLAUDE.md` only). **Both lines are in the shared block, so propagation to `health-connect-app` is OWED** (a ROADMAP NOW row; verbatim, grammar check first, then re-verify the byte-identical SHA). Until then the two repos' shared blocks differ. Numbers resolved at master max #384 / Q216 (`98b8f8b`).
+
+**How you know.** The operator's ruling in chat, 5 Oct 2026. Counts read on `98b8f8b` plus this branch: `grep -c "harness-assigned" BRANCHES.md` = 56 rows, 111 `claude/` rows. The whole-repo anchored grep for the two superseded phrasings (FEEDBACK §35), outside the append-only stores, finds only the two `CLAUDE.md` lines now replaced; no hook or script enforces either rule (`.githooks/` and `scripts/check_governance_placeholders.py` name neither). Not checked: `health-connect-app`'s copy, which is another repo.
+
+**Do not revisit unless.** A harness-assigned name causes a branch to be mistaken for another concern's (a mis-landed or mis-deleted branch), or per-ruling `gov(...)` commits fragment a close-out until it cannot be read.
+
+---
