@@ -272,6 +272,11 @@ self-merge on green under § Merge disposition.
   `/app`, not `/app/backend`. The `load_events` window column is `load_window` (migration
   `1341a2cf6938`, #246), not `window`: the rename took it off the Postgres reserved word, so hand
   queries use `load_window` unquoted. Windows psql needs `\encoding UTF8` for session titles to render.
+- **Operator scripts and psql, from the prod container.** `railway run` cannot run an operator script: the
+  database host is a private hostname, and a directory linked to the frontend service has no `DATABASE_URL`.
+  The recipe is `railway ssh --service health-app-backend`, then from `/app`
+  `/opt/venv/bin/python -m scripts.<name>` (the container's bare `python` lacks the app's packages). psql via
+  `railway connect` needs `PGCLIENTENCODING=UTF8` set first, or non-ASCII text (session titles) breaks.
 
 ### Recent landings
 
@@ -279,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Three phase-machinery questions are filed (Q211 direct open and quota, Q212 posture carried on a Move, Q213 the per-second HR input layer), and the 4-5 Oct sync and Garmin read evidence is recorded; the HC scheduled-sync fix is not confirmed.** Governance plus a test-only date fix, no schema - Handoff: `closeout.md`.
+
 - **Q210 is ruled (a): sport groups are counted with activity slots, one metabolic slot takes the remainder, and load accrues for every device session (#376); the phase form's placement trap, history read and kind hints are fixed.** Code plus governance, no schema - Handoff: `closeout.md`.
 
 - **The phase-change save now validates the whole write before it creates a Hevy folder, and step 4's capacity and load_window names are pickers (#375); the several-metabolic-slots question is filed (Q210).** Code plus governance, no schema - Handoff: `closeout.md`.
-
-- **The Garmin per-activity self-evaluation read is built, read-only and insert-only, inside the Garmin sweep (#372); the srpe-floor rulings are recorded (#373, #374); Q209 is closed, and the migration is released and landed (PR #309).** Code plus governance, one migration - Handoff: `closeout.md`.
 
 ---
 

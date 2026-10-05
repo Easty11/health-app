@@ -2349,6 +2349,15 @@ Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). H
 
 **Garmin activity read built for self-evaluation only (4 Oct 2026, #372).** The read-only Garmin activity read now exists, scoped to perceived effort and feel (Q209, landed via PR #309). It does NOT read in-activity HR: the HR read stays a separate candidate for the lag measured above, still unbuilt and unruled.
 
+**First live self-evaluation read (4 Oct 2026, #372; operator-reported, not read by Code).** Five rated activities linked to Health Connect rows 86, 87, 89, 93 and 99, and four unrated marker rows. The 1 Oct run was captured at RPE 6: the operator revised it in Garmin before the first read (it was 4 at save), so the stored value is the revised one, read once. Garmin prompts RPE and feel separately, so "rated" means RPE present and feel is optional. Health Connect row 94 (1 Oct 22:29, "Other Workout") is a Garmin breathwork activity. The nightly sweep's "unrated 22" in the startup log is summed over users 1 and 4, so it is not compared with the four rows here.
+
+**Scheduled-sync evidence (5 Oct 2026, Code, Railway HTTP log; #370 stays OWED, this does not confirm it).** The operator saw HRV and sleep update overnight 4 to 5 Oct with no manual sync, on build `e3e2333`. What the log shows:
+- *HRV is not phone evidence.* It reaches the app by the server-side Garmin sweep (`garmin sweep: user 1 OK`, 16:00:26Z = 02:00 Brisbane on 5 Oct) and by the web app's own `POST /integrations/garmin/refresh` on open (`useRecoveryRefresh.js`; 20:56Z and 23:49Z, 06:56 and 09:49 Brisbane). Neither involves the phone's scheduled sync, so an updated HRV says nothing about it.
+- *Sleep is the phone's* (HC `SleepSession` through `POST /health-connect/sync`). Phone POSTs since 4 Oct 14:00 Brisbane: 06:04Z (10.5 s), 12:08Z (237 s), 18:09Z (8.5 s, 04:09 Brisbane on 5 Oct), all 200; none since, as of 00:14Z on 5 Oct. About 6 hours apart (Likely a scheduled cadence). The pre-fix empty background POSTs took 40 and 42 ms (2 Oct 18:50Z, 3 Oct 00:51Z), so 8.5 s means the 18:09Z POST carried data.
+- *The server cannot say what triggered a POST.* The payload carries `client` and `fetchMeta` and no trigger, the user agent is `okhttp/4.9.2` on all of them, and the deploy log holds only the access line. So scheduled versus app-open cannot be read from the logs. Data-carrying POSTs also come from app-open (3 Oct 19:48Z, 12.6 s).
+- *Open points.* A sleep that ended after 04:09 Brisbane cannot be in the 18:09Z POST, and no POST followed it, so the sleep's end time against 04:09 decides whether it arrived by that POST. The row that settles the build and the read is the `health_connect_sync_events` row for 18:09:30Z: `git_sha` (is it `e3e2333`), `period_days`, and `fetch_meta` (hr received above 0 and no "not initialized" error, as on events 59 and 60). The operator knows whether the app was open at 04:09.
+- *A suggestion for the P1 brief, not ruled:* a `client.trigger` label (background or manual) in the payload would make this readable; today it is inferred.
+
 **State:** OPEN. Owner: Luke. Not blocking. Related: #369, #370, Q202, Q203, Q207.
 
 ---
@@ -2981,6 +2990,54 @@ Raised 4 Oct 2026 with #371, which fixed the `record_sources` race (PR #305). Th
 Code's lean, not a ruling: (a), as the one change that closes the whole class, and (c) alongside P1 (#370).
 
 **State:** OPEN. Owner: Luke. Not blocking. Related: #371, #370, Q207.
+
+---
+
+## Q211. Direct "Open a new phase" creates a phase with no microcycle: should it require one, carry the prior one, or warn on save?
+
+Raised 5 Oct 2026 (operator, from the 4 Oct real use). Advanced -> "Open a new phase" opened `aerobic base` with a name, posture, capacities and a review date and no microcycle, so it had no quota; only Review / change phase walks the quota step. The operator fixed it by re-running Review / change. Filed as a design question, not a defect fix.
+
+**Verified on master `21839a4`.**
+- **The backend allows it by design.** `validate_training_phase` treats `microcycle` and `capacities` as optional (`engine/training_phase.py:280-297`), and `PhaseIn.microcycle` defaults to None (`routers/training_phase.py:55`). `POST /engine/phase` calls `open_phase` with no quota step (`:69-81`).
+- **The form sends one only if asked.** `PhaseForm.jsx` adds `microcycle` to the body only when the Advanced JSON box is filled (`if (micro.value !== undefined)`).
+- **What a no-microcycle phase does.** The resolver falls back to the weekly template (`tests/test_resolver.py:272`, `window.source == "weekly"`), or a null window with no template. So the quota silently becomes the weekly one; nothing says so.
+- **It does close the prior phase.** Direct open and the wizard both go through `_apply_open_phase`, which sets `closed_on = new.entered_on` and a reason on the open row in the same transaction (`engine/training_phase.py:428-436`; pinned by `test_opening_a_second_closes_the_first_in_one_txn`, `tests/test_training_phase.py:134`). So by the code the direct open did NOT fail to close decompression. The empty history on 4 Oct was the read-shape bug (#314), not a missing closure. **What prod holds is not read** (Code has no database access); the read is owed, ROADMAP row 39.
+- **The wizard already has a "carry" form:** it prefills every slot from the outgoing microcycle, each editable, none silently applied (`PhaseTransitionFlow.jsx:125`).
+
+**Options (not decided).** (a) Require a microcycle on direct open (422 without). Forbids a state the resolver's weekly fallback exists to serve. (b) Carry the prior phase's microcycle onto the new row at direct open. The new phase silently inherits the old phase's quota, the same stale-default shape as Q212. (c) Warn on save and keep allowing none; the warning names the weekly fallback. (d) Remove the direct path and leave the wizard as the one way in; this loses the escape hatch and the review-date-only phase.
+
+**To decide (Luke).** Which option. Code's lean, not a ruling: (c), because a phase with no microcycle is a state the resolver supports, and (b) is a silent default.
+
+**State:** OPEN. Owner: Luke. Not blocking. Related: #276, #317, #375, Q210 (closed), Q212.
+
+---
+
+## Q212. A Move to a new phase seeds the posture, label, intent and slots from the outgoing phase: should posture carry over?
+
+Raised 5 Oct 2026 (operator observation, 5 Oct: "recovery vehicles ranked first" under the phase `aerobic base`). Report first; nothing is changed until ruled.
+
+**Source of the note, verified on master `21839a4`.**
+- The note is emitted only when the OPEN phase's stored `probe_posture` is `suppressed` (`engine/selection.py:578-581`, `:687-691`). So by the code the open `aerobic base` row carries `suppressed`. It is not derived from the label: no backend code branches on a phase label, and there is no default for an unmatched name.
+- `suppressed` does more than re-rank vehicles. It forces probe budget 0 and mode fortify and drops the probe block (`selection.py:695-700`, `:737`), so a posture carried by mistake also silences probing.
+- **Where the value comes from, by path.** The wizard seeds `label`, `intent` and `probe_posture` from the current phase (`PhaseTransitionFlow.jsx:118-123`), so a Move keeps the outgoing posture unless the operator toggles it. The direct form has no default and refuses submit until one is chosen (`PhaseForm.jsx:22`, `canSubmit`). **Which one set it on 4 Oct is not read:** it depends on the row's `probe_posture` in the ledger, per row, which is owed (ROADMAP row 39).
+
+**Question.** On a Move, should the new phase's posture be (a) seeded from the outgoing phase (today), (b) defaulted to `held`, or (c) left unset so the operator must choose, as the direct form does? Slots are seeded on purpose and marked as a prefill (F6); a posture is a quieter default with a bigger effect.
+
+**State:** OPEN. Owner: Luke. Not blocking, but while the row reads `suppressed` the coach output is recovery-first with the probe off. Related: #317, #375, Q211.
+
+---
+
+## Q213. The HR input layer, per second: Edwards retained, source precedence, bounded gap interpolation, and the sRPE floor
+
+Raised 5 Oct 2026 (operator; carried from the 1-4 Oct close-out). **Not drafted; nothing built; this records the design direction the operator named, not a ruling.** The direction: Edwards TRIMP stays the load measure; a per-second source precedence (which source's samples win where several cover one bout); bounded gap interpolation; and the sRPE floor (Q202) as the fallback when no usable device HR exists.
+
+**It waits on Polar per-second ingest.** Polar rows are zone-seconds only today, so the layer has no per-second Polar input (Q10: AccessLink per-second ingest, pathway specified in #46, not built; Q198: the v4 `samples` feature is untested). Health Connect rows already keep every posted sample (`hr_samples`).
+
+**Where the pieces already sit.** Source ranking (#365, Q201, Q203); the sRPE floor and its capture (Q202, Q209 closed, Q189); the whole-session overlap with Hevy (Q206). Zoning credits at most `hr_zones.MAX_SAMPLE_GAP_S` (60 s) per gap, the gap bound Q206 records; whether another exists was not searched for.
+
+**To decide (Luke).** When to draft, and whether it is one brief or follows Q10's trigger. A related brief, instrument datasheets, is not drafted either (ROADMAP LATER).
+
+**State:** OPEN. Owner: Luke. Not blocking; waits on Q10. Related: Q10, Q198, Q201, Q202, Q203, Q189, Q206.
 
 ---
 
