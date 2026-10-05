@@ -2358,6 +2358,18 @@ Unblocked 22 Sep. HR coverage confirmed via `record_sources` (HCA Q22 closed). H
 - *Open points, settled by #377.* The sync-event rows for the POSTs after 12:00Z are ids 66-68 (operator read): build `52f9d4d`, `period_days` 30, no error, heart rate 29.4-29.6k received, `hrv` 0. The newest sleep record is 2026-10-03T14:44:45Z in row 67 (04:09 Brisbane) and 2026-10-04T13:54:37Z in row 68 (10:09), which is consistent with the night's sleep arriving in the later POST, not the 04:09 one.
 - *P1 is built and device-confirmed (#377).* The companion's PR #64 (merge `e3e2333`) initialises Health Connect in the background task, returns `ok:false` on an all-failed fetch, and widens the scheduled window from 7 to 30 days. Sync events 66-68, on build `52f9d4d` (a descendant of `e3e2333`), show it reading with no error (operator read, 5 Oct). The acceptance criterion is amended to "a build containing `e3e2333`". #371's overlap proof stays owed.
 
+**Read owed (5 Oct 2026, operator): has the 30-day Health Connect window delivered the Garmin in-activity HR for the 1 Oct run?** Code has no database route. Notes before it is run:
+- *The receipt count cannot answer it.* Sync events 66-68 show heartRate received 29,475, 29,357 and 29,569 (#377). The window slides, so old days leave as new ones arrive: the count fell from 66 to 67 and rose from 67 to 68 with no change in the 1 Oct run.
+- *Expected timing.* Garmin writes in-activity HR about 7 days after the session (#369; the 26 Sep Pilates arrived about 3 Oct). For a 1 Oct session that is about 8 Oct, so a read on 5 Oct is expected to show passive samples only (Likely): read it on or after 9 Oct. What the 30-day window changes is whether a write later than 7 days is still picked up, which a session this young cannot show.
+- *A test that can be run now.* A session older than 7 days with no in-activity HR: the same read with `WHERE ... id IN (69, 85, 92)` in place of the time predicate (the rows named in Q207's first read). In-activity samples appearing there after the 30-day scheduled runs would be the window working.
+- *Reading the result.* A Garmin writer with a median gap of 7-16 s (in activity, Q198) on an arrival day after the late write is recovered; only 120 s gaps (passive) is not yet. `arrived_on` is the Brisbane day each sample first reached `hr_samples` (`created_at`, insert-once).
+
+Parser-checked with `pglast` 8.5 and against `SCHEMA.md`; not run:
+
+    WITH s AS (SELECT id AS sid, sport_name, source_package AS session_pkg, start_time AS st, stop_time AS sp FROM aerobic_sessions WHERE user_id = 1 AND source = 'health_connect' AND start_time >= TIMESTAMPTZ '2026-09-30 14:00:00+00' AND start_time < TIMESTAMPTZ '2026-10-01 14:00:00+00'), g AS (SELECT s.sid, h.source_package AS hr_pkg, h.sample_time, h.created_at, h.sample_time - lag(h.sample_time) OVER (PARTITION BY s.sid, h.source_package ORDER BY h.sample_time) AS gap FROM s JOIN hr_samples h ON h.user_id = 1 AND h.sample_time >= s.st AND h.sample_time <= s.sp) SELECT s.sid, s.sport_name, s.session_pkg, round(extract(epoch FROM (s.sp - s.st)) / 60.0, 1) AS dur_min, g.hr_pkg, (g.created_at AT TIME ZONE 'Australia/Brisbane')::date AS arrived_on, count(g.sample_time) AS n_samples, round(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM g.gap))::numeric, 1) AS median_gap_s, round(max(extract(epoch FROM g.gap))::numeric, 0) AS max_gap_s FROM s LEFT JOIN g ON g.sid = s.sid GROUP BY s.sid, s.sport_name, s.session_pkg, s.st, s.sp, g.hr_pkg, 6 ORDER BY s.sid, g.hr_pkg, 6;
+
+The window `[2026-09-30 14:00Z, 2026-10-01 14:00Z)` is 1 Oct in Brisbane, so it returns every session that day (the run, and the 22:29 "Other Workout" that is Garmin breathwork).
+
 **State:** OPEN. Owner: Luke. Not blocking. Related: #369, #370, Q202, Q203, Q207.
 
 ---
@@ -2993,26 +3005,6 @@ Code's lean, not a ruling: (a), as the one change that closes the whole class, a
 
 ---
 
-## Q211. Direct "Open a new phase" creates a phase with no microcycle: should it require one, carry the prior one, or warn on save?
-
-Raised 5 Oct 2026 (operator, from the 4 Oct real use). Advanced -> "Open a new phase" opened `aerobic base` with a name, posture, capacities and a review date and no microcycle, so it had no quota; only Review / change phase walks the quota step. The operator fixed it by re-running Review / change. Filed as a design question, not a defect fix.
-
-**Verified on master `21839a4`.**
-- **The backend allows it by design.** `validate_training_phase` treats `microcycle` and `capacities` as optional (`engine/training_phase.py:280-297`), and `PhaseIn.microcycle` defaults to None (`routers/training_phase.py:55`). `POST /engine/phase` calls `open_phase` with no quota step (`:69-81`).
-- **The form sends one only if asked.** `PhaseForm.jsx` adds `microcycle` to the body only when the Advanced JSON box is filled (`if (micro.value !== undefined)`).
-- **What a no-microcycle phase does.** The resolver falls back to the weekly template (`tests/test_resolver.py:272`, `window.source == "weekly"`), or a null window with no template. So the quota silently becomes the weekly one; nothing says so.
-- **It does close the prior phase.** Direct open and the wizard both go through `_apply_open_phase`, which sets `closed_on = new.entered_on` and a reason on the open row in the same transaction (`engine/training_phase.py:428-436`; pinned by `test_opening_a_second_closes_the_first_in_one_txn`, `tests/test_training_phase.py:134`). So by the code the direct open did NOT fail to close decompression. The empty history on 4 Oct was the read-shape bug (#314), not a missing closure. **What prod holds is not read** (Code has no database access); the read is owed, ROADMAP row 39.
-- **The wizard already has a "carry" form:** it prefills every slot from the outgoing microcycle, each editable, none silently applied (`PhaseTransitionFlow.jsx:125`).
-- **The direct path is kept on purpose, for now.** `PhaseCard.jsx:15-17`: it stays mounted "until the 8-step flow has completed one real transition in prod" and is to be removed in a later PR "once the flow is confirmed". By the operator's 4 Oct report that condition is met (a real transition was saved through the wizard), so option (d) is the removal the code already plans. That is not a ruling.
-
-**Options (not decided).** (a) Require a microcycle on direct open (422 without). Forbids a state the resolver's weekly fallback exists to serve. (b) Carry the prior phase's microcycle onto the new row at direct open. The new phase silently inherits the old phase's quota, the same stale-default shape as Q212. (c) Warn on save and keep allowing none; the warning names the weekly fallback. (d) Remove the direct path and leave the wizard as the one way in; this loses the escape hatch and the review-date-only phase.
-
-**To decide (Luke).** Which option. Code's lean, not a ruling: (c), because a phase with no microcycle is a state the resolver supports, and (b) is a silent default. (d) needs no new design, since the comment above already schedules it; the cost is the escape hatch.
-
-**State:** OPEN. Owner: Luke. Not blocking. Related: #276, #317, #375, Q210 (closed), Q212.
-
----
-
 ## Q212. A Move to a new phase seeds the posture, label, intent and slots from the outgoing phase: should posture carry over?
 
 Raised 5 Oct 2026 (operator observation, 5 Oct: "recovery vehicles ranked first" under the phase `aerobic base`). Report first; nothing is changed until ruled.
@@ -3026,7 +3018,11 @@ Raised 5 Oct 2026 (operator observation, 5 Oct: "recovery vehicles ranked first"
 
 **If the three behaviours should come apart** (a separate question from the seeding, raised by the same observation). Options: (i) a third posture value. `training_phases` has a database `CHECK` on `probe_posture IN ('suppressed','held')` (`models.py:1107`, `ck_training_phase_probe_posture`), so this is a migration (held) plus the validator constant (`engine/training_phase.py:62`). (ii) A separate per-phase ranking field: a new column, also a migration. (iii) Drop the phase from the re-rank triggers, leaving readiness and life-load; no schema, but it changes decompression, whose re-rank the T2 tests pin (`tests/test_training_phase.py:478-513`). Code's lean, not a ruling: none yet; fix the seeding first (a)-(c) and see whether the coupling ever bites.
 
-**State:** OPEN. Owner: Luke. Not blocking, but while the row reads `suppressed` the coach output is recovery-first with the probe off. Related: #317, #375, Q211.
+**Evidence (operator, 5 Oct 2026).** `suppressed` on `aerobic base` is intended: the operator chose it to stop probes while run, sprint and VO2 work all start. They want probe-off WITHOUT the recovery-first ranking, which is the case for separating the three behaviours (the options above), and they did not choose the ranking.
+
+**Ruling (operator, 5 Oct 2026).** Deferred to the aerobic base review (16 Nov 2026). `suppressed` stays, and the recovery-first ranking is accepted for this phase. No change is made. Whether to separate the behaviours, and whether a Move should seed posture from the outgoing phase, are decided at that review.
+
+**State:** OWED. Loop-close: the aerobic base review (16 Nov 2026) decides the separation (the options above) and the seeding (a)-(c). Owner: Luke. Not blocking. Related: #317, #375, #378, Q211 (closed).
 
 ---
 
@@ -5909,5 +5905,27 @@ Raised 4 Oct 2026 (operator, from the first real phase-change save). The phase n
 **Resolution (4 Oct 2026, #376).** Option (a), ruled by the operator: per-category counts through activity slots (they claim first); one metabolic `load_window` slot sized to the remainder; load accrues for every device session whichever slot counts it. No validator or resolver change; (b) is not built.
 
 **State:** `DONE → #376`.
+
+---
+
+## Q211. Direct "Open a new phase" creates a phase with no microcycle: should it require one, carry the prior one, or warn on save?
+
+Raised 5 Oct 2026 (operator, from the 4 Oct real use). Advanced -> "Open a new phase" opened `aerobic base` with a name, posture, capacities and a review date and no microcycle, so it had no quota; only Review / change phase walks the quota step. The operator fixed it by re-running Review / change. Filed as a design question, not a defect fix.
+
+**Verified on master `21839a4`.**
+- **The backend allows it by design.** `validate_training_phase` treats `microcycle` and `capacities` as optional (`engine/training_phase.py:280-297`), and `PhaseIn.microcycle` defaults to None (`routers/training_phase.py:55`). `POST /engine/phase` calls `open_phase` with no quota step (`:69-81`).
+- **The form sends one only if asked.** `PhaseForm.jsx` adds `microcycle` to the body only when the Advanced JSON box is filled (`if (micro.value !== undefined)`).
+- **What a no-microcycle phase does.** The resolver falls back to the weekly template (`tests/test_resolver.py:272`, `window.source == "weekly"`), or a null window with no template. So the quota silently becomes the weekly one; nothing says so.
+- **It does close the prior phase.** Direct open and the wizard both go through `_apply_open_phase`, which sets `closed_on = new.entered_on` and a reason on the open row in the same transaction (`engine/training_phase.py:428-436`; pinned by `test_opening_a_second_closes_the_first_in_one_txn`, `tests/test_training_phase.py:134`). So by the code the direct open did NOT fail to close decompression. The empty history on 4 Oct was the read-shape bug (#314), not a missing closure. **What prod holds is not read** (Code has no database access); the read is owed, ROADMAP row 39.
+- **The wizard already has a "carry" form:** it prefills every slot from the outgoing microcycle, each editable, none silently applied (`PhaseTransitionFlow.jsx:125`).
+- **The direct path is kept on purpose, for now.** `PhaseCard.jsx:15-17`: it stays mounted "until the 8-step flow has completed one real transition in prod" and is to be removed in a later PR "once the flow is confirmed". By the operator's 4 Oct report that condition is met (a real transition was saved through the wizard), so option (d) is the removal the code already plans. That is not a ruling.
+
+**Options (not decided).** (a) Require a microcycle on direct open (422 without). Forbids a state the resolver's weekly fallback exists to serve. (b) Carry the prior phase's microcycle onto the new row at direct open. The new phase silently inherits the old phase's quota, the same stale-default shape as Q212. (c) Warn on save and keep allowing none; the warning names the weekly fallback. (d) Remove the direct path and leave the wizard as the one way in; this loses the escape hatch and the review-date-only phase.
+
+**To decide (Luke).** Which option. Code's lean, not a ruling: (c), because a phase with no microcycle is a state the resolver supports, and (b) is a silent default. (d) needs no new design, since the comment above already schedules it; the cost is the escape hatch.
+
+**Resolution (5 Oct 2026, #378).** Option (d), ruled by the operator: the direct-open path is to be removed and Review / change phase is the only phase-entry route. Recorded now; the build is not scheduled. Open, for the build brief: the backend route (its only non-test caller in the tree is `PhaseForm.jsx:98`), the direct close path, and what the wizard can express (#378).
+
+**State:** `DONE → #378`.
 
 ---
