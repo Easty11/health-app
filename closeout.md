@@ -11,7 +11,9 @@ PR 1, a time-critical one-test fix, merged:
 PR 2, the sweep and the pin, on the same branch name restarted from `2fc4f6d` (the harness instruction and #387):
 - `53fe428` `test(dates): test_seed_constraints derives its review date; a pin runs the date-sensitive tests a year ahead` - `tests/test_seed_constraints.py`, `tests/clock_travel.py`, `tests/test_clock_pin.py`, and `time-machine==3.5.1` in `backend/requirements.txt`.
 - `53115f4` `gov(date-fragile-tests): the 15 Oct watch row is DONE; the sweep, its findings and the pin recorded` - ROADMAP, BRANCHES, the CLAUDE.md Recent-landings pointer.
-- The `chore: session close-out` commit carrying this file: its hash is on the branch (a file cannot name its own commit).
+- `b0e2da4` `chore: session close-out` - the first version of this file.
+- `fb4b05a` `test(dates): the pin's literal rule also matches timestamp literals (2026-09-28T05:00:00Z)` - the rule fix described under item 4.
+- A final `chore: session close-out` commit carrying this corrected file: its hash is on the branch (a file cannot name its own commit).
 
 No migration, no schema change, no prod read or write. PR 2 self-merges on green (non-schema; the brief ratified it, no new ruling). **Provisional until merged: everything in PR 2.**
 
