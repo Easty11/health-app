@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The 4 Oct wizard retries left two zero-length same-day ledger rows and a close reason on the wrong row; Q215 files the marker, same-day-supersede and close-reason question, nothing built.** Governance only - Handoff: `closeout.md`.
+
 - **The direct-open path is ruled out (#378, build not scheduled), Q212 is deferred to the aerobic base review, and the Q159 in-activity HR read is owed from about 9 Oct.** Governance only - Handoff: `closeout.md`.
 
 - **The phone's `client.trigger` is filed as dropped by the server (Q214), the HC phone fix (#370) is device-confirmed (#377), and operator-script docstrings give the container recipe.** Governance plus a docstring-only change, no schema - Handoff: `closeout.md`.
-
-- **Three phase-machinery questions are filed (Q211 direct open and quota, Q212 posture carried on a Move, Q213 the per-second HR input layer), and the 4-5 Oct sync and Garmin read evidence is recorded; the HC scheduled-sync fix is not confirmed.** Governance plus a test-only date fix, no schema - Handoff: `closeout.md`.
 
 ---
 
