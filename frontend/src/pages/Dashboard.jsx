@@ -63,7 +63,7 @@ function CheckInButtons() {
 
 export default function Dashboard() {
   return (
-    <HubLayout title="Health &amp; Performance">
+    <HubLayout title="Pocket EP">
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-5">
         <CheckInButtons />
         <AppointmentsDoorway />

@@ -64,7 +64,7 @@ export default function ResetPassword() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Health &amp; Performance</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Pocket EP</h1>
           <p className="text-gray-500 mt-1 text-sm">Choose a new password</p>
         </div>
 
