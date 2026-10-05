@@ -13348,3 +13348,21 @@ Recorded now; **the build is not scheduled**, and it may share one brief with #3
 **Do not revisit unless.** The brand changes again, or a user-facing surface turns up that implies a credential (then the copy changes, not the name).
 
 ---
+
+### 382. The Pocket EP icon is the plate-gauge mark (a weight plate whose rim is a readiness gauge) in a four-colour navy palette, with SVG masters committed under `frontend/public/`; the frontend ships as an installable PWA that precaches the app shell only
+
+**Decision.** Ruled by the operator on 5 Oct 2026 (brief `pocket-ep-pwa`).
+1. **The mark.** A weight plate seen face-on whose rim is a readiness gauge: a track ring, a bright arc for the filled part of the gauge, a plate face and a bore.
+2. **Palette.** `#13294B` (field and bore), `#26467A` (gauge track), `#2F7BEA` (gauge arc), `#DCE8FA` (plate face). The manifest `theme_color` and `background_color` are `#13294B`.
+3. **Masters.** Three SVGs committed under `frontend/public/`: `pocket-ep-icon.svg` (rounded square; also copied to `favicon.svg`), `pocket-ep-maskable.svg` (full-bleed, mark scaled to 0.85 for the safe zone) and `pocket-ep-monochrome.svg` (white on transparent, for themed icons). The PNGs (`icon-192/512`, `maskable-192/512`, `apple-touch-icon-180`, `monochrome-512`) are rendered from them once and committed; the repo carries no renderer and no new runtime dependency.
+4. **PWA.** `vite-plugin-pwa` (a dev dependency) generates `manifest.webmanifest` and a Workbox service worker. Name and short name "Pocket EP", `display: standalone`. Three constraints on the worker: it updates itself on deploy (skip waiting, claim clients, reload the page when the new worker takes control, plus an update check hourly and whenever the tab becomes visible); `runtimeCaching` is empty, so no backend or API response is ever cached; and the precache is the app shell only (hashed bundle, CSS, `index.html`, icons; not the SVG masters).
+
+**Rationale.** Live health data must never be served from a cache, and a stale bundle after a release is the other failure to avoid; the three constraints in 4 are each one of those. The backend is on a different origin from the frontend, so a worker with no runtime route never sees an API request. The icon is committed as masters plus rendered PNGs because the masters are the design and the PNGs are build inputs the plugin only lists; nothing renders at build time, so the build gains no tool.
+
+**Status.** Landed 5 Oct 2026 on `pocket-ep-pwa` (merge SHA resolved at next close-out). Files: `frontend/public/` (3 masters, `favicon.svg`, 6 PNGs), `frontend/vite.config.js`, `frontend/src/pwa.js`, `frontend/src/main.jsx`, `frontend/index.html`, `frontend/package.json` and lockfile. Out of scope and untouched: the companion app's launcher icon, Capacitor.
+
+**How you know.** `vite-plugin-pwa` 2.0.0's declared peer range includes `^8.0.0` (`npm view`), this repo is on Vite 8.0.x, and the build runs with it. Against a production build served by `serve -s dist` in the pre-installed Chromium: the worker registers, activates and controls the page; `Page.getInstallabilityErrors` returns none in a persistent (non-incognito) profile; `manifest.webmanifest` parses with no errors and five icons; the cache holds 13 shell paths and none is an API path. Update path: a real code change rebuilt under a running tab, then `registration.update()`, reloaded the tab onto the new hashed bundle (`index-CI1keljv.js` to `index-DEUBMlZG.js`). A comment-only change does not exercise it (the minifier strips it, so the hash is unchanged). Frontend suite: 44 files, 352 tests. Not verified: the served bundle and live `/manifest.webmanifest` after Railway deploys (#121 check owed; recorded in `BRANCHES.md`), installation in Microsoft Edge on desktop or Android (Chromium's own installability check was used as the proxy), the Android adaptive-icon mask on a device, and the iOS home-screen icon.
+
+**Do not revisit unless.** The mark or palette changes (a new decision, with new masters), or the worker is ever asked to cache anything beyond the shell (then the exclusion of API responses needs its own ruling).
+
+---
