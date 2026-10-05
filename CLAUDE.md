@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **#364 (HC zones) is verified in prod after the seed (17 of 29 HC rows zoned, the 28 Sep elliptical deposits once); the Polar band-edge parity ruling and two local reads are owed to the operator.** Governance only - Handoff: `closeout.md`.
+
 - **Q215 is ruled (keep appending, a derived same-day flag, a wizard review skip, a tests-only pin; #379) with the build shared with #378, and the #371 overlap proof now waits on a natural overlap or a debug control (#380).** Governance only - Handoff: `closeout.md`.
 
 - **The 4 Oct wizard retries left two zero-length same-day ledger rows and a close reason on the wrong row; Q215 files the marker, same-day-supersede and close-reason question, nothing built.** Governance only - Handoff: `closeout.md`.
-
-- **The direct-open path is ruled out (#378, build not scheduled), Q212 is deferred to the aerobic base review, and the Q159 in-activity HR read is owed from about 9 Oct.** Governance only - Handoff: `closeout.md`.
 
 ---
 
