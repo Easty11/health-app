@@ -10,11 +10,11 @@ column (`sport_name`) on the rows the report lists - never `sport_id`, never a r
 the map (those keep what they have; an unknown id is never guessed), never a row with no `sport_id`.
 Idempotent: a second run lists nothing.
 
-Run from backend/ (PowerShell):
+Run inside the container, from /app (`railway ssh --service health-app-backend`; `railway run` cannot, its database host is private):
 
-    railway run python -m scripts.polar_sport_backfill                 # report, all users
-    railway run python -m scripts.polar_sport_backfill --user 1        # report, one user
-    railway run python -m scripts.polar_sport_backfill --apply         # write the listed relabels
+    /opt/venv/bin/python -m scripts.polar_sport_backfill                 # report, all users
+    /opt/venv/bin/python -m scripts.polar_sport_backfill --user 1        # report, one user
+    /opt/venv/bin/python -m scripts.polar_sport_backfill --apply         # write the listed relabels
 
 Two consequences the report flags per row:
   * `class` - the row crosses the non-training line (`sport_classes.NON_TRAINING_SPORTS`: Walking,

@@ -12,8 +12,9 @@ opens `SET TRANSACTION READ ONLY` as a belt over the braces.
 
 Two ways to feed it:
 
-  DB mode (needs DATABASE_URL reachable from where it runs — e.g. `railway run` with the public URL):
-      python -m scripts.arbitration_flip_report [--user N]
+  DB mode (needs DATABASE_URL reachable from where it runs: inside the container, from /app, via
+  `railway ssh --service health-app-backend`; `railway run` injects the private host and cannot reach it):
+      /opt/venv/bin/python -m scripts.arbitration_flip_report [--user N]
 
   CSV mode (needs only the psql route the runbook already uses — `railway connect` to health-app-DB):
       \\copy (SELECT id, user_id, source, source_package, session_date, start_time, stop_time, sport_name,
