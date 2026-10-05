@@ -22,6 +22,7 @@ from auth import get_current_user
 from database import get_db
 from engine import taxonomy
 from engine import training_phase as phase_mod
+from tests.phase_fixtures import open_phase
 from routers import training_phase as tp
 
 TODAY = datetime.now(timezone.utc).date()
@@ -131,7 +132,7 @@ def test_the_second_metabolic_slot_refusal_creates_no_folder(world):
 
 def test_a_schedule_overlap_is_refused_before_the_folder_and_carries_no_orphan_key(world):
     """The structured F17 refusal keeps its shape, and `orphan_folder` is absent: nothing was created."""
-    phase_mod.open_phase(world.db, world.u.id, {**_phase(), "entered_on": PRIOR.isoformat(),
+    open_phase(world.db, world.u.id, {**_phase(), "entered_on": PRIOR.isoformat(),
                                                 "asserted_on": PRIOR.isoformat()})
     tp._stage_upsert_entry(world.u.id, tp.KnowledgeEntryIn(type="schedule_item", key="swim", source="api", value={
         "activity": "swim", "days": ["tuesday"], "hard": False, "expected_load": "moderate",

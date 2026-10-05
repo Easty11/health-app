@@ -3,18 +3,16 @@
 // (QuotaWindow), the #312/#316 week line (scheduled · quota · done + freshness, from GET
 // /engine/week-plan), phase history, and ONE action: Review / change phase — which opens the
 // structured 8-step flow (PhaseTransitionFlow). It replaces the phase portion of ExposurePanel's
-// read surface: the two ad-hoc controls (Open next phase / Close to baseline) and the inline
-// PhaseForm/ClosePhaseDialog are gone from the primary surface — a phase change is the form's single
-// confirmed atomic write now (#317), never two loose buttons.
+// read surface. A phase is entered only through that flow (#378: the direct-open form and its route
+// are gone); a phase change is the form's single confirmed atomic write (#317).
+//
+// END PHASE (#378 R1): closing to baseline is not a phase entry, so it stays as its own small control,
+// "End phase → baseline" (ClosePhaseDialog, POST /engine/phase/close), shown while a phase is open.
 //
 // PLAN OF RECORD (#319, closing the #318 §44 divergence): the macro plan headline + a STALE badge
 // come from GET /engine/plan-of-record, which returns the SAME stale flag the chat section computes
 // (context_builder.plan_of_record_stale — one definition, never re-derived here). Full macro on
 // expand.
-//
-// ADVANCED (#319, item 4): PhaseForm/ClosePhaseDialog are not deleted yet. Until the 8-step flow has
-// completed one real transition in prod, a small "advanced: open / close phase directly" link mounts
-// them, so the direct write paths remain reachable. Removed in a later PR once the flow is confirmed.
 //
 // Same Tailwind vocabulary as the rest of the panel.
 
@@ -22,7 +20,6 @@ import { useEffect, useState } from 'react'
 import api from '../../api'
 import QuotaWindow from './QuotaWindow'
 import PhaseHistory from './PhaseHistory'
-import PhaseForm from './PhaseForm'
 import ClosePhaseDialog from './ClosePhaseDialog'
 
 function Chip({ children, tone = 'gray' }) {
@@ -58,59 +55,25 @@ function planHeadline(macro) {
   return null
 }
 
-// The advanced (direct) open/close controls — the retained PhaseForm/ClosePhaseDialog behind a
-// disclosure. A successful write bubbles onWritten (ExposurePanel refetches) and collapses the panel.
-function AdvancedPhaseControls({ hasOpenPhase, onWritten }) {
+// End the open phase to baseline (#378 R1). Its own control, not under a disclosure: a reason is
+// required (ClosePhaseDialog), and a successful write bubbles onWritten (ExposurePanel refetches).
+function EndPhaseControl({ onWritten }) {
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState(null) // null | 'open' | 'close'
-
-  function written() {
-    setMode(null)
-    setOpen(false)
-    onWritten?.()
+  if (open) {
+    return (
+      <div className="w-full">
+        <ClosePhaseDialog
+          onWritten={() => { setOpen(false); onWritten?.() }}
+          onCancel={() => setOpen(false)}
+        />
+      </div>
+    )
   }
-
   return (
-    <div className="border-t border-gray-100 pt-2">
-      <button
-        type="button"
-        onClick={() => { setOpen((o) => !o); setMode(null) }}
-        aria-expanded={open}
-        className="text-[11px] font-medium text-gray-500 hover:text-gray-700"
-      >
-        {open ? '▾' : '▸'} Advanced · open / close phase directly
-      </button>
-      {open && (
-        <div className="flex flex-col gap-2 mt-2">
-          {mode === null && (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setMode('open')}
-                className="text-xs font-medium text-indigo-600 border border-indigo-200 rounded-full px-3 py-1 hover:bg-indigo-50"
-              >
-                {hasOpenPhase ? 'Open a new phase' : 'Open a phase'}
-              </button>
-              {hasOpenPhase && (
-                <button
-                  type="button"
-                  onClick={() => setMode('close')}
-                  className="text-xs font-medium text-gray-600 border border-gray-300 rounded-full px-3 py-1 hover:bg-gray-50"
-                >
-                  Close to baseline
-                </button>
-              )}
-            </div>
-          )}
-          {mode === 'open' && (
-            <PhaseForm hasOpenPhase={hasOpenPhase} onWritten={written} onCancel={() => setMode(null)} />
-          )}
-          {mode === 'close' && (
-            <ClosePhaseDialog onWritten={written} onCancel={() => setMode(null)} />
-          )}
-        </div>
-      )}
-    </div>
+    <button type="button" onClick={() => setOpen(true)}
+      className="self-start text-xs font-medium text-gray-600 border border-gray-300 rounded-full px-3 py-1 hover:bg-gray-50">
+      End phase → baseline
+    </button>
   )
 }
 
@@ -171,8 +134,7 @@ export default function PhaseCard({ phase, refetchKey = 0, onReviewChange, onWri
   }, [refetchKey])
 
   if (!phase) {
-    // Baseline: no open phase. The primary action opens a first one via the flow; the advanced
-    // disclosure keeps the direct PhaseForm reachable (#319, item 4).
+    // Baseline: no open phase. The one action opens a first phase through the flow.
     return (
       <section className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-2">
         <h3 className="text-sm font-semibold text-gray-900">Training phase</h3>
@@ -182,7 +144,6 @@ export default function PhaseCard({ phase, refetchKey = 0, onReviewChange, onWri
           className="self-start text-xs font-medium text-indigo-600 border border-indigo-200 rounded-full px-3 py-1 hover:bg-indigo-50">
           Open a phase
         </button>
-        <AdvancedPhaseControls hasOpenPhase={false} onWritten={onWritten} />
       </section>
     )
   }
@@ -241,15 +202,16 @@ export default function PhaseCard({ phase, refetchKey = 0, onReviewChange, onWri
         </div>
       )}
 
-      {/* ONE action */}
-      <button type="button" onClick={onReviewChange}
-        className="self-start text-xs font-medium text-indigo-600 border border-indigo-200 rounded-full px-3 py-1 hover:bg-indigo-50 transition-colors">
-        Review / change phase
-      </button>
+      {/* The one way to enter or change a phase; ending to baseline is its own control (R1) */}
+      <div className="flex flex-wrap gap-2 items-start">
+        <button type="button" onClick={onReviewChange}
+          className="self-start text-xs font-medium text-indigo-600 border border-indigo-200 rounded-full px-3 py-1 hover:bg-indigo-50 transition-colors">
+          Review / change phase
+        </button>
+        <EndPhaseControl onWritten={onWritten} />
+      </div>
 
       <PhaseHistory />
-
-      <AdvancedPhaseControls hasOpenPhase onWritten={onWritten} />
     </section>
   )
 }

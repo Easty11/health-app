@@ -11,6 +11,7 @@
 // Plus the standing contract: prefill, the draft-discard notice, the single confirm → onWritten, a
 // string 422 shown verbatim, a new placement shipping a resolved time (never 'unknown', B1).
 
+/* global process -- the near-midnight test sets TZ so todayLocal() is exercised in the operator's zone */
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { act } from 'react'
@@ -19,6 +20,7 @@ vi.mock('../../api', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 
 import api from '../../api'
 import PhaseTransitionFlow from './PhaseTransitionFlow'
+import { todayLocal } from './phaseTime'
 
 const DRAFT = {
   current_phase: {
@@ -107,6 +109,12 @@ test('G1: changing a prefilled quota slot asks replace-or-add; add yields two sl
 test('G2: confirm shows a removal and removing all capacity demands an extra tick (B2/F16)', async () => {
   await renderFlow()
   await next(); await next(); await next()   // → step 4
+  // Swap the only (capacity) slot for an activity slot: no capacity quota remains, but the phase still
+  // has a slot (R3 forbids zero slots, so "drop stability" alone no longer reaches step 8).
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /\+ quota slot/i })) })
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'activity' } }) })
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 key'), { target: { value: 'pilates' } }) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Pilates' })) })
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /remove slot 1/i })) })  // drop stability
   for (let i = 0; i < 4; i++) await next()   // 5,6,7,8
   expect(screen.getByText(/step 8 of 8/i)).toBeTruthy()
@@ -381,4 +389,129 @@ test('hints: the load_window kind says it takes the remainder after activity slo
   const hint = screen.getByText(/^load_window — H10/)
   expect(hint.textContent).toMatch(/no activity slot claims first/)
   expect(hint.textContent).toMatch(/load accrues from every session either way/)
+})
+
+
+// ---- #378 / #379: the build's settlement (R3, R5, R6) ----
+
+const sameDayDraft = (extra = {}) => ({
+  ...DRAFT,
+  current_phase: { ...DRAFT.current_phase, entered_on: todayLocal() },
+  ...extra,
+})
+const stepTo = async (n) => { for (let i = 1; i < n; i++) await next() }
+const confirmBtn = () => screen.getByRole('button', { name: /confirm — save phase change/i })
+const saveFromStep1 = async () => {
+  await stepTo(8)
+  await act(async () => { fireEvent.click(confirmBtn()) })
+  await waitFor(() => expect(transitionCalls().length).toBe(1))
+  return transitionCalls()[0][1]
+}
+
+test('R3: step 4 blocks Next with no quota slot and says why; one slot unblocks it', async () => {
+  await toStep4()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /remove slot 1/i })) })
+  expect(screen.queryByText('Slot 1 of 1')).toBeNull()
+  expect(nextBtn().disabled).toBe(true)
+  expect(screen.getByText('A phase needs at least one quota slot.')).toBeTruthy()
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  expect(nextBtn().disabled).toBe(false)
+  expect(screen.queryByText('A phase needs at least one quota slot.')).toBeNull()
+})
+
+test('R3: a baseline start (no open phase, so no prefilled slot) cannot pass step 4 without adding one', async () => {
+  api.get.mockResolvedValue({ data: { ...DRAFT, current_phase: null, outgoing_review: [], schedule_items: [] } })
+  await renderFlow()
+  expect(screen.getByText(/No open phase to review/i)).toBeTruthy()
+  await stepTo(4)
+  expect(screen.getByText(/step 4 of 8/i)).toBeTruthy()
+  expect(nextBtn().disabled).toBe(true)
+  expect(screen.getByText('A phase needs at least one quota slot.')).toBeTruthy()
+})
+
+test('R5: a same-day correction hides the block verdict and relabels the note box; "Then" stays', async () => {
+  api.get.mockResolvedValue({ data: sameDayDraft() })
+  await renderFlow()
+  expect(screen.queryByText(/Did the block do its job/i)).toBeNull()
+  expect(screen.queryByRole('button', { name: /^(yes|partly|no)$/i })).toBeNull()
+  expect(screen.getByText('What are you correcting? (optional)')).toBeTruthy()
+  expect(screen.getByRole('button', { name: /continue this phase/i })).toBeTruthy()
+  expect(screen.getByRole('button', { name: /move to a new phase/i })).toBeTruthy()
+})
+
+test('R5: a block opened on an earlier day still gets the verdict and the original note label', async () => {
+  await renderFlow()
+  expect(screen.getByText('Did the block do its job?')).toBeTruthy()
+  expect(screen.queryByText('What are you correcting? (optional)')).toBeNull()
+  expect(screen.getByText(/Notes — this becomes the phase’s close reason/)).toBeTruthy()
+})
+
+test('R5: an empty correction note omits close_prior_reason, so the server default applies', async () => {
+  api.get.mockResolvedValue({ data: sameDayDraft() })
+  await renderFlow()
+  const body = await saveFromStep1()
+  expect('close_prior_reason' in body.phase).toBe(false)
+})
+
+test('R5: a correction note is the whole close reason, with no verdict prefix', async () => {
+  api.get.mockResolvedValue({ data: sameDayDraft() })
+  await renderFlow()
+  await act(async () => { fireEvent.change(screen.getByLabelText(/close reason notes/i), { target: { value: 'wrong quota on the first save' } }) })
+  const body = await saveFromStep1()
+  expect(body.phase.close_prior_reason).toBe('wrong quota on the first save')
+})
+
+test('R6: step 1 and the step-8 confirm name the row the save closes (label, entered date)', async () => {
+  await renderFlow()
+  expect(screen.getByTestId('closing-row').textContent).toBe('This save closes “decompression” · entered 2026-09-07')
+  await stepTo(8)
+  expect(screen.getByTestId('closing-row').textContent).toBe('Closes “decompression” · entered 2026-09-07')
+  expect(screen.queryByText(/opened today/)).toBeNull()
+})
+
+test('R6: a same-day correction adds "opened today" on step 1 and on the confirm', async () => {
+  api.get.mockResolvedValue({ data: sameDayDraft() })
+  await renderFlow()
+  expect(screen.getByTestId('closing-row').textContent).toBe(`This save closes “decompression” · entered ${todayLocal()} · opened today`)
+  await stepTo(8)
+  expect(screen.getByTestId('closing-row').textContent).toBe(`Closes “decompression” · entered ${todayLocal()} · opened today`)
+})
+
+test('R6: with no open phase the confirm says it closes nothing', async () => {
+  api.get.mockResolvedValue({ data: { ...DRAFT, current_phase: null, outgoing_review: [], schedule_items: [] } })
+  await renderFlow()
+  expect(screen.queryByTestId('closing-row')).toBeNull()
+  await next()                                                              // step 2: name the first phase
+  await act(async () => { fireEvent.change(screen.getByLabelText('phase label'), { target: { value: 'first' } }) })
+  await next(); await next()                                                // step 4: R3 needs a slot
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  for (let i = 0; i < 4; i++) await next()                                  // 5,6,7,8
+  expect(screen.getByText(/step 8 of 8/i)).toBeTruthy()
+  expect(screen.getByTestId('closing-row').textContent).toBe('Opens a first phase — no row is closed.')
+})
+
+// The same-day test compares the open row's entered_on with todayLocal(), the value this form sends as the
+// new row's entered_on. Near midnight UTC the operator's day (AEST, UTC+10) is already the next date: a
+// row the server stamped "today" in AEST must count as same-day, and the UTC date must not.
+test('same-day near midnight UTC: 14:30Z on 5 Oct is 00:30 AEST on 6 Oct, and that is "today"', async () => {
+  const prevTz = process.env.TZ
+  process.env.TZ = 'Australia/Brisbane'
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-05T14:30:00Z'))
+  try {
+    expect(todayLocal()).toBe('2026-10-06')                          // the AEST day, not the UTC date
+    api.get.mockResolvedValue({ data: { ...DRAFT, current_phase: { ...DRAFT.current_phase, entered_on: '2026-10-06' } } })
+    await renderFlow()
+    expect(screen.getByTestId('closing-row').textContent).toMatch(/opened today$/)
+    expect(screen.queryByText(/Did the block do its job/i)).toBeNull()
+    cleanup()
+    // A row entered on the UTC date (5 Oct) is yesterday in AEST: the verdict is asked.
+    api.get.mockResolvedValue({ data: { ...DRAFT, current_phase: { ...DRAFT.current_phase, entered_on: '2026-10-05' } } })
+    await renderFlow()
+    expect(screen.getByTestId('closing-row').textContent).not.toMatch(/opened today/)
+    expect(screen.getByText('Did the block do its job?')).toBeTruthy()
+  } finally {
+    vi.useRealTimers()
+    if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz
+  }
 })

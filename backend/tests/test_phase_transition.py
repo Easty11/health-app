@@ -24,6 +24,7 @@ import pytest
 import models
 from engine import resolver as resolver_mod
 from engine import training_phase as phase_mod
+from tests.phase_fixtures import open_phase
 from engine import week_plan as week_plan_mod
 from routers import training_phase as tp
 
@@ -80,7 +81,7 @@ def _active_schedule(db, uid):
 
 def test_g1_failing_schedule_item_rolls_back_the_phase_open(db_session):
     u = _user(db_session)
-    phase_mod.open_phase(db_session, u.id, _phase_payload(entered_on="2026-09-01"))
+    open_phase(db_session, u.id, _phase_payload(entered_on="2026-09-01"))
     phases_before = _count_phases(db_session, u.id)
     sched_before = _active_schedule(db_session, u.id)
 
@@ -130,7 +131,7 @@ def test_g1_different_submit_is_not_matched(db_session):
 def test_g2_five_oct_continue_with_revise_leaves_no_mismatch(db_session):
     u = _user(db_session)
     # Outgoing: decompression, stability ×2, gym Mon/Wed/Fri linked (the deliberate 3-vs-2).
-    phase_mod.open_phase(db_session, u.id, _phase_payload(label="decompression", entered_on=PRIOR.isoformat(), stability=2))
+    open_phase(db_session, u.id, _phase_payload(label="decompression", entered_on=PRIOR.isoformat(), stability=2))
     from routers.knowledge import upsert_knowledge_entry, KnowledgeEntryIn
     upsert_knowledge_entry(u.id, KnowledgeEntryIn(type="schedule_item", key="gym", source="api", value={
         "activity": "gym", "days": ["monday", "wednesday", "friday"], "hard": False,
@@ -194,7 +195,7 @@ def _event_item(db, uid, key, activity, event_date, event_end=None, expected_loa
 def test_g3_dated_item_blocks_days_and_cautions_after(db_session):
     u = _user(db_session)
     # 14-day leg so the window spans the carnival and the day after.
-    phase_mod.open_phase(db_session, u.id, {
+    open_phase(db_session, u.id, {
         "label": "base", "probe_posture": "held",
         "microcycle": {"sub_cycle_days": 14, "sub_cycles": [{"label": "A", "slots": [
             {"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},
@@ -213,7 +214,7 @@ def test_g3_dated_item_drops_off_after_it_passes(db_session):
     entered = TODAY - timedelta(days=1)          # a fresh leg starting yesterday (not future)
     carnival_start = (entered - timedelta(days=6)).isoformat()
     carnival_end = (entered - timedelta(days=5)).isoformat()
-    phase_mod.open_phase(db_session, u.id, {
+    open_phase(db_session, u.id, {
         "label": "base", "probe_posture": "held",
         "microcycle": {"sub_cycle_days": 7, "sub_cycles": [{"label": "A", "slots": [
             {"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},
@@ -246,7 +247,7 @@ def test_g3_section_schedule_renders_dated_line_only_while_live(db_session):
 
 def test_g4_draft_replay_never_resolves_before_entered_on(db_session, monkeypatch):
     u = _user(db_session)
-    phase = phase_mod.open_phase(db_session, u.id, {
+    phase = open_phase(db_session, u.id, {
         "label": "base", "probe_posture": "held",
         "microcycle": {"sub_cycle_days": 7, "sub_cycles": [{"label": "A", "slots": [
             {"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},
@@ -334,7 +335,7 @@ def test_f17_transition_overlap_returns_structured_detail_then_distinct_from_sav
     """F17: a day+time clash surfaces STRUCTURED — the colliding row (id/activity/days/time) and the
     offending key — so the form can name it; a resubmit acknowledging it via `distinct_from` saves."""
     u = _user(db_session)
-    phase_mod.open_phase(db_session, u.id, _phase_payload(entered_on=PRIOR.isoformat()))
+    open_phase(db_session, u.id, _phase_payload(entered_on=PRIOR.isoformat()))
     _linked_item(db_session, u.id, "swim", "swim", ["tuesday"], {"activity": "pilates"})
     swim_id = (db_session.query(models.UserKnowledgeEntry)
                .filter_by(user_id=u.id, key="swim", active=True).first().id)
@@ -367,7 +368,7 @@ def test_draft_returns_item_ids_and_week_plan(db_session):
     """F8/F12: the draft carries each active item's id (for keep/relink/retire + distinct_from) and
     the outgoing window's `week_plan` (per-day availability + day-after-heavy caution)."""
     u = _user(db_session)
-    phase_mod.open_phase(db_session, u.id, _phase_payload(entered_on=PRIOR.isoformat()))
+    open_phase(db_session, u.id, _phase_payload(entered_on=PRIOR.isoformat()))
     _linked_item(db_session, u.id, "gym", "gym", ["monday"], {"capacity": "stability"})
     c = _client(db_session, u)
     d = c.get("/engine/phase/transition/draft").json()

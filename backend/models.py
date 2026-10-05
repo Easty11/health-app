@@ -1122,7 +1122,7 @@ class TrainingPhase(Base):
     upserted: a phase is never edited after authorship except closure, so the
     `upsert_profile` `is not None` merge pattern deliberately does NOT apply here.
 
-    Exactly-one-open per user, enforced at write in `engine/training_phase.open_phase`
+    Exactly-one-open per user, enforced at write in `engine/training_phase._apply_open_phase`
     (close the current open row in the same transaction, then insert). Zero-open is a valid
     state = baseline (like `cbti_blocks` between blocks); with no open row the engine runs
     off profile + `weekly_template`, byte-identical to pre-Q112.

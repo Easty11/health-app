@@ -14,8 +14,19 @@
 // existing schedule and the counter is the backend's own `consistency_rows` (B3). See DECISIONS
 // #320.
 //
-// Same Tailwind vocabulary as PhaseForm — bg-white border rounded-2xl, gray headings, indigo
-// accents. Mobile-first: single column, verified at 380 px (F19).
+// This flow is the ONLY way a phase is entered (#378: the direct-open form and its route are gone), so
+// it carries the guards the direct path lacked (#378/#379, the build's settlement):
+//   R3  at least one quota slot — step 4 blocks Next without one; a quota-less phase is not creatable;
+//   R5  a same-day correction (the open row was entered today) hides the block verdict, since there is
+//       no block to judge, and asks "What are you correcting?" — an empty note leaves no reason, so the
+//       server's default "opened <label>" applies;
+//   R6  step 1 and the step-8 confirm NAME the row the save closes: label, entered date, and
+//       "opened today" when it was.
+// The same-day test compares the open row's entered_on with todayLocal(), the exact value this form
+// sends as the new row's entered_on, so "same day" here is "the save would write a zero-length row".
+//
+// Tailwind vocabulary: bg-white border rounded-2xl, gray headings, indigo accents. Mobile-first:
+// single column, verified at 380 px (F19).
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../api'
@@ -73,6 +84,17 @@ function _cap(s) {
   return typeof s === 'string' && s ? s[0].toUpperCase() + s.slice(1) : s
 }
 
+// The row this save closes (R6): label, entered date, and "opened today" for a same-day correction.
+function ClosingRow({ phase, sameDay, lead }) {
+  if (!phase) return null
+  return (
+    <p className="text-xs text-gray-700" data-testid="closing-row">
+      {lead} <span className="font-medium">“{phase.label}”</span> · entered {phase.entered_on}
+      {sameDay && <span className="text-amber-700"> · opened today</span>}
+    </p>
+  )
+}
+
 export default function PhaseTransitionFlow({ onWritten, onCancel }) {
   const [step, setStep] = useState(1)
   const [draft, setDraft] = useState(null)         // prefill from the server
@@ -102,6 +124,9 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
   const [ackRemoveCapacity, setAckRemoveCapacity] = useState(false)  // F16 extra tick (B2)
   const [folderChoice, setFolderChoice] = useState('none')  // 'none' | '<id>' | 'new'
   const [newFolderName, setNewFolderName] = useState('')
+
+  // R5: the open row was entered today, so this save is a same-day correction.
+  const enteredToday = !!draft?.current_phase && draft.current_phase.entered_on === todayLocal()
 
   const outgoingSlots = useMemo(
     () => microcycleSlots(draft?.current_phase?.microcycle),
@@ -284,6 +309,8 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
     if (allCapacities) phase.capacities = null
     else if (capacities.length) phase.capacities = capacities
     // The review answer IS the close reason (F1/G5): verdict + the operator's note.
+    // A same-day correction hides the verdict (R5), so none is ever set, and an empty note sends
+    // nothing: the server default "opened <label>" applies.
     const reasonBits = [verdict && `block did its job: ${verdict}`, closeReason.trim()].filter(Boolean)
     if (reasonBits.length) phase.close_prior_reason = reasonBits.join(' — ')
 
@@ -370,6 +397,9 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
   if (step === 5 && hasMismatch && !ackMismatch) {
     nextBlockedReason = 'Acknowledge the schedule ≠ quota mismatch below to continue.'
   }
+  if (step === 4 && slots.length === 0) {
+    nextBlockedReason = 'A phase needs at least one quota slot.'   // R3 (#378): no quota-less phase via any route
+  }
   if (step === 4 && slotsInvalid) {
     nextBlockedReason = 'Fix the quota slot(s) marked above to continue: the save refuses them, so they are checked here.'
   }
@@ -394,11 +424,16 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
         </p>
         <button type="button" onClick={onCancel} className="text-xs text-gray-500 hover:text-gray-700">✕</button>
       </div>
-      <p className={blurbCls}>{STEP_BLURBS[step - 1]}</p>
+      <p className={blurbCls}>
+        {step === 1 && enteredToday
+          ? 'You opened this phase today, so this save is a correction: there is no block to judge.'
+          : STEP_BLURBS[step - 1]}
+      </p>
 
       {/* Step 1 — review the outgoing phase */}
       {step === 1 && (
         <div className="flex flex-col gap-2">
+          <ClosingRow phase={draft.current_phase} sameDay={enteredToday} lead="This save closes" />
           {(draft.outgoing_review ?? []).length === 0
             ? <p className="text-xs text-gray-500">No open phase to review — this opens a first phase.</p>
             : (draft.outgoing_review ?? []).map((w, i) => (
@@ -409,19 +444,27 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
               </div>
             ))}
           <div className="flex flex-col gap-1">
-            <span className={labelCls}>Did the block do its job?</span>
-            <div className="flex gap-2">
-              {['yes', 'partly', 'no'].map((v) => (
-                <button key={v} type="button" onClick={() => setVerdict(v)} aria-pressed={verdict === v}
-                  className={`text-xs px-3 py-1 rounded-full border capitalize ${
-                    verdict === v ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-gray-600 border-gray-300'}`}>{v}</button>
-              ))}
-            </div>
+            {!enteredToday && (
+              <>
+                <span className={labelCls}>Did the block do its job?</span>
+                <div className="flex gap-2">
+                  {['yes', 'partly', 'no'].map((v) => (
+                    <button key={v} type="button" onClick={() => setVerdict(v)} aria-pressed={verdict === v}
+                      className={`text-xs px-3 py-1 rounded-full border capitalize ${
+                        verdict === v ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-gray-600 border-gray-300'}`}>{v}</button>
+                  ))}
+                </div>
+              </>
+            )}
             <label className="flex flex-col gap-1">
-              <span className={labelCls}>Notes — this becomes the phase’s close reason</span>
+              <span className={labelCls}>
+                {enteredToday ? 'What are you correcting? (optional)' : 'Notes — this becomes the phase’s close reason'}
+              </span>
               <textarea value={closeReason} onChange={(e) => setCloseReason(e.target.value)} rows={2}
-                aria-label="close reason notes" placeholder="What happened this block?" className={fieldCls} />
+                aria-label="close reason notes"
+                placeholder={enteredToday ? 'e.g. wrong quota on the first save' : 'What happened this block?'}
+                className={fieldCls} />
             </label>
           </div>
           <div className="flex flex-col gap-1">
@@ -823,6 +866,9 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
       {/* Step 8 — confirm (a DIFF against the outgoing phase; removals first) */}
       {step === 8 && (
         <div className="flex flex-col gap-2">
+          {draft.current_phase
+            ? <ClosingRow phase={draft.current_phase} sameDay={enteredToday} lead="Closes" />
+            : <p className="text-xs text-gray-700" data-testid="closing-row">Opens a first phase — no row is closed.</p>}
           <p className="text-xs text-gray-600">This will change, in one write:</p>
           <ul className="text-xs list-disc list-inside flex flex-col gap-0.5">
             {diff.removes.map((s) => (

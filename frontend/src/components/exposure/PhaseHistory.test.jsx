@@ -104,3 +104,30 @@ test('an empty ledger says so; a bare array (the old, wrong shape) is not read a
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /phase history/i })) })
   await waitFor(() => expect(screen.getByText(/No phases recorded yet/i)).toBeTruthy())
 })
+
+
+// #379 R4 — a zero-length row is LABELLED, never collapsed or hidden: a muted row with a
+// "same-day correction" chip, and its close reason is still shown.
+test('R4: a zero_length row is labelled "same-day correction", muted, with its close reason; others are not', async () => {
+  const rows = [
+    { id: 3, label: 'corrected', probe_posture: 'held', capacities: null, entered_on: '2026-10-05',
+      closed_on: null, close_reason: null, zero_length: false },
+    { id: 2, label: 'first save', probe_posture: 'held', capacities: null, entered_on: '2026-10-05',
+      closed_on: '2026-10-05', close_reason: 'opened corrected', zero_length: true },
+    { id: 1, label: 'base build', probe_posture: 'held', capacities: null, entered_on: '2026-08-01',
+      closed_on: '2026-10-05', close_reason: 'opened first save', zero_length: false },
+  ]
+  api.get.mockResolvedValue({ data: { history: rows } })
+  const { container } = render(<PhaseHistory />)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /phase history/i })) })
+  await waitFor(() => expect(screen.getByText('first save')).toBeTruthy())
+  const items = [...container.querySelectorAll('li')]
+  expect(items).toHaveLength(3)                                         // nothing hidden or collapsed
+  const flagged = items.find((li) => li.textContent.includes('first save'))
+  expect(flagged.textContent).toContain('same-day correction')
+  expect(flagged.textContent).toContain('Closed: opened corrected')     // the reason is still shown
+  expect(flagged.getAttribute('data-zero-length')).toBe('true')
+  expect(flagged.className).toMatch(/opacity-60/)                       // muted
+  expect(container.querySelectorAll('li[data-zero-length]')).toHaveLength(1)
+  expect(screen.getAllByText('same-day correction')).toHaveLength(1)    // only the flagged row carries the chip
+})

@@ -258,7 +258,7 @@ def validate_training_phase(payload: dict[str, Any]) -> dict[str, Any]:
     `capacities`/`microcycle` kept BYTE-IDENTICAL (stored verbatim).
 
     The monotonic-history check (`entered_on >= the prior open row's entered_on`) needs the
-    ledger and lives in `open_phase`; every check here is pure. `close_prior_reason` is an
+    ledger and lives in `_apply_open_phase`; every check here is pure. `close_prior_reason` is an
     open-path control, not a phase field — strip it before calling this.
     """
     label = payload.get("label")
@@ -407,11 +407,18 @@ def phase_to_dict(phase: models.TrainingPhase | None, *, on: date | None = None)
 # --------------------------------------------------------------------------- #
 
 def _apply_open_phase(db: Session, user_id: int, payload: dict[str, Any]) -> models.TrainingPhase:
-    """Validate + STAGE the close-prior + open-new mutations WITHOUT committing — the shared core
-    of `open_phase` (which commits) and the phase transition (#317, which batches the schedule /
-    `phase_folders` / dated-item writes into ONE commit so a later failure rolls the phase open back
-    too). One definition of the validator AND the close/insert mechanics; no fork. Validate BEFORE
-    touching the session (mirror `upsert_profile`) so a refused open strands nothing."""
+    """Validate + STAGE the close-prior + open-new mutations WITHOUT committing. The phase transition
+    (#317) is the only caller: it batches the schedule / `phase_folders` / dated-item writes into ONE
+    commit so a later failure rolls the phase open back too. The direct-open route and its wrapper
+    were removed (#378): Review / change phase is the only way a phase is entered. One definition of
+    the validator AND the close/insert mechanics. Validate BEFORE touching the session (mirror
+    `upsert_profile`) so a refused open strands nothing.
+
+    `close_prior_reason` (optional, on the payload) is the closing note for the superseded row;
+    default `"opened <label>"`. The prior row closes at `closed_on = new.entered_on` (half-open
+    handoff), the ONLY UPDATE this ledger ever performs. A same-day correction therefore closes the
+    prior row on the day it was entered: a zero-length row, kept (append-only) and flagged on the
+    history read (#379)."""
     body = dict(payload)
     close_prior_reason = body.pop("close_prior_reason", None)
 
@@ -435,21 +442,6 @@ def _apply_open_phase(db: Session, user_id: int, payload: dict[str, Any]) -> mod
 
     phase = models.TrainingPhase(user_id=user_id, **fields)
     db.add(phase)
-    return phase
-
-
-def open_phase(db: Session, user_id: int, payload: dict[str, Any]) -> models.TrainingPhase:
-    """Open a phase in one transaction: close the current open row (if any), then INSERT the
-    new one. Validate BEFORE touching the session (mirror `upsert_profile`) so a refused open
-    strands nothing.
-
-    `close_prior_reason` (optional, on the payload) is the closing note for the superseded
-    row; default `"opened <label>"`. The prior row closes at `closed_on = new.entered_on`
-    (half-open handoff), the ONLY UPDATE this ledger ever performs.
-    """
-    phase = _apply_open_phase(db, user_id, payload)
-    db.commit()
-    db.refresh(phase)
     return phase
 
 
