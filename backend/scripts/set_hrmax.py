@@ -6,9 +6,9 @@ existing row is never edited or deleted. After a write, the next chain run recom
 health_connect row (Training-page open, the 02:00 sweep, or `python -m scripts.refresh_load --user N`);
 this script prints the rows whose HRmax-in-force will change so the operator can see what moves.
 
-Run from backend/ (PowerShell; single-quote the note, no embedded double quotes):
+Run inside the container, from /app (`railway ssh --service health-app-backend`; `railway run` cannot, its database host is private); the shell there is the container's, so single-quote the note):
 
-    railway run python -m scripts.set_hrmax --user 1 --effective-from 2026-06-01 --bpm 173 --provenance observed --note 'H10 chest strap max, Fitness sessions 2026-06-17 and 2026-07-17'
+    /opt/venv/bin/python -m scripts.set_hrmax --user 1 --effective-from 2026-06-01 --bpm 173 --provenance observed --note 'H10 chest strap max, Fitness sessions 2026-06-17 and 2026-07-17'
     ... --dry-run          # print the plan and the touched rows, write nothing
 
 Provenance is a closed set: `tested` (a maximal-effort test) or `observed` (a session maximum from a
