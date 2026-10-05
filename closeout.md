@@ -1,59 +1,64 @@
-# Close-out — Q215 is ruled (#379: keep appending, a derived same-day flag, a wizard review skip, a tests-only pin; one shared brief with #378) and the #371 overlap proof now waits on a natural overlap or a debug control (#380); nothing built
+# Close-out — #364 (HC zones) is verified in prod after the seed: 17 of 29 HC rows zoned, the 28 Sep elliptical deposits once; the Polar band-edge parity divergence is reported for the operator's ruling and nothing was edited
 
 ## Real commits this session
 
-Session `phase-ledger-same-day-rows` (the previous session, `phase-open-path-and-carried-items`, had closed out and merged at `1dc8bed`). Range: `1dc8bed` (master at open) to this close-out. Fresh-clone settings verified set at open (`core.hooksPath` = `.githooks`, local `alias.land`). Maxima at open: decisions 378, questions 214. Maxima now: decisions 380 (#379, #380), questions 215.
+Session `hc-zones-verify`. Range: `b81cebd` (master at open) to this close-out. Fresh-clone settings were unset at open and were set and verified (`core.hooksPath` = `.githooks`, local `alias.land`). Maxima at open and now: decisions 382, questions 215 (no decision or question was added).
 
-- **No code commit, no code PR.** One scratch test (the 4 Oct sequence, run against the repo's own helpers) was run and **deleted; it is not committed**.
-- **#324** `gov/phase-ledger-same-day-rows` (merge `4be42db`, self-merged on green: guard, vitest and pytest read as success on the pinned head): Q215 filed, ROADMAP row 39, the CLAUDE.md pointer. Governance only.
-- **This PR** `gov/q215-ruled-371-method`: one governance commit (the hash is on the branch; a file cannot name its own commit): DECISIONS #379 and #380, Q215 closed, ROADMAP rows 37 and 39 and the shared NEXT brief, the BRANCHES rows, the CLAUDE.md pointer, this file.
-
-**Disclosure: two `gov(...)` commits this session** (#324 and this one). CLAUDE.md allows one. The second records the operator's ruling, which arrived after #324 landed. Each was a single commit on its own branch. Stated here, not hidden.
-
-- Migration: none. No prod write. Code has no database access; the ledger rows are operator-reported and reproduced from the code, not read from prod. The HTTP-log facts below were read by Code from Railway.
+- `4ff652d` `gov(hc-zones-verify): #364 verified in prod after the seed; Polar-parity divergence reported for the operator` — ROADMAP HC zones row, BRANCHES (the `hc-zones-ingest` row resolved to DONE `054d2d9`, plus this branch's row), a Q199 update, the CLAUDE.md Recent-landings pointer. Governance only.
+- The close-out commit (`chore: session close-out`; the hash is on the branch, a file cannot name its own commit): this file.
+- **Code and schema: none.** No migration, no code change. The six #364 test files (102 tests) were run on master `b81cebd` and passed (Python 3.11, installed without `garminconnect`; not the full suite). A scratch Postgres 16 built from `models.py` validated the operator's queries and the `--hc-zones` command; it was dropped and stopped.
+- **No prod write by Code.** The DB reads and the container report were run by the operator and pasted; Code read the Railway deploy list and logs (read-only).
+- Disclosure: one `gov(...)` commit, as CLAUDE.md allows. The branch name `claude/nice-mccarthy-jd2yw8` is the harness's, kept per the harness instruction (recorded in BRANCHES).
 
 ## Pending-queue reconciliation
 
-The operator's 5 Oct ruling, item by item.
-1. **Q215 ruled: adopt the lean — recorded as #379; Q215 closed.** Same-day correction keeps appending (#317 stands); a derived flag on the history route for zero-length rows (`closed_on == entered_on`), which the card collapses or labels (no schema, no migration, no deletion); the wizard skips the "did the block do its job" review when the open row was entered today and names the row the save will close; a tests-only pin of the zero-length exclusion in `phase_at` and the open-phase readers. **Build not scheduled;** ROADMAP NEXT now carries one shared brief with #378 (same wizard and route surface), with the pin able to ship first on its own. Left for the brief: the flag's name and shape, collapse versus label, and what close reason a skipped review leaves.
-2. **#371 overlap proof — method dropped; recorded as #380.** "Manual sync during a scheduled one" is dropped (a sync takes about 8 s; the worker's start drifts by minutes). #371 stays OWED until a natural overlap shows in the Railway HTTP log or a debug control fires two syncs back to back. **Checked by Code, not just recorded:** none of the four POSTs since #371's deploy (23:12Z on 3 Oct) through 00:09:50Z on 5 Oct overlap (computed from log time minus duration); the start-to-start gaps are 6 h 0 m 30 s, 6 h 4 m 31 s and 6 h 0 m 20 s, so the drift is 0 to 4.5 minutes. The debug control is not built: it is a companion change, and the two sync buttons are disabled while a sync runs (`SyncScreen.js:284,294`).
-- **Cross-repo debt, not edited from here:** the companion's `ROADMAP.md:127`, `closeout.md:53` and its locked DECISIONS #48 still name the dropped method; its next close-out should drop them.
-- **No longer an operator step:** #371's proof. Any session can read the HTTP log for an overlap.
+The brief's four items and the correction, one by one. Nothing here came from the chat `;cc` queue as a PENDING item.
+
+1. **G3 report: done, with scope.**
+   - **Zoned rows:** 29 HC rows, 17 zoned; the stored zones equal the in-memory projection (canonical flips 0, TRIMP delta 0). `over_ceiling` 0, `no_hrmax` 0, no row within 0.05 of the 0.6 floor.
+   - **The 12 unzoned:** 3 `sparse` (69, 85, 92), 2 `no_same_writer_hr` #364 ruled (68, 84), and 7 `no_same_writer_hr` it did not name (72-78, 25-30 Aug). Those seven have zero same-writer HR samples because they predate the oldest stored HR for their writer (Samsung 2026-08-31, Polar Flow 2026-09-20); the 30-day re-post cannot reach them (Likely, not tested). Rows 72, 77 and 78 have no twin, so they never deposit.
+   - **Canonical row per multi-row bout (by deposit):** 67 (27 Aug), 90 (20 Sep), 91 (28 Sep), 95 (1 Oct), 97 (2 Oct), one deposit each. The 15 Sep and 22 Sep Pilates pairs have no zoned row and no deposit. **Not read:** whether the single-row HC bouts (79-83, 70, 86, 87, 94, 101) deposit.
+   - **28 Sep elliptical deposits once:** one `metabolic` event (id 48849, 115.97, `metab-v1`, zone source `polar_v4`) across rows 88, 89, 91. Verified.
+   - **`no_hrmax` count and user 4: the premise failed.** The brief expected user 4 to read `no_hrmax`. User 4 has no `aerobic_sessions` row of any source (the count query shows user 1 only; the chain log read `hc_zoned=0/0` for her on every run since 1 Oct). Her `no_hrmax` is untested, not demonstrated. The count is 0 because nothing was evaluated.
+2. **Polar parity: done, reported, nothing edited.** HC 88 and Polar 91 are the same H10 stream and agree on `hr_avg` 137 and `hr_max` 167. Minutes z1..z5: HC 0.60/3.58/10.82/8.60/8.65, Polar 0.32/3.47/11.32/8.98/7.77 (HC minus Polar +0.28/+0.11/-0.50/-0.38/+0.88), Edwards about +1.9 AU (+1.6%). In all seven HC-with-Polar-twin bouts HC z5 is at or above Polar's and HC z3 and z4 at or below (1 Oct running: Polar z5 0.0, HC 1.15 and 2.25 at `hr_max` 157-158); z1 is mixed. That is the direction a Polar HRmax above 173 would give (Likely, not shown). **OWED: the operator's ruling** (keep 50/60/70/80/90 of 173, or change bands or HRmax and recompute). Home: the ROADMAP HC zones row and Q199.
+3. **`s0_polar_read.py --mode zones`, then `--mode samples`: not run, OWED (operator, local).** The file is not on `origin/master`, the branch, any ref, or in the Code container; the stores name it only as an operator-local read. Not guessed at. It would print Polar's zone limits and the implied HRmax, which settles item 2's hypothesis.
+4. **ROADMAP NOW and BRANCHES for #364: updated in `4ff652d`.** The `hc-zones-ingest` BRANCHES row is DONE `054d2d9` (PR #298, merged 1 Oct 2026, remote branch deleted). The ROADMAP row keeps OWED for exactly the ruling and the local read.
+5. **The seed correction: recorded; no longer OWED.** `user_hrmax` id 1: user 1, effective 2026-03-01 (equal to user 1's earliest `aerobic_sessions` date, read), 173 bpm, `observed`, the #364 note verbatim. `created_at` 2026-10-01 07:49:05.495922Z (17:49 AEST), 17 minutes after the migration ran (07:31:52Z) and before the first stored HR arrived (08:14:35Z). Who: the operator, with `scripts/set_hrmax` (the only writer; a test asserts nothing else touches the table). The table has no author column, so the actor is inferred from the code path, not read. The 5 Oct re-seed was refused by the append-only guard and wrote nothing.
+- **Cross-checks that corroborate, from the Railway logs (Certain):** the migration line, the first chain line `no_hrmax=23` (07:32:21Z) and the first `no_hrmax=0` (16:00:24Z), bracketing `created_at`. The 4 Oct 12:08:48Z POST took 237 s against about 8 s normally, so it is probably a deep sync (Likely, not confirmed); the zoned count did not move across it.
 
 Provisional until merged: everything in this PR.
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** Row 37 carries the new #371 method (#380); row 39's state is "the build is in NEXT, one shared brief (#378, #379)". NEXT holds the shared brief, UNSTARTED. No other row changed.
+**Sprint (ROADMAP NOW).** The HC zones row now reads landed, seeded and verified, OWED for one operator ruling and one local read. No other row changed.
 
-**State.** This PR self-merges on green. #379 and #380 resolved at master max #378. Open: Q212 OWED to the 16 Nov review; Q213 and Q214 OPEN with Luke.
+**State.** This PR is governance only and self-merges on green; no `#NEXT` placeholders, no migration. Open: Q212 OWED to the 16 Nov review; Q213 and Q214 OPEN with Luke.
 
-**Single clearest next action.** Nothing blocks. When the operator schedules it, the shared brief starts by reading #378's three open points, then ships the tests-only pin first (it needs no further ruling). Until then the next dated item is the Q159 in-activity HR read on or after 9 Oct.
+**Single clearest next action.** The operator rules on the Polar band-edge parity (item 2), ideally after running `s0_polar_read.py --mode zones` to read Polar's implied HRmax. If the ruling changes bands or HRmax, it is a new `user_hrmax` row or a `BAND_PCT` change plus a recompute, never an edit. Until then nothing blocks.
 
-**Operator actions owed.** (1) The Q159 in-activity HR read (query on Q159) on or after 9 Oct; sessions 69, 85 and 92 can be tested now. (2) The instrument datasheets brief's scope. (3) Still open from earlier: the capture-rate query (Q202); the Polar backfill report, `--apply` and `refresh_load` (from the container); Q205 at the next Polar re-auth; the `concurrent_strength` marker build (Q206). (#371's proof is no longer an operator step; see #380.)
+**Operator actions owed.** (1) The parity ruling and the two `s0_polar_read.py` reads. (2) The Q159 in-activity HR read on or after 9 Oct (the stores carry the query; sessions 69, 85 and 92 are the unzoned `sparse` rows it concerns, and now each has 26-30 samples in `hr_samples`). (3) Still open from earlier: the instrument datasheets brief's scope; the capture-rate query (Q202); the Polar backfill report, `--apply` and `refresh_load`; Q205 at the next Polar re-auth; the `concurrent_strength` marker build (Q206); the #371 overlap proof (a natural overlap or a debug control, #380).
 
-**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 117 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). This session: Q215 opened and closed (`DONE → #379`).
+**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 117 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). Unchanged; Q199 gained an update note and stays OPEN.
 
 **What was NOT touched (named so absence does not read as finished).**
-- **The shared build (#378 and #379):** not scheduled, nothing built; the wizard, `PhaseCard`, `PhaseHistory`, the history route and the ledger are as they were. The pin is not written.
-- **The #371 debug control:** not built; a companion change.
-- **Q212** (deferred to 16 Nov), **Q214** (`client.trigger` still dropped by the server; a column is a migration and a hold), **the Q159 read, the datasheets scope, Q213:** as the previous close-out left them.
-- **The next date-bomb candidates:** `test_constraint_engine_arm.py`, `test_sweep_constraint_rehome.py` and `test_typed_write_shape_docs.py` hardcode `review_by: 2026-10-15` without pinning today; whether any assertion flips on the 15th was not checked.
-- **`verify_series_integrity.py:56`:** its runtime message still says `railway run`.
-- **The stale-looking amber warning** on a Garmin or Samsung `load_window` slot: left.
-- **The sRPE floor, the sibling sync races (Q208), the Source hierarchy (Q201, Q203), the marker exposure (#367, Q206):** unmoved.
-- **Know / the plan:** plan-conformance adjudication (Q197), Q27 and the Rule 1 vote counter did not move.
+- **Single-row HC bout deposits:** whether rows 79-83, 70, 86, 87, 94 and 101 each deposit a metabolic event was not read; only the multi-row bouts and 28 Sep were.
+- **The seven pre-reach unzoned rows (72-78):** recorded, not ruled, no recovery attempted; whether the deposit gap on 72, 77 and 78 matters is the operator's call.
+- **User 4's `no_hrmax`:** untested until she has an HC aerobic row; no seed for her, no change.
+- **The Polar re-zoning (Q198), the HRmax benchmark test (Q199's "to decide"), the "Resting HR" label (Q200):** unmoved.
+- **The shared phase-entry and ledger build (#378, #379), Q213, Q214, Q212:** unmoved; the queue of unbuilt phase-form work is where it was.
+- **The sRPE floor, Source hierarchy (Q201, Q203), the marker exposure (#367, Q206), the sibling sync races (Q208), the Garmin self-evaluation read, #371's proof:** unmoved.
 - **Walk in:** the lab upload pipeline, the interpretation layer's remaining increments and the appointment brief stood still.
 - **Medical protocol:** CBT-I (Q46, Q48, Q55, Q170 and the gate constants) and the injury ledger (Q52, Q111, Q120, the #340 sweep) did not move.
-- **Pattern to say out loud:** the sixth session in a row on the plan's input form and the phase ledger, and the first to end with two rulings recorded and still nothing built; the queue of unbuilt phase-form work (#378, #379) now outweighs what shipped this week. Walk in is where it was.
+- **Known gaps carried:** `test_constraint_engine_arm.py`, `test_sweep_constraint_rehome.py` and `test_typed_write_shape_docs.py` hardcode `review_by: 2026-10-15` and have not been checked for flipping on the 15th (from the previous close-out). `verify_series_integrity.py:56` still says `railway run`.
+- **Pattern to say out loud:** this was a verification session: it moved a record, not a product. The recent sessions have gone to plumbing, ledgers and verification of them (HC sync, source hierarchy, the phase form, now zones) rather than Walk in; the unbuilt phase-form work (#378, #379) still outweighs what shipped this week.
 
 **v1-triage of the NOW lanes** (which test each serves; DONE rows are demotion candidates by lane momentum):
-- Phase-change form (#375, #376, #378, #379; Q211 and Q215 closed, Q212 deferred; the build in NEXT): **Know** and **Loop**.
-- Garmin self-evaluation read (#372, OWED, first live read reported 4 Oct): **Know** and **Loop**.
-- HC sync reliability (#369-#371, #377, #380, Q159, Q202, Q208, Q214, OWED; #370 DONE, #371's overlap proof waits on a natural overlap or a debug control, the Q159 read owed): **See** and **Loop**.
+- HC zones (#364, now OWED only for the ruling and a local read): **See**, **Know** and **Loop**.
+- Phase-change form (#375, #376, #378, #379; the build in NEXT): **Know** and **Loop**.
+- Garmin self-evaluation read (#372, OWED): **Know** and **Loop**.
+- HC sync reliability (#369-#371, #377, #380, Q159, Q202, Q208, Q214, OWED): **See** and **Loop**.
 - Polar sport-id relabel and the H10-vs-Hevy facts (#366-#368, OWED): **Know** and **See**.
 - Source hierarchy (#365, OWED to Luke): **See** and **Know**.
-- HC zones (#364, OWED): **See**, **Know** and **Loop**.
 - Aerobic ingest automated (#353, OWED check): **See** and **Loop**.
 - Session fidelity (#354-#357, G6 OWED): **Loop** and **Know**.
 - Injury clearance (OWED): **Know** and **Walk in**.
