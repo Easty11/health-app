@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **User 1's HRmax is ruled to be 175, superseding #384's 177, and the restatement path with the `adjusted` provenance is built on a PR held for operator release (#385); applying 175 is owed after release.** Schema migration, held - Handoff: `closeout.md`.
+
 - **User 1's HRmax is ruled to change to 177 as a retroactive restatement with the bands unchanged (#384); the corrective-path design is owed as its own proposal for release, and `s0_polar_read.py` is retired as owed.** Governance only - Handoff: `closeout.md`.
 
 - **An HRmax correction from better evidence is a restatement (retroactive) and a fitness change is a dated change (forward only), ruled as #383 with the corrective path owed as a design; Q216 asks whether HC zoning should use heart-rate reserve.** Governance only - Handoff: `closeout.md`.
-
-- **#364 (HC zones) is verified in prod after the seed (17 of 29 HC rows zoned, the 28 Sep elliptical deposits once); the Polar band-edge parity ruling and two local reads are owed to the operator.** Governance only - Handoff: `closeout.md`.
 
 ---
 
