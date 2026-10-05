@@ -1,7 +1,8 @@
 """
 Garmin HRV sync runner — the batch sweep over Garmin-connected users, reused by two callers:
 
-  * `scripts/garmin_sync.py` CLI (this file's `main`) — `railway run` / ops one-shots.
+  * `scripts/garmin_sync.py` CLI (this file's `main`) — ops one-shots, run in the container from /app
+    (`railway ssh --service health-app-backend`, then `/opt/venv/bin/python -m scripts.garmin_sync`).
   * The in-process nightly sweep (`load_sweep._sweep`, #299) — garmin_sync as the second job
     on #297's 02:00 Brisbane rail, beside the load chain.
 
