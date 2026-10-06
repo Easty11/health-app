@@ -13525,7 +13525,7 @@ Not taken: a stored marker (a migration, held), collapsing the row, keeping the 
 
 **Do not revisit unless.** A phase the wizard cannot express is needed, the route turns out to have a caller that cannot use the wizard (#378), or a mistaken row that lasted days needs voiding (then Q215's stored marker, #379).
 
-### #NEXT. Know (d): the leg strip and the leg wrap — quota is authored, the wrap compares quota with done per slot key, history is derived from the phase ledger, and "Conditioning" is the one label
+### 390. Know (d): the leg strip and the leg wrap — quota is authored, the wrap compares quota with done per slot key, history is derived from the phase ledger, and "Conditioning" is the one label
 
 **Decision.** The operator's inline rulings R1-R7 (6 Oct 2026), built in two PRs (backend, then frontend). No new judgment by Code; the rulings are the operator's.
 - **R1. Quota stays authored on the phase.** A future planning grid pre-fills it from hard sessions plus soft-pool counts as an editable default; quota is never derived. Recorded now; the grid is the planning lane's brief, not this build.
