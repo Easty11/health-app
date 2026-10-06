@@ -13575,3 +13575,24 @@ Not taken: any change to `delta_done` (R8 is presentation), matching a done sess
 **Not verified here.** The live deploy and the live bundle (Code's egress to the frontend host is denied). The strip against the real `GET /engine/week-plan` payload of the operator's phase: its fixtures are typed from `plan_week`'s output shape, not captured from prod (FEEDBACK §48's caution), so the operator's read of the live card is the check. The wrap against the real ledger. Out of R7's stated scope and left alone: the phase-change wizard's slot-key selector and placeholder still show the raw token `metabolic`.
 
 **Do not revisit unless.** The operator wants a delta against a partial leg after all (then a prorated comparison is a new decision, not a presentation flag), or the wizard's raw `metabolic` token needs the same label.
+
+### 392. Know (v1 test 2) is MET by operator ruling; the #121 bundle checks for #389, #390 and #391 are met; the `previous_partial` field is accepted
+
+**Decision.** The operator's rulings of 6 Oct 2026. No new judgment by Code.
+- **Know (v1 test 2) is MET.** The operator's reading: R1 (#390) makes the authored quota the plan of record, so "what's due, enforced against the plan" is the due slot (#276), plus the unplaced and excess pushback (#316), plus the coach's position (#308), plus the per-leg history against the authored quota (#390, #391). **Placement-level adherence is out of Know's scope**; if it is ever wanted it needs versioned schedule items, and it is recorded on the phase-planning row (ROADMAP NEXT), not built. This closes the gap #390's ROADMAP text named (the wrap compares with the quota, not with placement): the operator rules that gap is outside the test.
+- **The `previous_partial` divergence (#391) is ACCEPTED.** Each leg row carries it, additively, so the page can apply R8 to the oldest returned row.
+- **The wizard's raw `metabolic` token** (the slot-key selector and its placeholder), which #391 named as outside R7's stated scope, is recorded as an input on the phase-planning row. Nothing is changed.
+
+**Recorded as met, from the operator (6 Oct 2026; Code did not re-check, its egress to the frontend host is denied).**
+- **#389** (merge `9e1bc28`): the #121 served-bundle check is MET by the operator's grep. Present: "End phase", "same-day correction", "A phase needs at least one quota slot". Absent: "Advanced · open / close phase directly", "Open a new phase".
+- **#390 / #391** (merges `97391da`, `2073d68`): the #121 check is MET by the operator's grep on `index-Bh2Xn4H_.js`. Present: "to place", "Conditioning", "Done vs quota, by leg". The operator looked at the live strip (desktop and phone) and the `/metrics` wrap. The wrap attributes the 7 Sep to 3 Oct legs to decompression's own quotas, with the partial leg correct and the R8 deltas correct.
+
+**Rationale.** The test names two things, what is due and that it is enforced against the plan. The plan the platform holds is the authored quota (R1), and every part of that sentence now has a built and live-read surface. A placement-level comparison would need schedule items that keep their history, which they do not; the operator rules that is a different feature, not a gap in this one.
+
+**Status.** DONE. #390's and #391's own Status and deploy-check lines are locked and are not edited; this entry carries what came after them.
+
+**How you know.** The operator's rulings and greps, as above. The live wrap reading is the check #390 and #391 listed as not verifiable by Code (no database or frontend-host access): the wrap's attribution of legs to their own phase's quota, the partial leg, and the R8 deltas are the three things its tests assert on fixtures, now read against the real ledger by the operator.
+
+**Not verified here.** Everything under "Recorded as met" is operator-reported. Code has not read the live bundle, the live ledger, or either deploy.
+
+**Do not revisit unless.** Placement-level adherence is wanted (then versioned schedule items are the first decision, on the planning row), or the Know reading above is withdrawn.
