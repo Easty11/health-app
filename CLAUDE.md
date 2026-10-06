@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The leg strip on the Phase card and the leg wrap on `/metrics` are built: each finished leg is counted against its own phase's quota, a partial leg shows no delta, and "Conditioning" is the one label (#390, #391).** Code, non-schema - Handoff: `closeout.md`.
+
 - **Date-fragile tests are swept: the five hardcoded-`review_by` tests are not date-sensitive, three others that were are fixed (#335, #336, and this branch), and a pin runs the date-sensitive test files a year ahead; no decision entry.** Tests, one pinned test dependency - Handoff: `closeout.md`.
 
 - **The direct phase open is removed so Review / change phase is the only phase-entry route, close-to-baseline stays as its own control, the wizard requires a quota slot and handles a same-day correction, and the history labels zero-length rows (#389, settling #378 and #379).** Code, non-schema - Handoff: `closeout.md`.
-
-- **#385 is applied in prod: user 1's HRmax is 175 (`adjusted`, restating row 1) and HC/Polar parity at 175 is closed, with a residual z2/z3 rounding difference not built against (#388).** Governance only - Handoff: `closeout.md`.
 
 ---
 
