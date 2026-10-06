@@ -315,6 +315,20 @@ async def get_week_plan(
     return week_plan_mod.plan_week(db, current_user.id, _local_day())
 
 
+@router.get("/legs")
+async def get_legs(
+    n: int = Query(8, description="legs to return, newest first; clamped to 1..26"),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The leg wrap (Know (d)): the last `n` completed legs of phases that carry a microcycle, each
+    counted against the quota its OWN phase declared (`phase_at`, never today's phase) — per slot
+    key `{kind, key, quota, done, delta_done}`, a `partial` flag for a leg cut short by a phase
+    change, and `excluded` naming what is left out (weekly-template periods: the template is not
+    versioned). Derived and stateless: no snapshot, no write (#316)."""
+    return resolver_mod.past_legs(db, current_user.id, n=n)
+
+
 @router.get("/plan-of-record")
 async def get_plan_of_record(
     current_user: models.User = Depends(get_current_user),
