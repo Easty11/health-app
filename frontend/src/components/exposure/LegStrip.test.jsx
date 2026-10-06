@@ -131,3 +131,95 @@ test('a quota over-scheduled shows "N over quota"; an unlinked soft item is name
   expect(screen.getByText('1 over quota')).toBeTruthy()
   expect(screen.getByText('Walk · no quota · Sun')).toBeTruthy()
 })
+
+// ── R9 (amends R6): a soft item whose candidate days equal its pool is drawn on its days, outlined ──
+
+const FIXED_GYM = { activity: 'Gym', satisfies: { capacity: 'stability' }, pool: 3, time_range: '06:00-07:00' }
+
+function weekWith(flexByDay, keys) {
+  const names = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  return {
+    window: { label: 'A', start_date: '2026-10-04', end_date: '2026-10-10', source: 'phase' },
+    days: names.map((w, i) => day(`2026-10-${String(4 + i).padStart(2, '0')}`, w, { flexible: flexByDay[w] ?? [] })),
+    keys: keys ?? [{ kind: 'capacity', key: 'stability', quota: 3, done: 0, scheduled: 3, excess: 0, unplaced: 0 }],
+  }
+}
+
+test('R9: pool equal to candidate days -> an outlined block on each of those days, and only those', () => {
+  const week = weekWith({ monday: [FIXED_GYM], wednesday: [FIXED_GYM], friday: [FIXED_GYM] })
+  render(<LegStrip week={week} />)
+  const cols = screen.getAllByTestId('leg-day')
+  const withBlock = cols.filter((c) => within(c).queryByTestId('leg-soft-fixed'))
+  expect(withBlock.map((c) => c.getAttribute('data-date'))).toEqual(['2026-10-05', '2026-10-07', '2026-10-09'])
+  const block = within(cols[1]).getByTestId('leg-soft-fixed')
+  expect(block.textContent).toContain('Gym')
+  expect(block.textContent).toContain('06:00-07:00')
+  // outlined, not the solid hard block
+  expect(block.className).toMatch(/border/)
+  expect(block.className).not.toMatch(/bg-gray-800/)
+  expect(block.getAttribute('title')).toContain('every listed day')
+})
+
+test('R9: a pool with MORE days than sessions stays tray-only (R6 holds there)', () => {
+  const week = weekWith({
+    monday: [{ ...FIXED_GYM, pool: 2 }], wednesday: [{ ...FIXED_GYM, pool: 2 }], friday: [{ ...FIXED_GYM, pool: 2 }],
+  })
+  render(<LegStrip week={week} />)
+  expect(screen.queryAllByTestId('leg-soft-fixed')).toHaveLength(0)
+  expect(screen.getByText('Gym · 0/3 · Mon Wed Fri')).toBeTruthy()
+})
+
+test('R9: a missing pool (an older server) never reads as fixed', () => {
+  const noPool = { activity: 'Gym', satisfies: { capacity: 'stability' } }
+  render(<LegStrip week={weekWith({ monday: [noPool], wednesday: [noPool], friday: [noPool] })} />)
+  expect(screen.queryAllByTestId('leg-soft-fixed')).toHaveLength(0)
+})
+
+test('R9: an item drawn on its days is not also listed by day in the tray; done still renders only where it happened', () => {
+  const week = weekWith({ monday: [FIXED_GYM], wednesday: [FIXED_GYM], friday: [FIXED_GYM] })
+  week.days[3].actual = [{ kind: 'capacity', key: 'stability', ref: 'w9', title: 'Legs' }]    // done on Wednesday
+  render(<LegStrip week={week} />)
+  expect(screen.getByText('Gym · 0/3')).toBeTruthy()                       // no "Mon Wed Fri" repeated here
+  expect(screen.queryByText(/Gym · 0\/3 · /)).toBeNull()
+  const actual = screen.getAllByTestId('leg-actual')
+  expect(actual).toHaveLength(1)
+  expect(actual[0].closest('[data-testid="leg-day"]').getAttribute('data-date')).toBe('2026-10-07')
+})
+
+// ── tray candidate days: de-duplicated, Monday first ─────────────────────────────────────────────
+
+test('tray candidate days are de-duplicated and ordered Mon -> Sun, whatever day the leg starts', () => {
+  const a = { activity: 'Gym A', satisfies: { capacity: 'stability' }, pool: 1 }
+  const b = { activity: 'Gym B', satisfies: { capacity: 'stability' }, pool: 1 }
+  // Sun-Sat window; Wed carries BOTH items (the live "Mon Tue Wed Wed Thu" case), Sun is first in the window.
+  const week = weekWith({ sunday: [a], monday: [b], wednesday: [a, b] },
+    [{ kind: 'capacity', key: 'stability', quota: 2, done: 0, scheduled: 2, excess: 0, unplaced: 0 }])
+  render(<LegStrip week={week} />)
+  expect(screen.getByText('Gym A / Gym B · 0/2 · Mon Wed Sun')).toBeTruthy()
+  expect(screen.getByText('Gym A / Gym B · 0/2 · Mon Wed Sun').getAttribute('title')).toBe('candidate days: Mon Wed Sun')
+})
+
+// ── mobile layout: a row per day below 640px, never a character-by-character wrap ────────────────
+
+test('layout: one row per day below 640px, seven columns from 640px; blocks truncate with a title', () => {
+  render(<LegStrip week={SUN_SAT} />)
+  const strip = screen.getByRole('group', { name: 'Leg days' })
+  expect(strip.className).toMatch(/\bgrid-cols-1\b/)
+  expect(strip.className).toContain('sm:[grid-template-columns:repeat(var(--leg-cols),minmax(0,1fr))]')
+  expect(strip.style.getPropertyValue('--leg-cols')).toBe('7')
+  const col = screen.getAllByTestId('leg-day')[0]
+  expect(col.className).toMatch(/\bflex-row\b/)
+  expect(col.className).toMatch(/\bsm:flex-col\b/)
+  // A hard block truncates (never `break-words`) and carries its full text.
+  const rugby = screen.getAllByTestId('leg-hard').find((n) => n.textContent.startsWith('Rugby'))
+  expect(rugby.getAttribute('title')).toBe('Rugby · evening')
+  expect(rugby.querySelector('.truncate')).toBeTruthy()
+  expect(rugby.className).not.toMatch(/break-words/)
+  const longName = 'Instrument calibration and validation'
+  cleanup()
+  const long = { ...SUN_SAT, days: [day('2026-10-04', 'sunday', { hard: [{ activity: longName, expected_load: 'none', same_day_training: true, time_range: '08:00-16:00' }] })], keys: [] }
+  render(<LegStrip week={long} />)
+  const block = screen.getByTestId('leg-hard')
+  expect(block.getAttribute('title')).toBe(`${longName} · 08:00-16:00`)
+  expect(block.querySelector('.truncate').textContent).toBe(longName)      // whole text in the DOM, clipped by CSS
+})

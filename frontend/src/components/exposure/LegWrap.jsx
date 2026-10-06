@@ -9,12 +9,15 @@
 //     one reads as a drop that is only a shorter leg. Presentation only: the server's `delta_done` is
 //     the raw difference, and `previous_partial` carries the predecessor's flag (the oldest returned
 //     row's predecessor is not itself in the list).
+//   • R10: a leg with anything the resolver could not count shows "N uncounted" with the reasons (from
+//     the same pass that produced `done`), so a leg that reads 0/3 after three real sessions says why
+//     (they resolved to a capacity that phase had no slot for) instead of looking like three skipped.
 //   • Derived and stateless (R5): a read, nothing stored here. The quota label for the load_window kind
 //     is "Conditioning" (R7, via legLabels).
 
 import { useEffect, useState } from 'react'
 import api from '../../api'
-import { keyLabel, shortDate } from './legLabels'
+import { keyLabel, reasonLabel, shortDate } from './legLabels'
 
 // The delta cell. Shown only against a full predecessor, for a full leg, on a key present in both.
 function deltaText(leg, k) {
@@ -23,6 +26,20 @@ function deltaText(leg, k) {
   if (k.delta_done > 0) return `+${k.delta_done}`
   if (k.delta_done < 0) return `−${Math.abs(k.delta_done)}`
   return '±0'
+}
+
+// "N uncounted" plus a count per reason. Nothing for zero, or for a server that sends no `uncounted`.
+function Uncounted({ u }) {
+  const count = u?.count
+  if (!(count > 0)) return null
+  const reasons = Object.entries(u.reasons ?? {}).map(([r, n]) => `${n} ${reasonLabel(r)}`).join(', ')
+  return (
+    <p data-testid="leg-uncounted" className="text-[11px] text-amber-700"
+      title={`Not counted toward any quota: ${reasons}`}>
+      <span className="font-medium">{count} uncounted</span>
+      {reasons && <span className="text-amber-600"> · {reasons}</span>}
+    </p>
+  )
 }
 
 function Row({ leg }) {
@@ -48,6 +65,7 @@ function Row({ leg }) {
           </li>
         ))}
       </ul>
+      <Uncounted u={leg.uncounted} />
     </li>
   )
 }

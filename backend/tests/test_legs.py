@@ -202,6 +202,46 @@ def test_previous_partial_names_whether_the_predecessor_was_cut_short(db_session
     assert got[-1]["previous_partial"] is None
 
 
+# ── R10: uncounted, from the same pass that produced `done` ─────────────────
+
+def test_uncounted_names_what_a_leg_could_not_count(db_session):
+    """The live case: a stability-only phase, three gym sessions that resolve to strength (no slot in
+    that phase) read 0/3 -- and the leg says why, rather than dropping them."""
+    u = _user(db_session)
+    _tpl(db_session, "t_str", STRENGTH_RK)
+    _tpl(db_session, "t_stab", STABILITY_RK)
+    db_session.add(models.HevyExerciseTemplate(id="t_none", title="t_none", is_custom=True, owner_user_id=None))
+    db_session.flush()
+    _open(db_session, u.id, "decompression", date(2026, 9, 7), _micro(("stability", 3)))
+    for i, d in enumerate((date(2026, 9, 29), date(2026, 10, 1), date(2026, 10, 3))):
+        _workout(db_session, u.id, f"g{i}", d, "t_str")           # strength: off plan here
+    _workout(db_session, u.id, "n0", date(2026, 9, 30), "t_none")   # no primary tag: untagged
+    _workout(db_session, u.id, "s0", date(2026, 9, 30), "t_stab")   # counts
+    legs = {l["start_date"]: l for l in resolver_mod.past_legs(db_session, u.id, n=3, today=date(2026, 10, 13))["legs"]}
+    leg = legs["2026-09-28"]
+    assert [(k["key"], k["quota"], k["done"]) for k in leg["keys"]] == [("stability", 3, 1)]
+    assert leg["uncounted"] == {"count": 4, "reasons": {"off_plan": 3, "untagged": 1}}
+    # A leg with nothing uncounted says so explicitly (count 0, no reasons), never a missing key.
+    assert legs["2026-09-21"]["uncounted"] == {"count": 0, "reasons": {}}
+
+
+def test_uncounted_comes_from_the_same_pass_as_done(db_session):
+    """Mirrors `resolve()` for the same window: the row's count is that call's `uncounted`, not a
+    second computation."""
+    u = _user(db_session)
+    _tpl(db_session, "t_str", STRENGTH_RK)
+    _open(db_session, u.id, "decompression", date(2026, 9, 7), _micro(("stability", 3)))
+    _workout(db_session, u.id, "g0", date(2026, 9, 29), "t_str")
+    legs = resolver_mod.past_legs(db_session, u.id, n=3, today=date(2026, 10, 13))["legs"]
+    leg = next(l for l in legs if l["start_date"] == "2026-09-28")
+    window = resolver_mod.QuotaWindow(
+        start_date=date(2026, 9, 28), end_date=date(2026, 10, 4), label="A", source="phase",
+        slots=resolver_mod._slots_from([{"capacity": "stability", "sessions_per_cycle": 3, "minutes": 30}],
+                                       "sessions_per_cycle"))
+    direct = resolver_mod.resolve(db_session, u.id, window=window)
+    assert leg["uncounted"]["count"] == len(direct["uncounted"]) == 1
+
+
 # ── R4: partial, never stretched; zero-length never a leg ────────────────────
 
 def test_a_leg_cut_short_by_a_phase_change_is_partial_with_its_actual_dates(db_session):

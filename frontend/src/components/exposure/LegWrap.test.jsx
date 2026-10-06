@@ -119,3 +119,32 @@ test('a failed read says so rather than rendering an empty history', async () =>
   await act(async () => { render(<LegWrap />) })
   await waitFor(() => expect(screen.getByText('Could not load the leg wrap.')).toBeTruthy())
 })
+
+// ── R10: uncounted ───────────────────────────────────────────────────────────────────────────────
+
+test('R10: a leg with uncounted sessions shows "N uncounted" and the reasons', async () => {
+  await mount([leg({ uncounted: { count: 4, reasons: { off_plan: 3, untagged: 1 } } })])
+  const u = screen.getByTestId('leg-uncounted')
+  expect(within(u).getByText('4 uncounted')).toBeTruthy()
+  expect(u.textContent).toContain('3 off plan, 1 untagged')
+  expect(u.getAttribute('title')).toBe('Not counted toward any quota: 3 off plan, 1 untagged')
+})
+
+test('R10: nothing for zero, and nothing when the server sends no `uncounted`', async () => {
+  await mount([
+    leg({ uncounted: { count: 0, reasons: {} } }),
+    leg({ start_date: '2026-09-27', end_date: '2026-10-03', uncounted: undefined }),
+  ])
+  expect(screen.queryByTestId('leg-uncounted')).toBeNull()
+  expect(screen.queryByText(/uncounted/)).toBeNull()
+})
+
+test('R10: only the leg that has uncounted sessions shows the line; an unknown reason still shows', async () => {
+  await mount([
+    leg({ uncounted: { count: 1, reasons: { something_new: 1 } } }),
+    leg({ start_date: '2026-09-27', end_date: '2026-10-03', uncounted: { count: 0, reasons: {} } }),
+  ])
+  const rows = screen.getAllByTestId('leg-row')
+  expect(within(rows[0]).getByTestId('leg-uncounted').textContent).toContain('1 something new')
+  expect(within(rows[1]).queryByTestId('leg-uncounted')).toBeNull()
+})
