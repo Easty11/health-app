@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The operator's R11 (phase bands plus a legend replacing the marker lines) is recorded on the ROADMAP phase-marker item with Code's checks for the brief; nothing is built and no decision is minted.** Governance only - Handoff: `closeout.md`.
+
 - **The `/metrics` phase-marker misreading is logged on ROADMAP NEXT with the check of its cause; nothing is built and no decision is minted.** Governance only - Handoff: `closeout.md`.
 
 - **The leg strip draws a soft item whose days equal its pool, lists tray days once and Monday first, and stacks a row per day on a phone; each leg row says how many sessions it could not count and why (#393, #394).** Code, non-schema - Handoff: `closeout.md`.
-
-- **Know (v1 test 2) is MET by operator ruling, with the live bundle, strip and wrap read; the #389, #390 and #391 bundle checks are closed (#392).** Governance only - Handoff: `closeout.md`.
 
 
 ---
