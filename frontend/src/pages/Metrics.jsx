@@ -5,12 +5,13 @@ import FormChart from '../components/charts/FormChart'
 import ReadinessChart from '../components/charts/ReadinessChart'
 import ExerciseChart from '../components/charts/ExerciseChart'
 import { usePhaseMarkers } from '../components/charts/PhaseMarkers'
+import LegWrap from '../components/exposure/LegWrap'
 import useLoadRefresh from '../lib/useLoadRefresh'
 
 // The training-performance view (Visuals increments 1–3). The lab surface — ingestion,
 // stored results, upload history — used to share this page; it now lives at /labs (STEP 0
 // of increment 4: a new surface gets a home before it gets a chart). This page is the four
-// charts only, and is where increment 4's weekly wrap and phase caption will mount.
+// charts plus the leg wrap (Know (d): done vs quota per completed leg, with a phase caption on each row).
 
 export default function Metrics() {
   // Range shared across the three Banister-view charts (Visuals increment 2). Lifted here so a
@@ -57,6 +58,8 @@ export default function Metrics() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-4">
+        {/* Leg wrap (Know (d)) — what each finished leg did against the quota its own phase set. */}
+        <LegWrap />
         {/* Banister view (Visuals increments 1–3). The range is shared: LoadChart owns the
             visible selector and lifts the chosen window to `chartDays`, which the others follow.
             LoadChart (work-done per window) and FormChart (fitness/fatigue/form) read

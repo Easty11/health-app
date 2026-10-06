@@ -41,7 +41,11 @@ test('renders the phase, week N, review badge, the week line, and the one action
   await act(async () => { render(<PhaseCard phase={PHASE} onReviewChange={onReviewChange} />) })
   expect(screen.getByText(/Phase · decompression · week \d+/)).toBeTruthy()
   expect(screen.getByText('review due')).toBeTruthy()
-  await waitFor(() => expect(screen.getByText(/Stability — scheduled 3 · quota 2 · done 1 — MISMATCH \+1/)).toBeTruthy())
+  // The leg strip (Know (d)) replaced the "Schedule vs quota" lines: the quota tray names the key,
+  // done/quota, and the over-schedule; the old line is gone.
+  await waitFor(() => expect(screen.getByText('Stability · 1/2')).toBeTruthy())
+  expect(screen.getByText('1 over quota')).toBeTruthy()
+  expect(screen.queryByText('Schedule vs quota')).toBeNull()
   expect(screen.getByText(/Device-evidenced counts may be incomplete/)).toBeTruthy()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /review \/ change phase/i })) })
   expect(onReviewChange).toHaveBeenCalled()

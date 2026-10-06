@@ -1,7 +1,7 @@
 // PhaseCard — the phase surface (#318, PR2 S5; extended #319). Composes the current phase, week N of
 // the block, the review badge, the plan-of-record headline + STALE flag (#319), the quota position
-// (QuotaWindow), the #312/#316 week line (scheduled · quota · done + freshness, from GET
-// /engine/week-plan), phase history, and ONE action: Review / change phase — which opens the
+// (QuotaWindow), the leg strip (LegStrip, Know (d): the current leg's days with hard blocks, actuals and
+// the quota tray, + freshness, from GET /engine/week-plan), phase history, and ONE action: Review / change phase — which opens the
 // structured 8-step flow (PhaseTransitionFlow). It replaces the phase portion of ExposurePanel's
 // read surface. A phase is entered only through that flow (#378: the direct-open form and its route
 // are gone); a phase change is the form's single confirmed atomic write (#317).
@@ -21,6 +21,7 @@ import api from '../../api'
 import QuotaWindow from './QuotaWindow'
 import PhaseHistory from './PhaseHistory'
 import ClosePhaseDialog from './ClosePhaseDialog'
+import LegStrip from './LegStrip'
 
 function Chip({ children, tone = 'gray' }) {
   const tones = {
@@ -29,10 +30,6 @@ function Chip({ children, tone = 'gray' }) {
     amber: 'bg-amber-100 text-amber-700',
   }
   return <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${tones[tone]}`}>{children}</span>
-}
-
-function _cap(s) {
-  return typeof s === 'string' && s ? s[0].toUpperCase() + s.slice(1) : s
 }
 
 // Week N of the block: whole weeks since entered_on, 1-based. Null if entered_on is unparseable.
@@ -178,19 +175,11 @@ export default function PhaseCard({ phase, refetchKey = 0, onReviewChange, onWri
       {/* Quota position (the #276/#307 resolver read) */}
       <QuotaWindow refetchKey={refetchKey} />
 
-      {/* The #312/#316 week line: scheduled · quota · done + freshness */}
+      {/* The leg strip (Know (d)): the current leg's days, hard blocks, actuals, and the quota tray;
+          replaces the #312/#316 "Schedule vs quota" lines. Freshness and planning notes stay. */}
       {wkStatus === 'ready' && week && (
-        <div className="border-t border-gray-100 pt-2 flex flex-col gap-0.5">
-          <p className="text-[11px] font-medium text-gray-600">Schedule vs quota</p>
-          {(week.keys ?? []).map((k) => {
-            const flag = k.excess > 0 ? ` — MISMATCH +${k.excess}`
-              : k.unplaced > 0 ? ` — UNPLACED ${k.unplaced}` : ''
-            return (
-              <p key={`${k.kind}:${k.key}`} className="text-xs text-gray-600">
-                {_cap(k.key)} — scheduled {k.scheduled} · quota {k.quota} · done {k.done}{flag}
-              </p>
-            )
-          })}
+        <div className="border-t border-gray-100 pt-2 flex flex-col gap-1.5">
+          <LegStrip week={week} />
           {week.needs_planning && (
             <p className="text-xs text-amber-700">Planning needed — no schedule item is placed against the quota.</p>
           )}
