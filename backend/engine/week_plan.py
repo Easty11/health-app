@@ -9,7 +9,9 @@ behaviours from ONE read, introducing no new store and no persisted "plan state"
 2. **Prompt planning at phase start.** `needs_planning` is true when the open phase declares a
    quota that NO schedule item is placed against (every key `scheduled == 0`).
 3. **Hard items first, then availability.** Fixed commitments occupy their days; what is left is
-   availability; flexible sessions are placed into availability.
+   availability; flexible sessions are LISTED on every candidate day — nothing is placed. A flexible
+   item repeats on each day it could fall (`days`), carrying its weekly count as `pool`; where it
+   lands is the operator's call (#275 free order), and the planner never assigns a day.
 
 Built over ALL THREE slot kinds (`capacity` | `load_window` | `activity`, #315) — a
 `satisfies: {activity: …}` item counts exactly like the others.
@@ -87,6 +89,15 @@ def schedule_sessions_per_week(value: dict[str, Any]) -> int:
         return spw
     days = value.get("days")
     return len(days) if isinstance(days, list) else 0
+
+
+def _time_keys(v: dict[str, Any]) -> dict[str, Any]:
+    """`time_of_day` / `time_range` of a schedule item, each only when it carries one (Know (d))."""
+    out: dict[str, Any] = {}
+    for k in ("time_of_day", "time_range"):
+        if v.get(k) is not None:
+            out[k] = v[k]
+    return out
 
 
 def consistency_rows(
@@ -266,13 +277,26 @@ def plan_week(
             if not _covers(v, d, wd):
                 continue
             if v.get("hard"):
-                hard.append({
+                item = {
                     "activity": v.get("activity"),
                     "expected_load": v.get("expected_load"),
                     "same_day_training": bool(v.get("same_day_training")),
-                })
+                }
+                # Know (d): the strip draws a hard block with its time and what it satisfies. Additive,
+                # present-only keys — every existing reader keys by name and is unchanged.
+                if v.get("satisfies") is not None:
+                    item["satisfies"] = v["satisfies"]
+                item.update(_time_keys(v))
+                hard.append(item)
             else:
-                flexible.append({"activity": v.get("activity"), "satisfies": v.get("satisfies")})
+                # `pool` is the item's weekly count (`schedule_sessions_per_week`): a flexible item is
+                # listed on EVERY candidate day, so the count lives on the item, not the day.
+                item = {
+                    "activity": v.get("activity"), "satisfies": v.get("satisfies"),
+                    "pool": schedule_sessions_per_week(v),
+                }
+                item.update(_time_keys(v))
+                flexible.append(item)
         # A day is unavailable iff a hard item that day BLOCKS training: not same_day_training AND
         # not a zero-load item (ruling 1 — `expected_load: "none"` never constrains).
         constraining = [

@@ -51,6 +51,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
@@ -62,7 +63,7 @@ from reads.hevy_reads import counted_workouts as _counted_workouts   # aliased: 
 from . import taxonomy
 from .profile import get_profile
 from .taxonomy import Capacity
-from .training_phase import current_training_phase, _SLOT_LOAD_WINDOWS
+from .training_phase import current_training_phase, phase_at, _SLOT_LOAD_WINDOWS
 
 # Sub-cycle labels when a leg carries none of its own: A, B, C, D by order.
 _LEG_LABELS = ("A", "B", "C", "D")
@@ -326,12 +327,22 @@ def _in_window_aerobic(db: Session, user_id: int, window: QuotaWindow) -> list[A
 # Public: resolve → the endpoint/enforcement payload.                          #
 # --------------------------------------------------------------------------- #
 
-def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str, Any]:
+def resolve(
+    db: Session, user_id: int, *, today: date | None = None, window: QuotaWindow | None = None,
+) -> dict[str, Any]:
     """The full resolver read: window, per-slot position, the due capacity (Rule 4), and the
     surfaced `uncounted[]`. At baseline (no phase microcycle, no weekly template) `window` is
-    null and the lists are empty — the #272 no-profile contract (200, degraded body)."""
+    null and the lists are empty — the #272 no-profile contract (200, degraded body).
+
+    `window` injects the span and slots to count over (Know (d): the leg wrap counts a PAST leg
+    against the quota ITS phase declared). `window=None` is the current behaviour, byte-identical:
+    the window comes from `resolve_window(today)`, which reads the OPEN phase — so passing a past
+    `today` alone counts against today's phase, never that day's (`resolve_window` uses
+    `current_training_phase`, not `phase_at`). A caller that wants a past leg builds the window
+    from `phase_at` (see `past_legs`) and injects it."""
     today = today or _local_day()
-    window = resolve_window(db, user_id, today)
+    if window is None:
+        window = resolve_window(db, user_id, today)
     if window is None:
         return {"window": None, "slots": [], "due_capacity": None,
                 "due_slot": None, "uncounted": []}
@@ -457,6 +468,103 @@ def resolve(db: Session, user_id: int, *, today: date | None = None) -> dict[str
         "due_slot": due_slot,
         "uncounted": uncounted,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Past legs — the leg wrap (Know (d)): quota vs done per slot key, per leg.     #
+# --------------------------------------------------------------------------- #
+
+LEGS_MAX = 26   # GET /engine/legs?n= is clamped here
+
+# Weekly-template periods are never a leg (R3): the template is current state, not versioned, so the
+# quota a past week was held to cannot be reconstructed. Surfaced in the payload, not guessed at.
+LEGS_EXCLUDED_NOTE = "weekly-template periods are not included: the template is not versioned"
+
+
+def _leg_window(phase: models.TrainingPhase, day: date) -> tuple[QuotaWindow, bool] | None:
+    """The leg of `phase` containing `day`, cut at the phase's close (R4). `partial` is true when the
+    close fell inside the leg: the leg keeps its ACTUAL dates (ends the day before `closed_on`,
+    the interval being half-open) and is never stretched or merged into its successor. `None` for a
+    phase with no usable microcycle."""
+    w = phase_window(phase, day)
+    if w is None:
+        return None
+    partial = False
+    if phase.closed_on is not None:
+        last = phase.closed_on - timedelta(days=1)
+        if w.end_date > last:
+            w.end_date = last
+            partial = True
+    return w, partial
+
+
+def past_legs(
+    db: Session, user_id: int, *, n: int = 8, today: date | None = None,
+) -> dict[str, Any]:
+    """The last `n` completed legs, newest first, each counted against the quota ITS OWN phase
+    declared (R2/R3: quota vs done per slot key; no "scheduled" column — placement is not
+    reconstructible).
+
+    Walks back day-by-day over the ledger with `phase_at(day)` — NEVER `current_training_phase`,
+    which would count every past leg against today's phase. Starts the day before the current
+    phase leg began (or today when the current window is a weekly template / baseline — those
+    periods are not legs). A phase with no microcycle is stepped over whole; a baseline gap is
+    jumped to the latest close before it; a zero-length row (`closed_on == entered_on`) is never
+    returned by `phase_at` so it never produces a leg (#379). Derived and stateless (R5): reads
+    only, via `resolve(window=...)` — no snapshot, no write.
+
+    One leg beyond `n` is counted but not returned, so the oldest returned leg still carries its
+    `delta_done`. `delta_done` is `done` minus the chronologically previous leg's, per key present
+    in both — taken as the counts stand, with no adjustment for a partial leg (the row carries the
+    `partial` flag instead)."""
+    n = max(1, min(int(n), LEGS_MAX))
+    today = today or _local_day()
+    current = resolve_window(db, user_id, today)
+    day = current.start_date - timedelta(days=1) if current is not None and current.source == "phase" else today
+
+    found: list[tuple[QuotaWindow, bool, models.TrainingPhase]] = []
+    while len(found) < n + 1:
+        phase = phase_at(db, user_id, day)
+        if phase is None:
+            prior_close = (
+                db.query(func.max(models.TrainingPhase.closed_on))
+                .filter(models.TrainingPhase.user_id == user_id,
+                        models.TrainingPhase.closed_on.isnot(None),
+                        models.TrainingPhase.closed_on <= day)
+                .scalar()
+            )
+            if prior_close is None:        # before the first phase: the start of the ledger
+                break
+            day = prior_close - timedelta(days=1)
+            continue
+        leg = _leg_window(phase, day)
+        if leg is None:                    # no microcycle: step over the whole phase
+            day = phase.entered_on - timedelta(days=1)
+            continue
+        found.append((leg[0], leg[1], phase))
+        day = leg[0].start_date - timedelta(days=1)
+
+    rows: list[dict[str, Any]] = []
+    for window, partial, phase in found:
+        pos = resolve(db, user_id, window=window)
+        keys = [
+            {"kind": s["kind"], "key": s[s["kind"]], "quota": s["quota"], "done": s["done"]}
+            for s in pos["slots"]
+        ]
+        rows.append({
+            "start_date": window.start_date.isoformat(),
+            "end_date": window.end_date.isoformat(),
+            "label": window.label,
+            "phase": {"id": phase.id, "label": phase.label},
+            "partial": partial,
+            "keys": keys,
+        })
+    for i, row in enumerate(rows):
+        prev = {(k["kind"], k["key"]): k["done"] for k in rows[i + 1]["keys"]} if i + 1 < len(rows) else {}
+        for k in row["keys"]:
+            p = prev.get((k["kind"], k["key"]))
+            k["delta_done"] = None if p is None else k["done"] - p
+    return {"legs": rows[:n], "excluded": LEGS_EXCLUDED_NOTE}
 
 
 def due_capacity(db: Session, user_id: int, *, today: date | None = None) -> str | None:
