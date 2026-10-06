@@ -26,3 +26,21 @@ export function shortDate(iso) {
   if (!m) return iso ?? ''
   return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1] ?? m[2]}`
 }
+
+// Monday-first order for a list of weekday names (the tray lists candidate days Mon -> Sun whatever
+// day the leg starts on).
+export const WEEKDAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
+// The resolver's `uncounted` reasons, in the words the page uses (R10). An unknown reason falls back to
+// itself with the underscores removed, so a new server-side reason shows rather than vanishing.
+const REASON_LABELS = {
+  off_plan: 'off plan',
+  untagged: 'untagged',
+  unadjudicated_duplicate: 'duplicate not adjudicated',
+  untimed: 'untimed',
+  concurrent_strength: 'concurrent strength',
+  unclaimed_session: 'other activity',
+}
+export function reasonLabel(reason) {
+  return REASON_LABELS[reason] ?? String(reason).replace(/_/g, ' ')
+}

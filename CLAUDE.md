@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The leg strip draws a soft item whose days equal its pool, lists tray days once and Monday first, and stacks a row per day on a phone; each leg row says how many sessions it could not count and why (#393, #394).** Code, non-schema - Handoff: `closeout.md`.
+
 - **Know (v1 test 2) is MET by operator ruling, with the live bundle, strip and wrap read; the #389, #390 and #391 bundle checks are closed (#392).** Governance only - Handoff: `closeout.md`.
 
 - **The leg strip on the Phase card and the leg wrap on `/metrics` are built: each finished leg is counted against its own phase's quota, a partial leg shows no delta, and "Conditioning" is the one label (#390, #391).** Code, non-schema - Handoff: `closeout.md`.
-
-- **Date-fragile tests are swept: the five hardcoded-`review_by` tests are not date-sensitive, three others that were are fixed (#335, #336, and this branch), and a pin runs the date-sensitive test files a year ahead; no decision entry.** Tests, one pinned test dependency - Handoff: `closeout.md`.
 
 
 ---

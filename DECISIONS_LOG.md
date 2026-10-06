@@ -13596,3 +13596,49 @@ Not taken: any change to `delta_done` (R8 is presentation), matching a done sess
 **Not verified here.** Everything under "Recorded as met" is operator-reported. Code has not read the live bundle, the live ledger, or either deploy.
 
 **Do not revisit unless.** Placement-level adherence is wanted (then versioned schedule items are the first decision, on the planning row), or the Know reading above is withdrawn.
+
+### 393. R9 amends R6: a soft item whose candidate days equal its pool is drawn on its days, outlined; the strip is a row per day on a phone; the tray lists days once, Monday first
+
+**Decision.** The operator's R9 (6 Oct 2026), and three follow-ups from the operator's reading of the live strip. R6 (#390) said soft pools appear only in the tray, never per day. R9 narrows that.
+- **R9.** A soft item whose candidate-day count equals its pool (`schedule_sessions_per_week` equals the number of days it lists) renders on its days as an **outlined** block, with its time. The pool has no choice left to make, so the days are the plan. A pool with more days than sessions stays tray-only. Done still renders only where it happened, and nothing is matched to a planned item (Q197 is unchanged). The outline is deliberate: the solid block stays for hard commitments.
+- **Mobile layout.** Below 640px the strip is one row per day (the day label, then its blocks) instead of seven columns. A block's text is truncated, never wrapped character by character, with the full text in its `title`.
+- **Tray candidate days** are de-duplicated and listed Monday to Sunday, whatever day the leg starts on (the live strip read "Mon Tue Wed Wed Thu").
+
+Choices inside the build that the rulings did not spell out, all presentation or derivation:
+- The page counts an item's candidate days as the number of distinct weekdays it appears on in the leg's window. That equals the number of days it lists for a 7-day leg (the only length in use). A leg shorter than 7 days, where some listed days fall outside the window, would read as not fixed and stay tray-only.
+- An item drawn on its days is not also listed by day in the tray; its key row still shows the names and done/quota.
+- A missing or non-numeric `pool` (an older server) never reads as fixed.
+
+Not taken: a count of candidate days from the server (the page derives it; a server field is the fix if a window other than 7 days ever appears), any matching of a done session to a planned item.
+
+**Rationale.** Where the pool equals the days, the schedule already says exactly when the sessions are, so hiding them in a tray makes the strip understate the week. Where there are more days than sessions the choice is the operator's, which is what the tray is for. Seven columns at phone width leave a block a few characters wide, and wrapping it by character is unreadable.
+
+**Status.** DONE in the PR that carries this entry (SHA resolved at next close-out). Deploy checks owed once it deploys (#121): the live `assets/index-*.js` contains "Leg days", "every listed day" and "candidate days"; the operator reads the live strip on the phone.
+
+**How you know.** The operator's rulings. Vitest: R9 draws a block on exactly the pool's days and no others, an unequal pool and a missing pool stay tray-only, a drawn item is not repeated in the tray and done renders only on its own day; the tray days read "Mon Wed Sun" for two items sharing Wednesday in a Sunday-first window; the layout classes (single column below 640px, a row per day, truncate with a title, no `break-words`). Mutation-checked, each failing the tests it should: every pool read as fixed (5), none read as fixed (2), days left in window order (1), a day listed once per item (1), blocks wrapping instead of truncating (1), no mobile single column (1), no per-day row layout (1). **Real browser, not committed:** the strip rendered in Chromium through Playwright with the live case's long block name ("Work — Instrument calibration") and measured. At 380px and 639px every day is its own row, the page does not scroll horizontally, and every hard block's name is a single line with nothing clipped. At 640px and 1024px the days are seven columns, the long name truncates to a single line with an ellipsis, and no block's text wraps. Screenshots read. The harness was a throwaway and is not in the tree.
+
+**Not verified here.** The operator's phone: the 380px check is a desktop Chromium at that viewport width, not the device. The strip against the real `week-plan` payload (the harness and the tests use fixtures typed from `plan_week`'s output shape). The live deploy and bundle.
+
+**Do not revisit unless.** A leg length other than 7 days comes into use (then the candidate-day count should come from the server), or the operator wants a pool with more days than sessions drawn too.
+
+### 394. R10: each leg row says how many sessions it could not count, and why
+
+**Decision.** The operator's R10 (6 Oct 2026). Each `GET /engine/legs` row carries `uncounted`: `{count, reasons}`, taken from the same `resolve()` pass that produced `done` (`reasons` is a count per reason, not the per-item list). LegWrap shows "N uncounted" with the reasons on any leg with N above zero, and nothing for zero or for a server that sends none. The live case it exists for: 28 Sep to 3 Oct read Stability 0/3 though three gym sessions happened; they resolved to strength, which had no slot in that phase.
+
+**Confirmed before building (the brief's stop condition).** `resolve()` does not drop a Hevy workout with no matching capacity slot: it lists it as `off_plan` with its capacity, and an untagged workout as `untagged`. Reproduced on a stability-only phase with three strength sessions and one untagged: stability 0/3, uncounted three `off_plan` and one `untagged`. So the build went ahead.
+
+**One nuance recorded, not changed.** `resolve()` evaluates aerobic sessions only when the window declares an aerobic slot (an `activity` or `load_window` slot). In a leg with none, an aerobic session is neither counted nor listed, so `uncounted` is complete for Hevy workouts and for aerobic sessions only where the leg could have counted them.
+
+Choices inside the build that R10 did not spell out: the payload carries counts by reason rather than the item list (the list stays on `/engine/resolver` for the current leg); the reasons are shown in words (`off_plan` as "off plan", `unclaimed_session` as "other activity"), and an unknown reason shows with its underscores removed rather than vanishing; the line is amber, under the keys, with the reasons also in its `title`.
+
+Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
+
+**Rationale.** A leg that reads 0/3 after three real sessions looks like three skipped sessions. The sessions were counted by the resolver and found to belong to a capacity the phase had no slot for; saying so is the difference between "I did not train" and "the plan did not ask for that".
+
+**Status.** DONE in the PR that carries this entry (SHA resolved at next close-out). Deploy check owed (#121): the live bundle contains "Not counted toward any quota"; the operator reads the 28 Sep to 3 Oct leg on `/metrics`.
+
+**How you know.** The operator's ruling and the scratch reproduction above. Pytest: the live case (a leg whose three off-plan sessions and one untagged are counted by reason, and a leg with none reads count 0 and no reasons), and the row's count equals `len` of a direct `resolve()` over the same window. Vitest: "N uncounted" with the reasons and the tooltip, nothing for zero or a missing field, only the leg that has any shows it, an unknown reason still shows. Mutation-checked: the field dropped (2), the reasons not counted (2), the count not taken from the pass (2), the line shown for zero (2), never shown (2), the reasons dropped (2).
+
+**Not verified here.** The live ledger (Code has no database access): the 28 Sep to 3 Oct leg is the operator's reading, and the reproduction above is on fixtures. The live deploy and bundle.
+
+**Do not revisit unless.** The operator wants to see WHICH sessions were uncounted on a past leg (then the item list, not only counts, goes in the row), or aerobic sessions in a leg with no aerobic slot need listing (a resolver change, not a page one).

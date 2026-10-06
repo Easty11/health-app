@@ -1,76 +1,73 @@
-# Close-out — Know (d): the leg strip on the Phase card and the leg wrap on /metrics are built; a partial leg shows no delta; "Conditioning" is the one label
+# Close-out — Know is MET by operator ruling; the leg strip draws a soft item whose days equal its pool, stacks a row per day on a phone, lists tray days once and Monday first; each leg row says how many sessions it could not count and why
 
 ## Real commits this session
 
-Session `know-d-leg-wrap`, the operator's brief of 6 Oct 2026 (AEST), two PRs. Range: `1006399` (master at open) to this close-out. Fresh-clone settings were not set in this container and were set and read back (`core.hooksPath` = `.githooks`, local `alias.land`). Maxima at open, by anchored script: decisions #389, questions Q216. Minted: #390 (PR 1) and #391 (PR 2); each resolved against master's max immediately before its merge (#389, then #390).
+Session `know-met-leg-followups`, the operator's brief of 6 Oct 2026 (AEST), two PRs: Part A (governance) then Part B (code). Range: `2073d68` (master at open) to this close-out. Fresh-clone settings were already set and read back. Maxima at open, by anchored script: decisions #391, questions Q216. Minted: #392 (PR 1), #393 and #394 (PR 2); each resolved against master's max immediately before its merge (#391, then #392).
 
-PR 1, backend, merged:
-- `c4a9093` `feat(know-d): GET /engine/legs, an injected window for resolve(), widened week-plan day items` - `engine/resolver.py`, `engine/week_plan.py`, `routers/engine.py`, `tests/test_legs.py`, the #390 entry, its BRANCHES row.
-- `82403d1` `gov(know-d): resolve #NEXT -> #390 against master max #389`.
-- `97391da` `Merge pull request #338 from Easty11/claude/busy-clarke-f9vzkw` - merged on green (guard, pytest, vitest) with the head SHA pinned.
+PR 1, governance only, merged:
+- `71ec64c` `gov(know-met): #392 Know (v1 test 2) is MET by operator ruling; the #389, #390 and #391 bundle checks recorded as met; previous_partial accepted` - DECISIONS #392, ROADMAP (v1 Know line, the Weekly-resolver row, the Phase-change form row, the NEXT block, one input on the planning row), BRANCHES, the CLAUDE.md pointer.
+- `ad972e1` `Merge pull request #340 from Easty11/claude/busy-clarke-f9vzkw` - merged on green (guard, pytest, vitest) with the head SHA pinned.
 
-PR 2, frontend, on the same branch name restarted from `97391da` (the harness instruction and #387):
-- `cd71531` `feat(know-d): LegStrip on the Phase card, LegWrap on /metrics, R8 (no delta against a partial leg)` - `LegStrip`, `LegWrap`, `legLabels`, the Phase card, the quota window, `/metrics`, their tests, and `previous_partial` on the leg rows.
-- `d2de64f` `gov(know-d): #391 R8 and the frontend build; Know (d) DONE as a code item with the gap against Know's wording named; phase-planning row` - DECISIONS #391, ROADMAP, BRANCHES, the CLAUDE.md Recent-landings pointer.
+PR 2, code, on the same branch name restarted from `ad972e1` (the harness instruction and #387):
+- `65f80e8` `feat(know-d): leg strip follow-ups (R9, mobile rows, tray order) and uncounted on each leg (R10)` - `LegStrip`, `LegWrap`, `legLabels`, `engine/resolver.py`, and their tests.
+- `b5bb9f9` `gov(know-d-followups): #393 R9 and the strip follow-ups, #394 R10` - DECISIONS #393 and #394, BRANCHES, the CLAUDE.md pointer.
 - A final `chore: session close-out` commit carrying this file: its hash is on the branch (a file cannot name its own commit).
 
-No migration, no schema change, no prod read or write. PR 2 self-merges on green (non-schema; R8 is the operator's ruling, no new judgment by Code). **Provisional until merged: everything in PR 2.**
+No migration, no schema change, no prod read or write. PR 2 self-merges on green (non-schema; R9 and R10 are the operator's rulings, no new judgment by Code). **Provisional until merged: everything in PR 2.**
 
 ## Pending-queue reconciliation
 
 Nothing came from a chat `;cc` queue as a PENDING item. The brief, item by item:
 
-**PR 1.**
-1. **Widen week-plan: DONE (`c4a9093`).** Hard items add `satisfies`, `time_of_day`, `time_range` when present; flexible items add `time_of_day`, `time_range` when present and `pool` always. Consumers confirmed: `context_builder` reads day items by `.get`, `session_focus` imports only `item_covers`.
-2. **Injected window: DONE (`c4a9093`).** `resolve(..., window=None)`; the current path is pinned by a golden literal and by equality with the same window injected.
-3. **`GET /engine/legs?n=8`: DONE (`c4a9093`).** n clamped to 1..26. Phase per leg from `phase_at`; bounds from the phase's `entered_on` and `sub_cycle_days`, cut at its close.
-4. **Docstring: DONE (`c4a9093`).** `plan_week` lists and does not place.
-5. **Tests: DONE.** Prior-phase quota with a `phase_at`-for-`current_training_phase` control that changes the answer; a partial leg; a zero-length row (paired with a one-day row that does produce a leg); template-only history; the byte-identical path; the widened keys with the old keys unchanged. Mutation-checked.
+**Part A (governance record) — DONE, `71ec64c`, merged.**
+1. **#389's #121 check** recorded as met by the operator's grep (the three strings present, the two removed ones absent), in #392 and ROADMAP; the Phase-change form row flips to DONE.
+2. **#390/#391's #121 check** recorded as met (`index-Bh2Xn4H_.js`), with the operator's read of the live strip (desktop and phone) and the `/metrics` wrap. Operator-reported; Code did not re-check (egress to the frontend host is denied).
+3. **`previous_partial`: ACCEPTED**, recorded in #392.
+4. **Know (v1 test 2) is MET**, recorded in #392 with the operator's reading quoted; the ROADMAP v1 Know line flipped.
+5. **The wizard's raw `metabolic`** added as an input on the phase-planning row.
+- **A choice, named:** #389, #390 and #391's own Status and deploy-check lines are locked, so #392 carries the records instead of editing them (the brief said "status line only"; I read that as the kind of record, and the append-only rule decides how it is written). ROADMAP and three BRANCHES cells (mutable) were updated.
 
-**PR 2.**
-1. **LegStrip: DONE (`cd71531`).** Replaces the "Schedule vs quota" lines; the freshness warning and the planning note stay. Columns from the payload's own day list (a Sun-Sat window and a Mon-Sun window are both tested; sorting Monday-first fails four tests). Hard blocks with time, actual marks, soft pools only in the tray, greyed unavailable days, caution note.
-2. **LegWrap: DONE (`cd71531`).** Mounted at the top of `/metrics`.
-3. **R7: DONE for the three surfaces named.** One helper, `legLabels.keyLabel`, used by the quota window, the strip and the wrap.
-4. **Tests per ruling, mutation checks: DONE.** R6 (the pool drawn per day: 1 fails), R7 (label mapping removed: 2), R4 (partial marker removed: 1), R8 (both flags ignored: 4; only `previous_partial` ignored: 3), `previous_partial` always false (1 backend).
-5. **#121 strings.** "to place", "Conditioning", and the LegWrap-specific string **"Done vs quota, by leg"** (the wrap's heading). Present in a local `vite build`; **the live bundle is not checked** (Code's egress to the frontend host is denied).
-6. **Governance: DONE (`d2de64f`).** One entry, #391 (R8, the divergence, what was built); #390 holds R1-R7 and is not edited. ROADMAP: the Weekly-resolver row's (d) marked DONE as a code item with Know's wording quoted and the gap named (below); the Visuals increment-4 sentence; the new phase-planning row in NEXT, carrying (f) and the never-written `sessions_per_week` as inputs. BRANCHES rows for both PRs.
-
-**R8 and the operator's agreements.** The two agreed calls (walk start today; one leg beyond `n`) are recorded in #391. R8 is built as presentation only.
+**Part B (code) — DONE, `65f80e8`, pending merge.**
+1. **Mobile layout: DONE.** Below 640px the strip is one row per day; a block's text truncates with its full text in `title`. Tested at 380px **in a real browser** (Chromium via Playwright, throwaway harness, not committed): at 380px and 639px each day is its own row, no horizontal page scroll, each hard block's name a single line with nothing clipped; at 640px and 1024px seven columns, the long name ("Work — Instrument calibration") truncates to one line. Screenshots read. Vitest asserts the layout classes.
+2. **R9: DONE.** A soft item whose candidate days equal its pool is drawn on its days as an outlined block; a larger pool stays tray-only; done renders only where it happened.
+3. **Tray days: DONE.** De-duplicated, Monday first.
+4. **R10: DONE.** **The stop condition was checked first and did not trigger:** `resolve()` lists a Hevy workout with no matching capacity slot (`off_plan`, with its capacity) and an untagged one (`untagged`); reproduced on a stability-only phase with three strength sessions and one untagged. Each `/engine/legs` row carries `uncounted {count, reasons}` from the same pass as `done`; LegWrap shows "N uncounted" with the reasons.
+5. **Tests per item, mutation checks: DONE.** R9 (every pool fixed: 5 fail; none fixed: 2), the order (1), the dedupe (1, after a first mutation proved too blunt and was redone), the layout (1 each for no truncate, no single column, no row layout), R10 backend (3 variants, 2 each) and frontend (3 variants, 2 each).
+6. **#121 strings, one per item:** "Leg days" (the phone layout), "every listed day" (R9), "candidate days" (the tray days), "Not counted toward any quota" (R10). All four are in a local `vite build`; the live bundle is not checked.
 
 **Divergences and judgment calls, named.**
-- **A backend field added in PR 2, against "the backend stays as built".** Each leg row carries `previous_partial` (`true`, `false`, `null` at the ledger start). R8 needs the predecessor's flag; the oldest returned row's predecessor is the leg counted beyond `n` and not returned, so the page cannot see it. `delta_done` is unchanged. Named in #391 and the PR body.
-- **Does Know (d) meet Know's v1 test wording ("Know — what's due, enforced against the plan.")?** Only in part. What is due and its enforcement were met before (#276, #308); (d) adds a history of finished legs against the quota, which does not change what is due now. The wrap compares with the authored quota only (R2), not with placement, so "against the plan" holds at the quota level. The ROADMAP row marks (d) DONE as the code item, **does not claim the Know test MET**, and names placement-level adherence (versioned schedule items) as the gap.
-- **Presentation choices the rulings did not spell out** (in #391): the tray row is named by the linked activities with the key label muted beside it; "N over quota" keeps the old MISMATCH signal; an unlinked soft item shows as "no quota".
-- **A citation:** `#316` and `week_plan.py` cite "#275's free-order rule"; `#275` has no such text (searched). Recorded in #390; the cites are left (append-only).
-- **Out of R7's stated scope, left alone:** the phase-change wizard's slot-key selector and placeholder still show the raw token `metabolic`.
+- **A nuance in R10, not changed:** `resolve()` evaluates aerobic sessions only when the window declares an aerobic slot, so in a leg with none an aerobic session is neither counted nor listed. `uncounted` is complete for Hevy workouts and for aerobic sessions only where the leg could have counted them. Recorded in #394.
+- **R9's "candidate-day count" is derived on the page** (distinct weekdays the item appears on in the window), equal to `len(days)` for a 7-day leg. A leg shorter than 7 days would read as not fixed and stay tray-only; a server field is the fix if one ever appears. Recorded in #393.
+- **Presentation choices the rulings did not spell out** (in #393 and #394): an item drawn on its days is not also listed by day in the tray; a missing `pool` never reads as fixed; `uncounted` is counts by reason, not the item list, shown in words with an amber line.
+- **The 380px check is desktop Chromium at that width, not the phone.** The operator reads the strip on the device.
+- **A process slip, mine:** a `pkill -f` matched its own shell command line and killed the step (exit 144); nothing it protected had run, and I re-ran the work without it.
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** No NOW row changed. The ROADMAP Weekly-resolver row's remainder (d) is DONE as a code item; NEXT gains the phase-planning row (UNSTARTED, no brief).
+**Sprint (ROADMAP NOW).** No NOW row changed except the Phase-change form row (DONE). The v1 **Know** test is MET (#392); See and Know are met, Walk in is met with its reconcile leg unbuilt, Loop is not claimed.
 
-**State.** PR 2 is open, checks pending at write time, self-merging on green. Backend suite on the PR 2 tree: 2884 passed, 3 skipped; frontend: 378 passed; eslint clean on the changed files (the repo's pre-existing lint debt is unchanged); `vite build` succeeds. No `#NEXT` placeholder on the branch (#391 typed directly).
+**State.** PR 2 is open, checks pending at write time, self-merging on green. Backend suite on the PR 2 tree: 2886 passed, 3 skipped. Frontend: 387 passed; eslint clean on the changed files; `vite build` succeeds. No `#NEXT` placeholder on the branch (#393 and #394 typed directly).
 
-**Single clearest next action.** The operator reads the live Phase card strip and the `/metrics` wrap against the real ledger, after the deploy settles. That is the check Code cannot make (no prod access) and the one the fixtures cannot replace.
+**Single clearest next action.** The operator reads the live strip on the phone and the 28 Sep to 3 Oct leg on `/metrics` after the deploy settles, and confirms the four #121 strings in the live bundle. After that, the clearest unbuilt work is the reconcile leg of Walk in (NEXT, #386), which needs a brief first.
 
-**Operator actions owed.** (1) The #116/#121 deploy checks for #390 and #391: backend and frontend SUCCESS; an authenticated `GET /engine/legs` returns 200 with `legs[]`, `excluded` and `previous_partial`; the live `assets/index-*.js` contains "to place", "Conditioning" and "Done vs quota, by leg"; and the #389 strings ("End phase", "same-day correction", "A phase needs at least one quota slot") are still owed from before. (2) Rule whether the Know test is MET, given the quota-level gap. (3) Carried from the last close-out: confirm Polar Flow's max HR is locked at 175 (#388); the Q159 in-activity HR read on or after 9 Oct; the phone read of B, C and E for the appointment brief.
+**Operator actions owed.** (1) The #121 bundle check for #393 and #394: the live `assets/index-*.js` contains "Leg days", "every listed day", "candidate days" and "Not counted toward any quota"; and a look at the strip on the phone and the 28 Sep to 3 Oct leg (it should now read "N uncounted"). (2) Carried from the last close-out: confirm Polar Flow's max HR is locked at 175 (#388); the Q159 in-activity HR read on or after 9 Oct; the phone read of B, C and E for the appointment brief.
 
 **Code actions owed.** The #387 shared-block propagation to `health-connect-app` (next HCA session); the single-row HC bout deposit read (low priority).
 
-**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 118 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). No question changed state this session; Q197 (matching a done session to a planned one) is still open and R6 deliberately does not touch it.
+**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 118 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). No question changed state this session; Q197 (matching a done session to a planned one) is still open and R9 deliberately does not touch it.
 
 **What was NOT touched (named so absence does not read as finished).**
-- **The planning grid itself** (three-kind grid, quota pre-fill, advisory placement): unbuilt and unbriefed; only its row and two inputs are recorded. The phase-change form still cannot author a new recurring hard item, and still never writes `sessions_per_week`.
-- **Placement-level adherence for a past leg:** impossible until schedule items are versioned; not started, not briefed.
+- **The planning grid** (three-kind grid, quota pre-fill, advisory placement): unbuilt and unbriefed; its row carries three inputs now (the form cannot author a new recurring hard item, it never writes `sessions_per_week`, and the wizard still shows the raw `metabolic` token). Placement-level adherence is ruled out of Know's scope and would need versioned schedule items.
+- **Listing which sessions were uncounted on a past leg:** only counts by reason are on the row. Aerobic sessions in a leg with no aerobic slot are still unlisted.
 - **The reconcile leg of Walk in** (NEXT, #386): unbuilt and unbriefed. **Loop** (check-in, readiness, recommendation, close-out): no change.
 - **Q197, the HC zones lane, Q199, Q216, the Polar re-zoning (Q198):** unmoved. The same for Q213, Q214, Q212; Source hierarchy (Q201, Q203); the marker exposure (#367, Q206); the sibling sync races (Q208); the Garmin self-evaluation read; #371's proof.
-- **The wizard's raw `metabolic` token** in the slot-key selector (above).
 - **Lab upload pipeline, interpretation layer increments, medical protocol (CBT-I, the injury ledger):** did not move.
-- **Known gap carried:** `test_context_builder_output_unchanged_pre_post_refactor` fails in a shallow clone (it needs commit `3360ed5`) and passes in CI; this container was shallow until `git fetch --unshallow`. `verify_series_integrity.py:56` still says `railway run`.
-- **Pattern to say out loud:** unlike the last three sessions, this one was product work on the Know test, not instrument or ledger hygiene. It is still a read-only view of a plan the form cannot fully author; the next session on Know should go to the planning lane (which needs a brief) rather than a fourth view.
+- **Known gap carried:** `test_context_builder_output_unchanged_pre_post_refactor` fails in a shallow clone (it needs commit `3360ed5`) and passes in CI; this container is now unshallowed. `verify_series_integrity.py:56` still says `railway run`.
+- **Pattern to say out loud:** this is the second session in a row on the Know test's own surfaces. Know is now MET and the strip, wrap and uncounted line are polished against the operator's live reading; a third session here would be polish on a met test. The next session should go to Walk in's reconcile leg or a Loop item.
 
 **v1-triage of the NOW lanes** (which test each serves):
-- Phase-change form (#375, #376, #378, #379, #389; only the bundle check OWED): **Know** and **Loop**. Nearly finished; a demotion candidate once the bundle check is read.
-- Know (d), the leg strip and wrap (#390, #391; the live read OWED): **Know**. Built; the Know test's MET call is the operator's.
+- Phase-change form (#375, #376, #378, #379, #389): **Know** and **Loop**. DONE (the bundle check met); a demotion candidate for removal from NOW.
+- Know (d), the leg strip and wrap (#390 to #394): **Know**. Built and live-read; the test is MET (#392). Nothing left in NOW except #393 and #394's own deploy check.
 - HC zones (#364, #385, #388, OWED for a lock confirmation and a low-priority read): **See**, **Know** and **Loop**. No real work left; a demotion candidate.
 - Appointment brief: **Walk in**, met (#386); the reconcile leg (NEXT) serves the same test.
 - Garmin self-evaluation read (#372, OWED): **Know** and **Loop**.

@@ -517,7 +517,10 @@ def past_legs(
     `delta_done`. `delta_done` is `done` minus the chronologically previous leg's, per key present
     in both — taken as the counts stand, with no adjustment for a partial leg (the row carries
     `partial`, and `previous_partial` for its predecessor, so a reader can withhold the delta: R8 does,
-    in the page, not here)."""
+    in the page, not here). Each row also carries `uncounted` (R10): `{count, reasons}` from the same
+    `resolve()` pass that produced `done`, `reasons` a count per reason. A Hevy workout whose dominant
+    capacity has no slot in the leg's phase is listed there as `off_plan`, never dropped; an aerobic
+    session is only evaluated (and so only listed) when the leg declares an aerobic slot."""
     n = max(1, min(int(n), LEGS_MAX))
     today = today or _local_day()
     current = resolve_window(db, user_id, today)
@@ -552,6 +555,11 @@ def past_legs(
             {"kind": s["kind"], "key": s[s["kind"]], "quota": s["quota"], "done": s["done"]}
             for s in pos["slots"]
         ]
+        # R10: what that same pass could not count, so a leg that reads 0/3 can say why. `done` and
+        # `uncounted` come from ONE resolve() call; a count by reason, not the per-item list.
+        reasons: dict[str, int] = {}
+        for u in pos["uncounted"]:
+            reasons[u["reason"]] = reasons.get(u["reason"], 0) + 1
         rows.append({
             "start_date": window.start_date.isoformat(),
             "end_date": window.end_date.isoformat(),
@@ -559,6 +567,7 @@ def past_legs(
             "phase": {"id": phase.id, "label": phase.label},
             "partial": partial,
             "keys": keys,
+            "uncounted": {"count": len(pos["uncounted"]), "reasons": reasons},
         })
     for i, row in enumerate(rows):
         # Whether the chronologically previous leg was cut short (None: no previous leg, the start of
