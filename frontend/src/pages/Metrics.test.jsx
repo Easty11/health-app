@@ -45,3 +45,9 @@ test('a real run re-fetches /series/load; a skip does not', async () => {
     expect(api.post).toHaveBeenLastCalledWith('/load/refresh', null, { params: { force: true } }))
   await waitFor(() => expect(seriesCalls()).toBe(afterMount + 2))
 })
+
+test('the leg wrap mounts on /metrics and reads /engine/legs (Know (d))', async () => {
+  await act(async () => { render(<MemoryRouter><Metrics /></MemoryRouter>) })
+  await waitFor(() => expect(screen.getByText('Done vs quota, by leg')).toBeTruthy())
+  expect(api.get).toHaveBeenCalledWith('/engine/legs?n=8')
+})

@@ -24,17 +24,13 @@
 import { useEffect, useState } from 'react'
 import api from '../../api'
 
-function titleCase(s) {
-  return typeof s === 'string' && s ? s[0].toUpperCase() + s.slice(1) : s
-}
+import { keyLabel, titleCase } from './legLabels'
 
 // A slot's display label: a load_window slot is a conditioning slot ("Conditioning" for the
 // metabolic window); an activity slot is its title-cased activity name (#315); a capacity slot is
 // its title-cased capacity token.
 function slotLabel(s) {
-  if (s.kind === 'load_window') {
-    return s.load_window === 'metabolic' ? 'Conditioning' : titleCase(s.load_window)
-  }
+  if (s.kind === 'load_window') return keyLabel('load_window', s.load_window)   // R7: "Conditioning"
   if (s.kind === 'activity') return titleCase(s.activity)
   return titleCase(s.capacity)
 }

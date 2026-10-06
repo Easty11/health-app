@@ -515,8 +515,9 @@ def past_legs(
 
     One leg beyond `n` is counted but not returned, so the oldest returned leg still carries its
     `delta_done`. `delta_done` is `done` minus the chronologically previous leg's, per key present
-    in both — taken as the counts stand, with no adjustment for a partial leg (the row carries the
-    `partial` flag instead)."""
+    in both — taken as the counts stand, with no adjustment for a partial leg (the row carries
+    `partial`, and `previous_partial` for its predecessor, so a reader can withhold the delta: R8 does,
+    in the page, not here)."""
     n = max(1, min(int(n), LEGS_MAX))
     today = today or _local_day()
     current = resolve_window(db, user_id, today)
@@ -560,6 +561,10 @@ def past_legs(
             "keys": keys,
         })
     for i, row in enumerate(rows):
+        # Whether the chronologically previous leg was cut short (None: no previous leg, the start of
+        # the ledger). Carried so the page can withhold a delta against a partial leg (R8) even for the
+        # oldest returned row, whose predecessor is the leg beyond `n` that is not itself returned.
+        row["previous_partial"] = rows[i + 1]["partial"] if i + 1 < len(rows) else None
         prev = {(k["kind"], k["key"]): k["done"] for k in rows[i + 1]["keys"]} if i + 1 < len(rows) else {}
         for k in row["keys"]:
             p = prev.get((k["kind"], k["key"]))

@@ -181,6 +181,27 @@ def test_oldest_returned_leg_carries_a_delta_from_the_leg_beyond_n(db_session):
     assert out["legs"][-1]["keys"][0]["delta_done"] == 1                          # 2 vs 08-17's 1
 
 
+def test_previous_partial_names_whether_the_predecessor_was_cut_short(db_session):
+    """R8's input: the page withholds a delta against a partial leg, including for the oldest returned
+    row, whose predecessor is the leg beyond `n`."""
+    u = _user(db_session)
+    _two_phase_ledger(db_session, u.id)
+    flags = lambda n: {l["start_date"]: l["previous_partial"]
+                       for l in resolver_mod.past_legs(db_session, u.id, n=n, today=TODAY)["legs"]}
+    wide = flags(6)
+    assert wide["2026-09-04"] is True          # predecessor 08-31..09-03 was cut by the phase change
+    assert wide["2026-09-11"] is False         # predecessor 09-04..09-10 is a full leg
+    assert wide["2026-08-31"] is False         # predecessor 08-24..08-30 is full
+    # The oldest RETURNED row still knows: its predecessor is counted though not returned.
+    assert flags(2) == {"2026-09-11": False, "2026-09-04": True}
+    assert flags(3)["2026-08-31"] is False
+    # Start of the ledger: no predecessor at all.
+    only = _user(db_session, "ledger-start@example.com")
+    _open(db_session, only.id, "only", date(2026, 9, 7), _micro(("stability", 2)))
+    got = resolver_mod.past_legs(db_session, only.id, n=26, today=date(2026, 9, 25))["legs"]
+    assert got[-1]["previous_partial"] is None
+
+
 # ── R4: partial, never stretched; zero-length never a leg ────────────────────
 
 def test_a_leg_cut_short_by_a_phase_change_is_partial_with_its_actual_dates(db_session):
