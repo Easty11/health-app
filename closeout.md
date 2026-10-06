@@ -1,73 +1,59 @@
-# Close-out — Know is MET by operator ruling; the leg strip draws a soft item whose days equal its pool, stacks a row per day on a phone, lists tray days once and Monday first; each leg row says how many sessions it could not count and why
+# Close-out — the /metrics phase-marker misreading is logged on ROADMAP NEXT with the check of its cause; nothing is built and no decision is minted
 
 ## Real commits this session
 
-Session `know-met-leg-followups`, the operator's brief of 6 Oct 2026 (AEST), two PRs: Part A (governance) then Part B (code). Range: `2073d68` (master at open) to this close-out. Fresh-clone settings were already set and read back. Maxima at open, by anchored script: decisions #391, questions Q216. Minted: #392 (PR 1), #393 and #394 (PR 2); each resolved against master's max immediately before its merge (#391, then #392).
+Session `metrics-markers-log`, the operator's brief of 6 Oct 2026 (AEST), one governance-only PR. Range: `cf5102d` (master at open) to this close-out. Fresh-clone settings were already set and read back. Maxima at open, by anchored script: decisions #394, questions Q216. No number minted: the brief asked for a log, not a ruling.
 
-PR 1, governance only, merged:
-- `71ec64c` `gov(know-met): #392 Know (v1 test 2) is MET by operator ruling; the #389, #390 and #391 bundle checks recorded as met; previous_partial accepted` - DECISIONS #392, ROADMAP (v1 Know line, the Weekly-resolver row, the Phase-change form row, the NEXT block, one input on the planning row), BRANCHES, the CLAUDE.md pointer.
-- `ad972e1` `Merge pull request #340 from Easty11/claude/busy-clarke-f9vzkw` - merged on green (guard, pytest, vitest) with the head SHA pinned.
-
-PR 2, code, on the same branch name restarted from `ad972e1` (the harness instruction and #387):
-- `65f80e8` `feat(know-d): leg strip follow-ups (R9, mobile rows, tray order) and uncounted on each leg (R10)` - `LegStrip`, `LegWrap`, `legLabels`, `engine/resolver.py`, and their tests.
-- `b5bb9f9` `gov(know-d-followups): #393 R9 and the strip follow-ups, #394 R10` - DECISIONS #393 and #394, BRANCHES, the CLAUDE.md pointer.
+- `e93eebc` `gov(metrics-markers): log the /metrics phase-marker misreading on ROADMAP NEXT, with the check of its cause` - the ROADMAP NEXT item, the BRANCHES row, the CLAUDE.md Recent-landings pointer (oldest dropped, cap of 3).
 - A final `chore: session close-out` commit carrying this file: its hash is on the branch (a file cannot name its own commit).
 
-No migration, no schema change, no prod read or write. PR 2 self-merges on green (non-schema; R9 and R10 are the operator's rulings, no new judgment by Code). **Provisional until merged: everything in PR 2.**
+No code, no migration, no schema change, no prod read or write. The PR self-merges on green (governance only; no new judgment by Code). **Provisional until merged: everything above.**
 
 ## Pending-queue reconciliation
 
 Nothing came from a chat `;cc` queue as a PENDING item. The brief, item by item:
 
-**Part A (governance record) — DONE, `71ec64c`, merged.**
-1. **#389's #121 check** recorded as met by the operator's grep (the three strings present, the two removed ones absent), in #392 and ROADMAP; the Phase-change form row flips to DONE.
-2. **#390/#391's #121 check** recorded as met (`index-Bh2Xn4H_.js`), with the operator's read of the live strip (desktop and phone) and the `/metrics` wrap. Operator-reported; Code did not re-check (egress to the frontend host is denied).
-3. **`previous_partial`: ACCEPTED**, recorded in #392.
-4. **Know (v1 test 2) is MET**, recorded in #392 with the operator's reading quoted; the ROADMAP v1 Know line flipped.
-5. **The wizard's raw `metabolic`** added as an input on the phase-planning row.
-- **A choice, named:** #389, #390 and #391's own Status and deploy-check lines are locked, so #392 carries the records instead of editing them (the brief said "status line only"; I read that as the kind of record, and the append-only rule decides how it is written). ROADMAP and three BRANCHES cells (mutable) were updated.
-
-**Part B (code) — DONE, `65f80e8`, pending merge.**
-1. **Mobile layout: DONE.** Below 640px the strip is one row per day; a block's text truncates with its full text in `title`. Tested at 380px **in a real browser** (Chromium via Playwright, throwaway harness, not committed): at 380px and 639px each day is its own row, no horizontal page scroll, each hard block's name a single line with nothing clipped; at 640px and 1024px seven columns, the long name ("Work — Instrument calibration") truncates to one line. Screenshots read. Vitest asserts the layout classes.
-2. **R9: DONE.** A soft item whose candidate days equal its pool is drawn on its days as an outlined block; a larger pool stays tray-only; done renders only where it happened.
-3. **Tray days: DONE.** De-duplicated, Monday first.
-4. **R10: DONE.** **The stop condition was checked first and did not trigger:** `resolve()` lists a Hevy workout with no matching capacity slot (`off_plan`, with its capacity) and an untagged one (`untagged`); reproduced on a stability-only phase with three strength sessions and one untagged. Each `/engine/legs` row carries `uncounted {count, reasons}` from the same pass as `done`; LegWrap shows "N uncounted" with the reasons.
-5. **Tests per item, mutation checks: DONE.** R9 (every pool fixed: 5 fail; none fixed: 2), the order (1), the dedupe (1, after a first mutation proved too blunt and was redone), the layout (1 each for no truncate, no single column, no row layout), R10 backend (3 variants, 2 each) and frontend (3 variants, 2 each).
-6. **#121 strings, one per item:** "Leg days" (the phone layout), "every listed day" (R9), "candidate days" (the tray days), "Not counted toward any quota" (R10). All four are in a local `vite build`; the live bundle is not checked.
+1. **Log on ROADMAP, no build: DONE (`e93eebc`).** A new small NEXT item rather than a Visuals-row edit, so the Visuals row stays history.
+2. **"Chat's hypothesis (verify)": verified, and half of it does not hold.** Checked by reading the code and by a throwaway render (jsdom, then real Chromium) of the shared chart with the ledger the report implies; nothing from the render is committed.
+   - **Holds: one fix in the shared piece.** All four chart components pass `markers` through `TimeSeriesChart` to `referenceLinesFor`; the three load charts share one `LoadChart` data array and marker list.
+   - **Does not hold: "a categorical axis of only days with load".** The rollup writes a continuous daily calendar per window to `as_of`, rest days included, so the load charts' axis has a slot per calendar day.
+   - **Does not hold: "bands".** The markers are dashed vertical lines; no training chart draws a band.
+   - **The likely cause of what the operator saw:** each marker's label is drawn to the LEFT of its line, over the preceding phase's bars. "Aerobic base" appears above the 28 Sep to 3 Oct bars although its line is correctly just right of the 3 Oct bar.
+   - **A second defect, reproduced:** a boundary after the last category is dropped silently, so a phase that starts after the series ends leaves no mark. `PhaseMarkers.test.jsx` pins that drop and the snap-to-next-day rule as design, so the fix changes pinned behaviour.
+   - **A third, by code only:** on the sparse axes (Exercise, Readiness) a boundary snaps to the next data day.
+3. **Fix direction and test, as given: recorded verbatim in the item,** with three notes for the brief that picks it up (the load charts need the band, an in-band label and an axis to today more than a time scale; the time scale matters for Exercise and Readiness; the pinned behaviours change).
 
 **Divergences and judgment calls, named.**
-- **A nuance in R10, not changed:** `resolve()` evaluates aerobic sessions only when the window declares an aerobic slot, so in a leg with none an aerobic session is neither counted nor listed. `uncounted` is complete for Hevy workouts and for aerobic sessions only where the leg could have counted them. Recorded in #394.
-- **R9's "candidate-day count" is derived on the page** (distinct weekdays the item appears on in the window), equal to `len(days)` for a 7-day leg. A leg shorter than 7 days would read as not fixed and stay tray-only; a server field is the fix if one ever appears. Recorded in #393.
-- **Presentation choices the rulings did not spell out** (in #393 and #394): an item drawn on its days is not also listed by day in the tray; a missing `pool` never reads as fixed; `uncounted` is counts by reason, not the item list, shown in words with an amber line.
-- **The 380px check is desktop Chromium at that width, not the phone.** The operator reads the strip on the device.
-- **A process slip, mine:** a `pkill -f` matched its own shell command line and killed the step (exit 144); nothing it protected had run, and I re-ran the work without it.
+- **The brief's premise was partly wrong and the log says so** rather than recording the hypothesis as fact (the unseeable-surface rule: a brief statement about a surface chat cannot read is an instruction to verify).
+- **Not read:** the operator's real ledger, the live rollup `as_of`, the live bundle (no prod or frontend-host access). The render used the dates from the report, so it shows what the code does with that shape, not what the live page shows.
+- **A process note:** the first real-browser attempt failed on a wait for a bare `<g>` to be "visible"; I changed the wait to "attached" and re-ran. The throwaway harness and the dev server were removed, and `git status` is clean of them.
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** No NOW row changed except the Phase-change form row (DONE). The v1 **Know** test is MET (#392); See and Know are met, Walk in is met with its reconcile leg unbuilt, Loop is not claimed.
+**Sprint (ROADMAP NOW).** No NOW row changed. NEXT gains the `/metrics` phase-marker item (UNSTARTED, no brief).
 
-**State.** PR 2 is open, checks pending at write time, self-merging on green. Backend suite on the PR 2 tree: 2886 passed, 3 skipped. Frontend: 387 passed; eslint clean on the changed files; `vite build` succeeds. No `#NEXT` placeholder on the branch (#393 and #394 typed directly).
+**State.** The PR is open, checks pending at write time, self-merging on green. No `#NEXT` placeholder on the branch. No code changed, so no suite was re-run beyond CI.
 
-**Single clearest next action.** The operator reads the live strip on the phone and the 28 Sep to 3 Oct leg on `/metrics` after the deploy settles, and confirms the four #121 strings in the live bundle. After that, the clearest unbuilt work is the reconcile leg of Walk in (NEXT, #386), which needs a brief first.
+**Single clearest next action.** Brief the marker fix. The operator's direction (bands clipped to [`entered_on`, `closed_on` or today], an axis to today, a test per chart that a phase entered after the last data day renders as a band with no bars) stands, with the three notes in the ROADMAP item. The one open fact it needs: the live rollup `as_of`, which the operator or a prod read can give.
 
-**Operator actions owed.** (1) The #121 bundle check for #393 and #394: the live `assets/index-*.js` contains "Leg days", "every listed day", "candidate days" and "Not counted toward any quota"; and a look at the strip on the phone and the 28 Sep to 3 Oct leg (it should now read "N uncounted"). (2) Carried from the last close-out: confirm Polar Flow's max HR is locked at 175 (#388); the Q159 in-activity HR read on or after 9 Oct; the phone read of B, C and E for the appointment brief.
+**Operator actions owed.** (1) The #121 bundle check for #393 and #394 (the strings "Leg days", "every listed day", "candidate days", "Not counted toward any quota"), the strip on the phone, and the 28 Sep to 3 Oct leg on `/metrics`, all carried from the last close-out. (2) Carried: confirm Polar Flow's max HR is locked at 175 (#388); the Q159 in-activity HR read on or after 9 Oct; the phone read of B, C and E for the appointment brief.
 
 **Code actions owed.** The #387 shared-block propagation to `health-connect-app` (next HCA session); the single-row HC bout deposit read (low priority).
 
-**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 118 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). No question changed state this session; Q197 (matching a done session to a planned one) is still open and R9 deliberately does not touch it.
+**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 118 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). No question changed state this session.
 
 **What was NOT touched (named so absence does not read as finished).**
-- **The planning grid** (three-kind grid, quota pre-fill, advisory placement): unbuilt and unbriefed; its row carries three inputs now (the form cannot author a new recurring hard item, it never writes `sessions_per_week`, and the wizard still shows the raw `metabolic` token). Placement-level adherence is ruled out of Know's scope and would need versioned schedule items.
-- **Listing which sessions were uncounted on a past leg:** only counts by reason are on the row. Aerobic sessions in a leg with no aerobic slot are still unlisted.
-- **The reconcile leg of Walk in** (NEXT, #386): unbuilt and unbriefed. **Loop** (check-in, readiness, recommendation, close-out): no change.
-- **Q197, the HC zones lane, Q199, Q216, the Polar re-zoning (Q198):** unmoved. The same for Q213, Q214, Q212; Source hierarchy (Q201, Q203); the marker exposure (#367, Q206); the sibling sync races (Q208); the Garmin self-evaluation read; #371's proof.
+- **The marker fix itself:** nothing in `PhaseMarkers.jsx`, `TimeSeriesChart.jsx` or the four chart components changed; the misreading is still live.
+- **The planning grid, the reconcile leg of Walk in (NEXT, #386), Loop (check-in, readiness, recommendation, close-out):** unbuilt or unchanged, as in the last close-out.
+- **Q197, the HC zones lane, Q199, Q216, the Polar re-zoning (Q198), Q213, Q214, Q212, Source hierarchy (Q201, Q203), the marker exposure (#367, Q206), the sibling sync races (Q208), the Garmin self-evaluation read, #371's proof:** unmoved.
 - **Lab upload pipeline, interpretation layer increments, medical protocol (CBT-I, the injury ledger):** did not move.
-- **Known gap carried:** `test_context_builder_output_unchanged_pre_post_refactor` fails in a shallow clone (it needs commit `3360ed5`) and passes in CI; this container is now unshallowed. `verify_series_integrity.py:56` still says `railway run`.
-- **Pattern to say out loud:** this is the second session in a row on the Know test's own surfaces. Know is now MET and the strip, wrap and uncounted line are polished against the operator's live reading; a third session here would be polish on a met test. The next session should go to Walk in's reconcile leg or a Loop item.
+- **Known gap carried:** `verify_series_integrity.py:56` still says `railway run`.
+- **Pattern to say out loud:** this is the third session in a row on the See and Know surfaces (the strip, the wrap, now the chart markers). All are small and operator-driven; none moves Walk in's reconcile leg or a Loop item. The next session should go there unless the marker fix is the operator's priority.
 
 **v1-triage of the NOW lanes** (which test each serves):
-- Phase-change form (#375, #376, #378, #379, #389): **Know** and **Loop**. DONE (the bundle check met); a demotion candidate for removal from NOW.
-- Know (d), the leg strip and wrap (#390 to #394): **Know**. Built and live-read; the test is MET (#392). Nothing left in NOW except #393 and #394's own deploy check.
+- Phase-change form (#375, #376, #378, #379, #389): **Know** and **Loop**. DONE; a candidate for removal from NOW.
+- Know (d), the leg strip and wrap (#390 to #394): **Know**. Built; the test is MET (#392); only #393 and #394's deploy check remains.
+- The `/metrics` phase-marker item (NEXT): **See**. Unbriefed.
 - HC zones (#364, #385, #388, OWED for a lock confirmation and a low-priority read): **See**, **Know** and **Loop**. No real work left; a demotion candidate.
 - Appointment brief: **Walk in**, met (#386); the reconcile leg (NEXT) serves the same test.
 - Garmin self-evaluation read (#372, OWED): **Know** and **Loop**.
