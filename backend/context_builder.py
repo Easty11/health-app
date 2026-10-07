@@ -1214,7 +1214,9 @@ def _section_health_connect(records: list[Any], now: datetime) -> str:
     if _v("steps") is not None:
         lines.append(f"Steps: {_v('steps'):,}")
     if _v("resting_heart_rate") is not None:
-        lines.append(f"Resting HR: {round(_v('resting_heart_rate'))} bpm")
+        # `resting_heart_rate` is the median of ALL the day's HR samples (activity included),
+        # not a resting rate — label it for what it is so the coach never reads it as RHR.
+        lines.append(f"All-day median HR: {round(_v('resting_heart_rate'))} bpm")
     if _v("hrv_rmssd") is not None:
         lines.append(f"HRV (RMSSD): {_v('hrv_rmssd')} ms")
 
