@@ -46,6 +46,15 @@ def test_health_connect_section_reports_combined_deep_light():
     assert "Deep: " not in out           # no standalone deep term (combined is "Deep+Light:")
 
 
+def test_health_connect_section_labels_hr_as_all_day_median():
+    # `resting_heart_rate` is the median of all the day's HR samples, so the coach is told that
+    # (a "Resting HR" label let an exercise-dominated 118 read as a resting rate).
+    records = [{"date": _NOW.date(), "resting_heart_rate": 118.0}]
+    out = _section_health_connect(records, _NOW)
+    assert "All-day median HR: 118 bpm" in out
+    assert "Resting HR" not in out
+
+
 # --- #294/#295: baseline_state surfaces in the Samsung HRV context section ---
 
 def _reading():

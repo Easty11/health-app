@@ -194,5 +194,13 @@ def test_format_recovery_metrics_labels_both_sources_on_one_night():
     assert "Deep=—m" in garmin_line and "RHR=—" in garmin_line
 
 
+def test_format_recovery_metrics_hc_fallback_labels_median_not_rhr():
+    # The health_connect_syncs fallback carries the median of ALL the day's HR samples. It is
+    # shown under its own label and never fills the RHR slot.
+    rows = [_row("2026-10-07", "health_connect_syncs", 50.0, all_day_median_hr=118.0)]
+    line = next(ln for ln in _format_recovery_metrics(rows, 7).splitlines() if "[health_connect_syncs]" in ln)
+    assert "RHR=— All-day median HR=118 bpm" in line
+
+
 def test_format_recovery_metrics_empty():
     assert _format_recovery_metrics([], 7) == "No recovery data found in the last 7 days."
