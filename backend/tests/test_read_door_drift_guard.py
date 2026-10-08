@@ -30,7 +30,7 @@ ALLOW_AEROBIC = {
     "routers/health_connect.py": "Writer (HC exercise ingest); reads existing rows for mirror-drop/upsert.",
     "import_polar.py": "Writer (Polar Flow-export ZIP ingest).",
     "load_events_metabolic.py": "Sources rows via arbitrated_sessions (the door); the only direct query is the distinct-user-id worklist.",
-    "cbti/replay.py": "Allow-listed: keeps its pre-migration raw-SQL isolation, and reads training_end DETERMINISTICALLY — MAX(stop_time) per session_date with non-training sports (sport_classes.NON_TRAINING_SPORTS) EXCLUDED, all sources (#322, closing Q162) — so no order-dependent wrong-pick (#311).",
+    "cbti/replay.py": "Allow-listed: keeps its pre-migration raw-SQL isolation, and reads training_end DETERMINISTICALLY — MAX(stop_time) per session_date with non-training sports (sport_classes.NON_TRAINING_SPORTS) EXCLUDED, all sources (#322, closing Q162) — so no order-dependent wrong-pick (#311). Hevy mirrors (a Garmin/Strava copy of a Hevy bout) are dropped from it through the door's column-light `hevy_mirror_session_ids` (A3.2), the same predicate arbitrated_sessions uses.",
     "engine/week_plan.py": "Derived week plan (#316) does NOT count — every `done` is resolve()'s (doored). Its only direct aerobic reads are day-attribution of the exact session ids resolve() ALREADY counted (never a membership/count decision) and the freshness aggregate max(created_at) for Polar rows, which no door exposes (ruling 4).",
     "session_focus.py": "Session focus (Brief A A1): the ONE row the operator asked to review, fetched by (user_id, id) — a lookup, never a membership/count decision. Its surrounding window goes through arbitrated_sessions (the door) and drops non-canonical rows.",
     "hc_zone_enrich.py": "Writer (HC zone fill, Q159 stage 2): fetches ALL of the user's health_connect rows — canonical or not, by design, so a new HRmax reflows every row — and writes only their z*_seconds / hr_avg / hr_max. Never a count or membership decision for any reader, and it reads no other source's rows (a canonical-only fetch would leave a non-canonical twin unzoned and flip arbitration the moment its twin changed).",
@@ -40,6 +40,7 @@ ALLOW_AEROBIC = {
 }
 ALLOW_HEVY = {
     "reads/hevy_reads.py": "THE counted-workouts read-door.",
+    "reads/aerobic_reads.py": "Hevy-mirror test (A3.2): fetches the non-excluded Hevy candidates that sit near the Health Connect rows being read, then partitions them via counted_workouts (the door) and compares overlap. A membership decision about AEROBIC rows (is this row a copy of a Hevy bout?), never about which Hevy workouts count.",
     "hevy_workouts.py": "Writer (Hevy ingest + dedup_flag/partner recompute).",
     "engine/resolver.py": "Fetches in-window candidates, partitions via counted_workouts (the door).",
     "reads/psychological_reads.py": "Fetches non-excluded candidates, filters via counted_workouts.",

@@ -314,6 +314,10 @@ class AerobicSessionOut(BaseModel):
     # Derived at read time (reads.aerobic_reads), never a stored column: false
     # when a higher-fidelity session from another source describes the same bout.
     canonical: bool = True
+    # Derived at read time: this Health Connect row is a Hevy workout that Garmin / Strava wrote
+    # back into Health Connect (>= HEVY_MIRROR_OVERLAP_FRACTION of its own duration inside a
+    # counted Hevy bout). Always non-canonical; the stored row is kept as evidence.
+    hevy_mirror: bool = False
 
     model_config = {"from_attributes": True}
 

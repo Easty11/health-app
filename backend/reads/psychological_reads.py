@@ -272,11 +272,12 @@ def _duration_min_by_day(db: Session, user_id: int) -> dict[date, tuple[float, i
         (`reads.aerobic_reads.arbitrated_sessions`) — a non-canonical same-bout twin/mirror
         (Polar↔HC, or two HC writers) is dropped, never a second re-implementation of the
         canonical rule.
-      • An aerobic session overlapping a COUNTED Hevy workout (see below) contributes
+      • An aerobic session that is the same bout as a COUNTED Hevy workout (see below) --
+        at least `HEVY_MIRROR_OVERLAP_FRACTION` of its own duration inside it -- contributes
         nothing: it IS that bout (a Garmin-recorded gym/pilates session co-logged in Hevy),
         already counted on the Hevy side. Reuses the shared `overlaps_workout` predicate —
         the same "same bout as a Hevy workout" test the resolver's `concurrent_strength`
-        guard uses.
+        guard uses. (An erg session that only brushes a Hevy timer is NOT that bout and counts.)
       • Hevy side counts via the shared `counted_workouts` door: `excluded_at IS NULL` AND
         (not `dedup_flag` OR every `dedup_partner_ids` member is excluded). `dedup_flag` is
         set on BOTH members of a suspected pair, so a bare `dedup_flag IS NOT TRUE` would

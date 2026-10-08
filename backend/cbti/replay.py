@@ -41,6 +41,7 @@ from sqlalchemy import text
 import models
 from cbti.engine import CYCLE_NIGHTS, MAX_MOVE_MIN, Night, evaluate_cycle, outcome_of
 from database import SessionLocal
+from reads.aerobic_reads import hevy_mirror_session_ids
 from sport_classes import NON_TRAINING_SPORTS_LOWER
 
 # The ONLY permitted Samsung read. A second query path around this allowlist is
@@ -62,14 +63,17 @@ _SAMSUNG_SQL = text(
 # The #311 interim `source <> 'health_connect'` exclusion is lifted. The IN-list is expanded
 # from the shared constant as bind params — never a second list here.
 _NON_TRAINING_PARAMS = {f"nt{i}": s for i, s in enumerate(sorted(NON_TRAINING_SPORTS_LOWER))}
+# One row per session (id, session_date, stop_time); the per-day MAX is folded in `load_nights`, AFTER
+# the Hevy mirrors are dropped (A3.2): a Health Connect copy of a Hevy bout (Strava / Garmin) is the
+# gym session again, and this query bypasses the read-door, so an unfiltered copy could set a
+# night's `training_end` that the Hevy bout itself never did and flip it to `training_constrained`.
 _TRAINING_SQL = text(
-    "SELECT session_date, MAX(stop_time) AS stop_time FROM aerobic_sessions "
+    "SELECT id, session_date, stop_time FROM aerobic_sessions "
     "WHERE user_id = :uid AND stop_time IS NOT NULL "
     "AND (sport_name IS NULL OR LOWER(sport_name) NOT IN ("
     + ", ".join(f":{k}" for k in _NON_TRAINING_PARAMS)
     + ")) "
-    "AND session_date BETWEEN :d0 AND :d1 "
-    "GROUP BY session_date"
+    "AND session_date BETWEEN :d0 AND :d1"
 )
 
 
@@ -150,8 +154,16 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     rows = db.execute(_NIGHTS_SQL, {"uid": user_id, "d0": d0, "d1": d1}).all()
     samsung = {_as_date(r[0]): r[1] for r in db.execute(_SAMSUNG_SQL, {"uid": user_id, "d0": d0, "d1": d1})}
     # a session on the calendar day BEFORE the wake date constrains that night
-    training = {_as_date(r[0]): r[1] for r in db.execute(
-        _TRAINING_SQL, {"uid": user_id, "d0": d0 - timedelta(days=1), "d1": d1, **_NON_TRAINING_PARAMS})}
+    t0 = d0 - timedelta(days=1)
+    mirrors = hevy_mirror_session_ids(user_id, db, since=t0)       # column-light: safe before a migration deploys
+    training: dict[date, object] = {}
+    for sid, sdate, stop in db.execute(
+            _TRAINING_SQL, {"uid": user_id, "d0": t0, "d1": d1, **_NON_TRAINING_PARAMS}):
+        if sid in mirrors:
+            continue                                   # the Hevy bout again, not a second session (A3.2)
+        day = _as_date(sdate)
+        if day not in training or stop > training[day]:
+            training[day] = stop                       # the latest session of the day constrains the night
     # likewise a nap on the calendar day BEFORE the wake date is the one that discharged
     # this night's sleep pressure — Night(W) reads the nap recorded on W-1 (Q45 -> #219).
     # This is the read `models.DailyRecord.naps_min` has documented as the contract since

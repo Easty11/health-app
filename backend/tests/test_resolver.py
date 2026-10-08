@@ -499,13 +499,17 @@ def test_load_window_concurrent_strength_excluded(db_session):
             "sport_name": "Row", "duration_minutes": 45.0} in res["uncounted"]
 
 
-def test_s3b_garmin_gym_bout_ingested_canonical_not_conditioning(db_session):
-    """Cross-PR fixture (HC ingest #309 S3b): a Garmin-recorded HC session (a pilates class,
-    co-recorded with Samsung) overlapping a Hevy workout. It is a REAL ingested `health_connect`
-    row (source_package set, zoneless), CANONICAL (no richer twin), yet it must NOT count as
-    conditioning: the concurrent_strength guard excludes it and the slot count is unchanged.
-    The guard is load-bearing against ANY watch auto-detecting or co-recording a session that
-    is already a Hevy workout — not a claim about how this user trains."""
+def test_s3b_garmin_gym_bout_is_a_hevy_mirror_not_conditioning(db_session):
+    """Cross-PR fixture (HC ingest #309 S3b, reworked by A3.2): a Garmin-recorded HC session (a
+    pilates class, co-recorded with Samsung) that sits 45 of its own 50 minutes inside a Hevy
+    workout. It is a REAL ingested `health_connect` row (source_package set, zoneless) and it must
+    NOT count as conditioning -- the slot count is unchanged. Since A3.2 it is excluded one step
+    earlier than the resolver's guard: the read-door marks it a `hevy_mirror` (the Hevy bout again,
+    whichever package wrote it) and it is NOT canonical, so it never reaches `uncounted[]` as a
+    session. (Before A3.2 it was canonical and the `concurrent_strength` guard caught it; that
+    guard still catches non-Health-Connect rows -- see test_g3 in test_activity_slots.)
+    The rule is load-bearing against ANY watch or app writing a session that is already a Hevy
+    workout -- not a claim about how this user trains."""
     from reads.aerobic_reads import arbitrated_sessions
     u = _user(db_session)
     _phase(db_session, u.id, _lw_micro(7, 2), MONDAY)
@@ -523,15 +527,14 @@ def test_s3b_garmin_gym_bout_ingested_canonical_not_conditioning(db_session):
     row.source_package = "com.garmin.android.apps.connectmobile"
     db_session.commit()
 
-    # Ingested + canonical: no same-bout twin, so it survives arbitration.
-    canonical = [s for s in arbitrated_sessions(u.id, db_session) if s.canonical]
-    assert [s.id for s in canonical] == [aid]
+    # Ingested (the stored row is evidence) but a Hevy mirror: returned, flagged, NOT canonical.
+    rows = arbitrated_sessions(u.id, db_session)
+    assert [(s.id, s.hevy_mirror, s.canonical) for s in rows] == [(aid, True, False)]
 
-    # ...but not conditioning: overlaps the Hevy strength workout.
+    # ...and not conditioning: the slot count is unchanged, and it is not a session to surface.
     res = resolver.resolve(db_session, u.id, today=date(2026, 9, 9))
     assert res["slots"][0]["done"] == 0
-    assert {"session": aid, "reason": "concurrent_strength",
-            "sport_name": "Pilates", "duration_minutes": 50.0} in res["uncounted"]
+    assert all(u_.get("session") != aid for u_ in res["uncounted"])
 
 
 def test_load_window_local_day_trap_late_utc(db_session):

@@ -20,6 +20,17 @@ signal (Polar carries cardio_load + HR-zone seconds; HC carries duration + type)
 the question is which row is richer, not whether one is a copy. Do not fold them.
 
 Follows the labs_reads.py shape: a query-only helper plus a pure core, no schema.
+
+HEVY MIRRORS (A3.2). A Hevy bout can reach `aerobic_sessions` under ANOTHER package: hevy2garmin
+pushes Hevy workouts to Garmin, and Garmin Connect / Strava then write them into Health Connect
+as their own activities (16 `com.strava` Weightlifting rows, Sept-Oct 2026). Admission drops only
+`com.hevy` (routers/health_connect.HEVY_PACKAGE), so these rows are stored. They are the Hevy
+bout again, not a second session, and are suppressed HERE, at read time, so admission order never
+matters and the stored rows stay as evidence: a Health Connect row whose overlap with a counted
+Hevy bout is >= HEVY_MIRROR_OVERLAP_FRACTION of its OWN duration is a `hevy_mirror`. It is marked
+`canonical=False` and kept out of arbitration (a mirror must not outrank a live row for the same
+bout). The rule is package-agnostic; Polar rows are never mirrors (a strap worn in the gym is a
+genuine HR trace; the orthogonal-windows design stands for them).
 """
 from __future__ import annotations
 
@@ -30,12 +41,21 @@ from sqlalchemy.orm import Session
 
 import models
 from load_events_metabolic import compute_metabolic_load
+from reads.hevy_reads import counted_workouts
 
 
 # Two cross-source sessions describe the same physical bout when their intervals
 # overlap by at least this fraction of the SHORTER session's duration. One place
 # to tune; empirical calibration against real Polar/HC pairs is an open question.
 OVERLAP_THRESHOLD = 0.50
+
+# A session is "the same bout as a Hevy workout" when its overlap with ONE counted Hevy bout is at
+# least this fraction of the SESSION'S OWN duration (A3.2, D-a / D-b). One constant, one definition:
+# `overlaps_workout` is the only predicate, used by the Hevy-mirror read-door below, the resolver's
+# `concurrent_strength` guard and the psychological duration read. Own duration (not the shorter of
+# the pair) is what protects an erg or cardio session that merely brushes a sloppily started Hevy
+# timer: a 2-minute brush on a 30-minute session is 0.07, not a copy.
+HEVY_MIRROR_OVERLAP_FRACTION = 0.50
 
 
 # Fidelity rank — higher wins when two sources describe the same bout.
@@ -235,10 +255,17 @@ def arbitrated_sessions(
     since: Optional[date] = None,
     limit: Optional[int] = None,
 ) -> list:
-    """Aerobic sessions for a user, each carrying a derived `.canonical` flag.
+    """Aerobic sessions for a user, each carrying derived `.canonical` and `.hevy_mirror` flags.
 
     Arbitration runs over the whole `since`-windowed set BEFORE `limit` is
     applied, so a bout's counterpart is never truncated out of the comparison.
+
+    Hevy mirrors (A3.2) are marked FIRST: a Health Connect row that is the same bout as a counted
+    Hevy workout gets `hevy_mirror=True, canonical=False` and is kept OUT of the arbitration, so it
+    can neither be emitted as a session nor suppress a live row for the same bout (a zoned
+    Strava copy would otherwise outrank a zoneless watch row that is the genuine record). Mirrors
+    are still RETURNED, like any non-canonical row, for callers that need every row (the Garmin
+    self-evaluation link); every reader that lists or counts sessions filters on `.canonical`.
     """
     q = (
         db.query(models.AerobicSession)
@@ -248,7 +275,13 @@ def arbitrated_sessions(
     if since is not None:
         q = q.filter(models.AerobicSession.session_date >= since)
     rows = q.all()
-    arbitrate(rows)
+    live = _live_hevy_near(db, user_id, [r for r in rows if r.source == HEALTH_CONNECT])
+    for r in rows:
+        r.hevy_mirror = bool(live) and r.source == HEALTH_CONNECT and overlaps_workout(r, live)
+    arbitrate([r for r in rows if not r.hevy_mirror])
+    for r in rows:
+        if r.hevy_mirror:
+            r.canonical = False
     if limit is not None:
         rows = rows[:limit]
     return rows
@@ -276,26 +309,79 @@ def sport_names_seen(user_id: int, db: Session) -> list[dict[str, str]]:
     return [{"sport_name": k, "source": v} for k, v in seen.items()]
 
 
-def overlaps_workout(session, workouts) -> bool:
-    """True iff `session`'s `[start_time, stop_time]` interval intersects any workout's
-    `[start_time, end_time]` (all four endpoints present on the pair). The SINGLE overlap
-    predicate (#309) — the resolver's `concurrent_strength` guard and the psychological
-    duration read both call this; one definition, so "same bout as a Hevy workout" means
-    the same thing to every reader.
+def overlap_fraction(session, workouts) -> float:
+    """The largest share of `session`'s OWN duration covered by any ONE workout, 0.0..1.0.
 
-    Null-safe on the session side: an untimed session (NULL start or stop) has no interval,
-    so it cannot be proven to overlap and returns False — the caller counts it rather than
-    dropping real minutes on an undecidable pair. Each workout with a NULL endpoint is
-    likewise skipped."""
-    s_start, s_stop = session.start_time, session.stop_time
-    if s_start is None or s_stop is None:
-        return False
+    Own duration is the denominator on purpose (A3.2, D-a): a copy of a Hevy bout is covered by
+    it almost completely, while an erg or cardio session that brushes a sloppily started Hevy
+    timer is covered for a sliver of itself. A 60-minute watch row around a 25-minute bout is
+    0.42, not a copy. One workout at a time (Hevy bouts do not overlap each other); two adjacent
+    bouts do not add up to a single "same bout".
+
+    An untimed session (NULL start or stop, or a non-positive span) has no interval, so it can
+    never be shown to overlap: 0.0, and the caller counts it rather than dropping real minutes on
+    an undecidable pair. A workout with a NULL endpoint is skipped. Instants are compared as epoch
+    seconds, so a naive and an aware stamp (SQLite vs Postgres) cannot raise."""
+    s_start, s_stop = _ts(session.start_time), _ts(session.stop_time)
+    if s_start is None or s_stop is None or s_stop <= s_start:
+        return 0.0
+    own = s_stop - s_start
+    best = 0.0
     for w in workouts:
-        if w.start_time is None or w.end_time is None:
+        w_start, w_end = _ts(w.start_time), _ts(w.end_time)
+        if w_start is None or w_end is None:
             continue
-        if s_start < w.end_time and w.start_time < s_stop:
-            return True
-    return False
+        best = max(best, min(s_stop, w_end) - max(s_start, w_start))
+    return max(best, 0.0) / own
+
+
+def overlaps_workout(session, workouts) -> bool:
+    """True iff `session` is the same bout as one of `workouts`: its overlap with a single workout
+    is at least `HEVY_MIRROR_OVERLAP_FRACTION` of its own duration. The SINGLE predicate (#309,
+    A3.2 D-b) — the Hevy-mirror read-door in `arbitrated_sessions`, the resolver's
+    `concurrent_strength` guard and the psychological duration read all call this, so "same bout
+    as a Hevy workout" means the same thing to every reader. (It was any intersection at all, which
+    treated an erg session brushing a Hevy timer as a strength trace.)"""
+    return overlap_fraction(session, workouts) >= HEVY_MIRROR_OVERLAP_FRACTION
+
+
+def _live_hevy_near(db: Session, user_id: int, rows) -> list:
+    """Counted Hevy workouts (the shared `counted_workouts` door: not excluded, and not an
+    unadjudicated duplicate) near the timed rows, for the mirror test. One query, bounded to the
+    rows' span plus a day either side (a gym bout is hours long)."""
+    timed = [r for r in rows if _ts(r.start_time) is not None and _ts(r.stop_time) is not None]
+    if not timed:
+        return []
+    lo = datetime.fromtimestamp(min(_ts(r.start_time) for r in timed), tz=timezone.utc) - timedelta(days=1)
+    hi = datetime.fromtimestamp(max(_ts(r.stop_time) for r in timed), tz=timezone.utc) + timedelta(days=1)
+    candidates = (
+        db.query(models.HevyWorkout)
+        .filter(models.HevyWorkout.user_id == user_id,
+                models.HevyWorkout.excluded_at.is_(None),
+                models.HevyWorkout.start_time >= lo,
+                models.HevyWorkout.start_time <= hi)
+        .all()
+    )
+    counted, _unadjudicated = counted_workouts(db, user_id, candidates)
+    return counted
+
+
+def hevy_mirror_session_ids(user_id: int, db: Session, *, since: Optional[date] = None) -> set[int]:
+    """Ids of the user's Health Connect rows that are Hevy mirrors, by the SAME predicate
+    `arbitrated_sessions` uses -- for raw readers that cannot take ORM entities.
+
+    Column-explicit on purpose: `cbti.replay` reads production BEFORE a migration deploys, so a
+    full-entity load that selects a column the live database does not have yet would break the
+    replay. This selects three columns (id, start_time, stop_time) that have existed since the
+    table did, and filters on user and source."""
+    q = (db.query(models.AerobicSession.id, models.AerobicSession.start_time, models.AerobicSession.stop_time)
+         .filter(models.AerobicSession.user_id == user_id,
+                 models.AerobicSession.source == HEALTH_CONNECT))
+    if since is not None:
+        q = q.filter(models.AerobicSession.session_date >= since)
+    rows = q.all()
+    live = _live_hevy_near(db, user_id, rows)
+    return {r.id for r in rows if live and overlaps_workout(r, live)} if live else set()
 
 
 # ── zone coverage (the "transport-starved sessions are visible, not silent" flag) ──
