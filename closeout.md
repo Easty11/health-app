@@ -1,66 +1,67 @@
-# Close-out — the operator's R11 (phase bands plus a legend replacing the marker lines) is recorded on the ROADMAP phase-marker item with Code's checks for the brief; nothing is built and no decision is minted
+# Close-out — ingest-triage: resting HR is now the sleep nadir (#344, #345), Hevy mirrors are suppressed at the read-door (#346), and six decisions and two questions are recorded; the companion RHR capture, the exclusion and reconciliation build, and the HRV re-bucketing are decided and unbuilt
 
 ## Real commits this session
 
-Session `metrics-markers-r11`, the operator's brief of 6 Oct 2026 (AEST), one governance-only PR. Range: `f289d67` (master at open) to this close-out. Fresh-clone settings were already set and read back. Maxima at open, by anchored script: decisions #394, questions Q216. No number minted: R11 is recorded as a decision entry when it is built, as the brief said.
+Session `ingest-triage`, the operator's briefs of 7 and 8 Oct 2026 (AEST). Range: `7a9114f` (session open) to this close-out. Maxima at open and again immediately before numbering, by anchored script: decisions #394, questions Q216. Numbers minted at the merge step: #395 to #400, Q217 and Q218.
 
-- `0c96417` `gov(metrics-markers-r11): record the operator's R11 (phase bands plus a legend) on the ROADMAP phase-marker item, with Code's checks for the brief` - the ROADMAP amendment, the BRANCHES row and the CLAUDE.md pointer (oldest dropped, cap of 3).
-- A final `chore: session close-out` commit carrying this file: its hash is on the branch (a file cannot name its own commit).
+- `0399b96` `fix(labels): call the HC resting_heart_rate column what it is, an all-day median HR`, merged as PR #344 (`c330a1e`).
+- `98dc9c4` `feat(hr): derive resting HR as the sleep nadir (DECISIONS_LOG.md:480); bucket the all-day median by AEST day`, merged as PR #345 (`f1cefac`). Carries the migration `a8c4e1f72b93`, released by the operator and applied on deploy.
+- `c77f230` `feat(aerobic): suppress Hevy mirrors at the read-door (A3.2); overlaps_workout is one fraction test`, merged as PR #346 (`6b8a482`).
+- `4984238` `gov(ingest-triage): #395-#400 ...`, the batched governance commit (this PR).
+- A final `chore: session close-out` commit carrying this file and the CLAUDE.md pointer: its hash is on the branch (a file cannot name its own commit).
 
-No code, no migration, no schema change, no prod read or write. The PR self-merges on green (governance only; no new judgment by Code). **Provisional until merged: everything above.**
+Deploys: #344, #345 and #346 each reached SUCCESS on Railway (#116). The governance PR changes no code. **Provisional until merged: the governance commit and this file.** The three code PRs are merged and live.
 
 ## Pending-queue reconciliation
 
-Nothing came from a chat `;cc` queue as a PENDING item. The brief, item by item:
+Nothing came from a chat `;cc` queue as a PENDING item. The operator's close-out brief, item by item:
 
-1. **R11 recorded on the item logged in #342: DONE.** Span, colour per phase name, the same-name revision as a thin dashed line with no label, a phase after the last data day listed as "no data yet" and never dropped, low-opacity bands with light and dark tokens and no in-chart text, and bands from dates with no snap on Exercise and Readiness. The item's heading says it was amended the same day.
-2. **The pinned tests: said so, as the brief asked.** R11 replaces the drop-after-the-last-category and snap-to-next-day behaviour; the item says the `PhaseMarkers.test.jsx` tests that pin them are updated in the build, and that the build says so.
-3. **The live rollup `as_of`: still owed by the operator,** recorded as such on the item.
-4. **"Record as #NEXT when built, not now": honoured.** No decision entry, no number.
-
-**What I checked before recording, and what it found.** R11's "light and dark tokens" assumes a token layer; the app has none (no `dark:` classes, no `prefers-color-scheme` rules and no theme config in `frontend/src`; chart colours are hex literals). That is recorded as an open choice for the brief (CSS variables with a dark override now, or light only), not decided.
-
-**Notes recorded for the brief, none a ruling** (all on the ROADMAP item):
-- R11 supersedes the earlier "bands to today": the band ends at the series end and a later phase shows in the legend only, so the axis need not extend to today.
-- "Bands from dates, no snap" on Exercise and Readiness needs `xType="time"`, which changes their spacing from even-per-data-day to proportional; R11 implies it without stating it.
-- Legend placement (per chart or per page) is unspecified.
-- Assumptions to confirm: "same name" is an exact match on `label`; consecutive same-name rows are one band with dashed lines at the handoffs; a name entered again after another phase is a second band in the same colour; a zero-length row (#379) draws nothing.
-- Bands go before the series so bars draw on top, as direct children of the Recharts chart.
+1. **Q29 premise correction: DONE (#395, and an additive note on Q29).** Q29 itself is unchanged.
+2. **fetchMeta capture-only superseded: DONE (#399).** Supersedes #321 on that one sentence.
+3. **A3.2 D-a and D-b rulings, A3 closed, the row-111 note: DONE (#397).**
+4. **Nadir ratifications, the column home, the alcohol-night constraint: DONE (#395, #396).**
+5. **Sweep-scope multi-user gap: DONE as Q217. SCHEMA.md 007 to 013 drift: DONE as Q218** (checked: all seven tables have neither a model nor a migration).
+6. **`cbti/replay.py` read-door bypass and the CBT-I closure: DONE (#398).**
+7. **Handoff carries, unbuilt: DONE in ROADMAP NEXT ("Ingest-triage carries")** — companion RHR capture (two PRs), reconciliation plus exclusion migration with `title`, HRV re-bucketing, the plausibility parking lot. Garmin `RestingHeartRate` as a secondary in #35's cross-check row is recorded as #400.
+8. **"Mint numbers only after merge": met in the form the guard allows.** No integer was claimed until the final re-read of master's max, immediately before this PR's merge; the guard refuses a `#NEXT` heading on master, so the integers are written on the branch at that instant and re-resolved if master advances.
+9. **HRV audit, item 3 downgraded: the query is owed to the operator** (ROADMAP, same block).
 
 **Divergences and judgment calls, named.**
-- **None built, so nothing narrowed.** The recorded notes are questions, not decisions; the item does not resolve any of them.
-- **The earlier fix direction was amended in place, not struck:** its heading clause and lead-in say it is superseded in part by R11, and the text it supersedes is kept.
+- **Q200 is settled but not moved to CLOSED.** Moving it removes lines outside a declared replacement region, which sends the batch to human review (gate (c)); it carries an additive "Settled" note and its State line still reads OPEN. The move, with `DONE → #395`, is owed to the next governance session.
+- **#399 leaves the exact use of `fetchMeta` to the build brief.** The ruling superseded "capture-only" without spelling out which fields decide absence; the entry names the fields and does not choose.
+- **Q217 and Q218 are filed, not ruled.**
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** No NOW row changed. NEXT's phase-marker item is amended (UNSTARTED, no brief).
+**Sprint (ROADMAP NOW).** No NOW row changed. NEXT gained one block, "Ingest-triage carries" (UNSTARTED, none briefed).
 
-**State.** The PR is open, checks pending at write time, self-merging on green. No `#NEXT` placeholder on the branch. No code changed, so no suite was re-run beyond CI.
+**State.** Code merged and live: the label fix, the sleep nadir (prod rows read by the operator: 8 Oct 57 bpm, matching the device; 6, 7 and 8 Oct read 57, 53 and 57), and the Hevy-mirror suppression (10 of the 16 Strava rows are mirrors; no load change). The governance PR is open, ready for review, self-merging on green. Nothing on the branch carries `#NEXT` after numbering.
 
-**Single clearest next action.** Brief the marker build from the ROADMAP item. It needs three answers first: the live rollup `as_of` (operator), the token choice (variables with a dark override, or light only), and the legend placement (per chart or per page). Everything else in the item is either ruled (R11) or an assumption the brief can confirm in one line.
+**Single clearest next action.** Pick one of two, by what the operator wants first. (1) Brief the companion RHR capture: PR 1 in this repo is small and additive, but it must first look at ONE real Garmin `RestingHeartRate` record (`time`, `zoneOffset`, `metadata.dataOrigin`) before keying anything. (2) Brief the reconciliation plus exclusion migration (a HOLD at the migration), which also gives row 111 its first exclusion.
 
-**Operator actions owed.** (1) The live rollup `as_of`, read off the chart, for the marker brief. (2) The #121 bundle check for #393 and #394 (the strings "Leg days", "every listed day", "candidate days", "Not counted toward any quota"), the strip on the phone, and the 28 Sep to 3 Oct leg on `/metrics`, carried from earlier close-outs. (3) Carried: confirm Polar Flow's max HR is locked at 175 (#388); the Q159 in-activity HR read on or after 9 Oct; the phone read of B, C and E for the appointment brief.
+**Operator actions owed.** (1) The Garmin HRV freshness read: `SELECT captured_at, rmssd_ms, source, status FROM hrv_readings WHERE user_id = 1 AND source = 'garmin' ORDER BY captured_at DESC LIMIT 1;` Flag it if older than 48 hours. The Samsung gap since 14 Sep is expected (Galaxy Ring on warranty). (2) The CBT-I earlier-prescription check: any `cbti_prescriptions` lights-out before about 20:49. (3) Rule on Q217 (sweep scope) and Q218 (the unbuilt SCHEMA.md sections) when convenient. (4) Carried from the last close-out: the R11 live rollup `as_of`; the #121 bundle check for #393 and #394 (the strings "Leg days", "every listed day", "candidate days", "Not counted toward any quota"); the strip on the phone; the Polar max HR lock at 175 (#388); the Q159 in-activity HR read on or after 9 Oct.
 
-**Code actions owed.** The #387 shared-block propagation to `health-connect-app` (next HCA session); the single-row HC bout deposit read (low priority).
+**Code actions owed.** Move Q200 to CLOSED with `DONE → #395` in the next governance session. The #387 shared-block propagation to `health-connect-app` (next HCA session). Carried: the single-row HC bout deposit read (low priority).
 
-**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 118 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). No question changed state this session.
+**Open questions by status** (OPEN_QUESTIONS.md above `## CLOSED`, counted by script): 120 OPEN, 7 OWED (Q78, Q176, Q178, Q181, Q205, Q206, Q212). Two opened (Q217, Q218); none changed state; Q29 and Q200 carry additive notes.
 
 **What was NOT touched (named so absence does not read as finished).**
-- **The marker fix itself:** nothing in `PhaseMarkers.jsx`, `TimeSeriesChart.jsx` or the four chart components changed; the misreading is still live, and so is the silent drop of a phase that starts after the last data day.
-- **The planning grid, the reconcile leg of Walk in (NEXT, #386), Loop (check-in, readiness, recommendation, close-out):** unbuilt or unchanged.
-- **Q197, the HC zones lane, Q199, Q216, the Polar re-zoning (Q198), Q213, Q214, Q212, Source hierarchy (Q201, Q203), the marker exposure (#367, Q206), the sibling sync races (Q208), the Garmin self-evaluation read, #371's proof:** unmoved.
-- **Lab upload pipeline, interpretation layer increments, medical protocol (CBT-I, the injury ledger):** did not move.
-- **Known gap carried:** `verify_series_integrity.py:56` still says `railway run`.
-- **Pattern to say out loud:** this is the fourth session in a row on the See and Know surfaces, and the second in a row that only edited the log for the marker item. Both were warranted (a ruling to record, a premise to check), but none moves Walk in's reconcile leg or a Loop item, and the marker build now waits on three small answers rather than on work. The next session should either take the marker build once those are in, or go to the reconcile leg.
+- **The `/metrics` phase-marker build:** nothing in `PhaseMarkers.jsx`, `TimeSeriesChart.jsx` or the four chart components; the R11 item still waits on three small answers (live `as_of`, the token choice, legend placement).
+- **The reconcile leg of Walk in (NEXT, #386) and every Loop item** (check-in, readiness, recommendation, close-out): unbuilt or unchanged. This session improved the number the check-in will one day read; it did not build the check-in.
+- **No consumer reads the nadir for a baseline or a trend.** #396 sets the constraint any such consumer must meet.
+- **Not built, though decided:** the companion RHR capture (#400), the soft exclusion and window-absence reconciliation (#399, migration HOLD), the HRV/SpO2/respiratory/distance AEST re-bucketing, and the plausibility layer (a parking lot, nothing decided).
+- **Q197, the HC zones lane, Q199, Q216, the Polar re-zoning (Q198), Q213, Q214, Q212, Source hierarchy (Q201, Q203), the marker exposure (#367, Q206), the sibling sync races (Q208), the Garmin self-evaluation read, #371's proof:** unmoved. Q216 (HC zoning from heart-rate reserve) now has a resting-HR input it lacked; that is noted here and not ruled.
+- **Lab upload pipeline, interpretation layer increments, medical protocol (CBT-I beyond the closure in #398, the injury ledger):** did not move.
+- **Known gaps carried:** `verify_series_integrity.py:56` still says `railway run`; `scripts/arbitration_flip_report.py` calls `arbitrate()` directly and is not mirror-aware (a report, not a reader).
+- **Pattern to say out loud:** this session was almost entirely on the See and Know data underneath the platform (ingest correctness), after four sessions on the See and Know surfaces. It did not move Walk in's reconcile leg or any Loop item. The next session should take one of the two builds above only if the operator wants the data path finished first; otherwise it should go to the reconcile leg or to a Loop item.
 
 **v1-triage of the NOW lanes** (which test each serves):
 - Phase-change form (#375, #376, #378, #379, #389): **Know** and **Loop**. DONE; a candidate for removal from NOW.
 - Know (d), the leg strip and wrap (#390 to #394): **Know**. Built; the test is MET (#392); only #393 and #394's deploy check remains.
-- The `/metrics` phase-marker item (NEXT, R11): **See**. Ruled, unbriefed.
 - HC zones (#364, #385, #388, OWED for a lock confirmation and a low-priority read): **See**, **Know** and **Loop**. No real work left; a demotion candidate.
 - Appointment brief: **Walk in**, met (#386); the reconcile leg (NEXT) serves the same test.
 - Garmin self-evaluation read (#372, OWED): **Know** and **Loop**.
-- HC sync reliability (#369-#371, #377, #380, Q159, Q202, Q208, Q214, OWED): **See** and **Loop**.
+- HC sync reliability (#369-#371, #377, #380, Q159, Q202, Q208, Q214, OWED): **See** and **Loop**. The nadir's sweep gap for a user without a Hevy key (Q217) sits beside it.
 - Polar sport-id relabel and the H10-vs-Hevy facts (#366-#368, OWED): **Know** and **See**.
 - Source hierarchy (#365, OWED to Luke): **See** and **Know**.
 - Aerobic ingest automated (#353, OWED check): **See** and **Loop**.
