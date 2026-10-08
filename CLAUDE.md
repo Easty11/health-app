@@ -284,7 +284,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **The MCP OAuth provider is persisted: hashed tokens with expiry and revocation, so a redeploy no longer drops a connected client; held for the operator's release, G4 and G5 owed (Q196, #NEXT, Q#NEXT).** Code and governance, one migration - Handoff: `closeout.md`.
+- **The MCP OAuth provider is persisted: hashed tokens with expiry and revocation, so a redeploy no longer drops a connected client; released by the operator, G4 and G5 owed (#404, Q222, Q223).** Code and governance, one migration - Handoff: `closeout.md`.
 
 - **A dedicated clinical-documents store holds imaging reports and clinical letters, and the `document` evidence door resolves against it; Q142 is closed and two follow-up questions are opened (#403, Q220, Q221).** Code and governance, one migration - Handoff: `closeout.md`.
 

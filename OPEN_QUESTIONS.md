@@ -3117,19 +3117,19 @@ Raised 8 Oct 2026 (clinical-documents store). The store is fed by an import endp
 
 ---
 
-## Q#NEXT. Should MCP refresh tokens rotate, now that refresh is proven?
+## Q222. Should MCP refresh tokens rotate, now that refresh is proven?
 
-Raised 8 Oct 2026 (persisting the MCP OAuth provider, Q196, fork F2). Refresh tokens are NOT rotated: a refresh returns the same refresh token, sliding its 90-day life. Rotation (a new refresh token on every refresh, the old one dead) is OAuth 2.1 best practice for public clients and shrinks the window in which a leaked refresh token is useful, but a client that fails to store the new token is locked out and must sign in again. Nothing is built.
+Raised 8 Oct 2026 (persisting the MCP OAuth provider, Q196, fork F2, operator-ratified as no rotation "for now"). Refresh tokens are NOT rotated: a refresh returns the same refresh token, sliding its 90-day life. Rotation (a new refresh token on every refresh, the old one dead) is OAuth 2.1 best practice for public clients and shrinks the window in which a leaked refresh token is useful, but a client that fails to store the new token is locked out and must sign in again. Nothing is built.
 
-**Trigger.** G4 (the real-client refresh check in prod: `claude.ai` refreshes silently on a 401 without a re-auth prompt) has passed, and the operator wants the extra protection against the lockout risk.
+**Trigger.** G4 (the real-client refresh check in prod, #404: `claude.ai` refreshes silently on a 401 without a re-auth prompt) has passed, and the operator wants the extra protection against the lockout risk.
 
 **Open design points, for when it fires.** The `refresh_hash` link already lets a rotated refresh revoke its predecessors' access tokens; rotation needs a grace window for an in-flight retry (the old token usable once more for a short time) or a replay of the same refresh within it would lock the client out; a replay of an already-rotated token outside the window should revoke the whole family (the standard reuse-detection response). Whether a second MCP client type behaves differently is part of the same call.
 
-**State:** OPEN. Not blocking; nothing built. Related: Q196 (closed), the persisted-provider decision.
+**State:** OPEN. Not blocking; nothing built. Related: Q196 (closed), #404.
 
 ---
 
-## Q#NEXT. Should expired and revoked MCP token rows be pruned, and the public client-registration endpoint bounded?
+## Q223. Should expired and revoked MCP token rows be pruned, and the public client-registration endpoint bounded?
 
 Raised 8 Oct 2026 (persisting the MCP OAuth provider, Q196). Two growth paths now write to the database that previously only grew process memory, which a restart cleared. (1) Expired and revoked rows in `mcp_oauth_tokens` are never deleted; a client that refreshes hourly adds about 9,000 access rows a year per connection. (2) The dynamic-registration endpoint is unauthenticated by design (the connector must register before any user signs in), and each call now writes a `mcp_oauth_clients` row, whether or not a sign-in ever follows. Neither is a correctness problem today (one user, one connector, rows are small), and nothing is built.
 
@@ -3137,7 +3137,7 @@ Raised 8 Oct 2026 (persisting the MCP OAuth provider, Q196). Two growth paths no
 
 **Open design points, for when it fires.** A prune of token rows expired or revoked more than N days ago, and of client rows with no token older than N days, run on the same cadence as an existing job or at registration; whether registration needs a rate limit or a cap on stored clients; whether `last_used_at` should drive an idle-connection report. The SDK stores the DCR-generated `client_secret` in `client_info` because it compares it in plaintext, so it cannot be hashed without bypassing the SDK's client authentication; that is a client credential, not a bearer token, and is recorded here rather than changed.
 
-**State:** OPEN. Not blocking; nothing built. Related: Q196 (closed), the persisted-provider decision.
+**State:** OPEN. Not blocking; nothing built. Related: Q196 (closed), #404.
 
 ---
 
@@ -5908,9 +5908,9 @@ and a "New chat" control, since the panel had no way to clear a chat.
 
 Options (not a ruling): persist tokens in a table (hashed, with expiry and revocation; a migration), give the in-memory tokens an expiry only, or accept and document it. If persistence is added, the retirement dry run's MCP paragraph and the pinning test must change with it.
 
-**Resolution (8 Oct 2026, #NEXT).** The operator took option one: persist, hashed, with expiry and revocation. Built as two tables (`mcp_oauth_clients`, `mcp_oauth_tokens`, `SCHEMA.md` section 046); access 1 h, refresh 90 d sliding, no rotation; a deleted user's tokens cascade away; revoking a refresh token revokes its access tokens; `retire_user`'s dry run now counts the live tokens from the table. `test_mcp_provider_really_persists_nothing` is replaced by `test_mcp_tokens_survive_restart`. The real-client gates G4 (refresh) and G5 (redeploy survival) are operator-assisted after release and are recorded in the decision's status, not here.
+**Resolution (8 Oct 2026, #404).** The operator took option one: persist, hashed, with expiry and revocation. Built as two tables (`mcp_oauth_clients`, `mcp_oauth_tokens`, `SCHEMA.md` section 046); access 1 h, refresh 90 d sliding, no rotation; a deleted user's tokens cascade away; revoking a refresh token revokes its access tokens; `retire_user`'s dry run now counts the live tokens from the table. `test_mcp_provider_really_persists_nothing` is replaced by `test_mcp_tokens_survive_restart`. The real-client gates G4 (refresh) and G5 (redeploy survival) are operator-assisted after release and are recorded in the decision's status, not here.
 
-**State:** DONE → #NEXT.
+**State:** DONE → #404.
 
 ---
 
