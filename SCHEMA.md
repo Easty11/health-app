@@ -43,6 +43,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 042 — garmin_activity_selfevals  FK to users (CASCADE) + aerobic_sessions (SET NULL) — insert-only, capture-timed Garmin per-activity self-evaluation (RPE CR-10, feel); unique (user, garmin_activity_id, captured_at) (Q209 path a)
 043 — user_hrmax restatement path  self-FK (restates_id -> id) — dated vs restatement rows, partial unique keys, `adjusted` provenance with base_bpm + rationale (#383, #384)
 044 — health_connect_syncs sleep-nadir HR  six additive nullable `hr_nadir_*` columns — the sleep-period resting rate DECISIONS_LOG.md:480 calls primary; HELD for operator release
+045 — clinical_documents  FK to users (CASCADE) — one row per imaging report or clinical letter; unique (user, doc_key); index (user, service_date); the target of the `document` evidence door (Q142 option b); HELD for operator release
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1812,3 +1813,62 @@ ALTER TABLE health_connect_syncs ADD COLUMN hr_nadir_formula        TEXT;       
 - **Writers and cadence.** The sync recomputes the rows it touched, inside a SAVEPOINT (a failure is reported as `hr_nadir.error` in the response and never fails the sync); the nightly `refresh_load` chain recomputes the trailing 14 days as a soft-fail fill step after `hc_zone_enrich`. Both are idempotent over `hr_samples`.
 - **Readers.** The chat prompt ("Resting HR (sleep nadir)" and "All-day median HR" as separate lines), `GET /health-connect/latest`, `/recovery` (`hr_nadir_bpm`, `hr_nadir_reason`) and the MCP `get_recovery_metrics` fallback ("Sleep-nadir HR="). No decision-making code reads either HR column.
 - **Downgrade** drops the six columns; nothing else reads them.
+
+
+### 045 — clinical_documents (imaging reports and clinical letters)
+
+Migration `c3e5a7d9b1f4` (revises `a8c4e1f72b93`). Additive: one table, one unique constraint, one index. **HELD for the operator's release** (a schema migration): the PR carrying it is not self-merged, and Railway auto-runs `alembic upgrade head` on deploy, so merging it is the release.
+
+One row per imaging report or clinical letter (referral, specialist letter), keyed by a stable per-user `doc_key`. The `LabReport` envelope pattern (#52): an OBSERVED document, so neither a `user_knowledge_entries` type (declared facts only) nor the deferred `health_events` spine (#43). It is a concrete domain table for a concrete series, the same reasoning `lab_reports` used, and does not start `health_events`. #280's refusal to force imaging into `lab_results` stands.
+
+```sql
+CREATE TABLE clinical_documents (
+  id                   SERIAL PRIMARY KEY,
+  user_id              INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  doc_key              VARCHAR(100) NOT NULL,   -- the payload's `id`, e.g. img_<yyyymmdd>_<modality>_<region>
+  doc_type             VARCHAR(20)  NOT NULL,   -- imaging | correspondence
+  modality             VARCHAR(10),             -- US | CT | MRI | XR | DXA; imaging only
+  subtype              VARCHAR(30),             -- referral | specialist letter; correspondence only
+  study                VARCHAR(255),            -- the imaging title
+  region               VARCHAR(100),            -- free text
+  laterality           VARCHAR(10),             -- L | R | bilateral
+  service_date         DATE         NOT NULL,   -- the timeline anchor
+  reported_date        DATE,
+  provider             VARCHAR(255),            -- provider / referrer / author / recipient: as printed
+  referrer_name_raw    VARCHAR(255),
+  author_name_raw      VARCHAR(255),
+  recipient            VARCHAR(255),
+  accession            VARCHAR(50),
+  source_doc_filenames JSONB        NOT NULL,   -- list of str, >= 1
+  clinical_history     TEXT,
+  conclusion_verbatim  TEXT,                    -- VERBATIM; NULL for a DXA (no comment) and for letters
+  conclusion_label     VARCHAR(100),            -- e.g. IMPRESSION, CONCLUSION
+  findings_summary     TEXT,                    -- condensed, NOT verbatim
+  structured           JSONB,                   -- modality numerics: DXA segmental, PVR, levels
+  letter               JSONB,                   -- correspondence body (below)
+  extraction_notes     JSONB,                   -- list of str
+  source               VARCHAR(30)  NOT NULL,   -- file_extraction
+  schema_version       VARCHAR(30)  NOT NULL,   -- the payload's `schema`, e.g. 'clinical_documents v0.1'
+  extracted_at         DATE,
+  created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  CONSTRAINT uq_clinical_document_user_key UNIQUE (user_id, doc_key)
+);
+CREATE INDEX ix_clinical_document_user_service ON clinical_documents (user_id, service_date);
+```
+
+`letter` (correspondence only; JSON, a closed key set, every value stored as received): `reason`, `diagnosis_verbatim`, `management_plan_verbatim` (list of str), `history_summary`, `examination_summary`, `imaging_review_summary`, `assessment_summary`, `medications_listed`, `recorded_risk_factors`, `allergies`, `attachments`, `actions`. Not an imaging column; refused on an imaging document.
+
+**Payload to column.** The import payload is `{schema, extracted_at, documents[], conventions?, not_extracted?}`; `conventions` and `not_extracted` are metadata and are not stored. Per document: `id` -> `doc_key`; `dates.service` / `dates.reported` -> `service_date` / `reported_date`; `source_files` -> `source_doc_filenames`; `author` -> `author_name_raw`; `referrer` -> `referrer_name_raw`; `schema` -> `schema_version`; every top-level correspondence key that is not an envelope column -> `letter`, unchanged. `source` is stamped `file_extraction`.
+
+**Row rules.**
+- **Verbatim, byte for byte.** `conclusion_verbatim`, `letter.diagnosis_verbatim` and `letter.management_plan_verbatim` are stored exactly as received: no trimming, no normalising, no typo repair (one is deliberately marked `[sic]`). Validation checks them (a non-blank string) and never returns a modified copy. The summaries (`findings_summary`, `*_summary`) are condensed and are not verbatim.
+- **Closed keys per `doc_type`**, refused with the key NAME, never a value. A key naming an identifier (`ihi`, `medicare*`, `address`, `phone`, `dob`, `mobile`, `fax`, date of birth), at any depth including inside `structured` and `letter`, refuses the document: the repo is public, the payload is a medical record, and the table carries no identifier. `modality` is refused on correspondence; `subtype` and the letter keys on imaging.
+- **Required:** `id` (`[A-Za-z0-9_.-]`, at most 100), `doc_type`, `dates.service`, `source_files` (>= 1), `modality` (imaging) or `subtype` (correspondence).
+- **Upsert on (`user_id`, `doc_key`); an update overwrites the row in full.** The payload is the canonical extraction and there is one extractor, so there is no supersede chain. A second extractor or uploader would need supersede semantics (see the decision).
+- **Dry run is the default.** `POST /clinical-documents/import` returns `{would_insert[], would_update[], unchanged[], refused[{doc_key, reason}]}` and writes nothing; `?dry_run=false` applies, all-or-nothing (any refused document aborts with a 422 and writes nothing). A second apply of the same payload reports every document `unchanged`. A `doc_key` repeated inside one payload refuses every copy.
+- **User-scoped.** Every read and write is filtered on the authenticated user's id; another user's `doc_key` is simply absent, and the same `doc_key` for two users is two rows.
+
+**Readers.** `GET /clinical-documents?since=&doc_type=&modality=&region=` (oldest `service_date` first; `region` a case-insensitive substring) and the MCP `get_clinical_documents(since?, doc_type?, modality?, region?, doc_key?)`: the list view is date, modality or subtype, study, then the conclusion in full between `<<<` and `>>>`; `doc_key=` returns one document with every stored field, including `structured` and `letter`. `appointment_brief.module_imaging_timeline` resolves a `document`-door evidence ref that byte-matches a `doc_key` to `{service_date, title, conclusion_verbatim}` and sorts by `service_date`; an unmatched ref renders as written. `validate_finding` is unchanged (the door resolves on read only; a ref is not validated against this table). The coach context does not render documents: the MCP is the pull path. Nothing derives a finding, constraint or injury change from a document.
+
+**Downgrade** drops the table (its index and unique constraint go with it). It loses data only if rows exist, and the payload file rebuilds every row through the import endpoint.

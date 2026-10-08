@@ -19,11 +19,13 @@ HARD EXCLUSIONS, inherited from the lifts (`typed_entries`) and re-applied to hi
     count (labs are out of v1; the #60 firewall applies anyway);
   * free-text `user_knowledge` is never read (being retired, Q181) — this module takes no session,
     so it cannot read any table; the loader reads `user_knowledge_entries` (and the user's
-    `full_name`, for the print subtitle) only.
+    `full_name`, for the print subtitle) only, plus -- only when a visible finding cites a
+    `document` ref -- the `clinical_documents` rows whose `doc_key` is cited.
 
 PURE. `build_appointment_brief` takes loaded rows and returns a JSON-safe dict: no queries, no
-clock. `load_appointment_brief` is the one loader (one ledger query, plus the user's name) the API
-route and the MCP tool both call, so the two surfaces return the same object.
+clock. `load_appointment_brief` is the one loader (one ledger query, plus the user's name, plus the
+cited clinical documents when there are any) the API route and the MCP tool both call, so the two
+surfaces return the same object.
 """
 from __future__ import annotations
 
@@ -138,6 +140,9 @@ class BriefContext:
     resolved_constraints: list[Any] = field(default_factory=list)        # inactive, confirmed, resolved
     finding_history: dict[str, list[dict[str, Any]]] = field(default_factory=dict)  # key → older, newest first
     derived_asks: list[dict[str, Any]] = field(default_factory=list)
+    # The user's stored clinical documents by `doc_key` -> {service_date, title, conclusion_verbatim}.
+    # The `document` evidence door resolves against it; empty means every ref renders as written.
+    documents: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def appointment_date(self) -> date:
@@ -153,10 +158,15 @@ def _visible_history_finding(row: Any) -> bool:
     return v.get("derived_from_labs") is False and v.get("asserted_by") is not None
 
 
-def scope_context(appointment: dict[str, Any], current_state: CurrentState, ledger: list[Any]) -> BriefContext:
+def scope_context(
+    appointment: dict[str, Any], current_state: CurrentState, ledger: list[Any],
+    documents: dict[str, dict[str, Any]] | None = None,
+) -> BriefContext:
     """Compute the in-scope rows once. `appointment` is `{"key", "value"}`; `current_state` supplies
     the ACTIVE typed rows through the shared lifts (`constraints`, `findings["visible"]`); `ledger`
-    is the user's injury, constraint and finding rows, active and inactive (history)."""
+    is the user's injury, constraint and finding rows, active and inactive (history). `documents`
+    is the user's clinical documents by `doc_key` (see `load_clinical_documents`); the pure core
+    never queries for them."""
     value = appointment["value"]
     kind = value["kind"]
     pks = list(value["scope"]["parent_keys"])
@@ -170,6 +180,7 @@ def scope_context(appointment: dict[str, Any], current_state: CurrentState, ledg
         since=typed_entries.parse_date(value.get("since")),
         parent_keys=pks,
         sections=resolve_sections(value),
+        documents=documents or {},
     )
 
     for pk in pks:
@@ -515,15 +526,26 @@ def module_background(ctx: BriefContext) -> dict[str, Any]:
 
 
 def module_imaging_timeline(ctx: BriefContext) -> dict[str, Any]:
-    """Evidence refs on the `document` door among in-scope findings, oldest first by the citing
-    finding's `as_of`. The `document` door resolves to nothing (no store behind it — a ref is free
-    text), so refs render as written, undated and untitled."""
+    """Evidence refs on the `document` door among in-scope findings, oldest first. A ref that
+    byte-matches one of the user's clinical-document `doc_key`s resolves to that record and gains
+    `service_date`, `title` and `conclusion_verbatim` (stored verbatim; null for a document with no
+    conclusion, such as a letter or a DEXA) and sorts by the document's `service_date`. Any other
+    ref is free text and renders exactly as written: the citing finding's `as_of`, no date or title.
+    Resolved and unresolved items share one ordering -- `service_date` where resolved, else the
+    finding's `as_of` -- and equal dates keep the order the findings and refs were written in."""
     items = []
     for f in sorted(ctx.findings, key=lambda f: str(f.get("as_of") or "")):
         for ev in ((f.get("basis") or {}).get("evidence") or []):
             if ev.get("door") == "document":
-                items.append({"ref": ev.get("ref"), "finding_key": f.get("key"), "as_of": f.get("as_of")})
-    return {"items": items, "note": "Document refs as written; they do not resolve to a dated, titled record yet."}
+                item = {"ref": ev.get("ref"), "finding_key": f.get("key"), "as_of": f.get("as_of")}
+                doc = ctx.documents.get(ev.get("ref"))
+                if doc is not None:
+                    item.update(doc)
+                items.append(item)
+    items.sort(key=lambda i: str(i.get("service_date") or i.get("as_of") or ""))
+    return {"items": items, "note": (
+        "A document ref that matches a stored clinical document shows its date, title and "
+        "conclusion; any other ref is shown as written.")}
 
 
 def module_request(ctx: BriefContext) -> dict[str, Any] | None:
@@ -578,11 +600,13 @@ def _json_safe(obj: Any) -> Any:
 
 def build_appointment_brief(
     appointment: dict[str, Any], current_state: CurrentState, ledger: list[Any],
-    patient_name: str | None = None,
+    patient_name: str | None = None, documents: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Assemble the brief: pure, JSON-safe. See the module docstring for scope and exclusions.
-    `patient_name` is the user's `full_name` (None if unset) — the print document's subtitle."""
-    ctx = scope_context(appointment, current_state, ledger)
+    `patient_name` is the user's `full_name` (None if unset) — the print document's subtitle.
+    `documents` is the user's clinical documents by `doc_key`; the `document` door resolves
+    against it (none given: every document ref renders as written)."""
+    ctx = scope_context(appointment, current_state, ledger, documents)
     sections = []
     for name in resolve_sections(ctx.value):
         body = MODULES[name](ctx)
@@ -630,7 +654,42 @@ def load_appointment_brief(db: Session, user_id: int, key: str) -> dict[str, Any
     )
     ledger = [r for r in rows if r.type != "appointment"]
     name = db.query(models.User.full_name).filter(models.User.id == user_id).scalar()
-    return build_appointment_brief({"key": appt.key, "value": appt.value}, state, ledger, name)
+    return build_appointment_brief(
+        {"key": appt.key, "value": appt.value}, state, ledger, name,
+        load_clinical_documents(db, user_id, _cited_document_refs(state)))
+
+
+def _cited_document_refs(state: CurrentState) -> set[str]:
+    """Every `document`-door ref cited by a visible finding (a superset of the in-scope ones)."""
+    return {
+        ev["ref"]
+        for f in (state.findings or {}).get("visible", [])
+        for ev in ((f.get("basis") or {}).get("evidence") or [])
+        if ev.get("door") == "document" and isinstance(ev.get("ref"), str)
+    }
+
+
+def load_clinical_documents(db: Session, user_id: int, refs: set[str]) -> dict[str, dict[str, Any]]:
+    """The user's clinical documents whose `doc_key` is in `refs`, by `doc_key`, as the `document`
+    door resolves them: the date, a title (the study for imaging, else the letter's subtype) and
+    the verbatim conclusion. Scoped to the user, so another user's `doc_key` never resolves. No
+    query at all when nothing is cited."""
+    if not refs:
+        return {}
+    rows = (
+        db.query(models.ClinicalDocument)
+        .filter(models.ClinicalDocument.user_id == user_id,
+                models.ClinicalDocument.doc_key.in_(sorted(refs)))
+        .all()
+    )
+    return {
+        r.doc_key: {
+            "service_date": r.service_date.isoformat(),
+            "title": r.study or r.subtype or r.modality or r.doc_key,
+            "conclusion_verbatim": r.conclusion_verbatim,
+        }
+        for r in rows
+    }
 
 
 def list_appointments(db: Session, user_id: int, status: str | None = None) -> list[dict[str, Any]]:

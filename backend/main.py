@@ -28,6 +28,7 @@ from routers import interpretation as interpretation_router
 from routers import series as series_router
 from routers import load as load_router
 from routers import appointments as appointments_router
+from routers import clinical_documents as clinical_documents_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -105,6 +106,7 @@ app.include_router(interpretation_router.router)
 app.include_router(series_router.router)
 app.include_router(load_router.router)
 app.include_router(appointments_router.router)
+app.include_router(clinical_documents_router.router)
 
 
 @app.get("/health")

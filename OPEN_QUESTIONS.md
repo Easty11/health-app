@@ -2073,27 +2073,6 @@ session.
 
 ---
 
-## Q142. Imaging / DEXA ingestion target — where do narrative studies and structured DEXA numerics land?
-
-Raised deferring the imaging half of the 2026-08/09 lab batch (#280). `imaging_extraction_new_batch.json` holds three
-studies: MRI pituitary (no lesion — narrative), US urinary tract (chronic bladder outlet obstruction, PVR 234 mL,
-11 mm renal cyst — narrative), and a baseline DEXA (total-body BMD T +1.8; structured body-composition numerics). No
-landed home exists today:
-
-- **Narrative MRI/US** need the generic `health_events` parent, deferred at #43/#52 — there is no table for a narrative
-  study.
-- **DEXA numerics** are structured (BMD, T/Z-score, lean/fat mass, RSMI, segmental) and could seed a numeric series,
-  but NOT `lab_results` — DEXA is not a lab panel, and forcing it would require declaring ~15 new canonicals and misusing
-  a lab table for imaging (#280 refused this; the handoff itself warns against it).
-
-Options: (a) wait for the `health_events` parent, land all three there; (b) a dedicated imaging/DEXA schema — a migration,
-so Merge disposition hold (a), full human review; (c) a DEXA-only numeric series now, narrative MRI/US still deferred.
-Operator deferred the decision this session. Owner: Luke / chat (data-meaning + schema), then a code session.
-
-**State:** OPEN
-
----
-
 ## Q143. MCP temporal re-anchoring + failure acknowledgement — the out-of-repo halves flagged by #281
 
 Raised closing the decompression-schedule verify-then-fix (#281). Two halves sit outside `health-app` and were flagged
@@ -3121,6 +3100,28 @@ Raised 8 Oct 2026 (hevy-garmin-dedupe close-out). **Parked by Luke:** nothing is
 **To decide (Luke), when the trigger fires.** Where the zones attach (an emission keyed to the Hevy session, or the mirror row made canonical for the metabolic window only), how a partial overlap is handled (a watch row covering half the bout), and the formula version.
 
 **State:** OPEN. Parked by Luke; not blocking; nothing built. Related: #402, #367, #397, #401, Q206, Q201.
+
+---
+
+## Q220. Should the `document` door be validated strictly on write once every existing ref resolves?
+
+Raised 8 Oct 2026 (clinical-documents store, fork F2). `validate_finding` still accepts any non-empty string as a `document` ref, so a finding can cite a document that is not in `clinical_documents`, and `module_imaging_timeline` then renders it as written. Strict validation (the ref must be one of the user's `doc_key`s) would close that. It is parked because existing findings may cite free-text refs and would become unrewritable the moment it landed.
+
+**Trigger.** The F2 audit (the read-only query in the clinical-documents PR; its output stays local or goes to chat, not into this repo) finds no active finding with a `document` ref that is not a `doc_key`, after the operator has re-pointed them through the normal finding rewrite.
+
+**Open design points, for when it fires.** The check needs the database, and `validate_finding` is shape-only by contract, so it belongs in `_validate_typed_write`, not in the validator. `request.evidence[]` on an appointment also carries `document` refs, which `module_request` renders as written and does not resolve; strict validation and resolution should treat both or say why not.
+
+**State:** OPEN. Not blocking; nothing built. Related: the clinical-documents decision, #280, Q142.
+
+---
+
+## Q221. Upload and extraction UI for clinical documents, reusing the `labs.py` Claude-extraction path
+
+Raised 8 Oct 2026 (clinical-documents store). The store is fed by an import endpoint that takes a payload the operator extracts elsewhere and POSTs from a laptop. An in-app path (upload a PDF or image, extract with Claude, confirm, store) would mirror `routers/labs.py` (`/extract`, `/confirm`). **Deferred by the operator; out of scope for the store.** The pending knee MRI arrives first, as a single-document import through the same endpoint.
+
+**Constraints a design must carry.** Verbatim fields stay byte-for-byte, so extraction output for `conclusion_verbatim`, `diagnosis_verbatim` and `management_plan_verbatim` must be confirmed against the source rather than trusted; a second extractor or uploader ends the full-overwrite upsert (the clinical-documents decision's last "do not revisit" clause) and needs supersede semantics first; the identifier-key refusal applies to whatever the extractor emits.
+
+**State:** OPEN. Not blocking; nothing built. Related: the clinical-documents decision, `routers/labs.py`.
 
 ---
 
@@ -5507,6 +5508,27 @@ actually uses (the #154 pattern), engine untouched, full backend suite green (14
   (`expire_stale_entries`, live via `chat.py:677` / `knowledge.py:603`) and `injury_trajectory.py:144`
   (`evaluate`, live via `mcp_server.py:486`, which passes no `today` so the UTC fallback fires) both compute a
   user-facing "today" in UTC → a real AEST-boundary skew. Two live → Q140 opened.
+
+---
+
+## Q142. Imaging / DEXA ingestion target — where do narrative studies and structured DEXA numerics land?
+
+Raised deferring the imaging half of the 2026-08/09 lab batch (#280). `imaging_extraction_new_batch.json` holds three
+studies: MRI pituitary (no lesion — narrative), US urinary tract (chronic bladder outlet obstruction, PVR 234 mL,
+11 mm renal cyst — narrative), and a baseline DEXA (total-body BMD T +1.8; structured body-composition numerics). No
+landed home exists today:
+
+- **Narrative MRI/US** need the generic `health_events` parent, deferred at #43/#52 — there is no table for a narrative
+  study.
+- **DEXA numerics** are structured (BMD, T/Z-score, lean/fat mass, RSMI, segmental) and could seed a numeric series,
+  but NOT `lab_results` — DEXA is not a lab panel, and forcing it would require declaring ~15 new canonicals and misusing
+  a lab table for imaging (#280 refused this; the handoff itself warns against it).
+
+Options: (a) wait for the `health_events` parent, land all three there; (b) a dedicated imaging/DEXA schema — a migration,
+so Merge disposition hold (a), full human review; (c) a DEXA-only numeric series now, narrative MRI/US still deferred.
+Operator deferred the decision this session. Owner: Luke / chat (data-meaning + schema), then a code session.
+
+**State:** DONE → #403. Option (b) taken, widened by the operator to clinical correspondence: a dedicated `clinical_documents` store (PR #352; the migration was released with the merge). The DEXA numerics stay in `structured` on the row (fork F1), so option (c) remains a later step at the second scan.
 
 ---
 

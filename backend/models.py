@@ -939,6 +939,65 @@ class LabReport(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ClinicalDocument(Base):
+    """One imaging report or clinical letter, keyed by a stable per-user `doc_key`
+    (Q142 option b; SCHEMA.md §045). The `LabReport` envelope pattern: an OBSERVED
+    document, so not a `user_knowledge_entries` type (declared facts only), and not the
+    deferred `health_events` spine (#43/#52) -- a concrete domain table for a concrete series.
+    It gives the `document` evidence door of a finding a target to resolve against.
+
+    VERBATIM FIELDS ARE BYTE-FAITHFUL. `conclusion_verbatim` and, inside `letter`,
+    `diagnosis_verbatim` / `management_plan_verbatim` are stored exactly as received: no
+    trimming, no normalising, no typo repair. Nothing in this module or its writers rewrites
+    them. `findings_summary` and the `*_summary` letter keys are condensed, NOT verbatim.
+
+    `service_date` is the timeline anchor. `structured` holds modality numerics (a DXA's
+    segmental values, a PVR, vertebral levels); `letter` holds a correspondence body. An
+    update overwrites the row in full -- the payload is the canonical extraction.
+    """
+    __tablename__ = "clinical_documents"
+    __table_args__ = (
+        UniqueConstraint("user_id", "doc_key", name="uq_clinical_document_user_key"),
+        Index("ix_clinical_document_user_service", "user_id", "service_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    doc_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    # imaging | correspondence
+    doc_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # US | CT | MRI | XR | DXA -- imaging only
+    modality: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # referral | specialist letter -- correspondence only
+    subtype: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    study: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    laterality: Mapped[str | None] = mapped_column(String(10), nullable=True)  # L | R | bilateral
+    service_date: Mapped[date] = mapped_column(Date, nullable=False)
+    reported_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # As printed on the document.
+    provider: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    referrer_name_raw: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    author_name_raw: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    recipient: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    accession: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_doc_filenames: Mapped[list] = mapped_column(_JSONB, nullable=False)   # >=1
+    clinical_history: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conclusion_verbatim: Mapped[str | None] = mapped_column(Text, nullable=True)   # VERBATIM
+    conclusion_label: Mapped[str | None] = mapped_column(String(100), nullable=True)  # IMPRESSION, CONCLUSION...
+    findings_summary: Mapped[str | None] = mapped_column(Text, nullable=True)   # condensed, not verbatim
+    structured: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
+    letter: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
+    extraction_notes: Mapped[list | None] = mapped_column(_JSONB, nullable=True)
+    source: Mapped[str] = mapped_column(String(30), nullable=False)   # file_extraction
+    schema_version: Mapped[str] = mapped_column(String(30), nullable=False)   # the payload's `schema`
+    extracted_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class LabResult(Base):
     """One row per marker per `LabReport` (DECISIONS_LOG #52). `current_state` reads
     the latest row per (user, marker_canonical) via join to `LabReport.collected_date`

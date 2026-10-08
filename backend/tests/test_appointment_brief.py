@@ -656,3 +656,140 @@ def test_patient_name_is_the_users_full_name_or_null(db_session, world):
     db_session.commit()
     b = ab.load_appointment_brief(db_session, world.id, "appt_a")
     assert b["patient"] == {"name": "Person A"}
+
+
+# ── imaging_timeline: the `document` door resolves against stored clinical documents ──────────────
+#
+# A `document` ref that byte-matches one of the user's clinical-document `doc_key`s gains the
+# record's date, title and verbatim conclusion and sorts by `service_date`; any other ref renders
+# exactly as it always did. SYNTHETIC documents only.
+
+DOC_VERBATIM = "Appearances  as written – query ?  [sic]\r\nLine two \n"
+
+
+def _doc(db, uid, key, service="2026-01-05", **over):
+    vals = dict(user_id=uid, doc_key=key, doc_type="imaging", modality="MRI", study=f"Study {key}",
+                service_date=date.fromisoformat(service), source_doc_filenames=["f.pdf"],
+                conclusion_verbatim=DOC_VERBATIM, source="file_extraction",
+                schema_version="clinical_documents v0.1")
+    vals.update(over)
+    db.add(models.ClinicalDocument(**vals))
+    db.commit()
+
+
+def _cite(db, uid, fkey, as_of, *refs):
+    _put(db, uid, "finding", fkey, _finding(as_of=as_of, basis={"evidence": [
+        {"door": "document", "ref": r} for r in refs]}))
+
+
+def test_a_matched_document_ref_gains_date_title_and_the_verbatim_conclusion(db_session, world):
+    _doc(db_session, world.id, "doc-a", service="2026-01-05")
+    _cite(db_session, world.id, "f_a", "2025-12-10", "doc-a")
+    items = _section(_brief(db_session, world.id, kind="intro"), "imaging_timeline")["items"]
+    assert items == [{"ref": "doc-a", "finding_key": "f_a", "as_of": "2025-12-10",
+                      "service_date": "2026-01-05", "title": "Study doc-a",
+                      "conclusion_verbatim": DOC_VERBATIM}]
+    assert items[0]["conclusion_verbatim"].encode() == DOC_VERBATIM.encode()
+
+
+def test_an_unmatched_ref_renders_exactly_as_before(db_session, world):
+    _doc(db_session, world.id, "doc-a")
+    _cite(db_session, world.id, "f_a", "2025-12-10", "doc-a", "Free text ref, no such key")
+    items = _section(_brief(db_session, world.id, kind="intro"), "imaging_timeline")["items"]
+    free = next(i for i in items if i["ref"] == "Free text ref, no such key")
+    assert free == {"ref": "Free text ref, no such key", "finding_key": "f_a", "as_of": "2025-12-10"}
+
+
+def test_a_ref_must_match_the_doc_key_byte_for_byte(db_session, world):
+    _doc(db_session, world.id, "doc-a")
+    _cite(db_session, world.id, "f_a", "2025-12-10", "DOC-A", "doc-a ", " doc-a")
+    items = _section(_brief(db_session, world.id, kind="intro"), "imaging_timeline")["items"]
+    assert all(set(i) == {"ref", "finding_key", "as_of"} for i in items) and len(items) == 3
+
+
+def test_resolved_items_sort_by_service_date_not_by_the_citing_findings_as_of(db_session, world):
+    _doc(db_session, world.id, "doc-late", service="2026-01-20")
+    _doc(db_session, world.id, "doc-early", service="2025-09-01")
+    # cited in the opposite order, and by findings whose as_of order is also the opposite
+    _cite(db_session, world.id, "f_1", "2025-10-01", "doc-late")
+    _cite(db_session, world.id, "f_2", "2025-12-01", "doc-early")
+    items = _section(_brief(db_session, world.id, kind="intro"), "imaging_timeline")["items"]
+    assert [i["ref"] for i in items] == ["doc-early", "doc-late"]
+
+
+def test_an_unresolved_ref_keeps_its_place_among_resolved_ones(db_session, world):
+    _doc(db_session, world.id, "doc-a", service="2026-01-05")
+    _cite(db_session, world.id, "f_free", "2025-11-01", "free text ref")      # sorts on as_of 2025-11-01
+    _cite(db_session, world.id, "f_doc", "2025-12-15", "doc-a")                # sorts on service 2026-01-05
+    items = _section(_brief(db_session, world.id, kind="intro"), "imaging_timeline")["items"]
+    assert [i["ref"] for i in items] == ["free text ref", "doc-a"]
+
+
+def test_a_document_with_no_conclusion_resolves_with_a_null_one(db_session, world):
+    _doc(db_session, world.id, "doc-letter", doc_type="correspondence", modality=None, study=None,
+         subtype="specialist letter", conclusion_verbatim=None)
+    _cite(db_session, world.id, "f_a", "2025-12-10", "doc-letter")
+    (item,) = _section(_brief(db_session, world.id, kind="intro"), "imaging_timeline")["items"]
+    assert item["title"] == "specialist letter" and item["conclusion_verbatim"] is None
+
+
+def test_another_users_doc_key_does_not_resolve(db_session, world):
+    other = _user(db_session, "other-brief@example.com")
+    _doc(db_session, other.id, "doc-a")
+    _cite(db_session, world.id, "f_a", "2025-12-10", "doc-a")
+    (item,) = _section(_brief(db_session, world.id, kind="intro"), "imaging_timeline")["items"]
+    assert set(item) == {"ref", "finding_key", "as_of"}
+
+
+def test_the_note_no_longer_says_the_door_resolves_to_nothing(db_session, world):
+    note = _section(_brief(db_session, world.id, kind="intro"), "imaging_timeline")["note"]
+    assert "do not resolve" not in note and "yet" not in note
+    assert "matches a stored clinical document" in note
+
+
+def test_no_document_query_is_made_when_no_finding_cites_one(db_session, world):
+    _put(db_session, world.id, "appointment", "appt_i", _appt(kind="intro"))
+    uid = world.id
+    statements = []
+    engine = db_session.get_bind()
+
+    def _capture(conn, cursor, statement, *a):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _capture)
+    try:
+        ab.load_appointment_brief(db_session, uid, "appt_i")
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+    assert statements and not any("clinical_documents" in s for s in statements)
+
+
+def test_the_pure_core_resolves_from_the_documents_it_is_given(db_session, world):
+    import typed_entries
+    from current_state import CurrentState
+    _cite(db_session, world.id, "f_a", "2025-12-10", "doc-a")
+    _put(db_session, world.id, "appointment", "appt_i", _appt(kind="intro"))
+    rows = db_session.query(models.UserKnowledgeEntry).filter_by(user_id=world.id).all()
+    active = [r for r in rows if r.active]
+    state = CurrentState(knowledge_entries=active, constraints=typed_entries.lift_constraints(active),
+                         findings=typed_entries.lift_findings(active), live_keys=typed_entries.active_keys(active))
+    appt = {"key": "appt_i", "value": _appt(kind="intro")}
+    docs = {"doc-a": {"service_date": "2026-01-05", "title": "T", "conclusion_verbatim": "C"}}
+    resolved = ab.build_appointment_brief(appt, state, rows, None, docs)
+    plain = ab.build_appointment_brief(appt, state, rows, None)
+    assert _section(resolved, "imaging_timeline")["items"][0]["title"] == "T"
+    assert set(_section(plain, "imaging_timeline")["items"][0]) == {"ref", "finding_key", "as_of"}
+
+
+def test_the_pure_core_matches_a_ref_to_its_doc_key_byte_for_byte():
+    """The loader's exact `IN` already keeps a near-miss from being fetched; the core must not
+    resolve one either, whatever it is handed."""
+    ctx = ab.BriefContext(key="k", value={}, kind="intro", audience="operator",
+                          at=ab.datetime(2026, 1, 15, 13, 0), since=None, parent_keys=[],
+                          documents={"doc-a": {"service_date": "2026-01-05", "title": "T",
+                                               "conclusion_verbatim": None}})
+    ctx.findings = [{"key": "f", "as_of": "2025-12-10", "basis": {"evidence": [
+        {"door": "document", "ref": r} for r in ("DOC-A", "doc-a ", " doc-a", "doc-a")]}}]
+    items = ab.module_imaging_timeline(ctx)["items"]
+    assert [("title" in i) for i in items] == [False, False, False, True]
+

@@ -26,10 +26,12 @@ from hevy_templates import catalogue_titles_by_id
 from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
 import appointment_brief
+import clinical_documents
 import models
 import typed_entries
 from routers.knowledge import FINDING_DOMAINS
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
+from routers.clinical_documents import document_out as _clinical_document_out, parse_filters as _parse_document_filters
 from reads.labs_reads import latest_lab_results
 from aerobic_format import format_aerobic_session, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
 from garmin_selfeval import selfeval_by_session   # Garmin per-activity RPE/feel for a linked session (Q209)
@@ -1125,6 +1127,118 @@ def get_lab_results(marker: str | None = None, limit: int | None = None,
         # brief's belt-and-suspenders: read and format inside the session.
         reports = _read_lab_results(current_user=user, db=sess)
         return _format_lab_results(reports, marker=marker, limit=limit)
+
+
+def _verbatim_block(label: str, text: str) -> list[str]:
+    """A verbatim field as a delimited block. The text between `<<<` and `>>>` is the stored
+    string exactly -- never indented, wrapped, trimmed or re-encoded -- so a reader can lift it
+    byte-for-byte; the delimiters carry the label so the text itself is not touched."""
+    return [f"{label}, verbatim:", "<<<", text, ">>>"]
+
+
+def _document_headline(d) -> str:
+    kind = d.modality if d.doc_type == "imaging" else d.subtype
+    parts = [str(d.service_date), kind, d.study if d.doc_type == "imaging" else None, d.region]
+    return " · ".join(p for p in parts if p) + f"  [{d.doc_key}]"
+
+
+def _format_clinical_documents(docs, *, full: bool = False) -> str:
+    """Pure text formatter over `ClinicalDocumentOut` snapshots (oldest `service_date` first, as
+    the read returns them). LIST view: date · modality-or-subtype · study · region, then the
+    conclusion in full. A letter has no `conclusion_verbatim`; its `diagnosis_verbatim` (a
+    different verbatim field, labelled as such) stands in. FULL view (one `doc_key`): every
+    stored field, the condensed summaries marked as not verbatim. Verbatim fields are emitted
+    through `_verbatim_block` untouched. Stores and reads back; interprets nothing."""
+    if not docs:
+        return "No clinical documents on file."
+    lines: list[str] = []
+    if not full:
+        lines.append(f"=== CLINICAL DOCUMENTS ({len(docs)}), oldest first ===")
+    for d in docs:
+        if lines:
+            lines.append("")
+        lines.append(_document_headline(d))
+        letter = d.letter or {}
+        if d.conclusion_verbatim is not None:
+            label = f"conclusion ({d.conclusion_label})" if d.conclusion_label else "conclusion"
+            lines.extend(_verbatim_block(label, d.conclusion_verbatim))
+        elif letter.get("diagnosis_verbatim") is not None:
+            lines.extend(_verbatim_block("diagnosis", letter["diagnosis_verbatim"]))
+        else:
+            lines.append("(no conclusion on the document)")
+        if not full:
+            continue
+        for label, value in (
+            ("type", d.doc_type), ("modality", d.modality), ("subtype", d.subtype),
+            ("laterality", d.laterality), ("reported", d.reported_date), ("provider", d.provider),
+            ("referrer", d.referrer_name_raw), ("author", d.author_name_raw),
+            ("recipient", d.recipient), ("accession", d.accession),
+        ):
+            if value is not None:
+                lines.append(f"{label}: {value}")
+        lines.append(f"source files: {', '.join(d.source_doc_filenames)}")
+        lines.append(f"extracted: {d.extracted_at or '—'} ({d.schema_version}, {d.source})")
+        if d.clinical_history is not None:
+            lines.extend(["clinical history:", d.clinical_history])
+        if d.findings_summary is not None:
+            lines.extend(["findings summary (condensed, NOT verbatim):", d.findings_summary])
+        if d.structured:
+            lines.extend(["structured:", json.dumps(d.structured, indent=1, ensure_ascii=False)])
+        for key, value in letter.items():
+            if key == "diagnosis_verbatim":
+                continue   # already shown above as the headline conclusion
+            if key == "management_plan_verbatim":
+                lines.append("management plan, verbatim (one entry per line):")
+                lines.extend(["<<<"] + list(value) + [">>>"])
+            elif isinstance(value, str):
+                note = " (condensed, NOT verbatim)" if key.endswith("_summary") else ""
+                lines.extend([f"{key}{note}:", value])
+            else:
+                lines.extend([f"{key}:", json.dumps(value, indent=1, ensure_ascii=False)])
+        if d.extraction_notes:
+            lines.extend(["extraction notes:"] + [f"- {n}" for n in d.extraction_notes])
+    return "\n".join(lines)
+
+
+@mcp.tool()
+@_stamped
+def get_clinical_documents(since: str | None = None, doc_type: str | None = None,
+                           modality: str | None = None, region: str | None = None,
+                           doc_key: str | None = None) -> str:
+    """The user's stored clinical documents -- imaging reports and clinical letters -- oldest
+    `service_date` first. Read-back only: nothing here is interpreted, and no finding, constraint
+    or injury is derived from a document.
+
+    LIST view (default): date · modality (imaging) or subtype (letter) · study · region, the
+    `doc_key`, and the document's own conclusion IN FULL. A conclusion is stored and returned
+    verbatim, between `<<<` and `>>>`, exactly as extracted (typos and all); a letter shows its
+    `diagnosis_verbatim` in that place. Summaries are condensed, not verbatim, and are marked so.
+
+    Optional filters: `since` (ISO date -- `service_date` on or after it), `doc_type`
+    (imaging | correspondence), `modality` (US | CT | MRI | XR | DXA, case-insensitive), `region`
+    (case-insensitive substring of the free-text region).
+
+    `doc_key=<key>` returns that ONE document in full instead -- every stored field, including
+    `structured` (modality numerics) and the letter body. A finding's `document` evidence ref
+    that equals a `doc_key` resolves to this record."""
+    since_d = None
+    if since is not None:
+        try:
+            since_d = date.fromisoformat(since)
+        except ValueError:
+            return f"`since` must be an ISO date (YYYY-MM-DD), got {since!r}."
+    try:
+        doc_type, modality = _parse_document_filters(doc_type, modality)
+    except ValueError as e:
+        return str(e) + "."
+    with SessionLocal() as sess:
+        rows = clinical_documents.read_documents(
+            sess, _current_user_id(), since=since_d, doc_type=doc_type, modality=modality,
+            region=region, doc_key=doc_key)
+        docs = [_clinical_document_out(r) for r in rows]
+    if doc_key is not None and not docs:
+        return f"No clinical document with doc_key {doc_key!r}."
+    return _format_clinical_documents(docs, full=doc_key is not None)
 
 
 @mcp.tool()
