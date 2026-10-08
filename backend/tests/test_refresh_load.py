@@ -71,7 +71,7 @@ def _mock_hevy_noop(monkeypatch):
 
 # ── ORDER ───────────────────────────────────────────────────────────────────────
 
-def test_chain_runs_seven_steps_in_order(db_session, monkeypatch):
+def test_chain_runs_eight_steps_in_order(db_session, monkeypatch):
     _user(db_session, 1)
     _hevy_key(db_session, 1)
 
@@ -89,6 +89,10 @@ def test_chain_runs_seven_steps_in_order(db_session, monkeypatch):
         calls.append("hc_zone_enrich")
         return {"rows": 0, "zoned": 0}
 
+    def _nadir(db, user_id):
+        calls.append("hr_nadir")
+        return {"rows": 0, "computed": 0}
+
     def _events(db, *, only_user_id=None):
         calls.append("load_events_tier0")
         return {"users": 1, "per_user": {only_user_id: {"events_written": 2}}}
@@ -104,6 +108,7 @@ def test_chain_runs_seven_steps_in_order(db_session, monkeypatch):
     monkeypatch.setattr(hevy_workouts, "sync_workouts", _sync)
     monkeypatch.setattr(polar_ingest, "sync_user", _polar)
     monkeypatch.setattr(refresh_load.hc_zone_enrich, "enrich_user", _hc_zones)
+    monkeypatch.setattr(refresh_load.hr_nadir, "compute_user", _nadir)
     monkeypatch.setattr(load_events, "compute_all_users", _events)
     monkeypatch.setattr(refresh_load.load_events_metabolic, "compute_all_users_metabolic", _metab)
     monkeypatch.setattr(refresh_load.load_metrics, "compute_all_users", _metrics)
@@ -118,14 +123,15 @@ def test_chain_runs_seven_steps_in_order(db_session, monkeypatch):
         "hevy_sync",
         f"polar_sync:days={hevy_workouts.DEFAULT_BACKFILL_DAYS}:cascade=False",
         "hc_zone_enrich",           # after polar_sync, BEFORE the metabolic transform reads the rows
+        "hr_nadir",                 # a soft-fail fill of health_connect_syncs; nothing downstream reads it
         "load_events_tier0",
         "load_events_metabolic",
         f"load_metrics:{load_events.FORMULA_VERSION}",
         f"load_metrics:{refresh_load.load_events_metabolic.FORMULA_VERSION_METABOLIC}",
     ]
     assert list(summary["per_user"][1]["steps"]) == [
-        "hevy_sync", "polar_sync", "hc_zone_enrich", "load_events_tier0", "load_events_metabolic",
-        "load_metrics_tier0", "load_metrics_metab",
+        "hevy_sync", "polar_sync", "hc_zone_enrich", "hr_nadir", "load_events_tier0",
+        "load_events_metabolic", "load_metrics_tier0", "load_metrics_metab",
     ]
 
 
@@ -428,9 +434,9 @@ def test_a_compute_step_failure_still_fails_the_user_after_a_soft_ingest_failure
 
 def test_soft_steps_are_exactly_the_ingest_and_fill_steps():
     """Ingest = the two steps that pull from a third-party API; the HC zone fill joins them (Q159
-    stage 2): a failure leaves rows in the stage-1 state, so it can only withhold information.
-    Everything after them computes."""
-    assert refresh_load.SOFT_STEPS == frozenset({"hevy_sync", "polar_sync", "hc_zone_enrich"})
+    stage 2) and so does the sleep-nadir fill: a failure leaves rows as they were, so it can only
+    withhold information, and nothing downstream reads the nadir. Everything after them computes."""
+    assert refresh_load.SOFT_STEPS == frozenset({"hevy_sync", "polar_sync", "hc_zone_enrich", "hr_nadir"})
 
 
 def test_hc_zone_enrich_failure_is_soft_and_later_steps_still_run(db_session, monkeypatch, capsys):

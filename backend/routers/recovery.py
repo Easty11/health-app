@@ -128,7 +128,11 @@ def get_summary(
             "last_synced": hc_latest.synced_at.isoformat() if hc_latest.synced_at else None,
             "date": hc_latest.date,
             "steps": hc_latest.steps,
+            # The median of ALL the day's HR samples, NOT a resting rate (key kept for API
+            # stability). The resting rate is the sleep nadir below; None carries a reason.
             "resting_heart_rate": hc_latest.resting_heart_rate,
+            "hr_nadir_bpm": hc_latest.hr_nadir_bpm,
+            "hr_nadir_reason": hc_latest.hr_nadir_reason,
             "hrv_rmssd": hc_latest.hrv_rmssd,
             "sleep_duration_minutes": hc_latest.sleep_duration_minutes,
             "sleep_score": hc_latest.sleep_score,
