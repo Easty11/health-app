@@ -3103,7 +3103,7 @@ Raised 8 Oct 2026 (hevy-garmin-dedupe close-out). **Parked by Luke:** nothing is
 
 ---
 
-## Q#NEXT. Should the `document` door be validated strictly on write once every existing ref resolves?
+## Q220. Should the `document` door be validated strictly on write once every existing ref resolves?
 
 Raised 8 Oct 2026 (clinical-documents store, fork F2). `validate_finding` still accepts any non-empty string as a `document` ref, so a finding can cite a document that is not in `clinical_documents`, and `module_imaging_timeline` then renders it as written. Strict validation (the ref must be one of the user's `doc_key`s) would close that. It is parked because existing findings may cite free-text refs and would become unrewritable the moment it landed.
 
@@ -3115,7 +3115,7 @@ Raised 8 Oct 2026 (clinical-documents store, fork F2). `validate_finding` still 
 
 ---
 
-## Q#NEXT. Upload and extraction UI for clinical documents, reusing the `labs.py` Claude-extraction path
+## Q221. Upload and extraction UI for clinical documents, reusing the `labs.py` Claude-extraction path
 
 Raised 8 Oct 2026 (clinical-documents store). The store is fed by an import endpoint that takes a payload the operator extracts elsewhere and POSTs from a laptop. An in-app path (upload a PDF or image, extract with Claude, confirm, store) would mirror `routers/labs.py` (`/extract`, `/confirm`). **Deferred by the operator; out of scope for the store.** The pending knee MRI arrives first, as a single-document import through the same endpoint.
 
@@ -5528,7 +5528,7 @@ Options: (a) wait for the `health_events` parent, land all three there; (b) a de
 so Merge disposition hold (a), full human review; (c) a DEXA-only numeric series now, narrative MRI/US still deferred.
 Operator deferred the decision this session. Owner: Luke / chat (data-meaning + schema), then a code session.
 
-**State:** DONE → #NEXT. Option (b) taken, widened by the operator to clinical correspondence: a dedicated `clinical_documents` store (migration held for operator release). The DEXA numerics stay in `structured` on the row (fork F1), so option (c) remains a later step at the second scan.
+**State:** DONE → #403. Option (b) taken, widened by the operator to clinical correspondence: a dedicated `clinical_documents` store (PR #352; the migration was released with the merge). The DEXA numerics stay in `structured` on the row (fork F1), so option (c) remains a later step at the second scan.
 
 ---
 
