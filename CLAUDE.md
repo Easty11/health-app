@@ -284,12 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Resting HR is now the sleep nadir and Hevy mirrors are suppressed at the read-door; the ingest-triage rulings, the alcohol constraint, the exclusion and reconciliation design and two questions are recorded (#395 to #400, Q217, Q218; code in #344 to #346).** Code and governance, one migration - Handoff: `closeout.md`.
+
 - **The operator's R11 (phase bands plus a legend replacing the marker lines) is recorded on the ROADMAP phase-marker item with Code's checks for the brief; nothing is built and no decision is minted.** Governance only - Handoff: `closeout.md`.
 
 - **The `/metrics` phase-marker misreading is logged on ROADMAP NEXT with the check of its cause; nothing is built and no decision is minted.** Governance only - Handoff: `closeout.md`.
-
-- **The leg strip draws a soft item whose days equal its pool, lists tray days once and Monday first, and stacks a row per day on a phone; each leg row says how many sessions it could not count and why (#393, #394).** Code, non-schema - Handoff: `closeout.md`.
-
 
 ---
 

@@ -1,6 +1,6 @@
 # ROADMAP
 
-Last updated: 2026-10-06
+Last updated: 2026-10-08
 
 ---
 
@@ -92,6 +92,14 @@ A group surfaces if any member trips any gate, which routes it to What Moved rat
 ## NEXT — queued
 
 _Live, undated — no external date orders these; pick by readiness._
+
+**Ingest-triage carries (recorded 8 Oct 2026; all UNSTARTED, none briefed; decisions #395 to #400 in `DECISIONS_LOG.md`).** Serves **See** and **Know** (a resting HR and a session list that are what they say) and **Loop** (the number the check-in reads). Built this session and not repeated here: #344 (labels), #345 (sleep nadir), #346 (Hevy mirror suppression).
+1. **Companion resting-HR capture, capture-first, two PRs.** (a) Backend, additive, this repo: accept a `restingHeartRate` stream and store the device value on the same `health_connect_syncs` row as the nadir; the payload keys are chosen after inspecting ONE real record (`time`, `zoneOffset`, `metadata.dataOrigin`). (b) Companion, `health-connect-app`: read `RestingHeartRate` (the permission is requested, the record never read). The derived nadir stays primary; no consumer. Cross-repo.
+2. **Reconciliation plus the exclusion migration, with the `title` column.** `aerobic_sessions` gains `excluded_at`, `excluded_reason` and `title` (diagnostics only); Health Connect window-absence marks `absent_from_source` (rules D1 to D6, ownership split, breaker, 24 h margin on the old edge). **Migration HOLD.** Keep `hevy_mirror_session_ids` column-light and route the new filter through it for `cbti/replay.py`. First use: operator exclusion of row 111 (the one non-mirror Strava Weightlifting row with no counterpart).
+3. **HRV, SpO2, respiratory-rate and distance re-bucketing to the AEST day.** They key on the legacy UTC `iso[:10]` slice. The motivating defect: a sync before 10:00 AEST overwrites the `today_utc - 7` row from a 10-hour slice. These streams have no raw store, so there is no backfill; the build is forward-only.
+4. **The plausibility layer (parking lot, nothing decided).** A minimum-duration floor (an 8-second stub, row 106); multisport siblings (rows 105 and 106); resting-HR bounds; rowing-erg pace and modality sanity.
+5. **Owed to the operator (reports, not builds).** Garmin HRV freshness: `SELECT captured_at, rmssd_ms, source, status FROM hrv_readings WHERE user_id = 1 AND source = 'garmin' ORDER BY captured_at DESC LIMIT 1;` Flag it if `captured_at` is older than 48 hours. The Galaxy Ring is away on warranty, so the Samsung HRV gap since 14 Sep is expected and readiness uses the Garmin lane; nothing further unless this read fails. And the earlier-prescription check for CBT-I (any `cbti_prescriptions` lights-out before about 20:49).
+6. **Not decided here:** the Q29 premise is corrected (OPEN_QUESTIONS note); Q200 is settled and owes its move to CLOSED; two new questions (Q217, sweep scope for users without a Hevy key; Q218, SCHEMA.md sections 007 to 013).
 
 **`/metrics` phase markers misread on the three Training-load charts (recorded 6 Oct 2026, amended with R11 the same day; UNSTARTED, no brief; no build now).**
 - **Operator report (6 Oct):** the Training load charts show last week's (28 Sep to 3 Oct) bars inside the "Aerobic base" band, which starts 4 Oct and has no load yet. Serves **See**.
