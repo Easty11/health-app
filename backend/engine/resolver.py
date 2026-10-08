@@ -21,8 +21,12 @@ orthogonally (a day may count once on each axis):
   • **`load_window` slots** count canonical `aerobic_sessions` (#307 / Amendment 1 — canonical
     SESSIONS, not `load_events`, so a zoneless conditioning session still counts). A canonical
     session in the window counts UNLESS its start/stop is NULL (`untimed`, fail-closed) or it
-    overlaps a non-excluded, non-dedup Hevy workout (`concurrent_strength` — an HR strap worn in
-    the gym is a strength trace, not conditioning). Both misses are surfaced in `uncounted[]`.
+    is the same bout as a non-excluded, non-dedup Hevy workout -- at least
+    `HEVY_MIRROR_OVERLAP_FRACTION` of its own duration inside one (`concurrent_strength` -- an HR
+    strap worn in the gym is a strength trace, not conditioning; an erg session that merely
+    brushes a Hevy timer is not). Both misses are surfaced in `uncounted[]`. (A Health Connect copy
+    of a Hevy bout written by Garmin or Strava never reaches this guard: the read-door marks it
+    a `hevy_mirror` and it is not canonical.)
 
 Two rules the resolver turns on (operator-pinned, this session; not `infer_loaded_regions`,
 which answers coverage, not "what was this session"):
@@ -317,8 +321,9 @@ def _in_window_aerobic(db: Session, user_id: int, window: QuotaWindow) -> list[A
     return out
 
 
-# `concurrent_strength` overlap test: a session overlapping a counted Hevy workout is that
-# strength session's trace, not conditioning (Amendment 1). The predicate itself is the shared
+# `concurrent_strength` overlap test: a session that is the same bout as a counted Hevy workout
+# (>= HEVY_MIRROR_OVERLAP_FRACTION of its own duration inside it) is that strength session's trace,
+# not conditioning (Amendment 1). The predicate itself is the shared
 # `reads.aerobic_reads.overlaps_workout` (#309) — one definition, also used by the psychological
 # duration read. The caller here only reaches it on a timed session (untimed handled upstream).
 

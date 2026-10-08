@@ -350,8 +350,10 @@ def test_g3_activity_untimed_fails_closed(db_session):
 
 
 def test_g3_activity_concurrent_strength_excluded_before_sport_match(db_session):
-    """Exclusions run FIRST (S3 step 1): a pilates session overlapping a gym workout is
-    concurrent_strength, never the activity slot — even though its sport matches."""
+    """Exclusions run FIRST (S3 step 1): a pilates session that is the same bout as a gym
+    workout is concurrent_strength, never the activity slot — even though its sport matches.
+    A Polar row here: a Health Connect row that is this much of a Hevy bout is a `hevy_mirror`
+    (A3.2) and never reaches the guard (see test_hevy_mirror)."""
     u = _user(db_session)
     _phase(db_session, u.id, _one_cycle(_act_slot("pilates", ["Pilates"])), MONDAY)
     _tpl(db_session, "t_str")
@@ -361,7 +363,7 @@ def test_g3_activity_concurrent_strength_excluded_before_sport_match(db_session)
     aid = _aerobic(db_session, u.id, "s_pil", date(2026, 9, 8),
                    start=datetime(2026, 9, 8, 6, 15, tzinfo=timezone.utc),
                    stop=datetime(2026, 9, 8, 7, 5, tzinfo=timezone.utc),
-                   sport="Pilates", duration=50.0, zones=(0, 0, 0, 0, 0), source="health_connect")
+                   sport="Pilates", duration=50.0, zones=(0, 0, 0, 0, 0), source="polar_flow_export")
     res = resolver.resolve(db_session, u.id, today=TODAY)
     assert res["slots"][0]["done"] == 0
     assert {"session": aid, "reason": "concurrent_strength",
