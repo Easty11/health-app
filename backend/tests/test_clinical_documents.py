@@ -514,3 +514,105 @@ def test_the_tool_cannot_see_another_users_documents(db_session, seeded, monkeyp
     monkeypatch.setattr(mcp_server, "_current_user_id", lambda: b.id)
     assert "No clinical documents on file." in mcp_server.get_clinical_documents()
     assert "No clinical document with doc_key" in mcp_server.get_clinical_documents(doc_key="img_20990105_mri_part_a")
+
+
+# -------------------------------------------------------------------------- #
+# the conclusion slot when a document has no conclusion of its own           #
+#                                                                            #
+# A referral shows its `reason`; a DXA with no report comment shows a        #
+# headline built from `structured`. Both are labelled NOT word-for-word and   #
+# neither is ever put in a verbatim block (`<<<` ... `>>>`).                 #
+# -------------------------------------------------------------------------- #
+
+from routers.clinical_documents import document_out as _out   # noqa: E402
+
+REASON = "Reason A  (synthetic) – low value on test B"
+HEADLINE_KEYS = {"total_mass_kg": 80.1, "tissue_fat_pct": 22.3, "t_score": 1.8,
+                 "bmd_total_g_cm2": 1.2, "segments": {"arms": {"mass_kg": 9.9}}}
+
+
+def referral(**over):
+    d = letter(id="ltr_20990113_referral_a", subtype="referral", dates={"service": "2099-01-13"},
+               reason=REASON)
+    for k in ("diagnosis_verbatim", "management_plan_verbatim"):
+        d.pop(k)
+    d.update(over)
+    return d
+
+
+def dexa_hl(**over):
+    return dexa(structured=dict(HEADLINE_KEYS), **over)
+
+
+def _fmt(db, user, *docs, full=False, key=None):
+    cd.import_documents(db, user.id, payload(*docs), dry_run=False)
+    rows = cd.read_documents(db, user.id, doc_key=key)
+    return mcp_server._format_clinical_documents([_out(r) for r in rows], full=full)
+
+
+def test_a_referral_shows_its_reason_labelled_not_word_for_word(db_session, user):
+    out = _fmt(db_session, user, referral())
+    lines = out.splitlines()
+    assert "reason for referral (as extracted, NOT word-for-word):" in lines
+    assert REASON in lines
+    assert "(no conclusion on the document)" not in out
+    assert "<<<" not in out                       # never presented as a verbatim block
+
+
+def test_the_reason_is_not_printed_twice_in_the_full_view(db_session, user):
+    out = _fmt(db_session, user, referral(), full=True, key="ltr_20990113_referral_a")
+    assert out.count(REASON) == 1
+    assert "reason:" not in out
+
+
+def test_a_letter_with_a_diagnosis_still_shows_the_diagnosis_not_the_reason(db_session, user):
+    out = _fmt(db_session, user, letter(reason=REASON))
+    assert f"<<<\n{DIAGNOSIS}\n>>>" in out
+    assert "NOT word-for-word" not in out
+
+
+def test_a_non_referral_letter_labels_its_reason_plainly(db_session, user):
+    d = letter(id="ltr_20990114_other", reason=REASON)
+    d.pop("diagnosis_verbatim")
+    assert "reason (as extracted, NOT word-for-word):" in _fmt(db_session, user, d).splitlines()
+
+
+def test_a_letter_with_neither_diagnosis_nor_reason_says_so(db_session, user):
+    d = referral()
+    d.pop("reason")
+    assert "(no conclusion on the document)" in _fmt(db_session, user, d).splitlines()
+
+
+def test_a_dexa_with_no_comment_shows_a_structured_headline(db_session, user):
+    out = _fmt(db_session, user, dexa_hl())
+    assert ("headline (from structured data, NOT a report comment): "
+            "total mass 80.1 kg · tissue fat 22.3% · BMD T-score +1.8") in out.splitlines()
+    assert "(no conclusion on the document)" not in out
+    assert "<<<" not in out
+
+
+@pytest.mark.parametrize("structured,expected", [
+    ({"total_mass_kg": 80.1}, "total mass 80.1 kg"),
+    ({"t_score": -1.2, "tissue_fat_pct": 30}, "tissue fat 30% · BMD T-score -1.2"),
+    ({"t_score": 0}, "BMD T-score +0"),
+    ({"total_mass_kg": True, "t_score": "1.8"}, None),          # a bool / a string is not a number
+    ({"bmd_total_g_cm2": 1.2}, None),                           # none of the three headline keys
+])
+def test_the_headline_uses_only_the_three_numeric_fields_that_are_present(db_session, user, structured, expected):
+    out = _fmt(db_session, user, dexa(structured=structured))
+    if expected is None:
+        assert "(no conclusion on the document)" in out.splitlines() and "headline" not in out
+    else:
+        assert f"headline (from structured data, NOT a report comment): {expected}" in out.splitlines()
+
+
+def test_only_a_dxa_gets_a_headline(db_session, user):
+    other = imaging(id="img_20990302_us_x", modality="US", conclusion_verbatim=None, conclusion_label=None,
+                    structured=dict(HEADLINE_KEYS))
+    out = _fmt(db_session, user, other)
+    assert "headline" not in out and "(no conclusion on the document)" in out
+
+
+def test_a_dxa_with_a_report_comment_keeps_it_verbatim_and_no_headline(db_session, user):
+    out = _fmt(db_session, user, dexa_hl(conclusion_verbatim=VERBATIM, conclusion_label="COMMENT"))
+    assert f"<<<\n{VERBATIM}\n>>>" in out and "headline" not in out
