@@ -3108,6 +3108,22 @@ Raised 8 Oct 2026 (ingest-triage close-out). Checked on master: `health_metrics`
 
 ---
 
+## Q219. Should the HR zones of a Health Connect strength row attach to the canonical Hevy session's metabolic load, and how?
+
+Raised 8 Oct 2026 (hevy-garmin-dedupe close-out). **Parked by Luke:** nothing is designed until its trigger fires, which is a strength or weightlifting Health Connect row (HC type 70 or 81) from a package that has same-writer HR samples. The rulings that bound any design are in #402: zones supersede where attachable, no zones means 0, there is no fixed Hevy metabolic value, a canonical Polar H10 row on the bout wins outright, and two HR-derived deposits are never stacked.
+
+**Findings (Code, report-only, master `02e9fa2`).**
+- *A Hevy session's metabolic contribution today: none.* `load_events.py` writes the mechanical and neuromuscular windows only (`tier0-v2`). `load_events_metabolic.py:177-206` reads canonical `aerobic_sessions` rows with usable zones (INV-7) and has no Hevy input, no duration estimate and no fixed value; D-A's orthogonal windows are the only stated treatment. No store recorded a fixed or "minor" value before #402.
+- *Zoned mirror rows: none.* #397 records ten mirror rows, none zoned, no Garmin-package row affected (operator-reported). `hc_zone_enrich` zones a row only from `hr_samples` written by the same `source_package` inside its interval, so a `com.strava` row zones only if Strava wrote HR samples, which the operator reports it does not (unread by Code). A Garmin-package mirror is the shape that could zone; none exist.
+- *What attaching would change.* It is a new metabolic emission path: the transform today emits only for canonical aerobic rows, so a Hevy session would need its own `source_ref` under `uq_load_event_session_window_version` and a new `metab-vN` decision, because the series moves from 0 to TRIMP for those bouts (a recompute, not a migration, D-B). Replace-not-stack is two rules, both ruled: zones over zero, and a canonical Polar H10 row over everything. The stacking case is a bout with both a canonical Polar H10 row (which deposits today, #367) and a watch mirror with zones.
+- *Readers of the metabolic window that would change numbers:* `metabolic_cascade` -> `load_metrics` (`banister-v4`) -> the MCP readiness readout (`mcp_server.py:877`); `routers/series.py`; `engine/training_phase.py` (`_SLOT_LOAD_WINDOWS`: a metabolic slot could newly be satisfied by a gym session); `reads/psychological_reads.py:245`. Naming the window only, not traced to a number: `routers/knowledge.py:126` and `context_builder.py:1643`. Not affected: `engine/week_plan.py`, `cbti/replay.py`, `garmin_selfeval.py`. Found by search, each reader not individually traced.
+
+**To decide (Luke), when the trigger fires.** Where the zones attach (an emission keyed to the Hevy session, or the mirror row made canonical for the metabolic window only), how a partial overlap is handled (a watch row covering half the bout), and the formula version.
+
+**State:** OPEN. Parked by Luke; not blocking; nothing built. Related: #402, #367, #397, #401, Q206, Q201.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
