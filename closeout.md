@@ -7,7 +7,8 @@ Session `ingest-triage`, the operator's briefs of 7 and 8 Oct 2026 (AEST). Range
 - `0399b96` `fix(labels): call the HC resting_heart_rate column what it is, an all-day median HR`, merged as PR #344 (`c330a1e`).
 - `98dc9c4` `feat(hr): derive resting HR as the sleep nadir (DECISIONS_LOG.md:480); bucket the all-day median by AEST day`, merged as PR #345 (`f1cefac`). Carries the migration `a8c4e1f72b93`, released by the operator and applied on deploy.
 - `c77f230` `feat(aerobic): suppress Hevy mirrors at the read-door (A3.2); overlaps_workout is one fraction test`, merged as PR #346 (`6b8a482`).
-- `4984238` `gov(ingest-triage): #395-#400 ...`, the batched governance commit (this PR).
+- `4984238` `gov(ingest-triage): #395-#400 ...`, the batched governance commit (PR #347, merged `ac2dfae`).
+- After #347 merged, the operator's A3.2 amendment arrived (row 111 mirrors an EXCLUDED Hevy bout): PR #348 (merged `b3f6189`) matches mirrors against every `hevy_workouts` row, and #401 records it and amends #397 by a new entry. The operator's reads of the same message (Garmin HRV fresh; CBT-I lowest lights-out 21:22) are recorded in #401.
 - A final `chore: session close-out` commit carrying this file and the CLAUDE.md pointer: its hash is on the branch (a file cannot name its own commit).
 
 Deploys: #344, #345 and #346 each reached SUCCESS on Railway (#116). The governance PR changes no code. **Provisional until merged: the governance commit and this file.** The three code PRs are merged and live.
@@ -24,7 +25,7 @@ Nothing came from a chat `;cc` queue as a PENDING item. The operator's close-out
 6. **`cbti/replay.py` read-door bypass and the CBT-I closure: DONE (#398).**
 7. **Handoff carries, unbuilt: DONE in ROADMAP NEXT ("Ingest-triage carries")** — companion RHR capture (two PRs), reconciliation plus exclusion migration with `title`, HRV re-bucketing, the plausibility parking lot. Garmin `RestingHeartRate` as a secondary in #35's cross-check row is recorded as #400.
 8. **"Mint numbers only after merge": met in the form the guard allows.** No integer was claimed until the final re-read of master's max, immediately before this PR's merge; the guard refuses a `#NEXT` heading on master, so the integers are written on the branch at that instant and re-resolved if master advances.
-9. **HRV audit, item 3 downgraded: the query is owed to the operator** (ROADMAP, same block).
+9. **HRV audit, item 3 downgraded: the query was run by the operator on 8 Oct and the Garmin row is fresh (2026-10-08, 62 ms, BALANCED): DONE** (#401).
 
 **Divergences and judgment calls, named.**
 - **Q200 is settled but not moved to CLOSED.** Moving it removes lines outside a declared replacement region, which sends the batch to human review (gate (c)); it carries an additive "Settled" note and its State line still reads OPEN. The move, with `DONE → #395`, is owed to the next governance session.
@@ -37,9 +38,9 @@ Nothing came from a chat `;cc` queue as a PENDING item. The operator's close-out
 
 **State.** Code merged and live: the label fix, the sleep nadir (prod rows read by the operator: 8 Oct 57 bpm, matching the device; 6, 7 and 8 Oct read 57, 53 and 57), and the Hevy-mirror suppression (10 of the 16 Strava rows are mirrors; no load change). The governance PR is open, ready for review, self-merging on green. Nothing on the branch carries `#NEXT` after numbering.
 
-**Single clearest next action.** Pick one of two, by what the operator wants first. (1) Brief the companion RHR capture: PR 1 in this repo is small and additive, but it must first look at ONE real Garmin `RestingHeartRate` record (`time`, `zoneOffset`, `metadata.dataOrigin`) before keying anything. (2) Brief the reconciliation plus exclusion migration (a HOLD at the migration), which also gives row 111 its first exclusion.
+**Single clearest next action.** Pick one of two, by what the operator wants first. (1) Brief the companion RHR capture: PR 1 in this repo is small and additive, but it must first look at ONE real Garmin `RestingHeartRate` record (`time`, `zoneOffset`, `metadata.dataOrigin`) before keying anything. (2) Brief the reconciliation plus exclusion migration (a HOLD at the migration). Row 111 no longer needs it: it is suppressed by rule (#401, PR #348).
 
-**Operator actions owed.** (1) The Garmin HRV freshness read: `SELECT captured_at, rmssd_ms, source, status FROM hrv_readings WHERE user_id = 1 AND source = 'garmin' ORDER BY captured_at DESC LIMIT 1;` Flag it if older than 48 hours. The Samsung gap since 14 Sep is expected (Galaxy Ring on warranty). (2) The CBT-I earlier-prescription check: any `cbti_prescriptions` lights-out before about 20:49. (3) Rule on Q217 (sweep scope) and Q218 (the unbuilt SCHEMA.md sections) when convenient. (4) Carried from the last close-out: the R11 live rollup `as_of`; the #121 bundle check for #393 and #394 (the strings "Leg days", "every listed day", "candidate days", "Not counted toward any quota"); the strip on the phone; the Polar max HR lock at 175 (#388); the Q159 in-activity HR read on or after 9 Oct.
+**Operator actions owed.** (1) The #348 post-deploy check: row 111 reads `hevy_mirror = true` and `canonical = false` in the session list (`AerobicSessionOut`), and no other row changes status (compare the canonical count and the load series before and after). (2) Rule on Q217 (sweep scope) and Q218 (the unbuilt SCHEMA.md sections) when convenient. (4) Carried from the last close-out: the R11 live rollup `as_of`; the #121 bundle check for #393 and #394 (the strings "Leg days", "every listed day", "candidate days", "Not counted toward any quota"); the strip on the phone; the Polar max HR lock at 175 (#388); the Q159 in-activity HR read on or after 9 Oct.
 
 **Code actions owed.** Move Q200 to CLOSED with `DONE → #395` in the next governance session. The #387 shared-block propagation to `health-connect-app` (next HCA session). Carried: the single-row HC bout deposit read (low priority).
 
