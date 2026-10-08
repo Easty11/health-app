@@ -13642,3 +13642,98 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 **Not verified here.** The live ledger (Code has no database access): the 28 Sep to 3 Oct leg is the operator's reading, and the reproduction above is on fixtures. The live deploy and bundle.
 
 **Do not revisit unless.** The operator wants to see WHICH sessions were uncounted on a past leg (then the item list, not only counts, goes in the row), or aerobic sessions in a leg with no aerobic slot need listing (a resolver change, not a page one).
+
+### 395. Resting HR is the sleep nadir: derived from `hr_samples`, stored on `health_connect_syncs`, NULL when it cannot be derived; the all-day median is relabelled and bucketed by AEST day, not repurposed (closes Q200; corrects Q29's premise)
+
+**Decision.** The platform's resting heart rate is the lowest sustained 30-minute window inside the sleep period, formula tag `nadir-v1`, built in #345 on the direction recorded in #35 ("derived nadir stays primary"). Rulings of 7 and 8 Oct 2026 (operator), as built:
+- **Method.** Period `[sleep_onset, sleep_end]`, falling back to `sleep_start` when onset is absent. Read deduplicated `hr_samples`; drop samples outside 30-240 bpm; take a 1-minute grid mean, carried forward at most 5 minutes; the nadir is the minimum mean over 30-minute windows that have at least 24 of 30 minutes present. A coverage floor of 180 minutes and 50% of the period applies first. One source package writes a night (the one with the most grid coverage, lexical tie-break). The sweep is idempotent over a 14-day window.
+- **Home.** Six columns on `health_connect_syncs` (`hr_nadir_bpm`, `hr_nadir_window_start`, `hr_nadir_coverage`, `hr_nadir_source_package`, `hr_nadir_reason`, `hr_nadir_formula`), keyed by the WAKE date like the sleep columns. The operator accepted the table as the column home.
+- **NULL means unavailable, with a closed reason.** `no_sleep_period`, `no_samples`, `insufficient_coverage`, `no_valid_window`. A night with no value is never filled with the all-day median. Readers say "not available (reason)".
+- **The all-day median is not repurposed.** `resting_heart_rate` keeps meaning the median of every HR sample for the day; it is relabelled "All-day median HR" on every surface (#344) and from #345 is bucketed by AEST calendar day. It is the datum Q200 asked to be named honestly.
+- **`synced_at` is not touched by the nadir write.** The column has `onupdate=now()` and is read as "when the phone last synced" (week plan, `/health-connect/status`); the writer pins it, so a nightly sweep does not read as a sync.
+- **Q29's premise is corrected.** Q29 says Health Connect `resting_heart_rate` is "the only clean independent path" for the resting-HR discriminator. It never was a resting value; it is an all-day median (Q200). The clean independent path is the derived nadir. Q29 itself is unchanged (still blocked on APK-install segmentation); the premise is struck in a note on it.
+
+**Rationale.** A day with a hard session posts a higher median than a rest day with the same true resting rate, so the coach was told a training-contaminated number was a resting one. The nadir is derived from data the platform already holds, needs no companion release, and has a device value to check against.
+
+**Status.** DONE: #344 (labels) and #345 (nadir, migration `a8c4e1f72b93`, SCHEMA.md sequence label 044), merged 8 Oct 2026 and deployed (SUCCESS). The migration was released by the operator after review. Not built: the consumers that would use the nadir for a baseline or a trend.
+
+**How you know.** The operator's prod reads, 8 Oct 2026: the nadir for 8 Oct is 57 bpm and the device's own resting HR that day is 57; 6, 7 and 8 Oct read 57, 53 and 57. Pytest: `test_hr_nadir.py` (28 tests, including the 8-minute-gap case that still passes the 80% rule and the 9-minute case that does not), the `synced_at` pin (reproduced failing before the fix), and the `/recovery`, context and MCP surfaces.
+
+**Not verified here.** The nadir against a clinical resting HR; anything before 6 Oct. The prod rows were read by the operator, not by Code.
+
+**Do not revisit unless.** A user has no sleep period for most nights (the reasons then need a fallback), or the companion's `RestingHeartRate` record (see #400) shows the nadir is biased in a way the alcohol constraint does not explain.
+
+### 396. Any baseline or trend built on the sleep nadir must handle alcohol and unrecorded late nights: a nadir is a state reading, not a trait
+
+**Decision.** No baseline, trend line, threshold or readiness input may treat a single night's `nadir-v1` value as a resting-HR trait. A consumer must either exclude or flag nights following alcohol or late intake, or use a robust statistic over a window (a low percentile or median of recent nights), and must say which. Recorded as a constraint on future work, not a rule on the stored value.
+
+**Rationale.** The operator's own data: 5 Oct read 69.7 bpm, the night after four units finishing 22:00, with the lowest window at 05:44 AEST, which is late in the night. 4 Oct read 77.5 bpm with no morning row and the alcohol not recorded at all. The three clean nights read 53 to 57. A raised nadir after alcohol is physiology, not a derivation error, so the formula should not be tuned to hide it.
+
+**Status.** Constraint, in force from this entry. No consumer built.
+
+**How you know.** The operator's prod reads, 8 Oct 2026, and the operator's alcohol log for 5 Oct. n = 2 contaminated nights against 3 clean ones, from one person: enough to set the constraint, not enough to set a threshold.
+
+**Do not revisit unless.** A longer series shows the contamination is rare enough to ignore, or an alcohol signal exists on the same timeline to exclude by rule.
+
+### 397. Hevy mirrors are suppressed at the read-door: a Health Connect row that is one counted Hevy bout seen again is marked, not counted; A3 is closed
+
+**Decision.** The Hevy to Garmin to Strava to Health Connect chain (hevy2garmin backfill, Strava auto-sync, Strava writing to Health Connect) deposits a second row for a strength bout Hevy already counted. A3.2 (#346) suppresses it at the read.
+- **D-a (rule).** An `aerobic_sessions` row is a Hevy mirror when `source = 'health_connect'` (any package) and at least `HEVY_MIRROR_OVERLAP_FRACTION = 0.5` of the row's OWN duration overlaps ONE counted Hevy bout (`counted_workouts`). Polar never mirrors. A mirror is marked on the row object (`hevy_mirror`, `canonical = False`) and still returned, so a reader can show it.
+- **D-b.** `overlaps_workout` becomes this one fraction test, used by the resolver's `concurrent_strength` marker and the psychological duration read, so the three agree on what "the same bout" means.
+- **Where.** `reads/aerobic_reads.arbitrated_sessions` marks mirrors first, arbitrates the rest, and the drift-guard allow-list names the file. Nothing is deleted or excluded in storage.
+- **A3 is CLOSED.** Of the six `com.strava` Weightlifting rows that are not mirrors, five have a full-overlap original (Polar v4, Polar Health Connect, Garmin) and arbitration already handles them. **Row 111** (2026-09-16 23:45Z to 2026-09-17 00:44Z, Weightlifting) has no counterpart at all: it is zoneless, predates the phase, and has no load impact. **Recorded as a candidate for operator exclusion once the exclusion migration lands (see #399); no action now.** The operator revoked Strava's Health Connect write, so no new rows arrive.
+
+**Rationale.** The platform's own gym log is the performed record; a Garmin-recorded copy of the same hour, relayed through Strava, is the same bout. Counting both would raise the conditioning count and the psychological duration for work done once. A 0.5 fraction of the row's own duration, against one bout, is the test that treated the live rows correctly (ten of sixteen qualify; the rest are not duplicates of a Hevy bout).
+
+**Status.** DONE: #346, merged 8 Oct 2026, deployed (SUCCESS). `scripts/arbitration_flip_report.py` calls `arbitrate()` directly and is not mirror-aware; it is a report, not a reader, and is noted rather than changed.
+
+**How you know.** The operator's impact query: only `com.strava` Weightlifting, ten rows, none zoned; no Garmin-package row affected; no load change. The operator's 16-row diagnostic. Pytest: `test_hevy_mirror.py` (20), with the resolver, activity-slot and drift-guard tests reworked deliberately; the suite passed (2936, 3 skipped).
+
+**Do not revisit unless.** A Health Connect writer records a genuine second session inside a Hevy bout (a ride across a gym hour), which a fraction test would hide.
+
+### 398. `cbti/replay.py` reads training rows by raw SQL and bypasses the read-door by design; it takes mirrors from a column-light helper; the CBT-I effect of the Strava rows is closed
+
+**Decision.** `cbti/replay.py` reads `aerobic_sessions` with column-explicit raw SQL so the replay runs before a migration deploys. That is a bypass of the door, and it stays one, deliberately. It now drops Hevy mirrors through `hevy_mirror_session_ids`, which selects only columns that already exist, and folds the per-day maximum training end in Python. Any future change to the door (an exclusion column, for example) must reach `replay.py` through that helper, not by adding a column to the raw SQL.
+
+**CBT-I closure.** The engine marks a night `training_constrained` when the training end plus 90 minutes falls after the prescribed lights-out. The prescribed lights-out is 21:45 (the operator, 8 Oct). The latest stop time among the 16 Strava rows plus 90 minutes is 20:49 AEST, so none of them can change any night under the current prescription. Closed for the current prescription; it reopens only if an earlier prescription in the same blocks had a lights-out before about 20:49.
+
+**Rationale.** The reader runs in the deploy path and the replay is a medical-protocol input; keeping its SQL independent of the ORM columns is what lets it run when the schema is one migration behind. The cost is that every new door rule needs a helper.
+
+**Status.** DONE in #346. The earlier-prescription check is OWED to the operator (a query on `cbti_prescriptions` for lights-out before 20:49).
+
+**How you know.** Pytest (the replay with and without mirrors); the operator's CBT-I query of the 16 rows (`other_rows_no_earlier`). `cbti/engine.py:116,460-465` for the rule.
+
+**Do not revisit unless.** The prescribed lights-out moves earlier than about 20:49, or the replay stops needing to run ahead of migrations.
+
+### 399. Aerobic-session soft exclusion and Health Connect window-absence reconciliation are decided; fetchMeta is no longer capture-only (supersedes #321 on that one point); nothing built, migration gated
+
+**Decision.** Ruled 7 and 8 Oct 2026 (operator), unbuilt.
+- **Exclusion.** `aerobic_sessions` gains `excluded_at` and `excluded_reason`, plus a `title` column (diagnostics only, bundled with the same migration). The migration is a HOLD for explicit operator release (the schema-migration hold). `hevy_mirror_session_ids` stays column-light.
+- **Reconciliation.** When a Health Connect window that should contain a stored row does not, ingestion marks it `excluded_reason = 'absent_from_source'` (D1: the column is named `exclusion_reason`). D2: a row is un-excluded on ANY later payload that carries it. D3: the 24 h margin applies to the OLD edge of the window only. D4: a breaker stops the pass and writes nothing when more than 50% of the rows or more than 3 rows would be excluded (tunable). D5: the exclusion filter sites are enumerated in the brief and routed through the door. D6: this entry is the superseding record.
+- **Ownership split.** Ingestion writes only `absent_from_source`. An operator exclusion (for example row 111) uses another reason and is never un-excluded by a payload.
+- **fetchMeta.** #321 stored `fetchMeta` as capture-only ("it filters nothing"). That sentence is superseded: ingestion may read the per-stream `truncated`, `endedOnFailure` and `failedDays` fields to decide whether absence is evidence; the exact use is left to the build brief. The rest of #321 stands (one row per POST, no endpoint).
+- **Fallback.** If a window cannot prove absence, the Health Connect Changes API deletion tokens are the fallback source; not designed here.
+
+**Rationale.** Deleting is not available (a real session can be re-posted); a payload that stops containing a row is currently invisible, so a deleted or merged record counts forever. A soft exclusion is reversible, which is what makes automatic marking safe.
+
+**Status.** Decided, UNSTARTED. Gated by the migration hold. The companion's windowed, paginated fetch already supplies the telemetry.
+
+**How you know.** The operator's rulings of 7 and 8 Oct; the fetch path read in `health-connect-app` (`fetchAllData`, `HC_PAGE_SIZE` 1000, `HC_MAX_PAGES` 100, per-stream `fetchMeta`). No code written.
+
+**Not verified here.** That Health Connect never returns an in-window record the platform stored (the breaker is the defence). The 24 h margin was chosen by the operator, not measured.
+
+**Do not revisit unless.** The first dry run flags more than three rows, or a payload that carries an excluded row is shown not to re-include it.
+
+### 400. The resting-HR cross-check row in #35 gains Garmin's daily `RestingHeartRate` record as a secondary; the derived nadir stays primary; companion capture comes first, in two PRs
+
+**Decision.** The operator confirmed (8 Oct 2026) that Garmin writes a daily `RestingHeartRate` record to Health Connect. #35's Resting HR row ("`fitness` / `polar`; cross-check only") is extended to name Garmin as a corroborating source. The derived nadir stays primary. The device value is stored beside the nadir on the same `health_connect_syncs` row, never substituted for it.
+- **Capture first.** PR 1 (this repo, additive): accept a `restingHeartRate` stream and store the device value on the same row. PR 2 (`health-connect-app`): read `RestingHeartRate` (the permission is already requested and never read). The payload keys are chosen AFTER inspecting one real record: `time`, `zoneOffset` and `metadata.dataOrigin`.
+- **No consumer** reads the device value in this work.
+
+**Rationale.** A second, independent number lets the nadir be checked and lets a bad derivation show; the platform already has a failure it could not see (Q200). Capturing before designing avoids keying on an assumed record shape.
+
+**Status.** Decided, UNSTARTED. The PR order is the operator's.
+
+**How you know.** The operator's observation of Garmin's record in Health Connect. The permission request in the companion read in code. No record inspected by Code.
+
+**Do not revisit unless.** The real record has no usable time or zone, or the nadir and the device value disagree on most nights (then the nadir is the thing to examine).

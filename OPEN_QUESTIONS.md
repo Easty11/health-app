@@ -275,6 +275,8 @@ only clean independent path.
 is an install event, not a commit). Owner: Luke. **Do NOT reconcile, backfill, or delete a
 single `samsung_hrv_readings` row until segmented.** Cross-refs Q17, Q18, issue #9, HCA #19 / Q3.
 
+**Premise correction, 8 Oct 2026 (additive; nothing above is edited).** The sentence "Health Connect `resting_heart_rate` ... is the only clean independent path" is wrong: that column is the median of every HR sample of the day, not a resting value (Q200). The independent resting-HR path is the sleep nadir derived from `hr_samples` (#395, built in #345). The blocker and the do-not-reconcile instruction stand.
+
 ---
 
 ## Q30. Neither repo has a `.gitattributes` — `core.autocrlf` decides bytes per-machine
@@ -2841,6 +2843,8 @@ sustained overnight stretch, which `hr_samples` can now supply).
 
 **State:** OPEN. Not blocking; a read-surface honesty question.
 
+**Settled 8 Oct 2026 (additive).** Both options were taken: the median is relabelled "All-day median HR" (#344) and a true resting value is derived as the sleep nadir (#345, #395). The move to CLOSED, with `DONE → #N`, is owed to the next session once #395 is landed; the number is now known.
+
 ---
 
 ## Q201. Two sources for one bout: cross-source dedup is read-time and silent, and ranks by richness, not by the #365 hierarchy
@@ -3081,6 +3085,26 @@ Raised 5 Oct 2026 (operator, with #383). The platform's zones are %HRmax: `hr_zo
 **To decide (Luke).** Whether to move at all; if so the resting-HR source and its provenance, whether it is dated like HRmax, the band edges, and the recompute. Not this session's build.
 
 **State:** OPEN. Not blocking; nothing built. Related: #364, #383, Q198, Q199, Q200.
+
+---
+
+## Q217. The nightly sweep refreshes Hevy-keyed users only, so a user without a Hevy key gets no nadir sweep, no load refresh and no Polar pull from it
+
+Raised 8 Oct 2026 (ingest-triage close-out). `scripts/refresh_load.py` selects users with `users_with_hevy_key` (recorded in #353: a Polar-connected user with no Hevy key is refreshed on Training-page open and never by the sweep). The `hr_nadir` step added with the nadir work sits in that chain, so the same gap now covers it: for such a user the nadir is written only when the phone syncs (`_recompute_hr_nadir` after the HC sync), never by the 14-day sweep that repairs a late sample.
+
+**To decide (Luke).** Whether the sweep should select users by any connected source rather than by Hevy key, or whether the gap is accepted while there is one real user. Bounded by the user rollout sequence in the ROADMAP; it matters the day a second user without Hevy joins.
+
+**State:** OPEN. Not blocking; one user today. Related: #353, #395, Q195.
+
+---
+
+## Q218. SCHEMA.md sections 007 to 013 describe seven tables that have no model and no migration
+
+Raised 8 Oct 2026 (ingest-triage close-out). Checked on master: `health_metrics`, `metric_type_aliases`, `unknown_metric_types`, `workout_metrics`, `derived_metrics`, `vendor_metrics` and `daily_metric_summaries` each appear in `SCHEMA.md` (sequence lines 007 to 013, and a section each) and in no `backend/models.py` `__tablename__` and no file under `backend/migrations/versions`. The file's rule is that it is the mirror of `backend/migrations/`; these seven sections are a design that never shipped. A reader (or a session) can take `derived_metrics` as an existing table that holds derived resting HR, RMSSD or TRIMP. It does not: the derived resting HR is stored on `health_connect_syncs`.
+
+**To decide (Luke).** Strike the seven sections as unbuilt design, move them to a clearly marked "designed, not built" block, or build them. Not an edit to make without that ruling: the sections are long and `SCHEMA.md` must never lag or lead master.
+
+**State:** OPEN. Not blocking. Related: #395 (column home), the CLAUDE.md SCHEMA.md convention.
 
 ---
 
