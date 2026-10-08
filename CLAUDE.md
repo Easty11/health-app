@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The MCP OAuth provider is persisted: hashed tokens with expiry and revocation, so a redeploy no longer drops a connected client; released by the operator, G4 and G5 owed (#404, Q222, Q223).** Code and governance, one migration - Handoff: `closeout.md`.
+
 - **A dedicated clinical-documents store holds imaging reports and clinical letters, and the `document` evidence door resolves against it; Q142 is closed and two follow-up questions are opened (#403, Q220, Q221).** Code and governance, one migration - Handoff: `closeout.md`.
 
 - **A Hevy session has no metabolic value of its own and watch zones would supersede that zero only where attachable; the Strava mirror chain leaves no residual; the zone-attachment question is parked (#402, Q219).** Governance only - Handoff: `closeout.md`.
-
-- **Resting HR is now the sleep nadir and Hevy mirrors are suppressed at the read-door; the ingest-triage rulings, the alcohol constraint, the exclusion and reconciliation design and two questions are recorded (#395 to #401, Q217, Q218; code in #344 to #346 and #348).** Code and governance, one migration - Handoff: `closeout.md`.
 
 ---
 

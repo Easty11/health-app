@@ -44,6 +44,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 043 — user_hrmax restatement path  self-FK (restates_id -> id) — dated vs restatement rows, partial unique keys, `adjusted` provenance with base_bpm + rationale (#383, #384)
 044 — health_connect_syncs sleep-nadir HR  six additive nullable `hr_nadir_*` columns — the sleep-period resting rate DECISIONS_LOG.md:480 calls primary; HELD for operator release
 045 — clinical_documents  FK to users (CASCADE) — one row per imaging report or clinical letter; unique (user, doc_key); index (user, service_date); the target of the `document` evidence door (Q142 option b); HELD for operator release
+046 — mcp_oauth_clients + mcp_oauth_tokens  tokens FK to users (CASCADE) and to clients (CASCADE) — the persisted MCP OAuth provider: client registrations and access/refresh tokens stored as sha256 hashes, with expiry and revocation (Q196); HELD for operator release
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1872,3 +1873,40 @@ CREATE INDEX ix_clinical_document_user_service ON clinical_documents (user_id, s
 **Readers.** `GET /clinical-documents?since=&doc_type=&modality=&region=` (oldest `service_date` first; `region` a case-insensitive substring) and the MCP `get_clinical_documents(since?, doc_type?, modality?, region?, doc_key?)`: the list view is date, modality or subtype, study, then the conclusion in full between `<<<` and `>>>` (a letter shows its `diagnosis_verbatim` there; a letter with none shows its `reason`, and a DXA with no report comment shows a one-line headline of total mass, tissue fat % and BMD T-score read from `structured`, each labelled NOT word-for-word and never placed in a verbatim block); `doc_key=` returns one document with every stored field, including `structured` and `letter`. `appointment_brief.module_imaging_timeline` resolves a `document`-door evidence ref that byte-matches a `doc_key` to `{service_date, title, conclusion_verbatim}` and sorts by `service_date`; an unmatched ref renders as written. `validate_finding` is unchanged (the door resolves on read only; a ref is not validated against this table). The coach context does not render documents: the MCP is the pull path. Nothing derives a finding, constraint or injury change from a document.
 
 **Downgrade** drops the table (its index and unique constraint go with it). It loses data only if rows exist, and the payload file rebuilds every row through the import endpoint.
+
+### 046 — mcp_oauth_clients + mcp_oauth_tokens (the persisted MCP OAuth provider, Q196)
+
+Migration `295da687b02e` (revises `c3e5a7d9b1f4`). Additive: two tables, one check constraint, two indexes. **HELD for the operator's release** (a schema migration): the PR carrying it is not self-merged, and Railway auto-runs `alembic upgrade head` on deploy, so merging it is the release. The deploy that lands it wipes the old in-memory MCP tokens, so the operator re-authenticates once.
+
+```sql
+CREATE TABLE mcp_oauth_clients (
+  client_id    VARCHAR(255) PRIMARY KEY,
+  client_info  JSONB        NOT NULL,   -- the SDK's OAuthClientInformationFull dump
+  created_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE TABLE mcp_oauth_tokens (
+  token_hash    VARCHAR(64)  PRIMARY KEY,                                                  -- sha256(token) hex; the raw token is never stored
+  kind          VARCHAR(7)   NOT NULL,                                                     -- 'access' | 'refresh'
+  user_id       INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id     VARCHAR(255) NOT NULL REFERENCES mcp_oauth_clients(client_id) ON DELETE CASCADE,
+  scopes        JSONB        NOT NULL,
+  expires_at    TIMESTAMPTZ,                                                               -- NULL = no expiry (none issued today)
+  refresh_hash  VARCHAR(64),                                                               -- on an access token: the refresh token that minted it
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  last_used_at  TIMESTAMPTZ,                                                               -- touched at most once a minute per token
+  revoked_at    TIMESTAMPTZ,                                                               -- set, never cleared
+  CONSTRAINT ck_mcp_oauth_token_kind CHECK (kind IN ('access', 'refresh'))
+);
+CREATE INDEX ix_mcp_oauth_token_user_kind    ON mcp_oauth_tokens (user_id, kind);
+CREATE INDEX ix_mcp_oauth_token_refresh_hash ON mcp_oauth_tokens (refresh_hash);
+```
+
+- **Hash only.** Tokens are 256-bit `secrets.token_urlsafe(32)` values, so `sha256(token)` hex is the key and no salt or KDF is needed. The raw value is returned to the client once and appears in no column, log line or error. (`client_info` is the SDK's registration record and can carry the DCR-generated `client_secret`, which the SDK compares in plaintext; that is a client credential, not a bearer token.)
+- **Usable means:** the row exists, is the wanted `kind`, `revoked_at IS NULL`, and `expires_at` is NULL or in the future. `load_access_token` and `get_user_id` accept only `kind = 'access'`, so a refresh token is never a bearer credential.
+- **Lifetimes (F1).** Access 1 hour; refresh 90 days, sliding (each refresh extends it). `MCP_ACCESS_TOKEN_TTL_SECONDS` and `MCP_REFRESH_TOKEN_TTL_SECONDS` override them; an unset, blank, non-numeric or non-positive value falls back to the default. **No rotation (F2):** a refresh returns the same refresh token.
+- **Revocation.** Revoking a refresh token sets `revoked_at` on it and on every row whose `refresh_hash` is its hash; revoking an access token sets it on that row only.
+- **Identity.** Deleting a user cascades to its tokens, so `get_user_id` returns None for them and `mcp_server._current_user_id` raises. `retire_user`'s dry run counts the account's live tokens from this table.
+- **Not persisted:** authorization codes (5-minute life) and pending logins stay in the provider's memory; losing one mid-login means signing in again.
+- **Housekeeping gap.** Expired and revoked rows are never deleted (a client refreshing hourly adds about 9,000 access rows a year); the unauthenticated registration endpoint also writes a `mcp_oauth_clients` row per call. Both are recorded as an open question, not built.
+
+**Downgrade** drops both tables (tokens first; their indexes and the check constraint go with them). It loses every issued MCP session, so each connected client re-authenticates once, which is the pre-migration behaviour. Checked on Postgres 16: upgrade, `compare_metadata` drift check (none on these tables), downgrade (zero tables and zero indexes left), upgrade again.
