@@ -42,6 +42,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 041 — hr_samples + user_hrmax  FK to users (CASCADE) — source-neutral raw HR (unique user, sample_time, source, source_package) + append-only dated HRmax (unique user, effective_from); HC zone fill (Q159 stage 2)
 042 — garmin_activity_selfevals  FK to users (CASCADE) + aerobic_sessions (SET NULL) — insert-only, capture-timed Garmin per-activity self-evaluation (RPE CR-10, feel); unique (user, garmin_activity_id, captured_at) (Q209 path a)
 043 — user_hrmax restatement path  self-FK (restates_id -> id) — dated vs restatement rows, partial unique keys, `adjusted` provenance with base_bpm + rationale (#383, #384)
+044 — health_connect_syncs sleep-nadir HR  six additive nullable `hr_nadir_*` columns — the sleep-period resting rate DECISIONS_LOG.md:480 calls primary; HELD for operator release
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1790,3 +1791,24 @@ ALTER TABLE user_hrmax ADD CONSTRAINT ck_user_hrmax_rationale CHECK
 - **Writer.** `scripts/set_hrmax.py` stays the only writer. `--restate` corrects the latest row dated `--effective-from` (the date must already have a row); without it, a date that has a row is still refused. `--provenance adjusted` requires `--base-bpm` (plausible, and different from `--bpm`) and `--rationale`. `--dry-run` prints the row it would restate and the health_connect rows whose HRmax in force changes.
 - **Downgrade refuses** while any restatement or `adjusted` row exists: dropping the columns would silently destroy an append-only ledger, and the old key cannot hold two rows on one date.
 - **Readers** are unchanged in role: `hc_zone_enrich.enrich_user` and `scripts/arbitration_flip_report.py --hc-zones`, both now building `HrmaxEntry`s from the rows (`hr_zones.entry_from_row`). A `--hrmax` projection dated on a stored row's date is now refused as ambiguous instead of silently ignored; date it after the stored row.
+
+### 044 — health_connect_syncs sleep-nadir HR (`hr_nadir_*`)
+
+Migration `a8c4e1f72b93` (revises `d6f8b1a3c5e7`). Additive, all nullable, no backfill. **HELD for the operator's release** (a schema migration): the PR carrying it is not self-merged, and Railway auto-runs `alembic upgrade head` on deploy, so merging it is the release. Rows fill on the next sync and the nightly `hr_nadir` chain step (trailing 14 days); older nights fill on the 30-day deep sync or a one-off `hr_nadir.compute_user(days=N)`.
+
+```sql
+ALTER TABLE health_connect_syncs ADD COLUMN hr_nadir_bpm            DOUBLE PRECISION;  -- the sleep nadir; NULL when withheld
+ALTER TABLE health_connect_syncs ADD COLUMN hr_nadir_window_start   TIMESTAMPTZ;       -- where the winning 30-minute window starts
+ALTER TABLE health_connect_syncs ADD COLUMN hr_nadir_coverage       DOUBLE PRECISION;  -- 0..1: fraction of the sleep period on the chosen writer's grid
+ALTER TABLE health_connect_syncs ADD COLUMN hr_nadir_source_package TEXT;              -- the ONE writer the nadir read
+ALTER TABLE health_connect_syncs ADD COLUMN hr_nadir_reason         TEXT;              -- NULL iff computed; else no_sleep_period | no_samples | insufficient_coverage | no_valid_window
+ALTER TABLE health_connect_syncs ADD COLUMN hr_nadir_formula        TEXT;              -- the constants in force ('nadir-v1')
+```
+
+- **What it is.** The resting rate `DECISIONS_LOG.md:480` names ("derived nadir stays primary"): the lowest sustained window inside the night's main sleep period, derived from `hr_samples`, not from the sync payload. `health_connect_syncs.resting_heart_rate` is the median of ALL the day's HR samples, activity included, and is **not repurposed**; it keeps its name for API stability and is shown as "All-day median HR".
+- **Method (`hr_nadir.py`, formula `nadir-v1`).** Period `[sleep_onset ?? sleep_start, sleep_end]` (#328). One writer: the package covering the most grid minutes, an exact tie to the lexically first (as #328 does for the sleep edges). Samples outside `hr_zones.PLAUSIBLE_BPM` are dropped. A 1-minute grid (mean per minute), carrying the last value forward at most 5 minutes. The nadir is the minimum, over every 30-minute sliding window with at least 80% of its minutes present, of the window's mean. The writer's grid must cover at least 180 minutes AND at least 50% of the period, else NULL with a reason. Every number is a named constant; changing one changes `hr_nadir_formula`.
+- **Wake-date keyed.** The row's `date` is the AEST wake date, the same key as the sleep columns, so a night's nadir sits on the row that holds that night's sleep. The row mixes keys: the wake-date columns (`sleep_*`, `hr_nadir_*`), the AEST calendar day (`resting_heart_rate`, `steps`), and the legacy UTC slice (`hrv_rmssd`, `oxygen_saturation`, `respiratory_rate`, `distance_meters`). The model docstring says which is which.
+- **NULL is a decided value.** The writer (`hr_nadir.compute_for_row`) sets all six columns on every run, NULLs included. The sync upsert (`_aggregate_day`) only ever writes non-null values, which is why the nadir does not ride it and why a night that stops qualifying (late HR changes the grid) is corrected rather than left stale. Rendered as "not available (<reason>)", never as a number.
+- **Writers and cadence.** The sync recomputes the rows it touched, inside a SAVEPOINT (a failure is reported as `hr_nadir.error` in the response and never fails the sync); the nightly `refresh_load` chain recomputes the trailing 14 days as a soft-fail fill step after `hc_zone_enrich`. Both are idempotent over `hr_samples`.
+- **Readers.** The chat prompt ("Resting HR (sleep nadir)" and "All-day median HR" as separate lines), `GET /health-connect/latest`, `/recovery` (`hr_nadir_bpm`, `hr_nadir_reason`) and the MCP `get_recovery_metrics` fallback ("Sleep-nadir HR="). No decision-making code reads either HR column.
+- **Downgrade** drops the six columns; nothing else reads them.

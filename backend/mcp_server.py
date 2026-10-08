@@ -167,7 +167,11 @@ def _format_recovery_metrics(rows: list, days: int) -> str:
         # The HC-store fallback carries a median of all the day's HR samples, not a resting
         # rate; it is shown under its own label and never in the RHR slot.
         median_hr = r.get("all_day_median_hr")
-        median_hr_part = f" All-day median HR={median_hr:.0f} bpm" if median_hr is not None else ""
+        hc_hr_part = f" All-day median HR={median_hr:.0f} bpm" if median_hr is not None else ""
+        # The HC-store fallback's resting rate: the sleep nadir, under its own label (not RHR=,
+        # whose slot is the Samsung ring's sleep HR).
+        nadir_hr = r.get("hr_nadir")
+        hc_hr_part += f" Sleep-nadir HR={nadir_hr:.0f} bpm" if nadir_hr is not None else ""
         spo2 = f"{r['spo2_average_pct']:.1f}%" if r["spo2_average_pct"] is not None else "—"
         rr = f"{r['respiratory_rate']:.1f} br/min" if r["respiratory_rate"] is not None else "—"
         eff = f"{r['sleep_efficiency_pct']:.0f}%" if r["sleep_efficiency_pct"] is not None else "—"
@@ -177,7 +181,7 @@ def _format_recovery_metrics(rows: list, days: int) -> str:
         light = f"{r['light_minutes']:.0f}" if r.get("light_minutes") is not None else "—"
         awake = f"{r['awake_minutes']:.0f}" if r.get("awake_minutes") is not None else "—"
         lines.append(
-            f"{date} [{src}]: HRV={hrv} RHR={rhr}{median_hr_part} SpO2={spo2} RR={rr} Eff={eff} "
+            f"{date} [{src}]: HRV={hrv} RHR={rhr}{hc_hr_part} SpO2={spo2} RR={rr} Eff={eff} "
             f"TST={tst} Deep={deep}m REM={rem}m Light={light}m Awake={awake}m"
         )
 
@@ -232,6 +236,7 @@ def get_recovery_metrics(days: int = 7) -> str:
             SELECT date AS captured_at, hrv_rmssd AS hrv_ms,
                    NULL AS sleep_hr_bpm,
                    resting_heart_rate AS all_day_median_hr,
+                   hr_nadir_bpm AS hr_nadir,
                    respiratory_rate, NULL AS sleep_efficiency_pct,
                    sleep_duration_minutes AS actual_sleep_time_minutes,
                    deep_sleep_minutes AS deep_minutes,

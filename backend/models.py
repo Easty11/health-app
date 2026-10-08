@@ -235,6 +235,23 @@ class DailyCheckIn(Base):
 
 
 class HealthConnectSync(Base):
+    """One row per user per date of derived daily physiology from Health Connect.
+
+    WHICH DATE A COLUMN MEANS (the row mixes two keys; read this before adding a column):
+
+      * WAKE-DATE (the AEST date of the night's wake): `sleep_*`, `deep/rem/light_sleep_minutes`,
+        `sleep_score`, the `sleep_start/end/onset` clocks, and every `hr_nadir_*` column. The
+        night that ended on `date` in the morning.
+      * AEST CALENDAR DAY: `resting_heart_rate` (the median of ALL the day's HR samples, a
+        display statistic and NOT a resting rate) and `steps` (the companion buckets steps by
+        device-local day).
+      * UTC DATE (legacy slice, `iso[:10]`): `hrv_rmssd`, `oxygen_saturation`, `respiratory_rate`,
+        `distance_meters`. A pending re-bucketing; until then they sit up to ten hours off the
+        AEST day.
+
+    `resting_heart_rate` was bucketed on the UTC date before the nadir change, so rows older than
+    the 7-day re-post window still hold a UTC-day median; the window rewrites the recent rows.
+    """
     __tablename__ = "health_connect_syncs"
     __table_args__ = (UniqueConstraint("user_id", "date", name="uq_hc_user_date"),)
 
@@ -244,6 +261,8 @@ class HealthConnectSync(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     steps: Mapped[int | None] = mapped_column(Integer)
+    # The median of every HR sample in the day, activity included. NOT a resting rate (the
+    # sleep nadir below is); labelled "All-day median HR" wherever it is shown.
     resting_heart_rate: Mapped[float | None] = mapped_column(Float)
     hrv_rmssd: Mapped[float | None] = mapped_column(Float)
 
@@ -265,6 +284,20 @@ class HealthConnectSync(Base):
     sleep_onset: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sleep_start_source_package: Mapped[str | None] = mapped_column(String)
     sleep_end_source_package: Mapped[str | None] = mapped_column(String)
+
+    # Resting HR as the lowest sustained window within the night's MAIN sleep period, derived
+    # from `hr_samples` on a 1-minute grid (hr_nadir.py; DECISIONS_LOG.md:480 "derived nadir
+    # stays primary"). WAKE-DATE keyed like the sleep columns above. Written ONLY by
+    # `hr_nadir`, whose writer may set these to NULL (the sync upsert never writes a NULL, so it
+    # must not carry them). `hr_nadir_reason` is NULL when a nadir was computed, else one of
+    # `hr_nadir.REASONS`. `hr_nadir_formula` names the constants in force, so a window or floor
+    # change is a recompute, not a silent change of meaning.
+    hr_nadir_bpm: Mapped[float | None] = mapped_column(Float)
+    hr_nadir_window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    hr_nadir_coverage: Mapped[float | None] = mapped_column(Float)       # 0..1 of the sleep period on the grid
+    hr_nadir_source_package: Mapped[str | None] = mapped_column(String)  # the one writer the nadir read
+    hr_nadir_reason: Mapped[str | None] = mapped_column(String)
+    hr_nadir_formula: Mapped[str | None] = mapped_column(String)
 
     active_calories: Mapped[int | None] = mapped_column(Integer)
     distance_meters: Mapped[int | None] = mapped_column(Integer)

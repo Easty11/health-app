@@ -16,6 +16,7 @@ import models
 import typed_entries
 from current_state import CurrentState, HRVBaseline
 from hevy_format import format_set
+from hr_nadir import REASON_TEXT as _NADIR_REASON_TEXT
 from hevy_routine_format import format_routine_compact, format_routine_full  # shared renderers (#314)
 # Write-shape vocab for the knowledge-update protocol text (#313), GENERATED not re-typed so
 # the coach's instructions cannot drift from the validators. Acyclic: `routers.knowledge`
@@ -1213,6 +1214,13 @@ def _section_health_connect(records: list[Any], now: datetime) -> str:
 
     if _v("steps") is not None:
         lines.append(f"Steps: {_v('steps'):,}")
+    # The resting rate: the lowest sustained window of the night's sleep (hr_nadir.py). A withheld
+    # nadir is said so, with its reason -- never a number, and never the all-day median in its place.
+    if _v("hr_nadir_bpm") is not None:
+        lines.append(f"Resting HR (sleep nadir): {round(_v('hr_nadir_bpm'))} bpm")
+    elif _v("hr_nadir_reason"):
+        reason = _v("hr_nadir_reason")
+        lines.append(f"Resting HR (sleep nadir): not available ({_NADIR_REASON_TEXT.get(reason, reason)})")
     if _v("resting_heart_rate") is not None:
         # `resting_heart_rate` is the median of ALL the day's HR samples (activity included),
         # not a resting rate — label it for what it is so the coach never reads it as RHR.

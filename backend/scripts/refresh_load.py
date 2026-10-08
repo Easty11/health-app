@@ -7,6 +7,8 @@ Sweeps every Hevy-keyed user and, per user, runs the load chain IN ORDER:
     1. hevy_workouts.sync_workouts                        Hevy API -> hevy_workouts   (async, soft-fail)
     2. polar_ingest.sync_user (run_cascade=False)         Polar v4 -> aerobic_sessions (soft-fail)
     3. hc_zone_enrich.enrich_user                        hr_samples -> HC row zones (soft-fail, fill)
+    3b. hr_nadir.compute_user                            hr_samples -> sleep nadir on health_connect_syncs
+                                                         (soft-fail, fill; trailing 14 days)
     4. load_events.compute_all_users                     resistance events   tier0-v2
     5. load_events_metabolic.compute_all_users_metabolic metabolic events    metab-v1
     6. load_metrics.compute_all_users (tier0-v2)         mechanical / neuromuscular metrics
@@ -77,6 +79,7 @@ import load_events
 import load_events_metabolic
 import load_metrics
 import hc_zone_enrich
+import hr_nadir
 import polar_ingest
 from database import SessionLocal
 from hevy_templates import users_with_hevy_key
@@ -94,7 +97,7 @@ def _per_user(result: dict[str, Any], uid: int) -> dict[str, Any]:
 
 # INGEST steps: their failure is recorded but never fails the user or skips later steps (Brief A C.1 —
 # ingest steps soft-fail, compute steps hard-fail). Every other step is a compute step.
-SOFT_STEPS = frozenset({"hevy_sync", "polar_sync", "hc_zone_enrich"})
+SOFT_STEPS = frozenset({"hevy_sync", "polar_sync", "hc_zone_enrich", "hr_nadir"})
 
 
 def _polar_sync(db, uid: int, days: int) -> dict[str, Any]:
@@ -124,6 +127,18 @@ def _hc_zone_enrich(db, uid: int) -> dict[str, Any]:
         return {"error": f"{type(exc).__name__}: {exc}"}
 
 
+def _hr_nadir(db, uid: int) -> dict[str, Any]:
+    """The chain's sleep-nadir fill: `hr_nadir.compute_user` over the trailing 14 days. Soft-fail by
+    construction (same shape as `_hc_zone_enrich`): any failure -> `{"error": "<Type>: <msg>"}` with
+    the session rolled back; a night it did not reach keeps its last value, and nothing downstream
+    reads the nadir, so it can only withhold information, never corrupt a computed value."""
+    try:
+        return hr_nadir.compute_user(db, uid)
+    except Exception as exc:  # noqa: BLE001 -- soft-fail: a nadir failure never stops the chain
+        db.rollback()
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
 def run_user_chain(
     db,
     uid: int,
@@ -147,6 +162,7 @@ def run_user_chain(
             asyncio.run(hevy_workouts.sync_workouts(db, only_user_id=uid, days=days)), uid)),
         ("polar_sync", lambda: _polar_sync(db, uid, days)),
         ("hc_zone_enrich", lambda: _hc_zone_enrich(db, uid)),
+        ("hr_nadir", lambda: _hr_nadir(db, uid)),
         ("load_events_tier0", lambda: _per_user(
             load_events.compute_all_users(db, only_user_id=uid), uid)),
         ("load_events_metabolic", lambda: _per_user(
@@ -252,6 +268,7 @@ def refresh_load(
             print(f"  user {uid}: OK  "
                   f"polar_synced={_polar(ps)} "
                   f"hc_zoned={_hc(hz)} "
+                  f"hr_nadir={_n(steps.get('hr_nadir'), 'computed')}/{_n(steps.get('hr_nadir'), 'rows')} "
                   f"tier0_events={_n(ev, 'events_written')} "
                   f"metab_events={_n(mev, 'events_written')} "
                   f"tier0_metrics={_n(m0, 'rows_written')} "

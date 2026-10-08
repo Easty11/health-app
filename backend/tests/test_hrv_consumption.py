@@ -265,6 +265,10 @@ def test_summary_device_blocks_byte_identical_to_pre_change_snapshot(db_session)
         "date": cdate.isoformat(),
         "steps": 8000,
         "resting_heart_rate": 52,
+        # Additive since the sleep-nadir change: the resting rate is its own field now (None here,
+        # no nadir computed for this fixture row). The rest of the block is the pre-change shape.
+        "hr_nadir_bpm": None,
+        "hr_nadir_reason": None,
         "hrv_rmssd": None,
         "sleep_duration_minutes": None,
         "sleep_score": None,

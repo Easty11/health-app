@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import null
 from sqlalchemy.orm import Session
 
+import hr_nadir
 import models
 from auth import create_access_token, get_current_user
 from database import get_db
@@ -376,6 +377,8 @@ class HCSyncOut(BaseModel):
     date: date
     synced_at: datetime
     steps: Optional[int]
+    # The median of ALL the day's HR samples (activity included) -- NOT a resting rate. The field
+    # name is kept for API stability; the resting rate is `hr_nadir_bpm`.
     resting_heart_rate: Optional[float]
     hrv_rmssd: Optional[float]
     sleep_duration_minutes: Optional[int]
@@ -387,6 +390,13 @@ class HCSyncOut(BaseModel):
     distance_meters: Optional[int]
     oxygen_saturation: Optional[float]
     respiratory_rate: Optional[float]
+    # Sleep-nadir resting HR (hr_nadir.py), wake-date keyed. Additive; NULL with a reason when withheld.
+    hr_nadir_bpm: Optional[float] = None
+    hr_nadir_window_start: Optional[datetime] = None
+    hr_nadir_coverage: Optional[float] = None
+    hr_nadir_source_package: Optional[str] = None
+    hr_nadir_reason: Optional[str] = None
+    hr_nadir_formula: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -438,6 +448,20 @@ def _parse_dt(iso: Optional[str]) -> Optional[datetime]:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _local_date(iso: str) -> date:
+    """AEST calendar date of an HC instant -- the day a point-in-time record (an HR sample) belongs
+    to. Same normalisation as `_wake_date`/`_parse_dt` (nanosecond fraction stripped, `Z` and
+    offsets honoured, a naive stamp read as UTC).
+
+    An unparseable stamp falls back to the legacy `iso[:10]` slice rather than raising: this runs
+    on the sync's hot path, where one bad record must not fail the whole POST (the old UTC slice
+    never could)."""
+    dt = _parse_dt(iso)
+    if dt is None:
+        return _parse_date(iso)
+    return dt.astimezone(_AEST).date()
 
 
 def _now_aest_date() -> date:
@@ -638,6 +662,24 @@ def _persist_hr_samples(payload: SyncPayload, user_id: int, db: Session) -> dict
         logger.exception("HC sync user=%s hr_samples persist failed", user_id)
         return {**counts, "stored": 0, "error": f"{type(exc).__name__}: {exc}"}
     return counts
+
+
+def _recompute_hr_nadir(db: Session, user_id: int, dates: set[date]) -> dict:
+    """Recompute the sleep nadir (`hr_nadir_*`) on the rows this sync touched.
+
+    Runs after the day rows are upserted (the sleep clocks it reads live on them) and after
+    `_persist_hr_samples` (the samples it reads), inside the sync's transaction. Failure-isolated
+    exactly like the HR persist: the SAVEPOINT rolls back only the nadir writes, and a failure is
+    logged and reported in the response (`{"error": ...}`), never raised -- a derived column must
+    not roll back the day aggregates riding the same commit. The nightly `refresh_load` step
+    recomputes the trailing 14 days, so a missed night is filled, not lost."""
+    db.flush()   # the just-upserted rows must be visible to the nadir's query (and fail as THEMSELVES here)
+    try:
+        with db.begin_nested():
+            return hr_nadir.compute_for_dates(db, user_id, dates)
+    except Exception as exc:  # noqa: BLE001 -- a derived fill must not fail the sync (see docstring)
+        logger.exception("HC sync user=%s hr_nadir recompute failed", user_id)
+        return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 # `com.hevy` mirrors Hevy workouts into Health Connect, but the direct Hevy connector
@@ -1017,10 +1059,13 @@ def _aggregate_day(day: date, payload: SyncPayload) -> dict[str, Any]:
     if day_steps:
         row["steps"] = sum(r.count for r in day_steps)
 
-    # Heart rate — median bpm for the day
+    # Heart rate -- median bpm of ALL the day's samples, activity included. This is NOT a resting
+    # rate (the sleep nadir, hr_nadir.py, is); it is stored in `resting_heart_rate` for history and
+    # shown as "All-day median HR". Bucketed by the AEST calendar day so "all-day" is a real day
+    # (the UTC slice made it a 10:00-to-10:00 AEST span).
     day_hr = [
         r for r in payload.heartRate
-        if r.bpm is not None and _parse_date(r.time) == day
+        if r.bpm is not None and _local_date(r.time) == day
     ]
     if day_hr:
         bpms = sorted(r.bpm for r in day_hr)
@@ -1185,7 +1230,7 @@ def sync(
         if r.date:
             dates.add(_parse_date(r.date))
     for r in payload.heartRate:
-        dates.add(_parse_date(r.time))
+        dates.add(_local_date(r.time))
     for r in payload.hrv:
         dates.add(_parse_date(r.time))
     for r in payload.sleep:
@@ -1210,7 +1255,7 @@ def sync(
     aggregated = {
         "sleep": sum(1 for r in payload.sleep if _wake_date(r.endTime) in valid_dates),
         "hrv": sum(1 for r in payload.hrv if _parse_date(r.time) in valid_dates),
-        "heartRate": sum(1 for r in payload.heartRate if _parse_date(r.time) in valid_dates),
+        "heartRate": sum(1 for r in payload.heartRate if _local_date(r.time) in valid_dates),
         "steps": sum(1 for r in payload.steps if r.date and _parse_date(r.date) in valid_dates),
         "workouts": exercise_ingest["ingested"],
     }
@@ -1236,6 +1281,9 @@ def sync(
                 **agg,
             ))
         synced_dates.append(str(day))
+
+    # Sleep nadir on the touched rows (derived from hr_samples + the sleep clocks just written).
+    hr_nadir_out = _recompute_hr_nadir(db, current_user.id, valid_dates)
 
     # Backfill DailyRecord.mindfulness_occurred from MindfulnessSession records.
     # Only updates rows that already exist (AM check-in must precede mindfulness write).
@@ -1285,6 +1333,10 @@ def sync(
         # Raw HR persisted this sync (Q159 stage 2): received, newly stored, intra-payload
         # duplicates, unparseable times; an `error` key when the isolated insert failed.
         "hr_samples": hr_samples,
+        # Sleep nadir recompute on the touched rows: rows evaluated, computed vs withheld (NULL),
+        # the closed reason counts, rows whose stored value moved; an `error` key if the isolated
+        # recompute failed.
+        "hr_nadir": hr_nadir_out,
         "renewed_token": renewed_token,
     }
 
