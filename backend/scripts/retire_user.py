@@ -41,11 +41,12 @@ the operator's `excluded_at` adjudications, template `laterality` / `adjudicated
 any exist unless `--accept-loss` is passed (an explicit decision, never a default).
 
 Sign-in artefacts. Web/API auth is a stateless JWT keyed on email: deleting the user row ends
-it. The MCP `PersonalOAuthProvider` persists NOTHING (in-process dicts, tokens never expire):
-the DB cannot say whether an account backs an MCP session, a live token for a deleted user
-survives until the backend restarts, and MCP sign-in verifies email + password against `users`,
-so the delete ends that sign-in path. No last-login is recorded anywhere. The dry run prints
-all of this, plus the account's knowledge entries, so the operator can decide.
+it. The MCP `PersonalOAuthProvider` persists its tokens in `mcp_oauth_tokens` (hashed, with expiry
+and revocation; Q196): the dry run counts the account's LIVE tokens (not revoked, not expired)
+and when one was last used, and a delete cascades them away, so a deleted user's MCP session ends
+at once. MCP sign-in verifies email + password against `users`, so the delete also ends that
+sign-in path. No last-login is recorded anywhere. The dry run prints all of this, plus the
+account's knowledge entries, so the operator can decide.
 
 Never prints a secret: the credential column is never selected (integrations are listed by
 provider and timestamps only), the email is masked, and the confirm token is a 12-char
@@ -59,7 +60,9 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import inspect, text
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, bindparam, inspect, text
 from sqlalchemy.engine import Connection, Engine
 
 # User ids this script must never touch, at any layer: the real accounts (operator ruling,
@@ -265,7 +268,8 @@ class Plan:
     at_risk: list[tuple[str, int]]        # non-re-derivable rows a cascade would destroy
     knowledge: list[dict[str, Any]] = field(default_factory=list)  # user_knowledge_entries breakdown
     legacy_knowledge: int = 0             # user_knowledge rows (legacy category store)
-    reset_tokens: dict[str, Any] | None = None  # password_reset_tokens: the one persisted auth table
+    reset_tokens: dict[str, Any] | None = None  # password_reset_tokens: a persisted auth table
+    mcp_tokens: dict[str, Any] | None = None    # mcp_oauth_tokens: live MCP tokens (None = no such table)
 
     @property
     def total_rows(self) -> int:
@@ -385,6 +389,22 @@ def build_plan(conn: Connection, engine: Engine, graph: Graph, uid: int) -> Plan
             " MAX(created_at) AS latest FROM password_reset_tokens WHERE user_id = :uid"
         ), {"uid": uid}).mappings().first()
         reset_tokens = {"n": int(r["n"] or 0), "unused": int(r["unused"] or 0), "latest": r["latest"]}
+    mcp_tokens = None
+    if "mcp_oauth_tokens" in graph.tables:
+        # Live = not revoked and not expired. A typed bind keeps the timestamp comparison honest on
+        # both Postgres (timestamptz) and the SQLite test substrate.
+        now = bindparam("now", datetime.now(timezone.utc), type_=DateTime(timezone=True))
+        live = {"access": 0, "refresh": 0}
+        last_used = None
+        for r in conn.execute(text(
+            "SELECT kind, COUNT(*) AS n, MAX(last_used_at) AS last_used FROM mcp_oauth_tokens"
+            " WHERE user_id = :uid AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > :now)"
+            " GROUP BY kind"
+        ).bindparams(now), {"uid": uid}).mappings():
+            live[r["kind"]] = int(r["n"])
+            if r["last_used"] is not None and (last_used is None or str(r["last_used"]) > str(last_used)):
+                last_used = r["last_used"]
+        mcp_tokens = {"access": live["access"], "refresh": live["refresh"], "last_used": last_used}
 
     return Plan(
         user_id=uid,
@@ -394,6 +414,7 @@ def build_plan(conn: Connection, engine: Engine, graph: Graph, uid: int) -> Plan
         integrations=integrations, rows=rows, nulled=nulled, blockers=blockers,
         orphans=orphans, hevy=hevy, at_risk=at_risk,
         knowledge=knowledge, legacy_knowledge=legacy, reset_tokens=reset_tokens,
+        mcp_tokens=mcp_tokens,
     )
 
 
@@ -409,13 +430,20 @@ def format_plan(plan: Plan, target: str) -> str:
     if plan.reset_tokens is not None:
         rt = plan.reset_tokens
         w(f"  password_reset_tokens: {rt['n']} row(s), {rt['unused']} unused, latest {rt['latest'] or '-'}"
-          " (the only auth table persisted in the DB)")
+          " (an auth table persisted in the DB)")
     w("  web/API login: stateless JWT keyed on email; ends the moment the user row is deleted.")
-    w("  MCP OAuth (oauth_provider.PersonalOAuthProvider): NOT persisted (in-process dicts, tokens never")
-    w("    expire), so it cannot be inventoried here. A live MCP token for this user keeps resolving to")
-    w(f"    user_id {plan.user_id} (finding no rows) until the backend restarts. MCP sign-in checks this")
-    w("    account's email + password against `users`, so a delete ends that sign-in path: if this")
-    w("    account backs an MCP / demo connection, that connection stops working.")
+    if plan.mcp_tokens is not None:
+        m = plan.mcp_tokens
+        w("  MCP OAuth (mcp_oauth_tokens, hashed; oauth_provider.PersonalOAuthProvider):")
+        w(f"    live tokens for this user: {m['access']} access, {m['refresh']} refresh (not revoked, not")
+        w(f"    expired); last used {m['last_used'] or 'never'}. They cascade-delete with the user, so a delete")
+        w("    ends every MCP session this account holds at once. MCP sign-in also checks this account's")
+        w("    email + password against `users`: if this account backs an MCP / demo connection, that")
+        w("    connection stops working.")
+    else:
+        w("  MCP OAuth: table mcp_oauth_tokens is absent from this database (migration not applied), so MCP")
+        w("    tokens cannot be inventoried here. MCP sign-in checks this account's email + password against")
+        w("    `users`, so a delete ends that sign-in path.")
     w("")
     w("Knowledge:")
     if plan.knowledge:

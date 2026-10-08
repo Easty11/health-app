@@ -372,7 +372,8 @@ def test_report_covers_signin_artefacts_knowledge_and_identity(two_users, monkey
     assert "full_name='user 7'" in r                                    # identity, not just a mask
     assert "No last-login is recorded anywhere" in r
     assert "password_reset_tokens: 1 row(s), 1 unused" in r
-    assert "MCP OAuth" in r and "NOT persisted" in r and "until the backend restarts" in r
+    assert "MCP OAuth" in r and "live tokens for this user: 0 access, 0 refresh" in r and "last used never" in r
+    assert "NOT persisted" not in r and "until the backend restarts" not in r     # the pre-Q196 claims are gone
     assert "user_knowledge_entries type=preference source=chat active=True: 1" in r
     assert "user_knowledge_entries type=injury source=onboarding active=True: 1" in r
     assert "user_knowledge (legacy category store): 1" in r
@@ -389,11 +390,72 @@ def test_non_ascii_full_name_keeps_the_report_ascii(two_users, monkeypatch):
     assert out.getvalue().isascii() and "D\\xe9bora" in out.getvalue()
 
 
-def test_mcp_provider_really_persists_nothing():
-    """The report asserts the MCP OAuth provider keeps no DB state (FEEDBACK section 46: a
-    sentence about runtime capability is a claim that needs a test). If someone gives it a table,
-    this fails and the report's MCP paragraph must be rewritten with a real inventory."""
-    from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "oauth_provider.py").read_text(encoding="utf-8")
-    for needle in ("import database", "from database", "SessionLocal", "import models", "from models", "sqlalchemy"):
-        assert needle not in src, f"oauth_provider.py now touches {needle!r}: the MCP report text is stale"
+def _seed_mcp(db, uid, *, access_live=1, refresh_live=1, revoked=0, expired=0, last_used=None):
+    """Token rows for `uid`: live access/refresh, plus revoked and expired access rows that the
+    dry run must NOT count. Hashes are placeholders -- the report never needs a raw token."""
+    db.merge(models.McpOAuthClient(client_id="c1", client_info={"client_id": "c1"}))
+    db.flush()
+    n = [0]
+
+    def add(kind, **kw):
+        n[0] += 1
+        db.add(models.McpOAuthToken(
+            token_hash=f"{uid:02d}{n[0]:062d}", kind=kind, user_id=uid, client_id="c1", scopes=["mcp"], **kw,
+        ))
+    far = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    for _ in range(access_live):
+        add("access", expires_at=far, last_used_at=last_used)
+    for _ in range(refresh_live):
+        add("refresh", expires_at=far)
+    for _ in range(revoked):
+        add("access", expires_at=far, revoked_at=NOW)
+    for _ in range(expired):
+        add("access", expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+    db.commit()
+
+
+def _dry_run(db, monkeypatch, uid=7):
+    monkeypatch.setattr(database, "engine", _engine(db))
+    out = io.StringIO()
+    with redirect_stdout(out):
+        assert ru.main(["--user-id", str(uid)]) == 0
+    return out.getvalue()
+
+
+def test_dry_run_counts_live_mcp_tokens_from_the_table(two_users, monkeypatch):
+    """Q196: the report inventories MCP tokens instead of saying it cannot see them. Live means
+    not revoked and not expired; the other user's tokens are not counted."""
+    db = two_users
+    _seed_mcp(db, 7, access_live=2, refresh_live=1, revoked=3, expired=2,
+              last_used=datetime(2026, 9, 29, 8, tzinfo=timezone.utc))
+    _seed_mcp(db, 1, access_live=5, refresh_live=4)
+    r = _dry_run(db, monkeypatch)
+    assert "live tokens for this user: 2 access, 1 refresh" in r
+    assert "last used 2026-09-29" in r and "last used never" not in r
+    assert "cascade-delete with the user" in r
+    assert "mcp_oauth_tokens" in r                       # also listed in the cascade row inventory
+    assert r.isascii()
+
+
+def test_dry_run_reports_an_absent_mcp_table_rather_than_zero(db_session, monkeypatch):
+    """Against a database the migration has not reached, 0 live tokens would be a false negative."""
+    _seed_user(db_session, 7, "testacct@example.com", hevy_prefix="u7")
+    db_session.execute(text("DROP TABLE mcp_oauth_tokens"))
+    db_session.commit()
+    r = _dry_run(db_session, monkeypatch)
+    assert "table mcp_oauth_tokens is absent" in r and "live tokens for this user" not in r
+
+
+def test_execute_cascades_the_retired_users_mcp_tokens_and_spares_the_rest(two_users, monkeypatch):
+    db = two_users
+    _seed_mcp(db, 7, access_live=2, refresh_live=1)
+    _seed_mcp(db, 1, access_live=1, refresh_live=1)
+    monkeypatch.setattr(database, "engine", _engine(db))
+    tok = _token(db, 7)
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        rc = ru.main(["--user-id", "7", "--execute", "--confirm", tok])
+    assert rc == 0, err.getvalue()
+    db.expire_all()
+    assert _counts(db, "mcp_oauth_tokens", uid=7) == 0
+    assert _counts(db, "mcp_oauth_tokens", uid=1) == 2

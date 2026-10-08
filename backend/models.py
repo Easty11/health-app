@@ -1511,3 +1511,52 @@ class LoadMetric(Base):
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class McpOAuthClient(Base):
+    """A dynamically registered MCP OAuth client (Q196).
+
+    `client_info` is the `OAuthClientInformationFull` dump the MCP SDK hands `register_client`;
+    the SDK reads it back through `get_client` on every token/revoke call. Authorization codes
+    and pending logins are NOT persisted (5-minute life; losing one just means signing in again).
+    """
+    __tablename__ = "mcp_oauth_clients"
+
+    client_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    client_info: Mapped[dict] = mapped_column(_JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class McpOAuthToken(Base):
+    """An issued MCP access or refresh token, keyed by sha256(token) hex -- the raw token is
+    returned to the client once and never stored (Q196). Tokens are 256-bit
+    `token_urlsafe(32)` values, so a fast hash needs no salt or KDF.
+
+    `user_id` CASCADEs: deleting a user kills every token it holds, so `get_user_id` returns
+    None for it. On an access token `refresh_hash` is the refresh token that minted it, so
+    revoking the refresh revokes its access tokens. `revoked_at` is set, never cleared;
+    `expires_at` NULL means no expiry.
+    """
+    __tablename__ = "mcp_oauth_tokens"
+    __table_args__ = (
+        CheckConstraint("kind IN ('access', 'refresh')", name="ck_mcp_oauth_token_kind"),
+        Index("ix_mcp_oauth_token_user_kind", "user_id", "kind"),
+        Index("ix_mcp_oauth_token_refresh_hash", "refresh_hash"),
+    )
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(7), nullable=False)          # 'access' | 'refresh'
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    client_id: Mapped[str] = mapped_column(
+        ForeignKey("mcp_oauth_clients.client_id", ondelete="CASCADE"), nullable=False
+    )
+    scopes: Mapped[list] = mapped_column(_JSONB, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    refresh_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
