@@ -316,7 +316,7 @@ class AerobicSessionOut(BaseModel):
     canonical: bool = True
     # Derived at read time: this Health Connect row is a Hevy workout that Garmin / Strava wrote
     # back into Health Connect (>= HEVY_MIRROR_OVERLAP_FRACTION of its own duration inside a
-    # counted Hevy bout). Always non-canonical; the stored row is kept as evidence.
+    # Hevy bout, excluded or not). Always non-canonical; the stored row is kept as evidence.
     hevy_mirror: bool = False
 
     model_config = {"from_attributes": True}

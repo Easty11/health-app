@@ -4,12 +4,12 @@ hevy2garmin pushes Hevy workouts to Garmin; Garmin Connect / Strava then write t
 Connect as their OWN activities (16 `com.strava` Weightlifting rows, Sept-Oct 2026). Admission drops
 only `com.hevy`, so the rows are stored. They are the Hevy bout again, so `arbitrated_sessions` marks
 a Health Connect row a `hevy_mirror` -- not canonical, and out of the arbitration -- when its overlap
-with ONE counted Hevy bout is >= HEVY_MIRROR_OVERLAP_FRACTION (0.5) of the ROW'S OWN duration. And
+with ONE Hevy bout (any hevy_workouts row, excluded or not) is >= HEVY_MIRROR_OVERLAP_FRACTION (0.5) of the ROW'S OWN duration. And
 `overlaps_workout` (the resolver's concurrent_strength guard, the psychological read) is the same
 fraction test, not any intersection (D-b).
 
 Gates: G1 the fraction test (boundary, own-duration denominator, one bout at a time) · G2 package-
-agnostic, Health Connect only · G3 only a COUNTED Hevy bout makes a mirror · G4 a mirror never
+agnostic, Health Connect only · G3 any Hevy bout makes a mirror, excluded or unadjudicated included · G4 a mirror never
 suppresses a live row · G5 every raw reader agrees (metabolic load, CBT-I training_end, psychological
 minutes) · G6 the API says so.
 """
@@ -20,6 +20,7 @@ import models
 from cbti.replay import load_nights
 from load_events_metabolic import compute_all_users_metabolic
 from reads import psychological_reads
+from reads.hevy_reads import counted_workouts
 from reads.aerobic_reads import (
     HEVY_MIRROR_OVERLAP_FRACTION,
     arbitrated_sessions,
@@ -145,24 +146,47 @@ def test_a_session_far_from_any_hevy_bout_is_untouched(db_session):
     assert row.hevy_mirror is False and row.canonical is True
 
 
-# ── G3: only a COUNTED Hevy bout makes a mirror ─────────────────────────────────────────
+# ── G3: any Hevy bout makes a mirror, counted or not ─────────────────────────────────────────
 
-def test_an_excluded_hevy_bout_makes_no_mirror(db_session):
+def test_an_excluded_hevy_bout_still_makes_a_mirror(db_session):
+    """INVERTED by the A3.2 amendment (it asserted an excluded bout makes no mirror). Prod row 111
+    mirrors hevy_workouts b3ebc404, excluded 18 Sep as `deleted_in_hevy_never_performed`;
+    hevy2garmin does not honour Hevy deletions and resurrected it into Garmin on the 7 Oct backfill.
+    The mirror test asks where a Health Connect row CAME FROM, not whether Hevy's bout still counts,
+    so an excluded bout must suppress its copy. Counting stays on the door, pinned below."""
     u = _user(db_session)
     _hevy(db_session, u.id, "w1", _t(6), _t(7), excluded=True)
     sid = _hc(db_session, u.id, "s1", _t(6, 5), _t(6, 55), STRAVA)
-    assert _by_id(db_session, u.id)[sid].hevy_mirror is False
+    row = _by_id(db_session, u.id)[sid]
+    assert row.hevy_mirror is True and row.canonical is False
+    assert sid in hevy_mirror_session_ids(u.id, db_session)
 
 
-def test_an_unadjudicated_duplicate_pair_makes_no_mirror_and_an_adjudicated_survivor_does(db_session):
+def test_an_excluded_bout_suppresses_its_copy_but_is_still_not_counted(db_session):
+    u = _user(db_session)
+    _hevy(db_session, u.id, "w1", _t(6), _t(7), excluded=True)
+    counted, _ = counted_workouts(db_session, u.id, db_session.query(models.HevyWorkout).all())
+    assert counted == []                                                        # the door is unchanged
+
+
+def test_both_sides_of_an_unadjudicated_duplicate_pair_make_a_mirror_and_so_does_a_survivor(db_session):
+    """The pair counts nothing until adjudicated (the door), but a copy of EITHER side is a copy of
+    a Hevy workout. Adjudicating the pair changes nothing about the copy."""
     u = _user(db_session)
     _hevy(db_session, u.id, "wA", _t(6), _t(7), dedup=True, partners=["wB"])
     _hevy(db_session, u.id, "wB", _t(6), _t(7), dedup=True, partners=["wA"])
     sid = _hc(db_session, u.id, "s1", _t(6, 5), _t(6, 55), STRAVA)
-    assert _by_id(db_session, u.id)[sid].hevy_mirror is False                   # pair not yet adjudicated: counts nothing
+    assert _by_id(db_session, u.id)[sid].hevy_mirror is True                    # pair unadjudicated
     db_session.get(models.HevyWorkout, "wB").excluded_at = datetime(2026, 9, 9, tzinfo=timezone.utc)
     db_session.commit()
-    assert _by_id(db_session, u.id)[sid].hevy_mirror is True                    # wA is now the retained survivor
+    assert _by_id(db_session, u.id)[sid].hevy_mirror is True                    # survivor wA, loser wB excluded
+
+
+def test_an_excluded_bout_that_the_row_only_brushes_is_still_not_a_copy(db_session):
+    u = _user(db_session)
+    _hevy(db_session, u.id, "w1", _t(6), _t(6, 25), excluded=True)
+    sid = _hc(db_session, u.id, "s1", _t(6), _t(7), GARMIN)                     # 25 of 60 minutes: 0.42
+    assert _by_id(db_session, u.id)[sid].hevy_mirror is False
 
 
 # ── G4: a mirror never suppresses a live row ────────────────────────────────────────────

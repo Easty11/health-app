@@ -40,7 +40,7 @@ ALLOW_AEROBIC = {
 }
 ALLOW_HEVY = {
     "reads/hevy_reads.py": "THE counted-workouts read-door.",
-    "reads/aerobic_reads.py": "Hevy-mirror test (A3.2): fetches the non-excluded Hevy candidates that sit near the Health Connect rows being read, then partitions them via counted_workouts (the door) and compares overlap. A membership decision about AEROBIC rows (is this row a copy of a Hevy bout?), never about which Hevy workouts count.",
+    "reads/aerobic_reads.py": "Hevy-mirror test (A3.2, amended): fetches EVERY Hevy workout near the Health Connect rows being read, excluded and unadjudicated-duplicate rows included, and compares overlap. Deliberately not the door: it is a membership decision about AEROBIC rows (is this row a copy of a Hevy workout, whether or not that workout still counts?), never about which Hevy workouts count.",
     "hevy_workouts.py": "Writer (Hevy ingest + dedup_flag/partner recompute).",
     "engine/resolver.py": "Fetches in-window candidates, partitions via counted_workouts (the door).",
     "reads/psychological_reads.py": "Fetches non-excluded candidates, filters via counted_workouts.",
