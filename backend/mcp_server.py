@@ -1136,6 +1136,44 @@ def _verbatim_block(label: str, text: str) -> list[str]:
     return [f"{label}, verbatim:", "<<<", text, ">>>"]
 
 
+def _num(structured, key):
+    """A numeric field of `structured`, or None (a bool is not a number here)."""
+    v = (structured or {}).get(key)
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _dexa_headline(d) -> str | None:
+    """One line for a DXA that has no report comment, read from `structured`: total mass, whole-body
+    tissue fat % and the BMD T-score, whichever of the three are present. A DERIVED line, built from
+    stored numbers -- never the document's own words -- and it says so; None when none are present."""
+    if d.doc_type != "imaging" or d.modality != "DXA":
+        return None
+    mass, fat, t = (_num(d.structured, k) for k in ("total_mass_kg", "tissue_fat_pct", "t_score"))
+    parts = []
+    if mass is not None:
+        parts.append(f"total mass {mass:g} kg")
+    if fat is not None:
+        parts.append(f"tissue fat {fat:g}%")
+    if t is not None:
+        parts.append(f"BMD T-score {t:+g}")
+    return " · ".join(parts) or None
+
+
+def _no_conclusion_lines(d, letter) -> tuple[list[str], bool]:
+    """What stands in the conclusion slot when a document has no `conclusion_verbatim` and no
+    `diagnosis_verbatim`: a referral's / letter's `reason`, or a DXA's `structured` headline, each
+    labelled as NOT word-for-word; else the plain "no conclusion" line. Returns the lines and whether
+    `reason` was used (the full view then does not print it a second time)."""
+    reason = letter.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        what = "reason for referral" if d.subtype == "referral" else "reason"
+        return [f"{what} (as extracted, NOT word-for-word):", reason], True
+    headline = _dexa_headline(d)
+    if headline is not None:
+        return [f"headline (from structured data, NOT a report comment): {headline}"], False
+    return ["(no conclusion on the document)"], False
+
+
 def _document_headline(d) -> str:
     kind = d.modality if d.doc_type == "imaging" else d.subtype
     parts = [str(d.service_date), kind, d.study if d.doc_type == "imaging" else None, d.region]
@@ -1146,7 +1184,8 @@ def _format_clinical_documents(docs, *, full: bool = False) -> str:
     """Pure text formatter over `ClinicalDocumentOut` snapshots (oldest `service_date` first, as
     the read returns them). LIST view: date · modality-or-subtype · study · region, then the
     conclusion in full. A letter has no `conclusion_verbatim`; its `diagnosis_verbatim` (a
-    different verbatim field, labelled as such) stands in. FULL view (one `doc_key`): every
+    different verbatim field, labelled as such) stands in; failing that, a referral's `reason` or a
+    DXA's `structured` headline stands in, each labelled NOT word-for-word. FULL view (one `doc_key`): every
     stored field, the condensed summaries marked as not verbatim. Verbatim fields are emitted
     through `_verbatim_block` untouched. Stores and reads back; interprets nothing."""
     if not docs:
@@ -1159,13 +1198,15 @@ def _format_clinical_documents(docs, *, full: bool = False) -> str:
             lines.append("")
         lines.append(_document_headline(d))
         letter = d.letter or {}
+        reason_used = False
         if d.conclusion_verbatim is not None:
             label = f"conclusion ({d.conclusion_label})" if d.conclusion_label else "conclusion"
             lines.extend(_verbatim_block(label, d.conclusion_verbatim))
         elif letter.get("diagnosis_verbatim") is not None:
             lines.extend(_verbatim_block("diagnosis", letter["diagnosis_verbatim"]))
         else:
-            lines.append("(no conclusion on the document)")
+            fallback, reason_used = _no_conclusion_lines(d, letter)
+            lines.extend(fallback)
         if not full:
             continue
         for label, value in (
@@ -1185,8 +1226,8 @@ def _format_clinical_documents(docs, *, full: bool = False) -> str:
         if d.structured:
             lines.extend(["structured:", json.dumps(d.structured, indent=1, ensure_ascii=False)])
         for key, value in letter.items():
-            if key == "diagnosis_verbatim":
-                continue   # already shown above as the headline conclusion
+            if key == "diagnosis_verbatim" or (key == "reason" and reason_used):
+                continue   # already shown above, in the conclusion slot
             if key == "management_plan_verbatim":
                 lines.append("management plan, verbatim (one entry per line):")
                 lines.extend(["<<<"] + list(value) + [">>>"])
@@ -1212,7 +1253,10 @@ def get_clinical_documents(since: str | None = None, doc_type: str | None = None
     LIST view (default): date · modality (imaging) or subtype (letter) · study · region, the
     `doc_key`, and the document's own conclusion IN FULL. A conclusion is stored and returned
     verbatim, between `<<<` and `>>>`, exactly as extracted (typos and all); a letter shows its
-    `diagnosis_verbatim` in that place. Summaries are condensed, not verbatim, and are marked so.
+    `diagnosis_verbatim` in that place. A letter with no diagnosis (a referral) shows its `reason`,
+    and a DXA with no report comment shows a one-line headline (total mass, tissue fat %, BMD
+    T-score) built from `structured`; both are labelled NOT word-for-word. Summaries are condensed,
+    not verbatim, and are marked so.
 
     Optional filters: `since` (ISO date -- `service_date` on or after it), `doc_type`
     (imaging | correspondence), `modality` (US | CT | MRI | XR | DXA, case-insensitive), `region`

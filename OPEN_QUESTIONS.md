@@ -3111,6 +3111,8 @@ Raised 8 Oct 2026 (clinical-documents store, fork F2). `validate_finding` still 
 
 **Open design points, for when it fires.** The check needs the database, and `validate_finding` is shape-only by contract, so it belongs in `_validate_typed_write`, not in the validator. `request.evidence[]` on an appointment also carries `document` refs, which `module_request` renders as written and does not resolve; strict validation and resolution should treat both or say why not.
 
+**Update, 8 Oct 2026.** The audit ran on prod (operator-run, operator-reported): one active finding cited a free-text `document` ref, and the operator re-pointed it to its `doc_key` in place (#403 addendum). The trigger above is therefore met for the active findings. Whether to build strict validation is still the operator's call: it turns a free-text ref into a write error, and chat would then learn the `doc_key`s only through `get_clinical_documents`.
+
 **State:** OPEN. Not blocking; nothing built. Related: the clinical-documents decision, #280, Q142.
 
 ---
