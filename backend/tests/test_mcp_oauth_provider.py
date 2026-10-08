@@ -537,3 +537,148 @@ def test_sdk_refresh_endpoint_rejects_an_expired_refresh_token(factory, clock):
         "refresh_token": body["refresh_token"],
     })
     assert r.status_code == 400 and r.json()["error"] == "invalid_grant"
+
+
+# --- the identity a tool call sees (G4 finding, 8 Oct 2026) ------------------------------------
+#
+# The SDK's get_access_token() is a contextvar tool handlers inherit from the task that started
+# the MCP session, i.e. the FIRST request. A client that refreshes keeps its Mcp-Session-Id and
+# sends the new token: the middleware accepts it (HTTP 200) but the handler still saw the token
+# that created the session. With non-expiring tokens that was invisible; once access tokens expire
+# it surfaced as the tool error "MCP token is not bound to a user" instead of a working call.
+
+def _mcp_over_http(provider, monkeypatch):
+    """A real FastMCP streamable-HTTP app over `provider`, whose one tool reports what the app's
+    own _current_user_id() resolves and what the SDK's contextvar still holds."""
+    import mcp_server
+    from mcp.server.auth.middleware.auth_context import get_access_token
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.auth.settings import AuthSettings
+    from mcp.server.transport_security import TransportSecuritySettings
+
+    monkeypatch.setattr(mcp_server, "_oauth_provider", provider)
+    # _current_user_id reads the request via the module-level `mcp`; point it at this server.
+    server = FastMCP(
+        "t", auth_server_provider=provider,
+        auth=AuthSettings(
+            issuer_url=AnyHttpUrl("https://t.example"),
+            client_registration_options=ClientRegistrationOptions(enabled=True),
+            resource_server_url=AnyHttpUrl("https://t.example/mcp"),
+        ),
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    )
+    monkeypatch.setattr(mcp_server, "mcp", server)
+
+    @server.tool()
+    def whoami() -> dict:
+        sdk = get_access_token()
+        try:
+            uid = mcp_server._current_user_id()
+        except ValueError as e:
+            uid = f"ERROR: {e}"
+        return {"user": uid, "sdk_context_is_session_token": bool(sdk), "sdk_hash": hash_token(sdk.token) if sdk else None}
+
+    return server.streamable_http_app()
+
+
+def _headers(token, sid=None):
+    h = {"Authorization": f"Bearer {token}", "Accept": "application/json, text/event-stream",
+         "Content-Type": "application/json"}
+    if sid:
+        h["mcp-session-id"] = sid
+    return h
+
+
+def _rpc(http, token, sid, method, params=None, id_=None):
+    import json
+    body = {"jsonrpc": "2.0", "method": method}
+    if params is not None:
+        body["params"] = params
+    if id_ is not None:
+        body["id"] = id_
+    return http.post("/mcp", headers=_headers(token, sid), content=json.dumps(body))
+
+
+def _payload(resp):
+    import json
+    for line in resp.text.splitlines():
+        if line.startswith("data:"):
+            return json.loads(line[5:])
+    return resp.json()
+
+
+def _open_session(http, token):
+    r = _rpc(http, token, None, "initialize", {
+        "protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}, 1)
+    assert r.status_code == 200, r.text
+    sid = r.headers["mcp-session-id"]
+    _rpc(http, token, sid, "notifications/initialized")
+    return sid
+
+
+def _whoami(http, token, sid, id_=2):
+    r = _rpc(http, token, sid, "tools/call", {"name": "whoami", "arguments": {}}, id_)
+    assert r.status_code == 200, r.text
+    import json
+    return json.loads(_payload(r)["result"]["content"][0]["text"])
+
+
+@pytest.mark.parametrize("how", ["expired", "revoked"])
+def test_a_refreshed_token_on_a_long_lived_session_resolves_its_own_user(factory, provider, monkeypatch, how):
+    """The session was opened with token A. A then expires (or is revoked), the client refreshes
+    to B and keeps the session. The tool must resolve B's user, not fail on A."""
+    uid = _add_user(factory)
+    client, first = asyncio.run(_connect(provider, uid))
+    app = _mcp_over_http(provider, monkeypatch)
+    with TestClient(app, base_url="https://t.example") as http:
+        sid = _open_session(http, first.access_token)
+        fresh = _whoami(http, first.access_token, sid)
+        assert fresh["user"] == uid                                  # control: before any expiry
+
+        with factory() as s:                                         # A dies; the session does not
+            row = s.get(models.McpOAuthToken, hash_token(first.access_token))
+            if how == "expired":
+                row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+            else:
+                row.revoked_at = datetime.now(timezone.utc)
+            s.commit()
+        assert provider.get_user_id(first.access_token) is None
+
+        rt = asyncio.run(provider.load_refresh_token(client, first.refresh_token))
+        second = asyncio.run(provider.exchange_refresh_token(client, rt, rt.scopes))
+        out = _whoami(http, second.access_token, sid, id_=3)
+
+    assert out["user"] == uid, f"tool did not resolve the refreshed token's user: {out['user']}"
+    # Identity control: the SDK's own contextvar really is still the session-creating token A, so
+    # this test would fail on the old code rather than pass for the wrong reason.
+    assert out["sdk_hash"] == hash_token(first.access_token)
+    assert out["sdk_hash"] != hash_token(second.access_token)
+
+
+def test_a_session_cannot_borrow_another_users_identity_via_a_later_token(factory, provider, monkeypatch):
+    """Identity binding is unchanged: the user a tool resolves is the one bound to the token on
+    THAT request, never the session creator's. (The SDK separately rejects a different client's
+    credential on an existing session, which is what stops a cross-client replay.)"""
+    a, b = _add_user(factory), _add_user(factory, "b@example.test")
+    client, tok_a = asyncio.run(_connect(provider, a))
+    # Same client, second user: sign in again as b through the same registered client.
+    url = asyncio.run(provider.authorize(client, AuthorizationParams(
+        state=None, scopes=["mcp"], code_challenge="c", redirect_uri=AnyUrl(REDIRECT),
+        redirect_uri_provided_explicitly=True, resource=None)))
+    ticket = parse_qs(urlparse(url).query)["ticket"][0]
+    code = parse_qs(urlparse(provider.complete_login(ticket, b)).query)["code"][0]
+    tok_b = asyncio.run(provider.exchange_authorization_code(
+        client, asyncio.run(provider.load_authorization_code(client, code))))
+    app = _mcp_over_http(provider, monkeypatch)
+    with TestClient(app, base_url="https://t.example") as http:
+        sid = _open_session(http, tok_a.access_token)
+        assert _whoami(http, tok_a.access_token, sid)["user"] == a
+        assert _whoami(http, tok_b.access_token, sid, id_=3)["user"] == b
+
+
+def test_request_token_falls_back_to_the_contextvar_outside_a_request(provider, monkeypatch):
+    """No request context (a direct call, not over HTTP): the contextvar is the only source."""
+    import mcp_server
+    sentinel = AccessToken(token="outside-request", client_id="c", scopes=[])
+    monkeypatch.setattr(mcp_server, "get_access_token", lambda: sentinel)
+    assert mcp_server._request_access_token() is sentinel

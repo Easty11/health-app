@@ -8,6 +8,8 @@ import httpx
 import pytz
 
 from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+from mcp.server.auth.provider import AccessToken
 from mcp.server.fastmcp import FastMCP
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.transport_security import TransportSecuritySettings
@@ -64,11 +66,31 @@ mcp = FastMCP(
 )
 
 
+def _request_access_token() -> AccessToken | None:
+    """The access token that authenticated THIS request.
+
+    The SDK's `get_access_token()` reads a contextvar that tool handlers inherit from the task
+    which started the MCP session, i.e. the FIRST request of the session. Once access tokens
+    expire (Q196) that is the wrong token: a client that refreshes keeps its Mcp-Session-Id and
+    sends the new token, the middleware accepts it, but the handler would still see the token
+    that created the session, by then expired. The current request's own token is on its
+    `scope["user"]`, which the bearer middleware set for this request. Outside an HTTP request
+    (no request context) the contextvar is the only source, so it is the fallback."""
+    try:
+        request = mcp.get_context().request_context.request
+    except (LookupError, ValueError):
+        request = None
+    if request is None:
+        return get_access_token()
+    user = request.scope.get("user")
+    return user.access_token if isinstance(user, AuthenticatedUser) else None
+
+
 def _current_user_id() -> int:
-    """Resolve the caller's user_id from their MCP bearer token. Raises
+    """Resolve the caller's user_id from the bearer token of the current request. Raises
     rather than falling back to any default — every tool call must be bound
     to a real, logged-in user (see oauth_provider.PersonalOAuthProvider)."""
-    token = get_access_token()
+    token = _request_access_token()
     if token is None:
         raise ValueError("No authenticated MCP session — sign in via /mcp/login first")
     user_id = _oauth_provider.get_user_id(token.token)
