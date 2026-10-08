@@ -322,7 +322,10 @@ function ImagingBlock({ s }) {
         columns={['Document', 'Cited']}
         rows={s.items.map((d, i) => (
           <tr key={i}>
-            <td>{d.ref}</td>
+            <td>
+              {d.title ? `${fmtDay(d.service_date)} · ${d.title}` : d.ref}
+              {d.conclusion_verbatim && <div className="brief-doc-verbatim">{d.conclusion_verbatim}</div>}
+            </td>
             <td className="brief-doc-nowrap">{fmtDay(d.as_of)}</td>
           </tr>
         ))}

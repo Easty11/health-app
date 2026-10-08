@@ -295,3 +295,43 @@ describe('date formats', () => {
     expect(text(screen.getByTestId('brief-print').querySelector('.brief-doc-footer'))).toContain('printed 29 Sep 2026.')
   })
 })
+
+describe('imaging_timeline resolves a stored clinical document', () => {
+  // SYNTHETIC: one document-door ref that resolved to a stored record, one that did not.
+  const CONCLUSION = 'Appearances  as written (synthetic) – query ?\nSecond line'
+  const IMAGING = {
+    module: 'imaging_timeline',
+    items: [
+      { ref: 'free text ref (synthetic)', finding_key: 'f_free', as_of: '2026-05-01' },
+      { ref: 'img_20260105_mri_part_a', finding_key: 'f_doc', as_of: '2026-06-01',
+        service_date: '2026-01-05', title: 'MRI synthetic part A', conclusion_verbatim: CONCLUSION },
+    ],
+    note: 'A document ref that matches a stored clinical document shows its date, title and conclusion; any other ref is shown as written.',
+  }
+  const withImaging = () => withSections((ss) => [...ss, IMAGING])
+
+  test('print: a resolved ref reads date, title and the conclusion; an unresolved one reads as written', async () => {
+    const doc = await renderPage(withImaging())
+    const t = text(doc)
+    expect(t).toContain('5 Jan 2026 · MRI synthetic part A')
+    expect(t).toContain('free text ref (synthetic)')
+    expect(t).not.toContain('img_20260105_mri_part_a')   // the doc_key is a reference, not something to read out
+  })
+
+  test('print: the conclusion keeps its whitespace (pre-wrap), exactly as stored', async () => {
+    const doc = await renderPage(withImaging())
+    const verbatim = doc.querySelector('.brief-doc-verbatim')
+    expect(verbatim.textContent).toBe(CONCLUSION)
+    expect(verbatim.className).toBe('brief-doc-verbatim')
+  })
+
+  test('screen: the same record, with the conclusion in full', async () => {
+    await renderPage(withImaging())
+    const screenLayout = screen.getByTestId('appointment-brief')
+    expect(screenLayout.textContent).toContain('MRI synthetic part A')
+    expect(screenLayout.textContent).toContain('free text ref (synthetic)')
+    const para = [...screenLayout.querySelectorAll('p')].find((p) => p.textContent === CONCLUSION)
+    expect(para).toBeTruthy()
+    expect(para.className).toMatch(/whitespace-pre-wrap/)
+  })
+})

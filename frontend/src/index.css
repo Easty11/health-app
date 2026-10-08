@@ -44,6 +44,7 @@ body {
 }
 .brief-doc-head { border-bottom: 1px solid var(--brief-navy); padding-bottom: 4pt; margin-bottom: 6pt; }
 .brief-doc-subtitle { color: var(--brief-grey); margin: 2pt 0 0; }
+.brief-doc-verbatim { white-space: pre-wrap; margin-top: 2pt; }
 .brief-doc-purpose, .brief-doc p { margin: 0 0 4pt; }
 .brief-doc table { width: 100%; border-collapse: collapse; margin: 0 0 4pt; }
 .brief-doc th, .brief-doc td {

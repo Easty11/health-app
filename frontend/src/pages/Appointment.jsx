@@ -250,7 +250,13 @@ const RENDERERS = {
   imaging_timeline: (s) => (
     <div className="space-y-2 text-base text-gray-800">
       {s.items.length === 0 ? <Empty>No documents referenced.</Empty> : s.items.map((d, i) => (
-        <p key={i}>{d.ref} <span className="text-sm text-gray-500">(cited {fmtDate(d.as_of)})</span></p>
+        <div key={i}>
+          <p>
+            {d.title ? `${fmtDate(d.service_date)} · ${d.title}` : d.ref}{' '}
+            <span className="text-sm text-gray-500">(cited {fmtDate(d.as_of)})</span>
+          </p>
+          {d.conclusion_verbatim && <p className="whitespace-pre-wrap text-sm text-gray-700">{d.conclusion_verbatim}</p>}
+        </div>
       ))}
       <p className="text-sm text-gray-400">{s.note}</p>
     </div>
