@@ -31,3 +31,18 @@ describe('the Training doorway is data-backed but singular (GATE 4)', () => {
     expect(toTraining).toHaveLength(1)
   })
 })
+
+describe('the load card heads the hub (F2)', () => {
+  test('it sits above the check-in buttons and the tiles, full width, and is the one doorway to /metrics', async () => {
+    await act(async () => { render(<MemoryRouter><Dashboard /></MemoryRouter>) })
+    const card = await screen.findByLabelText('Load summary')
+    const firstTile = screen.getByText('Recovery')
+    // DOM order: the card precedes everything else on the page.
+    expect(card.compareDocumentPosition(firstTile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const toMetrics = screen.getAllByRole('link').filter((a) => a.getAttribute('href') === '/metrics')
+    expect(toMetrics).toHaveLength(1)
+    expect(card.contains(toMetrics[0])).toBe(true)
+    // Not inside the tile grid.
+    expect(card.closest('.grid')).toBeNull()
+  })
+})
