@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import useRecoveryRefresh from '../lib/useRecoveryRefresh'
+import MissedPMCard from '../components/MissedPMCard'
 
 const READINESS_LABELS = ['Very tired', 'Tired', 'Okay', 'Good', 'Great']
 const SORENESS_LABELS = ['None', 'Mild', 'Moderate', 'Sore', 'Very sore']
@@ -297,6 +298,7 @@ export default function CheckInAM() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10 px-4">
         <div className="w-full max-w-sm">
+          <MissedPMCard missedPm={prefill?.missed_pm} />
           <div className="text-center mb-6">
             <p className="text-3xl mb-2">✓</p>
             <h1 className="text-lg font-semibold text-gray-800">Morning check-in saved</h1>
@@ -336,6 +338,10 @@ export default function CheckInAM() {
           <button onClick={() => navigate('/dashboard')} className="text-sm text-indigo-600 hover:text-indigo-800">← Back</button>
           <h1 className="text-lg font-semibold text-gray-800">Morning Check-in</h1>
         </div>
+
+        {/* Outside the <form>: its Save/Skip are independent of the AM submit and must never
+            be able to trigger it. Writes yesterday's row via for_date. */}
+        <MissedPMCard missedPm={prefill?.missed_pm} />
 
         {passive && (
           <PassiveCard
