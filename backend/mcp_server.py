@@ -39,6 +39,7 @@ from aerobic_format import format_aerobic_session, format_selfeval   # one aerob
 from garmin_selfeval import selfeval_by_session   # Garmin per-activity RPE/feel for a linked session (Q209)
 from reads.aerobic_reads import arbitrated_sessions   # the canonical read-door (#Q161)
 from reads.recovery_reads import hrv_deviation, representative_source
+from reads.snapshot_reads import hrv_continuity, hrv_continuity_line, latest_sleep_night, sleep_snapshot_lines
 from engine.training_phase import current_training_phase
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
@@ -735,26 +736,13 @@ def get_readiness_snapshot() -> str:
     7-day training summary, and current injury constraints."""
     user_id = _current_user_id()
 
-    hrv_rows = _db_rows(
-        """
-        SELECT captured_at, hrv_ms, sleep_efficiency_pct,
-               actual_sleep_time_minutes, deep_minutes, rem_minutes,
-               spo2_average_pct, respiratory_rate, sleep_hr_bpm
-        FROM samsung_hrv_readings
-        WHERE user_id = :user_id
-          AND context = 'passive_overnight'
-        ORDER BY captured_at DESC
-        LIMIT 1
-        """,
-        {"user_id": user_id},
-    )
-
     # Q130 → #292: the readiness HRV reads the per-source-normalised deviation model
     # (source-agnostic over hrv_readings), NOT `.canonical` arbitration. This is a rich
     # LLM readout (not the device-attributed `get_recovery_metrics`, which stays wholly
     # Samsung), so it surfaces BOTH the representative single ms figure and the full
-    # deviation object (combined z, direction, cross-source confidence). Sleep/SpO2/
-    # architecture below stay on the Samsung device row (Garmin supplies none).
+    # deviation object (combined z, direction, cross-source confidence). Sleep is ONE writer
+    # per night by fixed priority (Garmin > Samsung Health > Samsung scraper), named on every
+    # value and never blended (`reads/snapshot_reads.py`, shared with the card).
     with SessionLocal() as _db:
         # #294: feed the active training-phase change date so a mid-deload / regime
         # change surfaces as baseline_state="settling" with capped confidence here (this
@@ -765,6 +753,8 @@ def get_readiness_snapshot() -> str:
             user_id, _db, for_date=_wake_day,
             phase_change_date=_phase.entered_on if _phase is not None else None,
         )
+        _sleep = latest_sleep_night(_db, user_id)
+        _continuity = hrv_continuity(_db, user_id, _wake_day)
     _rep = representative_source(_dev)
 
     checkin_rows = _db_rows(
@@ -790,22 +780,10 @@ def get_readiness_snapshot() -> str:
     session_total_min = sum(float(s.duration_minutes) for s in _week
                             if s.duration_minutes is not None)
 
-    hrv_continuity = _db_rows(
-        """
-        SELECT COUNT(*) AS reading_count
-        FROM samsung_hrv_readings
-        WHERE user_id = :user_id
-          AND captured_at >= CURRENT_DATE - 6
-          AND context = 'passive_overnight'
-        """,
-        {"user_id": user_id},
-    )
-
     lines = ["=== TODAY'S READINESS SNAPSHOT ===\n"]
 
-    if hrv_rows:
-        r = hrv_rows[0]
-        lines.append(f"Latest biometrics ({str(r['captured_at'])[:10]}):")
+    if _sleep is not None or _rep is not None or _dev["n_contributing"] or _continuity["nights"]:
+        lines.append(f"Latest biometrics (wake-day {_wake_day}):")
         lines.append(_readiness_hrv_line(_rep, _dev, _wake_day))
         if _dev["n_contributing"]:
             lines.append(
@@ -813,16 +791,10 @@ def get_readiness_snapshot() -> str:
                 f"(confidence {_dev['confidence']}, {_dev['n_contributing']} source(s), "
                 f"baseline {_dev['baseline_state']})"
             )
-        lines.append(f"  Sleep efficiency: {r['sleep_efficiency_pct']:.0f}%" if r["sleep_efficiency_pct"] is not None else "  Sleep efficiency: —")
-        lines.append(f"  Sleep duration: {r['actual_sleep_time_minutes']:.0f} min" if r["actual_sleep_time_minutes"] is not None else "  Sleep duration: —")
-        lines.append(f"  Deep: {r['deep_minutes']:.0f} min  REM: {r['rem_minutes']:.0f} min" if (r.get("deep_minutes") is not None and r.get("rem_minutes") is not None) else "  Sleep stages: —")
-        lines.append(f"  SpO2: {r['spo2_average_pct']:.1f}%" if r["spo2_average_pct"] is not None else "  SpO2: —")
-        lines.append(f"  Resp rate: {r['respiratory_rate']:.1f} br/min" if r["respiratory_rate"] is not None else "  Resp rate: —")
-        lines.append(f"  Resting HR: {r['sleep_hr_bpm']:.0f} bpm\n" if r["sleep_hr_bpm"] is not None else "  Resting HR: —\n")
-        hrv_count = hrv_continuity[0]["reading_count"] if hrv_continuity else 0
-        lines.append(f"  HRV data continuity: {hrv_count}/7 days in last week\n")
+        lines.extend(sleep_snapshot_lines(_sleep))
+        lines.append(hrv_continuity_line(_continuity) + "\n")
     else:
-        lines.append("Latest biometrics: no Samsung Ring data found.\n")
+        lines.append("Latest biometrics: no sleep or HRV data found.\n")
 
     if checkin_rows:
         c = checkin_rows[0]
