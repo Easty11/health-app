@@ -170,3 +170,32 @@ def test_attribution_and_threshold_compose_into_the_verdict(db_session):
     assert classify_night(nights[d0 + timedelta(days=1)], "22:30").reason == "nap"
     # day d0+1's under-floor nap does not exclude the night it precedes
     assert classify_night(nights[d0 + timedelta(days=2)], "22:30").valid is True
+
+
+# ── missed-PM catch-up: a nap caught up for yesterday attributes to tonight's night ──
+
+def test_a_caught_up_nap_for_yesterday_excludes_todays_night(db_session):
+    """submit_pm(for_date=yesterday) writes the nap to yesterday's row, so the W-1 read
+    hands it to Night(today) and the NAP_EXCLUDE_MIN gate fires. Keyed to today's row
+    instead (the pre-catch-up behaviour) it would reach Night(tomorrow) and today's night
+    would read clean. Route-level cases live in test_pm_catchup.py."""
+    from datetime import timedelta
+    from routers.checkin_v2 import _today_aest
+
+    u = _user(db_session, "catchup-nap@x.io")
+    today = _today_aest()
+    yday = today - timedelta(days=1)
+    _rec(db_session, u.id, yday, naps_min=None)       # a diary night with no PM yet
+    _rec(db_session, u.id, today, naps_min=None)
+    submit_pm(body=NightlyCloseOutIn(today_rating=3, naps_min=NAP_EXCLUDE_MIN + 15, for_date=yday),
+              current_user=u, db=db_session)
+
+    nights = {n.date: n for n in load_nights(db_session, u.id, yday, today)}
+    assert nights[today].naps_min == NAP_EXCLUDE_MIN + 15
+    assert classify_night(nights[today], "22:30").reason == "nap"
+    assert nights[yday].naps_min is None
+
+
+def test_for_date_is_a_real_optional_input_field():
+    assert "for_date" in NightlyCloseOutIn.model_fields
+    assert NightlyCloseOutIn(today_rating=3).for_date is None
