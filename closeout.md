@@ -1,46 +1,68 @@
-# Close-out — mcp-oauth: the MCP OAuth provider is persisted (hashed tokens, expiry, revocation); released by the operator and merged via PR #355 as #404; G4 and G5 are owed (Q196 closed; Q222 and Q223 opened)
+# Close-out — freshness-load-card: snapshot sleep is Garmin-primary and named by writer (#405); a freshness read model and a home load card put an age under every load number (#406); the companion's status line shows a relative age (health-connect-app #51); Q224 and Q225 opened
 
 ## Real commits this session
 
-`git log --format="%h %ad %s" --date=short 941d160..HEAD` (session opened at master `941d160`; maxima at open: `DECISIONS_LOG` #403, `OPEN_QUESTIONS` Q221):
+`git log --format="%h %ad %s" --date=short 0939eaf..HEAD` (session opened at health-app master `0939eaf` and health-connect-app master `eed6492`; maxima at open: health-app `DECISIONS_LOG` #404 and `OPEN_QUESTIONS` Q223, companion #50 and Q25):
 
-- `df4b57f` 2026-10-08 feat(mcp-oauth): persist the MCP OAuth provider, hashed, with expiry and revocation (Q196)
-- `e99648a` 2026-10-08 gov(mcp-oauth): record the persisted MCP OAuth provider, close Q196, open two questions
-- the close-out commit below this file (`chore: session close-out`), on the same PR
+health-app:
+- `73a0a89` 2026-10-09 feat(readiness): snapshot sleep is Garmin-primary and named by writer; HRV continuity counts Garmin
+- `2156b71` 2026-10-10 Merge pull request #358 (PR 1)
+- `6d2ea4d` 2026-10-09 feat(freshness): freshness read model, snapshot block and the home load card
+- `f855919` 2026-10-10 fix(freshness): "data as of" is the last Health Connect delivery, not the newest arrival
+- `ed1764e` 2026-10-10 Merge pull request #359 (PR 2)
+- `efa7765` 2026-10-10 gov(freshness): record snapshot sleep as Garmin-primary (#405), open Q224 and Q225
+- `db797ac` 2026-10-10 gov(freshness): record the freshness model and load card (#406), F1/F2 and the five rulings
+- the close-out commit below this file (`chore: session close-out`), on the same governance PR
 
-PR #355 (ready for review, not draft) carries these commits plus the release commit `gov(mcp-oauth): land - integers resolved (#404, Q222, Q223), F1 and F2 recorded as operator-ratified` and was merged on the operator's release instruction (8 Oct 2026). The branch has a `BRANCHES.md` row (OWED: G4 and G5). Merge SHA is recorded at the next close-out.
+health-connect-app:
+- `201daee` 2026-10-10 feat(sync): the "Last background sync" line shows a relative age, amber past 13 h
+- `845f8c4` 2026-10-10 Merge pull request #70 (PR 3)
+- the companion `gov(...)` and close-out commits, in that repo's own handoff
+
+PR 1 and PR 2 were merged by Code on green. PR 2 was **held** for the operator's ruling (it carried data-meaning defaults the brief had not ratified, per the Merge disposition) and merged only after the five rulings of 10 Oct 2026; one of them (the "data as of" anchor) changed the code, pushed as `f855919` before the merge.
 
 ## Pending-queue reconciliation
 
-No `PENDING` items were carried in; the chat brief was the only input. Its LOG block is written: `DECISIONS_LOG` #404 (the persisted provider, F1 and F2 recorded as operator-ratified), Q196 moved to CLOSED as `DONE → #404`, and the brief's conditional new question (refresh-token rotation) is opened. One further question is opened that the brief did not ask for (pruning of expired and revoked rows, and the unauthenticated registration endpoint, which now writes a row per call). Raising a question needs no hold; neither is resolved. At the release the integers were claimed (#404, Q222, Q223, against master's max `#403` / `Q221`, unchanged) and the operator's F1 and F2 rulings were recorded as ratified. **Provisional:** the G4 and G5 results and the access TTL left live are owed and not written. Nothing decided is uncommitted.
+No `PENDING` items were carried in; the chat brief was the only input. Its LOG block is written:
+- *Snapshot sleep is Garmin-primary, recorded as the operator ruling of 9 Oct:* `DECISIONS_LOG` #405 (`efa7765`).
+- *Freshness model and load card, F1 and F2 rulings, and the five #359 rulings:* `DECISIONS_LOG` #406 (`db797ac`).
+- *Leave companion Q25 open and add that freshness is now visible:* in the companion's own close-out (health-connect-app), not here.
+- Two questions the build surfaced, opened (raising needs no hold): Q224 (per-writer nightly sleep aggregates) and Q225 (the on-device deep-sleep confidence verdict reaching the backend).
+Nothing is decided and uncommitted.
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** No NOW row changed. Q196 was never a NOW row (its only ROADMAP mention is historical, in the Garmin mix-up row).
+**Sprint (ROADMAP NOW).** One row added: *Data freshness, Garmin-primary snapshot sleep and the home load card* (#405, #406). The other NOW rows were not edited.
 
-**State.** The persisted provider, the migration `295da687b02e` and `retire_user`'s live-token count are on master via PR #355 (guard green after the integers were resolved; pytest and vitest green). Gates G1 to G3 passed before release (3066 passed, 3 skipped; 10 of 10 mutants killed; migration checked on Postgres 16). The deploy that carried the migration wiped the old in-memory MCP tokens.
+**State.** All three PRs are merged and the backend is deployed on `ed1764e` (both services SUCCESS). Verified live: the real `get_readiness_snapshot` prints sleep labelled `Garmin`, continuity `7/7 nights (garmin 7)` where it read 0/7, and the new `Data freshness` block (Health Connect delivery not amber; four stale writers named: Samsung Health heart rate, Samsung Health sleep, the Samsung scraper, unattributed steps). Suites: backend 3109 passed, 3 skipped (baseline 3070 / 3); frontend 47 files / 409 tests (baseline 45 / 390). The companion sim `npm run test:sync-age` passes at stamps 1 h, 14 h and 3 days.
 
-**Single clearest next action.** The operator-assisted release walk-through, one step at a time: (1) reconnect the connector once; (2) G4 with `MCP_ACCESS_TOKEN_TTL_SECONDS=120` in the Railway dashboard, wait 3 minutes, a tool call from chat, then remove the override (if G4 fails, set `2592000` instead and keep it); (3) G5, a no-op redeploy, then a tool call with no reconnect. Then Code records the results and the TTL left live as a #404 status addendum.
+**Single clearest next action.** The operator's two small checks, then the next open v1 leg: (1) the served-bundle grep of the live frontend (#121), which Code could not run because the egress policy refused that domain: the bundle should carry `Load summary`, `Data age unavailable` and `fatigue rising`; (2) a look at the amber "Last background sync" line on the next phone build. Neither blocks anything.
 
-**Operator actions owed.** The three steps above; and a ruling on whether a client secret held in `client_info` (the SDK compares it in plaintext) is acceptable as recorded in Q223.
+**Operator actions owed.**
+- The two checks above.
+- A decision on whether to open the egress policy to the app's own frontend domain, so that Code can run the #121 grep itself (the recipe is in the Environment network settings).
+- Optional, not blocking: a ruling on a label for form (cut-points were deliberately not invented; F1).
 
 **Things the next reader should know.**
-- Code had no prod or database access here; G4, G5 and the connector's token-endpoint auth method are unverified. Nothing in #404 asserts them.
-- `railway variables` is banned by #111, so the G4 TTL variable is set in the Railway dashboard, not from PowerShell. Setting `MCP_ACCESS_TOKEN_TTL_SECONDS` redeploys the backend; a short TTL applies to tokens minted after it, which is why the G4 script revokes the live access token to force a refresh.
-- If G4 fails, F1 falls back to a long access TTL (30 days, `2592000`) by environment variable, not a code change.
-- The full migration chain cannot run on an empty database (`e3b7c5a1f942` HALTs on zero rows by design); migration checks build the base from the models. A fresh container also needs the CI ephemeral `FERNET_KEY` and a non-shallow clone (`tests/test_constraint_engine_arm.py` reads an old SHA) for the suite to collect.
-- The provider does synchronous database work inside async methods (one short session per call), like the existing MCP tool reads; it is not a concern at one user.
+- The freshness read is **read-side only**: no table, no migration, no ingest change. It adds one grouped query over the user's `health_connect_record_sources` rows per Dashboard open (indexed by user only). It is a watch-point, not a measured problem (#406).
+- The usual gap is measured at **day grain**, over the 28 days ending at each writer's own last record. A window anchored at now drops dead writers (FEEDBACK 63); do not re-anchor it.
+- "Data as of" is the **last Health Connect delivery**, the same clock as the 13 h amber gate; Polar is information only and never drives amber (operator ruling, 10 Oct).
+- The Metrics tile is gone from the hub: the load card's `Metrics` link is the one doorway to `/metrics`.
+- The MCP data session drops on every backend redeploy ("session expired" until it reconnects); a retry after a minute works.
+- `reads/freshness_reads.py` is on the read-door drift guard's allow-list with a reason; a new direct toucher of `aerobic_sessions` fails that test.
+- Real health values are kept out of the repo: the live checks above are described by label and count only (public repo, guard 2).
 
 **What was NOT touched (named so absence does not read as finished).**
-- **Every v1 test's open leg:** the reconcile leg of Walk in (NEXT, #386) and every Loop item. This session was transport infrastructure for the chat connector: it serves no v1 test directly (the connector is how chat reads `get_appointment_brief`, so it is a precondition of using Walk in from chat, not a leg of it).
-- **The medical-protocol and fitness lanes:** the ingest and dedupe lane, Q217, Q218, Q219, the marker exposure (#367, Q206), the Source hierarchy (Q201, Q203), the Polar re-zoning (Q198), the HC sync reliability lane (Q159, Q208, Q214), the Garmin self-evaluation read, Q216, the clinical-documents operator check (the follow-up appointment's brief), the lab upload pipeline, the interpretation layer, CBT-I, the injury ledger: unmoved.
-- **Decided and unbuilt from earlier sessions:** the companion RHR capture (#400), the soft exclusion and window-absence reconciliation (#399, migration HOLD), the HRV/SpO2/respiratory/distance AEST re-bucketing.
-- **Out of scope by the brief:** MCP write tools, any change to what the tools return, and auth for the main app (`backend/auth.py`).
-- **Pattern to say out loud:** the last two sessions went to infrastructure around the product (document store, connector persistence), not to an open v1 leg. The next session should go to the reconcile leg or a Loop item once #355 is released, unless the operator wants more here.
+- **Every open v1 leg:** the reconcile leg of Walk in (NEXT, #386) and every Loop item. This session was visibility infrastructure for data age, plus one sleep-source repoint; it serves **See** directly (a load number never shows without its age) but did not move Walk in or Loop.
+- **The cause of the 8-9 Oct background silence** (companion Q25): still unknown. Only its visibility is fixed; the discriminators (`am get-standby-bucket`, `dumpsys jobscheduler`, the battery setting) have not been taken. The next silence will now show on the phone and on the home card.
+- **The Samsung scraper** (companion Q24): not fixed, by instruction (no live device). Its silence is now an amber `STALE` line; the re-verification when the ring returns is still owed.
+- **Everything in the medical-protocol and ingest lanes:** the ingest and dedupe lane (Q217-Q219), the marker exposure (#367, Q206), the source hierarchy (Q201, Q203), the Polar re-zoning (Q198), the HC sync reliability lane (Q159, Q208, Q214), the MCP OAuth gates G4 and G5 (#404, Q222, Q223), the clinical-documents upload UI (Q221).
+- **Out of scope by the brief:** the schedule MCP tool and the merged recent-sessions tool (a separate brief to follow), a label for form, and any `load_metrics` maths.
+- **Pattern to say out loud:** the last three sessions have gone to infrastructure around the product (the document store, connector persistence, and now data-age visibility), not to an open v1 leg. The next session should go to the reconcile leg or a Loop item.
 
-**Open questions by status.** 123 OPEN and 7 OWED above `## CLOSED` (two of the OPEN are new this session: Q222, refresh-token rotation, which stays open until G4 proves refresh; Q223, pruning and the registration endpoint). Q196 is now closed.
+**Open questions by status.** 125 OPEN and 7 OWED above `## CLOSED` (two new this session: Q224, per-writer nightly sleep aggregates, trigger a second sleep writer going live again; Q225, whether the on-device deep-sleep confidence verdict reaches the backend, trigger the companion's threshold review completing).
 
-**v1-triage of the NOW lanes** (unchanged; the NOW table was not edited):
-- Source hierarchy (#365): **See** and **Know**. Polar sport-id relabel (#366-#368): **Know** and **See**. HC sync reliability (#369-#371, #377, #380): **See** and **Loop**. Garmin self-evaluation read (#372-#374): **Know** and **Loop**. Aerobic ingest automated (#353): **See** and **Loop**. Session fidelity (#354-#357): **Loop** and **Know**. Appointment brief: **Walk in**, met (#386).
+**v1-triage of the NOW lanes** (the new row only; the rest are unchanged):
+- Data freshness, Garmin-primary snapshot sleep and the load card (#405, #406): **See** (an age under every load number; a late pipe visible before the number is trusted) and **Loop** (the next silence is caught, not found by accident).
 - Candidates for removal from NOW, as the previous close-outs named them: the phase-change form (#389, DONE), HC zones (#364, #385, #388), Know (d) (#390-#394).
-- Carrying no v1 test: the CBT-I items, the injury sweep, the typed-constraints seed; the operator should rule on whether any of them belongs in NOW. This session's lane (the MCP connector) is not in NOW and was released by the operator's instruction, not by lane momentum.
+- Carrying no v1 test: the CBT-I items, the injury sweep, the typed-constraints seed; the operator should rule on whether any belongs in NOW.
