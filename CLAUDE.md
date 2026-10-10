@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The metabolic lane stays on Edwards (#410, Q230 closed), and the imputed-load design for unrecorded sessions is ruled in principle with its build gated on 10 global pairs and a January 2027 deadline (Q231).** Governance only - Handoff: `closeout.md`.
+
 - **An imputed metabolic load for unrecorded sessions (RPE x minutes, calibrated per user) is investigated and recorded as an open question with a January 2027 deadline; nothing is built (Q231).** Governance only - Handoff: `closeout.md`.
 
-- **Pilates and walks stay in the metabolic TRIMP as built, and the question of moving the metabolic lane to Banister's exponential TRIMP is open for the operator before 16 Nov (#409, Q229 closed, Q230).** Governance only, nothing built - Handoff: `closeout.md`.
-
-- **Two read-only MCP tools put the plan and schedule, and aerobic sessions with their Hevy workouts, in one place; the strength-sport set is ratified and Pilates is deliberately outside it (#408, Q228, Q229).** Code and governance, no migration - Handoff: `closeout.md`.
+- **Pilates and walks stay in the metabolic TRIMP as built, and the question of moving the metabolic lane to Banister's exponential TRIMP was posed as Q230 and since ruled against (#409, #410).** Governance only, nothing built - Handoff: `closeout.md`.
 
 ---
 
