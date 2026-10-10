@@ -1508,7 +1508,7 @@ The current week is deliberately **not** stored here — that is `schedule_item`
 
 **Validated at write, stored verbatim** (`routers/knowledge.py::validate_training_plan`, inside `upsert_knowledge_entry` — the shared write path). Direct ORM construction is unvalidated (the backfill path), as with every other type.
 
-**Readers.** `context_builder._section_training_plan` renders it as its own `## Plan of Record` section directly above the training-phase section, with a STALE badge when the plan predates a passed phase review. It renders **once** — `_section_schedule` is type-filtered (`schedule_item`/`load_context`/`injury`) and ignores it, and no `engine/`, MCP, or frontend surface reads this type. `current_state` lifts the single active row onto `CurrentState.training_plan`.
+**Readers.** `context_builder._section_training_plan` renders it as its own `## Plan of Record` section directly above the training-phase section, with a STALE badge when the plan predates a passed phase review. It renders **once** in the chat context — `_section_schedule` is type-filtered (`schedule_item`/`load_context`/`injury`) and ignores it. Other readers: `GET /engine/plan-of-record` (#319; `macro`, `revised_on`, `revised_by` and the same STALE flag, consumed by the frontend Phase card) and the MCP `get_training_plan` (#408; a read-only formatter over `current_state`'s lift, STALE from the same `plan_of_record_stale`). `current_state` lifts the single active row onto `CurrentState.training_plan`.
 
 ### 034 — user_knowledge_entries.preference `phase_folders` + Hevy routines (not persisted)
 

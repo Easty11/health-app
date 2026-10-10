@@ -3186,6 +3186,30 @@ Raised 9 Oct 2026 (missed-PM catch-up, #407). The brief set `missed_pm.cbti_bloc
 
 ---
 
+## Q228. Should a zero-length or zero-minute aerobic session with no heart rate be listed, filtered at the read-door, or flagged?
+
+Raised 10 Oct 2026 (recent-sessions MCP, #408). `arbitrate` gives a session with no usable interval (stop not after start, or either NULL) `canonical = True` by default, so such a row passes `arbitrated_sessions` and appears as an ordinary line in `get_training_sessions` and `get_recent_sessions` (`… Other Workout: — HR=—/— dist=— cal=— zones=[]`), with `—` for its duration. Pinned by `test_g3_a_zero_minute_row_is_canonical_in_the_door_and_passes_through` on synthetic data. The brief asked what the door does with a 0-minute junk row today and not to filter it here; the answer is that it passes through. Code has not identified which stored row the operator meant (no prod access).
+
+**Trigger.** A zero-minute row distorts something a reader counts or shows, or the next change to `arbitrate` or `arbitrated_sessions`.
+
+**Open design points, for when it fires.** Whether the door should drop a row with no interval and no HR, or only the formatters; what the resolver does with the same row today (an untimed canonical session is surfaced in `uncounted` as `untimed`, never counted); whether a row of this kind carries information (a manual entry with a sport but no times) that dropping would lose; who decides, since which rows count as junk is a data-meaning call and so the operator's.
+
+**State:** OPEN. Not blocking; nothing changed. Related: #408, #309, Q161.
+
+---
+
+## Q229. Should Pilates sessions be excluded from, or down-weighted in, the metabolic load, now that the operator classes Pilates as strength?
+
+Raised 10 Oct 2026 (recent-sessions MCP, #408). The operator records Pilates (Garmin, with heart rate) as strength work and will never log sets for it. Three readers treat it differently today, by code read, not by a production read. (1) `NON_TRAINING_SPORTS` (#322 S1) lists Pilates, so it contributes no felt-load minutes or session tally to the psychological read and never sets a night's `training_end` for CBT-I. (2) The metabolic deposit has no sport exclusion (#322 S2; `load_events_metabolic` must not import the set), so a Pilates session with usable zones deposits TRIMP into the metabolic window. (3) The resolver counts a Pilates session toward a `load_window` or `activity` slot only if a slot's `device_sports` names it. The operator's framing (strength) matches none of the three, and the metabolic deposit is the one that moves a number. Not built; no change proposed here.
+
+**Trigger.** The metabolic load is read against a week with Pilates in it and the operator judges the number wrong, or the next change to #322's sets.
+
+**Open design points, for when it fires.** Exclude Pilates from the metabolic window, or down-weight it (what weight, and from what provenance: #32 forbids an invented constant, and #402 found no grounded fixed value for a strength session either); whether Pilates should leave `NON_TRAINING_SPORTS` or whether the two classifications are meant to differ (it amends #322 S1 or S2, which are ratified); that a change to `load_events` recomputes history and so bears on the series invariance #322 S1 protects (#302); how many stored Pilates sessions are zoned, which only a production read can say. A data-meaning call, so the operator's.
+
+**State:** OPEN. Not blocking; nothing built. Related: #408, #322, #302, #402, Q159.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
