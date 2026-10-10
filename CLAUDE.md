@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Pilates and walks stay in the metabolic TRIMP as built, and the question of moving the metabolic lane to Banister's exponential TRIMP is open for the operator before 16 Nov (#409, Q229 closed, Q230).** Governance only, nothing built - Handoff: `closeout.md`.
+
 - **Two read-only MCP tools put the plan and schedule, and aerobic sessions with their Hevy workouts, in one place; the strength-sport set is ratified and Pilates is deliberately outside it (#408, Q228, Q229).** Code and governance, no migration - Handoff: `closeout.md`.
 
 - **A missed nightly close-out can be completed from the next morning's AM check-in and lands on the previous day's record; the window is yesterday only and lateness is derived (#407, Q226, Q227).** Code and governance, no migration - Handoff: `closeout.md`.
-
-- **Snapshot sleep is Garmin-primary and named by writer, and a freshness read model plus a home load card put an age under every load number; the companion's status line shows a relative age (#405, #406, Q224, Q225).** Code and governance, both repos, no migration - Handoff: `closeout.md`.
 
 ---
 

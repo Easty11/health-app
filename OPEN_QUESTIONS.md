@@ -3198,15 +3198,35 @@ Raised 10 Oct 2026 (recent-sessions MCP, #408). `arbitrate` gives a session with
 
 ---
 
-## Q229. Should Pilates sessions be excluded from, or down-weighted in, the metabolic load, now that the operator classes Pilates as strength?
+## Q230. Should the metabolic lane move from Edwards zone-weighted TRIMP to Banister's exponential TRIMP, before the 16 Nov build ramp?
 
-Raised 10 Oct 2026 (recent-sessions MCP, #408). The operator records Pilates (Garmin, with heart rate) as strength work and will never log sets for it. Three readers treat it differently today, by code read, not by a production read. (1) `NON_TRAINING_SPORTS` (#322 S1) lists Pilates, so it contributes no felt-load minutes or session tally to the psychological read and never sets a night's `training_end` for CBT-I. (2) The metabolic deposit has no sport exclusion (#322 S2; `load_events_metabolic` must not import the set), so a Pilates session with usable zones deposits TRIMP into the metabolic window. (3) The resolver counts a Pilates session toward a `load_window` or `activity` slot only if a slot's `device_sports` names it. The operator's framing (strength) matches none of the three, and the metabolic deposit is the one that moves a number. Not built; no change proposed here.
+Raised 10 Oct 2026 (operator, after #409). The metabolic window weights minutes in zone z by `z` (`EDWARDS_WEIGHTS` 1 to 5, a reasoned prior per #32, unit `trimp_edw_au`, `metab-v1`). The operator's point: those integer weights underweight Z4 (about 20%) and Z5 (about 40%) against Banister's lactate-derived exponential TRIMP, while Z1 to Z3 roughly agree. The question for the operator, before the 16 Nov build ramp (the aerobic base review date, Q212): move the metabolic lane to Banister's exponential TRIMP? That needs a resting HR in force, a formula version bump and a recompute from source (D-B: never a migration).
 
-**Trigger.** The metabolic load is read against a week with Pilates in it and the operator judges the number wrong, or the next change to #322's sets.
+**Terms.** "Banister" in this tree already names the fitness-fatigue rollup (`load_metrics`, `banister-v4`, fitness tau 42 days, metabolic fatigue tau 4 days). That rollup takes the daily TRIMP as its input and is not what is in question. The question is the TRIMP formula that feeds it.
 
-**Open design points, for when it fires.** Exclude Pilates from the metabolic window, or down-weight it (what weight, and from what provenance: #32 forbids an invented constant, and #402 found no grounded fixed value for a strength session either); whether Pilates should leave `NON_TRAINING_SPORTS` or whether the two classifications are meant to differ (it amends #322 S1 or S2, which are ratified); that a change to `load_events` recomputes history and so bears on the series invariance #322 S1 protects (#302); how many stored Pilates sessions are zoned, which only a production read can say. A data-meaning call, so the operator's.
+**The claim, checked (Code, arithmetic only; a scratch computation, not committed).** Per-minute weight `y * a * e^(b*y)`, `y = (HR - rest) / (HRmax - rest)`, evaluated at the zone mid-points (55, 65, 75, 85, 95 percent of HRmax) and scaled so Z1 to Z3 match Edwards in least squares. Over HRmax 185 to 195 and resting HR 45 to 65, with the coefficients as published for men (0.64, 1.92): Edwards underweights Z4 by 13 to 25 percent and Z5 by 27 to 42 percent; at resting HR 55 to 65 that is 18 to 25 and 33 to 42. With the women's coefficients (0.86, 1.67): Z4 by 9 to 21 and Z5 by 21 to 36. Z1 to Z3 stay within about 13 percent either way. So the operator's figures hold in order of magnitude and move with the resting HR assumed. **Not read:** the operator's actual HRmax and resting HR (no production access), and the coefficients were recalled by Code, not re-checked against the paper in this session; verify both before any build. Mid-point evaluation approximates a per-sample computation.
 
-**State:** OPEN. Not blocking; nothing built. Related: #408, #322, #302, #402, Q159.
+**What the tree has for resting HR.**
+- `health_connect_syncs.hr_nadir_bpm` (`nadir-v1`, `hr_nadir.py`): the lowest 30-minute mean inside the night's main sleep period, from `hr_samples`, one writer only, wake-date keyed, NULL with a named reason when overnight coverage is short. It is the only per-night resting rate in the tree and the one #35 and #400 call primary.
+- `health_connect_syncs.resting_heart_rate` is **not** a resting rate: it is the median of all the day's samples, activity included (a BikeErg day read 118). It must not be used.
+- Garmin's daily `RestingHeartRate` record in Health Connect: decided as a secondary (#400), UNSTARTED. Nothing is captured or stored, and nothing would read it.
+- No Polar resting HR is ingested.
+- There is **no "resting HR in force"**. `user_hrmax` is an append-only, operator-set series with dated rows and restatements (#383, #384); nothing is its counterpart for resting HR. A per-session value would have to be derived (for example from the nadir, over some window) or a series created, which would be a schema decision of its own.
+
+**Other inputs a Banister TRIMP needs that the tree does not settle.**
+- *Sex coefficients.* Banister's two coefficient sets differ by sex. The user model carries no sex or age (`sex` appears only in lab-report parsing), and SCHEMA forbids age-predicted HRmax.
+- *Granularity.* The exponential is a per-sample or per-interval quantity. Per-sample HR is stored for Health Connect rows (`hr_samples`); Polar rows carry zone seconds and `hr_avg`/`hr_max`, with zones on Polar's own profile HRmax rather than `user_hrmax` (the parity gap in #384). The transform's own docstring forbids the obvious way out: mixing formulas inside one window's series breaks within-window comparability (INV-2). A single formula over zone seconds means evaluating at zone mid-points; average-HR is a poor stand-in for a non-steady session.
+- *HRmax in force* is operator-managed and restated (177 from 2026-03-01, #384), so a recompute under any HRmax-dependent formula moves with it.
+
+**Cost of moving.** A new `metab-vN` and a new unit (the series is not comparable with `trimp_edw_au`), a full recompute from source, and new rows in `docs/load-constants-provenance.md` (the set-equality drift guard fails otherwise). Fitness, fatigue and form in `banister-v4`, the MCP readiness readout, `routers/series.py` and the ΔLoad indicator all move; history moves with them (#302 series invariance). The middle path, changing the integer weights only, keeps the zone-seconds input and needs no resting HR, but is itself an uncited prior (#32).
+
+**Owed, not produced here: the read-only 90-day projection.** The brief asked for fitness, fatigue and form over the last 90 days under both formulas. It needs the user's `aerobic_sessions` zone seconds, `user_hrmax` and nadir values for that window, and Code has no production access, so no number is offered rather than a synthetic one that would look like evidence. The shape: run the same `banister-v4` rollup functions twice over one daily series, once with the `metab-v1` loads and once with Banister-weighted loads from the same sessions at a stated resting HR, and print daily load, fitness, fatigue and form side by side; read-only, writes nothing. The precedent is `scripts/arbitration_flip_report.py` (a read-only dry run, run in the container per the CLAUDE.md recipe). It is a code PR, so it needs the operator's go-ahead, and it has to run before 16 Nov to inform the decision.
+
+**Trigger.** The 16 Nov 2026 build ramp, or earlier if the projection is wanted first.
+
+**Open design points, for when it fires.** Whether to move at all, or only re-weight the integer zones; which resting-HR source (the nadir over a trailing window, or a series) and who sets it; where the sex coefficient comes from; one formula for every source row and how Polar rows are evaluated; the unit and version names; whether the projection is the gate. A data-meaning call, so the operator's.
+
+**State:** OPEN. Not blocking; nothing built; the operator's decision is wanted before 16 Nov 2026. Related: #409, #32, #302, #305, #322, #384, #400, #35, Q159, Q199, Q212.
 
 ---
 
@@ -6139,5 +6159,19 @@ Raised 5 Oct 2026 (operator, once the history card rendered, #314). **Operator-r
 **Resolution (5 Oct 2026, #379).** The operator adopted Code's lean: same-day correction keeps appending (#317 stands); a derived flag on the history route for zero-length rows, which the card collapses or labels (no schema, no migration, no deletion); the wizard skips the "did the block do its job" review when the open row was entered today and names the row the save will close; and a tests-only pin of the zero-length exclusion in `phase_at` and the open-phase readers. Recorded now; the build is not scheduled and may share one brief with #378.
 
 **State:** `DONE → #379`.
+
+---
+
+## Q229. Should Pilates sessions be excluded from, or down-weighted in, the metabolic load, now that the operator classes Pilates as strength?
+
+Raised 10 Oct 2026 (recent-sessions MCP, #408). The operator records Pilates (Garmin, with heart rate) as strength work and will never log sets for it. Three readers treat it differently today, by code read, not by a production read. (1) `NON_TRAINING_SPORTS` (#322 S1) lists Pilates, so it contributes no felt-load minutes or session tally to the psychological read and never sets a night's `training_end` for CBT-I. (2) The metabolic deposit has no sport exclusion (#322 S2; `load_events_metabolic` must not import the set), so a Pilates session with usable zones deposits TRIMP into the metabolic window. (3) The resolver counts a Pilates session toward a `load_window` or `activity` slot only if a slot's `device_sports` names it. The operator's framing (strength) matches none of the three, and the metabolic deposit is the one that moves a number. Not built; no change proposed here.
+
+**Trigger.** The metabolic load is read against a week with Pilates in it and the operator judges the number wrong, or the next change to #322's sets.
+
+**Open design points, for when it fires.** Exclude Pilates from the metabolic window, or down-weight it (what weight, and from what provenance: #32 forbids an invented constant, and #402 found no grounded fixed value for a strength session either); whether Pilates should leave `NON_TRAINING_SPORTS` or whether the two classifications are meant to differ (it amends #322 S1 or S2, which are ratified); that a change to `load_events` recomputes history and so bears on the series invariance #322 S1 protects (#302); how many stored Pilates sessions are zoned, which only a production read can say. A data-meaning call, so the operator's.
+
+**Ruling (operator, 10 Oct 2026).** Pilates and walks stay in the metabolic TRIMP as built, for consistent treatment of low-zone time across sports. No exclusion, no down-weighting, nothing built. The formula itself is Q230.
+
+**State:** `DONE → #409`.
 
 ---
