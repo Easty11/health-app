@@ -168,3 +168,15 @@ def test_continuity_window_is_seven_wake_days_inclusive(db_session, user):
     _garmin_hrv(db_session, user, TODAY - timedelta(days=7))   # out
     db_session.commit()
     assert sr.hrv_continuity(db_session, user.id, TODAY)["nights"] == 1
+
+
+# ── the freshness block rides the snapshot ───────────────────────────────────────────
+
+def test_snapshot_carries_the_freshness_block(db_session, user):
+    from datetime import datetime, timezone
+    db_session.add(models.HealthConnectSyncEvent(
+        user_id=user.id, synced_at=datetime.now(timezone.utc) - timedelta(hours=14)))
+    db_session.commit()
+    out = _snapshot()
+    assert "Data freshness:" in out
+    assert "Health Connect last delivery: 14 h ago — AMBER, older than 13 h" in out

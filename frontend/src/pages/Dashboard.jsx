@@ -7,6 +7,9 @@
 // AM/PM is NOT a tile. It is the daily touchpoint and the reason the app is opened, so it sits
 // above the grid at full size rather than being buried as one doorway among six.
 //
+// The Metrics tile is gone: the load card at the top IS the doorway to /metrics (its "Metrics" link),
+// so there is still exactly one route to that surface (RouteSurfaces.test).
+//
 // Tiles are plain doorways. None seeds chat context — that path is request-scoped
 // (find_marker -> render_asked_lab_value) and out of scope here (#150 rule 3, #59).
 
@@ -17,6 +20,7 @@ import Tile from '../components/hub/Tile'
 import InterpretationTile from '../components/hub/InterpretationTile'
 import ExposureTile from '../components/hub/ExposureTile'
 import AppointmentsDoorway from '../components/hub/AppointmentsDoorway'
+import LoadCard from '../components/hub/LoadCard'
 import api from '../api'
 
 function CheckInButtons() {
@@ -65,13 +69,13 @@ export default function Dashboard() {
   return (
     <HubLayout title="Pocket EP">
       <div className="max-w-4xl mx-auto px-4 py-5 space-y-5">
+        <LoadCard />
         <CheckInButtons />
         <AppointmentsDoorway />
 
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <Tile to="/recovery" icon="🌙" label="Recovery" detail="HRV, sleep and overnight vitals" />
           <ExposureTile />
-          <Tile to="/metrics" icon="📈" label="Metrics" detail="Training load, form and progression" />
           <Tile to="/labs" icon="🧪" label="Labs" detail="Blood panels and marker history" />
           <InterpretationTile />
           <Tile to="/checkin-history" icon="📅" label="History" detail="Past check-ins" />

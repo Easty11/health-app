@@ -39,6 +39,7 @@ from aerobic_format import format_aerobic_session, format_selfeval   # one aerob
 from garmin_selfeval import selfeval_by_session   # Garmin per-activity RPE/feel for a linked session (Q209)
 from reads.aerobic_reads import arbitrated_sessions   # the canonical read-door (#Q161)
 from reads.recovery_reads import hrv_deviation, representative_source
+from reads.freshness_reads import freshness, freshness_snapshot_lines
 from reads.snapshot_reads import hrv_continuity, hrv_continuity_line, latest_sleep_night, sleep_snapshot_lines
 from engine.training_phase import current_training_phase
 
@@ -755,6 +756,7 @@ def get_readiness_snapshot() -> str:
         )
         _sleep = latest_sleep_night(_db, user_id)
         _continuity = hrv_continuity(_db, user_id, _wake_day)
+        _fresh = freshness(_db, user_id)
     _rep = representative_source(_dev)
 
     checkin_rows = _db_rows(
@@ -795,6 +797,9 @@ def get_readiness_snapshot() -> str:
         lines.append(hrv_continuity_line(_continuity) + "\n")
     else:
         lines.append("Latest biometrics: no sleep or HRV data found.\n")
+
+    lines.extend(freshness_snapshot_lines(_fresh))
+    lines.append("")
 
     if checkin_rows:
         c = checkin_rows[0]

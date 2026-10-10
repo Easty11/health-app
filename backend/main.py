@@ -26,6 +26,7 @@ from routers import mcp_auth as mcp_auth_router
 from routers import labs as labs_router
 from routers import interpretation as interpretation_router
 from routers import series as series_router
+from routers import freshness as freshness_router
 from routers import load as load_router
 from routers import appointments as appointments_router
 from routers import clinical_documents as clinical_documents_router
@@ -104,6 +105,7 @@ app.include_router(mcp_auth_router.router)
 app.include_router(labs_router.router)
 app.include_router(interpretation_router.router)
 app.include_router(series_router.router)
+app.include_router(freshness_router.router)
 app.include_router(load_router.router)
 app.include_router(appointments_router.router)
 app.include_router(clinical_documents_router.router)
