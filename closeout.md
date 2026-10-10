@@ -14,6 +14,7 @@ health-app:
 - `db797ac` 2026-10-10 gov(freshness): record the freshness model and load card (#406), F1/F2 and the five rulings
 - the close-out commit below this file (`chore: session close-out`), on the same governance PR
 - a follow-up `gov(device-gate)` commit on its own governance PR: this file's device-gate lines and the ROADMAP NOW row updated for the operator's device evidence (recorded in `health-connect-app` `#52`)
+- a second follow-up `gov(bundle-check)` commit on its own governance PR: the served-bundle grep (#121) struck from the owed lists and its evidence recorded (run by chat on 10 Oct), and the companion `closeout.md` fix parked for the next companion governance commit
 
 health-connect-app:
 - `201daee` 2026-10-10 feat(sync): the "Last background sync" line shows a relative age, amber past 13 h
@@ -37,12 +38,13 @@ Nothing is decided and uncommitted.
 
 **State.** All three PRs are merged and the backend is deployed on `ed1764e` (both services SUCCESS). Verified live: the real `get_readiness_snapshot` prints sleep labelled `Garmin`, continuity `7/7 nights (garmin 7)` where it read 0/7, and the new `Data freshness` block (Health Connect delivery not amber; four stale writers named: Samsung Health heart rate, Samsung Health sleep, the Samsung scraper, unattributed steps). Suites: backend 3109 passed, 3 skipped (baseline 3070 / 3); frontend 47 files / 409 tests (baseline 45 / 390). The companion sim `npm run test:sync-age` passes at stamps 1 h, 14 h and 3 days.
 
-**Single clearest next action.** The operator's two small checks, then the next open v1 leg: (1) the served-bundle grep of the live frontend (#121), which Code could not run because the egress policy refused that domain: the bundle should carry `Load summary`, `Data age unavailable` and `fatigue rising`; (2) the **amber** "Last background sync" line, which needs a last background run older than 13 h to render. On 10 Oct the operator saw the line on a device as a relative age with the absolute time secondary (`health-connect-app` `#52`), so the rendering is otherwise observed; amber is the part still unobserved. Neither blocks anything.
+**Single clearest next action.** Nothing blocks: go to the next open v1 leg (the reconcile leg of Walk in, or a Loop item). The one device observation left is the **amber** "Last background sync" line, which needs a last background run older than 13 h to render; it will show on its own the next time background sync stops, which is when it matters, so there is no action now. On 10 Oct the operator saw the line on a device as a relative age with the absolute time secondary (`health-connect-app` `#52`); amber is the part still unobserved. The served-bundle grep (#121) is DONE (see the next list).
 
 **Operator actions owed.**
-- The two checks above (the second narrowed to the amber paint; see the next-action paragraph).
+- The **amber** paint: no action now; it shows on its own at the next real silence.
 - On the companion side (recorded there, listed here so it is not lost): the registration-once logcat check, which bears on `Q25`'s lost-chain candidate.
-- A decision on whether to open the egress policy to the app's own frontend domain, so that Code can run the #121 grep itself (the recipe is in the Environment network settings).
+- A decision on whether to open the egress policy to the app's own frontend domain, so that Code can run the #121 grep itself in a future session (chat ran it this time, from outside the block; the recipe is in the Environment network settings).
+- **Owed by Code, not the operator:** fold the one-line fix to the companion `closeout.md` (its "Things the next reader should know" bullet saying health-app's ROADMAP row and `closeout.md` "still list this repo's earlier device gate as owed", which health-app never did) into the NEXT companion governance commit. No standalone PR (operator, 10 Oct).
 - Optional, not blocking: a ruling on a label for form (cut-points were deliberately not invented; F1).
 
 **Things the next reader should know.**
@@ -53,6 +55,7 @@ Nothing is decided and uncommitted.
 - The MCP data session drops on every backend redeploy ("session expired" until it reconnects); a retry after a minute works.
 - `reads/freshness_reads.py` is on the read-door drift guard's allow-list with a reason; a new direct toucher of `aerobic_sessions` fails that test.
 - **Device evidence, 10 Oct (relayed, Unverified by Code; recorded as `health-connect-app` `#52`):** a build from companion master `d2d42b8` installed over the existing app showed the relative-age status line with the absolute time secondary, with no permission prompt, and the accessibility service stayed ON (added to companion `Q24`). The amber rendering was not reported, so it is recorded as unobserved, not as met.
+- **Frontend bundle (#121) is DONE, evidence relayed (Unverified by Code; chat ran it 10 Oct from outside the egress block):** the live bundle `assets/index-CEVXB3bP.js` contains `Load summary`, `Data age unavailable` and `fatigue rising`, one hit each. It supersedes the OWED clause in the locked `DECISIONS_LOG` #406 Status line; the ROADMAP row records the same. Not claimed: that the bundle is the one built from `ed1764e` (the file name is the only identity relayed).
 - Real health values are kept out of the repo: the live checks above are described by label and count only (public repo, guard 2).
 
 **What was NOT touched (named so absence does not read as finished).**
@@ -60,6 +63,7 @@ Nothing is decided and uncommitted.
 - **The cause of the 8-9 Oct background silence** (companion Q25): still unknown. Only its visibility is fixed; the discriminators (`am get-standby-bucket`, `dumpsys jobscheduler`, the battery setting) have not been taken. The next silence will now show on the phone and on the home card.
 - **The Samsung scraper** (companion Q24): not fixed, by instruction (no live device). Its silence is now an amber `STALE` line; the re-verification when the ring returns is still owed.
 - **Everything in the medical-protocol and ingest lanes:** the ingest and dedupe lane (Q217-Q219), the marker exposure (#367, Q206), the source hierarchy (Q201, Q203), the Polar re-zoning (Q198), the HC sync reliability lane (Q159, Q208, Q214), the MCP OAuth gates G4 and G5 (#404, Q222, Q223), the clinical-documents upload UI (Q221).
+- **Named by the operator as still open (chat-side or not started; Code did not touch them):** the brief for the schedule tool and the merged recent-sessions tool (to be written when the operator says); the unattributed-steps follow-up; removing the 65 PDFs from the project; the repo-visibility decision.
 - **Out of scope by the brief:** the schedule MCP tool and the merged recent-sessions tool (a separate brief to follow), a label for form, and any `load_metrics` maths.
 - **Pattern to say out loud:** the last three sessions have gone to infrastructure around the product (the document store, connector persistence, and now data-age visibility), not to an open v1 leg. The next session should go to the reconcile leg or a Loop item.
 
