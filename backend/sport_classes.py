@@ -35,16 +35,19 @@ def is_non_training(sport_name: Optional[str]) -> bool:
     return sport_name is not None and sport_name.lower() in NON_TRAINING_SPORTS_LOWER
 
 
-# ── STRENGTH_SPORTS — a device session's own claim to be strength training (UNRATIFIED) ──────
+# ── STRENGTH_SPORTS — a device session's own claim to be strength training (RATIFIED) ───────
 # Consumer: `mcp_server.get_recent_sessions`, which marks a canonical strength session with no
 # matching Hevy workout "HR only". Nothing else reads it. No mirror/overlap rule uses a sport
 # (`overlaps_workout` is time-only), and no earlier reader needed to ask "is this device row
-# strength?", so no ratified set exists: this one is the strength names the writers actually
-# emit - Polar Flow id 15 ("Strength training", import_polar.SPORT_NAMES) and Health Connect types
-# 70 and 81 (`sport_name_for`: "Strength Training", "Weightlifting"). Same matching rule as the
-# ratified set above (Q164: exact on the raw device string, case-insensitive, no fuzzy match).
-# It decides only a label on a line; no count, quota or load reads it. Held for operator
-# ratification before it is relied on.
+# strength?". Ratified by the operator on 10 Oct 2026 (#364): the strength names the writers
+# actually emit - Polar Flow id 15 ("Strength training", import_polar.SPORT_NAMES) and Health
+# Connect types 70 and 81 (`sport_name_for`: "Strength Training", "Weightlifting"). Same matching
+# rule as the ratified set above (Q164: exact on the raw device string, case-insensitive, no
+# fuzzy match). It decides only a label on a line; no count, quota or load reads it.
+#
+# PILATES IS DELIBERATELY ABSENT. The operator records Pilates (Garmin, with HR) as strength work
+# but will never log sets for it, so it must not carry "HR only": that mark reads as missing data,
+# and for Pilates nothing is missing. It renders as a plain session line. Do not add it here.
 STRENGTH_SPORTS = frozenset({"Strength training", "Weightlifting"})
 STRENGTH_SPORTS_LOWER = frozenset(s.lower() for s in STRENGTH_SPORTS)
 

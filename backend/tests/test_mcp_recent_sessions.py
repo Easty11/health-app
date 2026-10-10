@@ -203,6 +203,19 @@ def test_strength_names_are_the_exact_device_strings():
         assert not is_strength_sport(s)
 
 
+def test_pilates_is_deliberately_not_strength_and_carries_no_hr_only_mark(db_session, call):
+    """Ruled 10 Oct 2026: the operator logs Pilates as strength work but never logs sets, so "HR only"
+    would read as missing data. A Pilates session with no Hevy workout is a plain line."""
+    for name in ("Pilates", "pilates", "PILATES"):
+        assert not is_strength_sport(name)
+    u, _ = call()
+    _aero(db_session, u.id, "pil", start=D(8, 0), stop=D(8, 1), sport="Pilates", source="health_connect")
+    _, out = call(days=14)
+    line = next(l for l in _body(out) if "Pilates" in l)
+    assert line.startswith("2026-10-08 [health_connect] Pilates: 60 min")
+    assert "HR only" not in out and "Hevy only" not in out
+
+
 # --------------------------------------------------------------------------- #
 # The other two tools are unchanged apart from a docstring pointer             #
 # --------------------------------------------------------------------------- #
