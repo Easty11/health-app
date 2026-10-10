@@ -42,6 +42,9 @@ from reads.recovery_reads import hrv_deviation, representative_source
 from reads.freshness_reads import freshness, freshness_snapshot_lines
 from reads.snapshot_reads import hrv_continuity, hrv_continuity_line, latest_sleep_night, sleep_snapshot_lines
 from engine.training_phase import current_training_phase
+from context_builder import plan_of_record_stale   # the ONE plan-of-record STALE definition (#312/#319)
+from current_state import current_state as _current_state   # plan, phase, phase_folders, week plan: one read
+from load_metrics import _local_day   # the single operator-local-day source
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
@@ -1358,6 +1361,187 @@ def get_appointment_brief(key: str) -> str:
     if brief is None:
         return f"No active appointment with key {key!r}."
     return json.dumps(brief, indent=1, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# Tool — the training plan and schedule (read-only formatter over `current_state`)
+#
+# Nothing here derives or recomputes: the plan of record, the open phase, `phase_folders`, the
+# resolver position and the week plan are `current_state`'s lifts of the stores the in-app coach
+# already reads (`plan_week` is the SAME function behind `GET /engine/week-plan`; `done` is
+# `resolve()`'s, `scheduled`/`quota`/`excess`/`unplaced` are `week_plan.consistency_rows`'). The
+# STALE flag is `context_builder.plan_of_record_stale`. No verdicts: the stores' contents only.
+# ---------------------------------------------------------------------------
+
+_SCHEDULE_DAY_ABBR = {
+    "monday": "Mon", "tuesday": "Tue", "wednesday": "Wed", "thursday": "Thu",
+    "friday": "Fri", "saturday": "Sat", "sunday": "Sun",
+}
+
+
+def _plan_time(v: dict) -> str | None:
+    """A schedule item's time as stored: the `time_range` text when present, else `time_of_day`
+    (`unknown` is a stored value, not an absence, but it says nothing, so it is dropped)."""
+    tod = v.get("time_of_day")
+    tod = None if tod in (None, "unknown") else tod
+    rng = v.get("time_range")
+    return " ".join(x for x in (tod, rng) if x) or None
+
+
+def _plan_satisfies(sat) -> str | None:
+    if isinstance(sat, dict) and sat:
+        return ", ".join(f"{k}:{x}" for k, x in sat.items())
+    return None
+
+
+def _plan_slot(slot: dict) -> str:
+    """One raw microcycle slot as stored: kind:key, dose, minutes, the aerobic-lane sports."""
+    kind = next((k for k in ("capacity", "load_window", "activity") if k in slot), "?")
+    parts = [f"{kind}:{slot.get(kind)}", f"{slot.get('sessions_per_cycle')} per cycle",
+             f"{slot.get('minutes')} min"]
+    if slot.get("device_sports"):
+        parts.append("sports " + "/".join(str(x) for x in slot["device_sports"]))
+    if slot.get("recorded_via"):
+        parts.append(f"recorded via {slot['recorded_via']}")
+    return ", ".join(parts)
+
+
+def _format_plan_of_record(plan: dict | None, phase: dict | None) -> list[str]:
+    macro = plan.get("macro") if isinstance(plan, dict) else None
+    if not isinstance(macro, str) or not macro.strip():
+        return []
+    meta = [f"revised {plan['revised_on']}" if plan.get("revised_on") else None,
+            f"by {plan['revised_by']}" if plan.get("revised_by") else None]
+    lines = ["== Plan of record ==", "Last " + (", ".join(m for m in meta if m) or "revision not recorded")]
+    if plan_of_record_stale(plan, phase):
+        lines.append(f"STALE: last revised {plan.get('revised_on')}, before the open phase's review date "
+                     f"{phase.get('review_on')}, which has passed.")
+    lines += ["", macro.strip()]
+    return lines
+
+
+def _format_plan_phase(phase: dict | None, phase_folders, window: dict | None) -> list[str]:
+    if not phase:
+        return ["== Current phase ==", "No open training phase (baseline)."]
+    lines = ["== Current phase ==", f"{phase.get('label')} (entered {phase.get('entered_on')})"]
+    if phase.get("intent"):
+        lines.append(f"  intent: {phase['intent']}")
+    if phase.get("review_on"):
+        lines.append(f"  review on: {phase['review_on']}" + (" - review due" if phase.get("review_due") else ""))
+    lines.append(f"  probe posture: {phase.get('probe_posture') or 'not set'}")
+    caps = phase.get("capacities")
+    lines.append("  capacities: all live (no phase restriction)" if caps is None
+                 else "  capacities: " + (", ".join(caps) if caps else "none"))
+    if isinstance(phase_folders, dict):
+        folder = phase_folders.get(phase.get("label"))
+        lines.append(f"  Hevy folder (phase_folders): {folder}" if folder is not None
+                     else "  Hevy folder (phase_folders): none declared for this phase")
+
+    micro = phase.get("microcycle")
+    if isinstance(micro, dict) and isinstance(micro.get("sub_cycles"), list):
+        subs = micro["sub_cycles"]
+        today_label = window.get("label") if isinstance(window, dict) and window.get("source") == "phase" else None
+        lines.append(f"  microcycle: {micro.get('sub_cycle_days')}-day sub-cycles, {len(subs)} in rotation")
+        for i, sc in enumerate(subs, 1):
+            sc = sc if isinstance(sc, dict) else {}
+            label = sc.get("label") or "(unlabelled)"
+            here = " <- today" if today_label is not None and sc.get("label") == today_label else ""
+            lines.append(f"    {i}/{len(subs)} {label}{here}")
+            for slot in sc.get("slots") or []:
+                lines.append(f"      - {_plan_slot(slot)}")
+    if isinstance(window, dict) and window.get("source") == "phase":
+        lines.append(f"  today is in leg {window.get('label')} ({window.get('start_date')} -> {window.get('end_date')})")
+    return lines
+
+
+def _format_plan_week(week: dict) -> list[str]:
+    win = week.get("window") or {}
+    lines = ["== This week ==",
+             f"Window {win.get('label')}: {win.get('start_date')} -> {win.get('end_date')} (source {win.get('source')})"]
+    for day in week.get("days") or []:
+        flags = [] if day.get("available") else ["UNAVAILABLE (a hard item blocks training)"]
+        if day.get("caution"):
+            flags.append(f"caution: {day['caution']}")
+        lines.append(f"{(day.get('weekday') or '').capitalize()} {day.get('date')}"
+                     + (f" - {'; '.join(flags)}" if flags else ""))
+        for h in day.get("hard") or []:
+            bits = [h.get("expected_load"), "same-day training OK" if h.get("same_day_training") else None,
+                    " ".join(x for x in (h.get("time_of_day"), h.get("time_range")) if x) or None]
+            lines.append(f"  hard: {h.get('activity')}" + (f" ({', '.join(b for b in bits if b)})" if any(bits) else ""))
+        for f in day.get("flexible") or []:
+            sat = _plan_satisfies(f.get("satisfies"))
+            lines.append(f"  flexible (candidate day, {f.get('pool')}/wk across its days): {f.get('activity')}"
+                         + (f" [{sat}]" if sat else ""))
+        for a in day.get("actual") or []:
+            lines.append(f"  counted: {a.get('title') or a.get('sport_name') or a.get('ref')} -> {a.get('kind')}:{a.get('key')}")
+    keys = week.get("keys") or []
+    if keys:
+        lines.append("Per slot key (scheduled = schedule items linked to it; done = the resolver's count):")
+        for k in keys:
+            lines.append(f"  {k['kind']}:{k['key']} - scheduled {k['scheduled']} / quota {k['quota']} / done {k['done']}"
+                         f" - excess {k['excess']}, unplaced {k['unplaced']}")
+    lines.append("needs_planning: " + ("yes (a quota is declared and every slot key has scheduled 0)"
+                                       if week.get("needs_planning") else "no"))
+    if week.get("unlinked_soft"):
+        lines.append("Flexible items linked to no slot (listed, never counted): " + ", ".join(week["unlinked_soft"]))
+    for n in week.get("one_off_notes") or []:
+        lines.append(f"One-off note: {n.get('description')}" + (f" (expires {n['expires_at']})" if n.get("expires_at") else ""))
+    return lines
+
+
+def _format_plan_schedule_items(values: list[dict]) -> list[str]:
+    if not values:
+        return []
+    lines = ["== Schedule items =="]
+    for v in sorted(values, key=lambda x: str(x.get("activity") or "").casefold()):
+        when = []
+        span = v.get("event_date")
+        if span:
+            when.append(f"on {span}" + (f" -> {v['event_end']}" if v.get("event_end") else ""))
+        if v.get("days"):
+            when.append("/".join(_SCHEDULE_DAY_ABBR.get(str(d).lower(), str(d)) for d in v["days"]))
+        if v.get("sessions_per_week") is not None:
+            when.append(f"{v['sessions_per_week']}/wk")
+        parts = [str(v.get("activity")), ", ".join(when) or "no days stored",
+                 "hard" if v.get("hard") else "flexible", _plan_time(v),
+                 f"expected_load {v['expected_load']}" if v.get("expected_load") else None,
+                 f"season end {v['season_end']}" if v.get("season_end") else None,
+                 f"satisfies {_plan_satisfies(v.get('satisfies'))}" if _plan_satisfies(v.get("satisfies")) else None]
+        lines.append("- " + " · ".join(p for p in parts if p))
+    return lines
+
+
+def _format_training_plan(state) -> str:
+    """The plan, phase, week and schedule as text, from one `CurrentState`. Pure. Each section
+    appears only if its store holds something; the phase section always states the baseline."""
+    pos = state.resolver_position if isinstance(state.resolver_position, dict) else None
+    window = pos.get("window") if pos else None
+    sections = [
+        _format_plan_of_record(state.training_plan, state.training_phase),
+        _format_plan_phase(state.training_phase, state.phase_folders, window),
+    ]
+    if state.week_plan is not None:
+        sections.append(_format_plan_week(state.week_plan))
+    elif window:
+        # The resolver found a window but plan_week failed (current_state logged it and kept
+        # going). Say so: a silent omission would read as "no week".
+        sections.append(["== This week ==", "The week plan could not be read (see the server log)."])
+    sections.append(_format_plan_schedule_items(
+        [e.value or {} for e in state.knowledge_entries if getattr(e, "type", None) == "schedule_item"]))
+    return "\n\n".join("\n".join(s) for s in sections if s)
+
+
+@mcp.tool()
+@_stamped
+def get_training_plan() -> str:
+    """Get the training plan and schedule: the plan of record (macro plan, with its STALE flag),
+    the open phase (intent, review date, posture, capacities, microcycle and today's leg, Hevy
+    folder), this week from the week planner (hard items by day, flexible items on their
+    candidate days, scheduled/quota/done per slot key, needs_planning, day-after-heavy cautions),
+    and the active schedule items. States what the stores hold; no verdicts."""
+    user_id = _current_user_id()
+    with SessionLocal() as _db:
+        return _format_training_plan(_current_state(user_id, _db, _local_day()))
 
 
 # ---------------------------------------------------------------------------
