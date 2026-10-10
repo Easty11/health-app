@@ -289,3 +289,12 @@ def freshness_snapshot_lines(f: dict[str, Any]) -> list[str]:
     if info:
         lines.append("  Irregular streams, information only: " + "; ".join(info))
     return lines
+
+
+def freshness_footer_line(f: dict[str, Any]) -> str:
+    """One line for a session listing: when Health Connect last delivered and when Polar last
+    produced a session, so a stale window is visible beside the sessions it may be missing. The
+    same pipes, the same ages and the same AMBER threshold as `freshness_snapshot_lines`."""
+    hc, polar = f["pipes"]["health_connect"], f["pipes"]["polar"]
+    flag = f" (AMBER, older than {hc['amber_after_hours']:.0f} h)" if hc["status"] == "amber" else ""
+    return f"Health Connect delivered {_ago(hc['age_hours'])}{flag} · Polar {_ago(polar['age_hours'])}"
