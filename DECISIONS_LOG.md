@@ -13955,3 +13955,20 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 **Not verified here.** Anything in production: Code has no prod access from the build environment, so the doubled 2 Oct session was not re-read, and no real session list was rendered. How often the Hevy sync runs. How many stored Pilates sessions are zoned (Q229).
 
 **Do not revisit unless.** A tool is wanted that writes or edits the plan, schedule or phase (a write path, its own decision); `plan_week` gains a horizon (then `days_ahead` can be offered); the strength-sport set needs another device name; or `overlaps_workout` changes (this tool follows it by construction).
+
+---
+
+### 409. Pilates and walks stay in the metabolic TRIMP as built: one zone-weighting for every sport, no sport exclusion and no down-weighting (resolves Q229)
+
+**Decision.** Operator ruling, 10 Oct 2026. The metabolic deposit (`metab-v1`, `load_events_metabolic`) is unchanged: any canonical session with usable zones deposits an Edwards zone-weighted TRIMP, whatever its sport, and Pilates and walks are not excluded from it or weighted down. The reason is consistency: low-zone time is treated the same way across sports. This restates #322 S2 ("no sport exclusion from the metabolic window; zone weighting discriminates") for the case Q229 raised, and takes neither alternative Q229 listed (exclude Pilates, or down-weight it).
+- **Nothing is built and nothing is recomputed.** `load_events`, `FORMULA_VERSION_METABOLIC` and the rollup are untouched.
+- **`NON_TRAINING_SPORTS` (#322 S1) is not ruled on and not changed.** It answers a different question for different readers (the felt-load read and CBT-I `training_end` ask "was this a training session?"); the metabolic deposit asks how much heart-rate stress a session carried. This entry records that the two sets differ on Pilates and leaves them as they are.
+- **The formula itself is a separate question.** Whether the metabolic lane should keep the Edwards integer weights at all is Q230. Whatever that decides, the principle ruled here (one treatment of a zone across sports) carries into the formula that results.
+
+**Rationale.** A sport exclusion or a sport-specific weight would make the same heart-rate stress count differently depending on its label, and the label is the writer's, not the physiology's. #322 S2 reached the same conclusion for the metabolic window on 6 Oct; Q229 asked whether the operator's own classification of Pilates as strength work changes that, and the answer is no.
+
+**Status.** DONE 10 Oct 2026. Governance only: no code, no schema, no recompute. Q229 moves below `## CLOSED` as `DONE → #409` in the same commit. Opens Q230.
+
+**How you know.** The operator's ruling in chat. Code read, not run against production: `load_events_metabolic.py` (the Edwards weights are applied to zone seconds with no sport input; the module docstring and the provenance row for `EDWARDS_WEIGHTS`), #322 S2, and `tests/test_non_training_sports.py::test_metabolic_transform_does_not_import_it`, which fails if the transform ever imports the sport sets. How many stored Pilates sessions are zoned was not read.
+
+**Do not revisit unless.** The operator reclassifies Pilates or walks as something the metabolic window should not carry, or Q230 changes the formula in a way that makes one zone's treatment depend on the sport.

@@ -1,4 +1,4 @@
-# Close-out — plan-sessions-mcp: the plan/schedule and recent-sessions MCP tools as read-only formatters; the strength-sport set ratified, Pilates outside it (#408; Q228 and Q229 opened)
+# Close-out — plan-sessions-mcp: the plan/schedule and recent-sessions MCP tools (#408), then the TRIMP rulings: Pilates and walks stay in the metabolic TRIMP (#409, Q229 closed) and the Edwards-versus-Banister question is open for the operator (Q230)
 
 ## Real commits this session
 
@@ -11,7 +11,9 @@
 - `1d30b2e` 2026-10-10 test(mcp): one-workout-one-session fixture uses two distinct canonical bouts
 - `a207db4` 2026-10-10 test(mcp): pin the ratified strength-sport set, Pilates deliberately excluded
 - `6022ec0` 2026-10-10 Merge pull request #364 (PR 2, `get_recent_sessions`)
-- the commit of this close-out (`gov(plan-sessions-mcp)`), on the same harness-assigned branch restarted from `6022ec0`, which carries this file
+- `7a73be0` 2026-10-10 gov(plan-sessions-mcp): record the two MCP read tools (#408), open Q228 and Q229, close out
+- `b1ef061` 2026-10-10 Merge pull request #365 (that close-out)
+- the commit of the second governance pass (#409, Q230), on the same harness-assigned branch restarted from `b1ef061`, which carries this file
 
 Also in that range but not this session's: `314fa9a`, `7cb0f62`, `d7d9c0d` and `129a5d4` are the other session's missed-PM catch-up (PR #357), which landed between my PRs. Its #407, Q226 and Q227 are why this session's numbers are #408, Q228 and Q229.
 
@@ -19,7 +21,9 @@ Both code PRs opened ready for review, not draft. #363 self-merged on green (a c
 
 ## Pending-queue reconciliation
 
-No `PENDING` items were carried in; the chat brief was the only input, and the operator's ruling arrived as a second message. Its LOG block is written, in this close-out's commit: `DECISIONS_LOG` #408 (the two tools as read-only formatters over named reads; the shared overlap predicate as the Hevy-to-session link; the ratified strength-sport set and the Pilates exclusion with its reason; the week-renders-whenever-`plan_week`-returns-one acceptance; `days_ahead` omitted; the Hevy-sync freshness note), `OPEN_QUESTIONS` Q228 (the zero-minute row) and Q229 (Pilates in the metabolic load, no build), and the SCHEMA §033 reader-list amendment. Until that PR merges these are provisional; the code they describe is already on master.
+No `PENDING` items were carried in; the chat brief was the only input, and the operator's ruling arrived as a second message. Its LOG block is written, in this close-out's commit: `DECISIONS_LOG` #408 (the two tools as read-only formatters over named reads; the shared overlap predicate as the Hevy-to-session link; the ratified strength-sport set and the Pilates exclusion with its reason; the week-renders-whenever-`plan_week`-returns-one acceptance; `days_ahead` omitted; the Hevy-sync freshness note), `OPEN_QUESTIONS` Q228 (the zero-minute row) and Q229 (Pilates in the metabolic load, no build), and the SCHEMA §033 reader-list amendment. That PR merged as #365 (`b1ef061`), so they are committed.
+
+**Second operator message (TRIMP, governance only, no build).** Reconciled: the Q229 ruling is `DECISIONS_LOG` #409 and Q229 moved below `## CLOSED` as `DONE → #409`; the new question is Q230 (Edwards versus Banister TRIMP). **One item was not delivered and is stated plainly:** the brief asked for a read-only 90-day projection of fitness, fatigue and form under both formulas. Code has no production access, and a synthetic projection would read as evidence it is not, so Q230 specifies the projection and marks it owed as a read-only script (precedent `scripts/arbitration_flip_report.py`) needing the operator's go-ahead. Until the second pass merges, #409 and Q230 are provisional.
 
 ## Cold-resume handoff
 
@@ -29,10 +33,12 @@ No `PENDING` items were carried in; the chat brief was the only input, and the o
 
 **Single clearest next action.** The operator (Luke) calls both tools from the connected MCP client after the deploy settles (`railway deployment list` for SUCCESS on `health-app-backend`, #116) and reads one real answer from each: `get_training_plan` should show the live plan of record and the open phase's week; `get_recent_sessions(days=14)` should show the 2 Oct gym session as one Polar line with the Hevy sets under it, not two lines. The deploy is backend only; there is no frontend change, so no bundle grep applies.
 
-**Operator actions owed.** The check above. Rulings only if wanted: Q228 (whether a zero-minute row should be filtered, and where) and Q229 (Pilates in the metabolic load). Neither blocks anything.
+**Operator actions owed.** The check above. **Q230, before the 16 Nov build ramp:** decide whether the metabolic lane moves from Edwards to Banister's exponential TRIMP, and say whether Code should build the read-only 90-day projection script first (the question lists what it needs and why Code cannot run it). Rulings only if wanted: Q228 (whether a zero-minute row should be filtered, and where).
 
 **Things the next reader should know.**
-- **The strength-sport set is `{"Strength training", "Weightlifting"}` and Pilates is deliberately not in it.** The operator logs Pilates as strength work but never logs sets, so an `HR only` mark would read as missing data. The reason is in `sport_classes.py` and a test fails if Pilates is added. This does not change `NON_TRAINING_SPORTS` (#322), which still lists Pilates; Q229 is where that tension lives.
+- **The strength-sport set is `{"Strength training", "Weightlifting"}` and Pilates is deliberately not in it.** The operator logs Pilates as strength work but never logs sets, so an `HR only` mark would read as missing data. The reason is in `sport_classes.py` and a test fails if Pilates is added. This does not change `NON_TRAINING_SPORTS` (#322), which still lists Pilates; Q229 raised that tension and was closed by #409: the metabolic TRIMP keeps Pilates, and the two sets stay different.
+- **TRIMP findings (Q230), verified in the tree, not in production.** `health_connect_syncs.resting_heart_rate` is the median of the whole day's samples, not a resting rate (a BikeErg day read 118); the only per-night resting rate is the sleep nadir (`hr_nadir_bpm`, `nadir-v1`); Garmin's daily `RestingHeartRate` is decided (#400) and unbuilt; nothing is a "resting HR in force" the way `user_hrmax` is for HRmax. The user model has no sex or age, which Banister's coefficients need. The operator's "Edwards underweights Z4 about 20% and Z5 about 40%" reproduces in order of magnitude (Z4 13-25%, Z5 27-42% with the male coefficients, smaller with the female, and moving with the resting HR assumed); the coefficients were recalled, not re-checked against the paper. "Banister" in this tree means the fitness-fatigue rollup (`banister-v4`), which takes the TRIMP as input; the question is the TRIMP formula, not the rollup.
+- **Pilates and walks stay in the metabolic TRIMP as built (#409).** `NON_TRAINING_SPORTS` still lists Pilates and was not ruled on; the two sets answer different questions.
 - **The link is the shared `overlaps_workout` predicate, applied to every canonical session, Polar included.** The `hevy_mirror` mark is still Health Connect only. No overlap rule was written. Each workout and each session is used once, greedy by overlap fraction.
 - **`get_recent_sessions` reads `hevy_workouts`, not the live Hevy API** that `get_hevy_workouts` calls, so it is only as fresh as the Hevy sync; its footer covers Health Connect and Polar, not Hevy. `hevy_workouts.synced_at` is rewritten on every upsert, so a Hevy pipe in the freshness read is a small follow-up if wanted. Not built.
 - **`days_ahead` is omitted** from `get_training_plan` because `plan_week` has no horizon. It can be offered if `plan_week` gains one.
@@ -55,12 +61,12 @@ No `PENDING` items were carried in; the chat brief was the only input, and the o
 **What was NOT touched (named so absence does not read as finished).**
 - **Every v1 test's other open legs:** the reconcile leg of Walk in (NEXT, #386) and every other Loop item. This session made existing data readable from chat; it did not add a recommendation, a log leg or any new capture.
 - **Write paths for the plan, schedule and phase**, which the brief excluded: chat can now read them but still cannot edit them, and the phase change remains the form's single atomic write (#317).
-- **The metabolic load and `load_events`** (Q229 asks about Pilates there; nothing was built), **arbitration and the mirror rules** (the zero-minute row passes the door today, Q228), and the resolver.
+- **The metabolic load and `load_events`** (#409 and Q230 are rulings and a question about them; nothing was built or recomputed), **arbitration and the mirror rules** (the zero-minute row passes the door today, Q228), and the resolver.
 - **The medical-protocol and fitness lanes:** the ingest and dedupe lane, the marker exposure (#367, Q206), Source hierarchy (Q201, Q203), the Polar re-zoning (Q198), HC sync reliability (Q159, Q208, Q214), the Garmin self-evaluation read, the clinical-documents follow-ups (Q220, Q221), and the MCP OAuth owed items (G4 and G5 from #404; Q222, Q223).
 - **Decided and unbuilt from earlier sessions:** the companion RHR capture (#400), the soft exclusion and window-absence reconciliation (#399, migration HOLD), the HRV, SpO2, respiratory and distance AEST re-bucketing.
 - **Pattern to say out loud:** the last four sessions went to infrastructure and visibility around the product (the document store, connector persistence, data-age visibility, now the read tools), with one Loop habit (#407) between them. This session is again read-side plumbing for chat. The next session should go to a Walk in reconcile leg or another Loop item that changes what the operator does, unless the operator wants more read surface.
 
-**Open questions by status.** 129 OPEN and 7 OWED above `## CLOSED` (two OPEN are new from this session: Q228, a zero-minute row passing the door; Q229, Pilates in the metabolic load; the other session added Q226 and Q227).
+**Open questions by status.** 129 OPEN and 7 OWED above `## CLOSED` (new from this session: Q228, a zero-minute row passing the door, and Q230, Edwards versus Banister TRIMP; Q229 was raised and closed → #409; the other session added Q226 and Q227).
 
 **v1-triage of the NOW lanes.**
 - Plan/schedule and recent-sessions MCP tools (#408): **See** (chat can read the real plan and the real week, with the age of the pipes beside the sessions) and **Loop** (the operator reviews the last sessions in one list instead of stitching two).
