@@ -181,16 +181,19 @@ def test_g5_a_brush_of_a_workout_is_not_a_link(db_session, call):
 
 
 def test_one_workout_attaches_to_one_session_only(db_session, call):
+    """Two distinct canonical bouts (disjoint, so arbitration keeps both) each sit inside one long
+    workout. The workout attaches once; the other bout is not left claiming it."""
     u, _ = call()
-    _aero(db_session, u.id, "a", start=GYM_START, stop=GYM_STOP, sport="Strength training")
-    _aero(db_session, u.id, "b", start=D(2, 0, 5), stop=D(2, 1, 30), sport="Strength training", source="polar_flow_export")
-    _hevy(db_session, u.id, "h", D(2, 0, 2), D(2, 1, 33), "S", [_ex("Q", (1, 1))])
+    _aero(db_session, u.id, "a", start=D(2, 0), stop=D(2, 0, 45), sport="Strength training")
+    _aero(db_session, u.id, "b", start=D(2, 0, 50), stop=D(2, 1, 35), sport="Strength training")
+    _hevy(db_session, u.id, "h", D(2, 0), D(2, 1, 35), "S", [_ex("Q", (1, 1))])
     _, out = call(days=14)
     lines = _body(out)
-    assert out.count("  ↳") == 1 and "Hevy only" not in out                        # attached once, not left standing alone
-    heads = [i for i, l in enumerate(lines) if "Strength training" in l]
-    assert len(heads) == 2 and sum(lines[i + 1].startswith("  ↳") for i in heads if i + 1 < len(lines)) == 1
-    assert sum("HR only" in l for l in lines) == 1                                  # the unlinked twin is the HR-only one
+    heads = [i for i, l in enumerate(lines) if "[polar_v4] Strength training" in l]
+    assert len(heads) == 2                                                          # arbitration kept both bouts
+    assert out.count("  ↳") == 1 and "Hevy only" not in out                          # attached once, not left standing alone
+    assert sum(lines[i + 1].startswith("  ↳") for i in heads) == 1
+    assert sum("HR only" in l for l in lines) == 1                                  # the unlinked bout is the HR-only one
 
 
 def test_strength_names_are_the_exact_device_strings():
