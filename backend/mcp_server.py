@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from database import engine, SessionLocal
 from injury_trajectory import evaluate as evaluate_injury_trajectories
 from connectors.hevy import HevyClient
-from hevy_format import format_set
+from hevy_format import format_set, format_workout_compact
 from hevy_routine_format import (  # shared renderers (#314) — one home, also used by context_builder
     format_routine_compact,
     format_routine_full,
@@ -37,9 +37,11 @@ from routers.clinical_documents import document_out as _clinical_document_out, p
 from reads.labs_reads import latest_lab_results
 from aerobic_format import format_aerobic_session, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
 from garmin_selfeval import selfeval_by_session   # Garmin per-activity RPE/feel for a linked session (Q209)
-from reads.aerobic_reads import arbitrated_sessions   # the canonical read-door (#Q161)
+from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
+from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
+from sport_classes import is_strength_sport
 from reads.recovery_reads import hrv_deviation, representative_source
-from reads.freshness_reads import freshness, freshness_snapshot_lines
+from reads.freshness_reads import freshness, freshness_footer_line, freshness_snapshot_lines
 from reads.snapshot_reads import hrv_continuity, hrv_continuity_line, latest_sleep_night, sleep_snapshot_lines
 from engine.training_phase import current_training_phase
 from context_builder import plan_of_record_stale   # the ONE plan-of-record STALE definition (#312/#319)
@@ -586,7 +588,8 @@ def get_cbti_diary(days: int = 42) -> str:
 @_stamped
 def get_training_sessions(days: int = 28) -> str:
     """Get aerobic/cardio sessions from all connected sources (Polar, etc).
-    Returns sport type, duration, average/max HR, distance, calories, HR zones."""
+    Returns sport type, duration, average/max HR, distance, calories, HR zones.
+    For aerobic sessions and Hevy workouts merged into one list, use get_recent_sessions."""
     user_id = _current_user_id()
     since = datetime.now(timezone.utc).date() - timedelta(days=days)
 
@@ -626,7 +629,8 @@ def get_training_sessions(days: int = 28) -> str:
 @_stamped
 async def get_hevy_workouts(days: int = 14) -> str:
     """Get strength training workouts from Hevy. Returns exercises, sets,
-    weights, reps, and estimated 1RM (Epley formula) per movement."""
+    weights, reps, and estimated 1RM (Epley formula) per movement.
+    For Hevy workouts matched to their device recordings in one list, use get_recent_sessions."""
     user_id = _current_user_id()
 
     db: Session = SessionLocal()
@@ -714,6 +718,127 @@ async def get_hevy_workouts(days: int = 14) -> str:
         lines.append("")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Tool — recent sessions, aerobic and Hevy in one list (read-only formatter)
+#
+# Nothing here arbitrates, matches by a rule of its own, or counts. The sessions are
+# `arbitrated_sessions` (canonical only, as `get_training_sessions`); the workouts are
+# `counted_workouts`; a workout is the SAME BOUT as a session when the shared
+# `overlaps_workout` predicate (>= HEVY_MIRROR_OVERLAP_FRACTION of the session's own duration
+# inside one workout; the resolver's `concurrent_strength` guard and the mirror read-door use the
+# same one) says so. That predicate is applied here to every canonical session, Polar included:
+# the mirror MARK is Health Connect only, but the overlap TEST is package-agnostic.
+# ---------------------------------------------------------------------------
+
+def _local_midnight_utc(d: date) -> datetime:
+    return _AS_OF_TZ.localize(datetime.combine(d, datetime.min.time())).astimezone(timezone.utc)
+
+
+def _link_sessions_to_workouts(sessions: list, workouts: list) -> dict[int, object]:
+    """{session.id: workout}: each overlapping (session, workout) pair by descending overlap
+    fraction, a session and a workout each used once. A pair exists iff `overlaps_workout`."""
+    pairs = sorted(
+        ((overlap_fraction(s, [w]), s.id, w.hevy_id, s, w)
+         for s in sessions for w in workouts if overlaps_workout(s, [w])),
+        key=lambda p: (-p[0], p[1], p[2]))
+    used_w: set[str] = set()
+    linked: dict[int, object] = {}
+    for _f, sid, hid, _s, w in pairs:
+        if sid not in linked and hid not in used_w:
+            linked[sid] = w
+            used_w.add(hid)
+    return linked
+
+
+def _hevy_detail(w) -> str:
+    """The attached Hevy line: exercise count, then the shared compact renderer (top sets)."""
+    started = w.start_time
+    if started is not None:
+        started = (started if started.tzinfo else started.replace(tzinfo=timezone.utc)).astimezone(_AS_OF_TZ)
+    n = len((w.raw or {}).get("exercises") or [])
+    return f"  ↳ {n} exercise{'' if n == 1 else 's'} · " + format_workout_compact(
+        w.raw or {}, started.strftime("%H:%M") if started is not None else "")
+
+
+def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, days: int, since: date) -> str:
+    """Newest first: one line per canonical aerobic session (Hevy detail attached under a matched
+    one), `Hevy only` for a counted workout with no session, `HR only` for a strength-named session
+    with no workout, then the freshness footer. Pure."""
+    linked = _link_sessions_to_workouts(sessions, counted)
+    matched = {w.hevy_id for w in linked.values()}
+    items: list[tuple[float, list[str]]] = []
+
+    def _ts_of(dt, day):
+        if dt is not None:
+            return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).timestamp()
+        return _local_midnight_utc(day).timestamp()
+
+    for s in sessions:
+        line = format_aerobic_session(s)
+        if s.id in selfevals:
+            line += format_selfeval(selfevals[s.id])
+        w = linked.get(s.id)
+        if w is None and is_strength_sport(s.sport_name):
+            line += " — HR only (no Hevy workout matches)"
+        items.append((_ts_of(s.start_time, s.session_date), [line] + ([_hevy_detail(w)] if w is not None else [])))
+
+    def _hevy_line(w, note: str) -> list[str]:
+        started = w.start_time
+        day = (started if started.tzinfo else started.replace(tzinfo=timezone.utc)).astimezone(_AS_OF_TZ).date() \
+            if started is not None else None
+        dur = (f"{(w.end_time - w.start_time).total_seconds() / 60:.0f} min"
+               if w.start_time is not None and w.end_time is not None else "—")
+        return [f"{day or 'undated'} [hevy] {w.title or 'Workout'}: {dur} — {note}", _hevy_detail(w)]
+
+    def _in_window(w) -> bool:
+        return w.start_time is not None and _local_day(w.start_time) >= since
+
+    for w in counted:
+        if w.hevy_id not in matched and _in_window(w):
+            items.append((_ts_of(w.start_time, since), _hevy_line(w, "Hevy only")))
+    for w in unadjudicated:
+        if _in_window(w):
+            items.append((_ts_of(w.start_time, since), _hevy_line(w, "Hevy only, unadjudicated duplicate (not counted)")))
+
+    items.sort(key=lambda t: -t[0])
+    out = [f"Recent sessions — last {days} days (from {since})"]
+    if not items:
+        out.append(f"No sessions or Hevy workouts in the last {days} days.")
+    for _ts, lines in items:
+        out.extend(lines)
+    out.append("")
+    out.append(freshness_footer_line(fresh))
+    return "\n".join(out)
+
+
+@mcp.tool()
+@_stamped
+def get_recent_sessions(days: int = 7) -> str:
+    """Get recent training in one list, newest first: each aerobic session from all sources
+    (date, sport, duration, source, HR avg/max, zones, self-evaluation) with the matching Hevy
+    workout's exercises and top sets attached under it; Hevy workouts with no device recording
+    are marked 'Hevy only', strength-named device sessions with no Hevy workout 'HR only'. Ends
+    with how long ago Health Connect and Polar last delivered."""
+    user_id = _current_user_id()
+    since = _local_day() - timedelta(days=days)
+    with SessionLocal() as _db:
+        arbitrated = arbitrated_sessions(user_id, _db, since=since)
+        selfevals = selfeval_by_session(_db, user_id, arbitrated)   # before the canonical filter, as get_training_sessions
+        sessions = [s for s in arbitrated if getattr(s, "canonical", True)]
+        # Candidate fetch, padded a day before the window so a bout started just before it still
+        # links; the formatter applies the in-window cut on the LOCAL day. Partitioned by the
+        # counted-Hevy door.
+        candidates = [
+            w for w in _db.query(models.HevyWorkout)
+            .filter(models.HevyWorkout.user_id == user_id,
+                    models.HevyWorkout.start_time >= _local_midnight_utc(since) - timedelta(days=1))
+            .all()
+        ]
+        counted, unadjudicated = counted_workouts(_db, user_id, candidates)
+        return _format_recent_sessions(
+            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since)
 
 
 # ---------------------------------------------------------------------------
