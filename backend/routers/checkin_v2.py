@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 import pytz
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from sqlalchemy.orm import Session
 
 import models
@@ -310,6 +310,12 @@ class NightlyCloseOutIn(BaseModel):
     # guard is `is not None`, so a null silently leaves the nap exclusion un-firable.
     naps_min: Optional[int] = Field(None, ge=0)
     pm_notes: Optional[str] = None      # free-text; observational, not block-gated
+    # Missed-PM catch-up. Absent (or == today) is the ordinary close-out; yesterday closes out
+    # a night whose PM was never submitted (`submit_pm` enforces the window - yesterday only,
+    # never overwriting a PM already recorded; anything else is a 422). Distinct field name
+    # from `date` on purpose: a field named `date` collides with the datetime.date annotation
+    # (see TodayOut).
+    for_date: Optional[date] = None
 
 
 class DailyRecordOut(BaseModel):
@@ -343,6 +349,24 @@ class DailyRecordOut(BaseModel):
     pm_notes: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def pm_late(self) -> bool:
+        """True iff the PM was submitted on a later Brisbane calendar day than the record's.
+
+        Derived, never stored (no column): `pm_timestamp` is the real submit instant, so
+        lateness is a comparison of its Australia/Brisbane date with `date`. The comparison
+        is in Brisbane, not UTC - a 00:30 AEST submit is still the previous UTC date and
+        would read as on-time if compared in UTC. A naive timestamp (the SQLite test path)
+        is treated as UTC, as `_hc_final_wake` does.
+        """
+        ts = self.pm_timestamp
+        if ts is None:
+            return False
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts.astimezone(AEST).date() > self.date
 
 
 class CBTIContextOut(BaseModel):
@@ -559,6 +583,16 @@ class TodayOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MissedPMOut(BaseModel):
+    """Yesterday's close-out was never submitted: the AM screen offers to complete it.
+
+    `cbti_block_open` is what the catch-up card's nap field gates on, so a blank nap is
+    coerced to 0 (asked, no nap) or left null exactly as NightlyCloseOut does.
+    """
+    date: _dt.date
+    cbti_block_open: bool = False
+
+
 class AMPrefillOut(BaseModel):
     # Current wake-day HRV only (#327). `hrv_state` is the selector's discriminator
     # (value | pair | absent | stale_withheld | config_error); hrv_ms is None unless
@@ -584,6 +618,8 @@ class AMPrefillOut(BaseModel):
     # Editable clock defaults for the diary, gated against the prescription. Empty
     # (and unrendered) unless a block is open. Additive sibling, same as `cbti`.
     diary_prefill: DiaryPrefillOut = Field(default_factory=DiaryPrefillOut)
+    # Yesterday's PM still open, else null. Additive sibling, same as `cbti`.
+    missed_pm: Optional[MissedPMOut] = None
 
 
 # ── helper ─────────────────────────────────────────────────────────────────────
@@ -595,6 +631,31 @@ def _get_or_create(user_id: int, for_date: date, db: Session) -> models.DailyRec
         db.add(record)
         db.flush()
     return record
+
+
+def _missed_pm(user_id: int, today: date, db: Session) -> Optional[MissedPMOut]:
+    """Yesterday's open close-out, or None.
+
+    Offered when (a) yesterday's row has no pm_timestamp (or there is no row), AND (b) the user
+    has at least one daily_record dated on/before yesterday - so a brand-new user is not
+    nagged about a day that predates their first record. Null is "not asked": a skip writes
+    nothing, and the offer reappears until the day passes out of the window.
+    """
+    yesterday = today - timedelta(days=1)
+    row = db.query(models.DailyRecord).filter_by(user_id=user_id, date=yesterday).first()
+    if row is not None and row.pm_timestamp is not None:
+        return None
+    has_history = (
+        db.query(models.DailyRecord.id)
+        .filter(models.DailyRecord.user_id == user_id, models.DailyRecord.date <= yesterday)
+        .first()
+    ) is not None
+    if not has_history:
+        return None
+    return MissedPMOut(
+        date=yesterday,
+        cbti_block_open=_cbti_context(user_id, yesterday, db).block_open,
+    )
 
 
 # Display name for a Health Connect writer package — a LABEL lookup only, never a
@@ -685,6 +746,7 @@ def get_prefill(
         existing=existing,
         cbti=cbti_ctx,
         diary_prefill=diary_prefill,
+        missed_pm=_missed_pm(current_user.id, today, db),
     )
 
 
@@ -750,7 +812,27 @@ def submit_pm(
     db: Session = Depends(get_db),
 ):
     today = _today_aest()
-    record = _get_or_create(current_user.id, today, db)
+    target = today
+    if body.for_date is not None and body.for_date != today:
+        # Missed-PM catch-up. The window is hard-capped at yesterday, server-side: there is
+        # no general backfill. "Today" is always _today_aest().
+        if body.for_date != today - timedelta(days=1):
+            raise HTTPException(
+                status_code=422,
+                detail="for_date must be today or yesterday - older and future days cannot be closed out.",
+            )
+        prior = db.query(models.DailyRecord).filter_by(
+            user_id=current_user.id, date=body.for_date
+        ).first()
+        # Checked before _get_or_create so a refused request creates no row. A missing row is
+        # fine (a missing AM yesterday is legitimate); an existing PM is never overwritten here.
+        if prior is not None and prior.pm_timestamp is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="That day's close-out is already recorded.",
+            )
+        target = body.for_date
+    record = _get_or_create(current_user.id, target, db)
 
     record.pm_timestamp = _now_utc()
     record.today_rating = body.today_rating

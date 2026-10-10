@@ -1,75 +1,59 @@
-# Close-out — freshness-load-card: snapshot sleep is Garmin-primary and named by writer (#405); a freshness read model and a home load card put an age under every load number (#406); the companion's status line shows a relative age (health-connect-app #51); Q224 and Q225 opened
+# Close-out — pm-catchup: a missed nightly close-out is completed from the next morning's AM check-in and lands on the previous day's record (#407; Q226 and Q227 opened); operator check owed
 
 ## Real commits this session
 
-`git log --format="%h %ad %s" --date=short 0939eaf..HEAD` (session opened at health-app master `0939eaf` and health-connect-app master `eed6492`; maxima at open: health-app `DECISIONS_LOG` #404 and `OPEN_QUESTIONS` Q223, companion #50 and Q25):
+`git log --format="%h %ad %s" --date=short 0939eaf..HEAD` (session opened at master `0939eaf`, the brief's design anchor; maxima at open: `DECISIONS_LOG` #404, `OPEN_QUESTIONS` Q223):
 
-health-app:
-- `73a0a89` 2026-10-09 feat(readiness): snapshot sleep is Garmin-primary and named by writer; HRV continuity counts Garmin
-- `2156b71` 2026-10-10 Merge pull request #358 (PR 1)
-- `6d2ea4d` 2026-10-09 feat(freshness): freshness read model, snapshot block and the home load card
-- `f855919` 2026-10-10 fix(freshness): "data as of" is the last Health Connect delivery, not the newest arrival
-- `ed1764e` 2026-10-10 Merge pull request #359 (PR 2)
-- `efa7765` 2026-10-10 gov(freshness): record snapshot sleep as Garmin-primary (#405), open Q224 and Q225
-- `db797ac` 2026-10-10 gov(freshness): record the freshness model and load card (#406), F1/F2 and the five rulings
-- the close-out commit below this file (`chore: session close-out`), on the same governance PR
-- a follow-up `gov(device-gate)` commit on its own governance PR: this file's device-gate lines and the ROADMAP NOW row updated for the operator's device evidence (recorded in `health-connect-app` `#52`)
-- a second follow-up `gov(bundle-check)` commit on its own governance PR: the served-bundle grep (#121) struck from the owed lists and its evidence recorded (run by chat on 10 Oct), and the companion `closeout.md` fix parked for the next companion governance commit
+- `314fa9a` 2026-10-09 feat(checkin): missed-PM catch-up from the AM check-in (pm-catchup)
+- `7cb0f62` 2026-10-09 gov(pm-catchup): record the missed-PM catch-up (#405), open Q224 and Q225, close out
+- the merge commit of master into the branch, which resolved the numbering collision and carries this file
 
-health-connect-app:
-- `201daee` 2026-10-10 feat(sync): the "Last background sync" line shows a relative age, amber past 13 h
-- `845f8c4` 2026-10-10 Merge pull request #70 (PR 3)
-- the companion `gov(...)` and close-out commits, in that repo's own handoff
+PR #357 (ready for review, not draft: `CLAUDE.md` § Merge disposition overrides the harness default). No schema change and no migration, so no hold applies; the PR self-merges on green (`placeholder guard (POSIX)`, `backend tests (pytest)`, and `frontend tests (vitest)`).
 
-PR 1 and PR 2 were merged by Code on green. PR 2 was **held** for the operator's ruling (it carried data-meaning defaults the brief had not ratified, per the Merge disposition) and merged only after the five rulings of 10 Oct 2026; one of them (the "data as of" anchor) changed the code, pushed as `f855919` before the merge.
+**Renumbered at merge.** The branch was cut at `0939eaf` and claimed #405, Q224 and Q225. While PR #357's checks ran, another session landed PRs #358 to #362, which claimed #405 and #406 and Q224 and Q225 for the snapshot-sleep and freshness work. Master was merged into the branch (a merge commit, no rebase) and this session's entries were re-resolved from master's new maxima, **#406 and Q225**, to **#407, Q226 and Q227**. The commit messages `7cb0f62` and `314fa9a` still carry the old numbers and are not rewritten; the stores, `ROADMAP`, `CLAUDE.md` and this file carry the new ones. The renumber touched only this session's own regions; the other session's #405, #406, Q224 and Q225 are unedited.
 
 ## Pending-queue reconciliation
 
-No `PENDING` items were carried in; the chat brief was the only input. Its LOG block is written:
-- *Snapshot sleep is Garmin-primary, recorded as the operator ruling of 9 Oct:* `DECISIONS_LOG` #405 (`efa7765`).
-- *Freshness model and load card, F1 and F2 rulings, and the five #359 rulings:* `DECISIONS_LOG` #406 (`db797ac`).
-- *Leave companion Q25 open and add that freshness is now visible:* in the companion's own close-out (health-connect-app), not here.
-- Two questions the build surfaced, opened (raising needs no hold): Q224 (per-writer nightly sleep aggregates) and Q225 (the on-device deep-sleep confidence verdict reaching the backend).
-Nothing is decided and uncommitted.
+No `PENDING` items were carried in; the chat brief was the only input. Its LOG block is written: `DECISIONS_LOG` #407 (window is yesterday only, lateness derived, skip leaves the row null, the route refuses to overwrite yesterday's PM) and `OPEN_QUESTIONS` Q226 (the `DailyRecord` docstring says PM fields are append-only but same-day `submit_pm` overwrites; logged, same-day behaviour unchanged). Q227 is a second question the brief did not ask for; it records the `block_open` gap below. All three are in the PR, so they are committed once the PR merges; until then they are provisional.
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** One row added: *Data freshness, Garmin-primary snapshot sleep and the home load card* (#405, #406). The other NOW rows were not edited.
+**Sprint (ROADMAP NOW).** One row added: Missed-PM catch-up (#407), built and landed via PR #357, operator check owed. Serves **Loop**. No other row changed.
 
-**State.** All three PRs are merged and the backend is deployed on `ed1764e` (both services SUCCESS). Verified live: the real `get_readiness_snapshot` prints sleep labelled `Garmin`, continuity `7/7 nights (garmin 7)` where it read 0/7, and the new `Data freshness` block (Health Connect delivery not amber; four stale writers named: Samsung Health heart rate, Samsung Health sleep, the Samsung scraper, unattributed steps). Suites: backend 3109 passed, 3 skipped (baseline 3070 / 3); frontend 47 files / 409 tests (baseline 45 / 390). The companion sim `npm run test:sync-age` passes at stamps 1 h, 14 h and 3 days.
+**State.** Backend (`checkin_v2.py`): `NightlyCloseOutIn.for_date`, `/prefill.missed_pm`, `DailyRecordOut.pm_late`. Frontend: `components/MissedPMCard.jsx` on `CheckInAM`, a "late" marker on `CheckInHistory`. All VERIFY items in the brief matched master `0939eaf` before work began; the later master changes (freshness, snapshot sleep, the load card) touch none of the files this PR changes, so the merge conflicted only in governance files. Full backend suite 3106 passed, 3 skipped, and frontend 407 passed on the pre-merge head; both are re-run by CI on the merged head. The mutation check was run on the real source (`submit_pm` ignoring `for_date` fails 14 tests, both attribution tests among them) and the source restored. Nothing is verified in production.
 
-**Single clearest next action.** Nothing blocks: go to the next open v1 leg (the reconcile leg of Walk in, or a Loop item). The one device observation left is the **amber** "Last background sync" line, which needs a last background run older than 13 h to render; it will show on its own the next time background sync stops, which is when it matters, so there is no action now. On 10 Oct the operator saw the line on a device as a relative age with the absolute time secondary (`health-connect-app` `#52`); amber is the part still unobserved. The served-bundle grep (#121) is DONE (see the next list).
+**Single clearest next action.** The operator check (Luke, after the deploy): skip one evening's close-out; next morning the card appears on the AM screen; submit it; confirm `/checkin-history` shows yesterday's PM with the late marker, today's AM is unaffected, and that evening's `/nightly` is open as normal. Also grep the served frontend bundle for `Close out yesterday` (#121; two services deploy from this repo).
 
-**Operator actions owed.**
-- The **amber** paint: no action now; it shows on its own at the next real silence.
-- On the companion side (recorded there, listed here so it is not lost): the registration-once logcat check, which bears on `Q25`'s lost-chain candidate.
-- A decision on whether to open the egress policy to the app's own frontend domain, so that Code can run the #121 grep itself in a future session (chat ran it this time, from outside the block; the recipe is in the Environment network settings).
-- **Owed by Code, not the operator:** fold the one-line fix to the companion `closeout.md` (its "Things the next reader should know" bullet saying health-app's ROADMAP row and `closeout.md` "still list this repo's earlier device gate as owed", which health-app never did) into the NEXT companion governance commit. No standalone PR (operator, 10 Oct).
-- Optional, not blocking: a ruling on a label for form (cut-points were deliberately not invented; F1).
+**Operator actions owed.** The check above; and a ruling on Q227 only if a block opens or closes within a day of a missed close-out (otherwise it is inert).
 
 **Things the next reader should know.**
-- The freshness read is **read-side only**: no table, no migration, no ingest change. It adds one grouped query over the user's `health_connect_record_sources` rows per Dashboard open (indexed by user only). It is a watch-point, not a measured problem (#406).
-- The usual gap is measured at **day grain**, over the 28 days ending at each writer's own last record. A window anchored at now drops dead writers (FEEDBACK 63); do not re-anchor it.
-- "Data as of" is the **last Health Connect delivery**, the same clock as the 13 h amber gate; Polar is information only and never drives amber (operator ruling, 10 Oct).
-- The Metrics tile is gone from the hub: the load card's `Metrics` link is the one doorway to `/metrics`.
-- The MCP data session drops on every backend redeploy ("session expired" until it reconnects); a retry after a minute works.
-- `reads/freshness_reads.py` is on the read-door drift guard's allow-list with a reason; a new direct toucher of `aerobic_sessions` fails that test.
-- **Device evidence, 10 Oct (relayed, Unverified by Code; recorded as `health-connect-app` `#52`):** a build from companion master `d2d42b8` installed over the existing app showed the relative-age status line with the absolute time secondary, with no permission prompt, and the accessibility service stayed ON (added to companion `Q24`). The amber rendering was not reported, so it is recorded as unobserved, not as met.
-- **Frontend bundle (#121) is DONE, evidence relayed (Unverified by Code; chat ran it 10 Oct from outside the egress block):** the live bundle `assets/index-CEVXB3bP.js` contains `Load summary`, `Data age unavailable` and `fatigue rising`, one hit each. It supersedes the OWED clause in the locked `DECISIONS_LOG` #406 Status line; the ROADMAP row records the same. Not claimed: that the bundle is the one built from `ed1764e` (the file name is the only identity relayed).
-- Real health values are kept out of the repo: the live checks above are described by label and count only (public repo, guard 2).
+- **One departure from the brief, stated plainly.** The brief wanted a test that `cbti_block_open` "tracks yesterday's block, not today's". `_cbti_context(...).block_open` is `closed_on IS NULL` and never reads its date argument, so today and yesterday always return the same flag. The formula was used as briefed (ratified); the test pins that the context is asked about yesterday and records the equivalence. A block closed this morning hides the nap field for a day that was inside it; a block opened this morning asks for a nap on a day before it. Q227 holds the data-meaning fork; it was not resolved here.
+- **`pm_late` compares Brisbane dates, not UTC.** The brief's "late-evening AEST submit that is after midnight UTC" cannot occur at UTC+10 (23:59 AEST is 13:59Z, the same UTC date); the real trap is the other side (00:01 AEST is 14:01Z the day before, so a UTC comparison calls it on time). Tests cover 23:59 AEST false, 00:01 AEST true, and both sides of midnight UTC.
+- **A refused request mints no row**: the 409 check runs before `_get_or_create`.
+- **Fresh-container test setup.** The suite needs an ephemeral `FERNET_KEY`, `SECRET_KEY` and `ALGORITHM` (as CI sets them) and a non-shallow clone (`git fetch --unshallow`); without the clone `tests/test_constraint_engine_arm.py` fails at collection reading an old SHA.
+- The catch-up card is also shown on the "Morning check-in saved" view, because the prefill is loaded either way; the brief placed it on the AM screen without saying which state.
+- **Two sessions numbered from the same master.** Both branches were cut at `0939eaf` and the other landed first. Number-at-merge worked as designed (re-read master's max, re-resolve) but cost a conflict resolution across five governance files; the code merged without a conflict.
+
+**Carried forward from the previous close-out (`freshness-load-card`, landed 10 Oct as #405/#406; this file overwrites that one, so its owed items are restated here and its full text is in git history).** None was touched this session.
+- The **amber** "Last background sync" paint on the companion: no action now; it shows on its own at the next real silence. The cause of the 8-9 Oct background silence (companion Q25) is still unknown.
+- The companion's registration-once logcat check, bearing on Q25's lost-chain candidate.
+- A decision on whether to open the egress policy to the app's own frontend domain, so Code can run the #121 grep itself in a future session.
+- **Owed by Code:** fold the one-line fix to the companion `closeout.md` (its bullet saying health-app's ROADMAP row and `closeout.md` "still list this repo's earlier device gate as owed", which health-app never did) into the NEXT companion governance commit; no standalone PR.
+- The Samsung scraper (companion Q24) is not fixed; its silence is an amber `STALE` line and the re-verification when the ring returns is still owed.
+- Named by the operator as open and not Code's: the brief for the schedule tool and the merged recent-sessions tool, the unattributed-steps follow-up, removing the 65 PDFs from the project, and the repo-visibility decision.
+- Q224 (per-writer nightly sleep aggregates) and Q225 (the on-device deep-sleep confidence verdict reaching the backend) are the other session's questions and are OPEN.
 
 **What was NOT touched (named so absence does not read as finished).**
-- **Every open v1 leg:** the reconcile leg of Walk in (NEXT, #386) and every Loop item. This session was visibility infrastructure for data age, plus one sleep-source repoint; it serves **See** directly (a load number never shows without its age) but did not move Walk in or Loop.
-- **The cause of the 8-9 Oct background silence** (companion Q25): still unknown. Only its visibility is fixed; the discriminators (`am get-standby-bucket`, `dumpsys jobscheduler`, the battery setting) have not been taken. The next silence will now show on the phone and on the home card.
-- **The Samsung scraper** (companion Q24): not fixed, by instruction (no live device). Its silence is now an amber `STALE` line; the re-verification when the ring returns is still owed.
-- **Everything in the medical-protocol and ingest lanes:** the ingest and dedupe lane (Q217-Q219), the marker exposure (#367, Q206), the source hierarchy (Q201, Q203), the Polar re-zoning (Q198), the HC sync reliability lane (Q159, Q208, Q214), the MCP OAuth gates G4 and G5 (#404, Q222, Q223), the clinical-documents upload UI (Q221).
-- **Named by the operator as still open (chat-side or not started; Code did not touch them):** the brief for the schedule tool and the merged recent-sessions tool (to be written when the operator says); the unattributed-steps follow-up; removing the 65 PDFs from the project; the repo-visibility decision.
-- **Out of scope by the brief:** the schedule MCP tool and the merged recent-sessions tool (a separate brief to follow), a label for form, and any `load_metrics` maths.
-- **Pattern to say out loud:** the last three sessions have gone to infrastructure around the product (the document store, connector persistence, and now data-age visibility), not to an open v1 leg. The next session should go to the reconcile leg or a Loop item.
+- **Every v1 test's other open legs:** the reconcile leg of Walk in (NEXT, #386) and every other Loop item. This session built one Loop habit gap (a missed close-out); it did not touch the readiness, recommendation or log legs.
+- **The CBT-I engine, replay and prescriptions** (guarded out by the brief), and **same-day PM behaviour** (Q226).
+- **The medical-protocol and fitness lanes:** the ingest and dedupe lane, the marker exposure (#367, Q206), Source hierarchy (Q201, Q203), the Polar re-zoning (Q198), HC sync reliability (Q159, Q208, Q214), the Garmin self-evaluation read, the clinical-documents follow-ups (Q220, Q221), and the MCP OAuth owed items (G4 and G5 from #404; Q222, Q223).
+- **Decided and unbuilt from earlier sessions:** the companion RHR capture (#400), the soft exclusion and window-absence reconciliation (#399, migration HOLD), the HRV, SpO2, respiratory and distance AEST re-bucketing.
+- **Pattern to say out loud:** this is the first session in a while that went to a Loop habit rather than to infrastructure around the product, and it is small; the previous three went to infrastructure (the document store, connector persistence, data-age visibility). The next session should go to the Walk in reconcile leg or another Loop item, not to more capture-side polish, unless the operator wants more here.
 
-**Open questions by status.** 125 OPEN and 7 OWED above `## CLOSED` (two new this session: Q224, per-writer nightly sleep aggregates, trigger a second sleep writer going live again; Q225, whether the on-device deep-sleep confidence verdict reaches the backend, trigger the companion's threshold review completing).
+**Open questions by status.** 127 OPEN and 7 OWED above `## CLOSED` (two OPEN are new from this session: Q226, the append-only docstring versus same-day overwrite; Q227, `block_open` ignoring its date; the other session added Q224 and Q225).
 
-**v1-triage of the NOW lanes** (the new row only; the rest are unchanged):
-- Data freshness, Garmin-primary snapshot sleep and the load card (#405, #406): **See** (an age under every load number; a late pipe visible before the number is trusted) and **Loop** (the next silence is caught, not found by accident).
-- Candidates for removal from NOW, as the previous close-outs named them: the phase-change form (#389, DONE), HC zones (#364, #385, #388), Know (d) (#390-#394).
-- Carrying no v1 test: the CBT-I items, the injury sweep, the typed-constraints seed; the operator should rule on whether any belongs in NOW.
+**v1-triage of the NOW lanes.**
+- Missed-PM catch-up (#407): **Loop** (the daily check-in habit survives a missed evening without corrupting a day's record).
+- Data freshness, Garmin-primary snapshot sleep and the load card (#405, #406): **See** and **Loop**, per the previous close-out.
+- The other NOW rows are unchanged and keep the tests the previous close-outs named: Source hierarchy **See** and **Know**; Polar sport-id relabel **Know** and **See**; HC sync reliability **See** and **Loop**; Garmin self-evaluation read **Know** and **Loop**; Aerobic ingest automated **See** and **Loop**.
+- Candidates for removal from NOW, as the previous close-outs named them: the phase-change form (#389, DONE), HC zones (#364, #385, #388), Know (d) (#390-#394). Carrying no v1 test: the CBT-I items, the injury sweep, the typed-constraints seed; the operator should rule on whether any of them belongs in NOW.

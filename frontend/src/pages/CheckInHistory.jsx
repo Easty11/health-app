@@ -69,7 +69,17 @@ function DayCard({ rec }) {
 
       {pm && (
         <div className="px-4 py-3">
-          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">Evening</p>
+          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">
+            Evening
+            {rec.pm_late && (
+              <span
+                title="Submitted the day after"
+                className="ml-2 normal-case tracking-normal text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5"
+              >
+                late
+              </span>
+            )}
+          </p>
           <div className="grid grid-cols-3 gap-y-3 gap-x-2">
             <Stat label="Day" value={rec.today_rating != null ? `${DAY_LABELS[rec.today_rating] || rec.today_rating}` : null} />
             <Stat label="Session qual" value={rec.session_quality != null ? `${rec.session_quality}/5` : null} />
