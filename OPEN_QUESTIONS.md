@@ -3141,27 +3141,48 @@ Raised 8 Oct 2026 (persisting the MCP OAuth provider, Q196). Two growth paths no
 
 ---
 
-## Q224. The `DailyRecord` docstring says PM fields are append-only, but a same-day `submit_pm` overwrites them unconditionally
+## Q224. Should nightly sleep be stored per writer, so a two-writer night can be split and the Garmin-primary rule applied literally?
 
-Raised 9 Oct 2026 (missed-PM catch-up, #405). `models.DailyRecord` states that once `am_timestamp` or `pm_timestamp` is set those fields are never overwritten. `submit_pm` for today does not honour that: it assigns `pm_timestamp`, `today_rating`, the session fields, `naps_min` and `pm_notes` on every call, so a second same-day submit silently replaces the first (the nightly page blocks the second visit client-side, but the route does not). The catch-up path added in #405 does refuse to overwrite (409), so yesterday's PM is now append-only while today's is not. The same-day behaviour was deliberately left unchanged in that PR.
+Raised 10 Oct 2026 (the freshness brief, #405). `health_connect_syncs` keeps one aggregate row per night, a union over every writer's sessions (#254, #256), and `health_connect_record_sources` keeps a writer and a timestamp per record but no stage minutes. So a night written by both Garmin and the Samsung Health relay cannot be separated: the snapshot labels it `Health Connect (multiple)` and withholds the stage split rather than show mixed stages under one name. The operator ruling (snapshot sleep is Garmin-primary, never blended) can only be applied literally to single-writer nights.
+
+**Trigger.** A second sleep writer is live again (the ring returns, or Withings is re-enabled), so that two-writer nights recur; or the withheld split is wanted on a historical two-writer night.
+
+**Open design points, for when it fires.** A per-(night, writer) aggregate table or columns written at ingest (a schema change, hold (a)); whether history is backfilled from the retained records; whether the card's `Health Connect (multiple)` label then changes to the priority writer. Reading is not the problem: the read-side rule is already built (#405).
+
+**State:** OPEN. Not blocking: the live night is single-writer today. Nothing built. Related: #405, Q24 (companion), #254, #256.
+
+---
+
+## Q225. Should the on-device deep-sleep confidence verdict reach the backend?
+
+Raised 10 Oct 2026 (the freshness brief, #405). The brief asked for the existing stage-trust logic to be reused in the snapshot. The only such logic is `deepSleepConfidence.js` in `health-connect-app`: it runs on the phone, scores whether a night's deep-sleep reading is trustworthy (companion #3), and is deliberately held back from readiness and Banister modelling until its thresholds get a manual review (companion #4). Its verdict is not in the sync payload or any backend table, so the snapshot's stage split carries no trust signal.
+
+**Trigger.** The companion's threshold review is complete (companion #4 unblocks), or a stage-dependent reading in the snapshot or the coach is judged to need a trust tag.
+
+**Open design points, for when it fires.** Whether the verdict rides the sync payload (a wire change in the companion contract) and where it is stored; whether a backend counterpart is written instead (a second implementation of the same rule, which drifts); how an untrusted night reads in the snapshot.
+
+**State:** OPEN. Not blocking; nothing built. Related: #405, Q224, companion #3 and #4.
+## Q226. The `DailyRecord` docstring says PM fields are append-only, but a same-day `submit_pm` overwrites them unconditionally
+
+Raised 9 Oct 2026 (missed-PM catch-up, #407). `models.DailyRecord` states that once `am_timestamp` or `pm_timestamp` is set those fields are never overwritten. `submit_pm` for today does not honour that: it assigns `pm_timestamp`, `today_rating`, the session fields, `naps_min` and `pm_notes` on every call, so a second same-day submit silently replaces the first (the nightly page blocks the second visit client-side, but the route does not). The catch-up path added in #407 does refuse to overwrite (409), so yesterday's PM is now append-only while today's is not. The same-day behaviour was deliberately left unchanged in that PR.
 
 **Trigger.** Either a same-day overwrite loses data the operator wanted kept, or the next change to `submit_pm` or the docstring.
 
 **Open design points, for when it fires.** Whether the docstring is the error (same-day correction is wanted, since the nightly form re-shows and re-submits stored values) or the route is (refuse a second submit with 409 as the catch-up does); whether AM has the same mismatch (`submit_am` also reassigns on every call); if overwrite stays, whether it should keep the original `pm_timestamp` so `pm_late` is not rewritten by a correction.
 
-**State:** OPEN. Not blocking; nothing changed. Related: #405, #219.
+**State:** OPEN. Not blocking; nothing changed. Related: #407, #219.
 
 ---
 
-## Q225. `_cbti_context(...).block_open` ignores its date, so the catch-up card's nap gate cannot follow the block state on the day being closed out
+## Q227. `_cbti_context(...).block_open` ignores its date, so the catch-up card's nap gate cannot follow the block state on the day being closed out
 
-Raised 9 Oct 2026 (missed-PM catch-up, #405). The brief set `missed_pm.cbti_block_open = _cbti_context(user, today-1).block_open` so the nap field would follow the block state on the day being closed out. `block_open` is `closed_on IS NULL` for the user's open block and the date argument only selects the prescription, so the value for yesterday always equals the value for today. Two cases then differ from the intent: a block closed this morning reports closed, so the card hides the nap field and sends null for a day that was inside the block; a block opened this morning reports open, so the card asks for a nap and sends 0 for a day before the block existed. Both are confined to the one-day window around a block opening or closing, and the nap attribution for a day outside any block is inert.
+Raised 9 Oct 2026 (missed-PM catch-up, #407). The brief set `missed_pm.cbti_block_open = _cbti_context(user, today-1).block_open` so the nap field would follow the block state on the day being closed out. `block_open` is `closed_on IS NULL` for the user's open block and the date argument only selects the prescription, so the value for yesterday always equals the value for today. Two cases then differ from the intent: a block closed this morning reports closed, so the card hides the nap field and sends null for a day that was inside the block; a block opened this morning reports open, so the card asks for a nap and sends 0 for a day before the block existed. Both are confined to the one-day window around a block opening or closing, and the nap attribution for a day outside any block is inert.
 
 **Trigger.** A block opens or closes within a day of a missed close-out, or the next change to `_cbti_context`.
 
 **Open design points, for when it fires.** Whether "block open on D" means `opened_on <= D` and (`closed_on` is null or `closed_on > D`), and which side of `closed_on` the closing day falls on (a data-meaning call, so it is the operator's); whether it is the day being closed out or the night it precedes (Night(today)) whose block membership matters for a nap, since the nap attributes forward; whether the fix lives in `_cbti_context` (which the Today and prefill screens share) or in a separate date-aware helper used only by `missed_pm`.
 
-**State:** OPEN. Not blocking; the formula is as briefed. Related: #405, #219, Q45.
+**State:** OPEN. Not blocking; the formula is as briefed. Related: #407, #219, Q45.
 
 ---
 

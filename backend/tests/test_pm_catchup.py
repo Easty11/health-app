@@ -326,7 +326,7 @@ def test_missed_pm_cbti_block_open_is_read_for_YESTERDAYS_date(db_session, monke
 
     What cannot be pinned here is a case where the two days DISAGREE: `block_open` is
     `closed_on IS NULL` and ignores `for_date` (the date only picks the prescription), so
-    today and yesterday always return the same flag. That gap is OPEN_QUESTIONS Q225; the
+    today and yesterday always return the same flag. That gap is OPEN_QUESTIONS Q227; the
     final assertion records the current equivalence so the day it stops holding is visible."""
     u = _user(db_session, "pf-blk@x.io")
     today = c2._today_aest()
