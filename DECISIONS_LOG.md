@@ -13972,3 +13972,20 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 **How you know.** The operator's ruling in chat. Code read, not run against production: `load_events_metabolic.py` (the Edwards weights are applied to zone seconds with no sport input; the module docstring and the provenance row for `EDWARDS_WEIGHTS`), #322 S2, and `tests/test_non_training_sports.py::test_metabolic_transform_does_not_import_it`, which fails if the transform ever imports the sport sets. How many stored Pilates sessions are zoned was not read.
 
 **Do not revisit unless.** The operator reclassifies Pilates or walks as something the metabolic window should not carry, or Q230 changes the formula in a way that makes one zone's treatment depend on the sport.
+
+---
+
+### 410. The metabolic lane stays on Edwards zone-weighted TRIMP (`metab-v1`); Banister's exponential TRIMP is not adopted now (resolves Q230)
+
+**Decision.** Operator ruling, 10 Oct 2026. The metabolic window keeps `metab-v1` and the Edwards integer zone weights (unit `trimp_edw_au`). The move to a Banister-derived exponential TRIMP, which Q230 asked about, is **not adopted now**. Nothing is built, nothing is recomputed, and `FORMULA_VERSION_METABOLIC`, `load_events` and the rollup are untouched.
+- **The basis, as the operator stated it (qualitative; the repo is public and carries no real values).** The projection script's integrity control passed (its Edwards recomputation matched the deposited loads). The reweighting moved only the hard Z4 and Z5 sessions. The form delta was small relative to form's range and never changed its direction. The candidate's sensitivity to the resting-HR assumption was comparable to its own effect. The primary-source coefficients remain unverified. And, in the operator's words, "F1 gates no decision on form magnitude". (The tree does not define "F1" in this context, so Code records the phrase as given and has not assumed its referent; the operator can name it at the next touch if it should be spelled out.)
+- **The projection results are the operator's run, not Code's.** None of the script's output is in the repo. `backend/scripts/trimp_weighting_projection.py` stays in the tree, read-only, for the re-run trigger below.
+- **Consequence for Q231.** A future formula change re-fits Q231's `k` by recompute, because `k` is stored against the `formula_version` in force. Q230 no longer orders the Q231 build.
+
+**Rationale.** The candidate formula's gain was confined to a few hard sessions and did not change what the form number says, while its inputs (a resting-HR source that does not exist as a "resting HR in force", a sex coefficient the user model does not carry, primary coefficients not yet read) are costly and, in the resting-HR case, move the result as much as the formula does. Changing a formula means a new `metab-vN`, a new unit that breaks comparability with the stored series, a full recompute and new provenance rows (Q230 listed the cost); the evidence did not pay for it.
+
+**Status.** DONE 10 Oct 2026. Governance only: no code, no schema, no recompute. Q230 moves below `## CLOSED` as `DONE → #410` in the same commit.
+
+**How you know.** The operator's ruling in chat on 10 Oct 2026, reading the output of their own run of the projection script. Code did not see that output. Code's own checks, in the tree and not against production: the script and its 30 synthetic-data tests (#367), `load_events_metabolic.py` and `docs/load-constants-provenance.md` as the cost of a change; the coefficient status (secondary sources only, the primary chapter unread) is the one recorded in Q230.
+
+**Do not revisit unless.** (a) Form band thresholds are proposed (a threshold on form turns a small magnitude difference into a different band, which the ruling does not cover); or (b) at least four weeks of build-ramp data exist, in which case rerun the projection script first and decide from that output. Any later formula change re-fits Q231's `k` by recompute.
