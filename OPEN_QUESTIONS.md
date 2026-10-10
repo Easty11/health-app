@@ -3141,6 +3141,30 @@ Raised 8 Oct 2026 (persisting the MCP OAuth provider, Q196). Two growth paths no
 
 ---
 
+## Q224. Should nightly sleep be stored per writer, so a two-writer night can be split and the Garmin-primary rule applied literally?
+
+Raised 10 Oct 2026 (the freshness brief, #405). `health_connect_syncs` keeps one aggregate row per night, a union over every writer's sessions (#254, #256), and `health_connect_record_sources` keeps a writer and a timestamp per record but no stage minutes. So a night written by both Garmin and the Samsung Health relay cannot be separated: the snapshot labels it `Health Connect (multiple)` and withholds the stage split rather than show mixed stages under one name. The operator ruling (snapshot sleep is Garmin-primary, never blended) can only be applied literally to single-writer nights.
+
+**Trigger.** A second sleep writer is live again (the ring returns, or Withings is re-enabled), so that two-writer nights recur; or the withheld split is wanted on a historical two-writer night.
+
+**Open design points, for when it fires.** A per-(night, writer) aggregate table or columns written at ingest (a schema change, hold (a)); whether history is backfilled from the retained records; whether the card's `Health Connect (multiple)` label then changes to the priority writer. Reading is not the problem: the read-side rule is already built (#405).
+
+**State:** OPEN. Not blocking: the live night is single-writer today. Nothing built. Related: #405, Q24 (companion), #254, #256.
+
+---
+
+## Q225. Should the on-device deep-sleep confidence verdict reach the backend?
+
+Raised 10 Oct 2026 (the freshness brief, #405). The brief asked for the existing stage-trust logic to be reused in the snapshot. The only such logic is `deepSleepConfidence.js` in `health-connect-app`: it runs on the phone, scores whether a night's deep-sleep reading is trustworthy (companion #3), and is deliberately held back from readiness and Banister modelling until its thresholds get a manual review (companion #4). Its verdict is not in the sync payload or any backend table, so the snapshot's stage split carries no trust signal.
+
+**Trigger.** The companion's threshold review is complete (companion #4 unblocks), or a stage-dependent reading in the snapshot or the coach is judged to need a trust tag.
+
+**Open design points, for when it fires.** Whether the verdict rides the sync payload (a wire change in the companion contract) and where it is stored; whether a backend counterpart is written instead (a second implementation of the same rule, which drifts); how an untrusted night reads in the snapshot.
+
+**State:** OPEN. Not blocking; nothing built. Related: #405, Q224, companion #3 and #4.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
