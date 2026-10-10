@@ -244,15 +244,18 @@ def freshness(db: Session, user_id: int, *, now: datetime | None = None) -> dict
     # Pipes that feed the load number. Polar is information only (sessions are sparse), so the
     # one pipe with a threshold is Health Connect; the card dims on it alone.
     load_stale_pipes = [name for name in ("health_connect",) if pipes[name]["status"] == "amber"]
-    arrivals = [datetime.fromisoformat(p["newest_at"]) for k, p in pipes.items()
-                if k in ("health_connect", "polar") and p["newest_at"]]
-    data_as_of = max(arrivals) if arrivals else None
+    # "Data as of" is the last Health Connect delivery: the SAME clock as the amber gate, so the
+    # headline age and the alarm can never disagree (operator ruling 2026-10-10). A max() across
+    # pipes would let a fresh Polar session mask a stale Health Connect (the 9 Oct failure); a min()
+    # would be permanently amber, because Polar is training-only and legitimately sparse.
+    hc_pipe = pipes["health_connect"]
+    data_as_of = ({"newest_at": hc_pipe["newest_at"], "age_hours": hc_pipe["age_hours"]}
+                  if hc_pipe["newest_at"] else None)
     return {
         "generated_at": now.isoformat(),
         "streams": streams,
         "pipes": pipes,
-        "data_as_of": ({"newest_at": data_as_of.isoformat(), "age_hours": _age_hours(data_as_of, now)}
-                       if data_as_of else None),
+        "data_as_of": data_as_of,
         "load_inputs_stale": bool(load_stale_pipes),
         "load_stale_pipes": load_stale_pipes,
     }

@@ -33,10 +33,10 @@ function series({ fatigueStep = 1, maturity = 'ok' } = {}) {
            windows: [{ load_window: 'metabolic', unit: 'au', formula_version: 'metab-v1', points }] }
 }
 
-const freshness = ({ hcHours = 3, hcStatus } = {}) => ({
+const freshness = ({ hcHours = 3, hcStatus, polarHours = 52 } = {}) => ({
   pipes: {
     health_connect: { status: hcStatus ?? (hcHours > 13 ? 'amber' : 'fresh'), age_hours: hcHours, newest_at: 'x' },
-    polar: { status: 'info', age_hours: 52, newest_at: 'x' },
+    polar: { status: 'info', age_hours: polarHours, newest_at: 'x' },
     garmin_hrv: { status: 'fresh', age_hours: 5, newest_at: 'x' },
   },
   data_as_of: { age_hours: hcHours, newest_at: 'x' },
@@ -124,6 +124,25 @@ describe('the freshness line (the point of the card)', () => {
     expect(screen.getByTestId('load-content').className).toContain('opacity-50')
     // The warning itself is not dimmed with the numbers.
     expect(line.closest('[data-testid="load-content"]')).toBeNull()
+  })
+
+  test('GATE (ruling 2026-10-10): Polar fresh + HC 14 h old -> "as of" shows the HC age and the card is amber', async () => {
+    // The backend anchors data_as_of on the last HC delivery, so a fresh Polar session cannot mask it.
+    mockApi({ f: freshness({ hcHours: 14, polarHours: 1 }) })
+    await renderCard()
+    const line = screen.getByTestId('freshness-line')
+    expect(line.textContent).toBe('Data as of 14 h ago · Health Connect 14 h ago · Polar 1 h ago')
+    expect(line.className).toContain('text-amber')
+    expect(screen.getByLabelText('Load summary').getAttribute('data-stale')).toBe('true')
+  })
+
+  test('a long-quiet Polar never drives amber: it is information only', async () => {
+    mockApi({ f: freshness({ hcHours: 3, polarHours: 24 * 38 }) })
+    await renderCard()
+    const line = screen.getByTestId('freshness-line')
+    expect(line.textContent).toBe('Data as of 3 h ago · Health Connect 3 h ago · Polar 38 d ago')
+    expect(line.className).not.toContain('amber')
+    expect(screen.getByLabelText('Load summary').getAttribute('data-stale')).toBe('false')
   })
 
   test('a pipe that never delivered reads "never"', async () => {

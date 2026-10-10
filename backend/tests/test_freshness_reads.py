@@ -193,13 +193,50 @@ def test_polar_is_information_only_however_old(db_session, user):
     assert f["load_inputs_stale"] is False
 
 
-def test_data_as_of_is_the_newest_arrival_across_hc_and_polar(db_session, user):
-    _event(db_session, user, 20)
+def test_data_as_of_is_the_last_hc_delivery_not_the_newest_arrival(db_session, user):
+    """Ruling 2026-10-10: Polar fresh + HC 14 h old -> "as of" shows the HC age and the card is
+    amber. A max() across pipes would let a fresh Polar session mask a stale HC (the 9 Oct failure)."""
+    _event(db_session, user, 14)
     db_session.add(models.AerobicSession(
         user_id=user.id, source="polar_v4", source_session_id="p2",
-        session_date=date(2026, 10, 9), start_time=NOW - timedelta(hours=7)))
+        session_date=date(2026, 10, 9), start_time=NOW - timedelta(hours=1)))
     db_session.commit()
-    assert fr.freshness(db_session, user.id, now=NOW)["data_as_of"]["age_hours"] == 7.0
+    f = fr.freshness(db_session, user.id, now=NOW)
+    assert f["pipes"]["polar"]["age_hours"] == 1.0                      # Polar is fresh ...
+    assert f["data_as_of"]["age_hours"] == 14.0                         # ... and does not move "as of"
+    assert f["data_as_of"]["newest_at"] == f["pipes"]["health_connect"]["newest_at"]
+    assert f["load_inputs_stale"] is True and f["load_stale_pipes"] == ["health_connect"]
+
+
+def test_data_as_of_and_the_amber_gate_share_one_clock(db_session, user):
+    for hours in (2, 12.9, 13.1, 30):
+        db_session.query(models.HealthConnectSyncEvent).delete()
+        _event(db_session, user, hours)
+        db_session.commit()
+        f = fr.freshness(db_session, user.id, now=NOW)
+        assert f["data_as_of"]["age_hours"] == f["pipes"]["health_connect"]["age_hours"]
+        assert f["load_inputs_stale"] is (hours > 13)
+
+
+def test_old_polar_does_not_make_a_fresh_hc_amber(db_session, user):
+    """The other direction: Polar is training-only and legitimately sparse, so a long-quiet Polar
+    never drives amber and never moves "as of"."""
+    _event(db_session, user, 3)
+    db_session.add(models.AerobicSession(
+        user_id=user.id, source="polar_v4", source_session_id="p3",
+        session_date=date(2026, 9, 1), start_time=NOW - timedelta(days=38)))
+    db_session.commit()
+    f = fr.freshness(db_session, user.id, now=NOW)
+    assert f["data_as_of"]["age_hours"] == 3.0 and f["load_inputs_stale"] is False
+
+
+def test_polar_only_delivery_leaves_data_as_of_empty(db_session, user):
+    """No Health Connect delivery at all: nothing to anchor "as of" on, even with a Polar session."""
+    db_session.add(models.AerobicSession(
+        user_id=user.id, source="polar_v4", source_session_id="p4",
+        session_date=date(2026, 10, 9), start_time=NOW - timedelta(hours=1)))
+    db_session.commit()
+    assert fr.freshness(db_session, user.id, now=NOW)["data_as_of"] is None
 
 
 def test_garmin_hrv_pipe_reads_its_newest_night(db_session, user):
