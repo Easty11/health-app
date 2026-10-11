@@ -206,12 +206,23 @@ units, so the gap between them does not size a deficit. Each axis needs a route 
 Decide per axis (ER:IR, adductor:abductor, plantarflexion, hamstring if admitted). **Pending operator:** whether a
 dynamometer or squeeze gauge is available. Route (ii) cannot be chosen for any axis until that is known.
 
-**State:** OPEN — the v1 taxonomy bump is its own design pass: externally grounded (HAGOS / adductor
-squeeze; ER:IR isokinetic references; return-to-sport LSI), with adductor:abductor and ER:IR as first-class
-reads. NOT a bolt-on from a tag file (the taxonomy is external-authority so its breadth does not inherit the
-user's blind spots — #76). Narrowed by #363 to vocabulary plus measurement route. The vocabulary work has no
-blocker. Measurement route: blocker for route (ii) only is the operator's equipment answer (Owner: Luke).
-Unblocks the interim no-pattern verdicts on the four families above.
+**Resolved on a held branch (11 Oct 2026, #NEXT and the one after): vocabulary and routes.** The vocabulary is
+`shoulder_er`, `shoulder_ir`, `hip_adduction`, `hip_abduction`, `ankle_plantarflexion` and `knee_flexion` (absolute +
+LSI, no H:Q) in group H, with `er_ir` and `add_abd` as the declared ratios and `reference_kind` on Measure and Ratio.
+The routes: (i) log-derived against an INTERNAL band, declared not built; (ii) protocol probe, with dynamometry
+EP-administered (the equipment question is answered: no HHD purchase; a BP cuff for the squeeze is an optional
+operator buy). The interim no-pattern verdicts for calf, hip abduction and shoulder ER/IR are retired. Companion text:
+`docs/capability-taxonomy-v1.md`.
+
+**State:** OPEN, narrowed to what is left. (1) **V2, prod read before the merge (Owner: Luke):** no row names the
+retired `shoulder_er_ir` in `capability_state`, `capability_observations`, `exercise_region_tags`, engine-tier
+`constraint` rows in `user_knowledge_entries`, or `fortification_profiles` (`primary_target`, `hard_stops`); then the
+`--dry-run` and `--confirm` seed. (2) **Provenance migration, held for the operator:** `capability_observations`
+needs `administered_by`, `instrument` and `protocol` (nullable, closed vocabularies, `SCHEMA.md` paired) before the
+`reference_kind` match rule or `same_protocol` can be evaluated. (3) **Route (i) computation:** not built. (4) **Which
+action gates dip** (`shoulder_er`, `shoulder_ir`, or one): unruled; both carry the gate now. (5) **`knee_flexion` has no
+declared measure**; and **`squeeze_mmhg`'s literature basis** is unverified (the Copenhagen squeeze is validated as a
+pain score). (6) **Norms:** every band is "to populate"; nothing is queue-eligible until one is grounded and admitted.
 
 ---
 
