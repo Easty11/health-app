@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q202 is closed as superseded (its RPE floor is Q231's imputed TRIMP, its explicit absence is Q203); Q231 gains the two-class `k` and lag-window supersession as ruled design terms; #418's first live coach read is discharged (#419).** Governance only - Canonical home: `DECISIONS_LOG.md` #419.
+
 - **Q201 (b) is ruled and built: a canonical aerobic row names the twins it suppressed as `also_recorded_by`, on the MCP coach reads only; Q201 is closed (#418).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #418.
 
 - **Q201 is ruled on (a) and (c): richness-first stands with the #365 hierarchy out of arbitration, and the twin tolerance is declared; (b), suppression visible to the coach, is not met by #415 and is the open remainder (#417).** Governance only - Canonical home: `DECISIONS_LOG.md` #417.
-
-- **Q51, Q53, Q30 and Q50 are closed on the operator's rulings: `BRANCHES.md`'s header now matches its rows, `gate_test.py` is deleted, the `.gitattributes` question is superseded, and the four operating rules live in project instructions (#416).** Governance only - Canonical home: `DECISIONS_LOG.md` #416.
 
 ---
 

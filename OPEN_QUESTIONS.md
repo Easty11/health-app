@@ -2518,6 +2518,8 @@ quality signal, not a load driver. Garmin → Health Connect HR absence is unver
 
 **Garmin-watch sessions get a captured rating (4 Oct 2026, #372).** A per-session RPE and feel, immutable and linked to the Health Connect row, is built for sessions the Garmin watch records, landed via PR #309. It does not cover H10-only sessions, and Q209's path (b) (a companion-app notification on Polar session arrival) is undecided; this question's own fork (what a device-only session's effort is worth in load) is unchanged.
 
+**Case A lean moot for Garmin-watch sessions (11 Oct 2026, operator; #419).** The Case A lean below (a floor fires only where the unzoned session is the day's only counted session, because `session_rpe` is one whole-day rating) no longer applies to a session the Garmin watch records: a per-session rating exists (#372). Q189 stays OPEN for H10-only sessions, which have no captured rating. Q202, which the cross-reference below says to resolve with this entry, is closed (#419): its floor is Q231's imputed TRIMP, whose input is the Garmin per-activity rating.
+
 **State:** OPEN — design fork (capture surface; scaling rule). Owner: Luke.
 
 **Cross-reference (#365, Q202).** The running case the device hierarchy creates, a watch-owned run with no usable HR zones, is filed as Q202. Resolve the two together.
@@ -2715,42 +2717,6 @@ sustained overnight stretch, which `hr_samples` can now supply).
 **State:** OPEN. Not blocking; a read-surface honesty question.
 
 **Settled 8 Oct 2026 (additive).** Both options were taken: the median is relabelled "All-day median HR" (#344) and a true resting value is derived as the sleep nadir (#345, #395). The move to CLOSED, with `DONE → #N`, is owed to the next session once #395 is landed; the number is now known.
-
----
-
-## Q202. RPE floor: a session with no usable device HR deposits no load, and nothing floors it
-
-Raised with #365. Verified against master `054d2d9`.
-
-**Question.** Does the load model compute sRPE × duration when a session has no device HR? Can a session with zero device data exist in load at all?
-
-**Findings.**
-- **No floor.** The metabolic load is Edwards zone-seconds TRIMP only; a session with no usable zones emits no `load_events` row and is counted in `sessions_skipped_no_zones`, which is in the return dict only (`load_events_metabolic.py:24-29,99-112,204-206`). There is no HR-based fallback and no RPE term in any physical load.
-- **sRPE × duration exists in one place:** the regression target of `psychological_residual`, from the day's whole-day `daily_records.session_rpe` (`reads/psychological_reads.py:363-392`, `models.py:164`). It is a diagnostic, not a load input.
-- **A session with zero device data cannot exist in `aerobic_sessions`.** Its only writers are HC ingest (`routers/health_connect.py:765`), Polar sync (`polar_ingest.py:169`) and Polar import (`import_polar.py:196`). No manual path writes it. A Hevy strength session is the exception that needs no device: Tier-0 loads from logged sets, and a per-set RPE only bands RIR (`load_events.py:129-141,180-200`).
-- **What puts a watch-owned run into load (#365).** A Garmin HC row is zoned by `hc_zone_enrich` from same-writer HR samples (#364). It deposits only if a `user_hrmax` row is in force and the credited coverage reaches 0.6; otherwise it stays zoneless and deposits nothing (`hr_zones.py:48`, #364).
-
-**Gap.** A watch-owned run without usable HR reads as zero load, silently.
-
-**To decide (Luke).** For a zoneless watch-owned run: (a) stay fail-closed but make the absence explicit (Q203); (b) floor it with RPE × minutes, which is Q189's design fork (capture surface, scaling into lane units); (c) both. Q189 covers device-only sessions such as Pilates and swimming; this entry is the running case the hierarchy creates. Resolve together.
-
-**Brief verified and halted (4 Oct 2026, the `srpe-floor` session; master `53f5925`).** The sRPE-floor brief (A: an Edwards-skipped unzoned device session emits a floor event; B: an "unrecorded session" marker row carrying date, class, minutes and sRPE; C: a per-athlete kappa fitted from paired sessions) was verified before any build, and nothing was built. Findings:
-- **#326 forbids Case B.** Its Context says "no self-reported session rows, no load and no TRIMP", its Rationale says "The marker changes confidence, not values", and the Q169 principle it ratifies says "No per-session detail, RPE, duration, or time" and rejects "an sRPE variant". **Ruled (operator, 4 Oct): #326 stands, Case B is dropped, Q169's rejection is not superseded.**
-- **sRPE is one rating per day, overwritten, with no snapshot.** `daily_records.session_rpe` (Float, 0-10, `models.py:164`) is written by `POST /pm` (`routers/checkin_v2.py:758`, nulled when `trained_today` is false; `pm_timestamp` is overwritten too, `:755`). A delete-and-reinsert transform (`load_events_metabolic.py:180-185`) would follow a revised rating, so "sRPE at recording time only" needs an immutable capture (Q209). `users.rpe_complete_from` is the Hevy set-RPE epoch (`load_metrics.py:297`), not a `session_rpe` capture epoch.
-- **The rollup does not pick up a new formula version without wiring.** `compute_load_metrics` reads `load_events` for one `formula_version` (`load_metrics.py:277-283`), and the chain calls the metabolic step with `metab-v1` only (`scripts/refresh_load.py:158-161`), so `srpe-floor-v1` rows would never roll up. **Ruled (operator, 4 Oct): option (a), when the floor is built: the metabolic rollup reads both versions and the event rows keep their own. Nothing now.**
-- **A day's RPE does not describe every session.** Felt-load already leaves Walking, Pilates, Yoga and Stretching out of its RPE minutes (#322 S3, `reads/psychological_reads.py:290-294`) and skips an aerobic row that overlaps a counted Hevy workout (`:316-317`). The Case A lean is recorded on Q189.
-- `load_events.provenance` is JSONB (`models.py:12,1295`; migration `c7d9e2f14a86:55`). MCP `get_training_load` reads `load_metrics` only (`mcp_server.py:917-941`), so a floor event's `provenance.method` would not show there without a new read.
-- The brief's "3 Oct: 10 skipped for no zones, 12 of 26 HC rows unzoned" is operator-reported and appears in no repo text; it was not used.
-
-**S1 result (operator-reported, 4 Oct).** The paired-session query returned **n = 2** pair-days (2026-06-17 and 2026-09-09). No fit is possible; the gate was n >= 20. The operator confirmed the cause: the bedtime check-in is the only RPE surface and is often skipped. **Scope change (operator): report and governance only. No migration, nothing built. The floor and kappa wait on a capture surface (Q209).**
-
-**Capture rate, OWED (operator).** The count of training days that carry a `session_rpe` has not been read. Read-only, one statement; a training day is any non-excluded Hevy workout day or `aerobic_sessions` day (walks included): `WITH tr AS (SELECT session_date AS day FROM aerobic_sessions WHERE user_id = 1 UNION SELECT (start_time AT TIME ZONE 'Australia/Brisbane')::date FROM hevy_workouts WHERE user_id = 1 AND excluded_at IS NULL AND start_time IS NOT NULL) SELECT date_trunc('month', tr.day)::date AS month, count(*) AS training_days, count(*) FILTER (WHERE d.session_rpe IS NOT NULL) AS with_session_rpe, count(*) FILTER (WHERE d.pm_timestamp IS NOT NULL) AS with_pm_checkin FROM tr LEFT JOIN daily_records d ON d.user_id = 1 AND d.date = tr.day GROUP BY 1 ORDER BY 1;` Append the result here when pasted.
-
-**Scope note (4 Oct 2026, operator, with #369).** The Q202 brief is to follow. Its case A is rows inside the Garmin in-activity HR lag window (about 7 days from the session). It is not a cover for the scheduled-sync failure (#370).
-
-**Floor input now exists for watch sessions (4 Oct 2026, #372, #373, #374).** The per-session capture this entry was waiting on is built for Garmin-watch sessions (Q209, closed): an immutable per-activity RPE (CR-10) and feel, linked to the Health Connect row, landed via PR #309, first live run owed. No kappa fit is possible until paired data accumulates (n = 2 paired days when read). The two rulings recorded above are now decisions: #326 stands and Case B is dropped (#373); the rollup reads both formula versions, when the floor is built (#374). H10-only sessions have no captured rating (Q189).
-
-**State:** OPEN. Owner: Luke. Not blocking.
 
 ---
 
@@ -3072,7 +3038,20 @@ Raised 10 Oct 2026 (operator; investigation only, nothing built, no migration pr
 
 Reading it: `rpe_cr10` NULL on a row you rated means link (ii) failed (Garmin did not send the rating, or it was rated after day 7). `aerobic_session_id` NULL with a rating means link (i) failed (no Garmin-package Health Connect row overlapping the activity). A row with no `garmin_activity_id` at all means the sweep never listed the activity.
 
-**State:** OPEN. Ruled in principle (operator, 10 Oct 2026); the build is pending, gated on at least 10 global pairs and due before January 2027. The manual-entry path and its migration are out of scope on the verification above, pending the one live check. Not blocking today. Related: #410, Q230, #409, #32, #305, #402, Q209, Q219, Q159.
+**Design terms, ruled (operator, 11 Oct 2026; #419).** Carried in with Q202's closure, for the build. Nothing is built. They amend the 10 Oct ruling above where stated.
+1. **Two-class `k`, and Q231's first ratified sport-to-class table.** The fit is split in two, each class fitted only on its own pairs:
+
+   | Class | Sessions | Rule |
+   |-------|----------|------|
+   | Conditioning | every metabolic-transform session except the #322 S3 set (`sport_classes.NON_TRAINING_SPORTS`: Walking, Pilates, Yoga, Stretching) | fitted on its own pairs |
+   | Low-intensity | Pilates, Yoga, Stretching | fitted on its own pairs; fails closed below its own minimum n (n to be ruled with the build); never borrows the conditioning `k` |
+   | Excluded | Walking | no imputation: an unzoned walk deposits nothing, as today (INV-7) |
+
+   The conditioning class is the population the 10 Oct fit already used (Code's check: the S3 set is exactly those four names, `sport_classes.py:27`). What this amends in the 10 Oct terms: Pilates, Yoga and Stretching are no longer left out of the fit but fitted as their own class, and "global `k` first, a borrowed `k` flagged" does not apply to them. Not restated and not revoked here: the 10 Oct per-sport-class term for rugby, the 10-pair gate (counted over what is now the conditioning class), and the January 2027 date. Evidence (chat-computed from the 11 Oct MCP coach read, zone minutes rounded; Likely; Code did not recompute it, and no per-session values are recorded here): conditioning `k` about 0.42-0.77 (median about 0.64); walks about 0.08-0.17, depressed by the Edwards Z1 floor rather than by effort.
+2. **Lag-window supersession.** When a session imputed under Q231 later gains usable zones (Q159: a run's in-activity HR can arrive the next day, 11 Oct evidence in #416, or up to about seven days later, #369), the Edwards deposit replaces the imputed one. A session never holds both. The operator expects this to follow from the delete-and-reinsert transform (`load_events_metabolic.py`); **the build must carry a named test that a session never holds both.** Code's check of that expectation (read, not run): the transform's delete is scoped to `user_id` and `formula_version == FORMULA_VERSION_METABOLIC` (`load_events_metabolic.py:181-183`, `metab-v1`); the natural key `uq_load_event_session_window_version` includes `formula_version` (`models.py:1434-1435`); and the model docstring says a new version's rows coexist beside the old (`models.py:1411-1414`). So the guarantee holds if the imputed rows are cleared in the same pass. If they carry a different `formula_version` (finding 4 above says "from `metab-v2`"), the existing delete does not touch them and the key does not stop a second row, so a session could hold both. That is why the test is named and load-bearing. How the build clears them is for the build.
+3. **Settled and left open by these terms.** Settled: the sport-to-class table (above, first version) and, for the low-intensity class, fail closed rather than fall back. Left open for the build: the low-intensity class's minimum n; the fit method; the remaining open design points above.
+
+**State:** OPEN. Ruled in principle (operator, 10 Oct 2026) and refined by the two-class `k` and lag-window supersession terms (11 Oct 2026, #419); the build is pending, gated on at least 10 global pairs and due before January 2027. The manual-entry path and its migration are out of scope on the verification above, pending the one live check. Not blocking today. Related: #410, Q230, #409, #32, #305, #402, Q209, Q219, Q159, Q202 (closed into this, #419), Q203.
 
 ---
 
@@ -6034,9 +6013,47 @@ Not built: the intensity-share classifier is a Q201 input only. The `concurrent_
 - **(a) Ruled.** The #365 hierarchy does not enter arbitration. Richness-first (#356) stands: when both rows are zoned the richer, higher-ranked trace deposits, whichever device #365 makes the owner. #365 governs which device records a run; arbitration governs which copy deposits. The dropped owner tie-break stays dropped; the 3 Oct update's deferral of (a) is superseded.
 - **(c) Ruled.** The start-offset tolerance is accepted as behaviour and declared: the twin test is overlap >= 50% of the shorter duration (`reads/aerobic_reads.py:49,239`), about 640 s for the 1 Oct durations (646 s with Polar later, 678 s with Garmin later). Any change to the 50% predicate is a ruled change. Recorded in #417 and in `SCHEMA.md` §032.
 - **(b) Not met by #415 (as of #417).** #415 links sessions to Hevy workouts, not twins, and `get_recent_sessions` drops non-canonical rows before the formatter (`mcp_server.py:887`); no coach-facing read shows a suppressed twin or the canonical distinction (gap recorded precisely in #417). Not built at that point.
-- **(b) Ruled and built (operator, 11 Oct 2026; #418).** Suppression is surfaced on the MCP coach reads only: a canonical aerobic row that suppressed twins carries `also_recorded_by`, a list of `{source, source_package}` per non-canonical twin (identity only, no ids, zones or load; omitted when none). `get_training_sessions` and `get_recent_sessions` carry it; non-canonical rows stay filtered; no web UI, no snapshot count, no schema. `arbitrate()` did not retain the winner, so it is re-derived by `twins_by_canonical` through the one extracted pair test. **Owed (operator):** the first live coach read shows the 1 Oct run once, on row 95, with three entries.
+- **(b) Ruled and built (operator, 11 Oct 2026; #418).** Suppression is surfaced on the MCP coach reads only: a canonical aerobic row that suppressed twins carries `also_recorded_by`, a list of `{source, source_package}` per non-canonical twin (identity only, no ids, zones or load; omitted when none). `get_training_sessions` and `get_recent_sessions` carry it; non-canonical rows stay filtered; no web UI, no snapshot count, no schema. `arbitrate()` did not retain the winner, so it is re-derived by `twins_by_canonical` through the one extracted pair test. **First live coach read DONE (operator, 11 Oct 2026, #419):** it shows the 1 Oct run once, on row 95, with three entries.
 
-**State:** DONE → #418. Owner: Luke. All three limbs are ruled: (a) and (c) in #417, (b) in #418. Owed (operator): the first live coach read, above.
+**State:** DONE → #418. Owner: Luke. All three limbs are ruled: (a) and (c) in #417, (b) in #418. The first live coach read is discharged (operator, 11 Oct 2026, #419).
+
+---
+
+## Q202. RPE floor: a session with no usable device HR deposits no load, and nothing floors it
+
+Raised with #365. Verified against master `054d2d9`.
+
+**Question.** Does the load model compute sRPE × duration when a session has no device HR? Can a session with zero device data exist in load at all?
+
+**Findings.**
+- **No floor.** The metabolic load is Edwards zone-seconds TRIMP only; a session with no usable zones emits no `load_events` row and is counted in `sessions_skipped_no_zones`, which is in the return dict only (`load_events_metabolic.py:24-29,99-112,204-206`). There is no HR-based fallback and no RPE term in any physical load.
+- **sRPE × duration exists in one place:** the regression target of `psychological_residual`, from the day's whole-day `daily_records.session_rpe` (`reads/psychological_reads.py:363-392`, `models.py:164`). It is a diagnostic, not a load input.
+- **A session with zero device data cannot exist in `aerobic_sessions`.** Its only writers are HC ingest (`routers/health_connect.py:765`), Polar sync (`polar_ingest.py:169`) and Polar import (`import_polar.py:196`). No manual path writes it. A Hevy strength session is the exception that needs no device: Tier-0 loads from logged sets, and a per-set RPE only bands RIR (`load_events.py:129-141,180-200`).
+- **What puts a watch-owned run into load (#365).** A Garmin HC row is zoned by `hc_zone_enrich` from same-writer HR samples (#364). It deposits only if a `user_hrmax` row is in force and the credited coverage reaches 0.6; otherwise it stays zoneless and deposits nothing (`hr_zones.py:48`, #364).
+
+**Gap.** A watch-owned run without usable HR reads as zero load, silently.
+
+**To decide (Luke).** For a zoneless watch-owned run: (a) stay fail-closed but make the absence explicit (Q203); (b) floor it with RPE × minutes, which is Q189's design fork (capture surface, scaling into lane units); (c) both. Q189 covers device-only sessions such as Pilates and swimming; this entry is the running case the hierarchy creates. Resolve together.
+
+**Brief verified and halted (4 Oct 2026, the `srpe-floor` session; master `53f5925`).** The sRPE-floor brief (A: an Edwards-skipped unzoned device session emits a floor event; B: an "unrecorded session" marker row carrying date, class, minutes and sRPE; C: a per-athlete kappa fitted from paired sessions) was verified before any build, and nothing was built. Findings:
+- **#326 forbids Case B.** Its Context says "no self-reported session rows, no load and no TRIMP", its Rationale says "The marker changes confidence, not values", and the Q169 principle it ratifies says "No per-session detail, RPE, duration, or time" and rejects "an sRPE variant". **Ruled (operator, 4 Oct): #326 stands, Case B is dropped, Q169's rejection is not superseded.**
+- **sRPE is one rating per day, overwritten, with no snapshot.** `daily_records.session_rpe` (Float, 0-10, `models.py:164`) is written by `POST /pm` (`routers/checkin_v2.py:758`, nulled when `trained_today` is false; `pm_timestamp` is overwritten too, `:755`). A delete-and-reinsert transform (`load_events_metabolic.py:180-185`) would follow a revised rating, so "sRPE at recording time only" needs an immutable capture (Q209). `users.rpe_complete_from` is the Hevy set-RPE epoch (`load_metrics.py:297`), not a `session_rpe` capture epoch.
+- **The rollup does not pick up a new formula version without wiring.** `compute_load_metrics` reads `load_events` for one `formula_version` (`load_metrics.py:277-283`), and the chain calls the metabolic step with `metab-v1` only (`scripts/refresh_load.py:158-161`), so `srpe-floor-v1` rows would never roll up. **Ruled (operator, 4 Oct): option (a), when the floor is built: the metabolic rollup reads both versions and the event rows keep their own. Nothing now.**
+- **A day's RPE does not describe every session.** Felt-load already leaves Walking, Pilates, Yoga and Stretching out of its RPE minutes (#322 S3, `reads/psychological_reads.py:290-294`) and skips an aerobic row that overlaps a counted Hevy workout (`:316-317`). The Case A lean is recorded on Q189.
+- `load_events.provenance` is JSONB (`models.py:12,1295`; migration `c7d9e2f14a86:55`). MCP `get_training_load` reads `load_metrics` only (`mcp_server.py:917-941`), so a floor event's `provenance.method` would not show there without a new read.
+- The brief's "3 Oct: 10 skipped for no zones, 12 of 26 HC rows unzoned" is operator-reported and appears in no repo text; it was not used.
+
+**S1 result (operator-reported, 4 Oct).** The paired-session query returned **n = 2** pair-days (2026-06-17 and 2026-09-09). No fit is possible; the gate was n >= 20. The operator confirmed the cause: the bedtime check-in is the only RPE surface and is often skipped. **Scope change (operator): report and governance only. No migration, nothing built. The floor and kappa wait on a capture surface (Q209).**
+
+**Capture rate, OWED (operator).** The count of training days that carry a `session_rpe` has not been read. Read-only, one statement; a training day is any non-excluded Hevy workout day or `aerobic_sessions` day (walks included): `WITH tr AS (SELECT session_date AS day FROM aerobic_sessions WHERE user_id = 1 UNION SELECT (start_time AT TIME ZONE 'Australia/Brisbane')::date FROM hevy_workouts WHERE user_id = 1 AND excluded_at IS NULL AND start_time IS NOT NULL) SELECT date_trunc('month', tr.day)::date AS month, count(*) AS training_days, count(*) FILTER (WHERE d.session_rpe IS NOT NULL) AS with_session_rpe, count(*) FILTER (WHERE d.pm_timestamp IS NOT NULL) AS with_pm_checkin FROM tr LEFT JOIN daily_records d ON d.user_id = 1 AND d.date = tr.day GROUP BY 1 ORDER BY 1;` Append the result here when pasted.
+
+**Scope note (4 Oct 2026, operator, with #369).** The Q202 brief is to follow. Its case A is rows inside the Garmin in-activity HR lag window (about 7 days from the session). It is not a cover for the scheduled-sync failure (#370).
+
+**Floor input now exists for watch sessions (4 Oct 2026, #372, #373, #374).** The per-session capture this entry was waiting on is built for Garmin-watch sessions (Q209, closed): an immutable per-activity RPE (CR-10) and feel, linked to the Health Connect row, landed via PR #309, first live run owed. No kappa fit is possible until paired data accumulates (n = 2 paired days when read). The two rulings recorded above are now decisions: #326 stands and Case B is dropped (#373); the rollup reads both formula versions, when the floor is built (#374). H10-only sessions have no captured rating (Q189).
+
+**Closed as superseded (operator ruling, 11 Oct 2026; #419).** The fork above resolves as (c), both, housed elsewhere. (b), the RPE x minutes floor for a zoneless session, is Q231's imputed-TRIMP design, ruled in principle on 10 Oct 2026 (`k x RPE x minutes` in TRIMP units, an imputed row carrying its provenance). (a), explicit absence, is Q203. Nothing is built by this closure. #326, #373 and #374 stand unchanged. Q231 took two design terms in with it (the two-class `k` and lag-window supersession). Not discharged by this closure: the `Capture rate, OWED (operator)` statement above is still unrun. It is not a precondition of Q231's gate, which counts rated pairs, and Q231's entry route is Garmin's per-activity self-evaluation, not the whole-day `session_rpe` that statement counts.
+
+**State:** DONE → #419. Closed as superseded: the floor is Q231, the explicit absence is Q203; nothing built.
 
 ---
 
