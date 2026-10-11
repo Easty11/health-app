@@ -14252,3 +14252,21 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 **Do not revisit unless.** Route (i) is built, observations gain instrument/protocol provenance, or a protocol-matched norm is cited for a declared measure (then flip that one declaration and edit the pin in the same change).
 
 ---
+
+### 422. Q27 v1 is live in prod: the retagged exercises are seeded with the fixed seeder, and no `shoulder_er_ir` row remains
+
+**Decision.** Record of the prod re-seed that #420 left OWED, run by the operator on 11 Oct 2026 after both Railway services reached SUCCESS on `9246fce` (the merge of #383). Code had no prod route and ran none of it; the figures below are the operator's pasted output.
+- **Dry-run** (`seed_exercise_region_tags.py 1 --dry-run`, `/app`, user 1): 90 entries resolved, 0 unresolved, `near_twins` empty, 0 pre-existing unconfirmed rows, `tags_planned` 80, 16 no-pattern. It printed the `pending deletions` line only the fixed seeder emits (so the new image answered), and exactly 6 `DELETE` lines, all `shoulder_er_ir(primary) [human_confirmed]`: the two parents (`f5f7ecfb-68b8-44d6-99c4-f2dc7b183072` ER, `b4bab549-a143-4186-9615-249165e5a4a2` IR) and the four variants (`934c52a0…` IR L, `6ba537fa…` IR R, `c06b41ae…` ER L, `1af7297b…` ER R). That is the #420 hypothesis confirmed against prod: the unfixed seeder would have removed the four variants' rows and left the two parents' beside the new keys.
+- **Resolved catalogue ids of the five retagged entries:** Shoulder External Rotation `f5f7ecfb-68b8-44d6-99c4-f2dc7b183072` to `shoulder_er`; Shoulder Internal Rotation `b4bab549-a143-4186-9615-249165e5a4a2` to `shoulder_ir`; Calf Extension (Machine) `47B9DF13` and Standing Calf Raise (Machine) `E05C2C38` to `ankle_plantarflexion`; Hip Abduction (Machine) `F4B4C6EE` to `hip_abduction`. The four IR/ER variants inherit.
+- **`--confirm`:** `titles_resolved` 90, `tags_written` 80 (77 at #339, plus 3), `no_pattern_adjudicated` 16 (was 19), `inherited_variants` 8, `deleted` 6, `pruned` 0.
+- **Read-back** (`railway connect`, one statement): over `region_key IN ('shoulder_er_ir', 'shoulder_er', 'shoulder_ir')` on `exercise_region_tags`: `shoulder_ir` 3, `shoulder_er` 3, no `shoulder_er_ir` row.
+
+**Rationale.** Closes the loop #420 named, in the form #339 recorded the v0.1 seed. The deployed code had been verified by SUCCESS on both services and by a probe that differs between the images (the `pending deletions` output).
+
+**Status.** DONE 11 Oct 2026. Non-migration. Q27's re-seed item is discharged; what remains of Q27 is unchanged (provenance migration held, route (i), the `knee_flexion` measure, norms).
+
+**How you know.** The operator's pasted dry-run, `--confirm` summary and read-back above; `backend/tests/test_exercise_region_tags.py::test_the_retired_shoulder_er_ir_row_is_removed_from_parent_and_variant` pins the same shape at the unit level.
+
+**Do not revisit unless.** A later reference change retags these templates again (the seeder then deletes the stale rows on `--confirm`, by the #420 rule).
+
+---
