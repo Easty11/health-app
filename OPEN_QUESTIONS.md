@@ -206,23 +206,22 @@ units, so the gap between them does not size a deficit. Each axis needs a route 
 Decide per axis (ER:IR, adductor:abductor, plantarflexion, hamstring if admitted). **Pending operator:** whether a
 dynamometer or squeeze gauge is available. Route (ii) cannot be chosen for any axis until that is known.
 
-**Resolved on a held branch (11 Oct 2026, #NEXT and the one after): vocabulary and routes.** The vocabulary is
+**Resolved (11 Oct 2026, #NEXT and the one after): vocabulary and routes.** The vocabulary is
 `shoulder_er`, `shoulder_ir`, `hip_adduction`, `hip_abduction`, `ankle_plantarflexion` and `knee_flexion` (absolute +
 LSI, no H:Q) in group H, with `er_ir` and `add_abd` as the declared ratios and `reference_kind` on Measure and Ratio.
-The routes: (i) log-derived against an INTERNAL band, declared not built; (ii) protocol probe, with dynamometry
-EP-administered (the equipment question is answered: no HHD purchase; a BP cuff for the squeeze is an optional
-operator buy). The interim no-pattern verdicts for calf, hip abduction and shoulder ER/IR are retired. Companion text:
-`docs/capability-taxonomy-v1.md`.
+The gate fails closed, and every v1 measure and ratio is `internal` until a norm matching its protocol is cited.
+Dip is ungated. The routes: (i) log-derived against an INTERNAL band, declared not built; (ii) protocol probe, with
+dynamometry EP-administered (the equipment question is answered: no HHD purchase; a BP cuff for the squeeze is an
+optional operator buy). The interim no-pattern verdicts for calf, hip abduction and shoulder ER/IR are retired. The V2
+prod read was clean. Companion text: `docs/capability-taxonomy-v1.md`.
 
-**State:** OPEN, narrowed to what is left. (1) **V2, prod read before the merge (Owner: Luke):** no row names the
-retired `shoulder_er_ir` in `capability_state`, `capability_observations`, `exercise_region_tags`, engine-tier
-`constraint` rows in `user_knowledge_entries`, or `fortification_profiles` (`primary_target`, `hard_stops`); then the
-`--dry-run` and `--confirm` seed. (2) **Provenance migration, held for the operator:** `capability_observations`
-needs `administered_by`, `instrument` and `protocol` (nullable, closed vocabularies, `SCHEMA.md` paired) before the
-`reference_kind` match rule or `same_protocol` can be evaluated. (3) **Route (i) computation:** not built. (4) **Which
-action gates dip** (`shoulder_er`, `shoulder_ir`, or one): unruled; both carry the gate now. (5) **`knee_flexion` has no
-declared measure**; and **`squeeze_mmhg`'s literature basis** is unverified (the Copenhagen squeeze is validated as a
-pain score). (6) **Norms:** every band is "to populate"; nothing is queue-eligible until one is grounded and admitted.
+**State:** OPEN, narrowed to what is left. (1) **Prod re-seed (Owner: Luke):** `--dry-run`, then `--confirm`, for the
+five retagged entries; report the resolved catalogue titles. (2) **Provenance migration, held for the operator:**
+`capability_observations` needs `administered_by`, `instrument` and `protocol` (nullable, closed vocabularies,
+`SCHEMA.md` paired) before the `reference_kind` match rule or `same_protocol` can be evaluated. (3) **Route (i)
+computation:** not built. (4) **`knee_flexion` has no declared measure.** (5) **Norms:** every band is "to populate";
+a measure flips to `literature` only with a cited, protocol-matched norm, and nothing is queue-eligible until one is
+grounded and admitted. The silent skip of an unknown region key in the constraint engine is spun out as Q232.
 
 ---
 
@@ -3052,6 +3051,31 @@ Reading it: `rpe_cr10` NULL on a row you rated means link (ii) failed (Garmin di
 3. **Settled and left open by these terms.** Settled: the sport-to-class table (above, first version) and, for the low-intensity class, fail closed rather than fall back. Left open for the build: the low-intensity class's minimum n; the fit method; the remaining open design points above.
 
 **State:** OPEN. Ruled in principle (operator, 10 Oct 2026) and refined by the two-class `k` and lag-window supersession terms (11 Oct 2026, #419); the build is pending, gated on at least 10 global pairs and due before January 2027. The manual-entry path and its migration are out of scope on the verification above, pending the one live check. Not blocking today. Related: #410, Q230, #409, #32, #305, #402, Q209, Q219, Q159, Q202 (closed into this, #419), Q203.
+
+---
+
+## Q232. A stored engine-tier constraint or profile hard-stop names a region key that the taxonomy later retires: should the engine warn, fail, or re-validate?
+
+Spun out from Q27's V2 (11 Oct 2026, #NEXT). `validate_constraint` (`routers/knowledge.py`) refuses an unknown
+`scope.region_keys` entry at WRITE time, but nothing re-checks a stored row afterwards. `gather_active_constraints`
+(`engine/selection.py`) copies the keys through unchecked, and `is_contraindicated` matches them by string equality
+(`region.key in c["region_keys"]`, the constraint arm; `rk == region.key`, the profile hard-stop arm). A key removed
+from the taxonomy therefore matches nothing: the restriction stops applying with no log line and no error. Q27's
+`shoulder_er_ir` split could have disabled a stored shoulder block this way; the operator's V2 read found none, so no
+restriction was lost, but the next rename has no such check built in. A `fortify` `primary_target` fails loudly by
+contrast (`region_exercise` returns UNRESOLVED), and the `exercise_region_tags` consumers log and skip an orphan key.
+
+Options:
+- **(a) Warn.** Log every stored constraint or hard-stop key that resolves to no region, once per read. Cheap, but a
+  log line is not seen by the operator and the restriction is still off.
+- **(b) Fail closed.** Treat an unresolved key as blocking everything it could have meant, or refuse to serve the
+  probe queue, until the row is repaired. Safest, and the loudest; a rename then becomes an outage until migrated.
+- **(c) Validate at the taxonomy change.** A test or a deploy-time check that every stored engine-tier key and
+  `hard_stops[*].region_key` resolves, so a rename cannot ship while a row names the old key. Catches it before the
+  restriction lapses, but needs a prod read, which CI does not have.
+
+**State:** OPEN. Chat decides between (a), (b) and (c); (a) and (c) are not exclusive. Nothing is built. Owner: chat.
+Constraint rows are Q197's record; this question concerns only how the engine treats a key that no longer resolves.
 
 ---
 

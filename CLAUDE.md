@@ -219,11 +219,15 @@ self-merge on green under § Merge disposition.
   fenced block read byte-faithfully from the mount (never the rendered view, which flattens
   markdown); Code diffs before landing. Repo-canonical docs are edited in place, never cross
   this transport.
-- **Reference-JSON edit guard (#98).** `backend/reference/*.json` is hand-aligned pure ASCII
-  (non-ASCII as `\uXXXX`). Never build a `\uXXXX` escape in heredoc source (the Bash tool eats
-  one backslash even when quoted — use `chr(92)+"u2014"` or a script file); after any edit
-  assert `raw.isascii() and raw.count(chr(0x2014))==0` and that it still parses; no `json.dump`
-  round-trips. The bad-byte failure is silent — only the assertion catches it.
+- **Reference-JSON edit guard (#98).** `backend/reference/marker_groups.json` and
+  `backend/reference/safety_thresholds.json` are hand-aligned pure ASCII (non-ASCII as `\uXXXX`);
+  their tests pin it (`raw.isascii()`). Never build a `\uXXXX` escape in heredoc source (the Bash
+  tool eats one backslash even when quoted — use `chr(92)+"u2014"` or a script file); after any edit
+  to those two assert `raw.isascii() and raw.count(chr(0x2014))==0` and that it still parses; no
+  `json.dump` round-trips. The bad-byte failure is silent — only the assertion catches it. The other
+  `backend/reference/*.json` files are not pinned: `exercise_region_tags_v0.json` is raw UTF-8 on
+  master (29 em dashes), so edit it by line surgery that leaves every untouched line byte-identical
+  and adds no non-ASCII, and assert it still parses (Q27 v1 found the old blanket rule failing on it).
 - **Irreversible-write pre-ship gate (#166, `FEEDBACK` §23).** When a decision's How-you-know
   admits an unexercised write path, ask what its failure COSTS before shipping. Non-destructive
   and loud → ship with an `OPEN_QUESTIONS` watch-point. Able to change state we cannot undo →
