@@ -188,6 +188,43 @@ def _win_key(session, dur: float, start_ts: float, *, by_writer: bool) -> tuple:
     )
 
 
+def _intervals(sessions: list) -> dict:
+    """{id(session): (start_ts, stop_ts, duration)} for every session with a usable
+    [start_time, stop_time]. A session absent from the result cannot be paired."""
+    intervals: dict[int, tuple[float, float, float]] = {}
+    for s in sessions:
+        start_ts = _ts(s.start_time)
+        stop_ts = _ts(s.stop_time)
+        if start_ts is not None and stop_ts is not None and stop_ts > start_ts:
+            intervals[id(s)] = (start_ts, stop_ts, stop_ts - start_ts)
+    return intervals
+
+
+def _outranks(y, x, intervals: dict) -> bool:
+    """True when `y` describes the same bout as `x` and wins it by `_win_key` — the ONE
+    definition of "twin" (interval overlap >= OVERLAP_THRESHOLD of the shorter duration) and of
+    "outranks". `arbitrate` and `twins_by_canonical` both call it, so what suppresses a row and
+    what the coach read says suppressed it can never disagree.
+
+    Same-source pairs are compared ONLY within health_connect (writer-class arbitration); any
+    other same-source pair is never a twin. A row with no usable interval pairs with nothing."""
+    xi, yi = intervals.get(id(x)), intervals.get(id(y))
+    if xi is None or yi is None:
+        return False
+    same_source = (y.source == x.source)
+    if same_source and x.source != HEALTH_CONNECT:
+        return False
+    x_start, x_stop, x_dur = xi
+    y_start, y_stop, y_dur = yi
+    overlap = min(x_stop, y_stop) - max(x_start, y_start)
+    if overlap < OVERLAP_THRESHOLD * min(x_dur, y_dur):
+        return False  # not the same bout
+    # `same_source` here implies both rows are health_connect, so rank by writer class; a
+    # cross-source pair ranks by source fidelity.
+    return (_win_key(y, y_dur, y_start, by_writer=same_source)
+            > _win_key(x, x_dur, x_start, by_writer=same_source))
+
+
 def arbitrate(sessions: list) -> list:
     """Set `.canonical` (bool) on every session in `sessions`, in place.
 
@@ -210,43 +247,42 @@ def arbitrate(sessions: list) -> list:
     O(n^2) over the passed set; fine at personal/family scale (same assumption as
     _capture_record_sources). Returns the same list for convenience.
     """
-    # Precompute interval + duration once per session.
-    intervals: dict[int, tuple[float, float, float]] = {}
-    for s in sessions:
-        start_ts = _ts(s.start_time)
-        stop_ts = _ts(s.stop_time)
-        if start_ts is not None and stop_ts is not None and stop_ts > start_ts:
-            intervals[id(s)] = (start_ts, stop_ts, stop_ts - start_ts)
-
+    intervals = _intervals(sessions)
     for x in sessions:
-        xi = intervals.get(id(x))
-        canonical = True
-        if xi is not None:
-            x_start, x_stop, x_dur = xi
-            for y in sessions:
-                if y is x:
-                    continue
-                same_source = (y.source == x.source)
-                # Same-source pairs are compared ONLY within health_connect (writer-class
-                # arbitration); any other same-source pair is skipped as before.
-                if same_source and x.source != HEALTH_CONNECT:
-                    continue
-                yi = intervals.get(id(y))
-                if yi is None:
-                    continue
-                y_start, y_stop, y_dur = yi
-                overlap = min(x_stop, y_stop) - max(x_start, y_start)
-                if overlap < OVERLAP_THRESHOLD * min(x_dur, y_dur):
-                    continue  # not the same bout
-                # `same_source` here implies both rows are health_connect, so rank by
-                # writer class; a cross-source pair ranks by source fidelity.
-                by_writer = same_source
-                x_key = _win_key(x, x_dur, x_start, by_writer=by_writer)
-                if _win_key(y, y_dur, y_start, by_writer=by_writer) > x_key:
-                    canonical = False
-                    break
-        x.canonical = canonical
+        x.canonical = not any(_outranks(y, x, intervals) for y in sessions if y is not x)
     return sessions
+
+
+def twins_by_canonical(sessions: list) -> dict:
+    """{canonical session id: [non-canonical twins it suppressed]} — the Q201(b) read-time
+    derivation (#418), over the rows `arbitrated_sessions` returned. Only canonical rows that
+    won at least one bout appear.
+
+    `arbitrate` records only that a row lost, not to whom, so the winner is re-derived with the
+    same `_outranks` pair test. A loser attaches to exactly ONE canonical row: a canonical row
+    that directly outranks it (lowest id if several), else — when it lost only to rows that are
+    themselves losers — the canonical row at the end of that chain (visited-guarded). A Hevy
+    mirror (`hevy_mirror`) was never in the arbitration and is never a twin. Twins are ordered
+    by id. O(losers x n) over the passed set, on top of arbitrate's O(n^2)."""
+    pool = [s for s in sessions if not getattr(s, "hevy_mirror", False)]
+    intervals = _intervals(pool)
+    out: dict[int, list] = {}
+    for x in pool:
+        if getattr(x, "canonical", True):
+            continue
+        w, seen = x, {id(x)}
+        while not getattr(w, "canonical", True):
+            beaten_by = [y for y in pool if id(y) not in seen and _outranks(y, w, intervals)]
+            if not beaten_by:
+                break
+            direct = [y for y in beaten_by if getattr(y, "canonical", True)]
+            w = min(direct or beaten_by, key=lambda y: y.id)
+            seen.add(id(w))
+        if getattr(w, "canonical", True) and w is not x:
+            out.setdefault(w.id, []).append(x)
+    for twins in out.values():
+        twins.sort(key=lambda s: s.id)
+    return out
 
 
 def arbitrated_sessions(

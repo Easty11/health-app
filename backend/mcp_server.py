@@ -35,9 +35,9 @@ from routers.knowledge import FINDING_DOMAINS
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from routers.clinical_documents import document_out as _clinical_document_out, parse_filters as _parse_document_filters
 from reads.labs_reads import latest_lab_results
-from aerobic_format import format_aerobic_session, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
+from aerobic_format import format_aerobic_session, format_also_recorded_by, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
 from garmin_selfeval import selfeval_by_session   # Garmin per-activity RPE/feel for a linked session (Q209)
-from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
+from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout, twins_by_canonical   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
 from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
 from sport_classes import is_strength_sport
 from reads.recovery_reads import hrv_deviation, representative_source
@@ -591,6 +591,8 @@ def get_training_sessions(days: int = 28) -> str:
     Returns sport type, duration, average/max HR, distance, calories, HR zones.
     A session that is the HR trace of a Hevy gym workout (at least half of it inside that workout)
     is marked as overlapping it by title; the training plan does not count it as conditioning.
+    A session that other devices also recorded carries also_recorded_by=[{source, source_package}]:
+    identity only, those recordings are not extra training and add no load.
     For aerobic sessions and Hevy workouts merged into one list, use get_recent_sessions."""
     user_id = _current_user_id()
     since = datetime.now(timezone.utc).date() - timedelta(days=days)
@@ -602,6 +604,7 @@ def get_training_sessions(days: int = 28) -> str:
     with SessionLocal() as _db:
         arbitrated = arbitrated_sessions(user_id, _db, since=since)
         selfevals = selfeval_by_session(_db, user_id, arbitrated)   # before the canonical filter: a lost twin's value moves to the winner
+        twins = twins_by_canonical(arbitrated)   # Q201(b): who each canonical row suppressed, before the filter drops them
         sessions = [s for s in arbitrated if getattr(s, "canonical", True)]
 
         if not sessions:
@@ -620,6 +623,7 @@ def get_training_sessions(days: int = 28) -> str:
             line = format_aerobic_session(s)
             if s.id in selfevals:
                 line += format_selfeval(selfevals[s.id])
+            line += format_also_recorded_by(twins.get(s.id))
             if s.id in gym:
                 line += _gym_trace_note(gym[s.id])
             lines.append(line)
@@ -800,7 +804,8 @@ def _hevy_detail(w) -> str:
         w.raw or {}, started.strftime("%H:%M") if started is not None else "")
 
 
-def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, days: int, since: date) -> str:
+def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, days: int, since: date,
+                            twins=None) -> str:
     """Newest first: one line per canonical aerobic session; a session that overlaps a counted
     workout (`_concurrent_strength_sessions`, the #414 test: each session on its own) is a SEGMENT of
     that workout, so a workout's segments are listed in start-time order with its Hevy detail once
@@ -819,7 +824,7 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
         line = format_aerobic_session(s)
         if s.id in selfevals:
             line += format_selfeval(selfevals[s.id])
-        return line
+        return line + format_also_recorded_by((twins or {}).get(s.id))
 
     segments: dict[str, tuple[object, list]] = {}      # hevy_id -> (workout, its segments)
     for s in sessions:
@@ -878,12 +883,14 @@ def get_recent_sessions(days: int = 7) -> str:
     overlaps a Hevy workout is listed as a segment of it: a workout's segments in start order, the
     workout's exercises and top sets once beneath them. Hevy workouts with no device recording
     are marked 'Hevy only', strength-named device sessions with no Hevy workout 'HR only'. Ends
-    with how long ago Health Connect and Polar last delivered."""
+    with how long ago Health Connect and Polar last delivered. A session that other devices also
+    recorded carries also_recorded_by=[{source, source_package}] (identity only, no extra load)."""
     user_id = _current_user_id()
     since = _local_day() - timedelta(days=days)
     with SessionLocal() as _db:
         arbitrated = arbitrated_sessions(user_id, _db, since=since)
         selfevals = selfeval_by_session(_db, user_id, arbitrated)   # before the canonical filter, as get_training_sessions
+        twins = twins_by_canonical(arbitrated)   # Q201(b), as get_training_sessions
         sessions = [s for s in arbitrated if getattr(s, "canonical", True)]
         # Candidate fetch, padded a day before the window so a bout started just before it still
         # links; the formatter applies the in-window cut on the LOCAL day. Partitioned by the
@@ -896,7 +903,7 @@ def get_recent_sessions(days: int = 7) -> str:
         ]
         counted, unadjudicated = counted_workouts(_db, user_id, candidates)
         return _format_recent_sessions(
-            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since)
+            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since, twins)
 
 
 # ---------------------------------------------------------------------------
