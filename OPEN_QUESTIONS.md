@@ -2853,7 +2853,8 @@ Code's lean, not a ruling: leave arbitration alone. With the H10 paired to the w
 - **Classification rule (proposal, unruled).** A segment's Z4+Z5 share decides whether it is conditioning; Hevy overlap only marks lifting. A low-intensity segment overlapping or adjacent to a gym session belongs to that gym visit.
 - **The threshold is set against the zone bounds in force (Q198, Q199), not as a constant.** The 11 Oct data suggests 15-25%. The share is only as good as the zone bounds that produced it.
 - **A zoneless segment** (2026-07-02: 83 min, 1 min zoned) falls back to the overlap rule.
-- **OWED (operator).** 2026-06-24 is recorded as a VO2 bike day but shows only a 76-min Circuit training row, all in Z1-Z3. Decide whether the block was recorded inside it under June's zone bounds, or the day was not VO2.
+- **RESOLVED (operator, 11 Oct 2026; not read by Code).** 2026-06-24 was recorded as a VO2 bike day but shows only a 76-min Circuit training row, all in Z1-Z3. It was not a VO2 day: the Hevy workout's note records the VO2 block as skipped for time. The all-Z1-Z3 profile is correct and gives no evidence that June's zone bounds were too high.
+- **Hevy workout notes can carry planned-but-skipped intent** that neither the HR trace nor the sets show (the 24 Jun note above). Context only, not a build: any classifier that reads a day as planned conditioning from the schedule or the recorded label alone can be wrong in the same direction.
 
 Not built: the intensity-share classifier is a Q201 input only. The `concurrent_strength` marker (#414) still follows the overlap predicate and would follow a classifier if one is ruled.
 
@@ -6068,6 +6069,10 @@ Resolution and depth, from the operator's 1 Oct prod reads recorded in Q198: Gar
 - **Two VO2 blocks are swallowed as `concurrent_strength`:** 2026-04-07 (Other indoor) and 2026-06-17 (Cross-trainer).
 - **The sport label does not discriminate.** Cross-trainer covers VO2 work, warm-ups and whole gym sessions.
 - **Input to Q201:** a classification rule is proposed there, unruled; nothing is built.
+
+**Correction (11 Oct 2026, later; operator-reported, not read by Code).** The 3 Oct result (a) said the VO2 bike blocks of 17 and 24 Jun sit inside Hevy sessions. That was wrong for 24 Jun: the day had no VO2 work, and the Hevy workout's note records the VO2 block as skipped for time. Only 17 Jun is a VO2 block swallowed inside a Hevy session, plus 7 Apr from the zone read; the two swallowed blocks in the 11 Oct results stand. Q206 is not reopened.
+
+**Follow-up (11 Oct 2026).** The one-to-one pairing in `get_recent_sessions` that #414 recorded as the sharpest remaining disagreement is closed in #415: every session that overlaps a counted workout renders as a segment of it.
 
 **State:** DONE → #367 + #414. Ruled in #367: the deposit stays as it is. The loop-close landed 11 Oct 2026 in #414: `get_training_sessions` marks a session that is a gym workout's HR trace, with the workout title, and the readiness snapshot leaves it out of the aerobic count and reports it as "Gym HR traces", both by the resolver's own `overlaps_workout` test over its counted-workout set. Display and counting only; no load value changed. The input-layer design stays with Luke (Q201). Related: Q198 (re-zoning from raw HR), Q201, Q203, Q124, Q207.
 

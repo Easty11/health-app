@@ -742,31 +742,15 @@ def _local_midnight_utc(d: date) -> datetime:
     return _AS_OF_TZ.localize(datetime.combine(d, datetime.min.time())).astimezone(timezone.utc)
 
 
-def _link_sessions_to_workouts(sessions: list, workouts: list) -> dict[int, object]:
-    """{session.id: workout}: each overlapping (session, workout) pair by descending overlap
-    fraction, a session and a workout each used once. A pair exists iff `overlaps_workout`."""
-    pairs = sorted(
-        ((overlap_fraction(s, [w]), s.id, w.hevy_id, s, w)
-         for s in sessions for w in workouts if overlaps_workout(s, [w])),
-        key=lambda p: (-p[0], p[1], p[2]))
-    used_w: set[str] = set()
-    linked: dict[int, object] = {}
-    for _f, sid, hid, _s, w in pairs:
-        if sid not in linked and hid not in used_w:
-            linked[sid] = w
-            used_w.add(hid)
-    return linked
-
-
 def _concurrent_strength_sessions(sessions: list, counted: list) -> dict[int, object]:
     """{session.id: workout} for each canonical session the resolver would uncount as
     `concurrent_strength` (#307): `overlaps_workout(session, counted)`, the same call at
     engine/resolver.py. The mapped workout is the one covering most of the session, for its title.
 
-    Not `_link_sessions_to_workouts`: that pairs one-to-one (a workout is used once), so a second
-    trace over the same gym bout would lose its mark. The resolver tests every session on its own
-    against the whole set, and so does this. An untimed session has no interval and is never
-    marked (the resolver files it as `untimed` before the overlap test)."""
+    Not a one-to-one pairing (a workout used once): a second trace over the same gym bout would
+    lose its mark. The resolver tests every session on its own against the whole set, and so does
+    this. `get_recent_sessions` links through the same function (#415). An untimed session has no
+    interval and is never marked (the resolver files it as `untimed` before the overlap test)."""
     out: dict[int, object] = {}
     for s in sessions:
         if not overlaps_workout(s, counted):
@@ -817,10 +801,12 @@ def _hevy_detail(w) -> str:
 
 
 def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, days: int, since: date) -> str:
-    """Newest first: one line per canonical aerobic session (Hevy detail attached under a matched
-    one), `Hevy only` for a counted workout with no session, `HR only` for a strength-named session
-    with no workout, then the freshness footer. Pure."""
-    linked = _link_sessions_to_workouts(sessions, counted)
+    """Newest first: one line per canonical aerobic session; a session that overlaps a counted
+    workout (`_concurrent_strength_sessions`, the #414 test: each session on its own) is a SEGMENT of
+    that workout, so a workout's segments are listed in start-time order with its Hevy detail once
+    beneath them. `Hevy only` for a counted workout with no segment, `HR only` for a strength-named
+    session with no overlapping workout, then the freshness footer. Pure."""
+    linked = _concurrent_strength_sessions(sessions, counted)
     matched = {w.hevy_id for w in linked.values()}
     items: list[tuple[float, list[str]]] = []
 
@@ -829,14 +815,31 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
             return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).timestamp()
         return _local_midnight_utc(day).timestamp()
 
-    for s in sessions:
+    def _session_line(s) -> str:
         line = format_aerobic_session(s)
         if s.id in selfevals:
             line += format_selfeval(selfevals[s.id])
+        return line
+
+    segments: dict[str, tuple[object, list]] = {}      # hevy_id -> (workout, its segments)
+    for s in sessions:
         w = linked.get(s.id)
-        if w is None and is_strength_sport(s.sport_name):
-            line += " — HR only (no Hevy workout matches)"
-        items.append((_ts_of(s.start_time, s.session_date), [line] + ([_hevy_detail(w)] if w is not None else [])))
+        if w is not None:
+            segments.setdefault(w.hevy_id, (w, []))[1].append(s)
+
+    emitted: set[str] = set()
+    for s in sessions:
+        w = linked.get(s.id)
+        if w is None:
+            line = _session_line(s)
+            if is_strength_sport(s.sport_name):
+                line += " — HR only (no Hevy workout matches)"
+            items.append((_ts_of(s.start_time, s.session_date), [line]))
+        elif w.hevy_id not in emitted:
+            emitted.add(w.hevy_id)
+            segs = sorted(segments[w.hevy_id][1], key=lambda x: (_ts_of(x.start_time, x.session_date), x.id))
+            items.append((_ts_of(segs[0].start_time, segs[0].session_date),
+                          [_session_line(x) for x in segs] + [_hevy_detail(w)]))
 
     def _hevy_line(w, note: str) -> list[str]:
         started = w.start_time
@@ -871,8 +874,9 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
 @_stamped
 def get_recent_sessions(days: int = 7) -> str:
     """Get recent training in one list, newest first: each aerobic session from all sources
-    (date, sport, duration, source, HR avg/max, zones, self-evaluation) with the matching Hevy
-    workout's exercises and top sets attached under it; Hevy workouts with no device recording
+    (date, sport, duration, source, HR avg/max, zones, self-evaluation). A device session that
+    overlaps a Hevy workout is listed as a segment of it: a workout's segments in start order, the
+    workout's exercises and top sets once beneath them. Hevy workouts with no device recording
     are marked 'Hevy only', strength-named device sessions with no Hevy workout 'HR only'. Ends
     with how long ago Health Connect and Polar last delivered."""
     user_id = _current_user_id()
