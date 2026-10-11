@@ -16,6 +16,14 @@ import api from '../api'
 // place in a retrospective entry.
 //
 // Skip is client state only: no write, the row stays null (null = "not asked").
+//
+// WHERE THE RESOLUTION LIVES. Whether the card is saved / already-closed / skipped is NOT this
+// component's state: it is `outcome`, held by CheckInAM and reported through `onOutcome`. CheckInAM
+// has two return trees (the form view and the "Morning check-in saved" view) and this card sits at
+// a different child position in each, so submitting the AM unmounts one instance and mounts a fresh
+// one. State local to the instance was lost at that switch and the card re-offered a day that had
+// already been closed out (seen live, 11 Oct). Only the entry-in-progress (the fields, the saving
+// flag, a save error) stays local.
 
 const DAY_LABELS = ['Terrible', 'Poor', 'Okay', 'Good', 'Great']
 const SESSION_LABELS = ['Very poor', 'Below plan', 'As planned', 'Above plan', 'Exceptional']
@@ -48,8 +56,7 @@ function fmtDate(iso) {
   return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-export default function MissedPMCard({ missedPm }) {
-  const [status, setStatus] = useState('open') // open | saved | skipped | already
+export default function MissedPMCard({ missedPm, outcome = null, onOutcome = () => {} }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -61,11 +68,11 @@ export default function MissedPMCard({ missedPm }) {
   const [pmNotes, setPmNotes] = useState('')
 
   if (!missedPm) return null
-  if (status === 'skipped') return null
-  if (status === 'saved') {
+  if (outcome === 'skipped') return null
+  if (outcome === 'saved') {
     return <p className="text-xs text-gray-400 mb-5">Yesterday's close-out saved.</p>
   }
-  if (status === 'already') {
+  if (outcome === 'already') {
     return <p className="text-xs text-gray-400 mb-5">Yesterday was already closed out.</p>
   }
 
@@ -84,10 +91,10 @@ export default function MissedPMCard({ missedPm }) {
         pm_notes: pmNotes.trim() || null,
         naps_min: blockOpen ? (napsMin === '' ? 0 : Number(napsMin)) : null,
       })
-      setStatus('saved')
+      onOutcome('saved')
     } catch (err) {
       if (err.response?.status === 409) {
-        setStatus('already')
+        onOutcome('already')
       } else {
         setError(err.response?.data?.detail || 'Failed to save close-out')
       }
@@ -193,7 +200,7 @@ export default function MissedPMCard({ missedPm }) {
         </button>
         <button
           type="button"
-          onClick={() => setStatus('skipped')}
+          onClick={() => onOutcome('skipped')}
           disabled={saving}
           className="px-4 bg-white border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
         >
