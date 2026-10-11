@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **A gym session's HR trace is marked `concurrent_strength` in `get_training_sessions` and left out of the readiness snapshot's aerobic count, by the resolver's own test (#414, Q206 closed).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #414.
+
 - **A rendered Hevy routine carries each exercise's template id, and a title miss on the routine-write path forces one catalogue refresh per chat turn before it is reported unresolved (#411).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #411.
 
 - **The metabolic lane stays on Edwards (#410, Q230 closed), and the imputed-load design for unrecorded sessions is ruled in principle with its build gated on 10 global pairs and a January 2027 deadline (Q231).** Governance only - Handoff: `closeout.md`.
-
-- **An imputed metabolic load for unrecorded sessions (RPE x minutes, calibrated per user) is investigated and recorded as an open question with a January 2027 deadline; nothing is built (Q231).** Governance only - Handoff: `closeout.md`.
 
 ---
 
