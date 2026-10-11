@@ -12,6 +12,7 @@ extraction (Brief A G2). Pure: takes a row-like object (`session_date`, `source`
 `duration_minutes`, `hr_avg`, `hr_max`, `calories`, `z1_seconds`…`z5_seconds`), touches no DB.
 """
 
+import json
 from typing import Any
 
 
@@ -56,3 +57,18 @@ def format_selfeval(row: Any) -> str:
     if row.feel is not None:
         parts.append(f"feel {row.feel}/100")
     return f" selfeval=[{' '.join(parts)} garmin]"
+
+
+def format_also_recorded_by(twins: Any) -> str:
+    """The Q201(b) twin suffix for a canonical session line (#418), e.g.
+    ` also_recorded_by=[{"source": "health_connect", "source_package": "com.garmin.android.apps.connectmobile"}]`.
+
+    `twins` are the non-canonical rows the canonical row suppressed. Identity only — source and
+    source_package per twin: no ids, no zones, no load, so a twin can never be read as additional
+    training. An empty/None `twins` yields "" (the field is omitted, never empty-listed). The shared
+    `format_aerobic_session` line is NOT changed, so the in-app chat's pinned session block reads as
+    before; only the MCP coach reads append this."""
+    if not twins:
+        return ""
+    entries = [{"source": t.source, "source_package": t.source_package} for t in twins]
+    return " also_recorded_by=" + json.dumps(entries)

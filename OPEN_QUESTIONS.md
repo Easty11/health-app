@@ -2707,77 +2707,6 @@ sustained overnight stretch, which `hr_samples` can now supply).
 
 ---
 
-## Q201. Two sources for one bout: cross-source dedup is read-time and silent, and ranks by richness, not by the #365 hierarchy
-
-Raised with #365. Verified against master `054d2d9` by reading code and running the real `arbitrate()` on synthetic rows; the prod rows were not read (no DB route in that session).
-
-**Question.** When one session arrives from two sources (Garmin through Health Connect, and Polar), does ingestion or load dedupe it? Live case: 1 Oct 2026, about 18:49. Garmin "Trail Running" 3.34 km 21:33; Polar "Jogging" 3.36 km 22:05.
-
-**Findings.**
-- **Ingestion does not dedupe across sources.** Both rows persist. HC admission drops only `com.hevy` mirrors and a lower-writer-class record whose start instant is identical to a higher one's (`routers/health_connect.py:689-731`); two independent detections are deliberately left to read time (`:679-681`). Polar sync skips a session only when the same `source_session_id` already exists under a Polar source (`polar_ingest.py:155-168`), and never looks at HC rows.
-- **Load dedupes at read time.** `compute_metabolic_load_events` reads through `arbitrated_sessions` (`load_events_metabolic.py:177`) and skips non-canonical rows (`:197-199`). Felt load, the MCP session tools and session focus read canonical rows only (`reads/psychological_reads.py:312`, `mcp_server.py:559,749`, `session_focus.py:168`).
-- **The rule.** Two rows are one bout when they overlap by at least 50% of the shorter duration (`reads/aerobic_reads.py:38,218`). The winner is the richer data tier (zones, then HR only, then neither), then source rank (`polar_flow_export` > `polar_v4` > `health_connect`), then the longer duration (`:63-67,125-167`).
-- **Simulation (real `arbitrate()`, synthetic rows at the reported durations; not prod data).** Exactly one canonical row when the Polar start is within about 640 s of the Garmin start, whatever the zone state of either row. Two canonical rows, so two metabolic deposits, at about 700 s or more, or when either row has no usable start/stop (`:186-187,194-198`). Polar wins when both rows are zoned or when the Garmin row has no HR; Garmin wins only when it is zoned and the Polar row has HR only.
-- **Suppression is silent.** `sessions_skipped_non_canonical` exists only in the transform's return dict (`load_events_metabolic.py:230-238`) and no non-test code reads it. The `canonical` flag is exposed on the Polar aerobic list only (`routers/polar.py:316-335`).
-
-**Gaps.**
-1. #365 makes the watch the owner of running, but when both rows are zoned the Polar row is canonical and the Garmin row is dropped. The rule is richness-first (#356); the hierarchy is not an input.
-2. Nothing tells the operator or the coach that a recorded session was suppressed as a twin.
-3. A pair whose starts are more than roughly ten minutes apart, or that lacks a time, double-deposits. The tolerance follows from the 50% rule and the two durations; it is not a declared number.
-
-**Live case (owed, operator).** Over `railway connect` to `health-app-DB`, user 1:
-
-    SELECT id, source, source_package, sport_id, sport_name, start_time, stop_time, duration_minutes, hr_avg, z1_seconds FROM aerobic_sessions WHERE user_id = 1 AND session_date = '2026-10-01' ORDER BY start_time;
-    SELECT source_ref, load, occurred_at, provenance->>'zone_source' AS zone_source FROM load_events WHERE user_id = 1 AND load_window = 'metabolic' AND occurred_at >= '2026-09-30' ORDER BY occurred_at;
-
-The two start times settle which side of the tolerance the pair falls. One metabolic row for the run means dedup held, and `source_ref` is the winning `aerobic_sessions.id`. Two rows for the run is a data defect: report it and rule before anything is touched, and nothing is deleted without that ruling.
-
-**To decide (Luke).** (a) Does the hierarchy enter arbitration, and where relative to the data tier (today a row without HR never suppresses a row with HR)? (b) Must suppression be surfaced, for example an "also recorded by" note on the canonical row? (c) Is the start-offset tolerance acceptable as it stands?
-
-Code's lean, not a ruling: leave arbitration alone. With the H10 paired to the watch (#365) a run produces one record and the question stops arising for runs; surface suppression instead, after the live case is read.
-
-**Update (3 Oct 2026, with #366).** The operator read the live case in prod on 2 Oct (operator-reported; Code has no DB route). Row 93 (`health_connect`, Garmin package, HC sport 56, stored "Running") and row 95 (`polar_v4`, `sport_id` 4) were both zoned, `hr_avg` 145 each, starts 9 s apart. **Dedup held:** `load_events` carries one metabolic row for the run, `source_ref` 95, load 81.85. Polar won on source rank, which is what the findings above predict for two zoned rows, and the canonical row was labelled "Walking": id 4 had been mis-mapped (it is "Jogging" in Polar Flow), fixed by the corrected Polar sport-id map (#366). The row with the watch's own label (93) was the suppressed twin, so gap 1 above is now observed, not only predicted, for the running class.
-
-**The tie-break was scoped and dropped, not built.** The scoped change was: when candidates tie on data tier, prefer the #365 owner for the running class (HC sport 56/57 from the Garmin package) before source rank. It is deferred because a chat design for a source-agnostic input layer (day-level merged per-second HR with a source precedence) is pending and would make session-level metabolic arbitration redundant. `_win_key` is untouched; `metab-v1` (Edwards zone-seconds) stays the metric. Decision (a) is therefore deferred to that design rather than ruled here; (b) and (c) are unchanged.
-
-**Input from Q206 (11 Oct 2026).** Operator-reported data in Q206's 11 Oct results: Z4+Z5 share separates canonical rows cleanly (gym traces, warm-ups and long steady sessions 0-6%; VO2 sessions 33-71%; nothing between), while the sport label does not discriminate and the overlap predicate swallows two VO2 blocks (2026-04-07, 2026-06-17).
-- **Classification rule (proposal, unruled).** A segment's Z4+Z5 share decides whether it is conditioning; Hevy overlap only marks lifting. A low-intensity segment overlapping or adjacent to a gym session belongs to that gym visit.
-- **The threshold is set against the zone bounds in force (Q198, Q199), not as a constant.** The 11 Oct data suggests 15-25%. The share is only as good as the zone bounds that produced it.
-- **A zoneless segment** (2026-07-02: 83 min, 1 min zoned) falls back to the overlap rule.
-- **RESOLVED (operator, 11 Oct 2026; not read by Code).** 2026-06-24 was recorded as a VO2 bike day but shows only a 76-min Circuit training row, all in Z1-Z3. It was not a VO2 day: the Hevy workout's note records the VO2 block as skipped for time. The all-Z1-Z3 profile is correct and gives no evidence that June's zone bounds were too high.
-- **Hevy workout notes can carry planned-but-skipped intent** that neither the HR trace nor the sets show (the 24 Jun note above). Context only, not a build: any classifier that reads a day as planned conditioning from the schedule or the recorded label alone can be wrong in the same direction.
-
-Not built: the intensity-share classifier is a Q201 input only. The `concurrent_strength` marker (#414) still follows the overlap predicate and would follow a classifier if one is ruled.
-
-**Evidence (operator prod reads, 11 Oct 2026, user 1, 1 Oct Brisbane; a note, no ruling; not read by Code).** One run, four `aerobic_sessions` rows:
-
-| id | source | package / label | start (UTC) | zones |
-|----|--------|-----------------|-------------|-------|
-| 95 | `polar_v4` | "Jogging" | 08:49:54Z | zoned |
-| 96 | `health_connect` | `fi.polar.polarflow` | not given | zoned (z4 1,106 s) |
-| 93 | `health_connect` | Garmin | 08:49:45Z | zoned (z4 1,081 s) |
-| 118 | `health_connect` | Strava | not given | zoneless |
-
-`load_events` holds exactly one metabolic row for the run: `source_ref` 95, 81.9 AU, `metab-v1`, `zone_source` `polar_v4`. Row 94 (the Garmin breathwork, HC, 22:29 Brisbane) deposited 0.1 AU.
-
-**Which rule kept 93 and 96 from depositing while 94 did (Code, from the code on master `17cc0cd`; read, not run).** It is read-time arbitration, then the canonical gate in the metabolic transform.
-- *The gate.* `compute_metabolic_load_events` reads every session through `arbitrated_sessions` (`backend/load_events_metabolic.py:177`) and does `continue` on any row whose `.canonical` is false (`:197-199`) before it reaches the zone check (`:205`). A zoned row that did not deposit can only have been non-canonical.
-- *Who sets it.* `arbitrate()` (`backend/reads/aerobic_reads.py:191`) marks a row non-canonical when any other row overlaps it by at least 50% of the shorter duration (`:239`, `OVERLAP_THRESHOLD` `:49`) and has the larger `_win_key` (`:245-247`; `canonical` set at `:248`). Different `source` values are compared (the same-source skip at `:232` excludes only non-HC pairs).
-- *Why 95 beat 93 and 96.* `_win_key` (`:163`) leads with the data tier (`_data_tier`, `:146`). 93, 95 and 96 are all zoned, so all are tier 2 and the tier ties. The next term is source rank (`_SOURCE_RANK`, `:84`): `polar_v4` 2 against `health_connect` 1. 95's key is larger, so 93 and 96 are non-canonical and skipped at `:197-199`. The 9 s start gap between 93 and 95 clears the 50% test by a wide margin. 96's start is not in the evidence, so its overlap with 95 is inferred from the one-row outcome (Likely, not read).
-- *Why 118 deposited nothing.* Zoneless, so tier 0 or 1 and below 95 on tier; it also fails the zone check at `:205` if it were canonical.
-- *Why 94 deposited.* It is a different bout (22:29 Brisbane, about 3.7 h after the run), so no row overlaps it by 50% and it is canonical by default; it is zoned, so it deposits (0.1 AU, a short low-zone session).
-
-**Does the rule cover an overlap with no `polar_v4` row (Garmin + Strava only)?** Yes, for rows that have a usable start and stop. Nothing in `arbitrate()` names Polar; the pair is compared on tier, then rank, then duration. For two `health_connect` rows the rank basis is writer class (`:232`, `by_writer` `:243`; `WEARABLE_NATIVE` `:107-111`, `_WRITER_CLASS_RANK` `:116`): Garmin's package is `wearable_native` (2); a `com.strava` row is `unknown` (0), because `writer_class` is total and anything outside the table is `unknown`. So Garmin zoned + Strava zoneless: Garmin wins on tier alone and deposits once. Both zoneless: neither deposits (`:205`). Exceptions, each from the same code: (a) a row with no usable start or stop is canonical by default and deposits on its own (`:223-224`, `:248`), so it can double-deposit; (b) a pair overlapping by less than 50% of the shorter is two bouts; (c) a Strava row that is the same bout as a counted Hevy workout is a `hevy_mirror`, marked non-canonical before arbitration and never an opponent (`arbitrated_sessions`); (d) a Strava row that carried HR but no zones would out-tier a zoneless Garmin row (tier 1 against 0), win, and be skipped for no zones, suppressing the Garmin bout until its zones fill. (d) is a reading of the code with no case observed. Not changed.
-
-**Rulings (operator, 11 Oct 2026; #417).**
-- **(a) Ruled.** The #365 hierarchy does not enter arbitration. Richness-first (#356) stands: when both rows are zoned the richer, higher-ranked trace deposits, whichever device #365 makes the owner. #365 governs which device records a run; arbitration governs which copy deposits. The dropped owner tie-break stays dropped; the 3 Oct update's deferral of (a) is superseded.
-- **(c) Ruled.** The start-offset tolerance is accepted as behaviour and declared: the twin test is overlap >= 50% of the shorter duration (`reads/aerobic_reads.py:49,239`), about 640 s for the 1 Oct durations (646 s with Polar later, 678 s with Garmin later). Any change to the 50% predicate is a ruled change. Recorded in #417 and in `SCHEMA.md` §032.
-- **(b) Not met; the named remainder.** #415 links sessions to Hevy workouts, not twins, and `get_recent_sessions` drops non-canonical rows before the formatter (`mcp_server.py:887`); no coach-facing read shows a suppressed twin or the canonical distinction (gap recorded precisely in #417). Not built. The operator rules the surface.
-
-**State:** OPEN. Owner: Luke. Remainder: (b), the surface that shows a suppressed twin to the coach; (a) and (c) are ruled (#417). The live case is read and no longer owed. Not blocking.
-
----
-
 ## Q202. RPE floor: a session with no usable device HR deposits no load, and nothing floors it
 
 Raised with #365. Verified against master `054d2d9`.
@@ -6025,6 +5954,78 @@ Options (not a ruling): persist tokens in a table (hashed, with expiry and revoc
 **Resolution (8 Oct 2026, #404).** The operator took option one: persist, hashed, with expiry and revocation. Built as two tables (`mcp_oauth_clients`, `mcp_oauth_tokens`, `SCHEMA.md` section 046); access 1 h, refresh 90 d sliding, no rotation; a deleted user's tokens cascade away; revoking a refresh token revokes its access tokens; `retire_user`'s dry run now counts the live tokens from the table. `test_mcp_provider_really_persists_nothing` is replaced by `test_mcp_tokens_survive_restart`. The real-client gates G4 (refresh) and G5 (redeploy survival) are operator-assisted after release and are recorded in the decision's status, not here.
 
 **State:** DONE → #404.
+
+---
+
+## Q201. Two sources for one bout: cross-source dedup is read-time and silent, and ranks by richness, not by the #365 hierarchy
+
+Raised with #365. Verified against master `054d2d9` by reading code and running the real `arbitrate()` on synthetic rows; the prod rows were not read (no DB route in that session).
+
+**Question.** When one session arrives from two sources (Garmin through Health Connect, and Polar), does ingestion or load dedupe it? Live case: 1 Oct 2026, about 18:49. Garmin "Trail Running" 3.34 km 21:33; Polar "Jogging" 3.36 km 22:05.
+
+**Findings.**
+- **Ingestion does not dedupe across sources.** Both rows persist. HC admission drops only `com.hevy` mirrors and a lower-writer-class record whose start instant is identical to a higher one's (`routers/health_connect.py:689-731`); two independent detections are deliberately left to read time (`:679-681`). Polar sync skips a session only when the same `source_session_id` already exists under a Polar source (`polar_ingest.py:155-168`), and never looks at HC rows.
+- **Load dedupes at read time.** `compute_metabolic_load_events` reads through `arbitrated_sessions` (`load_events_metabolic.py:177`) and skips non-canonical rows (`:197-199`). Felt load, the MCP session tools and session focus read canonical rows only (`reads/psychological_reads.py:312`, `mcp_server.py:559,749`, `session_focus.py:168`).
+- **The rule.** Two rows are one bout when they overlap by at least 50% of the shorter duration (`reads/aerobic_reads.py:38,218`). The winner is the richer data tier (zones, then HR only, then neither), then source rank (`polar_flow_export` > `polar_v4` > `health_connect`), then the longer duration (`:63-67,125-167`).
+- **Simulation (real `arbitrate()`, synthetic rows at the reported durations; not prod data).** Exactly one canonical row when the Polar start is within about 640 s of the Garmin start, whatever the zone state of either row. Two canonical rows, so two metabolic deposits, at about 700 s or more, or when either row has no usable start/stop (`:186-187,194-198`). Polar wins when both rows are zoned or when the Garmin row has no HR; Garmin wins only when it is zoned and the Polar row has HR only.
+- **Suppression is silent.** `sessions_skipped_non_canonical` exists only in the transform's return dict (`load_events_metabolic.py:230-238`) and no non-test code reads it. The `canonical` flag is exposed on the Polar aerobic list only (`routers/polar.py:316-335`).
+
+**Gaps.**
+1. #365 makes the watch the owner of running, but when both rows are zoned the Polar row is canonical and the Garmin row is dropped. The rule is richness-first (#356); the hierarchy is not an input.
+2. Nothing tells the operator or the coach that a recorded session was suppressed as a twin.
+3. A pair whose starts are more than roughly ten minutes apart, or that lacks a time, double-deposits. The tolerance follows from the 50% rule and the two durations; it is not a declared number.
+
+**Live case (owed, operator).** Over `railway connect` to `health-app-DB`, user 1:
+
+    SELECT id, source, source_package, sport_id, sport_name, start_time, stop_time, duration_minutes, hr_avg, z1_seconds FROM aerobic_sessions WHERE user_id = 1 AND session_date = '2026-10-01' ORDER BY start_time;
+    SELECT source_ref, load, occurred_at, provenance->>'zone_source' AS zone_source FROM load_events WHERE user_id = 1 AND load_window = 'metabolic' AND occurred_at >= '2026-09-30' ORDER BY occurred_at;
+
+The two start times settle which side of the tolerance the pair falls. One metabolic row for the run means dedup held, and `source_ref` is the winning `aerobic_sessions.id`. Two rows for the run is a data defect: report it and rule before anything is touched, and nothing is deleted without that ruling.
+
+**To decide (Luke).** (a) Does the hierarchy enter arbitration, and where relative to the data tier (today a row without HR never suppresses a row with HR)? (b) Must suppression be surfaced, for example an "also recorded by" note on the canonical row? (c) Is the start-offset tolerance acceptable as it stands?
+
+Code's lean, not a ruling: leave arbitration alone. With the H10 paired to the watch (#365) a run produces one record and the question stops arising for runs; surface suppression instead, after the live case is read.
+
+**Update (3 Oct 2026, with #366).** The operator read the live case in prod on 2 Oct (operator-reported; Code has no DB route). Row 93 (`health_connect`, Garmin package, HC sport 56, stored "Running") and row 95 (`polar_v4`, `sport_id` 4) were both zoned, `hr_avg` 145 each, starts 9 s apart. **Dedup held:** `load_events` carries one metabolic row for the run, `source_ref` 95, load 81.85. Polar won on source rank, which is what the findings above predict for two zoned rows, and the canonical row was labelled "Walking": id 4 had been mis-mapped (it is "Jogging" in Polar Flow), fixed by the corrected Polar sport-id map (#366). The row with the watch's own label (93) was the suppressed twin, so gap 1 above is now observed, not only predicted, for the running class.
+
+**The tie-break was scoped and dropped, not built.** The scoped change was: when candidates tie on data tier, prefer the #365 owner for the running class (HC sport 56/57 from the Garmin package) before source rank. It is deferred because a chat design for a source-agnostic input layer (day-level merged per-second HR with a source precedence) is pending and would make session-level metabolic arbitration redundant. `_win_key` is untouched; `metab-v1` (Edwards zone-seconds) stays the metric. Decision (a) is therefore deferred to that design rather than ruled here; (b) and (c) are unchanged.
+
+**Input from Q206 (11 Oct 2026).** Operator-reported data in Q206's 11 Oct results: Z4+Z5 share separates canonical rows cleanly (gym traces, warm-ups and long steady sessions 0-6%; VO2 sessions 33-71%; nothing between), while the sport label does not discriminate and the overlap predicate swallows two VO2 blocks (2026-04-07, 2026-06-17).
+- **Classification rule (proposal, unruled).** A segment's Z4+Z5 share decides whether it is conditioning; Hevy overlap only marks lifting. A low-intensity segment overlapping or adjacent to a gym session belongs to that gym visit.
+- **The threshold is set against the zone bounds in force (Q198, Q199), not as a constant.** The 11 Oct data suggests 15-25%. The share is only as good as the zone bounds that produced it.
+- **A zoneless segment** (2026-07-02: 83 min, 1 min zoned) falls back to the overlap rule.
+- **RESOLVED (operator, 11 Oct 2026; not read by Code).** 2026-06-24 was recorded as a VO2 bike day but shows only a 76-min Circuit training row, all in Z1-Z3. It was not a VO2 day: the Hevy workout's note records the VO2 block as skipped for time. The all-Z1-Z3 profile is correct and gives no evidence that June's zone bounds were too high.
+- **Hevy workout notes can carry planned-but-skipped intent** that neither the HR trace nor the sets show (the 24 Jun note above). Context only, not a build: any classifier that reads a day as planned conditioning from the schedule or the recorded label alone can be wrong in the same direction.
+
+Not built: the intensity-share classifier is a Q201 input only. The `concurrent_strength` marker (#414) still follows the overlap predicate and would follow a classifier if one is ruled.
+
+**Evidence (operator prod reads, 11 Oct 2026, user 1, 1 Oct Brisbane; a note, no ruling; not read by Code).** One run, four `aerobic_sessions` rows:
+
+| id | source | package / label | start (UTC) | zones |
+|----|--------|-----------------|-------------|-------|
+| 95 | `polar_v4` | "Jogging" | 08:49:54Z | zoned |
+| 96 | `health_connect` | `fi.polar.polarflow` | not given | zoned (z4 1,106 s) |
+| 93 | `health_connect` | Garmin | 08:49:45Z | zoned (z4 1,081 s) |
+| 118 | `health_connect` | Strava | not given | zoneless |
+
+`load_events` holds exactly one metabolic row for the run: `source_ref` 95, 81.9 AU, `metab-v1`, `zone_source` `polar_v4`. Row 94 (the Garmin breathwork, HC, 22:29 Brisbane) deposited 0.1 AU.
+
+**Which rule kept 93 and 96 from depositing while 94 did (Code, from the code on master `17cc0cd`; read, not run).** It is read-time arbitration, then the canonical gate in the metabolic transform.
+- *The gate.* `compute_metabolic_load_events` reads every session through `arbitrated_sessions` (`backend/load_events_metabolic.py:177`) and does `continue` on any row whose `.canonical` is false (`:197-199`) before it reaches the zone check (`:205`). A zoned row that did not deposit can only have been non-canonical.
+- *Who sets it.* `arbitrate()` (`backend/reads/aerobic_reads.py:191`) marks a row non-canonical when any other row overlaps it by at least 50% of the shorter duration (`:239`, `OVERLAP_THRESHOLD` `:49`) and has the larger `_win_key` (`:245-247`; `canonical` set at `:248`). Different `source` values are compared (the same-source skip at `:232` excludes only non-HC pairs).
+- *Why 95 beat 93 and 96.* `_win_key` (`:163`) leads with the data tier (`_data_tier`, `:146`). 93, 95 and 96 are all zoned, so all are tier 2 and the tier ties. The next term is source rank (`_SOURCE_RANK`, `:84`): `polar_v4` 2 against `health_connect` 1. 95's key is larger, so 93 and 96 are non-canonical and skipped at `:197-199`. The 9 s start gap between 93 and 95 clears the 50% test by a wide margin. 96's start is not in the evidence, so its overlap with 95 is inferred from the one-row outcome (Likely, not read).
+- *Why 118 deposited nothing.* Zoneless, so tier 0 or 1 and below 95 on tier; it also fails the zone check at `:205` if it were canonical.
+- *Why 94 deposited.* It is a different bout (22:29 Brisbane, about 3.7 h after the run), so no row overlaps it by 50% and it is canonical by default; it is zoned, so it deposits (0.1 AU, a short low-zone session).
+
+**Does the rule cover an overlap with no `polar_v4` row (Garmin + Strava only)?** Yes, for rows that have a usable start and stop. Nothing in `arbitrate()` names Polar; the pair is compared on tier, then rank, then duration. For two `health_connect` rows the rank basis is writer class (`:232`, `by_writer` `:243`; `WEARABLE_NATIVE` `:107-111`, `_WRITER_CLASS_RANK` `:116`): Garmin's package is `wearable_native` (2); a `com.strava` row is `unknown` (0), because `writer_class` is total and anything outside the table is `unknown`. So Garmin zoned + Strava zoneless: Garmin wins on tier alone and deposits once. Both zoneless: neither deposits (`:205`). Exceptions, each from the same code: (a) a row with no usable start or stop is canonical by default and deposits on its own (`:223-224`, `:248`), so it can double-deposit; (b) a pair overlapping by less than 50% of the shorter is two bouts; (c) a Strava row that is the same bout as a counted Hevy workout is a `hevy_mirror`, marked non-canonical before arbitration and never an opponent (`arbitrated_sessions`); (d) a Strava row that carried HR but no zones would out-tier a zoneless Garmin row (tier 1 against 0), win, and be skipped for no zones, suppressing the Garmin bout until its zones fill. (d) is a reading of the code with no case observed. Not changed.
+
+**Rulings (operator, 11 Oct 2026; #417).**
+- **(a) Ruled.** The #365 hierarchy does not enter arbitration. Richness-first (#356) stands: when both rows are zoned the richer, higher-ranked trace deposits, whichever device #365 makes the owner. #365 governs which device records a run; arbitration governs which copy deposits. The dropped owner tie-break stays dropped; the 3 Oct update's deferral of (a) is superseded.
+- **(c) Ruled.** The start-offset tolerance is accepted as behaviour and declared: the twin test is overlap >= 50% of the shorter duration (`reads/aerobic_reads.py:49,239`), about 640 s for the 1 Oct durations (646 s with Polar later, 678 s with Garmin later). Any change to the 50% predicate is a ruled change. Recorded in #417 and in `SCHEMA.md` §032.
+- **(b) Not met by #415 (as of #417).** #415 links sessions to Hevy workouts, not twins, and `get_recent_sessions` drops non-canonical rows before the formatter (`mcp_server.py:887`); no coach-facing read shows a suppressed twin or the canonical distinction (gap recorded precisely in #417). Not built at that point.
+- **(b) Ruled and built (operator, 11 Oct 2026; #418).** Suppression is surfaced on the MCP coach reads only: a canonical aerobic row that suppressed twins carries `also_recorded_by`, a list of `{source, source_package}` per non-canonical twin (identity only, no ids, zones or load; omitted when none). `get_training_sessions` and `get_recent_sessions` carry it; non-canonical rows stay filtered; no web UI, no snapshot count, no schema. `arbitrate()` did not retain the winner, so it is re-derived by `twins_by_canonical` through the one extracted pair test. **Owed (operator):** the first live coach read shows the 1 Oct run once, on row 95, with three entries.
+
+**State:** DONE → #418. Owner: Luke. All three limbs are ruled: (a) and (c) in #417, (b) in #418. Owed (operator): the first live coach read, above.
 
 ---
 
