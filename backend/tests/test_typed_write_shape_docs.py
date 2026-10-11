@@ -47,7 +47,7 @@ def test_no_region_list_rides_the_prompt():
     # Underscored keys cannot occur as ordinary prose (plain ones like "rotation" can).
     listed = [r.key for r in all_regions() if "_" in r.key and r.key in SHAPE]
     assert listed == []
-    with pytest.raises(ValueError, match="valid keys:.*shoulder_er_ir"):
+    with pytest.raises(ValueError, match="valid keys:.*shoulder_er"):
         validate_constraint({"scope": {"tier": "engine", "region_keys": ["shoulder"]}, "kind": "block",
                              "exit": {"on_condition": "x"}, "review_by": "2026-10-15",
                              "status": "proposed", "asserted_by": None})
@@ -59,7 +59,7 @@ def test_the_side_cap_example_is_an_advisory_cap():
     ex = {e["key"]: e["value"] for e in (json.loads(b) for b in _blocks(SHAPE))}
     cap = ex["constraint_example_side_cap"]
     assert cap["scope"]["tier"] == "advisory" and cap["kind"] == "cap" and "<side>" in cap["scope"]["text"]
-    assert not any("shoulder_er_ir" in json.dumps(v) for v in ex.values())
+    assert not any("shoulder_er" in json.dumps(v) for v in ex.values())
 
 
 def test_examples_carry_no_user_specific_values():

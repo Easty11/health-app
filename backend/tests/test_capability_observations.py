@@ -132,6 +132,13 @@ def test_the_seeded_measures_are_exactly_the_briefed_battery():
         ("shoulder_mobility", "er_rom_deg", "deg"),
         ("deceleration_landing", "peak_decel_ms2", "m/s^2"),
         ("change_of_direction", "cod_count", "count"),
+        # v1 (Q27): the joint-action strength measures. HHD force is clinic-administered (R4).
+        ("shoulder_er", "hhd_force_n", "N"),
+        ("shoulder_ir", "hhd_force_n", "N"),
+        ("hip_adduction", "hhd_force_n", "N"),
+        ("hip_adduction", "squeeze_mmhg", "mmHg"),
+        ("hip_abduction", "hhd_force_n", "N"),
+        ("ankle_plantarflexion", "sl_heel_raise_reps", "count"),
     }
 
 

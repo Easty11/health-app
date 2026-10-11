@@ -627,11 +627,11 @@ def test_an_advisory_restriction_is_its_own_text(db_session, world):
 
 def test_an_engine_restriction_is_kind_regions_and_side_in_words(db_session, world):
     _put(db_session, world.id, "constraint", "c_eng", _constraint(
-        kind="block", scope={"tier": "engine", "region_keys": ["shoulder_er_ir", "vertical_push"], "side": "right"}))
+        kind="block", scope={"tier": "engine", "region_keys": ["shoulder_er", "vertical_push"], "side": "right"}))
     _put(db_session, world.id, "constraint", "c_bi", _constraint(
         kind="block", scope={"tier": "engine", "region_keys": ["hinge"]}))
     items = {c["key"]: c for c in _section(_brief(db_session, world.id), "current_constraints")["items"]}
-    assert items["c_eng"]["restriction"] == "Block: Shoulder ER / IR (rotator cuff), Vertical push, right side only"
+    assert items["c_eng"]["restriction"] == "Block: Shoulder external rotation (rotator cuff), Vertical push, right side only"
     assert items["c_bi"]["restriction"] == "Block: Hinge (hip-dominant)"
     for c in items.values():
         assert "engine-enforced" not in c["restriction"] and _no_token(c["restriction"])

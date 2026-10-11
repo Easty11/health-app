@@ -113,9 +113,9 @@ def test_engine_row_renders_as_enforced_with_its_side(db_session, monkeypatch):
     u = _user(db_session)
     _baseline(db_session, u.id)
     _put(db_session, u.id, "constraint", "c_shoulder", _constraint(
-        scope={"tier": "engine", "region_keys": ["shoulder_er_ir"], "side": "right"}))
+        scope={"tier": "engine", "region_keys": ["shoulder_er"], "side": "right"}))
     sec = _section(_prompt(db_session, u, monkeypatch), "## Constraints")
-    assert "BLOCK (engine-enforced) — regions: shoulder_er_ir, right side only" in sec
+    assert "BLOCK (engine-enforced) — regions: shoulder_er, right side only" in sec
 
 
 def test_passed_exit_and_review_are_tagged_and_still_render(db_session, monkeypatch):
@@ -213,11 +213,11 @@ def test_mcp_reads_what_current_state_reads(db_session, mcp_user):
 
 def test_readiness_snapshot_carries_confirmed_constraints(db_session, mcp_user, monkeypatch):
     _put(db_session, mcp_user.id, "constraint", "c_shoulder", _constraint(
-        scope={"tier": "engine", "region_keys": ["shoulder_er_ir"], "side": "right"}, asserted_by="clinician"))
+        scope={"tier": "engine", "region_keys": ["shoulder_er"], "side": "right"}, asserted_by="clinician"))
     monkeypatch.setattr(mcp_server, "_db_rows", lambda sql, params: [])
     out = mcp_server.get_readiness_snapshot()
     block = out[out.index("Active constraints (confirmed):"):]
-    assert "shoulder_er_ir, right side only" in block and "set by your clinician [c_shoulder]" in block
+    assert "shoulder_er, right side only" in block and "set by your clinician [c_shoulder]" in block
 
 
 def test_readiness_snapshot_unchanged_without_constraints(db_session, mcp_user, monkeypatch):

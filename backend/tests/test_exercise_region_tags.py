@@ -302,13 +302,14 @@ def test_seed_is_idempotent_and_confirm_stamps_provenance(db_session):
         models.HevyExerciseTemplate.adjudicated_at.isnot(None)).count()
     assert adjudicated == len(all_titles), "every processed template adjudicated on --confirm"
 
-    # A no_pattern template: adjudicated, zero tag rows.
-    calf_title = "Calf Extension (Machine)"
-    calf_tid = next(t.id for t in db_session.query(models.HevyExerciseTemplate)
-                    if t.title == calf_title)
-    assert db_session.get(models.HevyExerciseTemplate, calf_tid).adjudicated_at is not None
+    # A no_pattern template: adjudicated, zero tag rows. (Calf was the example until v1 gave it
+    # ankle_plantarflexion; Leg Extension stays no-pattern — knee_extension is not admitted, Q27 R3.)
+    np_title = "Leg Extension (Machine)"
+    np_tid = next(t.id for t in db_session.query(models.HevyExerciseTemplate)
+                  if t.title == np_title)
+    assert db_session.get(models.HevyExerciseTemplate, np_tid).adjudicated_at is not None
     assert db_session.query(models.ExerciseRegionTag).filter_by(
-        hevy_exercise_template_id=calf_tid).count() == 0
+        hevy_exercise_template_id=np_tid).count() == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -363,12 +364,12 @@ def test_sided_variant_mirrors_parent_planned_in_same_run(db_session):
                                             region_key="rotation", role="primary"))
     db_session.commit()
     prop = {"tags": [{"title": "Shoulder Internal Rotation",
-                      "regions": [{"key": "shoulder_er_ir", "role": "primary"}]}],
+                      "regions": [{"key": "shoulder_ir", "role": "primary"}]}],
             "sided_variants": [{"template_id": "V1", "title": "Shoulder IR L",
                                 "parent_template_id": "P1"}]}
     r = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
     assert r["inherited_variants"] == 1
-    assert _rows(db_session, "V1") == {("shoulder_er_ir", "primary")}
+    assert _rows(db_session, "V1") == {("shoulder_ir", "primary")}
     assert r["plan"]["V1"]["via"] == "P1"
 
 
@@ -442,19 +443,84 @@ def test_dry_run_writes_nothing_but_reports_the_plan(db_session):
     assert db_session.get(models.HevyExerciseTemplate, "A1").laterality is None
 
 
+V1_JOINT_ACTION = ("shoulder_er", "shoulder_ir", "hip_adduction", "hip_abduction",
+                   "ankle_plantarflexion", "knee_flexion")
+
+
 def test_v01_regions_are_inert_for_probing(db_session):
-    """The five tag-coverage axes (#334) never enter the probe queue or observations until
-    deliberately admitted; shoulder_er_ir gates dip (gates lists what THIS region gates)."""
-    new = ("shoulder_er_ir", "trunk_lateral_flexion", "knee_flexion", "hip_adduction", "dip")
+    """The two v0.1 tag-coverage axes that stayed in group A (#334) never enter the probe queue
+    or observations until deliberately admitted. (The other three moved to group H in v1.)"""
     eligible = {r.key for r in taxonomy.queue_eligible_regions()}
-    for key in new:
+    for key in ("trunk_lateral_flexion", "dip"):
         region = taxonomy.by_key(key)
         assert region is not None and region.capacity is taxonomy.Capacity.STRENGTH
         assert key not in eligible and not region.probe_priority and region.measures == ()
-    assert taxonomy.by_key("shoulder_er_ir").gates == ("dip",)
     for region in taxonomy.all_regions():
         for gated in region.gates:
             assert taxonomy.by_key(gated) is not None, (region.key, gated)
+
+
+def test_v1_joint_action_regions_are_inert_for_probing():
+    """Q27 v1 (G2): every region the v1 pass touched is group H, STRENGTH, and probe-inert —
+    not queue-eligible, not probe-priority, norms still to populate, confidence GUESSING.
+    Admitting one to the queue is a deliberate later change, so it has to edit this pin."""
+    for key in V1_JOINT_ACTION:
+        r = taxonomy.by_key(key)
+        assert r is not None, key
+        assert r.group == "H" and r.capacity is taxonomy.Capacity.STRENGTH, key
+        assert r.queue_eligible is False and r.probe_priority is False, key
+        assert r.needs_norm is True and r.confidence is taxonomy.Confidence.GUESSING, key
+    eligible = {r.key for r in taxonomy.queue_eligible_regions()}
+    assert eligible.isdisjoint(V1_JOINT_ACTION)
+    # Nothing outside the v1 pass became a priority region either.
+    assert {r.key for r in taxonomy.probe_priority_regions()} == {
+        "carry", "rotation", "single_leg_hop", "deceleration_landing", "change_of_direction"}
+
+
+def test_v1_split_retires_shoulder_er_ir_and_carries_the_dip_gate_to_both_halves():
+    """R1. The old key is gone (a stored row naming it no longer resolves — see the V2 note in
+    DECISIONS_LOG); `gates=("dip",)` rides BOTH halves, which is UNRULED and flagged for chat."""
+    assert taxonomy.by_key("shoulder_er_ir") is None
+    for key in ("shoulder_er", "shoulder_ir"):
+        assert taxonomy.by_key(key).gates == ("dip",)
+        assert taxonomy.by_key(key).plane is taxonomy.Plane.TRANSVERSE
+    assert taxonomy.by_key("hip_abduction").plane is taxonomy.Plane.FRONTAL
+    assert taxonomy.by_key("ankle_plantarflexion").plane is taxonomy.Plane.SAGITTAL
+    for key in V1_JOINT_ACTION:
+        assert taxonomy.by_key(key).per_side is True
+
+
+def test_shipped_reference_v1_retags():
+    """S4: ER/IR split, calf and hip abduction admitted, Copenhagen unchanged; every prior note
+    survives verbatim after a "v1" prefix (the #336 pattern); no-pattern 19 -> 16."""
+    proposal = seeder.load_proposal()
+    tags = {e["title"]: e for e in proposal["tags"]}
+    no_pat = {e["title"] for e in proposal["no_pattern"]}
+    expect = {"Shoulder External Rotation": "shoulder_er", "Shoulder Internal Rotation": "shoulder_ir",
+              "Calf Extension (Machine)": "ankle_plantarflexion",
+              "Standing Calf Raise (Machine)": "ankle_plantarflexion",
+              "Hip Abduction (Machine)": "hip_abduction",
+              "Copenhagen Plank (Short Lever)": "hip_adduction",
+              "Copenhagen Plank L": "hip_adduction", "Copenhagen Plank R": "hip_adduction"}
+    for title, key in expect.items():
+        assert [r["key"] for r in tags[title]["regions"]] == [key], title
+        assert title not in no_pat, title
+    for title in ("Shoulder External Rotation", "Shoulder Internal Rotation",
+                  "Calf Extension (Machine)", "Standing Calf Raise (Machine)",
+                  "Hip Abduction (Machine)"):
+        assert tags[title]["note"].startswith("v1 "), title
+    # Verbatim prior-note spot checks (distinctive text from each earlier verdict).
+    assert "Cable ER is rotator-cuff STRENGTH" in tags["Shoulder External Rotation"]["note"]
+    assert "IR strength; pairs with ER" in tags["Shoulder Internal Rotation"]["note"]
+    assert "REJECTED calf" in tags["Calf Extension (Machine)"]["note"]
+    assert "Plantarflexion strength, no v0 axis." in tags["Standing Calf Raise (Machine)"]["note"]
+    assert "Frontal-hip abductor strength" in tags["Hip Abduction (Machine)"]["note"]
+    assert len(proposal["no_pattern"]) == 16 and len(proposal["tags"]) == 66
+    assert len(proposal["sided_variants"]) == 8
+    # Every key the reference uses resolves (the seeder refuses an orphan, fail-closed).
+    used = {r["key"] for e in proposal["tags"] for r in e["regions"]}
+    assert all(taxonomy.by_key(k) is not None for k in used), used
+    assert proposal["_meta"]["taxonomy_version"] == taxonomy.TAXONOMY_VERSION == "v1"
 
 
 def test_shipped_reference_capacity_split(db_session):
@@ -508,7 +574,7 @@ def test_ir_variant_unresolved_parent_is_loud_not_no_pattern(db_session):
     _tmpl(db_session, "934c", "Shoulder Internal Rotation L", custom=True, owner=1)
     db_session.commit()
     prop = {"tags": [{"template_id": IR_PARENT, "title": "Shoulder Internal Rotation",
-                      "regions": [{"key": "shoulder_er_ir", "role": "primary"}]}],
+                      "regions": [{"key": "shoulder_ir", "role": "primary"}]}],
             "sided_variants": [{"template_id": "934c", "title": "IR L",
                                 "parent_template_id": IR_PARENT}]}
     r = seeder.seed_tags(db_session, 1, proposal=prop, dry_run=True)

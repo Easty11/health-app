@@ -2,9 +2,9 @@
 
 G3's gates:
   * ZERO ROWS → BYTE-IDENTICAL. With no constraint rows, `is_contraindicated` returns exactly what
-    the pre-change engine returned — same bool, same reason string — for every one of the 36
+    the pre-change engine returned — same bool, same reason string — for every one of the 39
     taxonomy regions × its sides, under each #72-probe injury fixture (the #72 probe enumerated
-    30 regions; the taxonomy has 36 since v0.1). `compute_probe_queue` is identical end to end.
+    30 regions; the taxonomy has 39 since v1). `compute_probe_queue` is identical end to end.
     The comparison runs against the engine AS IT WAS, loaded from the pinned SHA, never against
     a re-typed copy. No existing test is re-baselined.
   * one confirmed engine `block` on `hinge` blocks `hinge` and NOTHING else;
@@ -64,9 +64,9 @@ HARD_STOPS = {"none": None, "squat_left": [{"region_key": "squat", "side": "left
 ALL_CELLS = [(r, s) for r in taxonomy.all_regions() for s in r.sides()]
 
 
-def test_the_matrix_covers_all_36_regions():
-    assert len(taxonomy.all_regions()) == 36
-    assert len({r.key for r, _ in ALL_CELLS}) == 36
+def test_the_matrix_covers_all_39_regions():
+    assert len(taxonomy.all_regions()) == 39
+    assert len({r.key for r, _ in ALL_CELLS}) == 39
 
 
 @pytest.mark.parametrize("hs", list(HARD_STOPS))
@@ -106,9 +106,9 @@ def test_a_hinge_block_blocks_hinge_and_nothing_else(fixture):
 
 
 def test_a_right_sided_block_leaves_the_left_side_open():
-    region = taxonomy.by_key("shoulder_er_ir")
+    region = taxonomy.by_key("shoulder_er")
     assert region.per_side
-    c = [{"key": "c_r_shoulder", "region_keys": ["shoulder_er_ir"], "side": "right", "kind": "block"}]
+    c = [{"key": "c_r_shoulder", "region_keys": ["shoulder_er"], "side": "right", "kind": "block"}]
     kw = dict(profile_hard_stops=None, active_injuries=[], active_constraints=c)
     assert selection.is_contraindicated(region, "right", **kw) == (True, "constraint c_r_shoulder — block")
     assert selection.is_contraindicated(region, "left", **kw) == (False, None)

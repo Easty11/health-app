@@ -154,6 +154,7 @@ def get_taxonomy():
     return {
         "version": taxonomy.TAXONOMY_VERSION,
         "regions": [taxonomy.as_dict(r) for r in taxonomy.all_regions()],
+        "ratios": [taxonomy.ratio_as_dict(r) for r in taxonomy.all_ratios()],
     }
 
 
