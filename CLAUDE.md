@@ -290,9 +290,9 @@ test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest han
 
 - **Q27's v1 taxonomy is built: joint-action strength regions (`shoulder_er_ir` split, dip ungated), a derived `Ratio` type and a fail-closed `reference_kind` with every measure `internal`; Q232 is opened on stored keys the taxonomy later retires (#420, #421).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #420, #421.
 
-- **Q202 is closed as superseded (its RPE floor is Q231's imputed TRIMP, its explicit absence is Q203); Q231 gains the two-class `k` and lag-window supersession as ruled design terms; #418's first live coach read is discharged (#419).** Governance only - Canonical home: `DECISIONS_LOG.md` #419.
+- **Q231 records a build constraint derived from #374 (imputed rows clear in the same pass as `metab-v1`) and Q202's Capture-rate OWED is discharged as moot; the 11 Oct close-out resolves the day's landing SHAs.** Governance only - Canonical home: `closeout.md`.
 
-- **Q201 (b) is ruled and built: a canonical aerobic row names the twins it suppressed as `also_recorded_by`, on the MCP coach reads only; Q201 is closed (#418).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #418.
+- **Q202 is closed as superseded (its RPE floor is Q231's imputed TRIMP, its explicit absence is Q203); Q231 gains the two-class `k` and lag-window supersession as ruled design terms; #418's first live coach read is discharged (#419).** Governance only - Canonical home: `DECISIONS_LOG.md` #419.
 
 ---
 
