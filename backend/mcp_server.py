@@ -44,7 +44,7 @@ from reads.recovery_reads import hrv_deviation, representative_source
 from reads.freshness_reads import freshness, freshness_footer_line, freshness_snapshot_lines
 from reads.snapshot_reads import hrv_continuity, hrv_continuity_line, latest_sleep_night, sleep_snapshot_lines
 from engine.training_phase import current_training_phase
-from context_builder import plan_of_record_stale   # the ONE plan-of-record STALE definition (#312/#319)
+from context_builder import CONCURRENT_STRENGTH_PHRASE, plan_of_record_stale   # the ONE plan-of-record STALE definition (#312/#319); the ONE `concurrent_strength` wording
 from current_state import current_state as _current_state   # plan, phase, phase_folders, week plan: one read
 from load_metrics import _local_day   # the single operator-local-day source
 
@@ -589,6 +589,8 @@ def get_cbti_diary(days: int = 42) -> str:
 def get_training_sessions(days: int = 28) -> str:
     """Get aerobic/cardio sessions from all connected sources (Polar, etc).
     Returns sport type, duration, average/max HR, distance, calories, HR zones.
+    A session that is the HR trace of a Hevy gym workout (at least half of it inside that workout)
+    is marked as overlapping it by title; the training plan does not count it as conditioning.
     For aerobic sessions and Hevy workouts merged into one list, use get_recent_sessions."""
     user_id = _current_user_id()
     since = datetime.now(timezone.utc).date() - timedelta(days=days)
@@ -608,6 +610,8 @@ def get_training_sessions(days: int = 28) -> str:
                 "Note: Polar data accumulates from June 2026 onward."
             )
 
+        gym = _gym_trace_marks(_db, user_id, sessions)   # concurrent_strength, as the resolver tests it
+
         lines = [f"Training sessions — last {days} days"]
         lines.append(f"Data window: {sessions[-1].session_date} → {sessions[0].session_date}")
         lines.append("Note: Polar data accumulates from June 2026 onward.\n")
@@ -616,6 +620,8 @@ def get_training_sessions(days: int = 28) -> str:
             line = format_aerobic_session(s)
             if s.id in selfevals:
                 line += format_selfeval(selfevals[s.id])
+            if s.id in gym:
+                line += _gym_trace_note(gym[s.id])
             lines.append(line)
 
     return "\n".join(lines)
@@ -750,6 +756,54 @@ def _link_sessions_to_workouts(sessions: list, workouts: list) -> dict[int, obje
             linked[sid] = w
             used_w.add(hid)
     return linked
+
+
+def _concurrent_strength_sessions(sessions: list, counted: list) -> dict[int, object]:
+    """{session.id: workout} for each canonical session the resolver would uncount as
+    `concurrent_strength` (#307): `overlaps_workout(session, counted)`, the same call at
+    engine/resolver.py. The mapped workout is the one covering most of the session, for its title.
+
+    Not `_link_sessions_to_workouts`: that pairs one-to-one (a workout is used once), so a second
+    trace over the same gym bout would lose its mark. The resolver tests every session on its own
+    against the whole set, and so does this. An untimed session has no interval and is never
+    marked (the resolver files it as `untimed` before the overlap test)."""
+    out: dict[int, object] = {}
+    for s in sessions:
+        if not overlaps_workout(s, counted):
+            continue
+        out[s.id] = max(counted, key=lambda w: (overlap_fraction(s, [w]), w.hevy_id))
+    return out
+
+
+def _counted_workouts_near(db: Session, user_id: int, sessions: list) -> list:
+    """The workout set the resolver tests `concurrent_strength` against: non-excluded Hevy workouts
+    through the `counted_workouts` door (an excluded workout, and both members of an unadjudicated
+    duplicate pair, are out). The resolver clips that set to its quota window; here the fetch is
+    the sessions' span padded a day either side, so a bout straddling an edge still counts."""
+    days = [s.session_date for s in sessions if s.session_date is not None]
+    if not days:
+        return []
+    candidates = (
+        db.query(models.HevyWorkout)
+        .filter(models.HevyWorkout.user_id == user_id,
+                models.HevyWorkout.excluded_at.is_(None),
+                models.HevyWorkout.start_time.isnot(None),
+                models.HevyWorkout.start_time >= _local_midnight_utc(min(days)) - timedelta(days=1),
+                models.HevyWorkout.start_time < _local_midnight_utc(max(days) + timedelta(days=1)) + timedelta(days=1))
+        .all()
+    )
+    counted, _unadjudicated = counted_workouts(db, user_id, candidates)
+    return counted
+
+
+def _gym_trace_marks(db: Session, user_id: int, sessions: list) -> dict[int, object]:
+    """The `concurrent_strength` marks for canonical `sessions`, fetched against the resolver's set."""
+    return _concurrent_strength_sessions(sessions, _counted_workouts_near(db, user_id, sessions))
+
+
+def _gym_trace_note(w) -> str:
+    """The suffix on a marked session's line: the resolver's own wording, then the workout title."""
+    return f" — {CONCURRENT_STRENGTH_PHRASE} ({w.title or 'Workout'})"
 
 
 def _hevy_detail(w) -> str:
@@ -903,12 +957,19 @@ def get_readiness_snapshot() -> str:
     # Read-door (#Q161): count CANONICAL sessions only, so a same-bout Polar/HC twin does not
     # inflate the readiness training summary (session_date is the local day).
     with SessionLocal() as _sdb:
-        _week = [s for s in arbitrated_sessions(
-                     user_id, _sdb, since=datetime.now(timezone.utc).date() - timedelta(days=7))
-                 if getattr(s, "canonical", True)]
+        _canonical = [s for s in arbitrated_sessions(
+                          user_id, _sdb, since=datetime.now(timezone.utc).date() - timedelta(days=7))
+                      if getattr(s, "canonical", True)]
+        _gym = _gym_trace_marks(_sdb, user_id, _canonical)
+    # A gym session's HR trace is that strength session, not conditioning (`concurrent_strength`,
+    # #307): out of the aerobic count and minutes, reported on its own line below.
+    _week = [s for s in _canonical if s.id not in _gym]
+    _traces = [s for s in _canonical if s.id in _gym]
     session_count = len(_week)
     session_total_min = sum(float(s.duration_minutes) for s in _week
                             if s.duration_minutes is not None)
+    trace_total_min = sum(float(s.duration_minutes) for s in _traces
+                          if s.duration_minutes is not None)
 
     lines = ["=== TODAY'S READINESS SNAPSHOT ===\n"]
 
@@ -940,7 +1001,10 @@ def get_readiness_snapshot() -> str:
 
     if session_count:
         lines.append(f"Aerobic sessions (last 7 days): {session_count} sessions, "
-                     f"{session_total_min:.0f} total minutes\n")
+                     f"{session_total_min:.0f} total minutes" + ("" if _traces else "\n"))
+    if _traces:
+        lines.append(f"Gym HR traces (last 7 days): {len(_traces)} sessions, "
+                     f"{trace_total_min:.0f} min, not counted as aerobic\n")
 
     injury_rows = _db_rows(
         """

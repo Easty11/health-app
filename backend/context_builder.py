@@ -1669,6 +1669,11 @@ def _slot_is_due(slot: dict[str, Any], due_slot: dict[str, Any] | None) -> bool:
     return due_slot.get("kind") == kind and due_slot.get("key") == slot.get(kind)
 
 
+# The words for an aerobic session that is a gym workout's HR trace (`concurrent_strength`). One
+# home: the MCP readers (`get_training_sessions`, the readiness snapshot) say it in these words.
+CONCURRENT_STRENGTH_PHRASE = "conditioning session overlapping a gym workout"
+
+
 def _uncounted_phrase(u: dict[str, Any]) -> str:
     """One `uncounted` item in plain words. Hevy workouts carry `workout`; aerobic sessions
     carry `session`. An unknown reason falls back to itself."""
@@ -1679,7 +1684,7 @@ def _uncounted_phrase(u: dict[str, Any]) -> str:
         n = u.get("untagged_exercises")
         return f"untagged workout ({n} exercise{'' if n == 1 else 's'})"
     if reason == "concurrent_strength":
-        return f"conditioning session overlapping a gym workout ({u.get('sport_name')})"
+        return f"{CONCURRENT_STRENGTH_PHRASE} ({u.get('sport_name')})"
     if reason == "untimed":
         return f"untimed conditioning session ({u.get('sport_name')})"
     if reason == "unclaimed_session":            # #315 — a session no slot's sport claims
