@@ -634,3 +634,106 @@ def test_explain_quota_votes_matches_rule_1(db_session):
     [r] = explain_quota_votes.explain(db_session, 1, [date(2026, 9, 21)])
     assert r["votes"] == {"stability": 2, "strength": 1}
     assert r["dominant"] == "stability" and r["untagged"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Q27 v1: the reference is AUTHORITATIVE for the templates it names.           #
+# --------------------------------------------------------------------------- #
+
+def _tag(db, tid, key, *, source="human_confirmed", role="primary"):
+    db.add(models.ExerciseRegionTag(hevy_exercise_template_id=tid, region_key=key, role=role,
+                                    source=source,
+                                    confirmed_at=datetime.now(timezone.utc) if source == "human_confirmed" else None))
+
+
+def test_a_parent_retagged_from_key_a_to_key_b_ends_with_only_b(db_session):
+    """The prod shape: a directly-planned parent already carries a human-confirmed row under the
+    old key. An upsert alone leaves it beside the new one; --confirm must leave only B."""
+    _tmpl(db_session, "P1", "Shoulder Internal Rotation", custom=True, owner=1, adjudicated=True)
+    _tag(db_session, "P1", "hinge")
+    db_session.commit()
+    prop = {"tags": [{"template_id": "P1", "title": "Shoulder Internal Rotation",
+                      "regions": [{"key": "squat", "role": "primary"}]}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert _rows(db_session, "P1") == {("squat", "primary")}
+    assert r["deleted"] == 1 and r["pending_deletions"][0]["region_key"] == "hinge"
+
+
+def test_the_retired_shoulder_er_ir_row_is_removed_from_parent_and_variant(db_session):
+    """The literal prod case: a confirmed row under the retired key (no longer a taxonomy
+    region) on the parent AND on a sided variant. Both end with only the new key."""
+    _tmpl(db_session, "P1", "Shoulder Internal Rotation", custom=True, owner=1, adjudicated=True)
+    _tmpl(db_session, "V1", "Shoulder Internal Rotation L", custom=True, owner=1, adjudicated=True)
+    for tid in ("P1", "V1"):
+        _tag(db_session, tid, "shoulder_er_ir")
+    db_session.commit()
+    assert taxonomy.by_key("shoulder_er_ir") is None
+    prop = {"tags": [{"template_id": "P1", "title": "Shoulder Internal Rotation",
+                      "regions": [{"key": "shoulder_ir", "role": "primary"}]}],
+            "sided_variants": [{"template_id": "V1", "title": "Shoulder Internal Rotation L",
+                                "parent_template_id": "P1"}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert _rows(db_session, "P1") == {("shoulder_ir", "primary")}
+    assert _rows(db_session, "V1") == {("shoulder_ir", "primary")}
+    assert r["deleted"] == 2
+
+
+def test_dry_run_lists_the_pending_deletions_and_writes_nothing(db_session):
+    _tmpl(db_session, "P1", "Plank", adjudicated=True)
+    _tag(db_session, "P1", "hinge")
+    db_session.commit()
+    prop = {"tags": [{"template_id": "P1", "title": "Plank",
+                      "regions": [{"key": "squat", "role": "primary"}]}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, dry_run=True)
+    assert [(d["template_id"], d["region_key"], d["source"]) for d in r["pending_deletions"]] == [
+        ("P1", "hinge", "human_confirmed")]
+    assert r["deleted"] == 0
+    assert _rows(db_session, "P1") == {("hinge", "primary")}
+
+
+def test_a_plain_run_does_not_delete_on_a_direct_template(db_session):
+    """Deletion on a directly-planned template is a --confirm act; a plain run (which writes
+    llm_proposed rows Rule 1 counts) only adds."""
+    _tmpl(db_session, "P1", "Plank", adjudicated=True)
+    _tag(db_session, "P1", "hinge")
+    db_session.commit()
+    prop = {"tags": [{"template_id": "P1", "title": "Plank",
+                      "regions": [{"key": "squat", "role": "primary"}]}]}
+    seeder.seed_tags(db_session, 1, proposal=prop)
+    assert _rows(db_session, "P1") == {("hinge", "primary"), ("squat", "primary")}
+
+
+def test_a_direct_no_pattern_entry_loses_its_stale_rows_on_confirm(db_session):
+    _tmpl(db_session, "N1", "Leg Extension (Machine)", adjudicated=True)
+    _tag(db_session, "N1", "hinge", source="llm_proposed")
+    db_session.commit()
+    prop = {"no_pattern": [{"template_id": "N1", "title": "Leg Extension (Machine)"}]}
+    seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert _rows(db_session, "N1") == set()
+
+
+def test_a_template_the_reference_does_not_name_keeps_its_rows(db_session):
+    """Authoritative only for the templates it names: an unplanned template is untouched."""
+    _tmpl(db_session, "P1", "Plank", adjudicated=True)
+    _tmpl(db_session, "X1", "Something Else", adjudicated=True)
+    _tag(db_session, "X1", "hinge")
+    db_session.commit()
+    prop = {"tags": [{"template_id": "P1", "title": "Plank",
+                      "regions": [{"key": "squat", "role": "primary"}]}]}
+    seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert _rows(db_session, "X1") == {("hinge", "primary")}
+
+
+def test_a_variant_inheriting_an_unresolved_key_from_the_db_is_refused(db_session):
+    """The parent is not in the plan, so the variant inherits its CURRENT DB state, which
+    carries the retired key. The plan would write an orphan; refuse, on a dry run too."""
+    _tmpl(db_session, "P1", "Shoulder Internal Rotation", custom=True, owner=1, adjudicated=True)
+    _tmpl(db_session, "V1", "Shoulder Internal Rotation L", custom=True, owner=1)
+    _tag(db_session, "P1", "shoulder_er_ir")
+    db_session.commit()
+    prop = {"sided_variants": [{"template_id": "V1", "title": "Shoulder Internal Rotation L",
+                                "parent_template_id": "P1"}]}
+    for kw in ({"dry_run": True}, {"confirm": True}):
+        with pytest.raises(seeder.OrphanRegionKeyError, match="shoulder_er_ir"):
+            seeder.seed_tags(db_session, 1, proposal=prop, **kw)
+    assert _rows(db_session, "V1") == set()
