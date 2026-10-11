@@ -8,7 +8,8 @@ Region and not a Measure, and never a stored observation. This file pins:
     built first so the validator is shown to be able to fail (FEEDBACK 10, 57);
   * G3: no numeric threshold lives on any Ratio or Measure — bands are expectation text,
     marked "to populate", so no automatic deficit flag can fire from the declaration;
-  * `reference_kind` is a closed vocabulary and the default is the restrictive one;
+  * `reference_kind` is a closed vocabulary, the default is the restrictive one, the gate is
+    stated to FAIL CLOSED, and no declared measure or ratio is "literature" until a norm is cited;
   * the new measures accept and refuse sides the way their INSTRUMENT allows.
 """
 import dataclasses
@@ -41,7 +42,8 @@ def test_the_two_declared_ratios():
     assert add_abd.numerator == ("hip_adduction", "hhd_force_n")
     assert add_abd.denominator == ("hip_abduction", "hhd_force_n")
     for r in (er_ir, add_abd):
-        assert r.same_side and r.same_protocol and r.reference_kind == "literature"
+        # ER:IR's 0.66-0.75 is isokinetic torque, not HHD force; no add:abd norm is cited either.
+        assert r.same_side and r.same_protocol and r.reference_kind == "internal"
         assert r.confidence is Confidence.GUESSING
         assert "to populate" in r.expectation
     assert taxonomy.ratio_by_key("h_q") is None      # R3: no H:Q ratio
@@ -126,36 +128,48 @@ def test_a_duplicate_ratio_key_is_refused_at_declaration(monkeypatch):
 def test_reference_kind_is_a_closed_vocabulary_with_the_restrictive_default():
     assert taxonomy.REFERENCE_KINDS == ("internal", "literature")
     assert Measure("k", "N", True).reference_kind == "internal"
+    assert Measure("k", "N", True, reference_kind="literature").reference_kind == "literature"
     with pytest.raises(ValueError, match="reference_kind"):
         Measure("k", "N", True, reference_kind="lit")
     with pytest.raises(ValueError, match="reference_kind"):
         _ok(reference_kind="lit")
 
 
+def test_the_gate_is_stated_to_fail_closed_in_the_measure_and_ratio_docstrings():
+    """Operator ruling: an observation with no administered_by / protocol provenance is evaluated
+    as internal. Nothing evaluates it yet (no consumer, no provenance columns), so the contract
+    is pinned where it is stated."""
+    for doc in (Measure.__doc__, Ratio.__doc__):
+        flat = " ".join(doc.split())
+        assert "FAILS CLOSED" in flat and "administered_by" in flat and 'as "internal"' in flat
+
+
+def test_no_declared_measure_or_ratio_is_literature_until_a_matching_norm_is_cited():
+    """A measure flips to "literature" only when a norm matching its instrument AND protocol is
+    cited. None is: the ER:IR band is isokinetic torque (not HHD force), the Copenhagen squeeze is
+    validated as a pain score (not mmHg), and no heel-raise or adductor:abductor norm is cited.
+    A later flip must edit this pin together with the citation in the decision entry."""
+    literature = {(r.key, m.key) for r in taxonomy.all_regions() for m in r.measures
+                  if m.reference_kind == "literature"}
+    assert literature == set()
+    assert {r.key for r in taxonomy.all_ratios() if r.reference_kind == "literature"} == set()
+
+
 def test_the_v1_measures_are_declared_as_briefed():
     got = {(r.key, m.key): (m.unit, m.per_side, m.higher_is_better, m.reference_kind)
            for r in taxonomy.all_regions() for m in r.measures if r.group == "H"}
     assert got == {
-        ("shoulder_er", "hhd_force_n"): ("N", True, True, "literature"),
-        ("shoulder_ir", "hhd_force_n"): ("N", True, True, "literature"),
-        ("hip_adduction", "hhd_force_n"): ("N", True, True, "literature"),
-        ("hip_adduction", "squeeze_mmhg"): ("mmHg", False, True, "literature"),
-        ("hip_abduction", "hhd_force_n"): ("N", True, True, "literature"),
-        ("ankle_plantarflexion", "sl_heel_raise_reps"): ("count", True, True, "literature"),
+        ("shoulder_er", "hhd_force_n"): ("N", True, True, "internal"),
+        ("shoulder_ir", "hhd_force_n"): ("N", True, True, "internal"),
+        ("hip_adduction", "hhd_force_n"): ("N", True, True, "internal"),
+        ("hip_adduction", "squeeze_mmhg"): ("mmHg", False, True, "internal"),
+        ("hip_abduction", "hhd_force_n"): ("N", True, True, "internal"),
+        ("ankle_plantarflexion", "sl_heel_raise_reps"): ("count", True, True, "internal"),
     }
     # R3: knee_flexion is an absolute + LSI read with no instrument chosen; no H:Q, no knee_extension.
     assert taxonomy.by_key("knee_flexion").measures == ()
     assert taxonomy.by_key("knee_extension") is None
     assert "no H:Q ratio" in taxonomy.by_key("knee_flexion").expectation
-
-
-def test_pre_v1_measures_keep_the_internal_default():
-    """No pre-v1 measure was reclassified: reference_kind is declared only where the brief did."""
-    for r in taxonomy.all_regions():
-        if r.group == "H":
-            continue
-        for m in r.measures:
-            assert m.reference_kind == "internal", (r.key, m.key)
 
 
 # ── G3: no numeric threshold in code ─────────────────────────────────────────
@@ -217,7 +231,7 @@ def test_the_retired_key_is_refused_on_write(db_session):
 def test_as_dict_carries_reference_kind_and_the_taxonomy_endpoint_lists_ratios():
     d = taxonomy.as_dict(taxonomy.by_key("hip_adduction"))
     assert {m["key"]: m["reference_kind"] for m in d["measures"]} == {
-        "hhd_force_n": "literature", "squeeze_mmhg": "literature"}
+        "hhd_force_n": "internal", "squeeze_mmhg": "internal"}
     assert taxonomy.as_dict(taxonomy.by_key("ankle_df"))["measures"][0]["reference_kind"] == "internal"
     body = get_taxonomy()
     assert body["version"] == "v1"
@@ -227,5 +241,5 @@ def test_as_dict_carries_reference_kind_and_the_taxonomy_endpoint_lists_ratios()
     by = {r["key"]: r for r in body["ratios"]}
     assert by["er_ir"]["numerator"] == {"region": "shoulder_er", "measure": "hhd_force_n"}
     assert by["add_abd"]["denominator"] == {"region": "hip_abduction", "measure": "hhd_force_n"}
-    assert by["er_ir"]["reference_kind"] == "literature" and by["er_ir"]["same_side"] is True
+    assert by["er_ir"]["reference_kind"] == "internal" and by["er_ir"]["same_side"] is True
     assert by["er_ir"]["confidence"] == "guessing"

@@ -44,10 +44,19 @@ Declared on every `Measure` and every `Ratio`. The rule:
 > match the norm's. Otherwise the **internal** baseline / trend governs, and the literature gives
 > DIRECTION only.
 
-`Measure.reference_kind` defaults to `internal`, the restrictive reading: a measure that has not
-declared a literature reference cannot have one applied. The rule needs the observation's instrument
-and protocol, which `capability_observations` does not yet record (see "Provenance" below), so today
-it is a statement of intent that nothing can evaluate. That is why no deficit flag fires from a Ratio.
+**The gate fails closed.** An observation with no `administered_by` / protocol provenance is evaluated
+as `internal`, whatever the declaration says. `capability_observations` does not yet record that
+provenance (see Open items), so today every observation evaluates as `internal` and nothing can fire a
+deficit flag from a Ratio.
+
+**When a measure flips to `literature`.** Only when a norm matching its instrument AND protocol is
+cited. `Measure.reference_kind` defaults to `internal`, and every v1 measure and both ratios are
+`internal` because no matching norm is cited:
+
+- `hhd_force_n` (all four regions): the ~0.66-0.75 ER:IR band is an isokinetic-torque reference, not
+  HHD force.
+- `squeeze_mmhg`: PMID 27935487 validates the squeeze as a pain score, not as mmHg. No mmHg norm is cited.
+- `sl_heel_raise_reps`, and both ratios: no matching norm is cited.
 
 ---
 
@@ -59,17 +68,17 @@ Admitted under #335 (tested as a ratio denominator, or trained and tested).
 
 | Region | Plane | Measures | Role |
 |--------|-------|----------|------|
-| `shoulder_er` | transverse | `hhd_force_n` (N, literature) | numerator of `er_ir` |
-| `shoulder_ir` | transverse | `hhd_force_n` (N, literature) | denominator of `er_ir` |
-| `hip_adduction` | frontal | `hhd_force_n` (N, literature); `squeeze_mmhg` (mmHg, literature, bilateral) | numerator of `add_abd` |
-| `hip_abduction` | frontal | `hhd_force_n` (N, literature) | denominator of `add_abd` |
-| `ankle_plantarflexion` | sagittal | `sl_heel_raise_reps` (count, literature) | absolute + internal baseline; no ratio |
+| `shoulder_er` | transverse | `hhd_force_n` (N, internal) | numerator of `er_ir` |
+| `shoulder_ir` | transverse | `hhd_force_n` (N, internal) | denominator of `er_ir` |
+| `hip_adduction` | frontal | `hhd_force_n` (N, internal); `squeeze_mmhg` (mmHg, internal, bilateral) | numerator of `add_abd` |
+| `hip_abduction` | frontal | `hhd_force_n` (N, internal) | denominator of `add_abd` |
+| `ankle_plantarflexion` | sagittal | `sl_heel_raise_reps` (count, internal) | absolute + internal baseline; no ratio |
 | `knee_flexion` | sagittal | none declared | absolute eccentric + LSI; **no H:Q ratio** |
 
 Notes:
 
-- `shoulder_er_ir` is retired (split into `shoulder_er` + `shoulder_ir`, R1). `gates=("dip",)` is carried
-  onto BOTH halves; which action actually gates dip is unruled.
+- `shoulder_er_ir` is retired (split into `shoulder_er` + `shoulder_ir`, R1). The old `gates=("dip",)` was
+  dropped from both halves by the operator's ruling: dip is ungated (it is probe-inert, so nothing changes).
 - `knee_extension` is not admitted (R3). Leg extension stays adjudicated no-pattern.
 - Copenhagen plank is tagged `hip_adduction` as exposure only. It does not feed `add_abd`.
 - `ankle_plantarflexion` is plantarflexion STRENGTH, never `ankle_df` (dorsiflexion MOBILITY).
@@ -113,8 +122,7 @@ Pulled from PubMed 2026-10-11; the quoted figures are the abstracts' own words.
   *Br J Sports Med* 2017;51(7):594-599. PMID 27935487,
   [doi:10.1136/bjsports-2016-096675](https://doi.org/10.1136/bjsports-2016-096675). Validated as a
   pain-rating indicator (NRS 0-10) against HAGOS Sport in football players. It does not establish a
-  squeeze-pressure (mmHg) norm. `hip_adduction/squeeze_mmhg` is declared `literature` per the brief, but
-  no mmHg band has been verified; see Open items.
+  squeeze-pressure (mmHg) norm, so `hip_adduction/squeeze_mmhg` is `internal`.
 
 ---
 
@@ -126,6 +134,7 @@ Pulled from PubMed 2026-10-11; the quoted figures are the abstracts' own words.
   It has no `administered_by`, and no structured instrument or protocol. Until it does, the
   `reference_kind` match rule and `same_protocol` cannot be evaluated. Migration designed and HELD for
   the operator (schema migrations are held).
-- **Who gates dip** (`shoulder_er`, `shoulder_ir`, or one of them) is unruled.
 - **`knee_flexion` has no declared measure**, so its absolute + LSI read has nothing to be observed on.
-- **`squeeze_mmhg` literature basis** is unverified (see Grounding).
+- **Norms.** Every band is "to populate". A measure flips to `literature` only with a cited,
+  protocol-matched norm.
+- **Silent skip of an unknown region key** in the constraint engine (`selection.py`): OPEN_QUESTIONS.

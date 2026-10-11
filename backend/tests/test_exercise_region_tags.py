@@ -477,13 +477,15 @@ def test_v1_joint_action_regions_are_inert_for_probing():
         "carry", "rotation", "single_leg_hop", "deceleration_landing", "change_of_direction"}
 
 
-def test_v1_split_retires_shoulder_er_ir_and_carries_the_dip_gate_to_both_halves():
-    """R1. The old key is gone (a stored row naming it no longer resolves — see the V2 note in
-    DECISIONS_LOG); `gates=("dip",)` rides BOTH halves, which is UNRULED and flagged for chat."""
+def test_v1_split_retires_shoulder_er_ir_and_dip_is_ungated():
+    """R1. The old key is gone (a stored row naming it no longer resolves; V2 found none in prod).
+    Operator ruling: the old `gates=("dip",)` is dropped from BOTH halves, so nothing gates dip."""
     assert taxonomy.by_key("shoulder_er_ir") is None
     for key in ("shoulder_er", "shoulder_ir"):
-        assert taxonomy.by_key(key).gates == ("dip",)
+        assert taxonomy.by_key(key).gates == ()
         assert taxonomy.by_key(key).plane is taxonomy.Plane.TRANSVERSE
+    assert all("dip" not in r.gates for r in taxonomy.all_regions())
+    assert taxonomy.by_key("dip") is not None and taxonomy.by_key("dip").probe_priority is False
     assert taxonomy.by_key("hip_abduction").plane is taxonomy.Plane.FRONTAL
     assert taxonomy.by_key("ankle_plantarflexion").plane is taxonomy.Plane.SAGITTAL
     for key in V1_JOINT_ACTION:

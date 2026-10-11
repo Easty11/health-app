@@ -68,7 +68,13 @@ SIDE_RIGHT = "right"
 #   instrument and protocol match the norm's. Otherwise the internal
 #   baseline / trend governs, and the literature gives DIRECTION only.
 #
-# "internal" means the user's own baseline and trend are the only reference.
+# FAILS CLOSED: an observation with no administered_by / protocol provenance is
+# evaluated as "internal", whatever the declaration says. Today no observation
+# carries that provenance, so nothing evaluates as "literature".
+#
+# A measure or ratio flips to "literature" only when a norm matching its
+# instrument AND protocol is CITED. "internal" means the user's own baseline and
+# trend are the only reference.
 ReferenceKind = Literal["internal", "literature"]
 REFERENCE_KINDS: tuple[str, ...] = ("internal", "literature")
 
@@ -104,11 +110,16 @@ class Measure:
     anchored to. The rule: a "literature" band applies as a threshold ONLY when
     the observation's instrument and protocol match the norm's; otherwise the
     internal baseline / trend governs and the literature gives direction only.
-    The default is "internal", the restrictive reading: no literature threshold
-    may be applied to a measure that has not declared one. No consumer reads this
-    field yet, and the instrument/protocol match it depends on cannot be checked
-    until observations carry that provenance (OPEN_QUESTIONS Q27). No numeric
-    norm lives on the declaration either, by design: bands are expectation text.
+    The gate FAILS CLOSED: an observation with no administered_by / protocol
+    provenance is evaluated as "internal" even where the measure is declared
+    "literature". `capability_observations` carries no such provenance yet, so
+    today every observation evaluates as "internal".
+    A measure flips to "literature" only when a norm matching its protocol is
+    cited. The default is "internal"; every v1 measure is "internal" because no
+    matching norm is cited (the ER:IR band is isokinetic torque, not HHD force;
+    the Copenhagen squeeze is validated as a pain score, not as mmHg). No consumer
+    reads this field yet. No numeric norm lives on the declaration either, by
+    design: bands are expectation text.
     """
     key: str                    # stable id, e.g. "knee_to_wall_cm"
     unit: str                   # "cm", "deg", "s", "m/s", "m/s^2", "N", "mmHg", "count"
@@ -136,7 +147,7 @@ class Region:
     confidence: Confidence
     per_side: bool = True       # readable per-side (§F)
     gates: tuple[str, ...] = () # region keys THIS region gates (mobility reserves, §B;
-                                # shoulder_er / shoulder_ir -> dip) — never the regions that gate it
+                                # ankle_df -> squat) — never the regions that gate it
     probe_priority: bool = False  # §E + the seed comfort-gap — Probe targets first
     needs_norm: bool = False    # normative grounding still missing ("populate")
     # §G longevity-end axes are flagged but "need normative grounding before they
@@ -177,7 +188,10 @@ class Ratio:
     `reference_kind` follows the Measure rule: a "literature" band applies as a
     threshold ONLY when the observation's instrument and protocol match the
     norm's; otherwise the internal baseline / trend governs and the literature
-    gives direction only. `expectation` is a FLAG, not a verdict, like
+    gives direction only. It FAILS CLOSED: an observation with no administered_by
+    / protocol provenance is evaluated as "internal". A ratio flips to
+    "literature" only when a norm matching its protocol is cited.
+    `expectation` is a FLAG, not a verdict, like
     `Region.expectation`: any band sits in that text marked "to populate" and
     there is NO numeric threshold on this class, so no automatic deficit flag
     can fire from it.
@@ -259,7 +273,7 @@ _REGIONS: tuple[Region, ...] = (
            "(resisting it); symmetry L/R", Confidence.LIKELY, per_side=True,
            probe_priority=False, queue_eligible=False, measures=()),
     Region("dip", "Dip", "A", Capacity.STRENGTH, Plane.SAGITTAL,
-           "Dip / dip machine (gated by shoulder ER/IR)",
+           "Dip / dip machine",
            "Depth without anterior-shoulder compensation; distinct from vertical_push",
            Confidence.LIKELY, per_side=False, probe_priority=False, queue_eligible=False,
            measures=()),
@@ -364,25 +378,24 @@ _REGIONS: tuple[Region, ...] = (
     # probe field is EXPLICIT and inert: not probe-priority, not queue-eligible, norms
     # still to populate, confidence GUESSING on the bands. Bands live in `expectation`
     # text only, marked "to populate" — there is no numeric norm in code (G3).
-    # shoulder_er_ir was split in two (R1). `gates=("dip",)` is carried onto BOTH halves;
-    # which action actually gates dip is UNRULED (flagged for chat, OPEN_QUESTIONS Q27).
+    # shoulder_er_ir was split in two (R1). Neither half gates anything: the old
+    # `gates=("dip",)` was dropped by the operator's ruling, so dip is ungated (inert either way).
     # HHD force (N) is a clinic dynamometry reading, EP-administered (R4), not a gym lift.
+    # Every measure here keeps the "internal" reference_kind: a measure flips to "literature"
+    # only when a norm matching its instrument and protocol is CITED, and none is yet.
     Region("shoulder_er", "Shoulder external rotation (rotator cuff)", "H", Capacity.STRENGTH,
            Plane.TRANSVERSE, "Clinic HHD ER force (EP-administered); cable / band ER at load",
-           "Numerator of the ER:IR ratio (er_ir); symmetry L/R. Literature ER:IR band to "
-           "populate (Q27 cites ~0.66-0.75, unverified); direction only until instrument and "
-           "protocol match",
-           Confidence.GUESSING, per_side=True, gates=("dip",), probe_priority=False,
+           "Numerator of the ER:IR ratio (er_ir); symmetry L/R. Band to populate (Q27 "
+           "cites ~0.66-0.75, an isokinetic-torque reference, not HHD force; unverified)",
+           Confidence.GUESSING, per_side=True, probe_priority=False,
            needs_norm=True, queue_eligible=False,
-           measures=(Measure("hhd_force_n", "N", higher_is_better=True,
-                             reference_kind="literature"),)),
+           measures=(Measure("hhd_force_n", "N", higher_is_better=True),)),
     Region("shoulder_ir", "Shoulder internal rotation (rotator cuff)", "H", Capacity.STRENGTH,
            Plane.TRANSVERSE, "Clinic HHD IR force (EP-administered); cable / band IR at load",
            "Denominator of the ER:IR ratio (er_ir); symmetry L/R. Band to populate",
-           Confidence.GUESSING, per_side=True, gates=("dip",), probe_priority=False,
+           Confidence.GUESSING, per_side=True, probe_priority=False,
            needs_norm=True, queue_eligible=False,
-           measures=(Measure("hhd_force_n", "N", higher_is_better=True,
-                             reference_kind="literature"),)),
+           measures=(Measure("hhd_force_n", "N", higher_is_better=True),)),
     Region("hip_adduction", "Hip adduction (adductor)", "H", Capacity.STRENGTH,
            Plane.FRONTAL, "Clinic HHD adduction force (EP-administered); adductor squeeze "
            "(BP cuff, optional); Copenhagen plank (exposure)",
@@ -390,27 +403,23 @@ _REGIONS: tuple[Region, ...] = (
            "L/R. Copenhagen is exposure only and does not feed add_abd. Band to populate",
            Confidence.GUESSING, per_side=True, probe_priority=False, needs_norm=True,
            queue_eligible=False,
-           measures=(Measure("hhd_force_n", "N", higher_is_better=True,
-                             reference_kind="literature"),
+           measures=(Measure("hhd_force_n", "N", higher_is_better=True),
                      # One cuff reading squeezed between the knees: not attributable to a leg.
-                     Measure("squeeze_mmhg", "mmHg", higher_is_better=True, per_side=False,
-                             reference_kind="literature"))),
+                     Measure("squeeze_mmhg", "mmHg", higher_is_better=True, per_side=False))),
     Region("hip_abduction", "Hip abduction (abductor)", "H", Capacity.STRENGTH,
            Plane.FRONTAL, "Clinic HHD abduction force (EP-administered); hip abduction machine "
            "at load (exposure)",
            "Denominator of the adductor:abductor ratio (add_abd); symmetry L/R. Band to populate",
            Confidence.GUESSING, per_side=True, probe_priority=False, needs_norm=True,
            queue_eligible=False,
-           measures=(Measure("hhd_force_n", "N", higher_is_better=True,
-                             reference_kind="literature"),)),
+           measures=(Measure("hhd_force_n", "N", higher_is_better=True),)),
     Region("ankle_plantarflexion", "Ankle plantarflexion (calf)", "H", Capacity.STRENGTH,
            Plane.SAGITTAL, "Single-leg heel raise, reps to fatigue; calf raise at load",
-           "Reps against the internal baseline and L/R; literature reference to populate. "
+           "Reps against the internal baseline and L/R; band to populate. "
            "Plantarflexion STRENGTH, not ankle_df (dorsiflexion MOBILITY)",
            Confidence.GUESSING, per_side=True, probe_priority=False, needs_norm=True,
            queue_eligible=False,
-           measures=(Measure("sl_heel_raise_reps", "count", higher_is_better=True,
-                             reference_kind="literature"),)),
+           measures=(Measure("sl_heel_raise_reps", "count", higher_is_better=True),)),
     # R3: an ABSOLUTE + LSI read. No H:Q ratio is declared and knee_extension is NOT admitted.
     # No Measure is declared (R3 names no instrument), so this stays observation-ineligible.
     Region("knee_flexion", "Knee flexion (hamstring)", "H", Capacity.STRENGTH,
@@ -430,17 +439,18 @@ _BY_KEY: dict[str, Region] = {r.key: r for r in _REGIONS}
 _RATIOS: tuple[Ratio, ...] = (
     Ratio("er_ir", "Shoulder ER:IR (rotator cuff)",
           numerator=("shoulder_er", "hhd_force_n"), denominator=("shoulder_ir", "hhd_force_n"),
-          reference_kind="literature",
-          expectation="External:internal rotation force, same side, same protocol. Literature "
-                      "band to populate (Q27 cites ~0.66-0.75, unverified); direction only "
-                      "until EP readings exist on a matching instrument and protocol",
+          reference_kind="internal",
+          expectation="External:internal rotation force, same side, same protocol. Band to "
+                      "populate (Q27 cites ~0.66-0.75, an isokinetic-torque reference, not HHD "
+                      "force; unverified). Internal baseline and trend govern until a norm "
+                      "matching the protocol is cited",
           confidence=Confidence.GUESSING),
     Ratio("add_abd", "Hip adductor:abductor",
           numerator=("hip_adduction", "hhd_force_n"), denominator=("hip_abduction", "hhd_force_n"),
-          reference_kind="literature",
+          reference_kind="internal",
           expectation="Adductor:abductor force, same side, same protocol (groin-strain "
-                      "literature). Band to populate; direction only until EP readings exist "
-                      "on a matching instrument and protocol",
+                      "literature). Band to populate. Internal baseline and trend govern until "
+                      "a norm matching the protocol is cited",
           confidence=Confidence.GUESSING),
 )
 
