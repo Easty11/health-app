@@ -44,9 +44,9 @@ def format_routine_compact(routine: dict, fallback: dict[str, str]) -> list[str]
 
 
 def format_routine_full(routine: dict, fallback: dict[str, str]) -> list[str]:
-    """Full rendering: header, then each exercise IN PAYLOAD ORDER with superset grouping,
-    rest, notes, and every set. Superset membership is surfaced as a `[superset N]` tag so
-    grouped writes are verifiable."""
+    """Full rendering: header, then each exercise IN PAYLOAD ORDER with its template id,
+    superset grouping, rest, notes, and every set. The id is surfaced as an `[ID: X]` tag and
+    superset membership as a `[superset N]` tag, so grouped writes are verifiable."""
     lines = [format_routine_header(routine)]
 
     notes = (routine.get("notes") or "").strip()
@@ -60,9 +60,15 @@ def format_routine_full(routine: dict, fallback: dict[str, str]) -> list[str]:
 
     for ex in exercises:
         title = exercise_display_title(ex, fallback)
+        # The template id rides on the line, in the `[ID: X]` form `render_workout` uses for the
+        # workout history, so an update copies the id from the routine itself rather than
+        # re-resolving a title (a title cannot tell a left/right pair of customs apart). A
+        # payload with no id renders without a tag.
+        tid = ex.get("exercise_template_id")
+        id_tag = f" [ID: {tid}]" if tid else ""
         superset_id = ex.get("superset_id")
         superset_tag = f"  [superset {superset_id}]" if superset_id is not None else ""
-        lines.append(f"  {title}{superset_tag}")
+        lines.append(f"  {title}{id_tag}{superset_tag}")
 
         rest = ex.get("rest_seconds")
         if rest is not None:

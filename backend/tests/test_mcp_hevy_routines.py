@@ -184,7 +184,9 @@ def test_full_renders_titles_not_uuids(monkeypatch, db_session):
     _install(monkeypatch, db_session, by_id={"rt-push-1": ROUTINE_FULL})
     out = asyncio.run(mcp_server.get_hevy_routine("rt-push-1"))
     assert "Bench Press (Barbell)" in out
-    assert "BENCH01" not in out  # the id must not leak when a title is present
+    # The id is shown as an `[ID: ...]` tag beside the title, never AS the title (11 Oct 2026:
+    # the read-back and the in-app routines section share one renderer).
+    assert "Bench Press (Barbell) [ID: BENCH01]" in out
 
 
 def test_full_title_fallback_from_store(monkeypatch, db_session):
@@ -199,8 +201,7 @@ def test_full_title_fallback_from_store(monkeypatch, db_session):
     _install(monkeypatch, db_session, by_id={"rt-x": routine},
              templates={"STORE01": "Back Squat"})
     out = asyncio.run(mcp_server.get_hevy_routine("rt-x"))
-    assert "Back Squat" in out
-    assert "STORE01" not in out
+    assert "Back Squat [ID: STORE01]" in out   # store title is the name; the id is only the tag
 
 
 def test_full_bad_id(monkeypatch, db_session):
