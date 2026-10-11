@@ -176,6 +176,12 @@ export default function CheckInAM() {
   }, [])
   useRecoveryRefresh({ onFreshRun: refetchPassive })
   const [submitted, setSubmitted] = useState(false)
+  // How the missed-PM catch-up card was resolved this visit: null (still offered) | 'saved' |
+  // 'already' (409) | 'skipped'. Held HERE, not in the card, because the AM submit swaps this page
+  // to its other return tree and mounts a fresh card; instance-local state reset at that switch and
+  // the card re-offered a day that had been closed out. A skip lasts this page visit only: nothing
+  // is written, so the next load asks again.
+  const [missedPmOutcome, setMissedPmOutcome] = useState(null)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -298,7 +304,7 @@ export default function CheckInAM() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10 px-4">
         <div className="w-full max-w-sm">
-          <MissedPMCard missedPm={prefill?.missed_pm} />
+          <MissedPMCard missedPm={prefill?.missed_pm} outcome={missedPmOutcome} onOutcome={setMissedPmOutcome} />
           <div className="text-center mb-6">
             <p className="text-3xl mb-2">✓</p>
             <h1 className="text-lg font-semibold text-gray-800">Morning check-in saved</h1>
@@ -341,7 +347,7 @@ export default function CheckInAM() {
 
         {/* Outside the <form>: its Save/Skip are independent of the AM submit and must never
             be able to trigger it. Writes yesterday's row via for_date. */}
-        <MissedPMCard missedPm={prefill?.missed_pm} />
+        <MissedPMCard missedPm={prefill?.missed_pm} outcome={missedPmOutcome} onOutcome={setMissedPmOutcome} />
 
         {passive && (
           <PassiveCard

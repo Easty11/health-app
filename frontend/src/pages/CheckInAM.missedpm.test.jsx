@@ -177,3 +177,78 @@ test('the card also shows when this morning\'s AM is already saved', async () =>
   await screen.findByText('Morning check-in saved')
   expect(screen.getByText(/Close out yesterday/)).toBeTruthy()
 })
+
+// ── The card's resolution outlives the AM submit ────────────────────────────────────────────────
+// Operator-observed 11 Oct: the catch-up card was saved at 07:15, the AM submitted at 07:17, and the
+// "Morning check-in saved" view offered the same day again. The form view and the saved view are two
+// different return trees in CheckInAM, so the card mounted in the second is a FRESH instance and its
+// done/hidden state was local to the first. The state now lives in CheckInAM; these pin that.
+
+const submitAm = () => fireEvent.click(screen.getByRole('button', { name: 'Save Check-in' }))
+const cardGone = () => {
+  expect(screen.queryByText(/Close out yesterday/)).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Save yesterday' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+}
+
+test('saving the card, then submitting the AM, leaves no card on the saved view', async () => {
+  prefill = withMissed(false)
+  renderIt()
+  await screen.findByText(/Close out yesterday/)
+  fireEvent.click(saveBtn())
+  await screen.findByText(/Yesterday's close-out saved/)
+  submitAm()
+  await screen.findByText('Morning check-in saved')
+  cardGone()
+  expect(pmPosts()).toHaveLength(1)                       // and nothing re-posted
+})
+
+test('a 409 on the card, then submitting the AM, leaves no card on the saved view', async () => {
+  prefill = withMissed(false)
+  api.post.mockImplementation((url) => {
+    if (url === '/integrations/garmin/refresh') return Promise.resolve({ data: { skipped: true } })
+    if (url === '/checkin-v2/pm') {
+      return Promise.reject({ response: { status: 409, data: { detail: 'That day\'s close-out is already recorded.' } } })
+    }
+    return Promise.resolve({ data: {} })
+  })
+  renderIt()
+  await screen.findByText(/Close out yesterday/)
+  fireEvent.click(saveBtn())
+  await screen.findByText(/already closed out/)
+  submitAm()
+  await screen.findByText('Morning check-in saved')
+  cardGone()
+  expect(pmPosts()).toHaveLength(1)
+})
+
+test('skipping the card, then submitting the AM, does not re-ask within the same visit', async () => {
+  prefill = withMissed(true)
+  renderIt()
+  await screen.findByText(/Close out yesterday/)
+  fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+  submitAm()
+  await screen.findByText('Morning check-in saved')
+  cardGone()
+  expect(pmPosts()).toHaveLength(0)                       // a skip is still no write, anywhere
+})
+
+test('a skip is for the visit only: a fresh page load asks again', async () => {
+  prefill = withMissed(false)
+  const first = renderIt()
+  await screen.findByText(/Close out yesterday/)
+  fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+  expect(screen.queryByText(/Close out yesterday/)).toBeNull()
+  first.unmount()
+  renderIt()                                              // the next visit: null was never written
+  await screen.findByText(/Close out yesterday/)
+})
+
+test('an unresolved card is still offered on the saved view (resolving is what dismisses it)', async () => {
+  prefill = withMissed(false)
+  renderIt()
+  await screen.findByText(/Close out yesterday/)
+  submitAm()
+  await screen.findByText('Morning check-in saved')
+  expect(screen.getByText(/Close out yesterday/)).toBeTruthy()
+})
