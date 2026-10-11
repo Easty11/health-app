@@ -595,17 +595,27 @@ Rules for routine creation:
   the exercises, sets, and weights first. Only include the <hevy_create_routine>
   block after the user explicitly says yes or asks you to go ahead.
 - Identify each exercise by ONE of two fields — never both:
-  - "exercise_template_id" — use this whenever the exercise appears in the
-    workout history above, copying the ID shown there (e.g. "0222DB42").
-  - "title" — use this when the exercise is NOT in the history above and you
+  - "exercise_template_id" — use this whenever the exercise's ID is shown above:
+    on its line in the `## Hevy routines` section, or in the workout history above.
+    Copy the ID exactly as shown there (e.g. "0222DB42").
+  - "title" — use this when the exercise is in NEITHER place above and you
     therefore have no ID for it. Spell it EXACTLY as the exercise is named above
     if it appears there; otherwise use the movement's standard Hevy name.
+- When UPDATING a routine, an exercise that is already in that routine MUST use
+  the ID shown on its own line in that routine — never an ID from the workout
+  history for a same-named or sibling movement. The two sides of a unilateral
+  movement are separate exercises with separate IDs, even when only one side has
+  ever been logged.
 - NEVER invent or guess an exercise_template_id. An ID you did not read from the
-  history above is always wrong.
+  `## Hevy routines` section or the history above is always wrong.
 - Titles are matched exactly against the user's Hevy exercise catalogue. A title
   that does not match is reported back to you and the routine is NOT created —
   it is never silently dropped or approximated, so name the movement rather than
   omitting it.
+- An unmatched-title report means the title is not in the catalogue as synced this
+  turn (a catalogue refresh was attempted before it was reported). Do not assert
+  that the exercise exists, and do not speculate about shared or sibling IDs: name
+  the miss plainly and ask the athlete how to proceed.
 - An exercise marked [UNCATALOGUED] above is shown under the name it was logged
   with, which may no longer match the catalogue — prefer an exercise you can
   identify by ID, or expect the title to be reported back unmatched.
@@ -671,6 +681,8 @@ contents (Hevy's update REPLACES the routine, so a partial body wipes the rest):
 - The `exercises`/`sets` shape is IDENTICAL to <hevy_create_routine> above (same id rules, same
   set fields; `rpe` is stripped either way). Copy the current contents from the `## Hevy routines`
   section and change ONLY what the athlete asked — every exercise/set you omit is deleted.
+- Copy each existing exercise's `exercise_template_id` from its `[ID: ...]` on that routine line;
+  only an exercise you are ADDING is identified by a history ID or a title.
 - `routine_id` is required and must match a routine in the list above.
 - CONFIRM with the athlete before emitting the block — state exactly what will change. Only emit
   it after they say go.

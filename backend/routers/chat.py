@@ -35,6 +35,7 @@ from hevy_templates import (
     refresh_catalogue_if_stale,
     resolve_exercise,
     suggest_candidates,
+    sync_exercise_templates,
     user_hevy_key,
 )
 from engine import adaptation, selection
@@ -482,6 +483,49 @@ def _resolve_missing_ids(
     return exercises, unresolved
 
 
+class _TurnCatalogueRefresh:
+    """The one forced catalogue refresh a chat turn is allowed, shared by every routine block.
+
+    `spent` flips BEFORE the sync is awaited, so a failed or empty refresh still uses the turn's
+    allowance: a Hevy outage costs one attempt per turn, never one per block. One instance is
+    built per turn in the endpoint and handed to both routine processors; a caller that passes
+    none gets a private one, which bounds that call only."""
+
+    def __init__(self) -> None:
+        self.spent = False
+
+
+async def _resolve_ids_refreshing_on_miss(
+    exercises: list[dict],
+    user_id: int,
+    db: Session,
+    refresh: _TurnCatalogueRefresh,
+) -> tuple[list[dict], list[tuple[str, list[tuple[str, str]]]]]:
+    """`_resolve_missing_ids`, with ONE forced catalogue refresh before a title is called unresolved.
+
+    A title miss is evidence the local catalogue is behind Hevy (a custom made in the Hevy app
+    since the last sync), and `refresh_catalogue_if_stale` only fires past its 24h window — so a
+    miss forces `sync_exercise_templates` for this user regardless of the staleness marker, then
+    resolves again. Once per turn across all blocks (`refresh.spent`): after the first refresh the
+    catalogue is already as fresh as this turn can make it, so a later block's miss goes straight
+    to unresolved reporting.
+
+    Matching stays EXACT and nothing is minted on a miss. A refresh that fails, or leaves titles
+    unmatched, returns the second pass's `unresolved` unchanged for today's reporting: it never
+    raises and never blocks the caller's other blocks. The second pass only revisits exercises
+    still missing an id, because the first pass wrote the resolved ones' ids into the payload."""
+    exercises, unresolved = _resolve_missing_ids(exercises, user_id, db)
+    if not unresolved or refresh.spent:
+        return exercises, unresolved
+    refresh.spent = True
+    try:
+        await sync_exercise_templates(db, only_user_id=user_id)
+    except Exception as exc:  # noqa: BLE001 — the sync promises not to raise; a miss must still be reported
+        logger.warning("forced catalogue refresh on title miss failed for user %d — %s: %s",
+                       user_id, type(exc).__name__, exc)
+    return _resolve_missing_ids(exercises, user_id, db)
+
+
 def _format_unresolved(unresolved: list[tuple[str, list[tuple[str, str]]]]) -> str:
     """Render a miss as a correctable message (#83).
 
@@ -538,12 +582,14 @@ async def _process_routine_actions(
     db: Session,
     phase_label: str | None = None,
     phase_folders: dict | None = None,
+    refresh: _TurnCatalogueRefresh | None = None,
 ) -> tuple[str, list[str], list[WriteResult]]:
     """
     Scan `reply` for <hevy_create_routine> blocks.
     For each one found:
       - Parse the JSON payload
-      - Resolve any title-only exercises to ids (opt-in fallback, #60)
+      - Resolve any title-only exercises to ids (opt-in fallback, #60); a title miss forces
+        one catalogue refresh per turn (`refresh`) before it is reported unresolved
       - Call hevy_client.create_routine()
       - Strip the raw block from the displayed text
       - Record a confirmation message AND a machine-checkable WriteResult
@@ -585,6 +631,7 @@ async def _process_routine_actions(
         record(False, "create_failed", "⚠️ Routine not created — Hevy is not connected.")
         return cleaned, actions_taken, write_results
 
+    refresh = refresh if refresh is not None else _TurnCatalogueRefresh()
     cleaned = reply
     for match in matches:
         raw_json = match.group(1)
@@ -618,8 +665,9 @@ async def _process_routine_actions(
                 hevy_client, data.get("folder"), data.get("folder_id"))
 
         # Opt-in fallback: fill ids for any title-only exercises. Blocks that
-        # already carry ids are untouched (#60).
-        exercises, unresolved = _resolve_missing_ids(exercises, user_id, db)
+        # already carry ids are untouched (#60). A miss forces one refresh per turn first.
+        exercises, unresolved = await _resolve_ids_refreshing_on_miss(
+            exercises, user_id, db, refresh)
         if unresolved:
             record(
                 False, "unresolved_exercise",
@@ -728,6 +776,7 @@ async def _process_routine_updates(
     hevy_client: HevyClient | None,
     user_id: int,
     db: Session,
+    refresh: _TurnCatalogueRefresh | None = None,
 ) -> tuple[str, list[str], list[WriteResult]]:
     """Scan `reply` for <hevy_update_routine> blocks and update each routine IN PLACE (#314).
 
@@ -754,6 +803,7 @@ async def _process_routine_updates(
         record(False, "update_failed", "⚠️ Routine not updated — Hevy is not connected.")
         return cleaned, actions_taken, write_results
 
+    refresh = refresh if refresh is not None else _TurnCatalogueRefresh()
     cleaned = reply
     for match in matches:
         try:
@@ -772,7 +822,8 @@ async def _process_routine_updates(
             record(False, "invalid_shape", "⚠️ Routine update needs a routine_id.", key=title or None)
             cleaned = cleaned.replace(match.group(0), ""); continue
 
-        exercises, unresolved = _resolve_missing_ids(exercises, user_id, db)
+        exercises, unresolved = await _resolve_ids_refreshing_on_miss(
+            exercises, user_id, db, refresh)
         if unresolved:
             record(False, "unresolved_exercise",
                    f"⚠️ Routine '{title or routine_id}' not updated — could not resolve exercise(s): "
@@ -1322,6 +1373,10 @@ _PASS2_SYSTEM = (
     "if it is written again in a later reply. NEVER tell the user to fix a format, field, "
     "or block — they cannot see or edit one.\n"
     "  - informational: state the fact plainly (e.g. there was nothing matching to remove).\n"
+    "- An [NOT SAVED] item with reason code unresolved_exercise means that exercise title is "
+    "not in the catalogue as synced this turn. Do not assert the exercise exists, and do not "
+    "speculate about shared or sibling exercise IDs; name the miss and ask the user how to "
+    "proceed.\n"
     "- Do NOT append a tally or a '✓ N saved' line; that is added separately.\n"
 )
 
@@ -1618,11 +1673,15 @@ async def chat(
     reply, exercise_actions, exercise_write_results = await _process_exercise_actions(
         reply, current_user.id, db)
     _phase = state.training_phase or {}
+    # ONE forced catalogue refresh for the whole turn, shared by the create and update lanes: a
+    # title miss in either triggers it, and a miss after it has run goes straight to reporting.
+    _turn_refresh = _TurnCatalogueRefresh()
     reply, routine_actions, routine_write_results = await _process_routine_actions(
         reply, hevy_client, current_user.id, db,
-        phase_label=_phase.get("label"), phase_folders=state.phase_folders)
+        phase_label=_phase.get("label"), phase_folders=state.phase_folders,
+        refresh=_turn_refresh)
     reply, routine_update_actions, routine_update_write_results = await _process_routine_updates(
-        reply, hevy_client, current_user.id, db)
+        reply, hevy_client, current_user.id, db, refresh=_turn_refresh)
     reply, knowledge_actions, knowledge_write_results = _process_knowledge_updates(
         reply, current_user.id, db)
     # Q185: one in-turn retry per shape-refused knowledge write, before the reply is composed.
