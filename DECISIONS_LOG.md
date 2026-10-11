@@ -13937,6 +13937,8 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 **The `cbti_block_open` departure (see "What the brief could not be followed to the letter on" above) is ruled DEFER and stays OPEN as Q227.** Nothing was changed for it in #357. **Still OWED (operator):** the post-merge check under Status above; it is not discharged by these rulings.
 
+**Status addendum (11 Oct 2026, second; additive: the paragraphs above are unedited, and where this contradicts them this governs).** **The operator check under Status above PASSED on 11 Oct** (operator-reported; Code has no prod access): the card appeared on the AM screen, the catch-up landed on Sat 10 flagged late, today's AM was unaffected, and that evening's `/nightly` was open as normal. The prod rows were verified correct. The check also surfaced a defect the build tests did not reach: after the card was saved at 07:15 and the AM submitted at 07:17, the "Morning check-in saved" view offered Sat 10 again. That is the consequence of the third ruling in the first addendum (the card also renders on the saved view): the state that hides a resolved card was local to the card instance and was lost when the AM submit swapped views. Fixed in #411 (PR #373); no backend change.
+
 ---
 
 ### 408. The plan/schedule and recent-sessions MCP tools are read-only formatters over named reads; a Hevy workout links to a session by the one shared overlap predicate; the strength-sport set is ratified and Pilates is deliberately outside it
@@ -13996,3 +13998,25 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 **How you know.** The operator's ruling in chat on 10 Oct 2026, reading the output of their own run of the projection script. Code did not see that output. Code's own checks, in the tree and not against production: the script and its 30 synthetic-data tests (#367), `load_events_metabolic.py` and `docs/load-constants-provenance.md` as the cost of a change; the coefficient status (secondary sources only, the primary chapter unread) is the one recorded in Q230.
 
 **Do not revisit unless.** (a) Form band thresholds are proposed (a threshold on form turns a small magnitude difference into a different band, which the ruling does not cover); or (b) at least four weeks of build-ramp data exist, in which case rerun the projection script first and decide from that output. Any later formula change re-fits Q231's `k` by recompute.
+
+### 411. The catch-up card's resolution (saved, already closed out, skipped) is held by the AM check-in page, not the card; a skip lasts the page visit
+
+**Decision.**
+- **The resolution lives in `CheckInAM`.** `missedPmOutcome` is `null` (still offered), `saved`, `already` (the 409) or `skipped`. `MissedPMCard` receives it as `outcome` and reports changes through `onOutcome`. Only the entry in progress (the fields, the saving flag, a save error) stays local to the card. Frontend only: no backend change, `NightlyCloseOut` untouched.
+- **A skip survives the switch from the form view to the saved view,** so a skip is not re-asked within the same visit. Skip is otherwise as ruled in #407: no write, the row stays null (null means "not asked"), and a skip lasts this page visit only, so a fresh load of the page asks again. This is Code's call on the question the brief left open; the reasoning is that a skip is a decision the operator has just made, and re-offering the same day seconds later is the defect this entry fixes.
+- **The mechanism differs from the brief's wording, with the same behaviour.** The brief proposed clearing `missed_pm` in the prefill state on a resolution. Clearing it would unmount the card, and the quiet confirmation it renders ("Yesterday's close-out saved." / "Yesterday was already closed out.") would go with it. Holding an outcome keeps the card, the note and the hidden-after-skip behaviour exactly as #407 ruled them.
+- **Not fixed, noted:** an unresolved card keeps no entered values across the AM submit, because the fields are local to the instance and the page swaps return trees. The card is still offered on the saved view, with its fields reset to defaults. Low severity; fixing it means lifting the fields or rendering one tree.
+
+**Rationale.** The operator saved the catch-up card at 07:15 and submitted the AM at 07:17, and the saved view then offered the same day again. `CheckInAM` has two return trees (the form view and the saved view) and the card sits at a different child position in each, so the AM submit unmounts one instance and mounts a fresh one. The saved/already/skipped state was local to the instance and reset at that switch, while `prefill.missed_pm` was unchanged. The defect is invisible to a test that renders the card in one view; it needs a test that resolves the card and then submits the AM. State that must outlive a view switch belongs to the component that owns the switch.
+
+**Status.** Landed via PR #373 (merge SHA recorded at the next close-out). Frontend only, no migration, self-merged on green under the merge disposition. **OWED (operator, opportunistic):** the next time a close-out is missed, resolve the card and then submit the AM; the saved view should show no card. The fixture needed to reproduce it is a missed day, so it is not scheduled.
+
+**How you know.**
+- **The hypothesis was adjudicated by reproduction, not assumed.** The gate tests were written first and run against the unfixed code: the three "resolve the card, then submit the AM" tests failed with the "Close out yesterday" heading still present on the saved view, and no other test failed.
+- `CheckInAM.missedpm.test.jsx`: save then AM, 409 then AM, and skip then AM each leave no card on the saved view (and the skip case writes nothing); a skip is visit-only (a fresh mount asks again); an unresolved card is still offered on the saved view. Full frontend suite 431 passed; eslint clean on the touched files.
+- **Mutation check, run on the real source:** reverting the card to instance-local state (the #357 shape) fails all three submit-then-AM tests. The source was restored and the suite re-run green.
+- **Not verified here:** anything in production. The defect was observed there by the operator on 11 Oct; the fix has not been exercised there.
+
+**Do not revisit unless.** `CheckInAM` is restructured so the form view and the saved view are one tree (then the state could move back into the card); a second surface renders the card (then the outcome needs a shared home above both); or the operator wants a skip to persist beyond the visit (that is a stored "skipped" state, which #407 ruled against).
+
+---
