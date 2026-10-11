@@ -284,11 +284,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q201 is ruled on (a) and (c): richness-first stands with the #365 hierarchy out of arbitration, and the twin tolerance is declared; (b), suppression visible to the coach, is not met by #415 and is the open remainder (#417).** Governance only - Canonical home: `DECISIONS_LOG.md` #417.
+
 - **Q51, Q53, Q30 and Q50 are closed on the operator's rulings: `BRANCHES.md`'s header now matches its rows, `gate_test.py` is deleted, the `.gitattributes` question is superseded, and the four operating rules live in project instructions (#416).** Governance only - Canonical home: `DECISIONS_LOG.md` #416.
 
 - **`get_recent_sessions` lists every session that overlaps a counted Hevy workout as a segment of it, by the same test as the `concurrent_strength` marker (#415, Q206 follow-up).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #415.
-
-- **A gym session's HR trace is marked `concurrent_strength` in `get_training_sessions` and left out of the readiness snapshot's aerobic count, by the resolver's own test (#414, Q206 closed).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #414.
 
 ---
 

@@ -14133,3 +14133,29 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 **Do not revisit unless.** A session again follows a store's header over its rows (Q51), a cross-repo byte-identity check is made against a working tree rather than the index (Q30), or the manifest or gate-as-subtraction rule is needed in Code sessions and has no enforced home there (Q50).
 
 ---
+
+### 417. Q201 arbitration rulings: richness-first stands and the #365 hierarchy stays out of it, the twin tolerance is declared as derived behaviour, and #415 does not make a suppressed twin visible (Q201 stays OPEN on (b))
+
+**Decision.** Operator rulings on Q201, 11 Oct 2026. Governance only: no code change (docstrings included), no schema.
+- **(a) The #365 hierarchy does not enter arbitration.** Richness-first (#356) stands: when both rows are zoned, the richer, higher-ranked trace deposits, regardless of which device #365 makes the owner. #365 governs which device records a run; arbitration governs which copy deposits. Evidence: the 1 Oct run, four rows, one deposit, on row 95 (`polar_v4`, 81.9 AU); the rule picked the chest strap. The owner tie-break scoped and dropped in Q201's 3 Oct update stays dropped, and that update's "(a) is therefore deferred" is superseded: (a) is ruled here.
+- **(b) Suppression must be visible to the coach. Not met by #415. The gap is recorded and nothing is built.** #415's "every session that overlaps" is the overlap with a counted Hevy workout (`mcp_server._concurrent_strength_sessions`, `:745-759`, `overlaps_workout(s, counted)`), not a twin test, and its input is already canonical-only. On master `b2d1cde`:
+  - `get_recent_sessions` (`mcp_server.py:875-905`) builds `sessions = [s for s in arbitrated if getattr(s, "canonical", True)]` at `:887` and hands only those to `_format_recent_sessions` (`:803`). A non-canonical twin is dropped before the formatter, so it is not listed, not as a segment and not as a note.
+  - The line renderer `format_aerobic_session` (`aerobic_format.py:18-45`) has no canonical or twin field, and no text in `mcp_server.py` or `aerobic_format.py` says a row was suppressed or "also recorded by".
+  - The other coach-facing reads filter the same way: `get_training_sessions` (`:605`), the readiness snapshot (`:964-966`), `session_focus.py:168`.
+  - `canonical` is exposed on the Polar list `GET /integrations/polar/aerobic-sessions` only (`routers/polar.py:316,334`), an operator surface, not the coach's. `sessions_skipped_non_canonical` is only in the metabolic transform's return dict (`load_events_metabolic.py:189-198,235`) and only tests read it.
+  - So for the 1 Oct run the coach-facing reads show row 95 and not rows 93, 96 or 118 (Likely: from the code; the prod rows were not read). Which read shows what, and in what wording, is for the operator to rule.
+- **(c) The start-offset tolerance is accepted as behaviour and declared.** It is derived, not a constant: two rows are one bout when their interval overlap is at least 50% of the shorter duration (`OVERLAP_THRESHOLD = 0.50`, `reads/aerobic_reads.py:49`; the test at `:239`, `overlap < OVERLAP_THRESHOLD * min(x_dur, y_dur)`).
+  - **Worked value, 1 Oct** (Garmin 21:33 = 1,293 s, Polar 22:05 = 1,325 s; the shorter is 1,293 s, half of it 646.5 s): one canonical row while Polar starts up to 646 s after Garmin (overlap 1,293 s minus the offset), and while Garmin starts up to 678 s after Polar (overlap 1,325 s minus the offset). The declared figure is about 640 s. Past it, two canonical rows and two metabolic deposits. The live pair's starts were 9 s apart (rows 93 and 95), far inside.
+  - **General form.** For durations d_s <= d_l the tolerance runs from 0.5 x d_s (the longer row starts later) to d_l - 0.5 x d_s (the shorter starts later). It scales with the durations.
+  - **Not covered by this declaration, unchanged and not ruled:** a row with no usable start and stop is canonical by default and can double-deposit (`:219-224`); the Hevy-mirror predicate is a separate constant with the session's own duration as denominator (`HEVY_MIRROR_OVERLAP_FRACTION`, `:59`; #397, #401).
+  - **The rule.** Any change to the 50% predicate (the threshold or its shorter-duration denominator) is a ruled change: an operator ruling and a new entry first.
+
+**Rationale.** (a) keeps the deposit rule to one question, which copy is the richer trace, and leaves device ownership to #365's recording decision; the 1 Oct run shows the rule keeping exactly one deposit. (c) turns a number that only followed from two durations and a threshold into a stated behaviour, so a later change to it is a decision and not a drift. (b) is a requirement the current read path does not meet: the coach sees only the winner.
+
+**Status.** (a) and (c) DONE 11 Oct 2026. (b) OPEN: the gap is recorded, the surface is unruled, and nothing is built; Q201 stays OPEN with (b) as its named remainder. Q202 and Q203 untouched. Governance only; operator rulings, no new judgment, so self-merged on green. Merge SHA recorded at the next close-out.
+
+**How you know.** Code's checks on master `b2d1cde`: the file:line reads above. The real `arbitrate()` run on synthetic rows at the 1 Oct durations (Garmin as a `health_connect` Garmin-package row, Polar as `polar_v4`, both zoned; the database imports stubbed, a scratch probe not committed): one canonical row at a 646 s offset with Polar later and at 678 s with Garmin later, two at 647 s and 679 s, one at 9 s. Not verified here: the 1 Oct prod rows and the rulings themselves are operator-reported (Code has no DB route); no test suite was run, as no code or schema is touched.
+
+**Do not revisit unless.** (a) the source-agnostic input-layer design or the Q201 intensity-share classifier is ruled and changes which copy deposits; (b) the operator rules the suppression surface, which closes Q201; or (c) the 50% predicate is to change, which is the ruled change itself.
+
+---
