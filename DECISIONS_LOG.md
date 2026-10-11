@@ -14207,7 +14207,7 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 ---
 
-### #NEXT. Q27 v1 vocabulary: `shoulder_er_ir` splits, hip abduction and plantarflexion are admitted, the hamstring is an absolute + LSI read, dynamometry is EP-administered, and dip is ungated
+### 420. Q27 v1 vocabulary: `shoulder_er_ir` splits, hip abduction and plantarflexion are admitted, the hamstring is an absolute + LSI read, dynamometry is EP-administered, and dip is ungated
 
 **Decision.** Operator rulings on Q27, 11 Oct 2026.
 - **R1.** `shoulder_er_ir` is replaced by `shoulder_er` and `shoulder_ir`. The old key no longer exists.
@@ -14229,7 +14229,7 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 ---
 
-### #NEXT. A Ratio is a derived taxonomy type, and `reference_kind` gates when a literature band may act as a threshold (fail-closed; every v1 measure is internal)
+### 421. A Ratio is a derived taxonomy type, and `reference_kind` gates when a literature band may act as a threshold (fail-closed; every v1 measure is internal)
 
 **Decision.** Chat design, ratified through the Q27 brief and the operator's rulings, 11 Oct 2026.
 - **Ratio.** A new frozen type in `engine/taxonomy.py`, neither a Region nor a Measure: `key`, `label`, `numerator` and `denominator` as `(region_key, measure_key)`, `reference_kind`, `expectation`, `confidence`, and `same_side=True`, `same_protocol=True`. It is DERIVED at read time and never stored: no ratio key is a region key or a measure key, so there is no observation row to write. `validate_ratio` runs over every declared ratio at import and refuses an unknown region, a measure not declared on its region, identical ends, differing units, `same_side` over a measure that is not per-side, an unknown `reference_kind` and a duplicate key. Declared: `er_ir` (`shoulder_er` / `shoulder_ir`, `hhd_force_n`) and `add_abd` (`hip_adduction` / `hip_abduction`, `hhd_force_n`). The log-derived (route i) computation is not built.

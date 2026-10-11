@@ -206,7 +206,7 @@ units, so the gap between them does not size a deficit. Each axis needs a route 
 Decide per axis (ER:IR, adductor:abductor, plantarflexion, hamstring if admitted). **Pending operator:** whether a
 dynamometer or squeeze gauge is available. Route (ii) cannot be chosen for any axis until that is known.
 
-**Resolved (11 Oct 2026, #NEXT and the one after): vocabulary and routes.** The vocabulary is
+**Resolved (11 Oct 2026, #420 and #421): vocabulary and routes.** The vocabulary is
 `shoulder_er`, `shoulder_ir`, `hip_adduction`, `hip_abduction`, `ankle_plantarflexion` and `knee_flexion` (absolute +
 LSI, no H:Q) in group H, with `er_ir` and `add_abd` as the declared ratios and `reference_kind` on Measure and Ratio.
 The gate fails closed, and every v1 measure and ratio is `internal` until a norm matching its protocol is cited.
@@ -3058,7 +3058,7 @@ Reading it: `rpe_cr10` NULL on a row you rated means link (ii) failed (Garmin di
 
 ## Q232. A stored engine-tier constraint or profile hard-stop names a region key that the taxonomy later retires: should the engine warn, fail, or re-validate?
 
-Spun out from Q27's V2 (11 Oct 2026, #NEXT). `validate_constraint` (`routers/knowledge.py`) refuses an unknown
+Spun out from Q27's V2 (11 Oct 2026, #420). `validate_constraint` (`routers/knowledge.py`) refuses an unknown
 `scope.region_keys` entry at WRITE time, but nothing re-checks a stored row afterwards. `gather_active_constraints`
 (`engine/selection.py`) copies the keys through unchecked, and `is_contraindicated` matches them by string equality
 (`region.key in c["region_keys"]`, the constraint arm; `rk == region.key`, the profile hard-stop arm). A key removed
