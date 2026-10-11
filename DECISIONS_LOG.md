@@ -13930,6 +13930,13 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 **Do not revisit unless.** A second missed day is wanted (that is a backfill, with its own rulings on nap attribution across several days); the operator wants an explicit "skipped" record rather than null; `_cbti_context` is changed so `block_open` depends on its date (then the Q227 gap closes and the test gains a real disagreeing case); or the Q226 ruling changes how a PM may be rewritten (then the 409 rule is checked against it).
 
+**Status addendum (11 Oct 2026; additive: the paragraphs above are unedited, and where this contradicts them this governs).** Landed as PR #357, merge `129a5d4` (the SHA the Status line above left to the next close-out). **Chat ratified three things as rulings, so they are no longer Code's own calls.** They were relayed to Code in the 11 Oct brief; Code verified nothing beyond what #357 itself shows.
+- **The missed-PM catch-up as shipped in #357:** the yesterday-only window, the derived `pm_late`, a skip leaving the row null, and no overwrite of yesterday's PM (the 409).
+- **The 00:01 / 23:59 AEST gate pair replaces the brief's "after midnight UTC" gate.** The brief's gate was wrong: a late-evening AEST submit never crosses midnight UTC at UTC+10, so it could not be tested as written. The pair (23:59 AEST on time, 00:01 AEST late, the latter being 14:01Z on the previous UTC date) is the gate of record.
+- **The catch-up card also renders on the "Morning check-in saved" view,** so it stays reachable after the AM submit.
+
+**The `cbti_block_open` departure (see "What the brief could not be followed to the letter on" above) is ruled DEFER and stays OPEN as Q227.** Nothing was changed for it in #357. **Still OWED (operator):** the post-merge check under Status above; it is not discharged by these rulings.
+
 ---
 
 ### 408. The plan/schedule and recent-sessions MCP tools are read-only formatters over named reads; a Hevy workout links to a session by the one shared overlap predicate; the strength-sport set is ratified and Pilates is deliberately outside it

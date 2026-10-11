@@ -3182,6 +3182,8 @@ Raised 9 Oct 2026 (missed-PM catch-up, #407). The brief set `missed_pm.cbti_bloc
 
 **Open design points, for when it fires.** Whether "block open on D" means `opened_on <= D` and (`closed_on` is null or `closed_on > D`), and which side of `closed_on` the closing day falls on (a data-meaning call, so it is the operator's); whether it is the day being closed out or the night it precedes (Night(today)) whose block membership matters for a nap, since the nap attributes forward; whether the fix lives in `_cbti_context` (which the Today and prefill screens share) or in a separate date-aware helper used only by `missed_pm`.
 
+**Ruling (chat, 11 Oct 2026): DEFER, keep OPEN. Do not fix in #357; it is a block-membership rule for a later session.** Chat's assessment of the harm: it is one-directional and once per block. A block closed this morning hides the nap field for a day that was inside the block, so the closing night's nap exclusion cannot fire (information is lost). A block opened this morning asks for a nap on a pre-block day, which the engine never reads (a value is written that nothing uses). Chat states the shape of the fix as a block-membership rule: `opened_on <= date <= closed_on`, or open-ended while `closed_on` is null. That reading of `closed_on` as inclusive is chat's; **when this is picked up, first verify what the block row actually carries** (what `opened_on` and `closed_on` record, and whether `closed_on` is the last in-block day or the day after) rather than building from this description. Not built.
+
 **State:** OPEN. Not blocking; the formula is as briefed. Related: #407, #219, Q45.
 
 ---
