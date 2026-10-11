@@ -138,3 +138,63 @@ def test_missing_weight_is_omit_not_zero():
     s = _section()
     assert "weight_kg" in s
     assert "0 is a real load" in s or "not \"unweighted\"" in s or "unweighted" in s.lower()
+
+
+# --------------------------------------------------------------------------- #
+# The routine-id contract (11 Oct 2026): ids come from the routine line too.   #
+# --------------------------------------------------------------------------- #
+
+def _flat() -> str:
+    """The section with whitespace collapsed, so a pin survives a re-wrap of the prose."""
+    return " ".join(_section().split())
+
+
+def test_ids_may_be_copied_from_the_routines_section_or_the_history():
+    """The 11 Oct Session B incident: the routines section rendered titles only, so the only ids
+    in view were history ids and the model reused (L)'s for (R). The rule must name BOTH sources."""
+    s = _flat()
+    assert "on its line in the `## Hevy routines` section, or in the workout history above" in s
+    assert "NEITHER place above" in s
+
+
+def test_an_update_uses_the_id_on_the_existing_routine_line():
+    s = _flat()
+    assert "When UPDATING a routine, an exercise that is already in that routine MUST use " \
+           "the ID shown on its own line in that routine" in s
+    assert "never an ID from the workout history for a same-named or sibling movement" in s
+    assert "separate exercises with separate IDs" in s
+
+
+def test_update_block_notes_say_where_the_existing_ids_come_from():
+    s = _flat()
+    assert "Copy each existing exercise's `exercise_template_id` from its `[ID: ...]` on that routine line" in s
+
+
+def test_never_invent_survives_and_now_names_both_sources():
+    """The guard is unchanged in force; only the list of places an id may be read from grew."""
+    s = _flat()
+    assert "NEVER invent or guess an exercise_template_id" in s
+    assert "An ID you did not read from the `## Hevy routines` section or the history above is always wrong" in s
+
+
+def test_one_of_two_fields_rule_is_unchanged():
+    assert "never both" in _flat().lower()
+
+
+def test_an_unmatched_title_report_is_stamped_as_not_in_the_catalogue_this_turn():
+    """The model narrated catalogue facts it could not see ("it is there", "L and R share the same
+    template ID") after write failures. A miss is a statement about the catalogue as synced this
+    turn, nothing more."""
+    s = _flat()
+    assert "not in the catalogue as synced this turn" in s
+    assert "Do not assert that the exercise exists" in s
+    assert "do not speculate about shared or sibling IDs" in s
+
+
+def test_pass2_narration_carries_the_same_stamp():
+    """Pass-2 is where the post-failure narration is generated, so the stamp has to reach it too."""
+    from routers.chat import _PASS2_SYSTEM
+    flat = " ".join(_PASS2_SYSTEM.split())
+    assert "unresolved_exercise" in flat
+    assert "not in the catalogue as synced this turn" in flat
+    assert "do not speculate about shared or sibling exercise IDs" in flat
