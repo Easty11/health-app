@@ -132,7 +132,6 @@ def test_g4_a_second_trace_over_the_same_workout_is_marked_too(db_session, world
     counted = db_session.query(models.HevyWorkout).all()
     marks = mcp_server._concurrent_strength_sessions([a, b], counted)
     assert set(marks) == {a.id, b.id}
-    assert mcp_server._link_sessions_to_workouts([a, b], counted).keys() != marks.keys()   # the link is one-to-one
 
 
 # --------------------------------------------------------------------------- #

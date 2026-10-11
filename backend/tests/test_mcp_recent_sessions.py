@@ -180,20 +180,83 @@ def test_g5_a_brush_of_a_workout_is_not_a_link(db_session, call):
     assert any(l.startswith("2026-10-06 [hevy] Late:") and l.endswith("Hevy only") for l in lines)
 
 
-def test_one_workout_attaches_to_one_session_only(db_session, call):
-    """Two distinct canonical bouts (disjoint, so arbitration keeps both) each sit inside one long
-    workout. The workout attaches once; the other bout is not left claiming it."""
+def test_two_segments_inside_one_workout_are_both_linked_in_start_order(db_session, call):
+    """A gym day recorded as a warm-up segment and a work segment, both inside one Hevy workout (Q206).
+    Both are part of the workout, listed in start-time order with the workout's detail once beneath
+    them; neither is left "HR only". The later segment is inserted first, so row order is not start order."""
+    u, _ = call()
+    _aero(db_session, u.id, "work", start=D(2, 0, 50), stop=D(2, 1, 35), sport="Circuit training")
+    _aero(db_session, u.id, "warm", start=D(2, 0), stop=D(2, 0, 45), sport="Cross-trainer")
+    _hevy(db_session, u.id, "h", D(2, 0), D(2, 1, 35), "S", [_ex("Q", (1, 1))])
+    _, out = call(days=14)
+    lines = _body(out)
+    warm = next(i for i, l in enumerate(lines) if "Cross-trainer" in l)
+    work = next(i for i, l in enumerate(lines) if "Circuit training" in l)
+    assert (warm, work) == (work - 1, warm + 1)                                     # adjacent, warm-up first
+    assert lines[work + 1].startswith("  ↳ 1 exercise · ") and "[hevy] S: " in lines[work + 1]
+    assert out.count("  ↳") == 1 and "Hevy only" not in out and "HR only" not in out
+
+
+def test_two_strength_named_segments_in_one_workout_are_not_hr_only(db_session, call):
     u, _ = call()
     _aero(db_session, u.id, "a", start=D(2, 0), stop=D(2, 0, 45), sport="Strength training")
     _aero(db_session, u.id, "b", start=D(2, 0, 50), stop=D(2, 1, 35), sport="Strength training")
     _hevy(db_session, u.id, "h", D(2, 0), D(2, 1, 35), "S", [_ex("Q", (1, 1))])
     _, out = call(days=14)
+    assert out.count("  ↳") == 1 and "Hevy only" not in out and "HR only" not in out
+
+
+def test_a_segment_below_the_overlap_threshold_stays_hr_only(db_session, call):
+    u, _ = call()
+    _aero(db_session, u.id, "in", start=D(2, 0), stop=D(2, 0, 45), sport="Cross-trainer")
+    # 60 minutes of which 15 lie inside the workout: 0.25 of its own duration, below HEVY_MIRROR_OVERLAP_FRACTION
+    _aero(db_session, u.id, "out", start=D(2, 1, 20), stop=D(2, 2, 20), sport="Strength training")
+    _hevy(db_session, u.id, "h", D(2, 0), D(2, 1, 35), "S", [_ex("Q", (1, 1))])
+    _, out = call(days=14)
     lines = _body(out)
-    heads = [i for i, l in enumerate(lines) if "[polar_v4] Strength training" in l]
-    assert len(heads) == 2                                                          # arbitration kept both bouts
-    assert out.count("  ↳") == 1 and "Hevy only" not in out                          # attached once, not left standing alone
-    assert sum(lines[i + 1].startswith("  ↳") for i in heads) == 1
-    assert sum("HR only" in l for l in lines) == 1                                  # the unlinked bout is the HR-only one
+    late = next(l for l in lines if "Strength training" in l)
+    assert late.endswith("— HR only (no Hevy workout matches)")
+    early = lines.index(next(l for l in lines if "Cross-trainer" in l))
+    assert lines[early + 1].startswith("  ↳") and out.count("  ↳") == 1             # the workout stays with the segment inside it
+
+
+def test_a_session_overlapping_only_an_excluded_workout_is_unlinked_as_in_414(db_session, call):
+    u, _ = call()
+    _aero(db_session, u.id, "x", start=D(2, 0), stop=D(2, 1), sport="Strength training")
+    _hevy(db_session, u.id, "gone", D(2, 0), D(2, 1), "Deleted", [_ex("Q", (1, 1))],
+          excluded_at=datetime(2026, 10, 3, tzinfo=timezone.utc), exclusion_reason="deleted_in_hevy_never_performed")
+    u_, out = call(days=14)
+    assert "HR only (no Hevy workout matches)" in out and "  ↳" not in out and "Deleted" not in out
+    sessions = [s for s in arbitrated_sessions(u.id, db_session, since=date(2026, 10, 1)) if s.canonical]
+    assert mcp_server._gym_trace_marks(db_session, u.id, sessions) == {}            # the #414 marker agrees
+
+
+def test_the_links_are_the_414_marks_session_for_session(db_session, call):
+    u, _ = call()
+    _aero(db_session, u.id, "a", start=D(2, 0), stop=D(2, 0, 45), sport="Cross-trainer")
+    _aero(db_session, u.id, "b", start=D(2, 0, 50), stop=D(2, 1, 35), sport="Circuit training")
+    _aero(db_session, u.id, "c", start=D(4, 0), stop=D(4, 1), sport="Running")
+    _hevy(db_session, u.id, "h", D(2, 0), D(2, 1, 35), "S", [_ex("Q", (1, 1))])
+    _, out = call(days=14)
+    sessions = [s for s in arbitrated_sessions(u.id, db_session, since=date(2026, 10, 1)) if s.canonical]
+    marked = {s.sport_name for s in sessions if s.id in mcp_server._gym_trace_marks(db_session, u.id, sessions)}
+    detailed = {l.split("] ", 1)[1].split(":")[0] for l in _body(out) if l.startswith("2026-10-02 [polar_v4] ")}
+    assert marked == detailed == {"Cross-trainer", "Circuit training"} and "Running" not in marked
+    assert out.count("  ↳") == 1
+
+
+def test_a_single_segment_day_renders_as_before(db_session, call):
+    """One segment, one workout: the session line, then the workout detail, exactly the #408 shape."""
+    from aerobic_format import format_aerobic_session
+    u, _ = call()
+    s = _aero(db_session, u.id, "only", start=GYM_START, stop=GYM_STOP, sport="Strength training")
+    _hevy(db_session, u.id, "h1", D(2, 0, 2), D(2, 1, 33), "Session C", [_ex("Row", (50, 8))])
+    _, out = call(days=14)
+    w = db_session.query(models.HevyWorkout).filter_by(hevy_id="h1").one()
+    lines = out.split("\n")
+    i = lines.index(format_aerobic_session(s))
+    assert lines[i:i + 2] == [format_aerobic_session(s), mcp_server._hevy_detail(w)]
+    assert lines[i - 1].startswith("Recent sessions") and lines[i + 2] == ""            # nothing else between header and footer
 
 
 def test_strength_names_are_the_exact_device_strings():
