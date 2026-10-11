@@ -279,27 +279,6 @@ single `samsung_hrv_readings` row until segmented.** Cross-refs Q17, Q18, issue 
 
 ---
 
-## Q30. Neither repo has a `.gitattributes` — `core.autocrlf` decides bytes per-machine
-
-`health-app` and `health-connect-app` both lack `.gitattributes`, so with `core.autocrlf=true` the
-line endings of a working-tree checkout are decided per-machine rather than by the repo. Measured
-during the #91 sweep: the CLAUDE.md shared block is `i/lf w/lf` in health-app but `i/lf w/crlf` in
-health-connect-app — identical in the index (the thing that propagates), 151 CR bytes apart in the
-working tree.
-
-**Why it matters beyond cosmetics:** any cross-repo verification that reads the *working tree* will
-keep producing false divergence, and the G1 byte-identity guarantee becomes machine-dependent unless
-every check is made through git. A raw `md5sum` of the two working trees says "diverged" while the
-committed content is identical — the exact false verdict #91's gate had to be redefined to avoid.
-
-**Action (named, not taken today):** add `* text=auto eol=lf` as `.gitattributes` in both repos.
-Deliberately NOT done in the #91 brief: it changes working-tree checkouts on the next checkout in
-both repos — a behavioural change beyond a governance brief's bounds.
-
-**State:** OPEN — blocker-free, action named above. Owner: Luke.
-
----
-
 ## Q31. `DECISIONS_LOG.md`'s trailing Known-issues table is a fourth vocabulary — and may duplicate `OPEN_QUESTIONS`
 
 `DECISIONS_LOG.md` carries a trailing "Known open issues" table whose Status column uses
@@ -440,71 +419,6 @@ unless" is met and this becomes a gate proposal with data behind it.
 
 ---
 
-## Q50. Where do the four operating rules live — project instructions or CLAUDE.md?
-
-The 15 Jul calf investigation produced four rules that are not yet homed anywhere enforceable:
-
-- **no hypothesis before the manifest**
-- **inline source-of-claim tags** (per claim, naming the artefact it leans on)
-- **artefact ≠ source** (a record-artefact is not the thing it describes)
-- **a gate is a subtraction** (a constraint removes an exposure; log its cost at issue)
-
-These are the `prevention` values of ledger rows 5, 6, 8, 10 and 15 (`FEEDBACK.md` §19.6, DECISIONS_LOG #129–#132).
-The ledger records that the failures happened and what would have prevented them; it does not *enforce* the
-rules. Enforcement needs a home that loads before the analysis starts.
-
-**The fork.** Chat's position (schema proposal §6) is **project instructions** — permanent, enforced every chat,
-model-uneditable, porting the existing EPISTEMIC DISCIPLINE block (which already holds the parent rule) into the
-health lane where it was never applied. The alternative is **CLAUDE.md**, which reaches Code sessions but not
-chat — and these failures happened in chat, not Code. A third option is both, which re-creates the two-master
-drift the loop model exists to kill unless one is unambiguously the master.
-
-**Why it is not decided here:** project instructions are a UI surface, not a repo write — Code cannot write them,
-so this cannot be closed by the ledger's own commit. It is also the item the schema proposal flagged as bearing
-on cross-repo propagation: if the rules land in CLAUDE.md they hit the shared verbatim block and propagate to
-`health-connect-app`; if they land in project instructions they do not.
-
-**State:** OPEN — blocking nothing in the repo; blocks the rules being enforced anywhere. Decide the surface
-before writing them, not after.
-
----
-
-## Q51. `BRANCHES.md`'s header describes a convention its own rows contradict
-
-The header reads:
-
-> `# BRANCHES — every branch not master lives here until merged+deleted`
-
-"Until merged+deleted" says a row leaves once its branch lands. **The file does not do this.** 14 rows are
-retained with a `**LANDED <date>**` status (`fix/probe-harness-fidelity`, `feat/hevy-resolver-activation`,
-`chore/markitdown-mcp`, …), and the landing commits say so explicitly — `gov(branches):
-fix/probe-harness-fidelity LANDED at adb67e8`. Practice is retain-and-mark; the header says delete.
-
-**Practice is almost certainly the correct half.** Retained rows carry the `Unblocks on` column, which holds
-owed operator loops that outlive the merge — e.g. `feat/hevy-resolver-activation`'s "loop closes on Luke,
-post-merge + deploy: exercise the live path", and `chore/markitdown-mcp`'s parked Desktop registration.
-Deleting a row on land would destroy the record of what is still owed *because* it landed. The header is
-stale prose; the rows are the convention.
-
-**Why this is logged and not patched.** It is a repo defect with a live cost — it already produced one
-failure. `FEEDBACK.md` §19 row 16 records Code reading this header instead of the rows it governs and
-writing a false instruction (`"Owed on land: delete this row"`) into `BRANCHES.md` at `17ffe60`, corrected
-at `554e448`. That is row 8's class — an artefact read as the thing it describes — and the artefact here is
-a canonical store's own header. Row 16 records the misread; this question records the thing misread. They
-are the two halves of one `COUPLED` failure and neither is complete alone.
-
-**The fork:** (a) rewrite the header to match practice — "every branch not master lives here until landed;
-landed rows are retained and marked `LANDED`" — accepting that the file is an append-only branch history,
-not a live-branch inventory; or (b) rewrite the practice to match the header, deleting landed rows and
-relocating owed operator loops somewhere that survives. (a) is cheap and preserves the `Unblocks on`
-record; (b) costs a new home for owed loops and would discard 14 rows of history.
-
-**State:** OPEN — not Code's call to silently rewrite a header that 14 rows and the close-out
-terminal-state gate depend on. Blocks nothing; misleads every reader until decided, including the next
-model to read it.
-
----
-
 ## Q52. Three parallel readers of the `type='injury'` ledger — consolidate or leave?
 
 Three functions independently query `UserKnowledgeEntry` for `type='injury', active=True`, each normalising
@@ -535,31 +449,6 @@ argument for consolidating, and nobody has looked.
 
 **State:** OPEN — no decision, own concern, own branch when taken. Ref: DECISIONS_LOG #134; the retracted
 citation is recorded here so the refactor is not re-proposed on the same false basis.
-
----
-
-## Q53. `backend/gate_test.py` — land as an instrument, or delete?
-
-Untracked in the working tree: an ad-hoc script that reads a real lab PDF from `~/OneDrive/Documents/Medical/`,
-sends it to the **paid Anthropic API** via `routers.labs.EXTRACTION_SYSTEM_PROMPT`, and asserts on the extracted
-Bilirubin row (`ref_high == 21.0`, `ref_high_exclusive`, `computed_flag == 'H'`, `flag_agreement`).
-
-**Why it needs a decision rather than a silent leave-alone:** this is the second time this session an ad-hoc
-probe that spends credits has turned up loose in the tree. The first was the resolver harness — it got landed
-properly as a first-class instrument under DECISIONS_LOG #84 (operator-run, CI-excluded, key presence-checked,
-never materialised into output). This one has had none of that adjudication. "Left it alone" is how a loose
-instrument stays loose forever: untracked means it is invisible to review, absent from any suite, and one
-`git clean` from gone.
-
-**The two options:**
-- **Land it** as a peer of `probe_resolver.py` under the #84 pattern — versioned, CI-excluded, key-presence-only,
-  and with the hardcoded personal-medical path parameterised (it currently embeds an absolute path to a real
-  lab report, which is why it cannot land as-is).
-- **Delete it** — it was scaffolding for the labs extraction work and its assertions may already be carried by
-  `tests/test_labs_reads.py`. Nobody has checked whether they are.
-
-**State:** OPEN — NOT touched on `feat/checkin-injury-probe` (unrelated concern; the file stays untracked and
-uncommitted). Ref: DECISIONS_LOG #84 for the precedent pattern; FEEDBACK §11.
 
 ---
 
@@ -2351,6 +2240,8 @@ Parser-checked with `pglast` 8.5 and against `SCHEMA.md`; not run:
 
 The window `[2026-09-30 14:00Z, 2026-10-01 14:00Z)` is 1 Oct in Brisbane, so it returns every session that day (the run, and the 22:29 "Other Workout" that is Garmin breathwork).
 
+**Evidence (operator prod reads, 11 Oct 2026, user 1, 1 Oct Brisbane; a note, no ruling; not read by Code).** Garmin's in-activity HR for the 1 Oct run arrived on 2 Oct (236 samples, 6 s median gap), the next day. That is a counter-example to the roughly 7-day lag #369 measured on the 26 Sep Pilates. The lag is session-dependent and is not characterised: one session at about 7 days and one at about 1 day, from two sessions on one user. The row set for the run is in Q201's 11 Oct evidence note.
+
 **State:** OPEN. Owner: Luke. Not blocking. Related: #369, #370, Q202, Q203, Q207.
 
 ---
@@ -2857,6 +2748,26 @@ Code's lean, not a ruling: leave arbitration alone. With the H10 paired to the w
 - **Hevy workout notes can carry planned-but-skipped intent** that neither the HR trace nor the sets show (the 24 Jun note above). Context only, not a build: any classifier that reads a day as planned conditioning from the schedule or the recorded label alone can be wrong in the same direction.
 
 Not built: the intensity-share classifier is a Q201 input only. The `concurrent_strength` marker (#414) still follows the overlap predicate and would follow a classifier if one is ruled.
+
+**Evidence (operator prod reads, 11 Oct 2026, user 1, 1 Oct Brisbane; a note, no ruling; not read by Code).** One run, four `aerobic_sessions` rows:
+
+| id | source | package / label | start (UTC) | zones |
+|----|--------|-----------------|-------------|-------|
+| 95 | `polar_v4` | "Jogging" | 08:49:54Z | zoned |
+| 96 | `health_connect` | `fi.polar.polarflow` | not given | zoned (z4 1,106 s) |
+| 93 | `health_connect` | Garmin | 08:49:45Z | zoned (z4 1,081 s) |
+| 118 | `health_connect` | Strava | not given | zoneless |
+
+`load_events` holds exactly one metabolic row for the run: `source_ref` 95, 81.9 AU, `metab-v1`, `zone_source` `polar_v4`. Row 94 (the Garmin breathwork, HC, 22:29 Brisbane) deposited 0.1 AU.
+
+**Which rule kept 93 and 96 from depositing while 94 did (Code, from the code on master `17cc0cd`; read, not run).** It is read-time arbitration, then the canonical gate in the metabolic transform.
+- *The gate.* `compute_metabolic_load_events` reads every session through `arbitrated_sessions` (`backend/load_events_metabolic.py:177`) and does `continue` on any row whose `.canonical` is false (`:197-199`) before it reaches the zone check (`:205`). A zoned row that did not deposit can only have been non-canonical.
+- *Who sets it.* `arbitrate()` (`backend/reads/aerobic_reads.py:191`) marks a row non-canonical when any other row overlaps it by at least 50% of the shorter duration (`:239`, `OVERLAP_THRESHOLD` `:49`) and has the larger `_win_key` (`:245-247`; `canonical` set at `:248`). Different `source` values are compared (the same-source skip at `:232` excludes only non-HC pairs).
+- *Why 95 beat 93 and 96.* `_win_key` (`:163`) leads with the data tier (`_data_tier`, `:146`). 93, 95 and 96 are all zoned, so all are tier 2 and the tier ties. The next term is source rank (`_SOURCE_RANK`, `:84`): `polar_v4` 2 against `health_connect` 1. 95's key is larger, so 93 and 96 are non-canonical and skipped at `:197-199`. The 9 s start gap between 93 and 95 clears the 50% test by a wide margin. 96's start is not in the evidence, so its overlap with 95 is inferred from the one-row outcome (Likely, not read).
+- *Why 118 deposited nothing.* Zoneless, so tier 0 or 1 and below 95 on tier; it also fails the zone check at `:205` if it were canonical.
+- *Why 94 deposited.* It is a different bout (22:29 Brisbane, about 3.7 h after the run), so no row overlaps it by 50% and it is canonical by default; it is zoned, so it deposits (0.1 AU, a short low-zone session).
+
+**Does the rule cover an overlap with no `polar_v4` row (Garmin + Strava only)?** Yes, for rows that have a usable start and stop. Nothing in `arbitrate()` names Polar; the pair is compared on tier, then rank, then duration. For two `health_connect` rows the rank basis is writer class (`:232`, `by_writer` `:243`; `WEARABLE_NATIVE` `:107-111`, `_WRITER_CLASS_RANK` `:116`): Garmin's package is `wearable_native` (2); a `com.strava` row is `unknown` (0), because `writer_class` is total and anything outside the table is `unknown`. So Garmin zoned + Strava zoneless: Garmin wins on tier alone and deposits once. Both zoneless: neither deposits (`:205`). Exceptions, each from the same code: (a) a row with no usable start or stop is canonical by default and deposits on its own (`:223-224`, `:248`), so it can double-deposit; (b) a pair overlapping by less than 50% of the shorter is two bouts; (c) a Strava row that is the same bout as a counted Hevy workout is a `hevy_mirror`, marked non-canonical before arbitration and never an opponent (`arbitrated_sessions`); (d) a Strava row that carried HR but no zones would out-tier a zoneless Garmin row (tier 1 against 0), win, and be skipped for no zones, suppressing the Garmin bout until its zones fill. (d) is a reading of the code with no case observed. Not changed.
 
 **State:** OPEN. Owner: Luke (rule, with the input-layer design). The live case is read and no longer owed. Not blocking.
 
@@ -3784,6 +3695,29 @@ hip add-abd are adjudicated no-pattern.
 
 ---
 
+## Q30. Neither repo has a `.gitattributes` — `core.autocrlf` decides bytes per-machine
+
+`health-app` and `health-connect-app` both lack `.gitattributes`, so with `core.autocrlf=true` the
+line endings of a working-tree checkout are decided per-machine rather than by the repo. Measured
+during the #91 sweep: the CLAUDE.md shared block is `i/lf w/lf` in health-app but `i/lf w/crlf` in
+health-connect-app — identical in the index (the thing that propagates), 151 CR bytes apart in the
+working tree.
+
+**Why it matters beyond cosmetics:** any cross-repo verification that reads the *working tree* will
+keep producing false divergence, and the G1 byte-identity guarantee becomes machine-dependent unless
+every check is made through git. A raw `md5sum` of the two working trees says "diverged" while the
+committed content is identical — the exact false verdict #91's gate had to be redefined to avoid.
+
+**Action (named, not taken today):** add `* text=auto eol=lf` as `.gitattributes` in both repos.
+Deliberately NOT done in the #91 brief: it changes working-tree checkouts on the next checkout in
+both repos — a behavioural change beyond a governance brief's bounds.
+
+**Resolution (operator ruling, 11 Oct 2026): closed as superseded.** The action this entry named (`* text=auto eol=lf` in both repos) is not taken. `*.md text` landed in health-app as `407be6e` (2026-08-08), which pins the Markdown blobs to LF, and #91 moved G1 from the working tree to the index, so the per-machine working-tree divergence this entry measured no longer decides any gate. A blanket `eol=lf` is rejected: `health-connect-app` tracks `android/gradlew.bat` and `scripts/hevy-exercise-query.ps1`, and a blanket rule would reach them. What remains is one cross-repo item: `health-connect-app` has no `.gitattributes` (read on this session's checkout, 11 Oct 2026), so `*.md text` is not mirrored there. It is an OWED row in ROADMAP NOW ("Cross-repo: mirror `*.md text`"), not a reason to keep this question open.
+
+**State:** DONE → #416. Closed as superseded by `407be6e` and #91; the mirror into `health-connect-app` is OWED on ROADMAP.
+
+---
+
 ## Q33. The shared loop-rules block still says `parked` — the definition outlasted every sweep
 
 `CLAUDE.md:128` (health-app) and `CLAUDE.md:116` (health-connect-app) carry the same sentence:
@@ -4214,6 +4148,102 @@ so they can disagree only quietly, and nothing records which of the two produced
 false-held. Verified read-only against prod block 1 (9 cycles, one per ledger prescription) and block 3
 (id=10 stub vs the id=11 correction). New `test_cbti_replay.py` pins the regression; suite 412. The live
 evaluation trigger (#118) must reuse this same read (the shared "≥7 nights since effective_from" model).
+
+---
+
+## Q50. Where do the four operating rules live — project instructions or CLAUDE.md?
+
+The 15 Jul calf investigation produced four rules that are not yet homed anywhere enforceable:
+
+- **no hypothesis before the manifest**
+- **inline source-of-claim tags** (per claim, naming the artefact it leans on)
+- **artefact ≠ source** (a record-artefact is not the thing it describes)
+- **a gate is a subtraction** (a constraint removes an exposure; log its cost at issue)
+
+These are the `prevention` values of ledger rows 5, 6, 8, 10 and 15 (`FEEDBACK.md` §19.6, DECISIONS_LOG #129–#132).
+The ledger records that the failures happened and what would have prevented them; it does not *enforce* the
+rules. Enforcement needs a home that loads before the analysis starts.
+
+**The fork.** Chat's position (schema proposal §6) is **project instructions** — permanent, enforced every chat,
+model-uneditable, porting the existing EPISTEMIC DISCIPLINE block (which already holds the parent rule) into the
+health lane where it was never applied. The alternative is **CLAUDE.md**, which reaches Code sessions but not
+chat — and these failures happened in chat, not Code. A third option is both, which re-creates the two-master
+drift the loop model exists to kill unless one is unambiguously the master.
+
+**Why it is not decided here:** project instructions are a UI surface, not a repo write — Code cannot write them,
+so this cannot be closed by the ledger's own commit. It is also the item the schema proposal flagged as bearing
+on cross-repo propagation: if the rules land in CLAUDE.md they hit the shared verbatim block and propagate to
+`health-connect-app`; if they land in project instructions they do not.
+
+**Resolution (operator ruling, 11 Oct 2026): the home is project instructions.** It is a UI surface that the operator edits, not a repo write, so no Code commit and no `CLAUDE.md` or shared-block edit follows, and nothing propagates to `health-connect-app`. Of the four rules, *artefact ≠ source* and *source-of-claim tagging* are carried by the existing EPISTEMIC DISCIPLINE and Signal Quality blocks. The *manifest rule* (no hypothesis before the manifest) and the *gate-as-subtraction rule* were added to the project instructions on 11 Oct 2026. That surface is not readable from this tree, so the placement is operator-reported and not read by Code (the unseeable-surface rule).
+
+**State:** DONE → #416. Surface: project instructions. Recorded, not enforced by anything in the repo.
+before writing them, not after.
+
+---
+
+## Q51. `BRANCHES.md`'s header describes a convention its own rows contradict
+
+The header reads:
+
+> `# BRANCHES — every branch not master lives here until merged+deleted`
+
+"Until merged+deleted" says a row leaves once its branch lands. **The file does not do this.** 14 rows are
+retained with a `**LANDED <date>**` status (`fix/probe-harness-fidelity`, `feat/hevy-resolver-activation`,
+`chore/markitdown-mcp`, …), and the landing commits say so explicitly — `gov(branches):
+fix/probe-harness-fidelity LANDED at adb67e8`. Practice is retain-and-mark; the header says delete.
+
+**Practice is almost certainly the correct half.** Retained rows carry the `Unblocks on` column, which holds
+owed operator loops that outlive the merge — e.g. `feat/hevy-resolver-activation`'s "loop closes on Luke,
+post-merge + deploy: exercise the live path", and `chore/markitdown-mcp`'s parked Desktop registration.
+Deleting a row on land would destroy the record of what is still owed *because* it landed. The header is
+stale prose; the rows are the convention.
+
+**Why this is logged and not patched.** It is a repo defect with a live cost — it already produced one
+failure. `FEEDBACK.md` §19 row 16 records Code reading this header instead of the rows it governs and
+writing a false instruction (`"Owed on land: delete this row"`) into `BRANCHES.md` at `17ffe60`, corrected
+at `554e448`. That is row 8's class — an artefact read as the thing it describes — and the artefact here is
+a canonical store's own header. Row 16 records the misread; this question records the thing misread. They
+are the two halves of one `COUPLED` failure and neither is complete alone.
+
+**The fork:** (a) rewrite the header to match practice — "every branch not master lives here until landed;
+landed rows are retained and marked `LANDED`" — accepting that the file is an append-only branch history,
+not a live-branch inventory; or (b) rewrite the practice to match the header, deleting landed rows and
+relocating owed operator loops somewhere that survives. (a) is cheap and preserves the `Unblocks on`
+record; (b) costs a new home for owed loops and would discard 14 rows of history.
+
+**Resolution (operator ruling, 11 Oct 2026): fork (a).** `BRANCHES.md`'s header is rewritten to match practice: rows live there until landed, and landed rows are retained and marked landed, carrying any owed loops in the row's outstanding column. The file is an append-only branch history, not a live-branch inventory. `FEEDBACK` §19 row 16 (`FEEDBACK_ARCHIVE.md` §19 since the prune) is the misread this question records the cause of: Code followed the old header instead of the rows. Read against the file on 11 Oct 2026 (296 table rows), the header is written to what the rows say now, which is not quite the July text: landed rows read `DONE` with the landing evidence (the four-state vocabulary admits no `LANDED` state, and `LANDED` survives only in prose), and the column that holds owed loops is `Blocker / outstanding (owner)`, not `Unblocks on`.
+
+**State:** DONE → #416. Header rewritten in the same PR.
+terminal-state gate depend on. Blocks nothing; misleads every reader until decided, including the next
+model to read it.
+
+---
+
+## Q53. `backend/gate_test.py` — land as an instrument, or delete?
+
+Untracked in the working tree: an ad-hoc script that reads a real lab PDF from `~/OneDrive/Documents/Medical/`,
+sends it to the **paid Anthropic API** via `routers.labs.EXTRACTION_SYSTEM_PROMPT`, and asserts on the extracted
+Bilirubin row (`ref_high == 21.0`, `ref_high_exclusive`, `computed_flag == 'H'`, `flag_agreement`).
+
+**Why it needs a decision rather than a silent leave-alone:** this is the second time this session an ad-hoc
+probe that spends credits has turned up loose in the tree. The first was the resolver harness — it got landed
+properly as a first-class instrument under DECISIONS_LOG #84 (operator-run, CI-excluded, key presence-checked,
+never materialised into output). This one has had none of that adjudication. "Left it alone" is how a loose
+instrument stays loose forever: untracked means it is invisible to review, absent from any suite, and one
+`git clean` from gone.
+
+**The two options:**
+- **Land it** as a peer of `probe_resolver.py` under the #84 pattern — versioned, CI-excluded, key-presence-only,
+  and with the hardcoded personal-medical path parameterised (it currently embeds an absolute path to a real
+  lab report, which is why it cannot land as-is).
+- **Delete it** — it was scaffolding for the labs extraction work and its assertions may already be carried by
+  `tests/test_labs_reads.py`. Nobody has checked whether they are.
+
+**Resolution (operator ruling, 11 Oct 2026): delete.** The file was never tracked: `git log --all -- backend/gate_test.py` over this repository's 1,649 commits returns nothing, and the path is absent from the tree at `17cc0cd`. The operator checked his local clone(s) and removed it where present (operator-reported). No code change. The "land it as an instrument" fork was not taken. Whether `tests/test_labs_reads.py` carries the Bilirubin assertions was not checked, and the ruling does not depend on it.
+
+**State:** DONE → #416. Deleted; never tracked, so nothing in the repo moves.
+uncommitted). Ref: DECISIONS_LOG #84 for the precedent pattern; FEEDBACK §11.
 
 ---
 

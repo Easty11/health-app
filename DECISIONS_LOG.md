@@ -14114,3 +14114,22 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 **Do not revisit unless.** (a) the intensity-share classifier (Q201) is ruled, in which case which segments belong to a workout may follow intensity rather than overlap alone; (b) a workout's detail should name its segment count or window HR per segment; or (c) `session_focus` or `/polar/aerobic-sessions` is brought in line with this layout.
 
 ---
+
+### 416. Fruit rulings batch: `BRANCHES.md` header matches its rows (Q51), `gate_test.py` deleted (Q53), the `.gitattributes` question closed as superseded (Q30), the four operating rules homed in project instructions (Q50)
+
+**Decision.** Operator rulings, 11 Oct 2026. Four closures, one entry. Governance only.
+- **Q51: fork (a).** `BRANCHES.md`'s header is rewritten to match practice: rows live there until landed; landed rows are retained and marked landed, carrying any owed loops in the outstanding column. The file is a branch history, not a live-branch inventory. `FEEDBACK` §19 row 16 is the failure the stale header caused.
+- **Q53: delete.** `backend/gate_test.py` was never tracked. The operator checked his local clone(s) and removed it where present. No code change.
+- **Q30: closed as superseded.** `*.md text` landed in health-app as `407be6e` (2026-08-08) and #91 moved G1 to the index. A blanket `eol=lf` is rejected: `health-connect-app` tracks `android/gradlew.bat` and `scripts/hevy-exercise-query.ps1`. One OWED cross-repo ROADMAP row: mirror `*.md text` into `health-connect-app`'s `.gitattributes`.
+- **Q50: the home is project instructions.** A UI surface the operator edits, not a repo write; nothing enters `CLAUDE.md` or the shared block, and nothing propagates. *Artefact ≠ source* and *source-of-claim tagging* are carried by the existing EPISTEMIC DISCIPLINE and Signal Quality blocks; the manifest rule and the gate-as-subtraction rule were added there on 11 Oct 2026.
+- **Not rulings, recorded as notes:** the 11 Oct prod evidence for Q159 (a one-day HR lag against #369's seven) and Q201 (four rows for one run, one metabolic deposit), with Code's reading of which rule suppressed rows 93 and 96. No question state changes and no code changes.
+
+**Rationale.** Each is a closure the operator ruled in full. Q51's header was the artefact a session misread as the convention (§19 row 16). Q53's file never reached the repo, so there is nothing to land or delete in it. Q30's action was overtaken by the narrower `*.md text` fix, and the blanket rule it named would reach files HCA tracks for Windows. Q50's rules need a surface that loads before analysis starts, which the project instructions are and `CLAUDE.md` is not for chat.
+
+**Status.** DONE 11 Oct 2026. Governance only: no code, no schema.
+
+**How you know.** The operator's rulings in chat on 11 Oct 2026. Code's checks, run on this branch: `git show 407be6e` is `chore: add .gitattributes (*.md text)`, dated 2026-08-08, and the repo's `.gitattributes` holds that one rule; `git log --all -- backend/gate_test.py` returns nothing over 1,649 commits and `backend/gate_test.py` is absent from the tree; `health-connect-app` has no `.gitattributes` and tracks `android/gradlew.bat` and `scripts/hevy-exercise-query.ps1` (read on the HCA checkout of this session); `BRANCHES.md` had 296 table rows, statuses `DONE`, and the outstanding column `Blocker / outstanding (owner)`. Not verified here, because the surface is not on a pushed ref: the project instructions (Q50), and the operator's local clones (Q53). The Q159 and Q201 evidence is operator-reported prod reads that Code did not run.
+
+**Do not revisit unless.** A session again follows a store's header over its rows (Q51), a cross-repo byte-identity check is made against a working tree rather than the index (Q30), or the manifest or gate-as-subtraction rule is needed in Code sessions and has no enforced home there (Q50).
+
+---
