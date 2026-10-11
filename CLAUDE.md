@@ -284,7 +284,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **A gym session's HR trace is marked `concurrent_strength` in `get_training_sessions` and left out of the readiness snapshot's aerobic count, by the resolver's own test (#413, Q206 closed).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #413.
+- **A gym session's HR trace is marked `concurrent_strength` in `get_training_sessions` and left out of the readiness snapshot's aerobic count, by the resolver's own test (#414, Q206 closed).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #414.
 
 - **A rendered Hevy routine carries each exercise's template id, and a title miss on the routine-write path forces one catalogue refresh per chat turn before it is reported unresolved (#411).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #411.
 

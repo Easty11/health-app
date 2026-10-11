@@ -14041,7 +14041,25 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 ---
 
-### 413. A gym session's HR trace is marked `concurrent_strength` in `get_training_sessions` and left out of the readiness snapshot's aerobic count, by the resolver's own test (closes Q206's loop, #367)
+### 413. HANDOFF.md is retired and frozen; a cross-lane instruction travels as an addressed paste block, and an agreement with no brief yet rides closeout.md (#98 rule 3 and #102 partly superseded)
+
+**Decision.** Operator ruling, 11 Oct 2026. Three parts.
+- **`HANDOFF.md` is retired and frozen.** It gains a RETIRED banner directly under its title; every existing line, including the 11 Oct CODE line, is untouched. Nothing is appended to it again.
+- **The principle of #102 stands; its write target moves.** A cross-lane instruction or go that is not in the repo did not happen. Chat to Code instructions now arrive as addressed paste blocks (session name on the first line, per the shared Session-rituals paste-addressing rule). Anything agreed between sessions that has no brief yet is carried in `closeout.md`'s pending-commit queue and cold-resume handoff.
+- **Supersedes the write-target clauses only.** #98 rule 3 (post-close-out agreements are receipted in `HANDOFF.md`) and #102 (any cross-lane instruction is written to `HANDOFF.md`) lose the destination they name. Their principle, their worked examples (Q37, the erythroid go) and every other rule in #98 (the reference-JSON guard, pushing branches while holding) are unchanged.
+- **No instruction to write `HANDOFF.md` survives elsewhere.** A grep of `CLAUDE.md`, `.claude/commands/`, `scripts/`, `.githooks/`, `.github/`, `ROADMAP.md`, `closeout.md`, `FEEDBACK.md` and `OPEN_QUESTIONS.md` finds none; the only files naming it are this log and `HANDOFF.md`. The shared loop block does not name it, so no shared-block edit is owed. `health-connect-app` is the one other place, tracked as a ROADMAP NOW row.
+
+**Rationale.** The ledger had stopped being used. No commit touched it between 22 Sep and 10 Oct 2026 (its last two before the ruling are 21 Sep); the one later line, the 11 Oct CODE line, was appended on the day of the ruling. Over 21 Sep to 11 Oct `closeout.md` took 65 non-merge commits, and the `CLAUDE.md` Recent-landings block names `closeout.md` as the latest handoff. No failure is recorded in that window from an instruction going unrecorded. A retired file that still demands a receipt before work is a second handoff surface competing with the live one, which is the failure mode #98 and #102 were written against.
+
+**Status.** DONE 11 Oct 2026. Governance only: no code, no schema.
+
+**How you know.** The operator's ruling in chat on 11 Oct 2026, with the evidence figures above. Code's own checks, run against `origin/master` after deepening a shallow clone to 10 Sep (a clone shallower than the window under-counts: the first pass saw only 5 Oct onward): `git log --full-history --no-merges --since=2026-09-21` on `HANDOFF.md` returns `509ed27` and `3393b26` (21 Sep, #321) and `2c480e7` (11 Oct), nothing between; the same on `closeout.md` through 11 Oct returns 65 commits (the operator quoted roughly 66); `grep -rIi 'handoff\.md'` over the tree, excluding `.git` and `node_modules`, matching only `DECISIONS_LOG.md` before this entry. Not verified here: `health-connect-app`'s `HANDOFF.md` and `closeout.md`, which this tree cannot read.
+
+**Do not revisit unless.** A cross-lane instruction or go is lost in transit and the cause is the absence of a repo-visible record, in which case the question is the surface (the paste block or `closeout.md`), not a return to a receipt file by default.
+
+---
+
+### 414. A gym session's HR trace is marked `concurrent_strength` in `get_training_sessions` and left out of the readiness snapshot's aerobic count, by the resolver's own test (closes Q206's loop, #367)
 
 **Decision.** Operator brief `q206-gym-trace-marker`, 11 Oct 2026. #367 ruled that gym-overlapping HR stays in the metabolic window and that the MCP readers must show what the resolver shows. This is that exposure. Display and counting only: no load value, no overlap predicate, no resolver and no schema changes.
 - **One test, one workout set.** `mcp_server._concurrent_strength_sessions(sessions, counted)` marks a canonical session iff `overlaps_workout(session, counted)`, the call the resolver's guard makes. `_counted_workouts_near` builds `counted` from non-excluded `hevy_workouts` through the `counted_workouts` door (an excluded workout, and both members of an unadjudicated duplicate pair, are out), over the sessions' span padded a day either side. The mapped workout is the one covering most of the session, tie broken by `hevy_id`.

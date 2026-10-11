@@ -2855,7 +2855,7 @@ Code's lean, not a ruling: leave arbitration alone. With the H10 paired to the w
 - **A zoneless segment** (2026-07-02: 83 min, 1 min zoned) falls back to the overlap rule.
 - **OWED (operator).** 2026-06-24 is recorded as a VO2 bike day but shows only a 76-min Circuit training row, all in Z1-Z3. Decide whether the block was recorded inside it under June's zone bounds, or the day was not VO2.
 
-Not built: the intensity-share classifier is a Q201 input only. The `concurrent_strength` marker (#413) still follows the overlap predicate and would follow a classifier if one is ruled.
+Not built: the intensity-share classifier is a Q201 input only. The `concurrent_strength` marker (#414) still follows the overlap predicate and would follow a classifier if one is ruled.
 
 **State:** OPEN. Owner: Luke (rule, with the input-layer design). The live case is read and no longer owed. Not blocking.
 
@@ -6028,7 +6028,7 @@ Counts, with the untimed rows split out:
 
     SELECT a.source, (h.hevy_id IS NOT NULL) AS overlaps_hevy, count(DISTINCT a.id) AS sessions, count(DISTINCT a.id) FILTER (WHERE a.start_time IS NULL OR a.stop_time IS NULL) AS untimed FROM aerobic_sessions a LEFT JOIN hevy_workouts h ON h.user_id = a.user_id AND h.excluded_at IS NULL AND a.start_time < h.end_time AND h.start_time < a.stop_time WHERE a.source IN ('polar_v4', 'polar_flow_export') GROUP BY 1, 2 ORDER BY 1, 2;
 
-**(b) How an overlapping row is treated today.** *(Update, 11 Oct 2026: "overlapping" below now means `overlaps_workout`, >= 0.5 of the session's own duration inside one counted workout; the resolver, the psychological read and the Hevy-mirror door share that one test. The 3 Oct text was written under any-intersection. The coach-and-MCP inconsistency in the last bullet is closed by the marker, #413.)*
+**(b) How an overlapping row is treated today.** *(Update, 11 Oct 2026: "overlapping" below now means `overlaps_workout`, >= 0.5 of the session's own duration inside one counted workout; the resolver, the psychological read and the Hevy-mirror door share that one test. The 3 Oct text was written under any-intersection. The coach-and-MCP inconsistency in the last bullet is closed by the marker, #414.)*
 - **Metabolic load: deposited.** The transform has no overlap test. It emits one row per canonical, zoned `aerobic_sessions` row (`load_events_metabolic.py:177-206`), and its header says a session captured by both Hevy and Polar deposits into different windows by design (`:31-33`). A gym-session H10 trace therefore becomes metabolic load over the whole recorded interval, rests between sets included.
 - **Felt load: nothing.** An aerobic session overlapping a counted Hevy workout contributes no minutes and no tally; the Hevy minutes count (`reads/psychological_reads.py:316`).
 - **Resolver and quota: not claimed.** An overlapping canonical session is `concurrent_strength` and never reaches an activity or `load_window` slot (`engine/resolver.py:391-392`); it is listed in `uncounted[]` and rendered "conditioning session overlapping a gym workout" in the chat context (`context_builder.py:1657-1658`). Capacity slots count Hevy only.
@@ -6069,7 +6069,7 @@ Resolution and depth, from the operator's 1 Oct prod reads recorded in Q198: Gar
 - **The sport label does not discriminate.** Cross-trainer covers VO2 work, warm-ups and whole gym sessions.
 - **Input to Q201:** a classification rule is proposed there, unruled; nothing is built.
 
-**State:** DONE → #367 + #413. Ruled in #367: the deposit stays as it is. The loop-close landed 11 Oct 2026 in #413: `get_training_sessions` marks a session that is a gym workout's HR trace, with the workout title, and the readiness snapshot leaves it out of the aerobic count and reports it as "Gym HR traces", both by the resolver's own `overlaps_workout` test over its counted-workout set. Display and counting only; no load value changed. The input-layer design stays with Luke (Q201). Related: Q198 (re-zoning from raw HR), Q201, Q203, Q124, Q207.
+**State:** DONE → #367 + #414. Ruled in #367: the deposit stays as it is. The loop-close landed 11 Oct 2026 in #414: `get_training_sessions` marks a session that is a gym workout's HR trace, with the workout title, and the readiness snapshot leaves it out of the aerobic count and reports it as "Gym HR traces", both by the resolver's own `overlaps_workout` test over its counted-workout set. Display and counting only; no load value changed. The input-layer design stays with Luke (Q201). Related: Q198 (re-zoning from raw HR), Q201, Q203, Q124, Q207.
 
 ---
 
