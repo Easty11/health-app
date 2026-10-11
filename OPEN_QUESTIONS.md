@@ -215,8 +215,7 @@ dynamometry EP-administered (the equipment question is answered: no HHD purchase
 optional operator buy). The interim no-pattern verdicts for calf, hip abduction and shoulder ER/IR are retired. The V2
 prod read was clean. Companion text: `docs/capability-taxonomy-v1.md`.
 
-**State:** OPEN, narrowed to what is left. (1) **Prod re-seed (Owner: Luke), with the fixed seeder (#420):** `--dry-run`,
-read the pending deletions and the resolved catalogue titles, then `--confirm`, for user 1. (2) **Provenance migration, held for the operator:**
+**State:** OPEN, narrowed to what is left. (1) **Prod re-seed: DONE (#422).** (2) **Provenance migration, held for the operator:**
 `capability_observations` needs `administered_by`, `instrument` and `protocol` (nullable, closed vocabularies,
 `SCHEMA.md` paired) before the `reference_kind` match rule or `same_protocol` can be evaluated. (3) **Route (i)
 computation:** not built. (4) **`knee_flexion` has no declared measure.** (5) **Norms:** every band is "to populate";
