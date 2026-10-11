@@ -110,7 +110,7 @@ def test_unknown_region_refusal_names_the_valid_set_for_the_retry(chat):
     bad = {**GOOD, "kind": "block", "scope": {"tier": "engine", "region_keys": ["shoulder"]}}
     body, calls = chat["send"]([_kb(bad), _kb(GOOD)])
     assert "valid keys:" in calls[1]["messages"][-1]["content"]
-    assert "shoulder_er_ir" in calls[1]["messages"][-1]["content"]
+    assert "shoulder_er" in calls[1]["messages"][-1]["content"]
     assert body["write_results"][0]["saved"] is True
 
 

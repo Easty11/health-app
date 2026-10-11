@@ -23,11 +23,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
-# Matches the companion doc Capability_Taxonomy_v0.md. Bump when the axis list
+# Matches the companion doc (Capability_Taxonomy v1). Bump when the axis list
 # changes so capability_state rows can record which version scored them.
-TAXONOMY_VERSION = "v0.1"   # v0.1: +5 tag-coverage axes (#334); "v1" is reserved for Q27
+# v0.1: +5 tag-coverage axes (#334).
+# v1:   Q27 — joint-action strength group H, the Ratio type and Measure/Ratio
+#       `reference_kind`; `shoulder_er_ir` is split into `shoulder_er` + `shoulder_ir`.
+TAXONOMY_VERSION = "v1"
 
 
 class Plane(str, Enum):
@@ -58,6 +61,31 @@ SIDE_LEFT = "left"
 SIDE_RIGHT = "right"
 
 
+# What a reference band is anchored to (Q27 v1). The rule that governs both
+# `Measure.reference_kind` and `Ratio.reference_kind`:
+#
+#   A "literature" band applies as a THRESHOLD only when the observation's
+#   instrument and protocol match the norm's. Otherwise the internal
+#   baseline / trend governs, and the literature gives DIRECTION only.
+#
+# FAILS CLOSED: an observation with no administered_by / protocol provenance is
+# evaluated as "internal", whatever the declaration says. Today no observation
+# carries that provenance, so nothing evaluates as "literature".
+#
+# A measure or ratio flips to "literature" only when a norm matching its
+# instrument AND protocol is CITED. "internal" means the user's own baseline and
+# trend are the only reference.
+ReferenceKind = Literal["internal", "literature"]
+REFERENCE_KINDS: tuple[str, ...] = ("internal", "literature")
+
+
+def _check_reference_kind(owner: str, kind: Any) -> None:
+    # A Literal is not enforced at runtime; a typo here would silently read as
+    # "not literature" everywhere it is compared.
+    if kind not in REFERENCE_KINDS:
+        raise ValueError(f"{owner}: reference_kind {kind!r} is not one of {list(REFERENCE_KINDS)}")
+
+
 @dataclass(frozen=True)
 class Measure:
     """A declared, unit-bearing quantity a region can be MEASURED on.
@@ -77,11 +105,30 @@ class Measure:
 
     A region with no declared measure is observation-ineligible. That is the
     correct default for an axis nobody has chosen an instrument for, not a gap.
+
+    `reference_kind` (Q27 v1) says what a reference band for THIS measure is
+    anchored to. The rule: a "literature" band applies as a threshold ONLY when
+    the observation's instrument and protocol match the norm's; otherwise the
+    internal baseline / trend governs and the literature gives direction only.
+    The gate FAILS CLOSED: an observation with no administered_by / protocol
+    provenance is evaluated as "internal" even where the measure is declared
+    "literature". `capability_observations` carries no such provenance yet, so
+    today every observation evaluates as "internal".
+    A measure flips to "literature" only when a norm matching its protocol is
+    cited. The default is "internal"; every v1 measure is "internal" because no
+    matching norm is cited (the ER:IR band is isokinetic torque, not HHD force;
+    the Copenhagen squeeze is validated as a pain score, not as mmHg). No consumer
+    reads this field yet. No numeric norm lives on the declaration either, by
+    design: bands are expectation text.
     """
     key: str                    # stable id, e.g. "knee_to_wall_cm"
-    unit: str                   # "cm", "deg", "s", "m/s", "m/s^2", "count"
+    unit: str                   # "cm", "deg", "s", "m/s", "m/s^2", "N", "mmHg", "count"
     higher_is_better: bool
     per_side: bool = True
+    reference_kind: ReferenceKind = "internal"
+
+    def __post_init__(self) -> None:
+        _check_reference_kind(f"Measure {self.key!r}", self.reference_kind)
 
     def sides(self) -> list[str]:
         """Sides this measure can legally carry, before the region's own ceiling."""
@@ -100,7 +147,7 @@ class Region:
     confidence: Confidence
     per_side: bool = True       # readable per-side (§F)
     gates: tuple[str, ...] = () # region keys THIS region gates (mobility reserves, §B;
-                                # shoulder_er_ir -> dip) — never the regions that gate it
+                                # ankle_df -> squat) — never the regions that gate it
     probe_priority: bool = False  # §E + the seed comfort-gap — Probe targets first
     needs_norm: bool = False    # normative grounding still missing ("populate")
     # §G longevity-end axes are flagged but "need normative grounding before they
@@ -121,9 +168,58 @@ class Region:
         return None
 
 
+@dataclass(frozen=True)
+class Ratio:
+    """A DERIVED read across two observations (Q27 v1) — it generalises the §F
+    limb-symmetry index. A Region is something you can load or test; a Measure is
+    a quantity recorded on a region; a Ratio is neither: it is `numerator /
+    denominator` computed at READ time from two measures already declared on
+    regions. It is never stored as an observation (no key here is a region key or
+    a measure key — asserted in the tests), so there is no ratio row to drift from
+    the two observations it came from.
+
+    `numerator` / `denominator` are `(region_key, measure_key)` pairs and must
+    resolve on the taxonomy and share a unit. `same_side=True` pairs the left
+    numerator with the left denominator (never across limbs), which needs both
+    measures to be per-side. `same_protocol=True` records that the two readings
+    must come from the same protocol; it is declarative only until observations
+    carry protocol provenance (OPEN_QUESTIONS Q27), so nothing enforces it yet.
+
+    `reference_kind` follows the Measure rule: a "literature" band applies as a
+    threshold ONLY when the observation's instrument and protocol match the
+    norm's; otherwise the internal baseline / trend governs and the literature
+    gives direction only. It FAILS CLOSED: an observation with no administered_by
+    / protocol provenance is evaluated as "internal". A ratio flips to
+    "literature" only when a norm matching its protocol is cited.
+    `expectation` is a FLAG, not a verdict, like
+    `Region.expectation`: any band sits in that text marked "to populate" and
+    there is NO numeric threshold on this class, so no automatic deficit flag
+    can fire from it.
+
+    The log-derived computation (route i) is not built; this is the declaration.
+    """
+    key: str                              # stable id, e.g. "er_ir"
+    label: str
+    numerator: tuple[str, str]            # (region_key, measure_key)
+    denominator: tuple[str, str]
+    reference_kind: ReferenceKind
+    expectation: str
+    confidence: Confidence
+    same_side: bool = True
+    same_protocol: bool = True
+
+    def __post_init__(self) -> None:
+        _check_reference_kind(f"Ratio {self.key!r}", self.reference_kind)
+
+    def pairs(self) -> tuple[tuple[str, str], tuple[str, str]]:
+        return (self.numerator, self.denominator)
+
+
 # Ordering used when ranking the probe queue: the comfort-cluster blind spot (E)
-# and the under-trained transverse/frontal patterns come first.
-GROUP_PRIORITY = {"E": 0, "A": 1, "C": 2, "B": 3, "D": 4, "F": 5, "G": 6}
+# and the under-trained transverse/frontal patterns come first. H (joint-action
+# strength, v1) ranks last on purpose: every H region is queue-ineligible, so the
+# slot is inert today, and admitting one to the queue must set its rank deliberately.
+GROUP_PRIORITY = {"E": 0, "A": 1, "C": 2, "B": 3, "D": 4, "F": 5, "G": 6, "H": 7}
 
 
 # --------------------------------------------------------------------------- #
@@ -169,28 +265,15 @@ _REGIONS: tuple[Region, ...] = (
     # Every probe/observation field is EXPLICIT and inert — no measure, not queue-eligible,
     # not probe-priority — so none becomes a probe candidate until deliberately admitted.
     # They exist so tagged exercises stop falling to the keyword fallback / Rule 1 `untagged`.
-    # Q27 (joint-level strength ratios, v1) stays open: these are interim axes, not its answer.
-    Region("shoulder_er_ir", "Shoulder ER / IR (rotator cuff)", "A", Capacity.STRENGTH,
-           Plane.TRANSVERSE, "Cable / band ER and IR at load",
-           "ER:IR ratio is the read (~0.66-0.75 reference, Q27); symmetry L/R",
-           Confidence.LIKELY, per_side=True, gates=("dip",), probe_priority=False,
-           queue_eligible=False, measures=()),
+    # v1 (Q27): the three joint-action regions of this batch (shoulder_er_ir, knee_flexion,
+    # hip_adduction) moved to group H below; only trunk_lateral_flexion and dip remain here.
     Region("trunk_lateral_flexion", "Trunk lateral flexion (loaded, through range)", "A",
            Capacity.STRENGTH, Plane.FRONTAL, "Weighted side bend / lateral flexion-extension",
            "Loaded lateral flexion THROUGH range - distinct from anti_lateral_flexion "
            "(resisting it); symmetry L/R", Confidence.LIKELY, per_side=True,
            probe_priority=False, queue_eligible=False, measures=()),
-    Region("knee_flexion", "Knee flexion (hamstring)", "A", Capacity.STRENGTH,
-           Plane.SAGITTAL, "Nordic curl / leg curl",
-           "Eccentric hamstring quality; symmetry L/R", Confidence.LIKELY, per_side=True,
-           probe_priority=False, queue_eligible=False, measures=()),
-    Region("hip_adduction", "Hip adduction (adductor)", "A", Capacity.STRENGTH,
-           Plane.FRONTAL, "Copenhagen plank / adductor squeeze",
-           "Groin protection; adductor:abductor is the read (Q27); symmetry L/R",
-           Confidence.LIKELY, per_side=True, probe_priority=False, queue_eligible=False,
-           measures=()),
     Region("dip", "Dip", "A", Capacity.STRENGTH, Plane.SAGITTAL,
-           "Dip / dip machine (gated by shoulder ER/IR)",
+           "Dip / dip machine",
            "Depth without anterior-shoulder compensation; distinct from vertical_push",
            Confidence.LIKELY, per_side=False, probe_priority=False, queue_eligible=False,
            measures=()),
@@ -286,9 +369,141 @@ _REGIONS: tuple[Region, ...] = (
            Capacity.ENDURANCE, Plane.FRONTAL, "Carry load relative to bodyweight",
            "Needs normative grounding before queueing", Confidence.GUESSING, per_side=False,
            needs_norm=True, queue_eligible=False),
+
+    # ---- H. Joint-action strength (v1, Q27) ----
+    # One region per joint action, so a strength RATIO can be declared across two of them
+    # (see _RATIOS). Group H rather than A: A is loaded movement PATTERNS; these are joint
+    # actions, and the group is what keeps them from being read as patterns.
+    # Admitted under #335 (tested as a ratio denominator, or trained and tested). Every
+    # probe field is EXPLICIT and inert: not probe-priority, not queue-eligible, norms
+    # still to populate, confidence GUESSING on the bands. Bands live in `expectation`
+    # text only, marked "to populate" — there is no numeric norm in code (G3).
+    # shoulder_er_ir was split in two (R1). Neither half gates anything: the old
+    # `gates=("dip",)` was dropped by the operator's ruling, so dip is ungated (inert either way).
+    # HHD force (N) is a clinic dynamometry reading, EP-administered (R4), not a gym lift.
+    # Every measure here keeps the "internal" reference_kind: a measure flips to "literature"
+    # only when a norm matching its instrument and protocol is CITED, and none is yet.
+    Region("shoulder_er", "Shoulder external rotation (rotator cuff)", "H", Capacity.STRENGTH,
+           Plane.TRANSVERSE, "Clinic HHD ER force (EP-administered); cable / band ER at load",
+           "Numerator of the ER:IR ratio (er_ir); symmetry L/R. Band to populate (Q27 "
+           "cites ~0.66-0.75, an isokinetic-torque reference, not HHD force; unverified)",
+           Confidence.GUESSING, per_side=True, probe_priority=False,
+           needs_norm=True, queue_eligible=False,
+           measures=(Measure("hhd_force_n", "N", higher_is_better=True),)),
+    Region("shoulder_ir", "Shoulder internal rotation (rotator cuff)", "H", Capacity.STRENGTH,
+           Plane.TRANSVERSE, "Clinic HHD IR force (EP-administered); cable / band IR at load",
+           "Denominator of the ER:IR ratio (er_ir); symmetry L/R. Band to populate",
+           Confidence.GUESSING, per_side=True, probe_priority=False,
+           needs_norm=True, queue_eligible=False,
+           measures=(Measure("hhd_force_n", "N", higher_is_better=True),)),
+    Region("hip_adduction", "Hip adduction (adductor)", "H", Capacity.STRENGTH,
+           Plane.FRONTAL, "Clinic HHD adduction force (EP-administered); adductor squeeze "
+           "(BP cuff, optional); Copenhagen plank (exposure)",
+           "Numerator of the adductor:abductor ratio (add_abd); groin protection; symmetry "
+           "L/R. Copenhagen is exposure only and does not feed add_abd. Band to populate",
+           Confidence.GUESSING, per_side=True, probe_priority=False, needs_norm=True,
+           queue_eligible=False,
+           measures=(Measure("hhd_force_n", "N", higher_is_better=True),
+                     # One cuff reading squeezed between the knees: not attributable to a leg.
+                     Measure("squeeze_mmhg", "mmHg", higher_is_better=True, per_side=False))),
+    Region("hip_abduction", "Hip abduction (abductor)", "H", Capacity.STRENGTH,
+           Plane.FRONTAL, "Clinic HHD abduction force (EP-administered); hip abduction machine "
+           "at load (exposure)",
+           "Denominator of the adductor:abductor ratio (add_abd); symmetry L/R. Band to populate",
+           Confidence.GUESSING, per_side=True, probe_priority=False, needs_norm=True,
+           queue_eligible=False,
+           measures=(Measure("hhd_force_n", "N", higher_is_better=True),)),
+    Region("ankle_plantarflexion", "Ankle plantarflexion (calf)", "H", Capacity.STRENGTH,
+           Plane.SAGITTAL, "Single-leg heel raise, reps to fatigue; calf raise at load",
+           "Reps against the internal baseline and L/R; band to populate. "
+           "Plantarflexion STRENGTH, not ankle_df (dorsiflexion MOBILITY)",
+           Confidence.GUESSING, per_side=True, probe_priority=False, needs_norm=True,
+           queue_eligible=False,
+           measures=(Measure("sl_heel_raise_reps", "count", higher_is_better=True),)),
+    # R3: an ABSOLUTE + LSI read. No H:Q ratio is declared and knee_extension is NOT admitted.
+    # No Measure is declared (R3 names no instrument), so this stays observation-ineligible.
+    Region("knee_flexion", "Knee flexion (hamstring)", "H", Capacity.STRENGTH,
+           Plane.SAGITTAL, "Nordic curl / leg curl",
+           "Absolute eccentric + LSI (L/R); no H:Q ratio. Band to populate",
+           Confidence.GUESSING, per_side=True, probe_priority=False, needs_norm=True,
+           queue_eligible=False, measures=()),
 )
 
 _BY_KEY: dict[str, Region] = {r.key: r for r in _REGIONS}
+
+
+# --------------------------------------------------------------------------- #
+# Ratios (Q27 v1) — derived reads across two declared measures                #
+# --------------------------------------------------------------------------- #
+
+_RATIOS: tuple[Ratio, ...] = (
+    Ratio("er_ir", "Shoulder ER:IR (rotator cuff)",
+          numerator=("shoulder_er", "hhd_force_n"), denominator=("shoulder_ir", "hhd_force_n"),
+          reference_kind="internal",
+          expectation="External:internal rotation force, same side, same protocol. Band to "
+                      "populate (Q27 cites ~0.66-0.75, an isokinetic-torque reference, not HHD "
+                      "force; unverified). Internal baseline and trend govern until a norm "
+                      "matching the protocol is cited",
+          confidence=Confidence.GUESSING),
+    Ratio("add_abd", "Hip adductor:abductor",
+          numerator=("hip_adduction", "hhd_force_n"), denominator=("hip_abduction", "hhd_force_n"),
+          reference_kind="internal",
+          expectation="Adductor:abductor force, same side, same protocol (groin-strain "
+                      "literature). Band to populate. Internal baseline and trend govern until "
+                      "a norm matching the protocol is cited",
+          confidence=Confidence.GUESSING),
+)
+
+
+def validate_ratio(ratio: Ratio, regions: dict[str, Region] | None = None) -> None:
+    """Raise ValueError unless `ratio` is a coherent declaration against `regions`
+    (default: the live taxonomy). Run over every declared ratio at import, so a bad
+    declaration fails loudly instead of producing a ratio nothing can compute."""
+    regions = _BY_KEY if regions is None else regions
+    if not ratio.key:
+        raise ValueError("Ratio: key is empty")
+    ends: list[Measure] = []
+    for role, (region_key, measure_key) in (("numerator", ratio.numerator),
+                                            ("denominator", ratio.denominator)):
+        region = regions.get(region_key)
+        if region is None:
+            raise ValueError(f"Ratio {ratio.key!r}: {role} region {region_key!r} is not in the taxonomy")
+        measure = region.measure(measure_key)
+        if measure is None:
+            raise ValueError(
+                f"Ratio {ratio.key!r}: {role} measure {measure_key!r} is not declared on "
+                f"region {region_key!r} (declared: {[m.key for m in region.measures]})"
+            )
+        ends.append(measure)
+    if ratio.numerator == ratio.denominator:
+        raise ValueError(f"Ratio {ratio.key!r}: numerator and denominator are the same reading")
+    num, den = ends
+    if num.unit != den.unit:
+        raise ValueError(
+            f"Ratio {ratio.key!r}: units differ ({num.unit!r} / {den.unit!r}) — a ratio of "
+            f"unlike quantities is not a ratio"
+        )
+    if ratio.same_side and not (num.per_side and den.per_side):
+        raise ValueError(
+            f"Ratio {ratio.key!r}: same_side=True needs both measures per-side, "
+            f"got {num.key!r} per_side={num.per_side} / {den.key!r} per_side={den.per_side}"
+        )
+    _check_reference_kind(f"Ratio {ratio.key!r}", ratio.reference_kind)
+    if not isinstance(ratio.confidence, Confidence):
+        raise ValueError(f"Ratio {ratio.key!r}: confidence must be a Confidence")
+
+
+def _validate_declared_ratios() -> dict[str, Ratio]:
+    seen: dict[str, Ratio] = {}
+    for ratio in _RATIOS:
+        if ratio.key in seen:
+            raise ValueError(f"Ratio {ratio.key!r} is declared twice")
+        validate_ratio(ratio)
+        seen[ratio.key] = ratio
+    return seen
+
+
+_RATIO_BY_KEY: dict[str, Ratio] = _validate_declared_ratios()
 
 
 # --------------------------------------------------------------------------- #
@@ -343,6 +558,19 @@ def measure_for(region_key: str, measure_key: str) -> Measure | None:
     return region.measure(measure_key) if region else None
 
 
+def all_ratios() -> tuple[Ratio, ...]:
+    return _RATIOS
+
+
+def ratio_by_key(key: str) -> Ratio | None:
+    return _RATIO_BY_KEY.get(key)
+
+
+def ratios_for_region(region_key: str) -> tuple[Ratio, ...]:
+    """Ratios a region takes part in, as numerator or denominator."""
+    return tuple(r for r in _RATIOS if region_key in (r.numerator[0], r.denominator[0]))
+
+
 def observable_regions() -> list[Region]:
     """Regions carrying at least one declared measure — the observation-eligible set."""
     return [r for r in _REGIONS if r.measures]
@@ -384,7 +612,22 @@ def as_dict(region: Region) -> dict:
                 "higher_is_better": m.higher_is_better,
                 "per_side": m.per_side,
                 "sides": m.sides(),
+                "reference_kind": m.reference_kind,
             }
             for m in region.measures
         ],
+    }
+
+
+def ratio_as_dict(ratio: Ratio) -> dict:
+    return {
+        "key": ratio.key,
+        "label": ratio.label,
+        "numerator": {"region": ratio.numerator[0], "measure": ratio.numerator[1]},
+        "denominator": {"region": ratio.denominator[0], "measure": ratio.denominator[1]},
+        "same_side": ratio.same_side,
+        "same_protocol": ratio.same_protocol,
+        "reference_kind": ratio.reference_kind,
+        "expectation": ratio.expectation,
+        "confidence": ratio.confidence.value,
     }

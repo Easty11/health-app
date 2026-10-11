@@ -219,11 +219,15 @@ self-merge on green under § Merge disposition.
   fenced block read byte-faithfully from the mount (never the rendered view, which flattens
   markdown); Code diffs before landing. Repo-canonical docs are edited in place, never cross
   this transport.
-- **Reference-JSON edit guard (#98).** `backend/reference/*.json` is hand-aligned pure ASCII
-  (non-ASCII as `\uXXXX`). Never build a `\uXXXX` escape in heredoc source (the Bash tool eats
-  one backslash even when quoted — use `chr(92)+"u2014"` or a script file); after any edit
-  assert `raw.isascii() and raw.count(chr(0x2014))==0` and that it still parses; no `json.dump`
-  round-trips. The bad-byte failure is silent — only the assertion catches it.
+- **Reference-JSON edit guard (#98).** `backend/reference/marker_groups.json` and
+  `backend/reference/safety_thresholds.json` are hand-aligned pure ASCII (non-ASCII as `\uXXXX`);
+  their tests pin it (`raw.isascii()`). Never build a `\uXXXX` escape in heredoc source (the Bash
+  tool eats one backslash even when quoted — use `chr(92)+"u2014"` or a script file); after any edit
+  to those two assert `raw.isascii() and raw.count(chr(0x2014))==0` and that it still parses; no
+  `json.dump` round-trips. The bad-byte failure is silent — only the assertion catches it. The other
+  `backend/reference/*.json` files are not pinned: `exercise_region_tags_v0.json` is raw UTF-8 on
+  master (29 em dashes), so edit it by line surgery that leaves every untouched line byte-identical
+  and adds no non-ASCII, and assert it still parses (Q27 v1 found the old blanket rule failing on it).
 - **Irreversible-write pre-ship gate (#166, `FEEDBACK` §23).** When a decision's How-you-know
   admits an unexercised write path, ask what its failure COSTS before shipping. Non-destructive
   and loud → ship with an `OPEN_QUESTIONS` watch-point. Able to change state we cannot undo →
@@ -284,11 +288,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q27's v1 taxonomy is built: joint-action strength regions (`shoulder_er_ir` split, dip ungated), a derived `Ratio` type and a fail-closed `reference_kind` with every measure `internal`; Q232 is opened on stored keys the taxonomy later retires (#420, #421).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #420, #421.
+
 - **Q231 records a build constraint derived from #374 (imputed rows clear in the same pass as `metab-v1`) and Q202's Capture-rate OWED is discharged as moot; the 11 Oct close-out resolves the day's landing SHAs.** Governance only - Canonical home: `closeout.md`.
 
 - **Q202 is closed as superseded (its RPE floor is Q231's imputed TRIMP, its explicit absence is Q203); Q231 gains the two-class `k` and lag-window supersession as ruled design terms; #418's first live coach read is discharged (#419).** Governance only - Canonical home: `DECISIONS_LOG.md` #419.
-
-- **Q201 (b) is ruled and built: a canonical aerobic row names the twins it suppressed as `also_recorded_by`, on the MCP coach reads only; Q201 is closed (#418).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #418.
 
 ---
 

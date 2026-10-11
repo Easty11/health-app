@@ -886,7 +886,7 @@ Graded, timestamped capability **measurement** for the Adaptive Exposure Engine 
 
 **Append-only.** No `updated_at` column and no UPDATE path anywhere — a correction is a new row, and supersession is resolved on read by `observed_on`, then `created_at`, then `id`. `observed_on` is the **measurement** date, not the insert date, so a backfilled battery lands on the day it happened; a backdated correction therefore supersedes its own date without displacing a later real measurement. No backfill was possible on first upgrade — `capability_state` carries no numeric value — so an empty table is the correct initial state.
 
-`region_key` and `measure_key` are both validated against `engine/taxonomy.py` at write time (fail-closed, same guard as `exercise_region_tags`). Measures are **declared per region** on `Region.measures` and versioned with `TAXONOMY_VERSION`; a region with no declared measure is observation-ineligible, which is the correct default rather than a gap (7 of 31 regions are seeded). **`side` is validated against the MEASURE, not only the region** — sidedness is a property of the instrument: `deceleration_landing` is a per-side region, but a trunk-mounted GPS records one figure for the athlete and cannot attribute it to a leg, so `peak_decel_ms2` is `bilateral`-only.
+`region_key` and `measure_key` are both validated against `engine/taxonomy.py` at write time (fail-closed, same guard as `exercise_region_tags`). Measures are **declared per region** on `Region.measures` and versioned with `TAXONOMY_VERSION`; a region with no declared measure is observation-ineligible, which is the correct default rather than a gap (12 of 39 regions are observable since taxonomy v1: the six joint-action measures of group H were added, Q27). **`side` is validated against the MEASURE, not only the region** — sidedness is a property of the instrument: `deceleration_landing` is a per-side region, but a trunk-mounted GPS records one figure for the athlete and cannot attribute it to a leg, so `peak_decel_ms2` is `bilateral`-only.
 
 **Boundary:** values, symmetry ratios, and trends are legal outputs; a clearance, "safe to return", severity grade, or return-to-sport verdict is not. Enforced by `backend/tests/test_capability_observations.py`, not by docstring — same construction as `injury_probes.py`.
 
@@ -1569,7 +1569,7 @@ No migration. As with §024/§033, this records the `value` shape for one `user_
 
 ```json
 {
-  "scope": {"tier": "engine", "region_keys": ["shoulder_er_ir"], "side": "right"},
+  "scope": {"tier": "engine", "region_keys": ["shoulder_er"], "side": "right"},
   "kind": "block",
   "parent_key": "injury_shoulder_right",
   "exit": {"on_condition": "right ER pain-free at 11.25 kg", "with_parent": true},

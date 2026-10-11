@@ -227,6 +227,35 @@ def _unconfirmed_rows(db: Session) -> list[dict]:
             for t, title in rows]
 
 
+def _validate_plan_keys(plan: dict) -> None:
+    """Every region_key the PLAN would write must resolve. `_validate_fail_closed` covers the
+    reference; this covers a sided variant that inherits a parent's current DB state, which can
+    carry a key the taxonomy has since retired (Q27 v1: `shoulder_er_ir`)."""
+    orphans = sorted({(p["label"], r["key"]) for p in plan.values() for r in p["regions"]
+                      if taxonomy.by_key(r["key"]) is None})
+    if orphans:
+        raise OrphanRegionKeyError(
+            f"Refusing to seed — the plan would write {len(orphans)} unresolved region_key(s): {orphans}"
+        )
+
+
+def _pending_deletions(db: Session, plan: dict) -> list[dict]:
+    """Tag rows on a PLANNED template whose region_key the plan does not carry. The reference is
+    authoritative for the templates it names: with `--confirm` these are deleted (a template
+    retagged from key A to key B ends with only B). Any `source`: a row's `human_confirmed`
+    stamp does not protect it, because the writer of every row is this seeder (checked: no
+    other code path inserts `exercise_region_tags`)."""
+    Tag = models.ExerciseRegionTag
+    out = []
+    for tid, p in plan.items():
+        keep = {r["key"] for r in p["regions"]}
+        for row in db.query(Tag).filter_by(hevy_exercise_template_id=tid).all():
+            if row.region_key not in keep:
+                out.append({"template_id": tid, "label": p["label"], "region_key": row.region_key,
+                            "role": row.role, "source": row.source, "via": p["via"]})
+    return out
+
+
 def seed_tags(
     db: Session,
     user_id: int,
@@ -244,6 +273,12 @@ def seed_tags(
     `dry_run=True` resolves and returns the plan, writing nothing.
     `prune_unconfirmed=True` (requires `confirm`, or `dry_run` to preview) deletes every
     non-confirmed tag row this run does not plan — after it, no unconfirmed row remains.
+
+    The reference is AUTHORITATIVE for the templates it names (Q27 v1): on `--confirm`, every
+    PLANNED template, parent or variant, loses the tag rows whose region_key the plan does not
+    carry, whatever their `source`. `--dry-run` lists them as `pending_deletions`. (A plain run
+    still deletes only for sided variants, as before.) A planned region_key that the taxonomy
+    does not resolve is refused.
     """
     if prune_unconfirmed and not (confirm or dry_run):
         raise ValueError("--prune-unconfirmed requires --confirm (or --dry-run to preview)")
@@ -261,6 +296,8 @@ def seed_tags(
 
     built = build_plan(db, user_id, proposal)
     plan, unresolved_titles = built["plan"], built["unresolved"]
+    _validate_plan_keys(plan)
+    pending = _pending_deletions(db, plan)
     near_twins = _near_twins(db, proposal)
     unconfirmed = _unconfirmed_rows(db)
     planned_pairs = {(tid, r["key"]) for tid, p in plan.items() for r in p["regions"]}
@@ -293,16 +330,16 @@ def seed_tags(
                 no_pattern += 1
                 if not dry_run:
                     _apply_template_meta(tid, p["laterality"])
-                    if p["via"] is not None:   # a variant mirrors its parent exactly
-                        db.query(models.ExerciseRegionTag).filter_by(
-                            hevy_exercise_template_id=tid).delete()
+                    # A variant mirrors its parent exactly; a direct entry is authoritative.
+                    db.query(models.ExerciseRegionTag).filter_by(
+                        hevy_exercise_template_id=tid).delete()
             continue
 
         written += len(p["regions"])
         if dry_run:
             continue
         _apply_template_meta(tid, p["laterality"])
-        if p["via"] is not None:           # drop rows the parent no longer carries
+        if p["via"] is not None or confirm:   # drop rows the plan no longer carries
             keep = {r["key"] for r in p["regions"]}
             for row in db.query(models.ExerciseRegionTag).filter_by(
                     hevy_exercise_template_id=tid).all():
@@ -344,13 +381,16 @@ def seed_tags(
         "near_twins": near_twins,
         "unconfirmed_existing": unconfirmed,
         "prune": prune,
+        "pending_deletions": pending,
+        "deleted": 0 if dry_run else sum(
+            1 for d in pending if confirm or d["via"] is not None),
         "pruned": 0 if (dry_run or not prune_unconfirmed) else len(prune),
         "plan": {tid: {k: p[k] for k in ("label", "kind", "via", "regions")}
                  for tid, p in plan.items()},
     }
     logger.info("seed_exercise_region_tags: %s",
                 {k: v for k, v in summary.items()
-                 if k not in ("plan", "unconfirmed_existing", "prune")})
+                 if k not in ("plan", "unconfirmed_existing", "prune", "pending_deletions")})
     return summary
 
 
@@ -366,6 +406,11 @@ def _print_plan(summary: dict) -> None:
               f"referenced {t['referenced']} - rule on it, never map it silently")
     print(f"  pre-existing unconfirmed tag rows: {len(summary['unconfirmed_existing'])} "
           f"({len(summary['prune'])} not re-planned -> what --prune-unconfirmed would delete)")
+    print(f"  pending deletions (rows on planned templates the reference does not carry; "
+          f"--confirm deletes them): {len(summary['pending_deletions'])}")
+    for d in summary["pending_deletions"]:
+        print(f"    DELETE {d['template_id']:<38} {str(d['label'])[:34]:<34} "
+              f"{d['region_key']}({d['role']}) [{d['source']}]")
     for u in summary["unconfirmed_existing"]:
         fate = "PRUNE" if u in summary["prune"] else "re-stamped by --confirm"
         print(f"    {u['template_id']:<38} {str(u['title'])[:34]:<34} "
@@ -399,7 +444,7 @@ if __name__ == "__main__":
         if do_dry:
             _print_plan(result)
         print({k: v for k, v in result.items()
-               if k not in ("plan", "unconfirmed_existing", "prune")})
+               if k not in ("plan", "unconfirmed_existing", "prune", "pending_deletions")})
     except (EmptyTemplateStoreError, OrphanRegionKeyError, MalformedProposalError) as exc:
         logging.error("%s", exc)
         raise SystemExit(1)
