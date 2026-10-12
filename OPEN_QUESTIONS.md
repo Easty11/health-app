@@ -3055,31 +3055,6 @@ Reading it: `rpe_cr10` NULL on a row you rated means link (ii) failed (Garmin di
 
 ---
 
-## Q232. A stored engine-tier constraint or profile hard-stop names a region key that the taxonomy later retires: should the engine warn, fail, or re-validate?
-
-Spun out from Q27's V2 (11 Oct 2026, #420). `validate_constraint` (`routers/knowledge.py`) refuses an unknown
-`scope.region_keys` entry at WRITE time, but nothing re-checks a stored row afterwards. `gather_active_constraints`
-(`engine/selection.py`) copies the keys through unchecked, and `is_contraindicated` matches them by string equality
-(`region.key in c["region_keys"]`, the constraint arm; `rk == region.key`, the profile hard-stop arm). A key removed
-from the taxonomy therefore matches nothing: the restriction stops applying with no log line and no error. Q27's
-`shoulder_er_ir` split could have disabled a stored shoulder block this way; the operator's V2 read found none, so no
-restriction was lost, but the next rename has no such check built in. A `fortify` `primary_target` fails loudly by
-contrast (`region_exercise` returns UNRESOLVED), and the `exercise_region_tags` consumers log and skip an orphan key.
-
-Options:
-- **(a) Warn.** Log every stored constraint or hard-stop key that resolves to no region, once per read. Cheap, but a
-  log line is not seen by the operator and the restriction is still off.
-- **(b) Fail closed.** Treat an unresolved key as blocking everything it could have meant, or refuse to serve the
-  probe queue, until the row is repaired. Safest, and the loudest; a rename then becomes an outage until migrated.
-- **(c) Validate at the taxonomy change.** A test or a deploy-time check that every stored engine-tier key and
-  `hard_stops[*].region_key` resolves, so a rename cannot ship while a row names the old key. Catches it before the
-  restriction lapses, but needs a prod read, which CI does not have.
-
-**State:** OPEN. Chat decides between (a), (b) and (c); (a) and (c) are not exclusive. Nothing is built. Owner: chat.
-Constraint rows are Q197's record; this question concerns only how the engine treats a key that no longer resolves.
-
----
-
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
@@ -6349,5 +6324,31 @@ Raised 10 Oct 2026 (operator, after #409). The metabolic window weights minutes 
 **Ruling (operator, 10 Oct 2026).** The metabolic lane stays on Edwards (`metab-v1`); the Banister exponential TRIMP is not adopted now. The operator ran the projection script; its output is not in the repo. See #410 for the basis and the revisit conditions.
 
 **State:** `DONE → #410`.
+
+---
+
+## Q232. A stored engine-tier constraint or profile hard-stop names a region key that the taxonomy later retires: should the engine warn, fail, or re-validate?
+
+Spun out from Q27's V2 (11 Oct 2026, #420). `validate_constraint` (`routers/knowledge.py`) refuses an unknown
+`scope.region_keys` entry at WRITE time, but nothing re-checks a stored row afterwards. `gather_active_constraints`
+(`engine/selection.py`) copies the keys through unchecked, and `is_contraindicated` matches them by string equality
+(`region.key in c["region_keys"]`, the constraint arm; `rk == region.key`, the profile hard-stop arm). A key removed
+from the taxonomy therefore matches nothing: the restriction stops applying with no log line and no error. Q27's
+`shoulder_er_ir` split could have disabled a stored shoulder block this way; the operator's V2 read found none, so no
+restriction was lost, but the next rename has no such check built in. A `fortify` `primary_target` fails loudly by
+contrast (`region_exercise` returns UNRESOLVED), and the `exercise_region_tags` consumers log and skip an orphan key.
+
+Options:
+- **(a) Warn.** Log every stored constraint or hard-stop key that resolves to no region, once per read. Cheap, but a
+  log line is not seen by the operator and the restriction is still off.
+- **(b) Fail closed.** Treat an unresolved key as blocking everything it could have meant, or refuse to serve the
+  probe queue, until the row is repaired. Safest, and the loudest; a rename then becomes an outage until migrated.
+- **(c) Validate at the taxonomy change.** A test or a deploy-time check that every stored engine-tier key and
+  `hard_stops[*].region_key` resolves, so a rename cannot ship while a row names the old key. Catches it before the
+  restriction lapses, but needs a prod read, which CI does not have.
+
+**Resolution (operator ruling, 12 Oct 2026): option (c) plus a migration rule, not (b).** A change that retires a region key ships a data migration remapping the stored engine-tier constraint keys and `hard_stops[*].region_key` (a schema-class hold). A boot and nightly-sweep check that every stored key resolves is built later: an unresolved key logs ERROR and surfaces on the coach readiness read as an unresolved restriction, and the coach treats the region as restricted until the row is repaired. Recorded in #423; the check is a `ROADMAP.md` NEXT row.
+
+**State:** DONE → #423. Closed as ruled; nothing is built. Constraint rows are Q197's record; this question concerned only how the engine treats a key that no longer resolves.
 
 ---
