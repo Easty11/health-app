@@ -1,6 +1,6 @@
 # ROADMAP
 
-Last updated: 2026-10-12
+Last updated: 2026-10-16
 
 ---
 
