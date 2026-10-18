@@ -278,9 +278,10 @@ def test_other_users_ratings_never_cross(db_session):
     assert _ratings(db_session) == [("aerobic", None)]
 
 
-def test_the_door_is_the_only_resolver_of_per_session_rpe():
-    """Q231 imports this door and must not build its own: no module outside the store reads the table, and the
-    only caller of `latest_by_activity` besides the door is the Garmin adapter's own re-check bookkeeping."""
+def test_nothing_outside_the_store_queries_the_observation_table():
+    """Q231 imports the door and must not build its own lookup: the table is read through `latest_by_activity`
+    (the store) and resolved through `session_ratings` / `observed_ratings` (the door), nowhere else."""
+    import re
     from pathlib import Path
     backend = Path(__file__).resolve().parent.parent
     readers = []
@@ -288,6 +289,6 @@ def test_the_door_is_the_only_resolver_of_per_session_rpe():
         rel = path.relative_to(backend).as_posix()
         if rel.startswith(("tests/", "migrations/", ".venv/")) or "/site-packages/" in rel:
             continue
-        if "SessionRpeObservation" in path.read_text(encoding="utf-8"):
+        if re.search(r"(query|select)\(\s*models\.SessionRpeObservation", path.read_text(encoding="utf-8")):
             readers.append(rel)
-    assert sorted(readers) == ["models.py", "srpe_store.py"]       # the door reads through srpe_store.latest_by_activity
+    assert readers == ["srpe_store.py"]

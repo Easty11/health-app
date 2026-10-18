@@ -2,7 +2,7 @@
 
 Sessions whose raw `aerobic_sessions.sport_name` is in this set are NOT training for the two
 consumers that ask "was this a training session?":
-  • `reads.psychological_reads._duration_min_by_day` — contributes no felt-load minutes and no
+  • `reads.srpe_reads.counted_sessions` (the bout set `psychological_reads._duration_min_by_day` sums) — contributes no felt-load minutes and no
     session tally (Q160 → #322 S3: `session_rpe` is one whole-day RPE, so non-training minutes
     would inflate the day's felt load);
   • `cbti.replay.load_nights` (`_TRAINING_SQL`) — never sets a night's `training_end`

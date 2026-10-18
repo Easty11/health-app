@@ -659,11 +659,12 @@ class AerobicSession(Base):
 class GarminActivitySelfEval(Base):
     """One observation of a Garmin Connect activity's self-evaluation (perceived effort, feel).
 
-    INSERT-ONLY, capture-timed (Q209 path a). A row is what Garmin said at `captured_at`; it is never
-    updated, and the only writer is `garmin_selfeval.record_observation`, which inserts a row only
-    when the observed tuple (rpe, feel, link) differs from the activity's latest row (or, for a
-    still-unrated activity, as the daily re-check marker). The CURRENT value of an activity is its
-    latest row by `captured_at`; older rows are the history a later revision must not rewrite.
+    LEGACY, READ-ONLY. Superseded by `session_rpe_observations` (`SessionRpeObservation`, the source-neutral
+    store): the migration copied every row there verbatim and no code writes this table any more (its drop
+    is proposed separately). Kept so the migration chain and its schema tests keep their parent table.
+
+    Was INSERT-ONLY, capture-timed (Q209 path a). A row is what Garmin said at `captured_at`; it was never
+    updated. The CURRENT value of an activity is its latest row by `captured_at`; older rows are the history.
 
     `rpe_cr10` is Garmin's 0-100 `directWorkoutRpe` / 10 (CR-10, a float); `feel` is
     `directWorkoutFeel` 0-100 (0/25/50/75/100). Both are NULL on an UNRATED sighting (a row exists so
