@@ -2055,7 +2055,7 @@ must not wake the user), NOT a safety device, NOT a mask-failure backstop. The C
 alarms are the safety layer; this is pattern-awareness only, never positioned or relied on
 otherwise.
 
-**Storage shape (built, `#NEXT`, held for the operator's release):** a series, not a scalar —
+**Storage shape (built and released, `#425`):** a series, not a scalar —
 `spo2_nights` (user, night, source, the sleep window, `reading_count`, `gap_count`) with children
 `spo2_samples` (time, `spo2_pct`, `reading_confidence`, `epoch_duration_s`) and
 `breathing_disruption_intervals`, mirroring `hrv_readings`/`hrv_samples` (`SCHEMA.md` 048). Ingested raw:
@@ -2132,16 +2132,16 @@ Findings above; whether any derived trend tracks mask effectiveness is the defer
 traces" family, same two-gate logic (withheld-from-HC + scraper-reachable), lower priority —
 separate ticket. The trim decision (SpO2 excised per above) is not yet registered in this repo.
 
-**RESOLVES WHEN:** raw capture built (done on the held PR, `#NEXT`) and released; the backfill run and
+**RESOLVES WHEN:** raw capture built and released (`#425`); the backfill run and
 its result (the earliest night found, the last date reached, why it stopped) recorded here (OWED, operator); the detector designed once a baseline has accrued;
 the guardrail enforced on any surface that is ever added; SpO2 removed from the trim scope once that ticket
 lands. Full event-detection may remain gated on next hardware.
 
-**State:** OPEN — the gate is answered and the raw capture is built, but the PR carries a schema migration
-(§ Merge disposition, hold (a): full human review, no self-merge) and is held for the operator's release. Owed
-(operator): the release decision, then, after the deploy and migration are confirmed, the backfill
-(`scripts/garmin_spo2_backfill.py --user-id 1 --dry-run`, then for real) with its result recorded here (the earliest night found, the last date reached and why it stopped; an
-empty-streak stop is not proof that the history ends).
+**State:** OPEN — the gate is answered and the raw capture is built and released (`#425`; PR #392, hold (a) released by the operator on
+18 Oct 2026, conditional on backend and frontend CI green on the head). Owed (operator): after the deploy and migration are confirmed, the
+backfill (`scripts/garmin_spo2_backfill.py --user-id 1 --dry-run`, then for real) with its result recorded here (the earliest night found,
+the last date reached and why it stopped; an empty-streak stop is not proof that the history ends).
+**Post-release ruling (chat, 18 Oct 2026).** After the first nightly sweep (02:00 Brisbane, 19 Oct), Code checks the `spo2` counts and records the observed response for a not-yet-slept wake-date either way. If that date returns a non-200 and lands in `errors`, a follow-up classifies the case as "pending" (neither empty nor error) so `errors` stays zero on a healthy night.
 Detector design is deferred until a baseline accrues.
 
 ---
@@ -3075,7 +3075,7 @@ Reading it: `rpe_cr10` NULL on a row you rated means link (ii) failed (Garmin di
 
 ---
 
-## Q#NEXT. Should an aggregator (Open Wearables or similar) replace, or sit beside, Lane A as the Garmin and Polar ingestion route?
+## Q233. Should an aggregator (Open Wearables or similar) replace, or sit beside, Lane A as the Garmin and Polar ingestion route?
 
 Raised 18 Oct 2026 by chat. Nothing is decided, nothing is built, and no recommendation is recorded here. The direct Garmin lane
 (Lane A: `connectors/garmin.py`, `garminconnect` 0.3.11, a token blob minted out of band) is live and carries what Garmin withholds
@@ -3093,7 +3093,7 @@ What exists, for the ruling to be made against (verified in the tree on 13 Oct, 
   stages, steps, heart rate and exercise sessions.
 - **Polar:** direct AccessLink v4 (#17); Polar's Health Connect data is dropped (#35).
 - **Carried by nothing:** Body Battery, training status and readiness, stress, respiration, activity FIT or per-second detail
-  (Body Battery is reachable on Lane A but unbuilt: #NEXT+1).
+  (Body Battery is reachable on Lane A but unbuilt: #426).
 
 A ruling touches: #258 and #263 (their do-not-revisit clauses name the aggregator), Q129 (the Garmin sleep source), Q133 (done at
 #263; the cat-and-mouse watch continues), Q150 (its capture reads the sleep payload), and the manifest above. It closes when a ruling
@@ -5105,7 +5105,7 @@ not our DB; paid app; their status page documents repeated Garmin-side breakages
 Training Readiness, VO2 Max, training load). Requires the user's Garmin *password* at first login (no
 OAuth consent flow), stored refresh token, and we own the arms race.
 
-**Resolution (18 Oct 2026, #258).** Route (b), the server-side connector on python-garminconnect, was taken at #258, scoped to the metrics Garmin withholds from Health Connect: HRV (nightly and the 5-minute series), then the per-activity self-evaluation (#372) and, on a held PR, overnight SpO2 (Q150). Garmin sleep, steps and heart rate stay on the official Garmin to Health Connect feed. Route (a), the Health Sync bridge, was not taken: #258 records that Deb's first sync landed heart rate, sleep and steps with no HRV record type. The lane runs on `garminconnect` 0.3.11 since #263 and is live (the nightly sweep and the card-open refresh; prod holds Garmin HRV nights through 13 Oct, a Code read). Whether the server-side route stays the household lane or gives way to an aggregator is a separate question: Q#NEXT.
+**Resolution (18 Oct 2026, #258).** Route (b), the server-side connector on python-garminconnect, was taken at #258, scoped to the metrics Garmin withholds from Health Connect: HRV (nightly and the 5-minute series), then the per-activity self-evaluation (#372) and, on a held PR, overnight SpO2 (Q150). Garmin sleep, steps and heart rate stay on the official Garmin to Health Connect feed. Route (a), the Health Sync bridge, was not taken: #258 records that Deb's first sync landed heart rate, sleep and steps with no HRV record type. The lane runs on `garminconnect` 0.3.11 since #263 and is live (the nightly sweep and the card-open refresh; prod holds Garmin HRV nights through 13 Oct, a Code read). Whether the server-side route stays the household lane or gives way to an aggregator is a separate question: Q233.
 
 **State:** DONE → #258
 

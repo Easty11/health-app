@@ -14317,7 +14317,7 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 ---
 
-### #NEXT. Garmin overnight SpO2 is captured raw from the sleep payload through Lane A: schema, sweep hook and scope fit, with no consumer yet (Q150)
+### #425. Garmin overnight SpO2 is captured raw from the sleep payload through Lane A: schema, sweep hook and scope fit, with no consumer yet (Q150)
 
 **Decision.**
 - **Source.** The Garmin sleep payload (`GET /wellness-service/wellness/dailySleepData/{displayName}?date=D&nonSleepBufferMinutes=60`, the library's `get_sleep_data`): `wellnessEpochSPO2DataDTOList` (one epoch a minute: `epochTimestamp`, `spo2Reading`, `readingConfidence`, `epochDuration`) and `breathingDisruptionData` (`{value, startGMT, endGMT}` intervals). Read through the Lane A no-refresh client (#361). The daily SpO2 endpoint is hourly averages only and is not used. Samsung is the secondary path (the ring is away on warranty).
@@ -14332,7 +14332,7 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 **Rationale.** Q150's gate asked whether the SAMPLE SERIES behind a night's oxygenation is reachable. The scraper trace test was the assumed route; a direct probe of Garmin's own payload on 16 and 17 Oct answered it for Garmin: it is, at one reading a minute (350 readings / 1 gap on the event night, 439 / 0 on the control), while the daily endpoint is hourly-only. The first two nights already show why raw capture comes before any detector: the app-summary minimum (85) was a sleep-onset reading at 23:10, not the 03:00 hose event, which left no dip (minimum 94), and an 88% threshold would have fired on onset noise. Storing the series raw, with its confidence and its gaps, keeps every later reading of it possible; deriving anything now would bake in a threshold the data does not yet support.
 
-**Status.** BUILT and test-proven on the branch; the PR is open and **not merged**: it carries a schema migration (hold (a)), so it is released by the operator's instruction, and Railway auto-runs `alembic upgrade head` on deploy, so the merge is the release. The backfill and its reach are OWED after the deploy. Nothing reads these tables.
+**Status.** LANDED via PR #392, released by the operator on 18 Oct 2026 (hold (a): it carries a schema migration) on condition that backend and frontend CI were green on the head; both were green on `f55edc9`. Railway auto-runs `alembic upgrade head` on deploy, so the merge was the release; the deploy and boot-log evidence is in the post-land record. The backfill and its result are OWED (operator). **Post-release ruling (chat, 18 Oct 2026).** After the first nightly sweep (02:00 Brisbane, 19 Oct), Code checks the `spo2` counts and records the observed response for a not-yet-slept wake-date either way. If that date returns a non-200 and lands in `errors`, a follow-up classifies the case as "pending" (neither empty nor error) so `errors` stays zero on a healthy night. Nothing reads these tables.
 
 **How you know.**
 - *The probe (operator-run in the prod container, output relayed in chat, 16 and 17 Oct; Code did not run it):* the pathway, counts, gap, minimum and onset/event readings above; the daily endpoint's null `spO2SingleValues` and `continuousReadingDTOList`; the per-night summary scalars matching the app on both nights.
@@ -14346,11 +14346,11 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 ---
 
-### #NEXT+1. The Body Battery "no API access" clause is superseded: it is reachable on the unofficial Lane A route, and unbuilt and unrequested
+### #426. The Body Battery "no API access" clause is superseded: it is reachable on the unofficial Lane A route, and unbuilt and unrequested
 
 **Decision.** The line in the "Things tried and abandoned / not yet attempted" list, "Garmin Body Battery: Explicitly closed — no API access available regardless of method", is superseded. The log is append-only, so the line stands as history. Body Battery is not closed to ingestion. What is established: (1) `garminconnect` 0.3.11, the library Lane A runs, exposes `get_body_battery` and `get_body_battery_events` (its method list, read from the installed wheel); (2) the sleep payload Lane A already reads carries `sleepBodyBattery` (a list) and `bodyBatteryChange` (an integer) at its top level (key names and list length only, from the 17 Oct probe; values were not read). What is NOT established: that either call returns usable data for this account, or anything about an official Garmin programme (its Health API is a separate route, not evaluated here). Nothing is built and nothing is queued; capturing Body Battery would be a new decision under #258's "withheld metrics only" scope. #258 records Body Battery as withheld from Health Connect; that was not re-verified here.
 
-**Rationale.** The clause predates #258 and #263 and was written against the route as it stood then. `Q93(b)` already named Body Battery as available through `python-garminconnect`, and the 17 Oct probe shows the sleep payload carrying it, so the clause is wrong as written and would mislead a reader weighing what Lane A or an aggregator could carry (Q#NEXT).
+**Rationale.** The clause predates #258 and #263 and was written against the route as it stood then. `Q93(b)` already named Body Battery as available through `python-garminconnect`, and the 17 Oct probe shows the sleep payload carrying it, so the clause is wrong as written and would mislead a reader weighing what Lane A or an aggregator could carry (Q233).
 
 **Status.** Governance only: no code, no migration, nothing built.
 
