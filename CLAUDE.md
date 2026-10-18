@@ -288,11 +288,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Overnight SpO2 from Garmin's sleep payload is now captured raw (three tables, a nightly-sweep step, a backfill script), Q150's gate is answered by direct probe, and the Garmin governance is closed out: Q93 and Q94 closed, the Body Battery clause superseded, an aggregator question opened; held for the operator's release (Q150, #NEXT, #NEXT+1, Q#NEXT).** Code and governance, one migration - Handoff: `closeout.md`.
+
 - **The ROADMAP row for #423 (ii) now carries Q232's settled briefing term and its engine-versus-coach clause; the build is still UNSTARTED and nothing was built.** Governance only - Canonical home: `closeout.md`.
 
 - **Q27's v1 taxonomy is built: joint-action strength regions (`shoulder_er_ir` split, dip ungated), a derived `Ratio` type and a fail-closed `reference_kind` with every measure `internal`; Q232 is opened on stored keys the taxonomy later retires (#420, #421).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #420, #421.
-
-- **Q231 records a build constraint derived from #374 (imputed rows clear in the same pass as `metab-v1`) and Q202's Capture-rate OWED is discharged as moot; the 11 Oct close-out resolves the day's landing SHAs.** Governance only - Canonical home: `closeout.md`.
 
 ---
 
