@@ -13477,6 +13477,8 @@ The lines as they now read in `CLAUDE.md`: "One branch per concern. Harness-assi
 
 **Status.** Landed with PR #331 (edits to `CLAUDE.md` only). **Both lines are in the shared block, so propagation to `health-connect-app` is OWED** (a ROADMAP NOW row; verbatim, grammar check first, then re-verify the byte-identical SHA). Until then the two repos' shared blocks differ. Numbers resolved at master max #384 / Q216 (`98b8f8b`).
 
+**Propagation (added 2026-10-19; the locked text above is unchanged).** Done: health-connect-app PR #77 (merge `ce0e1ec`) and PR #78 (merge `eeeaf95`) carry both lines, and the shared block is byte-identical to health-app master `4fe1565`; the ROADMAP row is discharged.
+
 **How you know.** The operator's ruling in chat, 5 Oct 2026. Counts read on `98b8f8b` plus this branch: `grep -c "harness-assigned" BRANCHES.md` = 56 rows, 111 `claude/` rows. The whole-repo anchored grep for the two superseded phrasings (FEEDBACK §35), outside the append-only stores, finds only the two `CLAUDE.md` lines now replaced; no hook or script enforces either rule (`.githooks/` and `scripts/check_governance_placeholders.py` name neither). Not checked: `health-connect-app`'s copy, which is another repo.
 
 **Do not revisit unless.** A harness-assigned name causes a branch to be mistaken for another concern's (a mis-landed or mis-deleted branch), or per-ruling `gov(...)` commits fragment a close-out until it cannot be read.
