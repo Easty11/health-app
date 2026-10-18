@@ -289,11 +289,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q27's remainders are built and the question is closed: protocol-matched provenance on observations and a declared side on tags (one migration, applied in prod), a gate that shows a published norm as a band only on a protocol match with no number firing a verdict, the log-derived and observed ratios, and `knee_flexion` observable; the seeder is run.** Code, migration - Canonical home: `DECISIONS_LOG.md` #427 to #430.
+
 - **Overnight SpO2 from Garmin's sleep payload is now captured raw (three tables, a nightly-sweep step, a backfill script), Q150's gate is answered by direct probe, and the Garmin governance is closed out: Q93 and Q94 closed, the Body Battery clause superseded, an aggregator question opened; the backfill and the first nightly check are done.** Code and governance, one migration - Canonical home: `DECISIONS_LOG.md` #425, #426.
 
 - **Per-session sRPE is source-neutral: one contract, one store, one read door and a declared hierarchy, with the whole-day rating as the lowest rung and the close-out asking only for sessions no app rated; the migration is held for release.** Code, migration (held) - Canonical home: `DECISIONS_LOG.md` #424.
-
-- **The ROADMAP row for #423 (ii) now carries Q232's settled briefing term and its engine-versus-coach clause; the build is still UNSTARTED and nothing was built.** Governance only - Canonical home: `closeout.md`.
 
 ---
 
