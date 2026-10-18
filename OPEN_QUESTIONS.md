@@ -2117,6 +2117,11 @@ night "fine"/green on sparse or thin coverage. Absence of a recorded dip is NOT 
 Every oxygenation surface must show coverage/confidence and degrade to "minimum recorded: X%,
 coverage thin" rather than an unearned all-clear.
 
+**Coverage for the guardrail (chat review of PR #392, 18 Oct 2026).** `gap_count` is accepted as built: it counts the places
+where the series has a hole, not how long the holes are. The eventual guardrail needs MISSING MINUTES (how much of the
+night has no reading), which is derivable from `spo2_samples` (the epochs expected across the night, less the ones stored).
+Not built now: no surface exists yet to need it.
+
 **Value even at coarse resolution:** the AirMini gives zero SpO2 visibility. A consistent nightly
 minimum alone surfaces mask-effectiveness drift over weeks, clustering of bad nights, and the
 effect of a mask/cushion change — the near-term win is retrospective trend.
@@ -2128,14 +2133,15 @@ traces" family, same two-gate logic (withheld-from-HC + scraper-reachable), lowe
 separate ticket. The trim decision (SpO2 excised per above) is not yet registered in this repo.
 
 **RESOLVES WHEN:** raw capture built (done on the held PR, `#NEXT`) and released; the backfill run and
-how far back it reached recorded here (OWED, operator); the detector designed once a baseline has accrued;
+its result (the earliest night found, the last date reached, why it stopped) recorded here (OWED, operator); the detector designed once a baseline has accrued;
 the guardrail enforced on any surface that is ever added; SpO2 removed from the trim scope once that ticket
 lands. Full event-detection may remain gated on next hardware.
 
 **State:** OPEN — the gate is answered and the raw capture is built, but the PR carries a schema migration
 (§ Merge disposition, hold (a): full human review, no self-merge) and is held for the operator's release. Owed
 (operator): the release decision, then, after the deploy and migration are confirmed, the backfill
-(`scripts/garmin_spo2_backfill.py --user-id 1 --dry-run`, then for real) with its history reach recorded here.
+(`scripts/garmin_spo2_backfill.py --user-id 1 --dry-run`, then for real) with its result recorded here (the earliest night found, the last date reached and why it stopped; an
+empty-streak stop is not proof that the history ends).
 Detector design is deferred until a baseline accrues.
 
 ---
