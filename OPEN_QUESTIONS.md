@@ -2122,6 +2122,8 @@ where the series has a hole, not how long the holes are. The eventual guardrail 
 night has no reading), which is derivable from `spo2_samples` (the epochs expected across the night, less the ones stored).
 Not built now: no surface exists yet to need it.
 
+**Missing-night detection for future coverage / guardrail work (chat ruling, 18 Oct 2026).** A "missing night" is a night with **no `spo2_nights` row once it is older than the sweep's re-pull window**, not a count taken from a single run. The window is the sweep default of 7 days back from the Brisbane wake-date: the current wake-date plus the 7 before it, 8 wake-dates, so a night is re-pulled by 8 sweeps (those dated the night itself through 7 days later) and is out of reach of the nightly sweep after that; only a backfill could then fill it. The sweep's per-run `nights_empty` is **not** the measure: it includes the not-yet-slept wake-date every night, and also every genuinely empty night still inside the window (user 1's 12 Oct is counted empty on each run until it leaves the window), so a healthy run reads `nights_empty >= 1` per user. Nothing is built for this; no surface exists yet to need it.
+
 **Value even at coarse resolution:** the AirMini gives zero SpO2 visibility. A consistent nightly
 minimum alone surfaces mask-effectiveness drift over weeks, clustering of bad nights, and the
 effect of a mask/cushion change — the near-term win is retrospective trend.
