@@ -10,6 +10,7 @@ naive_baseline is the old formula frozen at AM capture time:
   formula: sleep×0.3 + (10-fatigue)×0.3 + (10-soreness)×0.2 + motivation×0.2
 """
 import datetime as _dt
+import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -26,6 +27,9 @@ from cbti.timeutil import clock_delta_minutes, clock_to_minutes, minutes_between
 from database import get_db
 from injury_trajectory import injury_soreness_key
 from reads.recovery_reads import hrv_deviation, select_wakeday_hrv
+from reads.srpe_reads import srpe_needed
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/checkin-v2", tags=["checkin-v2"])
 
@@ -578,6 +582,10 @@ class TodayOut(BaseModel):
     naps_min: Optional[int] = None       # round-trips the stored PM nap value into the form
     am_notes: Optional[str] = None       # round-trips so PM sees the morning's note
     pm_notes: Optional[str] = None
+    # Whether the close-out should ask for the day's sRPE: at least one counted session today has no
+    # per-session rating from any source (`reads.srpe_reads.srpe_needed`). Defaults to True so a client
+    # that cannot tell, or a read that failed, errs toward asking (fail open to asking).
+    srpe_needed: bool = True
     cbti: CBTIContextOut = Field(default_factory=CBTIContextOut)
 
     model_config = {"from_attributes": True}
@@ -591,6 +599,7 @@ class MissedPMOut(BaseModel):
     """
     date: _dt.date
     cbti_block_open: bool = False
+    srpe_needed: bool = True      # as TodayOut.srpe_needed, for the day being closed out
 
 
 class AMPrefillOut(BaseModel):
@@ -624,6 +633,16 @@ class AMPrefillOut(BaseModel):
 
 # ── helper ─────────────────────────────────────────────────────────────────────
 
+def _srpe_needed(user_id: int, day: date, db: Session) -> bool:
+    """`reads.srpe_reads.srpe_needed`, failing OPEN to asking: a read that errors must cost a question, not
+    the close-out (the screen cannot be saved without the answer to /today)."""
+    try:
+        return srpe_needed(db, user_id, day)
+    except Exception:  # noqa: BLE001 -- the failure is logged; the answer is "ask"
+        logger.exception("srpe_needed failed for user %s on %s; asking", user_id, day)
+        return True
+
+
 def _get_or_create(user_id: int, for_date: date, db: Session) -> models.DailyRecord:
     record = db.query(models.DailyRecord).filter_by(user_id=user_id, date=for_date).first()
     if not record:
@@ -655,6 +674,7 @@ def _missed_pm(user_id: int, today: date, db: Session) -> Optional[MissedPMOut]:
     return MissedPMOut(
         date=yesterday,
         cbti_block_open=_cbti_context(user_id, yesterday, db).block_open,
+        srpe_needed=_srpe_needed(user_id, yesterday, db),
     )
 
 
@@ -862,6 +882,7 @@ def get_today(
     ).first()
     out = TodayOut.model_validate(record) if record is not None else TodayOut()
     out.cbti = _cbti_context(current_user.id, today, db)
+    out.srpe_needed = _srpe_needed(current_user.id, today, db)
     return out
 
 
