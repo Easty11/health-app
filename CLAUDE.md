@@ -288,7 +288,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Per-session sRPE is source-neutral: one contract, one store, one read door and a declared hierarchy, with the whole-day rating as the lowest rung and the close-out asking only for sessions no app rated; the migration is held for release.** Code, migration (held) - Canonical home: `DECISIONS_LOG.md` #NEXT.
+- **Per-session sRPE is source-neutral: one contract, one store, one read door and a declared hierarchy, with the whole-day rating as the lowest rung and the close-out asking only for sessions no app rated; the migration is held for release.** Code, migration (held) - Canonical home: `DECISIONS_LOG.md` #424.
 
 - **The ROADMAP row for #423 (ii) now carries Q232's settled briefing term and its engine-versus-coach clause; the build is still UNSTARTED and nothing was built.** Governance only - Canonical home: `closeout.md`.
 
