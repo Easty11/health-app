@@ -77,6 +77,8 @@ export default function MissedPMCard({ missedPm, outcome = null, onOutcome = () 
   }
 
   const blockOpen = Boolean(missedPm.cbti_block_open)
+  // sRPE only for the sessions no app rated per session (`missed_pm.srpe_needed`); absent -> ask.
+  const srpeNeeded = missedPm.srpe_needed !== false
 
   async function save() {
     setSaving(true)
@@ -87,7 +89,7 @@ export default function MissedPMCard({ missedPm, outcome = null, onOutcome = () 
         today_rating: todayRating,
         trained_today: trained,
         session_quality: trained ? sessionQuality : null,
-        session_rpe: trained ? sessionRpe : null,
+        session_rpe: trained && srpeNeeded ? sessionRpe : null,
         pm_notes: pmNotes.trim() || null,
         naps_min: blockOpen ? (napsMin === '' ? 0 : Number(napsMin)) : null,
       })
@@ -140,21 +142,26 @@ export default function MissedPMCard({ missedPm, outcome = null, onOutcome = () 
               <label className="text-sm font-medium text-gray-700">Session quality (planned vs actual)</label>
               <TapSelect value={sessionQuality} onChange={setSessionQuality} labels={SESSION_LABELS} />
             </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>Session RPE</span>
-                <span className="font-semibold text-gray-700">{sessionRpe}</span>
+            {srpeNeeded ? (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Session RPE</span>
+                  <span className="font-semibold text-gray-700">{sessionRpe}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  aria-label="Session RPE"
+                  value={sessionRpe}
+                  onChange={e => setSessionRpe(Number(e.target.value))}
+                  className="w-full accent-indigo-600"
+                />
+                <p className="text-[10px] text-gray-400">Rate the sessions your apps didn't.</p>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={10}
-                aria-label="Session RPE"
-                value={sessionRpe}
-                onChange={e => setSessionRpe(Number(e.target.value))}
-                className="w-full accent-indigo-600"
-              />
-            </div>
+            ) : (
+              <p className="text-xs text-gray-400">Your apps rated every session yesterday, so there is no RPE to enter.</p>
+            )}
           </div>
         )}
       </div>

@@ -659,11 +659,12 @@ class AerobicSession(Base):
 class GarminActivitySelfEval(Base):
     """One observation of a Garmin Connect activity's self-evaluation (perceived effort, feel).
 
-    INSERT-ONLY, capture-timed (Q209 path a). A row is what Garmin said at `captured_at`; it is never
-    updated, and the only writer is `garmin_selfeval.record_observation`, which inserts a row only
-    when the observed tuple (rpe, feel, link) differs from the activity's latest row (or, for a
-    still-unrated activity, as the daily re-check marker). The CURRENT value of an activity is its
-    latest row by `captured_at`; older rows are the history a later revision must not rewrite.
+    LEGACY, READ-ONLY. Superseded by `session_rpe_observations` (`SessionRpeObservation`, the source-neutral
+    store): the migration copied every row there verbatim and no code writes this table any more (its drop
+    is proposed separately). Kept so the migration chain and its schema tests keep their parent table.
+
+    Was INSERT-ONLY, capture-timed (Q209 path a). A row is what Garmin said at `captured_at`; it was never
+    updated. The CURRENT value of an activity is its latest row by `captured_at`; older rows are the history.
 
     `rpe_cr10` is Garmin's 0-100 `directWorkoutRpe` / 10 (CR-10, a float); `feel` is
     `directWorkoutFeel` 0-100 (0/25/50/75/100). Both are NULL on an UNRATED sighting (a row exists so
@@ -687,6 +688,39 @@ class GarminActivitySelfEval(Base):
     stop_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     aerobic_session_id: Mapped[int | None] = mapped_column(
         ForeignKey("aerobic_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
+class SessionRpeObservation(Base):
+    """One observation of one activity's perceived effort, from any source (the source-neutral sRPE store).
+
+    INSERT-ONLY, capture-timed, and written only by `srpe_store.record_observation` (the contract). A row
+    is what `source` said about one of its own activities at `captured_at`; it is never updated. The CURRENT
+    value of an activity is its latest row by `captured_at`; older rows are history. An UNRATED sighting is a
+    row too (`rpe_raw` / `rpe_cr10` NULL) so an unrated activity is not re-fetched daily.
+
+    `rpe_raw` is the number the source sent, on the scale named by `raw_scale`; `rpe_cr10` is that value
+    converted by the scale the adapter DECLARED (`srpe_store.SOURCE_SCALES`). The window is the bout the
+    rating is about, in UTC: it is how `reads.srpe_reads` finds the counted session, so no per-source link is
+    stored. `feel` is a source-specific passthrough. `provenance` is free audit detail (activity type, the
+    legacy Health Connect link, the table a row was copied from); nothing reads it for a value.
+    """
+    __tablename__ = "session_rpe_observations"
+    __table_args__ = (
+        UniqueConstraint("user_id", "source", "source_activity_ref", "captured_at", name="uq_session_rpe_obs_capture"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)                    # 'garmin'; names an adapter
+    source_activity_ref: Mapped[str] = mapped_column(String(128), nullable=False)      # the source's own activity id
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    stop_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rpe_raw: Mapped[float | None] = mapped_column(Float, nullable=True)                # as sent; NULL = unrated
+    raw_scale: Mapped[str] = mapped_column(String(32), nullable=False)                 # a scale the adapter declared
+    rpe_cr10: Mapped[float | None] = mapped_column(Float, nullable=True)               # 0-10; NULL = unrated
+    feel: Mapped[int | None] = mapped_column(Integer, nullable=True)                   # source-specific passthrough
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    provenance: Mapped[dict] = mapped_column(_JSONB, nullable=False)
 
 
 class SamsungHRVReading(Base):
