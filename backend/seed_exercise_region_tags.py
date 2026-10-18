@@ -16,6 +16,12 @@ Three entry forms (#337):
                    #79). The variant mirrors its parent exactly: tagged -> same regions+roles
                    (rows the parent lacks are removed), no-pattern -> no-pattern.
 
+Side (Q27 v1): any `tags[]` or `sided_variants[]` entry may carry `"side": "left" | "right"`. It is
+written to `exercise_region_tags.side` on every row that entry plans (a variant stamps the rows it
+inherits from its parent). Side is NEVER derived from a title; it is the declared value only. An
+entry without `side` leaves the column untouched - the seeder never clears it. `--dry-run` lists the
+rows whose side would change as `pending_side_updates`.
+
 Fail-closed (G1): a region_key with no matching taxonomy Region aborts the run —
 an orphan is NEVER written. So does a malformed variant (regions on it, a missing
 parent id, or a variant-of-a-variant) and a template id claimed by two entries.
@@ -53,6 +59,8 @@ from engine import taxonomy
 from hevy_templates import _visible_to, resolve_exercise
 
 logger = logging.getLogger(__name__)
+
+SIDES = ("left", "right")
 
 _PROPOSAL_PATH = Path(__file__).resolve().parent / "reference" / "exercise_region_tags_v0.json"
 
@@ -96,6 +104,10 @@ def _validate_fail_closed(proposal: dict) -> None:
         )
 
     problems = []
+    bad_sides = [(_label(e), e["side"]) for key in ("tags", "sided_variants")
+                 for e in proposal.get(key, []) if "side" in e and e["side"] not in SIDES]
+    if bad_sides:
+        problems.append(f"side must be one of {list(SIDES)}: {bad_sides}")
     variants = proposal.get("sided_variants", [])
     variant_ids = {v.get("template_id") for v in variants}
     for v in variants:
@@ -164,6 +176,7 @@ def build_plan(db: Session, user_id: int, proposal: dict) -> dict:
             "regions": [{"key": r["key"], "role": r.get("role", "primary")}
                         for r in entry.get("regions", [])] if kind == "tagged" else [],
             "laterality": entry.get("laterality"),
+            "side": entry.get("side"),
         }
 
     for entry in proposal.get("tags", []):
@@ -192,6 +205,7 @@ def build_plan(db: Session, user_id: int, proposal: dict) -> dict:
         plan[tid] = {
             "label": _label(v), "kind": kind, "via": parent,
             "regions": [dict(r) for r in regions], "laterality": v.get("laterality"),
+            "side": v.get("side"),
         }
 
     return {"plan": plan, "unresolved": unresolved}
@@ -256,6 +270,23 @@ def _pending_deletions(db: Session, plan: dict) -> list[dict]:
     return out
 
 
+def _pending_side_updates(db: Session, plan: dict) -> list[dict]:
+    """Rows whose `side` the plan would set to a different value. A planned entry with no `side`
+    contributes nothing (the column is left as it is). A row not yet in the table counts as a change
+    from None, since the seed would create it carrying the side."""
+    out = []
+    for tid, p in plan.items():
+        if p.get("side") is None or p["kind"] != "tagged":
+            continue
+        for r in p["regions"]:
+            row = db.get(models.ExerciseRegionTag, (tid, r["key"]))
+            current = row.side if row is not None else None
+            if current != p["side"]:
+                out.append({"template_id": tid, "label": p["label"], "region_key": r["key"],
+                            "from": current, "to": p["side"], "row_exists": row is not None})
+    return out
+
+
 def seed_tags(
     db: Session,
     user_id: int,
@@ -298,6 +329,7 @@ def seed_tags(
     plan, unresolved_titles = built["plan"], built["unresolved"]
     _validate_plan_keys(plan)
     pending = _pending_deletions(db, plan)
+    pending_sides = _pending_side_updates(db, plan)
     near_twins = _near_twins(db, proposal)
     unconfirmed = _unconfirmed_rows(db)
     planned_pairs = {(tid, r["key"]) for tid, p in plan.items() for r in p["regions"]}
@@ -356,6 +388,8 @@ def seed_tags(
             row.taxonomy_version = taxonomy.TAXONOMY_VERSION
             row.source = "human_confirmed" if confirm else default_source
             row.confirmed_at = now if confirm else None
+            if p.get("side") is not None:
+                row.side = p["side"]
 
     if prune_unconfirmed and not dry_run:
         for u in prune:
@@ -382,15 +416,17 @@ def seed_tags(
         "unconfirmed_existing": unconfirmed,
         "prune": prune,
         "pending_deletions": pending,
+        "pending_side_updates": pending_sides,
         "deleted": 0 if dry_run else sum(
             1 for d in pending if confirm or d["via"] is not None),
         "pruned": 0 if (dry_run or not prune_unconfirmed) else len(prune),
-        "plan": {tid: {k: p[k] for k in ("label", "kind", "via", "regions")}
+        "plan": {tid: {k: p[k] for k in ("label", "kind", "via", "regions", "side")}
                  for tid, p in plan.items()},
     }
     logger.info("seed_exercise_region_tags: %s",
                 {k: v for k, v in summary.items()
-                 if k not in ("plan", "unconfirmed_existing", "prune", "pending_deletions")})
+                 if k not in ("plan", "unconfirmed_existing", "prune", "pending_deletions",
+                             "pending_side_updates")})
     return summary
 
 
@@ -408,6 +444,11 @@ def _print_plan(summary: dict) -> None:
           f"({len(summary['prune'])} not re-planned -> what --prune-unconfirmed would delete)")
     print(f"  pending deletions (rows on planned templates the reference does not carry; "
           f"--confirm deletes them): {len(summary['pending_deletions'])}")
+    print(f"  pending side updates (rows whose side the reference sets; --confirm writes them): "
+          f"{len(summary['pending_side_updates'])}")
+    for s in summary["pending_side_updates"]:
+        print(f"    SIDE   {s['template_id']:<38} {str(s['label'])[:34]:<34} "
+              f"{s['region_key']} {s['from']} -> {s['to']}")
     for d in summary["pending_deletions"]:
         print(f"    DELETE {d['template_id']:<38} {str(d['label'])[:34]:<34} "
               f"{d['region_key']}({d['role']}) [{d['source']}]")
@@ -444,7 +485,8 @@ if __name__ == "__main__":
         if do_dry:
             _print_plan(result)
         print({k: v for k, v in result.items()
-               if k not in ("plan", "unconfirmed_existing", "prune", "pending_deletions")})
+               if k not in ("plan", "unconfirmed_existing", "prune", "pending_deletions",
+                            "pending_side_updates")})
     except (EmptyTemplateStoreError, OrphanRegionKeyError, MalformedProposalError) as exc:
         logging.error("%s", exc)
         raise SystemExit(1)
