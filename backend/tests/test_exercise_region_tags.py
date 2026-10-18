@@ -737,3 +737,106 @@ def test_a_variant_inheriting_an_unresolved_key_from_the_db_is_refused(db_sessio
         with pytest.raises(seeder.OrphanRegionKeyError, match="shoulder_er_ir"):
             seeder.seed_tags(db_session, 1, proposal=prop, **kw)
     assert _rows(db_session, "V1") == set()
+
+
+# --------------------------------------------------------------------------- #
+# Q27 v1 remainders: `side` is declared in the reference, never derived       #
+# --------------------------------------------------------------------------- #
+
+def _side(db, tid, region_key):
+    return db.get(models.ExerciseRegionTag, (tid, region_key)).side
+
+
+def test_the_seeder_writes_the_declared_side_to_a_direct_tag_and_a_variant(db_session):
+    _tmpl(db_session, "P1", "Shoulder External Rotation", custom=True, owner=1)
+    _tmpl(db_session, "V1", "Shoulder External Rotation L", custom=True, owner=1)
+    _tmpl(db_session, "V2", "Shoulder External Rotation R", custom=True, owner=1)
+    _tmpl(db_session, "K1", "Kneeling Leg Curl L", custom=True, owner=1)
+    db_session.commit()
+    prop = {"tags": [{"title": "Shoulder External Rotation",
+                      "regions": [{"key": "shoulder_er", "role": "primary"}]},
+                     {"template_id": "K1", "title": "Kneeling Leg Curl L", "side": "left",
+                      "regions": [{"key": "knee_flexion", "role": "primary"}]}],
+            "sided_variants": [
+                {"template_id": "V1", "title": "Shoulder External Rotation L", "side": "left",
+                 "parent_template_id": "P1"},
+                {"template_id": "V2", "title": "Shoulder External Rotation R", "side": "right",
+                 "parent_template_id": "P1"}]}
+    seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert _side(db_session, "V1", "shoulder_er") == "left"
+    assert _side(db_session, "V2", "shoulder_er") == "right"
+    assert _side(db_session, "K1", "knee_flexion") == "left"
+    assert _side(db_session, "P1", "shoulder_er") is None        # the parent declared none: bilateral
+
+
+def test_a_planned_entry_without_a_side_leaves_the_column_untouched(db_session):
+    """The seeder never clears a side: absence in the reference is 'no ruling', not 'bilateral'."""
+    _tmpl(db_session, "K1", "Kneeling Leg Curl L", custom=True, owner=1)
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="K1", region_key="knee_flexion",
+                                            role="primary", side="left"))
+    db_session.commit()
+    prop = {"tags": [{"template_id": "K1", "title": "Kneeling Leg Curl L",
+                      "regions": [{"key": "knee_flexion", "role": "primary"}]}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert _side(db_session, "K1", "knee_flexion") == "left"
+    assert r["pending_side_updates"] == []
+
+
+def test_dry_run_lists_pending_side_updates_and_writes_nothing(db_session):
+    _tmpl(db_session, "K1", "Kneeling Leg Curl L", custom=True, owner=1, adjudicated=True)
+    _tmpl(db_session, "K2", "Kneeling Leg Curl R", custom=True, owner=1, adjudicated=True)
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="K1", region_key="knee_flexion",
+                                            role="primary", side="left"))       # already correct
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="K2", region_key="knee_flexion",
+                                            role="primary"))                    # NULL -> right
+    db_session.commit()
+    prop = {"tags": [
+        {"template_id": "K1", "title": "Kneeling Leg Curl L", "side": "left",
+         "regions": [{"key": "knee_flexion", "role": "primary"}]},
+        {"template_id": "K2", "title": "Kneeling Leg Curl R", "side": "right",
+         "regions": [{"key": "knee_flexion", "role": "primary"}]}]}
+    r = seeder.seed_tags(db_session, 1, proposal=prop, dry_run=True)
+    assert r["pending_side_updates"] == [{
+        "template_id": "K2", "label": "Kneeling Leg Curl R", "region_key": "knee_flexion",
+        "from": None, "to": "right", "row_exists": True}]
+    assert _side(db_session, "K2", "knee_flexion") is None            # nothing written
+    assert r["plan"]["K1"]["side"] == "left"
+
+
+@pytest.mark.parametrize("bad", [
+    {"tags": [{"template_id": "X", "side": "Left", "regions": [{"key": "hinge", "role": "primary"}]}]},
+    {"tags": [{"template_id": "X", "side": "bilateral", "regions": [{"key": "hinge", "role": "primary"}]}]},
+    {"tags": [{"template_id": "X", "side": None, "regions": [{"key": "hinge", "role": "primary"}]}]},
+    {"sided_variants": [{"template_id": "V", "parent_template_id": "P", "side": "both"}]},
+])
+def test_an_invalid_side_is_refused_fail_closed(db_session, bad):
+    with pytest.raises(seeder.MalformedProposalError, match="side must be one of"):
+        seeder._validate_fail_closed(bad)
+    seeder._validate_fail_closed({"tags": [{"template_id": "X", "side": "left",
+                                            "regions": [{"key": "hinge", "role": "primary"}]}]})   # control
+
+
+def test_the_shipped_reference_declares_side_on_exactly_twelve_entries():
+    import json
+    import re
+    from pathlib import Path
+    path = Path(seeder._PROPOSAL_PATH)
+    raw = path.read_text(encoding="utf-8")
+    ref = json.loads(raw)
+    assert (len(ref["tags"]), len(ref["no_pattern"]), len(ref["sided_variants"])) == (66, 16, 8)
+    sided = [e for key in ("tags", "no_pattern", "sided_variants") for e in ref[key] if "side" in e]
+    assert len(sided) == 12
+    assert sum("side" in e for e in ref["sided_variants"]) == 8       # all eight variants
+    assert {e["title"] for e in sided if e not in ref["sided_variants"]} == {
+        "Kneeling Leg Curl L", "Kneeling Leg Curl R", "Copenhagen Plank L", "Copenhagen Plank R"}
+    # The declared value is the operator's mapping; this only documents that it agrees with the
+    # titles - the seeder reads the field, never the title.
+    for e in sided:
+        assert e["side"] == ("left" if e["title"].endswith(" L") else "right"), e["title"]
+    # Stripping the twelve fragments gives back an entry-for-entry identical reference (nothing else moved).
+    stripped = re.sub(r'"side": "(?:left|right)", ', "", raw)
+    assert stripped.count('"side"') == 0 and raw.count('"side"') == 12
+    plain = json.loads(stripped)
+    for key in ("tags", "no_pattern", "sided_variants"):
+        assert [{k: v for k, v in e.items() if k != "side"} for e in ref[key]] == plain[key]
+    seeder._validate_fail_closed(ref)

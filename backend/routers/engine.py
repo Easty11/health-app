@@ -11,6 +11,9 @@ Endpoints:
   POST /engine/response         — apply an adaptation-loop response tag (§7)
   POST /engine/observations     — append one capability MEASUREMENT (#161)
   GET  /engine/observations     — the series for one (region, measure) + symmetry
+  GET  /engine/ratios           — every declared ratio, both routes (Q27 v1)
+  GET  /engine/ratios/{key}     — one ratio: log-derived (i) and observed (ii)
+  GET  /engine/log-strength     — per-side e1RM from the Hevy log for one region (route i)
 
 The two capability surfaces are deliberately separate. `/response` writes the
 response-to-load verdict into `capability_state`; `/observations` appends a
@@ -40,8 +43,11 @@ from database import get_db
 from encryption import decrypt
 from engine import (
     adaptation,
+    log_strength as log_strength_mod,
     observations as observations_mod,
     profile as profile_mod,
+    ratios as ratios_mod,
+    reference as reference_mod,
     region_exercise as region_exercise_mod,
     resolver as resolver_mod,
     selection,
@@ -98,6 +104,10 @@ class ObservationIn(BaseModel):
     # Optional assertion of the sending unit. The declared unit always wins; a
     # mismatch 422s rather than converting.
     unit: str | None = None
+    # Provenance (Q27 v1) - ALL-OR-NOTHING: all three, or none (none reads as "internal" forever).
+    administered_by: str | None = None   # self | ep | physio | clinician
+    instrument: str | None = None        # must equal the protocol's declared instrument
+    protocol: str | None = None          # a key of engine/protocols.py
 
 
 # --------------------------------------------------------------------------- #
@@ -408,6 +418,8 @@ def post_observation(
             value=body.value, side=body.side, observed_on=body.observed_on,
             method=body.method, source=body.source, confidence=body.confidence,
             context=body.context, unit=body.unit,
+            administered_by=body.administered_by, instrument=body.instrument,
+            protocol=body.protocol,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
@@ -448,13 +460,17 @@ def get_observations(
         db, current_user.id, region_key=region_key,
         measure_key=measure_key, side=side, since=since,
     )
-    current = {
-        s: observations_mod.observation_to_dict(row)
-        for s in measure.sides()
-        if (row := observations_mod.latest(
-            db, current_user.id, region_key=region_key,
-            measure_key=measure_key, side=s)) is not None
-    }
+    current = {}
+    for s in measure.sides():
+        row = observations_mod.latest(
+            db, current_user.id, region_key=region_key, measure_key=measure_key, side=s)
+        if row is not None:
+            # `reference` says which reference governs this reading (own series vs a literature
+            # band) and why - a band for display, never a comparison (Q27 v1 gate).
+            current[s] = {
+                **observations_mod.observation_to_dict(row),
+                "reference": reference_mod.evaluate_reference((region_key, measure_key), [row]),
+            }
     return {
         "region_key": region_key,
         "label": region.label,
@@ -471,3 +487,54 @@ def get_observations(
             db, current_user.id, region_key=region_key, measure_key=measure_key,
         ),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Ratios and log-derived strength (Q27 v1) - read-only, no verdicts            #
+# --------------------------------------------------------------------------- #
+
+def _ratio_or_422(ratio_key: str) -> None:
+    if taxonomy.ratio_by_key(ratio_key) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(f"unknown ratio_key: {ratio_key!r} "
+                    f"(declared: {', '.join(r.key for r in taxonomy.all_ratios())})"),
+        )
+
+
+@router.get("/ratios")
+def get_ratios(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every declared ratio with both routes: (i) log-derived from the Hevy log, same-day pairs
+    only, and (ii) observed from capability observations. Numbers, dates, the move over time and
+    the governing reference with its reason - no label, flag or threshold."""
+    return {"ratios": ratios_mod.all_ratio_overviews(db, current_user.id)}
+
+
+@router.get("/ratios/{ratio_key}")
+def get_ratio(
+    ratio_key: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ratio_or_422(ratio_key)
+    return ratios_mod.ratio_overview(db, current_user.id, ratio_key)
+
+
+@router.get("/log-strength")
+def get_log_strength(
+    region_key: str = Query(...),
+    since: date | None = Query(None),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Per-side estimated 1RM from the Hevy log for one region (route i). Read-only; never
+    writes a capability observation."""
+    if taxonomy.by_key(region_key) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"unknown region_key: {region_key!r}",
+        )
+    return log_strength_mod.log_strength_as_dict(db, current_user.id, region_key, since)

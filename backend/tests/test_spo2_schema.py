@@ -81,4 +81,6 @@ def test_the_revision_chains_from_the_prior_head_in_one_line():
     script = ScriptDirectory.from_config(cfg)
     assert len(script.get_heads()) == 1, "migration history branched"
     assert script.get_revision(_REV).down_revision == "e2a4c6d8f1b3"
-    assert script.get_heads() == [_REV]
+    # It was the head when written; a later revision may chain on, so assert it is still in the one line
+    # of history (an ancestor of the sole head), not that it IS the head.
+    assert _REV in {r.revision for r in script.walk_revisions(base="base", head=script.get_heads()[0])}

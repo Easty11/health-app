@@ -978,6 +978,7 @@ class CapabilityObservation(Base):
         Index("ix_capability_obs_user_region_side_date",
               "user_id", "region_key", "side", "observed_on"),
         Index("ix_capability_obs_user_date", "user_id", "observed_on"),
+        Index("ix_capability_obs_user_region_protocol", "user_id", "region_key", "protocol"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -999,6 +1000,13 @@ class CapabilityObservation(Base):
     confidence: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'likely'"))
     # {block, load, fatigue_state, notes, session_id} — free context, not queried on
     context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # PROVENANCE (Q27 v1) — ALL-OR-NOTHING: all three set, or all three NULL. A row with all three
+    # NULL evaluates as reference_kind "internal" forever (the fail-closed gate, engine/reference.py).
+    # Closed vocabularies in engine/observations.py; `protocol` is a key of engine/protocols.py and
+    # `instrument` must equal that protocol's declared instrument. No backfill: legacy rows stay NULL.
+    administered_by: Mapped[str | None] = mapped_column(String(20), nullable=True)   # self | ep | physio | clinician
+    instrument: Mapped[str | None] = mapped_column(String(40), nullable=True)        # hhd | sphygmomanometer | ...
+    protocol: Mapped[str | None] = mapped_column(String(60), nullable=True)          # engine/protocols.py key
     taxonomy_version: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'v0'"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -1262,6 +1270,10 @@ class ExerciseRegionTag(Base):
     # llm_proposed | human_confirmed — the labs-style extract→confirm provenance
     source: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'llm_proposed'"))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # left | right — which limb a sided (L/R) template loads; NULL = bilateral or unknown. Written ONLY
+    # from the reference's declared `side` by the seeder, never derived by stripping " L"/" R" from a
+    # title (Q27 v1). Read by engine/log_strength.py to pair a side with its counterpart.
+    side: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

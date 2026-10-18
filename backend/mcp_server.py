@@ -1754,6 +1754,95 @@ def get_training_plan() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Capability ratios (Q27 v1) — both routes per declared ratio, numbers only.
+#
+# Route (i) is derived from the Hevy log (same session-day pairs; baseline/current medians; the move
+# between them); route (ii) is derived from clinic observations (same protocol, within 14 days).
+# The governing reference and its reason are printed beside each; a literature band is printed as DATA
+# when the reference gate allows it. Nothing here compares a reading to a band or labels a result.
+# ---------------------------------------------------------------------------
+
+def _fmt_band_value(value: dict) -> str:
+    if "low" in value:
+        return f"{value['low']:g} to {value['high']:g}"
+    if "median" in value:
+        return f"median {value['median']:g}"
+    return f"mean {value['mean']:g}, SD {value['sd']:g}"
+
+
+def _fmt_reference(ref: dict) -> list[str]:
+    out = [f"reference: {ref['governing']} - {ref['reason']}"]
+    band = ref.get("band")
+    if band:
+        cit = band["citation"]
+        unit = band["unit"] if band["unit"] != "ratio" or band.get("normalisation") is None             else "force / body weight"
+        out.append(
+            f"band (published reference, for display): {_fmt_band_value(band['value'])} {unit} - "
+            f"{band['population']}, n={band['n']} ({cit['authors']} {cit['year']}, PMID {cit['pmid']}; "
+            f"read against {band['verified_against'].replace('_', ' ')})"
+        )
+        if band.get("unit_note"):
+            out.append(f"unit note: {band['unit_note']}")
+        if "body_mass_kg" in ref:
+            out.append(
+                f"body mass used: {ref['body_mass_kg']:g} kg ({ref['body_mass_source']}); "
+                f"reading per that mass: {ref['value_normalised']:.3g}"
+            )
+    return out
+
+
+def _format_capability_ratios(overviews: list[dict]) -> str:
+    blocks = ["CAPABILITY RATIOS (Q27 v1). Numbers and the governing reference only: no verdicts."]
+    for ov in overviews:
+        ratio, log, observed = ov["ratio"], ov["log_derived"], ov["observed"]
+        lines = [f"{ratio['label']} [{ratio['key']}]"]
+        lines.append(f"  Route (i) from the Hevy log (e1RM; same session-day pairs only):")
+        if not log["sides"]:
+            lines.append("    no side has both halves logged")
+        for side, s in log["sides"].items():
+            parts = [f"{s['n_pairs']} paired day(s), {s['unpaired_days']} unpaired"]
+            parts.append("baseline " + (f"{s['baseline']:.3f}" if s["baseline"] is not None else "n/a (under 3 pairs)"))
+            parts.append("current " + (f"{s['current']:.3f}" if s["current"] is not None
+                                       else f"n/a (under 3 pairs within {log['currency_days']} days)"))
+            if s["delta_pct"] is not None:
+                parts.append(f"change {s['delta_pct']:+.1f}%")
+            lines.append(f"    {side}: " + "; ".join(parts))
+            lines.append(f"      reference: {s['reference']['governing']} - {s['reference']['reason']}")
+        um = log["unmatched_sides"]
+        if um["numerator_only"] or um["denominator_only"]:
+            lines.append(f"    unmatched sides (not paired): numerator-only {um['numerator_only'] or '-'}, "
+                         f"denominator-only {um['denominator_only'] or '-'}")
+        lines.append(f"  Route (ii) from clinic readings (same protocol, within {observed['window_days']} days):")
+        if not observed["sides"]:
+            lines.append("    no paired readings recorded")
+        for side, o in observed["sides"].items():
+            n, dn = o["numerator"], o["denominator"]
+            ratio_txt = f"{o['ratio']:.3f}" if o["ratio"] is not None else "n/a"
+            lines.append(
+                f"    {side}: {ratio_txt} = {n['value']:g} {n['unit']} ({n['observed_on']}) / "
+                f"{dn['value']:g} {dn['unit']} ({dn['observed_on']}); protocol {o['protocol'] or 'none recorded'}"
+            )
+            for r in _fmt_reference(o["reference"]):
+                lines.append("      " + r)
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+@mcp.tool()
+@_stamped
+def get_capability_ratios() -> str:
+    """Get the capability strength ratios (shoulder ER:IR, hip adductor:abductor) by both routes:
+    (i) derived from the Hevy log (e1RM per side, same session-day pairs, baseline vs current), and
+    (ii) from clinic readings (same protocol, within 14 days), each with its governing reference and
+    the reason. A published literature band is shown as data only when the reading's protocol matches
+    the norm's. States numbers; no verdicts."""
+    user_id = _current_user_id()
+    from engine import ratios as _ratios
+    with SessionLocal() as _db:
+        return _format_capability_ratios(_ratios.all_ratio_overviews(_db, user_id))
+
+
+# ---------------------------------------------------------------------------
 # Tools 8 & 9 — Hevy routine read-back (list + full-by-id)
 #
 # Routines are read LIVE from Hevy and never persisted (there is no routine

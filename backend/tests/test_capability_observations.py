@@ -136,9 +136,13 @@ def test_the_seeded_measures_are_exactly_the_briefed_battery():
         ("shoulder_er", "hhd_force_n", "N"),
         ("shoulder_ir", "hhd_force_n", "N"),
         ("hip_adduction", "hhd_force_n", "N"),
+        ("hip_adduction", "squeeze_hhd_n", "N"),
         ("hip_adduction", "squeeze_mmhg", "mmHg"),
         ("hip_abduction", "hhd_force_n", "N"),
         ("ankle_plantarflexion", "sl_heel_raise_reps", "count"),
+        # v1 remainders (R7): knee_flexion becomes observable - isometric HHD and the single-leg bridge.
+        ("knee_flexion", "hhd_force_n", "N"),
+        ("knee_flexion", "slhb_reps", "count"),
     }
 
 
@@ -334,3 +338,74 @@ def test_symmetry_carries_both_collection_dates(db_session):
     assert s["left_observed_on"] == "2026-03-02"
     assert s["right_observed_on"] == "2026-07-04"
     assert s["as_of"] == "2026-07-04"
+
+
+# ── provenance (Q27 v1): ALL-OR-NOTHING, fail-closed ──────────────────────────
+
+_PROV = dict(administered_by="ep", instrument="hhd",
+             protocol="hhd_shoulder_rot_seated_neutral_make")
+
+
+def _hhd(db, uid, **kw):
+    kw.setdefault("region_key", "shoulder_er")
+    kw.setdefault("measure_key", "hhd_force_n")
+    kw.setdefault("value", 120.0)
+    return _rec(db, uid, **kw)
+
+
+def test_a_complete_provenance_row_round_trips(db_session):
+    u = _user(db_session)
+    row = _hhd(db_session, u.id, **_PROV)
+    d = obs.observation_to_dict(row)
+    assert (d["administered_by"], d["instrument"], d["protocol"]) == ("ep", "hhd", _PROV["protocol"])
+    # and a legacy-shaped write still works, with all three NULL
+    legacy = obs.observation_to_dict(_hhd(db_session, u.id, side=taxonomy.SIDE_RIGHT))
+    assert (legacy["administered_by"], legacy["instrument"], legacy["protocol"]) == (None, None, None)
+
+
+@pytest.mark.parametrize("given", [
+    ("administered_by",), ("instrument",), ("protocol",),
+    ("administered_by", "instrument"), ("administered_by", "protocol"), ("instrument", "protocol"),
+])
+def test_partial_provenance_is_refused(db_session, given):
+    u = _user(db_session)
+    _hhd(db_session, u.id, **_PROV)       # the control: the full set is accepted
+    with pytest.raises(ValueError, match="all-or-nothing"):
+        _hhd(db_session, u.id, **{k: _PROV[k] for k in given})
+    assert db_session.query(models.CapabilityObservation).count() == 1   # nothing half-written
+
+
+@pytest.mark.parametrize("bad,match", [
+    (dict(administered_by="coach"), "unknown administered_by"),
+    (dict(instrument="laser"), "unknown instrument"),
+    (dict(protocol="made_up_protocol"), "unknown protocol"),
+    (dict(instrument="nordbord"), "does not match protocol"),                  # vocabulary-valid, wrong
+    (dict(protocol="sphyg_squeeze_supine_45", instrument="sphygmomanometer"),
+     "does not produce shoulder_er/hhd_force_n"),                              # a protocol for another measure
+])
+def test_provenance_vocabularies_and_pairing_are_refused(db_session, bad, match):
+    u = _user(db_session)
+    _hhd(db_session, u.id, **_PROV)       # control
+    with pytest.raises(ValueError, match=match):
+        _hhd(db_session, u.id, **{**_PROV, **bad})
+
+
+def test_the_protocol_may_produce_a_ratio_member_measure(db_session):
+    """er_ir's members (shoulder_er / shoulder_ir hhd_force_n) are targets of the shoulder protocols,
+    so observing them under that protocol is legal; the ratio itself is never an observation."""
+    u = _user(db_session)
+    _hhd(db_session, u.id, region_key="shoulder_ir", **_PROV)
+
+
+def test_post_observation_refuses_partial_provenance_with_a_422(db_session):
+    from fastapi import HTTPException
+    from routers.engine import ObservationIn, post_observation
+    u = _user(db_session)
+    body = ObservationIn(region_key="shoulder_er", measure_key="hhd_force_n", value=120.0,
+                         side="left", **_PROV)
+    out = post_observation(body, current_user=_Stub(u.id), db=db_session)
+    assert out["observation"]["protocol"] == _PROV["protocol"]
+    with pytest.raises(HTTPException) as exc:
+        post_observation(body.model_copy(update={"protocol": None}),
+                         current_user=_Stub(u.id), db=db_session)
+    assert exc.value.status_code == 422 and "all-or-nothing" in exc.value.detail

@@ -100,130 +100,6 @@ exists. Owner: Luke. Unblocks on: reconciliation being designed/built.
 
 ---
 
-## Q27. Capability_Taxonomy v0 has no axis-type for joint-level STRENGTH RATIOS — grounded v1 family
-
-Four independent instances in one user's last-90d log point at one structural hole: v0 is a movement-PATTERN
-and screening vocabulary with no axis-type for **joint-level strength / strength-ratio** reads.
-
-| Movement | v0 offers | Why it fails |
-|----------|-----------|--------------|
-| Copenhagen Plank | nothing | Adductor strength; `frontal_single_leg_stability` is closed-chain balance, `anti_lateral_flexion` is trunk — a side-lying adduction load demonstrates neither |
-| Shoulder ER / IR | `shoulder_mobility` | Cable ER at load is STRENGTH; shoulder_mobility is a mobility screen — wrong capacity |
-| Hip Add / Abd (machine) | nothing | Open-chain frontal-hip strength; not `frontal_single_leg_stability` (closed-chain stability) |
-| Calf raise | `ankle_df` — REJECT | Plantarflexion STRENGTH ≠ dorsiflexion MOBILITY (category error, #76) |
-
-This is a family, externally grounded, carrying some of the best-evidenced return-to-sport metrics there are:
-**adductor:abductor** and the adductor squeeze (groin injury in field sport, HAGOS), **shoulder ER:IR** ratio
-(overhead athlete / rotator cuff, isokinetic literature), **plantarflexion** strength. Four hits from one log
-is what makes it structural, not anecdotal.
-
-**Live impact:** the user's ER:IR ≈ 6.25 : 11.25 = **0.56** against a ~0.66–0.75 reference — a quantified,
-flagged deficit he is actively fortifying, and the platform currently has no axis to represent it.
-`capability_state` is already per-region-per-side, so ratio reads are natively supported once the vocabulary
-exists — the schema is ready, the vocabulary is not.
-
-**Interim axes landed (2026-09-26, #334/#336).** `shoulder_er_ir`, `hip_adduction` and `knee_flexion` (plus
-`trunk_lateral_flexion` and `dip`) now exist as STRENGTH regions so tagged exercises stop falling to the keyword
-fallback. They are probe-inert bolt-ons, explicitly NOT this question's answer. Shoulder ER/IR, Copenhagen, Hip
-Adduction and the leg curls moved off no-pattern onto them; calf and hip abduction stay no-pattern. The v1 pass
-supersedes them.
-
-> **SUPERSEDED (2026-10-01, #363).** The slot-keying question below (options a / b / c) is moot: a quota slot is
-> satisfied by doing the PLANNED session, not by the logged session's capacity, plane or region set. Kept verbatim as
-> the record of how the question was framed.
-
-**Scope extension (2026-09-26): what does a quota slot KEY on?** Region definitions alone do not close this.
-The decompression phase exposed a second hole: its real intent is a PLANE PERMISSION on strength work ("strength in
-these planes, not the provocative ones"), and a `capacity` slot (Rule 1, `engine/resolver.py`) counts every
-STRENGTH-dominant workout the same, provocative-plane work included. Regions already carry a `Plane`, so v1 must also
-decide the slot key: **(a)** capacity alone (today), **(b)** capacity × plane, or **(c)** an explicit region
-allow/deny set per slot. Which one is enough turns on an operator input not yet given: are the currently provocative
-loads plane-level (e.g. all transverse loading) or finer (specific regions within a plane)? If Q27 closes on region
-definitions alone, the phase gets rebuilt on the same flawed base.
-
-**Scope note (2026-09-27): the real restrictions are not planes.** The operator's current restrictions, recorded as
-evidence for the slot-keying question above:
-1. **Lumbar** (clinician: Dr Aubrey). DENY end-of-range flexion COMBINED with rotation. All other lumbar movement is
-   PERMITTED under a pain-gated progression rule (start small, build up; pain halts progression). Heavy or end-range
-   hinge (flexion without rotation) is clinically cleared; whether an operator-chosen ceiling remains is PENDING the
-   operator. Deficit KB RDL (20 kg, flossing, #338) sits inside the clearance.
-2. **L knee → squat.** RANGE-LIMITED (depth). Likely extends to leg-press depth and step-up height.
-3. **L thumb.** EXERCISE- or POSITION-specific, only under direct thumb load: renegade row (worst), dead bug with a
-   dumbbell overhead (angle), dip hand position. Carries and pulls are unaffected.
-
-None of these is plane-level. That is evidence against option **(b) capacity × plane**: planes never appear in the
-restrictions actually in force.
-
-> **MOVED to Q197 (2026-10-01).** The restriction-record design below, including the pain-gated progression
-> qualifier and its capture point, now lives in Q197 (a "pain" reason on a deviation is the per-session capture
-> point). The restrictions listed above stay here as evidence. The counting half of "Separate counting from
-> permission" is SUPERSEDED by #363: counting keys on plan-conformance, not on region/capacity.
-
-Design direction (chat proposal, not ruled):
-- **Separate counting from permission.** Quota counting keys on region/capacity and stays ungated. Hevy exposes load
-  but not range, depth or hand position, so range gates cannot be enforced at count time.
-- **Permission lives in a restriction record**, enforced at prescription, probe and warning time:
-  `{target, qualifier, side, reason, source, review_date}`.
-  - `target` = region → a load ceiling and/or a range limit (expressible as "end-range permitted below load X").
-  - `target` = movement combination → deny (e.g. EOR flexion + rotation).
-  - `target` = exercise → a position/setup note the engine cannot detect, carried wherever the exercise is
-    prescribed or shown.
-- **Qualifier type PROGRESSION RULE (pain-gated).** Enforceable only if a pain signal is captured (a check-in field or
-  a per-session flag); otherwise advisory. Q27 decides the capture point.
-
-> **Partly SUPERSEDED (2026-10-01, #363).** Bullet 1 (the capacity-ruling finding) is folded into #363: capacity is
-> the wrong quota key, and it stays a descriptor only. Bullet 2 (sided pairs voting twice) is moot once counting
-> leaves Rule 1. Bullet 3 (exposure never suppresses screening of a MEASURED region) STANDS and is retained below.
-
-**Findings after the v0.1 seed (2026-09-27, #339). Q27 stays OPEN.**
-- **Operator ruling: capacity is the wrong quota key for this program.** Here the stability/strength split is a
-  misnomer, because all "stability" work is strength work. Capacity STAYS in the taxonomy as a descriptor (#76's
-  external grounding; other users may need it), but it is not necessarily what a slot keys on. This narrows the
-  slot-keying question above; it does not close it.
-- **Sided pairs vote twice in Rule 1.** On 09-21 the split was 5–3 for Stability per MOVEMENT but a 6–6 tie in VOTES.
-  The slot-order tie-break resolved it to Stability, and the Deficit KB RDL's move off primary `hinge` (#338) alone
-  decided the tie. Folded in here rather than fixed separately, because dominant-capacity counting itself is under
-  review.
-- **Training exposure must not suppress screening (generalised from #338).** Tagging an exercise to a region makes the
-  router prescribe that exercise instead of the region's screen, and logging it removes the region from probe
-  candidates. Principle for the redesign: exposure never suppresses periodic screening of a MEASURED region.
-
-**Scope after #363 (2026-10-01).** Q27 is narrowed to the v1 VOCABULARY and how each axis is MEASURED. It no longer
-decides what a quota slot keys on (superseded by #363) or how restrictions are recorded (moved to Q197).
-- **v1 vocabulary (ratio-first axes):** ER:IR, adductor:abductor, plantarflexion; hamstring is a candidate.
-- **Region tags stay load-bearing.** Substitution equivalence in Q197's adjudication runs on them, so the tags keep
-  their job even though capacity no longer keys the quota.
-- **Exposure never suppresses screening of a MEASURED region** (retained from #338; see Findings above, bullet 3).
-
-**Sub-question (2026-10-01): MEASUREMENT ROUTE per axis.** The ER:IR comparison above is not like-for-like. The
-logged 0.56 is a cable-load ratio (6.25 : 11.25 kg); the 0.66–0.75 band is an isokinetic-torque reference. Different
-units, so the gap between them does not size a deficit. Each axis needs a route chosen:
-- **(i) Log-derived ratio.** Same setup both sides, e1RM-normalised, judged against an INTERNAL band (the user's own
-  baseline and trend). Literature is used for DIRECTION only, never as a threshold.
-- **(ii) Protocol probe.** A handheld dynamometer or squeeze test, read against literature norms. The norm and the
-  measurement share a unit, so the literature band is usable as a threshold.
-
-Decide per axis (ER:IR, adductor:abductor, plantarflexion, hamstring if admitted). **Pending operator:** whether a
-dynamometer or squeeze gauge is available. Route (ii) cannot be chosen for any axis until that is known.
-
-**Resolved (11 Oct 2026, #420 and #421): vocabulary and routes.** The vocabulary is
-`shoulder_er`, `shoulder_ir`, `hip_adduction`, `hip_abduction`, `ankle_plantarflexion` and `knee_flexion` (absolute +
-LSI, no H:Q) in group H, with `er_ir` and `add_abd` as the declared ratios and `reference_kind` on Measure and Ratio.
-The gate fails closed, and every v1 measure and ratio is `internal` until a norm matching its protocol is cited.
-Dip is ungated. The routes: (i) log-derived against an INTERNAL band, declared not built; (ii) protocol probe, with
-dynamometry EP-administered (the equipment question is answered: no HHD purchase; a BP cuff for the squeeze is an
-optional operator buy). The interim no-pattern verdicts for calf, hip abduction and shoulder ER/IR are retired. The V2
-prod read was clean. Companion text: `docs/capability-taxonomy-v1.md`.
-
-**State:** OPEN, narrowed to what is left. (1) **Prod re-seed: DONE (#422).** (2) **Provenance migration, held for the operator:**
-`capability_observations` needs `administered_by`, `instrument` and `protocol` (nullable, closed vocabularies,
-`SCHEMA.md` paired) before the `reference_kind` match rule or `same_protocol` can be evaluated. (3) **Route (i)
-computation:** not built. (4) **`knee_flexion` has no declared measure.** (5) **Norms:** every band is "to populate";
-a measure flips to `literature` only with a cited, protocol-matched norm, and nothing is queue-eligible until one is
-grounded and admitted. The silent skip of an unknown region key in the constraint engine is spun out as Q232.
-
----
-
 ## Q28. `Pullover` is not a constraint-neutral probe subject — the resolver probe passes by luck
 
 `backend/probe_resolver.py` `_RESOLVER_PROBE` labels its subjects "out-of-history AND constraint-neutral",
@@ -3672,6 +3548,127 @@ rejected: redefining coverage as "zero wrong tags" forfeits the ability to detec
 (c) — the taxonomy bump — is deliberately NOT done inside a tag confirmation (the log must not shape the
 screen); it is spun out to Q27 as a grounded v1 design pass. Interim: calf / shoulder ER-IR / Copenhagen /
 hip add-abd are adjudicated no-pattern.
+
+---
+
+## Q27. Capability_Taxonomy v0 has no axis-type for joint-level STRENGTH RATIOS — grounded v1 family
+
+Four independent instances in one user's last-90d log point at one structural hole: v0 is a movement-PATTERN
+and screening vocabulary with no axis-type for **joint-level strength / strength-ratio** reads.
+
+| Movement | v0 offers | Why it fails |
+|----------|-----------|--------------|
+| Copenhagen Plank | nothing | Adductor strength; `frontal_single_leg_stability` is closed-chain balance, `anti_lateral_flexion` is trunk — a side-lying adduction load demonstrates neither |
+| Shoulder ER / IR | `shoulder_mobility` | Cable ER at load is STRENGTH; shoulder_mobility is a mobility screen — wrong capacity |
+| Hip Add / Abd (machine) | nothing | Open-chain frontal-hip strength; not `frontal_single_leg_stability` (closed-chain stability) |
+| Calf raise | `ankle_df` — REJECT | Plantarflexion STRENGTH ≠ dorsiflexion MOBILITY (category error, #76) |
+
+This is a family, externally grounded, carrying some of the best-evidenced return-to-sport metrics there are:
+**adductor:abductor** and the adductor squeeze (groin injury in field sport, HAGOS), **shoulder ER:IR** ratio
+(overhead athlete / rotator cuff, isokinetic literature), **plantarflexion** strength. Four hits from one log
+is what makes it structural, not anecdotal.
+
+**Live impact:** the user's ER:IR ≈ 6.25 : 11.25 = **0.56** against a ~0.66–0.75 reference — a quantified,
+flagged deficit he is actively fortifying, and the platform currently has no axis to represent it.
+`capability_state` is already per-region-per-side, so ratio reads are natively supported once the vocabulary
+exists — the schema is ready, the vocabulary is not.
+
+**Interim axes landed (2026-09-26, #334/#336).** `shoulder_er_ir`, `hip_adduction` and `knee_flexion` (plus
+`trunk_lateral_flexion` and `dip`) now exist as STRENGTH regions so tagged exercises stop falling to the keyword
+fallback. They are probe-inert bolt-ons, explicitly NOT this question's answer. Shoulder ER/IR, Copenhagen, Hip
+Adduction and the leg curls moved off no-pattern onto them; calf and hip abduction stay no-pattern. The v1 pass
+supersedes them.
+
+> **SUPERSEDED (2026-10-01, #363).** The slot-keying question below (options a / b / c) is moot: a quota slot is
+> satisfied by doing the PLANNED session, not by the logged session's capacity, plane or region set. Kept verbatim as
+> the record of how the question was framed.
+
+**Scope extension (2026-09-26): what does a quota slot KEY on?** Region definitions alone do not close this.
+The decompression phase exposed a second hole: its real intent is a PLANE PERMISSION on strength work ("strength in
+these planes, not the provocative ones"), and a `capacity` slot (Rule 1, `engine/resolver.py`) counts every
+STRENGTH-dominant workout the same, provocative-plane work included. Regions already carry a `Plane`, so v1 must also
+decide the slot key: **(a)** capacity alone (today), **(b)** capacity × plane, or **(c)** an explicit region
+allow/deny set per slot. Which one is enough turns on an operator input not yet given: are the currently provocative
+loads plane-level (e.g. all transverse loading) or finer (specific regions within a plane)? If Q27 closes on region
+definitions alone, the phase gets rebuilt on the same flawed base.
+
+**Scope note (2026-09-27): the real restrictions are not planes.** The operator's current restrictions, recorded as
+evidence for the slot-keying question above:
+1. **Lumbar** (clinician: Dr Aubrey). DENY end-of-range flexion COMBINED with rotation. All other lumbar movement is
+   PERMITTED under a pain-gated progression rule (start small, build up; pain halts progression). Heavy or end-range
+   hinge (flexion without rotation) is clinically cleared; whether an operator-chosen ceiling remains is PENDING the
+   operator. Deficit KB RDL (20 kg, flossing, #338) sits inside the clearance.
+2. **L knee → squat.** RANGE-LIMITED (depth). Likely extends to leg-press depth and step-up height.
+3. **L thumb.** EXERCISE- or POSITION-specific, only under direct thumb load: renegade row (worst), dead bug with a
+   dumbbell overhead (angle), dip hand position. Carries and pulls are unaffected.
+
+None of these is plane-level. That is evidence against option **(b) capacity × plane**: planes never appear in the
+restrictions actually in force.
+
+> **MOVED to Q197 (2026-10-01).** The restriction-record design below, including the pain-gated progression
+> qualifier and its capture point, now lives in Q197 (a "pain" reason on a deviation is the per-session capture
+> point). The restrictions listed above stay here as evidence. The counting half of "Separate counting from
+> permission" is SUPERSEDED by #363: counting keys on plan-conformance, not on region/capacity.
+
+Design direction (chat proposal, not ruled):
+- **Separate counting from permission.** Quota counting keys on region/capacity and stays ungated. Hevy exposes load
+  but not range, depth or hand position, so range gates cannot be enforced at count time.
+- **Permission lives in a restriction record**, enforced at prescription, probe and warning time:
+  `{target, qualifier, side, reason, source, review_date}`.
+  - `target` = region → a load ceiling and/or a range limit (expressible as "end-range permitted below load X").
+  - `target` = movement combination → deny (e.g. EOR flexion + rotation).
+  - `target` = exercise → a position/setup note the engine cannot detect, carried wherever the exercise is
+    prescribed or shown.
+- **Qualifier type PROGRESSION RULE (pain-gated).** Enforceable only if a pain signal is captured (a check-in field or
+  a per-session flag); otherwise advisory. Q27 decides the capture point.
+
+> **Partly SUPERSEDED (2026-10-01, #363).** Bullet 1 (the capacity-ruling finding) is folded into #363: capacity is
+> the wrong quota key, and it stays a descriptor only. Bullet 2 (sided pairs voting twice) is moot once counting
+> leaves Rule 1. Bullet 3 (exposure never suppresses screening of a MEASURED region) STANDS and is retained below.
+
+**Findings after the v0.1 seed (2026-09-27, #339). Q27 stays OPEN.**
+- **Operator ruling: capacity is the wrong quota key for this program.** Here the stability/strength split is a
+  misnomer, because all "stability" work is strength work. Capacity STAYS in the taxonomy as a descriptor (#76's
+  external grounding; other users may need it), but it is not necessarily what a slot keys on. This narrows the
+  slot-keying question above; it does not close it.
+- **Sided pairs vote twice in Rule 1.** On 09-21 the split was 5–3 for Stability per MOVEMENT but a 6–6 tie in VOTES.
+  The slot-order tie-break resolved it to Stability, and the Deficit KB RDL's move off primary `hinge` (#338) alone
+  decided the tie. Folded in here rather than fixed separately, because dominant-capacity counting itself is under
+  review.
+- **Training exposure must not suppress screening (generalised from #338).** Tagging an exercise to a region makes the
+  router prescribe that exercise instead of the region's screen, and logging it removes the region from probe
+  candidates. Principle for the redesign: exposure never suppresses periodic screening of a MEASURED region.
+
+**Scope after #363 (2026-10-01).** Q27 is narrowed to the v1 VOCABULARY and how each axis is MEASURED. It no longer
+decides what a quota slot keys on (superseded by #363) or how restrictions are recorded (moved to Q197).
+- **v1 vocabulary (ratio-first axes):** ER:IR, adductor:abductor, plantarflexion; hamstring is a candidate.
+- **Region tags stay load-bearing.** Substitution equivalence in Q197's adjudication runs on them, so the tags keep
+  their job even though capacity no longer keys the quota.
+- **Exposure never suppresses screening of a MEASURED region** (retained from #338; see Findings above, bullet 3).
+
+**Sub-question (2026-10-01): MEASUREMENT ROUTE per axis.** The ER:IR comparison above is not like-for-like. The
+logged 0.56 is a cable-load ratio (6.25 : 11.25 kg); the 0.66–0.75 band is an isokinetic-torque reference. Different
+units, so the gap between them does not size a deficit. Each axis needs a route chosen:
+- **(i) Log-derived ratio.** Same setup both sides, e1RM-normalised, judged against an INTERNAL band (the user's own
+  baseline and trend). Literature is used for DIRECTION only, never as a threshold.
+- **(ii) Protocol probe.** A handheld dynamometer or squeeze test, read against literature norms. The norm and the
+  measurement share a unit, so the literature band is usable as a threshold.
+
+Decide per axis (ER:IR, adductor:abductor, plantarflexion, hamstring if admitted). **Pending operator:** whether a
+dynamometer or squeeze gauge is available. Route (ii) cannot be chosen for any axis until that is known.
+
+**Resolved (11 Oct 2026, #420 and #421): vocabulary and routes.** The vocabulary is
+`shoulder_er`, `shoulder_ir`, `hip_adduction`, `hip_abduction`, `ankle_plantarflexion` and `knee_flexion` (absolute +
+LSI, no H:Q) in group H, with `er_ir` and `add_abd` as the declared ratios and `reference_kind` on Measure and Ratio.
+The gate fails closed, and every v1 measure and ratio is `internal` until a norm matching its protocol is cited.
+Dip is ungated. The routes: (i) log-derived against an INTERNAL band, declared not built; (ii) protocol probe, with
+dynamometry EP-administered (the equipment question is answered: no HHD purchase; a BP cuff for the squeeze is an
+optional operator buy). The interim no-pattern verdicts for calf, hip abduction and shoulder ER/IR are retired. The V2
+prod read was clean. Companion text: `docs/capability-taxonomy-v1.md`.
+
+**Resolution (19 Oct 2026, #427 to #430).** The five remainders are built, on one branch whose migration is held for the operator. Provenance (`administered_by`, `instrument`, `protocol`, all-or-nothing, NULL = `internal` forever) and a declared `side` on exercise region tags are #427; route (i), the log-derived strength and ratios with same-day pairing, and the `/engine/ratios` and `/engine/log-strength` surfaces and the MCP tool `get_capability_ratios`, are #428; the norms (ER:IR, shoulder ER and IR per body weight, adductor:abductor, the squeeze by dynamometer and by cuff, the single-leg heel raise) admitted as data with citations, the gate that shows a band only on a protocol match, G3 amended to "no number fires a verdict", `knee_flexion` observable on an isometric HHD and the single-leg hamstring bridge with its declared three-part strain-risk outcome, and the cuff-ceiling caveat are #429. Residual, named here and not as a new question: a NordBord / eccentric measure for `knee_flexion` is pending the EP's instrument, and the heel-rise cadence was confirmed from the accepted manuscript only (not the published PDF). The unit of Westrick's norm is not stated in the paper and is recorded as a dimensionless force / body-weight fraction, awaiting the operator's ratification (#429). After the operator releases the migration: `seed_exercise_region_tags.py 1 --dry-run`, read `pending_side_updates`, then `--confirm`. The silent skip of an unknown region key in the constraint engine stays spun out as Q232.
+
+**State:** DONE → #430
 
 ---
 

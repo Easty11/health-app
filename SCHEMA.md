@@ -47,6 +47,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 046 — mcp_oauth_clients + mcp_oauth_tokens  tokens FK to users (CASCADE) and to clients (CASCADE) — the persisted MCP OAuth provider: client registrations and access/refresh tokens stored as sha256 hashes, with expiry and revocation (Q196); HELD for operator release
 047 — session_rpe_observations  FK to users (CASCADE) — source-neutral, insert-only, capture-timed per-activity RPE (raw + declared scale + CR-10, UTC bout window, source-specific feel, provenance); unique (user, source, source_activity_ref, captured_at); Garmin rows copied verbatim from `garmin_activity_selfevals` (read-only from here); HELD for operator release
 048 — spo2_nights + spo2_samples + breathing_disruption_intervals  FK to users (CASCADE) and to spo2_nights (CASCADE) — raw Garmin overnight SpO2 capture: a nightly parent (unique user, night, source) with sleep window, reading_count and gap_count, one row per SpO2 epoch exactly as sent, and the raw breathing-disruption intervals (Q150); HELD for operator release
+049 — capability provenance + tag side  four additive nullable columns (`capability_observations.administered_by/instrument/protocol`, `exercise_region_tags.side`) + index `(user_id, region_key, protocol)` — Q27 v1 provenance; HELD for operator release (hold (a))
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -787,6 +788,7 @@ CREATE TABLE exercise_region_tags (
     taxonomy_version           VARCHAR(20) NOT NULL DEFAULT 'v0',             -- mirrors TAXONOMY_VERSION
     source                     VARCHAR(20) NOT NULL DEFAULT 'llm_proposed',   -- llm_proposed | human_confirmed
     confirmed_at               TIMESTAMPTZ,
+    side                       VARCHAR(20),             -- left | right; NULL = bilateral or unknown (Q27 v1, migration 705a17c84d9a)
     created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (hevy_exercise_template_id, region_key)
@@ -795,6 +797,8 @@ CREATE TABLE exercise_region_tags (
 CREATE INDEX ix_exercise_region_tags_region_key
     ON exercise_region_tags (region_key);
 ```
+
+**`side` (Q27 v1, migration `705a17c84d9a`).** Which limb a sided (L/R) template loads, so route (i) (`engine/log_strength.py`) can pair a side with its counterpart. Written ONLY from the `side` the reference declares on an entry (`reference/exercise_region_tags_v0.json`, by `seed_exercise_region_tags.py`, an operator run) and NEVER derived by stripping " L"/" R" from a title. A sided variant's `side` is stamped on the rows it inherits from its parent; a planned entry that declares no `side` leaves the column untouched (the seeder never clears it). Nullable, no backfill.
 
 ### 017 — cbti_blocks
 
@@ -906,6 +910,9 @@ CREATE TABLE capability_observations (
     source            VARCHAR(30) NOT NULL,    -- self_report | catapult | hevy | polar | manual
     confidence        VARCHAR(20) NOT NULL DEFAULT 'likely',   -- certain | likely | guessing
     context           JSON,                    -- {block, load, fatigue_state, notes, session_id}
+    administered_by   VARCHAR(20),             -- self | ep | physio | clinician   } provenance, ALL-OR-NOTHING
+    instrument        VARCHAR(40),             -- hhd | sphygmomanometer | ...     } (Q27 v1, migration 705a17c84d9a)
+    protocol          VARCHAR(60),             -- a key of engine/protocols.py     }
     taxonomy_version  VARCHAR(20) NOT NULL DEFAULT 'v0',
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
     -- NO updated_at, by construction. See "Append-only" above.
@@ -917,7 +924,11 @@ CREATE INDEX ix_capability_obs_user_region_side_date
     ON capability_observations (user_id, region_key, side, observed_on);
 CREATE INDEX ix_capability_obs_user_date
     ON capability_observations (user_id, observed_on);
+CREATE INDEX ix_capability_obs_user_region_protocol
+    ON capability_observations (user_id, region_key, protocol);
 ```
+
+**Provenance (Q27 v1).** `administered_by`, `instrument` and `protocol` say HOW a value was produced, so the reference gate (`engine/reference.py`) can decide whether a literature band applies to it. They are **all-or-nothing**: all three given or all three NULL, enforced in `engine/observations.py::record_observation` (a partial set is refused 422), with `instrument` required to equal the protocol's declared instrument and the observed `(region, measure)` required to be a target of that protocol. `administered_by` and `instrument` are closed vocabularies in code; `protocol` is a key of `engine/protocols.py`. **A row with all three NULL is legal and evaluates as `internal` forever** (the #421 fail-closed rule, now enforceable): legacy rows are never backfilled and never read as literature. Not a CHECK constraint: the vocabularies are versioned with the code, not the schema.
 
 **Seeded measures (v0)** — narrow first; broadening is additive and needs no schema change:
 

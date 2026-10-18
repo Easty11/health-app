@@ -68,10 +68,10 @@
     {"template_id": "d724248e-29a8-41b0-8463-e3d8f8fff8c1", "title": "Deficit KB RDL", "regions": [{"key": "hip_flexion_pc_length", "role": "primary"}, {"key": "hinge", "role": "secondary"}], "note": "#338: 20 kg on a wedge used as posterior-chain FLOSSING, not loaded hinge - the tag is bound to that intended use; heavy deficit work gets its own template."},
     {"template_id": "cd1268a6-a90d-42fd-b99a-2f800dab5a00", "title": "Seated Leg Press", "regions": [{"key": "squat", "role": "primary"}]},
     {"template_id": "500ad271-19e6-4894-9f58-039e77da0e9c", "title": "Assisted Nordic Curls", "regions": [{"key": "knee_flexion", "role": "primary"}]},
-    {"template_id": "bb1aa298-c18a-4702-b4c8-1b8dc97b28a8", "title": "Kneeling Leg Curl L", "regions": [{"key": "knee_flexion", "role": "primary"}]},
-    {"template_id": "14dcc62b-4548-4cb9-a935-e07885969dda", "title": "Kneeling Leg Curl R", "regions": [{"key": "knee_flexion", "role": "primary"}]},
-    {"template_id": "587000b5-f27c-4520-aef0-bf67f74fd4b4", "title": "Copenhagen Plank L", "regions": [{"key": "hip_adduction", "role": "primary"}]},
-    {"template_id": "b091e9d8-54c6-4083-aae3-00384e8a571a", "title": "Copenhagen Plank R", "regions": [{"key": "hip_adduction", "role": "primary"}]},
+    {"template_id": "bb1aa298-c18a-4702-b4c8-1b8dc97b28a8", "title": "Kneeling Leg Curl L", "side": "left", "regions": [{"key": "knee_flexion", "role": "primary"}]},
+    {"template_id": "14dcc62b-4548-4cb9-a935-e07885969dda", "title": "Kneeling Leg Curl R", "side": "right", "regions": [{"key": "knee_flexion", "role": "primary"}]},
+    {"template_id": "587000b5-f27c-4520-aef0-bf67f74fd4b4", "title": "Copenhagen Plank L", "side": "left", "regions": [{"key": "hip_adduction", "role": "primary"}]},
+    {"template_id": "b091e9d8-54c6-4083-aae3-00384e8a571a", "title": "Copenhagen Plank R", "side": "right", "regions": [{"key": "hip_adduction", "role": "primary"}]},
     {"template_id": "97f85861-2a0b-45e3-a85e-401b0e0fd403", "title": "Weighted Lateral Flexion/Ext L", "regions": [{"key": "trunk_lateral_flexion", "role": "primary"}]},
     {"template_id": "668914db-e8b2-42aa-94a9-53e2f149b229", "title": "Weighted Lateral Flexion/Ext R", "regions": [{"key": "trunk_lateral_flexion", "role": "primary"}]},
 
@@ -107,13 +107,13 @@
   ],
 
   "sided_variants": [
-    {"template_id": "71257f1e-0c2c-4a33-aed1-83f0be54783e", "title": "Single Arm Lat Pulldown L", "parent_template_id": "2EE45F81"},
-    {"template_id": "afdbdf48-b8eb-4023-9809-465dc7e63b3a", "title": "Single Arm Lat Pulldown R", "parent_template_id": "2EE45F81"},
-    {"template_id": "6686a46d-8687-4385-996f-f71fc47be330", "title": "Single Leg Hip Thrust L", "parent_template_id": "68CE0B9B"},
-    {"template_id": "7fadcf65-6f0a-4a22-a7b3-5621c09398d4", "title": "Single Leg Hip Thrust R", "parent_template_id": "68CE0B9B"},
-    {"template_id": "934c52a0-8c5a-4a05-a149-4752bcdb6e61", "title": "Shoulder Internal Rotation L", "parent_template_id": "b4bab549-a143-4186-9615-249165e5a4a2"},
-    {"template_id": "6ba537fa-d7dd-41e6-bc54-e5c13f8cb4f9", "title": "Shoulder Internal Rotation R", "parent_template_id": "b4bab549-a143-4186-9615-249165e5a4a2"},
-    {"template_id": "c06b41ae-4ebf-4675-9c27-d4a367e101ed", "title": "Shoulder External Rotation L", "parent_template_id": "f5f7ecfb-68b8-44d6-99c4-f2dc7b183072"},
-    {"template_id": "1af7297b-ba1f-429e-aef2-e78250e403b2", "title": "Shoulder External Rotation R", "parent_template_id": "f5f7ecfb-68b8-44d6-99c4-f2dc7b183072"}
+    {"template_id": "71257f1e-0c2c-4a33-aed1-83f0be54783e", "title": "Single Arm Lat Pulldown L", "side": "left", "parent_template_id": "2EE45F81"},
+    {"template_id": "afdbdf48-b8eb-4023-9809-465dc7e63b3a", "title": "Single Arm Lat Pulldown R", "side": "right", "parent_template_id": "2EE45F81"},
+    {"template_id": "6686a46d-8687-4385-996f-f71fc47be330", "title": "Single Leg Hip Thrust L", "side": "left", "parent_template_id": "68CE0B9B"},
+    {"template_id": "7fadcf65-6f0a-4a22-a7b3-5621c09398d4", "title": "Single Leg Hip Thrust R", "side": "right", "parent_template_id": "68CE0B9B"},
+    {"template_id": "934c52a0-8c5a-4a05-a149-4752bcdb6e61", "title": "Shoulder Internal Rotation L", "side": "left", "parent_template_id": "b4bab549-a143-4186-9615-249165e5a4a2"},
+    {"template_id": "6ba537fa-d7dd-41e6-bc54-e5c13f8cb4f9", "title": "Shoulder Internal Rotation R", "side": "right", "parent_template_id": "b4bab549-a143-4186-9615-249165e5a4a2"},
+    {"template_id": "c06b41ae-4ebf-4675-9c27-d4a367e101ed", "title": "Shoulder External Rotation L", "side": "left", "parent_template_id": "f5f7ecfb-68b8-44d6-99c4-f2dc7b183072"},
+    {"template_id": "1af7297b-ba1f-429e-aef2-e78250e403b2", "title": "Shoulder External Rotation R", "side": "right", "parent_template_id": "f5f7ecfb-68b8-44d6-99c4-f2dc7b183072"}
   ]
 }
