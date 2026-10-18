@@ -24,6 +24,7 @@ from datetime import date, timedelta
 from typing import Any
 
 import garmin_selfeval
+import garmin_spo2
 from connectors.garmin import GarminReconnectError
 from database import SessionLocal
 import models
@@ -52,6 +53,23 @@ def _selfeval_step(db, uid: int, factory) -> dict[str, Any]:
         return {"error": f"{type(exc).__name__}: {exc}"}
 
 
+_SPO2_COUNTS = ("nights_fetched", "nights_inserted", "nights_replaced", "nights_unchanged", "nights_empty",
+                "readings", "skipped_epochs", "duplicate_epochs", "skipped_needs_refresh", "errors")
+
+
+def _spo2_step(db, uid: int, factory, start: date, end: date) -> dict[str, Any]:
+    """The Garmin overnight SpO2 capture (Q150) for one user: soft-fail by construction, the same shape as
+    `_selfeval_step`. It runs AFTER `sync_hrv_for_user`, which has refreshed the token and committed it
+    back, through a client that cannot refresh (#361). Any failure -> `{"error": ...}`, session rolled
+    back; it never changes the user's HRV outcome or the self-evaluation capture."""
+    try:
+        return garmin_spo2.sync_user(db, uid, start=start, end=end, factory=factory)
+    except Exception as exc:  # noqa: BLE001 -- soft-fail: a SpO2 failure never costs the HRV sweep
+        db.rollback()
+        logger.warning("garmin sweep: user %s spo2 step failed: %s", uid, type(exc).__name__)
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
 def sweep_garmin_hrv(
     db,
     *,
@@ -60,6 +78,7 @@ def sweep_garmin_hrv(
     start: date | None = None,
     end: date | None = None,
     selfeval_factory=garmin_selfeval.ProbeSource,
+    spo2_factory=garmin_spo2.ProbeSource,
 ) -> dict[str, Any]:
     """Pull + upsert Garmin HRV for every connected user (or just `only_user_id`) over the
     window, isolating per-user failures. Returns an aggregate summary (mirrors `refresh_load`).
@@ -72,7 +91,12 @@ def sweep_garmin_hrv(
     (Q209) into the source-neutral sRPE store from the freshly written-back token, through a no-refresh client: it skips a user whose
     token is dead (`reconnect_required`: nothing fresh to read with), is soft-fail, and reports its
     counts under `per_user[uid]["selfeval"]` and summed under `summary["selfeval"]`
-    (`skipped_needs_refresh` is the visible sign of a stale token)."""
+    (`skipped_needs_refresh` is the visible sign of a stale token).
+
+    After the self-evaluation step, `garmin_spo2` captures the user's overnight SpO2 (Q150) for the same
+    wake-date window, raw, through the same no-refresh seam. It is its own soft-fail step: its counts sit
+    under `per_user[uid]["spo2"]` and summed under `summary["spo2"]`, and a failure in it never changes the
+    user's HRV or self-evaluation outcome."""
     today = garmin_wake_day()   # AEST wake-day, not UTC (#327 follow-up)
     end = end or today
     start = start or (end - timedelta(days=days))
@@ -106,6 +130,7 @@ def sweep_garmin_hrv(
             db.rollback()
         if per_user[uid]["status"] != "reconnect_required":
             per_user[uid]["selfeval"] = _selfeval_step(db, uid, selfeval_factory)
+            per_user[uid]["spo2"] = _spo2_step(db, uid, spo2_factory, start, end)
 
     selfeval_total = {k: 0 for k in _SELFEVAL_COUNTS}
     for detail in per_user.values():
@@ -116,6 +141,15 @@ def sweep_garmin_hrv(
         elif isinstance(ev, dict):
             selfeval_total["errors"] += 1
 
+    spo2_total = {k: 0 for k in _SPO2_COUNTS}
+    for detail in per_user.values():
+        sp = detail.get("spo2")
+        if isinstance(sp, dict) and "error" not in sp:
+            for k in _SPO2_COUNTS:
+                spo2_total[k] += sp.get(k, 0)
+        elif isinstance(sp, dict):
+            spo2_total["errors"] += 1
+
     return {
         "users_attempted": len(user_ids),
         "users_succeeded": succeeded,
@@ -123,6 +157,7 @@ def sweep_garmin_hrv(
         "from": start.isoformat(),
         "to": end.isoformat(),
         "selfeval": selfeval_total,
+        "spo2": spo2_total,
         "per_user": per_user,
     }
 
@@ -171,6 +206,14 @@ def main() -> int:
                     print(f"    selfeval: fetched={ev['fetched']} rated={ev['rated']} unrated={ev['unrated']} "
                           f"skipped_needs_refresh={ev['skipped_needs_refresh']} "
                           f"errors={ev['errors']}")
+                sp = detail.get("spo2", {})
+                if "error" in sp:
+                    print(f"    spo2: error ({sp['error']})", file=sys.stderr)
+                elif sp:
+                    print(f"    spo2: nights fetched={sp['nights_fetched']} inserted={sp['nights_inserted']} "
+                          f"replaced={sp['nights_replaced']} unchanged={sp['nights_unchanged']} "
+                          f"empty={sp['nights_empty']} readings={sp['readings']} "
+                          f"skipped_needs_refresh={sp['skipped_needs_refresh']} errors={sp['errors']}")
             else:
                 print(f"  user {uid}: {detail['status'].upper()} — {detail.get('error', '')}",
                       file=sys.stderr)

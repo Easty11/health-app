@@ -1053,37 +1053,6 @@ are now all `human_verified`. Cross-refs `#51`, `#194`.
 
 ---
 
-## Q93. Garmin recovery route: Health Sync bridge vs server-side connector
-
-Garmin does not write HRV to Health Connect (documented withhold list, corroborated by Apple Health
-omission). Two routes to Garmin recovery data:
-
-(a) Health Sync (healthsync.app) — third-party Android app, reads Garmin Connect, writes to Health
-Connect incl. HRV RMSSD (5-min intervals within the sleep window per Fitrockr's account of the Garmin
-Connect mobile path), VO2 Max, respiration, SpO2. No connector to build; credentials go to the vendor,
-not our DB; paid app; their status page documents repeated Garmin-side breakages.
-
-(b) Server-side connector on python-garminconnect — full derived scores (Body Battery, HRV status,
-Training Readiness, VO2 Max, training load). Requires the user's Garmin *password* at first login (no
-OAuth consent flow), stored refresh token, and we own the arms race.
-
-**State:** OPEN — decision deferred pending Deb's first sync (HR sample density, recordingMethod/device
-population for a Garmin writer). Owner: Luke.
-
----
-
-## Q94. Health Sync as a mirror writer
-
-If route (a) in `Q93` is taken, Garmin Connect and Health Sync both write Garmin-origin records to Health
-Connect under different dataOrigin values. This is the Withings-echo case governed by #35/#36/#37 and the
-#175 admission allow-list. Requires one-writer-per-data-type configuration or the admission list extended
-before Deb syncs, or she double-counts sleep/HR/steps.
-
-**State:** OPEN — contingent on `Q93` taking route (a); must be configured before Deb's first sync or she
-double-counts. Owner: Luke.
-
----
-
 ## Q95. Vendor and transport names where the meaning is a role
 
 Single question, multiple targets, distinct cost tiers:
@@ -2069,21 +2038,29 @@ Revisit once the loose router has real screen data flowing and tags are being co
 ## Q150. Oxygenation awareness capture — overnight SpO2 as a series, not a scalar [SAFETY-RELEVANT]
 
 Retrospective, morning-review awareness of overnight oxygenation for a CPAP-dependent user
-(ResMed AirMini — sealed, no SpO2 input, no clinician-grade export; verified dead end). On
-current hardware the Samsung wrist/ring path is the ONLY oxygenation source. Hardware path
-forward is owned separately, deliberately not specced here.
+(ResMed AirMini — sealed, no SpO2 input, no clinician-grade export; verified dead end).
+**Source (rewritten 18 Oct 2026, chat ruling):** the Garmin sleep payload, `wellnessEpochSPO2DataDTOList`
+(60 s epochs, each with a `readingConfidence`), read through the Lane A no-refresh client (#361) by the
+nightly Garmin sweep. The Samsung path is secondary: the ring is away on warranty, and its scraper posts
+only a scalar average. Hardware path forward is owned separately, deliberately not specced here.
 
 **What this is:** nightly SpO2 MINIMUM, count/duration of dips below a threshold (88% clinical
 convention, user-configurable), and dip timestamps — so mask-off / mask-shift desaturations
-are visible after the fact and trends are trackable over weeks.
+are visible after the fact and trends are trackable over weeks. **What is built is the raw capture
+that a detector will read; the detector itself is not designed** (see Findings: detector design is
+deferred until a baseline accrues).
 
 **Hard scope boundary — must be enforced in UI + framing:** NOT real-time alerting (cannot and
 must not wake the user), NOT a safety device, NOT a mask-failure backstop. The CPAP and its own
 alarms are the safety layer; this is pattern-awareness only, never positioned or relied on
 otherwise.
 
-**Storage shape (decided-in-brief, gated only on build):** series, not a scalar — a
-`hrv_readings`/`hrv_samples`-style parent+child (see `models.py:482–533`), NOT a mean.
+**Storage shape (built and released, `#425`):** a series, not a scalar —
+`spo2_nights` (user, night, source, the sleep window, `reading_count`, `gap_count`) with children
+`spo2_samples` (time, `spo2_pct`, `reading_confidence`, `epoch_duration_s`) and
+`breathing_disruption_intervals`, mirroring `hrv_readings`/`hrv_samples` (`SCHEMA.md` 048). Ingested raw:
+no filter, no confidence threshold, no derived metric.
+
 `SamsungHRVReading.spo2_average_pct` (`models.py:476`) is ACTIVELY WRONG for this purpose: a
 nightly mean masks the dips by construction. It is currently surfaced as the SpO2 figure in
 `context_builder.py:805`, `routers/recovery.py:65`, `routers/health.py:52`, and
@@ -2091,42 +2068,81 @@ nightly mean masks the dips by construction. It is currently surfaced as the SpO
 already reserves the metric: `'spo2'` is in `CANONICAL_METRIC_TYPES` (SCHEMA.md). SpO2 is
 therefore pulled OUT of the trim decision entirely — neither keep nor trim: it is REBUILD.
 
-**BLOCKING GATE — scraper-trace capability test (owned by `health-connect-app`, NOT answerable
-from this tree):** can the accessibility scraper extract the SAMPLE SERIES behind Samsung
-Health's sleep-oxygenation graph, or only the rendered summary tile?
-  - Trace reachable → event-detection (min + time-below + timestamps) is buildable → full scope.
-  - Summary only → best achievable is a coarse nightly minimum → ship that for TREND only;
-    event-detail deferred to next-hardware.
-  HC path is insufficient regardless (sparse daytime-mixed spot reads, gaps span mask-off
-  windows — verified). Cannot found event-detection on spots.
+**GATE: ANSWERED 16–17 Oct 2026, by a direct probe of Garmin's own payload, not by the scraper trace
+test** (which stays unrun and is no longer the gate). The question was whether the SAMPLE SERIES is
+reachable; for Garmin on user 1 it is. Evidence, with the exact pathway (FEEDBACK section 17; each
+negative below is only as broad as its scope):
+  - *Pathway.* `GET /userprofile-service/socialProfile` (the display name), then `GET
+    /wellness-service/wellness/dailySleepData/{displayName}?date=D&nonSleepBufferMinutes=60` (the
+    library's `get_sleep_data`), through the no-refresh client; one profile GET plus one GET a night.
+    Element layout: `epochTimestamp` (an ISO GMT string), `spo2Reading`, `readingConfidence`,
+    `epochDuration` 60, plus a profile id and device id that are not recorded anywhere.
+  - *Event night* (wake-date 16 Oct; sleep 15 Oct 22:39:28 to 16 Oct 04:31:28 AEST): **350 readings, 1
+    gap** (02:27 and 02:28 missing), median cadence 60 s. *Control night* (wake-date 15 Oct): **439
+    readings, 0 gaps.** The payload's own summary scalars match the app on both nights (lowest 85 / 90,
+    average 97 / 98).
+  - *The daily SpO2 endpoint is hourly-only and insufficient.* `/wellness-service/wellness/daily/spo2/{date}`
+    returned 24 hourly averages a day; `spO2SingleValues` and `continuousReadingDTOList` were null on all
+    three dates probed (14, 15, 16 Oct). Its hourly minimum was 94 or 95 against day-lows of 85 and 87: the
+    averaging hides exactly the dips Q150 is about. That is a negative for that endpoint, these dates, this
+    account.
+  - *Health Connect is not the route, and is unverified as a source.* The companion never fetches or posts
+    `OxygenSaturation`, so `health_connect_record_sources` holds no `oxygen_saturation` row for user 1 (an
+    operator query, 16 Oct: zero rows) and that says nothing about what Garmin writes. "Garmin's Health Connect
+    SpO2 is spot-only at best" is chat's ruling and is NOT verified from this tree.
 
-  **In-tree evidence, not an answer:** as of the last integration the scraper POSTs only a scalar
-  `spo2_average_pct` to `routers/samsung_hrv.py` (payload + bounds at `samsung_hrv.py:49,72`) —
-  no SpO2 series field exists. That places the scraper on the "summary" side *today*, but it does
-  NOT settle the ceiling: a scraper that aggregates a series it CAN see is indistinguishable from
-  one that can only read the tile, from this end. Only a trace test against a live sleep-oxygenation
-  graph in `health-connect-app` distinguishes them. That test is the gate; it is unseeable here.
+**Findings (chat rulings on the probe result; one event night and one control night, a wrist sensor, 60 s
+epochs, the event's timing as the operator reported it: awake about 03:00 to 03:10, detach time unknown):**
+  - **The app-summary minimum came from sleep onset, not the 03:00 hose event.** The night's lowest reading
+    was 85 at 15 Oct 23:10, about four hours before the awakening.
+  - **The event produced no dip.** 02:45 to 03:15 is 31 consecutive readings, minimum 94 (03:09), typically 97;
+    the watch kept sampling while the operator was awake. Nothing was below 90 after 02:18.
+  - **An 88% threshold would fire on onset noise.** 15 readings were under 90 on the event night (10 between 22:42
+    and 23:19, 5 between 01:57 and 02:18), 8 at or below 88 (22:48, 23:06, 23:07, 23:08, 23:10, 23:18, 02:06,
+    02:18), and none in the event window; the control night had none under 90. Consecutive epochs swing 3 to 5
+    points at onset, and there is a run of 100 at 02:08 to 02:11.
+  - **`breathingDisruptionData`** had 10 intervals on the event night and 2 on the control (`value` 0 on both
+    control intervals). Its scale is undocumented, so it is stored raw and not interpreted. `readingConfidence`
+    is stored and not yet examined; its scale is undocumented too.
+  - **Detector design is deferred until a baseline accrues.** No threshold, no dip count, no summary and no
+    minimum is surfaced anywhere (no UI, no MCP tool).
+
+**Scope fit with #258 (chat ruling).** SpO2 is treated as withheld from Health Connect (chat's ruling: the companion
+never posts it, and Garmin's Health Connect SpO2 is spot-only at best; the second half is unverified, see the Health
+Connect point above), so it sits inside #258's "withheld metrics only" scope. Pulling the sleep payload for SpO2 does
+NOT decide Q129: sleep stages stay on Health Connect.
 
 **GUARDRAIL — false reassurance is the critical failure mode for this user:** never render a
 night "fine"/green on sparse or thin coverage. Absence of a recorded dip is NOT absence of a dip.
 Every oxygenation surface must show coverage/confidence and degrade to "minimum recorded: X%,
 coverage thin" rather than an unearned all-clear.
 
+**Coverage for the guardrail (chat review of PR #392, 18 Oct 2026).** `gap_count` is accepted as built: it counts the places
+where the series has a hole, not how long the holes are. The eventual guardrail needs MISSING MINUTES (how much of the
+night has no reading), which is derivable from `spo2_samples` (the epochs expected across the night, less the ones stored).
+Not built now: no surface exists yet to need it.
+
 **Value even at coarse resolution:** the AirMini gives zero SpO2 visibility. A consistent nightly
 minimum alone surfaces mask-effectiveness drift over weeks, clustering of bad nights, and the
 effect of a mask/cushion change — the near-term win is retrospective trend.
+*(Written before the probe. The one night observed where the summary minimum was not the event is in the
+Findings above; whether any derived trend tracks mask effectiveness is the deferred detector question.)*
 
 **Related:** skin-temp + respiration overnight traces are the same "capture withheld Samsung
 traces" family, same two-gate logic (withheld-from-HC + scraper-reachable), lower priority —
 separate ticket. The trim decision (SpO2 excised per above) is not yet registered in this repo.
 
-**RESOLVES WHEN:** trace-test answered (in `health-connect-app`); capture built to whatever
-resolution that allows; storage in series shape; guardrail enforced; SpO2 removed from the trim
-scope once that ticket lands. Full event-detection may remain gated on next hardware.
+**RESOLVES WHEN:** raw capture built and released (`#425`); the backfill run and
+its result (the earliest night found, the last date reached, why it stopped) recorded here (OWED, operator); the detector designed once a baseline has accrued;
+the guardrail enforced on any surface that is ever added; SpO2 removed from the trim scope once that ticket
+lands. Full event-detection may remain gated on next hardware.
 
-**State:** OPEN — blocked on the `health-connect-app` scraper-trace test. Storage is a schema
-migration → § Merge disposition hold (a): full human review, no self-merge. Not built this
-session (gate unanswered + shape gate-dependent + migration hold).
+**State:** OPEN — the gate is answered and the raw capture is built and released (`#425`; PR #392, hold (a) released by the operator on
+18 Oct 2026, conditional on backend and frontend CI green on the head). Owed (operator): after the deploy and migration are confirmed, the
+backfill (`scripts/garmin_spo2_backfill.py --user-id 1 --dry-run`, then for real) with its result recorded here (the earliest night found,
+the last date reached and why it stopped; an empty-streak stop is not proof that the history ends).
+**Post-release ruling (chat, 18 Oct 2026).** After the first nightly sweep (02:00 Brisbane, 19 Oct), Code checks the `spo2` counts and records the observed response for a not-yet-slept wake-date either way. If that date returns a non-200 and lands in `errors`, a follow-up classifies the case as "pending" (neither empty nor error) so `errors` stays zero on a healthy night.
+Detector design is deferred until a baseline accrues.
 
 ---
 
@@ -3056,6 +3072,34 @@ Reading it: `rpe_cr10` NULL on a row you rated means link (ii) failed (Garmin di
 **Note (18 Oct 2026, #424): the per-session RPE lookup this build needs is `reads/srpe_reads.py`.** `session_ratings` / `observed_ratings` return `{counted session -> (rpe_cr10, source, rung)}` for the counted sessions (canonical aerobic, minus non-training, minus a Hevy mirror, plus counted Hevy) and are the lookup for the `k` fit and the imputation; the build imports that door and does not write its own. What changed for the text above: `garmin_selfeval.find_link` and `selfeval_by_session` are gone (a rating is placed by overlap of its window with a counted session at read time, still needing a Health Connect row to exist for an aerobic session, or a counted Hevy workout), and the live-check SQL reads `garmin_activity_selfevals`, which no longer receives new data: read `session_rpe_observations` (`source = 'garmin'`, latest `captured_at` per `source_activity_ref`) instead. A rating the door cannot place is an unrated session, so it is not a pair for the fit.
 
 **State:** OPEN. Ruled in principle (operator, 10 Oct 2026) and refined by the two-class `k` and lag-window supersession terms (11 Oct 2026, #419); the build is pending, gated on at least 10 global pairs and due before January 2027. The manual-entry path and its migration are out of scope on the verification above, pending the one live check. Not blocking today. Related: #410, Q230, #409, #32, #305, #402, Q209, Q219, Q159, Q202 (closed into this, #419), Q203.
+
+---
+
+## Q233. Should an aggregator (Open Wearables or similar) replace, or sit beside, Lane A as the Garmin and Polar ingestion route?
+
+Raised 18 Oct 2026 by chat. Nothing is decided, nothing is built, and no recommendation is recorded here. The direct Garmin lane
+(Lane A: `connectors/garmin.py`, `garminconnect` 0.3.11, a token blob minted out of band) is live and carries what Garmin withholds
+from Health Connect, on household accounts only: #258 and #263 call it unofficial, ToS-grey and brittle, and both name a self-fronting
+aggregator as the durable, B2B-viable channel. Terra was evaluated in June 2026 and deferred on cost and dependency (the "Things tried
+and abandoned" list). Open Wearables (github.com/the-momentum/open-wearables) has now been put forward as a possible route for Garmin
+and Polar; the description in chat's brief is MIT-licensed, a unified wearable API including direct Garmin OAuth, and it is NOT read
+from this tree.
+
+What exists, for the ruling to be made against (verified in the tree on 13 Oct, the ingestion audit; the SpO2 line added 18 Oct):
+- **Lane A, direct and unofficial, live:** nightly HRV with the 5-minute series (`hrv_readings`/`hrv_samples`), per-activity
+  self-evaluation (#372), and overnight SpO2 with breathing intervals (Q150, held PR). Run by the nightly sweep (02:00 Brisbane) and a
+  card-open refresh; a token minted out of band and stored Fernet-encrypted; an account-mix-up guard (#358 to #362).
+- **Lane B, official, live:** Garmin Connect app to Health Connect to the companion app to `POST /health-connect/sync`: sleep with
+  stages, steps, heart rate and exercise sessions.
+- **Polar:** direct AccessLink v4 (#17); Polar's Health Connect data is dropped (#35).
+- **Carried by nothing:** Body Battery, training status and readiness, stress, respiration, activity FIT or per-second detail
+  (Body Battery is reachable on Lane A but unbuilt: #426).
+
+A ruling touches: #258 and #263 (their do-not-revisit clauses name the aggregator), Q129 (the Garmin sleep source), Q133 (done at
+#263; the cat-and-mouse watch continues), Q150 (its capture reads the sleep payload), and the manifest above. It closes when a ruling
+names the route, or routes, per provider.
+
+**State:** OPEN. Owner: Luke (ruling).
 
 ---
 
@@ -5044,6 +5088,39 @@ already operates where it belongs. Authoring-side mitigation is convention, adop
 briefs date their anchors and state that claims yield to the tree (practised in the go-live brief). A
 second enforcement point would be redundant belt-and-braces of the class #186's severity gate exists to
 refuse. Cross-refs `#190`, `#186`.
+
+---
+
+## Q93. Garmin recovery route: Health Sync bridge vs server-side connector
+
+Garmin does not write HRV to Health Connect (documented withhold list, corroborated by Apple Health
+omission). Two routes to Garmin recovery data:
+
+(a) Health Sync (healthsync.app) — third-party Android app, reads Garmin Connect, writes to Health
+Connect incl. HRV RMSSD (5-min intervals within the sleep window per Fitrockr's account of the Garmin
+Connect mobile path), VO2 Max, respiration, SpO2. No connector to build; credentials go to the vendor,
+not our DB; paid app; their status page documents repeated Garmin-side breakages.
+
+(b) Server-side connector on python-garminconnect — full derived scores (Body Battery, HRV status,
+Training Readiness, VO2 Max, training load). Requires the user's Garmin *password* at first login (no
+OAuth consent flow), stored refresh token, and we own the arms race.
+
+**Resolution (18 Oct 2026, #258).** Route (b), the server-side connector on python-garminconnect, was taken at #258, scoped to the metrics Garmin withholds from Health Connect: HRV (nightly and the 5-minute series), then the per-activity self-evaluation (#372) and, on a held PR, overnight SpO2 (Q150). Garmin sleep, steps and heart rate stay on the official Garmin to Health Connect feed. Route (a), the Health Sync bridge, was not taken: #258 records that Deb's first sync landed heart rate, sleep and steps with no HRV record type. The lane runs on `garminconnect` 0.3.11 since #263 and is live (the nightly sweep and the card-open refresh; prod holds Garmin HRV nights through 13 Oct, a Code read). Whether the server-side route stays the household lane or gives way to an aggregator is a separate question: Q233.
+
+**State:** DONE → #258
+
+---
+
+## Q94. Health Sync as a mirror writer
+
+If route (a) in `Q93` is taken, Garmin Connect and Health Sync both write Garmin-origin records to Health
+Connect under different dataOrigin values. This is the Withings-echo case governed by #35/#36/#37 and the
+#175 admission allow-list. Requires one-writer-per-data-type configuration or the admission list extended
+before Deb syncs, or she double-counts sleep/HR/steps.
+
+**Resolution (18 Oct 2026, #258).** Moot. This was contingent on `Q93` taking route (a), the Health Sync bridge, and `Q93` took route (b) at #258. #258 records that Deb's first Garmin to Health Connect sync landed heart rate, sleep and steps with no HRV record type, so no mirror writer for Garmin-origin records was in play then (Code did not look at her phone). Health Sync was also removed from the operator's phone on 28 Jun 2026 (#35). If a mirror writer for Garmin-origin records appears, #35/#36/#37 and the #175 admission rules govern and a new question opens.
+
+**State:** DONE → #258
 
 ---
 
