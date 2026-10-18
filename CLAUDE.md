@@ -288,11 +288,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Per-session sRPE is source-neutral: one contract, one store, one read door and a declared hierarchy, with the whole-day rating as the lowest rung and the close-out asking only for sessions no app rated; the migration is held for release.** Code, migration (held) - Canonical home: `DECISIONS_LOG.md` #NEXT.
+
 - **The ROADMAP row for #423 (ii) now carries Q232's settled briefing term and its engine-versus-coach clause; the build is still UNSTARTED and nothing was built.** Governance only - Canonical home: `closeout.md`.
 
 - **Q27's v1 taxonomy is built: joint-action strength regions (`shoulder_er_ir` split, dip ungated), a derived `Ratio` type and a fail-closed `reference_kind` with every measure `internal`; Q232 is opened on stored keys the taxonomy later retires (#420, #421).** Code, non-migration - Canonical home: `DECISIONS_LOG.md` #420, #421.
-
-- **Q231 records a build constraint derived from #374 (imputed rows clear in the same pass as `metab-v1`) and Q202's Capture-rate OWED is discharged as moot; the 11 Oct close-out resolves the day's landing SHAs.** Governance only - Canonical home: `closeout.md`.
 
 ---
 
