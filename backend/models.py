@@ -777,6 +777,82 @@ class HrvSample(Base):
     rmssd_ms: Mapped[float | None] = mapped_column(Float)
 
 
+class Spo2Night(Base):
+    """One night of Garmin overnight SpO2 capture -- the parent of `spo2_samples` (Q150).
+
+    One row per (user, night, source); `captured_at` is the wake-date Garmin files the sleep under
+    (the date the sleep endpoint was asked for), the same night key `hrv_readings` uses. The row
+    is the night's provenance and coverage: the sleep window Garmin reports, how many epochs were
+    stored, and how many GAPS the series has. `gap_count` is the number of places where two
+    consecutive stored epochs are further apart than the epoch length (a 3-minute hole in a 60 s
+    series is ONE gap, not two), so coverage is readable without scanning the child rows.
+
+    RAW capture, nothing derived (Q150): no minimum, no average, no dip count, no threshold, and no
+    confidence filter is stored or computed here. Re-pulling a night replaces its children
+    (the `hrv_samples` discipline) and only when the payload actually differs.
+    """
+    __tablename__ = "spo2_nights"
+    __table_args__ = (
+        UniqueConstraint("user_id", "captured_at", "source", name="uq_spo2_night_user_date_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    captured_at: Mapped[date] = mapped_column(Date, nullable=False, index=True)   # the wake-date of the night
+    source: Mapped[str] = mapped_column(String(50), nullable=False)               # 'garmin'
+    sleep_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sleep_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reading_count: Mapped[int] = mapped_column(Integer, nullable=False)          # epochs stored
+    gap_count: Mapped[int] = mapped_column(Integer, nullable=False)              # holes longer than the epoch length
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Spo2Sample(Base):
+    """One SpO2 epoch of a `spo2_nights` night, exactly as the source sent it (Q150).
+
+    `spo2_pct` and `reading_confidence` are stored as received -- including values outside any
+    plausible range, a null reading, and a low or zero confidence -- because Q150 captures raw and
+    judges later. `reading_confidence` is Garmin's own `readingConfidence`; its scale is not
+    documented and nothing here interprets it. ON DELETE CASCADE ties the series to its night.
+    """
+    __tablename__ = "spo2_samples"
+    __table_args__ = (
+        UniqueConstraint("spo2_night_id", "reading_time", name="uq_spo2_sample_night_time"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    spo2_night_id: Mapped[int] = mapped_column(
+        ForeignKey("spo2_nights.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reading_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)   # epoch start (UTC)
+    spo2_pct: Mapped[float | None] = mapped_column(Float)
+    reading_confidence: Mapped[float | None] = mapped_column(Float)
+    epoch_duration_s: Mapped[int | None] = mapped_column(Integer)
+
+
+class BreathingDisruptionInterval(Base):
+    """One `breathingDisruptionData` interval of a `spo2_nights` night, raw (Q150).
+
+    Garmin's sleep payload carries these as `{value, startGMT, endGMT}` intervals, not point events.
+    The `value` scale is undocumented and is NOT interpreted anywhere. `seq` is the interval's
+    position in the payload, so a zero-length interval or a repeated start is kept exactly as sent
+    instead of colliding on a natural key. Replaced together with the night's samples.
+    """
+    __tablename__ = "breathing_disruption_intervals"
+    __table_args__ = (
+        UniqueConstraint("spo2_night_id", "seq", name="uq_breathing_interval_night_seq"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    spo2_night_id: Mapped[int] = mapped_column(
+        ForeignKey("spo2_nights.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    value: Mapped[float | None] = mapped_column(Float)
+
+
 class CapabilityState(Base):
     """
     Adaptive Exposure Engine — "map contents" (spec §3, v2.1 split).

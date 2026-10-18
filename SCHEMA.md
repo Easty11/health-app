@@ -45,6 +45,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 044 — health_connect_syncs sleep-nadir HR  six additive nullable `hr_nadir_*` columns — the sleep-period resting rate DECISIONS_LOG.md:480 calls primary; HELD for operator release
 045 — clinical_documents  FK to users (CASCADE) — one row per imaging report or clinical letter; unique (user, doc_key); index (user, service_date); the target of the `document` evidence door (Q142 option b); HELD for operator release
 046 — mcp_oauth_clients + mcp_oauth_tokens  tokens FK to users (CASCADE) and to clients (CASCADE) — the persisted MCP OAuth provider: client registrations and access/refresh tokens stored as sha256 hashes, with expiry and revocation (Q196); HELD for operator release
+047 — spo2_nights + spo2_samples + breathing_disruption_intervals  FK to users (CASCADE) and to spo2_nights (CASCADE) — raw Garmin overnight SpO2 capture: a nightly parent (unique user, night, source) with sleep window, reading_count and gap_count, one row per SpO2 epoch exactly as sent, and the raw breathing-disruption intervals (Q150); HELD for operator release
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1911,3 +1912,58 @@ CREATE INDEX ix_mcp_oauth_token_refresh_hash ON mcp_oauth_tokens (refresh_hash);
 - **Housekeeping gap.** Expired and revoked rows are never deleted (a client refreshing hourly adds about 9,000 access rows a year); the unauthenticated registration endpoint also writes a `mcp_oauth_clients` row per call. Both are recorded as an open question, not built.
 
 **Downgrade** drops both tables (tokens first; their indexes and the check constraint go with them). It loses every issued MCP session, so each connected client re-authenticates once, which is the pre-migration behaviour. Checked on Postgres 16: upgrade, `compare_metadata` drift check (none on these tables), downgrade (zero tables and zero indexes left), upgrade again.
+
+
+### 047 — spo2_nights + spo2_samples + breathing_disruption_intervals (Q150: raw Garmin overnight SpO2 capture)
+
+Migration `e0d53feadc9d` (revises `295da687b02e`). Additive: three new tables, nothing altered, empty until the capture code that fills them deploys. **HELD for the operator's release** (a schema migration): the PR carrying it is not self-merged. A parent and two children, mirroring `hrv_readings` / `hrv_samples`.
+
+```sql
+CREATE TABLE spo2_nights (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    captured_at    DATE NOT NULL,                 -- the wake-date Garmin files the sleep under
+    source         VARCHAR(50) NOT NULL,          -- 'garmin'
+    sleep_start    TIMESTAMPTZ,                   -- dailySleepDTO.sleepStartTimestampGMT; NULL when absent
+    sleep_end      TIMESTAMPTZ,                   -- dailySleepDTO.sleepEndTimestampGMT; NULL when absent
+    reading_count  INTEGER NOT NULL,              -- epochs stored
+    gap_count      INTEGER NOT NULL,              -- places where two consecutive epochs are further apart than the epoch length
+    created_at     TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT uq_spo2_night_user_date_source UNIQUE (user_id, captured_at, source)
+);
+CREATE INDEX ix_spo2_nights_id          ON spo2_nights (id);
+CREATE INDEX ix_spo2_nights_user_id     ON spo2_nights (user_id);
+CREATE INDEX ix_spo2_nights_captured_at ON spo2_nights (captured_at);
+
+CREATE TABLE spo2_samples (
+    id                  SERIAL PRIMARY KEY,
+    spo2_night_id       INTEGER NOT NULL REFERENCES spo2_nights(id) ON DELETE CASCADE,
+    reading_time        TIMESTAMPTZ NOT NULL,     -- epochTimestamp, the epoch start (UTC)
+    spo2_pct            DOUBLE PRECISION,         -- spo2Reading as sent; NULL when Garmin sent none
+    reading_confidence  DOUBLE PRECISION,         -- readingConfidence as sent; scale undocumented, never interpreted
+    epoch_duration_s    INTEGER,                  -- epochDuration (60 in every payload seen)
+    CONSTRAINT uq_spo2_sample_night_time UNIQUE (spo2_night_id, reading_time)
+);
+CREATE INDEX ix_spo2_samples_id            ON spo2_samples (id);
+CREATE INDEX ix_spo2_samples_spo2_night_id ON spo2_samples (spo2_night_id);
+
+CREATE TABLE breathing_disruption_intervals (
+    id             SERIAL PRIMARY KEY,
+    spo2_night_id  INTEGER NOT NULL REFERENCES spo2_nights(id) ON DELETE CASCADE,
+    seq            INTEGER NOT NULL,              -- position in the payload's breathingDisruptionData
+    start_time     TIMESTAMPTZ NOT NULL,          -- startGMT
+    end_time       TIMESTAMPTZ,                   -- endGMT; equal to start_time for a zero-length interval
+    value          DOUBLE PRECISION,              -- value as sent; scale undocumented, never interpreted
+    CONSTRAINT uq_breathing_interval_night_seq UNIQUE (spo2_night_id, seq)
+);
+CREATE INDEX ix_breathing_disruption_intervals_id            ON breathing_disruption_intervals (id);
+CREATE INDEX ix_breathing_disruption_intervals_spo2_night_id ON breathing_disruption_intervals (spo2_night_id);
+```
+
+- **Raw, nothing derived (Q150).** No minimum, average, dip count, threshold or confidence filter is stored or computed: a null reading, an implausible value and a low or zero confidence are all stored as sent, and judging them is deferred until a baseline accrues. The two counts on the night are coverage, not interpretation.
+- **`gap_count`.** Counts the places where two consecutive stored epochs are further apart than the earlier epoch's `epoch_duration_s` (60 when it names none). A 3-minute hole in a 60 s series is ONE gap; the probe nights read 350 readings / 1 gap (event night) and 439 / 0 (control).
+- **Replace on re-pull, only when different.** A re-pull of a night compares the payload with what is stored and writes nothing when they match; when they differ it replaces the night's samples and intervals (the `hrv_samples` discipline). A pull that returns no SpO2 never touches a stored night.
+- **The Garmin profile id and device id** the payload also carries are not columns and are never stored or logged.
+- **Source and writer.** Garmin's sleep payload (`wellnessEpochSPO2DataDTOList`, one epoch a minute; `breathingDisruptionData`), read through the #361 no-refresh client by the nightly Garmin sweep (`scripts/garmin_sync.sweep_garmin_hrv`, after its token refresh, as its own soft-fail step so a SpO2 failure never costs HRV) and by the operator backfill (`scripts/garmin_spo2_backfill.py`). Nothing reads these tables yet: no UI, no MCP tool, no summary.
+
+**Downgrade** drops the two children and then the parent. It loses every captured night; the data is re-fetchable from Garmin only as far back as the sleep endpoint returns it.
