@@ -14,6 +14,8 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from garminconnect import (GarminConnectAuthenticationError, GarminConnectConnectionError,
+                           GarminConnectNotFoundError, GarminConnectTooManyRequestsError)
 from sqlalchemy import text
 
 import encryption
@@ -519,6 +521,12 @@ def test_the_walk_goes_back_until_the_run_of_empty_nights_and_reports_how_far(db
     assert (rep["nights_with_spo2"], rep["epochs"], rep["nights_inserted"]) == (4, 80, 4)
     assert (rep["earliest"], rep["latest"]) == (date(2026, 10, 13), WAKE)
     assert len(_nights(db_session)) == 4
+    assert rep["last_date_reached"] == date(2026, 10, 10)                         # the last empty night it asked about
+    text_ = bf.format_report(rep, user_id=1, newest=WAKE, dry_run=False)
+    assert "stopped at empty streak: 3 nights in a row carried no SpO2" in text_
+    assert "NOT evidence that the history ends here" in text_ and "Pulse Ox switched off" in text_
+    assert "last date reached: 2026-10-10" in text_ and "--newest 2026-10-09" in text_
+    assert "exhausted" not in text_.lower()                                        # never "history exhausted"
 
 
 def test_a_rerun_is_idempotent(db_session):
@@ -550,7 +558,8 @@ def test_the_day_cap_is_reported_as_the_reason_when_data_is_still_coming(db_sess
     _garmin(db_session)
     rep = _walk(db_session, FakeSource(_history(nights=10)), max_days=5, stop_after_empty=3)
     assert rep["stopped"] == "max_days" and rep["nights_tried"] == 5 and rep["earliest"] == date(2026, 10, 12)
-    assert "larger --max-days" in bf.format_report(rep, user_id=1, newest=WAKE, dry_run=False)
+    text_ = bf.format_report(rep, user_id=1, newest=WAKE, dry_run=False)
+    assert "stopped at the --max-days cap" in text_ and "--newest 2026-10-11" in text_ and "last date reached: 2026-10-12" in text_
 
 
 def test_a_failure_stops_the_walk_keeps_what_was_stored_and_names_the_class(db_session):
@@ -559,7 +568,10 @@ def test_a_failure_stops_the_walk_keeps_what_was_stored_and_names_the_class(db_s
     h["2026-10-14"] = RuntimeError(f"secret {FAKE_NAME}")
     rep = _walk(db_session, FakeSource(h), max_days=60, stop_after_empty=3)
     assert rep["stopped"] == "error:RuntimeError" and rep["nights_inserted"] == 2
-    assert FAKE_NAME not in bf.format_report(rep, user_id=1, newest=WAKE, dry_run=False)
+    text_ = bf.format_report(rep, user_id=1, newest=WAKE, dry_run=False)
+    assert FAKE_NAME not in text_ and "RuntimeError" in text_
+    assert rep["last_date_reached"] == date(2026, 10, 15) and rep["failed_on"] == date(2026, 10, 14)
+    assert "last date reached: 2026-10-15" in text_
 
 
 def test_a_stale_token_stops_the_walk_before_anything_is_sent_for_a_night(db_session):
@@ -584,12 +596,14 @@ def test_the_walk_pauses_between_nights_not_before_the_first(db_session):
 def test_main_runs_end_to_end_prints_how_far_back_and_exits_clean(db_session, monkeypatch, capsys):
     _garmin(db_session)
     monkeypatch.setattr(bf, "SessionLocal", lambda: db_session)
-    rc = bf.main(["--user-id", "1", "--newest", "2026-10-16", "--stop-after-empty", "3", "--pause", "0"],
-                 factory=lambda blob: FakeSource(_history(nights=3)), sleep=lambda s: None)
+    pauses = []
+    rc = bf.main(["--user-id", "1", "--newest", "2026-10-16", "--stop-after-empty", "3"],
+                 factory=lambda blob: FakeSource(_history(nights=3)), sleep=pauses.append)
     out = capsys.readouterr().out
     assert rc == 0
-    assert "history with SpO2: 2026-10-14 -> 2026-10-16 (3 calendar days, 3 nights with data)" in out
-    assert "stopped: empty_streak" in out and "inserted 3" in out
+    assert "nights with SpO2 found: 2026-10-14 -> 2026-10-16 (3 calendar days, 3 nights with data)" in out
+    assert "stopped at empty streak" in out and "inserted 3" in out
+    assert pauses and set(pauses) == {3.0}                                         # the default pause is the 3 s floor
     assert FAKE_NAME not in out and str(FAKE_PROFILE_PK) not in out and "garmin-token" not in out
 
 
@@ -603,13 +617,106 @@ def test_main_exit_codes_no_connection_and_stale_token(db_session, monkeypatch, 
         def social_profile(self):
             raise gi.RefreshWouldBeNeeded()
     _garmin(db_session)
-    assert bf.main(["--user-id", "1", "--pause", "0"], factory=lambda b: Stale(), sleep=lambda s: None) == 2
+    assert bf.main(["--user-id", "1"], factory=lambda b: Stale(), sleep=lambda s: None) == 2
 
 
 def test_main_dry_run_says_so_and_writes_nothing(db_session, monkeypatch, capsys):
     _garmin(db_session)
     monkeypatch.setattr(bf, "SessionLocal", lambda: db_session)
-    rc = bf.main(["--user-id", "1", "--newest", "2026-10-16", "--stop-after-empty", "2", "--pause", "0", "--dry-run"],
+    rc = bf.main(["--user-id", "1", "--newest", "2026-10-16", "--stop-after-empty", "2", "--dry-run"],
                  factory=lambda blob: FakeSource(_history(nights=2)), sleep=lambda s: None)
     assert rc == 0 and "[DRY RUN: nothing written]" in capsys.readouterr().out
+    assert _nights(db_session) == []
+
+
+# -- the backfill's pacing and its abort on Garmin pushing back -------------------------------------
+
+def test_the_pause_floor_is_three_seconds_and_the_command_line_enforces_it(db_session, capsys):
+    assert bf.MIN_PAUSE_S == 3.0 and bf.DEFAULT_PAUSE_S >= bf.MIN_PAUSE_S
+    for bad in ("0", "1", "2.9"):
+        with pytest.raises(SystemExit) as e:
+            bf.main(["--user-id", "1", "--pause", bad])
+        assert e.value.code == 2
+    assert "at least 3 seconds" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("exc, expect", [
+    (GarminConnectTooManyRequestsError("login rate limited"), "HTTP 429"),
+    (GarminConnectConnectionError("API Error 429"), "HTTP 429"),
+    (GarminConnectConnectionError("API Error 429 - slow down"), "HTTP 429"),
+    (GarminConnectConnectionError("API Error 403"), "HTTP 403"),
+    (json.JSONDecodeError("Expecting value", "<html>Just a moment...</html>", 0), "not JSON"),
+])
+def test_garmin_pushing_back_is_recognised(exc, expect):
+    assert expect in bf.classify_block(exc)
+
+
+@pytest.mark.parametrize("exc", [
+    GarminConnectNotFoundError("API Error 404"),                  # a missing resource: loud, but not a block
+    GarminConnectConnectionError("API Error 500"),
+    GarminConnectConnectionError("API Error 4290"),               # not 429
+    GarminConnectAuthenticationError("auth"),
+    ValueError("Invalid API path: 'x'"),                          # our own bug, not a challenge page
+    RuntimeError("boom"),
+])
+def test_other_failures_are_not_mistaken_for_a_block(exc):
+    assert bf.classify_block(exc) is None
+
+
+@pytest.mark.parametrize("exc, words", [
+    (GarminConnectTooManyRequestsError("429"), "HTTP 429"),
+    (GarminConnectConnectionError("API Error 429"), "HTTP 429"),
+    (GarminConnectConnectionError("API Error 403"), "HTTP 403"),
+    (json.JSONDecodeError("Expecting value", "<html>", 0), "not JSON"),
+])
+def test_the_first_429_403_or_challenge_aborts_the_whole_run_with_no_retry(db_session, exc, words):
+    _garmin(db_session)
+    h = _history(nights=6)
+    h["2026-10-14"] = exc                                          # the third night asked about
+    src = FakeSource(h)
+    pauses = []
+    rep = bf.backfill(db_session, 1, src, newest=WAKE, max_days=60, stop_after_empty=3, pause=3.0, sleep=pauses.append)
+    assert rep["stopped"] == "blocked" and words in rep["block"]
+    assert rep["failed_on"] == date(2026, 10, 14) and rep["last_date_reached"] == date(2026, 10, 15)
+    dates_asked = [c[1]["date"] for c in src.calls[1:]]
+    assert dates_asked == ["2026-10-16", "2026-10-15", "2026-10-14"]  # the failing night once; nothing after it, no retry
+    assert len(pauses) == 2                                          # no extra wait to "try again"
+    assert [n.captured_at for n in _nights(db_session)] == [date(2026, 10, 15), WAKE]   # what was stored stays
+    text_ = bf.format_report(rep, user_id=1, newest=WAKE, dry_run=False)
+    assert "ABORTED" in text_ and "Nothing was retried" in text_ and "Wait hours, not minutes" in text_
+    assert "last date reached: 2026-10-15" in text_ and "--newest 2026-10-14" in text_
+
+
+def test_main_exits_3_on_a_block_and_prints_the_last_date_reached(db_session, monkeypatch, capsys):
+    _garmin(db_session)
+    monkeypatch.setattr(bf, "SessionLocal", lambda: db_session)
+    h = _history(nights=4)
+    h["2026-10-15"] = GarminConnectConnectionError("API Error 403")
+    rc = bf.main(["--user-id", "1", "--newest", "2026-10-16"], factory=lambda b: FakeSource(h), sleep=lambda s: None)
+    out = capsys.readouterr().out
+    assert rc == 3 and "ABORTED" in out and "last date reached: 2026-10-16" in out
+
+
+# The classification reads the status out of the library's message, so it is proved against the REAL client, faked
+# at the transport (FEEDBACK section 23): 429 and 403 come back as "API Error <n>", a challenge page as a non-JSON 200.
+
+class _HtmlResp(FakeResp):
+    def json(self):
+        raise json.JSONDecodeError("Expecting value", "<html>Just a moment...</html>", 0)
+
+
+@pytest.mark.parametrize("bad, words", [
+    (FakeResp(429), "HTTP 429"),
+    (FakeResp(403), "HTTP 403"),
+    (_HtmlResp(200), "not JSON"),
+])
+def test_the_real_client_surfaces_429_403_and_a_challenge_page_as_a_block_with_exactly_one_request(
+        db_session, no_token_endpoint, bad, words):
+    _garmin(db_session)
+    sess = FakeSession(FakeResp(200, {"displayName": FAKE_NAME}), bad, FakeResp(200, _payload(5)))   # a 3rd reply must stay unused
+    rep = bf.backfill(db_session, 1, gs.ProbeSource(_blob(+3600), session=sess), newest=WAKE, max_days=5,
+                      stop_after_empty=3, pause=3.0, sleep=lambda s: None)
+    assert rep["stopped"] == "blocked" and words in rep["block"]
+    assert [m for m, _, _ in sess.calls] == ["GET", "GET"]            # the profile and the one sleep GET; no retry
+    assert rep["last_date_reached"] is None and rep["failed_on"] == WAKE
     assert _nights(db_session) == []
