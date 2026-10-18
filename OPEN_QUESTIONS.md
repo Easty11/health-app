@@ -1053,37 +1053,6 @@ are now all `human_verified`. Cross-refs `#51`, `#194`.
 
 ---
 
-## Q93. Garmin recovery route: Health Sync bridge vs server-side connector
-
-Garmin does not write HRV to Health Connect (documented withhold list, corroborated by Apple Health
-omission). Two routes to Garmin recovery data:
-
-(a) Health Sync (healthsync.app) — third-party Android app, reads Garmin Connect, writes to Health
-Connect incl. HRV RMSSD (5-min intervals within the sleep window per Fitrockr's account of the Garmin
-Connect mobile path), VO2 Max, respiration, SpO2. No connector to build; credentials go to the vendor,
-not our DB; paid app; their status page documents repeated Garmin-side breakages.
-
-(b) Server-side connector on python-garminconnect — full derived scores (Body Battery, HRV status,
-Training Readiness, VO2 Max, training load). Requires the user's Garmin *password* at first login (no
-OAuth consent flow), stored refresh token, and we own the arms race.
-
-**State:** OPEN — decision deferred pending Deb's first sync (HR sample density, recordingMethod/device
-population for a Garmin writer). Owner: Luke.
-
----
-
-## Q94. Health Sync as a mirror writer
-
-If route (a) in `Q93` is taken, Garmin Connect and Health Sync both write Garmin-origin records to Health
-Connect under different dataOrigin values. This is the Withings-echo case governed by #35/#36/#37 and the
-#175 admission allow-list. Requires one-writer-per-data-type configuration or the admission list extended
-before Deb syncs, or she double-counts sleep/HR/steps.
-
-**State:** OPEN — contingent on `Q93` taking route (a); must be configured before Deb's first sync or she
-double-counts. Owner: Luke.
-
----
-
 ## Q95. Vendor and transport names where the meaning is a role
 
 Single question, multiple targets, distinct cost tiers:
@@ -3096,6 +3065,34 @@ Reading it: `rpe_cr10` NULL on a row you rated means link (ii) failed (Garmin di
 
 ---
 
+## Q#NEXT. Should an aggregator (Open Wearables or similar) replace, or sit beside, Lane A as the Garmin and Polar ingestion route?
+
+Raised 18 Oct 2026 by chat. Nothing is decided, nothing is built, and no recommendation is recorded here. The direct Garmin lane
+(Lane A: `connectors/garmin.py`, `garminconnect` 0.3.11, a token blob minted out of band) is live and carries what Garmin withholds
+from Health Connect, on household accounts only: #258 and #263 call it unofficial, ToS-grey and brittle, and both name a self-fronting
+aggregator as the durable, B2B-viable channel. Terra was evaluated in June 2026 and deferred on cost and dependency (the "Things tried
+and abandoned" list). Open Wearables (github.com/the-momentum/open-wearables) has now been put forward as a possible route for Garmin
+and Polar; the description in chat's brief is MIT-licensed, a unified wearable API including direct Garmin OAuth, and it is NOT read
+from this tree.
+
+What exists, for the ruling to be made against (verified in the tree on 13 Oct, the ingestion audit; the SpO2 line added 18 Oct):
+- **Lane A, direct and unofficial, live:** nightly HRV with the 5-minute series (`hrv_readings`/`hrv_samples`), per-activity
+  self-evaluation (#372), and overnight SpO2 with breathing intervals (Q150, held PR). Run by the nightly sweep (02:00 Brisbane) and a
+  card-open refresh; a token minted out of band and stored Fernet-encrypted; an account-mix-up guard (#358 to #362).
+- **Lane B, official, live:** Garmin Connect app to Health Connect to the companion app to `POST /health-connect/sync`: sleep with
+  stages, steps, heart rate and exercise sessions.
+- **Polar:** direct AccessLink v4 (#17); Polar's Health Connect data is dropped (#35).
+- **Carried by nothing:** Body Battery, training status and readiness, stress, respiration, activity FIT or per-second detail
+  (Body Battery is reachable on Lane A but unbuilt: #NEXT+1).
+
+A ruling touches: #258 and #263 (their do-not-revisit clauses name the aggregator), Q129 (the Garmin sleep source), Q133 (done at
+#263; the cat-and-mouse watch continues), Q150 (its capture reads the sleep payload), and the manifest above. It closes when a ruling
+names the route, or routes, per provider.
+
+**State:** OPEN. Owner: Luke (ruling).
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
@@ -5081,6 +5078,39 @@ already operates where it belongs. Authoring-side mitigation is convention, adop
 briefs date their anchors and state that claims yield to the tree (practised in the go-live brief). A
 second enforcement point would be redundant belt-and-braces of the class #186's severity gate exists to
 refuse. Cross-refs `#190`, `#186`.
+
+---
+
+## Q93. Garmin recovery route: Health Sync bridge vs server-side connector
+
+Garmin does not write HRV to Health Connect (documented withhold list, corroborated by Apple Health
+omission). Two routes to Garmin recovery data:
+
+(a) Health Sync (healthsync.app) — third-party Android app, reads Garmin Connect, writes to Health
+Connect incl. HRV RMSSD (5-min intervals within the sleep window per Fitrockr's account of the Garmin
+Connect mobile path), VO2 Max, respiration, SpO2. No connector to build; credentials go to the vendor,
+not our DB; paid app; their status page documents repeated Garmin-side breakages.
+
+(b) Server-side connector on python-garminconnect — full derived scores (Body Battery, HRV status,
+Training Readiness, VO2 Max, training load). Requires the user's Garmin *password* at first login (no
+OAuth consent flow), stored refresh token, and we own the arms race.
+
+**Resolution (18 Oct 2026, #258).** Route (b), the server-side connector on python-garminconnect, was taken at #258, scoped to the metrics Garmin withholds from Health Connect: HRV (nightly and the 5-minute series), then the per-activity self-evaluation (#372) and, on a held PR, overnight SpO2 (Q150). Garmin sleep, steps and heart rate stay on the official Garmin to Health Connect feed. Route (a), the Health Sync bridge, was not taken: #258 records that Deb's first sync landed heart rate, sleep and steps with no HRV record type. The lane runs on `garminconnect` 0.3.11 since #263 and is live (the nightly sweep and the card-open refresh; prod holds Garmin HRV nights through 13 Oct, a Code read). Whether the server-side route stays the household lane or gives way to an aggregator is a separate question: Q#NEXT.
+
+**State:** DONE → #258
+
+---
+
+## Q94. Health Sync as a mirror writer
+
+If route (a) in `Q93` is taken, Garmin Connect and Health Sync both write Garmin-origin records to Health
+Connect under different dataOrigin values. This is the Withings-echo case governed by #35/#36/#37 and the
+#175 admission allow-list. Requires one-writer-per-data-type configuration or the admission list extended
+before Deb syncs, or she double-counts sleep/HR/steps.
+
+**Resolution (18 Oct 2026, #258).** Moot. This was contingent on `Q93` taking route (a), the Health Sync bridge, and `Q93` took route (b) at #258. #258 records that Deb's first Garmin to Health Connect sync landed heart rate, sleep and steps with no HRV record type, so no mirror writer for Garmin-origin records was in play then (Code did not look at her phone). Health Sync was also removed from the operator's phone on 28 Jun 2026 (#35). If a mirror writer for Garmin-origin records appears, #35/#36/#37 and the #175 admission rules govern and a new question opens.
+
+**State:** DONE → #258
 
 ---
 

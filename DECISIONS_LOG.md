@@ -14316,3 +14316,17 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 ---
 
+### #NEXT+1. The Body Battery "no API access" clause is superseded: it is reachable on the unofficial Lane A route, and unbuilt and unrequested
+
+**Decision.** The line in the "Things tried and abandoned / not yet attempted" list, "Garmin Body Battery: Explicitly closed — no API access available regardless of method", is superseded. The log is append-only, so the line stands as history. Body Battery is not closed to ingestion. What is established: (1) `garminconnect` 0.3.11, the library Lane A runs, exposes `get_body_battery` and `get_body_battery_events` (its method list, read from the installed wheel); (2) the sleep payload Lane A already reads carries `sleepBodyBattery` (a list) and `bodyBatteryChange` (an integer) at its top level (key names and list length only, from the 17 Oct probe; values were not read). What is NOT established: that either call returns usable data for this account, or anything about an official Garmin programme (its Health API is a separate route, not evaluated here). Nothing is built and nothing is queued; capturing Body Battery would be a new decision under #258's "withheld metrics only" scope. #258 records Body Battery as withheld from Health Connect; that was not re-verified here.
+
+**Rationale.** The clause predates #258 and #263 and was written against the route as it stood then. `Q93(b)` already named Body Battery as available through `python-garminconnect`, and the 17 Oct probe shows the sleep payload carrying it, so the clause is wrong as written and would mislead a reader weighing what Lane A or an aggregator could carry (Q#NEXT).
+
+**Status.** Governance only: no code, no migration, nothing built.
+
+**How you know.** The method names: the `garminconnect` 0.3.11 wheel's `Garmin` class, read in the 13 Oct ingestion audit. The payload keys: the operator-run sleep-payload probe of 17 Oct, whose output was relayed in chat (`sleepBodyBattery:list[118]`, `bodyBatteryChange:int` on the 16 Oct wake-date night). Neither is a call that returned Body Battery data.
+
+**Do not revisit unless.** A real call shows Body Battery unavailable for the account, or an official route is evaluated.
+
+---
+
