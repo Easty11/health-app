@@ -289,7 +289,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Overnight SpO2 from Garmin's sleep payload is now captured raw (three tables, a nightly-sweep step, a backfill script), Q150's gate is answered by direct probe, and the Garmin governance is closed out: Q93 and Q94 closed, the Body Battery clause superseded, an aggregator question opened; the backfill has run and the first nightly check is owed.** Code and governance, one migration - Canonical home: `DECISIONS_LOG.md` #425, #426.
+- **Overnight SpO2 from Garmin's sleep payload is now captured raw (three tables, a nightly-sweep step, a backfill script), Q150's gate is answered by direct probe, and the Garmin governance is closed out: Q93 and Q94 closed, the Body Battery clause superseded, an aggregator question opened; the backfill and the first nightly check are done.** Code and governance, one migration - Canonical home: `DECISIONS_LOG.md` #425, #426.
 
 - **Per-session sRPE is source-neutral: one contract, one store, one read door and a declared hierarchy, with the whole-day rating as the lowest rung and the close-out asking only for sessions no app rated; the migration is held for release.** Code, migration (held) - Canonical home: `DECISIONS_LOG.md` #424.
 
