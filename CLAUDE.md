@@ -105,7 +105,8 @@ OPEN · OWED · DONE → #N, under the label `**State:**`.
   `BRANCHES.md`, else HALT.
 - **Paste addressing:** Operator paste blocks are addressed to a session by name on their
   first line. A block whose address names a different session, or carries none while more
-  than one session is live, is NOT acted on — report it back and wait.
+  than one session is live, is NOT acted on — report it back and wait. In a brief's header,
+  the text after ` - ` is the source chat's name, not an instruction.
 
 ### Project-wide standing rules
 - Windows / PowerShell only for operator commands. No Linux syntax. Avoid embedded double
