@@ -33,11 +33,15 @@ Banister — sum of that day's `load_events`), NOT on the fitness/fatigue stocks
 regressing out the fatigue stock would erase the very decoupling the residual exists to
 catch. Psychological `load_events` are NEVER a predictor (exclusivity, gate 2).
 
-GRAIN (S4 D2): per-training-day. `session_rpe` is one-per-day (a whole-day-retrospective
-RPE captured at PM check-in — a known recency bias vs the ~30-min-post-session target,
-S4 LOG; v1 accepts current timing). A day with more than one session is FLAGGED, never
-silently averaged under one RPE (gate 5): duration is SUMMED (total training time paired
-with the one whole-day RPE) and the day is recorded in `multi_session_days`.
+GRAIN (S4 D2): per-training-day, built from per-SESSION ratings. Each counted session carries the rating
+the one read door gives it (`reads.srpe_reads.session_ratings`): a per-session RPE from the highest-ranked
+source that rated it (Garmin today), else the day's whole-day `session_rpe` from the PM check-in (a known
+recency bias vs the ~30-min-post-session target, S4 LOG) as `day_fill`, else nothing. The day's target is
+Σ(rpe_i × minutes_i) over the counted sessions that have a value. A day is PAIRED when at least one counted
+session has a value and the valued sessions have minutes. A day that mixes per-session ratings with
+day-filled or unrated sessions is `partial` (gate 5, grain honesty): its target covers only the valued
+sessions while the day's objective load covers all of them, and the day is recorded in `partial_days`. A day
+rated entirely per session, or entirely from the one whole-day value, is not partial.
 
 NO NUMPY. The S4 brief assumed numpy "already used by the load transforms"; it is not a
 dependency of this repo (`load_metrics.py` uses `math`). The ridge is a 3-predictor
@@ -58,9 +62,7 @@ import models
 from load_events import FORMULA_VERSION as _FV_STRENGTH, WINDOW_MECHANICAL, WINDOW_NEUROMUSCULAR
 from load_events_metabolic import FORMULA_VERSION_METABOLIC as _FV_METABOLIC, WINDOW_METABOLIC
 from load_metrics import _local_day  # identical AEST day-bucketing as the Banister rollup
-from reads.aerobic_reads import arbitrated_sessions, overlaps_workout
-from reads.hevy_reads import counted_workouts
-from sport_classes import is_non_training
+from reads.srpe_reads import counted_sessions, is_per_session, session_ratings
 
 # ---------------------------------------------------------------------------
 # REASONED-PRIOR constants — calibratable, never magic numbers (S4 §3.5/§3.7).
@@ -261,88 +263,50 @@ def _daily_load_by_window(db: Session, user_id: int) -> dict[date, dict[str, flo
 
 
 def _duration_min_by_day(db: Session, user_id: int) -> dict[date, tuple[float, int]]:
-    """AEST-day → (Σ session duration minutes, session count) — the "felt" load base:
-    `session_rpe × Σ minutes` is the residual regression's target (`psychological_residual`),
-    and the session count flags a multi-session day (gate 5).
+    """AEST-day → (Σ session duration minutes, session count) over the COUNTED sessions.
 
-    Duration is resolved at READ time from the session stores (S4 D4 — no new column). One
-    physical bout must contribute AT MOST once, so (#309, fixing a double-count the HC
-    exercise ingest made material):
-      • Aerobic side reads CANONICAL rows only, via read-time arbitration
-        (`reads.aerobic_reads.arbitrated_sessions`) — a non-canonical same-bout twin/mirror
-        (Polar↔HC, or two HC writers) is dropped, never a second re-implementation of the
-        canonical rule.
-      • An aerobic session that is the same bout as a COUNTED Hevy workout (see below) --
-        at least `HEVY_MIRROR_OVERLAP_FRACTION` of its own duration inside it -- contributes
-        nothing: it IS that bout (a Garmin-recorded gym/pilates session co-logged in Hevy),
-        already counted on the Hevy side. Reuses the shared `overlaps_workout` predicate —
-        the same "same bout as a Hevy workout" test the resolver's `concurrent_strength`
-        guard uses. (An erg session that only brushes a Hevy timer is NOT that bout and counts.)
-      • Hevy side counts via the shared `counted_workouts` door: `excluded_at IS NULL` AND
-        (not `dedup_flag` OR every `dedup_partner_ids` member is excluded). `dedup_flag` is
-        set on BOTH members of a suspected pair, so a bare `dedup_flag IS NOT TRUE` would
-        wrongly drop the RETAINED performed log; and a flagged pair not yet adjudicated is
-        UNADJUDICATED — it contributes no minutes here (like an excluded row), surfaced
-        instead by the resolver.
-    Keyed on `aerobic_sessions.session_date` (already a local date) and, for Hevy, the AEST
-    day of `start_time` (`_local_day`). A session with no usable duration contributes no
-    minutes but still tallies.
-
-    Non-training sessions (#322 S3, closing Q160): a canonical aerobic row whose `sport_name`
-    is in `sport_classes.NON_TRAINING_SPORTS` (Walking/Pilates/Yoga/Stretching, case-insensitive,
-    ALL sources) contributes NOTHING — no minutes, no session tally — because `session_rpe` is
-    one whole-day RPE and non-training minutes would inflate the day's felt load. Every other
-    session counts, whatever its source (the #309 interim HC-source exclusion is lifted).
+    The counted set is `reads.srpe_reads.counted_sessions` (the definition that lived here until the
+    per-session sRPE store: canonical aerobic rows only through read-time arbitration, minus an aerobic row
+    that is the same bout as a counted Hevy workout (`overlaps_workout`), plus Hevy via `counted_workouts`,
+    minus `NON_TRAINING_SPORTS`; #309, #322 S3). A session with no usable duration contributes no minutes but
+    still tallies. The residual itself no longer sums this (it sums `_felt_by_day`); it stays as the day's
+    objective-time view and for the tests that pin the counting rules.
     """
     out_min: dict[date, float] = defaultdict(float)
     out_n: dict[date, int] = defaultdict(int)
-
-    # Counted Hevy workouts — the "same bout" set an aerobic row must not duplicate, and the
-    # only workouts whose minutes count. The shared door partitions non-excluded workouts into
-    # counted and unadjudicated; unadjudicated duplicates contribute no minutes (surfaced by
-    # the resolver, not here).
-    hevy_candidates = db.execute(
-        select(models.HevyWorkout).where(
-            models.HevyWorkout.user_id == user_id,
-            models.HevyWorkout.excluded_at.is_(None),
-        )
-    ).scalars().all()
-    hevy, _unadjudicated = counted_workouts(db, user_id, hevy_candidates)
-
-    for s in arbitrated_sessions(user_id, db):
-        if not getattr(s, "canonical", True):
-            continue
-        if is_non_training(s.sport_name):
-            continue                              # #322 S3: non-training minutes are not felt load
-        if overlaps_workout(s, hevy):
-            continue                              # same bout as a counted Hevy workout
-        day = s.session_date
-        out_n[day] += 1
-        if s.duration_minutes is not None and s.duration_minutes > 0:
-            out_min[day] += float(s.duration_minutes)
-
-    for w in hevy:
-        if w.start_time is None:
-            continue
-        day = _local_day(w.start_time)
-        out_n[day] += 1
-        if w.end_time is not None:
-            mins = (w.end_time - w.start_time).total_seconds() / 60.0
-            if mins > 0:
-                out_min[day] += mins
-
+    for b in counted_sessions(db, user_id):
+        out_n[b.day] += 1
+        if b.minutes:
+            out_min[b.day] += b.minutes
     return {d: (out_min.get(d, 0.0), out_n.get(d, 0)) for d in out_n}
 
 
-def _session_rpe_by_day(db: Session, user_id: int) -> dict[date, float]:
-    """AEST-day → session_rpe (0–10) for days where it was captured (training days)."""
-    rows = db.execute(
-        select(models.DailyRecord.date, models.DailyRecord.session_rpe).where(
-            models.DailyRecord.user_id == user_id,
-            models.DailyRecord.session_rpe.is_not(None),
-        )
-    ).all()
-    return {d: float(rpe) for d, rpe in rows if rpe is not None}
+@dataclass(frozen=True)
+class FeltDay:
+    """One day's felt load: `target` = Σ(rpe_i × minutes_i) over the counted sessions that have a value,
+    `minutes` = Σ minutes_i over those same sessions, `partial` = the day mixes per-session ratings with
+    day-filled or unrated sessions."""
+    target: float
+    minutes: float
+    partial: bool
+
+
+def _felt_by_day(db: Session, user_id: int) -> dict[date, FeltDay]:
+    """AEST-day → `FeltDay` for every day with at least one counted session that has a value (a per-session
+    rating or the whole-day fill). A day with none is absent: nothing was rated."""
+    by_day: dict[date, list] = defaultdict(list)
+    for rs in session_ratings(db, user_id):
+        by_day[rs.bout.day].append(rs)
+    out: dict[date, FeltDay] = {}
+    for day, rows in by_day.items():
+        valued = [rs for rs in rows if rs.rating is not None]
+        if not valued:
+            continue
+        target = sum(rs.rating.rpe_cr10 * rs.bout.minutes for rs in valued if rs.bout.minutes)
+        minutes = sum(rs.bout.minutes for rs in valued if rs.bout.minutes)
+        mixed = any(is_per_session(rs.rating) for rs in rows) and any(not is_per_session(rs.rating) for rs in rows)
+        out[day] = FeltDay(target=target, minutes=minutes, partial=mixed)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +322,7 @@ class PsychologicalResidual:
     latest_residual: float            # the most recent paired day's raw residual
     latest_day: date
     n_paired_days: int
-    multi_session_days: list[date]    # days with >1 session (grain caveat, gate 5)
+    partial_days: list[date]          # days mixing per-session and day-filled/unrated sessions (gate 5)
 
 
 def psychological_residual(
@@ -366,37 +330,35 @@ def psychological_residual(
 ) -> Optional[PsychologicalResidual]:
     """Compute the smoothed psychological residual, or None in cold-start.
 
-    A day is PAIRED iff `session_rpe` is present AND its physical load is resolvable
-    (a resolvable session duration > 0 that day — `actual_sRPE = session_rpe ×
-    duration_min` needs it). Predictors are the day's per-window `daily_load` impulse
-    (0 where a window logged nothing — a legitimate value, not missing). Below
-    N_COLDSTART_PAIRED_DAYS paired days → None (life-load-only mode; no residual, no
-    confidence-weighted ramp). At/above → ridge-fit and EWMA-smooth.
+    A day is PAIRED iff at least one counted session has a value (a per-session rating, else the
+    whole-day `session_rpe`) AND the valued sessions have a resolvable duration > 0 (`actual_sRPE =
+    Σ rpe_i × minutes_i` needs it). Predictors are the day's per-window `daily_load` impulse (0 where a
+    window logged nothing — a legitimate value, not missing). Below N_COLDSTART_PAIRED_DAYS paired days →
+    None (life-load-only mode; no residual, no confidence-weighted ramp). At/above → ridge-fit and
+    EWMA-smooth.
     """
     as_of = as_of or _aest_today()
 
-    rpe_by_day = _session_rpe_by_day(db, user_id)
-    dur_by_day = _duration_min_by_day(db, user_id)
+    felt_by_day = _felt_by_day(db, user_id)
     load_by_day = _daily_load_by_window(db, user_id)
 
     # Assemble paired rows in ascending date order (≤ as_of).
     paired_days: list[date] = []
     x: list[list[float]] = []
     y: list[float] = []
-    multi_session_days: list[date] = []
-    for day in sorted(rpe_by_day):
+    partial_days: list[date] = []
+    for day in sorted(felt_by_day):
         if day > as_of:
             continue
-        dur, n_sessions = dur_by_day.get(day, (0.0, 0))
-        if dur <= 0:
+        felt = felt_by_day[day]
+        if felt.minutes <= 0:
             continue  # physical load not resolvable → not a paired day
-        actual = rpe_by_day[day] * dur
         loads = load_by_day.get(day, {})
         x.append([float(loads.get(w, 0.0)) for w in PREDICTOR_WINDOWS])
-        y.append(actual)
+        y.append(felt.target)
         paired_days.append(day)
-        if n_sessions > 1:
-            multi_session_days.append(day)
+        if felt.partial:
+            partial_days.append(day)
 
     if len(paired_days) < N_COLDSTART_PAIRED_DAYS:
         return None  # cold-start hard flip: life-load-only mode
@@ -409,7 +371,7 @@ def psychological_residual(
         latest_residual=round(fit.residuals[-1], 6),
         latest_day=paired_days[-1],
         n_paired_days=len(paired_days),
-        multi_session_days=multi_session_days,
+        partial_days=partial_days,
     )
 
 

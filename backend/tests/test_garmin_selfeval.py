@@ -1,4 +1,4 @@
-"""`garmin_selfeval` -- Garmin per-activity self-evaluation into the insert-only store (Q209 path a).
+"""`garmin_selfeval` -- Garmin per-activity self-evaluation, adapter #1 of the source-neutral sRPE store (Q209 path a).
 
 Layers on purpose (FEEDBACK section 23), as in `test_garmin_selfeval_probe`: the capture logic is tested with a
 faked source (which records every request), and the no-refresh guarantee against the REAL `garminconnect` client
@@ -16,6 +16,7 @@ from sqlalchemy import event
 import encryption
 import garmin_selfeval as gs
 import models
+import srpe_store
 from aerobic_format import format_selfeval
 from scripts import garmin_identity as gi
 from scripts import garmin_sync
@@ -74,10 +75,10 @@ class FakeSource:
 
 
 def _rows(db, aid=None):
-    q = db.query(models.GarminActivitySelfEval).order_by(models.GarminActivitySelfEval.captured_at,
-                                                         models.GarminActivitySelfEval.id)
+    q = db.query(models.SessionRpeObservation).order_by(models.SessionRpeObservation.captured_at,
+                                                        models.SessionRpeObservation.id)
     if aid is not None:
-        q = q.filter_by(garmin_activity_id=aid)
+        q = q.filter_by(source="garmin", source_activity_ref=str(aid))
     return q.all()
 
 
@@ -85,7 +86,10 @@ def _run(db, src, now=NOW, uid=1):
     return gs.sync_user(db, uid, factory=lambda blob: src, now=now)
 
 
-def _hc(db, *, uid=1, start=START, minutes=45, pkg=gs.GARMIN_HC_PACKAGE, source="health_connect", ssid=None):
+GARMIN_HC_PACKAGE = "com.garmin.android.apps.connectmobile"
+
+
+def _hc(db, *, uid=1, start=START, minutes=45, pkg=GARMIN_HC_PACKAGE, source="health_connect", ssid=None):
     stop = start + timedelta(minutes=minutes)
     row = models.AerobicSession(user_id=uid, source=source, source_session_id=ssid or f"{pkg}|{start.isoformat()}",
                                 session_date=start.date(), start_time=start, stop_time=stop, sport_name="Strength",
@@ -97,14 +101,18 @@ def _hc(db, *, uid=1, start=START, minutes=45, pkg=gs.GARMIN_HC_PACKAGE, source=
 
 # -- scale conversion ----------------------------------------------------------------------------
 
-@pytest.mark.parametrize("raw,expected", [(40, 4.0), (70, 7.0), (100, 10.0), (0, 0.0), (45, 4.5), (40.0, 4.0)])
-def test_rpe_is_garmins_0_100_over_ten(raw, expected):
-    assert gs.parse_selfeval(_detail(rpe=raw), 1) == (expected, None)
+@pytest.mark.parametrize("raw", [40, 70, 100, 0, 45, 40.0])
+def test_the_adapter_hands_the_contract_garmins_value_as_sent(raw):
+    assert gs.parse_selfeval(_detail(rpe=raw), 1) == (float(raw), None)
 
 
-def test_the_probe_activity_reads_as_4_of_10_and_feel_25():
+def test_the_probe_activity_reads_as_raw_40_and_feel_25_and_is_4_of_10_in_the_store(db_session):
     """The anchor: activity 24564069469, operator-rated 4/10 and Weak, came back 40 and 25."""
-    assert gs.parse_selfeval(_detail(rpe=40, feel=25), 24564069469) == (4.0, 25)
+    assert gs.parse_selfeval(_detail(rpe=40, feel=25), 24564069469) == (40.0, 25)
+    _garmin(db_session)
+    _run(db_session, FakeSource([_item(24564069469)], {24564069469: _detail(rpe=40, feel=25)}))
+    (r,) = _rows(db_session)
+    assert (r.rpe_raw, r.raw_scale, r.rpe_cr10, r.feel) == (40.0, "garmin_0_100", 4.0, 25)
 
 
 @pytest.mark.parametrize("bad", [-10, 101, 1000, "40", True, [], {}])
@@ -131,12 +139,11 @@ def test_a_new_rated_activity_is_stored_with_scale_type_and_interval(db_session)
     src = FakeSource([_item(11)], {11: _detail(rpe=40, feel=25)})
     out = _run(db_session, src)
     (r,) = _rows(db_session)
-    assert (r.garmin_activity_id, r.rpe_cr10, r.feel, r.garmin_type) == (11, 4.0, 25, "strength_training")
+    assert (r.source, r.source_activity_ref, r.rpe_cr10, r.feel) == ("garmin", "11", 4.0, 25)
+    assert r.provenance == {"garmin_type": "strength_training"}
     assert r.start_time.replace(tzinfo=timezone.utc) == START
     assert r.stop_time.replace(tzinfo=timezone.utc) == START + timedelta(seconds=DURATION)
-    assert r.aerobic_session_id is None
-    assert out == {"fetched": 1, "rated": 1, "unrated": 0, "linked": 0, "relinked": 0,
-                   "skipped_needs_refresh": 0, "errors": 0}
+    assert out == {"fetched": 1, "rated": 1, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
 
 
 def test_two_gets_per_new_activity_and_one_list_get_nothing_else(db_session):
@@ -168,7 +175,7 @@ def test_unrated_is_recorded_as_a_null_row_and_not_refetched_the_same_day(db_ses
     src = FakeSource([_item(11)], {11: _detail()})
     out = _run(db_session, src)
     (r,) = _rows(db_session)
-    assert (r.rpe_cr10, r.feel, r.aerobic_session_id) == (None, None, None)
+    assert (r.rpe_raw, r.rpe_cr10, r.feel) == (None, None, None)
     assert (out["fetched"], out["rated"], out["unrated"]) == (1, 0, 1)
     again = FakeSource([_item(11)], {11: _detail()})
     _run(db_session, again, now=NOW + timedelta(hours=2))               # inside the 20 h gap
@@ -220,29 +227,27 @@ def test_the_recheck_stops_after_seven_days(db_session):
 
 
 def test_no_update_statement_is_ever_issued_against_the_store(db_session):
-    """Immutability: across first sight, a marker, a rating and a relink, every write to the table is an INSERT."""
+    """Immutability: across first sight, a marker and a rating, every write to the table is an INSERT."""
     _garmin(db_session)
     stmts: list[str] = []
     event.listen(db_session.get_bind(), "before_cursor_execute",
                  lambda c, cur, st, p, ctx, m: stmts.append(st.strip().upper()))
     _run(db_session, FakeSource([_item(11)], {11: _detail()}))
     _run(db_session, FakeSource([], {11: _detail()}), now=NOW + timedelta(days=1))
-    _hc(db_session)
     _run(db_session, FakeSource([], {11: _detail(rpe=70, feel=75)}), now=NOW + timedelta(days=2))
-    _run(db_session, FakeSource([], {}), now=NOW + timedelta(days=3))     # relink pass
-    touching = [s for s in stmts if "GARMIN_ACTIVITY_SELFEVALS" in s]
+    touching = [s for s in stmts if "SESSION_RPE_OBSERVATIONS" in s]
     assert touching and not [s for s in touching if s.startswith(("UPDATE", "DELETE"))], touching
 
 
 def test_a_new_row_never_reuses_an_earlier_capture_time(db_session):
-    """A relink in a run with the same clock reading as the original capture would collide on the unique key
-    (user, activity, captured_at); the later row is placed strictly after, so 'latest' stays unambiguous."""
+    """A re-rating found in a run with the same clock reading as the previous capture would collide on the unique
+    key (user, source, activity, captured_at); the contract places the later row strictly after, so 'latest' stays
+    unambiguous."""
     _garmin(db_session)
-    _run(db_session, FakeSource([_item(11)], {11: _detail(rpe=40, feel=25)}))
-    hc = _hc(db_session)
-    out = _run(db_session, FakeSource([], {}))                                 # the same NOW
+    _run(db_session, FakeSource([_item(11)], {11: _detail()}))                      # an unrated marker first
+    _run(db_session, FakeSource([], {11: _detail(rpe=40, feel=25)}), now=NOW + timedelta(days=1))
     a, b = _rows(db_session, 11)
-    assert out["relinked"] == 1 and b.aerobic_session_id == hc.id
+    assert (a.rpe_cr10, b.rpe_cr10) == (None, 4.0)
     assert b.captured_at.replace(tzinfo=timezone.utc) > a.captured_at.replace(tzinfo=timezone.utc)
 
 
@@ -254,7 +259,7 @@ def test_the_read_stops_at_the_first_failure_and_keeps_what_it_captured(db_sessi
     src = FakeSource(items, {11: _detail(rpe=40), 12: ConnectionError("boom"), 13: _detail(rpe=50)})
     out = _run(db_session, src)
     assert src.detail_ids() == [11, 12]                                  # 13 not attempted: the order invariant
-    assert [r.garmin_activity_id for r in _rows(db_session)] == [11]
+    assert [r.source_activity_ref for r in _rows(db_session)] == ["11"]
     assert out["errors"] == 1 and out["rated"] == 1
 
 
@@ -265,7 +270,7 @@ def test_a_shape_change_stops_the_read_at_that_activity(db_session):
     items = [_item(11), _item(12, start=START + timedelta(hours=1)), _item(13, start=START + timedelta(hours=2))]
     src = FakeSource(items, {11: _detail(rpe=40), 12: {"somethingElse": 1}, 13: _detail(rpe=50)})
     out = _run(db_session, src)
-    assert src.detail_ids() == [11, 12] and [r.garmin_activity_id for r in _rows(db_session)] == [11]
+    assert src.detail_ids() == [11, 12] and [r.source_activity_ref for r in _rows(db_session)] == ["11"]
     assert out["errors"] == 1
 
 
@@ -286,111 +291,6 @@ def test_a_user_without_a_garmin_connection_makes_no_request(db_session):
     src = FakeSource([_item(11)], {})
     out = _run(db_session, src)
     assert src.calls == [] and out["fetched"] == 0 and _rows(db_session) == []
-
-
-# -- the link rule --------------------------------------------------------------------------------
-
-def test_link_needs_50_percent_of_the_shorter_and_a_garmin_package(db_session):
-    _user(db_session)
-    stop = START + timedelta(seconds=DURATION)                                         # 45 min
-    full = _hc(db_session)
-    assert gs.find_link(db_session, 1, START, stop) == full.id
-    db_session.delete(full)
-    db_session.commit()
-    exactly_half = _hc(db_session, start=START + timedelta(minutes=22, seconds=30), minutes=45)   # 22.5 of 45 min overlap
-    assert gs.find_link(db_session, 1, START, stop) == exactly_half.id                 # 50% of the shorter: in
-    db_session.delete(exactly_half)
-    db_session.commit()
-    _hc(db_session, start=START + timedelta(minutes=23), minutes=45)                   # 22 of 45: out
-    assert gs.find_link(db_session, 1, START, stop) is None
-
-
-def test_the_shorter_interval_sets_the_denominator(db_session):
-    _user(db_session)
-    short = _hc(db_session, start=START + timedelta(minutes=10), minutes=10)           # wholly inside a 45-minute activity
-    assert gs.find_link(db_session, 1, START, START + timedelta(seconds=DURATION)) == short.id
-
-
-def test_samsung_polar_and_other_users_rows_are_never_linked(db_session):
-    _user(db_session)
-    _user(db_session, 2)
-    stop = START + timedelta(seconds=DURATION)
-    _hc(db_session, pkg="com.sec.android.app.shealth")
-    _hc(db_session, source="polar_v4", pkg=None, ssid="p1")
-    _hc(db_session, source="polar_v4", ssid="p2")                              # a non-HC row even with the Garmin package
-    _hc(db_session, uid=2, ssid="other-user")
-    assert gs.find_link(db_session, 1, START, stop) is None
-
-
-def test_the_greatest_overlap_wins_then_the_lowest_id(db_session):
-    _user(db_session)
-    stop = START + timedelta(seconds=DURATION)
-    _hc(db_session, start=START + timedelta(minutes=5), minutes=45, ssid="partial")
-    best = _hc(db_session, ssid="best")
-    assert gs.find_link(db_session, 1, START, stop) == best.id
-
-
-def test_no_stop_time_means_no_link_and_a_missing_interval_row_is_skipped(db_session):
-    _user(db_session)
-    row = _hc(db_session)
-    assert gs.find_link(db_session, 1, START, None) is None
-    row.stop_time = None
-    db_session.commit()
-    assert gs.find_link(db_session, 1, START, START + timedelta(seconds=DURATION)) is None
-
-
-def test_a_rated_activity_is_linked_at_capture_when_the_hc_row_is_already_there(db_session):
-    _garmin(db_session)
-    hc = _hc(db_session)
-    out = _run(db_session, FakeSource([_item(11)], {11: _detail(rpe=40, feel=25)}))
-    assert _rows(db_session)[0].aerobic_session_id == hc.id and out["linked"] == 1
-
-
-def test_a_garmin_only_type_that_never_reaches_hc_stays_unlinked(db_session):
-    _garmin(db_session)
-    out = _run(db_session, FakeSource([_item(11, tkey="breathwork")], {11: _detail(rpe=10, feel=75)}))
-    r = _rows(db_session)[0]
-    assert (r.garmin_type, r.aerobic_session_id, out["linked"]) == ("breathwork", None, 0)
-
-
-# -- the relink pass: DB-only, inserts a linked row, needs no token ---------------------------------
-
-def test_a_late_hc_row_is_linked_by_a_new_row_without_any_garmin_call(db_session):
-    _garmin(db_session)
-    _run(db_session, FakeSource([_item(11)], {11: _detail(rpe=40, feel=25)}))
-    assert _rows(db_session)[0].aerobic_session_id is None
-    hc = _hc(db_session)                                                       # Health Connect lands a few days late
-
-    class NoGarmin:
-        def get(self, *a, **k):
-            raise gi.RefreshWouldBeNeeded()                                    # even a dead token cannot stop the relink
-    out = gs.sync_user(db_session, 1, factory=lambda b: NoGarmin(), now=NOW + timedelta(days=3))
-    rows = _rows(db_session, 11)
-    assert out["relinked"] == 1 and out["linked"] == 1 and out["skipped_needs_refresh"] == 1
-    assert rows[0].aerobic_session_id is None                                  # the first row is untouched
-    assert (rows[1].aerobic_session_id, rows[1].rpe_cr10, rows[1].feel) == (hc.id, 4.0, 25)
-    again = gs.sync_user(db_session, 1, factory=lambda b: NoGarmin(), now=NOW + timedelta(days=4))
-    assert again["relinked"] == 0 and len(_rows(db_session, 11)) == 2          # linked now: nothing further
-
-
-def test_the_relink_pass_leaves_unrated_and_old_activities_alone(db_session):
-    _garmin(db_session)
-    _run(db_session, FakeSource([_item(11), _item(12, start=START - timedelta(days=20))],
-                                {11: _detail(), 12: _detail(rpe=40)}))
-    _hc(db_session)
-    _hc(db_session, start=START - timedelta(days=20), ssid="old")
-    out = gs.sync_user(db_session, 1, factory=lambda b: FakeSource([], {}), now=NOW)
-    assert out["relinked"] == 0                                                # 11 unrated; 12 is past RELINK_DAYS
-
-
-def test_deleting_the_linked_hc_row_nulls_the_link_and_keeps_the_capture(db_session):
-    _garmin(db_session)
-    hc = _hc(db_session)
-    _run(db_session, FakeSource([_item(11)], {11: _detail(rpe=40, feel=25)}))
-    db_session.delete(hc)
-    db_session.commit()
-    (r,) = _rows(db_session)
-    assert (r.aerobic_session_id, r.rpe_cr10, r.feel) == (None, 4.0, 25)
 
 
 # -- no refresh: the REAL client, faked at the transport --------------------------------------------
@@ -447,11 +347,6 @@ def test_the_module_never_sends_a_non_get_or_names_a_write_path():
     assert gs.ProbeSource.__mro__[1] is gi.LibrarySource
 
 
-def test_the_garmin_package_is_the_wearable_native_one():
-    from reads.aerobic_reads import WEARABLE_NATIVE
-    assert gs.GARMIN_HC_PACKAGE in WEARABLE_NATIVE
-
-
 # -- the sweep: placement, isolation, counts ---------------------------------------------------------
 
 def _fake_hrv(db, uid, start, end):
@@ -471,8 +366,7 @@ def test_the_sweep_runs_the_read_after_each_users_hrv_pull_and_sums_the_counts(d
     summary = garmin_sync.sweep_garmin_hrv(db_session, selfeval_factory=factory)
     assert order == ["hrv1", "read", "hrv4", "read"]                            # a read follows its own user's refresh
     assert summary["per_user"][1]["selfeval"]["rated"] == 1
-    assert summary["selfeval"] == {"fetched": 2, "rated": 2, "unrated": 0, "linked": 0, "relinked": 0,
-                                   "skipped_needs_refresh": 0, "errors": 0}
+    assert summary["selfeval"] == {"fetched": 2, "rated": 2, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
 
 
 def test_a_dead_token_user_gets_no_read_and_the_others_are_unaffected(db_session, monkeypatch):
@@ -508,17 +402,17 @@ def test_a_selfeval_failure_is_soft_and_never_changes_the_hrv_outcome(db_session
 
 
 def test_a_failure_outside_the_read_is_also_soft_and_reported(db_session, monkeypatch):
-    """`sync_user` catches its own read failures; this is the step's own net, for what happens before the read
-    (the DB-only relink pass). It reports the error, rolls back, and the user's HRV outcome stands."""
+    """`sync_user` catches its own read failures; this is the step's own net, for anything that escapes it. It
+    reports the error, rolls back, and the user's HRV outcome stands."""
     _garmin(db_session, 1)
     monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", _fake_hrv)
 
     def boom(*a, **k):
-        raise RuntimeError("relink exploded")
-    monkeypatch.setattr(gs, "_relink", boom)
+        raise RuntimeError("step exploded")
+    monkeypatch.setattr(gs, "sync_user", boom)
     summary = garmin_sync.sweep_garmin_hrv(db_session, selfeval_factory=lambda b: FakeSource([], {}))
     u = summary["per_user"][1]
-    assert u["status"] == "succeeded" and u["selfeval"] == {"error": "RuntimeError: relink exploded"}
+    assert u["status"] == "succeeded" and u["selfeval"] == {"error": "RuntimeError: step exploded"}
     assert summary["selfeval"]["errors"] == 1 and summary["users_failed"] == 0
 
 
@@ -539,58 +433,79 @@ def test_the_nightly_brief_carries_the_selfeval_counts():
     assert brief["garmin"]["selfeval"] == {"rated": 2}
 
 
-# -- the readout --------------------------------------------------------------------------------------
+# -- the readout: the MCP lines show the door's per-session rating, from any source ---------------------------------
 
-def _eval_row(db, aid, session_id, rpe=4.0, feel=25, captured=NOW):
-    r = models.GarminActivitySelfEval(user_id=1, garmin_activity_id=aid, captured_at=captured, rpe_cr10=rpe, feel=feel,
-                                      garmin_type="strength_training", start_time=START,
-                                      stop_time=START + timedelta(seconds=DURATION), aerobic_session_id=session_id)
-    db.add(r)
-    db.commit()
-    return r
+def _obs(db, ref, rpe_raw=40, feel=25, start=START, minutes=45, now=NOW, uid=1):
+    _user(db, uid)
+    return srpe_store.record_observation(db, uid, source="garmin", source_activity_ref=ref, start=start,
+                                         stop=start + timedelta(minutes=minutes), rpe_raw=rpe_raw,
+                                         raw_scale="garmin_0_100", feel=feel, now=now)
 
 
-def test_format_selfeval_renders_present_values_only():
-    assert format_selfeval(type("R", (), {"rpe_cr10": 4.0, "feel": 25})) == " selfeval=[RPE 4/10 feel 25/100 garmin]"
-    assert format_selfeval(type("R", (), {"rpe_cr10": 4.5, "feel": None})) == " selfeval=[RPE 4.5/10 garmin]"
-    assert format_selfeval(type("R", (), {"rpe_cr10": None, "feel": 75})) == " selfeval=[feel 75/100 garmin]"
+def _rating(rpe, feel, source="garmin"):
+    return type("R", (), {"rpe_cr10": rpe, "feel": feel, "source": source})
 
 
-def test_get_training_sessions_shows_the_value_on_a_linked_session_only(db_session, monkeypatch):
+def _lines(mcp_server, db, monkeypatch):
+    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db)
+    monkeypatch.setattr(mcp_server, "_current_user_id", lambda: 1)
+    return mcp_server.get_training_sessions(days=28).split("\n")
+
+
+def test_format_selfeval_renders_present_values_and_names_the_source():
+    assert format_selfeval(_rating(4.0, 25)) == " selfeval=[RPE 4/10 feel 25/100 garmin]"
+    assert format_selfeval(_rating(4.5, None)) == " selfeval=[RPE 4.5/10 garmin]"
+    assert format_selfeval(_rating(None, 75)) == " selfeval=[feel 75/100 garmin]"
+    assert format_selfeval(_rating(3.0, None, "in_app")) == " selfeval=[RPE 3/10 in_app]"
+
+
+def test_get_training_sessions_shows_the_rating_on_the_session_it_overlaps_only(db_session, monkeypatch):
     import mcp_server
     from aerobic_format import format_aerobic_session
     _user(db_session)
     today = datetime.now(timezone.utc)
-    linked = _hc(db_session, start=today - timedelta(days=1), ssid="a")
+    rated = _hc(db_session, start=today - timedelta(days=1), ssid="a")
     plain = _hc(db_session, start=today - timedelta(days=3), ssid="b", pkg="com.sec.android.app.shealth")
-    _eval_row(db_session, 11, linked.id, rpe=4.0, feel=25)
-    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
-    monkeypatch.setattr(mcp_server, "_current_user_id", lambda: 1)
-    lines = mcp_server.get_training_sessions(days=28).split("\n")
-    assert format_aerobic_session(linked) + " selfeval=[RPE 4/10 feel 25/100 garmin]" in lines
-    assert format_aerobic_session(plain) in lines                              # byte-identical when nothing is linked
+    _obs(db_session, "11", start=today - timedelta(days=1), now=today)
+    lines = _lines(mcp_server, db_session, monkeypatch)
+    assert format_aerobic_session(rated) + " selfeval=[RPE 4/10 feel 25/100 garmin]" in lines
+    assert format_aerobic_session(plain) in lines                              # byte-identical when nothing overlaps
 
 
-def test_the_readout_shows_the_latest_row_and_skips_unrated_ones(db_session):
+def test_the_lines_show_the_current_value_and_not_an_unrated_marker(db_session, monkeypatch):
+    import mcp_server
+    from aerobic_format import format_aerobic_session
     _user(db_session)
-    hc = _hc(db_session)
-    _eval_row(db_session, 11, hc.id, rpe=4.0, feel=25, captured=NOW)
-    _eval_row(db_session, 11, hc.id, rpe=6.0, feel=50, captured=NOW + timedelta(days=1))
-    out = gs.selfeval_by_session(db_session, 1, [hc])
-    assert (out[hc.id].rpe_cr10, out[hc.id].feel) == (6.0, 50)
-    _eval_row(db_session, 12, hc.id, rpe=None, feel=None, captured=NOW + timedelta(days=2))
-    assert gs.selfeval_by_session(db_session, 1, [hc])[hc.id].rpe_cr10 == 6.0   # an unrated marker is not a value
+    start = datetime.now(timezone.utc) - timedelta(days=1)
+    s = _hc(db_session, start=start)
+    _obs(db_session, "11", rpe_raw=40, start=start, now=NOW)
+    _obs(db_session, "11", rpe_raw=60, feel=50, start=start, now=NOW + timedelta(days=1))
+    assert format_aerobic_session(s) + " selfeval=[RPE 6/10 feel 50/100 garmin]" in _lines(mcp_server, db_session, monkeypatch)
+    _obs(db_session, "11", rpe_raw=None, feel=None, start=start, now=NOW + timedelta(days=2))
+    assert format_aerobic_session(s) in _lines(mcp_server, db_session, monkeypatch)   # un-rated: nothing shown
 
 
-def test_a_value_on_a_lost_twin_moves_to_the_canonical_session(db_session):
-    """The linked HC row lost arbitration to a same-bout Polar row: the readout shows the value on the winner."""
+def test_a_rating_on_a_lost_twin_lands_on_the_canonical_session_in_the_lines(db_session, monkeypatch):
+    """The Garmin Health Connect row lost arbitration to a same-bout Polar row: the rating is placed by overlap, so
+    the winner carries it with no carry-over code."""
+    import mcp_server
+    from aerobic_format import format_aerobic_session
     _user(db_session)
-    hc = _hc(db_session)
-    polar = _hc(db_session, source="polar_v4", pkg=None, ssid="polar-1")
-    hc.canonical, polar.canonical = False, True
-    _eval_row(db_session, 11, hc.id)
-    out = gs.selfeval_by_session(db_session, 1, [hc, polar])
-    assert set(out) == {polar.id}
-    elsewhere = _hc(db_session, start=START - timedelta(days=2), source="polar_v4", pkg=None, ssid="polar-2")
-    elsewhere.canonical = True
-    assert set(gs.selfeval_by_session(db_session, 1, [hc, elsewhere])) == set()   # no same-bout winner: nothing shown
+    start = datetime.now(timezone.utc) - timedelta(days=1)
+    _hc(db_session, start=start)
+    polar = _hc(db_session, start=start, source="polar_v4", pkg=None, ssid="polar-1")
+    _obs(db_session, "11", start=start, now=start)
+    lines = _lines(mcp_server, db_session, monkeypatch)
+    rated = [ln for ln in lines if "selfeval=" in ln]
+    assert len(rated) == 1 and rated[0].startswith(format_aerobic_session(polar))
+
+
+def test_the_whole_day_rating_is_never_shown_on_a_session_line(db_session, monkeypatch):
+    import mcp_server
+    from aerobic_format import format_aerobic_session
+    _user(db_session)
+    start = datetime.now(timezone.utc) - timedelta(days=1)
+    s = _hc(db_session, start=start)
+    db_session.add(models.DailyRecord(user_id=1, date=s.session_date, session_rpe=8.0))
+    db_session.commit()
+    assert format_aerobic_session(s) in _lines(mcp_server, db_session, monkeypatch)

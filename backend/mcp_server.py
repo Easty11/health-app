@@ -36,7 +36,7 @@ from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from routers.clinical_documents import document_out as _clinical_document_out, parse_filters as _parse_document_filters
 from reads.labs_reads import latest_lab_results
 from aerobic_format import format_aerobic_session, format_also_recorded_by, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
-from garmin_selfeval import selfeval_by_session   # Garmin per-activity RPE/feel for a linked session (Q209)
+from reads.srpe_reads import aerobic_bout, observed_ratings   # per-session RPE/feel for a session, any source (Q209)
 from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout, twins_by_canonical   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
 from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
 from sport_classes import is_strength_sport
@@ -584,6 +584,15 @@ def get_cbti_diary(days: int = 42) -> str:
 # Tool 3 — Training sessions (aerobic/cardio)
 # ---------------------------------------------------------------------------
 
+def _session_selfevals(db, user_id: int, sessions: list) -> dict[int, object]:
+    """`{aerobic_session.id: Rating}` for the given canonical sessions: the per-session rating the read
+    door resolves (any source, by the declared hierarchy). Per-session only: the whole-day `session_rpe`
+    is not a rating OF a session and is never shown on its line. Sessions the felt-load count leaves out
+    (Pilates, say) are rated here too, so their rating still shows."""
+    ratings = observed_ratings(db, user_id, [aerobic_bout(s) for s in sessions])
+    return {key[1]: r for key, r in ratings.items()}
+
+
 @mcp.tool()
 @_stamped
 def get_training_sessions(days: int = 28) -> str:
@@ -603,9 +612,9 @@ def get_training_sessions(days: int = 28) -> str:
     # are now included). Rendered inside the session so attributes are materialised.
     with SessionLocal() as _db:
         arbitrated = arbitrated_sessions(user_id, _db, since=since)
-        selfevals = selfeval_by_session(_db, user_id, arbitrated)   # before the canonical filter: a lost twin's value moves to the winner
         twins = twins_by_canonical(arbitrated)   # Q201(b): who each canonical row suppressed, before the filter drops them
         sessions = [s for s in arbitrated if getattr(s, "canonical", True)]
+        selfevals = _session_selfevals(_db, user_id, sessions)   # a rating is placed by overlap, so a lost twin's value lands on the winner
 
         if not sessions:
             return (
@@ -889,9 +898,9 @@ def get_recent_sessions(days: int = 7) -> str:
     since = _local_day() - timedelta(days=days)
     with SessionLocal() as _db:
         arbitrated = arbitrated_sessions(user_id, _db, since=since)
-        selfevals = selfeval_by_session(_db, user_id, arbitrated)   # before the canonical filter, as get_training_sessions
         twins = twins_by_canonical(arbitrated)   # Q201(b), as get_training_sessions
         sessions = [s for s in arbitrated if getattr(s, "canonical", True)]
+        selfevals = _session_selfevals(_db, user_id, sessions)   # as get_training_sessions
         # Candidate fetch, padded a day before the window so a bout started just before it still
         # links; the formatter applies the in-window cut on the LOCAL day. Partitioned by the
         # counted-Hevy door.

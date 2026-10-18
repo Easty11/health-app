@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_SWEEP_DAYS = 7
 
 
-_SELFEVAL_COUNTS = ("fetched", "rated", "unrated", "linked", "relinked", "skipped_needs_refresh", "errors")
+_SELFEVAL_COUNTS = ("fetched", "rated", "unrated", "skipped_needs_refresh", "errors")
 
 
 def _selfeval_step(db, uid: int, factory) -> dict[str, Any]:
@@ -88,7 +88,7 @@ def sweep_garmin_hrv(
     session back so the next user starts clean.
 
     After each user's HRV pull, `garmin_selfeval` reads that user's per-activity self-evaluation
-    (Q209) from the freshly written-back token, through a no-refresh client: it skips a user whose
+    (Q209) into the source-neutral sRPE store from the freshly written-back token, through a no-refresh client: it skips a user whose
     token is dead (`reconnect_required`: nothing fresh to read with), is soft-fail, and reports its
     counts under `per_user[uid]["selfeval"]` and summed under `summary["selfeval"]`
     (`skipped_needs_refresh` is the visible sign of a stale token).
@@ -204,7 +204,7 @@ def main() -> int:
                     print(f"    selfeval: error ({ev['error']})", file=sys.stderr)
                 elif ev:
                     print(f"    selfeval: fetched={ev['fetched']} rated={ev['rated']} unrated={ev['unrated']} "
-                          f"linked={ev['linked']} skipped_needs_refresh={ev['skipped_needs_refresh']} "
+                          f"skipped_needs_refresh={ev['skipped_needs_refresh']} "
                           f"errors={ev['errors']}")
                 sp = detail.get("spo2", {})
                 if "error" in sp:

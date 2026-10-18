@@ -18,7 +18,7 @@ the capture code that fills them deploys. The Garmin profile id and device id th
 carries are NOT columns and are never stored.
 
 Revision ID: e0d53feadc9d
-Revises: 295da687b02e
+Revises: e2a4c6d8f1b3
 Create Date: 2026-10-18
 
 """
@@ -28,7 +28,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = 'e0d53feadc9d'
-down_revision: Union[str, Sequence[str], None] = '295da687b02e'
+down_revision: Union[str, Sequence[str], None] = 'e2a4c6d8f1b3'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

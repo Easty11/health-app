@@ -80,5 +80,5 @@ def test_the_revision_chains_from_the_prior_head_in_one_line():
     cfg.set_main_option("script_location", str(_BACKEND / "migrations"))
     script = ScriptDirectory.from_config(cfg)
     assert len(script.get_heads()) == 1, "migration history branched"
-    assert script.get_revision(_REV).down_revision == "295da687b02e"
+    assert script.get_revision(_REV).down_revision == "e2a4c6d8f1b3"
     assert script.get_heads() == [_REV]

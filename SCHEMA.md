@@ -45,7 +45,8 @@ Ordering is determined by FK dependencies. Do not reorder.
 044 — health_connect_syncs sleep-nadir HR  six additive nullable `hr_nadir_*` columns — the sleep-period resting rate DECISIONS_LOG.md:480 calls primary; HELD for operator release
 045 — clinical_documents  FK to users (CASCADE) — one row per imaging report or clinical letter; unique (user, doc_key); index (user, service_date); the target of the `document` evidence door (Q142 option b); HELD for operator release
 046 — mcp_oauth_clients + mcp_oauth_tokens  tokens FK to users (CASCADE) and to clients (CASCADE) — the persisted MCP OAuth provider: client registrations and access/refresh tokens stored as sha256 hashes, with expiry and revocation (Q196); HELD for operator release
-047 — spo2_nights + spo2_samples + breathing_disruption_intervals  FK to users (CASCADE) and to spo2_nights (CASCADE) — raw Garmin overnight SpO2 capture: a nightly parent (unique user, night, source) with sleep window, reading_count and gap_count, one row per SpO2 epoch exactly as sent, and the raw breathing-disruption intervals (Q150); HELD for operator release
+047 — session_rpe_observations  FK to users (CASCADE) — source-neutral, insert-only, capture-timed per-activity RPE (raw + declared scale + CR-10, UTC bout window, source-specific feel, provenance); unique (user, source, source_activity_ref, captured_at); Garmin rows copied verbatim from `garmin_activity_selfevals` (read-only from here); HELD for operator release
+048 — spo2_nights + spo2_samples + breathing_disruption_intervals  FK to users (CASCADE) and to spo2_nights (CASCADE) — raw Garmin overnight SpO2 capture: a nightly parent (unique user, night, source) with sleep window, reading_count and gap_count, one row per SpO2 epoch exactly as sent, and the raw breathing-disruption intervals (Q150); HELD for operator release
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1914,9 +1915,40 @@ CREATE INDEX ix_mcp_oauth_token_refresh_hash ON mcp_oauth_tokens (refresh_hash);
 **Downgrade** drops both tables (tokens first; their indexes and the check constraint go with them). It loses every issued MCP session, so each connected client re-authenticates once, which is the pre-migration behaviour. Checked on Postgres 16: upgrade, `compare_metadata` drift check (none on these tables), downgrade (zero tables and zero indexes left), upgrade again.
 
 
-### 047 — spo2_nights + spo2_samples + breathing_disruption_intervals (Q150: raw Garmin overnight SpO2 capture)
+### 047 — session_rpe_observations (the source-neutral per-session sRPE store)
 
-Migration `e0d53feadc9d` (revises `295da687b02e`). Additive: three new tables, nothing altered, empty until the capture code that fills them deploys. **HELD for the operator's release** (a schema migration): the PR carrying it is not self-merged. A parent and two children, mirroring `hrv_readings` / `hrv_samples`.
+Migration `e2a4c6d8f1b3` (revises `295da687b02e`). One new table, two indexes, and a data step that copies `garmin_activity_selfevals` into it. **HELD for the operator's release** (a schema migration): the PR carrying it is not self-merged, and Railway auto-runs `alembic upgrade head` on deploy, so the merge is the release.
+
+```sql
+CREATE TABLE session_rpe_observations (
+    id                  SERIAL PRIMARY KEY,
+    user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    source              VARCHAR(32)  NOT NULL,         -- names an adapter ('garmin'); declared in srpe_store.SOURCE_SCALES
+    source_activity_ref VARCHAR(128) NOT NULL,         -- the source's own activity id, as text
+    start_time          TIMESTAMPTZ NOT NULL,          -- the bout the rating is about (UTC)
+    stop_time           TIMESTAMPTZ,                   -- NULL when the source gave no duration: never placed on a session
+    rpe_raw             DOUBLE PRECISION,              -- as the source sent it; NULL = unrated
+    raw_scale           VARCHAR(32)  NOT NULL,         -- a scale the adapter declared ('garmin_0_100')
+    rpe_cr10            DOUBLE PRECISION,              -- rpe_raw converted by the declared scale; NULL = unrated
+    feel                INTEGER,                       -- source-specific passthrough
+    captured_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    provenance          JSONB NOT NULL,                -- audit detail only; nothing reads it for a value
+    CONSTRAINT uq_session_rpe_obs_capture UNIQUE (user_id, source, source_activity_ref, captured_at)
+);
+CREATE INDEX ix_session_rpe_observations_id ON session_rpe_observations (id);
+CREATE INDEX ix_session_rpe_observations_user_id ON session_rpe_observations (user_id);
+```
+
+- **One writer, one contract.** `srpe_store.record_observation` is the only code that inserts (a test reads the tree for a second one). The adapter names its `source` and declares the scales it writes; the writer, not the adapter, converts `rpe_raw` to `rpe_cr10`. A `raw_scale` the source did not declare, a source that declared nothing (`in_app` is reserved in the hierarchy and has no writer yet), a non-numeric value or one outside the declared range is refused and inserts nothing.
+- **Insert-only, capture-timed.** A row is what the source said at `captured_at`; a changed or later answer is a new row, strictly later than that activity's previous one. An activity's CURRENT value is its latest row; an UNRATED latest row means "no rating". No code path updates or deletes one (a test fails on any UPDATE or DELETE).
+- **No link is stored.** Which counted session a rating belongs to is decided at read time by overlap of the window with the counted sessions (`reads/srpe_reads.py`), so a late Health Connect row, a lost twin or a Hevy mirror needs no repair of the store.
+- **Data step.** Every `garmin_activity_selfevals` row is copied verbatim: `captured_at`, window, `rpe_cr10`, `feel` and unrated marker rows preserved; `rpe_raw = rpe_cr10 * 10`; the old `aerobic_session_id`, `garmin_type` and row id travel in `provenance` only. The old table is untouched and read-only from here; its drop is proposed separately. The copy is skipped in offline (`--sql`) mode.
+
+**Downgrade** drops the new table. Observations written after the upgrade exist only there and are lost; the Garmin sweep re-reads at most the last 14 days of them.
+
+### 048 — spo2_nights + spo2_samples + breathing_disruption_intervals (Q150: raw Garmin overnight SpO2 capture)
+
+Migration `e0d53feadc9d` (revises `e2a4c6d8f1b3`). Additive: three new tables, nothing altered, empty until the capture code that fills them deploys. **HELD for the operator's release** (a schema migration): the PR carrying it is not self-merged. A parent and two children, mirroring `hrv_readings` / `hrv_samples`.
 
 ```sql
 CREATE TABLE spo2_nights (

@@ -45,18 +45,18 @@ def format_aerobic_session(s: Any) -> str:
 
 
 def format_selfeval(row: Any) -> str:
-    """The Garmin self-evaluation suffix for a session line, e.g. ` selfeval=[RPE 4/10 feel 25/100 garmin]`.
+    """The self-evaluation suffix for a session line, e.g. ` selfeval=[RPE 4/10 feel 25/100 garmin]`.
 
-    `row` is the latest `garmin_activity_selfevals` row linked to the session (rated: at least one of
-    `rpe_cr10` / `feel` is set). RPE is CR-10 (Garmin's 0-100 / 10); feel is Garmin's 0-100 as sent, no
-    label (only 25 = "Weak" is verified). The shared `format_aerobic_session` line is NOT changed, so the
+    `row` is the session's per-session rating from the read door (`reads.srpe_reads.Rating`: `rpe_cr10`,
+    `feel`, `source`), never the whole-day fill. RPE is CR-10; feel is the source's passthrough (Garmin's
+    0-100 as sent, no label: only 25 = "Weak" is verified); the trailing word names the source. The shared `format_aerobic_session` line is NOT changed, so the
     in-app chat's pinned session block reads as before; only `get_training_sessions` appends this."""
     parts = []
     if row.rpe_cr10 is not None:
         parts.append(f"RPE {row.rpe_cr10:g}/10")
     if row.feel is not None:
         parts.append(f"feel {row.feel}/100")
-    return f" selfeval=[{' '.join(parts)} garmin]"
+    return f" selfeval=[{' '.join(parts)} {row.source}]"
 
 
 def format_also_recorded_by(twins: Any) -> str:

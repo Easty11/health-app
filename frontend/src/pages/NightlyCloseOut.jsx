@@ -95,6 +95,10 @@ export default function NightlyCloseOut() {
   const [trainedToday, setTrainedToday] = useState(false)
   const [sessionQuality, setSessionQuality] = useState(3)
   const [sessionRpe, setSessionRpe] = useState(7)
+  // sRPE is asked only for the sessions no app rated per session (`/today.srpe_needed`). Until /today
+  // answers, or when it does not say (older backend), ask: failing open costs a slider, not a silent gap.
+  const [srpeNeeded, setSrpeNeeded] = useState(true)
+  const [storedRpe, setStoredRpe] = useState(null)   // the whole-day value already on the record, kept when the slider is hidden
 
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -115,7 +119,11 @@ export default function NightlyCloseOut() {
           setSessionQuality(data.session_quality)
         }
         if (data?.today_rating) setTodayRating(data.today_rating)
-        if (data?.session_rpe != null) setSessionRpe(data.session_rpe)
+        if (data?.session_rpe != null) {
+          setSessionRpe(data.session_rpe)
+          setStoredRpe(data.session_rpe)
+        }
+        setSrpeNeeded(data?.srpe_needed !== false)
         if (data?.naps_min != null) setNapsMin(String(data.naps_min))
         setPmNotes(data?.pm_notes ?? '')
         setAmNotes(data?.am_notes ?? '')
@@ -132,7 +140,8 @@ export default function NightlyCloseOut() {
         today_rating: todayRating,
         trained_today: trainedToday,
         session_quality: trainedToday ? sessionQuality : null,
-        session_rpe: trainedToday ? sessionRpe : null,
+        // Hidden slider: send what the record already holds, never the slider's untouched default.
+        session_rpe: trainedToday ? (srpeNeeded ? sessionRpe : storedRpe) : null,
         pm_notes: pmNotes.trim() || null,
         // Load-bearing (DECISIONS #C): while a block is open a blank field submits 0
         // ("asked, no nap"), NEVER null — null means "not asked" and disables the
@@ -167,8 +176,12 @@ export default function NightlyCloseOut() {
                 <>
                   <span className="text-gray-500">Session quality</span>
                   <span className="text-gray-800 font-medium text-right tabular-nums">{sessionQuality}/5</span>
-                  <span className="text-gray-500">Session RPE</span>
-                  <span className="text-gray-800 font-medium text-right tabular-nums">{sessionRpe}</span>
+                  {srpeNeeded && (
+                    <>
+                      <span className="text-gray-500">Session RPE</span>
+                      <span className="text-gray-800 font-medium text-right tabular-nums">{sessionRpe}</span>
+                    </>
+                  )}
                 </>
               ) : (
                 <>
@@ -249,11 +262,18 @@ export default function NightlyCloseOut() {
                   <TapSelect value={sessionQuality} onChange={setSessionQuality} labels={SESSION_LABELS} />
                   <p className="text-xs text-gray-400 text-center">{SESSION_LABELS[sessionQuality - 1]}</p>
                 </div>
-                <SliderField
-                  label={`Session RPE (${sessionRpe})`}
-                  value={sessionRpe}
-                  onChange={setSessionRpe}
-                />
+                {srpeNeeded ? (
+                  <div className="space-y-1">
+                    <SliderField
+                      label={`Session RPE (${sessionRpe})`}
+                      value={sessionRpe}
+                      onChange={setSessionRpe}
+                    />
+                    <p className="text-[10px] text-gray-400">Rate the sessions your apps didn't.</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">Your apps rated every session today, so there is no RPE to enter.</p>
+                )}
               </div>
             )}
           </div>

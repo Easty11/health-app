@@ -301,8 +301,8 @@ def arbitrated_sessions(
     workout (excluded and unadjudicated-duplicate rows included, see `_hevy_near`) gets `hevy_mirror=True, canonical=False` and is kept OUT of the arbitration, so it
     can neither be emitted as a session nor suppress a live row for the same bout (a zoned
     Strava copy would otherwise outrank a zoneless watch row that is the genuine record). Mirrors
-    are still RETURNED, like any non-canonical row, for callers that need every row (the Garmin
-    self-evaluation link); every reader that lists or counts sessions filters on `.canonical`.
+    are still RETURNED, like any non-canonical row, for callers that need every row (a rating of a
+    lost twin is placed by overlap, not carried); every reader that lists or counts sessions filters on `.canonical`.
     """
     q = (
         db.query(models.AerobicSession)

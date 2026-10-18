@@ -215,7 +215,7 @@ def test_mirrors_are_still_returned_for_callers_that_need_every_row(db_session):
     u = _user(db_session)
     _hevy(db_session, u.id, "w1", _t(6), _t(7))
     sid = _hc(db_session, u.id, "s1", _t(6, 5), _t(6, 55), STRAVA)
-    assert sid in [s.id for s in arbitrated_sessions(u.id, db_session, limit=5)]      # find_link reads these
+    assert sid in [s.id for s in arbitrated_sessions(u.id, db_session, limit=5)]      # every row is returned, canonical or not
 
 
 # ── G5: every raw reader agrees ─────────────────────────────────────────────────────────
