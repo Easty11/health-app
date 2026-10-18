@@ -46,6 +46,7 @@ ALLOW_HEVY = {
     "hevy_workouts.py": "Writer (Hevy ingest + dedup_flag/partner recompute).",
     "engine/resolver.py": "Fetches in-window candidates, partitions via counted_workouts (the door).",
     "reads/psychological_reads.py": "Fetches non-excluded candidates, filters via counted_workouts.",
+    "reads/srpe_reads.py": "THE counted-session read-door for per-session RPE (`counted_sessions`): fetches non-excluded candidates, filters via counted_workouts, and takes aerobic rows only through arbitrated_sessions. It owns the bout set the psychological read sums and the one place a rating is placed on a Hevy workout (the shared overlaps_workout predicate).",
     "routers/series.py": "Fetches non-excluded candidates, filters via counted_workouts.",
     "engine/region_exercise.py": "Fetches non-excluded candidates, filters via counted_workouts, then limits.",
     "load_events.py": "Fetches non-excluded candidates, filters via counted_workouts (byte-identical on adjudicated data).",
