@@ -6,10 +6,11 @@ Region and not a Measure, and never a stored observation. This file pins:
   * the declarations themselves (er_ir, add_abd) and that they resolve;
   * `validate_ratio` refusing each way a declaration can be incoherent, with the bad case
     built first so the validator is shown to be able to fail (FEEDBACK 10, 57);
-  * G3: no numeric threshold lives on any Ratio or Measure — bands are expectation text,
-    marked "to populate", so no automatic deficit flag can fire from the declaration;
+  * G3 (amended, R8): no numeric threshold lives on any Ratio or Measure, and no number in the
+    tier fires a verdict — norms are data in `reference/capability_norms_v1.json`;
   * `reference_kind` is a closed vocabulary, the default is the restrictive one, the gate is
-    stated to FAIL CLOSED, and no declared measure or ratio is "literature" until a norm is cited;
+    stated to FAIL CLOSED, and a declaration is "literature" exactly when a norm is cited for it
+    (the pin runs both ways, so a later admission edits the declaration and the norm together);
   * the new measures accept and refuse sides the way their INSTRUMENT allows.
 """
 import dataclasses
@@ -42,10 +43,11 @@ def test_the_two_declared_ratios():
     assert add_abd.numerator == ("hip_adduction", "hhd_force_n")
     assert add_abd.denominator == ("hip_abduction", "hhd_force_n")
     for r in (er_ir, add_abd):
-        # ER:IR's 0.66-0.75 is isokinetic torque, not HHD force; no add:abd norm is cited either.
-        assert r.same_side and r.same_protocol and r.reference_kind == "internal"
+        # R6: both ratios have a cited norm (Riemann 2010; Mosler 2016), so both are literature.
+        assert r.same_side and r.same_protocol and r.reference_kind == "literature"
         assert r.confidence is Confidence.GUESSING
-        assert "to populate" in r.expectation
+        # The retired isokinetic 0.66-0.75 text must not come back (it was torque, not HHD force).
+        assert "0.66" not in r.expectation and "isokinetic" not in r.expectation.lower()
     assert taxonomy.ratio_by_key("h_q") is None      # R3: no H:Q ratio
 
 
@@ -144,37 +146,64 @@ def test_the_gate_is_stated_to_fail_closed_in_the_measure_and_ratio_docstrings()
         assert "FAILS CLOSED" in flat and "administered_by" in flat and 'as "internal"' in flat
 
 
-def test_no_declared_measure_or_ratio_is_literature_until_a_matching_norm_is_cited():
-    """A measure flips to "literature" only when a norm matching its instrument AND protocol is
-    cited. None is: the ER:IR band is isokinetic torque (not HHD force), the Copenhagen squeeze is
-    validated as a pain score (not mmHg), and no heel-raise or adductor:abductor norm is cited.
-    A later flip must edit this pin together with the citation in the decision entry."""
-    literature = {(r.key, m.key) for r in taxonomy.all_regions() for m in r.measures
-                  if m.reference_kind == "literature"}
-    assert literature == set()
-    assert {r.key for r in taxonomy.all_ratios() if r.reference_kind == "literature"} == set()
+def test_every_literature_declaration_has_a_cited_norm_and_every_internal_one_has_none():
+    """The fail-closed inverse of the old pin (R8). A declaration is "literature" exactly when at
+    least one norm in the registry names it, under a DECLARED protocol, with a PMID and a DOI. A
+    future admission must flip the declaration and add the norm in ONE change; a norm with no
+    flipped declaration (or a flip with no norm) fails here."""
+    from engine import norms, protocols
+
+    def cited(target):
+        ns = norms.norms_for_target(target)
+        return bool(ns) and all(
+            protocols.by_key(pk) is not None and n.citation.get("pmid") and n.citation.get("doi")
+            for n in ns for pk in n.protocols)
+
+    for r in taxonomy.all_regions():
+        for m in r.measures:
+            has = bool(norms.norms_for_target((r.key, m.key)))
+            if m.reference_kind == "literature":
+                assert cited((r.key, m.key)), (r.key, m.key)
+            else:
+                assert not has, ("internal measure with a norm", r.key, m.key)
+    for ratio in taxonomy.all_ratios():
+        has = bool(norms.norms_for_target((protocols.RATIO_TARGET, ratio.key)))
+        if ratio.reference_kind == "literature":
+            assert cited((protocols.RATIO_TARGET, ratio.key)), ratio.key
+        else:
+            assert not has, ("internal ratio with a norm", ratio.key)
 
 
 def test_the_v1_measures_are_declared_as_briefed():
     got = {(r.key, m.key): (m.unit, m.per_side, m.higher_is_better, m.reference_kind)
            for r in taxonomy.all_regions() for m in r.measures if r.group == "H"}
     assert got == {
-        ("shoulder_er", "hhd_force_n"): ("N", True, True, "internal"),
-        ("shoulder_ir", "hhd_force_n"): ("N", True, True, "internal"),
+        ("shoulder_er", "hhd_force_n"): ("N", True, True, "literature"),
+        ("shoulder_ir", "hhd_force_n"): ("N", True, True, "literature"),
         ("hip_adduction", "hhd_force_n"): ("N", True, True, "internal"),
-        ("hip_adduction", "squeeze_mmhg"): ("mmHg", False, True, "internal"),
+        ("hip_adduction", "squeeze_hhd_n"): ("N", False, True, "literature"),
+        ("hip_adduction", "squeeze_mmhg"): ("mmHg", False, True, "literature"),
         ("hip_abduction", "hhd_force_n"): ("N", True, True, "internal"),
-        ("ankle_plantarflexion", "sl_heel_raise_reps"): ("count", True, True, "internal"),
+        ("ankle_plantarflexion", "sl_heel_raise_reps"): ("count", True, True, "literature"),
+        ("knee_flexion", "hhd_force_n"): ("N", True, True, "internal"),
+        ("knee_flexion", "slhb_reps"): ("count", True, True, "internal"),
     }
-    # R3: knee_flexion is an absolute + LSI read with no instrument chosen; no H:Q, no knee_extension.
-    assert taxonomy.by_key("knee_flexion").measures == ()
+    # R7: knee_flexion declares an isometric HHD and the single-leg bridge; NO NordBord measure until
+    # the EP confirms the instrument; still no H:Q ratio and no knee_extension (R3).
+    knee = taxonomy.by_key("knee_flexion")
+    assert [m.key for m in knee.measures] == ["hhd_force_n", "slhb_reps"]
     assert taxonomy.by_key("knee_extension") is None
-    assert "no H:Q ratio" in taxonomy.by_key("knee_flexion").expectation
+    assert "No H:Q ratio" in knee.expectation
+    # R7a: the declared OUTCOME is a three-part hamstring strain-risk profile, stated in the text.
+    for part in ("(a) absolute capacity", "(b) left/right", "(c) endurance"):
+        assert part in knee.expectation
+    assert not any("nordbord" in m.key for m in knee.measures)
 
 
 # ── G3: no numeric threshold in code ─────────────────────────────────────────
 
 def test_no_numeric_threshold_field_on_ratio_or_measure():
+    import re
     for cls in (Ratio, Measure, taxonomy.Region):
         for f in dataclasses.fields(cls):
             assert f.type not in ("int", "float"), (cls.__name__, f.name)
@@ -182,9 +211,10 @@ def test_no_numeric_threshold_field_on_ratio_or_measure():
         for f in dataclasses.fields(r):
             v = getattr(r, f.name)
             assert not (isinstance(v, (int, float)) and not isinstance(v, bool)), (r.key, f.name)
-    # A band, where one is quoted at all, is text marked "to populate".
+    # A band is DATA in the norms JSON (R8), never quoted in declaration text: no decimal number or
+    # percentage appears in a ratio's expectation.
     for r in taxonomy.all_ratios():
-        assert "to populate" in r.expectation.lower()
+        assert not re.search(r"\d+\.\d+|%", r.expectation), r.key
 
 
 # ── sides follow the instrument, through the real write path ─────────────────
@@ -231,7 +261,9 @@ def test_the_retired_key_is_refused_on_write(db_session):
 def test_as_dict_carries_reference_kind_and_the_taxonomy_endpoint_lists_ratios():
     d = taxonomy.as_dict(taxonomy.by_key("hip_adduction"))
     assert {m["key"]: m["reference_kind"] for m in d["measures"]} == {
-        "hhd_force_n": "internal", "squeeze_mmhg": "internal"}
+        "hhd_force_n": "internal", "squeeze_hhd_n": "literature", "squeeze_mmhg": "literature"}
+    knee = {m["key"]: m for m in taxonomy.as_dict(taxonomy.by_key("knee_flexion"))["measures"]}
+    assert set(knee) == {"hhd_force_n", "slhb_reps"}
     assert taxonomy.as_dict(taxonomy.by_key("ankle_df"))["measures"][0]["reference_kind"] == "internal"
     body = get_taxonomy()
     assert body["version"] == "v1"
@@ -241,5 +273,6 @@ def test_as_dict_carries_reference_kind_and_the_taxonomy_endpoint_lists_ratios()
     by = {r["key"]: r for r in body["ratios"]}
     assert by["er_ir"]["numerator"] == {"region": "shoulder_er", "measure": "hhd_force_n"}
     assert by["add_abd"]["denominator"] == {"region": "hip_abduction", "measure": "hhd_force_n"}
-    assert by["er_ir"]["reference_kind"] == "internal" and by["er_ir"]["same_side"] is True
+    assert by["er_ir"]["reference_kind"] == "literature" and by["er_ir"]["same_side"] is True
+    assert by["add_abd"]["reference_kind"] == "literature"
     assert by["er_ir"]["confidence"] == "guessing"

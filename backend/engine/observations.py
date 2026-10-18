@@ -36,7 +36,9 @@ import pytz
 from sqlalchemy.orm import Session
 
 import models
+from . import protocols as protocols_mod
 from . import taxonomy
+from .protocols import INSTRUMENTS  # noqa: F401  (re-exported: the closed instrument vocabulary)
 from .taxonomy import SIDE_BILATERAL, SIDE_LEFT, SIDE_RIGHT, TAXONOMY_VERSION
 
 AEST = pytz.timezone("Australia/Brisbane")
@@ -47,6 +49,9 @@ METHODS = frozenset({"baseline_battery", "probe", "session", "manual"})
 SOURCES = frozenset({"self_report", "catapult", "hevy", "polar", "manual"})
 # Mirrors taxonomy.Confidence.
 CONFIDENCES = frozenset({"certain", "likely", "guessing"})
+# Who administered the test (Q27 v1 provenance). `INSTRUMENTS` (re-exported above) is the other
+# closed vocabulary; `protocol` is a key of engine/protocols.py.
+ADMINISTERED_BY = frozenset({"self", "ep", "physio", "clinician"})
 
 
 def _today() -> date:
@@ -84,6 +89,43 @@ def _validate(region_key: str, measure_key: str, side: str) -> taxonomy.Measure:
     return measure
 
 
+def _validate_provenance(
+    region_key: str, measure_key: str,
+    administered_by: str | None, instrument: str | None, protocol: str | None,
+) -> None:
+    """Provenance is ALL-OR-NOTHING (Q27 v1): all three given, or none. A row with none is legal
+    and evaluates as "internal" forever (the fail-closed gate, engine/reference.py). A partial set
+    is refused rather than stored, because a half-described reading cannot be matched to a norm and
+    would still LOOK provenanced. `instrument` must equal the protocol's declared instrument, and
+    the observed (region, measure) must be a target of the protocol (or a member of a ratio target
+    it produces)."""
+    given = {"administered_by": administered_by, "instrument": instrument, "protocol": protocol}
+    present = [k for k, v in given.items() if v is not None]
+    if not present:
+        return
+    if len(present) != len(given):
+        missing = [k for k in given if k not in present]
+        raise ValueError(
+            f"provenance is all-or-nothing: got {', '.join(present)} but not {', '.join(missing)}"
+        )
+    if administered_by not in ADMINISTERED_BY:
+        raise ValueError(f"unknown administered_by: {administered_by!r}")
+    if instrument not in INSTRUMENTS:
+        raise ValueError(f"unknown instrument: {instrument!r}")
+    proto = protocols_mod.by_key(protocol)
+    if proto is None:
+        raise ValueError(f"unknown protocol: {protocol!r}")
+    if instrument != proto.instrument:
+        raise ValueError(
+            f"instrument {instrument!r} does not match protocol {protocol!r} "
+            f"(declared instrument: {proto.instrument!r})"
+        )
+    if not protocols_mod.covers(protocol, (region_key, measure_key)):
+        raise ValueError(
+            f"protocol {protocol!r} does not produce {region_key}/{measure_key}"
+        )
+
+
 def record_observation(
     db: Session,
     user_id: int,
@@ -98,6 +140,9 @@ def record_observation(
     confidence: str = "likely",
     context: dict[str, Any] | None = None,
     unit: str | None = None,
+    administered_by: str | None = None,
+    instrument: str | None = None,
+    protocol: str | None = None,
 ) -> models.CapabilityObservation:
     """Append one measurement. Never updates an existing row.
 
@@ -106,6 +151,9 @@ def record_observation(
     and the taxonomy already holds the answer. A caller MAY pass `unit` to assert
     what it thinks it is sending — a mismatch raises rather than converting,
     because a unit conversion we invented is a value we made up.
+
+    `administered_by` / `instrument` / `protocol` are the provenance (Q27 v1), ALL-OR-NOTHING:
+    see `_validate_provenance`. Omitting all three is legal and reads as "internal" forever.
     """
     measure = _validate(region_key, measure_key, side)
 
@@ -120,6 +168,7 @@ def record_observation(
         raise ValueError(f"unknown source: {source!r}")
     if confidence not in CONFIDENCES:
         raise ValueError(f"unknown confidence: {confidence!r}")
+    _validate_provenance(region_key, measure_key, administered_by, instrument, protocol)
 
     try:
         value = float(value)
@@ -144,6 +193,9 @@ def record_observation(
         source=source,
         confidence=confidence,
         context=context,
+        administered_by=administered_by,
+        instrument=instrument,
+        protocol=protocol,
         taxonomy_version=TAXONOMY_VERSION,
     )
     db.add(row)
@@ -210,6 +262,17 @@ def latest(
     )
 
 
+def left_right_index(left: float, right: float) -> tuple[float | None, str | None]:
+    """The ratio-and-lower-side shape shared by the observed symmetry below and the log-derived
+    one (`engine/log_strength.py`): `(index_pct, lower_side)`. `index_pct` is lower/higher, so it is
+    in (0, 100]; `lower_side` names the side with the smaller VALUE (None when equal). It is never
+    compared to a threshold."""
+    lo, hi = sorted((left, right))
+    index_pct = round(lo / hi * 100, 1) if hi else None
+    lower = SIDE_LEFT if left < right else (SIDE_RIGHT if right < left else None)
+    return index_pct, lower
+
+
 def symmetry(
     db: Session,
     user_id: int,
@@ -240,8 +303,7 @@ def symmetry(
     if left is None or right is None:
         return None
 
-    lo, hi = sorted((left.value, right.value))
-    index_pct = round(lo / hi * 100, 1) if hi else None
+    index_pct, lower_side = left_right_index(left.value, right.value)
 
     return {
         "region_key": region_key,
@@ -257,9 +319,7 @@ def symmetry(
         # the reader needs to see that rather than be handed one number.
         "as_of": str(max(left.observed_on, right.observed_on)),
         "index_pct": index_pct,
-        "lower_side": SIDE_LEFT if left.value < right.value else (
-            SIDE_RIGHT if right.value < left.value else None
-        ),
+        "lower_side": lower_side,
     }
 
 
@@ -276,6 +336,9 @@ def observation_to_dict(row: models.CapabilityObservation) -> dict[str, Any]:
         "source": row.source,
         "confidence": row.confidence,
         "context": row.context,
+        "administered_by": row.administered_by,
+        "instrument": row.instrument,
+        "protocol": row.protocol,
         "taxonomy_version": row.taxonomy_version,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }

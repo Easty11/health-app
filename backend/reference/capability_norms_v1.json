@@ -1,0 +1,212 @@
+{
+  "_meta": {
+    "version": "capability_norms_v1",
+    "taxonomy_version": "v1",
+    "decision": "Q27 v1 remainders (R6, R8, R9); numbers minted at merge in DECISIONS_LOG",
+    "rule": "G3 amended (R8): NO NUMBER FIRES A VERDICT. Each record is a published reference value, admitted as DATA for display. engine/reference.py shows a record as a band ONLY when an observation's protocol is one the record lists; engine/norms.py exposes no comparison function; nothing in the tier turns a band into a pass, a fail, a grade or a clearance.",
+    "shape": "target = {region, measure} or {ratio}; protocols = engine/protocols.py keys the record was cited for; unit = the measure's unit, 'ratio', '<unit>/kg' (normalisation per_body_mass_kg) or 'ratio' with normalisation per_body_weight (force divided by body weight); value = {mean, sd} | {median} | {low, high}; verified_against = full_text | abstract_only.",
+    "body_mass_source": "load_events.BODYWEIGHT_KG (the only body-mass source in code); surfaced in every response that uses it."
+  },
+  "norms": [
+    {
+      "id": "riemann2010_er_ir_hhd",
+      "target": {"ratio": "er_ir"},
+      "protocols": [
+        "hhd_shoulder_rot_seated_neutral_make",
+        "hhd_shoulder_rot_seated_30_30_30_make",
+        "hhd_shoulder_rot_prone_90_90_make"
+      ],
+      "kind": "reference",
+      "unit": "ratio",
+      "value": {"low": 0.86, "high": 0.99},
+      "population": "adults aged 20-40 (age per secondary citation); handheld dynamometer",
+      "n": 181,
+      "citation": {
+        "authors": "Riemann BL et al.",
+        "year": 2010,
+        "journal": "J Shoulder Elbow Surg 19(8):1175-83",
+        "pmid": "20850997",
+        "doi": "10.1016/j.jse.2010.05.021"
+      },
+      "verified_against": "abstract_only",
+      "notes": "The abstract reports the unilateral ER/IR ratio as 86% to 99% across the limb, position and sex cells; a per-position table was not reachable. Riemann recommends the 30-30-30 position."
+    },
+    {
+      "id": "westrick2013_er_neutral",
+      "target": {"region": "shoulder_er", "measure": "hhd_force_n"},
+      "protocols": ["hhd_shoulder_rot_seated_neutral_make"],
+      "kind": "reference",
+      "unit": "ratio",
+      "normalisation": "per_body_weight",
+      "value": {"mean": 0.20, "sd": 0.04},
+      "population": "physically active males, 18.8 +/- 1.0 y; dominant arm",
+      "n": 546,
+      "citation": {
+        "authors": "Westrick RB et al.",
+        "year": 2013,
+        "journal": "Sports Health 5(1):17-21",
+        "pmid": "24381696",
+        "doi": "10.1177/1941738112456280"
+      },
+      "verified_against": "full_text",
+      "unit_note": "Table 3 is titled 'computed relative to body weight' and prints bare numbers; the paper does not state the unit. The magnitude (0.20 for ER in 75 kg men) is only plausible as force divided by body weight, so it is recorded as a dimensionless fraction, NOT N/kg. Operator ratification pending.",
+      "notes": "The paper says 'neutral position' and 'supine and seated'; mapping the neutral test to the seated protocol is an inference. Young cohort: direction only for a 45-year-old unless the operator rules otherwise."
+    },
+    {
+      "id": "westrick2013_er_supine45",
+      "target": {"region": "shoulder_er", "measure": "hhd_force_n"},
+      "protocols": ["hhd_shoulder_rot_supine_45abd_make"],
+      "kind": "reference",
+      "unit": "ratio",
+      "normalisation": "per_body_weight",
+      "value": {"mean": 0.22, "sd": 0.05},
+      "population": "physically active males, 18.8 +/- 1.0 y; dominant arm",
+      "n": 546,
+      "citation": {
+        "authors": "Westrick RB et al.",
+        "year": 2013,
+        "journal": "Sports Health 5(1):17-21",
+        "pmid": "24381696",
+        "doi": "10.1177/1941738112456280"
+      },
+      "verified_against": "full_text",
+      "unit_note": "As westrick2013_er_neutral: unit not stated in the paper; recorded as a dimensionless force / body-weight fraction. Operator ratification pending.",
+      "notes": "45 deg abduction, 0 deg flexion, supine with a bolster, 5 s make test, best of two trials. Young cohort: direction only for a 45-year-old unless the operator rules otherwise."
+    },
+    {
+      "id": "westrick2013_ir_neutral",
+      "target": {"region": "shoulder_ir", "measure": "hhd_force_n"},
+      "protocols": ["hhd_shoulder_rot_seated_neutral_make"],
+      "kind": "reference",
+      "unit": "ratio",
+      "normalisation": "per_body_weight",
+      "value": {"mean": 0.27, "sd": 0.06},
+      "population": "physically active males, 18.8 +/- 1.0 y; dominant arm",
+      "n": 546,
+      "citation": {
+        "authors": "Westrick RB et al.",
+        "year": 2013,
+        "journal": "Sports Health 5(1):17-21",
+        "pmid": "24381696",
+        "doi": "10.1177/1941738112456280"
+      },
+      "verified_against": "full_text",
+      "unit_note": "As westrick2013_er_neutral: unit not stated in the paper; recorded as a dimensionless force / body-weight fraction. Operator ratification pending.",
+      "notes": "Seated-for-neutral is an inference (see westrick2013_er_neutral). Young cohort: direction only for a 45-year-old unless the operator rules otherwise."
+    },
+    {
+      "id": "westrick2013_ir_supine45",
+      "target": {"region": "shoulder_ir", "measure": "hhd_force_n"},
+      "protocols": ["hhd_shoulder_rot_supine_45abd_make"],
+      "kind": "reference",
+      "unit": "ratio",
+      "normalisation": "per_body_weight",
+      "value": {"mean": 0.26, "sd": 0.05},
+      "population": "physically active males, 18.8 +/- 1.0 y; dominant arm",
+      "n": 546,
+      "citation": {
+        "authors": "Westrick RB et al.",
+        "year": 2013,
+        "journal": "Sports Health 5(1):17-21",
+        "pmid": "24381696",
+        "doi": "10.1177/1941738112456280"
+      },
+      "verified_against": "full_text",
+      "unit_note": "As westrick2013_er_neutral: unit not stated in the paper; recorded as a dimensionless force / body-weight fraction. Operator ratification pending.",
+      "notes": "Young cohort: direction only for a 45-year-old unless the operator rules otherwise."
+    },
+    {
+      "id": "mosler2016_add_abd_ratio",
+      "target": {"ratio": "add_abd"},
+      "protocols": ["hhd_hip_add_abd_sidelying_eccentric"],
+      "kind": "reference",
+      "unit": "ratio",
+      "value": {"mean": 1.2, "sd": 0.2},
+      "population": "male professional footballers, 18-40 y",
+      "n": 394,
+      "citation": {
+        "authors": "Mosler AB et al.",
+        "year": 2016,
+        "journal": "J Sci Med Sport 20(4):339-343",
+        "pmid": "28185809",
+        "doi": "10.1016/j.jsams.2016.05.010"
+      },
+      "verified_against": "abstract_only",
+      "notes": "Admitted as a ratio because lever arm and body mass cancel. Mosler's absolute adduction 3.0 +/- 0.6 and abduction 2.6 +/- 0.4 are Nm/kg (torque, not force) and are NOT admitted for hhd_force_n. The abstract names a hand-held dynamometer eccentric test in side-lying; the Thorborg-protocol attribution is not in the abstract."
+    },
+    {
+      "id": "mosler2016_squeeze_hhd",
+      "target": {"region": "hip_adduction", "measure": "squeeze_hhd_n"},
+      "protocols": ["hhd_squeeze_supine_45_make"],
+      "kind": "reference",
+      "unit": "N/kg",
+      "normalisation": "per_body_mass_kg",
+      "value": {"mean": 3.6, "sd": 0.8},
+      "population": "male professional footballers, 18-40 y",
+      "n": 394,
+      "citation": {
+        "authors": "Mosler AB et al.",
+        "year": 2016,
+        "journal": "J Sci Med Sport 20(4):339-343",
+        "pmid": "28185809",
+        "doi": "10.1016/j.jsams.2016.05.010"
+      },
+      "verified_against": "abstract_only",
+      "notes": "Squeeze in supine with 45 deg hip flexion. The abstract reports an age effect of -0.03 N/kg per year."
+    },
+    {
+      "id": "delahunt2011_squeeze_mmhg",
+      "target": {"region": "hip_adduction", "measure": "squeeze_mmhg"},
+      "protocols": ["sphyg_squeeze_supine_45"],
+      "kind": "reference",
+      "unit": "mmHg",
+      "value": {"mean": 236.8, "sd": 47.3},
+      "population": "healthy male Gaelic games athletes, no groin injury history",
+      "n": 18,
+      "citation": {
+        "authors": "Delahunt E et al.",
+        "year": 2011,
+        "journal": "Man Ther 16(5):476-80",
+        "pmid": "21429785",
+        "doi": "10.1016/j.math.2011.02.014"
+      },
+      "also_cited": [
+        {
+          "authors": "Nevin F, Delahunt E",
+          "year": 2013,
+          "note": "controls 269 +/- 25 mmHg vs groin pain 202 +/- 36 mmHg",
+          "pmid": "23684372",
+          "doi": "10.1016/j.jsams.2013.04.008"
+        },
+        {
+          "authors": "Toohey LA et al.",
+          "year": 2017,
+          "note": "CEILING CAVEAT (R9): 16 of 32 community AFL players reached the maximal sphygmomanometer reading, so a value at the cuff maximum is censored, not a measurement",
+          "pmid": "28891759",
+          "doi": "10.1080/09593985.2017.1374492"
+        }
+      ],
+      "verified_against": "abstract_only",
+      "notes": "The abstract gives 236.76 +/- 47.29 mmHg at 45 deg hip flexion (0 deg 202.50 +/- 57.28; 90 deg 186.11 +/- 44.01), three repetitions per position. Whether the analysed value is the best or the mean of the three was not reachable. The cuff reads at most about 300 mmHg."
+    },
+    {
+      "id": "hebertlosier2017_sl_heel_raise",
+      "target": {"region": "ankle_plantarflexion", "measure": "sl_heel_raise_reps"},
+      "protocols": ["heel_rise_10deg_incline_to_fatigue"],
+      "kind": "reference",
+      "unit": "count",
+      "value": {"median": 24},
+      "population": "healthy adults aged 20-81 y with BMI <= 30 (566 of 600 recruited); median 24 is the abstract's figure for males (females 21)",
+      "n": 566,
+      "citation": {
+        "authors": "Hebert-Losier K et al.",
+        "year": 2017,
+        "journal": "Physiotherapy 103(4):446-452",
+        "pmid": "28886865",
+        "doi": "10.1016/j.physio.2017.03.002"
+      },
+      "verified_against": "full_text",
+      "notes": "Read from the accepted manuscript, not the published PDF. The median is age-dependent in the paper's quantile model (males, right leg: 37.5 at age 20, 33.0 at 30, 28.5 at 40, 24.0 at 50); overall medians were 24 (right) and 23 (left). Covariates: age, sex, age x sex, BMI, physical activity level."
+    }
+  ]
+}
