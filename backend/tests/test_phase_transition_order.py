@@ -51,7 +51,7 @@ GOOD_SLOT = {"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}
 
 
 def _phase(*slots, label="aerobic base"):
-    return {"label": label, "probe_posture": "held", "microcycle": _micro(*(slots or (GOOD_SLOT,))),
+    return {"label": label, "probe_posture": "held", "vehicle_ranking": "standard", "microcycle": _micro(*(slots or (GOOD_SLOT,))),
             "entered_on": TODAY.isoformat(), "asserted_by": "user",
             "asserted_on": TODAY.isoformat(), "source": "api"}
 

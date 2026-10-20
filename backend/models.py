@@ -1341,7 +1341,9 @@ class TrainingPhase(Base):
     state = baseline (like `cbti_blocks` between blocks); with no open row the engine runs
     off profile + `weekly_template`, byte-identical to pre-Q112.
 
-    `probe_posture` is REQUIRED at write with NO default (#230 discipline). `asserted_by`
+    `probe_posture` and `vehicle_ranking` are REQUIRED at write with NO default (#230 discipline;
+    Q212 split them: posture owns the probe budget and the probe block, the ranking owns the
+    recovery-first vehicle re-rank, and neither implies the other). `asserted_by`
     / `source` carry the provenance domains from #227 / #230 — the DB CHECK domains here
     are frozen snapshots of `engine.profile.ASSERTED_BY_VALUES` and
     `routers.knowledge.SOURCE_VALUES` (models.py cannot import either without a cycle);
@@ -1353,6 +1355,11 @@ class TrainingPhase(Base):
         CheckConstraint(
             "probe_posture IN ('suppressed','held')",
             name="ck_training_phase_probe_posture",
+        ),
+        # Frozen snapshot of engine.training_phase.VEHICLE_RANKING_VALUES (Q212).
+        CheckConstraint(
+            "vehicle_ranking IN ('standard','recovery_first')",
+            name="ck_training_phase_vehicle_ranking",
         ),
         # Frozen snapshot of engine.profile.ASSERTED_BY_VALUES (#227).
         CheckConstraint(
@@ -1373,6 +1380,7 @@ class TrainingPhase(Base):
     label: Mapped[str] = mapped_column(String(100), nullable=False)          # free text; engine never branches on it
     intent: Mapped[str | None] = mapped_column(Text, nullable=True)          # prose, incl. energy-system posture the engine does not enforce
     probe_posture: Mapped[str] = mapped_column(String(10), nullable=False)   # suppressed | held — required, no default
+    vehicle_ranking: Mapped[str] = mapped_column(String(15), nullable=False)  # standard | recovery_first — required, no default (Q212)
     capacities: Mapped[list | None] = mapped_column(JSON, nullable=True)     # allow-list of Capacity tokens; null = all live
     microcycle: Mapped[dict | None] = mapped_column(JSON, nullable=True)     # A/B shape; null = fall back to weekly_template
     entered_on: Mapped[date] = mapped_column(Date, nullable=False)           # anchor; A/B index counts from here

@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 import api from '../../api'
+import { PROBE_POSTURE_OPTIONS, VEHICLE_RANKING_OPTIONS, optionLabel } from './phaseTransitionLib'
 
 function Chip({ children }) {
   return (
@@ -71,7 +72,9 @@ export default function PhaseHistory() {
                 <span className="text-xs font-medium text-gray-800">{r.label}</span>
                 <span className="flex items-center gap-1">
                   {r.zero_length && <Chip>same-day correction</Chip>}
-                  <span className="text-[11px] text-gray-500">{r.probe_posture}</span>
+                  <span className="text-[11px] text-gray-500">
+                    {optionLabel(PROBE_POSTURE_OPTIONS, r.probe_posture)} · {optionLabel(VEHICLE_RANKING_OPTIONS, r.vehicle_ranking)}
+                  </span>
                 </span>
               </div>
               <p className="text-[11px] text-gray-500">

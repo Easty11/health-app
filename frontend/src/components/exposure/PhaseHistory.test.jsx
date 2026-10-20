@@ -73,11 +73,11 @@ test('no edit affordance — the ledger is read-only', async () => {
 
 const serverHistory = {
   history: [
-    { id: 9, label: 'decompression', probe_posture: 'held', capacities: null, entered_on: '2026-10-04',
+    { id: 9, label: 'decompression', probe_posture: 'held', vehicle_ranking: 'standard', capacities: null, entered_on: '2026-10-04',
       review_on: '2026-11-16', closed_on: null, close_reason: null },
-    { id: 8, label: 'decompression', probe_posture: 'held', capacities: null, entered_on: '2026-09-21',
+    { id: 8, label: 'decompression', probe_posture: 'held', vehicle_ranking: 'standard', capacities: null, entered_on: '2026-09-21',
       review_on: null, closed_on: '2026-10-04', close_reason: 'block did its job: partly' },
-    { id: 1, label: 'decompression', probe_posture: 'suppressed', capacities: ['mobility', 'stability'],
+    { id: 1, label: 'decompression', probe_posture: 'suppressed', vehicle_ranking: 'recovery_first', capacities: ['mobility', 'stability'],
       entered_on: '2026-09-07', review_on: '2026-10-05', closed_on: '2026-09-21', close_reason: 'opened decompression' },
   ],
 }
@@ -91,6 +91,14 @@ test('renders every ledger row the server envelope carries, newest first, only t
   const spans = screen.getAllByText(/→/).map((n) => n.textContent.trim())
   expect(spans).toEqual(['2026-10-04 → open', '2026-09-21 → 2026-10-04', '2026-09-07 → 2026-09-21'])
   expect(screen.getByText(/Closed: block did its job: partly/)).toBeTruthy()
+})
+
+test('Q212: each ledger row shows both settings in plain language', async () => {
+  api.get.mockResolvedValue({ data: serverHistory })
+  render(<PhaseHistory />)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /phase history/i })) })
+  await waitFor(() => expect(screen.getAllByText('Probes as usual · Usual order').length).toBe(2))
+  expect(screen.getByText('Probes off · Recovery vehicles first')).toBeTruthy()
 })
 
 test('an empty ledger says so; a bare array (the old, wrong shape) is not read as rows', async () => {
@@ -110,11 +118,11 @@ test('an empty ledger says so; a bare array (the old, wrong shape) is not read a
 // "same-day correction" chip, and its close reason is still shown.
 test('R4: a zero_length row is labelled "same-day correction", muted, with its close reason; others are not', async () => {
   const rows = [
-    { id: 3, label: 'corrected', probe_posture: 'held', capacities: null, entered_on: '2026-10-05',
+    { id: 3, label: 'corrected', probe_posture: 'held', vehicle_ranking: 'standard', capacities: null, entered_on: '2026-10-05',
       closed_on: null, close_reason: null, zero_length: false },
-    { id: 2, label: 'first save', probe_posture: 'held', capacities: null, entered_on: '2026-10-05',
+    { id: 2, label: 'first save', probe_posture: 'held', vehicle_ranking: 'standard', capacities: null, entered_on: '2026-10-05',
       closed_on: '2026-10-05', close_reason: 'opened corrected', zero_length: true },
-    { id: 1, label: 'base build', probe_posture: 'held', capacities: null, entered_on: '2026-08-01',
+    { id: 1, label: 'base build', probe_posture: 'held', vehicle_ranking: 'standard', capacities: null, entered_on: '2026-08-01',
       closed_on: '2026-10-05', close_reason: 'opened first save', zero_length: false },
   ]
   api.get.mockResolvedValue({ data: { history: rows } })

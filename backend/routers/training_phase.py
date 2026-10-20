@@ -52,6 +52,7 @@ class PhaseIn(BaseModel):
     label: str
     intent: str | None = None
     probe_posture: str
+    vehicle_ranking: str
     capacities: list[str] | None = None
     microcycle: dict[str, Any] | None = None
     entered_on: str | None = None

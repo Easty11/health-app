@@ -57,9 +57,9 @@ def _workout(db, uid, hevy_id, start, tids, *, dedup=False, excluded=False, raw_
     db.commit()
 
 
-def _phase(db, uid, microcycle, entered_on, *, probe_posture="held"):
+def _phase(db, uid, microcycle, entered_on, *, probe_posture="held", vehicle_ranking="standard"):
     ph = models.TrainingPhase(
-        user_id=uid, label="p", probe_posture=probe_posture, microcycle=microcycle,
+        user_id=uid, label="p", probe_posture=probe_posture, vehicle_ranking=vehicle_ranking, microcycle=microcycle,
         entered_on=entered_on, asserted_by="user", asserted_on=entered_on, source="api",
     )
     db.add(ph)

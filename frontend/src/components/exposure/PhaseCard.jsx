@@ -22,6 +22,7 @@ import QuotaWindow from './QuotaWindow'
 import PhaseHistory from './PhaseHistory'
 import ClosePhaseDialog from './ClosePhaseDialog'
 import LegStrip from './LegStrip'
+import { PROBE_POSTURE_OPTIONS, VEHICLE_RANKING_OPTIONS, optionLabel } from './phaseTransitionLib'
 
 function Chip({ children, tone = 'gray' }) {
   const tones = {
@@ -159,7 +160,8 @@ export default function PhaseCard({ phase, refetchKey = 0, onReviewChange, onWri
       </div>
 
       <p className="text-xs text-gray-500 leading-snug">
-        <span className="font-medium text-gray-700">Posture:</span> {phase.probe_posture} ·{' '}
+        <span className="font-medium text-gray-700">Probes:</span> {optionLabel(PROBE_POSTURE_OPTIONS, phase.probe_posture)} ·{' '}
+        <span className="font-medium text-gray-700">Vehicles:</span> {optionLabel(VEHICLE_RANKING_OPTIONS, phase.vehicle_ranking)} ·{' '}
         <span className="font-medium text-gray-700">entered</span> {phase.entered_on}
       </p>
       <div className="flex flex-wrap gap-1 items-center">

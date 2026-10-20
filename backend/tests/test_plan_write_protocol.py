@@ -75,7 +75,7 @@ def test_documented_dated_one_off_lands_and_blocks_its_day(db_session):
     u = _user(db_session, email="dated-oneoff@example.com")
     # an open phase gives plan_week a window to derive over.
     db_session.add(models.TrainingPhase(
-        user_id=u.id, label="base", probe_posture="held",
+        user_id=u.id, label="base", probe_posture="held", vehicle_ranking="standard",
         entered_on=date(2026, 9, 7), asserted_by="user", asserted_on=date(2026, 9, 7), source="api",
         microcycle={"sub_cycle_days": 7, "sub_cycles": [
             {"label": "A", "slots": [{"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},
