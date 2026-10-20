@@ -892,7 +892,7 @@ def test_tibialis_raise_is_no_pattern_and_is_never_ankle_df():
 def test_the_tag_pass_lines_are_pure_ascii_and_the_reference_still_parses():
     from pathlib import Path
     raw = Path(seeder._PROPOSAL_PATH).read_bytes()
-    for line in raw.split(b"\r\n"):
+    for line in raw.splitlines():       # either ending: the checkout is CRLF on Windows, LF in CI
         if b"rep-ceiling tag pass" in line:
             assert line.isascii(), line[:80]
     seeder._validate_fail_closed(seeder.load_proposal())
