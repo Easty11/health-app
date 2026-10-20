@@ -46,6 +46,7 @@
     "id": 2,
     "label": "rebuild",
     "probe_posture": "held",
+    "vehicle_ranking": "standard",
     "capacities": ["strength", "power"],
     "entered_on": "2026-09-08",
     "review_due": false,

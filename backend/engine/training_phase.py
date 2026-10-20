@@ -60,6 +60,10 @@ def slot_options() -> dict[str, list[str]]:
 
 # ── domains local to the phase ledger ────────────────────────────────────────
 PROBE_POSTURE_VALUES = ("suppressed", "held")
+# Q212: whether the phase asks the Fortify vehicle list to be re-ranked recovery-first. Separate from
+# `probe_posture` (the probe budget + probe block) so a phase can switch probes off without also
+# re-ranking vehicles. Readiness and life-load re-rank triggers are independent of it.
+VEHICLE_RANKING_VALUES = ("standard", "recovery_first")
 
 # Microcycle bounds. `sub_cycle_days` is one A/B leg's length; a leg shorter than 3 days is
 # not a training block and longer than 28 (four weeks) is a mesocycle, not a sub-cycle.
@@ -277,6 +281,14 @@ def validate_training_phase(payload: dict[str, Any]) -> dict[str, Any]:
             f"probe_posture: unknown value {probe_posture!r} — one of {list(PROBE_POSTURE_VALUES)}"
         )
 
+    vehicle_ranking = payload.get("vehicle_ranking")
+    if vehicle_ranking is None:
+        raise ValueError(f"vehicle_ranking is required — one of {list(VEHICLE_RANKING_VALUES)}")
+    if vehicle_ranking not in VEHICLE_RANKING_VALUES:
+        raise ValueError(
+            f"vehicle_ranking: unknown value {vehicle_ranking!r} — one of {list(VEHICLE_RANKING_VALUES)}"
+        )
+
     capacities = payload.get("capacities")
     if capacities is not None:
         if not isinstance(capacities, list):
@@ -328,6 +340,7 @@ def validate_training_phase(payload: dict[str, Any]) -> dict[str, Any]:
         "label": label,
         "intent": intent,
         "probe_posture": probe_posture,
+        "vehicle_ranking": vehicle_ranking,
         "capacities": capacities,          # verbatim
         "microcycle": microcycle,          # verbatim
         "entered_on": entered_on,
@@ -389,6 +402,7 @@ def phase_to_dict(phase: models.TrainingPhase | None, *, on: date | None = None)
         "label": phase.label,
         "intent": phase.intent,
         "probe_posture": phase.probe_posture,
+        "vehicle_ranking": phase.vehicle_ranking,
         "capacities": phase.capacities,          # verbatim
         "microcycle": phase.microcycle,          # verbatim
         "entered_on": str(phase.entered_on),

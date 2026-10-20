@@ -580,6 +580,11 @@ def select_next(
     )
     if probe_suppressed:
         effective_probe_budget = 0.0
+    # Q212 — the phase's vehicle ranking is a SEPARATE field from the probe posture: `suppressed`
+    # switches probes off and nothing else; only `recovery_first` asks for the re-rank below.
+    phase_recovery_first = (
+        training_phase is not None and training_phase.vehicle_ranking == "recovery_first"
+    )
 
     # E3 — the phase capacity allow-list. Resolve every stored token to its `.value`
     # BEFORE comparing (Q105): the queue carries lowercase `.value`, so a verbatim compare
@@ -639,11 +644,11 @@ def select_next(
     # the readiness scalar (that would inject into the readiness signal, which D1
     # forbids). Like readiness, this only re-ranks vehicles — never a gate, never dosing
     # (DECISIONS_LOG #8).
-    # A suppressed training phase is a THIRD independent trigger into the same stable
-    # two-group re-rank (T2). Like the two above it only re-orders vehicle_bias — recovery
-    # group first, loaded vehicles preserved after, nothing removed (DECISIONS_LOG #8).
-    # `held` posture never triggers it.
-    if low_readiness or life_load_bias or probe_suppressed:
+    # A training phase whose `vehicle_ranking` is `recovery_first` is a THIRD independent trigger
+    # into the same stable two-group re-rank (T2; keyed on the ranking field, not the probe posture,
+    # since Q212). Like the two above it only re-orders vehicle_bias — recovery group first, loaded
+    # vehicles preserved after, nothing removed (DECISIONS_LOG #8). `standard` never triggers it.
+    if low_readiness or life_load_bias or phase_recovery_first:
         vehicle_bias = (
             [v for v in vehicle_bias if v in RECOVERY_VEHICLES]
             + [v for v in vehicle_bias if v not in RECOVERY_VEHICLES]
@@ -683,8 +688,8 @@ def select_next(
             "Elevated life-load — pre-emptively biasing toward recovery vehicles "
             "(switch window, not skip). Re-rank, never a gate."
         )
-    # T2 — the suppressed phase surfaces its OWN re-rank reason, mirroring the two above.
-    if probe_suppressed:
+    # T2 — the recovery-first phase surfaces its OWN re-rank reason, mirroring the two above.
+    if phase_recovery_first:
         notes.append(
             f"Training phase '{training_phase.label}' — recovery vehicles ranked "
             f"first; loaded vehicles remain listed."
@@ -749,6 +754,7 @@ def select_next(
             "id": training_phase.id,
             "label": training_phase.label,
             "probe_posture": training_phase.probe_posture,
+            "vehicle_ranking": training_phase.vehicle_ranking,
             "capacities": training_phase.capacities,          # verbatim
             "entered_on": str(training_phase.entered_on),
             "review_due": bool(training_phase_review_due),

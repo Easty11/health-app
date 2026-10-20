@@ -52,7 +52,7 @@ def _micro(*slots, days=7, label="A"):
 
 def _open(db, uid, label, entered_on, microcycle=None):
     payload = {
-        "label": label, "probe_posture": "held", "entered_on": str(entered_on),
+        "label": label, "probe_posture": "held", "vehicle_ranking": "standard", "entered_on": str(entered_on),
         "asserted_by": "user", "asserted_on": str(entered_on), "source": "api",
     }
     if microcycle is not None:

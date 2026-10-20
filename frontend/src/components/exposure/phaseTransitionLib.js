@@ -4,6 +4,24 @@
 
 export const TIME_BUCKETS = ['morning', 'afternoon', 'evening']
 
+// The phase's two separate settings (Q212), in plain language. `probe_posture` owns the probe budget and
+// the probe block; `vehicle_ranking` owns the recovery-first re-rank of the vehicle list. Neither implies
+// the other, and neither has a default: the form makes the operator choose each.
+export const PROBE_POSTURE_OPTIONS = [
+  { value: 'held', label: 'Probes as usual', hint: 'Probe suggestions follow your standing probe budget.' },
+  { value: 'suppressed', label: 'Probes off', hint: 'No probe suggestions this phase; the engine recommends fortify only.' },
+]
+export const VEHICLE_RANKING_OPTIONS = [
+  { value: 'standard', label: 'Usual order', hint: 'Vehicles are listed in the order set in your profile.' },
+  { value: 'recovery_first', label: 'Recovery vehicles first',
+    hint: 'Swim, clinical Pilates and hiking are listed first; loaded vehicles stay listed after them.' },
+]
+
+// The plain label for a stored value; 'not set' for an absent one (an old payload), never a guess.
+export function optionLabel(options, value) {
+  return options.find((o) => o.value === value)?.label ?? 'not set'
+}
+
 // Coarse bands mirroring the backend `_TIME_OF_DAY_BANDS` (knowledge.py). Used ONLY to derive a
 // resolvable bucket from a precise start time, so a placement row always ships a valid
 // `time_of_day` and NEVER 'unknown' — the B1 fault the server (rightly) rejected on every weekday.

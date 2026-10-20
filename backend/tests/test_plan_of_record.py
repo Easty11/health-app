@@ -67,7 +67,7 @@ def _sched_entry(**over):
     return {"type": "schedule_item", "value": _valid_item(**over)}
 
 
-_PHASE_STUB = {"label": "base", "probe_posture": "held", "capacities": None,
+_PHASE_STUB = {"label": "base", "probe_posture": "held", "vehicle_ranking": "standard", "capacities": None,
                "review_on": None, "review_due": False, "microcycle": None}
 
 
@@ -259,7 +259,7 @@ def test_consistency_done_is_from_resolve_not_recounted(db_session):
     from engine import resolver as resolver_mod
     u = _user(db_session, email="g3resolve@example.com")
     db_session.add(models.TrainingPhase(
-        user_id=u.id, label="base", probe_posture="held",
+        user_id=u.id, label="base", probe_posture="held", vehicle_ranking="standard",
         entered_on=date(2026, 9, 7), asserted_by="user", asserted_on=date(2026, 9, 7), source="api",
         microcycle={"sub_cycle_days": 7, "sub_cycles": [
             {"label": "A", "slots": [{"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},

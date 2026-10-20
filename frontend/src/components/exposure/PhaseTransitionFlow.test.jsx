@@ -24,7 +24,7 @@ import { todayLocal } from './phaseTime'
 
 const DRAFT = {
   current_phase: {
-    label: 'decompression', intent: 'deload', probe_posture: 'held', entered_on: '2026-09-07',
+    label: 'decompression', intent: 'deload', probe_posture: 'held', vehicle_ranking: 'standard', entered_on: '2026-09-07',
     microcycle: { sub_cycle_days: 7, sub_cycles: [{ label: 'A', slots: [
       { capacity: 'stability', sessions_per_cycle: 2, minutes: 30 }] }] },
   },
@@ -400,6 +400,9 @@ const sameDayDraft = (extra = {}) => ({
   ...extra,
 })
 const stepTo = async (n) => { for (let i = 1; i < n; i++) await next() }
+// Q212: the probe setting and the vehicle ranking have no default - a phase with none seeded must have both chosen.
+const choose = async (name) => { await act(async () => { fireEvent.click(screen.getByRole('button', { name })) }) }
+const chooseBothSettings = async () => { await choose('Probes off'); await choose('Usual order') }
 const confirmBtn = () => screen.getByRole('button', { name: /confirm — save phase change/i })
 const saveFromStep1 = async () => {
   await stepTo(8)
@@ -423,7 +426,9 @@ test('R3: a baseline start (no open phase, so no prefilled slot) cannot pass ste
   api.get.mockResolvedValue({ data: { ...DRAFT, current_phase: null, outgoing_review: [], schedule_items: [] } })
   await renderFlow()
   expect(screen.getByText(/No open phase to review/i)).toBeTruthy()
-  await stepTo(4)
+  await next()                                                              // step 2: nothing seeded
+  await chooseBothSettings()
+  await next(); await next()                                                // step 4
   expect(screen.getByText(/step 4 of 8/i)).toBeTruthy()
   expect(nextBtn().disabled).toBe(true)
   expect(screen.getByText('A phase needs at least one quota slot.')).toBeTruthy()
@@ -483,6 +488,7 @@ test('R6: with no open phase the confirm says it closes nothing', async () => {
   expect(screen.queryByTestId('closing-row')).toBeNull()
   await next()                                                              // step 2: name the first phase
   await act(async () => { fireEvent.change(screen.getByLabelText('phase label'), { target: { value: 'first' } }) })
+  await chooseBothSettings()                                                // Q212: no default to fall to
   await next(); await next()                                                // step 4: R3 needs a slot
   await act(async () => { fireEvent.click(addSlotBtn()) })
   for (let i = 0; i < 4; i++) await next()                                  // 5,6,7,8
@@ -514,4 +520,88 @@ test('same-day near midnight UTC: 14:30Z on 5 Oct is 00:30 AEST on 6 Oct, and th
     vi.useRealTimers()
     if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz
   }
+})
+
+// ---- Q212: probe posture and vehicle ranking are two settings with no default ----
+
+const goMove = async () => { await choose(/move to a new phase/i) }
+
+test('Q212: a Continue seeds both settings from the outgoing phase, and the save sends both', async () => {
+  api.get.mockResolvedValue({ data: { ...DRAFT, current_phase: { ...DRAFT.current_phase, probe_posture: 'suppressed', vehicle_ranking: 'standard' } } })
+  await renderFlow()
+  await next()
+  expect(pressed('Probes off')).toBe('true')
+  expect(pressed('Usual order')).toBe('true')
+  const body = await (async () => { await stepTo(7); await act(async () => { fireEvent.click(confirmBtn()) })
+    await waitFor(() => expect(transitionCalls().length).toBe(1)); return transitionCalls()[0][1] })()
+  expect(body.phase.probe_posture).toBe('suppressed')
+  expect(body.phase.vehicle_ranking).toBe('standard')
+})
+
+test('Q212: a Move seeds NEITHER setting, and Next is blocked on step 2 until both are chosen', async () => {
+  await renderFlow()
+  await goMove()
+  await next()                                                              // step 2
+  expect(pressed('Probes off')).toBe('false'); expect(pressed('Probes as usual')).toBe('false')
+  expect(pressed('Usual order')).toBe('false'); expect(pressed('Recovery vehicles first')).toBe('false')
+  expect(screen.getByRole('button', { name: /^next$/i }).disabled).toBe(true)
+  expect(screen.getByText('Choose both the probe setting and the vehicle ranking to continue.')).toBeTruthy()
+  await choose('Probes off')                                                // one of two is not enough
+  expect(screen.getByRole('button', { name: /^next$/i }).disabled).toBe(true)
+  await choose('Usual order')
+  expect(screen.getByRole('button', { name: /^next$/i }).disabled).toBe(false)
+  expect(screen.queryByText('Choose both the probe setting and the vehicle ranking to continue.')).toBeNull()
+})
+
+test('Q212: the ranking alone also blocks a Move (neither field is implied by the other)', async () => {
+  await renderFlow()
+  await goMove(); await next()
+  await choose('Recovery vehicles first')
+  expect(screen.getByRole('button', { name: /^next$/i }).disabled).toBe(true)
+  await choose('Probes as usual')
+  expect(screen.getByRole('button', { name: /^next$/i }).disabled).toBe(false)
+})
+
+test('Q212: a Move with the two settings chosen sends them, so probes can be off with the usual order', async () => {
+  await renderFlow()
+  await goMove(); await next()
+  await chooseBothSettings()                                                // Probes off + Usual order
+  await stepTo(7)
+  await act(async () => { fireEvent.click(confirmBtn()) })
+  await waitFor(() => expect(transitionCalls().length).toBe(1))
+  const { phase } = transitionCalls()[0][1]
+  expect(phase.probe_posture).toBe('suppressed')
+  expect(phase.vehicle_ranking).toBe('standard')
+})
+
+test('Q212: switching Continue -> Move clears both settings; Move -> Continue seeds them back', async () => {
+  await renderFlow()
+  await next()
+  expect(pressed('Probes as usual')).toBe('true')                           // continue: seeded held + standard
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /back/i })) })
+  await goMove(); await next()
+  expect(pressed('Probes as usual')).toBe('false'); expect(pressed('Usual order')).toBe('false')
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /back/i })) })
+  await choose(/continue this phase/i); await next()
+  expect(pressed('Probes as usual')).toBe('true'); expect(pressed('Usual order')).toBe('true')
+})
+
+test('Q212: with no open phase there is nothing to seed - both settings must be chosen', async () => {
+  api.get.mockResolvedValue({ data: { ...DRAFT, current_phase: null, outgoing_review: [], schedule_items: [] } })
+  await renderFlow()
+  await next()
+  expect(screen.getByRole('button', { name: /^next$/i }).disabled).toBe(true)
+})
+
+test('Q212: the two settings read in plain language, each with a one-line hint, and the confirm names them', async () => {
+  await renderFlow()
+  await goMove(); await next()
+  expect(screen.getByRole('group', { name: 'probe setting' })).toBeTruthy()
+  expect(screen.getByRole('group', { name: 'vehicle ranking' })).toBeTruthy()
+  await choose('Probes off')
+  expect(screen.getByText(/No probe suggestions this phase/i)).toBeTruthy()
+  await choose('Recovery vehicles first')
+  expect(screen.getByText(/Swim, clinical Pilates and hiking are listed first/i)).toBeTruthy()
+  await stepTo(7)
+  expect(screen.getByText('Probes off · Recovery vehicles first')).toBeTruthy()
 })

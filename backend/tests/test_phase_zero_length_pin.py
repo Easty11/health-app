@@ -44,7 +44,7 @@ _MICROCYCLE = {"sub_cycle_days": 7, "sub_cycles": [{"label": "A", "slots": [
 def _open(db, uid, label, entered_on, microcycle=None):
     """Open a phase through the shared core (closes the open row at `entered_on`) and commit."""
     payload = {
-        "label": label, "probe_posture": "held", "entered_on": str(entered_on),
+        "label": label, "probe_posture": "held", "vehicle_ranking": "standard", "entered_on": str(entered_on),
         "asserted_by": "user", "asserted_on": str(entered_on), "source": "api",
     }
     if microcycle is not None:
@@ -152,7 +152,7 @@ def test_current_training_phase_filters_on_closed_not_on_ordering(db_session):
     u = _user(db_session)
     open_row = _open(db_session, u.id, "open", D)
     stray = models.TrainingPhase(
-        user_id=u.id, label="stray", probe_posture="held", entered_on=D, closed_on=D,
+        user_id=u.id, label="stray", probe_posture="held", vehicle_ranking="standard", entered_on=D, closed_on=D,
         close_reason="stray", asserted_by="user", asserted_on=D, source="api",
     )
     db_session.add(stray)

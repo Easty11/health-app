@@ -49,7 +49,7 @@ def _phase_payload(label="decompression", *, entered_on, stability=2, pilates=No
         slots.append({"activity": "pilates", "device_sports": ["Pilates"],
                       "sessions_per_cycle": pilates, "minutes": 50})
     payload = {
-        "label": label, "probe_posture": "held",
+        "label": label, "probe_posture": "held", "vehicle_ranking": "standard",
         "microcycle": {"sub_cycle_days": 7, "sub_cycles": [{"label": "A", "slots": slots}]},
         "entered_on": entered_on, "asserted_by": "user", "asserted_on": entered_on, "source": "api",
     }
@@ -196,7 +196,7 @@ def test_g3_dated_item_blocks_days_and_cautions_after(db_session):
     u = _user(db_session)
     # 14-day leg so the window spans the carnival and the day after.
     open_phase(db_session, u.id, {
-        "label": "base", "probe_posture": "held",
+        "label": "base", "probe_posture": "held", "vehicle_ranking": "standard",
         "microcycle": {"sub_cycle_days": 14, "sub_cycles": [{"label": "A", "slots": [
             {"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},
         "entered_on": "2026-09-15", "asserted_by": "user", "asserted_on": "2026-09-15", "source": "api"})
@@ -215,7 +215,7 @@ def test_g3_dated_item_drops_off_after_it_passes(db_session):
     carnival_start = (entered - timedelta(days=6)).isoformat()
     carnival_end = (entered - timedelta(days=5)).isoformat()
     open_phase(db_session, u.id, {
-        "label": "base", "probe_posture": "held",
+        "label": "base", "probe_posture": "held", "vehicle_ranking": "standard",
         "microcycle": {"sub_cycle_days": 7, "sub_cycles": [{"label": "A", "slots": [
             {"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},
         "entered_on": entered.isoformat(), "asserted_by": "user",
@@ -248,7 +248,7 @@ def test_g3_section_schedule_renders_dated_line_only_while_live(db_session):
 def test_g4_draft_replay_never_resolves_before_entered_on(db_session, monkeypatch):
     u = _user(db_session)
     phase = open_phase(db_session, u.id, {
-        "label": "base", "probe_posture": "held",
+        "label": "base", "probe_posture": "held", "vehicle_ranking": "standard",
         "microcycle": {"sub_cycle_days": 7, "sub_cycles": [{"label": "A", "slots": [
             {"capacity": "stability", "sessions_per_cycle": 2, "minutes": 30}]}]},
         "entered_on": "2026-09-07", "asserted_by": "user", "asserted_on": "2026-09-07", "source": "api"})
