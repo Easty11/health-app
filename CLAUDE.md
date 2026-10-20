@@ -289,11 +289,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The startup self-heal no longer re-runs the whole sweep on every boot: a keyed user with no load events (a Hevy account with no workouts) is skipped, and the boot log now reads "startup freshness OK".** Code - Canonical home: `DECISIONS_LOG.md` #432.
+
 - **Phase markers on `/metrics` are now shaded bands, coloured by phase name from one palette constant, with one legend per card; a phase with no data yet is listed, not dropped, and Exercise and Readiness sit on a time axis.** Code, front end only - Canonical home: `DECISIONS_LOG.md` #431.
 
 - **Q27's remainders are built and the question is closed: protocol-matched provenance on observations and a declared side on tags (one migration, applied in prod), a gate that shows a published norm as a band only on a protocol match with no number firing a verdict, the log-derived and observed ratios, and `knee_flexion` observable; the seeder is run.** Code, migration - Canonical home: `DECISIONS_LOG.md` #427 to #430.
-
-- **Overnight SpO2 from Garmin's sleep payload is now captured raw (three tables, a nightly-sweep step, a backfill script), Q150's gate is answered by direct probe, and the Garmin governance is closed out: Q93 and Q94 closed, the Body Battery clause superseded, an aggregator question opened; the backfill and the first nightly check are done.** Code and governance, one migration - Canonical home: `DECISIONS_LOG.md` #425, #426.
 
 ---
 
