@@ -9,6 +9,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 
 import TimeSeriesChart from './TimeSeriesChart'
+import { phaseSegments } from './PhaseMarkers'
 
 const DATA = [
   { day: '2026-07-01', a: 10, b: 3 },
@@ -51,31 +52,54 @@ test('does not throw when series share a unit', () => {
   expect(container.querySelector('.recharts-wrapper')).toBeTruthy()
 })
 
-test('draws a phase-marker reference line at an in-range boundary date', () => {
+const SEGS = phaseSegments([
+  { id: 0, label: 'decompression', entered_on: '2026-06-01', closed_on: '2026-07-02' },
+  { id: 1, label: 'base build', entered_on: '2026-07-02', closed_on: null },
+])
+const ONE_SERIES = [{ dataKey: 'a', name: 'a', color: '#4f46e5', unit: 'kg' }]
+const bandRects = (c) => [...c.querySelectorAll('.phase-band path')]
+  .map((p) => ({ x: parseFloat(p.getAttribute('x')), w: parseFloat(p.getAttribute('width')), fill: p.getAttribute('fill') }))
+
+test('draws a shaded band per phase, with no text label in the chart (R11)', () => {
   const { container } = render(
-    <TimeSeriesChart
-      data={DATA}
-      width={400}
-      height={200}
-      series={[{ dataKey: 'a', name: 'a', color: '#4f46e5', unit: 'kg' }]}
-      markers={[{ date: '2026-07-02', label: 'decompression' }]}
-    />,
+    <TimeSeriesChart data={DATA} width={400} height={200} series={ONE_SERIES} markers={SEGS} />,
   )
-  expect(container.querySelector('.recharts-reference-line')).toBeTruthy()
-  expect(container.textContent).toContain('decompression')  // the phase name is the label
+  expect(container.querySelectorAll('.recharts-reference-area')).toHaveLength(2)
+  expect(container.querySelector('.recharts-reference-line')).toBeNull()   // no boundary lines
+  expect(container.textContent).not.toContain('decompression')             // the name is the legend's
+  expect(container.textContent).not.toContain('base build')
 })
 
-test('an out-of-range boundary draws no reference line', () => {
+test('a band is drawn for the phase and none for one that starts after the last data day', () => {
+  const after = phaseSegments([{ id: 0, label: 'later', entered_on: '2026-09-01', closed_on: null }])
   const { container } = render(
-    <TimeSeriesChart
-      data={DATA}
-      width={400}
-      height={200}
-      series={[{ dataKey: 'a', name: 'a', color: '#4f46e5', unit: 'kg' }]}
-      markers={[{ date: '2020-01-01', label: 'ancient' }]}
-    />,
+    <TimeSeriesChart data={DATA} width={400} height={200} series={ONE_SERIES} markers={after} />,
   )
-  expect(container.querySelector('.recharts-reference-line')).toBeNull()
+  expect(container.querySelector('.recharts-reference-area')).toBeNull()   // legend-only (PhaseLegend)
+})
+
+test('bands sit behind the series: the reference area precedes the bars in the SVG', () => {
+  const { container } = render(
+    <TimeSeriesChart data={DATA} mark="bar" width={400} height={200} series={ONE_SERIES} markers={SEGS} />,
+  )
+  const area = container.querySelector('.recharts-reference-area')
+  const bar = container.querySelector('.load-bar, .recharts-bar-rectangle')
+  expect(area.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+test.each(['bar', 'line'])('on a %s chart the day slots are whole, so adjacent bands abut', (mark) => {
+  const six = ['01', '02', '03', '04', '05', '06'].map((d, i) => ({ day: `2026-08-${d}`, a: i + 1 }))
+  const segs = phaseSegments([
+    { id: 0, label: 'A', entered_on: '2026-08-01', closed_on: '2026-08-04' },
+    { id: 1, label: 'B', entered_on: '2026-08-04', closed_on: null },
+  ])
+  const { container } = render(
+    <TimeSeriesChart data={six} mark={mark} width={600} height={200} series={ONE_SERIES} markers={segs} />,
+  )
+  const [a, b] = bandRects(container)
+  expect(a.x + a.w).toBeCloseTo(b.x, 3)          // no gap, no overlap
+  expect(a.w).toBeCloseTo(b.w, 3)                // three slots each
+  expect(a.fill).not.toBe(b.fill)                // two names, two colours
 })
 
 test('xType="time" places points at their true temporal distance (90d vs 365d, D4)', () => {

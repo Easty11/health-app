@@ -90,3 +90,19 @@ test('empty series renders the empty state and no chart', async () => {
   expect(container.querySelector('.recharts-line')).toBeNull()
   expect(container.querySelector('svg')).toBeNull()
 })
+
+test('the x-axis is time-scaled: a missing day is a gap in time, not a squeezed neighbour', async () => {
+  // 1, 2 and 5 Aug. Dots one day apart sit a third of the 2→5 distance, which an even
+  // category axis would have drawn as equal.
+  const sparse = { days: 90, points: [
+    { date: '2026-08-01', morning_readiness: 3, passive_hrv_ms: 50 },
+    { date: '2026-08-02', morning_readiness: 4, passive_hrv_ms: 52 },
+    { date: '2026-08-05', morning_readiness: 2, passive_hrv_ms: 48 },
+  ] }
+  const { container } = await renderChart(sparse)
+  const cx = [...screen.getByLabelText('Morning self-report').querySelectorAll('.readiness-dot')]
+    .map((d) => parseFloat(d.getAttribute('cx')))
+  expect(cx).toHaveLength(3)
+  expect((cx[1] - cx[0]) / (cx[2] - cx[1])).toBeCloseTo(1 / 3, 2)
+  expect(container.querySelectorAll('.recharts-wrapper')).toHaveLength(2)
+})

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../api'
 import TimeSeriesChart from './TimeSeriesChart'
+import PhaseLegend from './PhaseLegend'
+import { epochDayOf } from './PhaseMarkers'
 
 // Per-exercise strength progression (Visuals increment 3) — the first chart Hevy can't draw,
 // because the training-phase markers overlaid on it (via `markers`) are ours, not theirs.
@@ -29,12 +31,14 @@ function E1rmDot(props) {
   return <circle cx={cx} cy={cy} r={2.5} className="e1rm-dot" fill={E1RM_COLOR} stroke={E1RM_COLOR} strokeWidth={1} />
 }
 
-// One row per session date: e1RM (null → gap) and volume (0 → null so no bar is drawn).
+// One row per session date: e1RM (null → gap) and volume (0 → null so no bar is drawn). `x` is
+// the date as an epoch day, the number the time axis plots (bands are placed by date, not snapped).
 function seriesRows(points) {
   return [...(points || [])]
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
     .map((p) => ({
       date: p.date,
+      x: epochDayOf(p.date),
       e1rm_kg: p.e1rm_kg,
       volume_kg_reps: p.volume_kg_reps === 0 ? null : p.volume_kg_reps,
     }))
@@ -86,7 +90,7 @@ export default function ExerciseChart({ width, height, days = 90, markers = [] }
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Exercise progression</h2>
-          <p className="text-[11px] text-gray-400">Estimated 1RM and volume per session · phase boundaries marked.</p>
+          <p className="text-[11px] text-gray-400">Estimated 1RM and volume per session · phases shaded.</p>
         </div>
         {hasExercises && (
           <div role="group" aria-label="Exercise" className="flex flex-wrap gap-1 justify-end">
@@ -123,6 +127,8 @@ export default function ExerciseChart({ width, height, days = 90, markers = [] }
         <p className="text-xs text-gray-400 py-8 text-center">Loading {series?.title || 'exercise'}…</p>
       )}
 
+      {hasData && <PhaseLegend markers={markers} data={data} xKey="x" />}
+
       {hasData && (
         <div className="space-y-4">
           <figure className="m-0" aria-label="Estimated 1RM">
@@ -133,7 +139,9 @@ export default function ExerciseChart({ width, height, days = 90, markers = [] }
               <TimeSeriesChart
                 data={data}
                 series={[{ dataKey: 'e1rm_kg', name: 'e1RM', color: E1RM_COLOR, unit: 'kg', dot: <E1rmDot /> }]}
-                xKey="date"
+                xKey="x"
+                xType="time"
+                timePad={0.5}
                 mark="line"
                 lineType="linear"
                 strokeWidth={1.5}
@@ -153,7 +161,9 @@ export default function ExerciseChart({ width, height, days = 90, markers = [] }
               <TimeSeriesChart
                 data={data}
                 series={[{ dataKey: 'volume_kg_reps', name: 'Volume', color: VOLUME_COLOR, unit: 'kg·reps' }]}
-                xKey="date"
+                xKey="x"
+                xType="time"
+                timePad={0.5}
                 mark="bar"
                 width={width}
                 height={panelHeight}

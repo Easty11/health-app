@@ -2,7 +2,7 @@ import {
   LineChart, Line, BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { referenceLinesFor } from './PhaseMarkers'
+import { bandAreasFor, bandLayout, handoffLinesFor } from './PhaseMarkers'
 
 // The ONE jsdom-safe mounting pattern every chart in the app shares, and the home of the
 // one invariant that a chart cannot break silently.
@@ -58,7 +58,8 @@ export default function TimeSeriesChart({
   lineType = 'monotone',
   strokeWidth = 2,
   legend = false,
-  markers = [],            // [{date, label}] training-phase boundaries (Visuals increment 3, D4)
+  markers = [],            // phase segments from `phaseSegments()` — shaded bands behind the series (R11)
+  timePad = 0,             // days added to each end of a time axis, so an edge day keeps its full slot
   children = null,         // extra Recharts elements (ReferenceArea/ReferenceDot) — direct children
   tooltipContent = null,   // custom Recharts Tooltip content (Lab visuals: operator / flag / derived notes)
 }) {
@@ -69,10 +70,12 @@ export default function TimeSeriesChart({
     console.error(msg)
   }
   const unit = units[0]
-  // Phase-boundary reference lines, snapped to this chart's categories. Built here (not nested
+  // Phase bands and handoff lines, laid out against this chart's own rows. Built here (not nested
   // in a child component) so they spread as DIRECT children of the Recharts chart — the only
-  // place Recharts registers them.
-  const refLines = referenceLinesFor(markers, data, xKey)
+  // place Recharts registers them. Bands go before the series so the marks draw on top.
+  const layout = bandLayout(markers, data, xKey, xType)
+  const bands = bandAreasFor(layout)
+  const refLines = handoffLinesFor(layout)
   const yLabel = unit
     ? { value: unit, angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: '#6b7280' } }
     : undefined
@@ -80,26 +83,38 @@ export default function TimeSeriesChart({
   // Epoch-day (integer days since 1970) → a short ISO date tick. Deterministic and jsdom-safe
   // (no locale dependence). Used only on the time axis.
   const epochDayLabel = (d) => new Date(d * 86400000).toISOString().slice(0, 10)
+  // A padded time axis would otherwise tick its half-day edges, which read as a day beyond the
+  // data; tick whole days across the data's own span instead.
+  const padTicks = (() => {
+    if (xType !== 'time' || !timePad || !data?.length) return undefined
+    const xs = data.map((r) => r[xKey])
+    const lo = Math.min(...xs)
+    const hi = Math.max(...xs)
+    return [...new Set([0, 1, 2, 3, 4].map((i) => Math.round(lo + ((hi - lo) * i) / 4)))]
+  })()
   const xAxis = xType === 'time'
     ? (
       <XAxis
         dataKey={xKey}
         type="number"
         scale="linear"
-        domain={['dataMin', 'dataMax']}
+        ticks={padTicks}
+        domain={timePad ? [(min) => min - timePad, (max) => max + timePad] : ['dataMin', 'dataMax']}
         tickFormatter={epochDayLabel}
         tick={hideXLabels ? false : { fontSize: 11 }}
         minTickGap={24}
       />
     )
-    : <XAxis dataKey={xKey} tick={hideXLabels ? false : { fontSize: 11 }} minTickGap={24} />
+    : <XAxis dataKey={xKey} scale="band" tick={hideXLabels ? false : { fontSize: 11 }} minTickGap={24} />
 
   const axes = (
     <>
       <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
       {xAxis}
       <YAxis tick={{ fontSize: 11 }} width={56} label={yLabel} domain={yDomain} />
-      {tooltipContent ? <Tooltip content={tooltipContent} /> : <Tooltip />}
+      {tooltipContent
+        ? <Tooltip content={tooltipContent} />
+        : <Tooltip labelFormatter={xType === 'time' ? epochDayLabel : undefined} />}
       {legend && <Legend />}
     </>
   )
@@ -109,6 +124,7 @@ export default function TimeSeriesChart({
     chart = (
       <BarChart data={data} width={responsive ? undefined : width} height={responsive ? undefined : height} margin={margin}>
         {axes}
+        {bands}
         {series.map((s) => (
           <Bar key={s.dataKey} dataKey={s.dataKey} name={s.name} fill={s.color} isAnimationActive={false}>
             {/* One Cell per row so a bar can be styled by that day's maturity. A day with a
@@ -137,6 +153,7 @@ export default function TimeSeriesChart({
     chart = (
       <LineChart data={data} width={responsive ? undefined : width} height={responsive ? undefined : height} margin={margin}>
         {axes}
+        {bands}
         {series.map((s) => (
           <Line
             key={s.dataKey}
