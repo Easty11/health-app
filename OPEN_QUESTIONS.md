@@ -6340,9 +6340,9 @@ Raised 5 Oct 2026 (operator observation, 5 Oct: "recovery vehicles ranked first"
 
 **Ruling (operator, 5 Oct 2026).** Deferred to the aerobic base review (16 Nov 2026). `suppressed` stays, and the recovery-first ranking is accepted for this phase. No change is made. Whether to separate the behaviours, and whether a Move should seed posture from the outgoing phase, are decided at that review.
 
-**Resolution (operator, 20 Oct 2026, #NEXT).** Brought forward from the 16 Nov aerobic base review, which no longer owns Q212. (1) Separation, fork (ii): a new required per-phase field `vehicle_ranking` (`standard` | `recovery_first`) takes over the phase arm of the recovery-first re-rank; `probe_posture` keeps the probe budget and the withheld probe block; the readiness and life-load triggers are unchanged. (2) Seeding, fork (c): on a Move the wizard seeds neither setting; both start unset and must be chosen. (3) Backfill: behaviour-preserving, except the single open phase (`aerobic base`), set to `standard`; the migration prints the ids and values. The migration is held for the operator's release. The source-of-the-note analysis above was verified on `21839a4` and still held on `a59b186` (the line numbers had not moved); `PhaseForm` had since been deleted (#378).
+**Resolution (operator, 20 Oct 2026, #434).** Brought forward from the 16 Nov aerobic base review, which no longer owns Q212. (1) Separation, fork (ii): a new required per-phase field `vehicle_ranking` (`standard` | `recovery_first`) takes over the phase arm of the recovery-first re-rank; `probe_posture` keeps the probe budget and the withheld probe block; the readiness and life-load triggers are unchanged. (2) Seeding, fork (c): on a Move the wizard seeds neither setting; both start unset and must be chosen. (3) Backfill: behaviour-preserving, except the single open phase (`aerobic base`), set to `standard`; the migration prints the ids and values. The migration is held for the operator's release. The source-of-the-note analysis above was verified on `21839a4` and still held on `a59b186` (the line numbers had not moved); `PhaseForm` had since been deleted (#378).
 
-**State:** `DONE → #NEXT`. Related: #317, #375, #378, Q211 (closed).
+**State:** `DONE → #434`. Related: #317, #375, #378, Q211 (closed).
 
 ---
 

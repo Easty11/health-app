@@ -14490,7 +14490,7 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 
 ---
 
-### #NEXT. A phase's recovery-first vehicle ranking is its own required field, separate from the probe posture; a Move seeds neither setting; the open phase is set to the usual order (Q212)
+### #434. A phase's recovery-first vehicle ranking is its own required field, separate from the probe posture; a Move seeds neither setting; the open phase is set to the usual order (Q212)
 
 **Decision.** Operator rulings on Q212, 20 Oct 2026, brought forward from the 16 Nov aerobic base review.
 1. **Separation (fork ii).** `training_phases` gains `vehicle_ranking` (`standard` | `recovery_first`), REQUIRED at write with no default (#230 discipline) and its own CHECK `ck_training_phase_vehicle_ranking`. `probe_posture` keeps two behaviours: the effective probe budget forced to 0 (mode fortify) and the withheld probe block. The phase arm of the recovery-first vehicle re-rank reads `vehicle_ranking == 'recovery_first'` instead of `probe_posture == 'suppressed'`. The readiness and life-load re-rank triggers are unchanged, and neither reads the new field. So probes can be off with the usual vehicle order, and a `held` phase can ask for recovery-first.
