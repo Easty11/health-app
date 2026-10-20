@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../api'
 import TimeSeriesChart from './TimeSeriesChart'
+import PhaseLegend from './PhaseLegend'
 
 // Daily training load per window, from `GET /series/load` — SMALL MULTIPLES, not an overlay.
 // One chart per populated window, stacked, each with its own y-axis labelled in that window's
@@ -107,6 +108,8 @@ export default function LoadChart({ width, height, initialDays = 90, days: daysP
           {error || 'No training load yet — log some sessions and it will appear here.'}
         </p>
       )}
+
+      {hasData && <PhaseLegend markers={markers} data={data} xKey="day" />}
 
       {hasData && (
         <div className="space-y-4">

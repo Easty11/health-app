@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../api'
 import TimeSeriesChart from './TimeSeriesChart'
+import PhaseLegend from './PhaseLegend'
+import { epochDayOf } from './PhaseMarkers'
 
 // Visuals increment 2: the OBSERVED readiness trend, from `GET /series/readiness`. Read-only.
 //
@@ -51,7 +53,9 @@ function Panel({ label, hint, data, dataKey, name, color, dotClass, unit, yDomai
         <TimeSeriesChart
           data={data}
           series={[{ dataKey, name, color, unit, dot: ObservationDot(color, dotClass) }]}
-          xKey="date"
+          xKey="x"
+          xType="time"
+          timePad={0.5}
           width={width}
           height={height}
           yDomain={yDomain}
@@ -80,7 +84,9 @@ export default function ReadinessChart({ width, height, days = 90, markers = [] 
     return () => { alive = false }
   }, [days])
 
-  const data = useMemo(() => points || [], [points])
+  // `x` is the date as an epoch day, the number the time axis plots: a day with no check-in is a
+  // real gap in time, and a phase band is placed by date.
+  const data = useMemo(() => (points || []).map((p) => ({ ...p, x: epochDayOf(p.date) })), [points])
   const hasData = !!points && points.length > 0
 
   // A panel's height defaults to a compact small-multiple; fall to that when no explicit height
@@ -103,6 +109,8 @@ export default function ReadinessChart({ width, height, days = 90, markers = [] 
           {error || 'No readiness yet — submit a morning check-in and it will appear here.'}
         </p>
       )}
+
+      {hasData && <PhaseLegend markers={markers} data={data} xKey="x" />}
 
       {hasData && (
         <div className="space-y-4">

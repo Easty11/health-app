@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../api'
 import TimeSeriesChart from './TimeSeriesChart'
+import PhaseLegend from './PhaseLegend'
 
 // Visuals increment 2 (1b): the Banister curves — FITNESS, FATIGUE, FORM — for one load
 // window at a time, from the SAME `GET /series/load` the LoadChart reads (no new endpoint;
@@ -151,6 +152,8 @@ export default function FormChart({ width, height, days = 90, markers = [], relo
           {error || 'No Banister curves yet — log some sessions and they will appear here.'}
         </p>
       )}
+
+      {hasData && <PhaseLegend markers={markers} data={data} xKey="day" />}
 
       {hasData && (
         <div className="overflow-x-auto">
