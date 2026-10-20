@@ -12,8 +12,9 @@ Two triggers:
     matches `load_metrics._AEST`) = 16:00 UTC, every day, via a plain `asyncio` sleep-until-fire
     loop (no scheduler dependency; `requirements.txt` has none).
   * STARTUP SELF-HEAL — on boot, if the all-users freshness is stale (>24h, or any Hevy-keyed
-    user has never been computed), run one sweep immediately. This covers a restart that crossed
-    02:00 while the process was down — the exact rot #297 exists to end.
+    user WITH load events has never been computed), run one sweep immediately. This covers a
+    restart that crossed 02:00 while the process was down — the exact rot #297 exists to end.
+    A keyed user with no load events has nothing to compute and never will, so it is not stale (#432).
 
 Off the loop. The sweep runs through `asyncio.to_thread(_sweep)`: `refresh_load.run_user_chain`
 drives the Hevy ingest with `asyncio.run(...)`, which raises inside a running event loop, so it
@@ -46,7 +47,8 @@ logger = logging.getLogger(__name__)
 _BRISBANE = pytz.timezone("Australia/Brisbane")
 SWEEP_LOCAL_HOUR = 2
 # Startup self-heal threshold: freshest per-user metric older than this (or any keyed user with
-# none) means the load table has rotted while the process was down — run one sweep on boot.
+# load events but no metrics) means the load table has rotted while the process was down — run
+# one sweep on boot.
 STARTUP_STALE_AFTER = timedelta(hours=24)
 
 
@@ -69,8 +71,11 @@ def all_users_stale(
     threshold: timedelta = STARTUP_STALE_AFTER,
     now_utc: datetime | None = None,
 ) -> bool:
-    """True when the all-users load freshness is stale: ANY Hevy-keyed user has never been
-    computed, or the OLDEST per-user `max(computed_at)` is older than `threshold`. False when
+    """True when the all-users load freshness is stale: ANY Hevy-keyed user who HAS load events
+    has never been computed, or the OLDEST per-user `max(computed_at)` is older than `threshold`.
+    A keyed user with no load events and no metrics (e.g. a Hevy account with no workouts) is
+    skipped: the load chain writes no rows for a user with no events, so such a user can never
+    become fresh and counting them would re-run the whole sweep on every boot (#432). False when
     there are no keyed users (nothing to sweep). Used for the startup self-heal only."""
     from hevy_templates import users_with_hevy_key
 
@@ -86,7 +91,14 @@ def all_users_stale(
             )
         )
         if latest is None:
-            return True  # a keyed user with no metrics at all
+            # No metrics at all. Stale only if there is something to compute from: `load_events` is
+            # the chain's input, and a user without any writes no metric rows, ever (#432).
+            has_events = db.scalar(
+                select(models.LoadEvent.id).where(models.LoadEvent.user_id == uid).limit(1)
+            ) is not None
+            if has_events:
+                return True
+            continue
         if latest.tzinfo is None:  # SQLite round-trips TIMESTAMPTZ as naive; assume UTC
             latest = latest.replace(tzinfo=timezone.utc)
         if now_utc - latest > threshold:

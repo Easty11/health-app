@@ -4,8 +4,9 @@ Proves the Step-2 gates:
 
   * NEXT-FIRE — 02:00 Australia/Brisbane resolves to the correct UTC instant, including across
     the local/UTC day boundary, and is always strictly in the future.
-  * STARTUP RUN-IF-STALE — `all_users_stale` is True when a keyed user is stale or never computed,
-    False when everyone is fresh (and False with no keyed users).
+  * STARTUP RUN-IF-STALE — `all_users_stale` is True when a keyed user is stale, or has load events
+    but was never computed; False when everyone is fresh, False with no keyed users, and False for a
+    keyed user with no load events at all (nothing to compute, so never fresh: #432).
   * OFF-THE-LOOP — the sweep runs via `asyncio.to_thread`, so the orchestrator's `asyncio.run`
     (which raises inside a running loop) does not collide.
   * CANCELLATION — `sweep_loop` runs the startup sweep once, then cancels cleanly on shutdown.
@@ -63,6 +64,15 @@ def _metric(db, *, user_id, computed_at):
     db.commit()
 
 
+def _load_event(db, user_id):
+    db.add(models.LoadEvent(
+        user_id=user_id, source="hevy", source_ref=f"w{user_id}", load_window="mechanical",
+        occurred_at=datetime.now(UTC) - timedelta(days=2), load=100.0, unit="kg_reps",
+        formula_version="tier0-v1",
+    ))
+    db.commit()
+
+
 def _mock_hevy_noop(monkeypatch):
     async def _fake_sync(db, *, only_user_id=None, days=hevy_workouts.DEFAULT_BACKFILL_DAYS):
         return {"users": 1, "per_user": {only_user_id: {"workouts_upserted": 0, "note": "mocked"}}}
@@ -108,7 +118,46 @@ def test_all_users_stale_true_when_a_user_is_old(db_session):
 
 def test_all_users_stale_true_when_a_keyed_user_never_computed(db_session):
     _user(db_session, 1)
-    _hevy_key(db_session, 1)  # keyed, but no load_metrics row at all
+    _hevy_key(db_session, 1)  # keyed, has load events, but no load_metrics row at all
+    _load_event(db_session, 1)
+    assert load_sweep.all_users_stale(db_session) is True
+
+
+def test_all_users_stale_false_for_a_keyed_user_with_no_events_and_no_metrics(db_session):
+    # The production shape that re-ran the whole sweep on every boot (#432): a Hevy account with no
+    # workouts. Nothing to compute, so it can never become fresh and must not make the sweep stale.
+    _user(db_session, 5)
+    _hevy_key(db_session, 5)
+    assert load_sweep.all_users_stale(db_session) is False
+
+
+def test_all_users_stale_false_when_others_are_fresh_and_the_empty_user_is_skipped(db_session):
+    for uid in (1, 4, 5):
+        _user(db_session, uid)
+        _hevy_key(db_session, uid)
+    for uid in (1, 4):  # users 1 and 4: events and freshly computed metrics; user 5: nothing
+        _load_event(db_session, uid)
+        _metric(db_session, user_id=uid, computed_at=datetime.now(UTC) - timedelta(hours=1))
+    assert load_sweep.all_users_stale(db_session) is False
+
+
+def test_all_users_stale_true_when_a_user_with_events_was_never_computed_among_fresh_users(db_session):
+    # The self-heal is kept for a real failure: events exist but no metric row was ever written.
+    for uid in (1, 5):
+        _user(db_session, uid)
+        _hevy_key(db_session, uid)
+    _load_event(db_session, 1)
+    _metric(db_session, user_id=1, computed_at=datetime.now(UTC) - timedelta(hours=1))
+    _load_event(db_session, 5)  # user 5 has events but still no metrics
+    assert load_sweep.all_users_stale(db_session) is True
+
+
+def test_all_users_stale_true_when_an_old_user_sits_beside_an_empty_one(db_session):
+    # Skipping the empty user must not hide a genuinely old one (the age branch is unchanged).
+    for uid in (1, 5):
+        _user(db_session, uid)
+        _hevy_key(db_session, uid)
+    _metric(db_session, user_id=1, computed_at=datetime.now(UTC) - timedelta(hours=48))
     assert load_sweep.all_users_stale(db_session) is True
 
 
