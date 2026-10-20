@@ -1800,6 +1800,12 @@ def _section_training_phase(
             f"- Probe posture: {posture}"
             + (" — probe budget forced to 0, mode is fortify this phase" if suppressed else "")
         )
+    ranking = phase.get("vehicle_ranking")
+    if ranking:
+        lines.append(
+            f"- Vehicle ranking: {ranking}"
+            + (" — recovery vehicles listed first, loaded vehicles after" if ranking == "recovery_first" else "")
+        )
     caps = phase.get("capacities")
     if caps is not None:
         lines.append(

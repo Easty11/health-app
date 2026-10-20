@@ -1638,6 +1638,7 @@ def _format_plan_phase(phase: dict | None, phase_folders, window: dict | None) -
     if phase.get("review_on"):
         lines.append(f"  review on: {phase['review_on']}" + (" - review due" if phase.get("review_due") else ""))
     lines.append(f"  probe posture: {phase.get('probe_posture') or 'not set'}")
+    lines.append(f"  vehicle ranking: {phase.get('vehicle_ranking') or 'not set'}")
     caps = phase.get("capacities")
     lines.append("  capacities: all live (no phase restriction)" if caps is None
                  else "  capacities: " + (", ".join(caps) if caps else "none"))

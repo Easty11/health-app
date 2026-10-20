@@ -36,6 +36,7 @@ def _payload(**overrides):
         "label": "decompression",
         "intent": "Post-season recovery. Swims easy aerobic, no VO2 this block.",
         "probe_posture": "suppressed",
+        "vehicle_ranking": "recovery_first",
         "capacities": ["mobility", "stability"],
         "microcycle": {
             "sub_cycle_days": 7,
@@ -72,6 +73,8 @@ def test_model_check_domains_match_the_canonical_tuples():
         assert f"'{v}'" in ddl
     for v in phase_mod.PROBE_POSTURE_VALUES:
         assert f"'{v}'" in ddl
+    for v in phase_mod.VEHICLE_RANKING_VALUES:
+        assert f"'{v}'" in ddl
 
 
 # ── append-only + one-open invariants (mirror test_cbti_substrate) ───────────
@@ -99,6 +102,32 @@ def test_probe_posture_domain_check_rejects_invalid(db_session):
     db_session.rollback()
 
 
+def test_vehicle_ranking_check_refuses_unknown_values(db_session):
+    """Q212: the DB CHECK refuses a ranking outside {standard, recovery_first}."""
+    u = _user(db_session)
+    db_session.add(models.TrainingPhase(
+        user_id=u.id, label="x", probe_posture="held", vehicle_ranking="loaded_first",
+        entered_on=date(2026, 9, 7), asserted_by="user",
+        asserted_on=date(2026, 9, 9), source="api",
+    ))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_vehicle_ranking_is_required_at_the_db_with_no_default(db_session):
+    """Q212 / #230: a row with no ranking is refused by NOT NULL - there is no default to fall to."""
+    u = _user(db_session)
+    db_session.add(models.TrainingPhase(
+        user_id=u.id, label="x", probe_posture="held",
+        entered_on=date(2026, 9, 7), asserted_by="user",
+        asserted_on=date(2026, 9, 9), source="api",
+    ))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
 @pytest.mark.parametrize("col,val", [
     ("asserted_by", "coach"),      # not in ASSERTED_BY_VALUES
     ("source", "sms"),             # not in SOURCE_VALUES
@@ -106,7 +135,7 @@ def test_probe_posture_domain_check_rejects_invalid(db_session):
 def test_provenance_domain_checks_reject_invalid(db_session, col, val):
     u = _user(db_session, email=f"{col}@x.io")
     kwargs = dict(
-        user_id=u.id, label="x", probe_posture="held", entered_on=date(2026, 9, 7),
+        user_id=u.id, label="x", probe_posture="held", vehicle_ranking="standard", entered_on=date(2026, 9, 7),
         asserted_by="user", asserted_on=date(2026, 9, 9), source="api",
     )
     kwargs[col] = val
@@ -127,7 +156,7 @@ def test_closure_updates_only_closure_columns(db_session):
     assert closed.id == p.id
     assert closed.closed_on == _local_day()
     assert closed.close_reason == "block complete"
-    for col in ("label", "intent", "probe_posture", "capacities", "microcycle",
+    for col in ("label", "intent", "probe_posture", "vehicle_ranking", "capacities", "microcycle",
                 "entered_on", "review_on", "asserted_by", "asserted_on", "source"):
         assert getattr(closed, col) == before[col], f"{col} must not change at closure"
 
@@ -191,6 +220,8 @@ def test_zero_open_is_a_valid_baseline(db_session):
     (_payload(capacities=["stability", "stability"]), "duplicate capacity"),
     (_payload(probe_posture="paused"), "probe_posture"),
     (_payload(probe_posture=...), "probe_posture is required"),
+    (_payload(vehicle_ranking="loaded_first"), "vehicle_ranking"),
+    (_payload(vehicle_ranking=...), "vehicle_ranking is required"),
     (_payload(label=""), "label is required"),
     (_payload(label=...), "label is required"),
     (_payload(asserted_by="coach"), "asserted_by is required"),
@@ -386,7 +417,7 @@ def test_suppressed_forces_fortify_and_zero_probe_budget(db_session):
 def test_held_posture_keeps_probe_budget(db_session):
     u, p, queue = _seeded(db_session)
     phase = open_phase(db_session, u.id, _payload(
-        probe_posture="held", capacities=None, microcycle=None))
+        probe_posture="held", vehicle_ranking="standard", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     assert out["budget"] == {"probe": 0.25, "fortify": 0.75}
@@ -398,7 +429,7 @@ def test_capacities_filter_removes_only_never_readmits(db_session):
     u, p, queue = _seeded(db_session)
     unconstrained = {(c["region_key"], c["side"]) for c in queue}
     phase = open_phase(db_session, u.id, _payload(
-        probe_posture="held", capacities=["stability"], microcycle=None))
+        probe_posture="held", vehicle_ranking="standard", capacities=["stability"], microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     if out["probe"] is not None:
@@ -412,7 +443,7 @@ def test_capacities_resolve_before_compare_uppercase_tokens(db_session):
     u, p, queue = _seeded(db_session)
     stability_exists = any(c["capacity"] == "stability" for c in queue)
     phase = open_phase(db_session, u.id, _payload(
-        probe_posture="held", capacities=["STABILITY"], microcycle=None))
+        probe_posture="held", vehicle_ranking="standard", capacities=["STABILITY"], microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     if stability_exists:
@@ -427,14 +458,14 @@ def test_fortify_target_within_phase(db_session):
     assert taxonomy.by_key("anti_lateral_flexion").capacity is taxonomy.Capacity.STABILITY
 
     within = open_phase(db_session, u.id, _payload(
-        label="a", probe_posture="held", capacities=["stability"], microcycle=None))
+        label="a", probe_posture="held", vehicle_ranking="standard", capacities=["stability"], microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=within)
     assert out["training_phase"]["fortify_target_within_phase"] is True
     assert out["fortify"]["target"] == "anti_lateral_flexion"       # still served
 
     excl = open_phase(db_session, u.id, _payload(
-        label="b", probe_posture="held", capacities=["endurance"], microcycle=None))
+        label="b", probe_posture="held", vehicle_ranking="standard", capacities=["endurance"], microcycle=None))
     out2 = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=excl)
     assert out2["training_phase"]["fortify_target_within_phase"] is False
@@ -445,7 +476,7 @@ def test_fortify_target_within_phase(db_session):
 def test_null_capacities_target_within_phase_true(db_session):
     u, p, queue = _seeded(db_session)
     phase = open_phase(db_session, u.id, _payload(
-        probe_posture="held", capacities=None, microcycle=None))
+        probe_posture="held", vehicle_ranking="standard", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     assert out["training_phase"]["fortify_target_within_phase"] is True
@@ -471,22 +502,23 @@ def test_held_keeps_probe_block_identical_to_no_phase(db_session):
     u, p, queue = _seeded(db_session)
     baseline = selection.select_next(db_session, u.id, profile=p, probe_queue=list(queue))
     phase = open_phase(db_session, u.id, _payload(
-        probe_posture="held", capacities=None, microcycle=None))
+        probe_posture="held", vehicle_ranking="standard", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     assert out["probe"] is not None
     assert out["probe"] == baseline["probe"]
 
 
-# ── T2 — recovery-vehicle re-rank on a suppressed phase ──────────────────────
+# ── T2 — recovery-vehicle re-rank on a recovery_first phase (Q212: its own field) ──
 
-def test_suppressed_reranks_vehicles_recovery_first(db_session):
-    """T2: a suppressed phase fires the same stable two-group re-rank — recovery vehicles
-    first (their original relative order preserved), loaded vehicles after (order
-    preserved), nothing dropped (#8). Its own reason is surfaced in notes."""
+def test_recovery_first_ranking_reranks_vehicles(db_session):
+    """T2: a phase whose `vehicle_ranking` is `recovery_first` fires the same stable two-group
+    re-rank - recovery vehicles first (their original relative order preserved), loaded
+    vehicles after (order preserved), nothing dropped (#8). Its own reason is surfaced in notes.
+    Since Q212 the trigger is the ranking field, not the probe posture (decompression is both)."""
     u, p, queue = _seeded(db_session)
     phase = open_phase(db_session, u.id, _payload(
-        probe_posture="suppressed", capacities=None, microcycle=None))
+        probe_posture="suppressed", vehicle_ranking="recovery_first", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     keys = [v["key"] for v in out["fortify"]["vehicles"]]
@@ -503,17 +535,76 @@ def test_suppressed_reranks_vehicles_recovery_first(db_session):
 
 
 def test_held_phase_does_not_rerank_vehicles(db_session):
-    """T2: `held` posture never triggers the recovery re-rank — the seed's order stands and
+    """T2: a `standard` ranking never triggers the recovery re-rank — the seed's order stands and
     no recovery note is surfaced."""
     u, p, queue = _seeded(db_session)
     phase = open_phase(db_session, u.id, _payload(
-        probe_posture="held", capacities=None, microcycle=None))
+        probe_posture="held", vehicle_ranking="standard", capacities=None, microcycle=None))
     out = selection.select_next(
         db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
     keys = [v["key"] for v in out["fortify"]["vehicles"]]
     assert keys == ["pilates_clinical", "offset_carry", "unilateral_lifting",
                     "swim", "hike", "barbell_floor_hold"]
     assert not any("recovery vehicles ranked first" in n for n in out["notes"])
+
+
+_SEED_ORDER = ["pilates_clinical", "offset_carry", "unilateral_lifting",
+               "swim", "hike", "barbell_floor_hold"]
+_RECOVERY_FIRST_ORDER = ["pilates_clinical", "swim", "hike",
+                         "offset_carry", "unilateral_lifting", "barbell_floor_hold"]
+
+
+def test_suppressed_standard_phase_probes_off_but_no_recovery_rerank(db_session):
+    """Q212 ruling 1: posture `suppressed` keeps behaviours (1) and (2) - probe budget 0 / fortify
+    and the withheld probe block - but with `standard` ranking it does NOT re-rank vehicles and
+    surfaces no 'recovery vehicles ranked first' note. This is the open phase's case (5 Oct)."""
+    u, p, queue = _seeded(db_session)
+    assert queue, "fixture precondition: a non-empty probe queue"
+    phase = open_phase(db_session, u.id, _payload(
+        probe_posture="suppressed", vehicle_ranking="standard", capacities=None, microcycle=None))
+    out = selection.select_next(
+        db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
+    assert out["mode_recommended"] == "fortify"
+    assert out["budget"] == {"probe": 0.0, "fortify": 1.0}      # (1) probe budget 0
+    assert out["probe"] is None                                  # (2) probe block withheld
+    keys = [v["key"] for v in out["fortify"]["vehicles"]]
+    assert keys == _SEED_ORDER                                   # (3) no re-rank
+    assert not any("recovery vehicles ranked first" in n for n in out["notes"])
+    assert any("probe posture suppressed" in n for n in out["notes"])
+    assert out["training_phase"]["probe_posture"] == "suppressed"
+    assert out["training_phase"]["vehicle_ranking"] == "standard"
+
+
+def test_held_recovery_first_phase_reranks_without_touching_probes(db_session):
+    """The split runs both ways: a `recovery_first` ranking re-ranks vehicles under a `held`
+    posture, and the probe budget and probe block are exactly the no-phase ones."""
+    u, p, queue = _seeded(db_session)
+    baseline = selection.select_next(db_session, u.id, profile=p, probe_queue=list(queue))
+    phase = open_phase(db_session, u.id, _payload(
+        probe_posture="held", vehicle_ranking="recovery_first", capacities=None, microcycle=None))
+    out = selection.select_next(
+        db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase)
+    assert [v["key"] for v in out["fortify"]["vehicles"]] == _RECOVERY_FIRST_ORDER
+    assert any("recovery vehicles ranked first" in n for n in out["notes"])
+    assert out["budget"] == baseline["budget"] == {"probe": 0.25, "fortify": 0.75}
+    assert out["probe"] == baseline["probe"] and out["probe"] is not None
+
+
+def test_readiness_and_life_load_reranks_are_independent_of_the_phase_ranking(db_session):
+    """Q212 ruling 1: the readiness and life-load triggers are unchanged - they re-rank under a
+    `standard` phase too, and the phase's own recovery note is NOT added by them."""
+    u, p, queue = _seeded(db_session)
+    phase = open_phase(db_session, u.id, _payload(
+        probe_posture="suppressed", vehicle_ranking="standard", capacities=None, microcycle=None))
+    low = selection.select_next(
+        db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase, readiness_hint=3)
+    assert [v["key"] for v in low["fortify"]["vehicles"]] == _RECOVERY_FIRST_ORDER
+    assert any("Low subjective readiness" in n for n in low["notes"])
+    assert not any("Training phase" in n and "recovery vehicles ranked first" in n for n in low["notes"])
+    life = selection.select_next(
+        db_session, u.id, profile=p, probe_queue=list(queue), training_phase=phase, life_load_bias=True)
+    assert [v["key"] for v in life["fortify"]["vehicles"]] == _RECOVERY_FIRST_ORDER
+    assert any("Elevated life-load" in n for n in life["notes"])
 
 
 # ── T1 (context_builder) — the suppressed-PROBE line ─────────────────────────
@@ -551,12 +642,12 @@ def test_section_probe_renders_queue_empty_without_suppression():
     assert "suppressed by training phase" not in out_no_phase
 
     out_held = _section_probe(_selection_stub(
-        training_phase={"label": "aerobic_base", "probe_posture": "held"}))
+        training_phase={"label": "aerobic_base", "probe_posture": "held", "vehicle_ranking": "standard"}))
     assert "- PROBE: queue empty under current filters" in out_held
     assert "suppressed by training phase" not in out_held
 
 
-_PHASE_STUB = {"label": "base", "probe_posture": "held", "capacities": None,
+_PHASE_STUB = {"label": "base", "probe_posture": "held", "vehicle_ranking": "standard", "capacities": None,
                "review_on": None, "microcycle": None}
 
 
@@ -727,6 +818,29 @@ def test_http_open_bad_payload_is_422(db_session):
     r = c.post("/engine/phase/transition", json={"phase": _payload(capacities=["cardio"])})
     assert r.status_code == 422, r.text
     assert "unknown capacity" in r.json()["detail"]
+
+
+def test_http_transition_refuses_a_missing_or_unknown_vehicle_ranking(db_session):
+    """Q212: the write is refused without a ranking (no default) and with an unknown one - and a
+    refusal opens nothing (the move-with-an-unset-field case the wizard also blocks client-side)."""
+    u = _user(db_session)
+    c = _client(db_session, u)
+    r = c.post("/engine/phase/transition", json={"phase": _payload(vehicle_ranking=...)})
+    assert r.status_code == 422, r.text
+    r = c.post("/engine/phase/transition", json={"phase": _payload(vehicle_ranking="loaded_first")})
+    assert r.status_code == 422, r.text
+    assert "vehicle_ranking" in r.json()["detail"]
+    assert c.get("/engine/phase").json()["training_phase"] is None
+
+
+def test_http_transition_round_trips_both_settings(db_session):
+    u = _user(db_session)
+    c = _client(db_session, u)
+    r = c.post("/engine/phase/transition", json={"phase": _payload(
+        probe_posture="suppressed", vehicle_ranking="standard", capacities=None, microcycle=None)})
+    assert r.status_code == 200, r.text
+    tp = c.get("/engine/phase").json()["training_phase"]
+    assert (tp["probe_posture"], tp["vehicle_ranking"]) == ("suppressed", "standard")
 
 
 def test_http_close_with_nothing_open_is_404(db_session):

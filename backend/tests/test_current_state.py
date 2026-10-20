@@ -464,7 +464,7 @@ def _seed_mature_hrv(db, user_id, source="samsung", *, baseline_rmssd=50.0, toda
 
 def _open_phase(db, user_id, entered_on):
     db.add(models.TrainingPhase(
-        user_id=user_id, label="deload", probe_posture="held",
+        user_id=user_id, label="deload", probe_posture="held", vehicle_ranking="standard",
         entered_on=entered_on, asserted_by="user", asserted_on=entered_on, source="api",
     ))
     db.commit()
@@ -521,7 +521,7 @@ def test_resolver_position_parity_state_equals_resolve(db_session):
 
     user = _make_user(db_session, email="parity-pos@example.com")
     open_phase(db_session, user.id, {
-        "label": "cond", "probe_posture": "held",
+        "label": "cond", "probe_posture": "held", "vehicle_ranking": "standard",
         "microcycle": {"sub_cycle_days": 7, "sub_cycles": [
             {"label": "A", "slots": [
                 {"capacity": "strength", "sessions_per_cycle": 2, "minutes": 45},

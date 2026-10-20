@@ -21,7 +21,7 @@ const WEEK = {
   days: [], unlinked_soft: [], one_off_notes: [], needs_planning: false,
   freshness: { hc_synced_at: null, hc_stale: true, polar_stale: true, polar_pull_ts_exists: false },
 }
-const PHASE = { label: 'decompression', probe_posture: 'held', entered_on: '2026-09-07',
+const PHASE = { label: 'decompression', probe_posture: 'held', vehicle_ranking: 'standard', entered_on: '2026-09-07',
                 review_on: '2026-10-05', review_due: true, capacities: ['stability'] }
 
 beforeEach(() => {
@@ -49,6 +49,19 @@ test('renders the phase, week N, review badge, the week line, and the one action
   expect(screen.getByText(/Device-evidenced counts may be incomplete/)).toBeTruthy()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /review \/ change phase/i })) })
   expect(onReviewChange).toHaveBeenCalled()
+})
+
+test('Q212: the open-phase card shows both settings in plain language', async () => {
+  const { unmount } = render(<PhaseCard phase={PHASE} onReviewChange={vi.fn()} />)
+  const line = screen.getByText('Probes:').parentElement.textContent
+  expect(line).toMatch(/Probes: Probes as usual · Vehicles: Usual order · entered 2026-09-07/)
+  unmount()
+  // Probes off WITHOUT the recovery-first ranking is a legal pair (the open phase's own case).
+  const { unmount: u2 } = render(<PhaseCard phase={{ ...PHASE, probe_posture: 'suppressed', vehicle_ranking: 'standard' }} onReviewChange={vi.fn()} />)
+  expect(screen.getByText('Probes:').parentElement.textContent).toMatch(/Probes: Probes off · Vehicles: Usual order/)
+  u2()
+  render(<PhaseCard phase={{ ...PHASE, probe_posture: 'held', vehicle_ranking: 'recovery_first' }} onReviewChange={vi.fn()} />)
+  expect(screen.getByText('Probes:').parentElement.textContent).toMatch(/Probes: Probes as usual · Vehicles: Recovery vehicles first/)
 })
 
 test('baseline (no phase) shows "Open a phase"', async () => {

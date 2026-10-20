@@ -44,7 +44,7 @@ def _user(db, email="wk@example.com"):
 
 def _phase(db, uid, microcycle, entered_on=MONDAY):
     ph = models.TrainingPhase(
-        user_id=uid, label="base", probe_posture="held", microcycle=microcycle,
+        user_id=uid, label="base", probe_posture="held", vehicle_ranking="standard", microcycle=microcycle,
         entered_on=entered_on, asserted_by="user", asserted_on=entered_on, source="api",
     )
     db.add(ph)

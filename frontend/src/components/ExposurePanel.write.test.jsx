@@ -18,7 +18,7 @@ import decompression from '../fixtures/engineNextDecompression.json'
 const NULL_WINDOW = { window: null, slots: [], due_capacity: null, due_slot: null, uncounted: [] }
 const NULL_WEEK = null
 const DRAFT = {
-  current_phase: { label: 'decompression', intent: 'deload', probe_posture: 'held', entered_on: '2026-09-07' },
+  current_phase: { label: 'decompression', intent: 'deload', probe_posture: 'held', vehicle_ranking: 'standard', entered_on: '2026-09-07' },
   outgoing_review: [], schedule_items: [], sport_names_seen: [{ sport_name: 'Pilates', source: 'health_connect' }],
   routine_folders: [], freshness: { hc_synced_at: null, hc_stale: true, polar_stale: true, polar_pull_ts_exists: false },
 }

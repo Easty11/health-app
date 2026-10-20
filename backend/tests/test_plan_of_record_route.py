@@ -46,7 +46,7 @@ def _plan(db, uid, macro="## Offseason\nPhase 1 base; buffer rule.", revised_on=
 
 def _phase(db, uid, entered_on, review_on):
     ph = models.TrainingPhase(
-        user_id=uid, label="base", probe_posture="held", entered_on=entered_on,
+        user_id=uid, label="base", probe_posture="held", vehicle_ranking="standard", entered_on=entered_on,
         asserted_by="user", asserted_on=entered_on, source="api", review_on=review_on,
     )
     db.add(ph)

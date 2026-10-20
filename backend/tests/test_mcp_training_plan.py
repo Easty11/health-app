@@ -38,7 +38,7 @@ def _phase(db, uid, *, review_on=None, folders=None):
         {"label": "B", "slots": [{"capacity": "stability", "sessions_per_cycle": 1, "minutes": 30}]},
     ]}
     db.add(models.TrainingPhase(
-        user_id=uid, label="base", intent="rebuild the base", probe_posture="held",
+        user_id=uid, label="base", intent="rebuild the base", probe_posture="held", vehicle_ranking="standard",
         capacities=["stability"], microcycle=micro, entered_on=MONDAY, review_on=review_on,
         asserted_by="user", asserted_on=MONDAY, source="api"))
     if folders is not None:

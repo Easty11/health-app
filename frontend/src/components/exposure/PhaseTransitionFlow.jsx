@@ -32,8 +32,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../api'
 import { todayLocal } from './phaseTime'
 import {
-  NO_SLOT_OPTIONS, TIME_BUCKETS, buildMicrocycle, defaultSlotKey, deriveTimeOfDay, diffSlots, dispositionAfterSlotChange, microcycleSlots,
-  normaliseActivityName, normaliseTimeRange, removesAllCapacity, slotIdentity, slotKeyOptions, validateSlots,
+  NO_SLOT_OPTIONS, PROBE_POSTURE_OPTIONS, TIME_BUCKETS, VEHICLE_RANKING_OPTIONS, buildMicrocycle, defaultSlotKey, deriveTimeOfDay, diffSlots, dispositionAfterSlotChange, microcycleSlots,
+  normaliseActivityName, normaliseTimeRange, optionLabel, removesAllCapacity, slotIdentity, slotKeyOptions, validateSlots,
 } from './phaseTransitionLib'
 
 const CAPACITIES = ['mobility', 'stability', 'strength', 'power', 'endurance']
@@ -109,7 +109,11 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
   const [closeReason, setCloseReason] = useState('')
   const [label, setLabel] = useState('')
   const [intent, setIntent] = useState('')
-  const [posture, setPosture] = useState('held')
+  // Q212: the two settings have NO default. They are seeded from the outgoing phase only when it is being
+  // continued (a revision of the same phase); a Move leaves both unset and the form will not advance
+  // past step 2 until each is chosen.
+  const [posture, setPosture] = useState(null)         // 'held' | 'suppressed' | null (unset)
+  const [ranking, setRanking] = useState(null)         // 'standard' | 'recovery_first' | null (unset)
   const [capacities, setCapacities] = useState([])
   const [allCapacities, setAllCapacities] = useState(false)
   const [reviewOn, setReviewOn] = useState('')
@@ -144,7 +148,8 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
         if (cur) {
           setLabel(cur.label ?? '')
           setIntent(cur.intent ?? '')
-          setPosture(cur.probe_posture ?? 'held')
+          setPosture(cur.probe_posture ?? null)
+          setRanking(cur.vehicle_ranking ?? null)
         }
         // Prefill quota slots from the outgoing microcycle (F6); each editable, none silently applied.
         setSlots(microcycleSlots(cur?.microcycle).map((s) => ({ ...s, origin: 'prefill' })))
@@ -226,6 +231,14 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
   )
   const hasMismatch = mismatchRows.length > 0
 
+  // Continue = revise the same phase, so its two settings carry over; Move = a new phase, so both start unset.
+  function chooseMode(v) {
+    setMode(v)
+    const cur = draft?.current_phase
+    setPosture(v === 'continue' ? (cur?.probe_posture ?? null) : null)
+    setRanking(v === 'continue' ? (cur?.vehicle_ranking ?? null) : null)
+  }
+
   // ---- quota slots (step 4) ---------------------------------------------- //
   // The closed vocabularies come from the backend's own validator (the draft's `slot_options`); the
   // per-slot problems are the refusals the save would raise, shown here instead (4 Oct 2026).
@@ -301,7 +314,7 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
   function buildPayload() {
     const microcycle = buildMicrocycle(slots)
     const phase = {
-      label: label.trim(), probe_posture: posture, entered_on: todayLocal(),
+      label: label.trim(), probe_posture: posture, vehicle_ranking: ranking, entered_on: todayLocal(),
       asserted_by: 'user', asserted_on: todayLocal(), source: 'api', microcycle,
     }
     if (intent.trim()) phase.intent = intent.trim()
@@ -394,6 +407,9 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
 
   // Why Next is disabled (F14/F16) — a named reason beats a dead button.
   let nextBlockedReason = ''
+  if (step === 2 && (posture == null || ranking == null)) {
+    nextBlockedReason = 'Choose both the probe setting and the vehicle ranking to continue.'   // Q212: no default
+  }
   if (step === 5 && hasMismatch && !ackMismatch) {
     nextBlockedReason = 'Acknowledge the schedule ≠ quota mismatch below to continue.'
   }
@@ -404,7 +420,8 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
     nextBlockedReason = 'Fix the quota slot(s) marked above to continue: the save refuses them, so they are checked here.'
   }
   const nextDisabled = !!nextBlockedReason
-  const confirmDisabled = submitting || !label.trim() || (mustAckCapacity && !ackRemoveCapacity)
+  const confirmDisabled = submitting || !label.trim() || posture == null || ranking == null
+    || (mustAckCapacity && !ackRemoveCapacity)
 
   if (status === 'loading') return <p className="text-sm text-gray-500 p-4">Reading the current phase…</p>
   if (status === 'error') {
@@ -471,7 +488,7 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
             <span className={labelCls}>Then</span>
             <div className="flex gap-2">
               {[['continue', 'Continue this phase (revise)'], ['move', 'Move to a new phase']].map(([v, t]) => (
-                <button key={v} type="button" onClick={() => setMode(v)} aria-pressed={mode === v}
+                <button key={v} type="button" onClick={() => chooseMode(v)} aria-pressed={mode === v}
                   className={`text-xs px-3 py-1 rounded-full border ${
                     mode === v ? 'bg-indigo-600 text-white border-indigo-600'
                       : 'bg-white text-gray-600 border-gray-300'}`}>{t}</button>
@@ -496,16 +513,37 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
             <span className={labelCls}>Intent</span>
             <textarea value={intent} onChange={(e) => setIntent(e.target.value)} rows={2} aria-label="phase intent" className={fieldCls} />
           </label>
-          <div className="flex flex-col gap-1">
-            <span className={labelCls}>Probe posture</span>
-            <div className="flex gap-2">
-              {['held', 'suppressed'].map((p) => (
-                <button key={p} type="button" onClick={() => setPosture(p)} aria-pressed={posture === p}
-                  className={`text-xs px-3 py-1 rounded-full border capitalize ${
-                    posture === p ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-gray-600 border-gray-300'}`}>{p}</button>
+          <div className="flex flex-col gap-1" role="group" aria-label="probe setting">
+            <span className={labelCls}>Probes</span>
+            <div className="flex flex-wrap gap-2">
+              {PROBE_POSTURE_OPTIONS.map((o) => (
+                <button key={o.value} type="button" onClick={() => setPosture(o.value)} aria-pressed={posture === o.value}
+                  className={`text-xs px-3 py-1 rounded-full border ${
+                    posture === o.value ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-600 border-gray-300'}`}>{o.label}</button>
               ))}
             </div>
+            <p className={blurbCls}>
+              {posture == null
+                ? 'Choose one. This phase has no default for probes.'
+                : PROBE_POSTURE_OPTIONS.find((o) => o.value === posture)?.hint}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1" role="group" aria-label="vehicle ranking">
+            <span className={labelCls}>Vehicle ranking</span>
+            <div className="flex flex-wrap gap-2">
+              {VEHICLE_RANKING_OPTIONS.map((o) => (
+                <button key={o.value} type="button" onClick={() => setRanking(o.value)} aria-pressed={ranking === o.value}
+                  className={`text-xs px-3 py-1 rounded-full border ${
+                    ranking === o.value ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-600 border-gray-300'}`}>{o.label}</button>
+              ))}
+            </div>
+            <p className={blurbCls}>
+              {ranking == null
+                ? 'Choose one. This is separate from the probe setting: probes can be off with the usual order.'
+                : VEHICLE_RANKING_OPTIONS.find((o) => o.value === ranking)?.hint}
+            </p>
           </div>
           <div className="flex flex-col gap-1">
             <span className={labelCls}>Capacities</span>
@@ -889,6 +927,7 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
             <li>{placements.filter((p) => p.isExisting && p.disposition === 'keep').length} kept · {placements.filter((p) => p.disposition === 'relink').length} relinked · {[...placements, ...hardItems].filter((p) => p.disposition === 'retire' || p.disposition === 'remove').length} retired · {placements.filter((p) => !p.isExisting && p.key?.trim()).length} added</li>
             <li>{events.filter((e) => e.activity.trim() && e.event_date).length} dated event{events.filter((e) => e.activity.trim() && e.event_date).length === 1 ? '' : 's'}</li>
             <li>{mode === 'continue' ? 'Continue' : 'Move to'} phase <span className="font-medium">{label || '—'}</span></li>
+            <li>{optionLabel(PROBE_POSTURE_OPTIONS, posture)} · {optionLabel(VEHICLE_RANKING_OPTIONS, ranking)}</li>
             <li>{folderChoice === 'new' ? `Create Hevy folder "${newFolderName}"` : folderChoice === 'none' ? 'No folder change' : 'Use the selected Hevy folder'}</li>
           </ul>
           {mustAckCapacity && (
