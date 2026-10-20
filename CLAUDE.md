@@ -293,7 +293,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Route (i) now scores sets up to a rep ceiling of 15 declared on the ratio, and the ER:IR read says why a day is missing: paired, only-one-half-logged, and no-usable-e1RM days with their dated reasons; the seeder reports the side updates it wrote.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #434.
+- **Route (i) now scores sets up to a rep ceiling of 15 declared on the ratio, and the ER:IR read says why a day is missing: paired, only-one-half-logged, and no-usable-e1RM days with their dated reasons; the seeder reports the side updates it wrote.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #435.
 
 - **The startup self-heal no longer re-runs the whole sweep on every boot: a keyed user with no load events (a Hevy account with no workouts) is skipped, and the boot log now reads "startup freshness OK".** Code - Canonical home: `DECISIONS_LOG.md` #432.
 
