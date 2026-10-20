@@ -2,8 +2,11 @@
 current / change, and the observed ratio. Everything here is a READ.
 
 Fixtures reuse the See-test helpers (`test_series_exercise`) so route (i) is shown to read the SAME
-sets the per-exercise series reads: same Epley, same rep cap, same working-set rule.
+sets the per-exercise series reads: same Epley, same working-set rule. The rep cap is the one
+deliberate difference: route (i) scores up to the ratio's `log_rep_ceiling` (15), the See-test series
+keeps D1's 10.
 """
+import inspect
 import json
 from datetime import timedelta
 
@@ -14,6 +17,7 @@ import mcp_server
 import models
 from engine import log_strength, ratios
 from engine import observations as obs
+from engine import taxonomy
 from reads import strength_reads
 from routers import series
 from routers.engine import get_log_strength, get_ratio, get_ratios
@@ -46,6 +50,11 @@ def _one_rep(weight):
     return [_ws(weight, 1)]
 
 
+def _series(db, uid, region, **kw):
+    """The scorable series per side at the route (i) ceiling."""
+    return log_strength.e1rm_by_side(db, uid, region, rep_cap=log_strength.LOG_REP_CEILING, **kw).series
+
+
 def _shoulder_setup(db):
     u = _user(db, "ls@example.com")
     for tid, region, side in ((ER_L, "shoulder_er", "left"), (ER_R, "shoulder_er", "right"),
@@ -66,6 +75,23 @@ def test_the_strength_primitives_are_one_shared_helper():
     assert log_strength.strength_reads is strength_reads         # route (i) reaches them through it
 
 
+def test_the_rep_cap_is_a_parameter_whose_default_is_the_see_test_cap():
+    sig = inspect.signature(strength_reads.aggregate_session)
+    assert sig.parameters["rep_cap"].default == strength_reads.EPLEY_REP_CAP == 10
+    assert sig.parameters["rep_cap"].kind is inspect.Parameter.KEYWORD_ONLY
+    twelve = [_ws(20, 12)]
+    assert strength_reads.aggregate_session(twelve)["e1rm_kg"] is None                  # default refuses
+    assert strength_reads.aggregate_session(twelve, rep_cap=15)["e1rm_kg"] == pytest.approx(20 * (1 + 12 / 30))
+    assert series._aggregate_session(twelve)["e1rm_kg"] is None                         # the series is unchanged
+
+
+def test_the_route_i_rep_cap_is_required_and_the_ceiling_is_one_literal():
+    assert inspect.signature(log_strength.e1rm_by_side).parameters["rep_cap"].default is inspect.Parameter.empty
+    assert log_strength.LOG_REP_CEILING == taxonomy.DEFAULT_LOG_REP_CEILING == 15
+    assert strength_reads.EPLEY_REP_CAP == 10                                           # not touched
+    assert all(r.log_rep_ceiling == 15 for r in taxonomy.all_ratios())
+
+
 # ── e1rm_by_side ─────────────────────────────────────────────────────────────
 
 def test_sides_come_from_the_declared_column_and_null_reads_as_bilateral(db_session):
@@ -75,7 +101,7 @@ def test_sides_come_from_the_declared_column_and_null_reads_as_bilateral(db_sess
     _tag(db_session, ER_B, "shoulder_er", None)
     for tid, w in ((ER_L, 10), (ER_R, 20), (ER_B, 30)):
         _log(db_session, u.id, -3, tid, _one_rep(w))
-    out = log_strength.e1rm_by_side(db_session, u.id, "shoulder_er")
+    out = _series(db_session, u.id, "shoulder_er")
     assert set(out) == {"left", "right", "bilateral"}
     assert out["left"][0]["e1rm_kg"] == pytest.approx(10 * (1 + 1 / 30))
     assert out["right"][0]["template_id"] == ER_R
@@ -88,14 +114,15 @@ def test_the_title_is_never_used_to_infer_a_side(db_session):
     _template(db_session, "named-l", "Shoulder External Rotation L")
     _tag(db_session, "named-l", "shoulder_er", None)
     _log(db_session, u.id, -2, "named-l", _one_rep(10))
-    assert set(log_strength.e1rm_by_side(db_session, u.id, "shoulder_er")) == {"bilateral"}
+    assert set(_series(db_session, u.id, "shoulder_er")) == {"bilateral"}
 
 
 def test_only_primary_tags_count(db_session):
     u = _user(db_session, "primary@example.com")
     _tag(db_session, ER_L, "shoulder_er", "left", role="secondary")
     _log(db_session, u.id, -2, ER_L, _one_rep(10))
-    assert log_strength.e1rm_by_side(db_session, u.id, "shoulder_er") == {}
+    reads = log_strength.e1rm_by_side(db_session, u.id, "shoulder_er", rep_cap=15)
+    assert reads.series == {} and reads.ineligible == {}
 
 
 def test_a_session_day_takes_the_best_template_for_that_side(db_session):
@@ -104,17 +131,17 @@ def test_a_session_day_takes_the_best_template_for_that_side(db_session):
     _tag(db_session, "er-b", "shoulder_er", "left")
     _workout(db_session, user_id=u.id, day=_today() - timedelta(days=4),
              blocks=[("er-a", _one_rep(10)), ("er-b", _one_rep(15))], hevy_id="w-best")
-    pts = log_strength.e1rm_by_side(db_session, u.id, "shoulder_er")["left"]
+    pts = _series(db_session, u.id, "shoulder_er")["left"]
     assert len(pts) == 1 and pts[0]["template_id"] == "er-b"
 
 
-def test_warmups_and_reps_over_the_cap_are_excluded_exactly_as_the_series_excludes_them(db_session):
+def test_warmups_and_reps_over_the_ceiling_are_excluded_and_the_number_is_the_series_own(db_session):
     u = _user(db_session, "rules@example.com")
     _tag(db_session, ER_L, "shoulder_er", "left")
     _log(db_session, u.id, -9, ER_L, [_ws(100, 3, "warmup")])                  # warm-up only -> no point
-    _log(db_session, u.id, -8, ER_L, [_ws(50, 12)])                           # reps > 10 -> no e1RM
+    _log(db_session, u.id, -8, ER_L, [_ws(50, 16)])                           # reps > 15 -> no e1RM
     _log(db_session, u.id, -7, ER_L, [_ws(100, 5, "warmup"), _ws(20, 5)])     # warm-up ignored
-    pts = log_strength.e1rm_by_side(db_session, u.id, "shoulder_er")["left"]
+    pts = _series(db_session, u.id, "shoulder_er")["left"]
     assert [p["day"] for p in pts] == [_today() - timedelta(days=7)]
     assert pts[0]["e1rm_kg"] == pytest.approx(20 * (1 + 5 / 30))
     assert pts[0]["top_set"] == {"weight_kg": 20.0, "reps": 5}
@@ -123,12 +150,52 @@ def test_warmups_and_reps_over_the_cap_are_excluded_exactly_as_the_series_exclud
     assert agg["e1rm_kg"] == pytest.approx(pts[0]["e1rm_kg"])
 
 
+# ── route (i) rep ceiling (15) vs the See-test cap (10) ──────────────────────
+
+def test_a_12_rep_set_scores_under_the_ceiling_and_not_under_the_see_test_cap(db_session):
+    u = _user(db_session, "twelve@example.com")
+    _tag(db_session, ER_L, "shoulder_er", "left")
+    _log(db_session, u.id, -3, ER_L, [_ws(8, 12)])
+    at15 = log_strength.e1rm_by_side(db_session, u.id, "shoulder_er", rep_cap=15)
+    assert at15.series["left"][0]["e1rm_kg"] == pytest.approx(8 * (1 + 12 / 30))
+    assert at15.ineligible == {}
+    at10 = log_strength.e1rm_by_side(db_session, u.id, "shoulder_er", rep_cap=10)
+    assert at10.series == {}
+    assert at10.ineligible["left"] == [{"day": _today() - timedelta(days=3),
+                                        "reason": "reps_over_ceiling", "template_id": ER_L}]
+
+
+def test_equal_rep_halves_give_exactly_the_load_ratio_because_epley_cancels(db_session):
+    u = _shoulder_setup(db_session)
+    for off, (er, ir) in zip((-9, -6, -3), ((6, 8), (9, 12), (7.5, 10))):
+        _log(db_session, u.id, off, ER_L, [_ws(er, 12)])
+        _log(db_session, u.id, off, IR_L, [_ws(ir, 12)])
+    left = ratios.log_derived(db_session, u.id, "er_ir")["sides"]["left"]
+    assert [p["ratio"] for p in left["pairs"]] == pytest.approx([6 / 8, 9 / 12, 7.5 / 10], abs=1e-12)
+    assert left["baseline"] == pytest.approx(0.75, abs=1e-12)
+
+
+def test_the_ratios_ceiling_is_what_log_derived_applies(db_session, monkeypatch):
+    import dataclasses
+    u = _shoulder_setup(db_session)
+    for off in (-9, -6, -3):
+        _log(db_session, u.id, off, ER_L, [_ws(6, 12)])
+        _log(db_session, u.id, off, IR_L, [_ws(8, 12)])
+    assert ratios.log_derived(db_session, u.id, "er_ir")["sides"]["left"]["n_pairs"] == 3
+    tight = dataclasses.replace(taxonomy.ratio_by_key("er_ir"), log_rep_ceiling=10)
+    monkeypatch.setattr(taxonomy, "ratio_by_key", lambda k: tight if k == "er_ir" else None)
+    out = ratios.log_derived(db_session, u.id, "er_ir")
+    assert out["rep_ceiling"] == 10
+    assert out["sides"]["left"]["n_pairs"] == 0
+    assert out["sides"]["left"]["no_eligible_e1rm_days"] == 3
+
+
 def test_symmetry_per_day_is_a_ratio_and_a_lower_side_only(db_session):
     u = _shoulder_setup(db_session)
     _log(db_session, u.id, -5, ER_L, _one_rep(20))
     _log(db_session, u.id, -5, ER_R, _one_rep(25))
     _log(db_session, u.id, -3, ER_L, _one_rep(22))                  # no right that day
-    sym = log_strength.symmetry_by_day(log_strength.e1rm_by_side(db_session, u.id, "shoulder_er"))
+    sym = log_strength.symmetry_by_day(_series(db_session, u.id, "shoulder_er"))
     assert len(sym) == 1
     assert sym[0]["index_pct"] == 80.0 and sym[0]["lower_side"] == "left"
     assert set(sym[0]) == {"day", "left_e1rm_kg", "right_e1rm_kg", "index_pct", "lower_side"}
@@ -150,6 +217,7 @@ def test_pairing_is_same_day_only_and_unpaired_days_are_counted(db_session):
         _log(db_session, u.id, off, IR_L, _one_rep(20))
     left = ratios.log_derived(db_session, u.id, "er_ir")["sides"]["left"]
     assert left["n_pairs"] == 2 and left["unpaired_days"] == 2           # -6 (ER only), -4 (IR only)
+    assert (left["paired_days"], left["half_not_logged_days"], left["no_eligible_e1rm_days"]) == (2, 2, 0)
     assert [p["day"] for p in left["pairs"]] == [str(_today() + timedelta(days=d)) for d in (-10, -8)]
     assert left["pairs"][0]["ratio"] == pytest.approx(0.75)
 
@@ -164,7 +232,8 @@ def test_baseline_current_and_change_are_the_briefed_arithmetic(db_session):
     assert left["delta_pct"] == pytest.approx(100.0)
     assert left["reference"] == {"governing": "internal",
                                  "reason": "log-derived (cable/machine); no norm shares the instrument"}
-    assert set(left) == {"pairs", "n_pairs", "unpaired_days", "baseline", "baseline_days", "current",
+    assert set(left) == {"pairs", "n_pairs", "paired_days", "half_not_logged_days", "no_eligible_e1rm_days",
+                         "no_eligible_e1rm", "unpaired_days", "baseline", "baseline_days", "current",
                          "current_days", "delta_pct", "reference"}       # no label, band or threshold
 
 
@@ -227,6 +296,132 @@ def test_route_i_writes_nothing(db_session):
     ratios.all_ratio_overviews(db_session, u.id)
     log_strength.log_strength_as_dict(db_session, u.id, "shoulder_er")
     assert db_session.query(models.CapabilityObservation).count() == 0
+
+
+# ── why a day is missing: ineligible reasons and the three-way day accounting ─
+
+def _ineligible(db, uid, region="shoulder_er", **kw):
+    return log_strength.e1rm_by_side(db, uid, region, rep_cap=15, **kw).ineligible
+
+
+def test_each_ineligible_reason_is_reported_with_its_day_and_template(db_session):
+    u = _user(db_session, "reasons@example.com")
+    _tag(db_session, ER_L, "shoulder_er", "left")
+    _log(db_session, u.id, -9, ER_L, [_ws(6, 12, "warmup"), _ws(6, 12, "warmup")])   # nothing but warm-ups
+    _log(db_session, u.id, -8, ER_L, [_ws(6, 16)])                                   # 16 reps > 15
+    _log(db_session, u.id, -7, ER_L, [_ws(None, 12)])                                # no weight logged
+    _log(db_session, u.id, -6, ER_L, [_ws(0, 12)])                                   # 0 kg is not a strength reading
+    _log(db_session, u.id, -5, ER_L, [_ws(6, 15)])                                   # 15 reps: at the ceiling, scores
+    got = _ineligible(db_session, u.id)["left"]
+    assert [(e["day"] - _today()).days for e in got] == [-9, -8, -7, -6]
+    assert [e["reason"] for e in got] == ["all_warmup", "reps_over_ceiling", "no_weight", "no_weight"]
+    assert {e["template_id"] for e in got} == {ER_L}
+    assert set(strength_reads.INELIGIBLE_REASONS) == {"all_warmup", "reps_over_ceiling", "no_weight"}
+    assert len(_series(db_session, u.id, "shoulder_er")["left"]) == 1                 # only the 15-rep day
+
+
+def test_a_day_with_no_sets_at_all_is_absent_not_ineligible(db_session):
+    u = _user(db_session, "absent@example.com")
+    _tag(db_session, ER_L, "shoulder_er", "left")
+    _log(db_session, u.id, -4, ER_L, [])
+    reads = log_strength.e1rm_by_side(db_session, u.id, "shoulder_er", rep_cap=15)
+    assert reads.series == {} and reads.ineligible == {}
+
+
+def test_a_day_another_template_of_the_side_scored_is_not_listed_as_missing(db_session):
+    u = _user(db_session, "twotmpl@example.com")
+    _tag(db_session, "er-a", "shoulder_er", "left")
+    _tag(db_session, "er-b", "shoulder_er", "left")
+    _workout(db_session, user_id=u.id, day=_today() - timedelta(days=4),
+             blocks=[("er-a", [_ws(6, 20)]), ("er-b", [_ws(6, 10)])], hevy_id="w-two")
+    reads = log_strength.e1rm_by_side(db_session, u.id, "shoulder_er", rep_cap=15)
+    assert [p["template_id"] for p in reads.series["left"]] == ["er-b"]
+    assert reads.ineligible == {}
+
+
+def test_zero_kg_exposure_never_scores_so_it_cannot_make_a_zero_ratio_pair(db_session):
+    u = _user(db_session, "zerokg@example.com")
+    _tag(db_session, ADD_M, "hip_adduction", None)
+    _tag(db_session, ABD_M, "hip_abduction", None)
+    _tag(db_session, "cop-hip-lift", "hip_adduction", None)          # tagged primary, logged unloaded
+    for off in (-6, -4, -2):
+        _log(db_session, u.id, off, "cop-hip-lift", [_ws(0, 12)])
+        _log(db_session, u.id, off, ABD_M, [_ws(25, 12)])
+    out = ratios.log_derived(db_session, u.id, "add_abd")["sides"]["bilateral"]
+    assert out["n_pairs"] == 0 and out["pairs"] == []
+    assert out["no_eligible_e1rm_days"] == 3
+    assert {e["reason"] for e in out["no_eligible_e1rm"]} == {"no_weight"}
+
+
+def test_the_operators_shape_twelve_rep_halves_baseline_and_a_warmup_day_with_its_reason(db_session):
+    """ER and IR together at 12 reps on three days, then a day whose ER/IR sets are all flagged warm-up."""
+    u = _shoulder_setup(db_session)
+    for off, (er, ir) in zip((-30, -23, -16), ((6, 8), (7, 8), (8, 10))):
+        _log(db_session, u.id, off, ER_L, [_ws(er, 12)])
+        _log(db_session, u.id, off, IR_L, [_ws(ir, 12)])
+    _log(db_session, u.id, -5, ER_L, [_ws(6, 12, "warmup")])
+    _log(db_session, u.id, -5, IR_L, [_ws(8, 12, "warmup")])
+    left = ratios.log_derived(db_session, u.id, "er_ir")["sides"]["left"]
+    assert left["paired_days"] == 3 and left["baseline"] == pytest.approx(0.8, abs=1e-12)  # median of .75 .875 .8
+    assert left["half_not_logged_days"] == 0 and left["no_eligible_e1rm_days"] == 1
+    assert [(e["day"], e["half"], e["region"], e["reason"]) for e in left["no_eligible_e1rm"]] == [
+        (str(_today() - timedelta(days=5)), "numerator", "shoulder_er", "all_warmup"),
+        (str(_today() - timedelta(days=5)), "denominator", "shoulder_ir", "all_warmup"),
+    ]
+
+
+def test_a_day_with_er_and_no_ir_is_half_not_logged(db_session):
+    u = _shoulder_setup(db_session)
+    _pair_days(db_session, u.id, (-9, -6), (10, 12))
+    _log(db_session, u.id, -3, ER_L, _one_rep(15))                                   # ER only
+    left = ratios.log_derived(db_session, u.id, "er_ir")["sides"]["left"]
+    assert (left["paired_days"], left["half_not_logged_days"], left["no_eligible_e1rm_days"]) == (2, 1, 0)
+    assert left["no_eligible_e1rm"] == []
+
+
+def test_a_half_that_is_logged_but_ineligible_against_nothing_is_still_half_not_logged(db_session):
+    u = _shoulder_setup(db_session)
+    _pair_days(db_session, u.id, (-9,), (10,))                                       # one paired day
+    _log(db_session, u.id, -3, ER_L, [_ws(6, 12, "warmup")])                         # ER warm-up only, no IR
+    left = ratios.log_derived(db_session, u.id, "er_ir")["sides"]["left"]
+    assert (left["paired_days"], left["half_not_logged_days"], left["no_eligible_e1rm_days"]) == (1, 1, 0)
+
+
+def test_the_two_unpaired_counts_are_disjoint_and_sum_to_the_deprecated_unpaired_days(db_session):
+    u = _shoulder_setup(db_session)
+    _pair_days(db_session, u.id, (-30, -27), (10, 12))                               # 2 paired
+    _log(db_session, u.id, -24, ER_L, _one_rep(15))                                  # ER only -> half
+    _log(db_session, u.id, -21, IR_L, _one_rep(20))                                  # IR only -> half
+    _log(db_session, u.id, -18, ER_L, [_ws(6, 20)])                                  # both logged,
+    _log(db_session, u.id, -18, IR_L, _one_rep(20))                                  #   ER over ceiling -> no eligible
+    _log(db_session, u.id, -15, ER_L, _one_rep(15))                                  # both logged,
+    _log(db_session, u.id, -15, IR_L, [_ws(8, 12, "warmup")])                        #   IR warm-up -> no eligible
+    left = ratios.log_derived(db_session, u.id, "er_ir")["sides"]["left"]
+    assert (left["paired_days"], left["half_not_logged_days"], left["no_eligible_e1rm_days"]) == (2, 2, 2)
+    assert left["unpaired_days"] == left["half_not_logged_days"] + left["no_eligible_e1rm_days"] == 4
+    assert len(left["no_eligible_e1rm"]) == 2
+
+
+def test_a_side_whose_only_days_are_ineligible_is_reported_not_dropped(db_session):
+    u = _shoulder_setup(db_session)
+    for off in (-9, -6, -3):
+        _log(db_session, u.id, off, ER_L, [_ws(6, 12, "warmup")])
+        _log(db_session, u.id, off, IR_L, [_ws(8, 12)])
+    out = ratios.log_derived(db_session, u.id, "er_ir")
+    left = out["sides"]["left"]
+    assert left["paired_days"] == 0 and left["no_eligible_e1rm_days"] == 3 and left["baseline"] is None
+    assert out["unmatched_sides"] == {"numerator_only": [], "denominator_only": []}
+
+
+def test_the_er_ir_baseline_comes_back_from_the_route_on_12_rep_pairs_on_three_days(db_session):
+    """Gate 3: GET /engine/ratios/er_ir on a fixture with 12-rep ER/IR on three days returns a baseline."""
+    u = _shoulder_setup(db_session)
+    for off in (-20, -13, -6):
+        _log(db_session, u.id, off, ER_L, [_ws(6, 12)])
+        _log(db_session, u.id, off, IR_L, [_ws(8, 12)])
+    body = get_ratio("er_ir", current_user=_Stub(u.id), db=db_session)
+    assert body["log_derived"]["sides"]["left"]["baseline"] == pytest.approx(0.75, abs=1e-12)
+    assert body["log_derived"]["rep_ceiling"] == 15
 
 
 # ── route (ii) observed ratio ────────────────────────────────────────────────
@@ -292,6 +487,8 @@ def test_the_routes_return_both_routes_and_refuse_unknown_keys(db_session):
     assert one["log_derived"]["sides"]["left"]["n_pairs"] == 3
     ls = get_log_strength(region_key="shoulder_er", since=None, current_user=_Stub(u.id), db=db_session)
     assert set(ls["sides"]) == {"left"} and len(ls["sides"]["left"]) == 3
+    assert ls["rep_ceiling"] == 15 and "reps 1-15" in ls["source"]
+    assert one["log_derived"]["rep_ceiling"] == 15 and one["ratio"]["log_rep_ceiling"] == 15
     for call in (lambda: get_ratio("h_q", current_user=_Stub(u.id), db=db_session),
                  lambda: get_log_strength(region_key="nope", since=None,
                                           current_user=_Stub(u.id), db=db_session)):
@@ -315,6 +512,31 @@ def test_the_mcp_tool_renders_both_routes_and_no_verdict(db_session, monkeypatch
                   "+100.0%", "reference: internal - log-derived", "reference: literature",
                   "0.86 to 0.99", "PMID 20850997", "Hip adductor:abductor"):
         assert token in out, token
+    hit = _FORBIDDEN_VERDICT.search(out)
+    assert hit is None, hit.group(0)
+    low = out.lower()
+    for word in ("deficit", "pass", "fail", "cleared", "grade ", "within normal", "abnormal"):
+        assert word not in low.replace("no verdicts", ""), word
+
+
+def test_the_mcp_tool_renders_the_three_counts_and_the_dated_reason(db_session, monkeypatch):
+    u = _shoulder_setup(db_session)
+    for off in (-30, -23, -16):
+        _log(db_session, u.id, off, ER_L, [_ws(6, 12)])
+        _log(db_session, u.id, off, IR_L, [_ws(8, 12)])
+    _log(db_session, u.id, -5, ER_L, [_ws(6, 12, "warmup")])
+    _log(db_session, u.id, -5, IR_L, [_ws(8, 12, "warmup")])
+    _log(db_session, u.id, -2, ER_L, _one_rep(15))                                   # ER only
+    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(mcp_server, "_current_user_id", lambda: u.id)
+    out = mcp_server.get_capability_ratios()
+    day = _today() - timedelta(days=5)
+    for token in ("sets up to 15 reps", "3 paired day(s)", "1 with only one half logged",
+                  "1 with both logged but no usable e1RM",
+                  f"{day.day} {day.strftime('%b')}: Shoulder external rotation (rotator cuff) - all sets flagged warm-up",
+                  "Shoulder internal rotation"):
+        assert token in out, token
+    assert "unpaired" not in out
     hit = _FORBIDDEN_VERDICT.search(out)
     assert hit is None, hit.group(0)
     low = out.lower()

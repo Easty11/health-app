@@ -202,13 +202,24 @@ def test_the_v1_measures_are_declared_as_briefed():
 
 # ── G3: no numeric threshold in code ─────────────────────────────────────────
 
+# The one numeric field a Ratio may carry. `log_rep_ceiling` (route (i), 2026-10-20) decides WHICH logged
+# sets count toward an e1RM; it is compared to a set's rep count, never to a result, so no outcome can fire
+# from it. Any other numeric field on a ratio is still refused. Named, not a blanket int allowance.
+_RATIO_MEASUREMENT_PARAMETERS = {"log_rep_ceiling"}
+
+
 def test_no_numeric_threshold_field_on_ratio_or_measure():
     import re
     for cls in (Ratio, Measure, taxonomy.Region):
+        allowed = _RATIO_MEASUREMENT_PARAMETERS if cls is Ratio else set()
         for f in dataclasses.fields(cls):
+            if f.name in allowed:
+                continue
             assert f.type not in ("int", "float"), (cls.__name__, f.name)
     for r in taxonomy.all_ratios():
         for f in dataclasses.fields(r):
+            if f.name in _RATIO_MEASUREMENT_PARAMETERS:
+                continue
             v = getattr(r, f.name)
             assert not (isinstance(v, (int, float)) and not isinstance(v, bool)), (r.key, f.name)
     # A band is DATA in the norms JSON (R8), never quoted in declaration text: no decimal number or
@@ -276,3 +287,27 @@ def test_as_dict_carries_reference_kind_and_the_taxonomy_endpoint_lists_ratios()
     assert by["er_ir"]["reference_kind"] == "literature" and by["er_ir"]["same_side"] is True
     assert by["add_abd"]["reference_kind"] == "literature"
     assert by["er_ir"]["confidence"] == "guessing"
+    assert by["er_ir"]["log_rep_ceiling"] == 15 and by["add_abd"]["log_rep_ceiling"] == 15
+
+
+def test_ratio_as_dict_carries_the_route_i_rep_ceiling():
+    r = taxonomy.ratio_by_key("er_ir")
+    assert taxonomy.ratio_as_dict(r)["log_rep_ceiling"] == 15
+    assert taxonomy.ratio_as_dict(dataclasses.replace(r, log_rep_ceiling=12))["log_rep_ceiling"] == 12
+
+
+@pytest.mark.parametrize("ceiling,ok", [(1, True), (15, True), (30, True),
+                                        (0, False), (31, False), (-3, False), (12.5, False),
+                                        ("15", False), (True, False), (None, False)])
+def test_log_rep_ceiling_is_an_int_between_1_and_30(ceiling, ok):
+    base = taxonomy.ratio_by_key("er_ir")
+    if ok:
+        assert dataclasses.replace(base, log_rep_ceiling=ceiling).log_rep_ceiling == ceiling
+    else:
+        with pytest.raises(ValueError, match="log_rep_ceiling"):
+            dataclasses.replace(base, log_rep_ceiling=ceiling)
+
+
+def test_the_declared_ratios_default_to_the_one_ceiling_literal():
+    assert taxonomy.DEFAULT_LOG_REP_CEILING == 15 and taxonomy.LOG_REP_CEILING_BOUNDS == (1, 30)
+    assert {r.log_rep_ceiling for r in taxonomy.all_ratios()} == {15}

@@ -803,6 +803,29 @@ def test_dry_run_lists_pending_side_updates_and_writes_nothing(db_session):
     assert r["plan"]["K1"]["side"] == "left"
 
 
+def test_a_writing_run_reports_how_many_rows_it_changed_the_side_of_and_a_dry_run_does_not(db_session):
+    _tmpl(db_session, "K1", "Kneeling Leg Curl L", custom=True, owner=1, adjudicated=True)
+    _tmpl(db_session, "K2", "Kneeling Leg Curl R", custom=True, owner=1, adjudicated=True)
+    _tmpl(db_session, "K3", "Kneeling Leg Curl R2", custom=True, owner=1, adjudicated=True)
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="K1", region_key="knee_flexion",
+                                            role="primary", side="left"))       # already correct: not counted
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="K2", region_key="knee_flexion",
+                                            role="primary"))                    # NULL -> right: counted
+    db_session.commit()                                                         # K3 has no row: created with a side
+    prop = {"tags": [
+        {"template_id": t, "title": f"Kneeling Leg Curl {t}", "side": side,
+         "regions": [{"key": "knee_flexion", "role": "primary"}]}
+        for t, side in (("K1", "left"), ("K2", "right"), ("K3", "right"))]}
+    dry = seeder.seed_tags(db_session, 1, proposal=prop, dry_run=True)
+    assert "side_updates_written" not in dry                                    # dry-run output unchanged
+    assert len(dry["pending_side_updates"]) == 2
+    first = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert first["side_updates_written"] == 2 == len(dry["pending_side_updates"])
+    assert (_side(db_session, "K2", "knee_flexion"), _side(db_session, "K3", "knee_flexion")) == ("right", "right")
+    again = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert again["side_updates_written"] == 0                                   # idempotent: nothing left to change
+
+
 @pytest.mark.parametrize("bad", [
     {"tags": [{"template_id": "X", "side": "Left", "regions": [{"key": "hinge", "role": "primary"}]}]},
     {"tags": [{"template_id": "X", "side": "bilateral", "regions": [{"key": "hinge", "role": "primary"}]}]},

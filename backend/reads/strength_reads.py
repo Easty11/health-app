@@ -41,13 +41,17 @@ def is_working_set(raw_set: dict) -> bool:
     return (raw_set.get("type") or "normal").lower() != "warmup"
 
 
-def aggregate_session(raw_sets: list[dict]) -> dict | None:
+def aggregate_session(raw_sets: list[dict], *, rep_cap: int = EPLEY_REP_CAP) -> dict | None:
     """Collapse one template's sets on ONE session-day to a point, or None if no working set.
 
-    e1RM is the max Epley over working sets with reps in [1, cap] and a logged weight (D1);
+    e1RM is the max Epley over working sets with reps in [1, rep_cap] and a logged weight (D1);
     None when none qualifies. Volume sums weight×reps over ALL working sets that carry both
     (a reps>cap set is excluded from e1RM but included here, D1/D2). `top_set` is the set that
-    produced the max e1RM. `working_sets` counts every non-warmup set, scorable or not."""
+    produced the max e1RM. `working_sets` counts every non-warmup set, scorable or not.
+
+    `rep_cap` defaults to the See-test's D1 cap (10); the series keeps calling it bare. Route (i)
+    passes its own ceiling (`Ratio.log_rep_ceiling`) - the cap is a parameter so a caller must be
+    able to say which rule it applies, but the default never moves."""
     working = [s for s in raw_sets if is_working_set(s)]
     if not working:
         return None
@@ -63,7 +67,7 @@ def aggregate_session(raw_sets: list[dict]) -> dict | None:
         weight = float(weight)
         reps = int(reps)
         volume += weight * reps
-        if 1 <= reps <= EPLEY_REP_CAP:
+        if 1 <= reps <= rep_cap:
             e = epley_e1rm(weight, reps)
             if best_e1rm is None or e > best_e1rm:
                 best_e1rm = e
@@ -75,6 +79,31 @@ def aggregate_session(raw_sets: list[dict]) -> dict | None:
         "volume_kg_reps": volume,
         "working_sets": len(working),
     }
+
+
+# Why a template-day that HAS sets has no usable e1RM (route (i) day accounting, Q27). A closed set:
+# the renderer and the tests key on these strings.
+REASON_ALL_WARMUP = "all_warmup"                  # every set on the day is typed `warmup`
+REASON_REPS_OVER_CEILING = "reps_over_ceiling"    # a working set had weight and reps, reps above the cap
+REASON_NO_WEIGHT = "no_weight"                    # no working set carried a positive weight and reps in range
+INELIGIBLE_REASONS = (REASON_ALL_WARMUP, REASON_REPS_OVER_CEILING, REASON_NO_WEIGHT)
+
+
+def ineligible_reason(raw_sets: list[dict], *, rep_cap: int) -> str:
+    """The reason a template-day with sets scored no e1RM. Call it only for a day `aggregate_session`
+    (at the same `rep_cap`) left without one (or whose e1RM the caller refused as non-positive).
+
+    Precedence when more than one applies: no working set at all -> `all_warmup`; else any working set
+    with a positive weight and reps above the cap -> `reps_over_ceiling` (the ceiling is what cost the
+    day its point); else `no_weight` (weight missing or zero, or reps missing or below 1)."""
+    working = [s for s in raw_sets if is_working_set(s)]
+    if not working:
+        return REASON_ALL_WARMUP
+    for s in working:
+        weight, reps = s.get("weight_kg"), s.get("reps")
+        if weight is not None and reps is not None and float(weight) > 0 and int(reps) > rep_cap:
+            return REASON_REPS_OVER_CEILING
+    return REASON_NO_WEIGHT
 
 
 def session_days_by_template(

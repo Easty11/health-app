@@ -1791,22 +1791,52 @@ def _fmt_reference(ref: dict) -> list[str]:
     return out
 
 
+# Why a logged day has no usable e1RM, in the words of the log (facts about the sets, not judgements).
+_INELIGIBLE_REASON_TEXT = {
+    "all_warmup": "all sets flagged warm-up",
+    "reps_over_ceiling": "working sets above the {ceiling}-rep ceiling",
+    "no_weight": "no set with a weight above zero and reps in range",
+}
+
+
+def _fmt_log_day(iso: str) -> str:
+    from datetime import date as _date
+    d = _date.fromisoformat(iso)
+    return f"{d.day} {d.strftime('%b')}"
+
+
+def _fmt_no_eligible(detail: list[dict], ceiling: int) -> list[str]:
+    """One line per day: '15 Oct: Shoulder ER - all sets flagged warm-up; ...'."""
+    from engine import taxonomy as _tax
+    by_day: dict[str, list[str]] = {}
+    for e in detail:
+        region = _tax.by_key(e["region"])
+        who = region.label if region is not None else e["region"]
+        why = _INELIGIBLE_REASON_TEXT[e["reason"]].format(ceiling=ceiling)
+        by_day.setdefault(e["day"], []).append(f"{who} - {why}")
+    return [f"{_fmt_log_day(day)}: " + "; ".join(parts) for day, parts in sorted(by_day.items())]
+
+
 def _format_capability_ratios(overviews: list[dict]) -> str:
     blocks = ["CAPABILITY RATIOS (Q27 v1). Numbers and the governing reference only: no verdicts."]
     for ov in overviews:
         ratio, log, observed = ov["ratio"], ov["log_derived"], ov["observed"]
         lines = [f"{ratio['label']} [{ratio['key']}]"]
-        lines.append(f"  Route (i) from the Hevy log (e1RM; same session-day pairs only):")
+        lines.append(f"  Route (i) from the Hevy log (e1RM from sets up to {log['rep_ceiling']} reps; "
+                     f"same session-day pairs only):")
         if not log["sides"]:
             lines.append("    no side has both halves logged")
         for side, s in log["sides"].items():
-            parts = [f"{s['n_pairs']} paired day(s), {s['unpaired_days']} unpaired"]
+            parts = [f"{s['paired_days']} paired day(s), {s['half_not_logged_days']} with only one half logged, "
+                     f"{s['no_eligible_e1rm_days']} with both logged but no usable e1RM"]
             parts.append("baseline " + (f"{s['baseline']:.3f}" if s["baseline"] is not None else "n/a (under 3 pairs)"))
             parts.append("current " + (f"{s['current']:.3f}" if s["current"] is not None
                                        else f"n/a (under 3 pairs within {log['currency_days']} days)"))
             if s["delta_pct"] is not None:
                 parts.append(f"change {s['delta_pct']:+.1f}%")
             lines.append(f"    {side}: " + "; ".join(parts))
+            for day_line in _fmt_no_eligible(s["no_eligible_e1rm"], log["rep_ceiling"]):
+                lines.append(f"      no usable e1RM - {day_line}")
             lines.append(f"      reference: {s['reference']['governing']} - {s['reference']['reason']}")
         um = log["unmatched_sides"]
         if um["numerator_only"] or um["denominator_only"]:
@@ -1832,7 +1862,9 @@ def _format_capability_ratios(overviews: list[dict]) -> str:
 @_stamped
 def get_capability_ratios() -> str:
     """Get the capability strength ratios (shoulder ER:IR, hip adductor:abductor) by both routes:
-    (i) derived from the Hevy log (e1RM per side, same session-day pairs, baseline vs current), and
+    (i) derived from the Hevy log (e1RM per side from sets up to the ratio's rep ceiling, same session-day
+    pairs, baseline vs current; days that do not pair are counted as one-half-logged or no-usable-e1RM,
+    with the reason and date), and
     (ii) from clinic readings (same protocol, within 14 days), each with its governing reference and
     the reason. A published literature band is shown as data only when the reading's protocol matches
     the norm's. States numbers; no verdicts."""
