@@ -14435,3 +14435,29 @@ Not taken: the per-item list on past legs, any change to `done` or `delta_done`.
 **Do not revisit unless.** A new axis is added to the group-H family (that is a new question), or the EP's instrument changes the `knee_flexion` read.
 
 ---
+
+### #431. Phase bands replace the labelled marker lines: a shaded band per phase, one legend per card, and a phase with no data yet is listed, not dropped (R11)
+
+**Decision.** On every chart that takes `markers` (the shared `PhaseMarkers` path: the three Training-load charts, Fitness/Fatigue/Form, the two Exercise panels, the two Readiness panels), a phase is a shaded band, not a labelled dashed line, and no text is drawn inside a chart. This supersedes #278 D4's line, label and snap rules. The ruled shape:
+
+- **Span.** A ledger row covers [`entered_on`, `closed_on`), where `closed_on` is the day the next phase starts; an open row runs to the series end; a span is clipped to the chart's first and last data day. The axis is not extended to today and the rollup `as_of` gates nothing.
+- **Colour per phase NAME** (an exact match on `label`), from ONE exported constant, `phaseBandPalette` (`PhaseMarkers.jsx`), assigned in the order each name first appears in the ledger. A test pins that no band hex is written anywhere else. Light only, no token layer (the app has no dark mode; the "light and dark tokens" clause of R11 is not built).
+- **One legend per card**, under the card's header: the load card's three charts share one; Fitness/Fatigue/Form, Exercise and Readiness each have their own. It lists each phase visible in that card's window once, in ledger order. A phase that starts after the last data day has no band and is listed marked "no data yet"; it is never dropped.
+- **Four assumptions, as written.** Same name is an exact `label` match. Back-to-back rows with one name are one band, with a thin unlabelled dashed line at each handoff. A name entered again after another phase is a second band in the same colour. A zero-length row (#379) draws nothing.
+- **Exercise and Readiness use `xType="time"`**, so a band is placed by its date and not snapped to a data day. Their x spacing changes from even-per-data-day to proportional to the calendar gap; a day with no session or check-in is now a visible gap.
+
+**Readings taken in the build, none of them a new rule.** Each is the smallest reading of the text above, each is one line to reverse, and each is surfaced for the operator rather than hidden.
+- "Consecutive" means back to back in time (the earlier row's `closed_on` reaches the later row's `entered_on`). Same-name rows with a gap between them (End phase, then a later re-entry) are two bands in one colour, so the baseline days are not painted as the phase.
+- "Draws nothing" for a zero-length row includes the legend: a name that only ever had a zero-length row has no entry.
+- A phase wholly before a card's window is outside it and not in that card's legend (the legend keys the bands on that card).
+- A day is a whole slot: bands are drawn from slot edge to slot edge so adjacent bands abut. That required a band scale on the category axis (the Fitness/Fatigue/Form dots now sit at slot centres, not on the plot edge) and a half-day pad with whole-day ticks on the time axis.
+
+**Rationale.** The line design misread (its label sat over the preceding phase's bars) and dropped a phase that began after the last data day, so a chart showed no sign a new phase had started. A band reads as a span, the legend names it without covering data, and "no data yet" keeps the new phase visible. Colour per name makes a phase one thing across charts, windows and re-entries.
+
+**Status.** Built and landed, front end only, no migration, no endpoint change. `/engine/phase/history` is reused. #121 served-bundle check, operator-side (Code has no frontend-host egress): grep the live `index-*.js` for `no data yet` and `Training phases`; absent: `phase-marker` (the old class; `phase-band` replaces it).
+
+**How you know.** `PhaseMarkers.test.jsx` (the pure model: colour by name, merge, zero-length, clipping, no-data-yet, no snap), `TimeSeriesChart.test.jsx` (bands behind the series, no text in the chart, adjacent bands abut on bar and line), `PhaseMarkersOnCharts.test.jsx` (each of the four charts: a band, one legend, the later phase marked, no in-chart text), `ExerciseChart.test.jsx` and `ReadinessChart.test.jsx` (time-scaled spacing 5:9 and 1:3). Pinned tests replaced: from `PhaseMarkers.test.jsx`, "snaps a boundary to the first category on or after it", "drops a boundary before the window or after the last category", "builds one reference line per in-range boundary, labelled with the phase name", "boundaries that snap to the same category collapse to one line", "an out-of-range boundary produces no line" and the two `phaseBoundaries` tests; from `TimeSeriesChart.test.jsx`, "draws a phase-marker reference line at an in-range boundary date" and "an out-of-range boundary draws no reference line"; the four `PhaseMarkersOnCharts` "draws the phase marker" tests; `ExerciseChart.test.jsx`, "phase markers reach the charts (a reference line is drawn)". Mutation checks, each failing the named tests and then restored: colour per row instead of per name (3 fail), "no data yet" dropped (6 fail), zero-length rows kept (3 fail). Rendered in Chromium from a throwaway harness (not committed): bars, the line chart and a sparse time axis, with a handoff line and two "no data yet" entries. The one failing test on master, `Injuries.test.jsx` (the finger's "Jun" date), was failing before this change and is untouched.
+
+**Do not revisit unless.** The app gains a dark mode (the palette then needs a token layer), a window holds more than six distinct phase names (the palette wraps and two names share a colour), or the operator wants a gap between same-name rows drawn as one band after all.
+
+---
