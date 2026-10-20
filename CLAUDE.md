@@ -248,6 +248,10 @@ self-merge on green under § Merge disposition.
 - **A deploy check must cover every service that changed (#121).** Two Railway services deploy
   from this repo (`health-app-backend`, `health-app-frontend`); probe the frontend by its served
   bundle (fetch the live `assets/index-*.js`, grep a string literal only new code carries).
+- **A SKIPPED deployment is the expected result for a merge that changes neither service's folder (#433).** Railway watch paths
+  (`/backend/**`, `/frontend/**`) deploy a service only when its own folder changes, so a governance or docs-only merge records
+  SKIPPED on both. Read `railway deployment list` per service: SUCCESS is owed only on a service whose folder changed, SKIPPED on
+  the other is correct, and a code change that records SKIPPED is a defect (redeploy by hand, then recheck the patterns).
 - **Push branches even while holding for review (#98).** A local-only branch is unreadable to
   chat (`raw.githubusercontent.com` 404s). Pushing is not merging; push when work becomes
   reviewable, not when it lands.
