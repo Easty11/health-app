@@ -13,7 +13,7 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.fastmcp import FastMCP
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.transport_security import TransportSecuritySettings
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from database import engine, SessionLocal
@@ -24,7 +24,12 @@ from hevy_routine_format import (  # shared renderers (#314) — one home, also 
     format_routine_compact,
     format_routine_full,
 )
-from hevy_templates import catalogue_titles_by_id
+from hevy_templates import (
+    _visible_to,
+    catalogue_titles_by_id,
+    refresh_catalogue_if_stale,
+    sync_exercise_templates,
+)
 from encryption import decrypt
 from oauth_provider import PersonalOAuthProvider
 import appointment_brief
@@ -1873,6 +1878,104 @@ def get_capability_ratios() -> str:
     from engine import ratios as _ratios
     with SessionLocal() as _db:
         return _format_capability_ratios(_ratios.all_ratio_overviews(_db, user_id))
+
+
+# ---------------------------------------------------------------------------
+# Exercise catalogue read (Q27 tag pass, STEP 3b)
+# ---------------------------------------------------------------------------
+
+def _like_literal(text_: str) -> str:
+    """Escape LIKE wildcards so a substring query matches its characters, not a pattern."""
+    return text_.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _exercise_catalogue_rows(db: Session, user_id: int, query: str | None) -> list[dict]:
+    """The templates visible to `user_id` (`hevy_templates._visible_to`: the global defaults and this
+    user's OWN customs, never another user's), narrowed by a case-insensitive title substring, each with
+    its tag state. READ-ONLY: nothing is written and no title is resolved.
+
+    The tag state is `selection.classify_coverage`, the one definition the audit and the read path use:
+    TAGGED (tag rows), NO-PATTERN (adjudicated, no rows), UNTAGGED (neither). The regions and roles come
+    from the tag rows themselves; the side is the DECLARED `side` column, shown only where one exists."""
+    from engine import selection as _selection
+
+    T, Tag = models.HevyExerciseTemplate, models.ExerciseRegionTag
+    q = db.query(T).filter(_visible_to(user_id))
+    if query:
+        q = q.filter(T.title.ilike("%" + _like_literal(query) + "%", escape="\\"))
+    templates = q.order_by(func.lower(T.title), T.id).all()
+    ids = {t.id for t in templates}
+    _, classes = _selection.classify_coverage(db, ids)
+    tag_rows: dict[str, list] = {}
+    if ids:
+        for r in db.query(Tag).filter(Tag.hevy_exercise_template_id.in_(ids)).order_by(
+                Tag.region_key).all():
+            tag_rows.setdefault(r.hevy_exercise_template_id, []).append(r)
+
+    out = []
+    for t in templates:
+        rows = tag_rows.get(t.id, [])
+        out.append({
+            "id": t.id, "title": t.title, "custom": bool(t.is_custom), "laterality": t.laterality,
+            "state": classes[t.id],
+            "regions": [(r.region_key, r.role) for r in rows],
+            "sides": sorted({r.side for r in rows if r.side}),
+        })
+    return out
+
+
+_CATALOGUE_STATE_TEXT = {"tagged": "TAGGED", "adjudicated_no_pattern": "NO-PATTERN", "untagged": "UNTAGGED"}
+
+
+def _format_exercise_catalogue(rows: list[dict], query: str | None) -> str:
+    scope = f" whose title contains {query!r}" if query else ""
+    if not rows:
+        return f"No exercise templates visible to you{scope}."
+    lines = [
+        f"EXERCISE CATALOGUE: {len(rows)} template(s) visible to you{scope}. "
+        "Tag state: TAGGED = has region tags; NO-PATTERN = adjudicated with none; UNTAGGED = neither. "
+        "Side is shown only where one is declared."
+    ]
+    for r in rows:
+        if r["state"] == "tagged":
+            state = "TAGGED " + ", ".join(f"{k}({role})" for k, role in r["regions"])
+        else:
+            state = _CATALOGUE_STATE_TEXT[r["state"]]
+        side = f" | side {'/'.join(r['sides'])}" if r["sides"] else ""
+        lines.append(
+            f"{r['id']} | {r['title']} | {'custom' if r['custom'] else 'default'} | "
+            f"laterality {r['laterality'] or 'unset'} | {state}{side}"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+@_stamped
+async def get_exercise_catalogue(query: str | None = None) -> str:
+    """List the exercise templates in the Hevy catalogue visible to you (the global defaults and your own
+    customs), one line each: id, title, custom or default, laterality, and tag state (TAGGED with its
+    regions and roles, NO-PATTERN, or UNTAGGED) plus the declared side where there is one. `query` is an
+    optional case-insensitive substring of the title. Read-only: it states what is recorded, writes
+    nothing, resolves nothing and gives no verdict. The catalogue is refreshed from Hevy first when it
+    is stale; a `query` that matches nothing forces one refresh and looks again, so a template made in
+    Hevy minutes ago can be found by name."""
+    user_id = _current_user_id()
+    query = (query or "").strip() or None
+    db: Session = SessionLocal()
+    try:
+        await refresh_catalogue_if_stale(db, user_id)     # the door chat.py uses; a no-op inside its window
+        rows = _exercise_catalogue_rows(db, user_id, query)
+        if query and not rows:
+            # The staleness gate skips the Hevy call inside 24h, and a miss is evidence the local copy is
+            # behind Hevy: force one refresh and look again (chat's refresh-on-miss). Never raises.
+            try:
+                await sync_exercise_templates(db, only_user_id=user_id)
+            except Exception:  # noqa: BLE001 -- a refresh problem must not fail a read of the local store
+                pass
+            rows = _exercise_catalogue_rows(db, user_id, query)
+        return _format_exercise_catalogue(rows, query)
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
