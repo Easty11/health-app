@@ -2672,27 +2672,6 @@ Code's lean, not a ruling: (a), as the one change that closes the whole class, a
 
 ---
 
-## Q212. A Move to a new phase seeds the posture, label, intent and slots from the outgoing phase: should posture carry over?
-
-Raised 5 Oct 2026 (operator observation, 5 Oct: "recovery vehicles ranked first" under the phase `aerobic base`). Report first; nothing is changed until ruled.
-
-**Source of the note, verified on master `21839a4`.**
-- The note is emitted only when the OPEN phase's stored `probe_posture` is `suppressed` (`engine/selection.py:578-581`, `:687-691`). So by the code the open `aerobic base` row carries `suppressed`. It is not derived from the label: no backend code branches on a phase label, and there is no default for an unmatched name.
-- **One value drives three behaviours.** (1) The effective probe budget is forced to 0 and the mode to fortify (`selection.py:574-581`; the note at `:695-700`). (2) The probe block is withheld (`:733-737`). (3) The recovery-first vehicle re-rank (`:646-650`; the note at `:687-691`). The re-rank fires on `probe_suppressed` alone, with no read of the label. So a posture carried by mistake also silences probing, and a phase cannot ask for the re-rank without the other two.
-- **Where the value comes from, by path.** The wizard seeds `label`, `intent` and `probe_posture` from the current phase (`PhaseTransitionFlow.jsx:118-123`), so a Move keeps the outgoing posture unless the operator toggles it. The direct form has no default and refuses submit until one is chosen (`PhaseForm.jsx:22`, `canSubmit`). **Which one set it on 4 Oct is not read:** it depends on the row's `probe_posture` in the ledger, per row, which is owed (ROADMAP row 39).
-
-**Question.** On a Move, should the new phase's posture be (a) seeded from the outgoing phase (today), (b) defaulted to `held`, or (c) left unset so the operator must choose, as the direct form does? Slots are seeded on purpose and marked as a prefill (F6); a posture is a quieter default with a bigger effect.
-
-**If the three behaviours should come apart** (a separate question from the seeding, raised by the same observation). Options: (i) a third posture value. `training_phases` has a database `CHECK` on `probe_posture IN ('suppressed','held')` (`models.py:1107`, `ck_training_phase_probe_posture`), so this is a migration (held) plus the validator constant (`engine/training_phase.py:62`). (ii) A separate per-phase ranking field: a new column, also a migration. (iii) Drop the phase from the re-rank triggers, leaving readiness and life-load; no schema, but it changes decompression, whose re-rank the T2 tests pin (`tests/test_training_phase.py:478-513`). Code's lean, not a ruling: none yet; fix the seeding first (a)-(c) and see whether the coupling ever bites.
-
-**Evidence (operator, 5 Oct 2026).** `suppressed` on `aerobic base` is intended: the operator chose it to stop probes while run, sprint and VO2 work all start. They want probe-off WITHOUT the recovery-first ranking, which is the case for separating the three behaviours (the options above), and they did not choose the ranking.
-
-**Ruling (operator, 5 Oct 2026).** Deferred to the aerobic base review (16 Nov 2026). `suppressed` stays, and the recovery-first ranking is accepted for this phase. No change is made. Whether to separate the behaviours, and whether a Move should seed posture from the outgoing phase, are decided at that review.
-
-**State:** OWED. Loop-close: the aerobic base review (16 Nov 2026) decides the separation (the options above) and the seeding (a)-(c). Owner: Luke. Not blocking. Related: #317, #375, #378, Q211 (closed).
-
----
-
 ## Q213. The HR input layer, per second: Edwards retained, source precedence, bounded gap interpolation, and the sRPE floor
 
 Raised 5 Oct 2026 (operator; carried from the 1-4 Oct close-out). **Not drafted; nothing built; this records the design direction the operator named, not a ruling.** The direction: Edwards TRIMP stays the load measure; a per-second source precedence (which source's samples win where several cover one bout); bounded gap interpolation; and the sRPE floor (Q202) as the fallback when no usable device HR exists.
@@ -6341,6 +6320,29 @@ Raised 5 Oct 2026 (operator, from the 4 Oct real use). Advanced -> "Open a new p
 **Resolution (5 Oct 2026, #378).** Option (d), ruled by the operator: the direct-open path is to be removed and Review / change phase is the only phase-entry route. Recorded now; the build is not scheduled. Open, for the build brief: the backend route (its only non-test caller in the tree is `PhaseForm.jsx:98`), the direct close path, and what the wizard can express (#378).
 
 **State:** `DONE → #378`.
+
+---
+
+## Q212. A Move to a new phase seeds the posture, label, intent and slots from the outgoing phase: should posture carry over?
+
+Raised 5 Oct 2026 (operator observation, 5 Oct: "recovery vehicles ranked first" under the phase `aerobic base`). Report first; nothing is changed until ruled.
+
+**Source of the note, verified on master `21839a4`.**
+- The note is emitted only when the OPEN phase's stored `probe_posture` is `suppressed` (`engine/selection.py:578-581`, `:687-691`). So by the code the open `aerobic base` row carries `suppressed`. It is not derived from the label: no backend code branches on a phase label, and there is no default for an unmatched name.
+- **One value drives three behaviours.** (1) The effective probe budget is forced to 0 and the mode to fortify (`selection.py:574-581`; the note at `:695-700`). (2) The probe block is withheld (`:733-737`). (3) The recovery-first vehicle re-rank (`:646-650`; the note at `:687-691`). The re-rank fires on `probe_suppressed` alone, with no read of the label. So a posture carried by mistake also silences probing, and a phase cannot ask for the re-rank without the other two.
+- **Where the value comes from, by path.** The wizard seeds `label`, `intent` and `probe_posture` from the current phase (`PhaseTransitionFlow.jsx:118-123`), so a Move keeps the outgoing posture unless the operator toggles it. The direct form has no default and refuses submit until one is chosen (`PhaseForm.jsx:22`, `canSubmit`). **Which one set it on 4 Oct is not read:** it depends on the row's `probe_posture` in the ledger, per row, which is owed (ROADMAP row 39).
+
+**Question.** On a Move, should the new phase's posture be (a) seeded from the outgoing phase (today), (b) defaulted to `held`, or (c) left unset so the operator must choose, as the direct form does? Slots are seeded on purpose and marked as a prefill (F6); a posture is a quieter default with a bigger effect.
+
+**If the three behaviours should come apart** (a separate question from the seeding, raised by the same observation). Options: (i) a third posture value. `training_phases` has a database `CHECK` on `probe_posture IN ('suppressed','held')` (`models.py:1107`, `ck_training_phase_probe_posture`), so this is a migration (held) plus the validator constant (`engine/training_phase.py:62`). (ii) A separate per-phase ranking field: a new column, also a migration. (iii) Drop the phase from the re-rank triggers, leaving readiness and life-load; no schema, but it changes decompression, whose re-rank the T2 tests pin (`tests/test_training_phase.py:478-513`). Code's lean, not a ruling: none yet; fix the seeding first (a)-(c) and see whether the coupling ever bites.
+
+**Evidence (operator, 5 Oct 2026).** `suppressed` on `aerobic base` is intended: the operator chose it to stop probes while run, sprint and VO2 work all start. They want probe-off WITHOUT the recovery-first ranking, which is the case for separating the three behaviours (the options above), and they did not choose the ranking.
+
+**Ruling (operator, 5 Oct 2026).** Deferred to the aerobic base review (16 Nov 2026). `suppressed` stays, and the recovery-first ranking is accepted for this phase. No change is made. Whether to separate the behaviours, and whether a Move should seed posture from the outgoing phase, are decided at that review.
+
+**Resolution (operator, 20 Oct 2026, #NEXT).** Brought forward from the 16 Nov aerobic base review, which no longer owns Q212. (1) Separation, fork (ii): a new required per-phase field `vehicle_ranking` (`standard` | `recovery_first`) takes over the phase arm of the recovery-first re-rank; `probe_posture` keeps the probe budget and the withheld probe block; the readiness and life-load triggers are unchanged. (2) Seeding, fork (c): on a Move the wizard seeds neither setting; both start unset and must be chosen. (3) Backfill: behaviour-preserving, except the single open phase (`aerobic base`), set to `standard`; the migration prints the ids and values. The migration is held for the operator's release. The source-of-the-note analysis above was verified on `21839a4` and still held on `a59b186` (the line numbers had not moved); `PhaseForm` had since been deleted (#378).
+
+**State:** `DONE → #NEXT`. Related: #317, #375, #378, Q211 (closed).
 
 ---
 
