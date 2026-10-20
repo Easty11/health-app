@@ -9,6 +9,17 @@
   },
 
   "tags": [
+    {"title": "Hip Abduction (Cable)", "regions": [{"key": "hip_abduction", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the operator's prod audit (id C469EA70, untagged, 60 days). No side: the operator logs it as two blocks of one title, so there is no side to declare."},
+    {"title": "Single Leg Standing Calf Raise (Machine)", "regions": [{"key": "ankle_plantarflexion", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (id B05C2C29, untagged). Plantarflexion strength, not ankle_df (a mobility screen, #76). No side: two blocks of one title."},
+    {"title": "Seated Calf Raise", "regions": [{"key": "ankle_plantarflexion", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (id 062AB91A, untagged). Plantarflexion strength, not ankle_df (#76)."},
+    {"template_id": "238ebf2c-d96c-4673-abe0-f7a0ec887867", "title": "Copenhagen Adductor Plank Hip Lift", "regions": [{"key": "hip_adduction", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (custom). Exposure: logged at 0 kg, so it never scores an e1RM on route (i). No side: two blocks of one title."},
+    {"title": "Box Squat (Barbell)", "regions": [{"key": "squat", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (id 38FC1AB9, untagged)."},
+    {"template_id": "8ff29e65-f65f-4f3b-a073-da18b3f05a59", "title": "Suitcase Deadlift", "regions": [{"key": "hinge", "role": "primary"}, {"key": "anti_lateral_flexion", "role": "secondary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (custom). Hinge primary; the unilateral load makes anti-lateral-flexion a secondary."},
+    {"title": "Back Extension (Weighted Hyperextension)", "regions": [{"key": "hinge", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (id 091737FA, untagged)."},
+    {"title": "Iso-Lateral High Row (Machine)", "regions": [{"key": "horizontal_pull", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (id BC3492DA, untagged)."},
+    {"title": "Pull Up (Assisted)", "regions": [{"key": "vertical_pull", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (id 2C37EC5E, untagged)."},
+    {"template_id": "dcf9b6f6-4c0a-4861-bce0-7b467642fa46", "title": "Half-Kneeling Dumbbell Press (L)", "regions": [{"key": "vertical_push", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (custom; logged as Half-Kneeling Bottoms-Up KB Press). The template title ends (L) but no side is declared: side is declared by the operator only, and no R twin is in the 60-day log."},
+    {"title": "Dead Bug", "regions": [{"key": "trunk_stability_sagittal", "role": "primary"}], "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (id D8911FC4, untagged); a distinct template from Weighted Dead Bug (778c9159), which is already tagged the same."},
     {"title": "Goblet Squat", "laterality": "bilateral", "regions": [{"key": "squat", "role": "primary"}]},
     {"title": "Leg Press (Machine)", "laterality": "bilateral", "regions": [{"key": "squat", "role": "primary"}]},
     {"title": "Bulgarian Split Squat (Dumbbell)", "laterality": "unilateral", "regions": [{"key": "lunge_single_leg", "role": "primary"}], "note": "keyword also fired `squat` — dropped; this is single-leg, not a bilateral squat"},
@@ -87,6 +98,7 @@
   ],
 
   "no_pattern": [
+    {"template_id": "d17b9661-e174-4f73-bd82-9e7025a34e2c", "title": "Tibialis Raise", "note": "v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20): from the audit (custom). Dorsiflexion STRENGTH, which v1 has no axis for. NOT ankle_df: that is a mobility screen (the #76 category error)."},
     {"title": "Leg Extension (Machine)", "laterality": "bilateral", "note": "Knee-extension isolation — no movement-pattern axis in v0."},
     {"title": "Bicep Curl (Dumbbell)", "laterality": "unilateral", "note": "Arm isolation — no v0 axis."},
     {"title": "Hammer Curl (Dumbbell)", "laterality": "unilateral", "note": "Arm isolation — no v0 axis."},
