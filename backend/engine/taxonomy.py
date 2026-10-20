@@ -84,6 +84,14 @@ ReferenceKind = Literal["internal", "literature"]
 REFERENCE_KINDS: tuple[str, ...] = ("internal", "literature")
 
 
+# Route (i) rep ceiling (Q27 v1, operator ruling 2026-10-20): reps above this do not contribute an e1RM to a
+# log-derived ratio. The one literal; `engine/log_strength.LOG_REP_CEILING` aliases it. It is NOT the See-test
+# cap (`strength_reads.EPLEY_REP_CAP`, 10), which stays as it is. Where both halves of a ratio are logged at
+# the same rep count the Epley factor (1 + reps/30) cancels out of the ratio exactly.
+DEFAULT_LOG_REP_CEILING = 15
+LOG_REP_CEILING_BOUNDS = (1, 30)
+
+
 def _check_reference_kind(owner: str, kind: Any) -> None:
     # A Literal is not enforced at runtime; a typo here would silently read as
     # "not literature" everywhere it is compared.
@@ -201,6 +209,10 @@ class Ratio:
 
     Route (ii), the observed ratio, and route (i), the log-derived ratio, are both
     computed at read time in `engine/ratios.py`; this class is the declaration.
+
+    `log_rep_ceiling` is route (i)'s rep ceiling (default 15, bounds 1..30): a logged set above it
+    contributes no e1RM to the log-derived ratio. It is declared here, per ratio, so the number is
+    visible and a ratio can differ; the See-test's cap (10) is a separate rule and does not move.
     """
     key: str                              # stable id, e.g. "er_ir"
     label: str
@@ -211,9 +223,14 @@ class Ratio:
     confidence: Confidence
     same_side: bool = True
     same_protocol: bool = True
+    log_rep_ceiling: int = DEFAULT_LOG_REP_CEILING   # route (i) only: highest rep count that scores an e1RM
 
     def __post_init__(self) -> None:
         _check_reference_kind(f"Ratio {self.key!r}", self.reference_kind)
+        lo, hi = LOG_REP_CEILING_BOUNDS
+        c = self.log_rep_ceiling
+        if isinstance(c, bool) or not isinstance(c, int) or not (lo <= c <= hi):
+            raise ValueError(f"Ratio {self.key!r}: log_rep_ceiling {c!r} must be an int in [{lo}, {hi}]")
 
     def pairs(self) -> tuple[tuple[str, str], tuple[str, str]]:
         return (self.numerator, self.denominator)
@@ -665,6 +682,7 @@ def ratio_as_dict(ratio: Ratio) -> dict:
         "denominator": {"region": ratio.denominator[0], "measure": ratio.denominator[1]},
         "same_side": ratio.same_side,
         "same_protocol": ratio.same_protocol,
+        "log_rep_ceiling": ratio.log_rep_ceiling,
         "reference_kind": ratio.reference_kind,
         "expectation": ratio.expectation,
         "confidence": ratio.confidence.value,

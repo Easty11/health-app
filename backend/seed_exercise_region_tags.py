@@ -20,7 +20,8 @@ Side (Q27 v1): any `tags[]` or `sided_variants[]` entry may carry `"side": "left
 written to `exercise_region_tags.side` on every row that entry plans (a variant stamps the rows it
 inherits from its parent). Side is NEVER derived from a title; it is the declared value only. An
 entry without `side` leaves the column untouched - the seeder never clears it. `--dry-run` lists the
-rows whose side would change as `pending_side_updates`.
+rows whose side would change as `pending_side_updates`; a run that writes reports how many it
+changed as `side_updates_written`.
 
 Fail-closed (G1): a region_key with no matching taxonomy Region aborts the run —
 an orphan is NEVER written. So does a malformed variant (regions on it, a missing
@@ -337,7 +338,7 @@ def seed_tags(
 
     default_source = proposal.get("_meta", {}).get("source", "llm_proposed")
     now = datetime.now(timezone.utc)
-    written = no_pattern = inherited = 0
+    written = no_pattern = inherited = side_updates = 0
 
     def _apply_template_meta(tid: str, laterality) -> None:
         """Laterality + three-state adjudication live on the template — never
@@ -389,6 +390,8 @@ def seed_tags(
             row.source = "human_confirmed" if confirm else default_source
             row.confirmed_at = now if confirm else None
             if p.get("side") is not None:
+                if row.side != p["side"]:      # a new row counts: it is created carrying the side
+                    side_updates += 1
                 row.side = p["side"]
 
     if prune_unconfirmed and not dry_run:
@@ -423,6 +426,10 @@ def seed_tags(
         "plan": {tid: {k: p[k] for k in ("label", "kind", "via", "regions", "side")}
                  for tid, p in plan.items()},
     }
+    if not dry_run:
+        # Rows whose `side` this run actually changed (the mirror of the dry-run's `pending_side_updates`).
+        # Absent from a dry-run summary, which is unchanged.
+        summary["side_updates_written"] = side_updates
     logger.info("seed_exercise_region_tags: %s",
                 {k: v for k, v in summary.items()
                  if k not in ("plan", "unconfirmed_existing", "prune", "pending_deletions",

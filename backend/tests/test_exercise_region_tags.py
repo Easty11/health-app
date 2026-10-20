@@ -517,7 +517,7 @@ def test_shipped_reference_v1_retags():
     assert "REJECTED calf" in tags["Calf Extension (Machine)"]["note"]
     assert "Plantarflexion strength, no v0 axis." in tags["Standing Calf Raise (Machine)"]["note"]
     assert "Frontal-hip abductor strength" in tags["Hip Abduction (Machine)"]["note"]
-    assert len(proposal["no_pattern"]) == 16 and len(proposal["tags"]) == 66
+    assert len(proposal["no_pattern"]) == 17 and len(proposal["tags"]) == 77   # 66 + 11, 16 + 1 (tag pass)
     assert len(proposal["sided_variants"]) == 8
     # Every key the reference uses resolves (the seeder refuses an orphan, fail-closed).
     used = {r["key"] for e in proposal["tags"] for r in e["regions"]}
@@ -535,7 +535,8 @@ def test_shipped_reference_capacity_split(db_session):
         primary = [r["key"] for r in e["regions"] if r["role"] == "primary"]
         caps.setdefault(taxonomy.by_key(primary[0]).capacity.value, []).append(e["title"])
     assert len(caps["stability"]) == 8
-    assert len(caps["strength"]) == 15      # 14 (#334) - Deficit KB RDL + Shoulder IR/ER parents (#338)
+    assert len(caps["strength"]) == 18      # 15 (#334, #338) + Copenhagen Hip Lift, Suitcase Deadlift,
+    #                                         Half-Kneeling Press (the 20 Oct 2026 tag pass, customs by id)
     assert caps["mobility"] == ["Deficit KB RDL"]
 
 
@@ -803,6 +804,29 @@ def test_dry_run_lists_pending_side_updates_and_writes_nothing(db_session):
     assert r["plan"]["K1"]["side"] == "left"
 
 
+def test_a_writing_run_reports_how_many_rows_it_changed_the_side_of_and_a_dry_run_does_not(db_session):
+    _tmpl(db_session, "K1", "Kneeling Leg Curl L", custom=True, owner=1, adjudicated=True)
+    _tmpl(db_session, "K2", "Kneeling Leg Curl R", custom=True, owner=1, adjudicated=True)
+    _tmpl(db_session, "K3", "Kneeling Leg Curl R2", custom=True, owner=1, adjudicated=True)
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="K1", region_key="knee_flexion",
+                                            role="primary", side="left"))       # already correct: not counted
+    db_session.add(models.ExerciseRegionTag(hevy_exercise_template_id="K2", region_key="knee_flexion",
+                                            role="primary"))                    # NULL -> right: counted
+    db_session.commit()                                                         # K3 has no row: created with a side
+    prop = {"tags": [
+        {"template_id": t, "title": f"Kneeling Leg Curl {t}", "side": side,
+         "regions": [{"key": "knee_flexion", "role": "primary"}]}
+        for t, side in (("K1", "left"), ("K2", "right"), ("K3", "right"))]}
+    dry = seeder.seed_tags(db_session, 1, proposal=prop, dry_run=True)
+    assert "side_updates_written" not in dry                                    # dry-run output unchanged
+    assert len(dry["pending_side_updates"]) == 2
+    first = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert first["side_updates_written"] == 2 == len(dry["pending_side_updates"])
+    assert (_side(db_session, "K2", "knee_flexion"), _side(db_session, "K3", "knee_flexion")) == ("right", "right")
+    again = seeder.seed_tags(db_session, 1, proposal=prop, confirm=True)
+    assert again["side_updates_written"] == 0                                   # idempotent: nothing left to change
+
+
 @pytest.mark.parametrize("bad", [
     {"tags": [{"template_id": "X", "side": "Left", "regions": [{"key": "hinge", "role": "primary"}]}]},
     {"tags": [{"template_id": "X", "side": "bilateral", "regions": [{"key": "hinge", "role": "primary"}]}]},
@@ -816,6 +840,64 @@ def test_an_invalid_side_is_refused_fail_closed(db_session, bad):
                                             "regions": [{"key": "hinge", "role": "primary"}]}]})   # control
 
 
+# The 20 Oct 2026 tag pass (q27-route-i-rep-ceiling-tagpass): templates the operator logged since the reference
+# was built, tagged from the prod audit. Eleven tags and one no-pattern; none of them declares a side.
+_TAG_PASS_TITLES = {
+    "Hip Abduction (Cable)": ("hip_abduction",),
+    "Single Leg Standing Calf Raise (Machine)": ("ankle_plantarflexion",),
+    "Seated Calf Raise": ("ankle_plantarflexion",),
+    "Copenhagen Adductor Plank Hip Lift": ("hip_adduction",),
+    "Box Squat (Barbell)": ("squat",),
+    "Suitcase Deadlift": ("hinge", "anti_lateral_flexion"),
+    "Back Extension (Weighted Hyperextension)": ("hinge",),
+    "Iso-Lateral High Row (Machine)": ("horizontal_pull",),
+    "Pull Up (Assisted)": ("vertical_pull",),
+    "Half-Kneeling Dumbbell Press (L)": ("vertical_push",),
+    "Dead Bug": ("trunk_stability_sagittal",),
+}
+
+
+def test_the_tag_pass_entries_are_tagged_as_ruled_carry_a_dated_note_and_declare_no_side():
+    ref = seeder.load_proposal()
+    tags = {e["title"]: e for e in ref["tags"]}
+    for title, keys in _TAG_PASS_TITLES.items():
+        e = tags[title]
+        assert tuple(r["key"] for r in e["regions"]) == keys, title
+        assert "side" not in e, title                      # two blocks of one title (or no ruling) has no side
+        assert e["note"].startswith("v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20)"), title
+    # Suitcase Deadlift: hinge is primary and anti-lateral-flexion the secondary.
+    assert [r["role"] for r in tags["Suitcase Deadlift"]["regions"]] == ["primary", "secondary"]
+    # Customs are keyed by the id the audit named; catalogue templates by title.
+    by_id = {e["template_id"]: e["title"] for e in ref["tags"] if e.get("template_id")}
+    assert by_id["238ebf2c-d96c-4673-abe0-f7a0ec887867"] == "Copenhagen Adductor Plank Hip Lift"
+    assert by_id["8ff29e65-f65f-4f3b-a073-da18b3f05a59"] == "Suitcase Deadlift"
+    assert by_id["dcf9b6f6-4c0a-4861-bce0-7b467642fa46"] == "Half-Kneeling Dumbbell Press (L)"
+    for title in ("Hip Abduction (Cable)", "Seated Calf Raise", "Box Squat (Barbell)", "Dead Bug"):
+        assert "template_id" not in tags[title], title
+    # Dead Bug is its own template, not the already-tagged Weighted Dead Bug.
+    assert tags["Dead Bug"] is not tags["Weighted Dead Bug"]
+
+
+def test_tibialis_raise_is_no_pattern_and_is_never_ankle_df():
+    ref = seeder.load_proposal()
+    tib = next(e for e in ref["no_pattern"] if e.get("template_id") == "d17b9661-e174-4f73-bd82-9e7025a34e2c")
+    assert tib["title"] == "Tibialis Raise" and "regions" not in tib and "side" not in tib
+    assert tib["note"].startswith("v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20)")
+    assert all(e.get("template_id") != tib["template_id"] for e in ref["tags"])
+    assert not any(r["key"] == "ankle_df" for e in ref["tags"]
+                   if e["title"] in _TAG_PASS_TITLES for r in e["regions"])      # the #76 category error
+    assert not any("side" in e for e in ref["tags"] if e["title"] in _TAG_PASS_TITLES)
+
+
+def test_the_tag_pass_lines_are_pure_ascii_and_the_reference_still_parses():
+    from pathlib import Path
+    raw = Path(seeder._PROPOSAL_PATH).read_bytes()
+    for line in raw.splitlines():       # either ending: the checkout is CRLF on Windows, LF in CI
+        if b"rep-ceiling tag pass" in line:
+            assert line.isascii(), line[:80]
+    seeder._validate_fail_closed(seeder.load_proposal())
+
+
 def test_the_shipped_reference_declares_side_on_exactly_twelve_entries():
     import json
     import re
@@ -823,7 +905,7 @@ def test_the_shipped_reference_declares_side_on_exactly_twelve_entries():
     path = Path(seeder._PROPOSAL_PATH)
     raw = path.read_text(encoding="utf-8")
     ref = json.loads(raw)
-    assert (len(ref["tags"]), len(ref["no_pattern"]), len(ref["sided_variants"])) == (66, 16, 8)
+    assert (len(ref["tags"]), len(ref["no_pattern"]), len(ref["sided_variants"])) == (77, 17, 8)
     sided = [e for key in ("tags", "no_pattern", "sided_variants") for e in ref[key] if "side" in e]
     assert len(sided) == 12
     assert sum("side" in e for e in ref["sided_variants"]) == 8       # all eight variants

@@ -129,10 +129,19 @@ instrument. Neither declared measure has an admitted norm, so both read `interna
 **Route (i).** Per region, the templates are the `exercise_region_tags` rows with `role="primary"`; a
 template's side is the tag's declared `side` (NULL reads as bilateral; never derived from a title). Per
 session-day and per side the value is the best e1RM across that side's templates, using the shared
-strength-read primitives (`reads/strength_reads.py`: same Epley, rep cap 10, working-set rule and AEST day as
-the See-test series). A ratio pairs numerator and denominator on the **same session-day only** (no window; a
-day missing either half is dropped and counted in `unpaired_days`), per side present in BOTH regions' series
-(left, right, or bilateral when both are bilateral; never mixed). `baseline` is the median of the first three
+strength-read primitives (`reads/strength_reads.py`: same Epley, working-set rule and AEST day as the
+See-test series). The **rep ceiling** is route (i)'s own: a set scores an e1RM only up to the ratio's
+`log_rep_ceiling` (15, declared on the `Ratio`, 1 to 30), where the See-test series keeps its cap of 10.
+When both halves are logged at the same rep count the Epley factor (1 + reps/30) cancels out of the ratio
+exactly; for mismatched counts the distortion is the ratio of the two factors (under 6% within 2 reps, 12.5%
+at 10 against 15). A ratio pairs numerator and denominator on the **same session-day only** (no window), per
+side with sets in BOTH regions (left, right, or bilateral when both are bilateral; never mixed). A day that
+does not pair is accounted for, in three counts per side: `paired_days`; `half_not_logged_days` (one region
+has sets that day, the other has none); and `no_eligible_e1rm_days` (both have sets, at least one has none
+scorable), each listed with the reason: `all_warmup` (every set flagged warm-up), `reps_over_ceiling` (a
+working set above the ceiling) or `no_weight` (no working set with a weight above zero and reps in range; a
+0 kg set never scores). A day with no sets is "not logged", not ineligible. `unpaired_days` is the sum of the
+last two, deprecated for one release. `baseline` is the median of the first three
 pairs, `current` the median of the last three pairs within 42 days of today (null when fewer than three are
 that recent), `delta_pct` the move between them. There is no label, band or threshold. It never writes
 `capability_observations`. Surfaces: `GET /engine/ratios`, `GET /engine/ratios/{key}`,
