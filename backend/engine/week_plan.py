@@ -39,6 +39,9 @@ from sqlalchemy.orm import Session
 import models
 from load_metrics import _local_day
 from engine import resolver as resolver_mod
+from engine import taxonomy
+from engine.profile import get_profile
+from engine.training_phase import current_training_phase
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +103,61 @@ def _time_keys(v: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def norm_slot_key(v: Any) -> Any:
+    """A slot key (or a `satisfies` value) folded for comparison: trimmed and casefolded when it is a
+    string, anything else returned as it stands. The ONE fold for "does this item name that slot":
+    the resolver casefolds `device_sports`, the microcycle validator refuses a duplicate activity name
+    case-insensitively, and the phase-change form compares `satisfies` the same way, so a link must not
+    depend on whether `pilates` or `Pilates` was written (the 21 Oct 2026 Tue Pilates item)."""
+    return v.strip().casefold() if isinstance(v, str) else v
+
+
+def declared_activity_names(db: Session, user_id: int) -> dict[str, str]:
+    """`casefolded name -> the slot's own spelling` for every `activity` slot the user's declared
+    quota carries: the open phase's microcycle (every sub-cycle), else the weekly template — the same
+    precedence `resolver.resolve_window` applies. Read from the stored JSON, not from `Slot`, so a
+    slot the resolver would skip defensively still names itself. A name declared twice with different
+    spellings (legal across sub-cycles) keeps the first."""
+    raw_slots: list[Any] = []
+    phase = current_training_phase(db, user_id)
+    micro = phase.microcycle if phase is not None else None
+    if isinstance(micro, dict) and isinstance(micro.get("sub_cycles"), list) and micro["sub_cycles"]:
+        for sc in micro["sub_cycles"]:
+            if isinstance(sc, dict):
+                raw_slots.extend(sc.get("slots") or [])
+    else:
+        profile = get_profile(db, user_id)
+        template = profile.weekly_template if profile is not None else None
+        if isinstance(template, dict) and isinstance(template.get("slots"), list):
+            raw_slots = template["slots"]
+    out: dict[str, str] = {}
+    for s in raw_slots:
+        name = s.get("activity") if isinstance(s, dict) else None
+        if isinstance(name, str) and name.strip():
+            out.setdefault(norm_slot_key(name), name.strip())
+    return out
+
+
+def canonical_satisfies(
+    db: Session, user_id: int, satisfies: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """A schedule item's `satisfies` rewritten to the spelling its slot carries, so what is stored is
+    what `consistency_rows` and the resolver emit. `capacity` → the token's own value (`resolve_capacity`
+    accepts `STRENGTH` and `strength`; the slot key is the value); `activity` → the declared slot's
+    name, matched on `norm_slot_key`; `load_window` is a closed exact token already. A value that
+    matches no slot is returned UNCHANGED — this never refuses a write (the link may precede its phase)."""
+    if not isinstance(satisfies, dict) or len(satisfies) != 1:
+        return satisfies
+    (kind, val), = satisfies.items()
+    if kind == "capacity":
+        cap = taxonomy.resolve_capacity(val)
+        return {kind: cap.value} if cap is not None else satisfies
+    if kind == "activity":
+        declared = declared_activity_names(db, user_id).get(norm_slot_key(val))
+        return {kind: declared} if declared is not None else satisfies
+    return satisfies
+
+
 def consistency_rows(
     slots: list[dict[str, Any]], item_values: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -116,7 +174,8 @@ def consistency_rows(
         scheduled = sum(
             schedule_sessions_per_week(v)
             for v in item_values
-            if isinstance(v.get("satisfies"), dict) and v["satisfies"].get(kind) == key
+            if isinstance(v.get("satisfies"), dict)
+            and norm_slot_key(v["satisfies"].get(kind)) == norm_slot_key(key)
         )
         quota = slot.get("quota") or 0
         done = slot.get("done") or 0
@@ -175,6 +234,25 @@ def _actuals_by_day(db: Session, slots: list[dict[str, Any]]) -> dict[str, list[
                 {"kind": kind, "key": key, "ref": s.id, "sport_name": s.sport_name}
             )
     return by_day
+
+
+def uncounted_context(db: Session, uncounted: list[dict[str, Any]]) -> dict[tuple[str, Any], dict[str, Any]]:
+    """Day (and Hevy title) of each item `resolve()` listed in `uncounted[]`, from a bounded lookup of
+    exactly those ids — the resolver's entries carry only an id, and a line that cannot say WHEN is hard
+    to match to a session. Like `_actuals_by_day`, never a membership or count decision: every item is one
+    the resolver already surfaced. Keyed `("session", id)` / `("workout", hevy_id)`."""
+    sess_ids = [u["session"] for u in uncounted if u.get("session") is not None]
+    hevy_ids = [u["workout"] for u in uncounted if u.get("workout") is not None]
+    out: dict[tuple[str, Any], dict[str, Any]] = {}
+    if sess_ids:
+        for s in db.query(models.AerobicSession).filter(models.AerobicSession.id.in_(sess_ids)).all():
+            day = _local_day(s.start_time) if s.start_time is not None else s.session_date
+            out[("session", s.id)] = {"day": day.isoformat()}
+    if hevy_ids:
+        for w in db.query(models.HevyWorkout).filter(models.HevyWorkout.hevy_id.in_(hevy_ids)).all():
+            if w.start_time is not None:
+                out[("workout", w.hevy_id)] = {"day": _local_day(w.start_time).isoformat(), "title": w.title}
+    return out
 
 
 def _freshness(db: Session, user_id: int, window_start: date) -> dict[str, Any]:
