@@ -23,16 +23,25 @@ from cbti.engine import (
 )
 from routers.checkin_v2 import accept_cbti_evaluation, get_cbti_evaluation
 
+import pytest
+import cbti.replay as replay_mod
+
 RX = "22:30"
 ANCHOR = "05:00"
 WINDOW = 390
+
+@pytest.fixture(autouse=True)
+def _rules_date_pinned(monkeypatch):
+    """These tests date their nights from today, so they would cross DEVIATION_RULES_FROM as the
+    clock moves and change ruleset under the assertions. Pin it so they always run under #436."""
+    monkeypatch.setattr(replay_mod, "DEVIATION_RULES_FROM", date(2000, 1, 1))
 
 
 def _n(d, *, tst=420, se=90.0, lights_out=RX, wake="05:00", naps=0,
        alcohol=0, alcohol_finish=None, travel=False):
     return Night(
         date=date(2026, 8, d), tst_min=tst, se_pct=se, lights_out=lights_out,
-        out_of_bed=wake, final_wake=wake, naps_min=naps, alcohol_units=alcohol,
+        out_of_bed=None, final_wake=wake, naps_min=naps, alcohol_units=alcohol,   # out_of_bed is left unset (#436)
         alcohol_finish_time=alcohol_finish, travel_or_match=travel,
     )
 
@@ -215,7 +224,7 @@ def test_accept_snapshots_the_ledger_and_ruleset_version(db_session):
         drink = (i == 2)
         db_session.add(models.DailyRecord(
             user_id=u.id, date=start + timedelta(days=i), diary_tst_min=420,
-            diary_se_pct=90.0, lights_out=RX, out_of_bed="05:00", final_wake="05:00",
+            diary_se_pct=90.0, lights_out=RX, out_of_bed=None, final_wake="05:00",
             naps_min=0, alcohol_units=2 if drink else 0,
             alcohol_finish_time="19:30" if drink else None))
     db_session.commit()

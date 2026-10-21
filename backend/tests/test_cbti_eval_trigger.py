@@ -20,17 +20,26 @@ LAST complete 4-night span of the live prescription.
 
 SYNTHETIC data only; no real rows (both repos are public).
 """
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from fastapi import HTTPException
 
+import cbti.replay as replay_mod
 import models
 from routers.checkin_v2 import (
     _today_aest,
     accept_cbti_evaluation,
     get_cbti_evaluation,
 )
+
+
+
+@pytest.fixture(autouse=True)
+def _rules_date_pinned(monkeypatch):
+    """These tests date their nights from today, so they would cross DEVIATION_RULES_FROM as the
+    clock moves and change ruleset under the assertions. Pin it so they always run under #436."""
+    monkeypatch.setattr(replay_mod, "DEVIATION_RULES_FROM", date(2000, 1, 1))
 
 
 def _user(db, email="trig@x.io"):
@@ -69,7 +78,7 @@ def _nights(db, uid, start, n, *, lo="22:30", tst=420, se=90.0, wake="05:00", sk
             continue
         db.add(models.DailyRecord(
             user_id=uid, date=d, diary_tst_min=tst, diary_se_pct=se,
-            lights_out=lo, out_of_bed=wake, final_wake=wake, naps_min=0,
+            lights_out=lo, out_of_bed=None, final_wake=wake, naps_min=0,
             alcohol_units=0,
         ))
     db.commit()

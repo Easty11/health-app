@@ -112,6 +112,8 @@ describe('reasonLabel', () => {
     expect(reasonLabel('nap')).toBe('Nap over threshold')
     expect(reasonLabel('unknown')).toBe('Unclassified')
     expect(reasonLabel('ok')).toBe('Clean night')
+    expect(reasonLabel('deviation')).toBe('Missed the prescription')
+    expect(reasonLabel('training_constrained')).toBe('Late training')   // legacy ledgers still read
   })
   it('an unknown code falls through to itself, not a fabricated phrase', () => {
     expect(reasonLabel('some_new_code')).toBe('some_new_code')

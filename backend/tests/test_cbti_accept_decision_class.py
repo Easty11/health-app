@@ -33,6 +33,7 @@ from datetime import date, timedelta
 import pytest
 from fastapi import HTTPException
 
+import cbti.replay as replay_mod
 import models
 from cbti.engine import (
     CYCLE_NIGHTS, MIN_VALID_NIGHTS, PLATEAU_TOL_MIN, SE_FLOOR_PCT, evaluate_cycle,
@@ -45,6 +46,14 @@ from routers.checkin_v2 import accept_cbti_evaluation, get_cbti_evaluation
 # imports another, and a shared fixture helper would couple two modules that pin opposite
 # halves of #118 — a change made for the offer suite could then silently reshape what the
 # accept suite believes it is exercising.
+
+
+@pytest.fixture(autouse=True)
+def _rules_date_pinned(monkeypatch):
+    """These tests date their nights from today, so they would cross DEVIATION_RULES_FROM as the
+    clock moves and change ruleset under the assertions. Pin it so they always run under #436."""
+    monkeypatch.setattr(replay_mod, "DEVIATION_RULES_FROM", date(2000, 1, 1))
+
 
 def _user(db, email):
     u = models.User(email=email, hashed_password="x")
@@ -81,7 +90,7 @@ def _nights(db, uid, start, n, *, lo="22:30", tst=420, se=90.0, wake="05:00", sk
             continue
         db.add(models.DailyRecord(
             user_id=uid, date=start + timedelta(days=i), diary_tst_min=tst,
-            diary_se_pct=se, lights_out=lo, out_of_bed=wake, final_wake=wake,
+            diary_se_pct=se, lights_out=lo, out_of_bed=None, final_wake=wake,
             naps_min=0, alcohol_units=0,
         ))
     db.commit()
@@ -145,7 +154,7 @@ def test_engine_flags_only_the_sufficiency_gate_as_insufficient():
 
     def _n(i, **kw):
         base = dict(date=date(2026, 1, 1) + timedelta(days=i), tst_min=420, se_pct=90.0,
-                    lights_out="22:30", out_of_bed="05:00", final_wake="05:00",
+                    lights_out="22:30", out_of_bed=None, final_wake="05:00",
                     naps_min=0, alcohol_units=0)
         base.update(kw)
         return Night(**base)
