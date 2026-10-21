@@ -31,11 +31,18 @@ function timeLabel(h) {
   return null
 }
 
+// One identity for a quota key across spellings. The server links an item to a slot on the trimmed,
+// casefolded key (`week_plan.norm_slot_key`), so the strip must too: an item written `pilates` joins
+// the `Pilates` tray row rather than vanishing from it.
+function slotId(kind, key) {
+  return `${kind}:${String(key ?? '').trim().toLowerCase()}`
+}
+
 // `satisfies` is `{capacity|activity|load_window: <key>}`; the kind is its one key.
 function satisfiesId(sat) {
   if (!sat || typeof sat !== 'object') return null
   const kind = Object.keys(sat)[0]
-  return kind ? { kind, key: sat[kind], id: `${kind}:${sat[kind]}` } : null
+  return kind ? { kind, key: sat[kind], id: slotId(kind, sat[kind]) } : null
 }
 
 // A flexible item's identity across the window's days (the same item is listed on every candidate day).
@@ -95,7 +102,7 @@ function trayRows(week, fixed) {
     }
   }
   const rows = (week.keys ?? []).map((k) => {
-    const id = `${k.kind}:${k.key}`
+    const id = slotId(k.kind, k.key)
     const l = linked.get(id)
     const kl = keyLabel(k.kind, k.key)
     const names = l ? [...l.names] : []

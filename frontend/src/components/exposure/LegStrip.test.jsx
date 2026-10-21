@@ -132,6 +132,23 @@ test('a quota over-scheduled shows "N over quota"; an unlinked soft item is name
   expect(screen.getByText('Walk · no quota · Sun')).toBeTruthy()
 })
 
+test('a link written in another case still joins its quota row (the server links on the folded key)', () => {
+  // 21 Oct 2026: the slot is `Pilates`; the Tuesday item was stored `pilates`. Both belong to the one row.
+  const week = {
+    window: SUN_SAT.window,
+    days: [
+      day('2026-10-04', 'sunday', { flexible: [{ activity: 'Mat class', satisfies: { activity: 'Pilates' }, pool: 2 }] }),
+      day('2026-10-06', 'tuesday', { flexible: [{ activity: 'Reformer', satisfies: { activity: 'pilates' }, pool: 2 }] }),
+    ],
+    keys: [{ kind: 'activity', key: 'Pilates', quota: 4, done: 0, scheduled: 4, excess: 0, unplaced: 0 }],
+  }
+  render(<LegStrip week={week} />)
+  const row = screen.getByLabelText('Quota tray').querySelector('li')
+  expect(row.textContent).toContain('Mat class / Reformer')
+  expect(row.textContent).toContain('Tue Sun')
+  expect(screen.queryByText(/no quota/)).toBeNull()                         // neither item reads as unlinked
+})
+
 // ── R9 (amends R6): a soft item whose candidate days equal its pool is drawn on its days, outlined ──
 
 const FIXED_GYM = { activity: 'Gym', satisfies: { capacity: 'stability' }, pool: 3, time_range: '06:00-07:00' }

@@ -44,7 +44,8 @@ from reads.recovery_reads import hrv_deviation, representative_source
 from reads.freshness_reads import freshness, freshness_footer_line, freshness_snapshot_lines
 from reads.snapshot_reads import hrv_continuity, hrv_continuity_line, latest_sleep_night, sleep_snapshot_lines
 from engine.training_phase import current_training_phase
-from context_builder import CONCURRENT_STRENGTH_PHRASE, plan_of_record_stale   # the ONE plan-of-record STALE definition (#312/#319); the ONE `concurrent_strength` wording
+from engine import week_plan as week_plan_mod   # the plan's derivations (#316), incl. the uncounted-item day lookup
+from context_builder import CONCURRENT_STRENGTH_PHRASE, _uncounted_phrase, plan_of_record_stale   # the ONE plan-of-record STALE definition (#312/#319); the ONE `concurrent_strength` wording
 from current_state import current_state as _current_state   # plan, phase, phase_folders, week plan: one read
 from load_metrics import _local_day   # the single operator-local-day source
 
@@ -1699,6 +1700,48 @@ def _format_plan_week(week: dict) -> list[str]:
     return lines
 
 
+# Why an in-window item is in the resolver's `uncounted[]`, as a fact about the record (no verdict). The
+# reason codes are the resolver's, so a line here can be matched to `GET /engine/legs` `uncounted.reasons`.
+def _uncounted_why(u: dict) -> str | None:
+    reason = u.get("reason")
+    if reason == "unclaimed_session":
+        if u.get("detail") == "no_sport":
+            return "the session has no sport recorded, so no slot's sports list can name it"
+        return f"no slot's sports list names \"{u.get('sport_name')}\""
+    if reason == "untimed":
+        return "no start or stop time, so it cannot be placed or checked against a Hevy workout"
+    if reason == "concurrent_strength":
+        return "the same bout as a Hevy workout (its heart-rate trace)"
+    if reason == "unadjudicated_duplicate":
+        return "a possible duplicate Hevy workout, not yet adjudicated"
+    if reason == "untagged":
+        return "no exercise in it carries a primary region tag"
+    if reason == "off_plan":
+        return "its dominant capacity has no slot in this leg"
+    return None
+
+
+def _format_plan_uncounted(uncounted: list[dict], context: dict | None) -> list[str]:
+    """Sessions and workouts inside the window that matched no slot, each with its date and the resolver's
+    reason. Silence here is how an unmatched sport name went unseen for a week (21 Oct 2026)."""
+    if not uncounted:
+        return []
+    context = context or {}
+    lines = ["== Not counted toward any slot this leg ==",
+             "In the window, recorded, and not counted (reason code as in the legs read):"]
+    for u in uncounted:
+        key = ("session", u["session"]) if u.get("session") is not None else ("workout", u.get("workout"))
+        meta = context.get(key, {})
+        dur = u.get("duration_minutes")
+        parts = [meta.get("day"), _uncounted_phrase(u),
+                 f"{dur:g} min" if isinstance(dur, (int, float)) else None,
+                 f"Hevy \"{meta['title']}\"" if meta.get("title") else None]
+        why = _uncounted_why(u)
+        lines.append("- " + " · ".join(str(p) for p in parts if p)
+                     + f" - {u.get('reason')}" + (f": {why}" if why else ""))
+    return lines
+
+
 def _format_plan_schedule_items(values: list[dict]) -> list[str]:
     if not values:
         return []
@@ -1721,7 +1764,7 @@ def _format_plan_schedule_items(values: list[dict]) -> list[str]:
     return lines
 
 
-def _format_training_plan(state) -> str:
+def _format_training_plan(state, uncounted_context: dict | None = None) -> str:
     """The plan, phase, week and schedule as text, from one `CurrentState`. Pure. Each section
     appears only if its store holds something; the phase section always states the baseline."""
     pos = state.resolver_position if isinstance(state.resolver_position, dict) else None
@@ -1736,6 +1779,8 @@ def _format_training_plan(state) -> str:
         # The resolver found a window but plan_week failed (current_state logged it and kept
         # going). Say so: a silent omission would read as "no week".
         sections.append(["== This week ==", "The week plan could not be read (see the server log)."])
+    if pos:
+        sections.append(_format_plan_uncounted(pos.get("uncounted") or [], uncounted_context))
     sections.append(_format_plan_schedule_items(
         [e.value or {} for e in state.knowledge_entries if getattr(e, "type", None) == "schedule_item"]))
     return "\n\n".join("\n".join(s) for s in sections if s)
@@ -1748,10 +1793,13 @@ def get_training_plan() -> str:
     the open phase (intent, review date, posture, capacities, microcycle and today's leg, Hevy
     folder), this week from the week planner (hard items by day, flexible items on their
     candidate days, scheduled/quota/done per slot key, needs_planning, day-after-heavy cautions),
-    and the active schedule items. States what the stores hold; no verdicts."""
+    the sessions in the window that matched no slot (each with its date and reason), and the active
+    schedule items. States what the stores hold; no verdicts."""
     user_id = _current_user_id()
     with SessionLocal() as _db:
-        return _format_training_plan(_current_state(user_id, _db, _local_day()))
+        state = _current_state(user_id, _db, _local_day())
+        pos = state.resolver_position if isinstance(state.resolver_position, dict) else {}
+        return _format_training_plan(state, week_plan_mod.uncounted_context(_db, pos.get("uncounted") or []))
 
 
 # ---------------------------------------------------------------------------
