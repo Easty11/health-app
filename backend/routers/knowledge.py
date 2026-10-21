@@ -1405,6 +1405,11 @@ def _stage_upsert_entry(
             k: v for k, v in entry_in.value.items()
             if k not in SCHEDULE_ITEM_WRITE_ONLY_FIELDS
         }
+        if stored_value.get("satisfies") is not None:
+            # Store the link in its slot's own spelling (never a refusal: no match = unchanged). A
+            # function-local import: `engine.training_phase` imports this module at load time.
+            from engine.week_plan import canonical_satisfies
+            stored_value["satisfies"] = canonical_satisfies(db, user_id, stored_value["satisfies"])
     if entry_in.type in _TYPED_VALIDATORS:
         _TYPED_VALIDATORS[entry_in.type](entry_in.value)
     if entry_in.type == "appointment":
