@@ -185,7 +185,8 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
         f"{', '.join(sorted(_SATISFIES_VALIDATORS))}: "
         '`"satisfies": {"capacity": "stability"}` for a movement-quality slot, '
         '`"satisfies": {"load_window": "metabolic"}` for the conditioning window, or '
-        '`"satisfies": {"activity": "pilates"}` for a device-evidenced activity slot. Omit it\n'
+        '`"satisfies": {"activity": "<slot key>"}` for a device-evidenced activity slot. Copy the '
+        "slot key verbatim from the plan, capitalisation included. Omit it\n"
         "  (or null) when the commitment fills no declared quota slot — unlinked is fine.\n"
         "\n"
         "A DATED ONE-OFF — a commitment that happens ON a known date, not every week (a game,\n"
