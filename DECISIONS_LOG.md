@@ -14543,7 +14543,7 @@ Every new entry carries a dated `note`; no `side` on any (Hip Abduction (Cable),
 
 ---
 
-### #436. An MCP tool reads the exercise catalogue with each template's tag state, so a template can be found, and its id taken, before it is logged (Q27 tag pass, STEP 3b)
+### #438. An MCP tool reads the exercise catalogue with each template's tag state, so a template can be found, and its id taken, before it is logged (Q27 tag pass, STEP 3b)
 
 **Decision.** `get_exercise_catalogue(query: str | None = None)` in `mcp_server.py`, stamped under `@mcp.tool()` like the others. It reads `hevy_exercise_templates` through the user's visibility (`hevy_templates._visible_to`: the global defaults and the user's own customs, never another user's), optionally narrowed by a case-insensitive substring of the title (LIKE wildcards in the query are literal), and returns one line per template: id, title, `custom` or `default`, laterality (or `unset`), and the tag state, then `side` only where a side is declared. The tag state is `selection.classify_coverage`, the one definition the audit and the read path use: `TAGGED <region(role), ...>`, `NO-PATTERN` (adjudicated, no rows) or `UNTAGGED`. Read-only for the user's data: it writes no tag, resolves no title and states no verdict. The catalogue is refreshed first through `refresh_catalogue_if_stale`, the door `chat.py` uses.
 
