@@ -2985,6 +2985,48 @@ names the route, or routes, per provider.
 
 ---
 
+## Q234. Should a phase change carry every sub-cycle of the outgoing microcycle, or keep collapsing to the first?
+
+Raised 21 Oct 2026, from the week planner done-state report (carry-forward check, #438). Nothing is decided and nothing is built.
+
+What the tree does today (read on master `955eda4`): the phase-change wizard prefills step 4 from the outgoing phase's FIRST sub-cycle only
+(`microcycleSlots` reads `sub_cycles[0]`, `phaseTransitionLib.js:68-84`; applied at `PhaseTransitionFlow.jsx:155`, on Continue and on Move alike),
+and `buildMicrocycle` writes exactly one sub-cycle, labelled "A", with `sub_cycle_days: 7` (`phaseTransitionLib.js`, the function of that name). A
+microcycle with an A/B rotation therefore loses every sub-cycle after the first, and the label and day count of the first, on any transition.
+Nothing on the confirm says so.
+
+Not hit today: the open `aerobic base` phase has one sub-cycle (`1 in rotation` in `get_training_plan`). It will matter at the next
+phase that rotates: the plan of record names "alternating A/B weeks" for the operator's preseason (January).
+
+The fork: (i) the wizard carries every sub-cycle through (prefill and write), (ii) it refuses, with a message, to revise a multi-sub-cycle
+phase and sends the operator to a logged migration (the bounded exception in #438), or (iii) leave it, accepted. Whatever is chosen, the
+collapse should not be silent.
+
+**State:** OPEN. Owner: Luke (ruling).
+
+---
+
+## Q235. Should the phase-change confirm show a change to a slot's sports list, minutes or recorded-via, or keep comparing session counts only?
+
+Raised 21 Oct 2026, from the week planner done-state report (carry-forward check, #438). Nothing is decided and nothing is built.
+
+What the tree does today (read on master `955eda4`): the confirm's diff (`diffSlots`, `phaseTransitionLib.js`) lists a slot as removed, added or
+changed on its `sessions` count alone. A change to `device_sports`, `minutes` or `recorded_via` is written by the save and does not appear on
+the confirm. The sports list is what decides whether a recorded session counts toward a conditioning or activity slot (`resolver.resolve`,
+exact casefolded match), so a sport added or dropped changes what counts, with no line on the page that says so.
+
+The 21 Oct 2026 defect was exactly a sports list: three Polar "Indoor cycling" sessions went uncounted for want of one entry, found by
+reading the plan. (The prefill carries the list forward, so the wizard did not cause it; the point is that the confirm could not have shown
+a mistake in it either.)
+
+The fork: (i) extend the diff to show sports added and dropped per slot (and minutes, recorded-via), (ii) show the sports list only, since minutes
+are advisory ("not counted" on the form), or (iii) leave it. A related, smaller edge: a slot added in the wizard starts with an empty sports
+list that the validator refuses until a sport is chosen, so an omission there is loud; an omission carried forward is not.
+
+**State:** OPEN. Owner: Luke (ruling).
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
