@@ -2537,6 +2537,21 @@ If not, matching falls back to date window + exercise overlap. Findings (2026-10
 **Dependency.** Plan↔log reconciliation, the unbuilt consumer named in Q24 (`laterality` and any `capability_state.side`
 join wait on it too). This is the same component. Q27's region tags feed the substitution test.
 
+**Note (21 Oct 2026): a narrower matching rule was proposed for the week strip, and not taken.** The week planner
+report offered a rule short of this question's adjudication: a scheduled box shows done when a done session with the
+same `kind:key` lands on a day the box covers, each session consumed once, a moved session staying a plain chip.
+The operator declined it. R6 (#390) stands and matching stays here. The failure modes, for whoever designs the
+real match:
+- *`kind:key` is coarser than the item.* For `load_window:metabolic` the key names the whole conditioning window, not
+  one item. On a day with a single metabolic item placed (Monday and Saturday carry `running` alone) any ride would
+  tick `running`: a tidy display that names an item the session was not.
+- *The tie-break fails on a multi-item day.* Wednesday 21 Oct carries `running` (3 a week) and `echo` (1 a week), both
+  metabolic. "No tick when ambiguous" ticks neither, so that day's Echo session would show nothing at all. A
+  time-proximity tie-break (echo 16:30-17:00, running 18:00-18:30) was also offered; it was not run against the
+  session's start time, and `days[].actual` carries no start time today.
+- *The trade.* Keeping R6 costs a second chip beside the box. The narrow rule would cost a tick that is sometimes
+  wrong. If the clutter matters, the lever is this question's priority.
+
 **State:** OPEN — chat proposal, not ruled; the Hevy routine-id check is owed before design relies on it. Owner: Luke.
 
 ---
