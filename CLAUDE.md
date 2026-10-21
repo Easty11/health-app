@@ -293,7 +293,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **An MCP tool, `get_exercise_catalogue`, lists the exercise templates visible to you with their tag state and any declared side, so a template just made in Hevy can be found by name and its id read.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #438.
+- **An MCP tool, `get_exercise_catalogue`, lists the exercise templates visible to you with their tag state and any declared side, so a template just made in Hevy can be found by name and its id read.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #439.
 
 - **Route (i) now scores sets up to a rep ceiling of 15 declared on the ratio, and the ER:IR read says why a day is missing: paired, only-one-half-logged, and no-usable-e1RM days with their dated reasons; the seeder reports the side updates it wrote.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #435.
 
