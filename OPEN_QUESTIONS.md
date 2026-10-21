@@ -2219,6 +2219,8 @@ Raised 2026-09-24 with #326. The CBT-I ruling in #326 relies on the late-session
 
 **To decide:** whether to add a capture-time field (an AM check-in "trained late last night" or a training-end time on `daily_records`, which is a schema change) that `load_nights` reads alongside the device value, and how the two combine (device wins, or either constrains). Also decide whether `travel_or_match` should gain a writer on the same path or be retired as dead.
 
+**Added 2026-10-21, with the deviation-basis ruling (DECISIONS_LOG #436).** The titration policy (V2 section 7, project knowledge, not readable from the repo) names a class `external_disruption`. The code has no such predicate (a search of `backend/` finds none), and `travel_or_match` still has no writer. Under #436, cause capture is the only route to excusing an adherence miss, so Q170 now gates that excusal as well as the late-training case. To decide, in addition: whether the cause set is the policy's classes, including `external_disruption`, or the two the code carries; and that the cause set is limited to what can be captured the morning after, because a cause entered after the fact is post-hoc (#326).
+
 **State:** OPEN. Not blocking #326 (the marker has no CBT-I effect whatever this decides). Risk until built: an unrecorded late session reads as an unconstrained night.
 
 ---
