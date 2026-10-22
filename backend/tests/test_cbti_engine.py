@@ -8,7 +8,7 @@ gate is exercised here or nowhere.
 
 No real rows appear (both repos are public).
 """
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 
 import pytest
 
@@ -31,11 +31,11 @@ WINDOW = 390          # 22:30 -> 05:00
 
 
 def night(day: int, *, tst=420, se=90.0, lights_out=RX, wake="05:00",
-          naps=0, alcohol=0, samsung=None, training_end=None, travel=False) -> Night:
+          naps=0, alcohol=0, samsung=None, travel=False) -> Night:
     return Night(
         date=date(2026, 6, day), tst_min=tst, se_pct=se, lights_out=lights_out,
         final_wake=wake, naps_min=naps, alcohol_units=alcohol,
-        samsung_bedtime=samsung, training_end=training_end, travel_or_match=travel,
+        samsung_bedtime=samsung, travel_or_match=travel,
     )
 
 
@@ -89,58 +89,13 @@ def test_travel_or_match_excluded():
     assert classify_night(night(1, travel=True), RX).reason == "travel_or_match"
 
 
-# ── training_constrained: a full diary-local datetime compare (#323) ─────────
-# Inputs are AWARE-UTC instants, exactly as Postgres hands `stop_time` back (session
-# TimeZone Etc/UTC in prod). `_bne` builds the UTC instant of a Brisbane wall-clock time,
-# so each case reads in local terms. Night(2) wakes 2026-06-02; its session is on 06-01.
-_BNE = timezone(timedelta(hours=10))   # Australia/Brisbane: UTC+10, no DST
+# ── training is not a night-level predicate (#436) ────────────────────────────
+# `training_constrained` (#323) is retired: Night carries no training_end, nothing reads a
+# session, and the reason is only LEGACY-readable on persisted ledgers. The deviation tests
+# that replace it, on real nights, are in test_cbti_deviation_classifier.py.
 
-
-def _bne(day, hh, mm=0, *, tz=timezone.utc):
-    """The instant of Brisbane wall-clock hh:mm on 2026-06-`day`, expressed in `tz`."""
-    return datetime(2026, 6, day, hh, mm, tzinfo=_BNE).astimezone(tz)
-
-
-@pytest.mark.parametrize("tz", [timezone.utc, _BNE], ids=["utc", "bne"])
-def test_training_evening_session_constrains(tz):
-    """21:30 local (11:30Z) + 90 = 23:00 > 22:30. Pre-#323 read .hour=11 off the UTC value
-    and let it through. The verdict must not depend on the zone the instant arrives in."""
-    v = classify_night(night(2, training_end=_bne(1, 21, 30, tz=tz)), RX)
-    assert not v.valid and v.reason == "training_constrained"
-
-
-def test_training_early_evening_session_does_not_constrain():
-    v = classify_night(night(2, training_end=_bne(1, 19, 0)), RX)   # 20:30 <= 22:30
-    assert v.valid
-
-
-def test_training_morning_session_does_not_constrain():
-    """07:45 local = 21:45Z the day before. Pre-#323: 21:45 + 90 = 23:15 > 22:30 -> a false
-    training_constrained exclusion of a night a morning session cannot have affected."""
-    v = classify_night(night(2, training_end=_bne(1, 7, 45)), RX)
-    assert v.valid
-
-
-def test_training_late_finish_constrains_across_midnight():
-    """23:15 + 90 = 00:45 the next day, which is LATER than 22:30. A clock-minutes compare
-    wraps it to 45 min and waves the night through."""
-    v = classify_night(night(2, training_end=_bne(1, 23, 15)), RX)
-    assert not v.valid and v.reason == "training_constrained"
-
-
-@pytest.mark.parametrize("finish, constrained", [((22, 30), False), ((23, 30), True)])
-def test_training_vs_post_midnight_lights_out_rolls_to_wake_date(finish, constrained):
-    """A 00:30 lights-out is 00:30 ON the wake date (06-02), not on 06-01. A 22:30 finish
-    -> 00:00 <= 00:30 (clear); 23:30 -> 01:00 > 00:30 (constrained). Without the rollover
-    the prescription sits on 06-01 and both nights read constrained."""
-    v = classify_night(night(2, lights_out="00:30", training_end=_bne(1, *finish)), "00:30")
-    assert (v.reason == "training_constrained") is constrained
-
-
-def test_training_naive_instant_is_read_as_utc():
-    """SQLite drops the zone on round-trip; a naive stop_time is a UTC instant (#323)."""
-    v = classify_night(night(2, training_end=datetime(2026, 6, 1, 11, 30)), RX)   # 21:30 local
-    assert v.reason == "training_constrained"
+def test_night_carries_no_training_end():
+    assert not hasattr(night(1), "training_end")
 
 
 def test_incomplete_night_excluded():
@@ -161,15 +116,15 @@ def test_insufficient_valid_nights_holds():
     assert d.basis_nights_n == CYCLE_NIGHTS - n_excluded
 
 
-def test_sufficiency_failure_short_circuits_before_adherence():
-    """A HOLD names the FIRST failing gate, not the last one checked. Here both
-    gates would fail; the reason must be sufficiency."""
+def test_adherence_runs_before_sufficiency():
+    """#436: a HOLD names the FIRST failing gate, and adherence is first. Here both gates
+    would fail (every night deviates, so no valid night remains); the reason must be
+    adherence, and the cycle is a decision on the merits, not an insufficiency."""
     nights = cycle(lights_out="01:00")            # wildly non-adherent (by diary)
-    for n in nights[:CYCLE_NIGHTS - MIN_VALID_NIGHTS + 1]:
-        n.travel_or_match = True                 # a real exclusion (alcohol now excuses, #253)
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
-    assert d.decision == "hold" and "insufficient_nights" in d.reason
-    assert "adherence" not in d.reason
+    assert d.decision == "hold" and d.reason.startswith("adherence")
+    assert "insufficient_nights" not in d.reason
+    assert d.sufficient is True
 
 
 # ── gate 2: adherence — unreachable from real data, so tested only here ───────
@@ -178,7 +133,7 @@ def test_adherence_failure_holds_and_reports_source_composition():
     nights = cycle(lights_out="23:45")            # +75 min by diary, whole cycle outside tolerance
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold" and d.reason.startswith("adherence")
-    assert d.basis_n_diary == CYCLE_NIGHTS and d.basis_n_samsung == 0
+    assert d.basis_n_diary == 0 and d.basis_n_samsung == 0    # every night deviated, none stays in the basis (#436)
     assert d.window_minutes == WINDOW
 
 
@@ -446,7 +401,7 @@ def test_tib_over_run_is_recorded():
 
 
 def test_tib_over_run_is_negative_when_the_window_is_under_run():
-    nights = [_n(d) for d in range(1, 8)]
+    nights = [_n(d, tst=350) for d in range(1, 8)]      # TST must fit the 360 min TIB below (#436 guard)
     for x in nights:
         x.out_of_bed = "04:30"                    # 22:30 -> 04:30 = 360 vs 390
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
@@ -455,12 +410,18 @@ def test_tib_over_run_is_negative_when_the_window_is_under_run():
 
 def test_tib_over_run_does_NOT_gate_the_decision():
     """A large over-run must still titrate on TST. If this ever fails, a TIB gate
-    has been introduced without the distribution needed to justify a threshold."""
+    has been introduced without the distribution needed to justify a threshold.
+
+    #436: the over-run is built from a lights-out 30 min early (the edge of tolerance) and a
+    rise 30 min late (the edge of tolerance), the widest over-run a night can have and still be
+    inside the prescription. A rise further out than that is a DEVIATION now, not an over-run.
+    """
     nights = [_n(d, tst=400) for d in range(1, 8)]
     for x in nights:
-        x.out_of_bed = "07:00"                    # +150 min over-run
+        x.lights_out = "22:00"                    # 30 min early
+        x.out_of_bed = "05:30"                    # 22:00 -> 05:30 = 450 vs the 405 window: +45 over-run
     d = evaluate_cycle(nights, 405, RX, ANCHOR)
-    assert d.basis_tib_over_run_min > 100
+    assert d.basis_tib_over_run_min == pytest.approx(45.0)
     assert d.decision == "extend"                 # decided on TST, not on TIB
     assert "over_run" not in d.reason and "tib" not in d.reason.lower()
 

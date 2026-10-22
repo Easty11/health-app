@@ -14,7 +14,7 @@ ANCHOR = "05:45"
 WINDOW = 360
 
 
-def night(d, tst, se, *, bedtime="23:45", lo="23:45", fw="05:45", oob="05:45", naps=0, alc=0):
+def night(d, tst, se, *, bedtime="23:45", lo="23:45", fw="05:45", oob=None, naps=0, alc=0):
     return Night(date=date(2026, 7, d), tst_min=tst, se_pct=se, lights_out=lo, final_wake=fw,
                  out_of_bed=oob, samsung_bedtime=bedtime, naps_min=naps, alcohol_units=alc)
 
