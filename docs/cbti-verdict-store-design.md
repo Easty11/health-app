@@ -1,8 +1,13 @@
 # CBT-I cycle verdict store: design for DECISIONS_LOG #437
 
-**Status: DESIGN ONLY.** Nothing here is built. No migration is written, no code changes. This PR
-holds for operator review; the implementation PRs that follow it hold under Merge disposition (a)
-(a schema migration). Drafted 2026-10-21 against master `cb3a5ba`; the Alembic head was `c4e9a1f27b36` then and is `e5b2c8a91d47` on master as of 2026-10-22 (another session's migration landed in between), which is why the build re-reads it.
+**Status: AMENDED 2026-10-23; STILL DESIGN ONLY.** The design landed as #418 (approved 2026-10-22). On
+2026-10-23 the operator ruled the five open points of section 8 and added two items: a converged
+verdict is offered, not applied (item 6), and a night's prescription is attributed by wake date
+(item 7). The rulings are recorded in `DECISIONS_LOG` #440 and the text below carries them. Nothing is
+built: no migration is written, no code changes, and the implementation PRs hold under Merge
+disposition (a) (a schema migration). Drafted 2026-10-21 against master `cb3a5ba`; the Alembic head
+was `c4e9a1f27b36` then and is `e5b2c8a91d47` on master as of 2026-10-22, which is why the build
+re-reads it.
 
 What #437 rules, in one paragraph: a HOLD verdict, including an insufficiency HOLD, applies without
 acceptance and the next cycle chains from the previous cycle's close; a move (extend or compress)
@@ -10,7 +15,8 @@ needs acceptance, the next cycle starts at the new prescription's `effective_fro
 between the offer and the acceptance are unscored by design; a move offer that is superseded
 without acceptance is recorded as lapsed; the plateau history (`prior_basis_tst`) draws only from
 verdicts that applied (accepted or auto-applied), so a lapsed or superseded cycle contributes
-nothing.
+nothing. **Amended by #440:** a converged HOLD is the one HOLD that does not apply on its own. It is
+offered and needs the witnessed accept, like a move, because convergence ends restriction.
 
 ## 1. What exists today, and what is missing
 
@@ -67,6 +73,7 @@ CREATE TABLE cbti_cycle_verdicts (
     lapsed_on                 DATE,
     unscored_from             DATE,                       -- accepted move only: the nights between the offer and the acceptance
     unscored_to               DATE,
+    surfaced_on               DATE,                       -- set once, by the AM check-in submit after the verdict was shown (section 3B)
     origin                    VARCHAR(10) NOT NULL DEFAULT 'engine',   -- engine | backfill
 
     CONSTRAINT uq_cbti_verdict_cycle   UNIQUE (block_id, cycle_start),
@@ -75,8 +82,11 @@ CREATE TABLE cbti_cycle_verdicts (
     CONSTRAINT ck_cbti_verdict_outcome CHECK (outcome  IN ('no_decision','hold','converged','extend','compress')),
     CONSTRAINT ck_cbti_verdict_origin  CHECK (origin   IN ('engine','backfill')),
     CONSTRAINT ck_cbti_verdict_span    CHECK (cycle_end >= cycle_start),
-    -- a HOLD applies; a move is offered, then accepted or lapsed. Nothing else.
-    CONSTRAINT ck_cbti_verdict_kind    CHECK ((decision = 'hold') = (status = 'applied')),
+    -- a HOLD that is not converged applies on its own; a move or a converged verdict is
+    -- offered, then accepted or lapsed. Nothing else (#440 item 6).
+    CONSTRAINT ck_cbti_verdict_kind    CHECK ((status = 'applied') = (decision = 'hold' AND NOT converged)),
+    -- convergence is a HOLD and carries the converged outcome, and only that outcome
+    CONSTRAINT ck_cbti_verdict_conv    CHECK (converged = (outcome = 'converged') AND (NOT converged OR decision = 'hold')),
     -- only a HOLD can be a non-decision
     CONSTRAINT ck_cbti_verdict_suff    CHECK (sufficient OR (decision = 'hold' AND outcome = 'no_decision')),
     CONSTRAINT ck_cbti_verdict_accept  CHECK (status <> 'accepted' OR minted_prescription_id IS NOT NULL),
@@ -97,41 +107,66 @@ caveats require (autogenerate does not produce them). `JSON` matches the existin
 `basis_ledger` and `excluded_nights`.
 
 **Append-only discipline, same as `cbti_prescriptions`: a model and application invariant, no DB
-trigger.** Everything is frozen at authorship except two transitions of a `status = 'offered'` row:
+trigger.** Everything is frozen at authorship except two transitions of a `status = 'offered'` row and
+one marker:
 
 | Transition | Columns it may set | Trigger |
 |---|---|---|
 | `offered` -> `accepted` | `status`, `minted_prescription_id`, `applied_on`, `unscored_from`, `unscored_to` | the witnessed accept |
 | `offered` -> `lapsed` | `status`, `lapsed_by_id`, `lapsed_on` | the next cycle's verdict is written while this one is still `offered` |
+| an `applied` or `lapsed` row | `surfaced_on`, once | the AM check-in submit that follows the verdict being shown (section 3B) |
 
 ### State machine
 
 | Verdict | Written as | Then |
 |---|---|---|
-| HOLD (adherence, converged, merits HOLD) | `applied`, `applied_on` = the day it was frozen | terminal. Chains to the next cycle. |
-| Insufficiency HOLD | `applied`, `outcome = 'no_decision'`, `sufficient = false` | terminal. Chains to the next cycle. Reads as a finding, never a decision (`outcome_of`, #214, #218). |
+| HOLD that is not converged (adherence, merits HOLD) | `applied`, `applied_on` = the day it was frozen | terminal. Chains to the next cycle. Shown at the next check-in (section 3B). |
+| Insufficiency HOLD | `applied`, `outcome = 'no_decision'`, `sufficient = false` | terminal. Chains to the next cycle. Reads as a finding, never a decision (`outcome_of`, #214, #218). Shown at the next check-in. |
+| Converged HOLD (`converged`, `outcome = 'converged'`) | `offered` (#440 item 6) | accepted by the witnessed act, or lapsed when the next cycle's verdict is written. |
 | Move (extend or compress) | `offered` | accepted by the witnessed act, or lapsed when the next cycle's verdict is written. |
 
 ## 3. How each #437 requirement is met
 
-**(a) HOLDs apply without acceptance, and the next cycle chains from the previous close.** A HOLD is
-written `applied`. The next cycle's `cycle_start` is the previous `cycle_end + 1`, and
-`chains_from_id` names the previous verdict. The accept path no longer sees HOLDs, so #218's 409 for
-an insufficiency HOLD goes away: there is nothing to refuse.
+**(a) HOLDs apply without acceptance, and the next cycle chains from the previous close.** A HOLD
+other than a converged one (item 6, (d) below) is written `applied`. The next cycle's `cycle_start` is the previous `cycle_end + 1`, and
+`chains_from_id` names the previous verdict. The accept path no longer sees applied HOLDs, so #218's
+409 for an insufficiency HOLD goes away: there is nothing to refuse.
 
 **(b) A move needs acceptance, and the next cycle starts at the new `effective_from`.** The move is
 `offered`. `POST .../accept` takes the verdict id, checks it is the block's one `offered` row, mints
-the successor prescription exactly as today (`effective_from` = the accept day), and sets the
-verdict `accepted` with `minted_prescription_id`. The next cycle starts at that `effective_from`.
-The nights from the offered cycle's `cycle_end + 1` to the day before the accept day are the
-accepted-as-designed unscored nights; `unscored_from` and `unscored_to` record them so a surface
-can say so, and they belong to no cycle of the new prescription.
+the successor prescription (`effective_from` = the accept day), and sets the verdict `accepted` with
+`minted_prescription_id`. The nights between the offer and the first night the new window governs
+are the accepted-as-designed unscored nights; `unscored_from` and `unscored_to` record them so a
+surface can say so, and they belong to no cycle of the new prescription. **Where the new
+prescription's first cycle starts is OPEN (section 3A, Q236):** as built today it is the accept day,
+and the proposal there is the day after.
 
 **(c) A superseded move offer is recorded as lapsed.** When the materializer writes a new verdict
 for a block that still has an `offered` row, it sets the old row `lapsed` with `lapsed_by_id` = the
 new verdict and `lapsed_on` = the day. The unique partial index guarantees there is never more than
 one pending offer. A new move becomes the new `offered` row; a new HOLD is `applied` and the old
 offer still lapses, because the cycle that would have replaced it has closed.
+
+**(d) A converged verdict is offered, not applied (item 6).** The plateau HOLD does not apply on its
+own: it is written `offered` and needs the witnessed accept, like a move, because convergence ends
+restriction (#118's reason for the witnessed act). If the next cycle closes without an accept it
+lapses, and a lapsed converged verdict contributes nothing to the plateau history. Checked on master
+`88c4c5b` before ruling:
+
+- The engine turns a plateau into a HOLD with the window unchanged and `converged = True`
+  (`engine.py`, the converged branch); `outcome_of` labels it `converged`.
+- **Nothing in the application closes a CBT-I block.** No code path sets `cbti_blocks.closed_on`
+  (block rows come from the import and open scripts only), and the engine never emits `close`
+  (#165 made the titration perpetual). A converged outcome therefore ends no restriction today.
+- The accept path treats a converged HOLD as an acceptable decision (`sufficient` is true) and mints
+  a `hold` prescription with the window unchanged and its basis; that restarts the cycle clock.
+- The replay script only prints "engine FIRST converged". The frontend never reads the `outcome`
+  field, so a converged HOLD shows as "Hold the window" with the engine's reason text.
+
+So today a converged outcome is acted on by exactly one thing: an optional accept that mints an
+unchanged-window prescription. **What accepting a converged verdict should write is not ruled
+(Q237).** Recommended: keep today's behaviour (a `hold` prescription minted with its basis), and no
+block close, which is a separate decision.
 
 **Plateau history draws only from applied verdicts.** `prior_basis_tst` becomes, in `cycle_start`
 order:
@@ -142,10 +177,68 @@ WHERE block_id = :bid AND status IN ('applied','accepted') AND basis_tst_min IS 
 ORDER BY cycle_start;
 ```
 
-A lapsed cycle, an offered one that has not been decided, and an adherence HOLD that recorded no
-basis (#436: a basis only with at least 3 valid nights) contribute nothing. `replay()` stops
+A lapsed cycle, an offered one that has not been decided (a converged verdict included until it is
+accepted), and an adherence HOLD that recorded no basis (#436: a basis only with at least 3 valid
+nights) contribute nothing. Rx 21's basis 406 stays in the history as persisted (#323 T2); it is a
+merits HOLD, not a converged one, so item 6 does not touch it. `replay()` stops
 accumulating `prior_tst` from every replayed cycle on the live path; the offline replay script
 keeps its in-memory chain, labelled as a diagnostic.
+
+## 3A. Which prescription a night belongs to (item 7, OPEN: Q236)
+
+**Finding: a night is attributed by its WAKE date, and the night whose wake date is the accept day
+belongs to the newly minted prescription.** Evidence:
+
+- Accepting sets the successor's `effective_from` to the accept day and the prior row's
+  `effective_to` to the day before (`checkin_v2.py:1105-1131`).
+- Every reader attributes a night to the latest prescription whose `effective_from <= wake date`:
+  `_cbti_context` (`checkin_v2.py:421-426`) and the MCP diary's `_rx_in_force`
+  (`mcp_server.py:444-456`). The replay starts a prescription's first cycle at its `effective_from`
+  (`replay.py`, `cycle_start = rx.effective_from`).
+- `daily_records` stores no prescription id, so the join is made at read time and flips the moment
+  the successor is minted.
+- Live data: the diary read-out on 2026-10-22 shows night 2026-10-21 with rx 21, and rx 21 was
+  accepted on 2026-10-21. That night was lived under rx 20: its lights-out was the evening of 10-20,
+  before the acceptance.
+
+**Why it matters only for a move.** Rx 21 was a HOLD, so the window did not change and the
+attribution was harmless. A move changes the window, and a new window can only govern the evening
+after the accept, which is the night with wake date accept day + 1. Counting the accept day's night in
+the new prescription's first cycle scores a night run under the old window against the new one.
+
+**Proposal (not ruled).** For a MOVE, and for an accepted converged verdict that mints a
+prescription, the new prescription's first cycle starts at the accept day + 1, and the unscored range
+runs from the offered cycle's `cycle_end + 1` to the accept day **inclusive**. That is at least one
+unscored night even when the accept is made on the first eligible day.
+
+`effective_from` is not redefined; it stays the date of the act. Three ways to carry the new start:
+
+- **A (recommended): an additive column `cbti_prescriptions.first_night DATE NULL`**, the wake date of
+  the first night the window governs. NULL means `effective_from`, which is every existing row, so
+  no history is restated. At accept, `first_night` = accept day + 1 and the prior row's
+  `effective_to` = the accept day, so the old window governs the accept day's night. Readers
+  attribute by `COALESCE(first_night, effective_from)`: `_cbti_context` (two queries), the MCP
+  `_rx_in_force`, and the replay's prescription load. It is one nullable column in its own
+  migration, separate from the verdict table.
+- **B: a code rule** (a move's first night is `effective_from + 1`). It cannot tell a post-cutover
+  move from rx 15 to 17, which were accepted moves attributed the old way, so it either restates
+  them or needs a cutover date. Rejected.
+- **C: redefine `effective_from`** as the first governed night. Rejected: it loses the date of the
+  act and changes the meaning of every existing row.
+
+An edge to rule on: the rule is by calendar wake date. An accept made after the evening's lights-out
+still names the night that began that evening as the first governed night, which is then already
+partly run.
+
+## 3B. Surface requirement (item 5)
+
+An auto-applied HOLD is shown at the next check-in and is never silent. Wording is deferred to the
+cutover PR; the requirement is built into the store now. Mechanism: `surfaced_on`, set once for each
+`applied` or `lapsed` verdict by the AM check-in submit that follows its being shown. The AM prefill
+(a GET, which does not write) lists every `applied` verdict with `surfaced_on IS NULL`, and the AM
+submit response returns the verdicts it has just materialized, so a HOLD written at a submit is shown
+in that response and again on the next prefill until the following submit marks it. A skipped
+check-in leaves it unmarked, so it is shown again. `surfaced_on` is the third permitted update.
 
 ## 4. The write path
 
@@ -156,7 +249,7 @@ means two concurrent callers write each cycle once, and the loser re-reads.
 
 ```
 cursor   = (last stored verdict).cycle_end + 1       # applied or lapsed: chain
-           or live_prescription.effective_from        # first cycle, or just after an acceptance
+           or the live prescription's first governed night   # first cycle, or just after an acceptance (3A)
 for cycle [cursor .. cursor + CYCLE_NIGHTS - 1] while today > cycle_end:
     nights = logged nights in the cycle
     if no nights: cursor = cycle_end + 1; continue    # nothing to adjudicate; dates still tile
@@ -165,22 +258,22 @@ for cycle [cursor .. cursor + CYCLE_NIGHTS - 1] while today > cycle_end:
     cursor = cycle_end + 1
 ```
 
-**Freeze point.** A cycle is written once `today > cycle_end`, the day after its last night, so a
-diary entry made by the end of that last day still counts. A later correction (the 2026-10-09 row,
-corrected on 2026-10-21, is the example) does not reopen a frozen verdict; that is the ledger rule
-(#323 T2), now applied to HOLDs. An explicit re-adjudication path is out of scope here.
+**Freeze point (ruled).** A cycle is written once `today > cycle_end`, the day after its last night,
+so a diary entry made by the end of that last day still counts. A later correction (the 2026-10-09
+row, corrected on 2026-10-21, is the example) never reopens a frozen verdict, and there is no
+re-adjudication path (ruled); that is the ledger rule (#323 T2), now applied to HOLDs.
 
-**When it runs: the AM check-in submit, and the offer and accept calls.** Not a schedule and not a
-background sweep (#118: nothing mints on a schedule or from a data signal). It is reached only
-through the operator's own check-in and the offer read. Open point 1 below asks whether
-`GET /cbti/evaluation` may write; the alternative is that the GET computes the not-yet-written head
-in memory and only the check-in submit and the accept write.
+**When it runs (ruled): the AM check-in submit and the accept call only.** Not a schedule and not a
+background sweep (#118: nothing mints on a schedule or from a data signal), and **a GET never
+writes.** `GET /cbti/evaluation` and the AM prefill compute the not-yet-written head in memory. The
+cost is that a day with no check-in leaves the head unwritten until the next submit.
 
 ## 5. Read path and API
 
-- `GET /checkin-v2/cbti/evaluation` returns the pending `offered` verdict (or none), the latest
-  applied verdict, and the recent lapsed ones. `eligible` stops meaning "a cycle is acceptable" and
-  starts meaning "a move is waiting".
+- `GET /checkin-v2/cbti/evaluation` returns the pending `offered` verdict (a move or a converged one,
+  or none), the latest applied verdict, and the recent lapsed ones, computing the unwritten head in
+  memory (a GET does not write). `eligible` stops meaning "a cycle is acceptable" and starts meaning
+  "an offer is waiting".
 - `POST /checkin-v2/cbti/evaluation/accept` takes `{verdict_id}`. It no longer recomputes: the
   verdict is frozen, and the client cannot post a decision the engine did not write because the id
   names a stored row. The idempotency 409 survives; the insufficiency 409 does not.
@@ -266,35 +359,46 @@ entry; it is the basis of an accepted verdict and the persisted record.
 - **A second table for lapsed offers.** Rejected: one lifecycle table with a status column is
   simpler to constrain and to read.
 
-## 8. Open points for the operator
+## 8. Rulings and what is still open
 
-1. **Does `GET /cbti/evaluation` write?** Recommended: no. The GET computes the not-yet-written
-   head in memory; the AM check-in submit and the accept call materialize. The cost is that a day
-   with no check-in leaves the head unwritten until the next one.
-2. **Freeze point.** Proposed: the day after `cycle_end`. A shorter point (the moment the last
-   night's diary is saved) freezes sooner but misses a same-day correction.
-3. **Post-freeze corrections.** None reopen a verdict. If you want an explicit re-adjudication
-   (operator-triggered, recorded as a new verdict that supersedes), that is a further decision.
-4. **Rx 21's basis 406 enters the history.** It carries the `training_constrained` exclusion of
-   10-17 under the retired rule and is kept as persisted (#323 T2).
-5. **Surface.** The offer card, a "held, chained" line for auto-applied HOLDs, and a lapsed list
-   are frontend work in the cutover PR; wording is not designed here.
+Ruled by the operator on 2026-10-23 and recorded in `DECISIONS_LOG` #440:
+
+| # | Point | Ruling |
+|---|---|---|
+| 1 | Does `GET /cbti/evaluation` write? | No. Materialize on the AM check-in submit and the accept call only. |
+| 2 | Freeze point | The day after `cycle_end`. |
+| 3 | Post-freeze corrections | Never reopen a verdict; no re-adjudication path. |
+| 4 | Rx 21's basis 406 | Stays in the plateau history as persisted (#323 T2), contingent on item 6. It is a merits HOLD, so item 6 does not touch it. |
+| 5 | Surface | Wording deferred to the cutover PR. Requirement now: an auto-applied HOLD is shown on the next check-in, never silent (section 3B). |
+| 6 | Converged verdicts | Not auto-applied: written `offered`, needs the witnessed accept, like a move (section 3(d)). |
+
+Still open:
+
+1. **Which prescription a night belongs to, for a move (item 7, Q236).** Section 3A proposes that a
+   move's first cycle starts the day after the accept and that the unscored range includes the accept
+   day, carried by a new nullable `first_night` column (option A).
+2. **What accepting a converged verdict writes (Q237).** Recommended: a `hold` prescription minted
+   with its basis, as today, and no block close.
+3. **Surface wording**, in the cutover PR.
 
 ## 9. Build plan
 
 Each step is its own PR; the first two hold for review.
 
-1. **Migration, model, SCHEMA.md `050`** (this table, empty). No behaviour change. Holds (schema).
+1. **Migration, model, SCHEMA.md `050`** (this table, empty, with `surfaced_on` and the amended
+   `ck_cbti_verdict_kind` and `ck_cbti_verdict_conv`). No behaviour change. Holds (schema). The
+   `first_night` column of section 3A, if ruled, is a separate migration after this one.
 2. **Backfill script**, run by the operator after step 1 deploys: dry-run first, read the plan,
    then `--apply`. Holds until the dry-run is read.
 3. **Materializer in shadow**: writes verdicts from the AM check-in and the accept call, while the
    offer, accept and plateau still use today's logic. A test pins that the stored verdicts equal
    what `replay()` computes for the same nights, so the cutover is a read swap, not a new rule.
 4. **Cutover**: the offer, accept and plateau read the store; #218's insufficiency 409 is removed;
-   the frontend renders the chain. Tests: HOLD chains with no gap; an accepted move restarts at
-   `effective_from` and records the unscored nights; a superseded move lapses and the plateau
-   ignores it; a late diary correction does not move a frozen verdict; two concurrent
-   materializations write each cycle once.
+   the frontend renders the chain. Tests: a HOLD chains with no gap; a converged verdict is written
+   `offered` and lapses without an accept; an accepted move starts its successor's cycle where 3A
+   rules and records the unscored nights; a superseded move lapses and the plateau ignores it; an
+   applied HOLD is shown until a submit marks `surfaced_on`; a GET writes nothing; a late diary
+   correction does not move a frozen verdict; two concurrent materializations write each cycle once.
 
 **Rollback.** Steps 1 and 2 are inert and `downgrade()` drops the table. Step 3 can be switched off
 without data loss (the table is only written). Step 4 is the only behavioural change and reverts by
