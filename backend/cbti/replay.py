@@ -41,8 +41,6 @@ from sqlalchemy import text
 import models
 from cbti.engine import CYCLE_NIGHTS, MAX_MOVE_MIN, Night, evaluate_cycle, outcome_of
 from database import SessionLocal
-from reads.aerobic_reads import hevy_mirror_session_ids
-from sport_classes import NON_TRAINING_SPORTS_LOWER
 
 # The ONLY permitted Samsung read. A second query path around this allowlist is
 # the thing #108's isolation exists to prevent.
@@ -51,31 +49,6 @@ _SAMSUNG_SQL = text(
     "WHERE user_id = :uid AND context = 'passive_overnight' "
     "AND bedtime IS NOT NULL AND captured_at BETWEEN :d0 AND :d1"
 )
-
-# One training_end per session_date, DETERMINISTIC (#311): MAX(stop_time), never SQL row
-# order — post-#309 a day can hold DIFFERENT bouts, so the old order-dependent
-# {date: stop_time} fold (last-row-wins) could pick a morning walk over the evening session.
-# The latest session on the day is the one that constrains the night.
-# Non-training sessions never constrain a night (#322 S4, closing Q162): a row whose
-# `sport_name` is in `sport_classes.NON_TRAINING_SPORTS` (case-insensitive exact, ALL sources)
-# is dropped; every other session counts, whatever its source — including generic names and a
-# NULL/blank sport_name (hence the explicit `IS NULL OR`, since `NULL NOT IN (...)` is NULL).
-# The #311 interim `source <> 'health_connect'` exclusion is lifted. The IN-list is expanded
-# from the shared constant as bind params — never a second list here.
-_NON_TRAINING_PARAMS = {f"nt{i}": s for i, s in enumerate(sorted(NON_TRAINING_SPORTS_LOWER))}
-# One row per session (id, session_date, stop_time); the per-day MAX is folded in `load_nights`, AFTER
-# the Hevy mirrors are dropped (A3.2): a Health Connect copy of a Hevy bout (Strava / Garmin) is the
-# gym session again, and this query bypasses the read-door, so an unfiltered copy could set a
-# night's `training_end` that the Hevy bout itself never did and flip it to `training_constrained`.
-_TRAINING_SQL = text(
-    "SELECT id, session_date, stop_time FROM aerobic_sessions "
-    "WHERE user_id = :uid AND stop_time IS NOT NULL "
-    "AND (sport_name IS NULL OR LOWER(sport_name) NOT IN ("
-    + ", ".join(f":{k}" for k in _NON_TRAINING_PARAMS)
-    + ")) "
-    "AND session_date BETWEEN :d0 AND :d1"
-)
-
 
 _NIGHTS_SQL = text(
     "SELECT date, diary_tst_min, diary_se_pct, lights_out, out_of_bed, final_wake, "
@@ -153,17 +126,9 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
     # the divergence phase 1 spent a brief undoing.
     rows = db.execute(_NIGHTS_SQL, {"uid": user_id, "d0": d0, "d1": d1}).all()
     samsung = {_as_date(r[0]): r[1] for r in db.execute(_SAMSUNG_SQL, {"uid": user_id, "d0": d0, "d1": d1})}
-    # a session on the calendar day BEFORE the wake date constrains that night
-    t0 = d0 - timedelta(days=1)
-    mirrors = hevy_mirror_session_ids(user_id, db, since=t0)       # column-light: safe before a migration deploys
-    training: dict[date, object] = {}
-    for sid, sdate, stop in db.execute(
-            _TRAINING_SQL, {"uid": user_id, "d0": t0, "d1": d1, **_NON_TRAINING_PARAMS}):
-        if sid in mirrors:
-            continue                                   # the Hevy bout again, not a second session (A3.2)
-        day = _as_date(sdate)
-        if day not in training or stop > training[day]:
-            training[day] = stop                       # the latest session of the day constrains the night
+    # Training is NOT read here (#436): a session neither constrains nor excuses a night. The
+    # `aerobic_sessions` join, the Hevy-mirror drop and the non-training sport set that fed
+    # `training_end` (#311, #322 S4, #398) went with the `training_constrained` predicate.
     # likewise a nap on the calendar day BEFORE the wake date is the one that discharged
     # this night's sleep pressure — Night(W) reads the nap recorded on W-1 (Q45 -> #219).
     # This is the read `models.DailyRecord.naps_min` has documented as the contract since
@@ -180,7 +145,6 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
             naps_min=naps.get(d - timedelta(days=1)), alcohol_units=alc,
             alcohol_finish_time=alc_finish,
             samsung_bedtime=samsung.get(d),
-            training_end=training.get(d - timedelta(days=1)),
         ))
     return nights
 
@@ -196,6 +160,11 @@ def replay(nights: list[Night], prescriptions: list[LedgerRx],
     a cycle can never straddle a prescription change. `prior_basis_tst` accumulates
     across ALL cycles (TST-plateau is a trajectory property, indifferent to window
     nudges); `nights_since_effective_from` resets at each prescription (#124).
+
+    FORWARD-ONLY, cut by EVALUATION (#436): the cycles of the LIVE prescription (`effective_to`
+    is None) are adjudicated under #436 for all of their nights; the cycles of an earlier
+    prescription are history and keep the legacy gate semantics (`deviation_rules=False`), so
+    re-walking the block never rewrites the plateau history.
     """
     by_date = {n.date: n for n in nights}
     rxs = sorted(prescriptions, key=lambda r: r.effective_from)
@@ -225,7 +194,8 @@ def replay(nights: list[Night], prescriptions: list[LedgerRx],
             # nights logged since THIS prescription took effect (settling period, #124)
             nse = sum(1 for dd in by_date if rx.effective_from <= dd <= cycle_end)
             d = evaluate_cycle(wnights, rx.window_minutes, rx.lights_out, rx.wake_anchor,
-                               prior_basis_tst=prior_tst, nights_since_effective_from=nse)
+                               prior_basis_tst=prior_tst, nights_since_effective_from=nse,
+                               deviation_rules=rx.effective_to is None)
             series.append({
                 "cycle": idx,
                 "from": cycle_start, "to": cycle_end,
@@ -383,9 +353,7 @@ def main() -> None:
         print(f"block {block.id}: {block.opened_on} .. {block.closed_on} block-anchor {block.wake_anchor}")
         print(f"nights loaded: {len(nights)}")
         n_with_samsung = sum(1 for n in nights if n.samsung_bedtime)
-        n_with_training = sum(1 for n in nights if n.training_end)
         print(f"  nights with a passive_overnight bedtime: {n_with_samsung}")
-        print(f"  nights with a constraining session end : {n_with_training}")
         print(f"ledger prescriptions: {len(rxs)}")
         for rx in rxs:
             print(f"  rx {rx.effective_from}..{rx.effective_to or '(live)'} "

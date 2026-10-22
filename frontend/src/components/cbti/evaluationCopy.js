@@ -117,7 +117,8 @@ const REASON_LABEL = {
   incomplete: 'Incomplete data',
   nap: 'Nap over threshold',
   travel_or_match: 'Travel or match',
-  training_constrained: 'Late training',
+  deviation: 'Missed the prescription',
+  training_constrained: 'Late training',   // legacy: persisted ledgers only, never emitted (#436)
   unknown: 'Unclassified',
 }
 export function reasonLabel(reason) {

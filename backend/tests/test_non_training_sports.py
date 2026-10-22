@@ -1,6 +1,6 @@
 """#322 S1 — ONE static non-training set, imported by every consumer; no second list.
 
-Fails if either consumer (`reads/srpe_reads.py`, the counted-session door the psychological read sums; `cbti/replay.py`) stops importing
+Fails if the consumer (`reads/srpe_reads.py`, the counted-session door the psychological read sums) stops importing
 `sport_classes`, or if any backend module other than `sport_classes.py` declares its own list —
 detected as a literal containing two or more of the set's members (case-insensitive) in
 non-test source. The metabolic transform must NOT import it (#322 S2: no sport exclusion for
@@ -13,7 +13,7 @@ from pathlib import Path
 from sport_classes import NON_TRAINING_SPORTS, is_non_training
 
 BACKEND = Path(__file__).resolve().parents[1]
-CONSUMERS = ("reads/srpe_reads.py", "cbti/replay.py")
+CONSUMERS = ("reads/srpe_reads.py",)   # cbti/replay.py left the set with the training join (#436)
 _IMPORT_RE = re.compile(r"^from sport_classes import\b", re.M)
 
 # Files that legitimately quote several members without declaring the SET: an id -> display-name

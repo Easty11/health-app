@@ -1,12 +1,12 @@
 """NON_TRAINING_SPORTS — the ONE static non-training exclusion set (#322, S1).
 
-Sessions whose raw `aerobic_sessions.sport_name` is in this set are NOT training for the two
-consumers that ask "was this a training session?":
+Sessions whose raw `aerobic_sessions.sport_name` is in this set are NOT training for the one
+consumer that asks "was this a training session?":
   • `reads.srpe_reads.counted_sessions` (the bout set `psychological_reads._duration_min_by_day` sums) — contributes no felt-load minutes and no
     session tally (Q160 → #322 S3: `session_rpe` is one whole-day RPE, so non-training minutes
-    would inflate the day's felt load);
-  • `cbti.replay.load_nights` (`_TRAINING_SQL`) — never sets a night's `training_end`
-    (Q162 → #322 S4).
+    would inflate the day's felt load).
+`cbti.replay.load_nights` was the second consumer (Q162 → #322 S4) until #436 retired the
+`training_constrained` predicate: CBT-I no longer reads a session at all.
 Every other session counts, including generic names ("Fitness", "Other Workout", blank, NULL).
 
 Matching is the Q164 rule: EXACT on the raw device string, case-insensitive, no trimming, no
