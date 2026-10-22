@@ -33,7 +33,6 @@ from datetime import date, timedelta
 import pytest
 from fastapi import HTTPException
 
-import cbti.replay as replay_mod
 import models
 from cbti.engine import (
     CYCLE_NIGHTS, MIN_VALID_NIGHTS, PLATEAU_TOL_MIN, SE_FLOOR_PCT, evaluate_cycle,
@@ -47,12 +46,6 @@ from routers.checkin_v2 import accept_cbti_evaluation, get_cbti_evaluation
 # halves of #118 — a change made for the offer suite could then silently reshape what the
 # accept suite believes it is exercising.
 
-
-@pytest.fixture(autouse=True)
-def _rules_date_pinned(monkeypatch):
-    """These tests date their nights from today, so they would cross DEVIATION_RULES_FROM as the
-    clock moves and change ruleset under the assertions. Pin it so they always run under #436."""
-    monkeypatch.setattr(replay_mod, "DEVIATION_RULES_FROM", date(2000, 1, 1))
 
 
 def _user(db, email):

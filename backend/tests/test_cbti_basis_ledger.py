@@ -23,18 +23,9 @@ from cbti.engine import (
 )
 from routers.checkin_v2 import accept_cbti_evaluation, get_cbti_evaluation
 
-import pytest
-import cbti.replay as replay_mod
-
 RX = "22:30"
 ANCHOR = "05:00"
 WINDOW = 390
-
-@pytest.fixture(autouse=True)
-def _rules_date_pinned(monkeypatch):
-    """These tests date their nights from today, so they would cross DEVIATION_RULES_FROM as the
-    clock moves and change ruleset under the assertions. Pin it so they always run under #436."""
-    monkeypatch.setattr(replay_mod, "DEVIATION_RULES_FROM", date(2000, 1, 1))
 
 
 def _n(d, *, tst=420, se=90.0, lights_out=RX, wake="05:00", naps=0,

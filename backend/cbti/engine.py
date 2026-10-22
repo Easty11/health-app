@@ -102,6 +102,12 @@ LATE_RISE_TOL_MIN = 30
 # below the 1083 a 12-hour clock-entry slip produced (2026-10-09, since corrected). The slip in
 # the other direction gives TST < 0 or TST > TIB, which the guard also refuses.
 MAX_PLAUSIBLE_TST_MIN = 720
+# The same 12 h, applied to the time in bed. `minutes_between` wraps a clock pair whose end is
+# EARLIER than its start into the next day, which is right for a night (22:30 -> 05:30) and wrong
+# for an inverted pair: out_of_bed 21:00 against lights_out 22:05 would read as 22 h 55 min, and
+# a TST of 400 fits inside that, so the TST tests alone pass it. No real night is anywhere near
+# this (the longest TIB in 124 nights is 610), so a span past 12 h means the clocks are inverted.
+MAX_PLAUSIBLE_TIB_MIN = 720
 # 3 -> 2, rescaling the numerator to a 4-night denominator: 3-of-7 was very roughly a
 # majority-of-half, and 2-of-4 keeps the gate at a comparable strictness rather than
 # letting it slacken by accident when the cycle shortened. CHOSEN, not derived.
@@ -178,18 +184,17 @@ AdherenceSource = Literal["samsung", "diary", "none"]
 # before sufficiency; training is no longer a night-level predicate. FORWARD-ONLY: persisted
 # ledgers carry the ruleset they were produced under and are never restated (#323 T2).
 RULESET_VERSION = "cbti-basis/2026-10-21.1"
-# The ruleset a cycle that starts BEFORE `DEVIATION_RULES_FROM` is still adjudicated under
-# (the #323 gate semantics: no deviation class, no plausibility guard, adherence counted among
-# the valid nights after sufficiency), minus the retired training predicate.
+# The ruleset a HISTORICAL cycle is still reconstructed under (the #323 gate semantics: no
+# deviation class, no plateau-affecting plausibility guard, adherence counted among the valid
+# nights after sufficiency), minus the retired training predicate.
 LEGACY_RULESET_VERSION = "cbti-basis/2026-09-23.1"
-# FORWARD-ONLY made concrete (#436). `replay()` re-adjudicates the whole block on every offer
-# and feeds each cycle's basis into the plateau history (`prior_basis_tst`). Run over the
-# pre-build cycles the new rules would turn nearly all of them into adherence HOLDs (rx 11 to
-# 17 recorded a 05:00 anchor while the operator ran to 05:45, so a late rise reads on almost
-# every night) and rewrite that history. A cycle that starts on or after this date is
-# adjudicated under #436; an earlier one keeps the legacy gate semantics. 2026-10-21 is the
-# `effective_from` of rx 21, the first prescription whose cycles are all adjudicated under it.
-DEVIATION_RULES_FROM = date(2026, 10, 21)
+# FORWARD-ONLY cuts by EVALUATION, not by night date (#436, ruled 2026-10-21): every cycle of the
+# LIVE prescription (effective_to is None) is adjudicated under #436 for ALL of its nights,
+# whatever their dates, from the first evaluation after this ships. A cycle of an earlier
+# prescription is history: its verdict was produced and, if accepted, persisted before; the
+# replay only re-walks it to rebuild the plateau history (`prior_basis_tst`), and re-judging it
+# under the new rules would rewrite that history (rx 11 to 17 recorded a 05:00 anchor while the
+# operator ran to 05:45, so a late rise reads on almost every night). `replay()` makes the cut.
 
 # ── per-night ledger (closed enums) ───────────────────────────────────────────
 # The ledger row's three-state status and its reason code. BOTH ARE CLOSED SETS: a
@@ -418,10 +423,12 @@ def _implausible(night: Night) -> bool:
     TIB or TST? Runs on recall values only (lights_out -> out_of_bed for TIB).
 
     True when the TST is negative or above `MAX_PLAUSIBLE_TST_MIN`, when the TIB is not
-    positive, or when the TST exceeds the TIB. `_freeze_diary` already refuses a night
-    whose TST exceeds its TIB at write time; this is the same test at read time, plus the
-    ceiling that a clock slip such as 10:05 for 22:05 gets under (TST 1083 in a 1165 min
-    TIB is inside the window and so passes the frozen check).
+    positive (equal clocks) or above `MAX_PLAUSIBLE_TIB_MIN` (an inverted pair, which the
+    midnight wrap turns into a near-24 h span), or when the TST exceeds the TIB.
+    `_freeze_diary` already refuses a night whose TST exceeds its TIB at write time; this is
+    the same test at read time, plus the ceilings that a clock slip such as 10:05 for 22:05
+    gets under (TST 1083 in a 1165 min TIB is inside the window and passes the frozen check).
+    A pair swapped into a span of 12 h or less cannot be told from a real night.
     """
     tst = night.tst_min
     if tst is None:
@@ -429,7 +436,7 @@ def _implausible(night: Night) -> bool:
     if tst < 0 or tst > MAX_PLAUSIBLE_TST_MIN:
         return True
     tib = tib_minutes(clock_to_minutes(night.lights_out), clock_to_minutes(night.out_of_bed))
-    return tib is not None and (tib <= 0 or tst > tib)
+    return tib is not None and (tib <= 0 or tib > MAX_PLAUSIBLE_TIB_MIN or tst > tib)
 
 
 def classify_night(night: Night, prescribed_lights_out: str,
@@ -442,8 +449,8 @@ def classify_night(night: Night, prescribed_lights_out: str,
     excused). A night excluded for any reason contributes to neither the TST mean nor the
     adherence count; a `deviation` additionally counts toward ADHERENCE_FAIL_N.
 
-    `deviation_rules=False` is the legacy path for a cycle that starts before
-    `DEVIATION_RULES_FROM`: no plausibility guard, no deviation class (a miss stays a valid
+    `deviation_rules=False` is the legacy path for a cycle of an earlier (superseded)
+    prescription, rebuilt only as history: no plausibility guard, no deviation class (a miss stays a valid
     night whose `adherent` is False, counted by the legacy Gate 2).
     """
     # incomplete data cannot support a basis.
@@ -704,7 +711,7 @@ def evaluate_cycle(
     mean_se = round(statistics.mean(v.night.se_pct for v in valid), 2)
     base.update(basis_tst_min=mean_tst, basis_se_pct=mean_se)
 
-    # ── GATE 2 (LEGACY, cycles before DEVIATION_RULES_FROM only): adherence among the valid
+    # ── GATE 2 (LEGACY, historical cycles only): adherence among the valid
     # nights, after sufficiency. A window that is not being run cannot be extended on the
     # strength of the sleep it produced. Under #436 this is Gate A above and never runs.
     if not deviation_rules:

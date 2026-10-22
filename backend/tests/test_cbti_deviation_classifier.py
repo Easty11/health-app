@@ -19,6 +19,7 @@ from cbti.engine import (
     ADHERENCE_TOL_MIN,
     LATE_RISE_TOL_MIN,
     LEGACY_RULESET_VERSION,
+    MAX_PLAUSIBLE_TIB_MIN,
     MAX_PLAUSIBLE_TST_MIN,
     RULESET_VERSION,
     Night,
@@ -136,9 +137,9 @@ def test_the_corrected_1009_row_is_a_valid_adherent_night():
 
 def test_the_tst_ceiling_is_a_boundary_not_a_range():
     assert MAX_PLAUSIBLE_TST_MIN == 720
-    # no wake anchor passed, so the long TIB is not also read as a late rise
-    assert classify_night(clean(1, tst=720, oob="09:50"), RX).valid is True            # TIB 722, TST 720
-    assert classify_night(clean(1, tst=721, oob="09:50"), RX).reason == "incomplete"
+    # no wake anchor passed, so the long TIB is not also read as a late rise; TIB 720 is the cap
+    assert classify_night(clean(1, tst=720, oob="09:48"), RX).valid is True            # TIB 720, TST 720
+    assert classify_night(clean(1, tst=721, oob="09:48"), RX).reason == "incomplete"   # one over the TST ceiling
 
 
 def test_a_tst_above_its_own_time_in_bed_is_incomplete():
@@ -199,31 +200,70 @@ def test_an_adherence_hold_with_no_basis_adds_nothing_to_the_plateau_history():
     nights = [clean(d, tst=430, month=10) for d in range(1, 5)]                    # cycle 1: clean
     nights += [clean(5, lo="23:30"), clean(6, lo="23:30"), clean(7), clean(8)]     # cycle 2: adherence hold
     rxs = [LedgerRx(d0, None, RX, ANCHOR, WINDOW, "adopt")]
-    series = replay(nights, rxs, date(2026, 10, 8), rules_from=d0)
+    series = replay(nights, rxs, date(2026, 10, 8))
     assert series[0]["tst"] == 430
     assert series[1]["decision"] == "hold" and series[1]["reason"].startswith("adherence")
     assert series[1]["tst"] is None and series[1]["ruleset_version"] == RULESET_VERSION
 
 
-def test_the_rules_date_is_rx_21s_effective_from():
-    from cbti.engine import DEVIATION_RULES_FROM
-    assert DEVIATION_RULES_FROM == date(2026, 10, 21)
+def test_the_cut_is_the_evaluation_not_the_night_date():
+    """#436, ruled 2026-10-21: every cycle of the LIVE prescription is adjudicated under the new
+    rules for ALL of its nights, whatever their dates. The nights here are dated 2026-08, long
+    before any 'ruleset date', and a miss still leaves the basis."""
+    nights = [clean(d, tst=360, month=8) for d in (1, 2)] + [clean(3, lo="23:30", month=8), clean(4, lo="23:30", month=8)]
+    live = [LedgerRx(date(2026, 8, 1), None, RX, ANCHOR, WINDOW, "adopt")]       # effective_to None = live
+    s = replay(nights, live, date(2026, 8, 4))[0]
+    assert s["reason"].startswith("adherence") and s["excluded"] == {"2026-08-03": "deviation", "2026-08-04": "deviation"}
+    assert s["ruleset_version"] == RULESET_VERSION and s["n"] == 2
 
 
-def test_a_cycle_before_the_rules_date_keeps_the_legacy_gate_so_history_is_not_rewritten():
-    """FORWARD-ONLY (#436): the same nights, replayed with the default rules date (2026-10-21),
-    are adjudicated by the legacy gate semantics. The two late nights stay VALID nights whose
-    miss is counted after sufficiency, the basis is recorded, and the cycle is stamped with the
-    legacy ruleset. Replaying the whole block never rewrites the plateau history."""
-    d0 = date(2026, 10, 1)
-    nights = [clean(d, tst=430) for d in range(1, 5)]
-    nights += [clean(5, lo="23:30"), clean(6, lo="23:30"), clean(7), clean(8)]
-    series = replay(nights, [LedgerRx(d0, None, RX, ANCHOR, WINDOW, "adopt")], date(2026, 10, 8))
-    assert series[1]["decision"] == "hold" and series[1]["reason"].startswith("adherence")
-    assert "valid nights outside" in series[1]["reason"]          # the legacy wording
-    assert series[1]["n"] == 4 and series[1]["excluded"] == {}     # nothing left the basis
-    assert series[1]["tst"] is not None
-    assert series[1]["ruleset_version"] == LEGACY_RULESET_VERSION
+def test_a_superseded_prescriptions_cycles_keep_the_legacy_gate_so_history_is_not_rewritten():
+    """The same four nights under a prescription that has been SUPERSEDED (effective_to set) are
+    history. The replay re-walks them only to rebuild the plateau history, under the legacy gate:
+    the two late nights stay VALID nights whose miss is counted after sufficiency, the basis is
+    recorded, and the cycle is stamped with the legacy ruleset."""
+    nights = [clean(d, tst=430, month=8) for d in (1, 2)] + [clean(3, lo="23:30", month=8), clean(4, lo="23:30", month=8)]
+    past = LedgerRx(date(2026, 8, 1), date(2026, 8, 4), RX, ANCHOR, WINDOW, "adopt")
+    live = LedgerRx(date(2026, 8, 5), None, RX, ANCHOR, WINDOW, "adopt")
+    s = replay(nights, [past, live], date(2026, 8, 4))[0]
+    assert s["reason"].startswith("adherence") and "valid nights outside" in s["reason"]    # the legacy wording
+    assert s["n"] == 4 and s["excluded"] == {} and s["tst"] is not None
+    assert s["ruleset_version"] == LEGACY_RULESET_VERSION
+
+
+# ── inverted and wrapped clocks (ruled 2026-10-21) ────────────────────────────
+
+@pytest.mark.parametrize("lo, oob", [
+    ("22:05", "21:00"),      # out of bed an hour BEFORE lights-out: the wrap reads it as 22 h 55 min
+    ("01:10", "00:30"),      # the same inversion across the midnight line (23 h 20 min)
+    ("05:30", "22:05"),      # a morning and an evening swapped (16 h 35 min)
+    ("10:05", "05:30"),      # the stored 2026-10-09 clocks (19 h 25 min)
+    ("22:00", "22:00"),      # equal clocks: TIB 0, never a positive span
+])
+def test_an_inverted_or_degenerate_clock_pair_is_incomplete_never_a_positive_span(lo, oob):
+    n = Night(date=date(2026, 10, 22), tst_min=400, se_pct=80.0, lights_out=lo, out_of_bed=oob,
+              final_wake=oob, naps_min=0, alcohol_units=0)
+    for v in (classify_night(n, RX, ANCHOR), classify_night(n, RX)):
+        assert v.valid is False and v.reason == "incomplete"
+
+
+def test_an_inverted_pair_is_not_a_deviation_and_does_not_count_toward_the_gate():
+    bad = Night(date=date(2026, 10, 1), tst_min=400, se_pct=80.0, lights_out="22:05", out_of_bed="21:00",
+                final_wake="21:00", naps_min=0, alcohol_units=0)
+    d = evaluate_cycle([bad, clean(2), clean(3), real(4, 331, 90.68, "22:30", "04:35", "04:31")], WINDOW, RX, ANCHOR)
+    assert d.excluded_nights["2026-10-01"] == "incomplete" and not d.reason.startswith("adherence")
+
+
+def test_a_real_midnight_crossing_is_not_an_inversion():
+    assert MAX_PLAUSIBLE_TIB_MIN == 720
+    assert cls(clean(1, oob="05:30")).valid                                           # 7 h 42 min, crosses midnight
+    assert classify_night(clean(1, tst=300, lo="23:50", oob="06:10"), "23:50").valid  # a post-midnight-ish pair
+    long_ok = Night(date=date(2026, 10, 1), tst_min=400, se_pct=80.0, lights_out="21:48", out_of_bed="09:48",
+                    final_wake="09:48", naps_min=0, alcohol_units=0)                  # TIB exactly 720
+    assert classify_night(long_ok, RX).valid
+    too_long = Night(date=date(2026, 10, 1), tst_min=400, se_pct=80.0, lights_out="21:48", out_of_bed="09:49",
+                     final_wake="09:49", naps_min=0, alcohol_units=0)                 # TIB 721
+    assert classify_night(too_long, RX).reason == "incomplete"
 
 
 # ── training is not read, the legacy reason still reads ───────────────────────

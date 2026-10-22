@@ -39,9 +39,7 @@ from datetime import date, timedelta
 from sqlalchemy import text
 
 import models
-from cbti.engine import (
-    CYCLE_NIGHTS, DEVIATION_RULES_FROM, MAX_MOVE_MIN, Night, evaluate_cycle, outcome_of,
-)
+from cbti.engine import CYCLE_NIGHTS, MAX_MOVE_MIN, Night, evaluate_cycle, outcome_of
 from database import SessionLocal
 
 # The ONLY permitted Samsung read. A second query path around this allowlist is
@@ -152,7 +150,7 @@ def load_nights(db, user_id: int, d0: date, d1: date) -> list[Night]:
 
 
 def replay(nights: list[Night], prescriptions: list[LedgerRx],
-           last_night: date, *, rules_from: date | None = None) -> list[dict]:
+           last_night: date) -> list[dict]:
     """Walk the block by LEDGER PRESCRIPTION (Q49), adjudicating each 7-night cycle
     against the prescription actually in force over those nights.
 
@@ -163,13 +161,11 @@ def replay(nights: list[Night], prescriptions: list[LedgerRx],
     across ALL cycles (TST-plateau is a trajectory property, indifferent to window
     nudges); `nights_since_effective_from` resets at each prescription (#124).
 
-    FORWARD-ONLY (#436): a cycle that starts before `rules_from` is adjudicated under the
-    legacy gate semantics (`deviation_rules=False`), so re-walking the block never rewrites
-    the history the plateau check reads. `rules_from=None` reads `DEVIATION_RULES_FROM` at call
-    time.
+    FORWARD-ONLY, cut by EVALUATION (#436): the cycles of the LIVE prescription (`effective_to`
+    is None) are adjudicated under #436 for all of their nights; the cycles of an earlier
+    prescription are history and keep the legacy gate semantics (`deviation_rules=False`), so
+    re-walking the block never rewrites the plateau history.
     """
-    if rules_from is None:
-        rules_from = DEVIATION_RULES_FROM
     by_date = {n.date: n for n in nights}
     rxs = sorted(prescriptions, key=lambda r: r.effective_from)
     series: list[dict] = []
@@ -199,7 +195,7 @@ def replay(nights: list[Night], prescriptions: list[LedgerRx],
             nse = sum(1 for dd in by_date if rx.effective_from <= dd <= cycle_end)
             d = evaluate_cycle(wnights, rx.window_minutes, rx.lights_out, rx.wake_anchor,
                                prior_basis_tst=prior_tst, nights_since_effective_from=nse,
-                               deviation_rules=cycle_start >= rules_from)
+                               deviation_rules=rx.effective_to is None)
             series.append({
                 "cycle": idx,
                 "from": cycle_start, "to": cycle_end,
