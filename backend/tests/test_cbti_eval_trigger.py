@@ -33,6 +33,8 @@ from routers.checkin_v2 import (
 )
 
 
+
+
 def _user(db, email="trig@x.io"):
     u = models.User(email=email, hashed_password="x")
     db.add(u)
@@ -69,7 +71,7 @@ def _nights(db, uid, start, n, *, lo="22:30", tst=420, se=90.0, wake="05:00", sk
             continue
         db.add(models.DailyRecord(
             user_id=uid, date=d, diary_tst_min=tst, diary_se_pct=se,
-            lights_out=lo, out_of_bed=wake, final_wake=wake, naps_min=0,
+            lights_out=lo, out_of_bed=None, final_wake=wake, naps_min=0,
             alcohol_units=0,
         ))
     db.commit()

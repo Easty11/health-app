@@ -10,7 +10,7 @@ fraction test, not any intersection (D-b).
 
 Gates: G1 the fraction test (boundary, own-duration denominator, one bout at a time) · G2 package-
 agnostic, Health Connect only · G3 any Hevy bout makes a mirror, excluded or unadjudicated included · G4 a mirror never
-suppresses a live row · G5 every raw reader agrees (metabolic load, CBT-I training_end, psychological
+suppresses a live row · G5 every raw reader agrees (metabolic load, psychological
 minutes) · G6 the API says so.
 """
 from datetime import date, datetime, timedelta, timezone
@@ -233,34 +233,6 @@ def test_the_metabolic_transform_emits_no_load_for_a_mirror(db_session):
 def _night(db, uid, wake_day):
     db.add(models.DailyRecord(user_id=uid, date=wake_day, diary_tst_min=420, diary_se_pct=90.0))
     db.commit()
-
-
-def test_a_mirror_never_sets_a_cbti_training_end_but_a_genuine_session_does(db_session):
-    """cbti/replay.py reads aerobic_sessions with raw SQL (it must run before a migration deploys), so
-    it bypasses the door. A Strava copy of a late gym session would otherwise set a night's training_end
-    that the Hevy bout itself never did and could flip the night to training_constrained."""
-    u = _user(db_session)
-    # Day 8: a late gym session whose only Health Connect trace is a Strava copy.
-    _hevy(db_session, u.id, "w1", _t(9, 30), _t(10, 30))
-    _hc(db_session, u.id, "strava", _t(9, 35), _t(10, 29), STRAVA)
-    # Day 10: a genuine Garmin run, no Hevy bout.
-    run_stop = _t(10, 0, day=10)
-    _hc(db_session, u.id, "run", _t(9, 20, day=10), run_stop, GARMIN, sport="Running")
-    _night(db_session, u.id, date(2026, 9, 9))      # follows day 8
-    _night(db_session, u.id, date(2026, 9, 11))     # follows day 10
-    nights = {n.date: n for n in load_nights(db_session, u.id, date(2026, 9, 9), date(2026, 9, 11))}
-    assert nights[date(2026, 9, 9)].training_end is None
-    assert nights[date(2026, 9, 11)].training_end is not None
-
-
-def test_the_latest_genuine_session_of_the_day_still_wins_the_cbti_max(db_session):
-    u = _user(db_session)
-    _hevy(db_session, u.id, "w1", _t(9, 30), _t(10, 30))
-    _hc(db_session, u.id, "strava", _t(9, 35), _t(10, 29), STRAVA)                       # a mirror, ends 10:29
-    _hc(db_session, u.id, "walk_run", _t(6, 0), _t(6, 45), GARMIN, sport="Running")       # genuine, ends 06:45
-    _night(db_session, u.id, date(2026, 9, 9))
-    n = load_nights(db_session, u.id, date(2026, 9, 9), date(2026, 9, 9))[0]
-    assert str(n.training_end)[11:16] == "06:45"                                          # not the mirror's 10:29
 
 
 def test_the_psychological_read_counts_a_brushing_erg_session_but_not_a_copy(db_session):

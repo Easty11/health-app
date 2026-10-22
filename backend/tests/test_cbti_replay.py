@@ -13,7 +13,7 @@ from cbti.engine import CYCLE_NIGHTS, Night
 from cbti.replay import LedgerRx, replay
 
 
-def night(d, *, lo, tst=420, se=90.0, wake="05:00", oob="05:00", naps=0, alc=0):
+def night(d, *, lo, tst=420, se=90.0, wake="05:00", oob=None, naps=0, alc=0):   # oob unset: the #436 guard refuses TST above TIB
     return Night(date=d, tst_min=tst, se_pct=se, lights_out=lo, out_of_bed=oob,
                  final_wake=wake, naps_min=naps, alcohol_units=alc)
 
