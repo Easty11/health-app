@@ -2,7 +2,7 @@
 
 **Status: DESIGN ONLY.** Nothing here is built. No migration is written, no code changes. This PR
 holds for operator review; the implementation PRs that follow it hold under Merge disposition (a)
-(a schema migration). Drafted 2026-10-21 against master `cb3a5ba` (Alembic head `c4e9a1f27b36`).
+(a schema migration). Drafted 2026-10-21 against master `cb3a5ba`; the Alembic head was `c4e9a1f27b36` then and is `e5b2c8a91d47` on master as of 2026-10-22 (another session's migration landed in between), which is why the build re-reads it.
 
 What #437 rules, in one paragraph: a HOLD verdict, including an insufficiency HOLD, applies without
 acceptance and the next cycle chains from the previous cycle's close; a move (extend or compress)
@@ -189,7 +189,7 @@ in memory and only the check-in submit and the accept write.
 
 ## 6. Migration shape
 
-One additive Alembic revision, hand-written, `down_revision = 'c4e9a1f27b36'` (re-read the head at
+One additive Alembic revision, hand-written, `down_revision = 'e5b2c8a91d47'` (the head on 2026-10-22; re-read the head at
 build time and re-chain if it has moved).
 
 - `upgrade()`: `op.create_table('cbti_cycle_verdicts', ...)` with every named CHECK, the unique
