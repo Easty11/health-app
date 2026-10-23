@@ -517,7 +517,7 @@ def test_shipped_reference_v1_retags():
     assert "REJECTED calf" in tags["Calf Extension (Machine)"]["note"]
     assert "Plantarflexion strength, no v0 axis." in tags["Standing Calf Raise (Machine)"]["note"]
     assert "Frontal-hip abductor strength" in tags["Hip Abduction (Machine)"]["note"]
-    assert len(proposal["no_pattern"]) == 17 and len(proposal["tags"]) == 77   # 66 + 11, 16 + 1 (tag pass)
+    assert len(proposal["no_pattern"]) == 17 and len(proposal["tags"]) == 85   # 66 + 11 + 8 (tag pass, part 2), 16 + 1
     assert len(proposal["sided_variants"]) == 8
     # Every key the reference uses resolves (the seeder refuses an orphan, fail-closed).
     used = {r["key"] for e in proposal["tags"] for r in e["regions"]}
@@ -535,7 +535,9 @@ def test_shipped_reference_capacity_split(db_session):
         primary = [r["key"] for r in e["regions"] if r["role"] == "primary"]
         caps.setdefault(taxonomy.by_key(primary[0]).capacity.value, []).append(e["title"])
     assert len(caps["stability"]) == 8
-    assert len(caps["strength"]) == 18      # 15 (#334, #338) + Copenhagen Hip Lift, Suitcase Deadlift,
+    assert len(caps["endurance"]) == 2      # the two sleds (tag pass part 2, gait_load_carriage)
+    assert len(caps["strength"]) == 21      # 18 + Wide Chest Press, Pronated Grip Pulldown, Half-Kneeling (R)
+    #                                         18 = 15 (#334, #338) + Copenhagen Hip Lift, Suitcase Deadlift,
     #                                         Half-Kneeling Press (the 20 Oct 2026 tag pass, customs by id)
     assert caps["mobility"] == ["Deficit KB RDL"]
 
@@ -863,7 +865,10 @@ def test_the_tag_pass_entries_are_tagged_as_ruled_carry_a_dated_note_and_declare
     for title, keys in _TAG_PASS_TITLES.items():
         e = tags[title]
         assert tuple(r["key"] for r in e["regions"]) == keys, title
-        assert "side" not in e, title                      # two blocks of one title (or no ruling) has no side
+        if title == "Half-Kneeling Dumbbell Press (L)":
+            assert e["side"] == "left", title              # declared by the operator in part 2 (20 Oct adjudication)
+        else:
+            assert "side" not in e, title                  # two blocks of one title (or no ruling) has no side
         assert e["note"].startswith("v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20)"), title
     # Suitcase Deadlift: hinge is primary and anti-lateral-flexion the secondary.
     assert [r["role"] for r in tags["Suitcase Deadlift"]["regions"]] == ["primary", "secondary"]
@@ -886,7 +891,8 @@ def test_tibialis_raise_is_no_pattern_and_is_never_ankle_df():
     assert all(e.get("template_id") != tib["template_id"] for e in ref["tags"])
     assert not any(r["key"] == "ankle_df" for e in ref["tags"]
                    if e["title"] in _TAG_PASS_TITLES for r in e["regions"])      # the #76 category error
-    assert not any("side" in e for e in ref["tags"] if e["title"] in _TAG_PASS_TITLES)
+    assert not any("side" in e for e in ref["tags"]
+                   if e["title"] in _TAG_PASS_TITLES and e["title"] != "Half-Kneeling Dumbbell Press (L)")
 
 
 def test_the_tag_pass_lines_are_pure_ascii_and_the_reference_still_parses():
@@ -898,26 +904,76 @@ def test_the_tag_pass_lines_are_pure_ascii_and_the_reference_still_parses():
     seeder._validate_fail_closed(seeder.load_proposal())
 
 
-def test_the_shipped_reference_declares_side_on_exactly_twelve_entries():
+# Tag pass part 2 (operator adjudications of 20 Oct 2026, written 23 Oct): the seven the first pass held, the
+# Half-Kneeling sides, and the R twin found in the catalogue. Eight new tags; one existing entry gains a side.
+_PART2 = {   # title -> (regions, how it is keyed, side)
+    "Iso-lateral Wide Chest Press": (("horizontal_push",), "1fe04727-cd01-4c66-92ac-86555e511bc8", None),
+    "Iso-Lateral Chest Press (Machine)": (("horizontal_push",), None, None),
+    "iso-lateral front lat pull down (Pronated Grip)": (("vertical_pull",), "dcdcb2ec-6941-472a-a042-1f46b7127fe1", None),
+    "Sled Pull Weighted": (("gait_load_carriage",), "740e17da-3185-44cf-8d68-e5d855c42eb0", None),
+    "Sled Push Weighted": (("gait_load_carriage",), "a6c0df8b-27a1-4d9f-b542-119ddd37c454", None),
+    "Swimming": (("aerobic_base",), None, None),
+    "Single Leg Hip Thrust": (("hinge",), None, None),
+    "Half-Kneeling Dumbbell Press (R)": (("vertical_push",), "e60dd3d0-58e0-48b9-9959-ca8b3e133be5", "right"),
+}
+
+
+def test_tag_pass_part_2_entries_are_tagged_as_adjudicated_with_dated_notes():
+    ref = seeder.load_proposal()
+    tags = {e["title"]: e for e in ref["tags"]}
+    for title, (keys, tid, side) in _PART2.items():
+        e = tags[title]
+        assert tuple(r["key"] for r in e["regions"]) == keys, title
+        assert all(r["role"] == "primary" for r in e["regions"]), title
+        assert e.get("template_id") == tid, title                  # customs by id, catalogue templates by title
+        assert e.get("side") == side, title
+        assert e["note"].startswith("v1 (Q27 tag pass part 2, operator adjudication 2026-10-20, written 2026-10-23)"), title
+    # The Half-Kneeling pair: L gained its side, R is new, both vertical_push primary.
+    hk_l, hk_r = tags["Half-Kneeling Dumbbell Press (L)"], tags["Half-Kneeling Dumbbell Press (R)"]
+    assert (hk_l["side"], hk_r["side"]) == ("left", "right")
+    assert hk_l["template_id"] == "dcf9b6f6-4c0a-4861-bce0-7b467642fa46"
+    assert [r["key"] for r in hk_l["regions"]] == [r["key"] for r in hk_r["regions"]] == ["vertical_push"]
+    assert hk_l["note"].startswith("v1 (Q27 route (i) rep-ceiling tag pass, 2026-10-20)")     # the first pass's prefix survives
+    # Rulings that stay as landed or were kept distinct.
+    assert [r["key"] for r in tags["Iso-Lateral High Row (Machine)"]["regions"]] == ["horizontal_pull"]
+    variant_ids = {v["template_id"] for v in ref["sided_variants"]}
+    assert {e.get("template_id") for e in ref["tags"]}.isdisjoint(variant_ids)                # nothing claimed twice
+    assert "Single Leg Hip Thrust" not in {v["title"] for v in ref["sided_variants"]}         # the L/R machine variants are others
+    assert len(ref["no_pattern"]) == 17 and len(ref["sided_variants"]) == 8
+    seeder._validate_fail_closed(ref)
+
+
+def test_tag_pass_part_2_lines_are_pure_ascii():
+    from pathlib import Path
+    raw = Path(seeder._PROPOSAL_PATH).read_bytes()
+    marked = [l for l in raw.splitlines() if b"tag pass part 2" in l]
+    assert len(marked) == 9 and all(l.isascii() for l in marked)   # 8 new entries + the Half-Kneeling (L) note that cites part 2
+    for l in raw.splitlines():
+        if b"Half-Kneeling Dumbbell Press (L)" in l:
+            assert l.isascii()
+
+
+def test_the_shipped_reference_declares_side_on_exactly_fourteen_entries():
     import json
     import re
     from pathlib import Path
     path = Path(seeder._PROPOSAL_PATH)
     raw = path.read_text(encoding="utf-8")
     ref = json.loads(raw)
-    assert (len(ref["tags"]), len(ref["no_pattern"]), len(ref["sided_variants"])) == (77, 17, 8)
+    assert (len(ref["tags"]), len(ref["no_pattern"]), len(ref["sided_variants"])) == (85, 17, 8)
     sided = [e for key in ("tags", "no_pattern", "sided_variants") for e in ref[key] if "side" in e]
-    assert len(sided) == 12
+    assert len(sided) == 14
     assert sum("side" in e for e in ref["sided_variants"]) == 8       # all eight variants
     assert {e["title"] for e in sided if e not in ref["sided_variants"]} == {
-        "Kneeling Leg Curl L", "Kneeling Leg Curl R", "Copenhagen Plank L", "Copenhagen Plank R"}
+        "Kneeling Leg Curl L", "Kneeling Leg Curl R", "Copenhagen Plank L", "Copenhagen Plank R",
+        "Half-Kneeling Dumbbell Press (L)", "Half-Kneeling Dumbbell Press (R)"}
     # The declared value is the operator's mapping; this only documents that it agrees with the
     # titles - the seeder reads the field, never the title.
     for e in sided:
-        assert e["side"] == ("left" if e["title"].endswith(" L") else "right"), e["title"]
-    # Stripping the twelve fragments gives back an entry-for-entry identical reference (nothing else moved).
+        assert e["side"] == ("left" if e["title"].endswith((" L", "(L)")) else "right"), e["title"]
+    # Stripping the fourteen fragments gives back an entry-for-entry identical reference (nothing else moved).
     stripped = re.sub(r'"side": "(?:left|right)", ', "", raw)
-    assert stripped.count('"side"') == 0 and raw.count('"side"') == 12
+    assert stripped.count('"side"') == 0 and raw.count('"side"') == 14
     plain = json.loads(stripped)
     for key in ("tags", "no_pattern", "sided_variants"):
         assert [{k: v for k, v in e.items() if k != "side"} for e in ref[key]] == plain[key]
