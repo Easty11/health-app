@@ -14633,3 +14633,25 @@ Supersedes the use of the latest complete cycle as the only offer (`complete[-1]
 **Do not revisit unless.** The operator wants the refresh forced on every call (set it there, and accept the cost above), the catalogue grows past what a single text reply can carry (add a limit then, not before), or tag state gains a fourth value in `classify_coverage` (the tool takes it from there).
 
 ---
+
+### #440. The verdict store: a GET never writes, the freeze point and corrections are ruled, an auto-applied HOLD is shown and never silent, a converged verdict is offered and not applied; the first governed night of a move is proposed
+
+**Decision.** RATIFIED 2026-10-23 (operator rulings in chat) for items 1 to 6; item 7 is PROPOSED and open (Q236). Nothing is built.
+
+1. **A GET never writes.** The verdict store is materialized on the AM check-in submit and the accept call only. The evaluation GET and the AM prefill compute the not-yet-written head in memory.
+2. **Freeze point:** the day after `cycle_end`.
+3. **Post-freeze corrections never reopen a verdict.** There is no re-adjudication path.
+4. **Rx 21's basis 406 stays in the plateau history as persisted** (#323 T2), contingent on item 6. It is a merits HOLD, not a converged one, so item 6 does not touch it.
+5. **Surface:** wording is deferred to the cutover PR. The requirement now is that an auto-applied HOLD is shown on the next check-in and is never silent.
+6. **A converged verdict is NOT auto-applied.** It is written `offered` and requires the witnessed accept, like a move, because convergence ends restriction (#118's rationale). This amends #437(a): a HOLD applies without acceptance **except a converged HOLD**. The design's state machine, `ck_cbti_verdict_kind` (`(status = 'applied') = (decision = 'hold' AND NOT converged)`) and the plateau rule (a converged verdict enters the history only once accepted) change with it. What accepting one writes is Q237.
+7. **PROPOSED, not ruled (Q236): the first governed night of a move.** A night is attributed to a prescription by wake date, so the night whose wake date is the accept day belongs to the newly minted prescription, although it was lived under the old window. For a move the proposal is that the new prescription's first cycle starts at the accept day + 1, and the unscored range runs from the offered cycle's `cycle_end + 1` to the accept day inclusive; `effective_from` keeps its meaning (the date of the act) and a new nullable `cbti_prescriptions.first_night` carries the start (NULL means `effective_from`, so no history is restated).
+
+**Rationale.** A GET that writes would make a read the trigger of a ledger record, against #118's rule that nothing is recorded except through the operator's own act. A converged HOLD is the one HOLD whose meaning is that restriction ends, which is exactly what #118 reserves for a witnessed act; the other HOLDs change nothing the operator runs. Item 7 is about what the data already does: the night of 2026-10-21 reads as rx 21, accepted that same day, though it was lived under rx 20. Harmless for a HOLD, and wrong for a move, whose new window cannot govern a night that began before the accept.
+
+**Status.** RATIFIED for items 1 to 6, 2026-10-23. Item 7 PROPOSED; its ruling is Q236. The design is `docs/cbti-verdict-store-design.md`, amended in the same commit.
+
+**How you know.** Item 6, read on master `88c4c5b`: the engine turns a plateau into a HOLD with the window unchanged and `converged = True` (`engine.py`); no code path sets `cbti_blocks.closed_on` (block rows come from the import and open scripts only) and the engine never emits `close`; the accept path treats a converged HOLD as acceptable (`sufficient` is true) and mints a `hold` prescription; the replay script only prints "engine FIRST converged"; the frontend never reads the `outcome` field. Item 7: accept sets `effective_from` to the accept day and the prior `effective_to` to the day before (`checkin_v2.py:1105-1131`); `_cbti_context` (`checkin_v2.py:421-426`) and the MCP `_rx_in_force` (`mcp_server.py:444-456`) attribute a night to the latest prescription with `effective_from <= wake date`; the replay starts a cycle at `effective_from`; `daily_records` stores no prescription id; the 2026-10-22 diary read-out shows night 2026-10-21 under rx 21.
+
+**Do not revisit unless.** A re-adjudication path is wanted (item 3), a block-close path is built (then converged verdicts may carry more than a prescription), or item 7 is ruled differently.
+
+---
