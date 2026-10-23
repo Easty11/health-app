@@ -3,7 +3,7 @@
 **Status: AMENDED 2026-10-23; STILL DESIGN ONLY.** The design landed as #418 (approved 2026-10-22). On
 2026-10-23 the operator ruled the five open points of section 8 and added two items: a converged
 verdict is offered, not applied (item 6), and a night's prescription is attributed by wake date
-(item 7). The rulings are recorded in `DECISIONS_LOG` #440 and the text below carries them. Nothing is
+(item 7). The rulings are recorded in `DECISIONS_LOG` #440, and Q236 and Q237, ruled the same day, in #441; the text below carries them. Nothing is
 built: no migration is written, no code changes, and the implementation PRs hold under Merge
 disposition (a) (a schema migration). Drafted 2026-10-21 against master `cb3a5ba`; the Alembic head
 was `c4e9a1f27b36` then and is `e5b2c8a91d47` on master as of 2026-10-22, which is why the build
@@ -69,6 +69,7 @@ CREATE TABLE cbti_cycle_verdicts (
     applied_on                DATE,                       -- the day a HOLD applied, or a move was accepted
     minted_prescription_id    INT REFERENCES cbti_prescriptions(id),
                                                           -- accepted move: the row it minted (backfill: also a historical HOLD that minted one)
+    accepted_at               TIMESTAMPTZ,                -- the acceptance instant; first_night is derived from it (section 3A)
     lapsed_by_id              INT REFERENCES cbti_cycle_verdicts(id) ON DELETE SET NULL,
     lapsed_on                 DATE,
     unscored_from             DATE,                       -- accepted move only: the nights between the offer and the acceptance
@@ -112,7 +113,7 @@ one marker:
 
 | Transition | Columns it may set | Trigger |
 |---|---|---|
-| `offered` -> `accepted` | `status`, `minted_prescription_id`, `applied_on`, `unscored_from`, `unscored_to` | the witnessed accept |
+| `offered` -> `accepted` | `status`, `minted_prescription_id`, `applied_on`, `accepted_at`, `unscored_from`, `unscored_to` | the witnessed accept |
 | `offered` -> `lapsed` | `status`, `lapsed_by_id`, `lapsed_on` | the next cycle's verdict is written while this one is still `offered` |
 | an `applied` or `lapsed` row | `surfaced_on`, once | the AM check-in submit that follows the verdict being shown (section 3B) |
 
@@ -138,8 +139,8 @@ the successor prescription (`effective_from` = the accept day), and sets the ver
 `minted_prescription_id`. The nights between the offer and the first night the new window governs
 are the accepted-as-designed unscored nights; `unscored_from` and `unscored_to` record them so a
 surface can say so, and they belong to no cycle of the new prescription. **Where the new
-prescription's first cycle starts is OPEN (section 3A, Q236):** as built today it is the accept day,
-and the proposal there is the day after.
+prescription's first cycle starts is ruled in section 3A (Q236, #441):** the first night whose
+lights-out falls after the acceptance, carried by `first_night`.
 
 **(c) A superseded move offer is recorded as lapsed.** When the materializer writes a new verdict
 for a block that still has an `offered` row, it sets the old row `lapsed` with `lapsed_by_id` = the
@@ -164,9 +165,9 @@ lapses, and a lapsed converged verdict contributes nothing to the plateau histor
   field, so a converged HOLD shows as "Hold the window" with the engine's reason text.
 
 So today a converged outcome is acted on by exactly one thing: an optional accept that mints an
-unchanged-window prescription. **What accepting a converged verdict should write is not ruled
-(Q237).** Recommended: keep today's behaviour (a `hold` prescription minted with its basis), and no
-block close, which is a separate decision.
+unchanged-window prescription. **Ruled (Q237, #441):** accepting a converged
+verdict mints a `hold` prescription (window unchanged, basis recorded, cycle clock restarted), as
+today. Block close remains an operator act, undefined in code, and is a separate future decision.
 
 **Plateau history draws only from applied verdicts.** `prior_basis_tst` becomes, in `cycle_start`
 order:
@@ -184,7 +185,7 @@ merits HOLD, not a converged one, so item 6 does not touch it. `replay()` stops
 accumulating `prior_tst` from every replayed cycle on the live path; the offline replay script
 keeps its in-memory chain, labelled as a diagnostic.
 
-## 3A. Which prescription a night belongs to (item 7, OPEN: Q236)
+## 3A. Which prescription a night belongs to (item 7, RULED: Q236, #441)
 
 **Finding: a night is attributed by its WAKE date, and the night whose wake date is the accept day
 belongs to the newly minted prescription.** Evidence:
@@ -202,33 +203,35 @@ belongs to the newly minted prescription.** Evidence:
   before the acceptance.
 
 **Why it matters only for a move.** Rx 21 was a HOLD, so the window did not change and the
-attribution was harmless. A move changes the window, and a new window can only govern the evening
-after the accept, which is the night with wake date accept day + 1. Counting the accept day's night in
-the new prescription's first cycle scores a night run under the old window against the new one.
+attribution was harmless. A move changes the window, and a new window can only govern a night whose
+lights-out falls after the acceptance. Counting an earlier night in the new prescription's first
+cycle scores a night run under the old window against the new one.
 
-**Proposal (not ruled).** For a MOVE, and for an accepted converged verdict that mints a
-prescription, the new prescription's first cycle starts at the accept day + 1, and the unscored range
-runs from the offered cycle's `cycle_end + 1` to the accept day **inclusive**. That is at least one
-unscored night even when the accept is made on the first eligible day.
+**Ruling (2026-10-23, #441): option A.** `effective_from` is not redefined; it stays the date of the
+act. An additive nullable column `cbti_prescriptions.first_night DATE NULL` carries the start, and
+every reader attributes a night by `COALESCE(first_night, effective_from)`. NULL means
+`effective_from`, which is every existing row, so no history is restated.
 
-`effective_from` is not redefined; it stays the date of the act. Three ways to carry the new start:
+`first_night` is **the wake date of the first night whose lights-out falls after the acceptance
+timestamp.** An accept on day D before that evening's prescribed lights-out gives D + 1; an accept
+after it gives D + 2. The prescribed lights-out is the new prescription's (the window the night
+would run under), and one at or after midnight falls on the following calendar date. The accept
+stores the instant on the verdict (`accepted_at`) so the derivation can be reproduced.
 
-- **A (recommended): an additive column `cbti_prescriptions.first_night DATE NULL`**, the wake date of
-  the first night the window governs. NULL means `effective_from`, which is every existing row, so
-  no history is restated. At accept, `first_night` = accept day + 1 and the prior row's
-  `effective_to` = the accept day, so the old window governs the accept day's night. Readers
-  attribute by `COALESCE(first_night, effective_from)`: `_cbti_context` (two queries), the MCP
-  `_rx_in_force`, and the replay's prescription load. It is one nullable column in its own
-  migration, separate from the verdict table.
-- **B: a code rule** (a move's first night is `effective_from + 1`). It cannot tell a post-cutover
-  move from rx 15 to 17, which were accepted moves attributed the old way, so it either restates
-  them or needs a cutover date. Rejected.
-- **C: redefine `effective_from`** as the first governed night. Rejected: it loses the date of the
-  act and changes the meaning of every existing row.
+- The prior row's `effective_to` becomes `first_night - 1`: it governs every night before.
+- The successor's first cycle starts at `first_night`.
+- The unscored range runs from the offered cycle's `cycle_end + 1` to `first_night - 1`. That is one
+  night (the accept day's own) when the accept is made on the first eligible day before the
+  evening's lights-out.
+- An accepted converged verdict mints a prescription (Q237), so the same rule applies to it.
+- Readers that change: `_cbti_context` (two queries), the MCP `_rx_in_force`, and the replay's
+  prescription load (`LedgerRx.effective_from` takes the coalesced value). It is one nullable column
+  in its own migration, built after the verdict table, with the reader changes in the same PR.
 
-An edge to rule on: the rule is by calendar wake date. An accept made after the evening's lights-out
-still names the night that began that evening as the first governed night, which is then already
-partly run.
+Rejected: a code rule (a move's first night is `effective_from + 1`), because it cannot tell a
+post-cutover move from rx 15 to 17, which were accepted moves attributed the old way, so it either
+restates them or needs a cutover date; and redefining `effective_from`, because it loses the date of
+the act and changes the meaning of every existing row.
 
 ## 3B. Surface requirement (item 5)
 
@@ -371,23 +374,21 @@ Ruled by the operator on 2026-10-23 and recorded in `DECISIONS_LOG` #440:
 | 4 | Rx 21's basis 406 | Stays in the plateau history as persisted (#323 T2), contingent on item 6. It is a merits HOLD, so item 6 does not touch it. |
 | 5 | Surface | Wording deferred to the cutover PR. Requirement now: an auto-applied HOLD is shown on the next check-in, never silent (section 3B). |
 | 6 | Converged verdicts | Not auto-applied: written `offered`, needs the witnessed accept, like a move (section 3(d)). |
+| 7 | Which prescription a night belongs to, for a move (Q236, #441) | Option A: `first_night` read as `COALESCE(first_night, effective_from)`; the first night whose lights-out falls after the acceptance (D + 1 before that evening's lights-out, D + 2 after); unscored range `cycle_end + 1` to `first_night - 1` (section 3A). |
+| 8 | What accepting a converged verdict writes (Q237, #441) | A `hold` prescription (window unchanged, basis recorded, clock restarted). Block close stays an operator act, undefined in code, a separate future decision. |
 
 Still open:
 
-1. **Which prescription a night belongs to, for a move (item 7, Q236).** Section 3A proposes that a
-   move's first cycle starts the day after the accept and that the unscored range includes the accept
-   day, carried by a new nullable `first_night` column (option A).
-2. **What accepting a converged verdict writes (Q237).** Recommended: a `hold` prescription minted
-   with its basis, as today, and no block close.
-3. **Surface wording**, in the cutover PR.
+1. **Surface wording**, in the cutover PR.
 
 ## 9. Build plan
 
 Each step is its own PR; the first two hold for review.
 
 1. **Migration, model, SCHEMA.md `050`** (this table, empty, with `surfaced_on` and the amended
-   `ck_cbti_verdict_kind` and `ck_cbti_verdict_conv`). No behaviour change. Holds (schema). The
-   `first_night` column of section 3A, if ruled, is a separate migration after this one.
+   `ck_cbti_verdict_kind` and `ck_cbti_verdict_conv`) and `accepted_at`. No behaviour change. Holds
+   (schema). The `first_night` column of section 3A (ruled) is a separate migration after this one,
+   with the reader changes in the same PR.
 2. **Backfill script**, run by the operator after step 1 deploys: dry-run first, read the plan,
    then `--apply`. Holds until the dry-run is read.
 3. **Materializer in shadow**: writes verdicts from the AM check-in and the accept call, while the
