@@ -170,7 +170,10 @@ def test_the_revision_is_the_single_head_and_chains_from_c4e9a1f27b36():
     cfg = Config(str(_BACKEND / "alembic.ini"))
     cfg.set_main_option("script_location", str(_BACKEND / "migrations"))
     script = ScriptDirectory.from_config(cfg)
-    assert script.get_heads() == ["e5b2c8a91d47"], "migration history branched, or another head landed"
+    heads = script.get_heads()
+    assert len(heads) == 1, "migration history branched"
+    # a later migration may sit after this one: it must still be in the chain the single head reaches
+    assert "e5b2c8a91d47" in {r.revision for r in script.walk_revisions(base="base", head=heads[0])}
     assert script.get_revision("e5b2c8a91d47").down_revision == "c4e9a1f27b36"
 
 

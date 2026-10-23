@@ -48,6 +48,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 047 — session_rpe_observations  FK to users (CASCADE) — source-neutral, insert-only, capture-timed per-activity RPE (raw + declared scale + CR-10, UTC bout window, source-specific feel, provenance); unique (user, source, source_activity_ref, captured_at); Garmin rows copied verbatim from `garmin_activity_selfevals` (read-only from here); HELD for operator release
 048 — spo2_nights + spo2_samples + breathing_disruption_intervals  FK to users (CASCADE) and to spo2_nights (CASCADE) — raw Garmin overnight SpO2 capture: a nightly parent (unique user, night, source) with sleep window, reading_count and gap_count, one row per SpO2 epoch exactly as sent, and the raw breathing-disruption intervals (Q150); HELD for operator release
 049 — capability provenance + tag side  four additive nullable columns (`capability_observations.administered_by/instrument/protocol`, `exercise_region_tags.side`) + index `(user_id, region_key, protocol)` — Q27 v1 provenance; HELD for operator release (hold (a))
+050 — cbti_cycle_verdicts  FK to cbti_blocks (CASCADE) and cbti_prescriptions (CASCADE, plus a plain FK for the minted row) + self (chains_from_id, lapsed_by_id, SET NULL) — one frozen row per adjudicated CBT-I cycle (applied / offered / accepted / lapsed); unique (block, cycle_start); at most one `offered` per block (partial unique index); empty and unread until the materializer ships
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -2013,3 +2014,75 @@ CREATE INDEX ix_breathing_disruption_intervals_spo2_night_id ON breathing_disrup
 - **Source and writer.** Garmin's sleep payload (`wellnessEpochSPO2DataDTOList`, one epoch a minute; `breathingDisruptionData`), read through the #361 no-refresh client by the nightly Garmin sweep (`scripts/garmin_sync.sweep_garmin_hrv`, after its token refresh, as its own soft-fail step so a SpO2 failure never costs HRV) and by the operator backfill (`scripts/garmin_spo2_backfill.py`). Nothing reads these tables yet: no UI, no MCP tool, no summary.
 
 **Downgrade** drops the two children and then the parent. It loses every captured night; the data is re-fetchable from Garmin only as far back as the sleep endpoint returns it.
+
+### 050 — cbti_cycle_verdicts (the CBT-I cycle verdict store, DECISIONS_LOG #437 and #440)
+
+Migration `b8e4d2f61a39` (revises `e5b2c8a91d47`). Additive: one new table, nothing altered, **empty and read by nothing** until the materializer ships (step 3 of `docs/cbti-verdict-store-design.md`), so it changes no behaviour. **HELD for the operator** under Merge disposition (a): Railway runs `alembic upgrade head` at deploy.
+
+One row per adjudicated 4-night cycle, frozen when written. It is a record of a finding, not a prescription: writing a row mints nothing (#118). A HOLD that is not converged is `applied` on its own; a move (extend or compress) and a converged HOLD are `offered`, then `accepted` by the witnessed act or `lapsed` when the next cycle's verdict is written (#440 item 6). The plateau history is read only from `applied` and `accepted` verdicts.
+
+```sql
+CREATE TABLE cbti_cycle_verdicts (
+    id                       SERIAL PRIMARY KEY,
+    block_id                 INTEGER NOT NULL REFERENCES cbti_blocks(id) ON DELETE CASCADE,
+    prescription_id          INTEGER NOT NULL REFERENCES cbti_prescriptions(id) ON DELETE CASCADE,
+                                                          -- the prescription in force over the cycle's nights
+    cycle_start              DATE NOT NULL,
+    cycle_end                DATE NOT NULL,
+    chains_from_id           INTEGER REFERENCES cbti_cycle_verdicts(id) ON DELETE SET NULL,
+    status                   VARCHAR(10) NOT NULL,        -- applied | offered | accepted | lapsed
+    decision                 VARCHAR(10) NOT NULL,        -- hold | extend | compress
+    outcome                  VARCHAR(12) NOT NULL,        -- no_decision | hold | converged | extend | compress
+    sufficient               BOOLEAN NOT NULL,
+    converged                BOOLEAN NOT NULL,
+    reason                   TEXT NOT NULL,
+    window_minutes           INTEGER NOT NULL,            -- the window as it stood
+    rec_window_minutes       INTEGER NOT NULL,            -- what the engine recommended
+    rec_lights_out           VARCHAR(5) NOT NULL,
+    basis_tst_min            INTEGER,                     -- the basis, frozen at authorship (#323 T2)
+    basis_se_pct             DOUBLE PRECISION,
+    basis_nights_n           INTEGER NOT NULL,
+    basis_nights_logged      INTEGER NOT NULL,
+    basis_n_flagged          INTEGER NOT NULL DEFAULT 0,
+    excluded_nights          JSON NOT NULL,
+    basis_ledger             JSON NOT NULL,
+    ruleset_version          VARCHAR(40) NOT NULL,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    applied_on               DATE,                        -- the day a HOLD applied, or a move was accepted
+    minted_prescription_id   INTEGER REFERENCES cbti_prescriptions(id),
+    accepted_at              TIMESTAMPTZ,                 -- the acceptance instant; first_night is derived from it (Q236, #441)
+    lapsed_by_id             INTEGER REFERENCES cbti_cycle_verdicts(id) ON DELETE SET NULL,
+    lapsed_on                DATE,
+    unscored_from            DATE,                        -- accepted only: the nights between the offer and first_night
+    unscored_to              DATE,
+    surfaced_on              DATE,                        -- set once by the AM submit after the verdict was shown (#440 item 5)
+    origin                   VARCHAR(10) NOT NULL DEFAULT 'engine',   -- engine | backfill
+    CONSTRAINT uq_cbti_verdict_cycle    UNIQUE (block_id, cycle_start),
+    CONSTRAINT ck_cbti_verdict_status   CHECK (status   IN ('applied','offered','accepted','lapsed')),
+    CONSTRAINT ck_cbti_verdict_decision CHECK (decision IN ('hold','extend','compress')),
+    CONSTRAINT ck_cbti_verdict_outcome  CHECK (outcome  IN ('no_decision','hold','converged','extend','compress')),
+    CONSTRAINT ck_cbti_verdict_origin   CHECK (origin   IN ('engine','backfill')),
+    CONSTRAINT ck_cbti_verdict_span     CHECK (cycle_end >= cycle_start),
+    CONSTRAINT ck_cbti_verdict_kind     CHECK ((status = 'applied') = (decision = 'hold' AND NOT converged)),
+    CONSTRAINT ck_cbti_verdict_conv     CHECK (converged = (outcome = 'converged') AND (NOT converged OR decision = 'hold')),
+    CONSTRAINT ck_cbti_verdict_suff     CHECK (sufficient OR (decision = 'hold' AND outcome = 'no_decision')),
+    CONSTRAINT ck_cbti_verdict_accept   CHECK (status <> 'accepted' OR minted_prescription_id IS NOT NULL),
+    CONSTRAINT ck_cbti_verdict_lapse    CHECK ((status = 'lapsed') = (lapsed_by_id IS NOT NULL)),
+    CONSTRAINT ck_cbti_verdict_mint     CHECK (origin = 'backfill' OR status <> 'applied' OR minted_prescription_id IS NULL)
+);
+
+CREATE INDEX ix_cbti_verdicts_block ON cbti_cycle_verdicts (block_id, cycle_start);
+-- at most one pending offer per block
+CREATE UNIQUE INDEX uq_cbti_verdicts_one_offer ON cbti_cycle_verdicts (block_id) WHERE status = 'offered';
+-- the plateau read: applied or accepted verdicts that recorded a basis
+CREATE INDEX ix_cbti_verdicts_plateau ON cbti_cycle_verdicts (block_id, cycle_start)
+    WHERE status IN ('applied','accepted') AND basis_tst_min IS NOT NULL;
+```
+
+- **Append-only, no DB trigger** (the repo's discipline for `cbti_blocks` and `cbti_prescriptions`). Everything is frozen at authorship except `offered` -> `accepted` (`status`, `minted_prescription_id`, `applied_on`, `accepted_at`, `unscored_from`, `unscored_to`), `offered` -> `lapsed` (`status`, `lapsed_by_id`, `lapsed_on`), and `surfaced_on` once. The checks enforce the shape of a row, not its lifecycle.
+- **`ck_cbti_verdict_kind` and `ck_cbti_verdict_conv`** carry #440 item 6: only a HOLD that is not converged can be `applied`, and a converged verdict is always `offered`, `accepted` or `lapsed`.
+- **`ck_cbti_verdict_mint`** exempts `origin = 'backfill'`, because a backfilled historical HOLD did mint a prescription row.
+- **Hand-written checks and partial indexes**; the model also passes `sqlite_where` so the SQLite test path builds the same two partial indexes.
+- **`first_night` on `cbti_prescriptions`** (Q236, #441) is a separate later migration.
+
+**Downgrade** drops the three indexes and then the table. It loses every verdict, so it is only safe before the writers deploy.

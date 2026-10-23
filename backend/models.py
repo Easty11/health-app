@@ -572,6 +572,104 @@ class CBTIPrescription(Base):
     )
 
 
+class CBTICycleVerdict(Base):
+    """One adjudicated CBT-I titration cycle, frozen when written (DECISIONS_LOG #437, #440).
+
+    A verdict is a RECORD OF A FINDING, not a prescription: writing one mints nothing (#118).
+    A HOLD that is not converged is `applied` on its own and chains to the next cycle. A move
+    (extend or compress) and a converged HOLD are `offered`, then `accepted` by the witnessed act
+    or `lapsed` when the next cycle's verdict is written. The plateau history is read only from
+    `applied` and `accepted` verdicts, so a lapsed or undecided one contributes nothing.
+
+    Append-only, the same model-plus-application discipline as `CBTIPrescription` (no DB
+    trigger). Everything is frozen at authorship except:
+      * `offered` -> `accepted`: status, minted_prescription_id, applied_on, accepted_at,
+        unscored_from, unscored_to (the witnessed accept);
+      * `offered` -> `lapsed`: status, lapsed_by_id, lapsed_on (the next cycle's verdict);
+      * `surfaced_on`, once, on an `applied` or `lapsed` row (the AM check-in submit that
+        followed the verdict being shown, #440 item 5).
+
+    The DB enforces the shape (the named checks below), not the lifecycle. Design:
+    docs/cbti-verdict-store-design.md. Nothing writes or reads this table yet (step 1).
+    """
+    __tablename__ = "cbti_cycle_verdicts"
+    __table_args__ = (
+        UniqueConstraint("block_id", "cycle_start", name="uq_cbti_verdict_cycle"),
+        CheckConstraint("status IN ('applied','offered','accepted','lapsed')", name="ck_cbti_verdict_status"),
+        CheckConstraint("decision IN ('hold','extend','compress')", name="ck_cbti_verdict_decision"),
+        CheckConstraint("outcome IN ('no_decision','hold','converged','extend','compress')",
+                        name="ck_cbti_verdict_outcome"),
+        CheckConstraint("origin IN ('engine','backfill')", name="ck_cbti_verdict_origin"),
+        CheckConstraint("cycle_end >= cycle_start", name="ck_cbti_verdict_span"),
+        # a HOLD that is not converged applies on its own; a move or a converged verdict is
+        # offered, then accepted or lapsed. Nothing else (#440 item 6).
+        CheckConstraint("(status = 'applied') = (decision = 'hold' AND NOT converged)",
+                        name="ck_cbti_verdict_kind"),
+        # convergence is a HOLD and carries the converged outcome, and only that outcome
+        CheckConstraint("converged = (outcome = 'converged') AND (NOT converged OR decision = 'hold')",
+                        name="ck_cbti_verdict_conv"),
+        # only a HOLD can be a non-decision
+        CheckConstraint("sufficient OR (decision = 'hold' AND outcome = 'no_decision')",
+                        name="ck_cbti_verdict_suff"),
+        CheckConstraint("status <> 'accepted' OR minted_prescription_id IS NOT NULL",
+                        name="ck_cbti_verdict_accept"),
+        CheckConstraint("(status = 'lapsed') = (lapsed_by_id IS NOT NULL)", name="ck_cbti_verdict_lapse"),
+        CheckConstraint("origin = 'backfill' OR status <> 'applied' OR minted_prescription_id IS NULL",
+                        name="ck_cbti_verdict_mint"),
+        Index("ix_cbti_verdicts_block", "block_id", "cycle_start"),
+        # one pending offer per block
+        Index("uq_cbti_verdicts_one_offer", "block_id", unique=True,
+              postgresql_where=text("status = 'offered'"), sqlite_where=text("status = 'offered'")),
+        # the plateau read: applied or accepted verdicts that recorded a basis
+        Index("ix_cbti_verdicts_plateau", "block_id", "cycle_start",
+              postgresql_where=text("status IN ('applied','accepted') AND basis_tst_min IS NOT NULL"),
+              sqlite_where=text("status IN ('applied','accepted') AND basis_tst_min IS NOT NULL")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    block_id: Mapped[int] = mapped_column(ForeignKey("cbti_blocks.id", ondelete="CASCADE"), nullable=False)
+    # the prescription in force over the cycle's nights
+    prescription_id: Mapped[int] = mapped_column(
+        ForeignKey("cbti_prescriptions.id", ondelete="CASCADE"), nullable=False)
+    cycle_start: Mapped[date] = mapped_column(Date, nullable=False)
+    cycle_end: Mapped[date] = mapped_column(Date, nullable=False)
+    # the previous verdict in the block's chain; NULL for the first
+    chains_from_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cbti_cycle_verdicts.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False)     # applied | offered | accepted | lapsed
+    decision: Mapped[str] = mapped_column(String(10), nullable=False)   # hold | extend | compress
+    outcome: Mapped[str] = mapped_column(String(12), nullable=False)    # no_decision | hold | converged | extend | compress
+    sufficient: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    converged: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    # the window as it stood and what the engine recommended
+    window_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    rec_window_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    rec_lights_out: Mapped[str] = mapped_column(String(5), nullable=False)
+    # the basis, frozen at authorship (never restated, #323 T2)
+    basis_tst_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    basis_se_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    basis_nights_n: Mapped[int] = mapped_column(Integer, nullable=False)
+    basis_nights_logged: Mapped[int] = mapped_column(Integer, nullable=False)
+    basis_n_flagged: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    excluded_nights: Mapped[dict] = mapped_column(JSON, nullable=False)
+    basis_ledger: Mapped[list] = mapped_column(JSON, nullable=False)
+    ruleset_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    # lifecycle
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    applied_on: Mapped[date | None] = mapped_column(Date, nullable=True)   # the day a HOLD applied, or a move was accepted
+    # the row an accepted verdict minted (a backfilled historical HOLD that minted one also sets it)
+    minted_prescription_id: Mapped[int | None] = mapped_column(ForeignKey("cbti_prescriptions.id"), nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lapsed_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cbti_cycle_verdicts.id", ondelete="SET NULL"), nullable=True)
+    lapsed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    unscored_from: Mapped[date | None] = mapped_column(Date, nullable=True)   # accepted only: nights between the offer and first_night
+    unscored_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    surfaced_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    origin: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("'engine'"))   # engine | backfill
+
+
 class CBTIISI(Base):
     """Insomnia Severity Index administration (Morin) — the outcome measure a block is
     judged by. Stored as the SEVEN items (the record) plus the tool's reported total (a
