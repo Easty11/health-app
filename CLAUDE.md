@@ -250,8 +250,12 @@ self-merge on green under § Merge disposition.
   bundle (fetch the live `assets/index-*.js`, grep a string literal only new code carries).
 - **A SKIPPED deployment is the expected result for a merge that changes neither service's folder (#433).** Railway watch paths
   (`/backend/**`, `/frontend/**`) deploy a service only when its own folder changes, so a governance or docs-only merge records
-  SKIPPED on both. Read `railway deployment list` per service: SUCCESS is owed only on a service whose folder changed, SKIPPED on
-  the other is correct, and a code change that records SKIPPED is a defect (redeploy by hand, then recheck the patterns).
+  SKIPPED on both. Read `railway deployment list` per service, matching on `commitHash`, not on position in the list: SUCCESS is
+  owed only on a service whose folder changed, SKIPPED on the other is correct, and a code change that records SKIPPED is a defect
+  (redeploy by hand, then recheck the patterns). **No record on either service, not even SKIPPED, means the trigger did not fire:**
+  halt (#442 (b)). Recover with a deploy of master head, never the Redeploy action, which replays the commit of an existing
+  deployment and so a stale one (#442 (c)). A service can deploy on a merge that did not touch its folder when the span from its
+  last-deployed commit does (#442 (d)).
 - **Push branches even while holding for review (#98).** A local-only branch is unreadable to
   chat (`raw.githubusercontent.com` 404s). Pushing is not merging; push when work becomes
   reviewable, not when it lands.
@@ -293,11 +297,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Railway's 2026-10-21 pause was a security incident, not an outage: a merge with no deployment record on either service means the deploy trigger did not fire, recovery is a deploy of master head and never Redeploy, and rotating every environment variable is owed to the operator.** Governance only - Canonical home: `DECISIONS_LOG.md` #442.
+
 - **An MCP tool, `get_exercise_catalogue`, lists the exercise templates visible to you with their tag state and any declared side, so a template just made in Hevy can be found by name and its id read.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #439.
 
 - **A schedule item now links to its quota slot on the case-folded key and is stored in the slot's spelling; the plan tool lists what a leg did not count, with date and reason; one migration adds "Indoor cycling" to the open phase's metabolic sports.** Code, migration - Canonical home: `DECISIONS_LOG.md` #438.
-
-- **Route (i) now scores sets up to a rep ceiling of 15 declared on the ratio, and the ER:IR read says why a day is missing: paired, only-one-half-logged, and no-usable-e1RM days with their dated reasons; the seeder reports the side updates it wrote.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #435.
 
 ---
 
