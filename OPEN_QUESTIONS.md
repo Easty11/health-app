@@ -3049,7 +3049,7 @@ What this repo can hold is a names-only ledger, one row per credential, with rot
 | Private registry credentials | None known to Code; the operator to confirm. | not recorded | not applicable |
 | Service logs for the incident window | Review, not rotation: who read them, when, and what they showed. | not recorded | not applicable |
 
-Procedure: `docs/rotation-runbook-2026-10.md` (#443).
+Procedure: `docs/rotation-runbook-2026-10.md` (#444).
 
 This question closes when every row carries a rotation date or a recorded decision not to rotate, with the reason.
 

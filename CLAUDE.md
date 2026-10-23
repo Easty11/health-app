@@ -297,7 +297,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **A Fernet fallback key and `scripts.rotate_fernet` let the encryption key be swapped with no unreadable window, and `docs/rotation-runbook-2026-10.md` is the operator's ordered procedure for Q238.** Code - Canonical home: `DECISIONS_LOG.md` #443.
+- **A Fernet fallback key and `scripts.rotate_fernet` let the encryption key be swapped with no unreadable window, and `docs/rotation-runbook-2026-10.md` is the operator's ordered procedure for Q238.** Code - Canonical home: `DECISIONS_LOG.md` #444.
 
 - **Railway's 2026-10-21 pause was a security incident, not an outage: a merge with no deployment record on either service means the deploy trigger did not fire, recovery is a deploy of master head and never Redeploy, and rotating every environment variable is owed to the operator.** Governance only - Canonical home: `DECISIONS_LOG.md` #442.
 
