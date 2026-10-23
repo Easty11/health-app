@@ -3027,26 +3027,6 @@ list that the validator refuses until a sport is chosen, so an omission there is
 
 ---
 
-## Q236. Which prescription does the night whose wake date is the accept day belong to, for a MOVE?
-
-Raised 2026-10-23 with #440 item 7. A night is attributed to a prescription by wake date, and accepting sets the successor's `effective_from` to the accept day, so the night whose wake date is the accept day reads as the NEW prescription (night 2026-10-21 reads as rx 21, accepted that day), though it was lived under the old window. Harmless for a HOLD, wrong for a move.
-
-**To decide:** whether a move's new prescription starts its first cycle at the accept day + 1, with the unscored range running from the offered cycle's `cycle_end + 1` to the accept day inclusive; and how to carry it without redefining `effective_from`: an additive nullable `cbti_prescriptions.first_night` read as `COALESCE(first_night, effective_from)` (recommended, `docs/cbti-verdict-store-design.md` section 3A, option A), a code rule (rejected: it restates rx 15 to 17), or redefining `effective_from` (rejected). Also the late-accept edge: an accept after the evening's lights-out still names the night that began that evening.
-
-**State:** OPEN. Owner: Luke (ruling). Blocks the `first_night` migration and the cutover PR's cycle-start logic, not the verdict table.
-
----
-
-## Q237. What does accepting a converged verdict write?
-
-Raised 2026-10-23 with #440 item 6. A converged verdict is now `offered` and needs the witnessed accept. Today the accept of a converged HOLD mints a `hold` prescription (window unchanged, basis recorded, cycle clock restarted), and nothing in the application closes a CBT-I block.
-
-**To decide:** keep that (recommended), record the acceptance on the verdict only with no prescription, or define a block close. A block close is a separate decision that no code path supports today.
-
-**State:** OPEN. Owner: Luke (ruling). Blocks the cutover PR's accept path, not the verdict table.
-
----
-
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
@@ -6521,5 +6501,25 @@ Options:
 **Resolution (operator ruling, 12 Oct 2026): option (c) plus a migration rule, not (b).** A change that retires a region key ships a data migration remapping the stored engine-tier constraint keys and `hard_stops[*].region_key` (a schema-class hold). A boot and nightly-sweep check that every stored key resolves is built later: an unresolved key logs ERROR and surfaces on the coach readiness read as an unresolved restriction, and the coach treats the region as restricted until the row is repaired. Recorded in #423; the check is a `ROADMAP.md` NEXT row.
 
 **State:** DONE → #423. Closed as ruled; nothing is built. Constraint rows are Q197's record; this question concerned only how the engine treats a key that no longer resolves.
+
+---
+
+## Q236. Which prescription does the night whose wake date is the accept day belong to, for a MOVE?
+
+Raised 2026-10-23 with #440 item 7. A night is attributed to a prescription by wake date, and accepting sets the successor's `effective_from` to the accept day, so the night whose wake date is the accept day reads as the NEW prescription (night 2026-10-21 reads as rx 21, accepted that day), though it was lived under the old window. Harmless for a HOLD, wrong for a move.
+
+**To decide:** whether a move's new prescription starts its first cycle at the accept day + 1, with the unscored range running from the offered cycle's `cycle_end + 1` to the accept day inclusive; and how to carry it without redefining `effective_from`: an additive nullable `cbti_prescriptions.first_night` read as `COALESCE(first_night, effective_from)` (recommended, `docs/cbti-verdict-store-design.md` section 3A, option A), a code rule (rejected: it restates rx 15 to 17), or redefining `effective_from` (rejected). Also the late-accept edge: an accept after the evening's lights-out still names the night that began that evening.
+
+**State:** DONE → #441. Ruled 2026-10-23: option A, an additive nullable `first_night`, read as `COALESCE(first_night, effective_from)`; the wake date of the first night whose lights-out falls after the acceptance (D + 1 before that evening's prescribed lights-out, D + 2 after); unscored range `cycle_end + 1` to `first_night - 1`.
+
+---
+
+## Q237. What does accepting a converged verdict write?
+
+Raised 2026-10-23 with #440 item 6. A converged verdict is now `offered` and needs the witnessed accept. Today the accept of a converged HOLD mints a `hold` prescription (window unchanged, basis recorded, cycle clock restarted), and nothing in the application closes a CBT-I block.
+
+**To decide:** keep that (recommended), record the acceptance on the verdict only with no prescription, or define a block close. A block close is a separate decision that no code path supports today.
+
+**State:** DONE → #441. Ruled 2026-10-23: accepting a converged verdict mints a `hold` prescription (window unchanged, basis recorded, clock restarted). Block close remains an operator act, undefined in code, a separate future decision.
 
 ---
