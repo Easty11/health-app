@@ -3027,6 +3027,26 @@ list that the validator refuses until a sport is chosen, so an omission there is
 
 ---
 
+## Q236. Which prescription does the night whose wake date is the accept day belong to, for a MOVE?
+
+Raised 2026-10-23 with #440 item 7. A night is attributed to a prescription by wake date, and accepting sets the successor's `effective_from` to the accept day, so the night whose wake date is the accept day reads as the NEW prescription (night 2026-10-21 reads as rx 21, accepted that day), though it was lived under the old window. Harmless for a HOLD, wrong for a move.
+
+**To decide:** whether a move's new prescription starts its first cycle at the accept day + 1, with the unscored range running from the offered cycle's `cycle_end + 1` to the accept day inclusive; and how to carry it without redefining `effective_from`: an additive nullable `cbti_prescriptions.first_night` read as `COALESCE(first_night, effective_from)` (recommended, `docs/cbti-verdict-store-design.md` section 3A, option A), a code rule (rejected: it restates rx 15 to 17), or redefining `effective_from` (rejected). Also the late-accept edge: an accept after the evening's lights-out still names the night that began that evening.
+
+**State:** OPEN. Owner: Luke (ruling). Blocks the `first_night` migration and the cutover PR's cycle-start logic, not the verdict table.
+
+---
+
+## Q237. What does accepting a converged verdict write?
+
+Raised 2026-10-23 with #440 item 6. A converged verdict is now `offered` and needs the witnessed accept. Today the accept of a converged HOLD mints a `hold` prescription (window unchanged, basis recorded, cycle clock restarted), and nothing in the application closes a CBT-I block.
+
+**To decide:** keep that (recommended), record the acceptance on the verdict only with no prescription, or define a block close. A block close is a separate decision that no code path supports today.
+
+**State:** OPEN. Owner: Luke (ruling). Blocks the cutover PR's accept path, not the verdict table.
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
