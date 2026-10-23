@@ -14656,6 +14656,25 @@ Supersedes the use of the latest complete cycle as the only offer (`complete[-1]
 
 ---
 
+### #441. A move's first governed night is the first night whose lights-out falls after the acceptance (`first_night`, option A), and accepting a converged verdict mints a hold prescription (closes Q236 and Q237)
+
+**Decision.** RATIFIED 2026-10-23 (operator rulings in chat). Nothing is built.
+
+1. **Q236, option A.** An additive nullable `cbti_prescriptions.first_night`, read as `COALESCE(first_night, effective_from)`. `effective_from` is not redefined; it stays the date of the act, and NULL means `effective_from`, which is every existing row. `first_night` is **the wake date of the first night whose lights-out falls after the acceptance timestamp**: an accept on day D before that evening's prescribed lights-out gives D + 1, and after it gives D + 2. The prescribed lights-out is the new prescription's. The unscored range runs from the offered cycle's `cycle_end + 1` to `first_night - 1`; the prior row's `effective_to` is `first_night - 1`; the successor's first cycle starts at `first_night`. The acceptance instant is kept on the verdict as `accepted_at`.
+2. **Q237.** Accepting a converged verdict mints a `hold` prescription: window unchanged, basis recorded, cycle clock restarted, as the accept path does today. **Block close remains an operator act, undefined in code, and is a separate future decision.**
+
+Supersedes the proposal in #440 item 7 (accept day + 1, unscored range through the accept day), which assumed an accept before the evening; the new rule also settles the late-accept edge that proposal left open.
+
+**Rationale.** A new window can only govern a night whose lights-out falls after the act, so the first governed night depends on the hour of the accept, not only its date. Keeping `effective_from` as the date of the act preserves every existing row and the audit of when the operator acted, and the nullable column restates nothing. A converged accept keeps today's behaviour because nothing in the application closes a block, so there is no closing write to attach to it.
+
+**Status.** RATIFIED, implementation pending: the `first_night` column and its readers (`_cbti_context`, the MCP `_rx_in_force`, the replay's prescription load) are a separate migration after the verdict table, and the verdict table carries `accepted_at`. Q236 and Q237 are DONE. The design is `docs/cbti-verdict-store-design.md`, amended in the same commit.
+
+**How you know.** Night 2026-10-21 reads as rx 21 in the 2026-10-22 diary read-out, and rx 21 was accepted on 2026-10-21 (`checkin_v2.py:1105-1131` sets `effective_from` to the accept day and the prior `effective_to` to the day before; `_cbti_context`, `checkin_v2.py:421-426`, and the MCP `_rx_in_force`, `mcp_server.py:444-456`, attribute a night by `effective_from <= wake date`; `daily_records` stores no prescription id). Nothing in the application sets `cbti_blocks.closed_on`, and the accept path mints a `hold` prescription for a converged HOLD today (#440 item 6).
+
+**Do not revisit unless.** A block-close path is built, or the first-night rule meets a case the lights-out time cannot decide (a prescription with no lights-out).
+
+---
+
 ### #442. Tag pass, part 2: the seven movements #435 held are tagged as the operator ruled, and the Half-Kneeling pair carries its sides (Q27)
 
 **Decision.** The operator's adjudications of 20 Oct 2026, carried from chat and written on 23 Oct 2026. #435 is landed, so this supersedes it and edits nothing in it. Eight new tags in `backend/reference/exercise_region_tags_v0.json`, and one existing entry gains a side:
