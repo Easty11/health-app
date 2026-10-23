@@ -3027,6 +3027,36 @@ list that the validator refuses until a sport is chosen, so an omission there is
 
 ---
 
+## Q238. Rotation after the 2026-10-21 Railway incident: which environment variables and credentials were rotated, when, and by whom.
+
+Raised 2026-10-23 with `DECISIONS_LOG` #442. Nothing is decided and nothing is built. Code has no evidence that any credential below was or was not rotated, so no row is marked rotated.
+
+Railway's instruction to every customer (its status page and disclosure post, read by Code on 2026-10-23; see #442 (a)): roll every environment variable stored in Railway, which here means `health-app-backend`, `health-app-frontend` and `health-app-DB`; roll any private registry credential; rotate database credentials; reconnect the GitHub connection; and review service logs for unusual activity across the incident window, 2026-10-21 to 2026-10-22. The status page also points to checking for unexpected usage at AI providers and in GitHub. Railway said it would email affected customers; whether this project received that email is not known to Code.
+
+What this repo can hold is a names-only ledger, one row per credential, with rotation dates, pasted by the operator. Never a value, and never a CLI listing (#111): no `railway variables` in any form, no `printenv`, no `.env`. The rows to fill, named here so none is forgotten:
+
+| Credential | Why it is its own row | Rotated (date, by whom) | Consumers redeployed after |
+|------------|-----------------------|-------------------------|----------------------------|
+| Postgres credential (`health-app-DB`) | Whether every `DATABASE_URL` consumer was redeployed after the rotation is the open part, so it has its own column. | not recorded | not recorded |
+| Fernet key under which `user_integrations.api_key_encrypted` rows are stored | Not a variable swap. A key rotation is a re-encryption migration over every `api_key_encrypted` row; replacing the key alone leaves every stored credential unreadable (the reasoning in Q43, closed). Q43 found the production key isolated from the development key; that was a different question and is no evidence about this incident. | not recorded | not recorded |
+| Hevy key (a `user_integrations` row, `provider='hevy'`, where one exists) | Stored encrypted under the Fernet key, so a re-stored key lands under whichever Fernet key is current. | not recorded | not recorded |
+| Garmin token blob (garth) | A stored login session, not a variable; rotation means re-authenticating. | not recorded | not recorded |
+| Polar client credentials | The client id and secret; the per-user Polar tokens the app stores are separate. | not recorded | not recorded |
+| MCP OAuth provider signing material | Rotation invalidates connected clients; the operator re-authenticates once. | not recorded | not recorded |
+| LLM API key the chat endpoint uses | Also the row where provider usage for the incident window is checked, as Railway asks. | not recorded | not recorded |
+| Railway CLI login on the laptop | Railway invalidated all API tokens on 2026-10-22. Code ran `railway whoami` on 2026-10-23 and it answered, as did the Railway MCP, so a working login exists; whether it was renewed after the invalidation is not known to Code. | not recorded | not applicable |
+| GitHub token held as a variable, and the Railway-to-GitHub connection | Railway asks to reconnect GitHub, and the deploy trigger is that connection: after it, the next merge's records on both services are the check (#442 (e)). | not recorded | not recorded |
+| Private registry credentials | None known to Code; the operator to confirm. | not recorded | not applicable |
+| Service logs for the incident window | Review, not rotation: who read them, when, and what they showed. | not recorded | not applicable |
+
+This question closes when every row carries a rotation date or a recorded decision not to rotate, with the reason.
+
+**State:** OWED (operator).
+
+---
+
+---
+
 ## CLOSED
 
 _Resolved questions, moved here verbatim (backlog triage, #123). `DONE → #N` names the
