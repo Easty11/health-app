@@ -16,10 +16,11 @@ from cbti.engine import (
     ADHERENCE_FAIL_N,
     ADHERENCE_TOL_MIN,
     CYCLE_NIGHTS,
-    BUFFER_MIN,
     FLOOR_MIN,
     MAX_MOVE_MIN,
     MIN_VALID_NIGHTS,
+    SE_EXTEND_PCT,
+    SE_FLOOR_PCT,
     Night,
     classify_night,
     evaluate_cycle,
@@ -184,35 +185,87 @@ def test_adherence_delta_uses_shortest_path_across_midnight():
 
 # ── titration ─────────────────────────────────────────────────────────────────
 
-def test_window_is_mean_tst_plus_buffer():
-    # start close enough that the per-cycle cap does not bind, so this test
-    # measures the buffer rule rather than the cap
-    d = evaluate_cycle(cycle(tst=400), 400 + BUFFER_MIN - MAX_MOVE_MIN, RX, ANCHOR)
-    assert d.window_minutes == 400 + BUFFER_MIN      # exactly one uncapped step away
-    assert d.decision == "extend"
-    assert d.move_capped is False
+# Direction comes from the mean-SE band (R1, #445), not from TST + a buffer: >= SE_EXTEND_PCT
+# extends, SE_FLOOR_PCT <= SE < SE_EXTEND_PCT holds, < SE_FLOOR_PCT compresses.
+
+def test_the_band_thresholds_are_the_ruled_values():
+    assert SE_EXTEND_PCT == 90.0 and SE_FLOOR_PCT == 85.0
+
+
+@pytest.mark.parametrize("se, decision, window", [
+    (89.99, "hold", 390),
+    (90.0, "extend", 390 + MAX_MOVE_MIN),
+    (84.99, "compress", 390 - MAX_MOVE_MIN),
+    (85.0, "hold", 390),
+])
+def test_the_se_band_boundaries(se, decision, window):
+    d = evaluate_cycle(cycle(se=se), WINDOW, RX, ANCHOR)
+    assert d.decision == decision and d.window_minutes == window
+    assert d.sufficient is True and d.converged is False
+
+
+def test_direction_does_not_depend_on_tst():
+    """The retired rule targeted mean TST + 30; under the band rule TST is only an outcome.
+    The same SE gives the same direction whether TST sits far above or far below the window."""
+    for tst in (300, 390, 480):
+        assert evaluate_cycle(cycle(tst=tst, se=92.0), WINDOW, RX, ANCHOR).decision == "extend"
+        assert evaluate_cycle(cycle(tst=tst, se=80.0), WINDOW, RX, ANCHOR).decision == "compress"
+        assert evaluate_cycle(cycle(tst=tst, se=87.0), WINDOW, RX, ANCHOR).decision == "hold"
+
+
+def test_the_live_cycle_that_motivated_R1_extends():
+    """2026-10-21..24: mean SE 92.34, TST 428, window 477. TST + 30 compressed this to 462;
+    the band rule extends it."""
+    d = evaluate_cycle(cycle(tst=428, se=92.34), 477, RX, ANCHOR)
+    assert d.decision == "extend" and d.window_minutes == 492
+
+
+def test_every_move_is_exactly_one_step_so_move_capped_is_never_set():
+    """The retired cap clipped a TST-derived move; every band move is MAX_MOVE_MIN by
+    construction. The field stays for ledger-shape stability and is pinned False."""
+    for se, expected in ((95.0, WINDOW + MAX_MOVE_MIN), (70.0, WINDOW - MAX_MOVE_MIN), (87.0, WINDOW)):
+        for tst in (200, 420, 600):
+            d = evaluate_cycle(cycle(tst=tst, se=se), WINDOW, RX, ANCHOR)
+            assert d.window_minutes == expected
+            assert d.move_capped is False
+
+
+def test_reason_strings():
+    assert evaluate_cycle(cycle(se=92.34), 477, RX, ANCHOR).reason == "extended 477->492min (mean SE 92.34 >= 90)"
+    assert evaluate_cycle(cycle(se=83.1), 477, RX, ANCHOR).reason == "compressed 477->462min (mean SE 83.1 < 85)"
+    held = evaluate_cycle(cycle(se=87.5), 477, RX, ANCHOR)
+    assert held.reason == "se_band: 85 <= SE 87.5 < 90, window held"
+    for r in ("buffer", "capped", "mean TST"):
+        assert r not in held.reason
+
+
+def test_a_band_hold_leaves_the_prescription_untouched():
+    d = evaluate_cycle(cycle(se=87.0), WINDOW, RX, ANCHOR)
+    assert d.decision == "hold" and d.window_minutes == WINDOW
+    assert d.prescribed_lights_out == RX
 
 
 def test_window_never_goes_below_the_five_hour_floor():
-    d = evaluate_cycle(cycle(tst=180), 320, RX, ANCHOR)
-    assert d.window_minutes >= FLOOR_MIN
+    d = evaluate_cycle(cycle(tst=180, se=70.0), FLOOR_MIN + 10, RX, ANCHOR)
+    assert d.window_minutes == FLOOR_MIN                 # 310 - 15 clamps to the floor
+    assert d.decision == "compress"
 
 
-def test_move_is_capped_and_the_cap_is_reported():
-    d = evaluate_cycle(cycle(tst=500), 300, RX, ANCHOR)   # wants +230
-    assert d.window_minutes == 300 + MAX_MOVE_MIN
-    assert d.move_capped is True
+def test_compress_at_the_floor_is_a_hold_not_a_move():
+    d = evaluate_cycle(cycle(tst=180, se=70.0), FLOOR_MIN, RX, ANCHOR)
+    assert d.window_minutes == FLOOR_MIN and d.decision == "hold"
+    assert "floor" in d.reason
 
 
 def test_new_lights_out_is_derived_from_the_anchor_not_the_old_prescription():
-    d = evaluate_cycle(cycle(tst=390), 420 - MAX_MOVE_MIN, RX, ANCHOR)
-    assert d.window_minutes == 420                      # 390 TST + 30 buffer = 7h00
+    d = evaluate_cycle(cycle(tst=390), 420 - MAX_MOVE_MIN, RX, ANCHOR)   # SE 90.0 -> extend
+    assert d.window_minutes == 420
     assert d.prescribed_lights_out == "22:00"           # 05:00 minus 7h00
 
 
-def test_compress_when_tst_falls():
-    d = evaluate_cycle(cycle(tst=330), 420, RX, ANCHOR)
-    assert d.decision == "compress" and d.window_minutes < 420
+def test_compress_when_se_falls_below_the_floor():
+    d = evaluate_cycle(cycle(tst=330, se=80.0), 420, RX, ANCHOR)
+    assert d.decision == "compress" and d.window_minutes == 420 - MAX_MOVE_MIN
 
 
 # ── exit condition — TST plateau, NOT SE stall (#107) ────────────────────────
@@ -431,13 +484,14 @@ def test_tib_over_run_is_none_when_out_of_bed_is_missing():
     assert d.basis_tib_over_run_min is None
 
 
-def test_over_run_at_high_SE_and_at_low_SE_both_titrate():
+def test_over_run_is_decided_by_the_SE_band():
     """The discriminator is SE AT over-run, not over-run magnitude — #107's own
-    sleep-need basis week over-ran (+29) at SE 92.2%. Both cases titrate here;
-    the SE floor separates them only at the exit condition."""
-    for se in (92.2, 85.7):
+    sleep-need basis week over-ran (+29) at SE 92.2%. The same over-run is decided by the
+    SE band: genuine capacity (high SE) extends, time lying awake (low SE) compresses, and
+    the band between holds (R1, #445)."""
+    for se, decision in ((92.2, "extend"), (85.7, "hold"), (82.0, "compress")):
         nights = [_n(d, tst=400, se=se) for d in range(1, 8)]
         for x in nights:
             x.out_of_bed = "05:30"
         d = evaluate_cycle(nights, 405, RX, ANCHOR)
-        assert d.decision == "extend"
+        assert d.decision == decision

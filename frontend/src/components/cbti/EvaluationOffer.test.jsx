@@ -16,7 +16,7 @@
 // the other suites keep running in node and pay nothing for this one.
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { act } from 'react'
 
 vi.mock('../../api', () => ({
@@ -32,7 +32,7 @@ const EXTEND = {
   eligible: true,
   reason: '',
   decision: 'extend',
-  decision_reason: 'extended 390->405min (mean TST 420 + 30 buffer, move capped at 15)',
+  decision_reason: 'extended 390->405min (mean SE 92 >= 90)',
   sufficient: true,
   days_since_effective_from: 4,
   nights_since_effective_from: 4,
@@ -43,7 +43,7 @@ const EXTEND = {
     lights_out_current: '22:30', lights_out_proposed: '22:15',
     wake_anchor: '05:00',
     nights_counted: 4, n_diary: 4, n_samsung: 0, n_alcohol_unknown: 0,
-    nights_excluded: {}, ema_count: 0, move_capped: true, tib_over_run_min: null,
+    nights_excluded: {}, ema_count: 0, move_capped: false, tib_over_run_min: null,
   },
 }
 
@@ -159,6 +159,72 @@ describe('an acceptable offer takes two deliberate acts (#214)', () => {
     await click(/confirm — record prescription/i)
 
     expect(screen.getByText(/Evaluation recorded/i)).toBeTruthy()
+  })
+})
+
+
+describe('the operator can refuse a move, never author a window (R2)', () => {
+  test('an acceptable offer carries both controls', async () => {
+    await renderOffer(EXTEND)
+    expect(screen.getByRole('button', { name: /review and accept/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /hold this window/i })).toBeTruthy()
+  })
+
+  test('the first tap on hold fires no request and opens the confirmation', async () => {
+    await renderOffer(EXTEND)
+    await click(/hold this window/i)
+    expect(api.post).not.toHaveBeenCalled()
+    // the write is restated: the window does not change, but the cycle still closes
+    expect(screen.getByText(/Window stays 6h 30m \(no change\)/)).toBeTruthy()
+    expect(screen.getByText(/Lights out stays 22:30/)).toBeTruthy()
+    expect(screen.getByText(/resets the evaluation clock/i)).toBeTruthy()
+  })
+
+  test('the confirm does not post until a reason is entered', async () => {
+    await renderOffer(EXTEND)
+    await click(/hold this window/i)
+    const confirm = screen.getByRole('button', { name: /confirm — hold this window/i })
+    expect(confirm.disabled).toBe(true)
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/why are you holding/i), { target: { value: '   ' } })
+    })
+    expect(screen.getByRole('button', { name: /confirm — hold this window/i }).disabled).toBe(true)
+    expect(api.post).not.toHaveBeenCalled()
+  })
+
+  test('the hold posts the trimmed reason to /hold and never to /accept', async () => {
+    await renderOffer(EXTEND)
+    await click(/hold this window/i)
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/why are you holding/i),
+        { target: { value: '  ill this week  ' } })
+    })
+    api.post.mockResolvedValue({
+      data: { ...EXTEND, reason: 'held_by_operator', eligible: false,
+        basis: { ...EXTEND.basis, window_minutes_proposed: 390 } },
+    })
+    await click(/confirm — hold this window/i)
+
+    expect(api.post).toHaveBeenCalledTimes(1)
+    // a reason and nothing else: no window, no lights-out, no decision
+    expect(api.post).toHaveBeenCalledWith('/checkin-v2/cbti/evaluation/hold', { reason: 'ill this week' })
+    expect(screen.getByText(/Hold recorded/i)).toBeTruthy()
+    expect(screen.getByText(/Window stays 6h 30m/)).toBeTruthy()
+  })
+
+  test('cancel fires nothing and returns to both controls', async () => {
+    await renderOffer(EXTEND)
+    await click(/hold this window/i)
+    await click(/cancel/i)
+    expect(api.post).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /review and accept/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /hold this window/i })).toBeTruthy()
+  })
+
+  test('a not-yet-eligible offer renders neither control', async () => {
+    await renderOffer({ ...EXTEND, eligible: false, days_since_effective_from: 2, decision: null, basis: null })
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 })
 

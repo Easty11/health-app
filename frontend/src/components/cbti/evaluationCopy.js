@@ -72,6 +72,24 @@ export function confirmationLines(basis, cycleNights = 4) {
   return lines
 }
 
+// The operator's REFUSAL of an offered cycle (R2, #446) restates its own write for the same
+// reason `confirmationLines` does: what it records is not what it sounds like. The window is NOT
+// changed, but the cycle is still closed and the clock still reset, and the engine's offered
+// decision is stored beside the operator's reason.
+export function holdConfirmationLines(basis, cycleNights = 4) {
+  const b = basis ?? {}
+  const lines = []
+  if (b.window_minutes_current != null) {
+    lines.push(`Window stays ${formatMinutes(b.window_minutes_current)} (no change)`)
+  }
+  if (b.lights_out_current != null) {
+    lines.push(`Lights out stays ${b.lights_out_current}`)
+  }
+  lines.push('Records your reason and the decision the engine offered')
+  lines.push(`Closes the current cycle and resets the evaluation clock (~${cycleNights} days)`)
+  return lines
+}
+
 // "1 night dropped" reads as incidental; the operator needs to know the decision was
 // computed WITHOUT those nights, so the exclusions stay visible rather than being
 // summarised away.

@@ -91,20 +91,30 @@ def test_guard_b_holds_when_only_the_excused_night_carries_a_move():
 
 
 def test_guard_b_holds_when_the_clean_subset_would_not_move_the_same_way():
-    """Four nights, one flagged. The flagged night's high TST tips the full basis to
-    extend, but the three clean nights on their own would not — so the extend is not
-    robust to the excused night and the cycle holds."""
-    nights = [_n(20, tst=360), _n(21, tst=360), _n(22, tst=360),
-              _n(23, tst=470, alcohol=2, alcohol_finish="19:30")]
+    """Four nights, one flagged. The flagged night's high SE tips the full basis (mean 90.0)
+    into the extend band, but the three clean nights on their own (mean 88) sit in the hold
+    band — so the extend is not robust to the excused night and the cycle holds."""
+    nights = [_n(20, se=88.0), _n(21, se=88.0), _n(22, se=88.0),
+              _n(23, se=96.0, alcohol=2, alcohol_finish="19:30")]
+    d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
+    assert d.decision == "hold" and "excused_guard" in d.reason
+    assert "mean SE 88" in d.reason
+
+
+def test_guard_b_holds_a_compress_the_clean_subset_would_not_make():
+    """The same guard in the other direction: the flagged night drags the mean under
+    SE_FLOOR_PCT, but the clean three (mean 86) stay in the hold band."""
+    nights = [_n(20, se=86.0), _n(21, se=86.0), _n(22, se=86.0),
+              _n(23, se=70.0, alcohol=2, alcohol_finish="19:30")]
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "hold" and "excused_guard" in d.reason
 
 
 def test_guard_b_allows_a_move_robust_to_the_excused_night():
-    """Four nights, one flagged, all high TST: the clean three extend on their own, so the
-    excused night is not what drives the change — the move stands."""
-    nights = [_n(20, tst=450), _n(21, tst=450), _n(22, tst=450),
-              _n(23, tst=450, alcohol=2, alcohol_finish="19:30")]
+    """Four nights, one flagged, all in the extend band: the clean three extend on their
+    own, so the excused night is not what drives the change — the move stands."""
+    nights = [_n(20, se=92.0), _n(21, se=92.0), _n(22, se=92.0),
+              _n(23, se=92.0, alcohol=2, alcohol_finish="19:30")]
     d = evaluate_cycle(nights, WINDOW, RX, ANCHOR)
     assert d.decision == "extend"
     assert d.basis_n_flagged == 1
