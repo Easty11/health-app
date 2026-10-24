@@ -14,8 +14,8 @@ prescription only on a witnessed accept. What carries risk here is not the arith
     build: adjudicate against the ledger's correction, never the block-open seed.
 
 All numbers here are computed from the 4-night engine (CYCLE_NIGHTS=4, MIN_VALID_NIGHTS=3,
-MAX_MOVE_MIN=15, BUFFER_MIN=30): a default night tst=420 against a 390 window targets
-420+30=450, a +60 move capped to +15 -> a 405 proposed window. The selected cycle is the
+MAX_MOVE_MIN=15, SE_EXTEND_PCT=90): a default night se=90.0 against a 390 window is in
+the extend band, one step of +15 -> a 405 proposed window. The selected cycle is the
 LAST complete 4-night span of the live prescription.
 
 SYNTHETIC data only; no real rows (both repos are public).
@@ -101,11 +101,11 @@ def test_offer_once_a_full_cycle_has_elapsed_carries_decision_and_basis(db_sessi
 
     out = get_cbti_evaluation(current_user=u, db=db_session)
     assert out.eligible is True
-    # TST 420 + 30 buffer = 450 target against a 390 window: a +60 move, capped to +15.
+    # Mean SE 90.0 is exactly SE_EXTEND_PCT: extend by one step, which is never a capped move.
     assert out.decision == "extend"
     assert out.basis.window_minutes_current == 390
     assert out.basis.window_minutes_proposed == 405
-    assert out.basis.move_capped is True
+    assert out.basis.move_capped is False
     assert out.basis.nights_counted == 4
 
 

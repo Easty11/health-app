@@ -108,13 +108,13 @@ def _insufficiency(db, u):
 def _compress(db, u):
     """A decision on merits, in the direction that takes sleep opportunity AWAY.
 
-    TST 300 + 30 buffer targets 330 against a 390 window: a -60 move capped to -15, so a
-    375 proposed window.
+    Mean SE 80 sits under SE_FLOOR_PCT, so the band rule compresses by one step: a 375
+    proposed window against the 390 one (R1, #445).
     """
     start = date.today() - timedelta(days=CYCLE_NIGHTS)
     b = _block(db, u.id, opened=start)
     _rx(db, b.id, eff=start, win=390)
-    _nights(db, u.id, start, CYCLE_NIGHTS, tst=300, se=90.0)
+    _nights(db, u.id, start, CYCLE_NIGHTS, tst=300, se=80.0)
     return b
 
 
@@ -172,7 +172,7 @@ def test_engine_flags_only_the_sufficiency_gate_as_insufficient():
     assert d.sufficient is True
 
     # A move.
-    d = evaluate_cycle([_n(i, tst_min=300) for i in range(CYCLE_NIGHTS)], 390, "22:30", "05:00")
+    d = evaluate_cycle([_n(i, tst_min=300, se_pct=80.0) for i in range(CYCLE_NIGHTS)], 390, "22:30", "05:00")
     assert d.decision == "compress"
     assert d.sufficient is True
 
@@ -266,7 +266,7 @@ def test_accept_records_a_compress(db_session):
     successor = (db_session.query(models.CBTIPrescription)
                  .filter_by(block_id=b.id)
                  .order_by(models.CBTIPrescription.id.desc()).first())
-    assert successor.window_minutes == 375              # 390 - 15 (move capped)
+    assert successor.window_minutes == 375              # 390 - 15 (one band step)
     assert successor.decision == "compress"
 
 
