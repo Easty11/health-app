@@ -297,11 +297,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The CBT-I titration now decides direction from the cycle's mean sleep efficiency (extend at 90 or above, hold from 85 to 90, compress under 85), and the close-out carries a second control, "Hold this window", that records a refusal at the unchanged window with the operator's reason.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #445 and #446.
+
 - **A Fernet fallback key and `scripts.rotate_fernet` let the encryption key be swapped with no unreadable window, and `docs/rotation-runbook-2026-10.md` is the operator's ordered procedure for Q238.** Code - Canonical home: `DECISIONS_LOG.md` #444.
 
 - **Railway's 2026-10-21 pause was a security incident, not an outage: a merge with no deployment record on either service means the deploy trigger did not fire, recovery is a deploy of master head and never Redeploy, and rotating every environment variable is owed to the operator.** Governance only - Canonical home: `DECISIONS_LOG.md` #442.
-
-- **An MCP tool, `get_exercise_catalogue`, lists the exercise templates visible to you with their tag state and any declared side, so a template just made in Hevy can be found by name and its id read.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #439.
 
 ---
 
