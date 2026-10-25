@@ -3018,6 +3018,36 @@ The key's owner sets its expiry at creation (one year at most) and Garmin emails
 
 ---
 
+## Q244. Should in-activity HR for a Garmin session that Health Connect never delivers be read from the Garmin Personal API (#449) into `hr_samples`, and under what writer-identity rule would it zone the Health Connect row?
+
+Raised 2026-10-25 with #452, on the operator's brief. No hold, no code: a question, not a build.
+
+**What #452 left.** The read on sessions 69, 85 and 92 (Garmin Pilates, 15, 22 and 29 Sep) found only 120 s passive samples, from the Garmin Health Connect package (arrived 1 Oct) and from `personal_api` (arrived 25 Oct); no in-activity samples (#452 (e)). The operator reads that as LOSS, not lag: all three sessions were inside the 30-day window at its first scheduled run, and no in-activity sample has arrived in the 26 to 40 days since. #452 (e) itself says the read cannot tell late from never for session 92, which is still inside the window on 2026-10-25. #364 already accepts these rows as zoneless, reason `sparse`.
+
+**The R4 rationale is superseded for this lane.** #452 (d) dropped a direct Garmin in-activity HR read because `garminconnect` is an unofficial, ToS-grey lane under #361. That does not describe the Personal API: #449 makes it the owner-authorised primary Garmin lane for users 1 and 4, and its HR already lands in `hr_samples` as source `garmin`, package `personal_api` (#449 item 3). Everything else in #452 (d) stands, including that any proposal to read in-activity HR from Garmin is a NEW question, not a Q159 limb; this is that question. #452 is not changed.
+
+**The writer-identity rule is the real fork.** `hc_zone_enrich` zones a `health_connect` row from SAME-WRITER HR only: samples with `source = 'health_connect'` and the row's own `source_package` (#364, deliberate, so a ring's HR inside a Garmin bout is never used for it). A `personal_api` sample therefore cannot zone a `com.garmin.android.apps.connectmobile` row today. Reading Personal API HR into the zoning would need an explicit rule that the two names are one writer (the same physical watch), and a rule for a window that holds both (precedence, no double credit). That rule is a change to #364's deliberate boundary and is not made here.
+
+**Unverified: whether the Personal API carries per-sample activity HR at all.** The `personal_api` rows already stored for 69, 85 and 92 are 120 s gaps (30, 26 and 27 samples), which is the passive rate, not an in-activity series. An inventory read of the lane's endpoints (does any activity or intraday endpoint return a 6 to 16 s series for a dated activity, and how soon after it) is the first step, read-only. A build is not.
+
+**State:** OPEN. Owner: Luke. Not blocking. Related: #452, #449, #364, Q198, Q203, Q231.
+
+---
+
+## Q245. Watch-point: `hrmax_prompts` is derived on read from the stored samples, not read from a chain run
+
+Raised 2026-10-25 with PR #447 (the "Restate HRmax?" prompt), because the surface choice was a judgment call.
+
+The brief asked to expose the over-ceiling rows "from the latest chain run". Nothing persists a run's report: `hc_zone_enrich.enrich_user` returns `over_ceiling_rows`, and the only reader was the `refresh_load` report line (a count) and the log. Two ways to carry them: persist the report (a table, so a migration, held), or derive the same rows on read. PR #447 derives them: `hc_zone_enrich.over_ceiling_prompts`, one aggregate query with the chain's own definition (same-writer samples inside the row's interval, inside the plausibility bounds, strictly above the HRmax in force), carried as `hrmax_prompts` on the freshness read beside `garmin_alerts`, shown on the home load card and in the readiness snapshot lines. A test pins parity with a chain run.
+
+What the choice changes: the list is the CURRENT state of the rows (it clears the moment a restatement covers the sample, without waiting for a chain run), not the last run's output; the query runs on every freshness read; every row is listed with no cap and no threshold, sparse rows included (the chain lists them too).
+
+**Watch for:** freshness latency growing with the number of Health Connect rows (the aggregate scans every row's interval each call), or a list long enough to be noise before the operator acts. Neither is a reason to tune a threshold; the response would be a window or a persisted report, each its own ruling. Nothing to decide now.
+
+**State:** OPEN. Owner: Luke. Not blocking. Related: #453, #383, #385, Q159.
+
+---
+
 ---
 
 ## CLOSED

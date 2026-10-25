@@ -14919,3 +14919,34 @@ By the reading rule that came with the query (a Garmin row at a 6 to 16 s median
 **How you know.** The 11 Oct evidence note on Q159 (the 1 Oct run's HR arrived 2 Oct, 236 samples, 6 s median gap) against #369's 7-day case; sync events 66-68 (#377) for the 30-day window; the read in (e) for 69/85/92. `git grep -n Q159 ea1ab7e -- frontend backend` (PR-A's merge) returns 25 lines in 17 files: 24 in backend docstrings and comments that describe stage 2 as BUILT (`hc_zone_enrich`, `hr_zones`, `models`, the sync router, the operator scripts and their tests) and 1 in the frontend, the section header of the new render test. None says "until stage 2". PR-A's CI was green (placeholder guard, backend pytest, frontend vitest).
 
 **Do not revisit unless.** A session's in-activity HR is shown to arrive later than 30 days (then the window, not this entry, is the question); or Q231's build finds the supersession term cannot be met because a zoned row and an imputed row for the same session cannot be told apart (then the lag-window ownership returns here).
+
+---
+
+### #453. User 1's HRmax is restated to 177 (`observed`, retroactive from 2026-03-01, bands unchanged), superseding #385's value only
+
+**Decision.** RULED by the operator on 2026-10-25 (Code did not originate it). Governance only: Code writes nothing to `user_hrmax`; the apply is the operator's.
+
+1. **Value: 177.** This supersedes #385 item 1's 175, as #385 superseded #384's 177. Provenance `observed`. It is a #383 restatement, retroactive from 2026-03-01, of the row dated that day (the 175 `adjusted` row written under #388), so the chain reads 173 (`observed`) then 175 (`adjusted`) then 177 (`observed`), each kept. Bands unchanged at 50/60/70/80/90.
+2. **#385's design stands:** `adjusted` provenance, `restates_id`, the rank rule, `set_hrmax --restate`. Only #385's NUMBER is superseded. #384's premise that 173 is an Echo-bike lower bound is discharged: the bike itself showed 177.
+3. **Basis.** (a) The 2026-10-14 `polar_v4` indoor-cycling row carries `hr_max` 177 on the H10 (45 min, average 138), a plausible sample above the 175 in force, which is #385's third revisit clause; the 2026-10-21 row carries 175. (b) Polar Flow and Garmin now both read 177, user-set (operator, 2026-10-25), so #385's first revisit clause (the Polar lock lifted) fired too, and the HC/Polar seam has been open since.
+4. **Verified in the tree (Code, 2026-10-25).** `scripts/set_hrmax.py` accepts provenance `observed` on a restatement: the closed set is `tested | observed | adjusted`; only `adjusted` requires `--base-bpm`; a restatement requires `--rationale` and a `--note`; the target is the head of the chain dated `--effective-from`; a restatement to the same value is refused (177 differs from 175). #385 item 2 (a) already states that a restatement may be `observed` or `tested`. The vocabulary is not widened.
+
+**Rationale.** The operator's. A sample above the HRmax in force is the evidence #385 named as a reason to restate, the device settings that #385 aligned to have moved, and an HRmax below a measured sample mis-bands the top zone for every restated-over row. The 14 Oct row is a Polar row, so its zones are Polar's own (Q198); the restatement moves the Health Connect rows only (#385 item 3).
+
+**Status.** RULED 2026-10-25. **OWED, operator-run in the container, then reported back:** the apply and its post-apply comparison. Until then 175 stands in prod. The commands (run the first report before the write, to hold the 175 baseline; `--dry-run` first):
+
+```
+railway ssh --service health-app-backend
+cd /app
+/opt/venv/bin/python -m scripts.arbitration_flip_report --hc-zones --user 1
+/opt/venv/bin/python -m scripts.set_hrmax --user 1 --effective-from 2026-03-01 --bpm 177 --provenance observed --restate --rationale 'a Polar v4 indoor cycling row on 2026-10-14 carries hr_max 177 on the H10, above the 175 in force; Polar Flow and Garmin both set to 177 on 2026-10-25' --note 'polar_v4 Indoor cycling 2026-10-14 hr_max 177 on the H10 (2026-10-21 175); Polar Flow and Garmin max HR both 177, operator 2026-10-25; supersedes the value of 385, ruled 453' --dry-run
+/opt/venv/bin/python -m scripts.set_hrmax --user 1 --effective-from 2026-03-01 --bpm 177 --provenance observed --restate --rationale 'a Polar v4 indoor cycling row on 2026-10-14 carries hr_max 177 on the H10, above the 175 in force; Polar Flow and Garmin both set to 177 on 2026-10-25' --note 'polar_v4 Indoor cycling 2026-10-14 hr_max 177 on the H10 (2026-10-21 175); Polar Flow and Garmin max HR both 177, operator 2026-10-25; supersedes the value of 385, ruled 453'
+/opt/venv/bin/python -m scripts.refresh_load --user 1
+/opt/venv/bin/python -m scripts.arbitration_flip_report --hc-zones --user 1
+```
+
+The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared bout, from the second `--hc-zones` report) is recorded the way #388 recorded it for 175, as a fold-in entry that names this one. Numbers resolved at master max #452 / Q245.
+
+**How you know.** The operator's ruling in chat, 2026-10-25. The two rows are the app's own `get_training_sessions` read by Code on 2026-10-25: `2026-10-14 [polar_v4] Indoor cycling: 45 min HR=138/177` and `2026-10-21 [polar_v4] Indoor cycling: 35 min HR=150/175`, each also recorded by the Garmin and Polar Flow Health Connect packages. That the Polar Flow and Garmin settings read 177 and are user-set is the operator's statement; Code did not see either screen. The `set_hrmax` behaviour is from reading `backend/scripts/set_hrmax.py` and #385, not from a run. **Not verified:** the prod chain (that the head of the 2026-03-01 chain is the 175 row), and the effect of the restatement, which the dry run and the post-apply report will show.
+
+**Do not revisit unless.** A sample above 177 appears (the "Restate HRmax?" prompt on the load card shows it, PR #447) or a maximal-effort test (Q199) gives another value; Polar Flow or Garmin moves off 177; or Q216 moves HC zoning to heart-rate reserve, which makes the edges different edges.
