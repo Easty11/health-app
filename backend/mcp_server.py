@@ -852,7 +852,8 @@ def _readiness_hrv_line(rep: dict | None, dev: dict, wake_day: date) -> str:
 @_stamped
 def get_readiness_snapshot() -> str:
     """Today's readiness snapshot. Latest biometrics, most recent check-in,
-    7-day training summary, and current injury constraints."""
+    7-day training summary, and current injury constraints. The resting and sleep heart-rate
+    figures are withheld, with the reason printed, when their night is more than 48 hours old."""
     user_id = _current_user_id()
 
     # Q130 → #292: the readiness HRV reads the per-source-normalised deviation model
@@ -918,7 +919,7 @@ def get_readiness_snapshot() -> str:
                 f"(confidence {_dev['confidence']}, {_dev['n_contributing']} source(s), "
                 f"baseline {_dev['baseline_state']})"
             )
-        lines.extend(sleep_snapshot_lines(_sleep))
+        lines.extend(sleep_snapshot_lines(_sleep, today=_wake_day))
         lines.append(hrv_continuity_line(_continuity) + "\n")
     else:
         lines.append("Latest biometrics: no sleep or HRV data found.\n")
