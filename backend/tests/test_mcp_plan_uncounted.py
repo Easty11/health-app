@@ -146,3 +146,30 @@ def test_the_section_states_facts_and_no_verdicts(db_session, tool):
     sec = _section(tool(u)).lower()
     for word in ("on track", "behind", "ahead of", "should", "recommend", "good", "bad", "fix", "wrong"):
         assert word not in sec
+
+
+# ---- durations read in whole minutes (the 22 Oct Rugby line printed "58.9167 min") ------------------------
+
+def test_a_fractional_duration_is_rounded_to_whole_minutes(db_session, tool):
+    u = _user(db_session)
+    _phase(db_session, u.id, LIVE_SPORTS)
+    _session(db_session, u.id, "p1", "Rugby", minutes=58.9167)
+    sec = _section(tool(u))
+    assert "59 min" in sec and "58.9167" not in sec
+
+
+def test_the_rounding_is_to_the_nearest_minute_not_a_floor_or_a_ceiling(db_session, tool):
+    u = _user(db_session)
+    _phase(db_session, u.id, LIVE_SPORTS)
+    _session(db_session, u.id, "p1", "Rugby", minutes=40.4, day=date(2026, 9, 7))
+    _session(db_session, u.id, "p2", "Squash", minutes=40.6, day=date(2026, 9, 8))
+    sec = _section(tool(u))
+    assert "Rugby) · 40 min" in sec and "Squash) · 41 min" in sec
+
+
+def test_a_session_under_a_minute_is_not_shown_as_zero(db_session, tool):
+    u = _user(db_session)
+    _phase(db_session, u.id, LIVE_SPORTS)
+    _session(db_session, u.id, "p1", "Rugby", minutes=0.5)
+    sec = _section(tool(u))
+    assert "<1 min" in sec and "0 min" not in sec.replace("<1 min", "")
