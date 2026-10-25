@@ -140,7 +140,7 @@ def test_a_new_rated_activity_is_stored_with_scale_type_and_interval(db_session)
     out = _run(db_session, src)
     (r,) = _rows(db_session)
     assert (r.source, r.source_activity_ref, r.rpe_cr10, r.feel) == ("garmin", "11", 4.0, 25)
-    assert r.provenance == {"garmin_type": "strength_training"}
+    assert r.provenance == {"garmin_type": "strength_training", "transport": "di"}
     assert r.start_time.replace(tzinfo=timezone.utc) == START
     assert r.stop_time.replace(tzinfo=timezone.utc) == START + timedelta(seconds=DURATION)
     assert out == {"fetched": 1, "rated": 1, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}

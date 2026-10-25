@@ -233,6 +233,77 @@ def _pipes(db: Session, user_id: int, now: datetime, nightly: list[dict[str, Any
     return {"health_connect": hc, "polar": polar, "garmin_hrv": garmin}
 
 
+# -- Garmin lane alerts (DECISIONS_LOG #449, S5) ---------------------------------------------------
+KEY_EXPIRY_AMBER_DAYS = 30            # Garmin emails the key's OWNER, not the operator: this is the warning
+KEY_EXPIRY_RED_DAYS = 7
+DI_SPO2_STALE_AFTER_NIGHTS = 2        # more than this many wake-dates behind with no epoch data -> loud
+_LANE_OK = ("ok", "empty")
+_PERSONAL_LANES = ("personal_hrv", "personal_wellness", "personal_selfeval")
+
+
+def garmin_alerts(db: Session, user_id: int, now: datetime) -> list[dict[str, str]]:
+    """Loud, never-skipped Garmin problems for one user, most severe first. Each is
+    `{code, severity ('red' | 'amber'), message}`. Read-only.
+
+    * the Personal API key: days to expiry from the date the operator recorded at attach (amber at
+      <= 30 days, red at <= 7 and when lapsed; amber when no date was recorded);
+    * a token-exchange failure (the key was refused: red);
+    * a failed Personal API lane (amber);
+    * the DI epoch-SpO2 lane (the CPAP-seal evidence, operator-ruled load-bearing), for any user with a DI
+      connection: its last outcome not ok (red), or newest night more than 2 wake-dates behind the Brisbane
+      wake-day, or no epoch night at all (red). `nights_empty` per run is NOT the measure (it includes
+      the not-yet-slept wake-date); the stored nights are.
+    """
+    out: list[dict[str, str]] = []
+    today = now.astimezone(_AEST).date()
+    lanes = {r.lane: r for r in db.query(models.IntegrationLaneStatus).filter_by(user_id=user_id).all()}
+
+    pers = db.query(models.UserIntegration).filter_by(user_id=user_id, provider="garmin_personal").first()
+    if pers is not None:
+        if pers.key_expires_on is None:
+            out.append({"code": "garmin_key_expiry_unknown", "severity": "amber",
+                        "message": "Garmin Personal API key: no expiry date recorded (re-attach with --expires)"})
+        else:
+            days = (pers.key_expires_on - today).days
+            if days < 0:
+                out.append({"code": "garmin_key_expired", "severity": "red",
+                            "message": f"Garmin Personal API key EXPIRED {-days} day(s) ago: attach a new key"})
+            elif days <= KEY_EXPIRY_RED_DAYS:
+                out.append({"code": "garmin_key_expiry", "severity": "red",
+                            "message": f"Garmin Personal API key expires in {days} day(s): create and attach a new key"})
+            elif days <= KEY_EXPIRY_AMBER_DAYS:
+                out.append({"code": "garmin_key_expiry", "severity": "amber",
+                            "message": f"Garmin Personal API key expires in {days} days"})
+        tok = lanes.get("personal_token")
+        if tok is not None and tok.outcome == "auth_failed":
+            out.append({"code": "garmin_token_failed", "severity": "red",
+                        "message": "Garmin Personal API token exchange is failing: the key was refused"})
+        for name in _PERSONAL_LANES:
+            r = lanes.get(name)
+            if r is not None and r.outcome not in _LANE_OK:
+                out.append({"code": f"garmin_lane_failed:{name}", "severity": "amber",
+                            "message": f"Garmin lane {name}: last run {r.outcome}" + (f" ({r.reason})" if r.reason else "")})
+
+    di = db.query(models.UserIntegration.id).filter_by(user_id=user_id, provider="garmin").first()
+    if di is not None:
+        r = lanes.get("di_spo2")
+        if r is not None and r.outcome not in _LANE_OK:
+            out.append({"code": "garmin_di_spo2_failed", "severity": "red",
+                        "message": f"Garmin epoch SpO2 lane (DI): last run {r.outcome}"
+                                   + (f" ({r.reason})" if r.reason else "")})
+        newest = db.scalar(select(func.max(models.Spo2Night.captured_at)).where(
+            models.Spo2Night.user_id == user_id, models.Spo2Night.source == "garmin"))
+        if newest is None:
+            out.append({"code": "garmin_di_spo2_none", "severity": "red",
+                        "message": "Garmin epoch SpO2: no night captured yet"})
+        elif (today - newest).days > DI_SPO2_STALE_AFTER_NIGHTS:
+            out.append({"code": "garmin_di_spo2_stale", "severity": "red",
+                        "message": f"Garmin epoch SpO2: no night since {newest.isoformat()} "
+                                   f"({(today - newest).days} days behind)"})
+    out.sort(key=lambda a: 0 if a["severity"] == "red" else 1)
+    return out
+
+
 def freshness(db: Session, user_id: int, *, now: datetime | None = None) -> dict[str, Any]:
     """The whole freshness read for one user. `now` is injectable for tests."""
     now = _utc(now) if now is not None else datetime.now(timezone.utc)
@@ -258,6 +329,7 @@ def freshness(db: Session, user_id: int, *, now: datetime | None = None) -> dict
         "data_as_of": data_as_of,
         "load_inputs_stale": bool(load_stale_pipes),
         "load_stale_pipes": load_stale_pipes,
+        "garmin_alerts": garmin_alerts(db, user_id, now),
     }
 
 
@@ -280,6 +352,8 @@ def freshness_snapshot_lines(f: dict[str, Any]) -> list[str]:
              f"  Health Connect last delivery: {_ago(hc['age_hours'])}{flag}",
              f"  Polar last session: {_ago(pipes['polar']['age_hours'])} (information only)",
              f"  Garmin HRV last night: {_ago(pipes['garmin_hrv']['age_hours'])}"]
+    for a in f.get("garmin_alerts", []):
+        lines.append(f"  GARMIN {a['severity'].upper()}: {a['message']}")
     stale = [s for s in f["streams"] if s["status"] == "stale"]
     for s in stale:
         lines.append(f"  STALE {s['stream']} · {s['writer']}: {_ago(s['age_hours'])} "

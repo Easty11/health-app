@@ -74,6 +74,15 @@ class UserIntegration(Base):
     templates_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Garmin Personal API (provider='garmin_personal'; DECISIONS_LOG #448). NULL on every other row.
+    # `key_expires_on` is the date the OPERATOR entered at attach (Garmin emails the key's owner, not
+    # the operator, and the key's expiry is set by its owner at creation). The access token is a
+    # <=24 h cache of the key's exchange, Fernet-encrypted: it is derived, never durable, so a row that
+    # does not decrypt is a cache miss (re-exchange), not an error, and `scripts.rotate_fernet`
+    # does not need to move it.
+    key_expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    access_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PasswordResetToken(Base):
@@ -787,6 +796,10 @@ class HrvReading(Base):
     baseline_low: Mapped[float | None] = mapped_column(Float)                     # balanced-range lower bound
     baseline_high: Mapped[float | None] = mapped_column(Float)                    # balanced-range upper bound
     weekly_avg: Mapped[float | None] = mapped_column(Float)
+    # How the row reached us, separate from `source` (ranks and SOURCE_SCALES key on source and an
+    # unknown source ranks 0): 'personal_api' (Garmin Personal API) or 'di' (the unofficial lane).
+    # NULL = written before the column existed; the held M2 data revision stamps those 'di'.
+    transport: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -885,6 +898,171 @@ class BreathingDisruptionInterval(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     value: Mapped[float | None] = mapped_column(Float)
+
+
+class GarminRawPayload(Base):
+    """One Garmin Personal API response, landed raw (S3, DECISIONS_LOG #448). APPEND-ONLY.
+
+    `endpoint` is our logical name for the call ('hrv', 'sleep', 'heart_rate', 'spo2_hourly',
+    'body_battery', 'stress', 'hr_zones', 'activity_detail'), `ref` the calendar date (ISO) or the
+    activity id it was asked for. The key is (user, endpoint, ref, payload_sha256): an unchanged
+    re-fetch is a no-op and a changed payload (an in-progress day) appends a row, so the CURRENT
+    payload of a key is the row with the greatest `fetched_at`. The hash is taken over the payload
+    AFTER the identity keys are stripped (`garmin_raw.IDENTITY_KEYS`, R3): the profile pk, display
+    name and device ids are never stored. Mappers are re-runnable from here without a re-fetch.
+    """
+    __tablename__ = "garmin_raw_payloads"
+    __table_args__ = (
+        UniqueConstraint("user_id", "endpoint", "ref", "payload_sha256", name="uq_garmin_raw_payload"),
+        Index("ix_garmin_raw_payloads_key", "user_id", "endpoint", "ref"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(String(48), nullable=False)
+    ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(_JSONB, nullable=False)
+
+
+class SleepNight(Base):
+    """One night of sleep from a wearable, source-neutral (Garmin Personal API first).
+
+    One row per (user, night, source); `captured_at` is the WAKE-DATE (Garmin files sleep under the
+    wake date), the same night key `hrv_readings` and `spo2_nights` use. Times are the GMT instants
+    Garmin sends: never keyed on the profile timezone (it is Pacific/Port_Moresby). Deliberately NOT
+    `health_connect_syncs`: that row is owned by the Health Connect writer (#254's union logic) and a
+    second writer would corrupt it. Nothing arbitrates between this table and Health Connect; no reader
+    consumes it yet.
+
+    `spo2_avg_pct` / `spo2_lowest_pct` are the coarse nightly figures (the permanent substitute for the
+    epoch series). `averageSpO2HRSleep` is a HEART RATE and is never mapped here. `efficiency_pct` is
+    DERIVED: sleep time / (sleep end - sleep start), tagged by `efficiency_formula`. That window has
+    no pre-sleep time in bed, so it reads HIGHER than the diary SE (lights-out based); nothing in the
+    CBT-I engine reads this table. `sleep_scores_subs` and `sleep_need` are stored as sent (JSON): their
+    units and scales are not interpreted.
+    """
+    __tablename__ = "sleep_nights"
+    __table_args__ = (
+        UniqueConstraint("user_id", "captured_at", "source", name="uq_sleep_night_user_date_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    captured_at: Mapped[date] = mapped_column(Date, nullable=False, index=True)    # the wake-date
+    source: Mapped[str] = mapped_column(String(50), nullable=False)               # 'garmin'
+    transport: Mapped[str] = mapped_column(String(20), nullable=False)            # 'personal_api'
+    sleep_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sleep_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sleep_time_s: Mapped[int | None] = mapped_column(Integer)
+    deep_s: Mapped[int | None] = mapped_column(Integer)
+    light_s: Mapped[int | None] = mapped_column(Integer)
+    rem_s: Mapped[int | None] = mapped_column(Integer)
+    awake_s: Mapped[int | None] = mapped_column(Integer)
+    respiration_avg: Mapped[float | None] = mapped_column(Float)
+    respiration_low: Mapped[float | None] = mapped_column(Float)
+    respiration_high: Mapped[float | None] = mapped_column(Float)
+    spo2_avg_pct: Mapped[float | None] = mapped_column(Float)
+    spo2_lowest_pct: Mapped[float | None] = mapped_column(Float)
+    sleep_score: Mapped[int | None] = mapped_column(Integer)
+    sleep_scores_subs: Mapped[dict | None] = mapped_column(_JSONB)
+    awake_count: Mapped[int | None] = mapped_column(Integer)
+    avg_sleep_stress: Mapped[float | None] = mapped_column(Float)
+    sleep_need: Mapped[dict | None] = mapped_column(_JSONB)
+    efficiency_pct: Mapped[float | None] = mapped_column(Float)
+    efficiency_formula: Mapped[str | None] = mapped_column(String(48))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Spo2Hourly(Base):
+    """One hourly SpO2 average from Garmin's daily SpO2 endpoint (24 a day) -- the coarse series that
+    persists whether or not the DI epoch lane works. `hour_start` is the GMT hour Garmin sent."""
+    __tablename__ = "spo2_hourly"
+    __table_args__ = (
+        UniqueConstraint("user_id", "hour_start", "source", name="uq_spo2_hourly_user_hour_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    hour_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    avg_pct: Mapped[float | None] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    transport: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DailyPhysiology(Base):
+    """Per CALENDAR day daily physiology from a wearable: resting HR, stress, body battery.
+
+    `date` is the calendar day Garmin was asked for (NOT a wake-date). `resting_hr_bpm` is the day's
+    resting HR from the daily heart-rate endpoint; it is not the HR-zones endpoint's value (Garmin's
+    7-day auto figure, kept apart in `hr_zone_config_snapshots`). The stress and body-battery columns
+    are vendor composites kept for DISPLAY: never an algorithm input (SCHEMA.md vendor_metrics rule).
+    """
+    __tablename__ = "daily_physiology"
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", "source", name="uq_daily_physiology_user_date_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    transport: Mapped[str] = mapped_column(String(20), nullable=False)
+    resting_hr_bpm: Mapped[int | None] = mapped_column(Integer)
+    rhr_7d_avg_bpm: Mapped[int | None] = mapped_column(Integer)
+    stress_avg: Mapped[int | None] = mapped_column(Integer)           # vendor composite: display only
+    stress_max: Mapped[int | None] = mapped_column(Integer)           # vendor composite: display only
+    body_battery_high: Mapped[int | None] = mapped_column(Integer)    # vendor composite: display only
+    body_battery_low: Mapped[int | None] = mapped_column(Integer)     # vendor composite: display only
+    body_battery_charged: Mapped[int | None] = mapped_column(Integer) # vendor composite: display only
+    body_battery_drained: Mapped[int | None] = mapped_column(Integer) # vendor composite: display only
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class HrZoneConfigSnapshot(Base):
+    """Garmin's heart-rate-zone configuration at `captured_at`, APPEND-ONLY with change history.
+
+    A row is inserted only when (max HR, LTHR, RHR, method) differs from the user's latest row, so the
+    table is the history of CHANGES. Observation only: it never writes `user_hrmax` (operator-owned,
+    #383). `rhr_7d_auto_bpm` is Garmin's own 7-day auto resting HR as the zones endpoint reports it:
+    NOT a daily RHR and not comparable to `daily_physiology.resting_hr_bpm`.
+    """
+    __tablename__ = "hr_zone_config_snapshots"
+    __table_args__ = (Index("ix_hr_zone_config_user_captured", "user_id", "captured_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    transport: Mapped[str] = mapped_column(String(20), nullable=False)
+    max_hr_bpm: Mapped[int | None] = mapped_column(Integer)
+    lthr_bpm: Mapped[int | None] = mapped_column(Integer)
+    rhr_7d_auto_bpm: Mapped[int | None] = mapped_column(Integer)
+    method: Mapped[str | None] = mapped_column(String(60))
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)   # the raw-landing row this came from
+
+
+class IntegrationLaneStatus(Base):
+    """Per-user, per-lane sync status (S5). A mutable STATUS row (upserted), not a history.
+
+    `outcome` is one of `ok | empty | auth_failed | rate_limited | error | skipped_needs_refresh`;
+    `reason` is an exception class or short code only, never a payload, key or token. `last_success_at`
+    advances on `ok` and `empty` (the lane worked; Garmin had nothing).
+    """
+    __tablename__ = "integration_lane_status"
+    __table_args__ = (UniqueConstraint("user_id", "lane", name="uq_integration_lane_user_lane"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    lane: Mapped[str] = mapped_column(String(40), nullable=False)
+    last_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome: Mapped[str] = mapped_column(String(30), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(200))
 
 
 class CapabilityState(Base):

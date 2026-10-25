@@ -169,12 +169,14 @@ def test_the_downgrade_leaves_the_sport_in_place(conn):
     assert _micro_of(conn, 1) == once
 
 
-def test_the_revision_is_the_single_head_and_chains_from_the_indoor_cycling_one():
+def test_the_revision_chains_from_the_indoor_cycling_one_in_a_single_line_of_history():
     cfg = Config(str(_BACKEND / "alembic.ini"))
     cfg.set_main_option("script_location", str(_BACKEND / "migrations"))
     script = ScriptDirectory.from_config(cfg)
-    assert script.get_heads() == ["b8f3d6a2c915"], "migration history branched, or another head landed"
+    assert len(script.get_heads()) == 1, "migration history branched"
     assert script.get_revision("b8f3d6a2c915").down_revision == "e5b2c8a91d47"
+    # It was the head when written; a later revision may chain on, so assert it is still in the one line.
+    assert "b8f3d6a2c915" in {r.revision for r in script.walk_revisions(base="base", head=script.get_heads()[0])}
 
 
 def _load_indoor():

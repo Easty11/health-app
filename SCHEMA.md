@@ -48,6 +48,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 047 — session_rpe_observations  FK to users (CASCADE) — source-neutral, insert-only, capture-timed per-activity RPE (raw + declared scale + CR-10, UTC bout window, source-specific feel, provenance); unique (user, source, source_activity_ref, captured_at); Garmin rows copied verbatim from `garmin_activity_selfevals` (read-only from here); HELD for operator release
 048 — spo2_nights + spo2_samples + breathing_disruption_intervals  FK to users (CASCADE) and to spo2_nights (CASCADE) — raw Garmin overnight SpO2 capture: a nightly parent (unique user, night, source) with sleep window, reading_count and gap_count, one row per SpO2 epoch exactly as sent, and the raw breathing-disruption intervals (Q150); HELD for operator release
 049 — capability provenance + tag side  four additive nullable columns (`capability_observations.administered_by/instrument/protocol`, `exercise_region_tags.side`) + index `(user_id, region_key, protocol)` — Q27 v1 provenance; HELD for operator release (hold (a))
+050 — garmin personal api  six new tables (`garmin_raw_payloads` append-only raw landing, `sleep_nights`, `spo2_hourly`, `daily_physiology`, `hr_zone_config_snapshots`, `integration_lane_status`) + nullable `user_integrations.key_expires_on/access_token_encrypted/access_token_expires_at` + `hrv_readings.transport`; all FK to users (CASCADE); HELD for operator release
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -2013,3 +2014,68 @@ CREATE INDEX ix_breathing_disruption_intervals_spo2_night_id ON breathing_disrup
 - **Source and writer.** Garmin's sleep payload (`wellnessEpochSPO2DataDTOList`, one epoch a minute; `breathingDisruptionData`), read through the #361 no-refresh client by the nightly Garmin sweep (`scripts/garmin_sync.sweep_garmin_hrv`, after its token refresh, as its own soft-fail step so a SpO2 failure never costs HRV) and by the operator backfill (`scripts/garmin_spo2_backfill.py`). Nothing reads these tables yet: no UI, no MCP tool, no summary.
 
 **Downgrade** drops the two children and then the parent. It loses every captured night; the data is re-fetchable from Garmin only as far back as the sleep endpoint returns it.
+
+
+### 050 — Garmin Personal API: credential columns, hrv transport, raw landing, sleep / physiology / status tables
+
+Migration `c4a8e2f6b190` (revises `b8f3d6a2c915`). **ADDITIVE ONLY and HELD for the operator's release** (a schema migration): nothing dropped, retyped or backfilled, every added column nullable, every new table empty until the code that fills it deploys. The data step (stamping existing `hrv_readings.transport = 'di'`) is a separate held revision, not this one. DECISIONS_LOG #448 (the migration) and #449 (the DI SpO2 lane).
+
+```sql
+ALTER TABLE user_integrations ADD COLUMN key_expires_on DATE;                       -- provider='garmin_personal': operator-entered key expiry
+ALTER TABLE user_integrations ADD COLUMN access_token_encrypted TEXT;              -- <=24 h bearer cache, Fernet; undecryptable = cache miss
+ALTER TABLE user_integrations ADD COLUMN access_token_expires_at TIMESTAMPTZ;
+ALTER TABLE hrv_readings      ADD COLUMN transport VARCHAR(20);                    -- 'personal_api' | 'di'; `source` stays 'garmin'
+
+CREATE TABLE garmin_raw_payloads (            -- APPEND-ONLY
+    id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint VARCHAR(48) NOT NULL,            -- our logical name: hrv, sleep, heart_rate, spo2_hourly, body_battery, stress, hr_zones, activity_detail
+    ref VARCHAR(64) NOT NULL,                 -- ISO date or activity id
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    payload_sha256 VARCHAR(64) NOT NULL,      -- over the SCRUBBED canonical JSON (sorted keys, compact, UTF-8)
+    payload JSONB NOT NULL,                   -- identity keys (userProfilePk, displayName, deviceId, owner*) removed before hashing/storing
+    CONSTRAINT uq_garmin_raw_payload UNIQUE (user_id, endpoint, ref, payload_sha256)
+);                                            -- + ix (id), (user_id), (user_id, endpoint, ref)
+
+CREATE TABLE sleep_nights (                   -- one row per (user, wake-date, source); NOT health_connect_syncs (HC-writer-owned)
+    id, user_id FK CASCADE, captured_at DATE NOT NULL, source VARCHAR(50) NOT NULL, transport VARCHAR(20) NOT NULL,
+    sleep_start TIMESTAMPTZ, sleep_end TIMESTAMPTZ, sleep_time_s INT, deep_s INT, light_s INT, rem_s INT, awake_s INT,
+    respiration_avg FLOAT, respiration_low FLOAT, respiration_high FLOAT,
+    spo2_avg_pct FLOAT, spo2_lowest_pct FLOAT,  -- coarse nightly SpO2 (averageSpO2HRSleep is a HEART RATE and is never mapped)
+    sleep_score INT, sleep_scores_subs JSONB, awake_count INT, avg_sleep_stress FLOAT, sleep_need JSONB,
+    efficiency_pct FLOAT, efficiency_formula VARCHAR(48),   -- DERIVED sleep_time / (end - start); 'garmin_window_tst_over_span_v1'
+    created_at, updated_at,
+    CONSTRAINT uq_sleep_night_user_date_source UNIQUE (user_id, captured_at, source)
+);
+
+CREATE TABLE spo2_hourly (                    -- the 24 hourly averages a day; persists whether or not the DI epoch lane works
+    id, user_id FK CASCADE, hour_start TIMESTAMPTZ NOT NULL, avg_pct FLOAT, source VARCHAR(50) NOT NULL,
+    transport VARCHAR(20) NOT NULL, created_at,
+    CONSTRAINT uq_spo2_hourly_user_hour_source UNIQUE (user_id, hour_start, source)
+);
+
+CREATE TABLE daily_physiology (               -- per CALENDAR day
+    id, user_id FK CASCADE, date DATE NOT NULL, source VARCHAR(50) NOT NULL, transport VARCHAR(20) NOT NULL,
+    resting_hr_bpm INT, rhr_7d_avg_bpm INT,    -- from the daily heart-rate endpoint (NOT the HR-zones value)
+    stress_avg INT, stress_max INT, body_battery_high INT, body_battery_low INT, body_battery_charged INT, body_battery_drained INT,
+                                              -- stress / body battery: vendor composites, DISPLAY ONLY, never an algorithm input
+    created_at, updated_at,
+    CONSTRAINT uq_daily_physiology_user_date_source UNIQUE (user_id, date, source)
+);
+
+CREATE TABLE hr_zone_config_snapshots (       -- APPEND-ONLY change history; a row only when (max, LTHR, RHR, method) differs from the latest
+    id, user_id FK CASCADE, captured_at TIMESTAMPTZ NOT NULL DEFAULT now(), source VARCHAR(50) NOT NULL, transport VARCHAR(20) NOT NULL,
+    max_hr_bpm INT, lthr_bpm INT, rhr_7d_auto_bpm INT,   -- Garmin's 7-day AUTO resting HR, not a daily RHR
+    method VARCHAR(60), payload_sha256 VARCHAR(64) NOT NULL
+);                                            -- + ix (user_id, captured_at). Observation only: never writes user_hrmax (#383)
+
+CREATE TABLE integration_lane_status (        -- mutable status row, not history
+    id, user_id FK CASCADE, lane VARCHAR(40) NOT NULL, last_attempt_at TIMESTAMPTZ NOT NULL, last_success_at TIMESTAMPTZ,
+    outcome VARCHAR(30) NOT NULL,             -- ok | empty | auth_failed | rate_limited | error | skipped_needs_refresh
+    reason VARCHAR(200),                      -- exception class / status text only
+    CONSTRAINT uq_integration_lane_user_lane UNIQUE (user_id, lane)
+);                                            -- lanes: personal_token, personal_hrv, personal_wellness, personal_selfeval, di_spo2
+```
+
+**Writers:** `garmin_raw.land` (raw), `garmin_wellness` (sleep, daily HR into `hr_samples` as source `garmin` / package `personal_api`, hourly SpO2, body battery, stress, HR-zone config), `routers/garmin._sync_hrv_personal` and `scripts/garmin_personal_backfill` (HRV into `hrv_readings`), `garmin_raw.record_lane` (status). **Readers:** `reads.freshness_reads.garmin_alerts` only; no UI, MCP tool or engine reads the new tables, and a test pins that nothing under `cbti/`, `engine/` or `reads/` does.
+
+**Downgrade** drops the six tables and the four columns. It loses every landed payload and mapped row; all of it is re-fetchable from Garmin's Personal API (no lookback cap observed).

@@ -153,6 +153,24 @@ describe('the freshness line (the point of the card)', () => {
     expect(screen.getByTestId('freshness-line').textContent).toContain('Polar never')
   })
 
+  test('Garmin lane alerts are shown as sent, red before amber, and absent when there are none', async () => {
+    const f = freshness()
+    f.garmin_alerts = [
+      { code: 'garmin_di_spo2_stale', severity: 'red', message: 'Garmin epoch SpO2: no night since 2026-10-20 (5 days behind)' },
+      { code: 'garmin_key_expiry', severity: 'amber', message: 'Garmin Personal API key expires in 20 days' },
+    ]
+    mockApi({ f })
+    await renderCard()
+    const alerts = screen.getAllByTestId('garmin-alert')
+    expect(alerts.map((a) => a.getAttribute('data-severity'))).toEqual(['red', 'amber'])
+    expect(alerts[0].textContent).toContain('epoch SpO2')
+    expect(alerts[0].className).toContain('text-red')
+    cleanup()
+    mockApi({ f: freshness() })
+    await renderCard()
+    expect(screen.queryAllByTestId('garmin-alert')).toHaveLength(0)
+  })
+
   test('if freshness cannot be read the card says so, amber and dimmed, never a bare number', async () => {
     mockApi({ fFail: true })
     await renderCard()
