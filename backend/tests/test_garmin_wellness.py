@@ -228,3 +228,47 @@ def test_remap_rebuilds_the_canonical_rows_from_the_landed_payloads_with_no_netw
     counts = gw.remap_user(db_session, 1, start=D, end=D, now=NOW)
     assert counts["sleep_inserted"] == 1
     assert db_session.query(models.SleepNight).count() == 1 and db_session.query(models.DailyPhysiology).count() == 1
+
+
+# -- a day with no data: the real host answers 200 with every value null (25 Oct 2026) ----------------
+
+def test_a_null_skeleton_is_empty_and_anything_with_a_real_value_or_an_unknown_shape_is_not():
+    skel = {"userProfilePK": 1, "calendarDate": DS, "restingHeartRate": None, "heartRateValues": None}
+    assert gw._is_empty(skel)
+    assert gw._is_empty([{"date": DS, "charged": None, "bodyBatteryValuesArray": [[1, None], [2, None]]}])
+    assert gw._is_empty(None) and gw._is_empty({}) and gw._is_empty([])
+    assert not gw._is_empty({"calendarDate": DS, "restingHeartRate": 48})
+    assert not gw._is_empty({"calendarDate": DS, "heartRateValues": [[1, 55]]})
+    assert not gw._is_empty({"somethingNew": [1, 2]})                         # unknown shape: kept, not dropped
+    assert not gw._is_empty({"value": 0})                                     # zero is a value
+
+
+def test_skeleton_days_are_counted_empty_and_land_nothing(db_session):
+    from garmin_personal_fakes import skeleton_day
+    _user(db_session)
+    host = FakeHost(now=NOW)
+    skeleton_day(host, DS)
+    with _client(host) as c:
+        counts = gw.sync_user(db_session, 1, c, start=D, end=D, with_zones=False, now=NOW)
+    assert counts["empty"] == 5 and counts["payloads_landed"] == 0 and counts["unmapped"] == 0
+    assert db_session.query(models.GarminRawPayload).count() == 0
+
+
+def test_the_real_payload_shapes_probed_in_prod_map_as_written():
+    """Shapes read from the live host (keys and types, 25 Oct 2026): sleep is FLAT with epoch-ms GMT times,
+    hourly SpO2 rows are [ts, level, extra], body battery rows are [ts, level], stress is a list of
+    {calendarDate, values}, and the HR-zone endpoint returns one object per sport."""
+    sleep = {"calendarDate": DS, "sleepTimeSeconds": 25000, "sleepStartTimestampGMT": 1792764000000,
+             "sleepEndTimestampGMT": 1792792800000, "averageSpO2Value": 95.0, "lowestSpO2Value": 88,
+             "averageSpO2HRSleep": 51.0, "awakeCount": 2, "avgSleepStress": 14.5,
+             "sleepScores": {"overall": {"value": 70, "qualifierKey": "FAIR"}, "stress": {"qualifierKey": "FAIR"}},
+             "sleepNeed": {"baseline": 470, "actual": 510}}
+    n = gw.parse_sleep(sleep, D)
+    assert n["sleep_start"].tzinfo is not None and n["sleep_score"] == 70 and n["spo2_avg_pct"] == 95.0
+    hours = gw.parse_spo2_hourly({"spO2HourlyAverages": [[1792764000000, 97, 15.6], [1792767600000, 98, 15.6]]})
+    assert [h[1] for h in hours] == [97.0, 98.0]
+    assert gw.parse_body_battery([{"charged": 5, "drained": 3, "bodyBatteryValuesArray": [[1, 29], [2, 90]]}])["high"] == 90
+    assert gw.parse_stress([{"calendarDate": DS, "values": {"overallStressLevel": 33}}], D) == {"avg": 33, "max": None}
+    zones = [{"sport": "RUNNING", "maxHeartRateUsed": 1}, {"sport": "DEFAULT", "trainingMethod": "HR_RESERVE",
+             "restingHeartRateUsed": 52, "lactateThresholdHeartRateUsed": 157, "maxHeartRateUsed": 177}]
+    assert gw.parse_hr_zones(zones) == {"max_hr": 177, "lthr": 157, "rhr_7d_auto": 52, "method": "HR_RESERVE"}

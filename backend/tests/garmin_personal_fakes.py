@@ -142,3 +142,17 @@ def populate(host: FakeHost, d: str) -> None:
     host.set(gp.BODY_BATTERY_PATH, body_battery_payload(d), d)
     host.set(gp.STRESS_PATH.format(start=d, end=d), stress_payload(d))
     host.set(gp.HR_ZONES_PATH, hr_zones_payload())
+
+
+def skeleton_day(host: FakeHost, d: str) -> None:
+    """What the real host answers for a day with no data (observed 25 Oct 2026): 200 with the full field set,
+    every value null. Only HRV and stress answer empty."""
+    host.set(gp.SLEEP_PATH, {"id": None, "userProfilePK": None, "calendarDate": None, "sleepTimeSeconds": None,
+                             "deepSleepSeconds": None, "sleepScores": None, "sleepNeed": None}, d)
+    host.set(gp.HEART_RATE_PATH, {"userProfilePK": FAKE_PK, "calendarDate": d, "restingHeartRate": None,
+                                  "heartRateValues": None}, d)
+    host.set(gp.SPO2_HOURLY_PATH.format(date=d), {"userProfilePK": FAKE_PK, "calendarDate": d, "averageSpO2": None,
+                                                  "spO2HourlyAverages": None, "monitoringEnvironmentValues": None})
+    host.set(gp.BODY_BATTERY_PATH, [{"date": d, "charged": None, "drained": None,
+                                     "bodyBatteryValuesArray": [[1785542400001, None], [1785542400002, None]],
+                                     "bodyBatteryValueDescriptorDTOList": None}], d)
