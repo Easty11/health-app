@@ -14820,7 +14820,6 @@ Iso-Lateral High Row (Machine) stays `horizontal_pull` as landed: the operator's
 **Do not revisit unless.** The Garmin Personal API migration lands a sleep, respiratory-rate, daily-RHR or SpO2-summary store (it slots in by rank, and `garmin_api` is the named position), or a ruling on SpO2 confidence and range filtering changes what the mean and minimum mean.
 
 ---
----
 
 ### #449. Garmin moves to the Personal API as the primary lane: a `garmin_personal` credential row, a hash-keyed raw landing, and typed tables for the data no canonical table held
 
