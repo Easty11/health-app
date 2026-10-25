@@ -14982,3 +14982,21 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **How you know.** The operator's pasted container output of 2026-10-25: the write, the `refresh_load` report and both `--hc-zones` reports. Code re-ran none of it (a session has no prod access) and did not see the Polar Flow or Garmin screens. The 175-baseline figures are the first report; the 177 figures are the second. Every row above is read from those two reports and the write output.
 
 **Do not revisit unless.** Polar's setting on the 14 and 21 Oct dates is read and contradicts the item-5 reading; a sample above 177 appears (the "Restate HRmax?" prompt shows it, PR #447); Polar Flow or Garmin moves off 177; a maximal-effort test (Q199) gives another value; or Q216 moves HC zoning to heart-rate reserve.
+
+---
+
+### #455. HC/Polar parity at 177 is treated as closed, on the operator's call; the comparison in #454 stands as recorded and its Polar-setting reading stays untested
+
+**Decision.** RULED by the operator on 2026-10-25 (their words: treat HC/Polar parity at 177 as closed). It is the call #454 item 6 left to them, made as #388 item 2 was made at 175. Governance only; nothing is built.
+
+1. **Parity at 177 is closed.** The per-band figures in #454 item 4 are unchanged and are the record. The 21 Oct bout agrees to within 0.37 min per band; the older bouts differ because Polar rows keep the zones Polar computed at the setting it held then (#385 item 3), which #454 item 5 records.
+2. **What the closure means, and does not.** As at 175 (#388), it says HC zoning is accepted against Polar's at the same maximum; it is not evidence that 177 is the true maximum (only Q199's maximal-effort test gives that), and it does not turn #454 item 5 from Likely into tested: Polar's setting on 14 and 21 Oct has still not been read. #453 stands unchanged.
+3. **The ROADMAP "HC zones (Q159 stage 2)" owed item for the operator is DONE.** Code's low-priority read of the single-row HC bout deposits (#384 item 4) remains.
+
+**Rationale.** None was given with the call. Code's note for the reader, not the operator's reason: the remaining gaps in #454 are against Polar rows computed before Polar's setting moved (Likely, not tested), and the one bout recorded since agrees.
+
+**Status.** DONE, ruled 2026-10-25. Numbers resolved at master max #454.
+
+**How you know.** The operator's ruling in chat, 2026-10-25, on the figures recorded in #454.
+
+**Do not revisit unless.** Polar's setting on 14 and 21 Oct is read and contradicts the #454 item 5 reading; a bout recorded after Polar and Garmin were both at 177 shows a per-band gap that the half-bpm edge convention of #388 item 3 cannot explain; Polar Flow or Garmin moves off 177; a sample above 177 appears (the "Restate HRmax?" prompt); or Q216 moves HC zoning to heart-rate reserve.
