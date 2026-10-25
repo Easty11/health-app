@@ -204,14 +204,38 @@ def format_duration(minutes: float) -> str:
     return f"{total // 60} h {total % 60:02d} m" if total >= 60 else f"{total} m"
 
 
-def sleep_snapshot_lines(sleep: dict[str, Any] | None) -> list[str]:
+# A heart-rate figure on the snapshot carries no date of its own (it rides on the night's line), so a
+# night that is not recent would put an old number under "Resting HR" beside today's biometrics. Past
+# this age the figure is withheld and the reason printed. Measured in whole wake-days (`days * 24`),
+# because the stores key a figure to its wake-date and not to a clock time.
+HR_MAX_AGE_HOURS = 48
+
+
+def hr_figures_stale(night: str, today: date | None) -> int | None:
+    """Days between the sleep night's wake-date and `today` when that age exceeds `HR_MAX_AGE_HOURS`,
+    else None. None whenever `today` is not given (callers that do not gate) or the night is unparseable
+    (never a crash, never a silent withhold)."""
+    if today is None:
+        return None
+    try:
+        age_days = (today - date.fromisoformat(str(night)[:10])).days
+    except ValueError:
+        return None
+    return age_days if age_days * 24 > HR_MAX_AGE_HOURS else None
+
+
+def sleep_snapshot_lines(sleep: dict[str, Any] | None, today: date | None = None) -> list[str]:
     """The snapshot's sleep lines: duration WITH its source, then the stage split of that one
     source, then each other figure tagged with the source that supplied it. A blended night (two
     or more writers) withholds the split rather than present mixed stages under one name. Fields
     no source carried print '—' where the line has a name to hold (stages, resting HR).
 
     "Resting HR" is the daily resting rate and nothing else: the ring's average sleep HR is its own
-    "Sleep HR" line, and when no daily rate exists the line says so rather than borrow a figure."""
+    "Sleep HR" line, and when no daily rate exists the line says so rather than borrow a figure.
+
+    When `today` (the wake-day) is given, both heart-rate lines are gated on the night's age: a night
+    more than `HR_MAX_AGE_HOURS` old prints `—` and the reason instead of its figure, so an old reading
+    is never read as current."""
     if sleep is None:
         return ["  Sleep: — (no staged night found)"]
     who = sleep["writers"][0] if len(sleep["writers"]) == 1 else sleep["source_label"]
@@ -238,11 +262,18 @@ def sleep_snapshot_lines(sleep: dict[str, Any] | None) -> list[str]:
         lines.append(f"  SpO2: {sleep['spo2_pct']:.1f}% · {by('spo2')}")
     if sleep["resp_rate"] is not None:
         lines.append(f"  Resp rate: {sleep['resp_rate']:.1f} br/min · {by('rr')}")
+    old = hr_figures_stale(sleep["night"], today)
+    gate = (f"withheld — the last reading is from the night of {sleep['night']}, {old} days before "
+            f"{today}, over {HR_MAX_AGE_HOURS} h old") if old is not None else None
     if sleep["sleep_hr_bpm"] is not None:
-        lines.append(f"  Sleep HR: {sleep['sleep_hr_bpm']:.0f} bpm · {by('sleep_hr')}")
+        lines.append(f"  Sleep HR: — ({gate})" if gate
+                     else f"  Sleep HR: {sleep['sleep_hr_bpm']:.0f} bpm · {by('sleep_hr')}")
     rhr = sleep.get("resting_hr_bpm")
-    lines.append(f"  Resting HR: {rhr:.0f} bpm · {by('daily_rhr')}" if rhr is not None
-                 else "  Resting HR: — (no daily resting rate)")
+    if rhr is not None and gate:
+        lines.append(f"  Resting HR: — ({gate})")
+    else:
+        lines.append(f"  Resting HR: {rhr:.0f} bpm · {by('daily_rhr')}" if rhr is not None
+                     else "  Resting HR: — (no daily resting rate)")
     for w in sleep.get("withheld", []):
         lines.append(f"  Withheld: {w['source']} sleep for {w['night']} — {w['reason']}")
     return lines
