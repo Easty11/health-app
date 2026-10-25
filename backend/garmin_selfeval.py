@@ -100,12 +100,14 @@ def _latest_by_activity(db, user_id: int) -> dict[int, models.SessionRpeObservat
 
 
 def _insert(db, user_id: int, *, activity_id: int, rpe_raw: float | None, feel: int | None, garmin_type: str | None,
-            start: datetime, stop: datetime | None, now: datetime) -> models.SessionRpeObservation:
+            start: datetime, stop: datetime | None, now: datetime,
+            transport: str = "di") -> models.SessionRpeObservation:
     """THE Garmin write: one call to the contract, which converts on the declared scale, inserts, commits,
-    and places the row strictly later than the activity's prior one."""
+    and places the row strictly later than the activity's prior one. `source` stays 'garmin' whichever
+    transport read it; the transport ('personal_api' | 'di') is audit detail in `provenance`."""
     return srpe_store.record_observation(
         db, user_id, source=SOURCE, source_activity_ref=activity_id, start=start, stop=stop, rpe_raw=rpe_raw,
-        raw_scale=RAW_SCALE, feel=feel, provenance={"garmin_type": garmin_type}, now=now)
+        raw_scale=RAW_SCALE, feel=feel, provenance={"garmin_type": garmin_type, "transport": transport}, now=now)
 
 
 def _is_rated(r: models.SessionRpeObservation) -> bool:
@@ -128,7 +130,8 @@ def _list_item_fields(item: Any) -> tuple[int, datetime, datetime | None, str | 
 
 
 def sync_user(db, user_id: int, *, factory: SourceFactory = ProbeSource, now: datetime | None = None,
-              window_days: int = LIST_WINDOW_DAYS) -> dict[str, Any]:
+              window_days: int = LIST_WINDOW_DAYS, source: Any = None,
+              transport: str = "di") -> dict[str, Any]:
     """One user's self-evaluation capture. Never refreshes a token, never writes to Garmin, never reads HR.
 
     ONE list GET since the last captured start (bounded by `window_days`), then ONE detail GET per
@@ -138,15 +141,23 @@ def sync_user(db, user_id: int, *, factory: SourceFactory = ProbeSource, now: da
 
     Returns `{fetched, rated, unrated, skipped_needs_refresh, errors}` (counts; `skipped_needs_refresh` is
     0/1). `fetched` counts detail records read; `rated` and `unrated` the observations inserted from them.
+
+    `source` (a prebuilt object with `.get(path, params=None)`) bypasses the DI row lookup: the Personal
+    API lane passes its `PersonalClient` with `transport='personal_api'`. Everything after the read is the
+    same code, so the contract, the scale and the re-check rules are shared between the two lanes.
     """
     now = _utc(now) or datetime.now(timezone.utc)
     out = {"fetched": 0, "rated": 0, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
 
-    row = db.query(models.UserIntegration).filter_by(user_id=user_id, provider="garmin").first()
-    if row is None:
-        return out
+    own_source = source is None
+    row = None
+    if own_source:
+        row = db.query(models.UserIntegration).filter_by(user_id=user_id, provider="garmin").first()
+        if row is None:
+            return out
     try:
-        source = factory(decrypt(row.api_key_encrypted))
+        if own_source:
+            source = factory(decrypt(row.api_key_encrypted))
         latest = _latest_by_activity(db, user_id)
         floor = (now - timedelta(days=window_days)).date()
         last_start = max((_utc(r.start_time) for r in latest.values()), default=None)
@@ -178,7 +189,7 @@ def sync_user(db, user_id: int, *, factory: SourceFactory = ProbeSource, now: da
             if prior is not None and (rpe, feel) == (prior.rpe_raw, prior.feel) and rated:
                 continue                    # re-read of a rated value that did not change: no row
             _insert(db, user_id, activity_id=aid, rpe_raw=rpe, feel=feel, garmin_type=tkey, start=start, stop=stop,
-                    now=now)
+                    now=now, transport=transport)
             out["rated" if rated else "unrated"] += 1
     except RefreshWouldBeNeeded:
         db.rollback()

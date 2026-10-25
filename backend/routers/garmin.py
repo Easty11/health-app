@@ -26,11 +26,16 @@ from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
+import garmin_personal_lanes as gpl
+import garmin_raw
+from connectors import garmin_personal as gp
 from connectors.garmin import (
     GarminClient,
+    GarminPersonalKeyError,
     GarminProfileUnresolvable,
     GarminReconnectError,
     account_fingerprint,
+    normalize_hrv_day,
 )
 from database import get_db
 from encryption import decrypt, encrypt
@@ -102,12 +107,18 @@ def _store_token(db: Session, row: models.UserIntegration, token_json: str) -> N
 
 # ── core sync service (reused by the endpoint and the CLI runner) ──────────────
 
-def _upsert_hrv_day(db: Session, user_id: int, source: str, day: dict) -> int:
+def _upsert_hrv_day(db: Session, user_id: int, source: str, day: dict, *, transport: str | None = None,
+                    keep_existing: bool = False) -> int:
     """Idempotent upsert of one normalised night + its samples. Returns #samples.
 
     Upserts the parent on (user_id, captured_at, source); children replace-on-reingest
     (delete this night's samples, re-add). Portable across Postgres and the SQLite test
-    substrate — a manual read-modify-write, not a dialect-specific ON CONFLICT."""
+    substrate — a manual read-modify-write, not a dialect-specific ON CONFLICT.
+
+    `transport` ('personal_api' | 'di') records how the night arrived; `source` stays 'garmin'.
+    `keep_existing` is the Personal API lane's guard: a night first written by the other transport is
+    overwritten field by field, but a field the new payload lacks (None) never nulls a stored value, and
+    a payload with no samples never deletes the stored series."""
     existing = (
         db.query(models.HrvReading)
         .filter_by(user_id=user_id, captured_at=day["captured_at"], source=source)
@@ -115,14 +126,20 @@ def _upsert_hrv_day(db: Session, user_id: int, source: str, day: dict) -> int:
     )
     if existing is not None:
         for field, value in day["reading"].items():
+            if keep_existing and value is None and getattr(existing, field) is not None:
+                continue
             setattr(existing, field, value)
-        db.query(models.HrvSample).filter_by(hrv_reading_id=existing.id).delete()
+        if transport is not None:
+            existing.transport = transport
+        if not (keep_existing and not day["samples"]):
+            db.query(models.HrvSample).filter_by(hrv_reading_id=existing.id).delete()
         reading = existing
     else:
         reading = models.HrvReading(
             user_id=user_id,
             source=source,
             captured_at=day["captured_at"],
+            transport=transport,
             **day["reading"],
         )
         db.add(reading)
@@ -162,7 +179,12 @@ def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date) -> dict
     immediately after a successful login so a refresh performed during login survives
     even if the subsequent pull fails. A dead/MFA-needed token raises
     GarminReconnectError (mapped to 424 upstream), never a 500.
+
+    A user with a `garmin_personal` key is served from the Personal API instead (PR-A of the migration,
+    DECISIONS_LOG #449); a user without one still takes this DI path until it is removed (PR-B).
     """
+    if gpl.get_row(db, user_id) is not None:
+        return _sync_hrv_personal(db, user_id, start, end)
     row = _require_garmin_row(user_id, db)
     client = GarminClient.from_token(decrypt(row.api_key_encrypted))
 
@@ -178,7 +200,7 @@ def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date) -> dict
 
     readings = samples = 0
     for day in days:
-        samples += _upsert_hrv_day(db, user_id, "garmin", day)
+        samples += _upsert_hrv_day(db, user_id, "garmin", day, transport="di")
         readings += 1
     db.commit()
 
@@ -186,6 +208,49 @@ def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date) -> dict
         "from": start.isoformat(),
         "to": end.isoformat(),
         "days_with_data": len(days),
+        "readings_upserted": readings,
+        "samples_upserted": samples,
+    }
+
+
+def _sync_hrv_personal(db: Session, user_id: int, start: date, end: date) -> dict:
+    """The Personal API HRV pull for one user over [start, end]. Same result shape as the DI path.
+
+    Per night: fetch `hrv-service/hrv/{date}`, LAND the raw payload (identity keys scrubbed), map it with
+    the same `normalize_hrv_day` the DI lane uses, and upsert on (user, night, 'garmin') with transport
+    'personal_api' and `keep_existing` (a field the payload lacks never nulls a stored one). A refused key
+    is a `GarminPersonalKeyError` (a reconnect state, 424 upstream); every other Personal API failure
+    propagates as a `PersonalApiError`. The lane status is recorded either way."""
+    readings = samples = days_with_data = 0
+    try:
+        with gpl.personal_client(db, user_id) as client:
+            if client is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="garmin personal key not connected")
+            cur = start
+            while cur <= end:
+                cdate = cur.isoformat()
+                raw = client.hrv_day(cdate)
+                if raw:
+                    landed = garmin_raw.land(db, user_id, "hrv", cdate, raw)
+                    day = normalize_hrv_day(landed.payload, cdate)
+                    if day is not None:
+                        samples += _upsert_hrv_day(db, user_id, "garmin", day, transport="personal_api",
+                                                   keep_existing=True)
+                        readings += 1
+                        days_with_data += 1
+                    db.commit()
+                cur += timedelta(days=1)
+    except gp.PersonalApiError as exc:
+        db.rollback()
+        gpl.record_failure(db, user_id, garmin_raw.LANE_PERSONAL_HRV, exc)
+        if isinstance(exc, gp.PersonalAuthError):
+            raise GarminPersonalKeyError(f"Garmin Personal API key refused or expired: {exc}") from None
+        raise
+    gpl.record_success(db, user_id, garmin_raw.LANE_PERSONAL_HRV, empty=days_with_data == 0)
+    return {
+        "from": start.isoformat(),
+        "to": end.isoformat(),
+        "days_with_data": days_with_data,
         "readings_upserted": readings,
         "samples_upserted": samples,
     }
@@ -216,6 +281,11 @@ def _latest_garmin_ingest_at(db: Session, user_id: int) -> datetime | None:
 def _reconnect_http(exc: GarminReconnectError) -> HTTPException:
     # Connector-auth failure is NOT session-auth failure — 424 so the frontend
     # interceptor never logs the user out; the body says to reconnect Garmin.
+    if isinstance(exc, GarminPersonalKeyError):
+        return HTTPException(
+            status_code=status.HTTP_424_FAILED_DEPENDENCY,
+            detail=f"Garmin Personal API key needs replacing — re-run garmin_personal_attach.py: {exc}",
+        )
     return HTTPException(
         status_code=status.HTTP_424_FAILED_DEPENDENCY,
         detail=f"Garmin reconnect required — re-run garmin_login.py: {exc}",
@@ -228,7 +298,7 @@ def _fingerprint_linked_elsewhere(db: Session, fingerprint: str, user_id: int) -
     return (
         db.query(models.UserIntegration.id)
         .filter(
-            models.UserIntegration.provider == "garmin",
+            models.UserIntegration.provider.in_(("garmin", gpl.PROVIDER)),   # one Garmin account, one user
             models.UserIntegration.account_fingerprint == fingerprint,
             models.UserIntegration.user_id != user_id,
         )
@@ -312,7 +382,10 @@ def garmin_status(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return {"connected": _get_garmin_row(current_user.id, db) is not None}
+    # Connected when the user has EITHER lane: a personal-only user is served and must not read as "not connected".
+    di = _get_garmin_row(current_user.id, db) is not None
+    personal = gpl.get_row(db, current_user.id) is not None
+    return {"connected": di or personal, "personal_api": personal}
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
@@ -357,6 +430,8 @@ def sync_garmin_hrv(
         return sync_hrv_for_user(db, current_user.id, start, end)
     except GarminReconnectError as exc:
         raise _reconnect_http(exc)
+    except gp.PersonalApiError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Garmin Personal API: {exc}")
 
 
 @router.post("/refresh")

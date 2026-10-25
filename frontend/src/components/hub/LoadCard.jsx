@@ -153,6 +153,18 @@ export default function LoadCard() {
           ? 'Data age unavailable: freshness could not be read.'
           : `Data as of ${asOf} · Health Connect ${formatPipeAge(fresh.pipes.health_connect)} · Polar ${formatPipeAge(fresh.pipes.polar)}`}
       </p>
+      {/* Garmin lane alerts (DECISIONS_LOG #450): the epoch-SpO2 lane failing or more than two nights behind,
+          the Personal API key close to expiry, a refused key. Server-decided; shown as sent, never filtered. */}
+      {(fresh?.garmin_alerts ?? []).map((a) => (
+        <p
+          key={a.code}
+          data-testid="garmin-alert"
+          data-severity={a.severity}
+          className={`text-[11px] mt-1 font-medium ${a.severity === 'red' ? 'text-red-600' : 'text-amber-600'}`}
+        >
+          {a.message}
+        </p>
+      ))}
     </section>
   )
 }

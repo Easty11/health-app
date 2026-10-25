@@ -103,6 +103,11 @@ class GarminReconnectError(Exception):
     """
 
 
+class GarminPersonalKeyError(GarminReconnectError):
+    """The Garmin Personal API key was refused (expired, revoked or wrong). A reconnect state like its
+    parent, but the remedy is a new key (`scripts/garmin_personal_attach.py`), not `garmin_login.py`."""
+
+
 def _bounded_rmssd(value: Any, *, cdate: str, field: str) -> Optional[float]:
     """Return the RMSSD value as a float if in [1, 400] ms, else None (logged).
 
