@@ -297,11 +297,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q238, the Railway-incident rotation ledger, is closed on the operator's instruction with its unrecorded rows left unrecorded: they say nothing was or was not rotated.** Governance - Canonical home: `DECISIONS_LOG.md` #451.
+
 - **"Rugby" now counts toward the open phase's metabolic slot (the 22 Oct sprint session was being listed as not counted), by one migration, and the plan tool's "Not counted" section prints whole minutes.** Code, migration - Canonical home: `DECISIONS_LOG.md` #447.
 
 - **The CBT-I titration now decides direction from the cycle's mean sleep efficiency (extend at 90 or above, hold from 85 to 90, compress under 85), and the close-out carries a second control, "Hold this window", that records a refusal at the unchanged window with the operator's reason.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #445 and #446.
-
-- **A Fernet fallback key and `scripts.rotate_fernet` let the encryption key be swapped with no unreadable window, and `docs/rotation-runbook-2026-10.md` is the operator's ordered procedure for Q238.** Code - Canonical home: `DECISIONS_LOG.md` #444.
 
 ---
 
