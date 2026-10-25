@@ -165,6 +165,13 @@ export default function LoadCard() {
           {a.message}
         </p>
       ))}
+      {/* HRmax prompts: a Health Connect row holds a sample above the HRmax in force. Information only: the
+          server lists the rows, nothing is restated from here (the operator's call, #383). */}
+      {(fresh?.hrmax_prompts ?? []).map((p) => (
+        <p key={p.id} data-testid="hrmax-prompt" className="text-[11px] mt-1 font-medium text-amber-600">
+          Restate HRmax? {p.date} {p.sport}: a sample of {p.hr_max} bpm against {p.hrmax_in_force} in force.
+        </p>
+      ))}
     </section>
   )
 }
