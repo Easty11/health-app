@@ -3010,14 +3010,6 @@ The key's owner sets its expiry at creation (one year at most) and Garmin emails
 
 ---
 
-## Q243. What reads the new Garmin tables, and which sleep-efficiency figure is shown?
-
-`sleep_nights`, `daily_physiology`, `spo2_hourly` and `hr_zone_config_snapshots` have no reader; a test pins that nothing under `cbti/`, `engine/` or `reads/` touches them. `sleep_nights.efficiency_pct` is a device-window figure (sleep time over the window Garmin reports, no pre-sleep time in bed) and reads higher than the diary SE the CBT-I titration uses (#445). A reader brief (including the `get_recovery_metrics` fix, out of scope here) decides what is surfaced, how Garmin sleep sits beside Health Connect sleep, and how the efficiency figure is labelled.
-
-**State:** OPEN.
-
----
-
 ## Q244. Should in-activity HR for a Garmin session that Health Connect never delivers be read from the Garmin Personal API (#449) into `hr_samples`, and under what writer-identity rule would it zone the Health Connect row?
 
 Raised 2026-10-25 with #452, on the operator's brief. No hold, no code: a question, not a build.
@@ -6640,5 +6632,13 @@ This question closes when every row carries a rotation date or a recorded decisi
 Open rows as of 2026-10-25 (operator slots left blank are `not recorded`): the dates of the Hevy, Garmin and Polar-secret re-issues; Polar re-authorisation and its sync (L5); MCP OAuth (L6); the old Anthropic key disabled and the incident-window usage check (L2, L1); the Railway CLI login and the Railway-to-GitHub reconnect (L7); private registry credentials (operator to confirm); the incident-window log review (L1); hevy2garmin (L8); the Phase 5 checks (L4); the Garmin old-session observation (L9). Dated and complete: Postgres, Fernet, the Phase 5 batch.
 
 The rows marked `not recorded` stay as written. They say the operator did not record the item; they do not say it was rotated and they do not say it was not. The items that carry security weight and that Code did not verify are named in #451 (c).
+
+---
+
+## Q243. What reads the new Garmin tables, and which sleep-efficiency figure is shown?
+
+`sleep_nights`, `daily_physiology`, `spo2_hourly` and `hr_zone_config_snapshots` have no reader; a test pins that nothing under `cbti/`, `engine/` or `reads/` touches them. `sleep_nights.efficiency_pct` is a device-window figure (sleep time over the window Garmin reports, no pre-sleep time in bed) and reads higher than the diary SE the CBT-I titration uses (#445). A reader brief (including the `get_recovery_metrics` fix, out of scope here) decides what is surfaced, how Garmin sleep sits beside Health Connect sleep, and how the efficiency figure is labelled.
+
+**State:** DONE → #457. The readers are `reads/recovery_night.py` (the MCP table and the candidates the snapshot and card resolve) and `reads/snapshot_reads.py`; Garmin ranks on (source, transport); the efficiency is printed as derived from the device's own sleep window and is not the diary SE; the pin test names the two readers.
 
 ---
