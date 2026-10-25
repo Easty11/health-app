@@ -166,12 +166,16 @@ def test_the_downgrade_leaves_the_sport_in_place(conn):
     assert _micro_of(conn, 1) == once
 
 
-def test_the_revision_is_the_single_head_and_chains_from_c4e9a1f27b36():
+def test_the_revision_chains_from_c4e9a1f27b36_and_the_history_has_one_head():
+    """Not "is the head": a later revision (b8f3d6a2c915, Rugby) now sits on top of it. What stays true is the
+    parent and that it is an ancestor of the one head."""
     cfg = Config(str(_BACKEND / "alembic.ini"))
     cfg.set_main_option("script_location", str(_BACKEND / "migrations"))
     script = ScriptDirectory.from_config(cfg)
-    assert script.get_heads() == ["e5b2c8a91d47"], "migration history branched, or another head landed"
+    heads = script.get_heads()
+    assert len(heads) == 1, "migration history branched"
     assert script.get_revision("e5b2c8a91d47").down_revision == "c4e9a1f27b36"
+    assert "e5b2c8a91d47" in {r.revision for r in script.walk_revisions(base="base", head=heads[0])}
 
 
 # ---- the point of it: the edited list makes the 21 Oct session count -----------------------------------
