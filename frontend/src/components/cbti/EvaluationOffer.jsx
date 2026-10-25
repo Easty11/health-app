@@ -5,9 +5,13 @@
 // so a prescription cannot change what the operator does without them having seen the
 // decision and what it rested on.
 //
-// Accept is an explicit control and the ONLY write path. It posts an empty body — the
-// server re-evaluates and mints from its own result, so nothing the client sends can
-// produce a prescription the engine did not compute.
+// Accept is an explicit control and the ONLY path that adopts the engine's decision. It posts an
+// empty body — the server re-evaluates and mints from its own result, so nothing the client sends
+// can produce a prescription the engine did not compute.
+//
+// "Hold this window…" is the operator's REFUSAL (R2, #446). It posts a reason and nothing
+// else: the operator may refuse a move, never author a window, and the server writes a hold at
+// the unchanged window. It follows the same two-act shape as accept, plus a required reason.
 //
 // ACCEPT IS TWO ACTS, NOT ONE (#214, resolving Q101). The offer card's own control fires
 // no request: it expands a confirmation that restates the ACTUAL WRITE — the decision, the
@@ -27,7 +31,8 @@ import { useEffect, useState } from 'react'
 import api from '../../api'
 import {
   basisLine, confirmationLines, decisionHeadline, exclusionNote, formatMinutes,
-  insufficiencyHeadline, nextEvaluationNote, reasonLabel, statusChipClass, statusLabel,
+  holdConfirmationLines, insufficiencyHeadline, nextEvaluationNote, reasonLabel,
+  statusChipClass, statusLabel,
 } from './evaluationCopy'
 
 function Row({ label, value }) {
@@ -90,7 +95,9 @@ export default function EvaluationOffer({ onAccepted }) {
   const [accepting, setAccepting] = useState(false)
   // The #214 gate. False = the offer is being read; true = the confirmation restating the
   // write is open. Nothing about entering or leaving this state touches the network.
-  const [confirming, setConfirming] = useState(false)
+  // null = reading the offer; 'accept' | 'hold' = that act's confirmation is open.
+  const [confirming, setConfirming] = useState(null)
+  const [holdReason, setHoldReason] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -119,7 +126,34 @@ export default function EvaluationOffer({ onAccepted }) {
     }
   }
 
+  async function hold() {
+    setAccepting(true)
+    setError('')
+    try {
+      const { data } = await api.post('/checkin-v2/cbti/evaluation/hold', { reason: holdReason.trim() })
+      setEv(data)
+      onAccepted?.(data)
+    } catch (err) {
+      setError(err.response?.data?.detail?.[0]?.msg || err.response?.data?.detail
+        || 'Could not record the hold.')
+    } finally {
+      setAccepting(false)
+    }
+  }
+
   if (status !== 'ready' || !ev?.block_open) return null
+
+  if (ev.reason === 'held_by_operator') {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 mb-4 text-left">
+        <p className="text-sm font-semibold text-gray-800">Hold recorded</p>
+        <p className="text-xs text-gray-600 mt-1">
+          Window stays {formatMinutes(ev.basis?.window_minutes_proposed)} · lights out{' '}
+          {ev.basis?.lights_out_proposed} → {ev.basis?.wake_anchor}. A new cycle starts tonight.
+        </p>
+      </div>
+    )
+  }
 
   if (ev.reason === 'accepted') {
     return (
@@ -258,20 +292,31 @@ export default function EvaluationOffer({ onAccepted }) {
       {/* STEP 1 — no network. The label says what the control does (opens a review), not
           what the flow eventually does, so a tap made without reading cannot write. */}
       {!confirming && (
-        <button
-          type="button"
-          onClick={() => { setError(''); setConfirming(true) }}
-          className="w-full bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-medium
-            hover:bg-indigo-700 transition-colors"
-        >
-          Review and accept…
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => { setError(''); setConfirming('accept') }}
+            className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-medium
+              hover:bg-indigo-700 transition-colors"
+          >
+            Review and accept…
+          </button>
+          {/* The refusal. Same deliberate two acts; it can only keep the window as it is. */}
+          <button
+            type="button"
+            onClick={() => { setError(''); setConfirming('hold') }}
+            className="flex-1 bg-white text-gray-700 border border-gray-300 rounded-xl py-2.5
+              text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            Hold this window…
+          </button>
+        </div>
       )}
 
       {/* STEP 2 — the write, restated. This repeats the decision deliberately: the
           operator is confirming a LEDGER WRITE, and the write is not only the numbers
           above but the cycle close and clock reset that come with them. */}
-      {confirming && (
+      {confirming === 'accept' && (
         <div className="border-t border-gray-100 pt-3 space-y-2">
           <p className="text-[11px] font-semibold text-gray-800">
             Record this prescription? {decisionHeadline(ev.decision, b)}.
@@ -293,7 +338,52 @@ export default function EvaluationOffer({ onAccepted }) {
             </button>
             <button
               type="button"
-              onClick={() => { setError(''); setConfirming(false) }}
+              onClick={() => { setError(''); setConfirming(null) }}
+              disabled={accepting}
+              className="px-4 bg-white text-gray-600 border border-gray-300 rounded-xl py-2.5
+                text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* The refusal's confirmation. The reason is required — the textarea is the only place the
+          operator's ground is recorded — so the confirm control does not post until it is filled. */}
+      {confirming === 'hold' && (
+        <div className="border-t border-gray-100 pt-3 space-y-2">
+          <p className="text-[11px] font-semibold text-gray-800">
+            Hold the window instead? The engine offered: {decisionHeadline(ev.decision, b)}.
+          </p>
+          <ul className="space-y-0.5">
+            {holdConfirmationLines(b).map((line) => (
+              <li key={line} className="text-[11px] text-gray-600 leading-snug">· {line}</li>
+            ))}
+          </ul>
+          <label className="block text-[11px] text-gray-600" htmlFor="cbti-hold-reason">
+            Why are you holding this window?
+          </label>
+          <textarea
+            id="cbti-hold-reason"
+            value={holdReason}
+            onChange={(e) => setHoldReason(e.target.value)}
+            rows={2}
+            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-800"
+          />
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={hold}
+              disabled={accepting || !holdReason.trim()}
+              className="flex-1 bg-gray-800 text-white rounded-xl py-2.5 text-sm font-medium
+                hover:bg-gray-900 transition-colors disabled:opacity-50"
+            >
+              {accepting ? 'Recording…' : 'Confirm — hold this window'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setError(''); setConfirming(null) }}
               disabled={accepting}
               className="px-4 bg-white text-gray-600 border border-gray-300 rounded-xl py-2.5
                 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"

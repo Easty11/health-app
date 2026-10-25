@@ -5,14 +5,27 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  basisLine, decisionHeadline, exclusionNote, formatMinutes, nextEvaluationNote,
-  reasonLabel, statusChipClass, statusLabel,
+  basisLine, decisionHeadline, exclusionNote, formatMinutes, holdConfirmationLines,
+  nextEvaluationNote, reasonLabel, statusChipClass, statusLabel,
 } from './evaluationCopy'
 
 const basis = (over = {}) => ({
   window_minutes_current: 390,
   window_minutes_proposed: 405,
   ...over,
+})
+
+describe('holdConfirmationLines (R2)', () => {
+  it('states that the window stays, and that the cycle still closes', () => {
+    const lines = holdConfirmationLines({
+      window_minutes_current: 390, window_minutes_proposed: 405, lights_out_current: '22:30',
+    })
+    expect(lines).toContain('Window stays 6h 30m (no change)')
+    expect(lines).toContain('Lights out stays 22:30')
+    expect(lines.some((l) => /resets the evaluation clock/.test(l))).toBe(true)
+    // it never restates the engine's proposed window as something that will be written
+    expect(lines.join(' ')).not.toMatch(/6h 45m/)
+  })
 })
 
 describe('formatMinutes', () => {

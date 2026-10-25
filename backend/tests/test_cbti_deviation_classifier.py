@@ -277,6 +277,6 @@ def test_training_constrained_stays_in_the_enum_as_legacy_but_is_never_emitted()
 
 def test_the_ruleset_version_moved_and_the_replay_no_longer_reads_sessions():
     import cbti.replay as replay_mod
-    assert RULESET_VERSION == "cbti-basis/2026-10-21.1"
+    assert RULESET_VERSION == "cbti-se-band/2026-10-25.1"
     assert not hasattr(replay_mod, "_TRAINING_SQL")
     assert not hasattr(Night(date=date(2026, 10, 1)), "training_end")

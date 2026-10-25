@@ -16,7 +16,7 @@ from typing import Any, Optional
 
 import pytz
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
 from sqlalchemy.orm import Session
 
 import models
@@ -1048,26 +1048,25 @@ def get_cbti_evaluation(
     return out
 
 
-@router.post("/cbti/evaluation/accept", response_model=CBTIEvaluationOut)
-def accept_cbti_evaluation(
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """The witnessed act (#118). Mints the successor prescription.
+class CBTIHoldIn(BaseModel):
+    """The operator's refusal of an offered cycle (R2, #446). The reason is mandatory: a
+    refusal with no stated ground is indistinguishable from a mis-tap, and the text is the
+    only place the operator's ground is recorded."""
+    reason: str
 
-    The decision is RE-EVALUATED here rather than taken from the client: the request
-    carries no body, so there is no path by which a posted decision could mint a
-    prescription the engine did not produce.
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("a reason is required")
+        return v
 
-    Appends one row and applies the ledger's only two permitted UPDATEs to the prior one
-    — `effective_to` and `superseded_by`. The block row is not touched: block close stays
-    engine-driven (#118). Under the hunting engine every eligible decision-on-merits is a
-    prescription (extend / compress / adherence HOLD / converged HOLD), never a
-    block-ending act, so those successors are always safe to mint.
 
-    NOT every eligible cycle, though. An INSUFFICIENCY HOLD is refused (#218): the engine
-    reached no decision, so there is nothing to record. See the gate below.
-    """
+def _gated_cycle(current_user: models.User, db: Session):
+    """The three 409 gates shared by accept and hold (#118, #218): returns
+    `(block, ev, prior)` for a cycle that may be written, or raises 409. One function so
+    the two writes cannot drift on what they refuse."""
     block, ev = _live_evaluation(current_user.id, db)
     if block is None or ev is None:
         raise HTTPException(status_code=409, detail="No open CBT-I block with a live prescription.")
@@ -1099,17 +1098,23 @@ def accept_cbti_evaluation(
     # Without this a double-tap mints two successors, both claiming the same cycle.
     if prior is None or prior.superseded_by is not None:
         raise HTTPException(status_code=409, detail="This evaluation has already been accepted.")
+    return block, ev, prior
 
-    today = _today_aest()
+
+def _mint_successor(db: Session, block, ev, prior, *, decision: str, window_minutes: int,
+                    lights_out: str, rationale: Optional[str]):
+    """Append the successor prescription and apply the ledger's only two permitted UPDATEs
+    to the prior one. Shared by accept and hold: the basis_* snapshot, the per-night ledger
+    and the ruleset are written identically, so the two kinds of row cannot drift."""
     cycle = ev.cycle
     successor = models.CBTIPrescription(
         block_id=block.id,
-        effective_from=today,
+        effective_from=_today_aest(),
         effective_to=None,
-        prescribed_lights_out=cycle["rec_lights_out"],
+        prescribed_lights_out=lights_out,
         wake_anchor=ev.live_rx.wake_anchor,
-        window_minutes=cycle["rec_window"],
-        decision=cycle["decision"],
+        window_minutes=window_minutes,
+        decision=decision,
         basis_tst_min=cycle["tst"],
         basis_se_pct=cycle["se"],
         basis_nights_n=cycle["n"],
@@ -1122,14 +1127,44 @@ def accept_cbti_evaluation(
         basis_n_flagged=cycle["n_flagged"],
         basis_ledger=cycle["ledger"],
         ruleset_version=cycle["ruleset_version"],
+        rationale=rationale,
     )
     db.add(successor)
     db.flush()
 
     # The ONLY two permitted UPDATEs on an existing prescription row.
-    prior.effective_to = today - timedelta(days=1)
+    prior.effective_to = successor.effective_from - timedelta(days=1)
     prior.superseded_by = successor.id
     db.commit()
+    return successor
+
+
+@router.post("/cbti/evaluation/accept", response_model=CBTIEvaluationOut)
+def accept_cbti_evaluation(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The witnessed act (#118). Mints the successor prescription.
+
+    The decision is RE-EVALUATED here rather than taken from the client: the request
+    carries no body, so there is no path by which a posted decision could mint a
+    prescription the engine did not produce.
+
+    Appends one row and applies the ledger's only two permitted UPDATEs to the prior one
+    — `effective_to` and `superseded_by`. The block row is not touched: block close stays
+    engine-driven (#118). Under the hunting engine every eligible decision-on-merits is a
+    prescription (extend / compress / adherence HOLD / converged HOLD), never a
+    block-ending act, so those successors are always safe to mint.
+
+    NOT every eligible cycle, though. An INSUFFICIENCY HOLD is refused (#218): the engine
+    reached no decision, so there is nothing to record. See `_gated_cycle`.
+    """
+    block, ev, prior = _gated_cycle(current_user, db)
+    cycle = ev.cycle
+    successor = _mint_successor(
+        db, block, ev, prior, decision=cycle["decision"], window_minutes=cycle["rec_window"],
+        lights_out=cycle["rec_lights_out"], rationale=None,
+    )
 
     return CBTIEvaluationOut(
         block_open=True,
@@ -1140,4 +1175,45 @@ def accept_cbti_evaluation(
         decision=successor.decision,
         decision_reason=cycle["reason"],
         basis=_basis_from(cycle, ev.live_rx),
+    )
+
+
+@router.post("/cbti/evaluation/hold", response_model=CBTIEvaluationOut)
+def hold_cbti_evaluation(
+    body: CBTIHoldIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The operator's refusal of an offered cycle (R2, #446; extends #118).
+
+    The operator may REFUSE a move, never AUTHOR a window: the body carries only a reason,
+    and the window and lights-out written are the live prescription's own, unchanged. The
+    successor is a `hold` row (already admitted by the decision CHECK) that supersedes the
+    prior and resets the cycle clock exactly as accept does — same gates, same mint.
+
+    The engine's rejected decision travels in `rationale` beside the operator's text, so
+    the ledger records both what was offered and why it was refused, with no new column.
+    """
+    block, ev, prior = _gated_cycle(current_user, db)
+    cycle = ev.cycle
+    rationale = (f"operator_declined: {body.reason} | engine offered: "
+                 f"{cycle['decision']} — {cycle['reason']}")
+    successor = _mint_successor(
+        db, block, ev, prior, decision="hold", window_minutes=ev.live_rx.window_minutes,
+        lights_out=ev.live_rx.lights_out, rationale=rationale,
+    )
+
+    basis = _basis_from(cycle, ev.live_rx)
+    # the window actually written is the unchanged one, not the engine's rejected proposal
+    basis.window_minutes_proposed = successor.window_minutes
+    basis.lights_out_proposed = successor.prescribed_lights_out
+    return CBTIEvaluationOut(
+        block_open=True,
+        eligible=False,
+        reason="held_by_operator",
+        days_since_effective_from=0,
+        nights_since_effective_from=0,
+        decision=successor.decision,
+        decision_reason=rationale,
+        basis=basis,
     )

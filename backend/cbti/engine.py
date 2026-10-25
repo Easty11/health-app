@@ -1,10 +1,14 @@
 """CBT-I titration engine — weekly adjudication of the prescribed sleep window.
 
-Controls on TOTAL SLEEP TIME with sleep efficiency as a FLOOR, never as the target
-(#107). The window is rolling mean TST plus a buffer; the block exits on TST
-plateau with SE held >= 85%, not on SE reaching or stalling at a threshold. An
-SE-maximising rule terminates at peak efficiency, ~45 minutes short of need per
-#107's sleep-need estimate.
+Direction comes from the cycle's mean SLEEP EFFICIENCY BAND (R1, #445, superseding the
+rule of #107): mean SE >= SE_EXTEND_PCT (90) extends by MAX_MOVE_MIN, SE_FLOOR_PCT (85) <=
+mean SE < 90 holds the window, mean SE < 85 compresses by MAX_MOVE_MIN (never below
+FLOOR_MIN). Every move is exactly MAX_MOVE_MIN. #107's need estimate (~7h30) and its framing
+stand — SE is a floor and TST is the outcome — and the block still converges on a TST
+plateau with SE held >= 85%, not on SE reaching or stalling at a threshold. What is retired
+is #107's TARGET: re-targeting `mean TST + 30` each cycle has the fixed point TST = W - 30,
+i.e. SE = (W - 30) / W (~93.7% at a 477 min window), so that rule could only extend above
+that SE — a stricter SE-maximiser than the Spielman rule #107 set out to avoid.
 
 This module is PURE: it takes `Night` records and returns a `CycleDecision`. It
 opens no database session, reads no readiness output, and re-implements no clock
@@ -71,14 +75,12 @@ from cbti.timeutil import (
 )
 
 # ── constants ─────────────────────────────────────────────────────────────────
-# CHOSEN, not block-derived. 30 min is the standard sleep-restriction-therapy buffer
-# added to mean TST when setting the window — a first-principles / literature support
-# that stands without the prior block. (A block-2 derivation once co-supported ~30 but
-# is discarded for outcome claims; the SRT-buffer support is sufficient on its own.)
-BUFFER_MIN = 30
-
 FLOOR_MIN = 300               # 5h00 — never prescribe below this
 SE_FLOOR_PCT = 85.0           # #107: efficiency is the floor, not the target
+# R1 / #445: mean SE at or above this extends the window. CHOSEN, not derived — 90% is the
+# standard sleep-restriction-therapy extension threshold (below it: hold down to SE_FLOOR_PCT,
+# compress under it). Replaces the `mean TST + 30 min buffer` target of #107.
+SE_EXTEND_PCT = 90.0
 # UNDETERMINABLE FROM THE OBSERVED BLOCK. The three cycles that failed this gate
 # had n = 3, 3, 2. Lowering the threshold to 4 changes nothing — all three still
 # fail; lowering to 3 rescues two and still leaves one. The block's failures sit
@@ -183,7 +185,9 @@ AdherenceSource = Literal["samsung", "diary", "none"]
 # basis; an implausible night is `incomplete`; the adherence gate runs over every logged night
 # before sufficiency; training is no longer a night-level predicate. FORWARD-ONLY: persisted
 # ledgers carry the ruleset they were produced under and are never restated (#323 T2).
-RULESET_VERSION = "cbti-basis/2026-10-21.1"
+# `cbti-se-band/2026-10-25.1` (R1, #445): the titrate direction comes from the mean-SE band, not
+# from `mean TST + 30`; the basis/ledger rules are unchanged from 2026-10-21.1.
+RULESET_VERSION = "cbti-se-band/2026-10-25.1"
 # The ruleset a HISTORICAL cycle is still reconstructed under (the #323 gate semantics: no
 # deviation class, no plateau-affecting plausibility guard, adherence counted among the valid
 # nights after sufficiency), minus the retired training predicate.
@@ -592,6 +596,16 @@ def centre_estimate(windows: list[int], n: int = CENTRE_CYCLES) -> float | None:
     return round(statistics.mean(recent), 1)
 
 
+def _se_band(mean_se: float) -> Literal["extend", "hold", "compress"]:
+    """The titration direction for a cycle's mean SE (R1, #445). Boundaries are inclusive
+    on the upper band: exactly SE_EXTEND_PCT extends, exactly SE_FLOOR_PCT holds."""
+    if mean_se >= SE_EXTEND_PCT:
+        return "extend"
+    if mean_se >= SE_FLOOR_PCT:
+        return "hold"
+    return "compress"
+
+
 def evaluate_cycle(
     nights: list[Night],
     current_window_min: int,
@@ -750,26 +764,29 @@ def evaluate_cycle(
                 window_minutes=current_window_min, **base,
             )
 
-    # ── titrate ───────────────────────────────────────────────────────────────
-    target = max(FLOOR_MIN, mean_tst + BUFFER_MIN)
-    move = target - current_window_min
-    capped = abs(move) > MAX_MOVE_MIN
-    if capped:
-        move = MAX_MOVE_MIN if move > 0 else -MAX_MOVE_MIN
-    new_window = max(FLOOR_MIN, current_window_min + move)
+    # ── titrate: direction from the mean-SE band (R1, #445) ─────────────────
+    # Every move is exactly MAX_MOVE_MIN, so `move_capped` is structurally False; the field
+    # stays on the dataclass and the ledger payload for shape stability.
+    band = _se_band(mean_se)
+    if band == "extend":
+        new_window = current_window_min + MAX_MOVE_MIN
+    elif band == "compress":
+        new_window = min(current_window_min, max(FLOOR_MIN, current_window_min - MAX_MOVE_MIN))
+    else:
+        new_window = current_window_min
 
     if new_window > current_window_min:
-        decision, verb = "extend", "extended"
+        decision = "extend"
     elif new_window < current_window_min:
-        decision, verb = "compress", "compressed"
+        decision = "compress"
     else:
-        decision, verb = "hold", "unchanged"
+        decision = "hold"
 
     # ── GUARD (b), #253: an excused night may not by itself move the window ─────
     # The reclass admits a compromised night to the basis (guard a caps it at one), but
     # a single excused night must not be what TIPS a cycle into an extend or compress.
     # The move only stands if it is ROBUST to that night — i.e. the clean-only nights
-    # (valid, non-excused) reach the same direction on their own. If they are too few to
+    # (valid, non-excused) land in the same SE band on their own. If they are too few to
     # adjudicate (< MIN_VALID_NIGHTS) or would not move the window the same way, the
     # cycle HOLDs on its merits (sufficient=True — this is a decision, not an
     # insufficiency): the excused night keeps the cycle evaluable without driving it.
@@ -780,11 +797,9 @@ def evaluate_cycle(
             held_why = (f"only {len(clean)} clean of {len(valid)} valid nights — the "
                         f"{decision} rests on the excused night")
         else:
-            mean_tst_clean = round(statistics.mean(v.night.tst_min for v in clean))
-            move_clean = max(FLOOR_MIN, mean_tst_clean + BUFFER_MIN) - current_window_min
-            same_dir = (move_clean > 0) == (move > 0) and move_clean != 0
-            if not same_dir:
-                held_why = (f"clean-only basis (mean TST {mean_tst_clean}, "
+            mean_se_clean = round(statistics.mean(v.night.se_pct for v in clean), 2)
+            if _se_band(mean_se_clean) != band:
+                held_why = (f"clean-only basis (mean SE {mean_se_clean}, "
                             f"{len(clean)} nights) would not {decision}")
         if held_why is not None:
             return CycleDecision(
@@ -799,12 +814,18 @@ def evaluate_cycle(
                       if anchor_min is not None else prescribed_lights_out)
 
     base["prescribed_lights_out"] = new_lights_out
+    if decision == "extend":
+        reason = f"extended {current_window_min}->{new_window}min (mean SE {mean_se} >= {SE_EXTEND_PCT:g})"
+    elif decision == "compress":
+        reason = f"compressed {current_window_min}->{new_window}min (mean SE {mean_se} < {SE_FLOOR_PCT:g})"
+    elif band == "hold":
+        reason = f"se_band: {SE_FLOOR_PCT:g} <= SE {mean_se} < {SE_EXTEND_PCT:g}, window held"
+    else:
+        reason = (f"unchanged {current_window_min}min (mean SE {mean_se} < {SE_FLOOR_PCT:g}, "
+                  f"window already at the {FLOOR_MIN}min floor)")
     return CycleDecision(
         decision=decision,
-        reason=(f"{verb} {current_window_min}->{new_window}min "
-                f"(mean TST {mean_tst} + {BUFFER_MIN} buffer"
-                + (f", move capped at {MAX_MOVE_MIN}" if capped else "") + ")"),
+        reason=reason,
         window_minutes=new_window,
-        move_capped=capped,
         **base,
     )
