@@ -51,10 +51,10 @@ def _is_skeleton(o: Any) -> bool:
     """True when `o` holds no value at all: only None, empty containers, label keys, and `[timestamp, None...]`
     placeholder pairs. Observed 25 Oct 2026 (prod, user 1): for a day with no data the host does NOT answer with
     an empty body; it answers 200 with the full field set, every value null (sleep, heart rate, hourly SpO2,
-    body battery with `[ts, None]` pairs). Only HRV and stress answer empty. Anything with a real value, or a
+    body battery with `[ts, None]` pairs), and old days carry only false flags (`retro`, `deviceRemCapable`). Only HRV and stress answer empty. Anything with a real value, or a
     shape this function does not know, is content, so an unrecognised payload is landed, never dropped."""
-    if o is None:
-        return True
+    if o is None or isinstance(o, bool):
+        return True                                      # a flag (`retro: false`) is not a reading
     if isinstance(o, dict):
         return all(_is_skeleton(v) for k, v in o.items() if str(k).lower() not in _LABEL_KEYS)
     if isinstance(o, list):
