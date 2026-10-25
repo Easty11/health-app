@@ -27,7 +27,7 @@ from auth import get_current_user
 from database import get_db
 from routers import health
 from routers.health import _pick_latest_hrv
-from mcp_server import _format_recovery_metrics
+from reads.recovery_night import format_night, format_recovery, resolve, resolve_night
 
 
 def _user(db, uid=4):
@@ -167,40 +167,32 @@ def test_summary_preserves_existing_samsung_keys(db_session):
     assert body["latest"]["hrv_ms"] == 50.0
 
 
-# ── MCP formatter: both sources, labelled, never collapsed ───────────────────────────
+# ── MCP recovery reader: both sources, labelled, never collapsed ─────────────────────
 
-def _row(captured_at, source, hrv_ms, **sleep):
-    base = {
-        "captured_at": captured_at, "source": source, "hrv_ms": hrv_ms,
-        "sleep_hr_bpm": None, "respiratory_rate": None, "sleep_efficiency_pct": None,
-        "actual_sleep_time_minutes": None, "deep_minutes": None, "rem_minutes": None,
-        "light_minutes": None, "awake_minutes": None, "spo2_average_pct": None,
-    }
-    base.update(sleep)
-    return base
+NIGHT = date(2026, 9, 14)
 
 
-def test_format_recovery_metrics_labels_both_sources_on_one_night():
-    rows = [
-        _row("2026-09-14", "samsung", 113.0, sleep_hr_bpm=55, deep_minutes=60, rem_minutes=90),
-        _row("2026-09-14", "garmin", 65.0),
-    ]
-    out = _format_recovery_metrics(rows, 7)
-    assert "sources: garmin, samsung" in out
-    assert "2026-09-14 [samsung]: HRV=113 ms" in out
-    assert "2026-09-14 [garmin]: HRV=65 ms" in out
-    # Garmin carries no sleep architecture → those fields render as '—', not fabricated.
-    garmin_line = next(ln for ln in out.splitlines() if "[garmin]" in ln)
-    assert "Deep=—m" in garmin_line and "RHR=—" in garmin_line
+def test_recovery_line_labels_both_hrv_sources_on_one_night():
+    line = format_night(resolve_night(NIGHT, {
+        "samsung_scraper": {"hrv": 113.0, "sleep_hr": 55, "deep": 60, "rem": 90, "tst": 400},
+        "garmin": {"hrv": 65.0},
+    }))
+    # Two instruments, two readings, neither dropped nor ranked (#292).
+    assert "HRV=65 ms [garmin], 113 ms [samsung scraper]" in line
+    # The Garmin HRV row did not suppress the scraper's sleep fields (the old row-level gate).
+    assert "TST=400 min [samsung scraper]" in line and "Deep=60m" in line
+    # The ring's sleep HR is its own labelled figure, never the RHR slot.
+    assert "RHR=— (no daily-RHR source yet)" in line and "Sleep HR=55 bpm [samsung scraper]" in line
 
 
-def test_format_recovery_metrics_hc_fallback_labels_median_not_rhr():
-    # The health_connect_syncs fallback carries the median of ALL the day's HR samples. It is
-    # shown under its own label and never fills the RHR slot.
-    rows = [_row("2026-10-07", "health_connect_syncs", 50.0, all_day_median_hr=118.0)]
-    line = next(ln for ln in _format_recovery_metrics(rows, 7).splitlines() if "[health_connect_syncs]" in ln)
-    assert "RHR=— All-day median HR=118 bpm" in line
+def test_recovery_hc_fallback_labels_median_not_rhr():
+    # The all-day median of every HR sample is shown under its own label, never as RHR.
+    line = format_night(resolve_night(NIGHT, {
+        "hc_utc_day": {"hrv": 50.0}, "hc_aest_day": {"all_day_median_hr": 118.0}}))
+    assert "RHR=— (no daily-RHR source yet)" in line
+    assert "All-day median HR=118 bpm [HC all-day]" in line
+    assert "HRV=50 ms [HC UTC-day]" in line
 
 
-def test_format_recovery_metrics_empty():
-    assert _format_recovery_metrics([], 7) == "No recovery data found in the last 7 days."
+def test_recovery_empty():
+    assert format_recovery(resolve({}), 7) == "No recovery data found in the last 7 days."
