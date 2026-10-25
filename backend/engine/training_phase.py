@@ -81,8 +81,9 @@ _MICRO_SLOT_FIELDS = ("capacity", "load_window", "activity", "sessions_per_cycle
                       "device_sports", "recorded_via")
 
 # `recorded_via` (#317) — how a slot's sessions are recorded, so the form can WARN when a choice
-# has no evidence path today (a Garmin/Samsung load_window deposits no load until HC stage 2, Q159;
-# an H10 session with no sport won't match). Optional, closed set, metadata to the resolver/planner.
+# has no evidence path today (a Garmin load_window zones once Health Connect delivers the watch HR, 1–7 days
+# measured, #369; a Samsung Health load_window zones only if the writer sends HR, #364; an H10 session with
+# no sport won't match). Optional, closed set, metadata to the resolver/planner.
 _RECORDED_VIA_VALUES = ("hevy", "polar_h10", "garmin", "samsung_health", "manual")
 
 

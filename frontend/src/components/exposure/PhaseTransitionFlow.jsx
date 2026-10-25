@@ -39,8 +39,12 @@ import {
 const CAPACITIES = ['mobility', 'stability', 'strength', 'power', 'endurance']
 const SLOT_KINDS = ['capacity', 'load_window', 'activity']
 const RECORDED_VIA = ['hevy', 'polar_h10', 'garmin', 'samsung_health', 'manual']
-// A slot recorded on these has no load path today (HC stage 2, Q159) — WARN (F15, load_window only).
-const NO_LOAD_PATH = new Set(['garmin', 'samsung_health'])
+// A load_window slot recorded on these zones from Health Connect HR after a lag (Garmin, #369/#NEXT) or only if
+// the writer sends HR at all (Samsung Health, #364) — hint per device (F15, load_window only).
+const LOAD_WINDOW_HR_HINT = {
+  garmin: { tone: 'text-gray-500', text: "zones from the watch's HR once Health Connect delivers it — 1 to 7 days on the sessions measured; reads zero load until then." },
+  samsung_health: { tone: 'text-amber-700', text: "⚠ deposits load only if Samsung Health writes the session's HR to Health Connect; it has not since 2026-09-14 — zero load otherwise." },
+}
 const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
 // What each quota KIND records — one-line evidence hint (F4). A slot only CLAIMS sessions to count them (an
@@ -867,8 +871,8 @@ export default function PhaseTransitionFlow({ onWritten, onCancel }) {
               </label>
               {/* F15: the no-load warning is for load_window slots only; an activity slot is zero-load
                   by design, so warn only when its device has no evidence path at all. */}
-              {s.kind === 'load_window' && NO_LOAD_PATH.has(s.recorded_via) && (
-                <p className="text-xs text-amber-700 leading-snug">⚠ counts for the plan but deposits no load until Health Connect stage 2 (Q159).</p>
+              {s.kind === 'load_window' && LOAD_WINDOW_HR_HINT[s.recorded_via] && (
+                <p className={`text-xs ${LOAD_WINDOW_HR_HINT[s.recorded_via].tone} leading-snug`}>{LOAD_WINDOW_HR_HINT[s.recorded_via].text}</p>
               )}
               {s.kind === 'activity' && (s.device_sports?.length ?? 0) === 0 && s.recorded_via === '' && (
                 <p className="text-xs text-amber-700 leading-snug">⚠ no evidence path — pick how a session is recorded, or it can never count.</p>
