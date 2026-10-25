@@ -113,8 +113,8 @@ Transport-layer fake (`httpx.MockTransport`) for all personal-host tests (FEEDBA
 
 ## 5. Proposed governance entries (PENDING — not written to the stores)
 
-- **Decision #448 (migration + credentials):** M1/M2 shape, `garmin_personal` provider row, token columns, `hrv_readings.transport`, typed tables over `health_metrics`/`vendor_metrics`, hash-keyed append-only raw landing. How you know: S0.1 prod read; prior-art source read; httpx 401 probe.
-- **Decision #449 (SpO2-lane ruling):** DI epoch SpO2 + breathing disruptions is the DI lane's only job, operator-ruled load-bearing; it gets its own token keepalive; personal coarse SpO2 persists as the permanent substitute. How you know: code coupling read (`garmin_sync` ordering, #361 seam).
+- **Decision #449 (migration + credentials):** M1/M2 shape, `garmin_personal` provider row, token columns, `hrv_readings.transport`, typed tables over `health_metrics`/`vendor_metrics`, hash-keyed append-only raw landing. How you know: S0.1 prod read; prior-art source read; httpx 401 probe.
+- **Decision #450 (SpO2-lane ruling):** DI epoch SpO2 + breathing disruptions is the DI lane's only job, operator-ruled load-bearing; it gets its own token keepalive; personal coarse SpO2 persists as the permanent substitute. How you know: code coupling read (`garmin_sync` ordering, #361 seam).
 - **Questions to open (Q239+):** raw-landing identity scrub (R3); user 4 fingerprint vs its pk (S0 owed); personal-host range caps / rate limits / token-invalidation-on-re-exchange; payload field parity for HRV (baseline, weekly, samples); key-rotation procedure at the 1-year expiry; raw-landing retention; reader brief for the new tables (out of scope here; `get_recovery_metrics` fix separate).
 
 ## 6. Rulings needed before any code/migration

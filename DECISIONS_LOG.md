@@ -14792,11 +14792,39 @@ Iso-Lateral High Row (Machine) stays `horizontal_pull` as landed: the operator's
 
 ---
 
+### #448. get_recovery_metrics resolves every field to its own best source and names it; the resting-HR slot is held empty until a real daily resting rate is ingested
+
+**Decision.** `get_recovery_metrics` (the MCP recovery table) stops choosing a source per row and chooses one per field, per wake-day (`reads/recovery_night.py`, new). One line per wake-day; every value carries the source that supplied it. Each field walks a rank tuple (`FIELD_RANK`) and takes the first source with a value, so a source that carries only some fields no longer blanks the rest.
+- Sleep (TST, deep/REM/light) comes from the Health Connect aggregate with its writer read from `health_connect_record_sources`, ordered by `SLEEP_WRITER_PRIORITY` (Garmin, Samsung Health, Withings), the Samsung scraper below every HC writer. No new rank. The stage block (deep/REM/light/awake) resolves as one group from one source and is never mixed across writers; a night with two or more real HC writers gives its duration, labelled, and withholds the split (the snapshot's rule).
+- SpO2 is the Garmin night from `spo2_nights`: the mean and the minimum of the night's non-null epochs, computed on read and unfiltered. The scraper and the HC UTC-day column rank below it.
+- HRV is not ranked (#292): each instrument's reading is printed, side by side. The HC UTC-day HRV prints only when no instrument has one.
+- `RHR=` is reserved for a real daily resting rate and reads "no daily-RHR source yet". It is never filled from another figure. The ring's sleep HR is `Sleep HR=`, the HC sleep nadir is `Sleep-nadir HR=` (tagged with the writer it read), the HC AEST-day median of every sample is `All-day median HR=`.
+- A field no source carries prints a dash, never zero. Respiratory rate has no Garmin store and prints a dash on a Garmin night.
+- The slot for a new source is a loader that adds a candidate under a new source key plus an entry in the rank tuples; `daily_rhr` already ranks `garmin_api` first with no loader behind it.
+- The window is anchored on the Brisbane wake-day (`_aest_wake_day`), not the server's `CURRENT_DATE`.
+
+**Rationale.** The old reader had two faults. The Garmin branch of the union hardcoded NULL for sleep, SpO2 and the heart-rate fields, and the Health Connect fallback ran only when the union returned zero rows, so one Garmin HRV row hid every other source. The `RHR=` slot also held the Samsung ring's average sleep HR, which is not a resting rate.
+
+**Status.** Locked. Operator ratified all four calls below as written (25 Oct 2026, in session); self-merged on green per Merge disposition. No migration, no ingest change. The calls:
+1. The SpO2 mean and minimum are the first derived SpO2 values; Q150 stores raw epochs and defers judging them. They are unfiltered (no confidence threshold, no range check) because none is ruled, so the minimum is a single raw epoch (84 to 92 percent across users 1 and 4 last week) with Garmin's undocumented confidence ignored.
+2. One line per wake-day replaces one line per source. Anything that parsed the `[source]` prefix of a line, or `RHR=` as the ring's sleep HR, changes.
+3. Stage groups are single-writer, so Garmin-HC nights print `Awake=-`: the HC aggregate stores no awake minutes or efficiency, and the scraper's would be a second writer under the same block.
+4. The HC UTC-day SpO2, respiratory rate and HRV, and the AEST-day median, stay as the lowest-rank labelled sources (the old fallback showed them); dropping them is the alternative.
+
+**How you know.** Prod reads of 25 Oct 2026 (read-only, `railway connect` pipe). User 1: `health_connect_syncs` has a Garmin-package sleep night on each of 17 to 25 Oct, `hr_nadir_source_package` is the Garmin package on all of them, `spo2_nights` has 8 Garmin nights with 373 to 515 epochs and no null readings. User 4: `spo2_nights` has 8 Garmin nights and `hrv_readings` 8 rows, but `health_connect_syncs` holds ten rows, all 24 Aug to 2 Sep, and no sleep writer record since, so user 4's sleep and heart-rate fields are blank for want of a source. Master's own SQL and formatter on those rows printed sleep, SpO2 and RHR blank on every night for both users; this branch's loader and formatter on the same rows (replayed into SQLite) fill sleep, nadir and SpO2 for user 1 and SpO2 for user 4. `backend/tests/test_recovery_night.py` (resolution, writer order, atomic stages, blended night, slot-in by rank, absent not zero, loader scoping) plus the two retargeted tests pass; the full backend suite is 3751 passed, with `test_clock_pin` failing in this environment on master as well (`time_machine` not installed).
+
+**Not verified here.** The tool through MCP on the deployed service (this branch is not deployed). User 1's 25 Oct night reads 1151 minutes (light 1067) in the HC aggregate, which the reader now prints as stored; whether that is a merged second session is not read. Efficiency and awake from Garmin-package HC sleep are not in the aggregate at all.
+
+**Other readers with the same fault, reported not fixed.** `reads/snapshot_reads.sleep_snapshot_lines` prints the scraper's sleep HR as "Resting HR" (the same mislabel; `get_readiness_snapshot`). `reads/snapshot_reads.latest_sleep_night` (snapshot and the card's `latest_sleep`) picks one writer per night and hardcodes efficiency, awake, respiratory rate, sleep HR and SpO2 to None on an HC night, and never reads `spo2_nights`: row-level gating of the same kind. `context_builder`'s HC section labels the nadir and the median honestly, and its ring section is scraper-only and says so. Nothing under `current_state` reads these tables. `routers/recovery.py` is unmounted (Q151).
+
+**Do not revisit unless.** The Garmin Personal API migration lands a sleep, respiratory-rate, daily-RHR or SpO2-summary store (it slots in by rank, and `garmin_api` is the named position), or a ruling on SpO2 confidence and range filtering changes what the mean and minimum mean.
+
+---
 ---
 
-### #448. Garmin moves to the Personal API as the primary lane: a `garmin_personal` credential row, a hash-keyed raw landing, and typed tables for the data no canonical table held
+### #449. Garmin moves to the Personal API as the primary lane: a `garmin_personal` credential row, a hash-keyed raw landing, and typed tables for the data no canonical table held
 
-**Decision.** RATIFIED by the operator (25 Oct 2026, "approve R1-R8 as recommended", rulings R1-R6 and R8 here, R7 in #449; the plan is `docs/garmin-personal-api-plan.md`). The official Personal API (`personal.connectapi.garmin.com`) becomes the primary Garmin lane for users 1 and 4; the unofficial DI lane keeps one job (#449).
+**Decision.** RATIFIED by the operator (25 Oct 2026, "approve R1-R8 as recommended", rulings R1-R6 and R8 here, R7 in #450; the plan is `docs/garmin-personal-api-plan.md`). The official Personal API (`personal.connectapi.garmin.com`) becomes the primary Garmin lane for users 1 and 4; the unofficial DI lane keeps one job (#450).
 1. **Credentials (R1).** A second `user_integrations` row per user, `provider='garmin_personal'`: the key Fernet-encrypted in `api_key_encrypted`, plus three nullable columns, `key_expires_on` (the date the operator enters at attach), `access_token_encrypted` and `access_token_expires_at` (the 24 h bearer cache). The cache is derived, not a credential: a cached token that does not decrypt is a cache miss and re-exchanges, so `scripts.rotate_fernet` is deliberately NOT extended (the plan said to extend it; this is the recorded departure). A token is reused while more than an hour remains; a 401 forces one re-exchange. The client is hand-rolled on `httpx` (Garmin's `connect-personal-api-python` writes an undisableable token file under `~/.config`, adds `requests`, and has no release); its endpoint map and exchange protocol are followed.
 2. **Fingerprint and guard (R6).** `account_fingerprint = sha256("garmin:" + userProfilePk)`, the same function as the DI row, so user 1's stored digest matches without re-linking (S0.1, verified). The attach is refused (409) when the account is connected to a different user on EITHER Garmin provider, refused (409, distinct message) when it differs from the user's own DI connection, and fails closed (503) when the pk cannot be resolved. The DI attach route now also checks personal rows.
 3. **Canonical targets (R2).** `SCHEMA.md`'s `health_metrics` and `vendor_metrics` are specified but were never built, so they are not. HRV goes to `hrv_readings` / `hrv_samples`, intraday HR to `hr_samples` (source `garmin`, package `personal_api`; every reader filters `source = 'health_connect'`, so nothing double-counts), sRPE to `session_rpe_observations`. New typed tables: `garmin_raw_payloads`, `sleep_nights`, `spo2_hourly`, `daily_physiology`, `hr_zone_config_snapshots`, `integration_lane_status`. Stress and body battery are vendor composites, display only.
@@ -14817,7 +14845,7 @@ Iso-Lateral High Row (Machine) stays `horizontal_pull` as landed: the operator's
 
 ---
 
-### #449. The DI epoch-SpO2 lane (the CPAP-seal evidence) is the unofficial lane's only job, and it refreshes its own token
+### #450. The DI epoch-SpO2 lane (the CPAP-seal evidence) is the unofficial lane's only job, and it refreshes its own token
 
 **Decision.** RATIFIED by the operator (25 Oct 2026, ruling R7, with R8's alert rules). The unofficial `garminconnect` / DI lane is kept for ONE purpose: `dailySleepData` epoch SpO2 and `breathingDisruptionData`, unchanged in content, because the Personal API's sleep payload carries neither (probe: no `wellnessEpochSPO2DataDTOList`, severity string only). The operator ruled that evidence load-bearing (Q150: sealing of the CPAP mask).
 1. **Own keepalive.** Before the DI SpO2 read, a user served by the Personal API gets a DI login that refreshes the token and writes it back (`scripts.garmin_sync._di_keepalive`). Until now the DI HRV pull did this as a side effect and the SpO2 read goes through a client that cannot refresh (#361); moving HRV off DI would have aged the blob out and silently killed this lane. A dead DI token is recorded `auth_failed` and the read is not attempted with it; a transient keepalive failure still attempts the read.
@@ -14827,7 +14855,7 @@ Iso-Lateral High Row (Machine) stays `horizontal_pull` as landed: the operator's
 
 **Rationale.** A lane that fails by ageing out, with its failure absorbed as `skipped_needs_refresh`, is the worst shape for safety-relevant evidence. Making the dependency explicit and the failure loud costs one extra login a night.
 
-**Status.** BUILT with #448, HELD with it. Not exercised against prod.
+**Status.** BUILT with #449, HELD with it. Not exercised against prod.
 
 **How you know.** `tests/test_garmin_personal_lanes.py` pins the order (keepalive login, write-back, then the read), that the refreshed blob is stored, that a dead DI token blocks the read and records `auth_failed`, that a dead personal key does not stop the DI lane, and that a DI-only user is unchanged. `tests/test_garmin_alerts.py` pins the thresholds. The coupling itself was read from `garmin_sync` and #361.
 

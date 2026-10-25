@@ -2,7 +2,7 @@
 
 Hand-rolled on `httpx` (already a dependency) instead of depending on `garmin/connect-personal-api-python`:
 that library caches the bearer token in a file under ~/.config that cannot be switched off, which is wrong
-for a multi-user server where the cache must be Fernet-encrypted in the database (DECISIONS_LOG #448).
+for a multi-user server where the cache must be Fernet-encrypted in the database (DECISIONS_LOG #449).
 Its endpoint map and exchange protocol are what this follows.
 
   * The key is exchanged for a bearer JWT: `POST /personalapitoken-service/personal-api/personal-api-key/token`,

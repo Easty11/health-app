@@ -74,7 +74,7 @@ class UserIntegration(Base):
     templates_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # Garmin Personal API (provider='garmin_personal'; DECISIONS_LOG #448). NULL on every other row.
+    # Garmin Personal API (provider='garmin_personal'; DECISIONS_LOG #449). NULL on every other row.
     # `key_expires_on` is the date the OPERATOR entered at attach (Garmin emails the key's owner, not
     # the operator, and the key's expiry is set by its owner at creation). The access token is a
     # <=24 h cache of the key's exchange, Fernet-encrypted: it is derived, never durable, so a row that
@@ -901,7 +901,7 @@ class BreathingDisruptionInterval(Base):
 
 
 class GarminRawPayload(Base):
-    """One Garmin Personal API response, landed raw (S3, DECISIONS_LOG #448). APPEND-ONLY.
+    """One Garmin Personal API response, landed raw (S3, DECISIONS_LOG #449). APPEND-ONLY.
 
     `endpoint` is our logical name for the call ('hrv', 'sleep', 'heart_rate', 'spo2_hourly',
     'body_battery', 'stress', 'hr_zones', 'activity_detail'), `ref` the calendar date (ISO) or the

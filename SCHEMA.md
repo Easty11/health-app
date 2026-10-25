@@ -2018,7 +2018,7 @@ CREATE INDEX ix_breathing_disruption_intervals_spo2_night_id ON breathing_disrup
 
 ### 050 — Garmin Personal API: credential columns, hrv transport, raw landing, sleep / physiology / status tables
 
-Migration `c4a8e2f6b190` (revises `b8f3d6a2c915`). **ADDITIVE ONLY and HELD for the operator's release** (a schema migration): nothing dropped, retyped or backfilled, every added column nullable, every new table empty until the code that fills it deploys. The data step (stamping existing `hrv_readings.transport = 'di'`) is a separate held revision, not this one. DECISIONS_LOG #448 (the migration) and #449 (the DI SpO2 lane).
+Migration `c4a8e2f6b190` (revises `b8f3d6a2c915`). **ADDITIVE ONLY and HELD for the operator's release** (a schema migration): nothing dropped, retyped or backfilled, every added column nullable, every new table empty until the code that fills it deploys. The data step (stamping existing `hrv_readings.transport = 'di'`) is a separate held revision, not this one. DECISIONS_LOG #449 (the migration) and #450 (the DI SpO2 lane).
 
 ```sql
 ALTER TABLE user_integrations ADD COLUMN key_expires_on DATE;                       -- provider='garmin_personal': operator-entered key expiry

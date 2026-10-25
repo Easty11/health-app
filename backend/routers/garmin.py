@@ -181,7 +181,7 @@ def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date) -> dict
     GarminReconnectError (mapped to 424 upstream), never a 500.
 
     A user with a `garmin_personal` key is served from the Personal API instead (PR-A of the migration,
-    DECISIONS_LOG #448); a user without one still takes this DI path until it is removed (PR-B).
+    DECISIONS_LOG #449); a user without one still takes this DI path until it is removed (PR-B).
     """
     if gpl.get_row(db, user_id) is not None:
         return _sync_hrv_personal(db, user_id, start, end)

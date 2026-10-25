@@ -233,7 +233,7 @@ def _pipes(db: Session, user_id: int, now: datetime, nightly: list[dict[str, Any
     return {"health_connect": hc, "polar": polar, "garmin_hrv": garmin}
 
 
-# -- Garmin lane alerts (DECISIONS_LOG #449, S5) ---------------------------------------------------
+# -- Garmin lane alerts (DECISIONS_LOG #450, S5) ---------------------------------------------------
 KEY_EXPIRY_AMBER_DAYS = 30            # Garmin emails the key's OWNER, not the operator: this is the warning
 KEY_EXPIRY_RED_DAYS = 7
 DI_SPO2_STALE_AFTER_NIGHTS = 2        # more than this many wake-dates behind with no epoch data -> loud
