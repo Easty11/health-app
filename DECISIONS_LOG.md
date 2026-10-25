@@ -14860,3 +14860,23 @@ Iso-Lateral High Row (Machine) stays `horizontal_pull` as landed: the operator's
 
 **Do not revisit unless.** The Personal API gains epoch SpO2 or breathing disruptions (then this lane can be retired); the DI lane is blocked outright by Garmin; or the sweep ordering changes.
 
+---
+
+### #451. Q238 closes on the operator's instruction with an incomplete ledger: the unrecorded rows are unknown, not done
+
+**Decision.** RATIFIED by the operator in chat on 2026-10-25 (their words: it was all yesterday, they do not care to reconstruct it, they want it completed so they can move on). Governance only; nothing is built.
+
+(a) **Q238 closes DONE although its own close condition is not met.** The condition was that every row carries a rotation date or a recorded decision not to rotate. The operator declined to supply the rows that rest on their slots (L1 to L9 of the 2026-10-25 brief) and the dates of the Hevy, Garmin and Polar-secret re-issues. The condition is waived by the operator, not satisfied.
+
+(b) **A `not recorded` row is not a claim either way.** Those rows stay in Q238 as written. They say the operator did not record the item; they do not say it was rotated and they do not say it was not. Nothing in the stores asserts that any of those credentials was rotated.
+
+(c) **Named so the closure is not read as proof: unverified by Code.** The old Anthropic key disabled in the console; `mcp_oauth_tokens` and `mcp_oauth_clients` cleared and the connector reconnected (Phase 6); `railway logout` and `login`, and the Railway-to-GitHub reconnect (Phase 7); the incident-window log review (backend HTTP logs, Anthropic console usage, GitHub security log); the hevy2garmin project's rotation; the Phase 5 checks (web-app sign-in, password reset, a chat turn under the new `ANTHROPIC_API_KEY`, the reset email under the new `RESEND_API_KEY`); and the Polar re-authorisation, which failed on its first attempt on 2026-10-24 and whose outcome is unrecorded. What Code did verify is in #444's Status and Q238's rows: the Railway deployments by id, and the 2026-10-24T16:00Z sweep (every Hevy page `200`, `garmin ... errors: 0`).
+
+**Rationale.** The ledger exists to put dates on rotations. The operator ran the rotation on 2026-10-23 and 2026-10-24 and will not reconstruct the record. An open question nobody will close tracks nothing the operator will act on, and filling the rows from inference would write claims Code cannot support (#111 bars the variable reads that would settle several). A closure that says what it does not know is more honest than either.
+
+**Status.** Landed via this PR. Q238 DONE. Not verified here: every item in (c).
+
+**How you know.** The operator's message of 2026-10-25 in the Code session. Q238's table and its open-rows line as landed by PR 434 (merge `5c6b76a`). #444's Status for what Code read.
+
+**Do not revisit unless.** Railway reports a further exposure or confirms that variables were decrypted; a credential on the (c) list is found live under its old value; or the operator chooses to backfill a row (append a dated row to Q238's entry; do not reopen it).
+
