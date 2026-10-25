@@ -15000,3 +15000,21 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **How you know.** The operator's ruling in chat, 2026-10-25, on the figures recorded in #454.
 
 **Do not revisit unless.** Polar's setting on 14 and 21 Oct is read and contradicts the #454 item 5 reading; a bout recorded after Polar and Garmin were both at 177 shows a per-band gap that the half-bpm edge convention of #388 item 3 cannot explain; Polar Flow or Garmin moves off 177; a sample above 177 appears (the "Restate HRmax?" prompt); or Q216 moves HC zoning to heart-rate reserve.
+
+---
+
+### #456. HC/Polar parity at 177 is CLOSED on the 21 Oct bout alone, and Polar's HRmax is understood to follow its own session maxima, not a user-set lock (supersedes #455's wording and #453 item 3(b)'s framing)
+
+**Decision.** RULED by the operator on 2026-10-25, as replacement wording for #455 (which had merged). Governance only; nothing is built. #455 and #453 stand as written (append-only); this entry supersedes the wording named in the title.
+
+1. **Parity at 177 is closed on the 21 Oct bout, the only like-for-like comparison.** Both rows were zoned at 177 (HC #136 and #137 against `polar_v4` #138) and every band is within 0.37 min (#454 item 4). The 28 Sep, 2 Oct and 14 Oct gaps are Polar rows frozen at Polar's earlier HRmax (#385 item 3, Q198). They are not a zoning divergence, and they are not re-read on future restatements.
+2. **The "user-set lock" framing is replaced.** #453 item 3(b) said Polar Flow and Garmin both read 177, user-set, and #385 and #388 spoke of locking Polar's value. The operator's understanding now is that Polar's profile HRmax follows its own session maxima (**Likely; unread**: the setting was not read on any date). So Polar and `user_hrmax` ratchet from the same strap data, and parity holds for as long as the operator restates when the "Restate HRmax?" prompt fires (PR #447). #454 item 5's note that the two statements sit awkwardly together is resolved in favour of this one.
+3. **No new owed item.** The ROADMAP "HC zones (Q159 stage 2)" row keeps Code's low-priority read of the single-row HC bout deposits (#384 item 4) as its only owed item.
+
+**Rationale.** The operator's wording. Only the 21 Oct bout compares like with like; the earlier gaps compare today's HC zoning with Polar's past setting, which no restatement can change.
+
+**Status.** DONE, ruled 2026-10-25. Numbers resolved at master max #455.
+
+**How you know.** The operator's ruling in chat, 2026-10-25, on the figures in #454. That Polar's HRmax follows its own session maxima is the operator's understanding, not read from Polar by anyone.
+
+**Do not revisit unless.** Polar's profile HRmax is read and does not follow its session maxima (then restating on the prompt no longer keeps parity); a bout with both rows zoned at the same HRmax shows a per-band gap that the half-bpm edge convention (#388 item 3) cannot explain; a sample above 177 appears (the prompt shows it); or Q216 moves HC zoning to heart-rate reserve.
