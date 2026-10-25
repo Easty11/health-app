@@ -326,12 +326,12 @@ def test_a_row_the_nadir_has_not_reached_prints_no_nadir_line():
     assert "sleep nadir" not in out
 
 
-def test_the_mcp_recovery_line_labels_the_nadir_and_median_apart_from_rhr():
+def test_the_mcp_recovery_line_labels_the_nadir_apart_from_rhr_and_drops_the_median():
     line = format_night(resolve_night(date(2026, 10, 7), {
         "garmin_hc": {"sleep_nadir_hr": 51.6}, "hc_aest_day": {"all_day_median_hr": 118.0}}))
-    assert "RHR=— (no daily-RHR source yet)" in line
+    assert "RHR=— |" in line
     assert "Sleep-nadir HR=52 bpm [garmin/HC]" in line
-    assert "All-day median HR=118 bpm [HC all-day]" in line
+    assert "All-day median" not in line
 
 
 def test_the_api_exposes_the_nadir_additively(db_session):

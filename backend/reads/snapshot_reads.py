@@ -4,16 +4,21 @@ Read-side only: nothing here ingests, aggregates or writes. Two consumers share 
 two surfaces cannot drift (FEEDBACK §55): the card's `/health/summary` (`latest_sleep`) and
 the MCP `get_readiness_snapshot`.
 
-SLEEP WRITER RULE (operator ruling 2026-10-09; see DECISIONS_LOG): the snapshot's night
-comes from ONE writer, named on every value, by fixed priority
+PER-FIELD RESOLUTION. The night is the newest wake-date with a sleep duration; every figure on it
+is resolved on its own through `recovery_night` (the same candidates and rank tables as the MCP
+`get_recovery_metrics`), so the two cannot disagree and a source that lacks a field no longer
+blanks it: a Personal API night has its own efficiency, awake minutes and respiratory rate, and
+SpO2 comes from the epoch lane when it has the night. Each figure keeps the source that supplied
+it (`field_sources`), and the snapshot lines tag every figure with its own.
 
-    Garmin (com.garmin.android.apps.connectmobile)
+SLEEP WRITER RULE (operator ruling 2026-10-09; see DECISIONS_LOG) still governs the duration and
+the stage split, which come from ONE source, named on every value, and are never mixed across
+writers. The order is now (Q243, DECISIONS_LOG)
+
+    Garmin Personal API
+      > Garmin (com.garmin.android.apps.connectmobile) via Health Connect
       > Samsung Health relay (com.sec.android.app.shealth)
       > Samsung scraper (samsung_hrv_readings)
-
-and stages are never mixed across writers. The night chosen is the newest wake-date across
-{Health Connect aggregate, Samsung scraper}; on a tie Health Connect wins (it outranks the
-scraper), and inside Health Connect the writer is read from `health_connect_record_sources`.
 
 WHAT THIS CANNOT DO: `health_connect_syncs` holds ONE aggregate per night, built as a union
 over every writer's sessions (`_aggregate_day`, #254/#256). Where a night has two or more real
@@ -21,6 +26,7 @@ writers the aggregate is a blend that cannot be split back per writer here (no p
 stage minutes are stored). Such a night is returned `blended=True`, labelled with its writers,
 and a caller that must not mix stages (the snapshot) withholds the stage split. Splitting it
 needs per-writer aggregates at ingest, which is a schema change and so a separate decision.
+A night that cannot be one night (`hc_sleep.night_implausibility`) is withheld, not read.
 
 STAGE TRUST: the only stage-confidence logic (`deepSleepConfidence.js`, companion DECISIONS #3)
 runs on the phone, is held back from the readiness model (#4), and its verdict is not sent to or
@@ -35,43 +41,32 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 import models
+from reads.hc_sleep import (  # noqa: F401  (re-exported: callers and tests import these from here)
+    SCRAPER_WRITER_NAME, SLEEP_SOURCE_BY_PACKAGE, SLEEP_SOURCE_LABELS, SLEEP_WRITER_NAMES,
+    SLEEP_WRITER_PRIORITY, hc_sleep_writers,
+)
+from reads.recovery_night import (
+    DERIVED, GARMIN_API, GARMIN_DI, HC_BLENDED, HC_UNNAMED, SCRAPER, SOURCE_LABELS, load_candidates,
+    resolve_night,
+)
 
-# Health Connect writer package → friendly source, as the packages actually arrive in
-# health_connect_record_sources.source_package. Withings is a real HC sleep writer historically
-# (Q83) even though it is disabled on live nights, so a Samsung+Withings night is recognised as
-# multi-source rather than misattributed to Samsung.
-SLEEP_SOURCE_BY_PACKAGE = {
-    "com.garmin.android.apps.connectmobile": "garmin",
-    "com.sec.android.app.shealth": "samsung",
-    "com.withings.wiscale2": "withings",
+# Names for a figure's source in the snapshot lines (the writer, not the rank key). A figure from
+# the same source as the duration is tagged with the duration's own name instead.
+FIELD_SOURCE_NAMES = {
+    GARMIN_API: "Garmin (Personal API)",
+    "garmin_hc": "Garmin (Health Connect)",
+    GARMIN_DI: "Garmin (epoch SpO2 lane)",
+    "samsung_hc": SLEEP_WRITER_NAMES["samsung"],
+    "withings_hc": SLEEP_WRITER_NAMES["withings"],
+    HC_BLENDED: "Health Connect (multiple)",
+    HC_UNNAMED: "Health Connect",
+    "hc_utc_day": "Health Connect (UTC-day)",
+    SCRAPER: SCRAPER_WRITER_NAME,
 }
-SLEEP_SOURCE_LABELS = {"garmin": "Garmin", "samsung": "Samsung", "withings": "Withings"}
-# Names for the value itself. The Samsung Health relay and the Samsung scraper are different
-# writers with different data, so the snapshot never calls either of them just "Samsung".
-SLEEP_WRITER_NAMES = {"garmin": "Garmin", "samsung": "Samsung Health", "withings": "Withings"}
-SCRAPER_WRITER_NAME = "Samsung scraper"
-# Writer priority, highest first, for the sources this module can name. The scraper is not an
-# HC writer; it sits below every HC writer by the ruling above.
-SLEEP_WRITER_PRIORITY = ("garmin", "samsung", "withings")
 
-
-def hc_sleep_writers(db: Session, user_id: int, night: date) -> set[str]:
-    """The distinct REAL writer packages of a Health Connect sleep night.
-
-    JOIN WINDOW: a sleep session's `record_start` is its START timestamp, whose local date is
-    normally the calendar day BEFORE the wake-date `health_connect_syncs` is keyed on, so match
-    `record_start` on {night, night-1}. The 'unknown' pre-cutover sentinel is not a source."""
-    days = [night.isoformat(), (night - timedelta(days=1)).isoformat()]
-    rows = db.execute(
-        select(models.HealthConnectRecordSource.source_package)
-        .where(
-            models.HealthConnectRecordSource.user_id == user_id,
-            models.HealthConnectRecordSource.record_type == "sleep",
-            func.substr(models.HealthConnectRecordSource.record_start, 1, 10).in_(days),
-        )
-        .distinct()
-    ).all()
-    return {pkg for (pkg,) in rows if pkg and pkg != "unknown"}
+# How far behind the newest sleep night the card looks for a night that survives the plausibility
+# guard. A newest night that is withheld falls back to the previous one inside this window.
+LATEST_NIGHT_LOOKBACK_DAYS = 7
 
 
 def resolve_hc_sleep_source(db: Session, user_id: int, night: date) -> tuple[str, str]:
@@ -99,92 +94,108 @@ def _writer_names(packages: set[str]) -> list[str]:
     return [SLEEP_WRITER_NAMES[k] for k in named] + other
 
 
-def latest_sleep_night(db: Session, user_id: int) -> dict[str, Any] | None:
-    """Freshest staged sleep night across the Samsung scraper table and the Health Connect
-    aggregate, source-labelled and dated. Newest wake-date wins; a same-night tie prefers the
-    HC aggregate (it outranks the scraper in the writer priority above).
-
-    Fields the winning source does not carry are None — never another night's or another
-    writer's value under the same header. The HC aggregate stores only the asleep-union stages
-    (deep/rem/light, summing to duration) plus a score, so efficiency %, awake/WASO, respiratory
-    rate, sleep HR, SpO2 and bedtime/wake are genuinely absent for an HC night.
-
-    Extra keys over the card's original shape: `writers` (friendly names behind the value, a
-    list) and `blended` (True when an HC night spans two or more real writers, so its stage
-    split mixes writers)."""
-    hc = (
-        db.query(models.HealthConnectSync)
-        .filter(
+def _newest_sleep_night(db: Session, user_id: int) -> date | None:
+    """Wake-date of the newest night any sleep store holds, filtered as `load_candidates` reads."""
+    newest = [
+        db.query(func.max(models.SleepNight.captured_at)).filter(
+            models.SleepNight.user_id == user_id, models.SleepNight.source == "garmin",
+            models.SleepNight.sleep_time_s.isnot(None)).scalar(),
+        db.query(func.max(models.HealthConnectSync.date)).filter(
             models.HealthConnectSync.user_id == user_id,
-            models.HealthConnectSync.sleep_duration_minutes.isnot(None),
-        )
-        .order_by(models.HealthConnectSync.date.desc())
-        .first()
-    )
-    samsung = (
-        db.query(models.SamsungHRVReading)
-        .filter(
+            models.HealthConnectSync.sleep_duration_minutes.isnot(None)).scalar(),
+        db.query(func.max(models.SamsungHRVReading.captured_at)).filter(
             models.SamsungHRVReading.user_id == user_id,
-            models.SamsungHRVReading.context != "session",
-            or_(
-                models.SamsungHRVReading.total_sleep_time_minutes.isnot(None),
-                models.SamsungHRVReading.actual_sleep_time_minutes.isnot(None),
-            ),
-        )
-        .order_by(models.SamsungHRVReading.captured_at.desc())
-        .first()
-    )
+            models.SamsungHRVReading.context == "passive_overnight",
+            or_(models.SamsungHRVReading.total_sleep_time_minutes.isnot(None),
+                models.SamsungHRVReading.actual_sleep_time_minutes.isnot(None))).scalar(),
+    ]
+    return max((d for d in newest if d is not None), default=None)
 
-    hc_night = hc.date if hc else None
-    samsung_night = samsung.captured_at if samsung else None
 
-    if hc_night is not None and (samsung_night is None or hc_night >= samsung_night):
-        packages = hc_sleep_writers(db, user_id, hc_night)
-        source, label = resolve_hc_sleep_source(db, user_id, hc_night)
-        return {
-            "night": hc_night.isoformat(),
-            "source": source,
-            "source_label": label,
-            "writers": _writer_names(packages),
-            "blended": len(packages) >= 2,
-            "duration_min": hc.sleep_duration_minutes,
-            "deep_min": hc.deep_sleep_minutes,
-            "rem_min": hc.rem_sleep_minutes,
-            "light_min": hc.light_sleep_minutes,
-            "score": hc.sleep_score,
-            "efficiency_pct": None,
-            "awake_min": None,
-            "resp_rate": None,
-            "sleep_hr_bpm": None,
-            "spo2_pct": None,
-            "bedtime": None,
-            "wake_time": None,
-        }
-    if samsung_night is not None:
-        return {
-            "night": samsung_night.isoformat(),
-            "source": "samsung",
-            "source_label": "Samsung",
-            "writers": [SCRAPER_WRITER_NAME],
-            "blended": False,
-            "duration_min": (
-                samsung.total_sleep_time_minutes
-                if samsung.total_sleep_time_minutes is not None
-                else samsung.actual_sleep_time_minutes
-            ),
-            "deep_min": samsung.deep_minutes,
-            "rem_min": samsung.rem_minutes,
-            "light_min": samsung.light_minutes,
-            "score": None,
-            "efficiency_pct": samsung.sleep_efficiency_pct,
-            "awake_min": samsung.awake_minutes,
-            "resp_rate": samsung.respiratory_rate,
-            "sleep_hr_bpm": samsung.sleep_hr_bpm,
-            "spo2_pct": samsung.spo2_average_pct,
-            "bedtime": samsung.bedtime,
-            "wake_time": samsung.wake_time,
-        }
+def _field(r: dict[str, Any], field: str, key: str | None = None) -> Any:
+    hit = r[field]
+    return hit["value"][key or field] if hit else None
+
+
+def latest_sleep_night(db: Session, user_id: int) -> dict[str, Any] | None:
+    """Freshest sleep night across the Personal API, the Health Connect aggregate and the Samsung
+    scraper, every figure resolved on its own and dated. The newest wake-date with a duration wins;
+    on a tie the duration's source follows `recovery_night.TST_RANK` (Personal API, then the HC
+    writers, then the scraper).
+
+    Fields no source carries are None — never another night's value under the same header. A
+    figure from a different source than the duration is named in `field_sources`; the stage split
+    and the duration are always one source.
+
+    Keys over the card's original shape: `writers` (friendly names behind the duration, a list),
+    `blended` (True when an HC night spans two or more real writers, so its stage split mixes
+    writers), `transport` ('personal_api', 'health_connect' or 'scraper'), `field_sources`
+    ({field: label}), `efficiency_derived` (True when the efficiency is sleep time over the
+    device's own start-to-end window, which has no pre-sleep time in bed and so reads higher than
+    the diary SE), `resting_hr_bpm` (the daily resting rate, or None) and `withheld` (nights the
+    plausibility guard refused, newest first)."""
+    newest = _newest_sleep_night(db, user_id)
+    if newest is None:
+        return None
+    cands = load_candidates(db, user_id, newest - timedelta(days=LATEST_NIGHT_LOOKBACK_DAYS))
+    withheld: list[dict[str, str]] = []
+    for night in sorted(cands, reverse=True):
+        r = resolve_night(night, cands[night])
+        withheld += [{"night": night.isoformat(), "source": SOURCE_LABELS.get(s, s), "reason": why}
+                     for s, why in r["withheld"].items()]
+        if r["tst"] is not None:
+            return _night_dict(db, user_id, night, r, cands[night], withheld)
     return None
+
+
+def _night_dict(db: Session, user_id: int, night: date, r: dict[str, Any], cand: dict[str, Any],
+                withheld: list[dict[str, str]]) -> dict[str, Any]:
+    tst_src = r["tst"]["source"]
+    stages = r["stages"]["value"] if r["stages"] else {}
+    if tst_src == HC_BLENDED:
+        # The resolver withholds a blend's split; the card has always shown it, labelled blended.
+        stages = {k: cand[HC_BLENDED].get(k) for k in ("deep", "rem", "light")}
+    score, bedtime, wake_time = None, None, None
+    if tst_src == SCRAPER:
+        source, label, writers, transport = "samsung", "Samsung", [SCRAPER_WRITER_NAME], "scraper"
+        scraper = db.query(models.SamsungHRVReading).filter_by(
+            user_id=user_id, captured_at=night, context="passive_overnight").first()
+        bedtime, wake_time = (scraper.bedtime, scraper.wake_time) if scraper else (None, None)
+    elif tst_src == GARMIN_API:
+        source, label, writers, transport = "garmin", SLEEP_SOURCE_LABELS["garmin"], \
+            [SLEEP_WRITER_NAMES["garmin"]], "personal_api"
+    else:
+        packages = hc_sleep_writers(db, user_id, night)
+        source, label = resolve_hc_sleep_source(db, user_id, night)
+        writers, transport = _writer_names(packages), "health_connect"
+        hc = db.query(models.HealthConnectSync).filter_by(user_id=user_id, date=night).first()
+        score = hc.sleep_score if hc else None
+    field_sources = {f: FIELD_SOURCE_NAMES.get(r[f]["source"], r[f]["source"])
+                     for f in ("tst", "stages", "efficiency", "spo2", "rr", "sleep_hr", "daily_rhr") if r[f]}
+    return {
+        "night": night.isoformat(),
+        "source": source,
+        "source_label": label,
+        "writers": writers,
+        "blended": tst_src == HC_BLENDED,
+        "transport": transport,
+        "duration_min": _field(r, "tst"),
+        "deep_min": stages.get("deep"),
+        "rem_min": stages.get("rem"),
+        "light_min": stages.get("light"),
+        "score": score,
+        "efficiency_pct": _field(r, "efficiency"),
+        "efficiency_derived": bool(r["efficiency"]) and ("efficiency", r["efficiency"]["source"]) in DERIVED,
+        "awake_min": stages.get("awake"),
+        "resp_rate": _field(r, "rr"),
+        "sleep_hr_bpm": _field(r, "sleep_hr"),
+        "spo2_pct": _field(r, "spo2"),
+        "resting_hr_bpm": _field(r, "daily_rhr"),
+        "field_sources": field_sources,
+        "withheld": withheld,
+        "bedtime": bedtime,
+        "wake_time": wake_time,
+    }
 
 
 def format_duration(minutes: float) -> str:
@@ -194,12 +205,22 @@ def format_duration(minutes: float) -> str:
 
 
 def sleep_snapshot_lines(sleep: dict[str, Any] | None) -> list[str]:
-    """The snapshot's sleep lines: duration WITH its writer, then the stage split of that
-    one writer. A blended night (two or more writers) withholds the split rather than present
-    mixed stages under one name. Fields the writer did not stage print '—'."""
+    """The snapshot's sleep lines: duration WITH its source, then the stage split of that one
+    source, then each other figure tagged with the source that supplied it. A blended night (two
+    or more writers) withholds the split rather than present mixed stages under one name. Fields
+    no source carried print '—' where the line has a name to hold (stages, resting HR).
+
+    "Resting HR" is the daily resting rate and nothing else: the ring's average sleep HR is its own
+    "Sleep HR" line, and when no daily rate exists the line says so rather than borrow a figure."""
     if sleep is None:
         return ["  Sleep: — (no staged night found)"]
     who = sleep["writers"][0] if len(sleep["writers"]) == 1 else sleep["source_label"]
+    fs = sleep.get("field_sources", {})
+
+    def by(field: str) -> str:
+        name = fs.get(field, who)
+        return who if name == fs.get("tst") else name
+
     lines = [f"  Sleep {format_duration(sleep['duration_min'])} · {who} (night of {sleep['night']})"]
     if sleep["blended"]:
         lines.append(f"  Sleep stages: withheld — the night spans {' + '.join(sleep['writers'])} "
@@ -208,14 +229,22 @@ def sleep_snapshot_lines(sleep: dict[str, Any] | None) -> list[str]:
         lines.append(f"  Deep: {sleep['deep_min']:.0f} min  REM: {sleep['rem_min']:.0f} min · {who}")
     else:
         lines.append("  Sleep stages: —")
+    if sleep.get("awake_min") is not None:
+        lines.append(f"  Awake: {sleep['awake_min']:.0f} min · {by('stages')}")
     if sleep["efficiency_pct"] is not None:
-        lines.append(f"  Sleep efficiency: {sleep['efficiency_pct']:.0f}% · {who}")
+        basis = ", derived from the device's own sleep window" if sleep.get("efficiency_derived") else ""
+        lines.append(f"  Sleep efficiency: {sleep['efficiency_pct']:.0f}% · {by('efficiency')}{basis}")
     if sleep["spo2_pct"] is not None:
-        lines.append(f"  SpO2: {sleep['spo2_pct']:.1f}% · {who}")
+        lines.append(f"  SpO2: {sleep['spo2_pct']:.1f}% · {by('spo2')}")
     if sleep["resp_rate"] is not None:
-        lines.append(f"  Resp rate: {sleep['resp_rate']:.1f} br/min · {who}")
+        lines.append(f"  Resp rate: {sleep['resp_rate']:.1f} br/min · {by('rr')}")
     if sleep["sleep_hr_bpm"] is not None:
-        lines.append(f"  Resting HR: {sleep['sleep_hr_bpm']:.0f} bpm · {who}")
+        lines.append(f"  Sleep HR: {sleep['sleep_hr_bpm']:.0f} bpm · {by('sleep_hr')}")
+    rhr = sleep.get("resting_hr_bpm")
+    lines.append(f"  Resting HR: {rhr:.0f} bpm · {by('daily_rhr')}" if rhr is not None
+                 else "  Resting HR: — (no daily resting rate)")
+    for w in sleep.get("withheld", []):
+        lines.append(f"  Withheld: {w['source']} sleep for {w['night']} — {w['reason']}")
     return lines
 
 

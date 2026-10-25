@@ -1,18 +1,23 @@
-"""Per-field resolution of a night's recovery metrics, for the MCP `get_recovery_metrics`.
+"""Per-field resolution of a night's recovery metrics, for the MCP `get_recovery_metrics` and,
+through `snapshot_reads.latest_sleep_night`, the readiness snapshot and the card.
 
 Read-side only: nothing here ingests, aggregates or writes.
 
-THE SHAPE. A night (keyed on its WAKE-DATE) is a set of CANDIDATES, one per source store that
-has something for it: {source_key: {field: value}}. `resolve_night` walks each field's rank
+THE SHAPE. A night (keyed on its WAKE-DATE) is a set of CANDIDATES, one per (source, transport)
+that has something for it: {source_key: {field: value}}. `resolve_night` walks each field's rank
 list (`FIELD_RANK`) and takes the first candidate whose value is not None, so a source that
-carries only some fields never suppresses the others (the old reader fell back to the HC store
-only when the Samsung+HRV union returned ZERO rows, so one Garmin HRV row blanked everything
-else). Every resolved value keeps the source that supplied it; the formatter prints it.
+carries only some fields never suppresses the others. Every resolved value keeps the source that
+supplied it; the formatter prints it.
 
-ADDING A SOURCE (the Garmin Personal API migration): write its loader so it adds a candidate
-under a new source key, add the key to `SOURCE_LABELS`, and insert it into the rank tuples of
-the fields it carries. Nothing else changes -- `daily_rhr` already ranks `garmin_api` first
-with no loader behind it, so that slot reads "awaiting" until a loader exists.
+GARMIN RANKS ON (SOURCE, TRANSPORT). `source` stays 'garmin' in every store (#449 R4); the
+transport is the second coordinate and gets its own candidate key and its own label:
+    garmin_api  -- the Personal API (sleep_nights, daily_physiology, hrv_readings.transport)
+    garmin_hc   -- the Garmin package writing into Health Connect
+    garmin_di   -- the unofficial DI lane (spo2_nights epochs, the CPAP-seal evidence, #450)
+    garmin      -- an `hrv_readings` row with no transport recorded (history before #449)
+The rank tables stay per field; there is no cross-domain tier table. Sleep: garmin_api > HC
+writers > scraper. SpO2: garmin_di (epoch-derived mean/min) > garmin_api (the nightly summary,
+which is the permanent fallback, #450) > scraper > HC UTC-day. Daily RHR: garmin_api only.
 
 TWO FIELD KINDS THAT ARE NOT "FIRST NON-NULL WINS":
   * HRV is never arbitrated (#292): two devices are two instruments and raw ms is never
@@ -22,19 +27,25 @@ TWO FIELD KINDS THAT ARE NOT "FIRST NON-NULL WINS":
     never mixed across writers (the sleep-writer ruling, snapshot_reads). A blended Health
     Connect night (two or more real writers) withholds its stage split, as the snapshot does.
 
-SLEEP SOURCE ORDER is `SLEEP_WRITER_PRIORITY` (snapshot_reads), not a new rank: Garmin >
-Samsung Health relay > Withings, all as Health Connect writers, then the Samsung scraper below
-every HC writer. The HC aggregate is one row per night built over every writer's sessions
-(`health_connect_syncs`), so the writer is read from `health_connect_record_sources`.
+WITHHELD NIGHTS. A wearable's sleep night that cannot be one night (`hc_sleep.night_implausibility`)
+is not offered as a candidate: its TST, stages and nadir (the nadir window is the same bad period)
+are dropped and the reason is kept in the night's `withheld` map, which the formatter prints. The
+guard runs on every wearable lane, so it holds on the Health Connect path whatever ranks above it.
 
 DATE KEYS. Sleep, stages, nadir, `hrv_readings`, `spo2_nights` and the Samsung scraper are all
-keyed on the wake-date. `health_connect_syncs.oxygen_saturation / respiratory_rate / hrv_rmssd`
-are UTC-date keyed (a pending re-bucketing, see the model), so they carry their own source key
-`hc_utc_day` and are the lowest rank of their field. `resting_heart_rate` there is the AEST-day
-median of every HR sample -- not a resting rate -- and carries `hc_aest_day`.
+keyed on the wake-date. `daily_physiology` is keyed on the CALENDAR day Garmin was asked for, which
+for a night is its wake-day (the day's resting rate is read as the rate of the day that began with
+this wake-up; today's is provisional until the day closes). `health_connect_syncs.oxygen_saturation
+/ respiratory_rate / hrv_rmssd` are UTC-date keyed (a pending re-bucketing, see the model), so they
+carry their own source key `hc_utc_day` and are the lowest rank of their field.
+
+THE ALL-DAY MEDIAN IS NOT SHOWN. `health_connect_syncs.resting_heart_rate` (the median of every HR
+sample in the AEST day) is stored and unread here: it weights samples by count, so a one-second
+Polar bout outweighs a day of two-minute Garmin samples (21 Oct 2026: 2,076 Polar samples in 35 min
+against 901 Garmin samples in 24 h gave 144 bpm). A daily RHR now exists to show instead.
 
 SPO2 IS DERIVED HERE. `spo2_nights` stores raw epochs only (Q150: no mean, no min). The nightly
-mean and min below are computed over the night's non-null `spo2_pct` epochs, UNFILTERED -- no
+mean and min are computed over the night's non-null `spo2_pct` epochs, UNFILTERED -- no
 confidence threshold, no range check -- because none is ruled. See DECISIONS_LOG.
 """
 from __future__ import annotations
@@ -46,60 +57,77 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
-from reads.snapshot_reads import SLEEP_SOURCE_BY_PACKAGE, SLEEP_WRITER_PRIORITY, hc_sleep_writers
+from reads.hc_sleep import (
+    SLEEP_SOURCE_BY_PACKAGE, SLEEP_WRITER_PRIORITY, hc_sleep_writers, night_implausibility,
+)
 
 SCRAPER = "samsung_scraper"
+GARMIN_API = "garmin_api"
+GARMIN_DI = "garmin_di"
+GARMIN_NO_TRANSPORT = "garmin"
 _HC_WRITERS = tuple(f"{k}_hc" for k in SLEEP_WRITER_PRIORITY)        # garmin_hc, samsung_hc, withings_hc
 HC_BLENDED = "hc_multiple"                                            # two or more real writers
 HC_UNNAMED = "hc"                                                     # one writer with no friendly name, or none recorded
+WITHHELD = "_withheld"                                                # per-night {source_key: reason}, not a source
 
 SOURCE_LABELS = {
-    "garmin": "garmin",
+    GARMIN_API: "garmin/api",
     "garmin_hc": "garmin/HC",
+    GARMIN_DI: "garmin/di",
+    GARMIN_NO_TRANSPORT: "garmin",
     "samsung_hc": "samsung/HC",
     "withings_hc": "withings/HC",
     HC_BLENDED: "HC (multiple writers)",
     HC_UNNAMED: "HC",
     SCRAPER: "samsung scraper",
-    "hc_aest_day": "HC all-day",
     "hc_utc_day": "HC UTC-day",
-    "garmin_api": "garmin personal API",
 }
 
-# Sleep order: SLEEP_WRITER_PRIORITY as HC writers, an unnamed HC writer after them, the
-# scraper last (below every HC writer by the sleep-writer ruling).
-SLEEP_RANK = _HC_WRITERS + (HC_UNNAMED, SCRAPER)
+_TRANSPORT_KEY = {"personal_api": GARMIN_API, "di": GARMIN_DI}
+
+# Sleep order: the Personal API first, then SLEEP_WRITER_PRIORITY as HC writers, an unnamed HC
+# writer after them, the scraper last (below every HC writer by the sleep-writer ruling).
+SLEEP_RANK = (GARMIN_API,) + _HC_WRITERS + (HC_UNNAMED, SCRAPER)
 STAGE_RANK = SLEEP_RANK                      # HC_BLENDED is deliberately absent: no stage split from a blend
-TST_RANK = _HC_WRITERS + (HC_BLENDED, HC_UNNAMED, SCRAPER)
+TST_RANK = (GARMIN_API,) + _HC_WRITERS + (HC_BLENDED, HC_UNNAMED, SCRAPER)
+NADIR_RANK = _HC_WRITERS + (HC_UNNAMED,)     # only Health Connect derives a nadir (hr_nadir.py)
 
 FIELD_RANK: dict[str, tuple[str, ...]] = {
     "tst": TST_RANK,
     "stages": STAGE_RANK,                                   # deep / rem / light / awake, one source
-    "efficiency": (SCRAPER,),                               # the HC aggregate does not carry it
-    "spo2": ("garmin", SCRAPER, "hc_utc_day"),              # nightly mean (+ min where the source has one)
-    "rr": (SCRAPER, "hc_utc_day"),
+    "efficiency": (GARMIN_API, SCRAPER),                    # the HC aggregate does not carry it
+    "score": (GARMIN_API,),                                 # Garmin's own composite; display only
+    "spo2": (GARMIN_DI, GARMIN_API, SCRAPER, "hc_utc_day"),  # nightly mean (+ min where the source has one)
+    "rr": (GARMIN_API, SCRAPER, "hc_utc_day"),
     "sleep_hr": (SCRAPER,),                                 # the ring's average HR over the night
-    "sleep_nadir_hr": SLEEP_RANK,
-    "all_day_median_hr": ("hc_aest_day",),
-    # The real daily resting rate. No loader yet: the Personal API migration adds `garmin_api`.
-    "daily_rhr": ("garmin_api",),
+    "sleep_nadir_hr": NADIR_RANK,
+    # The real daily resting rate: dailyHeartRate.restingHeartRate. Never the HR-zones endpoint's
+    # 7-day auto figure and never averageSpO2HRSleep (a sleep HR).
+    "daily_rhr": (GARMIN_API,),
 }
 STAGE_FIELDS = ("deep", "rem", "light", "awake")
-HRV_SOURCES = ("garmin", SCRAPER)
+HRV_SOURCES = (GARMIN_API, GARMIN_DI, GARMIN_NO_TRANSPORT, SCRAPER)
 HRV_FALLBACK_SOURCES = ("hc_utc_day",)
+
+# (field, source) pairs whose value is computed here or in the mapper, not read off the device.
+DERIVED = {("efficiency", GARMIN_API)}
 
 # field -> the candidate keys that supply it (a "group" field names several)
 _FIELD_KEYS = {
     "tst": ("tst",),
     "stages": STAGE_FIELDS,
     "efficiency": ("efficiency",),
+    "score": ("score",),
     "spo2": ("spo2", "spo2_min"),
-    "rr": ("rr",),
+    "rr": ("rr", "rr_low", "rr_high"),
     "sleep_hr": ("sleep_hr",),
     "sleep_nadir_hr": ("sleep_nadir_hr",),
-    "all_day_median_hr": ("all_day_median_hr",),
     "daily_rhr": ("daily_rhr",),
 }
+
+# A source takes the stage group only if it carries an asleep stage: awake minutes alone are not a
+# split, and would otherwise win the group and leave deep/REM/light blank.
+_CARRY_KEYS = {"stages": ("deep", "rem", "light")}
 
 Candidates = dict[str, dict[str, Any]]            # source_key -> {field: value}
 
@@ -110,11 +138,13 @@ def _carries(cand: dict[str, Any], keys: tuple[str, ...]) -> bool:
 
 def resolve_night(night: date, cands: Candidates) -> dict[str, Any]:
     """One night's resolved view: for each ranked field `{"value": {...}, "source": key}`
-    (or None when no source carries it), plus `hrv`, a list of `(source, ms)`."""
+    (or None when no source carries it), plus `hrv`, a list of `(source, ms)`, and `withheld`,
+    the `{source_key: reason}` of any sleep night refused as implausible."""
     out: dict[str, Any] = {"night": night}
     for field, rank in FIELD_RANK.items():
         keys = _FIELD_KEYS[field]
-        hit = next((s for s in rank if s in cands and _carries(cands[s], keys)), None)
+        carry = _CARRY_KEYS.get(field, keys)
+        hit = next((s for s in rank if s in cands and _carries(cands[s], carry)), None)
         out[field] = None if hit is None else {
             "source": hit, "value": {k: cands[hit].get(k) for k in keys},
         }
@@ -122,18 +152,20 @@ def resolve_night(night: date, cands: Candidates) -> dict[str, Any]:
     if not hrv:
         hrv = [(s, cands[s]["hrv"]) for s in HRV_FALLBACK_SOURCES if cands.get(s, {}).get("hrv") is not None]
     out["hrv"] = hrv
+    out["withheld"] = dict(cands.get(WITHHELD, {}))
     return out
 
 
-_NOT_ALONE = ("all_day_median_hr", "daily_rhr")
+_NOT_ALONE = ("daily_rhr",)
 
 
 def resolve(candidates: dict[date, Candidates]) -> list[dict[str, Any]]:
     """Resolved nights, newest first. A night with no value in any field is dropped."""
     nights = [resolve_night(n, c) for n, c in sorted(candidates.items(), reverse=True)]
-    # all-day median HR rides along on a night but is not a recovery metric on its own, and
-    # the empty daily_rhr slot is not data: neither keeps an otherwise empty night.
-    return [n for n in nights if n["hrv"] or any(n[f] for f in FIELD_RANK if f not in _NOT_ALONE)]
+    # The daily resting rate is keyed on a calendar day, so today's row exists before today's
+    # night does; it rides along on a night but does not keep an otherwise empty one.
+    return [n for n in nights
+            if n["hrv"] or n["withheld"] or any(n[f] for f in FIELD_RANK if f not in _NOT_ALONE)]
 
 
 # -- loading: one candidate per source store, all keyed on the wake-date --------------------------
@@ -142,6 +174,10 @@ def _add(cands: dict[date, Candidates], night: date, source: str, **fields: Any)
     present = {k: v for k, v in fields.items() if v is not None}
     if present:
         cands.setdefault(night, {}).setdefault(source, {}).update(present)
+
+
+def _withhold(cands: dict[date, Candidates], night: date, source: str, reason: str) -> None:
+    cands.setdefault(night, {}).setdefault(WITHHELD, {})[source] = reason
 
 
 def _hc_source_key(packages: set[str]) -> str:
@@ -159,6 +195,14 @@ def _hc_package_key(package: str | None) -> str:
     return f"{key}_hc" if key else HC_UNNAMED
 
 
+def _transport_key(transport: str | None) -> str:
+    return _TRANSPORT_KEY.get(transport or "", GARMIN_NO_TRANSPORT)
+
+
+def _minutes(seconds: int | None) -> int | None:
+    return None if seconds is None else int(round(seconds / 60))
+
+
 def load_candidates(db: Session, user_id: int, since: date) -> dict[date, Candidates]:
     cands: dict[date, Candidates] = {}
 
@@ -167,7 +211,11 @@ def load_candidates(db: Session, user_id: int, since: date) -> dict[date, Candid
         models.SamsungHRVReading.captured_at >= since,
         models.SamsungHRVReading.context == "passive_overnight",
     ):
-        _add(cands, r.captured_at, SCRAPER, hrv=r.hrv_ms, tst=r.actual_sleep_time_minutes,
+        # The card has always taken the total when the scraper stored one; the table took the actual.
+        # Neither is dropped: the actual wins where both exist, the total stands in where it is alone.
+        _add(cands, r.captured_at, SCRAPER, hrv=r.hrv_ms,
+             tst=r.actual_sleep_time_minutes if r.actual_sleep_time_minutes is not None
+             else r.total_sleep_time_minutes,
              efficiency=r.sleep_efficiency_pct, deep=r.deep_minutes, rem=r.rem_minutes,
              light=r.light_minutes, awake=r.awake_minutes, spo2=r.spo2_average_pct,
              rr=r.respiratory_rate, sleep_hr=r.sleep_hr_bpm)
@@ -177,20 +225,52 @@ def load_candidates(db: Session, user_id: int, since: date) -> dict[date, Candid
         models.HrvReading.captured_at >= since,
         models.HrvReading.source == "garmin",
     ):
-        _add(cands, r.captured_at, "garmin", hrv=r.rmssd_ms)
+        _add(cands, r.captured_at, _transport_key(r.transport), hrv=r.rmssd_ms)
+
+    for r in db.query(models.SleepNight).filter(
+        models.SleepNight.user_id == user_id,
+        models.SleepNight.captured_at >= since,
+        models.SleepNight.source == "garmin",
+    ):
+        key = _transport_key(r.transport)
+        tst, deep, rem, light = (_minutes(r.sleep_time_s), _minutes(r.deep_s), _minutes(r.rem_s),
+                                 _minutes(r.light_s))
+        stage_sum = None if None in (deep, rem, light) else deep + rem + light
+        why = night_implausibility(tst, stage_sum, r.sleep_start, r.sleep_end)
+        if why:
+            _withhold(cands, r.captured_at, key, why)
+        else:
+            _add(cands, r.captured_at, key, tst=tst, deep=deep, rem=rem, light=light,
+                 awake=_minutes(r.awake_s), efficiency=r.efficiency_pct, score=r.sleep_score)
+        # Not sleep-duration facts, so the guard on the duration does not reach them.
+        _add(cands, r.captured_at, key, rr=r.respiration_avg, rr_low=r.respiration_low,
+             rr_high=r.respiration_high, spo2=r.spo2_avg_pct, spo2_min=r.spo2_lowest_pct)
+
+    for r in db.query(models.DailyPhysiology).filter(
+        models.DailyPhysiology.user_id == user_id,
+        models.DailyPhysiology.date >= since,
+        models.DailyPhysiology.source == "garmin",
+    ):
+        _add(cands, r.date, _transport_key(r.transport), daily_rhr=r.resting_hr_bpm)
 
     for r in db.query(models.HealthConnectSync).filter(
         models.HealthConnectSync.user_id == user_id,
         models.HealthConnectSync.date >= since,
     ):
+        nadir = r.hr_nadir_bpm
         if r.sleep_duration_minutes is not None:
             key = _hc_source_key(hc_sleep_writers(db, user_id, r.date))
-            _add(cands, r.date, key, tst=r.sleep_duration_minutes, deep=r.deep_sleep_minutes,
-                 rem=r.rem_sleep_minutes, light=r.light_sleep_minutes)
-        if r.hr_nadir_bpm is not None:
-            _add(cands, r.date, _hc_package_key(r.hr_nadir_source_package),
-                 sleep_nadir_hr=r.hr_nadir_bpm)
-        _add(cands, r.date, "hc_aest_day", all_day_median_hr=r.resting_heart_rate)
+            stages = (r.deep_sleep_minutes, r.rem_sleep_minutes, r.light_sleep_minutes)
+            stage_sum = None if None in stages else sum(stages)
+            why = night_implausibility(r.sleep_duration_minutes, stage_sum, r.sleep_start, r.sleep_end)
+            if why:
+                _withhold(cands, r.date, key, why)
+                nadir = None                       # read over the same bad period: it goes with the night
+            else:
+                _add(cands, r.date, key, tst=r.sleep_duration_minutes, deep=r.deep_sleep_minutes,
+                     rem=r.rem_sleep_minutes, light=r.light_sleep_minutes)
+        if nadir is not None:
+            _add(cands, r.date, _hc_package_key(r.hr_nadir_source_package), sleep_nadir_hr=nadir)
         _add(cands, r.date, "hc_utc_day", hrv=r.hrv_rmssd, spo2=r.oxygen_saturation,
              rr=r.respiratory_rate)
 
@@ -202,15 +282,19 @@ def load_candidates(db: Session, user_id: int, since: date) -> dict[date, Candid
                 models.Spo2Night.source == "garmin", models.Spo2Sample.spo2_pct.isnot(None))
         .group_by(models.Spo2Night.id, models.Spo2Night.captured_at)
     ):
-        _add(cands, night, "garmin", spo2=float(mean), spo2_min=float(low))
+        _add(cands, night, GARMIN_DI, spo2=float(mean), spo2_min=float(low))
 
     return cands
 
 
 # -- rendering ------------------------------------------------------------------------------------
 
-def _tag(source: str) -> str:
-    return f" [{SOURCE_LABELS.get(source, source)}]"
+def _label(source: str) -> str:
+    return SOURCE_LABELS.get(source, source)
+
+
+def _tag(source: str, derived: bool = False) -> str:
+    return f" [{_label(source)}{', derived' if derived else ''}]"
 
 
 def _n(v: float | None, unit: str = "", fmt: str = ".0f") -> str:
@@ -226,7 +310,9 @@ def format_night(r: dict[str, Any]) -> str:
     def one(name: str, field: str, unit: str, fmt: str = ".0f", key: str | None = None) -> str:
         hit = r[field]
         v = hit["value"][key or field] if hit else None
-        return f"{name}={_n(v, unit, fmt)}" + (_tag(hit["source"]) if hit and v is not None else "")
+        if hit is None or v is None:
+            return f"{name}=—"
+        return f"{name}={_n(v, unit, fmt)}" + _tag(hit["source"], (field, hit["source"]) in DERIVED)
 
     parts.append(one("TST", "tst", " min"))
     stages = r["stages"]
@@ -246,13 +332,20 @@ def format_night(r: dict[str, Any]) -> str:
                      + _tag(spo2["source"]))
     else:
         parts.append("SpO2=—")
-    parts.append(one("RR", "rr", " br/min", ".1f"))
-    # The daily resting rate has a named slot and no source yet: it is never filled from a
-    # sleep-window or all-day figure. Those carry their own labels below.
-    parts.append(one("RHR", "daily_rhr", " bpm") if r["daily_rhr"] else "RHR=— (no daily-RHR source yet)")
+    rr = one("RR", "rr", " br/min", ".1f")
+    if r["rr"] and r["rr"]["value"]["rr_low"] is not None and r["rr"]["value"]["rr_high"] is not None:
+        v = r["rr"]["value"]
+        rr = rr.replace(" br/min", f" br/min (low {v['rr_low']:.0f}, high {v['rr_high']:.0f})", 1)
+    parts.append(rr)
+    # The daily resting rate is its own figure: never filled from a sleep-window figure. Those
+    # carry their own labels below.
+    parts.append(one("RHR", "daily_rhr", " bpm"))
     parts.append(one("Sleep-nadir HR", "sleep_nadir_hr", " bpm"))
     parts.append(one("Sleep HR", "sleep_hr", " bpm"))
-    parts.append(one("All-day median HR", "all_day_median_hr", " bpm"))
+    if r["score"]:
+        parts.append(one("Sleep score", "score", ""))
+    if r["withheld"]:
+        parts.append("Withheld: " + "; ".join(f"{_label(s)} sleep — {why}" for s, why in r["withheld"].items()))
     return f"{r['night']}: " + " | ".join(parts)
 
 
@@ -265,7 +358,7 @@ def format_recovery(resolved: list[dict[str, Any]], days: int) -> str:
     })
     lines = [
         f"Recovery metrics — last {days} days (one line per wake-day; each value is tagged with the "
-        f"source that supplied it; sources: {', '.join(SOURCE_LABELS.get(s, s) for s in used)})",
+        f"source that supplied it; sources: {', '.join(_label(s) for s in used)})",
         f"Data window: {resolved[-1]['night']} → {resolved[0]['night']}\n",
     ]
     lines += [format_night(r) for r in resolved]
