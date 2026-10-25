@@ -16,7 +16,7 @@ import pytest
 import hr_nadir
 import models
 from context_builder import _section_health_connect
-from mcp_server import _format_recovery_metrics
+from reads.recovery_night import format_night, resolve_night
 from routers import health_connect as hc
 from routers.health_connect import (
     HeartRateRecord, SleepSession, SleepStage, SleepStageType, SyncPayload, _aggregate_day, _local_date, sync,
@@ -326,13 +326,12 @@ def test_a_row_the_nadir_has_not_reached_prints_no_nadir_line():
     assert "sleep nadir" not in out
 
 
-def test_the_mcp_fallback_labels_the_nadir_apart_from_rhr():
-    row = {"captured_at": "2026-10-07", "source": "health_connect_syncs", "hrv_ms": 50.0,
-           "sleep_hr_bpm": None, "all_day_median_hr": 118.0, "hr_nadir": 51.6, "respiratory_rate": None,
-           "sleep_efficiency_pct": None, "actual_sleep_time_minutes": None, "deep_minutes": None,
-           "rem_minutes": None, "light_minutes": None, "awake_minutes": None, "spo2_average_pct": None}
-    line = next(ln for ln in _format_recovery_metrics([row], 7).splitlines() if "[health_connect_syncs]" in ln)
-    assert "RHR=— All-day median HR=118 bpm Sleep-nadir HR=52 bpm" in line
+def test_the_mcp_recovery_line_labels_the_nadir_and_median_apart_from_rhr():
+    line = format_night(resolve_night(date(2026, 10, 7), {
+        "garmin_hc": {"sleep_nadir_hr": 51.6}, "hc_aest_day": {"all_day_median_hr": 118.0}}))
+    assert "RHR=— (no daily-RHR source yet)" in line
+    assert "Sleep-nadir HR=52 bpm [garmin/HC]" in line
+    assert "All-day median HR=118 bpm [HC all-day]" in line
 
 
 def test_the_api_exposes_the_nadir_additively(db_session):

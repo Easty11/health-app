@@ -46,6 +46,7 @@ from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_
 from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
 from sport_classes import is_strength_sport
 from reads.recovery_reads import hrv_deviation, representative_source
+from reads.recovery_night import recovery_text   # per-field recovery resolution (get_recovery_metrics)
 from reads.freshness_reads import freshness, freshness_footer_line, freshness_snapshot_lines
 from reads.snapshot_reads import hrv_continuity, hrv_continuity_line, latest_sleep_night, sleep_snapshot_lines
 from engine.training_phase import current_training_phase
@@ -181,115 +182,21 @@ def _stamped(fn):
 # Tool 1 — Recovery metrics
 # ---------------------------------------------------------------------------
 
-def _format_recovery_metrics(rows: list, days: int) -> str:
-    """Render source-tagged recovery rows into the tool's text table (pure; testable).
-
-    Each row is a mapping carrying `source` plus HRV/sleep fields; rows are already
-    ordered captured_at DESC. Every line is prefixed with its `[source]` so provenance is
-    never silent and a night carried by two sources shows as two labelled lines — neither
-    collapsed nor dropped (Garmin lines carry HRV only; Samsung supplies the sleep
-    architecture, so a Garmin line renders the sleep fields as '—')."""
-    if not rows:
-        return f"No recovery data found in the last {days} days."
-
-    sources = ", ".join(sorted({str(r["source"]) for r in rows}))
-    lines = [f"Recovery metrics — last {days} days (sources: {sources})"]
-    lines.append(f"Data window: {rows[-1]['captured_at']} → {rows[0]['captured_at']}\n")
-
-    for r in rows:
-        date = str(r["captured_at"])[:10]
-        src = r["source"]
-        hrv = f"{r['hrv_ms']:.0f} ms" if r["hrv_ms"] is not None else "—"
-        rhr = f"{r['sleep_hr_bpm']:.0f} bpm" if r["sleep_hr_bpm"] is not None else "—"
-        # The HC-store fallback carries a median of all the day's HR samples, not a resting
-        # rate; it is shown under its own label and never in the RHR slot.
-        median_hr = r.get("all_day_median_hr")
-        hc_hr_part = f" All-day median HR={median_hr:.0f} bpm" if median_hr is not None else ""
-        # The HC-store fallback's resting rate: the sleep nadir, under its own label (not RHR=,
-        # whose slot is the Samsung ring's sleep HR).
-        nadir_hr = r.get("hr_nadir")
-        hc_hr_part += f" Sleep-nadir HR={nadir_hr:.0f} bpm" if nadir_hr is not None else ""
-        spo2 = f"{r['spo2_average_pct']:.1f}%" if r["spo2_average_pct"] is not None else "—"
-        rr = f"{r['respiratory_rate']:.1f} br/min" if r["respiratory_rate"] is not None else "—"
-        eff = f"{r['sleep_efficiency_pct']:.0f}%" if r["sleep_efficiency_pct"] is not None else "—"
-        tst = f"{r['actual_sleep_time_minutes']:.0f} min" if r["actual_sleep_time_minutes"] is not None else "—"
-        deep = f"{r['deep_minutes']:.0f}" if r["deep_minutes"] is not None else "—"
-        rem = f"{r['rem_minutes']:.0f}" if r["rem_minutes"] is not None else "—"
-        light = f"{r['light_minutes']:.0f}" if r.get("light_minutes") is not None else "—"
-        awake = f"{r['awake_minutes']:.0f}" if r.get("awake_minutes") is not None else "—"
-        lines.append(
-            f"{date} [{src}]: HRV={hrv} RHR={rhr}{hc_hr_part} SpO2={spo2} RR={rr} Eff={eff} "
-            f"TST={tst} Deep={deep}m REM={rem}m Light={light}m Awake={awake}m"
-        )
-
-    return "\n".join(lines)
-
-
 @mcp.tool()
 @_stamped
 def get_recovery_metrics(days: int = 7) -> str:
-    """Get recent recovery biometrics across connected sources (Samsung Ring + Garmin).
-    Returns HRV (ms) source-tagged per night, plus sleep architecture (deep/REM/light/
-    awake minutes), SpO2, respiratory rate, sleep efficiency for the last N days. Sleep
-    architecture is Samsung-only; a Garmin night carries HRV and shows sleep fields as
-    '—'. A night measured by both sources shows as two labelled lines — never collapsed,
-    never silently preferring one source."""
+    """Get recent recovery biometrics, one line per wake-day, each value tagged with the
+    source that supplied it. Every field resolves on its own to its best available source
+    (HRV, TST and sleep stages, efficiency, SpO2, respiratory rate, heart rate), so a source
+    that carries only some fields never blanks the others. HRV is never ranked or blended
+    across instruments: each source's reading is shown. Sleep stages come from one writer,
+    never mixed. RHR= is reserved for a real daily resting rate and is empty until one is
+    ingested; the sleep nadir, the ring's sleep HR and the all-day median are separate,
+    labelled figures. A field no source carries prints '—'."""
     user_id = _current_user_id()
-
-    # Union the source-native stores: Samsung device rows carry HRV + full sleep
-    # architecture (and pre-mirror history the held backfill hasn't copied), Garmin HRV
-    # comes from the source-agnostic `hrv_readings`. Neither is dropped; each row is
-    # source-tagged for the formatter. Raw ms is never blended (cross-instrument offset is
-    # non-constant, #292) — the two sources are shown side by side, labelled.
-    rows = _db_rows(
-        """
-        SELECT captured_at, hrv_ms, sleep_hr_bpm, respiratory_rate,
-               sleep_efficiency_pct, actual_sleep_time_minutes,
-               deep_minutes, rem_minutes, light_minutes, awake_minutes,
-               spo2_average_pct, bedtime, wake_time, 'samsung' AS source
-        FROM samsung_hrv_readings
-        WHERE user_id = :user_id
-          AND captured_at >= CURRENT_DATE - :days
-          AND context = 'passive_overnight'
-        UNION ALL
-        SELECT captured_at, rmssd_ms AS hrv_ms, NULL AS sleep_hr_bpm,
-               NULL AS respiratory_rate, NULL AS sleep_efficiency_pct,
-               NULL AS actual_sleep_time_minutes, NULL AS deep_minutes,
-               NULL AS rem_minutes, NULL AS light_minutes, NULL AS awake_minutes,
-               NULL AS spo2_average_pct, NULL AS bedtime, NULL AS wake_time,
-               'garmin' AS source
-        FROM hrv_readings
-        WHERE user_id = :user_id
-          AND captured_at >= CURRENT_DATE - :days
-          AND source = 'garmin'
-        ORDER BY captured_at DESC, source
-        """,
-        {"user_id": user_id, "days": days},
-    )
-
-    if not rows:
-        rows = _db_rows(
-            """
-            SELECT date AS captured_at, hrv_rmssd AS hrv_ms,
-                   NULL AS sleep_hr_bpm,
-                   resting_heart_rate AS all_day_median_hr,
-                   hr_nadir_bpm AS hr_nadir,
-                   respiratory_rate, NULL AS sleep_efficiency_pct,
-                   sleep_duration_minutes AS actual_sleep_time_minutes,
-                   deep_sleep_minutes AS deep_minutes,
-                   rem_sleep_minutes AS rem_minutes,
-                   NULL AS light_minutes, NULL AS awake_minutes,
-                   oxygen_saturation AS spo2_average_pct,
-                   NULL AS bedtime, NULL AS wake_time, 'health_connect_syncs' AS source
-            FROM health_connect_syncs
-            WHERE user_id = :user_id
-              AND date >= CURRENT_DATE - :days
-            ORDER BY date DESC
-            """,
-            {"user_id": user_id, "days": days},
-        )
-
-    return _format_recovery_metrics(rows, days)
+    since = _aest_wake_day() - timedelta(days=days)
+    with SessionLocal() as _db:
+        return recovery_text(_db, user_id, since, days)
 
 
 # ---------------------------------------------------------------------------
