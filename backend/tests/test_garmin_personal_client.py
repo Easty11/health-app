@@ -140,3 +140,69 @@ def test_profile_pk_is_read_from_either_spelling_and_never_from_a_non_dict():
     assert gp.extract_user_profile_pk({"userProfilePk": ""}) is None
     assert gp.extract_user_profile_pk([{"userProfilePk": 1}]) is None
     assert gp.extract_user_profile_pk(None) is None
+
+
+# -- pacing: the host answers 429 to a burst (25 Oct 2026) and 200 to requests two seconds apart ----------
+
+class _Clock:
+    def __init__(self):
+        self.t = 100.0
+        self.slept = []
+
+    def monotonic(self):
+        return self.t
+
+    def sleep(self, s):
+        self.slept.append(s)
+        self.t += s
+
+
+def _paced(host, clock, interval):
+    return gp.PersonalClient(host.key, transport=host.transport(), now=lambda: NOW, min_interval_s=interval,
+                             sleep=clock.sleep, monotonic=clock.monotonic)
+
+
+def test_data_requests_are_spaced_by_the_interval_and_the_first_is_never_delayed():
+    host, clock = _host(), _Clock()
+    host.set("/x", {})
+    with _paced(host, clock, 2.0) as c:
+        c.get("/x")
+        assert clock.slept == []
+        c.get("/x")
+        c.get("/x")
+    assert clock.slept == [2.0, 2.0]
+
+
+def test_time_already_elapsed_counts_towards_the_gap_and_zero_disables_pacing():
+    host, clock = _host(), _Clock()
+    host.set("/x", {})
+    with _paced(host, clock, 2.0) as c:
+        c.get("/x")
+        clock.t += 1.5
+        c.get("/x")
+    assert clock.slept == [pytest.approx(0.5)]
+    host2, clock2 = _host(), _Clock()
+    host2.set("/x", {})
+    with _paced(host2, clock2, 0.0) as c:
+        c.get("/x"); c.get("/x")
+    assert clock2.slept == []
+
+
+def test_the_401_retry_is_paced_too_and_the_exchange_is_not_counted_as_a_data_request():
+    host, clock = _host(), _Clock()
+    host.set("/x", {"ok": 1})
+    with _paced(host, clock, 2.0) as c:
+        c.get("/x")
+        host.reject_next_bearer = True
+        c.get("/x")                        # 401, re-exchange, retry: two data requests after the first
+    assert clock.slept == [2.0, 2.0]
+
+
+def test_the_real_host_is_paced_and_an_injected_transport_is_not():
+    import garmin_personal_lanes as gpl
+    from encryption import encrypt
+    import models
+    row = models.UserIntegration(user_id=1, provider="garmin_personal", api_key_encrypted=encrypt(FAKE_KEY))
+    assert gpl.build_client(row)._min_interval == gpl.PACE_S == 2.0
+    assert gpl.build_client(row, transport=_host().transport())._min_interval == 0.0
+    assert gpl.build_client(row, min_interval_s=0.5)._min_interval == 0.5

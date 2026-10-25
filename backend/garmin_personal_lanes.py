@@ -33,7 +33,14 @@ def get_row(db, user_id: int) -> Optional[models.UserIntegration]:
     return db.query(models.UserIntegration).filter_by(user_id=user_id, provider=PROVIDER).first()
 
 
-def build_client(row: models.UserIntegration, *, transport: Optional[httpx.BaseTransport] = None) -> gp.PersonalClient:
+PACE_S = 2.0   # min gap between data requests on the real host (12 requests 2 s apart: all 200; a burst: 429)
+
+
+def build_client(row: models.UserIntegration, *, transport: Optional[httpx.BaseTransport] = None,
+                 min_interval_s: Optional[float] = None) -> gp.PersonalClient:
+    """The real host is paced at `PACE_S`; a client over an injected transport (a test double) is not."""
+    if min_interval_s is None:
+        min_interval_s = 0.0 if transport is not None else PACE_S
     token = expires = None
     if row.access_token_encrypted and row.access_token_expires_at is not None:
         try:
@@ -41,7 +48,7 @@ def build_client(row: models.UserIntegration, *, transport: Optional[httpx.BaseT
         except (InvalidToken, ValueError, TypeError):
             token = expires = None                     # a cache miss, not an error
     return gp.PersonalClient(decrypt(row.api_key_encrypted), access_token=token, token_expires_at=expires,
-                             transport=transport)
+                             transport=transport, min_interval_s=min_interval_s)
 
 
 def persist_token(db, row: models.UserIntegration, client: gp.PersonalClient) -> None:
