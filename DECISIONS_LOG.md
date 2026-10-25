@@ -14791,3 +14791,32 @@ Iso-Lateral High Row (Machine) stays `horizontal_pull` as landed: the operator's
 **Do not revisit unless.** Matches or skills-only Rugby sessions start inflating the metabolic count (item 2's cost), or the in-season phase change arrives (the stated revisit); a third in-place sports-list edit is proposed, which would argue for a lighter route for sports-list changes than a migration; the resolver's sport match gains an alias or category rule; or Q197 rules a way to match a done session to a planned one.
 
 ---
+
+### #448. get_recovery_metrics resolves every field to its own best source and names it; the resting-HR slot is held empty until a real daily resting rate is ingested
+
+**Decision.** `get_recovery_metrics` (the MCP recovery table) stops choosing a source per row and chooses one per field, per wake-day (`reads/recovery_night.py`, new). One line per wake-day; every value carries the source that supplied it. Each field walks a rank tuple (`FIELD_RANK`) and takes the first source with a value, so a source that carries only some fields no longer blanks the rest.
+- Sleep (TST, deep/REM/light) comes from the Health Connect aggregate with its writer read from `health_connect_record_sources`, ordered by `SLEEP_WRITER_PRIORITY` (Garmin, Samsung Health, Withings), the Samsung scraper below every HC writer. No new rank. The stage block (deep/REM/light/awake) resolves as one group from one source and is never mixed across writers; a night with two or more real HC writers gives its duration, labelled, and withholds the split (the snapshot's rule).
+- SpO2 is the Garmin night from `spo2_nights`: the mean and the minimum of the night's non-null epochs, computed on read and unfiltered. The scraper and the HC UTC-day column rank below it.
+- HRV is not ranked (#292): each instrument's reading is printed, side by side. The HC UTC-day HRV prints only when no instrument has one.
+- `RHR=` is reserved for a real daily resting rate and reads "no daily-RHR source yet". It is never filled from another figure. The ring's sleep HR is `Sleep HR=`, the HC sleep nadir is `Sleep-nadir HR=` (tagged with the writer it read), the HC AEST-day median of every sample is `All-day median HR=`.
+- A field no source carries prints a dash, never zero. Respiratory rate has no Garmin store and prints a dash on a Garmin night.
+- The slot for a new source is a loader that adds a candidate under a new source key plus an entry in the rank tuples; `daily_rhr` already ranks `garmin_api` first with no loader behind it.
+- The window is anchored on the Brisbane wake-day (`_aest_wake_day`), not the server's `CURRENT_DATE`.
+
+**Rationale.** The old reader had two faults. The Garmin branch of the union hardcoded NULL for sleep, SpO2 and the heart-rate fields, and the Health Connect fallback ran only when the union returned zero rows, so one Garmin HRV row hid every other source. The `RHR=` slot also held the Samsung ring's average sleep HR, which is not a resting rate.
+
+**Status.** HELD for chat ruling, not merged. No migration, no ingest change. The calls below are this branch's and were not ratified:
+1. The SpO2 mean and minimum are the first derived SpO2 values; Q150 stores raw epochs and defers judging them. They are unfiltered (no confidence threshold, no range check) because none is ruled, so the minimum is a single raw epoch (84 to 92 percent across users 1 and 4 last week) with Garmin's undocumented confidence ignored.
+2. One line per wake-day replaces one line per source. Anything that parsed the `[source]` prefix of a line, or `RHR=` as the ring's sleep HR, changes.
+3. Stage groups are single-writer, so Garmin-HC nights print `Awake=-`: the HC aggregate stores no awake minutes or efficiency, and the scraper's would be a second writer under the same block.
+4. The HC UTC-day SpO2, respiratory rate and HRV, and the AEST-day median, stay as the lowest-rank labelled sources (the old fallback showed them); dropping them is the alternative.
+
+**How you know.** Prod reads of 25 Oct 2026 (read-only, `railway connect` pipe). User 1: `health_connect_syncs` has a Garmin-package sleep night on each of 17 to 25 Oct, `hr_nadir_source_package` is the Garmin package on all of them, `spo2_nights` has 8 Garmin nights with 373 to 515 epochs and no null readings. User 4: `spo2_nights` has 8 Garmin nights and `hrv_readings` 8 rows, but `health_connect_syncs` holds ten rows, all 24 Aug to 2 Sep, and no sleep writer record since, so user 4's sleep and heart-rate fields are blank for want of a source. Master's own SQL and formatter on those rows printed sleep, SpO2 and RHR blank on every night for both users; this branch's loader and formatter on the same rows (replayed into SQLite) fill sleep, nadir and SpO2 for user 1 and SpO2 for user 4. `backend/tests/test_recovery_night.py` (resolution, writer order, atomic stages, blended night, slot-in by rank, absent not zero, loader scoping) plus the two retargeted tests pass; the full backend suite is 3751 passed, with `test_clock_pin` failing in this environment on master as well (`time_machine` not installed).
+
+**Not verified here.** The tool through MCP on the deployed service (this branch is not deployed). User 1's 25 Oct night reads 1151 minutes (light 1067) in the HC aggregate, which the reader now prints as stored; whether that is a merged second session is not read. Efficiency and awake from Garmin-package HC sleep are not in the aggregate at all.
+
+**Other readers with the same fault, reported not fixed.** `reads/snapshot_reads.sleep_snapshot_lines` prints the scraper's sleep HR as "Resting HR" (the same mislabel; `get_readiness_snapshot`). `reads/snapshot_reads.latest_sleep_night` (snapshot and the card's `latest_sleep`) picks one writer per night and hardcodes efficiency, awake, respiratory rate, sleep HR and SpO2 to None on an HC night, and never reads `spo2_nights`: row-level gating of the same kind. `context_builder`'s HC section labels the nadir and the median honestly, and its ring section is scraper-only and says so. Nothing under `current_state` reads these tables. `routers/recovery.py` is unmounted (Q151).
+
+**Do not revisit unless.** The Garmin Personal API migration lands a sleep, respiratory-rate, daily-RHR or SpO2-summary store (it slots in by rank, and `garmin_api` is the named position), or a ruling on SpO2 confidence and range filtering changes what the mean and minimum mean.
+
+---
