@@ -3065,6 +3065,46 @@ Open rows as of 2026-10-25 (operator slots left blank are `not recorded`): the d
 
 ---
 
+## Q239. What do the Personal API's body-battery, stress, HR-zone and hourly-SpO2 payloads, and its HRV baseline fields, actually look like?
+
+The mappers for these were written from the official client's endpoint map and the shapes the DI lane showed, not from observed payloads (#448). They read defensively, store NULL for what they cannot find, count a non-empty payload that yields nothing as `unmapped`, and the raw landing keeps every payload. Owed with the key attached: (1) a dry-run backfill and a read of the landed `body_battery`, `stress`, `hr_zones`, `spo2_hourly` payloads against the mappers; (2) whether the personal HRV payload carries `baseline`, `weeklyAvg`, `status` and `hrvReadings[]` (the null-overwrite guard protects stored DI data meanwhile); (3) range-endpoint caps and rate limits; (4) whether a fresh token exchange invalidates the previous token (decides whether the sweep and the on-read refresh can race); (5) the authenticated half of the Railway egress check (the 401 half is done).
+
+**State:** OWED (operator attaches the keys; Code runs the dry run and the remap).
+
+---
+
+## Q240. What is the procedure at the Personal API key's yearly expiry, and who is told?
+
+The key's owner sets its expiry at creation (one year at most) and Garmin emails the owner, not the operator. #448 records the date at attach and the freshness card warns at 30 and 7 days. Undecided: the replacement procedure (create the new key, `scripts.garmin_personal_attach` over the old row, no re-link needed because the fingerprint is the same), whether the warning should also reach the operator outside the app, and what user 4's key owner does about it.
+
+**State:** OPEN.
+
+---
+
+## Q241. How long are raw Garmin payloads kept?
+
+`garmin_raw_payloads` is append-only and a changed payload (a day still filling) appends a row. Volume is estimated at 10 to 40 MB per user per year; nothing prunes it. Undecided: a retention rule (keep the latest per key plus N days of history, or keep all), and whether the closed identity-key list needs widening once real payloads are read.
+
+**State:** OPEN.
+
+---
+
+## Q242. PR-B, M2 and the user 4 check: what remains after PR-A is released and keys are attached?
+
+(1) M2, the held data revision stamping existing `hrv_readings.transport = 'di'` (every existing row is DI by construction). (2) PR-B: remove DI from the HRV and self-evaluation paths once both users have been served from the personal host for a night or more and their lane statuses read ok. (3) User 4's stored `account_fingerprint` (`96ff6301...`) is checked against their key's `userProfilePk` at attach; a mismatch stops that user (#448 item 2). (4) Retire `GarminReconnectError` text that points at `garmin_login.py` for personal users once PR-B lands.
+
+**State:** OWED (operator releases PR-A and attaches the keys; Code lands M2 and PR-B).
+
+---
+
+## Q243. What reads the new Garmin tables, and which sleep-efficiency figure is shown?
+
+`sleep_nights`, `daily_physiology`, `spo2_hourly` and `hr_zone_config_snapshots` have no reader; a test pins that nothing under `cbti/`, `engine/` or `reads/` touches them. `sleep_nights.efficiency_pct` is a device-window figure (sleep time over the window Garmin reports, no pre-sleep time in bed) and reads higher than the diary SE the CBT-I titration uses (#445). A reader brief (including the `get_recovery_metrics` fix, out of scope here) decides what is surfaced, how Garmin sleep sits beside Health Connect sleep, and how the efficiency figure is labelled.
+
+**State:** OPEN.
+
+---
+
 ---
 
 ## CLOSED
