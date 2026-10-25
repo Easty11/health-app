@@ -100,6 +100,8 @@ PowerShell window's scrollback and history (`Clear-History`; close the window).
 either case. If it reports `unreadable`, stop: do not delete `FERNET_KEY_PREVIOUS`, and bring the ids
 back to chat.
 
+Observed 2026-10-24: if you roll a deployment back during this phase, the Variables tab may not show the key pair the rolled-back container is running under, and Redeploy deploys the tab's values. Do not trust the tab after a rollback: either set `FERNET_KEY` and `FERNET_KEY_PREVIOUS` again in the tab and deploy master head (not Redeploy), or run `rotate_fernet` with the pair set in the `railway ssh` shell for that run only. In every case the `--dry-run` output, not the tab, tells you which key the rows are under.
+
 ## Phase 4: re-issue the stored provider credentials
 
 Each re-store encrypts under the new key, and this is what retires the plaintexts the incident may
