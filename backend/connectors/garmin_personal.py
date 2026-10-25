@@ -23,6 +23,7 @@ import base64
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+import time
 from typing import Any, Callable, Optional
 
 import httpx
@@ -97,6 +98,9 @@ class PersonalClient:
         transport: Optional[httpx.BaseTransport] = None,
         base_url: str = BASE_URL,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        min_interval_s: float = 0.0,
+        sleep: Callable[[float], None] = time.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not api_key or not api_key.strip():
             raise PersonalAuthError("empty api key")
@@ -104,6 +108,10 @@ class PersonalClient:
         self._token = access_token
         self._expires_at = _aware(token_expires_at) if token_expires_at is not None else None
         self._now = now
+        # Minimum gap between DATA requests (the first is never delayed). 0 disables it.
+        self._min_interval = max(0.0, min_interval_s)
+        self._sleep, self._monotonic = sleep, monotonic
+        self._last_request_at: Optional[float] = None
         self._http = httpx.Client(base_url=base_url.rstrip("/"), timeout=TIMEOUT_S, transport=transport)
 
     # -- lifecycle ----------------------------------------------------------------------------------
@@ -149,11 +157,22 @@ class PersonalClient:
         return self._token
 
     # -- data ---------------------------------------------------------------------------------------
+    def _pace(self) -> None:
+        """Keep at least `min_interval_s` between data requests. The host answers 429 to a burst (observed
+        25 Oct 2026: about six back-to-back calls per day of backfill) and sends no Retry-After or limit
+        header, while 12 requests two seconds apart all returned 200."""
+        if self._min_interval and self._last_request_at is not None:
+            wait = self._min_interval - (self._monotonic() - self._last_request_at)
+            if wait > 0:
+                self._sleep(wait)
+        self._last_request_at = self._monotonic()
+
     def get(self, path: str, params: Optional[dict[str, str]] = None) -> Any:
         """GET `path` with the bearer token; decoded JSON, or None for an empty body. ProbeSource-shaped, so
         the existing self-evaluation code can read through it unchanged."""
         for attempt in (0, 1):
             token = self._bearer(force=attempt == 1)
+            self._pace()
             try:
                 resp = self._http.get(path, params=params, headers={"Authorization": f"Bearer {token}"})
             except httpx.HTTPError as exc:

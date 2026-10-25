@@ -7,7 +7,7 @@
 Walks NEWEST -> OLDEST from `--newest` (default the Brisbane wake-day) and stops after `--stop-after-empty`
 consecutive days on which EVERY wellness endpoint returned nothing (default 30): the personal API has no
 observed lookback cap, so "the earliest date Garmin returns" is where the data stops, not a fixed floor.
-HRV is walked on the same days. Calls are paced (`--pause`, default 0.5 s). Idempotent (raw landing keys on
+HRV is walked on the same days. Requests are paced by the client (2 s apart on the real host: a burst got 429, 12 requests 2 s apart all 200). Idempotent (raw landing keys on
 the payload hash; the mappers upsert), so an interrupted run is resumed by running it again.
 
 A dry run fetches and counts but writes no data (no raw payload, no table row; only the cached bearer token may be refreshed). `--remap` re-runs
@@ -45,7 +45,7 @@ def _day_has_data(client: gp.PersonalClient, ref: str) -> dict[str, Any]:
 
 
 def backfill(db, user_id: int, client: gp.PersonalClient, *, newest: date, stop_after_empty: int, confirm: bool,
-             pause: float = 0.5, floor: date = date(2020, 1, 1),
+             pause: float = 0.0, floor: date = date(2020, 1, 1),
              sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
     out = {"days_walked": 0, "days_with_data": 0, "oldest_with_data": None, "newest_with_data": None,
            "stopped": "floor", "payloads_landed": 0, "hrv_nights": 0, "mapped": garmin_wellness._new_counts()}
@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--confirm", action="store_true", help="write (default is a dry run)")
     p.add_argument("--newest", help="first (newest) day to walk, YYYY-MM-DD; default the Brisbane wake-day")
     p.add_argument("--stop-after-empty", type=int, default=30)
-    p.add_argument("--pause", type=float, default=0.5)
+    p.add_argument("--pause", type=float, default=0.0, help="extra seconds between days (the client already paces requests)")
     p.add_argument("--remap", action="store_true", help="re-run mappers over landed payloads; no network")
     p.add_argument("--from", dest="from_", help="--remap window start")
     p.add_argument("--to", help="--remap window end")
