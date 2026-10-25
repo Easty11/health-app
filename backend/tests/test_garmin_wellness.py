@@ -272,3 +272,11 @@ def test_the_real_payload_shapes_probed_in_prod_map_as_written():
     zones = [{"sport": "RUNNING", "maxHeartRateUsed": 1}, {"sport": "DEFAULT", "trainingMethod": "HR_RESERVE",
              "restingHeartRateUsed": 52, "lactateThresholdHeartRateUsed": 157, "maxHeartRateUsed": 177}]
     assert gw.parse_hr_zones(zones) == {"max_hr": 177, "lthr": 157, "rhr_7d_auto": 52, "method": "HR_RESERVE"}
+
+
+def test_a_payload_of_only_false_flags_is_an_empty_day_but_flags_beside_a_reading_are_content():
+    """Prod, 25 Oct 2026: a day before the watch was worn answers sleep with every value null except
+    `retro: false` and `deviceRemCapable: false`, which kept the backfill walking to the 2020 floor."""
+    assert gw._is_empty({"id": None, "sleepTimeSeconds": None, "retro": False, "deviceRemCapable": False})
+    assert not gw._is_empty({"sleepTimeSeconds": 25000, "retro": False})
+    assert not gw._is_empty({"awakeCount": 0, "retro": False})                 # zero is still a value

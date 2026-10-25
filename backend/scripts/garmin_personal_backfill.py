@@ -77,6 +77,9 @@ def backfill(db, user_id: int, client: gp.PersonalClient, *, newest: date, stop_
                     else:
                         garmin_wellness.apply_payload(db, user_id, ep, ref, landed.payload, landed.sha256, out["mapped"])
                 db.commit()
+        if out["days_walked"] % 10 == 0:
+            print(f"  ... {out['days_walked']} days walked, back to {ref}, {out['days_with_data']} with data, "
+                  f"empty streak {empty_streak}", flush=True)
         d -= timedelta(days=1)
         sleep(pause)
     if confirm:
