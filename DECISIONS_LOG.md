@@ -14805,7 +14805,7 @@ Iso-Lateral High Row (Machine) stays `horizontal_pull` as landed: the operator's
 
 **Rationale.** The old reader had two faults. The Garmin branch of the union hardcoded NULL for sleep, SpO2 and the heart-rate fields, and the Health Connect fallback ran only when the union returned zero rows, so one Garmin HRV row hid every other source. The `RHR=` slot also held the Samsung ring's average sleep HR, which is not a resting rate.
 
-**Status.** HELD for chat ruling, not merged. No migration, no ingest change. The calls below are this branch's and were not ratified:
+**Status.** Locked. Operator ratified all four calls below as written (25 Oct 2026, in session); self-merged on green per Merge disposition. No migration, no ingest change. The calls:
 1. The SpO2 mean and minimum are the first derived SpO2 values; Q150 stores raw epochs and defers judging them. They are unfiltered (no confidence threshold, no range check) because none is ruled, so the minimum is a single raw epoch (84 to 92 percent across users 1 and 4 last week) with Garmin's undocumented confidence ignored.
 2. One line per wake-day replaces one line per source. Anything that parsed the `[source]` prefix of a line, or `RHR=` as the ring's sleep HR, changes.
 3. Stage groups are single-writer, so Garmin-HC nights print `Awake=-`: the HC aggregate stores no awake minutes or efficiency, and the scraper's would be a second writer under the same block.
