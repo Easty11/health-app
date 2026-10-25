@@ -297,11 +297,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **User 1's HRmax of 177 is applied in prod and the post-apply per-band comparison is recorded; whether HC/Polar parity at 177 counts as closed is left to the operator.** Governance - Canonical home: `DECISIONS_LOG.md` #454.
+
 - **User 1's HRmax is ruled 177 (`observed`, retroactive from 2026-03-01, superseding #385's 175); the apply is the operator's and is owed.** Governance - Canonical home: `DECISIONS_LOG.md` #453.
 
 - **The home load card and the readiness snapshot now prompt "Restate HRmax?" for each Health Connect row holding a sample above the HRmax in force, derived on read; nothing is restated.** Code, no migration - Canonical home: `OPEN_QUESTIONS.md` Q245.
-
-- **Q159, the Health Connect zones question, is closed: the in-lag-window behaviour belongs to Q203 and Q231, the lag is not characterised further, the Garmin direct HR read is dropped, and the stale "until stage 2" warning on a Garmin or Samsung `load_window` slot is replaced by a per-device hint.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #452.
 
 ---
 

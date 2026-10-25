@@ -14950,3 +14950,35 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **How you know.** The operator's ruling in chat, 2026-10-25. The two rows are the app's own `get_training_sessions` read by Code on 2026-10-25: `2026-10-14 [polar_v4] Indoor cycling: 45 min HR=138/177` and `2026-10-21 [polar_v4] Indoor cycling: 35 min HR=150/175`, each also recorded by the Garmin and Polar Flow Health Connect packages. That the Polar Flow and Garmin settings read 177 and are user-set is the operator's statement; Code did not see either screen. The `set_hrmax` behaviour is from reading `backend/scripts/set_hrmax.py` and #385, not from a run. **Not verified:** the prod chain (that the head of the 2026-03-01 chain is the 175 row), and the effect of the restatement, which the dry run and the post-apply report will show.
 
 **Do not revisit unless.** A sample above 177 appears (the "Restate HRmax?" prompt on the load card shows it, PR #447) or a maximal-effort test (Q199) gives another value; Polar Flow or Garmin moves off 177; or Q216 moves HC zoning to heart-rate reserve, which makes the edges different edges.
+
+---
+
+### #454. #453 is applied: user 1's HRmax is 177 (`observed`, restating the 175 row) from 2026-03-01, and the post-apply per-band comparison is recorded; calling parity closed or not is left to the operator
+
+**Decision.** A record of the operator-run write on 2026-10-25 that #453 owed, plus the recompute and the second `--hc-zones` report. Code rules nothing here.
+
+1. **Applied.** `scripts/set_hrmax --restate` wrote one `user_hrmax` row: user 1, 177 bpm, `observed`, restating row #2 (175 bpm, `adjusted`), effective 2026-03-01. The output named row #2 as the target, so the head of the 2026-03-01 chain was the 175 row, as #453 assumed. 66 health_connect rows moved 175 to 177 (every HC row, all dated on or after 2026-08-25). The operator ran the write without the `--dry-run` pass #453 suggested, so no plan was printed ahead of it.
+2. **Recomputed.** `refresh_load --user 1` ran OK: `hc_zoned` 32 of 66 (`sparse` 5, `no_same_writer_hr` 29, `no_hrmax` 0, `over_ceiling` 0), 29 rows changed, `metab_events` 73, 14 sessions skipped for no zones. The TRIMP series against Polar's cardio-load reads r = 0.9736 over n = 46 (#388 reported 0.974 over n = 46 at 175). The 175-baseline report taken before the write projected 32 zoned and the same reasons, so the zoned set did not move; zone seconds did.
+3. **Over-ceiling cleared.** Before: 2 rows (#130 max 177, #131 max 176, both 2026-10-14). After: 0. Canonical flips 0 and per-day metabolic TRIMP delta 0 days in both reports.
+4. **Per-band comparison**, the Polar-writer HC row against the `polar_v4` row of the same H10 stream, the set #388 used (the 14 and 21 Oct bouts are new since it):
+
+| Bout (HC row / `polar_v4` row) | At 175 (z1..z5, HC minus Polar, minutes) | At 177 |
+|---|---|---|
+| 20 Sep #71 / #90 | [0, 0, 0, 0, 0] | [-0.08, -0.08, 0, 0, 0] |
+| 28 Sep #88 / #91 | [0, +0.43, -0.45, 0, 0] | [+0.75, +0.18, -0.07, +0.14, -1.04] |
+| 1 Oct #96 / #95 | [0, +0.06, -0.05, 0, 0] | [+0.07, 0.0, +0.90, -0.96, 0.0] |
+| 2 Oct #100 / #97 | [0, +3.04, -3.05, 0, 0] | [+1.47, +4.45, -5.94, 0, 0] |
+| 14 Oct #130 / #132 | [0, +0.22, -0.23, 0, +0.21] | [+0.20, +0.39, +0.42, -0.01, -1.00] |
+| 21 Oct #137 / #138 | [-0.10, -0.07, -1.37, +0.96, +0.56] | [+0.12, -0.12, 0.0, +0.36, -0.37] |
+
+   Garmin-writer HC rows differ more, as at 175 (wrist optical against the H10): for example 2 Oct #99 [+3.5, +3.45, -5.87, 0, 0] and 14 Oct #131 z5 -1.75.
+5. **Reading, not ruled.** Polar rows keep the zones Polar computed at the HRmax it held at the time (#385 item 3, Q198); the restatement reflows HC rows only. So a gap against an OLD Polar row is the restated HC value against Polar's old setting, by construction. The 28 Sep z5 gap, -1.04, is the figure #385 recorded as the 177 projection. The 21 Oct bout narrows at 177 (largest gap 0.37 against 1.37 at 175) while 20 Sep to 14 Oct move or widen. That fits Polar holding about 175 until the 14 Oct ride (the 177 sample) and 177 by 21 Oct (**Likely, not tested**: Polar's setting on each date was not read). It also agrees with the operator's statement of 2026-10-25 that Polar raises its maximum itself when it detects a higher value, which sits beside the "user-set" wording of #453 item 3(b); which of the two holds is the operator's to say.
+6. **Not decided here:** whether HC/Polar parity at 177 is closed (the operator's call, as #388 item 2 was at 175). The figures above are the record.
+
+**Rationale.** None of Code's. A status record filed so the HC zones row's owed apply can close, written so the next reader sees the comparison and not only the conclusion: parity at 177 is the expected result for bouts since Polar moved and not for bouts before it, and nothing in the report distinguishes "Polar was at 175 then" from any other cause.
+
+**Status.** DONE: applied 2026-10-25. #453 is unchanged (a supersession of #385's number only). Still OWED: the operator's call on parity (item 6); the low-priority read of the single-row HC bout deposits (#384 item 4). Numbers resolved at master max #453.
+
+**How you know.** The operator's pasted container output of 2026-10-25: the write, the `refresh_load` report and both `--hc-zones` reports. Code re-ran none of it (a session has no prod access) and did not see the Polar Flow or Garmin screens. The 175-baseline figures are the first report; the 177 figures are the second. Every row above is read from those two reports and the write output.
+
+**Do not revisit unless.** Polar's setting on the 14 and 21 Oct dates is read and contradicts the item-5 reading; a sample above 177 appears (the "Restate HRmax?" prompt shows it, PR #447); Polar Flow or Garmin moves off 177; a maximal-effort test (Q199) gives another value; or Q216 moves HC zoning to heart-rate reserve.
