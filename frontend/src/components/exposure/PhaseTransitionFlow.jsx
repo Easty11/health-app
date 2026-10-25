@@ -39,7 +39,7 @@ import {
 const CAPACITIES = ['mobility', 'stability', 'strength', 'power', 'endurance']
 const SLOT_KINDS = ['capacity', 'load_window', 'activity']
 const RECORDED_VIA = ['hevy', 'polar_h10', 'garmin', 'samsung_health', 'manual']
-// A load_window slot recorded on these zones from Health Connect HR after a lag (Garmin, #369/#NEXT) or only if
+// A load_window slot recorded on these zones from Health Connect HR after a lag (Garmin, #369/#452) or only if
 // the writer sends HR at all (Samsung Health, #364) — hint per device (F15, load_window only).
 const LOAD_WINDOW_HR_HINT = {
   garmin: { tone: 'text-gray-500', text: "zones from the watch's HR once Health Connect delivers it — 1 to 7 days on the sessions measured; reads zero load until then." },
