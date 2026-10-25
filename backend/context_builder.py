@@ -325,6 +325,58 @@ def _section_user_profile(device_profile: dict[str, Any] | None) -> str:
     )
 
 
+def _header_folder(phase: dict[str, Any], phase_folders: Any, hevy_routines: Any) -> str:
+    """The open phase's declared Hevy folder for the state header: `name (id N)` when the folder list is
+    to hand, the bare id when it is not, `none declared` when `phase_folders` has no entry for the label."""
+    declared = phase_folders.get(phase.get("label")) if isinstance(phase_folders, dict) else None
+    if declared is None:
+        return "none declared"
+    folders = (hevy_routines or {}).get("folders") if isinstance(hevy_routines, dict) else None
+    for f in folders or []:
+        if isinstance(f, dict) and f.get("id") == declared:
+            name = f.get("title") or f.get("name")
+            if name:
+                return f"{name} (id {declared})"
+    return f"id {declared}"
+
+
+STATE_HEADER_HEADING = "## Authoritative state — read this first"
+
+
+def _section_state_header(
+    now: datetime,
+    phase: dict[str, Any] | None,
+    phase_folders: Any = None,
+    hevy_routines: Any = None,
+) -> str:
+    """The first thing in the system prompt: today's date, the open phase in one place, and the two
+    standing instructions the rest of the prompt depends on — live state outranks the plan of record and
+    the legacy notes (conflicts are named, never silently resolved), and derived arithmetic is shown with
+    its inputs. It RESTATES live rows (the phase, the folder declaration); it holds nothing of its own."""
+    lines = [STATE_HEADER_HEADING, f"- Today: {now.strftime('%A, %d %B %Y')} (AEST)."]
+    if phase:
+        review = phase.get("review_on") or "not set"
+        due = " — review is DUE" if phase.get("review_due") else ""
+        lines.append(
+            f"- Open phase: {phase.get('label')} — entered {phase.get('entered_on')}, review on "
+            f"{review}{due}."
+        )
+        lines.append(f"- Hevy folder for this phase: {_header_folder(phase, phase_folders, hevy_routines)}.")
+        lines.append(f"- Probe posture: {phase.get('probe_posture') or 'none set'}.")
+    else:
+        lines.append("- Open phase: none (baseline — no training phase is open).")
+    lines.append(
+        "- Precedence: the live sections below (this header, the training phase, constraints, findings, "
+        "schedule, Hevy and device data) outrank the Plan of Record and the legacy notes. Where sources "
+        "disagree, name the conflict to the athlete; do not resolve it silently."
+    )
+    lines.append(
+        "- Derived arithmetic (pace, effective load, unit conversions) is always shown with its inputs, "
+        "e.g. 6.0 km in 36:00 → 6:00/km — never as a bare result."
+    )
+    return "\n".join(lines)
+
+
 def _section_identity(user: models.User, now: datetime) -> str:
     name = user.full_name or user.email
     current_date = now.strftime("%A, %d %B %Y")
@@ -434,16 +486,46 @@ def _section_hevy(
     return "\n".join(lines)
 
 
+def _row_updated_day(e: Any) -> str | None:
+    """The local (AEST) day a legacy knowledge row was last edited — `updated_at`, else `created_at` —
+    ISO, or None when the row carries neither (a plain dict without the keys)."""
+    if isinstance(e, dict):
+        ts = e.get("updated_at") or e.get("created_at")
+    else:
+        ts = getattr(e, "updated_at", None) or getattr(e, "created_at", None)
+    if ts is None:
+        return None
+    try:
+        if getattr(ts, "tzinfo", None) is not None:
+            ts = ts.astimezone(AEST)
+        return ts.date().isoformat() if hasattr(ts, "date") else str(ts)[:10]
+    except (AttributeError, ValueError):
+        return None
+
+
+LEGACY_NOTES_HEADING = "## Legacy notes (undated free text — superseded by the live sections above)"
+
+
 def _section_knowledge(entries: list[Any]) -> str:
+    """The legacy free-text knowledge rows (`user_knowledge`), rendered AFTER every live section under a
+    header that marks them as undated notes the live state outranks. Row content is verbatim; each row is
+    prefixed with the day it was last edited, when it has one (that is an edit date, not the date the
+    fact was true — the header says so)."""
     if not entries:
         return ""
-    lines = ["## Athlete Knowledge Base"]
+    lines = [
+        LEGACY_NOTES_HEADING,
+        "These notes pre-date the structured state above and carry no reliable date. Where one differs "
+        "from a live section, the live section wins — name the conflict rather than choosing silently. "
+        "[date] = when the row was last edited, not when the fact was true.",
+    ]
     # Group by category
     grouped: dict[str, list[str]] = {}
     for e in entries:
         cat = e.category if hasattr(e, "category") else e.get("category", "Other")
         content = e.content if hasattr(e, "content") else e.get("content", "")
-        grouped.setdefault(cat, []).append(content)
+        day = _row_updated_day(e)
+        grouped.setdefault(cat, []).append(f"[{day}] {content}" if day else content)
     for category, items in grouped.items():
         lines.append(f"\n### {category}")
         for item in items:
@@ -1714,22 +1796,45 @@ def _entry_type(e: Any) -> Any:
 _schedule_sessions_per_week = schedule_sessions_per_week
 
 
-def plan_of_record_stale(plan: dict[str, Any] | None, phase: dict[str, Any] | None) -> bool:
-    """The SINGLE definition of the plan-of-record STALE flag (#312/#319): the plan was last
-    revised BEFORE the open phase's review date AND that review date has passed — the phase's own
-    `review_due`, so no second definition of "passed". ONE definition, two callers: the chat render
-    (`_section_training_plan`) and `GET /engine/plan-of-record` (the Phase card, #319) — never
-    re-derived client-side. False whenever an input is absent or unparseable (shown as not-stale,
-    never a crash)."""
+PLAN_STALE_PHASE_ENTERED = "phase_entered"
+PLAN_STALE_REVIEW = "review"
+
+
+def plan_of_record_stale_reason(plan: dict[str, Any] | None, phase: dict[str, Any] | None) -> str | None:
+    """WHY the plan of record is stale, or None. Two rules, either sufficient:
+
+      * `phase_entered` — the plan was last revised BEFORE the open phase was entered (the phase
+        change post-dates the plan, so the plan cannot describe it);
+      * `review` (#312/#319) — the plan was last revised BEFORE the open phase's review date AND that
+        date has passed (the phase's own `review_due`, so no second definition of "passed").
+
+    None whenever an input is absent or unparseable (shown as not-stale, never a crash)."""
     if not isinstance(plan, dict) or not isinstance(phase, dict):
-        return False
-    revised_on = plan.get("revised_on")
-    if not (phase.get("review_due") and phase.get("review_on") and revised_on):
-        return False
+        return None
     try:
-        return date.fromisoformat(str(revised_on)) < date.fromisoformat(str(phase["review_on"]))
+        revised = date.fromisoformat(str(plan.get("revised_on")))
     except (ValueError, TypeError):
-        return False
+        return None
+    try:
+        if revised < date.fromisoformat(str(phase.get("entered_on"))):
+            return PLAN_STALE_PHASE_ENTERED
+    except (ValueError, TypeError):
+        pass
+    if phase.get("review_due") and phase.get("review_on"):
+        try:
+            if revised < date.fromisoformat(str(phase["review_on"])):
+                return PLAN_STALE_REVIEW
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
+def plan_of_record_stale(plan: dict[str, Any] | None, phase: dict[str, Any] | None) -> bool:
+    """The SINGLE definition of the plan-of-record STALE flag (#312/#319, extended by the
+    phase-entered rule): `plan_of_record_stale_reason` is not None. ONE definition, three callers: the
+    chat render (`_section_training_plan`), `GET /engine/plan-of-record` (the Phase card, #319) and the
+    MCP `get_training_plan` — never re-derived client-side."""
+    return plan_of_record_stale_reason(plan, phase) is not None
 
 
 def _section_training_plan(plan: dict[str, Any] | None, phase: dict[str, Any] | None) -> str:
@@ -1755,7 +1860,14 @@ def _section_training_plan(plan: dict[str, Any] | None, phase: dict[str, Any] | 
     if meta:
         lines.append(f"- Last {', '.join(meta)}.")
 
-    if plan_of_record_stale(plan, phase):
+    reason = plan_of_record_stale_reason(plan, phase)
+    if reason == PLAN_STALE_PHASE_ENTERED:
+        lines.append(
+            f"- STALE — plan last revised before the open phase ({phase.get('label')}) was entered on "
+            f"{phase.get('entered_on')}; the open phase and the live sections outrank it. Treat the macro "
+            "below as possibly out of date and prompt the athlete to confirm or revise it."
+        )
+    elif reason == PLAN_STALE_REVIEW:
         lines.append(
             "- STALE — plan not revised since before the last phase review; treat the macro "
             "below as possibly out of date and prompt the athlete to confirm or revise it."
@@ -2200,6 +2312,11 @@ def build_system_prompt(
     )
 
     sections: list[str] = [
+        _section_state_header(
+            now, getattr(state, "training_phase", None), getattr(state, "phase_folders", None),
+            hevy_routines,
+        ),
+        "",
         _section_user_profile(state.device_profile),
         "",
         "You are a personal health and performance assistant. Your job is to help the "
@@ -2260,9 +2377,6 @@ def build_system_prompt(
     if appointments_section:
         sections.append(appointments_section)
 
-    if knowledge_entries:
-        sections.append(_section_knowledge(knowledge_entries))
-
     if state.knowledge_entries:
         # When the week block renders (a non-null resolver window → `week_plan` present), fold the
         # next-7-days hard lines into it rather than stating the week twice (#316).
@@ -2311,6 +2425,12 @@ def build_system_prompt(
     )
     if routines_section:
         sections.append(routines_section)
+
+    # The legacy free-text notes come LAST of the data sections, after every live one, under a header
+    # that marks them undated and outranked (they used to sit mid-prompt, ahead of the schedule, and a
+    # stale line in them beat the live state).
+    if knowledge_entries:
+        sections.append(_section_knowledge(knowledge_entries))
 
     sections += [
         "",

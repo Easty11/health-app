@@ -3,6 +3,7 @@ import json
 import logging
 import math
 from typing import Any
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,21 @@ class HevyClient:
                 params={"page": page, "pageSize": page_size},
             )
             return self._check(r).json()
+
+    async def get_workout(self, workout_id: str) -> dict[str, Any]:
+        """Fetch a single workout by its Hevy id — GET /v1/workouts/{id}.
+
+        Returns the workout object itself. Hevy has been seen both returning the object bare and
+        wrapping it as `{"workout": {...}}`; both are tolerated (the connector parses nothing rigid).
+        A missing/foreign id surfaces through `_check` as `httpx.HTTPStatusError` (404); the caller
+        decides how to render the miss. Timeout-bounded: the chat turn must never hang on Hevy."""
+        async with httpx.AsyncClient(headers=self._headers, timeout=_TIMEOUT) as client:
+            # `safe=""`: the id can arrive from a client-named focus, so it is one path segment, never a path.
+            r = await client.get(f"{HEVY_BASE}/workouts/{quote(workout_id, safe='')}")
+            data = self._check(r).json()
+        if isinstance(data, dict) and isinstance(data.get("workout"), dict):
+            return data["workout"]
+        return data
 
     async def get_all_workouts(self, page_size: int = 10) -> dict[str, Any]:
         """Loop every /workouts page and concatenate — genuine "all workouts".
