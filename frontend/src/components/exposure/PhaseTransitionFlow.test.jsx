@@ -605,3 +605,43 @@ test('Q212: the two settings read in plain language, each with a one-line hint, 
   await stepTo(7)
   expect(screen.getByText('Probes off · Recovery vehicles first')).toBeTruthy()
 })
+
+// ---- Q159 close-out: the step-6 recorded-via hint is per device, on a load_window slot only ----
+
+async function toStep6WithLoadWindow(recordedVia) {
+  await toStep4()
+  await act(async () => { fireEvent.click(addSlotBtn()) })
+  await act(async () => { fireEvent.change(screen.getByLabelText('slot 2 kind'), { target: { value: 'load_window' } }) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Pilates' })) })
+  await next(); await next()
+  expect(screen.getByText(/step 6 of 8/i)).toBeTruthy()
+  await act(async () => { fireEvent.change(screen.getByLabelText('recorded via metabolic'), { target: { value: recordedVia } }) })
+}
+const garminHint = () => screen.queryByText(/zones from the watch's HR once Health Connect delivers it/)
+const samsungHint = () => screen.queryByText(/deposits load only if Samsung Health writes the session's HR/)
+
+test('recorded via: a Garmin load_window slot gets the neutral lag hint, not the amber warning', async () => {
+  await toStep6WithLoadWindow('garmin')
+  const hint = garminHint()
+  expect(hint.textContent).toMatch(/1 to 7 days on the sessions measured; reads zero load until then/)
+  expect(hint.className).toMatch(/text-gray-500/)
+  expect(hint.className).not.toMatch(/amber/)
+  expect(samsungHint()).toBeNull()
+  expect(screen.queryByText(/Health Connect stage 2/)).toBeNull()
+})
+
+test('recorded via: a Samsung Health load_window slot keeps the amber warning with the 2026-09-14 fact', async () => {
+  await toStep6WithLoadWindow('samsung_health')
+  const hint = samsungHint()
+  expect(hint.textContent).toMatch(/^\u26a0 /)
+  expect(hint.textContent).toMatch(/it has not since 2026-09-14 \u2014 zero load otherwise/)
+  expect(hint.className).toMatch(/text-amber-700/)
+  expect(garminHint()).toBeNull()
+  expect(screen.queryByText(/Health Connect stage 2/)).toBeNull()
+})
+
+test('recorded via: a polar_h10 load_window slot gets no device hint', async () => {
+  await toStep6WithLoadWindow('polar_h10')
+  expect(garminHint()).toBeNull()
+  expect(samsungHint()).toBeNull()
+})
