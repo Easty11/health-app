@@ -1726,6 +1726,14 @@ def _uncounted_why(u: dict) -> str | None:
     return None
 
 
+def _whole_minutes(v) -> str | None:
+    """A duration in whole minutes ("59 min"); under a minute reads "<1 min", so a short session is not shown as
+    zero. A non-number is None. (A device records fractions; the plan line is for finding the session.)"""
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return None
+    return "<1 min" if 0 < v < 1 else f"{int(v + 0.5)} min"
+
+
 def _format_plan_uncounted(uncounted: list[dict], context: dict | None) -> list[str]:
     """Sessions and workouts inside the window that matched no slot, each with its date and the resolver's
     reason. Silence here is how an unmatched sport name went unseen for a week (21 Oct 2026)."""
@@ -1739,7 +1747,7 @@ def _format_plan_uncounted(uncounted: list[dict], context: dict | None) -> list[
         meta = context.get(key, {})
         dur = u.get("duration_minutes")
         parts = [meta.get("day"), _uncounted_phrase(u),
-                 f"{dur:g} min" if isinstance(dur, (int, float)) else None,
+                 _whole_minutes(dur),
                  f"Hevy \"{meta['title']}\"" if meta.get("title") else None]
         why = _uncounted_why(u)
         lines.append("- " + " · ".join(str(p) for p in parts if p)
