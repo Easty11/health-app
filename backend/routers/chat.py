@@ -1,8 +1,10 @@
 from typing import Any
+import asyncio
 import json
 import logging
 import os
 import re
+import sys
 
 import anthropic
 from dotenv import load_dotenv
@@ -21,7 +23,7 @@ from connectors.hevy import (
     RoutineNumericError,
 )
 from context_builder import build_system_prompt, render_asked_lab_value
-from session_focus import FocusSession, build_focus_block
+from session_focus import FocusSession, build_focus_block, focus_from_share_url, needs_live_hevy
 from current_state import current_state as compute_current_state
 from database import get_db
 import hevy_routine_cache
@@ -55,6 +57,62 @@ from routers.knowledge import (
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+class _StdoutHandler(logging.Handler):
+    """Writes to the CURRENT `sys.stdout` at emit time (not the one bound at import), so a captured
+    stdout in a test sees it and a re-pointed one in prod is followed."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            sys.stdout.write(self.format(record) + "\n")
+            sys.stdout.flush()
+        except Exception:  # noqa: BLE001 — a log line never takes the turn down
+            self.handleError(record)
+
+
+# The app's own loggers have no handler (uvicorn's `--log-level` configures only uvicorn's), so an
+# `INFO` line from `logger` above never reaches Railway's stdout. Token usage must, so it has its own
+# logger with a stdout handler. Metadata only — never prompt or reply text (health data stays out).
+usage_logger = logging.getLogger("chat.usage")
+if not usage_logger.handlers:
+    _h = _StdoutHandler()
+    _h.setFormatter(logging.Formatter("%(message)s"))
+    usage_logger.addHandler(_h)
+    usage_logger.setLevel(logging.INFO)
+    usage_logger.propagate = False
+
+
+def _token_count(usage: Any, name: str) -> str:
+    v = getattr(usage, name, None)
+    return str(v) if isinstance(v, int) and not isinstance(v, bool) else "n/a"
+
+
+def log_usage(call: str, response: Any, system_chars: int) -> None:
+    """One stdout line per Anthropic call in a /chat turn: input/output tokens as the API reported
+    them (`n/a` when the response carries none) and the system prompt's size in characters."""
+    usage = getattr(response, "usage", None)
+    usage_logger.info(
+        "chat usage: call=%s input_tokens=%s output_tokens=%s system_chars=%d",
+        call, _token_count(usage, "input_tokens"), _token_count(usage, "output_tokens"), system_chars,
+    )
+
+
+# A live fetch by id is for ONE workout, on the turn's critical path: bounded well inside the client's
+# own 10s timeout so a slow Hevy never stalls the reply.
+_LIVE_HEVY_BUDGET_S = 6.0
+
+
+async def _fetch_live_hevy(client: HevyClient, workout_id: str) -> dict[str, Any] | None:
+    """The Hevy payload for `workout_id` straight from Hevy, or None on any failure (logged, never
+    raised — the focus block then says the session was not found)."""
+    try:
+        data = await asyncio.wait_for(client.get_workout(workout_id), timeout=_LIVE_HEVY_BUDGET_S)
+    except Exception as exc:  # noqa: BLE001 — a failed live read degrades to "not found", not a 500
+        logger.warning("live Hevy fetch for focus workout failed: %s: %s", type(exc).__name__, exc)
+        return None
+    return data if isinstance(data, dict) and data else None
+
 
 MODEL = "claude-sonnet-4-6"
 
@@ -1184,6 +1242,7 @@ def _retry_refused_shapes(
                     {"role": "user", "content": _retry_instruction(r)},
                 ],
             )
+            log_usage("knowledge_retry", resp, len(system_prompt))
             text = resp.content[0].text
         except Exception as exc:  # noqa: BLE001 — the original refusal stands; never raise the turn
             logger.warning("knowledge-write retry key=%s code=%s: transport error, refusal kept: %s",
@@ -1439,6 +1498,7 @@ def _narrate_after_write(
                 "content": _pass2_user_content(user_message, pre_write_reply, write_results),
             }],
         )
+        log_usage("narrate_after_write", resp, len(_PASS2_SYSTEM))
         return resp.content[0].text, True
     except Exception as exc:  # noqa: BLE001 — degrade to the deterministic floor, never the draft
         logger.warning("narrate-after-write pass-2 failed, falling back to floor: %s", exc)
@@ -1635,9 +1695,18 @@ async def chat(
     # lab value above — never merged into the standing render, so with no focus the prompt is
     # byte-identical to before. Loaded for the calling user only; a missing/foreign id yields a
     # block that says so and the turn proceeds.
-    if body.focus_session is not None:
+    #
+    # A pasted `hevy.com/workout/<uuid>` share link names its workout as the session under review when
+    # the client pinned no focus of its own (a pinned focus always wins). A Hevy workout missing from
+    # `hevy_workouts` — a share link to a session the sync has not stored, a pinned id the sync lags —
+    # is fetched live by id (one call, budgeted) and rendered in its place.
+    focus = body.focus_session or focus_from_share_url(body.message)
+    if focus is not None:
+        live_hevy = None
+        if hevy_client is not None and needs_live_hevy(db, current_user.id, focus):
+            live_hevy = await _fetch_live_hevy(hevy_client, focus.id)
         system_prompt += "\n\n" + build_focus_block(
-            db, current_user.id, body.focus_session, annotate_hevy=_annotate_canonical_titles,
+            db, current_user.id, focus, annotate_hevy=_annotate_canonical_titles, live_hevy=live_hevy,
         )
 
     # Build messages list: history + current user message
@@ -1654,6 +1723,7 @@ async def chat(
         system=system_prompt,
         messages=messages,
     )
+    log_usage("main", response, len(system_prompt))
 
     # Every text block, not `content[0]`: a reply with no content blocks was an IndexError, and one
     # whose first block is not text would drop the rest (Q187). Empty is handled at the end.
