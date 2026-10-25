@@ -14880,3 +14880,42 @@ Iso-Lateral High Row (Machine) stays `horizontal_pull` as landed: the operator's
 
 **Do not revisit unless.** Railway reports a further exposure or confirms that variables were decrypted; a credential on the (c) list is found live under its old value; or the operator chooses to backfill a row (append a dated row to Q238's entry; do not reopen it).
 
+---
+
+### #452. Q159 closes: the lag-window behaviour is Q203's and Q231's, the lag is not characterised further, the Garmin direct HR read is dropped, and the stale "until stage 2" warning is corrected
+
+**Decision.** Q159 closes DONE, on the operator's rulings of 2026-10-25 (proposed by chat, accepted by the operator; Code did not originate them). Nothing new is built here; PR-A and PR-C below are wording and one comment number.
+
+(a) **Lag-window behaviour is not Q159's (R1).** What a session shows and deposits while its in-activity HR has not arrived belongs to Q203 (the explicit absence) and Q231 (the imputed deposit, superseded by the Edwards deposit when zones arrive, #419). Q159 rules nothing new on either.
+
+(b) **Re-read depth is settled (R2).** The 30-day scheduled window (#370, device-confirmed #377) plus the per-run recompute on every chain run (#364) is the mechanism that fills a lag-window row. No further build.
+
+(c) **The lag is recorded, not characterised (R3):** "session-dependent, within the 30-day window on every case measured; not characterised further". Two measured points on one user (about 7 days, the 26 Sep Pilates, #369; about 1 day, the 1 Oct run, the 11 Oct evidence note on Q159) do not characterise it, and no code path depends on the number now that the window is 30 days.
+
+(d) **The Garmin direct in-activity HR read is dropped as a Q159 candidate (R4).** Not built. The 30-day window and Q231 cover the same gap, and `garminconnect` is an unofficial, ToS-grey lane under #361 (never refresh a Garmin token). Any future proposal to read in-activity HR from Garmin directly is a NEW question, not a Q159 limb.
+
+(e) **The 69/85/92 read (R5) is recorded verbatim and did not gate the close.** Run by the operator, `railway connect health-app-DB`, 2026-10-25; not run by Code:
+
+```
+sid | sport_name |              session_pkg              | session_day | dur_min |                hr_pkg                 | arrived_on | n_samples | median_gap_s | max_gap_s
+-----+------------+---------------------------------------+-------------+---------+---------------------------------------+------------+-----------+--------------+-----------
+  69 | Pilates    | com.garmin.android.apps.connectmobile | 2026-09-15  |    60.0 | com.garmin.android.apps.connectmobile | 2026-10-01 |        30 |        120.0 |       120
+  69 | Pilates    | com.garmin.android.apps.connectmobile | 2026-09-15  |    60.0 | personal_api                          | 2026-10-25 |        30 |        120.0 |       120
+  85 | Pilates    | com.garmin.android.apps.connectmobile | 2026-09-22  |    52.0 | com.garmin.android.apps.connectmobile | 2026-10-01 |        26 |        120.0 |       120
+  85 | Pilates    | com.garmin.android.apps.connectmobile | 2026-09-22  |    52.0 | personal_api                          | 2026-10-25 |        26 |        120.0 |       120
+  92 | Pilates    | com.garmin.android.apps.connectmobile | 2026-09-29  |    55.0 | com.garmin.android.apps.connectmobile | 2026-10-01 |        27 |        120.0 |       120
+  92 | Pilates    | com.garmin.android.apps.connectmobile | 2026-09-29  |    55.0 | personal_api                          | 2026-10-25 |        27 |        120.0 |       120
+(6 rows)
+```
+
+By the reading rule that came with the query (a Garmin row at a 6 to 16 s median gap arriving on or after 2026-10-05 is the 30-day window recovering a late write; only 120 s gaps is "not recovered"): all three sessions carry only 120 s gaps, from the Garmin Health Connect package (arrived 1 Oct) and from a second package named `personal_api` (arrived 25 Oct). None carries in-activity samples. **Not recovered.** The brief expected row 69 to be the one outside the window (a guess from id order); the query shows its `session_day` as 2026-09-15, so all three sessions (15, 22 and 29 Sep) were inside the window at the first 30-day scheduled run. This read does not settle whether those three are late or never delivered: session 92 is still inside the 30-day window on 2026-10-25. It agrees with #364 (69/85/92 stay zoneless, reason `sparse`, accepted) and with Q198 (1 Oct: the POSTs the server received held passive 120 s samples only).
+
+(f) **The stale warning and comment are corrected (R6).** PR-A (#444, merge `ea1ab7e`): on a `load_window` slot the form shows, per device, a Garmin hint in neutral grey ("zones from the watch's HR once Health Connect delivers it — 1 to 7 days on the sessions measured; reads zero load until then.") and a Samsung Health warning kept amber ("⚠ deposits load only if Samsung Health writes the session's HR to Health Connect; it has not since 2026-09-14 — zero load otherwise."). The F15 condition (`load_window` only) and the activity-slot line are unchanged. The `recorded_via` comment in `backend/engine/training_phase.py` is rewritten; `_RECORDED_VIA_VALUES` and all behaviour are unchanged. Three `PhaseTransitionFlow` render tests pin Garmin, Samsung Health and `polar_h10` (no hint). PR-C (#445) resolved this entry's number in the hint comment, because the placeholder guard does not scan the frontend.
+
+**Rationale.** The question as titled, the load treatment of a zoned session, was answered by #364, #322 S2 and #385/#388. #369 reopened it on the measured lag. Since then every limb of that reopen has been built (#370/#377), re-homed (Q203; Q231 and #419) or shown not to change a code path (the lag's size). Holding Q159 open duplicated three live stores.
+
+**Status.** Ruled 2026-10-25. PR-A merged (#444, `ea1ab7e`); PR-C merged (#445); PR-B (this entry) lands the governance. The ROADMAP row "HC zones (Q159 stage 2)" is unchanged and keeps its two owed items (the operator confirming Polar Flow's 175 is locked as user-set; Code, low priority, the single-row HC bout deposit read, #384 item 4); closing the question does not close that row.
+
+**How you know.** The 11 Oct evidence note on Q159 (the 1 Oct run's HR arrived 2 Oct, 236 samples, 6 s median gap) against #369's 7-day case; sync events 66-68 (#377) for the 30-day window; the read in (e) for 69/85/92. `git grep -n Q159 ea1ab7e -- frontend backend` (PR-A's merge) returns 25 lines in 17 files: 24 in backend docstrings and comments that describe stage 2 as BUILT (`hc_zone_enrich`, `hr_zones`, `models`, the sync router, the operator scripts and their tests) and 1 in the frontend, the section header of the new render test. None says "until stage 2". PR-A's CI was green (placeholder guard, backend pytest, frontend vitest).
+
+**Do not revisit unless.** A session's in-activity HR is shown to arrive later than 30 days (then the window, not this entry, is the question); or Q231's build finds the supersession term cannot be met because a zoned row and an imputed row for the same session cannot be told apart (then the lag-window ownership returns here).
