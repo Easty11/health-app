@@ -7,72 +7,6 @@ definition). The label is `**State:**` (never `**Status:**`). `DONE → #N` name
 
 ---
 
-## Q10. Build AccessLink per-second ingest for the Metabolic-load window (HC/companion lane)?
-
-#35 established the dependency: HC carries no per-second R-R/HR-zone; only AccessLink
-(v3 REST exercise-samples / TCX export) does. #46 specified the exact pathway but it is
-not built. PSL covers Luke's direct solo/gym capture, so the need only bites if the
-HC/companion lane carries a Polar user requiring per-second — none confirmed (Deb's
-wearable integration is no longer deferred as of 2026-08-10 — see State; Cooper has no wearable).
-
-**State:** OPEN — low priority. **Not BLOCKED**: #46 already specified the pathway, so nothing
-prevents building it; the trigger is a real consumer, and the one deferral that held it off has lifted.
-**2026-08-10 (Luke, confirmed):** Deb's wearable integration is **no longer deferred**. This does not by
-itself make Q10's consumer real — the pathway bites only if Deb's device delivers Polar-in-HC per-second
-data (R-R / HR-zone), which is not yet established — but it removes the reason this was parked, so Q10
-re-enters live consideration. Revisit when the Metabolic-load channel is wired to a confirmed
-Polar-in-HC consumer.
-
----
-
-## Q19. Desktop workout-detail exercise scroller starved to ~36px — right-column space allocation
-
-Desktop full-width, a workout opened in `WorkoutDetail` (`frontend/src/components/WorkoutPanel.jsx`
-lines 190–244): reported symptom, verbatim — "no scroll ability for the full column, only the
-exercise section, which is small." Live DevTools measurement on the authenticated app (Chromium,
-~779 px-tall viewport) confirms the exercise list at `WorkoutPanel.jsx:224`
-(`flex-1 overflow-y-auto px-4 py-4 space-y-5`) computes `clientHeight 36` / `scrollHeight 1977`,
-`overflow-y: auto` — scrollable, but squeezed to a 36 px window. **Nothing is stranded/unreachable**;
-the fixed chrome above simply consumes the panel. Cause is **space allocation, not a
-min-height/overflow CSS defect**: the right column (727 px) splits 50/50 between HealthPanel and
-WorkoutPanel (both `flex-1 min-h-0`, `Dashboard.jsx:99/102`), so WorkoutPanel gets ~363 px; the two
-`flex-none` blocks above the list — header (`:192`) and the stats-grid + session-analysis + "Get AI
-Feedback" button block (`:197–223`) — consume ~327 px, leaving the `flex-1` exercise list ~36 px.
-
-Falsified prior hypothesis: the `md:min-h-0`-on-four-scrollers fix (drafted as "#70", **withdrawn** —
-the real #70/#71 are the HRV work) was disproven by measurement; all four targets are self
-scroll-containers whose flexbox automatic-minimum is already 0, so `min-h-0` is inert (pre-fix sim
-scrolled identically, 274 vs 3144). The Dashboard column chain is measurement-confirmed bounded
-(LEFT/Chat scroller 573→112029 and HealthPanel 363→511 both scroll correctly); the LEFT-column prime
-suspect was exonerated (clientH == scrollH == 727).
-
-Fork (undecided): (a) let the whole detail view scroll as one unit — move the scroll boundary to the
-panel root so the stats/analysis chrome scrolls with the exercise list rather than being pinned;
-(b) rebalance the right-column 50/50 split so the expanded/active panel gets priority, or size to
-content; (c) cap the chrome height so the list keeps a usable minimum. Frontend-only; no connector,
-contract, or schema impact.
-
-Not-yet-characterised: measured only at ~779 px viewport height — taller viewports give WorkoutPanel
-more room and may not exhibit it. A faithful isolated repro (real compiled CSS, verbatim classes) did
-**not** reproduce it; the trigger is specifically the detail-view chrome height vs the ~363 px
-half-column, which the repro did not stage.
-
-**State:** OPEN — frontend layout fork: decide direction (a) / (b) / (c), then implement. Branch
-`fix/desktop-column-scroll` was cut then discarded (zero commits; deleted). No DECISIONS_LOG entry.
-No blocker — the decision is Luke's to make at will, nothing external gates it.
-
-**Re-measured 30 Sep 2026 (Brief A G7, after the A3/A5 changes to `WorkoutPanel`, #355).** On the built app in
-Chromium, `/training` (the panel no longer sits in the Dashboard's 50/50 column; it lives in an
-`h-[75vh] min-h-[420px]` box beside the docked chat), API mocked, a 9-exercise Hevy workout open in
-`WorkoutDetail`: the exercise scroller (`flex-1 overflow-y-auto`) measures **361 px tall x 819 px wide** at
-1280x779 (`scrollHeight` 1479) and **452 x 926** at 1440x900, `overflow-y: auto`. That is not the 36 px of the
-original measurement, so on the route the panel now occupies the starvation is not reproduced; the Dashboard
-column it was measured in no longer hosts `WorkoutPanel`. Not measured: a phone-width viewport, and a workout
-with a long session-analysis block. State unchanged (the fork is moot on `/training` unless the panel returns
-to a half-height column).
-
----
-
 ## Q22. Promote exercise-region tags to a source-agnostic canonical exercise layer
 
 Tags are currently keyed on the **Hevy** template id (`exercise_region_tags.hevy_exercise_template_id`),
@@ -87,7 +21,12 @@ layer is designed.
 
 ---
 
-## Q24. Does anything besides reconciliation consume `laterality`? Is there a `capability_state.side` join that should exist?
+## Q24. Should a `capability_state.side` join exist?
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: (a) is answered yes — #239 D-E session-pairing consumes `laterality`, and #302 narrows that to provenance-only. **Now asks only:** (b) should a `capability_state.side` join exist, given that #427/#428 built per-side strength on `exercise_region_tags.side` deliberately without capability rows.
+Original title: "Does anything besides reconciliation consume `laterality`? Is there a `capability_state.side` join that should exist?"
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 `capability_state` already carries a `side` column (left / right / bilateral). `hevy_exercise_templates.laterality`
 now records whether a movement is unilateral. A unilateral logged exercise plausibly should feed a per-side
@@ -182,30 +121,6 @@ duplication rather than expose it.
 
 ---
 
-## Q32. The `/closeout` ritual definitions have diverged between repos — 77 vs 132 lines
-
-`health-app/.claude/commands/closeout.md` is **77 lines**; `health-connect-app`'s is **132**. Both
-define the same ritual, and both were carrying the struck `purpose / why-parked / unblocks-on`
-column set (HCA Q9 item 2). health-app's copy is fixed at #92; **HCA's still teaches the dead
-dialect**, and a ritual definition that does so re-emits it every session — the drift regenerates
-itself rather than merely persisting.
-
-Two undecided questions, deliberately left open rather than answered unilaterally (sweeping another
-repo's ritual definition is out of this brief's scope, and doing it unbidden is not Code's call):
-
-1. **Does HCA's copy need the same strike?** Almost certainly yes — HCA Q9 records it as the higher
-   priority of its two items.
-2. **Is the 77-vs-132 divergence intentional?** The shared loop-rules block is propagated verbatim
-   and fingerprint-gated; the ritual definition is neither. If the ritual is meant to be shared, it
-   needs the same treatment (markers + a parity gate). If it is meant to be per-repo — HCA's is a
-   different app with different close-out needs — that should be *stated*, so the divergence stops
-   reading as drift. Right now nothing distinguishes "intentionally different" from "quietly
-   drifted", which is the same ambiguity the vocabulary sweeps existed to remove.
-
-**State:** OPEN — no blocker; both questions are answerable at will. Owner: Luke.
-
----
-
 ## Q35. The over-collapse guard is unit-only and cannot see same-unit semantic collapse
 
 `backend/routers/labs.py:394` refuses a write when a raw label maps to a canonical whose
@@ -236,6 +151,10 @@ other panel has yet printed that word.
 
 ## Q42. The 12-hour-clock scrape failure in `parseSleepTimingContentDesc` is silent and cross-cutting — owned by `health-connect-app`
 
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the carry-across happened. The canonical question is health-connect-app Q19 (still OPEN there), and #127 removed Samsung bedtime from adherence and prefill. **Now asks only:** whether this row stays as a cross-repo tracking stub or closes as transferred once HCA Q19 moves. The operator may choose to close it as transferred now; that was flagged at the sweep and is not ruled.
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
+
 `HRVDataModel.parseSleepTimingContentDesc` captures `(\d+:\d+)` from a Samsung content-desc, and
 `parseClockToMinutes` accepts it without a meridiem. If the phone clock is ever set to 12-hour, `10:12 pm`
 is stored as `10:12` — a 12-hour error that reads as a valid time. It is silent, and it affects **every**
@@ -255,26 +174,6 @@ in `health-connect-app` (`parseSleepTimingContentDesc` / `parseClockToMinutes`, 
 verified) and is unverifiable from a health-app-rooted session. Scope is now explicit: **the gate covers
 prefill only; the source mis-parse is still open and belongs to HCA.** So the question stays live, not
 closed by tonight's gate.
-
----
-
-## Q46. No column records whether a prescription's `basis_tst` came from device or diary — only its adherence source
-
-The `cbti_prescriptions` basis-source columns (`basis_n_samsung` / `basis_n_diary`, migration
-`c4e8a2019bd7`) record the **adherence** source of each basis night — whether bedtime was checked
-against Samsung or against the diary's own `lights_out`. They do **not** record whether `basis_tst_min`
-itself was computed from device `actual_sleep_time_minutes` or from diary TST. These are different axes.
-
-Surfaced opening block 3. Its opening prescription (block id=2, rx id=10) is **device-derived**:
-`basis_n_samsung=27`, `basis_n_diary=0`, `basis_tst_min=349` computed from Samsung
-`actual_sleep_time_minutes` over 2026-06-23..2026-07-23 — stated only in the prescription's `rationale`
-text. Block 2's basis was diary-derived. A later reader comparing the two blocks' bases cannot tell the
-two provenances apart from structured columns, and a device basis and a diary basis are not equivalent.
-
-**State:** OPEN — no blocker; the interim is the rationale text on rx id=10. Owner: Luke. **No
-column added mid-block** — block 3 is open, an additive nullable migration is safe, but a new provenance
-axis is a design choice not a hotfix. **Next action to close it:** decide whether `basis_tst` provenance
-warrants its own column (`device|diary|mixed`) or the rationale text suffices, before block 4 opens.
 
 ---
 
@@ -337,7 +236,12 @@ citation is recorded here so the refactor is not re-proposed on the same false b
 
 ---
 
-## Q55. Four CBT-I gate constants are chosen, not derived — no data or literature grounding
+## Q55. CBT-I gate constants are chosen, not derived — no data or literature grounding
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged (the constants table below is stale): `NAP_EXCLUDE_MIN` 0 → 30 (#219); `ADHERENCE_FAIL_N` 3 → 2 (#165); `TRAINING_RECOVERY_MIN`'s gate retired (#436 item 5). **Now asks:** ground the surviving chosen constants (`ADHERENCE_TOL_MIN`, `ADHERENCE_FAIL_N`, `NAP_EXCLUDE_MIN`) and the newly minted ones (`LATE_RISE_TOL_MIN`, `MAX_PLAUSIBLE_TST` / `MAX_PLAUSIBLE_TIB` — #436, #445). #445's `SE_EXTEND_PCT` has a named convention basis, the first constant that does.
+Original title: "Four CBT-I gate constants are chosen, not derived — no data or literature grounding"
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 `NAP_EXCLUDE_MIN` (0), `TRAINING_RECOVERY_MIN` (90), `ADHERENCE_TOL_MIN` (30) and `ADHERENCE_FAIL_N` (3)
 in `cbti/engine.py` are operating values set by choice — not estimated from data and not traced to a CBT-I
@@ -392,7 +296,12 @@ increment has something trustworthy to highlight against).
 
 ---
 
-## Q59. Nothing verifies the deployable artifact — no CI, and no check can observe "the application starts"
+## Q59. Nothing verifies the deployable artifact — no check can observe "the application starts"
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: CI exists — #170 added the placeholder guard, and #273 binds backend pytest and frontend vitest as required master contexts. **Now asks only:** an explicit deployable-artifact check — a build-stage import against the Railway image — so that "the application boots" is observed rather than inferred.
+Original title: "Nothing verifies the deployable artifact — no CI, and no check can observe "the application starts""
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 Surfaced by the 2026-07-28 deploy outage (an unpinned `mcp` resolved to a breaking major and the app
 died at import while 460 tests passed). One gap with two faces; recorded as one row because they are
@@ -459,39 +368,6 @@ Candidates:
 marker where a correction is known to exist. **Owner:** Luke.
 
 Numbered `Q66` on the `gov/two-open-questions` branch (pre-ff; max was Q65, no competing branch).
-
----
-
-## Q68. A full-collision re-upload creates an empty `LabReport` envelope, and nothing decides whether it should
-
-**State:** OPEN. **Blocks:** nothing today — the empty envelope is now visible as a fault, so this
-is a correctness-of-model question, not a live defect. **Related:** `#155`, `#156`, `#157`.
-**Numbering collision — read this before filing the cross-date operand question.** The brief that
-produced this entry refers to "Q68's cross-date operand question" as though it exists; it is not in
-this file and never was. Number-at-merge claims the next sequential integer at the instant of merge,
-the repo max was Q67, so THIS entry is Q68. The cross-date operand question is still pending in chat
-and takes the next free number when it lands.
-
-**The fork.** `#155` ratifies retain-raw: the report row is created because the document genuinely
-exists. `#156` keys duplicate detection at the marker level and explicitly adds **no report-level
-key**. Together these mean a re-upload whose every marker collides produces a `lab_reports` row
-with zero `lab_results` — ten such rows exist in production today. Neither entry decided whether
-that is the *intended* outcome or an unexamined consequence of two independently correct choices.
-
-**Why it is not obvious either way.** Retaining it is defensible: the document was uploaded, the
-upload is an event, and `#155`'s whole argument is that discarding raw provenance is the mistake.
-Discarding it is also defensible: the envelope carries no data, no `source_doc_filename` in some
-cases, and duplicates provenance already held on the report that owns the rows — it is a record
-that someone uploaded a file twice, which is operator behaviour rather than health data.
-
-**What would settle it** is report-level identity (`Document ID` / `Lab ID`, currently uncaptured),
-which is the same dependency `#157`'s do-not-revisit clause names. With it, the question stops
-being "keep or discard the empty envelope" and becomes "recognise the document before writing
-anything" — at which point the envelope is never created and the fork dissolves. **This is a
-trigger, not a blocker:** the schema change is possible now, it is simply not yet worth doing.
-
-**Do not resolve by deleting the existing ten rows** — that is a separate operator decision under
-`#155`, and answering a design question by mutating the evidence for it is the wrong order.
 
 ---
 
@@ -626,37 +502,12 @@ because a cycle needed rescuing. The justification is the test, not the directio
 
 ---
 
-## Q82. `_aggregate_day` keeps only the longest sleep session — fragmented Samsung nights undercount
+## Q83. Sleep-writer admission policy, and per-writer sleep aggregates at ingest (Q224)
 
-Surfaced by the Q4/G4 drill-down (2026-08-03, live Railway). Three nights — wake-dates 2026-07-20,
--22, -23 — undercount the Samsung scraper across **all** stages, with date attribution correct
-(same-date, `still_shifted = 0`). So this is not a residue of the Q4 shift; it is a separate defect that
-the Q4 fix made visible.
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the longest-session selector is gone (#254 union, #256 precedence partition), the blend is labelled (#300), and the snapshot is one writer per night (#405). **Now asks:** the sleep-writer admission policy (default-untrust, → #175 device identity), and per-writer sleep aggregates at ingest, which is now Q224. The remainder overlaps Q224; the operator's draft considered folding it into Q224 and closing this row, and that fold is not ruled.
+Original title: "HC sleep selection is source-blind — Withings and Samsung are silently blended, and the `#35`/`#36`/`#37` dedup enabler was never wired"
 
-**Mechanism.** Samsung writes a fragmented night as multiple non-overlapping `SleepSession` records.
-`_aggregate_day` (`backend/routers/health_connect.py`, the `best = max(day_sleep, key=...duration())`
-selection) persists **only the longest session and its stages**, discarding the rest of the night.
-Per `health_connect_record_sources` the three undercounting nights carry 2 / 2 / 4 `shealth` sessions
-(7/23 has four: 22:42, 02:14, 02:45, 04:46 AEST).
-
-**Not every multi-session night.** 7/21 had two `shealth` sessions and matched exactly. The undercount
-bites only when the fragments are **balanced** — when one session clearly dominates, `max()` happens to
-pick nearly the whole night and the bug hides. That is why it survived Q4.
-
-The in-code comment above the selection anticipated only **nap displacement** ("a same-day nap cannot
-displace the main night because the max() tiebreak still picks the longest session") — it did not
-anticipate a real night split into several main sessions, which is the case that breaks it.
-
-**Fix:** replace max-only with a **union/merge** of the night's sessions, excluding same-wake-date naps.
-"Which sessions constitute the night" is the design fork and is not yet decided.
-
-**State:** OPEN — no blocker, but **sequenced after `Q83`**: a merge must run *within* the single
-source that question selects, because merging sessions across Samsung and Withings would be incoherent.
-Distinct from Q4 (`DONE → #64`). Owner: Luke. Cross-refs `Q83`, `#35`/`#36`/`#37`.
-
----
-
-## Q83. HC sleep selection is source-blind — Withings and Samsung are silently blended, and the `#35`/`#36`/`#37` dedup enabler was never wired
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 Surfaced alongside `Q82` in the Q4/G4 drill-down (2026-08-03). `health_connect_record_sources`
 shows Health Connect carries sleep from **two** writers: Samsung (`com.sec.android.app.shealth`) and
@@ -868,22 +719,11 @@ current drift (a data point, not the governance gap).
 
 ---
 
-## Q88. Empirical calibration of `OVERLAP_THRESHOLD` against real Polar/HC pairs
-
-`reads/aerobic_reads.py` (`#189`) sets `OVERLAP_THRESHOLD = 0.50` of the shorter session's duration as
-the "same physical bout" cutoff for read-time cross-source arbitration — a **proposed default, not a
-measured one**. It has never been tested against real overlapping Polar/HC captures, because none exist
-yet: HC exercise ingestion is held (`#189` Status — HCA forwards no exercise identifier). Set too low,
-the rule merges genuinely separate back-to-back bouts into one and suppresses a real session; set too
-high, it splits one bout whose two sensors clocked slightly different start/stop and double-counts it.
-One tunable constant, one place.
-
-**State:** OPEN — deferred until HC exercise ingestion lands and real Polar/HC pairs exist to measure.
-Cross-refs `#189`, `Q83` (distinct dedup class), `Q89`.
-
----
-
 ## Q89. Do HC auto-detected micro-sessions warrant a minimum-duration floor?
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the decide-at-ingest moment was ruled — no floor at ingest, and countability is slot-declared (#309 Ruling 0 withdrawn; #315/#376; #322 `NON_TRAINING_SPORTS`). **Now asks only:** whether a duration floor ever gains an empirical basis, per #306's do-not-revisit clause.
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 Health Connect can auto-detect short activity bouts (sub-5-minute walks) that Polar never records. If
 ingestion (step 3, held) admits them, they arrive as `aerobic_sessions` rows with no Polar counterpart —
@@ -893,22 +733,6 @@ before filtering anything**; a floor is a chat decision, never a silent filter.
 
 **State:** OPEN — decide at HC ingestion (step 3). No floor exists yet; none is to be added without the
 count/distribution evidence first. Cross-refs `#189`, `Q88`.
-
----
-
-## Q90. HCA question headings carry work-item states — vocabulary drift or a deliberate dialect?
-
-`gen_status_model` flags 6 health-connect-app questions headed `· UNSTARTED` (and `BLOCKED` appears
-too) — work-item vocabulary on question headings. The `### State vocabulary` block is byte-identical
-across both repos' `CLAUDE.md` (SHA `27337630fca6db03`, verified 2026-08-10) and restricts question
-state to `OPEN / OWED / DONE → #N`; `UNSTARTED`/`BLOCKED` are the work-item set. Because the vocabulary
-is shared and agreed, this is un-propagated store debt in HCA, not a first-class dialect.
-
-**State:** OPEN — drift, not a decision (Step 1 of the status-parser-gate brief resolved this: blocks
-match ⇒ accept-and-flag). The status model accepts and tallies the tokens as off-vocab `drift`, never
-coercing or dropping them, so the finding surfaces every run. Resolution is an HCA-side store edit
-(re-home those questions' true state, or record why `UNSTARTED` is meant there) — cross-repo, owner
-Luke, not actionable from a health-app write session. Cross-refs `#190`, `#193`.
 
 ---
 
@@ -959,43 +783,6 @@ Owner: Luke.
 
 ---
 
-## Q97. No local strength-training store for any user
-
-Hevy workouts are fetched live from the Hevy API and never persisted; only `hevy_exercise_templates`
-exists locally. Consequence: no store to compute strength load trends against, and every view depends on
-Hevy uptime plus a valid token. Sits awkwardly beside `capability_observations` and the already-logged
-Hevy weight-semantics defect (cable-machine markings, per-limb vs bilateral under one exercise name).
-
-**State:** OPEN — no local strength store; every strength view depends on Hevy uptime + a valid token.
-Related: `Q6` (unit-trustworthiness addendum). Owner: Luke.
-
----
-
-## Q98. HC aerobic rows carry no load
-
-Health Connect exports duration, type and HR but no zone seconds and no cardio_load. Any consumer keying
-on cardio_load will be permanently silent for HC-sourced users, not temporarily sparse. Options: derive a
-TRIMP-style estimate (requires max and resting HR; not comparable to Polar's cardio_load — a parallel
-metric, not a substitute), accept the gap, or take the server-side-connector route in `Q93`.
-
-**State:** OPEN — HC aerobic rows carry no `cardio_load`; consumers keying on it go permanently silent for
-HC-sourced users. Owner: Luke.
-
----
-
-## Q99. Multi-user paths are unexercised
-
-Three accounts (1 Luke, 4 Deb, 5 Cooper). Every provider path, the HCA sync route, and readiness/recovery
-logic have only ever executed against user_id 1. Readiness baselines are calibrated to user 1. Not
-evidence of a defect — but untested, and Deb's first sync is the first exercise of it. Cooper (ACL
-reconstruction ~18 months post-op, contact rugby) is a third profile with onboarding context and no
-recovery source.
-
-**State:** OPEN — multi-user paths unexercised; Deb's first sync is the first real exercise of them.
-Owner: Luke.
-
----
-
 ## Q100. User 5's stored Hevy key authenticates to an empty account (0 customs, 0 workouts)
 
 The exercise-template seeder (`sync_hevy_templates.py --user-id 5`) synced clean for Cooper (user 5) but
@@ -1026,7 +813,12 @@ from the Hevy account that shows his workouts/customs, and re-issue it from that
 
 ---
 
-## Q102. `restrictions[]` is dead data — `is_contraindicated` cannot express the ledger's clinical language
+## Q102. Constraint rows: restriction vocabulary to region keys, `signal_type` refinement, and the `lunge_single_leg` over-block
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: `restrictions[]` strings became typed constraint rows with lifecycle, exit and authority (#342 S6), audited by #340. **Now asks:** the restriction-vocabulary → region-key mapping (engine-tier rows were never seeded); `signal_type` refinement and a per-entry override; and the live `lunge_single_leg` over-block (coordinate with Q182/Q183).
+Original title: "`restrictions[]` is dead data — `is_contraindicated` cannot express the ledger's clinical language"
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 `gather_active_injuries` normalises `restrictions` onto every injury row, and `is_contraindicated` reads it
 for exactly one thing: the `"ra_flare" in restrictions` alias. Every other restriction string the ledger
@@ -1460,7 +1252,12 @@ store whose vocabulary a cost axis must not fork).
 
 ---
 
-## Q118. Health Connect record metadata (`id` / `recordingMethod` / `device`) is forwarded by HCA and accepted-but-dropped by the backend
+## Q118. Health Connect record metadata: `device` is still dropped, the `health_connect_record_sources` dedup key is unruled, and non-exercise records carry nothing
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: #309 persisted `recording_method` and `source_package`, and the HC record UUID keys exercise rows. **Now asks:** persist `device`; rule the `health_connect_record_sources` dedup key (still the synthesized triple; #36/#37 never ruled it); and non-exercise record types still carry nothing.
+Original title: "Health Connect record metadata (`id` / `recordingMethod` / `device`) is forwarded by HCA and accepted-but-dropped by the backend"
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 `workoutMapper` forwards `metadata.id`, `metadata.recordingMethod` and `metadata.device`;
 `ExerciseRecord` declared none of them, so Pydantic dropped them. `#234` declares them `Optional`
@@ -1482,6 +1279,10 @@ before, and nothing yet reads them. Owner: Luke. Cross-refs `#36`, `#37`, `#175`
 ---
 
 ## Q119. A windowed/manual backfill path for `/health-connect/sync`, so a contract break outliving the rolling fetch window is still recoverable
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the scheduled window went 7 → 30 days (#370, device-confirmed #377), 30-day manual deep syncs are in live use, and #399 rules window-absence reconciliation. **Now asks:** a caller-supplied arbitrary date-range backfill (shape, timing, auth), so that a contract break outliving ~30 days is recoverable.
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 `#235` accepts whole-batch rejection as the cost of loudness on the ground that a break is a **gap,
 not corruption** — HCA re-reads a rolling window every sync and the upsert never overwrites a stored
@@ -1660,7 +1461,12 @@ toward a majority/consensus or a source-preferred merge? A tightening is a **new
 
 ---
 
-## Q129. Garmin sleep source — pull server-side or leave on HC?
+## Q129. Which sleep figure do the remaining platform reads use for a Garmin user?
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the A-vs-B fork is overtaken — #449 ingests Garmin sleep server-side through the official API into `sleep_nights`, and #457 (which closed Q243) has the recovery readers (`get_recovery_metrics`, the readiness snapshot, the card) rank it first. **Now asks:** which sleep figure the remaining platform reads use — #457 records `context_builder._section_health_connect` and the check-in prefill's `passive_sleep_min` as still reading the HC aggregate unguarded (readers still on HC per #425). Coordinate with Q244. The operator's draft said to consider folding this into Q243; Q243 closed at #457, so there is no fold target and none was ruled.
+Original title: "Garmin sleep source — pull server-side or leave on HC?"
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 Garmin sleep currently reaches the platform only via the companion app → Health Connect →
 `health_connect_syncs`, coupling it to the Samsung-purposed companion app and the phone chain the
@@ -1675,41 +1481,6 @@ ingestion lane (#258/#259).
 
 ---
 
-## Q131. HRV `_SOURCE_RANK` is currently unexercised
-
-`recovery_reads._SOURCE_RANK` ranks garmin > samsung, but per-user overlap is nil today (Deb=Garmin,
-Luke=Samsung), so no night is actually contested. Revisit the ranking only if a single user acquires
-both sources.
-
-**State:** OPEN
-
----
-
-## Q132. Garmin garth refresh-token re-login cadence
-
-Observe how often Garmin invalidates the refresh token (forcing a manual `garmin_login.py` re-run).
-Informs whether silent re-auth is tolerable or needs an operator nudge/alert on the "reconnect Garmin"
-424 state.
-
-**State:** OPEN
-
----
-
-## Q134. Full `/recovery/summary` restructure — retire the Samsung-block HRV duplication + source-agnostic sleep read
-
-#265 added an `hrv` block additively and left the device-shaped `samsung` and `health_connect` blocks
-byte-for-byte, because repointing them breaks the current frontend contract. The follow-on: once the
-frontend reads the `hrv` block, retire the `samsung` block's HRV duplication (its `hrv_ms`/`trend`/
-`baseline_*` overlap the new block) and introduce a source-agnostic SLEEP read across HC + Samsung
-(sleep still lives only in `samsung_hrv_readings`). Also decide `has_data` semantics at that point —
-whether it should reflect the `hrv` block (a Garmin-only user currently reads `has_data=false` despite a
-populated `hrv` block). Requires a coordinated frontend change (health-connect-app), so it is a
-cross-surface restructure, not a backend-only edit.
-
-**State:** OPEN (deferred — blocks on frontend readiness to consume the `hrv` block)
-
----
-
 ## Q135. Drop `samsung_hrv_readings.hrv_ms` once dual-write is proven and the frontend reads the `hrv` block
 
 #266 retains `samsung_hrv_readings.hrv_ms` (dual-write, not move) so the `samsung` block keeps working
@@ -1718,7 +1489,9 @@ nights present in both tables) and the backfill has run, and (b) the frontend re
 block rather than the `samsung` block, `hrv_ms` becomes redundant and can be dropped — `samsung_hrv_readings`
 then holds sleep only. Gated on Q134 (the frontend read-path move) and on the live parity check.
 
-**State:** OPEN (deferred — gated on Q134 + live dual-write/backfill parity)
+**Gate re-pinned, 2026-10-26 (`DECISIONS_LOG` #459).** The gate cited Q134, which closed superseded, and its condition (b), the frontend reading the `hrv` block, has no consumer left to wait on: the only endpoint that serves that block is unmounted (Q151). The gate is the actual remaining readers of `samsung_hrv_readings.hrv_ms`, from a read of the tree on 2026-10-26: `routers/health.py` (`_serialize_reading`, the `/health/summary` HRV block and baseline, the workout-day HRV); the chat context's Samsung block (`routers/chat.py` window, rendered by `context_builder`); `reads/recovery_night.py` (the scraper candidate); `reads/snapshot_reads.py` (the night-count filter on non-null `hrv_ms`); and `routers/recovery.py` (unmounted; Q151). The drop waits on each being repointed to `hrv_readings` or retired, and on the live dual-write parity check in (a).
+
+**State:** OPEN (deferred — gated on Q151 for `routers/recovery.py`, on the live `hrv_ms` readers named above, and on live dual-write/backfill parity)
 
 ---
 
@@ -1817,6 +1590,10 @@ session.
 ---
 
 ## Q143. MCP temporal re-anchoring + failure acknowledgement — the out-of-repo halves flagged by #281
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the in-repo item landed — the Hevy routine and exercise lanes folded onto `WriteResult` with narrate-after-write (#286/#288). **Now asks only:** WS3, the out-of-repo client-layer per-turn `as_of` re-anchor.
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 Raised closing the decompression-schedule verify-then-fix (#281). Two halves sit outside `health-app` and were flagged
 rather than forced into the tree:
@@ -2043,22 +1820,9 @@ mounting it would ship a live, testable, maintainable endpoint for zero consumer
 this task did not need. Decide adopt-or-delete as its own scoped call: adopt WITH a defined consumer
 (a frontend/dashboard that reads the `hrv` block), or delete the module.
 
+**Sole owner of the `recovery.py` disposition, 2026-10-26 (`DECISIONS_LOG` #459).** Q134 closed superseded: `/recovery/summary` is unmounted with zero consumers (`main.py` does not include the router; checked 2026-10-26), so adopt-or-delete is decided here and nowhere else. The substantive goals of Q134 landed on live surfaces (#300/#405/#448/#292).
+
 **State:** OPEN (deferred — decide when a consumer is proposed, or delete)
-
----
-
-## Q152. Historical `daily_records.passive_hrv_ms` backfill from `canonical_hrv` (Garmin cutover seam)
-
-`/series/readiness` reads `daily_records.passive_hrv_ms`, a value frozen at AM check-in. The #291
-rewire repoints the snapshot source to `canonical_hrv` for FUTURE check-ins only; historical rows
-keep their Samsung-snapshotted values, leaving a seam at the date a user connects Garmin (before it:
-Samsung-snapshotted; after: canonical). A clean history needs a one-off script recomputing
-`passive_hrv_ms` from `canonical_hrv` as-of each past date. Non-destructive (recomputes a
-forward-frozen scalar) and a NO-OP today: canonical == Samsung on every existing night (per-user
-overlap nil, Q131), so backfilling now changes nothing. Defer until Garmin has synced a stretch of
-history worth reflecting, then run it as-of each past date. Watch-point, not owed work.
-
-**State:** OPEN (deferred — no-op until Garmin has overlapping history)
 
 ---
 
@@ -2185,6 +1949,10 @@ Raised 2026-09-24 with #327 (nit accepted, not fixed there). #327 moved the read
 ---
 
 ## Q173. S8 — latest-row readers of the dead ring table and the HC aggregate that reach a surface
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the named case is fixed — snapshot sleep is Garmin-primary (#405), the freshness block exists (#406), and `get_recovery_metrics` resolves per field (#448). The residue #448 recorded (`sleep_snapshot_lines` printing the scraper's sleep HR as "Resting HR", and never reading `spo2_nights`) is also discharged, by #457: the snapshot's "Resting HR" is the daily rate or a dash, and SpO2 resolves from the epoch lane first (`reads/snapshot_reads.py`). The operator's draft named that residue as what remains; it landed after the review snapshot. **Now asks:** the per-reader gate / re-headline / retire ruling for the residue #457 itself records under "Not fixed, reported" — `context_builder._section_health_connect` printing the HC aggregate's sleep duration unguarded and the all-day median, the check-in prefill's `passive_sleep_min`, and `routers/recovery.py` (Q151).
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 Raised 2026-09-25 with the HC sleep-clocks decision (#328). This is an audit (the table is in PR2's description), and no reader is fixed there. Several user- and coach-facing readers take the newest `samsung_hrv_readings` row, or a window of it, with no same-day gate. The ring scraper has been dead since 2026-09-14. The sharpest case is the MCP readiness snapshot's "Latest biometrics (<date>)" block, which sits under "TODAY'S READINESS SNAPSHOT" with 2026-09-14 sleep/SpO2 values. It is dated, but headlined as today.
 
@@ -2334,31 +2102,6 @@ Raised with #342/#343 (brief S7). The standing prompt grows section by section, 
 
 ---
 
-## Q186. App chat has no current date — anchors "today" to the newest data
-
-The 27 Sep weekly summary reported Fri/Sat as "scheduled" after Saturday's Pilates had
-landed, and computed "11 days to 05 Oct" from 24 Sep (the last logged session). A second
-instance on 28 Sep: asked for an injury row's key, chat said the row was saved "on
-18 Sep" (the MRI date in its context); the ledger shows 28 Sep. The MCP layer emits
-`as_of` (Brisbane); the chat handler's system-prompt assembly is the suspect
-(hypothesis — verify against `routers/chat.py`). Browser chat history (Q180) re-sends
-old "today" references every turn and may compound it. Session status should be derived
-in code (planned vs logged), not read by the model.
-
-**State:** OPEN — brief owed. Owner: Luke (rule), Code (verify + fix).
-
----
-
-## Q188. Session card shows the UTC date, MCP shows the local date
-
-Saturday 26 Sep Pilates renders as 2026-09-25 on the Training session card and as
-2026-09-26 in `get_training_sessions`. Hypothesis: card renders UTC `start_time`; before
-10:00 AEST a session lands on the previous day. Affects which day load is booked to.
-
-**State:** OPEN — one-line fix once verified (`_local_day` is the single source, #276).
-
----
-
 ## Q189. Session-RPE for device-only sessions (Pilates, swim) with no logged sets
 
 HC Pilates sessions arrive with no HR/kcal and no sets, so they deposit nothing in the
@@ -2378,20 +2121,6 @@ quality signal, not a load driver. Garmin → Health Connect HR absence is unver
 **Cross-reference (#365, Q202).** The running case the device hierarchy creates, a watch-owned run with no usable HR zones, is filed as Q202. Resolve the two together.
 
 **Case A lean (4 Oct 2026, the `srpe-floor` session; a lean, not a ruling).** If a floor is ever built (Q202), it fires only where the unzoned session is the day's only counted session, and a non-training sport (Walking, Pilates, Yoga, Stretching; #322 S3) is excluded, because `session_rpe` is one whole-day rating (`daily_records.session_rpe`). The consequence for this question's own example: a Pilates session does not floor until a session-specific capture surface exists, which is Q209. The brief's S1 found only 2 paired days (Q202), so there is no kappa to apply either way.
-
----
-
-## Q190. Two devices, one session: source-wins rule and overlap dedupe
-
-Operator intends watch (Garmin/HC) for runs and Polar H10 for training/games. A run
-recorded on both arrives as a Polar row and an HC row; whether ingestion merges
-overlapping sessions across sources is unverified. Proposal: per-activity source
-priority + overlap dedupe surfaced (never silent), mirroring the Hevy `dedup_flag` door.
-
-**State:** OPEN — verify current arbitration first (#309 writer-class ladder is
-same-source only). Owner: Code (verify), Luke (rule).
-
-**Update (#365, Q201).** Arbitration was verified against master `054d2d9`. The premise above is stale: cross-source arbitration exists (#260) and #309 added a same-source `health_connect` arm. The findings, the gaps and the live-case queries are in Q201, and the device rule is recorded as #365. This entry stays OPEN for the arbitration and surfacing ruling, which Q201 now carries; close the two together.
 
 ---
 
@@ -2571,23 +2300,6 @@ forward, or backward over the seed's range as the seed does).
 
 ---
 
-## Q200. `health_connect_syncs.resting_heart_rate` is the day's median of all HR samples, but the coach reads it as "Resting HR"
-
-Raised 2026-10-01 with #364 (operator-recorded; found while tracing where HR bpm is used). `routers/health_connect._aggregate_day`
-stores the MEDIAN of EVERY heart-rate sample posted for the day in `health_connect_syncs.resting_heart_rate` (the "Heart rate" block,
-`:1012-1019`). `context_builder.py:1214-1215` presents it to the coach as "Resting HR: N bpm"; `routers/recovery.py:131` and
-`mcp_server.py:228` (aliased `sleep_hr_bpm`) carry the same value. A day with a hard session posts a higher median than a rest day
-with the same true resting rate, so the coach is told a training-contaminated number is a resting one. No decision here relies on it.
-
-**To decide.** Rename or relabel it honestly (for example "median HR"), or derive a true resting value (for example the lowest
-sustained overnight stretch, which `hr_samples` can now supply).
-
-**State:** OPEN. Not blocking; a read-surface honesty question.
-
-**Settled 8 Oct 2026 (additive).** Both options were taken: the median is relabelled "All-day median HR" (#344) and a true resting value is derived as the sleep nadir (#345, #395). The move to CLOSED, with `DONE → #N`, is owed to the next session once #395 is landed; the number is now known.
-
----
-
 ## Q203. Missingness: the load model cannot tell "expected device data absent" from "low load"
 
 Raised with #365. Verified against master `054d2d9`.
@@ -2697,6 +2409,10 @@ Raised 8 Oct 2026 (ingest-triage close-out). `scripts/refresh_load.py` selects u
 ---
 
 ## Q218. SCHEMA.md sections 007 to 013 describe seven tables that have no model and no migration
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: #449 R2 forecloses "build them" for `health_metrics` and `vendor_metrics` — Garmin went to new typed tables instead. **Now asks:** the disposition of all seven `SCHEMA.md` sections 007–013 — strike, mark "designed, not built", or build the remaining five.
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
 
 Raised 8 Oct 2026 (ingest-triage close-out). Checked on master: `health_metrics`, `metric_type_aliases`, `unknown_metric_types`, `workout_metrics`, `derived_metrics`, `vendor_metrics` and `daily_metric_summaries` each appear in `SCHEMA.md` (sequence lines 007 to 013, and a section each) and in no `backend/models.py` `__tablename__` and no file under `backend/migrations/versions`. The file's rule is that it is the mirror of `backend/migrations/`; these seven sections are a design that never shipped. A reader (or a session) can take `derived_metrics` as an existing table that holds derived resting HR, RMSSD or TRIMP. It does not: the derived resting HR is stored on `health_connect_syncs`.
 
@@ -2908,6 +2624,10 @@ Reading it: `rpe_cr10` NULL on a row you rated means link (ii) failed (Garmin di
 
 ## Q233. Should an aggregator (Open Wearables or similar) replace, or sit beside, Lane A as the Garmin and Polar ingestion route?
 
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the Garmin per-provider route is named — #449 makes the official Personal API the primary lane and #450 keeps the unofficial lane for its one surviving job. The Lane-A manifest was stale; the "What exists" block below has been rewritten against #449, #450 and #457. **Now asks:** the Polar route, and the explicit aggregator (Open Wearables) replace-vs-sit-beside ruling.
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
+
 Raised 18 Oct 2026 by chat. Nothing is decided, nothing is built, and no recommendation is recorded here. The direct Garmin lane
 (Lane A: `connectors/garmin.py`, `garminconnect` 0.3.11, a token blob minted out of band) is live and carries what Garmin withholds
 from Health Connect, on household accounts only: #258 and #263 call it unofficial, ToS-grey and brittle, and both name a self-fronting
@@ -2916,15 +2636,12 @@ and abandoned" list). Open Wearables (github.com/the-momentum/open-wearables) ha
 and Polar; the description in chat's brief is MIT-licensed, a unified wearable API including direct Garmin OAuth, and it is NOT read
 from this tree.
 
-What exists, for the ruling to be made against (verified in the tree on 13 Oct, the ingestion audit; the SpO2 line added 18 Oct):
-- **Lane A, direct and unofficial, live:** nightly HRV with the 5-minute series (`hrv_readings`/`hrv_samples`), per-activity
-  self-evaluation (#372), and overnight SpO2 with breathing intervals (Q150, held PR). Run by the nightly sweep (02:00 Brisbane) and a
-  card-open refresh; a token minted out of band and stored Fernet-encrypted; an account-mix-up guard (#358 to #362).
-- **Lane B, official, live:** Garmin Connect app to Health Connect to the companion app to `POST /health-connect/sync`: sleep with
-  stages, steps, heart rate and exercise sessions.
-- **Polar:** direct AccessLink v4 (#17); Polar's Health Connect data is dropped (#35).
-- **Carried by nothing:** Body Battery, training status and readiness, stress, respiration, activity FIT or per-second detail
-  (Body Battery is reachable on Lane A but unbuilt: #426).
+What exists, for the ruling to be made against (rewritten 2026-10-26 against #449, #450 and #457; the 13 Oct ingestion-audit manifest it replaces is in git history):
+- **Garmin, official Personal API, primary (#449):** `personal.connectapi.garmin.com` for users 1 and 4 once a `garmin_personal` credential row exists. HRV to `hrv_readings` / `hrv_samples`, intraday HR to `hr_samples`, sRPE to `session_rpe_observations`, and new typed tables `garmin_raw_payloads`, `sleep_nights`, `spo2_hourly`, `daily_physiology`, `hr_zone_config_snapshots` and `integration_lane_status`. The recovery readers rank it first (#457). A user without a `garmin_personal` row still takes the unofficial path for HRV and self-evaluation; removing it there is #449's PR-B, owed at #449.
+- **Garmin, unofficial DI lane (formerly "Lane A"), one job (#450):** `dailySleepData` epoch SpO2 and `breathingDisruptionData` into `spo2_nights`, which the Personal API does not carry; it refreshes its own token before the read, and its failure raises a RED alert.
+- **Garmin via Health Connect, official, live:** Garmin Connect app to Health Connect to the companion app to `POST /health-connect/sync`: sleep with stages, steps, heart rate and exercise sessions.
+- **Polar:** direct AccessLink v4 (#17); Polar's Health Connect data is dropped (#35). Carried forward from the 13 Oct audit; not re-verified.
+- **Carried by nothing:** Body Battery, training status and readiness, stress, respiration, activity FIT or per-second detail. Carried forward from the 13 Oct audit; not re-verified (#449 item 3 keeps stress and Body Battery as display-only vendor composites).
 
 A ruling touches: #258 and #263 (their do-not-revisit clauses name the aggregator), Q129 (the Garmin sleep source), Q133 (done at
 #263; the cat-and-mouse watch continues), Q150 (its capture reads the sleep payload), and the manifest above. It closes when a ruling
@@ -3343,6 +3060,26 @@ Forward-compat note and the Step-1 ruling above move verbatim to **Q181**, which
 
 ---
 
+## Q10. Build AccessLink per-second ingest for the Metabolic-load window (HC/companion lane)?
+
+#35 established the dependency: HC carries no per-second R-R/HR-zone; only AccessLink
+(v3 REST exercise-samples / TCX export) does. #46 specified the exact pathway but it is
+not built. PSL covers Luke's direct solo/gym capture, so the need only bites if the
+HC/companion lane carries a Polar user requiring per-second — none confirmed (Deb's
+wearable integration is no longer deferred as of 2026-08-10 — see State; Cooper has no wearable).
+
+**State:** DONE → #459 — superseded: #364's `hr_samples` + `hc_zone_enrich` serve the HC/companion lane from HC's own raw HR, so AccessLink per-second ingest is no longer the only path (the #46 pathway is unbuilt and now optional).
+
+Prior state text, kept verbatim: OPEN — low priority. **Not BLOCKED**: #46 already specified the pathway, so nothing
+prevents building it; the trigger is a real consumer, and the one deferral that held it off has lifted.
+**2026-08-10 (Luke, confirmed):** Deb's wearable integration is **no longer deferred**. This does not by
+itself make Q10's consumer real — the pathway bites only if Deb's device delivers Polar-in-HC per-second
+data (R-R / HR-zone), which is not yet established — but it removes the reason this was parked, so Q10
+re-enters live consideration. Revisit when the Metabolic-load channel is wired to a confirmed
+Polar-in-HC consumer.
+
+---
+
 ## Q11. Lab store — where per-marker observed results live
 
 Fork: `lab_result` typed table vs `user_knowledge_entries type="lab"` vs `health_events`.
@@ -3507,6 +3244,56 @@ numeric schema, not just efficiency.
 `2026-06-28` trigger row's `sleep_efficiency_pct` is already NULL. No historical violator existed, so no
 backfill was required and no rows were written. Closes the `BRANCHES.md` `fix/hrv-sleep-integrity` Task 3
 loop. Independent of Q17.
+
+---
+
+## Q19. Desktop workout-detail exercise scroller starved to ~36px — right-column space allocation
+
+Desktop full-width, a workout opened in `WorkoutDetail` (`frontend/src/components/WorkoutPanel.jsx`
+lines 190–244): reported symptom, verbatim — "no scroll ability for the full column, only the
+exercise section, which is small." Live DevTools measurement on the authenticated app (Chromium,
+~779 px-tall viewport) confirms the exercise list at `WorkoutPanel.jsx:224`
+(`flex-1 overflow-y-auto px-4 py-4 space-y-5`) computes `clientHeight 36` / `scrollHeight 1977`,
+`overflow-y: auto` — scrollable, but squeezed to a 36 px window. **Nothing is stranded/unreachable**;
+the fixed chrome above simply consumes the panel. Cause is **space allocation, not a
+min-height/overflow CSS defect**: the right column (727 px) splits 50/50 between HealthPanel and
+WorkoutPanel (both `flex-1 min-h-0`, `Dashboard.jsx:99/102`), so WorkoutPanel gets ~363 px; the two
+`flex-none` blocks above the list — header (`:192`) and the stats-grid + session-analysis + "Get AI
+Feedback" button block (`:197–223`) — consume ~327 px, leaving the `flex-1` exercise list ~36 px.
+
+Falsified prior hypothesis: the `md:min-h-0`-on-four-scrollers fix (drafted as "#70", **withdrawn** —
+the real #70/#71 are the HRV work) was disproven by measurement; all four targets are self
+scroll-containers whose flexbox automatic-minimum is already 0, so `min-h-0` is inert (pre-fix sim
+scrolled identically, 274 vs 3144). The Dashboard column chain is measurement-confirmed bounded
+(LEFT/Chat scroller 573→112029 and HealthPanel 363→511 both scroll correctly); the LEFT-column prime
+suspect was exonerated (clientH == scrollH == 727).
+
+Fork (undecided): (a) let the whole detail view scroll as one unit — move the scroll boundary to the
+panel root so the stats/analysis chrome scrolls with the exercise list rather than being pinned;
+(b) rebalance the right-column 50/50 split so the expanded/active panel gets priority, or size to
+content; (c) cap the chrome height so the list keeps a usable minimum. Frontend-only; no connector,
+contract, or schema impact.
+
+Not-yet-characterised: measured only at ~779 px viewport height — taller viewports give WorkoutPanel
+more room and may not exhibit it. A faithful isolated repro (real compiled CSS, verbatim classes) did
+**not** reproduce it; the trigger is specifically the detail-view chrome height vs the ~363 px
+half-column, which the repro did not stage.
+
+**State:** DONE → #459 — superseded: the 50/50 column that starved the scroller no longer exists; our own re-measure (#355 G7) shows 361–452 px. Reopen only if the panel returns to a half-height column; phone width was never measured.
+
+Prior state text, kept verbatim: OPEN — frontend layout fork: decide direction (a) / (b) / (c), then implement. Branch
+`fix/desktop-column-scroll` was cut then discarded (zero commits; deleted). No DECISIONS_LOG entry.
+No blocker — the decision is Luke's to make at will, nothing external gates it.
+
+**Re-measured 30 Sep 2026 (Brief A G7, after the A3/A5 changes to `WorkoutPanel`, #355).** On the built app in
+Chromium, `/training` (the panel no longer sits in the Dashboard's 50/50 column; it lives in an
+`h-[75vh] min-h-[420px]` box beside the docked chat), API mocked, a 9-exercise Hevy workout open in
+`WorkoutDetail`: the exercise scroller (`flex-1 overflow-y-auto`) measures **361 px tall x 819 px wide** at
+1280x779 (`scrollHeight` 1479) and **452 x 926** at 1440x900, `overflow-y: auto`. That is not the 36 px of the
+original measurement, so on the route the panel now occupies the starvation is not reproduced; the Dashboard
+column it was measured in no longer hosts `WorkoutPanel`. Not measured: a phone-width viewport, and a workout
+with a long session-analysis block. State unchanged (the fork is moot on `/training` unless the panel returns
+to a half-height column).
 
 ---
 
@@ -3759,6 +3546,32 @@ both repos — a behavioural change beyond a governance brief's bounds.
 **Resolution (operator ruling, 11 Oct 2026): closed as superseded.** The action this entry named (`* text=auto eol=lf` in both repos) is not taken. `*.md text` landed in health-app as `407be6e` (2026-08-08), which pins the Markdown blobs to LF, and #91 moved G1 from the working tree to the index, so the per-machine working-tree divergence this entry measured no longer decides any gate. A blanket `eol=lf` is rejected: `health-connect-app` tracks `android/gradlew.bat` and `scripts/hevy-exercise-query.ps1`, and a blanket rule would reach them. What remains is one cross-repo item: `health-connect-app` has no `.gitattributes` (read on this session's checkout, 11 Oct 2026), so `*.md text` is not mirrored there. It is an OWED row in ROADMAP NOW ("Cross-repo: mirror `*.md text`"), not a reason to keep this question open.
 
 **State:** DONE → #416. Closed as superseded by `407be6e` and #91; the mirror into `health-connect-app` is OWED on ROADMAP.
+
+---
+
+## Q32. The `/closeout` ritual definitions have diverged between repos — 77 vs 132 lines
+
+`health-app/.claude/commands/closeout.md` is **77 lines**; `health-connect-app`'s is **132**. Both
+define the same ritual, and both were carrying the struck `purpose / why-parked / unblocks-on`
+column set (HCA Q9 item 2). health-app's copy is fixed at #92; **HCA's still teaches the dead
+dialect**, and a ritual definition that does so re-emits it every session — the drift regenerates
+itself rather than merely persisting.
+
+Two undecided questions, deliberately left open rather than answered unilaterally (sweeping another
+repo's ritual definition is out of this brief's scope, and doing it unbidden is not Code's call):
+
+1. **Does HCA's copy need the same strike?** Almost certainly yes — HCA Q9 records it as the higher
+   priority of its two items.
+2. **Is the 77-vs-132 divergence intentional?** The shared loop-rules block is propagated verbatim
+   and fingerprint-gated; the ritual definition is neither. If the ritual is meant to be shared, it
+   needs the same treatment (markers + a parity gate). If it is meant to be per-repo — HCA's is a
+   different app with different close-out needs — that should be *stated*, so the divergence stops
+   reading as drift. Right now nothing distinguishes "intentionally different" from "quietly
+   drifted", which is the same ambiguity the vocabulary sweeps existed to remove.
+
+**State:** DONE → #459 (cross-repo: the resolution is health-connect-app #21; recorded at #459).
+
+Prior state text, kept verbatim: OPEN — no blocker; both questions are answerable at will. Owner: Luke.
 
 ---
 
@@ -4146,6 +3959,28 @@ _Gate summary (2026-06-22, on-device, SM-S921B): GATE 1 PASS → DECISIONS_LOG #
 GATE 2 PASS (deep slivers survive the HC write at 30s resolution; deep is heavily
 fragmented — ~26 of 30 deep segments are <3 min slivers). GATE 3 INCONCLUSIVE → Q3 (superseded
 `#173` / `Q81`; principle `#71`)._
+
+---
+
+## Q46. No column records whether a prescription's `basis_tst` came from device or diary — only its adherence source
+
+The `cbti_prescriptions` basis-source columns (`basis_n_samsung` / `basis_n_diary`, migration
+`c4e8a2019bd7`) record the **adherence** source of each basis night — whether bedtime was checked
+against Samsung or against the diary's own `lights_out`. They do **not** record whether `basis_tst_min`
+itself was computed from device `actual_sleep_time_minutes` or from diary TST. These are different axes.
+
+Surfaced opening block 3. Its opening prescription (block id=2, rx id=10) is **device-derived**:
+`basis_n_samsung=27`, `basis_n_diary=0`, `basis_tst_min=349` computed from Samsung
+`actual_sleep_time_minutes` over 2026-06-23..2026-07-23 — stated only in the prescription's `rationale`
+text. Block 2's basis was diary-derived. A later reader comparing the two blocks' bases cannot tell the
+two provenances apart from structured columns, and a device basis and a diary basis are not equivalent.
+
+**State:** DONE → #459 — superseded: the engine is recall-only (#127), every minted basis is diary-mean (#436/#445), and operator window-authoring is removed (#446); the one device-derived basis (rx id=10) is historical and documented.
+
+Prior state text, kept verbatim: OPEN — no blocker; the interim is the rationale text on rx id=10. Owner: Luke. **No
+column added mid-block** — block 3 is open, an additive nullable migration is safe, but a new provenance
+axis is a design choice not a hotfix. **Next action to close it:** decide whether `basis_tst` provenance
+warrants its own column (`device|diary|mixed`) or the rationale text suffices, before block 4 opens.
 
 ---
 
@@ -4674,6 +4509,41 @@ Numbered `Q67` on the `gov/two-open-questions` branch (pre-ff; max was Q66, no c
 
 ---
 
+## Q68. A full-collision re-upload creates an empty `LabReport` envelope, and nothing decides whether it should
+
+**State:** DONE → #158.
+
+Prior state text, kept verbatim: OPEN. **Blocks:** nothing today — the empty envelope is now visible as a fault, so this
+is a correctness-of-model question, not a live defect. **Related:** `#155`, `#156`, `#157`.
+**Numbering collision — read this before filing the cross-date operand question.** The brief that
+produced this entry refers to "Q68's cross-date operand question" as though it exists; it is not in
+this file and never was. Number-at-merge claims the next sequential integer at the instant of merge,
+the repo max was Q67, so THIS entry is Q68. The cross-date operand question is still pending in chat
+and takes the next free number when it lands.
+
+**The fork.** `#155` ratifies retain-raw: the report row is created because the document genuinely
+exists. `#156` keys duplicate detection at the marker level and explicitly adds **no report-level
+key**. Together these mean a re-upload whose every marker collides produces a `lab_reports` row
+with zero `lab_results` — ten such rows exist in production today. Neither entry decided whether
+that is the *intended* outcome or an unexamined consequence of two independently correct choices.
+
+**Why it is not obvious either way.** Retaining it is defensible: the document was uploaded, the
+upload is an event, and `#155`'s whole argument is that discarding raw provenance is the mistake.
+Discarding it is also defensible: the envelope carries no data, no `source_doc_filename` in some
+cases, and duplicates provenance already held on the report that owns the rows — it is a record
+that someone uploaded a file twice, which is operator behaviour rather than health data.
+
+**What would settle it** is report-level identity (`Document ID` / `Lab ID`, currently uncaptured),
+which is the same dependency `#157`'s do-not-revisit clause names. With it, the question stops
+being "keep or discard the empty envelope" and becomes "recognise the document before writing
+anything" — at which point the envelope is never created and the fork dissolves. **This is a
+trigger, not a blocker:** the schema change is possible now, it is simply not yet worth doing.
+
+**Do not resolve by deleting the existing ten rows** — that is a separate operator decision under
+`#155`, and answering a design question by mutating the evidence for it is the wrong order.
+
+---
+
 ## Q69. `marker_series` has no temporal bound, so the interpretation output is a composite of draws rather than a reading of one
 
 **State:** DONE → #159. **Blocks (until the wiring bar is met):** wiring the interpretation view to live data (1b).
@@ -5083,6 +4953,38 @@ Med). Cross-refs Q3, `#71`.
 
 ---
 
+## Q82. `_aggregate_day` keeps only the longest sleep session — fragmented Samsung nights undercount
+
+Surfaced by the Q4/G4 drill-down (2026-08-03, live Railway). Three nights — wake-dates 2026-07-20,
+-22, -23 — undercount the Samsung scraper across **all** stages, with date attribution correct
+(same-date, `still_shifted = 0`). So this is not a residue of the Q4 shift; it is a separate defect that
+the Q4 fix made visible.
+
+**Mechanism.** Samsung writes a fragmented night as multiple non-overlapping `SleepSession` records.
+`_aggregate_day` (`backend/routers/health_connect.py`, the `best = max(day_sleep, key=...duration())`
+selection) persists **only the longest session and its stages**, discarding the rest of the night.
+Per `health_connect_record_sources` the three undercounting nights carry 2 / 2 / 4 `shealth` sessions
+(7/23 has four: 22:42, 02:14, 02:45, 04:46 AEST).
+
+**Not every multi-session night.** 7/21 had two `shealth` sessions and matched exactly. The undercount
+bites only when the fragments are **balanced** — when one session clearly dominates, `max()` happens to
+pick nearly the whole night and the bug hides. That is why it survived Q4.
+
+The in-code comment above the selection anticipated only **nap displacement** ("a same-day nap cannot
+displace the main night because the max() tiebreak still picks the longest session") — it did not
+anticipate a real night split into several main sessions, which is the case that breaks it.
+
+**Fix:** replace max-only with a **union/merge** of the night's sessions, excluding same-wake-date naps.
+"Which sessions constitute the night" is the design fork and is not yet decided.
+
+**State:** DONE → #254 (union TST; refined by #256).
+
+Prior state text, kept verbatim: OPEN — no blocker, but **sequenced after `Q83`**: a merge must run *within* the single
+source that question selects, because merging sessions across Samsung and Withings would be incoherent.
+Distinct from Q4 (`DONE → #64`). Owner: Luke. Cross-refs `Q83`, `#35`/`#36`/`#37`.
+
+---
+
 ## Q85. Which required field does the live extraction of a ref-less lead row actually drop?
 
 The SNP Albumin/Creat Ratio report (collected 2026-08-04) is refused by `/labs/confirm` with a
@@ -5144,6 +5046,41 @@ the save and is a separate track.
 
 ---
 
+## Q88. Empirical calibration of `OVERLAP_THRESHOLD` against real Polar/HC pairs
+
+`reads/aerobic_reads.py` (`#189`) sets `OVERLAP_THRESHOLD = 0.50` of the shorter session's duration as
+the "same physical bout" cutoff for read-time cross-source arbitration — a **proposed default, not a
+measured one**. It has never been tested against real overlapping Polar/HC captures, because none exist
+yet: HC exercise ingestion is held (`#189` Status — HCA forwards no exercise identifier). Set too low,
+the rule merges genuinely separate back-to-back bouts into one and suppresses a real session; set too
+high, it splits one bout whose two sensors clocked slightly different start/stop and double-counts it.
+One tunable constant, one place.
+
+**State:** DONE → #417 (2026-10-11; threshold accepted as declared behaviour, change-gated — the operator accepted this as satisfying the calibration ask).
+
+Prior state text, kept verbatim: OPEN — deferred until HC exercise ingestion lands and real Polar/HC pairs exist to measure.
+Cross-refs `#189`, `Q83` (distinct dedup class), `Q89`.
+
+---
+
+## Q90. HCA question headings carry work-item states — vocabulary drift or a deliberate dialect?
+
+`gen_status_model` flags 6 health-connect-app questions headed `· UNSTARTED` (and `BLOCKED` appears
+too) — work-item vocabulary on question headings. The `### State vocabulary` block is byte-identical
+across both repos' `CLAUDE.md` (SHA `27337630fca6db03`, verified 2026-08-10) and restricts question
+state to `OPEN / OWED / DONE → #N`; `UNSTARTED`/`BLOCKED` are the work-item set. Because the vocabulary
+is shared and agreed, this is un-propagated store debt in HCA, not a first-class dialect.
+
+**State:** DONE → #459 (cross-repo: the resolution is health-connect-app Q13 / commit `ff2f3f6`; recorded at #459).
+
+Prior state text, kept verbatim: OPEN — drift, not a decision (Step 1 of the status-parser-gate brief resolved this: blocks
+match ⇒ accept-and-flag). The status model accepts and tallies the tokens as off-vocab `drift`, never
+coercing or dropping them, so the finding surfaces every run. Resolution is an HCA-side store edit
+(re-home those questions' true state, or record why `UNSTARTED` is meant there) — cross-repo, owner
+Luke, not actionable from a health-app write session. Cross-refs `#190`, `#193`.
+
+---
+
 ## Q91. Should brief-authoring carry a verify-checkpoint for unseeable-surface claims?
 
 The `status-parser-gate` brief asserted an existing committed generator "returned 0 blocked / 0 owed /
@@ -5193,6 +5130,49 @@ before Deb syncs, or she double-counts sleep/HR/steps.
 **Resolution (18 Oct 2026, #258).** Moot. This was contingent on `Q93` taking route (a), the Health Sync bridge, and `Q93` took route (b) at #258. #258 records that Deb's first Garmin to Health Connect sync landed heart rate, sleep and steps with no HRV record type, so no mirror writer for Garmin-origin records was in play then (Code did not look at her phone). Health Sync was also removed from the operator's phone on 28 Jun 2026 (#35). If a mirror writer for Garmin-origin records appears, #35/#36/#37 and the #175 admission rules govern and a new question opens.
 
 **State:** DONE → #258
+
+---
+
+## Q97. No local strength-training store for any user
+
+Hevy workouts are fetched live from the Hevy API and never persisted; only `hevy_exercise_templates`
+exists locally. Consequence: no store to compute strength load trends against, and every view depends on
+Hevy uptime plus a valid token. Sits awkwardly beside `capability_observations` and the already-logged
+Hevy weight-semantics defect (cable-machine markings, per-limb vs bilateral under one exercise name).
+
+**State:** DONE → #239 (2026-08-25; store landed, #240 backfill, #241/#251 consume).
+
+Prior state text, kept verbatim: OPEN — no local strength store; every strength view depends on Hevy uptime + a valid token.
+Related: `Q6` (unit-trustworthiness addendum). Owner: Luke.
+
+---
+
+## Q98. HC aerobic rows carry no load
+
+Health Connect exports duration, type and HR but no zone seconds and no cardio_load. Any consumer keying
+on cardio_load will be permanently silent for HC-sourced users, not temporarily sparse. Options: derive a
+TRIMP-style estimate (requires max and resting HR; not comparable to Polar's cardio_load — a parallel
+metric, not a substitute), accept the gap, or take the server-side-connector route in `Q93`.
+
+**State:** DONE → #364 (2026-10-01; derive branch — own zone model, same load series as Polar).
+
+Prior state text, kept verbatim: OPEN — HC aerobic rows carry no `cardio_load`; consumers keying on it go permanently silent for
+HC-sourced users. Owner: Luke.
+
+---
+
+## Q99. Multi-user paths are unexercised
+
+Three accounts (1 Luke, 4 Deb, 5 Cooper). Every provider path, the HCA sync route, and readiness/recovery
+logic have only ever executed against user_id 1. Readiness baselines are calibrated to user 1. Not
+evidence of a defect — but untested, and Deb's first sync is the first exercise of it. Cooper (ACL
+reconstruction ~18 months post-op, contact rugby) is a third profile with onboarding context and no
+recovery source.
+
+**State:** DONE → #459 — superseded: multi-user paths are now exercised — user 4 has her own Garmin (#359/#362), verified Hevy history, load metrics (#345) and an SpO2 sweep (#425).
+
+Prior state text, kept verbatim: OPEN — multi-user paths unexercised; Deb's first sync is the first real exercise of them.
+Owner: Luke.
 
 ---
 
@@ -5641,6 +5621,30 @@ to Q134, and dropping `samsung_hrv_readings.hrv_ms` to Q135.
 
 ---
 
+## Q131. HRV `_SOURCE_RANK` is currently unexercised
+
+`recovery_reads._SOURCE_RANK` ranks garmin > samsung, but per-user overlap is nil today (Deb=Garmin,
+Luke=Samsung), so no night is actually contested. Revisit the ranking only if a single user acquires
+both sources.
+
+**State:** DONE → #292 (rank superseded by the deviation model; deletion housekeeping stays Q153).
+
+Prior state text, kept verbatim: OPEN
+
+---
+
+## Q132. Garmin garth refresh-token re-login cadence
+
+Observe how often Garmin invalidates the refresh token (forcing a manual `garmin_login.py` re-run).
+Informs whether silent re-auth is tolerable or needs an operator nudge/alert on the "reconnect Garmin"
+424 state.
+
+**State:** DONE → #450 (2026-10-25; with #449 R8).
+
+Prior state text, kept verbatim: OPEN
+
+---
+
 ## Q133. garth is deprecated upstream — durability of the Garmin HRV lane
 
 Discovered during #258 implementation: `garth` (0.8.0, the OAuth engine under `python-garminconnect`)
@@ -5667,6 +5671,23 @@ server-side. The durable, B2B-viable channel remains the self-fronting aggregato
 consumer-auth arms race.
 
 **State:** DONE → #263 (residual cat-and-mouse watch continues — bump the pin forward when Garmin next tightens)
+
+---
+
+## Q134. Full `/recovery/summary` restructure — retire the Samsung-block HRV duplication + source-agnostic sleep read
+
+#265 added an `hrv` block additively and left the device-shaped `samsung` and `health_connect` blocks
+byte-for-byte, because repointing them breaks the current frontend contract. The follow-on: once the
+frontend reads the `hrv` block, retire the `samsung` block's HRV duplication (its `hrv_ms`/`trend`/
+`baseline_*` overlap the new block) and introduce a source-agnostic SLEEP read across HC + Samsung
+(sleep still lives only in `samsung_hrv_readings`). Also decide `has_data` semantics at that point —
+whether it should reflect the `hrv` block (a Garmin-only user currently reads `has_data=false` despite a
+populated `hrv` block). Requires a coordinated frontend change (health-connect-app), so it is a
+cross-surface restructure, not a backend-only edit.
+
+**State:** DONE → #459 — superseded: `/recovery/summary` is unmounted with zero consumers; its disposition is Q151's (adopt-or-delete), and the substantive goals landed on live surfaces (#300/#405/#448/#292).
+
+Prior state text, kept verbatim: OPEN (deferred — blocks on frontend readiness to consume the `hrv` block)
 
 ---
 
@@ -5802,6 +5823,23 @@ double-write, no idempotency bug. The write path was truthful throughout; the ea
 scare was a truncated-key verification query, not missing data (§43).
 
 **State:** DONE → #289 (Concern B closed, verified not inferred)
+
+---
+
+## Q152. Historical `daily_records.passive_hrv_ms` backfill from `canonical_hrv` (Garmin cutover seam)
+
+`/series/readiness` reads `daily_records.passive_hrv_ms`, a value frozen at AM check-in. The #291
+rewire repoints the snapshot source to `canonical_hrv` for FUTURE check-ins only; historical rows
+keep their Samsung-snapshotted values, leaving a seam at the date a user connects Garmin (before it:
+Samsung-snapshotted; after: canonical). A clean history needs a one-off script recomputing
+`passive_hrv_ms` from `canonical_hrv` as-of each past date. Non-destructive (recomputes a
+forward-frozen scalar) and a NO-OP today: canonical == Samsung on every existing night (per-user
+overlap nil, Q131), so backfilling now changes nothing. Defer until Garmin has synced a stretch of
+history worth reflecting, then run it as-of each past date. Watch-point, not owed work.
+
+**State:** DONE → #459 — superseded: #327 dropped the `passive_hrv_ms` write; readers read `hrv_readings` directly, so the backfill would change nothing a reader sees.
+
+Prior state text, kept verbatim: OPEN (deferred — no-op until Garmin has overlapping history)
 
 ---
 
@@ -6059,6 +6097,23 @@ refused block is re-emitted, and no other write re-runs.
 
 ---
 
+## Q186. App chat has no current date — anchors "today" to the newest data
+
+The 27 Sep weekly summary reported Fri/Sat as "scheduled" after Saturday's Pilates had
+landed, and computed "11 days to 05 Oct" from 24 Sep (the last logged session). A second
+instance on 28 Sep: asked for an injury row's key, chat said the row was saved "on
+18 Sep" (the MRI date in its context); the ledger shows 28 Sep. The MCP layer emits
+`as_of` (Brisbane); the chat handler's system-prompt assembly is the suspect
+(hypothesis — verify against `routers/chat.py`). Browser chat history (Q180) re-sends
+old "today" references every turn and may compound it. Session status should be derived
+in code (planned vs logged), not read by the model.
+
+**State:** DONE → #459 — superseded: live code contradicts the premise — `context_builder._section_identity` puts "Today is {date} … AEST" in every chat system prompt. If the session-status-in-code sub-ask still matters, mint it as a NEW narrow question rather than keeping this one.
+
+Prior state text, kept verbatim: OPEN — brief owed. Owner: Luke (rule), Code (verify + fix).
+
+---
+
 ## Q187. Chat asks "Do you confirm?" before a typed write, then the "yes" turn writes nothing and renders empty
 
 Raised 2026-09-28 (operator, prod). Before a finding write (`finding_mri_cervical_20260918`) the coach asked a
@@ -6092,6 +6147,34 @@ nothing. PR #278 prod proof: the next chat write lands on the first turn.
 
 **State:** DONE → #347 (prompt: write proposals directly, never confirm in chat; a turn never renders empty; silent
 drops become reported refusals; per-turn metadata logged).
+
+---
+
+## Q188. Session card shows the UTC date, MCP shows the local date
+
+Saturday 26 Sep Pilates renders as 2026-09-25 on the Training session card and as
+2026-09-26 in `get_training_sessions`. Hypothesis: card renders UTC `start_time`; before
+10:00 AEST a session lands on the previous day. Affects which day load is booked to.
+
+**State:** DONE → #355 (2026-09-30, PR #289).
+
+Prior state text, kept verbatim: OPEN — one-line fix once verified (`_local_day` is the single source, #276).
+
+---
+
+## Q190. Two devices, one session: source-wins rule and overlap dedupe
+
+Operator intends watch (Garmin/HC) for runs and Polar H10 for training/games. A run
+recorded on both arrives as a Polar row and an HC row; whether ingestion merges
+overlapping sessions across sources is unverified. Proposal: per-activity source
+priority + overlap dedupe surfaced (never silent), mirroring the Hevy `dedup_flag` door.
+
+**State:** DONE → #418 (2026-10-11; with #365/#417, closed jointly with Q201).
+
+Prior state text, kept verbatim: OPEN — verify current arbitration first (#309 writer-class ladder is
+same-source only). Owner: Code (verify), Luke (rule).
+
+**Update (#365, Q201).** Arbitration was verified against master `054d2d9`. The premise above is stale: cross-source arbitration exists (#260) and #309 added a same-source `health_connect` arm. The findings, the gaps and the live-case queries are in Q201, and the device rule is recorded as #365. This entry stays OPEN for the arbitration and surfacing ruling, which Q201 now carries; close the two together.
 
 ---
 
@@ -6153,6 +6236,25 @@ Options (not a ruling): persist tokens in a table (hashed, with expiry and revoc
 **Resolution (8 Oct 2026, #404).** The operator took option one: persist, hashed, with expiry and revocation. Built as two tables (`mcp_oauth_clients`, `mcp_oauth_tokens`, `SCHEMA.md` section 046); access 1 h, refresh 90 d sliding, no rotation; a deleted user's tokens cascade away; revoking a refresh token revokes its access tokens; `retire_user`'s dry run now counts the live tokens from the table. `test_mcp_provider_really_persists_nothing` is replaced by `test_mcp_tokens_survive_restart`. The real-client gates G4 (refresh) and G5 (redeploy survival) are operator-assisted after release and are recorded in the decision's status, not here.
 
 **State:** DONE → #404.
+
+---
+
+## Q200. `health_connect_syncs.resting_heart_rate` is the day's median of all HR samples, but the coach reads it as "Resting HR"
+
+Raised 2026-10-01 with #364 (operator-recorded; found while tracing where HR bpm is used). `routers/health_connect._aggregate_day`
+stores the MEDIAN of EVERY heart-rate sample posted for the day in `health_connect_syncs.resting_heart_rate` (the "Heart rate" block,
+`:1012-1019`). `context_builder.py:1214-1215` presents it to the coach as "Resting HR: N bpm"; `routers/recovery.py:131` and
+`mcp_server.py:228` (aliased `sleep_hr_bpm`) carry the same value. A day with a hard session posts a higher median than a rest day
+with the same true resting rate, so the coach is told a training-contaminated number is a resting one. No decision here relies on it.
+
+**To decide.** Rename or relabel it honestly (for example "median HR"), or derive a true resting value (for example the lowest
+sustained overnight stretch, which `hr_samples` can now supply).
+
+**State:** DONE → #395 (2026-10-08).
+
+Prior state text, kept verbatim: OPEN. Not blocking; a read-surface honesty question.
+
+**Settled 8 Oct 2026 (additive).** Both options were taken: the median is relabelled "All-day median HR" (#344) and a true resting value is derived as the sleep nadir (#345, #395). The move to CLOSED, with `DONE → #N`, is owed to the next session once #395 is landed; the number is now known.
 
 ---
 
