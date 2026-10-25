@@ -297,11 +297,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q159, the Health Connect zones question, is closed: the in-lag-window behaviour belongs to Q203 and Q231, the lag is not characterised further, the Garmin direct HR read is dropped, and the stale "until stage 2" warning on a Garmin or Samsung `load_window` slot is replaced by a per-device hint.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #452.
+
 - **Q238, the Railway-incident rotation ledger, is closed on the operator's instruction with its unrecorded rows left unrecorded: they say nothing was or was not rotated.** Governance - Canonical home: `DECISIONS_LOG.md` #451.
 
 - **"Rugby" now counts toward the open phase's metabolic slot (the 22 Oct sprint session was being listed as not counted), by one migration, and the plan tool's "Not counted" section prints whole minutes.** Code, migration - Canonical home: `DECISIONS_LOG.md` #447.
-
-- **The CBT-I titration now decides direction from the cycle's mean sleep efficiency (extend at 90 or above, hold from 85 to 90, compress under 85), and the close-out carries a second control, "Hold this window", that records a refusal at the unchanged window with the operator's reason.** Code, no migration - Canonical home: `DECISIONS_LOG.md` #445 and #446.
 
 ---
 
