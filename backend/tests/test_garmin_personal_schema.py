@@ -120,7 +120,10 @@ def test_the_revision_chains_from_the_prior_head_in_one_line():
 
 def test_new_tables_are_not_read_by_the_cbti_engine_nor_by_any_arbiter():
     """Sleep efficiency here is a device-window figure and reads higher than the diary SE; nothing that
-    titrates a sleep window may read it. Nothing reads these tables yet at all (a later reader brief)."""
+    titrates a sleep window may read it. The readers (Q243, DECISIONS_LOG) are `reads/recovery_night.py`
+    (the MCP recovery table, and the candidates the snapshot and the card resolve) and
+    `reads/snapshot_reads.py` (which asks only for the newest night's date); every other reader, the
+    CBT-I engine and every arbiter stays out."""
     import re
     forbidden = re.compile(r"SleepNight|sleep_nights|DailyPhysiology|daily_physiology|Spo2Hourly|spo2_hourly"
                            r"|GarminRawPayload|HrZoneConfigSnapshot")
@@ -129,4 +132,9 @@ def test_new_tables_are_not_read_by_the_cbti_engine_nor_by_any_arbiter():
         target = root / sub
         files = [target] if target.is_file() else list(target.rglob("*.py"))
         for f in files:
+            if f in (root / "reads" / "recovery_night.py", root / "reads" / "snapshot_reads.py"):
+                continue                                         # the readers (Q243)
             assert not forbidden.search(f.read_text(encoding="utf-8")), f"{f} reads a Personal API table"
+    reader = (root / "reads" / "recovery_night.py").read_text(encoding="utf-8")
+    assert "models.SleepNight" in reader and "models.DailyPhysiology" in reader
+    assert "Spo2Hourly" not in reader and "HrZoneConfigSnapshot" not in reader    # the zones figure is never read

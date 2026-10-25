@@ -182,15 +182,15 @@ def test_recovery_line_labels_both_hrv_sources_on_one_night():
     # The Garmin HRV row did not suppress the scraper's sleep fields (the old row-level gate).
     assert "TST=400 min [samsung scraper]" in line and "Deep=60m" in line
     # The ring's sleep HR is its own labelled figure, never the RHR slot.
-    assert "RHR=— (no daily-RHR source yet)" in line and "Sleep HR=55 bpm [samsung scraper]" in line
+    assert "RHR=— |" in line and "Sleep HR=55 bpm [samsung scraper]" in line
 
 
-def test_recovery_hc_fallback_labels_median_not_rhr():
-    # The all-day median of every HR sample is shown under its own label, never as RHR.
+def test_recovery_hc_fallback_never_fills_rhr_and_the_all_day_median_is_not_shown():
+    # The stored all-day median is not a candidate any more (count-weighted across writers); a
+    # source that still offers one under the old key is ignored, and RHR stays a dash.
     line = format_night(resolve_night(NIGHT, {
         "hc_utc_day": {"hrv": 50.0}, "hc_aest_day": {"all_day_median_hr": 118.0}}))
-    assert "RHR=— (no daily-RHR source yet)" in line
-    assert "All-day median HR=118 bpm [HC all-day]" in line
+    assert "RHR=— |" in line and "All-day median" not in line and "118" not in line
     assert "HRV=50 ms [HC UTC-day]" in line
 
 

@@ -101,7 +101,14 @@ def test_same_night_tie_goes_to_health_connect_over_the_scraper(db_session, user
     _writer(db_session, user, TODAY, GARMIN)
     db_session.commit()
     out = _snapshot()
-    assert "Sleep 6 h 17 m · Garmin" in out and "Samsung scraper" not in out
+    # The duration and the stage split are the HC writer's alone ...
+    assert "Sleep 6 h 17 m · Garmin" in out
+    assert any(l.strip().startswith("Deep:") and l.endswith("· Garmin") for l in out.splitlines())
+    # ... and the figures the HC aggregate does not carry come from the scraper's same night,
+    # each tagged with its own source (per-field resolution), never under the Garmin name.
+    assert "Sleep efficiency: 94% · Samsung scraper" in out
+    eff_line = next(l for l in out.splitlines() if "Sleep efficiency" in l)
+    assert "Garmin" not in eff_line
 
 
 # ── never blended ────────────────────────────────────────────────────────────────────
