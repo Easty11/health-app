@@ -86,3 +86,15 @@ def test_a_429_mid_walk_raises_and_what_was_written_is_kept_so_a_rerun_resumes(d
     del host.status_for[gp.SLEEP_PATH]
     out = _run(db_session, host, confirm=True)
     assert out["days_with_data"] == 5 and db_session.query(models.SleepNight).count() == 5
+
+
+def test_skeleton_days_do_not_count_as_data_so_the_empty_streak_stops_the_walk(db_session):
+    """The real host answers a no-data day with 200 and every value null; counting that as data made the
+    first prod dry run walk to the 2020 floor instead of stopping (25 Oct 2026)."""
+    from garmin_personal_fakes import skeleton_day
+    _user(db_session)
+    host = _host_with_history(3)
+    for i in range(3, 12):
+        skeleton_day(host, (NEWEST - timedelta(days=i)).isoformat())
+    out = _run(db_session, host, stop=4)
+    assert out["days_with_data"] == 3 and out["stopped"] == "empty_streak_4" and out["days_walked"] == 3 + 4

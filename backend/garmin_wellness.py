@@ -43,8 +43,29 @@ def _int(v: Any) -> Optional[int]:
     return None if f is None else int(round(f))
 
 
+# Keys that label a skeleton rather than carry data (the day asked for, and the identity keys the landing scrubs).
+_LABEL_KEYS = frozenset({"calendardate", "date"}) | garmin_raw.IDENTITY_KEYS
+
+
+def _is_skeleton(o: Any) -> bool:
+    """True when `o` holds no value at all: only None, empty containers, label keys, and `[timestamp, None...]`
+    placeholder pairs. Observed 25 Oct 2026 (prod, user 1): for a day with no data the host does NOT answer with
+    an empty body; it answers 200 with the full field set, every value null (sleep, heart rate, hourly SpO2,
+    body battery with `[ts, None]` pairs). Only HRV and stress answer empty. Anything with a real value, or a
+    shape this function does not know, is content, so an unrecognised payload is landed, never dropped."""
+    if o is None:
+        return True
+    if isinstance(o, dict):
+        return all(_is_skeleton(v) for k, v in o.items() if str(k).lower() not in _LABEL_KEYS)
+    if isinstance(o, list):
+        if len(o) >= 2 and all(x is None for x in o[1:]):
+            return True                                  # [timestamp, None]: a timestamp with no reading
+        return all(_is_skeleton(v) for v in o)
+    return False
+
+
 def _is_empty(payload: Any) -> bool:
-    return payload is None or payload == {} or payload == []
+    return _is_skeleton(payload)
 
 
 # -- mappers (pure) ---------------------------------------------------------------------------------
