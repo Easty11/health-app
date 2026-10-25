@@ -35,14 +35,15 @@ def _user(db, email="rn@example.com"):
 
 def test_each_field_takes_its_own_best_source_and_names_it():
     line = format_night(resolve_night(NIGHT, {
-        "garmin": {"hrv": 67.0, "spo2": 96.6, "spo2_min": 90.0},
+        "garmin": {"hrv": 67.0},
+        "garmin_di": {"spo2": 96.6, "spo2_min": 90.0},
         "garmin_hc": {"tst": 387, "deep": 68, "rem": 59, "light": 260, "sleep_nadir_hr": 49.1},
         "samsung_scraper": {"efficiency": 91, "rr": 14.5},
     }))
     assert "HRV=67 ms [garmin]" in line
     assert "TST=387 min [garmin/HC]" in line
     assert "Deep=68m REM=59m Light=260m Awake=— [garmin/HC]" in line
-    assert "SpO2=96.6% (min 90%) [garmin]" in line
+    assert "SpO2=96.6% (min 90%) [garmin/di]" in line
     assert "Eff=91% [samsung scraper]" in line and "RR=14.5 br/min [samsung scraper]" in line
     assert "Sleep-nadir HR=49 bpm [garmin/HC]" in line
 
@@ -54,8 +55,9 @@ def test_a_source_that_carries_only_some_fields_does_not_blank_the_others():
     assert [s for s, _ in r["hrv"]] == ["garmin"]
 
 
-def test_sleep_order_is_the_snapshot_writer_priority_with_the_scraper_below_every_hc_writer():
-    assert SLEEP_RANK[: len(SLEEP_WRITER_PRIORITY)] == tuple(f"{k}_hc" for k in SLEEP_WRITER_PRIORITY)
+def test_sleep_order_is_the_personal_api_then_the_snapshot_writer_priority_with_the_scraper_last():
+    assert SLEEP_RANK[0] == "garmin_api"
+    assert SLEEP_RANK[1: 1 + len(SLEEP_WRITER_PRIORITY)] == tuple(f"{k}_hc" for k in SLEEP_WRITER_PRIORITY)
     assert SLEEP_RANK[-1] == "samsung_scraper"
     r = resolve_night(NIGHT, {"garmin_hc": {"tst": 390}, "samsung_hc": {"tst": 400},
                               "samsung_scraper": {"tst": 410}})
@@ -86,15 +88,15 @@ def test_the_resting_hr_slot_is_never_filled_from_a_non_resting_figure():
     line = format_night(resolve_night(NIGHT, {
         "garmin_hc": {"sleep_nadir_hr": 49.0}, "hc_aest_day": {"all_day_median_hr": 144.0},
         "samsung_scraper": {"sleep_hr": 55}}))
-    assert "RHR=— (no daily-RHR source yet)" in line
-    assert "Sleep-nadir HR=49 bpm" in line and "Sleep HR=55 bpm" in line and "All-day median HR=144 bpm" in line
+    assert "RHR=— |" in line
+    assert "Sleep-nadir HR=49 bpm" in line and "Sleep HR=55 bpm" in line
+    assert "All-day median" not in line and "144" not in line
 
 
-def test_a_new_source_slots_in_by_rank_with_no_other_change():
-    """The Personal API migration adds a loader under `garmin_api`; the reader needs no edit."""
-    assert FIELD_RANK["daily_rhr"][0] == "garmin_api"
+def test_the_daily_resting_rate_is_the_personal_api_alone():
+    assert FIELD_RANK["daily_rhr"] == ("garmin_api",)
     line = format_night(resolve_night(NIGHT, {"garmin_api": {"daily_rhr": 52.0}}))
-    assert "RHR=52 bpm [garmin personal API]" in line
+    assert "RHR=52 bpm [garmin/api]" in line
 
 
 def test_absent_fields_print_a_dash_never_zero():
@@ -108,8 +110,8 @@ def test_a_real_zero_is_kept():
     assert "REM=0m" in format_night(resolve_night(NIGHT, {"garmin_hc": {"deep": 35, "rem": 0, "light": 301}}))
 
 
-def test_a_night_with_only_the_all_day_median_is_dropped():
-    assert resolve({NIGHT: {"hc_aest_day": {"all_day_median_hr": 70.0}}}) == []
+def test_a_night_with_only_a_daily_rhr_is_dropped():
+    assert resolve({NIGHT: {"garmin_api": {"daily_rhr": 52.0}}}) == []
     assert format_recovery([], 7) == "No recovery data found in the last 7 days."
 
 
@@ -144,10 +146,10 @@ def test_loader_reads_garmin_sleep_spo2_and_hrv_for_a_garmin_only_night(db_sessi
     r = resolve_night(NIGHT, load_candidates(db_session, u.id, NIGHT - timedelta(days=1))[NIGHT])
     assert r["tst"]["source"] == "garmin_hc" and r["stages"]["source"] == "garmin_hc"
     assert r["hrv"] == [("garmin", 67.0)]
-    assert r["spo2"]["source"] == "garmin"
+    assert r["spo2"]["source"] == "garmin_di"
     assert round(r["spo2"]["value"]["spo2"], 2) == 94.67 and r["spo2"]["value"]["spo2_min"] == 90.0   # NULL epoch skipped
     assert r["sleep_nadir_hr"]["source"] == "garmin_hc"
-    assert r["all_day_median_hr"]["source"] == "hc_aest_day"
+    assert "all_day_median_hr" not in r                      # stored, not read (count-weighted across writers)
 
 
 def test_loader_marks_a_two_writer_night_as_blended(db_session):

@@ -186,13 +186,16 @@ def _stamped(fn):
 @_stamped
 def get_recovery_metrics(days: int = 7) -> str:
     """Get recent recovery biometrics, one line per wake-day, each value tagged with the
-    source that supplied it. Every field resolves on its own to its best available source
-    (HRV, TST and sleep stages, efficiency, SpO2, respiratory rate, heart rate), so a source
-    that carries only some fields never blanks the others. HRV is never ranked or blended
-    across instruments: each source's reading is shown. Sleep stages come from one writer,
-    never mixed. RHR= is reserved for a real daily resting rate and is empty until one is
-    ingested; the sleep nadir, the ring's sleep HR and the all-day median are separate,
-    labelled figures. A field no source carries prints '—'."""
+    source that supplied it, including the Garmin transport ([garmin/api] the Personal API,
+    [garmin/HC] Health Connect, [garmin/di] the epoch SpO2 lane). Every field resolves on its
+    own to its best available source (HRV, TST and sleep stages, efficiency, SpO2, respiratory
+    rate, heart rate), so a source that carries only some fields never blanks the others. HRV is
+    never ranked or blended across instruments: each source's reading is shown. Sleep stages
+    come from one writer, never mixed. Eff is derived from the device's own sleep window (no
+    pre-sleep time), so it reads higher than the diary efficiency. RHR= is the daily resting
+    rate and nothing else; the sleep nadir and the ring's sleep HR are separate, labelled
+    figures. A sleep night that cannot be one night is withheld and the reason printed. A field
+    no source carries prints '—'."""
     user_id = _current_user_id()
     since = _aest_wake_day() - timedelta(days=days)
     with SessionLocal() as _db:
