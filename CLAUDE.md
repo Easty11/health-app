@@ -297,11 +297,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **HC/Polar parity at 177 is treated as closed on the operator's call; the comparison stays as recorded and Polar's setting on the earlier dates stays unread.** Governance - Canonical home: `DECISIONS_LOG.md` #455.
+
 - **User 1's HRmax of 177 is applied in prod and the post-apply per-band comparison is recorded; whether HC/Polar parity at 177 counts as closed is left to the operator.** Governance - Canonical home: `DECISIONS_LOG.md` #454.
 
 - **User 1's HRmax is ruled 177 (`observed`, retroactive from 2026-03-01, superseding #385's 175); the apply is the operator's and is owed.** Governance - Canonical home: `DECISIONS_LOG.md` #453.
-
-- **The home load card and the readiness snapshot now prompt "Restate HRmax?" for each Health Connect row holding a sample above the HRmax in force, derived on read; nothing is restated.** Code, no migration - Canonical home: `OPEN_QUESTIONS.md` Q245.
 
 ---
 
