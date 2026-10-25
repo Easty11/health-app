@@ -171,6 +171,23 @@ describe('the freshness line (the point of the card)', () => {
     expect(screen.queryAllByTestId('garmin-alert')).toHaveLength(0)
   })
 
+  test('HRmax prompts list each row with its sample against the HRmax in force, and are absent when there are none', async () => {
+    const f = freshness()
+    f.hrmax_prompts = [
+      { id: 123, date: '2026-10-14', sport: 'Indoor cycling', hr_max: 177, hrmax_in_force: 175 },
+      { id: 130, date: '2026-10-21', sport: 'Indoor cycling', hr_max: 176, hrmax_in_force: 175 },
+    ]
+    mockApi({ f })
+    await renderCard()
+    const prompts = screen.getAllByTestId('hrmax-prompt')
+    expect(prompts).toHaveLength(2)
+    expect(prompts[0].textContent).toMatch(/Restate HRmax\? 2026-10-14 Indoor cycling: a sample of 177 bpm against 175 in force/)
+    cleanup()
+    mockApi({ f: freshness() })
+    await renderCard()
+    expect(screen.queryAllByTestId('hrmax-prompt')).toHaveLength(0)
+  })
+
   test('if freshness cannot be read the card says so, amber and dimmed, never a bare number', async () => {
     mockApi({ fFail: true })
     await renderCard()

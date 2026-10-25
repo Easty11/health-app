@@ -23,7 +23,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import null
+from sqlalchemy import and_, func, null
 from sqlalchemy.orm import Session
 
 import models
@@ -102,4 +102,34 @@ def enrich_user(db: Session, user_id: int) -> dict[str, Any]:
                 (v if v is not None else null()) for v in new[:5])
             row.hr_avg, row.hr_max = new[5], new[6]
     db.commit()
+    return out
+
+
+def over_ceiling_prompts(db: Session, user_id: int) -> list[dict[str, Any]]:
+    """The health_connect rows that hold a plausible same-writer sample above the HRmax in force: the
+    rows `enrich_user` lists as `over_ceiling_rows`, read from the stored samples instead of from a
+    chain run (nothing persists a run's report). READ-ONLY and in ONE aggregate query, so the freshness
+    read can carry it. Same definition as `zone_session`: samples inside [start, stop] from the row's own
+    writer, inside the plausibility bounds, `top > hrmax` (equal is not over); a row with no usable
+    interval or no HRmax in force is never over. Each item: `{id, date, sport, hr_max, hrmax_in_force}`.
+    It never touches `user_hrmax`: restating is the operator's call (#383)."""
+    hrmax_rows = [entry_from_row(h)
+                  for h in db.query(models.UserHrmax).filter(models.UserHrmax.user_id == user_id).all()]
+    lo, hi = PLAUSIBLE_BPM
+    A, H = models.AerobicSession, models.HrSample
+    tops = (db.query(A.id, A.session_date, A.sport_name, func.max(H.bpm))
+            .join(H, and_(H.user_id == A.user_id, H.source == HEALTH_CONNECT,
+                          H.source_package == func.coalesce(A.source_package, "unknown"),
+                          H.sample_time >= A.start_time, H.sample_time <= A.stop_time,
+                          H.bpm >= lo, H.bpm <= hi))
+            .filter(A.user_id == user_id, A.source == HEALTH_CONNECT, A.stop_time > A.start_time)
+            .group_by(A.id, A.session_date, A.sport_name)
+            .order_by(A.session_date, A.id)
+            .all())
+    out: list[dict[str, Any]] = []
+    for row_id, day, sport, top in tops:
+        hrmax = hrmax_in_force(hrmax_rows, day)
+        if hrmax is not None and top > hrmax:
+            out.append({"id": row_id, "date": day.isoformat(), "sport": sport,
+                        "hr_max": top, "hrmax_in_force": hrmax})
     return out

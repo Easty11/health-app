@@ -33,6 +33,7 @@ Read-side only. No ingest, aggregation or `load_metrics` change.
 """
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Any
@@ -42,9 +43,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 import models
+from hc_zone_enrich import over_ceiling_prompts
 # Writer package -> friendly name, shared with the sleep read so the two never disagree.
 from reads.snapshot_reads import SLEEP_SOURCE_BY_PACKAGE, SLEEP_WRITER_NAMES
 
+log = logging.getLogger(__name__)
 _AEST = pytz.timezone("Australia/Brisbane")   # no DST; the same zone the day grain uses elsewhere
 
 STALE_GAP_MULTIPLE = 3                          # operator brief 2026-10-09: "~3x its usual gap"
@@ -304,6 +307,18 @@ def garmin_alerts(db: Session, user_id: int, now: datetime) -> list[dict[str, st
     return out
 
 
+def hrmax_prompts(db: Session, user_id: int) -> list[dict[str, Any]]:
+    """\"Restate HRmax?\" prompts: health_connect rows holding a plausible same-writer sample above the
+    HRmax in force (`hc_zone_enrich.over_ceiling_prompts`). Information only: nothing is restated and no
+    threshold is applied. A failure here must not take the freshness read down, so it is logged and
+    reads as none; the chain step fails loudly on the same incoherent HRmax chain."""
+    try:
+        return over_ceiling_prompts(db, user_id)
+    except Exception:
+        log.warning("hrmax prompts unavailable for user %s", user_id, exc_info=True)
+        return []
+
+
 def freshness(db: Session, user_id: int, *, now: datetime | None = None) -> dict[str, Any]:
     """The whole freshness read for one user. `now` is injectable for tests."""
     now = _utc(now) if now is not None else datetime.now(timezone.utc)
@@ -330,6 +345,7 @@ def freshness(db: Session, user_id: int, *, now: datetime | None = None) -> dict
         "load_inputs_stale": bool(load_stale_pipes),
         "load_stale_pipes": load_stale_pipes,
         "garmin_alerts": garmin_alerts(db, user_id, now),
+        "hrmax_prompts": hrmax_prompts(db, user_id),
     }
 
 
@@ -354,6 +370,9 @@ def freshness_snapshot_lines(f: dict[str, Any]) -> list[str]:
              f"  Garmin HRV last night: {_ago(pipes['garmin_hrv']['age_hours'])}"]
     for a in f.get("garmin_alerts", []):
         lines.append(f"  GARMIN {a['severity'].upper()}: {a['message']}")
+    for p in f.get("hrmax_prompts", []):
+        lines.append(f"  HRMAX, restate? #{p['id']} {p['date']} {p['sport']}: a sample of {p['hr_max']} bpm "
+                     f"against {p['hrmax_in_force']} in force (the operator's call; nothing is restated)")
     stale = [s for s in f["streams"] if s["status"] == "stale"]
     for s in stale:
         lines.append(f"  STALE {s['stream']} · {s['writer']}: {_ago(s['age_hours'])} "
