@@ -3040,6 +3040,18 @@ What the choice changes: the list is the CURRENT state of the rows (it clears th
 
 ---
 
+## Q246. Should the in-app /chat get read tools, instead of everything standing in its prompt?
+
+Raised with #458, on the operator's brief; a deferred fork, recorded and not built.
+
+**What is true.** `/chat` is one Messages call with no `tools` (`routers/chat.py`): it can only use what the prompt carries, and the prompt grows section by section (Q184). The 7 Oct failure was precedence, not access (#458), so tools would not have fixed it; the fork is about the next failure, where the coach needs history or a record the standing prompt does not carry and cannot fetch it.
+
+**To decide.** Whether `/chat` should call the read surface the MCP already has (the plan, recovery, sessions, findings), which would let the prompt shrink toward the Q184 budgeted builder; how a tool-using turn composes with the single-pass write lanes and the narrate-after-write second call (a tool loop changes the turn's shape); and what a turn costs (a loop multiplies the calls #458's usage line now counts).
+
+**State:** OPEN. Owner: Luke. Not blocking. Related: Q184, Q181, #458.
+
+---
+
 ---
 
 ## CLOSED

@@ -297,11 +297,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The /chat prompt opens with an authoritative state header, the legacy notes render after live state, the plan of record also goes stale on a later phase entry, and the readiness snapshot withholds old heart-rate figures.** Code - Canonical home: `DECISIONS_LOG.md` #458.
+
 - **HC/Polar parity at 177 is closed on the 21 Oct bout alone, and Polar's HRmax is understood to follow its own session maxima rather than a user-set lock.** Governance - Canonical home: `DECISIONS_LOG.md` #456.
 
 - **HC/Polar parity at 177 is treated as closed on the operator's call; the comparison stays as recorded and Polar's setting on the earlier dates stays unread.** Governance - Canonical home: `DECISIONS_LOG.md` #455.
-
-- **User 1's HRmax of 177 is applied in prod and the post-apply per-band comparison is recorded; whether HC/Polar parity at 177 counts as closed is left to the operator.** Governance - Canonical home: `DECISIONS_LOG.md` #454.
 
 ---
 
