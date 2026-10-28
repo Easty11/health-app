@@ -297,11 +297,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Q42 closes as transferred, Q83 closes folded into Q224 with the admission fork carried, and Q129 closes folded into Q173.** Governance - Canonical home: `DECISIONS_LOG.md` #460.
+
 - **Seven stale-premise questions close as superseded, two cross-repo resolutions are recorded, and fourteen questions are re-scoped.** Governance - Canonical home: `DECISIONS_LOG.md` #459.
 
 - **The /chat prompt opens with an authoritative state header, the legacy notes render after live state, the plan of record also goes stale on a later phase entry, and the readiness snapshot withholds old heart-rate figures.** Code - Canonical home: `DECISIONS_LOG.md` #458.
-
-- **HC/Polar parity at 177 is closed on the 21 Oct bout alone, and Polar's HRmax is understood to follow its own session maxima rather than a user-set lock.** Governance - Canonical home: `DECISIONS_LOG.md` #456.
 
 ---
 

@@ -149,34 +149,6 @@ other panel has yet printed that word.
 
 ---
 
-## Q42. The 12-hour-clock scrape failure in `parseSleepTimingContentDesc` is silent and cross-cutting — owned by `health-connect-app`
-
-**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the carry-across happened. The canonical question is health-connect-app Q19 (still OPEN there), and #127 removed Samsung bedtime from adherence and prefill. **Now asks only:** whether this row stays as a cross-repo tracking stub or closes as transferred once HCA Q19 moves. The operator may choose to close it as transferred now; that was flagged at the sweep and is not ruled.
-
-_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
-
-`HRVDataModel.parseSleepTimingContentDesc` captures `(\d+:\d+)` from a Samsung content-desc, and
-`parseClockToMinutes` accepts it without a meridiem. If the phone clock is ever set to 12-hour, `10:12 pm`
-is stored as `10:12` — a 12-hour error that reads as a valid time. It is silent, and it affects **every**
-consumer of `bedtime`/`wake_time`, not just CBT-I (surfaced while designing the CBT-I diary prefill,
-which now sanity-gates prefills against the prescribed window as a local defence — brief Step 6).
-
-This is a scraper defect in the companion app's store, not health-app's. Raised here so it is not lost;
-the fix and its canonical question belong in `health-connect-app`'s `OPEN_QUESTIONS`, not this repo.
-
-**State:** OPEN — no blocker. Owner: Luke. **Next action:** carry to `health-connect-app`'s
-`OPEN_QUESTIONS` (cross-repo; not editable from a health-app-rooted session).
-
-**Re-scoped (2026-07-25, backlog triage — Step 5 stale check):** the 4h prefill sanity-gate shipped in
-health-app (#117's safety catch) catches the *symptom* at prefill — a 12-hour-format value more than 4h
-from the prescription is rejected rather than prefilled. It does **not** fix the source parse, which lives
-in `health-connect-app` (`parseSleepTimingContentDesc` / `parseClockToMinutes`, absent from this repo,
-verified) and is unverifiable from a health-app-rooted session. Scope is now explicit: **the gate covers
-prefill only; the source mis-parse is still open and belongs to HCA.** So the question stays live, not
-closed by tonight's gate.
-
----
-
 ## Q48. What is the settling period between prescription changes, and does it lengthen as TST approaches need?
 
 The titration engine adjudicates each cycle on the trailing `CYCLE_NIGHTS`, so a move made soon after a
@@ -499,109 +471,6 @@ because a cycle needed rescuing. The justification is the test, not the directio
 **Blocked by:** nothing. Buildable now — UNSTARTED rather than blocked, and the reason it is a question rather than a roadmap row is the grandfathering fork above, which wants a ruling before code.
 
 **Do not resolve by:** adding the assertion to the alias after all, or by asserting on a count rather than the heading forms (`#113`: read the matches, never the count).
-
----
-
-## Q83. Sleep-writer admission policy, and per-writer sleep aggregates at ingest (Q224)
-
-**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the longest-session selector is gone (#254 union, #256 precedence partition), the blend is labelled (#300), and the snapshot is one writer per night (#405). **Now asks:** the sleep-writer admission policy (default-untrust, → #175 device identity), and per-writer sleep aggregates at ingest, which is now Q224. The remainder overlaps Q224; the operator's draft considered folding it into Q224 and closing this row, and that fold is not ruled.
-Original title: "HC sleep selection is source-blind — Withings and Samsung are silently blended, and the `#35`/`#36`/`#37` dedup enabler was never wired"
-
-_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
-
-Surfaced alongside `Q82` in the Q4/G4 drill-down (2026-08-03). `health_connect_record_sources`
-shows Health Connect carries sleep from **two** writers: Samsung (`com.sec.android.app.shealth`) and
-Withings (`com.withings.wiscale2`).
-
-`_aggregate_day` selects by max-duration across **all sources with no priority**. So on any night a
-Withings session happens to be the longest, the persisted `health_connect_syncs` sleep reflects
-**Withings** staging rather than Samsung — silently. That breaks scraper parity and poisons every
-downstream HC-sleep consumer: `sleep_score`, `_section_health_connect`, the dashboard.
-
-**Designed, enabled, never wired.** `health_connect_record_sources` exists expressly as the
-"source-priority dedup enabler (`#35` F1 / `#36` / `#37`)" — its own migration docstring says so — and
-`_aggregate_day` never consumes it. The table is populated and ignored.
-
-**The sub-finding is no longer unexplained — it is the cause (2026-08-05).** On four nights (7/19,
-7/20, 7/21, 7/23) a Withings record shares an **identical `record_start`** with the Samsung one. That
-is **confirmed as a Withings Health-Mate mirror of Samsung's own sleep**, not an independent sensor —
-a re-post loop. Consequence: **no signal is lost by discarding those rows.** They are a copy of data
-already held, so the choice is not "which of two measurements to trust" but "stop ingesting an echo".
-*(Attested by Luke 2026-08-05; not independently verified from this tree — the Railway CLI was
-non-functional in the recording session and Health Connect writer permissions are a device surface
-neither Code nor chat can read. Recorded as reported.)*
-
-**This reframes the fix, and the reframe is the point.** "Prefer Samsung" would have worked here by
-coincidence and failed on the next mirroring app to appear:
-
-- **(a) Source-side — the higher-leverage half, and it needs no repo work at all.** Revoke Withings'
-  Health-Connect **write** permission for Sleep. That kills the duplicate *before* ingest, so nothing
-  downstream has to reason about it. It is a phone setting Luke can change immediately, independent of
-  any code below. **Do this first** — it makes (b) a robustness measure rather than a live bug fix.
-- **(b) Code-side — `default-untrust`, not `prefer-Samsung`.** `_aggregate_day` selects from a
-  **registered measuring source** and treats any other writer as **derivative unless explicitly known
-  to be an independent sensor**. An allow-list, not a preference ordering: an unknown future writer is
-  excluded by default rather than silently competing on duration. This survives the next Health-Mate.
-  Runs **before** `Q82`'s fragment-merge, which is why this question gates that one — a merge across a
-  measuring source and its own mirror would double-count the night.
-
-The device-agnostic-schema rule makes this structural rather than a one-user quirk; `record_sources`
-or the payload `source_package` is the input either way.
-
-**State:** OPEN — cause confirmed, direction decided, and the reframe now **binds at `#175`**
-(source admission replaces source priority; the OWED entry-note is discharged). What remains is code:
-`_aggregate_day` still selects by max-duration across all writers.
-
-**The `#175` identity precondition — RESOLVED in the safe direction, and narrowed (2026-08-05).**
-`#175` flagged a contradiction: `WriterIdentity` documents *"current HCA builds send no dataOrigin"*
-while this question's evidence shows real package names in `health_connect_record_sources` on
-2026-08-03. **Identity does arrive; the docstring is the stale artifact** — HCA master's sleep mapper
-and `heartRateMapper` thread `sourcePackage: r.metadata?.dataOrigin ?? null`, and the live table
-carries real packages. The docstring predates the mapper change that added `sourcePackage`. So the
-**"allow-list admits nothing, every night vanishes" scenario is withdrawn** — it was conditional on the
-docstring being true. *(Attested by Luke 2026-08-05 from an HCA-rooted read plus prod data; neither
-surface is readable from this tree.)*
-
-**What survives, and it is the precondition's real content:** the allow-list must not silently drop the
-`'unknown'` that **legitimately exists**. `_capture_record_sources` coalesces missing identity to
-`'unknown'`, and that value arises for real reasons — historical rows written before HCA threaded
-`dataOrigin`, any record type HCA does not tag, and a future build regression. A strict allow-list that
-excludes `'unknown'` fail-closes those **silently**, which is the same defect class `#175` exists to
-remove. So **`'unknown'` must be a decided value, not a default that means exclude**: admit-with-flag,
-fall back to pre-`#175` max-pick for unidentified records, or log-and-count coverage per the `#74`
-fallback-hit-rate pattern. Decide which before the filter is written.
-
-**Two moves discharge it, both cheap:**
-1. **When Railway is reachable**, one bounded query on `health_connect_record_sources`: per-record-type
-   `source_package` coverage — what fraction of sleep rows are `'unknown'` vs real, **split by era**.
-   That quantifies the historical-`'unknown'` exposure and confirms current sleep is fully identified.
-   Measure the gap before trusting the filter.
-2. **Correct the stale `WriterIdentity` docstring** — done on `gov/175-precondition-narrowed`. It was
-   actively misleading, and it is what made a resolved question look like a live fail-closed risk.
-
-→ `DONE → #175` when the code lands. **Higher priority than `Q82`, and gates it.** Distinct from Q4
-(`DONE → #64`). Owner: Luke. Cross-refs `Q82`, `#35`/`#36`/`#37`, `#74`.
-
-**Premise corrected against `health_connect_record_sources` (2026-08-09, Brief K).** The
-identity-distribution measurement (`railway connect health-app-DB`, operator-run 2026-08-08; recorded
-in `#188`) falsifies the two-writer sleep premise as written at the top of this question, while
-leaving the selector finding intact:
-
-- **Falsified — the Withings-blending premise.** Withings totals **33 rows across all record types
-  combined**, first seen **2026-07-15** (ten days after the 2026-07-05 identity cutover), is **absent
-  from every contaminated group** (the 11 contaminated sleep groups included), and its Health-Connect
-  write access was **revoked 2026-08-08**. There is no night on which "a Withings session happens to be
-  the longest" — the scenario has no rows behind it. The four identical-`record_start` mirror nights
-  (7/19–7/23) still stand as recorded — an echo, not a rival sensor — but they are not a live blending
-  risk, and Samsung, not Withings, is the sole real sleep writer.
-- **Untouched — whether `_aggregate_day` is source-blind.** A max-duration selector with **no
-  priority** is still source-blind even when only one writer feeds it, and that is a code property this
-  brief has **not read**. The (b) `default-untrust` allow-list remains the design and still gates
-  `Q82`. What changed is only the premise's factual claim about *who* writes sleep — not the selector's
-  behaviour and not this question's severity.
-
-Premise only; **State stays OPEN**. Remaining work unchanged: read `_aggregate_day` against the source
-table and wire the allow-list (→ `#175`).
 
 ---
 
@@ -1461,26 +1330,6 @@ toward a majority/consensus or a source-preferred merge? A tightening is a **new
 
 ---
 
-## Q129. Which sleep figure do the remaining platform reads use for a Garmin user?
-
-**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the A-vs-B fork is overtaken — #449 ingests Garmin sleep server-side through the official API into `sleep_nights`, and #457 (which closed Q243) has the recovery readers (`get_recovery_metrics`, the readiness snapshot, the card) rank it first. **Now asks:** which sleep figure the remaining platform reads use — #457 records `context_builder._section_health_connect` and the check-in prefill's `passive_sleep_min` as still reading the HC aggregate unguarded (readers still on HC per #425). Coordinate with Q244. The operator's draft said to consider folding this into Q243; Q243 closed at #457, so there is no fold target and none was ruled.
-Original title: "Garmin sleep source — pull server-side or leave on HC?"
-
-_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
-
-Garmin sleep currently reaches the platform only via the companion app → Health Connect →
-`health_connect_syncs`, coupling it to the Samsung-purposed companion app and the phone chain the
-garth pull otherwise escapes. Option A: leave on HC (official, resilient, but companion-app-coupled).
-Option B: pull sleep via garth and extend arbitration to sleep (severs the coupling, richer
-Garmin-native sleep, but widens the fragile garth dependency to a commodity signal and requires
-building sleep source-arbitration — none exists today). Household tolerates A; B2B goes fully
-server-side/official and moots it. Decide on its own merits; do NOT build either way inside the
-ingestion lane (#258/#259).
-
-**State:** OPEN
-
----
-
 ## Q135. Drop `samsung_hrv_readings.hrv_ms` once dual-write is proven and the frontend reads the `hrv` block
 
 #266 retains `samsung_hrv_readings.hrv_ms` (dual-write, not move) so the `samsung` block keeps working
@@ -1822,6 +1671,8 @@ this task did not need. Decide adopt-or-delete as its own scoped call: adopt WIT
 
 **Sole owner of the `recovery.py` disposition, 2026-10-26 (`DECISIONS_LOG` #459).** Q134 closed superseded: `/recovery/summary` is unmounted with zero consumers (`main.py` does not include the router; checked 2026-10-26), so adopt-or-delete is decided here and nowhere else. The substantive goals of Q134 landed on live surfaces (#300/#405/#448/#292).
 
+Q129 was folded into Q173 at #460: the per-reader ruling on the HC-aggregate readers is asked there, and `routers/recovery.py` is named in it, but its adopt-or-delete disposition stays here.
+
 **State:** OPEN (deferred — decide when a consumer is proposed, or delete)
 
 ---
@@ -1957,6 +1808,8 @@ _The entry below is kept as minted, for provenance; where it differs from the pa
 Raised 2026-09-25 with the HC sleep-clocks decision (#328). This is an audit (the table is in PR2's description), and no reader is fixed there. Several user- and coach-facing readers take the newest `samsung_hrv_readings` row, or a window of it, with no same-day gate. The ring scraper has been dead since 2026-09-14. The sharpest case is the MCP readiness snapshot's "Latest biometrics (<date>)" block, which sits under "TODAY'S READINESS SNAPSHOT" with 2026-09-14 sleep/SpO2 values. It is dated, but headlined as today.
 
 **To decide:** per reader, gate to same-day, keep dated but re-headline, or retire now that the ring is returning (the scraper stays the ring-HRV path).
+
+**Q129 folded in, 2026-10-28 (`DECISIONS_LOG` #460).** Q129 asked which sleep figure the remaining platform reads use for a Garmin user. After #449 and #457 its remainder was the same list of readers named above (`context_builder._section_health_connect`, the check-in prefill's `passive_sleep_min`), so the per-reader ruling asked here settles both. Q129's re-scope and original text stay on its closed row. Coordinate with Q244, as Q129 did.
 
 **State:** OPEN.
 
@@ -2494,7 +2347,9 @@ Raised 10 Oct 2026 (the freshness brief, #405). `health_connect_syncs` keeps one
 
 **Open design points, for when it fires.** A per-(night, writer) aggregate table or columns written at ingest (a schema change, hold (a)); whether history is backfilled from the retained records; whether the card's `Health Connect (multiple)` label then changes to the priority writer. Reading is not the problem: the read-side rule is already built (#405).
 
-**State:** OPEN. Not blocking: the live night is single-writer today. Nothing built. Related: #405, Q24 (companion), #254, #256.
+**Admission is also undecided (folded in from Q83, `DECISIONS_LOG` #460).** Which writers a night admits at ingest: a default-untrust allow-list of registered measuring sources, so that an unknown future writer (the next Health-Mate mirror) is excluded by default, versus the read-side preference ordering #457 built (`SLEEP_WRITER_PRIORITY`: Garmin, Samsung Health, Withings), which Q83 argued fails on the next mirroring app. The allow-list is gated on device identity (Q175), and `'unknown'` must be a decided value (admit-with-flag, fall back to max-pick, or log-and-count), not a default that means exclude, or the filter silently drops legitimate untagged records. Both halves fire on the same trigger, a second live sleep writer. Q83's closed row holds the full argument, including the source-side move (revoking Withings' Health Connect sleep write).
+
+**State:** OPEN. Not blocking: the live night is single-writer today. Nothing built. Related: #405, Q24 (companion), #254, #256, Q83 (folded in at #460), Q175 (device identity, the admission gate).
 
 ---
 
@@ -3819,6 +3674,36 @@ gate 1's safety arm is reachable. Asset and test only — no gate or producer lo
 
 ---
 
+## Q42. The 12-hour-clock scrape failure in `parseSleepTimingContentDesc` is silent and cross-cutting — owned by `health-connect-app`
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the carry-across happened. The canonical question is health-connect-app Q19 (still OPEN there), and #127 removed Samsung bedtime from adherence and prefill. **Now asks only:** whether this row stays as a cross-repo tracking stub or closes as transferred once HCA Q19 moves. The operator may choose to close it as transferred now; that was flagged at the sweep and is not ruled.
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
+
+`HRVDataModel.parseSleepTimingContentDesc` captures `(\d+:\d+)` from a Samsung content-desc, and
+`parseClockToMinutes` accepts it without a meridiem. If the phone clock is ever set to 12-hour, `10:12 pm`
+is stored as `10:12` — a 12-hour error that reads as a valid time. It is silent, and it affects **every**
+consumer of `bedtime`/`wake_time`, not just CBT-I (surfaced while designing the CBT-I diary prefill,
+which now sanity-gates prefills against the prescribed window as a local defence — brief Step 6).
+
+This is a scraper defect in the companion app's store, not health-app's. Raised here so it is not lost;
+the fix and its canonical question belong in `health-connect-app`'s `OPEN_QUESTIONS`, not this repo.
+
+**State:** DONE → #460 — closed as transferred: the canonical question is health-connect-app Q19 (still OPEN there). The carry-across is done, and #127 removed Samsung bedtime from adherence and prefill, which leaves this repo's exposure near nil.
+
+Prior state text, kept verbatim: OPEN — no blocker. Owner: Luke. **Next action:** carry to `health-connect-app`'s
+`OPEN_QUESTIONS` (cross-repo; not editable from a health-app-rooted session).
+
+**Re-scoped (2026-07-25, backlog triage — Step 5 stale check):** the 4h prefill sanity-gate shipped in
+health-app (#117's safety catch) catches the *symptom* at prefill — a 12-hour-format value more than 4h
+from the prescription is rejected rather than prefilled. It does **not** fix the source parse, which lives
+in `health-connect-app` (`parseSleepTimingContentDesc` / `parseClockToMinutes`, absent from this repo,
+verified) and is unverifiable from a health-app-rooted session. Scope is now explicit: **the gate covers
+prefill only; the source mis-parse is still open and belongs to HCA.** So the question stays live, not
+closed by tonight's gate.
+
+---
+
 ## Q43. Does production share `FERNET_KEY` (and `SECRET_KEY`) with the local development `.env`?
 
 `mcp_server.py:288` decrypts `api_key_encrypted` for stored third-party credentials, so a shared Fernet
@@ -4985,6 +4870,111 @@ Distinct from Q4 (`DONE → #64`). Owner: Luke. Cross-refs `Q83`, `#35`/`#36`/`#
 
 ---
 
+## Q83. Sleep-writer admission policy, and per-writer sleep aggregates at ingest (Q224)
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the longest-session selector is gone (#254 union, #256 precedence partition), the blend is labelled (#300), and the snapshot is one writer per night (#405). **Now asks:** the sleep-writer admission policy (default-untrust, → #175 device identity), and per-writer sleep aggregates at ingest, which is now Q224. The remainder overlaps Q224; the operator's draft considered folding it into Q224 and closing this row, and that fold is not ruled.
+Original title: "HC sleep selection is source-blind — Withings and Samsung are silently blended, and the `#35`/`#36`/`#37` dedup enabler was never wired"
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
+
+Surfaced alongside `Q82` in the Q4/G4 drill-down (2026-08-03). `health_connect_record_sources`
+shows Health Connect carries sleep from **two** writers: Samsung (`com.sec.android.app.shealth`) and
+Withings (`com.withings.wiscale2`).
+
+`_aggregate_day` selects by max-duration across **all sources with no priority**. So on any night a
+Withings session happens to be the longest, the persisted `health_connect_syncs` sleep reflects
+**Withings** staging rather than Samsung — silently. That breaks scraper parity and poisons every
+downstream HC-sleep consumer: `sleep_score`, `_section_health_connect`, the dashboard.
+
+**Designed, enabled, never wired.** `health_connect_record_sources` exists expressly as the
+"source-priority dedup enabler (`#35` F1 / `#36` / `#37`)" — its own migration docstring says so — and
+`_aggregate_day` never consumes it. The table is populated and ignored.
+
+**The sub-finding is no longer unexplained — it is the cause (2026-08-05).** On four nights (7/19,
+7/20, 7/21, 7/23) a Withings record shares an **identical `record_start`** with the Samsung one. That
+is **confirmed as a Withings Health-Mate mirror of Samsung's own sleep**, not an independent sensor —
+a re-post loop. Consequence: **no signal is lost by discarding those rows.** They are a copy of data
+already held, so the choice is not "which of two measurements to trust" but "stop ingesting an echo".
+*(Attested by Luke 2026-08-05; not independently verified from this tree — the Railway CLI was
+non-functional in the recording session and Health Connect writer permissions are a device surface
+neither Code nor chat can read. Recorded as reported.)*
+
+**This reframes the fix, and the reframe is the point.** "Prefer Samsung" would have worked here by
+coincidence and failed on the next mirroring app to appear:
+
+- **(a) Source-side — the higher-leverage half, and it needs no repo work at all.** Revoke Withings'
+  Health-Connect **write** permission for Sleep. That kills the duplicate *before* ingest, so nothing
+  downstream has to reason about it. It is a phone setting Luke can change immediately, independent of
+  any code below. **Do this first** — it makes (b) a robustness measure rather than a live bug fix.
+- **(b) Code-side — `default-untrust`, not `prefer-Samsung`.** `_aggregate_day` selects from a
+  **registered measuring source** and treats any other writer as **derivative unless explicitly known
+  to be an independent sensor**. An allow-list, not a preference ordering: an unknown future writer is
+  excluded by default rather than silently competing on duration. This survives the next Health-Mate.
+  Runs **before** `Q82`'s fragment-merge, which is why this question gates that one — a merge across a
+  measuring source and its own mirror would double-count the night.
+
+The device-agnostic-schema rule makes this structural rather than a one-user quirk; `record_sources`
+or the payload `source_package` is the input either way.
+
+**State:** DONE → #460 — closed, folded into Q224: the longest-session selector is gone (#254, #256), the blend is labelled (#300), and the snapshot is one writer per night (#405). What stayed open here, the admission policy and per-writer aggregates at ingest, is carried on Q224's open design points, with the #175 identity gate and the decided-`'unknown'` precondition. This row's argument for default-untrust is kept below.
+
+Prior state text, kept verbatim: OPEN — cause confirmed, direction decided, and the reframe now **binds at `#175`**
+(source admission replaces source priority; the OWED entry-note is discharged). What remains is code:
+`_aggregate_day` still selects by max-duration across all writers.
+
+**The `#175` identity precondition — RESOLVED in the safe direction, and narrowed (2026-08-05).**
+`#175` flagged a contradiction: `WriterIdentity` documents *"current HCA builds send no dataOrigin"*
+while this question's evidence shows real package names in `health_connect_record_sources` on
+2026-08-03. **Identity does arrive; the docstring is the stale artifact** — HCA master's sleep mapper
+and `heartRateMapper` thread `sourcePackage: r.metadata?.dataOrigin ?? null`, and the live table
+carries real packages. The docstring predates the mapper change that added `sourcePackage`. So the
+**"allow-list admits nothing, every night vanishes" scenario is withdrawn** — it was conditional on the
+docstring being true. *(Attested by Luke 2026-08-05 from an HCA-rooted read plus prod data; neither
+surface is readable from this tree.)*
+
+**What survives, and it is the precondition's real content:** the allow-list must not silently drop the
+`'unknown'` that **legitimately exists**. `_capture_record_sources` coalesces missing identity to
+`'unknown'`, and that value arises for real reasons — historical rows written before HCA threaded
+`dataOrigin`, any record type HCA does not tag, and a future build regression. A strict allow-list that
+excludes `'unknown'` fail-closes those **silently**, which is the same defect class `#175` exists to
+remove. So **`'unknown'` must be a decided value, not a default that means exclude**: admit-with-flag,
+fall back to pre-`#175` max-pick for unidentified records, or log-and-count coverage per the `#74`
+fallback-hit-rate pattern. Decide which before the filter is written.
+
+**Two moves discharge it, both cheap:**
+1. **When Railway is reachable**, one bounded query on `health_connect_record_sources`: per-record-type
+   `source_package` coverage — what fraction of sleep rows are `'unknown'` vs real, **split by era**.
+   That quantifies the historical-`'unknown'` exposure and confirms current sleep is fully identified.
+   Measure the gap before trusting the filter.
+2. **Correct the stale `WriterIdentity` docstring** — done on `gov/175-precondition-narrowed`. It was
+   actively misleading, and it is what made a resolved question look like a live fail-closed risk.
+
+→ `DONE → #175` when the code lands. **Higher priority than `Q82`, and gates it.** Distinct from Q4
+(`DONE → #64`). Owner: Luke. Cross-refs `Q82`, `#35`/`#36`/`#37`, `#74`.
+
+**Premise corrected against `health_connect_record_sources` (2026-08-09, Brief K).** The
+identity-distribution measurement (`railway connect health-app-DB`, operator-run 2026-08-08; recorded
+in `#188`) falsifies the two-writer sleep premise as written at the top of this question, while
+leaving the selector finding intact:
+
+- **Falsified — the Withings-blending premise.** Withings totals **33 rows across all record types
+  combined**, first seen **2026-07-15** (ten days after the 2026-07-05 identity cutover), is **absent
+  from every contaminated group** (the 11 contaminated sleep groups included), and its Health-Connect
+  write access was **revoked 2026-08-08**. There is no night on which "a Withings session happens to be
+  the longest" — the scenario has no rows behind it. The four identical-`record_start` mirror nights
+  (7/19–7/23) still stand as recorded — an echo, not a rival sensor — but they are not a live blending
+  risk, and Samsung, not Withings, is the sole real sleep writer.
+- **Untouched — whether `_aggregate_day` is source-blind.** A max-duration selector with **no
+  priority** is still source-blind even when only one writer feeds it, and that is a code property this
+  brief has **not read**. The (b) `default-untrust` allow-list remains the design and still gates
+  `Q82`. What changed is only the premise's factual claim about *who* writes sleep — not the selector's
+  behaviour and not this question's severity.
+
+Premise only; **State stays OPEN**. Remaining work unchanged: read `_aggregate_day` against the source
+table and wire the allow-list (→ `#175`).
+
+---
+
 ## Q85. Which required field does the live extraction of a ref-less lead row actually drop?
 
 The SNP Albumin/Creat Ratio report (collected 2026-08-04) is refused by `/labs/confirm` with a
@@ -5597,6 +5587,28 @@ Resolved (operator-ratified) by ranking `polar_flow_export` (3) > `polar_v4` (2)
 (1): the export row is strictly richer than the list-sourced v4 twin, so it is deterministically
 canonical. Single-emission is now a guaranteed property. The one intended output change is a zoned
 cross-source overlap collapsing from two emissions to one.
+
+---
+
+## Q129. Which sleep figure do the remaining platform reads use for a Garmin user?
+
+**Re-scoped 2026-10-26 (operator-ruled, `DECISIONS_LOG` #459).** Discharged: the A-vs-B fork is overtaken — #449 ingests Garmin sleep server-side through the official API into `sleep_nights`, and #457 (which closed Q243) has the recovery readers (`get_recovery_metrics`, the readiness snapshot, the card) rank it first. **Now asks:** which sleep figure the remaining platform reads use — #457 records `context_builder._section_health_connect` and the check-in prefill's `passive_sleep_min` as still reading the HC aggregate unguarded (readers still on HC per #425). Coordinate with Q244. The operator's draft said to consider folding this into Q243; Q243 closed at #457, so there is no fold target and none was ruled.
+Original title: "Garmin sleep source — pull server-side or leave on HC?"
+
+_The entry below is kept as minted, for provenance; where it differs from the paragraph above, the paragraph above governs._
+
+Garmin sleep currently reaches the platform only via the companion app → Health Connect →
+`health_connect_syncs`, coupling it to the Samsung-purposed companion app and the phone chain the
+garth pull otherwise escapes. Option A: leave on HC (official, resilient, but companion-app-coupled).
+Option B: pull sleep via garth and extend arbitration to sleep (severs the coupling, richer
+Garmin-native sleep, but widens the fragile garth dependency to a commodity signal and requires
+building sleep source-arbitration — none exists today). Household tolerates A; B2B goes fully
+server-side/official and moots it. Decide on its own merits; do NOT build either way inside the
+ingestion lane (#258/#259).
+
+**State:** DONE → #460 — closed, folded into Q173: after #449 and #457 its remainder is the list of platform readers still on the HC aggregate (`context_builder._section_health_connect`, the check-in prefill's `passive_sleep_min`), which is the list Q173 now asks a per-reader ruling on.
+
+Prior state text, kept verbatim: OPEN
 
 ---
 
