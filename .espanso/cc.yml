@@ -11,7 +11,8 @@
 matches:
   - trigger: ";cc"
     replace: |
-      Chat close-out. Emit the PENDING-COMMIT QUEUE for this session and nothing else.
+      Chat close-out. Emit the PENDING-COMMIT QUEUE for this session, then the CHAT
+      DISPOSITION line below, and nothing else.
 
       For everything decided this session, output canonical-format entries — ready to
       paste, or to file as a GitHub issue for @claude, with zero reformatting:
@@ -22,7 +23,17 @@ matches:
       Number new entries from the current highest. To change a locked decision, add a new
       entry that supersedes it by number — never edit the old text.
 
-      OPEN_QUESTIONS.md entries — one status each: open / verifying / resolved -> #.
+      OPEN_QUESTIONS.md entries — one **State:** each: OPEN / OWED / DONE -> #N.
 
       Flag every entry PENDING. Write NOTHING to project knowledge. Chat proposes; Code is
       the only writer; this queue stays provisional until a commit lands it.
+
+      End with one line headed CHAT DISPOSITION, after the queue. Name the Q-number(s)
+      this chat served, the chat's state, and the exact title the operator should rename
+      the chat to:
+        LIVE    -> "▶ Q<n> <short title>"   (work still open in this chat)
+        PARKED  -> "⏸ Q<n> <short title>"   (name what it waits on)
+        CLOSED  -> "✓ Q<n> <short title>"   (every entry above has a store or a brief to land in)
+      If CLOSED and nothing in this chat is absent from master's stores or a project brief,
+      say DELETE instead of a title. A chat with no Q-number is a sandbox: title it
+      "~ <topic> scratch". The stores are the record; the chat is scaffolding.
