@@ -97,8 +97,12 @@ OPEN · OWED · DONE → #N, under the label `**State:**`.
 - **Open:** report both maxima — decisions `^### #?[0-9]+`, questions `^#{2,3} Q[0-9]+`
   (period-, sigil- and level-agnostic; the pinned forms return zero on one repo or the
   other). Chat re-aims any brief against these.
+  Optional at open, when a cold-start digest is wanted: `python scripts\gen_governance_view.py`
+  (reads master; output is gitignored under `build\`). Never run it at close-out — it would
+  digest master before this session's close-out merges.
 - **Chat close-out (`;cc`):** emits the pending-commit queue as canonical-format entries
-  flagged PENDING. Writes nothing to project knowledge.
+  flagged PENDING, then a one-line CHAT DISPOSITION (Q-number(s) served; LIVE / PARKED /
+  CLOSED; the title to rename the chat to, or DELETE). Writes nothing to project knowledge.
 - **Code close-out (`/closeout`):** reads the stores; reports actual commits
   (`git log --format="%ad %s" --date=short -10`); reconciles every PENDING item;
   branch terminal-state gate — every touched branch ends merged+deleted or in
@@ -297,11 +301,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Chat close-out ends with a chat disposition bound to a Q-number, and the project-knowledge copy of the consolidated governance view is retired.** Governance - Canonical home: `DECISIONS_LOG.md` #461.
+
 - **Q42 closes as transferred, Q83 closes folded into Q224 with the admission fork carried, and Q129 closes folded into Q173.** Governance - Canonical home: `DECISIONS_LOG.md` #460.
 
 - **Seven stale-premise questions close as superseded, two cross-repo resolutions are recorded, and fourteen questions are re-scoped.** Governance - Canonical home: `DECISIONS_LOG.md` #459.
-
-- **The /chat prompt opens with an authoritative state header, the legacy notes render after live state, the plan of record also goes stale on a later phase entry, and the readiness snapshot withholds old heart-rate figures.** Code - Canonical home: `DECISIONS_LOG.md` #458.
 
 ---
 
