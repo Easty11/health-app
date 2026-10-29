@@ -2608,17 +2608,15 @@ Raised with #458, on the operator's brief; a deferred fork, recorded and not bui
 
 ---
 
-## Q247. Should the app's sleep reading say when the watch recorded only part of a night?
+## Q248. Should the partial-night note say which way the device window falls short?
 
-Raised 2026-10-29, from the operator's own night and a 37-night comparison. No hold, no code: a question, not a build.
+Raised 2026-10-30 from the live read recorded under Q247. No hold, no code: a question, not a build.
 
-**What is true.** The Personal API sleep payload for 29 Oct (user 1) carries one window, 01:39:53 to 06:11:53 AEST (16,320 s, 248 min asleep plus 24 awake). The operator went to bed at 21:30, woke at midnight and was awake until about 01:30; the 21:30 to midnight sleep is not in the payload: `napTimeSeconds` and `unmeasurableSleepSeconds` are 0, the window is `enhanced_confirmed_final`, and there is no list of periods. Mapped faithfully, the stored `sleep_time_s` is what the device holds, and the Sleep score (50) is scored on that window. The watch is the only sleep source until the ring returns. Across the 37 nights with both a device TST and a diary TST (17 Sep to 28 Oct): the device is lower on 31, the median gap is about -24 min and the mean about -42, and 8 nights are 60 min or more short (19 Sep, 20 Sep, 2 Oct, 3 Oct, 8 Oct, 10 Oct, 11 Oct, 18 Oct), the largest 11 Oct (device 203, diary 439, four wakings). That pattern fits the watch keeping only the longest stint on broken nights (Likely: totals alone cannot prove it, and the diary is recall).
+**What is true.** The note says "the device may have recorded only part of the night" for every night 60 min or more below the diary, and prints the device window beside the diary lights-out. Of the nine nights flagged in 45 days, five start 1 h or more after lights-out, one starts 49 min after, two start on time and end early (22:37–03:55, 22:42–03:09), and one (18 Oct, 21:52–06:28 against lights-out 21:41) spans the whole night, where the device scored 180 min awake against a diary TST of 491. For that last night "only part of the night" is wrong, and the reader has to work it out from the two clocks.
 
-**Who reads the device TST.** Only `reads/recovery_night.py` (the recovery lines) and `reads/snapshot_reads.py` (the readiness snapshot). It does not feed the CBT-I engine, whose titration basis has been diary-only since rx 12 (the diary has no sensor fields). The exposure is the coach reading "TST 248, score 50" as a poor night.
+**To decide.** Whether the note names the mechanism from facts already in hand: "device window starts 4 h 14 m after lights-out" (the early stint is missing), "ends N h before the diary's final wake" (the late part is missing; `daily_records.final_wake` is the comparator, not yet read), or "covers the night; the gap is awake time" (the window starts within 60 min of lights-out and ends within 60 min of final wake). It would extend the ratified rule (Q247) in wording only: the 60-minute flag, the stored numbers and the no-diary silence stay. The 60-minute window tolerance is a data-meaning default and is the operator's to set.
 
-**To decide.** Whether to annotate rather than change the stored number: when a diary TST exists for the night, show it beside the device figure, and flag the night when the device is short by at least 60 min (the threshold separates the 8 clear nights from ordinary recall noise, -10 to -58 min), with the device window next to the diary lights-out. Proposed: no fallback when the diary is not yet logged (a guess from the planned lights-out is more false-positive-prone, and the flag appears once the diary is). Health Connect was not checked as a second path for the same watch. When the ring returns the scraper is a TST candidate again and `TST_RANK` (Personal API first) deserves a look.
-
-**State:** OPEN. Owner: Luke. Not blocking. Related: Q239, Q243, #457, #449.
+**State:** OPEN. Owner: Luke. Not blocking. Related: Q247, Q239, #465.
 
 ---
 
@@ -6792,3 +6790,24 @@ The mappers for these were written from the official client's endpoint map and t
 **State:** DONE → #457. The readers are `reads/recovery_night.py` (the MCP table and the candidates the snapshot and card resolve) and `reads/snapshot_reads.py`; Garmin ranks on (source, transport); the efficiency is printed as derived from the device's own sleep window and is not the diary SE; the pin test names the two readers.
 
 ---
+
+## Q247. Should the app's sleep reading say when the watch recorded only part of a night?
+
+Raised 2026-10-29, from the operator's own night and a 37-night comparison. No hold, no code: a question, not a build.
+
+**What is true.** The Personal API sleep payload for 29 Oct (user 1) carries one window, 01:39:53 to 06:11:53 AEST (16,320 s, 248 min asleep plus 24 awake). The operator went to bed at 21:30, woke at midnight and was awake until about 01:30; the 21:30 to midnight sleep is not in the payload: `napTimeSeconds` and `unmeasurableSleepSeconds` are 0, the window is `enhanced_confirmed_final`, and there is no list of periods. Mapped faithfully, the stored `sleep_time_s` is what the device holds, and the Sleep score (50) is scored on that window. The watch is the only sleep source until the ring returns. Across the 37 nights with both a device TST and a diary TST (17 Sep to 28 Oct): the device is lower on 31, the median gap is about -24 min and the mean about -42, and 8 nights are 60 min or more short (19 Sep, 20 Sep, 2 Oct, 3 Oct, 8 Oct, 10 Oct, 11 Oct, 18 Oct), the largest 11 Oct (device 203, diary 439, four wakings). That pattern fits the watch keeping only the longest stint on broken nights (Likely: totals alone cannot prove it, and the diary is recall).
+
+**Who reads the device TST.** Only `reads/recovery_night.py` (the recovery lines) and `reads/snapshot_reads.py` (the readiness snapshot). It does not feed the CBT-I engine, whose titration basis has been diary-only since rx 12 (the diary has no sensor fields). The exposure is the coach reading "TST 248, score 50" as a poor night.
+
+**To decide.** Whether to annotate rather than change the stored number: when a diary TST exists for the night, show it beside the device figure, and flag the night when the device is short by at least 60 min (the threshold separates the 8 clear nights from ordinary recall noise, -10 to -58 min), with the device window next to the diary lights-out. Proposed: no fallback when the diary is not yet logged (a guess from the planned lights-out is more false-positive-prone, and the flag appears once the diary is). Health Connect was not checked as a second path for the same watch. When the ring returns the scraper is a TST candidate again and `TST_RANK` (Personal API first) deserves a look.
+
+**Resolution (29 Oct 2026).** The operator accepted the three parts as proposed: annotate rather than change the stored number; flag when the device is 60 min or more below the diary; no flag, and no note, when the diary is not logged. Built read-side only, no migration (PR 467, merge `9f52fb6`): the recovery line (`get_recovery_metrics`), the readiness snapshot's sleep lines and the card's `latest_sleep` (a `diary_note` key) show the diary TST beside the device TST, and a flagged night also shows the device window beside the diary lights-out, on the Brisbane clock. The window is read from the Personal API sleep row only; Health Connect's `sleep_start` is not ruled (`models.HealthConnectSync`), so a Health Connect night is flagged without one. Health Connect was not checked as a second path for the watch's missing stint. The scraper's night is compared like any other TST, without a window.
+
+**Read live after the deploy (30 Oct 2026, 07:13 AEST, `get_recovery_metrics` over 45 days).** The 29 Oct line renders as designed: `TST=248 min [garmin/api] (diary 396 min; 148 min below the diary, so the device may have recorded only part of the night: device window 01:39–06:11, diary lights-out 21:25)`. Nine nights are flagged in the 45 days. Their device windows against the diary lights-out: window starts 1 h or more after lights-out on 20 Sep (05:38 vs 04:31), 2 Oct (23:43 vs 21:49), 8 Oct (00:46 vs 22:45), 10 Oct (02:45 vs 22:25) and 29 Oct (01:39 vs 21:25); 49 min after on 3 Oct (23:19 vs 22:30); the window starts on time but ends early on 19 Sep (22:37–03:55) and 11 Oct (22:42–03:09), where a later part may be missing (the diary's final wake was not compared); and the window spans the whole night on 18 Oct (21:52–06:28 vs 21:41), where the device scored 180 min awake against a diary TST of 491.
+
+**Correction to the body above.** It read the eight 60-minute nights as the watch keeping only the longest stint (Likely). The windows show that holds for the late-start nights, is a different shape for the early-end nights, and does not hold for 18 Oct, where the whole night is in the window and the gap is awake time. The flag's wording ("may have recorded only part of the night") is therefore too specific for that night; the window shown beside the lights-out lets a reader see it. Whether to say which way the window falls short is Q248; nothing is changed here.
+
+**State:** DONE → #465. Related: Q239, Q243, #457, #449.
+
+---
+

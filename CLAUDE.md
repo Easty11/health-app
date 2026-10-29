@@ -301,11 +301,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The watch's partial nights are annotated against the diary, not corrected: flagged at 60 minutes below it, silent without a diary.** Governance - Canonical home: `DECISIONS_LOG.md` #465.
+
 - **Garmin Personal API activation closes: PR-B is landed, Q239 and Q242 are DONE, and what stays unmeasured is named.** Governance - Canonical home: `DECISIONS_LOG.md` #464.
 
 - **The `;sc` session close-out snippet lands in the repo as `.espanso/sc.yml`, apart from `;cc`.** Governance - Canonical home: `DECISIONS_LOG.md` #463.
-
-- **Garmin M2 closes as superseded: no existing `hrv_readings` row is left to stamp, and Q242 item 1 is replaced.** Governance - Canonical home: `DECISIONS_LOG.md` #462.
 
 ---
 
