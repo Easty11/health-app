@@ -1,10 +1,10 @@
-"""Garmin HRV server-side ingestion lane — normalisation, bounds, idempotency,
-refresh-token writeback, reconnect-not-500, and read-time arbitration.
+"""Garmin HRV server-side ingestion lane — normalisation, bounds, idempotency, reconnect-not-500, and
+read-time arbitration.
 
-No live Garmin call: the connector's underlying `garminconnect.Garmin` is a fake, and
-`GarminClient.from_token` is monkeypatched where the endpoint/service builds a client.
-Fixtures are canned `/hrv-service/hrv/{date}` payloads checked against hand-computed
-oracles (the reconciliation-fixture pattern).
+The HRV pull runs through the Personal API only (#449, PR-B): the real `PersonalClient` is driven against a fake
+host at the transport layer. `GarminClient.from_token` (the DI token, which now serves the attach route and epoch
+SpO2) is monkeypatched where the token endpoint builds a client. Fixtures are canned `/hrv-service/hrv/{date}`
+payloads checked against hand-computed oracles (the reconciliation-fixture pattern).
 """
 from __future__ import annotations
 
@@ -17,12 +17,15 @@ from fastapi.testclient import TestClient
 import models
 from auth import get_current_user
 from database import get_db
+import garmin_personal_lanes as gpl
+from connectors import garmin_personal as gp
 from connectors.garmin import (
     GarminClient,
     GarminReconnectError,
     normalize_hrv_day,
 )
 from encryption import decrypt, encrypt
+from garmin_personal_fakes import FAKE_KEY, FakeHost
 from reads.recovery_reads import arbitrate, canonical_hrv
 from routers import garmin
 
@@ -49,27 +52,6 @@ def _hrv_payload(
         },
         "hrvReadings": [{"readingTimeGMT": t, "hrvValue": v} for t, v in readings],
     }
-
-
-class _FakeGarmin:
-    """Stands in for `garminconnect.Garmin` — serves canned days by date, records the
-    token blob it would dump (for writeback assertions)."""
-
-    def __init__(self, by_date: dict[str, dict], token: str = "REFRESHED_TOKEN_BLOB"):
-        self._by_date = by_date
-        self._token = token
-
-        class _Client:
-            def __init__(self, token):
-                self._token = token
-
-            def dumps(self):
-                return self._token
-
-        self.client = _Client(token)
-
-    def get_hrv_data(self, cdate):
-        return self._by_date.get(cdate)
 
 
 # ── normalisation vs oracle ─────────────────────────────────────────────────────
@@ -100,17 +82,6 @@ def test_normalize_falls_back_to_queried_date_when_summary_omits_it():
 def test_normalize_skips_empty_day():
     assert normalize_hrv_day(None, "2026-08-15") is None
     assert normalize_hrv_day({"hrvSummary": {}, "hrvReadings": []}, "2026-08-15") is None
-
-
-def test_get_hrv_range_loops_days_and_drops_empty(monkeypatch):
-    by_date = {
-        "2026-08-15": _hrv_payload("2026-08-15"),
-        # 2026-08-16 absent → Garmin has no data → dropped
-        "2026-08-17": _hrv_payload("2026-08-17", readings=(("2026-08-17T05:00:00.0", 50),)),
-    }
-    client = GarminClient(_FakeGarmin(by_date))
-    days = client.get_hrv_range(date(2026, 8, 15), date(2026, 8, 17))
-    assert [d["captured_at"] for d in days] == [date(2026, 8, 15), date(2026, 8, 17)]
 
 
 # ── bounds: out-of-range RMSSD nulled/skipped, siblings kept ─────────────────────
@@ -144,7 +115,12 @@ def _user(db, uid=1):
     return u
 
 
-def _connect_garmin(db, uid, token="INITIAL_TOKEN_BLOB"):
+def _connect_personal(db, uid, key=FAKE_KEY):
+    db.add(models.UserIntegration(user_id=uid, provider="garmin_personal", api_key_encrypted=encrypt(key)))
+    db.commit()
+
+
+def _connect_di(db, uid, token="INITIAL_TOKEN_BLOB"):
     db.add(models.UserIntegration(user_id=uid, provider="garmin", api_key_encrypted=encrypt(token)))
     db.commit()
 
@@ -157,38 +133,36 @@ def _client(db, user) -> TestClient:
     return TestClient(app)
 
 
-def _patch_from_token(monkeypatch, fake_garmin):
-    """Make GarminClient.from_token (used inside the service) return a client wrapping
-    the fake — no network, no real auth."""
-    monkeypatch.setattr(
-        garmin.GarminClient, "from_token",
-        classmethod(lambda cls, token_json: GarminClient(fake_garmin)),
-    )
+@pytest.fixture()
+def host(monkeypatch):
+    """The fake Personal API host, wired in wherever the service builds a client."""
+    h = FakeHost()
+    orig = gpl.personal_client
+    monkeypatch.setattr(gpl, "personal_client", lambda db, uid, *, transport=None: orig(db, uid, transport=h.transport()))
+    return h
+
+
+def _serve(host, cdate, payload):
+    host.set(gp.HRV_PATH.format(date=cdate), payload)
 
 
 # ── idempotency: re-run overwrites parent, replaces children, no dup ─────────────
 
-def test_sync_is_idempotent_and_replaces_children(db_session, monkeypatch):
+def test_sync_is_idempotent_and_replaces_children(db_session, host):
     user = _user(db_session)
-    _connect_garmin(db_session, user.id)
+    _connect_personal(db_session, user.id)
 
-    first = _FakeGarmin({"2026-08-15": _hrv_payload("2026-08-15")})
-    _patch_from_token(monkeypatch, first)
+    _serve(host, "2026-08-15", _hrv_payload("2026-08-15"))
     r1 = garmin.sync_hrv_for_user(db_session, user.id, date(2026, 8, 15), date(2026, 8, 15))
     assert r1["readings_upserted"] == 1 and r1["samples_upserted"] == 2
 
     reading = db_session.query(models.HrvReading).filter_by(user_id=user.id).one()
     first_id = reading.id
-    assert reading.rmssd_ms == 42.0
+    assert reading.rmssd_ms == 42.0 and reading.transport == "personal_api"
 
     # Re-run the same night with a changed summary + a single (different) sample.
-    second = _FakeGarmin({
-        "2026-08-15": _hrv_payload(
-            "2026-08-15", last_night_avg=55,
-            readings=(("2026-08-15T06:00:00.0", 60),),
-        )
-    })
-    _patch_from_token(monkeypatch, second)
+    _serve(host, "2026-08-15", _hrv_payload("2026-08-15", last_night_avg=55,
+                                            readings=(("2026-08-15T06:00:00.0", 60),)))
     garmin.sync_hrv_for_user(db_session, user.id, date(2026, 8, 15), date(2026, 8, 15))
 
     rows = db_session.query(models.HrvReading).filter_by(user_id=user.id).all()
@@ -201,18 +175,34 @@ def test_sync_is_idempotent_and_replaces_children(db_session, monkeypatch):
     assert samples[0].rmssd_ms == 60.0
 
 
-# ── refresh-token writeback ───────────────────────────────────────────────────────
+# ── no personal key: there is no DI fallback ──────────────────────────────────────
 
-def test_refresh_token_is_written_back_encrypted(db_session, monkeypatch):
+class _NoDI:
+    """Any DI login on the HRV path is a defect (PR-B)."""
+    calls = 0
+
+    @classmethod
+    def from_token(cls, token_json):
+        cls.calls += 1
+        raise AssertionError("the DI lane must not serve HRV")
+
+
+def test_a_user_with_only_a_DI_token_is_not_pulled_and_never_logs_in_to_DI(db_session, monkeypatch):
     user = _user(db_session)
-    _connect_garmin(db_session, user.id, token="INITIAL_TOKEN_BLOB")
+    _connect_di(db_session, user.id)
+    monkeypatch.setattr(garmin.GarminClient, "from_token", _NoDI.from_token)
+    with pytest.raises(gpl.NoPersonalKey):
+        garmin.sync_hrv_for_user(db_session, user.id, date(2026, 8, 15), date(2026, 8, 15))
+    assert _NoDI.calls == 0 and db_session.query(models.HrvReading).count() == 0
 
-    fake = _FakeGarmin({"2026-08-15": _hrv_payload("2026-08-15")}, token="REFRESHED_TOKEN_BLOB")
-    _patch_from_token(monkeypatch, fake)
-    garmin.sync_hrv_for_user(db_session, user.id, date(2026, 8, 15), date(2026, 8, 15))
 
-    row = db_session.query(models.UserIntegration).filter_by(user_id=user.id, provider="garmin").one()
-    assert decrypt(row.api_key_encrypted) == "REFRESHED_TOKEN_BLOB"
+def test_refresh_endpoint_reports_no_personal_key_and_never_errors_the_card(db_session, monkeypatch):
+    user = _user(db_session)
+    _connect_di(db_session, user.id)
+    monkeypatch.setattr(garmin.GarminClient, "from_token", _NoDI.from_token)
+    resp = _client(db_session, user).post("/integrations/garmin/refresh?force=true")
+    assert resp.status_code == 200
+    assert resp.json()["skipped"] is True and resp.json()["reason"] == "no_personal_key"
 
 
 # ── auth failure → reconnect state, never 500 ─────────────────────────────────────
@@ -229,18 +219,14 @@ def test_from_token_maps_auth_error_to_reconnect(monkeypatch):
         GarminClient.from_token("dead-blob")
 
 
-def test_sync_endpoint_returns_424_on_reconnect(db_session, monkeypatch):
+def test_sync_endpoint_returns_424_when_the_personal_key_is_refused(db_session, host):
     user = _user(db_session)
-    _connect_garmin(db_session, user.id)
-
-    def _raise(cls, token_json):
-        raise GarminReconnectError("token can no longer authenticate")
-
-    monkeypatch.setattr(garmin.GarminClient, "from_token", classmethod(_raise))
-    client = _client(db_session, user)
-    resp = client.post("/integrations/garmin/sync?from=2026-08-15&to=2026-08-15")
+    _connect_personal(db_session, user.id)
+    host.exchange_status = 401
+    resp = _client(db_session, user).post("/integrations/garmin/sync?from=2026-08-15&to=2026-08-15")
     assert resp.status_code == 424
-    assert "reconnect" in resp.json()["detail"].lower()
+    detail = resp.json()["detail"]
+    assert "garmin_personal_attach.py" in detail and "garmin_login" not in detail     # the retired pointer (Q242)
 
 
 def test_sync_endpoint_404_when_not_connected(db_session):

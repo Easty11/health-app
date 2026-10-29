@@ -401,15 +401,14 @@ def _fake_hrv(db, uid, start, end):
             "samples_upserted": 5}
 
 
-class NoActivities:
-    """A self-evaluation source with nothing to read, so these tests exercise the SpO2 step alone."""
-    def get(self, *a, **k):
-        return []
+@pytest.fixture(autouse=True)
+def _no_di_login_in_the_keepalive(monkeypatch):
+    """The sweep refreshes the DI token before the SpO2 read (HRV no longer does). These tests drive the SpO2 step."""
+    monkeypatch.setattr(garmin_sync, "_di_keepalive", lambda db, uid: "ok")
 
 
 def _sweep(db, spo2_factory, **kw):
-    return garmin_sync.sweep_garmin_hrv(db, selfeval_factory=lambda b: NoActivities(), spo2_factory=spo2_factory,
-                                        start=date(2026, 10, 15), end=WAKE, **kw)
+    return garmin_sync.sweep_garmin_hrv(db, spo2_factory=spo2_factory, start=date(2026, 10, 15), end=WAKE, **kw)
 
 
 def test_the_sweep_runs_spo2_after_each_users_hrv_pull_and_sums_the_counts(db_session, monkeypatch):
@@ -430,23 +429,23 @@ def test_the_sweep_runs_spo2_after_each_users_hrv_pull_and_sums_the_counts(db_se
     assert {(n.user_id, n.captured_at) for n in _nights(db_session)} == {(1, WAKE), (4, WAKE)}
 
 
-def test_a_dead_token_user_gets_no_spo2_read_and_the_others_are_unaffected(db_session, monkeypatch):
-    from connectors.garmin import GarminReconnectError
+def test_a_refused_personal_key_does_not_stop_that_users_spo2_read_or_the_others(db_session, monkeypatch):
+    from connectors.garmin import GarminPersonalKeyError
     _garmin(db_session, 1)
     _garmin(db_session, 4)
 
     def hrv(db, uid, s, e):
         if uid == 4:
-            raise GarminReconnectError("dead")
+            raise GarminPersonalKeyError("refused")
         return _fake_hrv(db, uid, s, e)
     monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", hrv)
     built = []
     summary = _sweep(db_session, lambda b: built.append("x") or FakeSource())
-    assert built == ["x"]
-    assert "spo2" not in summary["per_user"][4] and summary["per_user"][4]["status"] == "reconnect_required"
+    assert built == ["x", "x"]                                   # the DI token is independent of the personal key
+    assert summary["per_user"][4]["status"] == "reconnect_required" and "spo2" in summary["per_user"][4]
 
 
-def test_a_spo2_failure_is_soft_and_never_changes_the_hrv_or_selfeval_outcome(db_session, monkeypatch):
+def test_a_spo2_failure_is_soft_and_never_changes_the_hrv_outcome(db_session, monkeypatch):
     _garmin(db_session, 1)
     monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", _fake_hrv)
 
@@ -455,7 +454,6 @@ def test_a_spo2_failure_is_soft_and_never_changes_the_hrv_or_selfeval_outcome(db
     summary = _sweep(db_session, factory)
     u = summary["per_user"][1]
     assert u["status"] == "succeeded" and summary["users_succeeded"] == 1 and summary["users_failed"] == 0
-    assert u["selfeval"]["errors"] == 0                                           # its sibling step is untouched
     assert u["spo2"]["errors"] == 1 and summary["spo2"]["errors"] == 1
 
 
@@ -471,18 +469,6 @@ def test_a_failure_outside_the_read_is_also_soft_and_reported(db_session, monkey
     u = summary["per_user"][1]
     assert u["status"] == "succeeded" and u["spo2"] == {"error": "RuntimeError: exploded"}
     assert summary["spo2"]["errors"] == 1 and summary["users_failed"] == 0
-
-
-def test_a_selfeval_failure_does_not_stop_the_spo2_step(db_session, monkeypatch):
-    _garmin(db_session, 1)
-    monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", _fake_hrv)
-
-    def bad_selfeval(blob):
-        raise RuntimeError("selfeval blew up")
-    summary = garmin_sync.sweep_garmin_hrv(
-        db_session, selfeval_factory=bad_selfeval, spo2_factory=lambda b: FakeSource({"2026-10-16": _payload(10)}),
-        start=WAKE, end=WAKE)
-    assert summary["per_user"][1]["spo2"]["nights_inserted"] == 1
 
 
 def test_a_stale_token_is_visible_in_the_sweep_summary(db_session, monkeypatch):

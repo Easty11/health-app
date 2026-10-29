@@ -1,16 +1,19 @@
 """
-Garmin HRV sync runner — the batch sweep over Garmin-connected users, reused by two callers:
+Garmin sync runner — the batch sweep over Garmin-connected users, reused by two callers:
 
   * `scripts/garmin_sync.py` CLI (this file's `main`) — ops one-shots, run in the container from /app
     (`railway ssh --service health-app-backend`, then `/opt/venv/bin/python -m scripts.garmin_sync`).
   * The in-process nightly sweep (`load_sweep._sweep`, #299) — garmin_sync as the second job
     on #297's 02:00 Brisbane rail, beside the load chain.
 
-`sweep_garmin_hrv` is the reusable core: it sweeps every user with a stored Garmin token (or one
-named user), pulls their HRV for a date window, and upserts into hrv_readings + hrv_samples via
-the shared per-user core (`routers.garmin.sync_hrv_for_user`). PER-USER ISOLATION: one user's dead
-token (GarminReconnectError) or any other failure is caught, rolled back, logged and skipped — it
-never aborts the batch. Idempotent: the upsert keys on (user, night, source).
+`sweep_garmin_hrv` is the reusable core: it sweeps every user with a Garmin Personal API key or DI token
+(or one named user), pulls their HRV for a date window through the Personal API, and upserts into
+hrv_readings + hrv_samples via the shared per-user core (`routers.garmin.sync_hrv_for_user`). The Personal
+API is the only HRV, self-evaluation and wellness lane (#449, PR-B); the DI token keeps one job, epoch SpO2
+(#450). A user with no personal key is reported `no_personal_key` and counted failed, so a missing key is
+loud, and their SpO2 still runs. PER-USER ISOLATION: one user's refused key (GarminPersonalKeyError) or any
+other failure is caught, rolled back, logged and skipped — it never aborts the batch. Idempotent: the upsert
+keys on (user, night, source).
 
     /opt/venv/bin/python -m scripts.garmin_sync                 # last 7 nights, all users
     /opt/venv/bin/python -m scripts.garmin_sync --days 30
@@ -37,7 +40,7 @@ from routers.garmin import _store_token, garmin_wake_day, sync_hrv_for_user
 logger = logging.getLogger(__name__)
 
 # Default window when no explicit range is given — a week of nights. Enough to cover the prior
-# night plus a short self-heal tail (bounded upstream by the ~7-day get_hrv_range ceiling).
+# night plus a short self-heal tail.
 _DEFAULT_SWEEP_DAYS = 7
 
 
@@ -47,19 +50,6 @@ _DEFAULT_SWEEP_DAYS = 7
 WELLNESS_SWEEP_DAYS = 3
 
 _SELFEVAL_COUNTS = ("fetched", "rated", "unrated", "skipped_needs_refresh", "errors")
-
-
-def _selfeval_step(db, uid: int, factory) -> dict[str, Any]:
-    """The Garmin self-evaluation capture (Q209 path a) for one user: soft-fail by construction (the
-    chain's ingest-step shape). It runs AFTER `sync_hrv_for_user`, which has refreshed the token and
-    committed it back, through a client that cannot refresh (#361). Any failure -> `{"error": ...}`,
-    session rolled back; it never changes the user's HRV outcome."""
-    try:
-        return garmin_selfeval.sync_user(db, uid, factory=factory)
-    except Exception as exc:  # noqa: BLE001 -- soft-fail: a self-evaluation failure never costs the HRV sweep
-        db.rollback()
-        logger.warning("garmin sweep: user %s selfeval step failed: %s", uid, type(exc).__name__)
-        return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 _SPO2_COUNTS = ("nights_fetched", "nights_inserted", "nights_replaced", "nights_unchanged", "nights_empty",
@@ -146,7 +136,6 @@ def sweep_garmin_hrv(
     days: int = _DEFAULT_SWEEP_DAYS,
     start: date | None = None,
     end: date | None = None,
-    selfeval_factory=garmin_selfeval.ProbeSource,
     spo2_factory=garmin_spo2.ProbeSource,
     personal_transport=None,
 ) -> dict[str, Any]:
@@ -157,16 +146,16 @@ def sweep_garmin_hrv(
     (the CLI opens its own; the sweep passes its `SessionLocal()`); a per-user failure rolls the
     session back so the next user starts clean.
 
-    After each user's HRV pull, `garmin_selfeval` reads that user's per-activity self-evaluation
-    (Q209) into the source-neutral sRPE store from the freshly written-back token, through a no-refresh client: it skips a user whose
-    token is dead (`reconnect_required`: nothing fresh to read with), is soft-fail, and reports its
-    counts under `per_user[uid]["selfeval"]` and summed under `summary["selfeval"]`
-    (`skipped_needs_refresh` is the visible sign of a stale token).
+    After each Personal API user's HRV pull, `garmin_selfeval` reads that user's per-activity self-evaluation
+    (Q209) into the source-neutral sRPE store through the user's `PersonalClient`, and `garmin_wellness` captures
+    sleep, heart rate, hourly SpO2, body battery, stress and the HR-zone config. Both skip a user whose key was
+    refused (`reconnect_required`), are soft-fail, and report their counts under `per_user[uid]["selfeval"]` and
+    `["wellness"]`, summed under the summary keys of the same names.
 
-    After the self-evaluation step, `garmin_spo2` captures the user's overnight SpO2 (Q150) for the same
-    wake-date window, raw, through the same no-refresh seam. It is its own soft-fail step: its counts sit
-    under `per_user[uid]["spo2"]` and summed under `summary["spo2"]`, and a failure in it never changes the
-    user's HRV or self-evaluation outcome."""
+    Last, `garmin_spo2` captures the user's overnight SpO2 (Q150) for the same wake-date window, raw, through
+    the DI token (the DI lane's one remaining job, #450), after a keepalive that refreshes that token. It is its
+    own soft-fail step: its counts sit under `per_user[uid]["spo2"]` and summed under `summary["spo2"]`, and a
+    failure in it never changes the user's HRV, self-evaluation or wellness outcome."""
     today = garmin_wake_day()   # AEST wake-day, not UTC (#327 follow-up)
     end = end or today
     explicit_window = start is not None
@@ -196,26 +185,25 @@ def sweep_garmin_hrv(
             per_user[uid] = {"status": "reconnect_required", "error": str(exc)}
             logger.warning("garmin sweep: user %s reconnect needed — %s", uid, exc)
             db.rollback()
+        except gpl.NoPersonalKey:
+            failed += 1
+            per_user[uid] = {"status": "no_personal_key", "error": "no garmin_personal key"}
+            logger.warning("garmin sweep: user %s has no personal key: no HRV, self-evaluation or wellness pull", uid)
+            db.rollback()
         except Exception as exc:  # noqa: BLE001 — one user's failure never aborts the sweep
             failed += 1
             per_user[uid] = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
             logger.exception("garmin sweep: user %s failed", uid)
             db.rollback()
         hrv_dead = per_user[uid]["status"] == "reconnect_required"
-        if gpl.get_row(db, uid) is not None:
-            # Personal API user: HRV, self-evaluation and wellness come from the official host. The DI lane
-            # keeps ONE job, epoch SpO2 + breathing disruptions, and (HRV no longer refreshing its token)
-            # refreshes its own token first.
-            if not hrv_dead:
-                per_user[uid]["selfeval"] = _personal_selfeval_step(db, uid, personal_transport)
-                per_user[uid]["wellness"] = _wellness_step(db, uid, wellness_start, end, personal_transport)
-            if db.query(models.UserIntegration.id).filter_by(user_id=uid, provider="garmin").first() is not None:
-                per_user[uid]["spo2"] = _di_spo2_lane(db, uid, spo2_factory, start, end, keepalive=True)
-        elif not hrv_dead:
-            # Transitional (PR-A): a user with no Personal API key is still served by the DI lane, whose HRV
-            # pull has just refreshed and written back the token.
-            per_user[uid]["selfeval"] = _selfeval_step(db, uid, selfeval_factory)
-            per_user[uid]["spo2"] = _di_spo2_lane(db, uid, spo2_factory, start, end, keepalive=False)
+        if gpl.get_row(db, uid) is not None and not hrv_dead:
+            # Personal API user: self-evaluation and wellness come from the official host, after the HRV pull.
+            per_user[uid]["selfeval"] = _personal_selfeval_step(db, uid, personal_transport)
+            per_user[uid]["wellness"] = _wellness_step(db, uid, wellness_start, end, personal_transport)
+        if db.query(models.UserIntegration.id).filter_by(user_id=uid, provider="garmin").first() is not None:
+            # The DI lane's one job: epoch SpO2 + breathing disruptions. Nothing else refreshes its token any
+            # more, so it refreshes its own first.
+            per_user[uid]["spo2"] = _di_spo2_lane(db, uid, spo2_factory, start, end, keepalive=True)
 
     selfeval_total = {k: 0 for k in _SELFEVAL_COUNTS}
     for detail in per_user.values():

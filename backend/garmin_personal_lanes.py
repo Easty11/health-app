@@ -87,6 +87,11 @@ def personal_client(db, user_id: int, *, transport: Optional[httpx.BaseTransport
         client.close()
 
 
+class NoPersonalKey(Exception):
+    """The user has no `garmin_personal` key, so the Personal API cannot serve them. Since PR-B (#449) there is
+    no DI fallback for HRV or self-evaluation: the caller maps this to its own 'not connected' state."""
+
+
 def failure_outcome(exc: BaseException) -> str:
     if isinstance(exc, gp.PersonalAuthError):
         return garmin_raw.AUTH_FAILED

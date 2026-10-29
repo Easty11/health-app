@@ -2,7 +2,7 @@
 Garmin HRV historical backfill — loads nightly HRV from a Garmin *account data
 export* into `hrv_readings`, reaching the history the live API can't.
 
-`get_hrv_range` serves only a ~7-day rolling window, so HRV before the live-sync
+The live API serves only a short rolling window, so HRV before the live-sync
 floor is unreachable online. The Garmin account data export carries nightly HRV
 much further back — in `DI-Connect-Wellness/*healthStatusData.json` as
 `metrics[type="HRV"].value` plus its baseline limits — but NOT the 5-min series.
