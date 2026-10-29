@@ -1,0 +1,23 @@
+# Canonical source for the `;sc` session close-out snippet.
+# Edit here in health-app; if it is installed from another repo, copy it verbatim.
+# Distinct from `;cc` (chat close-out, cc.yml): `;cc` emits the pending-commit queue
+# defined in CLAUDE.md "Session rituals"; `;sc` is the free-form session summary. They
+# must not share a trigger, or espanso shows a picker.
+# The body below is the operator's text, taken verbatim from the local base.yml.
+#
+# Install (Windows): copy this file into your espanso match dir
+#   %APPDATA%\espanso\match\sc.yml
+# remove any `;sc` (or old `;cc` session close-out) match from base.yml, then run:
+#   espanso restart
+# Verify path with:  espanso path
+
+matches:
+  - trigger: ";sc"
+    replace: |
+      Session close-out. You propose; you do not write to the repo or to memory.
+
+      LOCKED — decisions made this session we're not revisiting
+      PENDING — anything decided or drafted this session that belongs in a repo file but isn't committed yet. Render it commit-ready: canonical format, target file named, each entry flagged PENDING. "None" if the tree already reflects everything.
+      OPEN — unresolved questions, forks, or things that need a decision
+      NEXT — single highest-priority action coming out of this session
+      HANDOFF — 4-6 sentences of cold-start context to resume this in a new conversation without rebuilding everything
