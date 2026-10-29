@@ -15141,3 +15141,20 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **How you know.** A read-only prod query through `railway connect`, run by the operator on 29 Oct 2026: `SELECT user_id, transport, count(*) FROM hrv_readings WHERE source = 'garmin' GROUP BY 1, 2` returned user 1: `personal_api` 49, user 4: `personal_api` 171, and no other row, so no NULL and no `di` (a NULL group would have printed as its own row). The overwrite behaviour is `_upsert_hrv_day` in `routers/garmin.py`, which assigns `existing.transport = transport` whenever a transport is passed.
 
 **Do not revisit unless.** A garmin `hrv_readings` row with a NULL or `di` transport appears from a live lane (PR-B removes the lane that wrote `di`, so none should), or a reader needs the origin of a night's values beyond the last writer, which would be a new column and a new decision.
+
+---
+
+### #463. The session close-out snippet lands in the repo as `.espanso/sc.yml` under the trigger `;sc`, apart from `;cc`
+
+**Decision.** Operator-directed in session on 29 Oct 2026 ("land ;sc in the repo as well"). Snippet file and governance edits only: no code, no migration.
+1. **`.espanso/sc.yml` is the canonical source for `;sc`**, the free-form session close-out prompt (LOCKED / PENDING / OPEN / NEXT / HANDOFF). Its body is the operator's text from the local `base.yml`, byte-for-byte as pasted on 29 Oct 2026. It is a sibling of `.espanso/cc.yml` and installs the same way (`match\sc.yml`).
+2. **The trigger is `;sc`, not `;cc`.** The operator's snippet had been `;cc` in `base.yml` while this repo's `cc.yml` also defines `;cc`; with both installed espanso shows a picker. The operator moved the local one to `;sc` on 29 Oct 2026, and confirmed `;cc` and `;sc` both expand. `;cc` stays owned by `cc.yml` (#461).
+3. **`;sc` is not a shared loop rule and is not added to Session rituals.** Code's call, not ruled: the Session rituals block is copied verbatim into every repo, and adding a bullet there would mint a propagation obligation nobody asked for. `;cc` remains the loop's chat close-out and its pending-commit queue; `;sc` is an operator convenience that happens to be versioned. If the operator wants it propagated, that is a later ruling.
+
+**Rationale.** A snippet that lives only in one machine's `base.yml` is the unversioned state the repo exists to avoid, and the collision just seen came from exactly that. Versioning it gives a canonical copy, a reinstall path, and a trigger that is recorded as taken.
+
+**Status.** DONE, ruled 29 Oct 2026. Number resolved at master max #462. Operator acts OWED (machine-local, none done by this session): copy `.espanso/sc.yml` to `match\sc.yml` and delete the `;sc` match block from `base.yml`, so two definitions of `;sc` do not recreate the picker (`Copy-Item .espanso\sc.yml $env:APPDATA\espanso\match\sc.yml -Force`, then `espanso restart`).
+
+**How you know.** The body is taken from the operator's PowerShell output of `Get-Content base.yml -TotalCount 12`, 29 Oct 2026 (a surface this session cannot read, so the text is the operator's report and the check is that `;sc` expands to the same text after install). `sc.yml` parses as YAML with one match, trigger `;sc`; `cc.yml` still has one match, trigger `;cc`. The operator's `Select-String` over `match\*.yml` showed `;cc` defined in both `base.yml` and `cc.yml` before the rename.
+
+**Do not revisit unless.** The operator wants `;sc` propagated to other repos (then it is a shared-loop ruling and a Session rituals bullet), or a second snippet needs a trigger and `;sc` is found already taken.
