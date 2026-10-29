@@ -15199,3 +15199,25 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **Not verified.** A Health Connect-sourced night on prod (flagged without a window in tests only); whether the diary TST is the value the operator sees, when it is edited after the AM freeze (the column is "frozen at AM", `models.DailyRecord`); the diary's `final_wake` against the device window (Q248).
 
 **Do not revisit unless.** The 60-minute line produces a flag on a night that does not warrant one, or misses one that does (a new decision sets the number); the ring returns and `TST_RANK` changes (the note then compares whichever TST wins); or a second sleep period turns up in the Garmin payload (then recover the data instead of annotating).
+
+---
+
+### #466. The partial-night note names how the device window falls short: started late, finished early or broken up, at a 60-minute tolerance
+
+**Decision.** RULED by the operator (30 Oct 2026: "use 60 mins, and flag whether the sleep window is started late, finished early or was broken up. this is important to the cbt-i").
+1. **Tolerance.** `WINDOW_TOLERANCE_MIN = 60`, inclusive at both ends, applied to both diary clocks.
+2. **Three kinds, for a night already flagged by #465** (device TST 60 min or more below the diary): `started late`, the Personal API window opens 60 min or more after the diary lights-out; `finished early`, it closes 60 min or more before the diary final wake; `broken up`, both clocks are present and neither applies, so the window covers the night and the gap is awake time inside it, named with the device's awake minutes. Started late and finished early can both apply.
+3. **No invented mechanism.** A missing diary clock never produces a kind (`broken up` needs both); a Health Connect night has no window and keeps the generic "may have recorded only part of the night" sentence; a diary bedtime before noon is a shift night and is dated on the wake-date.
+4. **Where, as built** (PR 469, merge `0957bd4`, read-side only, no migration): the recovery line (`get_recovery_metrics`) and the readiness snapshot's sleep lines, sharing one `partial_clause`. The stored numbers and #465's 60-minute flag are unchanged.
+5. **The CBT-I boundary.** The I1 firewall is unchanged. The note sits where sleep is read when titration is discussed; no device signal enters the CBT-I engine or `get_cbti_diary` (nothing under `cbti/` imports `reads/recovery_night.py` or `reads/snapshot_reads.py`, and the diary tool serves a fixed list of diary columns). Whether a device signal should reach the CBT-I side itself would cross I1 and is a separate decision, not made here.
+6. **Q248 closes DONE.**
+
+**Rationale.** #465's generic sentence ("may have recorded only part of the night") was wrong for nights where the whole night is inside the window: the nine nights flagged in 45 days split five started late, two finished early, two broken up. Naming the mechanism from clocks already in hand tells a reader whether the early stint is missing, the late part is missing, or the watch heard the night and scored it awake, which are different things to weigh against a diary TST.
+
+**Status.** DONE, 30 Oct 2026. Number resolved at master max #465. Deploy (#116, #121, #433; matched on `commitHash` `0957bd4`): backend `6ae0cc75` SUCCESS at 21:45Z, frontend `7d8156e2` SKIPPED (correct: no frontend change).
+
+**How you know.** Tests: 23 in `tests/test_partial_night.py` (a case per kind; the 60/59 boundary at both ends; a shift night; each missing-clock case; a Health Connect night; the loaders; the snapshot lines); eight mutants killed (both tolerance boundaries, the shift-night dating, `broken up` without both clocks, the window from any source, never flagging, both sign flips); full backend suite 3,966 passed, 3 skipped; CI green on head `6e9f2ff`. **Read live on prod after the deploy** (30 Oct 2026, 07:45 AEST, 45 days of `get_recovery_metrics`): 29 Oct started late (device window 01:39–06:11 starts 4 h 15 m after lights-out 21:25); 18 Oct broken up (21:52–06:28, 180 min awake inside it); 11 Oct finished early (ends 3 h 55 m before final wake 07:05); 10 Oct, 8 Oct, 2 Oct and 20 Sep started late (the last on a shift night, lights-out 04:31); 19 Sep finished early; 3 Oct broken up (window opens 49 min after lights-out, inside the tolerance, 89 min awake).
+
+**Not verified.** A Health Connect-sourced flagged night on prod (generic sentence in tests only); that the diary's `final_wake` is the clock the operator means by the end of the night (the diary also carries `out_of_bed`); the diary values as edited after the AM freeze (#465).
+
+**Do not revisit unless.** The 60-minute tolerance labels a night wrongly in a way that matters (a new decision sets the number); a device signal is wanted by the CBT-I side (a new decision that crosses I1); or the ring returns and a second sleep window becomes available to compare.
