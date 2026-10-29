@@ -2335,6 +2335,8 @@ Raised 8 Oct 2026 (persisting the MCP OAuth provider, Q196). Two growth paths no
 
 **Open design points, for when it fires.** A prune of token rows expired or revoked more than N days ago, and of client rows with no token older than N days, run on the same cadence as an existing job or at registration; whether registration needs a rate limit or a cap on stored clients; whether `last_used_at` should drive an idle-connection report. The SDK stores the DCR-generated `client_secret` in `client_info` because it compares it in plaintext, so it cannot be hashed without bypassing the SDK's client authentication; that is a client credential, not a bearer token, and is recorded here rather than changed.
 
+**Measurement (operator, prod, 2026-10-29).** Three weeks after #404: `mcp_oauth_tokens` holds 27 rows (1 live access, 25 expired access, 1 live refresh, none revoked); `mcp_oauth_clients` holds one orphan row with no token. One connection. Refresh is use-driven, not TTL-driven: about 1.2 access rows a day, so roughly 400 a year per connection, against the 9,000-a-year hourly-refresh ceiling stated above. At the observed rate the row-count trigger is years out; the second-user trigger stands. Mechanism this rests on: the refresh token is sliding with no rotation (`exchange_refresh_token` extends the same row), so only access rows accumulate and a connection holds one refresh row for its life. Noted, not ruled: `ClientRegistrationOptions.client_secret_expiry_seconds` (mcp 1.28.1) is unset; setting it would bound client rows by SDK mechanism at the cost of a re-authorisation when the secret expires. Nothing built; trigger unchanged.
+
 **State:** OPEN. Not blocking; nothing built. Related: Q196 (closed), #404.
 
 ---
