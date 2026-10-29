@@ -47,7 +47,7 @@ from reads.hc_sleep import (  # noqa: F401  (re-exported: callers and tests impo
 )
 from reads.recovery_night import (
     DERIVED, GARMIN_API, GARMIN_DI, HC_BLENDED, HC_UNNAMED, SCRAPER, SOURCE_LABELS, load_candidates,
-    resolve_night,
+    load_device_windows, load_diary, partial_detail, partial_note, resolve_night,
 )
 
 # Names for a figure's source in the snapshot lines (the writer, not the rank key). A figure from
@@ -132,8 +132,9 @@ def latest_sleep_night(db: Session, user_id: int) -> dict[str, Any] | None:
     writers), `transport` ('personal_api', 'health_connect' or 'scraper'), `field_sources`
     ({field: label}), `efficiency_derived` (True when the efficiency is sleep time over the
     device's own start-to-end window, which has no pre-sleep time in bed and so reads higher than
-    the diary SE), `resting_hr_bpm` (the daily resting rate, or None) and `withheld` (nights the
-    plausibility guard refused, newest first)."""
+    the diary SE), `resting_hr_bpm` (the daily resting rate, or None) `withheld` (nights the
+    plausibility guard refused, newest first) and `diary_note` (the night's diary TST beside the device figure,
+    flagged when the device is 60 min or more below it; None when the diary is not logged, Q247)."""
     newest = _newest_sleep_night(db, user_id)
     if newest is None:
         return None
@@ -170,6 +171,9 @@ def _night_dict(db: Session, user_id: int, night: date, r: dict[str, Any], cand:
         writers, transport = _writer_names(packages), "health_connect"
         hc = db.query(models.HealthConnectSync).filter_by(user_id=user_id, date=night).first()
         score = hc.sleep_score if hc else None
+    diary_note = partial_note(
+        _field(r, "tst"), tst_src, load_diary(db, user_id, night).get(night),
+        load_device_windows(db, user_id, night).get(night))
     field_sources = {f: FIELD_SOURCE_NAMES.get(r[f]["source"], r[f]["source"])
                      for f in ("tst", "stages", "efficiency", "spo2", "rr", "sleep_hr", "daily_rhr") if r[f]}
     return {
@@ -195,6 +199,7 @@ def _night_dict(db: Session, user_id: int, night: date, r: dict[str, Any], cand:
         "withheld": withheld,
         "bedtime": bedtime,
         "wake_time": wake_time,
+        "diary_note": diary_note,
     }
 
 
@@ -245,7 +250,13 @@ def sleep_snapshot_lines(sleep: dict[str, Any] | None, today: date | None = None
         name = fs.get(field, who)
         return who if name == fs.get("tst") else name
 
-    lines = [f"  Sleep {format_duration(sleep['duration_min'])} · {who} (night of {sleep['night']})"]
+    note = sleep.get("diary_note")
+    lines = [f"  Sleep {format_duration(sleep['duration_min'])} · {who} (night of {sleep['night']})"
+             + (f" · diary {format_duration(note['diary_tst'])}" if note else "")]
+    if note and note["short_min"] is not None:
+        detail = partial_detail(note)
+        lines.append(f"  Partial night? The device is {format_duration(note['short_min'])} below the diary, so it may "
+                     f"have recorded only part of the night" + (f" ({detail})" if detail else ""))
     if sleep["blended"]:
         lines.append(f"  Sleep stages: withheld — the night spans {' + '.join(sleep['writers'])} "
                      f"and cannot be split per writer")

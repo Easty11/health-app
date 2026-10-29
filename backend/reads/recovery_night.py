@@ -44,15 +44,25 @@ sample in the AEST day) is stored and unread here: it weights samples by count, 
 Polar bout outweighs a day of two-minute Garmin samples (21 Oct 2026: 2,076 Polar samples in 35 min
 against 901 Garmin samples in 24 h gave 144 bpm). A daily RHR now exists to show instead.
 
+THE PARTIAL-NIGHT NOTE (Q247). A watch that is woken mid-night keeps only the
+longest stint, so its TST can read far below the night the diary records (11 Oct 2026: device 203 min,
+diary 439). The stored number is never changed. Where the night has a diary TST, the line shows it
+beside the device figure, and when the device is `PARTIAL_NIGHT_MIN` minutes or more below it the line
+says the device may have recorded only part of the night, with the device window (the Personal API
+sleep row only; the Health Connect `sleep_start` is not ruled) beside the diary lights-out. A night
+with no diary TST gets no note and no flag. This reads the recall diary FROM a sensor reader; the I1
+firewall binds the other direction (CBT-I never reads a sensor) and is untouched.
+
 SPO2 IS DERIVED HERE. `spo2_nights` stores raw epochs only (Q150: no mean, no min). The nightly
 mean and min are computed over the night's non-null `spo2_pct` epochs, UNFILTERED -- no
 confidence threshold, no range check -- because none is ruled. See DECISIONS_LOG.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
+import pytz
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -287,6 +297,80 @@ def load_candidates(db: Session, user_id: int, since: date) -> dict[date, Candid
     return cands
 
 
+# -- the partial-night note (Q247) ----------------------------------------------------------------
+
+PARTIAL_NIGHT_MIN = 60          # flag when the device TST is at least this many minutes below the diary TST
+_AEST = pytz.timezone("Australia/Brisbane")   # no DST; the diary's clocks are operator-local
+
+
+def load_diary(db: Session, user_id: int, since: date) -> dict[date, dict[str, Any]]:
+    """`{wake-date: {"tst": minutes, "lights_out": "HH:MM" | None}}` for nights with a diary TST. A night the
+    diary has not been logged for is absent, which is what keeps it unflagged."""
+    rows = db.query(models.DailyRecord.date, models.DailyRecord.diary_tst_min, models.DailyRecord.lights_out).filter(
+        models.DailyRecord.user_id == user_id,
+        models.DailyRecord.date >= since,
+        models.DailyRecord.diary_tst_min.isnot(None),
+    )
+    return {d: {"tst": tst, "lights_out": lo} for d, tst, lo in rows}
+
+
+def load_device_windows(db: Session, user_id: int, since: date) -> dict[date, tuple[datetime, datetime]]:
+    """The Personal API's sleep window per wake-date. Health Connect's `sleep_start` is not read: its meaning
+    per source is not ruled (models.HealthConnectSync)."""
+    rows = db.query(models.SleepNight.captured_at, models.SleepNight.sleep_start, models.SleepNight.sleep_end).filter(
+        models.SleepNight.user_id == user_id,
+        models.SleepNight.source == "garmin",
+        models.SleepNight.captured_at >= since,
+        models.SleepNight.sleep_start.isnot(None),
+        models.SleepNight.sleep_end.isnot(None),
+    )
+    return {d: (a, b) for d, a, b in rows}
+
+
+def _clock(dt: datetime) -> str:
+    if dt.tzinfo is None:                       # SQLite round-trips TIMESTAMPTZ naive; the stored value is UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_AEST).strftime("%H:%M")
+
+
+def partial_note(device_tst: int | None, tst_source: str | None, diary: dict[str, Any] | None,
+                 window: tuple[datetime, datetime] | None) -> dict[str, Any] | None:
+    """The diary beside the device figure, flagged when the device is short. None when either side is
+    missing. The window rides only when the Personal API supplied the TST it describes."""
+    if diary is None or device_tst is None:
+        return None
+    short = diary["tst"] - device_tst
+    return {
+        "diary_tst": diary["tst"],
+        "lights_out": diary.get("lights_out"),
+        "short_min": short if short >= PARTIAL_NIGHT_MIN else None,
+        "window": f"{_clock(window[0])}\u2013{_clock(window[1])}" if window and tst_source == GARMIN_API else None,
+    }
+
+
+def partial_detail(note: dict[str, Any]) -> str:
+    """The flagged night's evidence: the device window beside the diary lights-out, whichever exist."""
+    bits = []
+    if note["window"]:
+        bits.append(f"device window {note['window']}")
+    if note["lights_out"]:
+        bits.append(f"diary lights-out {note['lights_out']}")
+    return ", ".join(bits)
+
+
+def annotate_partial(resolved: list[dict[str, Any]], diary: dict[date, dict[str, Any]],
+                     windows: dict[date, tuple[datetime, datetime]]) -> list[dict[str, Any]]:
+    """Attach `diary_note` to each resolved night that has both a device TST and a diary TST. In place."""
+    for r in resolved:
+        tst = r["tst"]
+        if tst is None:
+            continue
+        note = partial_note(tst["value"]["tst"], tst["source"], diary.get(r["night"]), windows.get(r["night"]))
+        if note is not None:
+            r["diary_note"] = note
+    return resolved
+
+
 # -- rendering ------------------------------------------------------------------------------------
 
 def _label(source: str) -> str:
@@ -314,7 +398,16 @@ def format_night(r: dict[str, Any]) -> str:
             return f"{name}=—"
         return f"{name}={_n(v, unit, fmt)}" + _tag(hit["source"], (field, hit["source"]) in DERIVED)
 
-    parts.append(one("TST", "tst", " min"))
+    tst = one("TST", "tst", " min")
+    note = r.get("diary_note")
+    if note:
+        if note["short_min"] is None:
+            tst += f" (diary {note['diary_tst']} min)"
+        else:
+            detail = partial_detail(note)
+            tst += (f" (diary {note['diary_tst']} min; {note['short_min']} min below the diary, so the device may "
+                    f"have recorded only part of the night" + (f": {detail}" if detail else "") + ")")
+    parts.append(tst)
     stages = r["stages"]
     if stages:
         v = stages["value"]
@@ -366,4 +459,6 @@ def format_recovery(resolved: list[dict[str, Any]], days: int) -> str:
 
 
 def recovery_text(db: Session, user_id: int, since: date, days: int) -> str:
-    return format_recovery(resolve(load_candidates(db, user_id, since)), days)
+    resolved = annotate_partial(resolve(load_candidates(db, user_id, since)),
+                                load_diary(db, user_id, since), load_device_windows(db, user_id, since))
+    return format_recovery(resolved, days)
