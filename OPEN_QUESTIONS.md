@@ -2608,18 +2608,6 @@ Raised with #458, on the operator's brief; a deferred fork, recorded and not bui
 
 ---
 
-## Q248. Should the partial-night note say which way the device window falls short?
-
-Raised 2026-10-30 from the live read recorded under Q247. No hold, no code: a question, not a build.
-
-**What is true.** The note says "the device may have recorded only part of the night" for every night 60 min or more below the diary, and prints the device window beside the diary lights-out. Of the nine nights flagged in 45 days, five start 1 h or more after lights-out, one starts 49 min after, two start on time and end early (22:37–03:55, 22:42–03:09), and one (18 Oct, 21:52–06:28 against lights-out 21:41) spans the whole night, where the device scored 180 min awake against a diary TST of 491. For that last night "only part of the night" is wrong, and the reader has to work it out from the two clocks.
-
-**To decide.** Whether the note names the mechanism from facts already in hand: "device window starts 4 h 14 m after lights-out" (the early stint is missing), "ends N h before the diary's final wake" (the late part is missing; `daily_records.final_wake` is the comparator, not yet read), or "covers the night; the gap is awake time" (the window starts within 60 min of lights-out and ends within 60 min of final wake). It would extend the ratified rule (Q247) in wording only: the 60-minute flag, the stored numbers and the no-diary silence stay. The 60-minute window tolerance is a data-meaning default and is the operator's to set.
-
-**State:** OPEN. Owner: Luke. Not blocking. Related: Q247, Q239, #465.
-
----
-
 ---
 
 ## CLOSED
@@ -6811,3 +6799,16 @@ Raised 2026-10-29, from the operator's own night and a 37-night comparison. No h
 
 ---
 
+## Q248. Should the partial-night note say which way the device window falls short?
+
+Raised 2026-10-30 from the live read recorded under Q247. No hold, no code: a question, not a build.
+
+**What is true.** The note says "the device may have recorded only part of the night" for every night 60 min or more below the diary, and prints the device window beside the diary lights-out. Of the nine nights flagged in 45 days, five start 1 h or more after lights-out, one starts 49 min after, two start on time and end early (22:37–03:55, 22:42–03:09), and one (18 Oct, 21:52–06:28 against lights-out 21:41) spans the whole night, where the device scored 180 min awake against a diary TST of 491. For that last night "only part of the night" is wrong, and the reader has to work it out from the two clocks.
+
+**To decide.** Whether the note names the mechanism from facts already in hand: "device window starts 4 h 14 m after lights-out" (the early stint is missing), "ends N h before the diary's final wake" (the late part is missing; `daily_records.final_wake` is the comparator, not yet read), or "covers the night; the gap is awake time" (the window starts within 60 min of lights-out and ends within 60 min of final wake). It would extend the ratified rule (Q247) in wording only: the 60-minute flag, the stored numbers and the no-diary silence stay. The 60-minute window tolerance is a data-meaning default and is the operator's to set.
+
+**Resolution (30 Oct 2026).** The operator ruled: use 60 minutes, and flag whether the sleep window started late, finished early or was broken up ("this is important to the CBT-I"). Built read-side only, no migration (PR 469, merge `0957bd4`). For a night the device reads 60 min or more below the diary, the note says `started late` (the Personal API window opens 60 min or more after the diary lights-out), `finished early` (it closes 60 min or more before the diary final wake), both, or `broken up` (both clocks present and neither applies, so the window covers the night and the gap is awake time inside it, named with the device's awake minutes). A missing diary clock never invents a mechanism, a Health Connect night has no window and keeps the generic sentence, and a bedtime before noon is dated on the wake-date. **Read live on prod after the deploy** (30 Oct, 07:45 AEST, 45 days of `get_recovery_metrics`): of the nine flagged nights, five started late (20 Sep, 2 Oct, 8 Oct, 10 Oct, 29 Oct), two finished early (19 Sep, 11 Oct) and two were broken up (3 Oct, whose window opens 49 min after lights-out and so sits inside the tolerance, and 18 Oct); none was both. On the CBT-I point: the I1 firewall is unchanged. The note sits where sleep is read when titration is discussed (the recovery lines and the readiness snapshot); nothing under `cbti/` imports those readers and `get_cbti_diary` still serves diary columns only. Whether a device signal should reach the CBT-I side itself would cross I1 and is not ruled here.
+
+**State:** DONE → #466. Related: Q247, Q239, #465.
+
+---
