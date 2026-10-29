@@ -59,7 +59,7 @@ confidence threshold, no range check -- because none is ruled. See DECISIONS_LOG
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import pytz
@@ -297,75 +297,145 @@ def load_candidates(db: Session, user_id: int, since: date) -> dict[date, Candid
     return cands
 
 
-# -- the partial-night note (Q247) ----------------------------------------------------------------
+# -- the partial-night note (Q247, Q248) -----------------------------------------------------------
 
 PARTIAL_NIGHT_MIN = 60          # flag when the device TST is at least this many minutes below the diary TST
+WINDOW_TOLERANCE_MIN = 60       # Q248: the device window is late or early only by at least this much
 _AEST = pytz.timezone("Australia/Brisbane")   # no DST; the diary's clocks are operator-local
 
 
 def load_diary(db: Session, user_id: int, since: date) -> dict[date, dict[str, Any]]:
-    """`{wake-date: {"tst": minutes, "lights_out": "HH:MM" | None}}` for nights with a diary TST. A night the
-    diary has not been logged for is absent, which is what keeps it unflagged."""
-    rows = db.query(models.DailyRecord.date, models.DailyRecord.diary_tst_min, models.DailyRecord.lights_out).filter(
+    """`{wake-date: {"tst": minutes, "lights_out": "HH:MM" | None, "final_wake": "HH:MM" | None}}` for nights
+    with a diary TST. A night the diary has not been logged for is absent, which is what keeps it unflagged."""
+    rows = db.query(models.DailyRecord.date, models.DailyRecord.diary_tst_min, models.DailyRecord.lights_out,
+                    models.DailyRecord.final_wake).filter(
         models.DailyRecord.user_id == user_id,
         models.DailyRecord.date >= since,
         models.DailyRecord.diary_tst_min.isnot(None),
     )
-    return {d: {"tst": tst, "lights_out": lo} for d, tst, lo in rows}
+    return {d: {"tst": tst, "lights_out": lo, "final_wake": fw} for d, tst, lo, fw in rows}
 
 
-def load_device_windows(db: Session, user_id: int, since: date) -> dict[date, tuple[datetime, datetime]]:
-    """The Personal API's sleep window per wake-date. Health Connect's `sleep_start` is not read: its meaning
-    per source is not ruled (models.HealthConnectSync)."""
-    rows = db.query(models.SleepNight.captured_at, models.SleepNight.sleep_start, models.SleepNight.sleep_end).filter(
+def load_device_nights(db: Session, user_id: int, since: date) -> dict[date, dict[str, Any]]:
+    """`{wake-date: {"start", "end", "awake_min"}}` from the Personal API's sleep row. Health Connect's
+    `sleep_start` is not read: its meaning per source is not ruled (models.HealthConnectSync)."""
+    rows = db.query(models.SleepNight.captured_at, models.SleepNight.sleep_start, models.SleepNight.sleep_end,
+                    models.SleepNight.awake_s).filter(
         models.SleepNight.user_id == user_id,
         models.SleepNight.source == "garmin",
         models.SleepNight.captured_at >= since,
         models.SleepNight.sleep_start.isnot(None),
         models.SleepNight.sleep_end.isnot(None),
     )
-    return {d: (a, b) for d, a, b in rows}
+    return {d: {"start": a, "end": b, "awake_min": _minutes(w)} for d, a, b, w in rows}
+
+
+def _aest(dt: datetime) -> datetime:
+    if dt.tzinfo is None:                       # SQLite round-trips TIMESTAMPTZ naive; the stored value is UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_AEST)
 
 
 def _clock(dt: datetime) -> str:
-    if dt.tzinfo is None:                       # SQLite round-trips TIMESTAMPTZ naive; the stored value is UTC
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(_AEST).strftime("%H:%M")
+    return _aest(dt).strftime("%H:%M")
 
 
-def partial_note(device_tst: int | None, tst_source: str | None, diary: dict[str, Any] | None,
-                 window: tuple[datetime, datetime] | None) -> dict[str, Any] | None:
-    """The diary beside the device figure, flagged when the device is short. None when either side is
-    missing. The window rides only when the Personal API supplied the TST it describes."""
+def _diary_clock(night: date, hhmm: str | None, *, bedtime: bool) -> datetime | None:
+    """A diary clock ("HH:MM", Brisbane) as a datetime on the right side of the wake-date. A bedtime at or after
+    noon belongs to the evening before the wake-date; one before noon (a shift night) is after midnight, on it.
+    A final wake is on the wake-date. None when the clock is absent or unreadable."""
+    if not hhmm:
+        return None
+    try:
+        h, m = (int(x) for x in hhmm.split(":"))
+        day = night - timedelta(days=1) if (bedtime and h >= 12) else night
+        return _AEST.localize(datetime(day.year, day.month, day.day, h, m))
+    except (ValueError, TypeError):
+        return None
+
+
+def _window_kinds(night: date, diary: dict[str, Any], dev: dict[str, Any]) -> tuple[list[str], int | None, int | None]:
+    """How the device window falls short of the diary night: `started_late` (it opens at least
+    WINDOW_TOLERANCE_MIN after the diary lights-out), `finished_early` (it closes at least that long before the
+    diary final wake), or `broken_up` (it covers the night at both ends, so the gap is awake time inside it).
+    `broken_up` is asserted only when both diary clocks are present; with one missing and no other kind, the
+    mechanism is not determinable and the list is empty."""
+    start, end = _aest(dev["start"]), _aest(dev["end"])
+    lo = _diary_clock(night, diary.get("lights_out"), bedtime=True)
+    fw = _diary_clock(night, diary.get("final_wake"), bedtime=False)
+    late = None if lo is None else round((start - lo).total_seconds() / 60)
+    early = None if fw is None else round((fw - end).total_seconds() / 60)
+    kinds: list[str] = []
+    if late is not None and late >= WINDOW_TOLERANCE_MIN:
+        kinds.append("started_late")
+    if early is not None and early >= WINDOW_TOLERANCE_MIN:
+        kinds.append("finished_early")
+    if not kinds and late is not None and early is not None:
+        kinds.append("broken_up")
+    return kinds, late, early
+
+
+def partial_note(night: date, device_tst: int | None, tst_source: str | None, diary: dict[str, Any] | None,
+                 dev: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The diary beside the device figure, flagged when the device is short, and for a flagged night which way
+    the window falls short. None when either TST is missing. The window rides only when the Personal API
+    supplied the TST it describes."""
     if diary is None or device_tst is None:
         return None
     short = diary["tst"] - device_tst
+    flagged = short >= PARTIAL_NIGHT_MIN
+    dev = dev if tst_source == GARMIN_API else None
+    kinds, late, early = _window_kinds(night, diary, dev) if (flagged and dev) else ([], None, None)
     return {
         "diary_tst": diary["tst"],
         "lights_out": diary.get("lights_out"),
-        "short_min": short if short >= PARTIAL_NIGHT_MIN else None,
-        "window": f"{_clock(window[0])}\u2013{_clock(window[1])}" if window and tst_source == GARMIN_API else None,
+        "final_wake": diary.get("final_wake"),
+        "short_min": short if flagged else None,
+        "window": f"{_clock(dev['start'])}\u2013{_clock(dev['end'])}" if dev else None,
+        "kinds": kinds,
+        "late_min": late,
+        "early_min": early,
+        "awake_min": dev["awake_min"] if dev else None,
     }
 
 
-def partial_detail(note: dict[str, Any]) -> str:
-    """The flagged night's evidence: the device window beside the diary lights-out, whichever exist."""
-    bits = []
-    if note["window"]:
-        bits.append(f"device window {note['window']}")
-    if note["lights_out"]:
-        bits.append(f"diary lights-out {note['lights_out']}")
-    return ", ".join(bits)
+def format_minutes(minutes: float) -> str:
+    """4 h 14 m, or 37 m: whole minutes, never a bare decimal."""
+    total = int(round(minutes))
+    return f"{total // 60} h {total % 60:02d} m" if total >= 60 else f"{total} m"
+
+
+def partial_clause(note: dict[str, Any]) -> str:
+    """What happened to the window, from the facts in hand. A flagged night whose mechanism cannot be told (a
+    Health Connect night, or a diary clock missing) keeps the generic sentence and whatever evidence exists."""
+    kinds, win = note["kinds"], note["window"]
+    if not kinds:
+        bits = ([f"device window {win}"] if win else []) + (
+            [f"diary lights-out {note['lights_out']}"] if note["lights_out"] else [])
+        return "the device may have recorded only part of the night" + (f" ({', '.join(bits)})" if bits else "")
+    labels = {"started_late": "started late", "finished_early": "finished early", "broken_up": "broken up"}
+    facts = []
+    if "started_late" in kinds:
+        facts.append(f"starts {format_minutes(note['late_min'])} after diary lights-out {note['lights_out']}")
+    if "finished_early" in kinds:
+        facts.append(f"ends {format_minutes(note['early_min'])} before diary final wake {note['final_wake']}")
+    if "broken_up" in kinds:
+        awake = note["awake_min"]
+        facts.append("covers the night but scores "
+                     + (f"{awake} min awake inside it" if awake is not None else "awake time inside it"))
+    return (f"window {' and '.join(labels[k] for k in kinds)}: the device window {win} "
+            + " and ".join(facts))
 
 
 def annotate_partial(resolved: list[dict[str, Any]], diary: dict[date, dict[str, Any]],
-                     windows: dict[date, tuple[datetime, datetime]]) -> list[dict[str, Any]]:
+                     devices: dict[date, dict[str, Any]]) -> list[dict[str, Any]]:
     """Attach `diary_note` to each resolved night that has both a device TST and a diary TST. In place."""
     for r in resolved:
         tst = r["tst"]
         if tst is None:
             continue
-        note = partial_note(tst["value"]["tst"], tst["source"], diary.get(r["night"]), windows.get(r["night"]))
+        note = partial_note(r["night"], tst["value"]["tst"], tst["source"], diary.get(r["night"]),
+                            devices.get(r["night"]))
         if note is not None:
             r["diary_note"] = note
     return resolved
@@ -404,9 +474,7 @@ def format_night(r: dict[str, Any]) -> str:
         if note["short_min"] is None:
             tst += f" (diary {note['diary_tst']} min)"
         else:
-            detail = partial_detail(note)
-            tst += (f" (diary {note['diary_tst']} min; {note['short_min']} min below the diary, so the device may "
-                    f"have recorded only part of the night" + (f": {detail}" if detail else "") + ")")
+            tst += f" (diary {note['diary_tst']} min; {note['short_min']} min below the diary; {partial_clause(note)})"
     parts.append(tst)
     stages = r["stages"]
     if stages:
@@ -460,5 +528,5 @@ def format_recovery(resolved: list[dict[str, Any]], days: int) -> str:
 
 def recovery_text(db: Session, user_id: int, since: date, days: int) -> str:
     resolved = annotate_partial(resolve(load_candidates(db, user_id, since)),
-                                load_diary(db, user_id, since), load_device_windows(db, user_id, since))
+                                load_diary(db, user_id, since), load_device_nights(db, user_id, since))
     return format_recovery(resolved, days)
