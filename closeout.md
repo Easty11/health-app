@@ -2,7 +2,7 @@
 
 ## Real commits this session
 
-Session opened at health-app master `6d15a4c` (the merge of PR 453). Maxima at open: `DECISIONS_LOG` #457, `OPEN_QUESTIONS` Q245; the brief named #457 as the next free number, so it was stale and was re-read, not trusted. Maxima at close: #460 and Q246 (Q246 was raised by another session's #458, not here). `git log --format="%h %ad %s" --date=short 6d15a4c..origin/master`, my commits only:
+Session opened at health-app master `6d15a4c` (the merge of PR 453). Maxima at open: `DECISIONS_LOG` #457, `OPEN_QUESTIONS` Q245; the brief named #457 as the next free number, so it was stale and was re-read, not trusted. Maxima at close: #461 and Q246 (Q246 came from another session's #458 and #461 from another session's chat-disposition ruling, which landed while this PR was open; this session's entries are #459 and #460). `git log --format="%h %ad %s" --date=short 6d15a4c..origin/master`, my commits only:
 
 health-app:
 
@@ -19,7 +19,7 @@ health-connect-app (cloned read-write this session; attached with `add_repo`):
 - `2961475` 2026-10-25 gov(oq-sweep): Q21 DONE -> #44, Q22 stale state line struck, Q18 re-scoped (health-app DECISIONS_LOG #459)
 - `3c2986b` 2026-10-26 Merge pull request #79 from Easty11/claude/youthful-clarke-bpacrn (the guard was its only check; green)
 
-Not mine, landed in the same span: PR 458 (`c7aa6a0`, `bcbaf24`, the Garmin token-invalidation probe, another session). Commit dates are git's author dates; the two PR merges and the folds landed on 26 and 28 Oct. The harness-assigned branch name `claude/youthful-clarke-bpacrn` was used three times (the sweep, the folds, this close-out), each time restarted from master after its PR merged and the remote branch was gone.
+Not mine, landed in the same span: PR 458 (`c7aa6a0`, `bcbaf24`, the Garmin token-invalidation probe) and PR 459 (`7af715c`, `56c7818`, #461 chat disposition), both other sessions. Commit dates are git's author dates; the two PR merges and the folds landed on 26 and 28 Oct. The harness-assigned branch name `claude/youthful-clarke-bpacrn` was used three times (the sweep, the folds, this close-out), each time restarted from master after its PR merged and the remote branch was gone.
 
 Deploys (#433): every merge here changed only governance files, so SKIPPED on both Railway services is the expected result. **Not read by Code**: no `railway deployment list` was run this session. The #433 "no record at all means the trigger did not fire" check is therefore owed to whoever next reads it.
 
@@ -43,7 +43,7 @@ Nothing decided in this session is uncommitted. Only this close-out is provision
 
 **Sprint (ROADMAP NOW).** Not edited this session; `ROADMAP.md` still reads "Last updated: 2026-10-25". The NOW rows are the CBT-I, Garmin/Polar/HC ingest, source-hierarchy, sRPE and appointment-brief lanes; their own "Serves" clauses stand. Roadmap lines this session's closes make stale and which were left for the operator: row 207 ("HR input layer, per second (Q213)") still says it "waits on Polar per-second ingest (Q10, Q198)", and Q10 closed as superseded at #459 (#364's `hr_samples` serves the HC lane from HC's own raw HR, so AccessLink per-second ingest is optional); whether row 207 still waits on Polar per-second ingest is for the operator, not Code, and Q198 is untouched. The history line 80 ("Q200 ... owes its move to CLOSED") is now true and was left as dated history.
 
-**State.** `DECISIONS_LOG` max is #460; `OPEN_QUESTIONS` max is Q246. Health-app questions above `## CLOSED`: 105 OPEN and 7 OWED (Q78, Q176, Q178, Q181, Q205, Q239, Q242), DONE 133. health-connect-app: 10 OPEN and 3 OWED live, DONE 12. Health-app master is `bcbaf24` (PR 458's merge) at close.
+**State.** `DECISIONS_LOG` max is #461 (mine are #459 and #460); `OPEN_QUESTIONS` max is Q246. Health-app questions above `## CLOSED`: 105 OPEN and 7 OWED (Q78, Q176, Q178, Q181, Q205, Q239, Q242), DONE 133. health-connect-app: 10 OPEN and 3 OWED live, DONE 12. Health-app master is `56c7818` (PR 459's merge, another session's #461) at close.
 
 **Single clearest next action.** The operator rules the two flags that gate real work: record the outcome of the 24 Oct Polar re-auth and rule the `sports:read` scope add before the next re-auth (Q205, OWED), and cut the `user_knowledge` retirement brief (brief 2, Q181, OWED, settled GO since 27 Sep). Neither needs Code first.
 
