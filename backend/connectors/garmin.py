@@ -27,10 +27,6 @@ Library mechanism (garminconnect 0.3.11, curl_cffi-era, read from source):
     `client.loads` (no path, no password). It proactively refreshes the DI token if it is
     expiring, so the blob we hold back may be newer than the one we loaded — hence the
     refresh-writeback contract (see `dump_token`).
-  * `get_hrv_data(cdate)` — ONE day. 0.3.11 also exposes `get_hrv_data_range`, but this
-    connector keeps the per-day loop so each night is normalised / bounds-checked and
-    empty days dropped individually (see `get_hrv_range`); the range call is not adopted
-    here — deliberately, not for want of an endpoint.
   * `client.dumps()` — serialise the (possibly refreshed) token blob for writeback.
   * A dead/expired token with no password raises `GarminConnectAuthenticationError`
     (login falls through to the credentials branch and finds none) — surfaced here as
@@ -41,7 +37,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 from garminconnect import (
@@ -95,7 +91,9 @@ def account_fingerprint(profile_id: str) -> str:
 
 
 class GarminReconnectError(Exception):
-    """Auth is dead or MFA is required — the operator must re-run garmin_login.py.
+    """The stored DI token can no longer authenticate (auth is dead or MFA is required): the operator must
+    re-run garmin_login.py. Since PR-B (#449) the DI token serves the epoch-SpO2 lane only, so this reaches
+    the DI attach route and the SpO2 lane; no HRV or self-evaluation path raises it.
 
     Distinct from a transient API/network failure: this one means the stored token
     can no longer authenticate. Upstream maps it to 424 (a clean "reconnect Garmin"
@@ -247,27 +245,3 @@ class GarminClient:
     def dump_token(self) -> str:
         """The current (possibly refreshed) token blob, for re-encryption + writeback."""
         return self._garmin.client.dumps()
-
-    def get_hrv_day(self, cdate: str) -> Optional[dict]:
-        """Raw HRV payload for one 'YYYY-MM-DD', or None if Garmin has no data."""
-        try:
-            return self._garmin.get_hrv_data(cdate)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError) as exc:
-            raise GarminReconnectError(f"Garmin auth lost mid-pull: {exc}") from exc
-
-    def get_hrv_range(self, start: date, end: date) -> list[dict]:
-        """Normalised HRV for each day in [start, end] inclusive that has data.
-
-        Per-day loop (deliberate): 0.3.11 exposes `get_hrv_data_range`, but looping keeps
-        per-day normalisation / bounds and lets days Garmin has no HRV for be silently
-        absent from the result (not an error), rather than adopting the range call.
-        """
-        out: list[dict] = []
-        cur = start
-        while cur <= end:
-            cdate = cur.isoformat()
-            normalized = normalize_hrv_day(self.get_hrv_day(cdate), cdate)
-            if normalized is not None:
-                out.append(normalized)
-            cur += timedelta(days=1)
-        return out

@@ -176,19 +176,14 @@ def test_a_cached_token_that_no_longer_decrypts_is_a_cache_miss_not_an_error(db_
     assert host.exchanges == 1 and db_session.query(models.HrvReading).count() == 1
 
 
-def test_a_user_with_no_personal_key_still_takes_the_DI_path(db_session, monkeypatch):
+def test_a_user_with_no_personal_key_is_not_pulled_and_there_is_no_DI_fallback(db_session, monkeypatch):
     _user(db_session)
     _di_row(db_session)
-
-    class FakeDI:
-        def dump_token(self): return "BLOB2"
-        def get_hrv_range(self, s, e): return [normalize_hrv_day(hrv_payload(TS, 44.0), TS)]
-        def profile_id(self): return "p"
-
-    monkeypatch.setattr(GarminClient, "from_token", classmethod(lambda cls, blob: FakeDI()))
-    garmin_router.sync_hrv_for_user(db_session, 1, TODAY, TODAY)
-    r = db_session.query(models.HrvReading).one()
-    assert (r.rmssd_ms, r.transport) == (44.0, "di")
+    no_di = NoDI()
+    monkeypatch.setattr(GarminClient, "from_token", classmethod(lambda cls, blob: no_di.from_token(blob)))
+    with pytest.raises(gpl.NoPersonalKey):
+        garmin_router.sync_hrv_for_user(db_session, 1, TODAY, TODAY)
+    assert no_di.calls == 0 and db_session.query(models.HrvReading).count() == 0
 
 
 # -- the sweep --------------------------------------------------------------------------------------
@@ -202,14 +197,9 @@ class DISpo2Source:
         return {"dailySleepDTO": {"calendarDate": params["date"]}}
 
 
-class NoActivities:
-    def get(self, path, params=None): return []
-
-
 def _sweep(db, host, log, **kw):
     return garmin_sync.sweep_garmin_hrv(
-        db, days=1, selfeval_factory=lambda b: NoActivities(), spo2_factory=lambda b: DISpo2Source(log),
-        personal_transport=host.transport(), **kw)
+        db, days=1, spo2_factory=lambda b: DISpo2Source(log), personal_transport=host.transport(), **kw)
 
 
 def _activity_routes(host, rpe=60):
@@ -300,22 +290,25 @@ def test_a_dead_personal_key_skips_the_personal_lanes_but_the_DI_spo2_lane_still
     assert _lane(db_session, 1, "personal_token").outcome == "auth_failed"
 
 
-def test_a_legacy_DI_only_user_is_unchanged_no_extra_login_and_the_lane_is_recorded(db_session, monkeypatch):
+def test_a_DI_only_user_is_reported_failed_loudly_but_their_SpO2_lane_still_runs(db_session, monkeypatch):
+    """After PR-B nothing pulls HRV, self-evaluation or wellness for a user with no personal key, which is a
+    state that should not exist (#449): it counts as failed, every night, until a key is attached. The DI token
+    keeps its one job, epoch SpO2, with its own keepalive."""
     _user(db_session)
     _di_row(db_session)
     log = []
 
     class FakeDI:
-        def dump_token(self): return "B"
-        def get_hrv_range(self, s, e): return []
-        def profile_id(self): return "p"
+        def dump_token(self): log.append("keepalive_dump"); return "B"
 
-    logins = []
-    monkeypatch.setattr(GarminClient, "from_token", classmethod(lambda cls, blob: logins.append(1) or FakeDI()))
-    out = garmin_sync.sweep_garmin_hrv(db_session, days=1, selfeval_factory=lambda b: NoActivities(),
-                                       spo2_factory=lambda b: DISpo2Source(log))
-    assert out["per_user"][1]["status"] == "succeeded" and len(logins) == 1       # the HRV step's login only
+    monkeypatch.setattr(GarminClient, "from_token", classmethod(lambda cls, blob: log.append("keepalive_login") or FakeDI()))
+    out = garmin_sync.sweep_garmin_hrv(db_session, days=1, spo2_factory=lambda b: DISpo2Source(log))
+    u = out["per_user"][1]
+    assert u["status"] == "no_personal_key" and "selfeval" not in u and "wellness" not in u
+    assert out["users_failed"] == 1 and out["users_succeeded"] == 0
+    assert log[:2] == ["keepalive_login", "keepalive_dump"] and "spo2_read" in log
     assert _lane(db_session, 1, "di_spo2").outcome == "ok"
+    assert db_session.query(models.HrvReading).count() == 0
 
 
 def test_a_failing_wellness_endpoint_is_a_recorded_lane_failure_not_a_crashed_sweep(db_session, host, monkeypatch):
@@ -332,13 +325,12 @@ def test_a_failing_wellness_endpoint_is_a_recorded_lane_failure_not_a_crashed_sw
 def test_wellness_window_on_the_nightly_sweep_is_the_last_few_days_and_an_explicit_window_is_honoured(db_session, host):
     _user(db_session)
     _personal_row(db_session)
-    garmin_sync.sweep_garmin_hrv(db_session, days=7, selfeval_factory=lambda b: NoActivities(),
-                                 personal_transport=host.transport())
+    garmin_sync.sweep_garmin_hrv(db_session, days=7, personal_transport=host.transport())
     sleep_dates = sorted({p["date"] for m, path, p in host.requests if path == gp.SLEEP_PATH})
     assert len(sleep_dates) == garmin_sync.WELLNESS_SWEEP_DAYS + 1 and sleep_dates[-1] == TS
     host.requests.clear()
     garmin_sync.sweep_garmin_hrv(db_session, start=TODAY - timedelta(days=6), end=TODAY,
-                                 selfeval_factory=lambda b: NoActivities(), personal_transport=host.transport())
+                                 personal_transport=host.transport())
     assert len({p["date"] for m, path, p in host.requests if path == gp.SLEEP_PATH}) == 7
 
 

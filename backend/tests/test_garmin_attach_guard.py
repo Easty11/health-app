@@ -28,7 +28,7 @@ from connectors.garmin import (
     extract_profile_id,
 )
 from database import get_db
-from encryption import decrypt, encrypt
+from encryption import decrypt
 from routers import garmin as garmin_router
 
 CONFLICT = "This Garmin account is already connected to a different user."
@@ -260,62 +260,9 @@ def test_the_partial_unique_index_is_the_databases_own_refusal(db_session):
     db_session.commit()
 
 
-class SyncFake:
-    def __init__(self, profile="ACCOUNT-A"):
-        self._profile, self.profile_calls = profile, 0
-
-    def profile_id(self):
-        self.profile_calls += 1
-        if isinstance(self._profile, Exception):
-            raise self._profile
-        return self._profile
-
-    def dump_token(self):
-        return "BLOB"
-
-    def get_hrv_range(self, start, end):
-        return []
-
-
-def _connect(db, uid):
-    db.add(models.UserIntegration(user_id=uid, provider="garmin", api_key_encrypted=encrypt("BLOB")))
-    db.commit()
-
-
-def _sync(db, monkeypatch, uid, fake):
-    from datetime import date
-    monkeypatch.setattr(garmin_router.GarminClient, "from_token", classmethod(lambda cls, t: fake))
-    return garmin_router.sync_hrv_for_user(db, uid, date(2026, 9, 1), date(2026, 9, 2))
-
-
-def test_a_sync_records_the_fingerprint_once(db_session, monkeypatch):
-    _user(db_session, 1)
-    _connect(db_session, 1)
-    fake = SyncFake()
-    _sync(db_session, monkeypatch, 1, fake)
-    _sync(db_session, monkeypatch, 1, fake)
-    assert _rows(db_session, 1)[0].account_fingerprint == account_fingerprint("ACCOUNT-A")
-    assert fake.profile_calls == 1                                         # no extra API call once recorded
-
-
-def test_a_duplicate_account_at_sync_time_alerts_and_never_fails_the_sync(db_session, monkeypatch, caplog):
-    _user(db_session, 1), _user(db_session, 4)
-    _connect(db_session, 1), _connect(db_session, 4)
-    _sync(db_session, monkeypatch, 1, SyncFake("ACCOUNT-A"))
-    with caplog.at_level(logging.ERROR):
-        out = _sync(db_session, monkeypatch, 4, SyncFake("ACCOUNT-A"))     # the mix-up condition
-    assert out["days_with_data"] == 0                                      # the sync completed
-    assert _rows(db_session, 4)[0].account_fingerprint is None             # left unrecorded
-    assert _rows(db_session, 1)[0].account_fingerprint == account_fingerprint("ACCOUNT-A")
-    assert any("ALREADY connected to another user" in r.getMessage() for r in caplog.records)
-    assert "user 1" not in " ".join(r.getMessage() for r in caplog.records)   # names only the syncing user
-
-
-def test_an_unresolvable_profile_never_fails_the_sync(db_session, monkeypatch):
-    _user(db_session, 1)
-    _connect(db_session, 1)
-    out = _sync(db_session, monkeypatch, 1, SyncFake(GarminProfileUnresolvable("none")))
-    assert out["days_with_data"] == 0 and _rows(db_session, 1)[0].account_fingerprint is None
+# The sync-time fingerprint recording (and its three tests) went with the DI HRV sync in PR-B (#449): a DI row's
+# fingerprint is set at attach (`POST /integrations/garmin/token`), a personal row's at `attach_key`, and both are
+# covered above and in test_garmin_personal_attach.py.
 
 
 # -- migration DDL --------------------------------------------------------------------------

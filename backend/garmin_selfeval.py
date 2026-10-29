@@ -14,12 +14,11 @@ The store is INSERT-ONLY: a row is what Garmin said at `captured_at`. A row is i
   * an UNRATED activity inside its re-check window is checked again and is still unrated (the daily
     marker: insert-only forbids a last-checked update, so the check IS the row).
 
-Reads (two GETs per new activity, plus one list GET per user per run) go through the #361 no-refresh
-seam: `ProbeSource` is `garmin_identity.LibrarySource` (the client's `_refresh_session` raises) plus
-a generic GET, so this can never refresh a Garmin token, and it never writes to Garmin or reads HR.
-It runs inside `scripts.garmin_sync.sweep_garmin_hrv`, right after that sweep's own refresh-and-
-writeback, so the token it sees is fresh without this module adding a refresh. A token that still
-needs one is reported as `skipped_needs_refresh`, never refreshed. The sweep runs once a night (02:00
+Reads (two GETs per new activity, plus one list GET per user per run) go through the user's Personal API
+client (`PersonalClient.get`), which only ever sends GETs: this module never writes to Garmin or reads HR.
+It runs inside `scripts.garmin_sync.sweep_garmin_hrv`, right after that user's HRV pull. The DI lane no longer
+reads self-evaluation (PR-B, #449), so the old no-refresh seam and its `skipped_needs_refresh` outcome are gone;
+the count stays in the result at 0 so the sweep summary keeps its shape. The sweep runs once a night (02:00
 Brisbane, `load_sweep`), so a rating given in Garmin reaches the store after that night's close-out.
 
 Scale (probe, 4 Oct 2026, activity 24564069469): `summaryDTO.directWorkoutRpe` 0-100 in steps of 10
@@ -32,13 +31,11 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
 
 import models
 import srpe_store
-from encryption import decrypt
-from scripts.garmin_identity import RefreshWouldBeNeeded
-from scripts.garmin_selfeval_probe import ACTIVITY_LIST_PATH, ACTIVITY_PATH, ProbeSource
+from scripts.garmin_selfeval_probe import ACTIVITY_LIST_PATH, ACTIVITY_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +48,6 @@ LIST_WINDOW_DAYS = 14        # how far back a first run (or a gap) lists
 LIST_LIMIT = 50              # one bounded page; a fuller page converges over the next runs
 RECHECK_DAYS = 7             # an unrated activity is re-checked for this long after its start, then left
 RECHECK_MIN_GAP = timedelta(hours=20)   # at most about one re-check a day per activity
-
-SourceFactory = Callable[[str], Any]
 
 
 def _utc(dt: datetime | None) -> datetime | None:
@@ -101,7 +96,7 @@ def _latest_by_activity(db, user_id: int) -> dict[int, models.SessionRpeObservat
 
 def _insert(db, user_id: int, *, activity_id: int, rpe_raw: float | None, feel: int | None, garmin_type: str | None,
             start: datetime, stop: datetime | None, now: datetime,
-            transport: str = "di") -> models.SessionRpeObservation:
+            transport: str = "personal_api") -> models.SessionRpeObservation:
     """THE Garmin write: one call to the contract, which converts on the declared scale, inserts, commits,
     and places the row strictly later than the activity's prior one. `source` stays 'garmin' whichever
     transport read it; the transport ('personal_api' | 'di') is audit detail in `provenance`."""
@@ -129,10 +124,9 @@ def _list_item_fields(item: Any) -> tuple[int, datetime, datetime | None, str | 
     return aid, start, stop, (str(type_key)[:100] if type_key else None)
 
 
-def sync_user(db, user_id: int, *, factory: SourceFactory = ProbeSource, now: datetime | None = None,
-              window_days: int = LIST_WINDOW_DAYS, source: Any = None,
-              transport: str = "di") -> dict[str, Any]:
-    """One user's self-evaluation capture. Never refreshes a token, never writes to Garmin, never reads HR.
+def sync_user(db, user_id: int, *, source: Any, now: datetime | None = None,
+              window_days: int = LIST_WINDOW_DAYS, transport: str = "personal_api") -> dict[str, Any]:
+    """One user's self-evaluation capture. Never writes to Garmin, never reads HR.
 
     ONE list GET since the last captured start (bounded by `window_days`), then ONE detail GET per
     activity that has no row yet, and per unrated activity due a re-check (start within `RECHECK_DAYS`,
@@ -140,24 +134,15 @@ def sync_user(db, user_id: int, *, factory: SourceFactory = ProbeSource, now: da
     first failure, so the last captured start never passes an unfetched activity.
 
     Returns `{fetched, rated, unrated, skipped_needs_refresh, errors}` (counts; `skipped_needs_refresh` is
-    0/1). `fetched` counts detail records read; `rated` and `unrated` the observations inserted from them.
+    always 0 now, kept so the sweep summary keeps its shape). `fetched` counts detail records read; `rated`
+    and `unrated` the observations inserted from them.
 
-    `source` (a prebuilt object with `.get(path, params=None)`) bypasses the DI row lookup: the Personal
-    API lane passes its `PersonalClient` with `transport='personal_api'`. Everything after the read is the
-    same code, so the contract, the scale and the re-check rules are shared between the two lanes.
+    `source` is an object with `.get(path, params=None)`: the Personal API lane passes its `PersonalClient`.
     """
     now = _utc(now) or datetime.now(timezone.utc)
     out = {"fetched": 0, "rated": 0, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
 
-    own_source = source is None
-    row = None
-    if own_source:
-        row = db.query(models.UserIntegration).filter_by(user_id=user_id, provider="garmin").first()
-        if row is None:
-            return out
     try:
-        if own_source:
-            source = factory(decrypt(row.api_key_encrypted))
         latest = _latest_by_activity(db, user_id)
         floor = (now - timedelta(days=window_days)).date()
         last_start = max((_utc(r.start_time) for r in latest.values()), default=None)
@@ -191,9 +176,6 @@ def sync_user(db, user_id: int, *, factory: SourceFactory = ProbeSource, now: da
             _insert(db, user_id, activity_id=aid, rpe_raw=rpe, feel=feel, garmin_type=tkey, start=start, stop=stop,
                     now=now, transport=transport)
             out["rated" if rated else "unrated"] += 1
-    except RefreshWouldBeNeeded:
-        db.rollback()
-        out["skipped_needs_refresh"] = 1
     except Exception as exc:  # noqa: BLE001 -- the error CLASS is the whole report; a Garmin hiccup never costs the sweep
         db.rollback()
         out["errors"] += 1

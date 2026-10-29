@@ -1,17 +1,20 @@
 """
-Garmin integration — server-side HRV pull (the metrics Garmin withholds from Health
-Connect). See `connectors/garmin.py` for the why and the credential model.
+Garmin integration — server-side HRV pull through the Personal API (the metrics Garmin withholds from
+Health Connect). See `connectors/garmin.py` for the DI token's remaining job and `garmin_personal_lanes.py`
+for the credential model (DECISIONS_LOG #449).
 
 Endpoints (all authenticated, self-scoped):
-  POST   /integrations/garmin/token        → verify + store the out-of-band login token blob
-                                             (refuses an account already linked to another user)
-  POST   /integrations/garmin/sync?from&to → pull + upsert HRV for a date range
-  GET    /integrations/garmin/status       → {connected: bool}
-  DELETE /integrations/garmin              → disconnect (drop the token)
+  POST   /integrations/garmin/token        → verify + store the out-of-band DI login token blob, which now
+                                             serves the epoch-SpO2 lane only (#450); refuses an account
+                                             already linked to another user
+  POST   /integrations/garmin/sync?from&to → pull + upsert HRV for a date range (Personal API key required)
+  GET    /integrations/garmin/status       → {connected: bool, personal_api: bool}
+  DELETE /integrations/garmin              → disconnect (drop the DI token)
 
-The token is minted by `scripts/garmin_login.py` (interactive, out-of-band); the
-platform never sees the Garmin password. `sync_hrv_for_user` is the reusable core —
-the endpoint and the `scripts/garmin_sync.py` cron/ops runner both call it.
+The DI token is minted by `scripts/garmin_login.py` (interactive, out-of-band); the platform never sees the
+Garmin password. `sync_hrv_for_user` is the reusable core: the endpoint and the `scripts/garmin_sync.py`
+cron/ops runner both call it, and it serves a user from the Personal API only. A user with no personal key
+raises `NoPersonalKey` (404 on the endpoint); there is no DI fallback (PR-B).
 """
 from __future__ import annotations
 
@@ -38,7 +41,7 @@ from connectors.garmin import (
     normalize_hrv_day,
 )
 from database import get_db
-from encryption import decrypt, encrypt
+from encryption import encrypt
 
 logger = logging.getLogger(__name__)
 
@@ -87,16 +90,6 @@ def _get_garmin_row(user_id: int, db: Session) -> models.UserIntegration | None:
         .filter_by(user_id=user_id, provider="garmin")
         .first()
     )
-
-
-def _require_garmin_row(user_id: int, db: Session) -> models.UserIntegration:
-    row = _get_garmin_row(user_id, db)
-    if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="garmin integration not connected",
-        )
-    return row
 
 
 def _store_token(db: Session, row: models.UserIntegration, token_json: str) -> None:
@@ -150,71 +143,20 @@ def _upsert_hrv_day(db: Session, user_id: int, source: str, day: dict, *, transp
     return len(day["samples"])
 
 
-def _record_account_fingerprint(db: Session, row: models.UserIntegration, client: GarminClient) -> None:
-    """Best-effort: record which Garmin account this connection is, so the attach guard can protect
-    it. Never raises and never fails a sync (bookkeeping must not cost HRV).
-
-    A unique-index conflict here means ANOTHER user already holds this same Garmin account: the
-    mix-up condition itself. It is logged at ERROR (the alert) and left unrecorded; nothing is
-    changed. An unresolvable profile is logged by the connector at ERROR too."""
-    uid = row.user_id
-    try:
-        row.account_fingerprint = account_fingerprint(client.profile_id())
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        logger.error(
-            "garmin account fingerprint: user %s's Garmin account is ALREADY connected to another "
-            "user (the account mix-up condition); left unrecorded, needs the operator", uid,
-        )
-    except Exception as exc:  # noqa: BLE001 -- includes GarminProfileUnresolvable
-        db.rollback()
-        logger.warning("garmin account fingerprint not recorded for user %s: %s", uid, type(exc).__name__)
-
-
 def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date) -> dict:
-    """Pull Garmin HRV for one user over [start, end] and upsert it. Commits.
+    """Pull Garmin HRV for one user over [start, end] through the Personal API and upsert it. Commits.
 
-    Auth-from-token only (no password). The token blob is re-encrypted and committed
-    immediately after a successful login so a refresh performed during login survives
-    even if the subsequent pull fails. A dead/MFA-needed token raises
-    GarminReconnectError (mapped to 424 upstream), never a 500.
-
-    A user with a `garmin_personal` key is served from the Personal API instead (PR-A of the migration,
-    DECISIONS_LOG #449); a user without one still takes this DI path until it is removed (PR-B).
+    The Personal API is the only HRV lane (DECISIONS_LOG #449, PR-B): the DI lane's HRV pull is gone and its
+    token serves epoch SpO2 only (#450). A user with no `garmin_personal` key raises `NoPersonalKey`; a refused
+    key raises `GarminPersonalKeyError` (a reconnect state, 424 upstream).
     """
-    if gpl.get_row(db, user_id) is not None:
-        return _sync_hrv_personal(db, user_id, start, end)
-    row = _require_garmin_row(user_id, db)
-    client = GarminClient.from_token(decrypt(row.api_key_encrypted))
-
-    # Refresh-token writeback: persist the (possibly refreshed) blob right after login,
-    # before the pull, so the refresh is never lost to a later pull failure.
-    _store_token(db, row, client.dump_token())
-    db.commit()
-
-    if row.account_fingerprint is None:
-        _record_account_fingerprint(db, row, client)
-
-    days = client.get_hrv_range(start, end)
-
-    readings = samples = 0
-    for day in days:
-        samples += _upsert_hrv_day(db, user_id, "garmin", day, transport="di")
-        readings += 1
-    db.commit()
-
-    return {
-        "from": start.isoformat(),
-        "to": end.isoformat(),
-        "days_with_data": len(days),
-        "readings_upserted": readings,
-        "samples_upserted": samples,
-    }
+    if gpl.get_row(db, user_id) is None:
+        raise gpl.NoPersonalKey(f"user {user_id} has no garmin_personal key")
+    return _sync_hrv_personal(db, user_id, start, end)
 
 
 def _sync_hrv_personal(db: Session, user_id: int, start: date, end: date) -> dict:
-    """The Personal API HRV pull for one user over [start, end]. Same result shape as the DI path.
+    """The Personal API HRV pull for one user over [start, end].
 
     Per night: fetch `hrv-service/hrv/{date}`, LAND the raw payload (identity keys scrubbed), map it with
     the same `normalize_hrv_day` the DI lane uses, and upsert on (user, night, 'garmin') with transport
@@ -224,8 +166,8 @@ def _sync_hrv_personal(db: Session, user_id: int, start: date, end: date) -> dic
     readings = samples = days_with_data = 0
     try:
         with gpl.personal_client(db, user_id) as client:
-            if client is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="garmin personal key not connected")
+            if client is None:                    # the key was removed between the check and the pull
+                raise gpl.NoPersonalKey(f"user {user_id} has no garmin_personal key")
             cur = start
             while cur <= end:
                 cdate = cur.isoformat()
@@ -428,7 +370,9 @@ def sync_garmin_hrv(
 
     try:
         return sync_hrv_for_user(db, current_user.id, start, end)
-    except GarminReconnectError as exc:
+    except gpl.NoPersonalKey:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="garmin personal key not connected")
+    except GarminPersonalKeyError as exc:
         raise _reconnect_http(exc)
     except gp.PersonalApiError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Garmin Personal API: {exc}")
@@ -451,7 +395,7 @@ def refresh_garmin_hrv(
     `{"skipped": true, "reason": ..., "last_ingested_at": ...}` when fresh, and the sync summary
     on a real run.
 
-    NEVER errors the card. A dead/MFA-needed token (`GarminReconnectError`) or any other sync
+    NEVER errors the card. A refused Personal API key (`GarminPersonalKeyError`), a missing key or any other sync
     failure is logged and returns last-good (a skipped-shaped payload), so a background refresh
     can never break a card that is already showing its cached data. Sync `def` (not `async`): the
     Garmin client is blocking network I/O, which FastAPI runs in its threadpool off the event
@@ -469,8 +413,10 @@ def refresh_garmin_hrv(
     last_iso = last.isoformat() if last is not None else None
     try:
         return sync_hrv_for_user(db, current_user.id, start, today)
-    except GarminReconnectError as exc:
-        logger.warning("garmin refresh: reconnect needed for user %s — %s", current_user.id, exc)
+    except gpl.NoPersonalKey:
+        return {"skipped": True, "reason": "no_personal_key", "last_ingested_at": last_iso}
+    except GarminPersonalKeyError as exc:
+        logger.warning("garmin refresh: key needs replacing for user %s — %s", current_user.id, exc)
         return {"skipped": True, "reason": "reconnect_required", "last_ingested_at": last_iso}
     except Exception:  # noqa: BLE001 — a card refresh must never error the card; return last-good
         logger.exception("garmin refresh: sync failed for user %s", current_user.id)

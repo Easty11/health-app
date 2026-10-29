@@ -6,7 +6,7 @@ auth and query wiring are FastAPI's, not the logic under test):
 
   * GATE PICKER — stale ingest runs; fresh-within-30-min skips; `force=true` runs regardless;
     a never-ingested (NULL marker) user runs.
-  * GRACEFUL DEGRADE — a dead token (`GarminReconnectError`) and any other sync failure return a
+  * GRACEFUL DEGRADE — a refused personal key (`GarminPersonalKeyError`) and any other sync failure return a
     last-good, skipped-shaped payload and NEVER raise: the endpoint can never error the card.
 
 The route is `def` (not `async`): the Garmin client is blocking network I/O, run in FastAPI's
@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import models
-from connectors.garmin import GarminReconnectError
+from connectors.garmin import GarminPersonalKeyError
 from routers import garmin as garmin_router
 from routers.garmin import RECOVERY_REFRESH_STALE_AFTER, refresh_garmin_hrv
 
@@ -135,7 +135,7 @@ def test_dead_token_returns_last_good_never_raises(db_session, monkeypatch):
     _garmin_key(db_session, 1)
     stale = datetime.now(timezone.utc) - (RECOVERY_REFRESH_STALE_AFTER + timedelta(minutes=5))
     _garmin_reading(db_session, 1, created_at=stale)
-    _spy_sync(monkeypatch, raises=GarminReconnectError("token expired"))
+    _spy_sync(monkeypatch, raises=GarminPersonalKeyError("key refused"))
 
     out = refresh_garmin_hrv(force=False, current_user=caller, db=db_session)  # must NOT raise
 

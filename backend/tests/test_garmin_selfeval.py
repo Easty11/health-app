@@ -1,10 +1,10 @@
 """`garmin_selfeval` -- Garmin per-activity self-evaluation, adapter #1 of the source-neutral sRPE store (Q209 path a).
 
-Layers on purpose (FEEDBACK section 23), as in `test_garmin_selfeval_probe`: the capture logic is tested with a
-faked source (which records every request), and the no-refresh guarantee against the REAL `garminconnect` client
-faked at the TRANSPORT, because it lives in the library's own request path. Payload fixtures carry what the API
-sends, nulls included (FEEDBACK section 60): `directWorkoutRpe` 0-100 in steps of 10, `directWorkoutFeel` 0/25/50/75/100,
-both on the activity DETAIL (summaryDTO), neither on the list.
+Layers on purpose (FEEDBACK section 23): the capture logic is tested with a faked source (which records every
+request), and the real `PersonalClient` is driven against a fake host at the TRANSPORT (the only read path since PR-B,
+#449; the DI no-refresh seam and its tests are gone). Payload fixtures carry what the API sends, nulls included
+(FEEDBACK section 60): `directWorkoutRpe` 0-100 in steps of 10, `directWorkoutFeel` 0/25/50/75/100, both on the
+activity DETAIL (summaryDTO), neither on the list.
 """
 import json
 import logging
@@ -18,9 +18,10 @@ import garmin_selfeval as gs
 import models
 import srpe_store
 from aerobic_format import format_selfeval
-from scripts import garmin_identity as gi
+from connectors import garmin_personal as gp
+from connectors.garmin import GarminPersonalKeyError
+from garmin_personal_fakes import FAKE_KEY, FakeHost
 from scripts import garmin_sync
-from tests.test_garmin_selfeval_probe import FakeResp, FakeSession, _blob  # the transport-fake precedent
 
 NOW = datetime(2026, 10, 4, 3, 0, tzinfo=timezone.utc)
 START = datetime(2026, 10, 3, 21, 30, tzinfo=timezone.utc)      # the activity: 45 minutes
@@ -83,7 +84,7 @@ def _rows(db, aid=None):
 
 
 def _run(db, src, now=NOW, uid=1):
-    return gs.sync_user(db, uid, factory=lambda blob: src, now=now)
+    return gs.sync_user(db, uid, source=src, now=now)
 
 
 GARMIN_HC_PACKAGE = "com.garmin.android.apps.connectmobile"
@@ -140,7 +141,7 @@ def test_a_new_rated_activity_is_stored_with_scale_type_and_interval(db_session)
     out = _run(db_session, src)
     (r,) = _rows(db_session)
     assert (r.source, r.source_activity_ref, r.rpe_cr10, r.feel) == ("garmin", "11", 4.0, 25)
-    assert r.provenance == {"garmin_type": "strength_training", "transport": "di"}
+    assert r.provenance == {"garmin_type": "strength_training", "transport": "personal_api"}
     assert r.start_time.replace(tzinfo=timezone.utc) == START
     assert r.stop_time.replace(tzinfo=timezone.utc) == START + timedelta(seconds=DURATION)
     assert out == {"fetched": 1, "rated": 1, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
@@ -286,145 +287,104 @@ def test_a_list_item_without_an_id_or_start_is_skipped(db_session):
     assert _run(db_session, src)["rated"] == 1 and src.detail_ids() == [11]
 
 
-def test_a_user_without_a_garmin_connection_makes_no_request(db_session):
+# -- the real Personal API client, faked at the transport --------------------------------------------
+
+def test_a_real_personal_client_run_is_get_only_and_stores_the_personal_transport(db_session):
     _user(db_session)
-    src = FakeSource([_item(11)], {})
-    out = _run(db_session, src)
-    assert src.calls == [] and out["fetched"] == 0 and _rows(db_session) == []
-
-
-# -- no refresh: the REAL client, faked at the transport --------------------------------------------
-
-@pytest.fixture()
-def no_token_endpoint(monkeypatch):
-    from garminconnect import client as gc
-
-    def forbidden(*a, **k):
-        raise AssertionError("a token refresh request was sent")
-    monkeypatch.setattr(gc.Client, "_http_post", forbidden)
-
-
-def _real(db, blob, sess):
-    return gs.sync_user(db, 1, factory=lambda b: gs.ProbeSource(b, session=sess), now=NOW)
-
-
-def test_an_expiring_token_sends_nothing_inserts_nothing_and_leaves_the_stored_blob(db_session, no_token_endpoint):
-    blob = _blob(-60)
-    _garmin(db_session, secret=blob)
-    stored = db_session.query(models.UserIntegration).first().api_key_encrypted
-    sess = FakeSession()                                                     # any request would IndexError
-    out = _real(db_session, blob, sess)
-    assert out["skipped_needs_refresh"] == 1 and out["errors"] == 0
-    assert sess.calls == [] and _rows(db_session) == []
-    assert db_session.query(models.UserIntegration).first().api_key_encrypted == stored
-
-
-def test_a_401_mid_read_does_not_trigger_the_retry_refresh(db_session, no_token_endpoint):
-    blob = _blob(+3600)
-    _garmin(db_session, secret=blob)
-    sess = FakeSession(FakeResp(401))
-    out = _real(db_session, blob, sess)
-    assert out["skipped_needs_refresh"] == 1 and len(sess.calls) == 1 and _rows(db_session) == []
-
-
-def test_a_real_client_run_is_get_only_and_leaves_the_token_state_alone(db_session, no_token_endpoint):
-    blob = _blob(+3600)
-    _garmin(db_session, secret=blob)
-    sess = FakeSession(FakeResp(200, [_item(11)]), FakeResp(200, {"summaryDTO": {"directWorkoutRpe": 40, "directWorkoutFeel": 25}}))
-    stored = db_session.query(models.UserIntegration).first().api_key_encrypted
-    out = _real(db_session, blob, sess)
-    assert [m for m, _, _ in sess.calls] == ["GET", "GET"]
-    assert sess.calls[0][1].endswith(gs.ACTIVITY_LIST_PATH) and sess.calls[1][1].endswith(f"{gs.ACTIVITY_PATH}/11")
-    assert out["rated"] == 1 and _rows(db_session)[0].rpe_cr10 == 4.0
-    assert db_session.query(models.UserIntegration).first().api_key_encrypted == stored   # no token writeback here
+    host = FakeHost()
+    host.set(gp.ACTIVITY_LIST_PATH, [_item(11)])
+    host.set(f"{gp.ACTIVITY_PATH}/11", {"summaryDTO": {"directWorkoutRpe": 40, "directWorkoutFeel": 25}})
+    with gp.PersonalClient(host.key, transport=host.transport()) as client:
+        out = gs.sync_user(db_session, 1, source=client, now=NOW)
+    assert {m for m, _, _ in host.requests} == {"GET"} and len(host.requests) == 2
+    assert host.requests[0][1] == gp.ACTIVITY_LIST_PATH and host.requests[1][1] == f"{gp.ACTIVITY_PATH}/11"
+    assert out["rated"] == 1 and out["skipped_needs_refresh"] == 0
+    row = _rows(db_session)[0]
+    assert row.rpe_cr10 == 4.0 and row.provenance["transport"] == "personal_api"
 
 
 def test_the_module_never_sends_a_non_get_or_names_a_write_path():
     import inspect
     src = inspect.getsource(gs)
-    for forbidden in ("_http_post", "connectapi(", ".login(", "set_activity", "upload", "requests."):
+    for forbidden in ("_http_post", "connectapi(", ".login(", "set_activity", "upload", "requests.", "ProbeSource",
+                      "RefreshWouldBeNeeded", "decrypt"):
         assert forbidden not in src, forbidden
-    assert gs.ProbeSource.__mro__[1] is gi.LibrarySource
 
 
 # -- the sweep: placement, isolation, counts ---------------------------------------------------------
+
+def _personal(db, uid=1):
+    _user(db, uid)
+    db.add(models.UserIntegration(user_id=uid, provider="garmin_personal", api_key_encrypted=encryption.encrypt(FAKE_KEY)))
+    db.commit()
+
 
 def _fake_hrv(db, uid, start, end):
     return {"from": start.isoformat(), "to": end.isoformat(), "days_with_data": 1, "readings_upserted": 1,
             "samples_upserted": 5}
 
 
-def test_the_sweep_runs_the_read_after_each_users_hrv_pull_and_sums_the_counts(db_session, monkeypatch):
-    _garmin(db_session, 1)
-    _garmin(db_session, 4)
-    order: list[str] = []
-    monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", lambda db, uid, s, e: order.append(f"hrv{uid}") or _fake_hrv(db, uid, s, e))
+def _host_with_one_rated_activity():
+    host = FakeHost()
+    host.set(gp.ACTIVITY_LIST_PATH, [_item(11)])
+    host.set(f"{gp.ACTIVITY_PATH}/11", _detail(rpe=40, feel=25))
+    return host
 
-    def factory(blob):
-        order.append("read")
-        return FakeSource([_item(11)], {11: _detail(rpe=40, feel=25)})
-    summary = garmin_sync.sweep_garmin_hrv(db_session, selfeval_factory=factory)
-    assert order == ["hrv1", "read", "hrv4", "read"]                            # a read follows its own user's refresh
+
+def test_the_sweep_reads_each_personal_users_self_evaluation_after_their_hrv_pull_and_sums_the_counts(
+        db_session, monkeypatch):
+    _personal(db_session, 1)
+    _personal(db_session, 4)
+    order: list[str] = []
+    monkeypatch.setattr(garmin_sync, "sync_hrv_for_user",
+                        lambda db, uid, s, e: order.append(f"hrv{uid}") or _fake_hrv(db, uid, s, e))
+    orig = gs.sync_user
+    monkeypatch.setattr(gs, "sync_user", lambda db, uid, **k: order.append(f"read{uid}") or orig(db, uid, **k))
+    host = _host_with_one_rated_activity()
+    summary = garmin_sync.sweep_garmin_hrv(db_session, personal_transport=host.transport())
+    assert order == ["hrv1", "read1", "hrv4", "read4"]                          # a read follows its own user's pull
     assert summary["per_user"][1]["selfeval"]["rated"] == 1
     assert summary["selfeval"] == {"fetched": 2, "rated": 2, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
 
 
-def test_a_dead_token_user_gets_no_read_and_the_others_are_unaffected(db_session, monkeypatch):
-    from connectors.garmin import GarminReconnectError
-    _garmin(db_session, 1)
-    _garmin(db_session, 4)
+def test_a_refused_key_user_gets_no_read_and_the_others_are_unaffected(db_session, monkeypatch):
+    _personal(db_session, 1)
+    _personal(db_session, 4)
 
     def hrv(db, uid, s, e):
         if uid == 4:
-            raise GarminReconnectError("dead")
+            raise GarminPersonalKeyError("refused")
         return _fake_hrv(db, uid, s, e)
     monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", hrv)
-    built: list[str] = []
-
-    def factory(blob):
-        built.append("x")
-        return FakeSource([], {})
-    summary = garmin_sync.sweep_garmin_hrv(db_session, selfeval_factory=factory)
-    assert built == ["x"]                                                       # only user 1
+    summary = garmin_sync.sweep_garmin_hrv(db_session, personal_transport=_host_with_one_rated_activity().transport())
     assert "selfeval" not in summary["per_user"][4] and summary["per_user"][4]["status"] == "reconnect_required"
+    assert summary["per_user"][1]["selfeval"]["rated"] == 1
+
+
+def test_a_user_with_only_a_DI_token_is_reported_failed_and_gets_no_self_evaluation_read(db_session, monkeypatch):
+    _garmin(db_session, 1)                                                      # a DI row, no personal key
+    monkeypatch.setattr(garmin_sync, "_di_spo2_lane", lambda *a, **k: {})        # the SpO2 lane is not under test here
+    called: list[int] = []
+    monkeypatch.setattr(gs, "sync_user", lambda *a, **k: called.append(1) or {})
+    summary = garmin_sync.sweep_garmin_hrv(db_session)
+    u = summary["per_user"][1]
+    assert u["status"] == "no_personal_key" and "selfeval" not in u and called == []
+    assert summary["users_failed"] == 1 and summary["users_succeeded"] == 0
 
 
 def test_a_selfeval_failure_is_soft_and_never_changes_the_hrv_outcome(db_session, monkeypatch):
-    _garmin(db_session, 1)
-    monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", _fake_hrv)
-
-    def factory(blob):
-        raise RuntimeError("library blew up")
-    summary = garmin_sync.sweep_garmin_hrv(db_session, selfeval_factory=factory)
-    u = summary["per_user"][1]
-    assert u["status"] == "succeeded" and summary["users_succeeded"] == 1 and summary["users_failed"] == 0
-    assert u["selfeval"]["errors"] == 1                                         # counted, by class (read-phase catch)
-
-
-def test_a_failure_outside_the_read_is_also_soft_and_reported(db_session, monkeypatch):
-    """`sync_user` catches its own read failures; this is the step's own net, for anything that escapes it. It
-    reports the error, rolls back, and the user's HRV outcome stands."""
-    _garmin(db_session, 1)
+    _personal(db_session, 1)
     monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", _fake_hrv)
 
     def boom(*a, **k):
         raise RuntimeError("step exploded")
     monkeypatch.setattr(gs, "sync_user", boom)
-    summary = garmin_sync.sweep_garmin_hrv(db_session, selfeval_factory=lambda b: FakeSource([], {}))
+    summary = garmin_sync.sweep_garmin_hrv(db_session, personal_transport=FakeHost().transport())
     u = summary["per_user"][1]
-    assert u["status"] == "succeeded" and u["selfeval"] == {"error": "RuntimeError: step exploded"}
+    assert u["status"] == "succeeded" and u["selfeval"]["error"] == "RuntimeError"
     assert summary["selfeval"]["errors"] == 1 and summary["users_failed"] == 0
-
-
-def test_a_stale_token_is_visible_in_the_summary(db_session, monkeypatch):
-    _garmin(db_session, 1)
-    monkeypatch.setattr(garmin_sync, "sync_hrv_for_user", _fake_hrv)
-
-    class Stale:
-        def get(self, *a, **k):
-            raise gi.RefreshWouldBeNeeded()
-    summary = garmin_sync.sweep_garmin_hrv(db_session, selfeval_factory=lambda b: Stale())
-    assert summary["selfeval"]["skipped_needs_refresh"] == 1
+    lane = db_session.query(models.IntegrationLaneStatus).filter_by(user_id=1, lane="personal_selfeval").one()
+    assert lane.outcome == "error"                                              # recorded, not swallowed
 
 
 def test_the_nightly_brief_carries_the_selfeval_counts():
