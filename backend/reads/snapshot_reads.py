@@ -47,7 +47,7 @@ from reads.hc_sleep import (  # noqa: F401  (re-exported: callers and tests impo
 )
 from reads.recovery_night import (
     DERIVED, GARMIN_API, GARMIN_DI, HC_BLENDED, HC_UNNAMED, SCRAPER, SOURCE_LABELS, load_candidates,
-    load_device_windows, load_diary, partial_detail, partial_note, resolve_night,
+    load_device_nights, load_diary, partial_clause, partial_note, resolve_night,
 )
 
 # Names for a figure's source in the snapshot lines (the writer, not the rank key). A figure from
@@ -172,8 +172,8 @@ def _night_dict(db: Session, user_id: int, night: date, r: dict[str, Any], cand:
         hc = db.query(models.HealthConnectSync).filter_by(user_id=user_id, date=night).first()
         score = hc.sleep_score if hc else None
     diary_note = partial_note(
-        _field(r, "tst"), tst_src, load_diary(db, user_id, night).get(night),
-        load_device_windows(db, user_id, night).get(night))
+        night, _field(r, "tst"), tst_src, load_diary(db, user_id, night).get(night),
+        load_device_nights(db, user_id, night).get(night))
     field_sources = {f: FIELD_SOURCE_NAMES.get(r[f]["source"], r[f]["source"])
                      for f in ("tst", "stages", "efficiency", "spo2", "rr", "sleep_hr", "daily_rhr") if r[f]}
     return {
@@ -254,9 +254,8 @@ def sleep_snapshot_lines(sleep: dict[str, Any] | None, today: date | None = None
     lines = [f"  Sleep {format_duration(sleep['duration_min'])} · {who} (night of {sleep['night']})"
              + (f" · diary {format_duration(note['diary_tst'])}" if note else "")]
     if note and note["short_min"] is not None:
-        detail = partial_detail(note)
-        lines.append(f"  Partial night? The device is {format_duration(note['short_min'])} below the diary, so it may "
-                     f"have recorded only part of the night" + (f" ({detail})" if detail else ""))
+        lines.append(f"  Partial night? The device is {format_duration(note['short_min'])} below the diary; "
+                     f"{partial_clause(note)}")
     if sleep["blended"]:
         lines.append(f"  Sleep stages: withheld — the night spans {' + '.join(sleep['writers'])} "
                      f"and cannot be split per writer")
