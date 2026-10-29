@@ -15122,3 +15122,22 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **How you know.** Checked by Code at execution, 29 Oct 2026: the generator's docstring states it reads both repos at master via `raw.githubusercontent.com` and that output is gitignored; `build/` is in `.gitignore` (lines 10 and 30); `CLAUDE.md` State vocabulary is `OPEN · OWED · DONE → #N` under `**State:**`. After the edit the `cc.yml` body and the `CLAUDE.md` `;cc` bullet agree on the disposition step and on the vocabulary (diffed by eye; line numbers are cited in the close-out), `cc.yml` parses as YAML, and `scripts/check_governance_placeholders.py --ref HEAD` is clean once this heading carries its resolved integer.
 
 **Do not revisit unless.** A chat is found to hold content absent from every store and brief when the disposition said DELETE (the delete test then needs tightening, not the ritual dropped); or a derived digest is wanted in project knowledge again (then it is a dated manual re-upload, per item 4, not a regen step in `/closeout`).
+
+---
+
+### #462. Garmin M2 closes as superseded, operator-ruled 29 Oct 2026: no existing `hrv_readings` row is left to stamp, and Q242 item 1 is replaced
+
+**Decision.** RULED by the operator (29 Oct 2026: "close M2 as superseded").
+1. **M2 is closed. No migration is written.** M2 was the held data revision that would stamp existing `hrv_readings.transport = 'di'` (#449 item 5), on the premise that every existing row is DI by construction.
+2. **Why nothing is left to stamp.** The premise stopped being true when the Personal API lane began writing: `_upsert_hrv_day` sets `transport` on every night it (re)fetches, so each night the personal lane has covered, the backfills and the sweep window included, carries `personal_api` even where the DI lane wrote it first. The read of 29 Oct found no row of the other kind.
+3. **What `transport` means from here.** The lane that last wrote the night, not a claim that every value came from it: the personal upsert fills field by field and never nulls a stored value (#449 item 5), so a night first written by DI can carry a few DI-origin values under a `personal_api` label.
+4. **Not covered, by design.** `scripts/garmin_backfill.py` (an offline account-export import) writes no transport, so a row it inserts is NULL, a distinct provenance, and is not stamped `di`.
+5. **Q242 item 1 is replaced** to say so (the other three items are updated in the same commit with what is now known; Q242 stays OWED on PR-B).
+
+**Rationale.** A blanket `UPDATE ... SET transport = 'di'` run now would have relabelled live `personal_api` rows; the narrower `WHERE transport IS NULL AND source = 'garmin'` form would have matched nothing. A migration that matches nothing is a held revision with no work, so it is closed rather than shipped.
+
+**Status.** DONE, ruled 29 Oct 2026. Number resolved at master max #461.
+
+**How you know.** A read-only prod query through `railway connect`, run by the operator on 29 Oct 2026: `SELECT user_id, transport, count(*) FROM hrv_readings WHERE source = 'garmin' GROUP BY 1, 2` returned user 1: `personal_api` 49, user 4: `personal_api` 171, and no other row, so no NULL and no `di` (a NULL group would have printed as its own row). The overwrite behaviour is `_upsert_hrv_day` in `routers/garmin.py`, which assigns `existing.transport = transport` whenever a transport is passed.
+
+**Do not revisit unless.** A garmin `hrv_readings` row with a NULL or `di` transport appears from a live lane (PR-B removes the lane that wrote `di`, so none should), or a reader needs the origin of a night's values beyond the last writer, which would be a new column and a new decision.

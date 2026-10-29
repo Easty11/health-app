@@ -301,11 +301,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Garmin M2 closes as superseded: no existing `hrv_readings` row is left to stamp, and Q242 item 1 is replaced.** Governance - Canonical home: `DECISIONS_LOG.md` #462.
+
 - **Chat close-out ends with a chat disposition bound to a Q-number, and the project-knowledge copy of the consolidated governance view is retired.** Governance - Canonical home: `DECISIONS_LOG.md` #461.
 
 - **Q42 closes as transferred, Q83 closes folded into Q224 with the admission fork carried, and Q129 closes folded into Q173.** Governance - Canonical home: `DECISIONS_LOG.md` #460.
-
-- **Seven stale-premise questions close as superseded, two cross-repo resolutions are recorded, and fourteen questions are re-scoped.** Governance - Canonical home: `DECISIONS_LOG.md` #459.
 
 ---
 
