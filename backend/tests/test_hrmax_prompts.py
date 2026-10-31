@@ -113,7 +113,7 @@ def test_the_prompts_ride_in_the_freshness_read_and_the_snapshot_lines(db_sessio
     lines = fr.freshness_snapshot_lines(f)
     mine = [l for l in lines if l.startswith("  HRMAX, restate?")]
     assert len(mine) == 2
-    assert f"#{rows['over'].id} {rows['over'].session_date.isoformat()} Indoor cycling: a sample of 177 bpm against 175 in force" in mine[0]
+    assert f"row {rows['over'].id} {rows['over'].session_date.isoformat()} Indoor cycling: a sample of 177 bpm against 175 in force" in mine[0]
     clean = fr.freshness_snapshot_lines({**f, "hrmax_prompts": []})
     assert not any("HRMAX" in l for l in clean)
 
@@ -127,3 +127,46 @@ def test_a_failure_reads_as_no_prompts_and_does_not_take_the_freshness_read_down
     f = fr.freshness(db_session, 1, now=NOW)
     assert f["hrmax_prompts"] == []
     assert "pipes" in f and "garmin_alerts" in f
+
+
+# ---- one bout, two writers: one prompt (rows 144/145 on 2026-10-28) -----------------------------------------
+
+P_START = datetime(2026, 10, 28, 5, 5, 15, tzinfo=timezone.utc)      # Polar row, the longer window
+P_STOP = datetime(2026, 10, 28, 5, 36, 3, tzinfo=timezone.utc)
+G_START = datetime(2026, 10, 28, 5, 11, 19, tzinfo=timezone.utc)     # Garmin row, wholly inside it
+G_STOP = datetime(2026, 10, 28, 5, 33, 35, tzinfo=timezone.utc)
+
+
+def _one_ride_two_writers(db, *, polar_top, garmin_top):
+    _user(db)
+    _hrmax(db, date(2026, 3, 1), 177)
+    polar = _row(db, "polar", P_START, P_STOP, pkg=POLAR_FLOW, sport="Biking Stationary")
+    garmin = _row(db, "garmin", G_START, G_STOP, pkg=GARMIN, sport="Biking")
+    peak = datetime(2026, 10, 28, 5, 31, 47, tzinfo=timezone.utc)
+    for pkg, start, stop, top in ((POLAR_FLOW, P_START, P_STOP, polar_top), (GARMIN, G_START, G_STOP, garmin_top)):
+        n = int((stop - start).total_seconds() // 5)
+        bpms = [150] * n
+        bpms[int((peak - start).total_seconds() // 5)] = top
+        _samples(db, pkg, start, 5, bpms)
+    return polar, garmin
+
+
+def test_one_bout_recorded_by_two_writers_prompts_once_on_the_primary_row(db_session):
+    polar, garmin = _one_ride_two_writers(db_session, polar_top=179, garmin_top=179)
+    chain = hc_zone_enrich.enrich_user(db_session, 1)["over_ceiling_rows"]
+    assert {c["id"] for c in chain} == {polar.id, garmin.id}                 # the chain still lists each raw row
+    prompts = hc_zone_enrich.over_ceiling_prompts(db_session, 1)
+    assert [p["id"] for p in prompts] == [polar.id]                          # the prompt is per bout
+    assert prompts[0]["hr_max"] == 179 and prompts[0]["hrmax_in_force"] == 177
+    assert {p["id"] for p in prompts} <= {c["id"] for c in chain}
+
+
+def test_a_sample_held_only_by_the_suppressed_twin_still_prompts(db_session):
+    polar, garmin = _one_ride_two_writers(db_session, polar_top=150, garmin_top=179)
+    prompts = hc_zone_enrich.over_ceiling_prompts(db_session, 1)
+    assert [p["id"] for p in prompts] == [garmin.id]                         # the only row holding the 179
+
+
+def test_two_separate_rides_over_the_ceiling_still_prompt_twice(db_session):
+    _seed_mix(db_session)                                                    # rows an hour apart: no twins
+    assert len(hc_zone_enrich.over_ceiling_prompts(db_session, 1)) == 2

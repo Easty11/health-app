@@ -20,7 +20,7 @@ state, so it can only withhold information, never corrupt a computed value.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import and_, func, null
@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 import models
 from hr_zones import PLAUSIBLE_BPM, REASONS, entry_from_row, hrmax_in_force, zone_session
-from reads.aerobic_reads import HEALTH_CONNECT
+from reads.aerobic_reads import HEALTH_CONNECT, arbitrated_sessions, twins_by_canonical
 
 
 def _utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -106,13 +106,21 @@ def enrich_user(db: Session, user_id: int) -> dict[str, Any]:
 
 
 def over_ceiling_prompts(db: Session, user_id: int) -> list[dict[str, Any]]:
-    """The health_connect rows that hold a plausible same-writer sample above the HRmax in force: the
-    rows `enrich_user` lists as `over_ceiling_rows`, read from the stored samples instead of from a
-    chain run (nothing persists a run's report). READ-ONLY and in ONE aggregate query, so the freshness
-    read can carry it. Same definition as `zone_session`: samples inside [start, stop] from the row's own
-    writer, inside the plausibility bounds, `top > hrmax` (equal is not over); a row with no usable
-    interval or no HRmax in force is never over. Each item: `{id, date, sport, hr_max, hrmax_in_force}`.
-    It never touches `user_hrmax`: restating is the operator's call (#383)."""
+    """One prompt per BOUT whose health_connect row(s) hold a plausible same-writer sample above the HRmax in
+    force. The over-ceiling test is `enrich_user`'s `over_ceiling_rows` (every raw row), read from the
+    stored samples instead of from a chain run (nothing persists a run's report): one aggregate query,
+    READ-ONLY, so the freshness read can carry it. Same definition as `zone_session`: samples inside
+    [start, stop] from the row's own writer, inside the plausibility bounds, `top > hrmax` (equal is not
+    over); a row with no usable interval or no HRmax in force is never over.
+
+    A bout two writers recorded (a Polar row and the Garmin row inside it) is one ride, so it earns one
+    prompt: the over-ceiling rows are grouped with the SAME arbitration the session lists use
+    (`arbitrated_sessions`, `twins_by_canonical`). The prompt sits on the canonical row when that row is
+    itself over the ceiling, else on the lowest-id over-ceiling twin, so a sample held only by a suppressed
+    twin still prompts. A Hevy mirror is outside the arbitration and keeps its own prompt. The chain report
+    still lists every raw row (each is zoned on its own), so prompts equal the chain's rows only when no
+    two rows are twins; otherwise they are a subset. Each item: `{id, date, sport, hr_max, hrmax_in_force}`,
+    `id` an `aerobic_sessions` row id. It never touches `user_hrmax`: restating is the operator's call (#383)."""
     hrmax_rows = [entry_from_row(h)
                   for h in db.query(models.UserHrmax).filter(models.UserHrmax.user_id == user_id).all()]
     lo, hi = PLAUSIBLE_BPM
@@ -126,10 +134,31 @@ def over_ceiling_prompts(db: Session, user_id: int) -> list[dict[str, Any]]:
             .group_by(A.id, A.session_date, A.sport_name)
             .order_by(A.session_date, A.id)
             .all())
-    out: list[dict[str, Any]] = []
+    over = []
     for row_id, day, sport, top in tops:
         hrmax = hrmax_in_force(hrmax_rows, day)
         if hrmax is not None and top > hrmax:
-            out.append({"id": row_id, "date": day.isoformat(), "sport": sport,
-                        "hr_max": top, "hrmax_in_force": hrmax})
-    return out
+            over.append({"id": row_id, "date": day.isoformat(), "sport": sport,
+                         "hr_max": top, "hrmax_in_force": hrmax, "_day": day})
+    if len(over) < 2:                      # one bout cannot be duplicated by itself: skip the arbitration read
+        return [{k: v for k, v in o.items() if k != "_day"} for o in over]
+
+    # One prompt per ARBITRATED bout (the same `arbitrate` the session lists use): a bout two writers
+    # recorded is one ride, so it earns one prompt, not one per raw row. The prompt is attributed to the
+    # canonical row when that row is itself over the ceiling, else to the lowest-id over-ceiling twin, so a
+    # sample held only by a suppressed twin still prompts. Hevy mirrors are outside the arbitration and
+    # keep their own prompt.
+    rows = arbitrated_sessions(user_id, db, since=min(o["_day"] for o in over) - timedelta(days=1))
+    by_id = {r.id: r for r in rows}
+    winner_of = {t.id: w for w, twins in twins_by_canonical(rows).items() for t in twins}
+    groups: dict[int, list[dict[str, Any]]] = {}
+    for o in over:
+        r = by_id.get(o["id"])
+        key = o["id"] if r is None or getattr(r, "hevy_mirror", False) else winner_of.get(o["id"], o["id"])
+        groups.setdefault(key, []).append(o)
+    out = []
+    for key, members in groups.items():
+        pick = next((m for m in members if m["id"] == key), None) or min(members, key=lambda m: m["id"])
+        out.append(pick)
+    out.sort(key=lambda m: (m["_day"], m["id"]))
+    return [{k: v for k, v in m.items() if k != "_day"} for m in out]

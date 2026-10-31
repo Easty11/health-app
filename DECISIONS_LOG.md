@@ -15420,3 +15420,12 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **Decision.** Chat-side writes are approval-gated as the new shared-block line in `CLAUDE.md` § Merge disposition states: a chat-side session writes to the repo or tracker only behind an explicit operator approval given in-turn, one approval may cover a named group of actions, and a pasted queue or brief authorises nothing by itself. `FEEDBACK.md` §66 records the 1 Nov 2026 instance (PRs 574 and 575 landed from a chat-side session with nothing discussed or approved). Code's own merge disposition is unchanged. The same batch carries `FEEDBACK.md` §67, the test-fixture lesson from the `claude/fix-aerobic-twins-clock` row: a fixture that freezes one clock reader must freeze every reader the surface under test uses, or a green suite expires on a calendar date (PR 575).
 
 **Reverse-by.** Operator ruling in a later entry; none expected.
+
+
+### #474. One "Restate HRmax?" prompt per arbitrated bout, not per raw row
+
+**Tier:** ruling
+
+**Decision.** `over_ceiling_prompts` (`backend/hc_zone_enrich.py`) emits one prompt per arbitrated bout instead of one per raw `health_connect` row. The over-ceiling rows are grouped with the arbitration the session lists use (`arbitrated_sessions`, `twins_by_canonical`), and the prompt sits on the canonical row when that row is itself over the ceiling, else on the lowest-id over-ceiling twin, so a sample held only by a suppressed twin still prompts. A Hevy mirror is outside the arbitration and keeps its own prompt. Operator ruled these three defaults on 1 Nov 2026 ("land, defaults"). Evidence (operator prod reads, 1 Nov 2026, user 1; operator-reported, not re-read by Code, which has no prod access): `aerobic_sessions` row 144 (Polar, 05:05:15 to 05:36:03Z) and row 145 (Garmin, 05:11:19 to 05:33:35Z, wholly inside it) are one 2026-10-28 ride, each with a live max of 179 against 177 in force, so master prompted twice for one burst. `enrich_user` still lists every raw row, since each is zoned on its own; `test_prompts_match_the_chain_runs_over_ceiling_rows` passes unchanged because its rows are not twins. The snapshot line now writes `row N`, not `#N`: an `aerobic_sessions` id is not a `DECISIONS_LOG` number. Two-way door (display only; nothing reads a prompt or writes `user_hrmax`); held for the operator's ruling, then landed.
+
+**Reverse-by.** Revert `over_ceiling_prompts` to the per-row form; no stored row depends on it.
