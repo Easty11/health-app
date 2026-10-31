@@ -12,8 +12,12 @@ pasted summary; if a summary contradicts `CLAUDE.md`, `CLAUDE.md` wins.
 Execute these steps in order:
 
 1. **Read the canonical stores** — `DECISIONS_LOG.md`, `ROADMAP.md`, `FEEDBACK.md`, the open `fork` issues
-   (`gh issue list --label fork --state open`) and issues updated this session
-   (`gh issue list --state all --search "updated:>=<session-open-date>"`). They are the source of truth.
+   (`gh api "repos/Easty11/health-app/issues?labels=fork&state=open" --jq ".[] | \"GH#\(.number) \(.title)\""`)
+   and issues updated this session
+   (`gh api "repos/Easty11/health-app/issues?state=all&since=<session-open-iso>" --jq ".[] | select(.pull_request == null) | \"GH#\(.number) \(.state) \(.title)\""`).
+   They are the source of truth. The REST form is the one that works in a cloud session, where GraphQL
+   is blocked; locally `gh issue list --label fork --state open` and
+   `gh issue list --state all --search "updated:>=<session-open-date>"` do the same.
 
 2. **Report the actual commits made this session.** Determine the session-open ref
    (the first commit of this session, or ask if ambiguous; `git reflog` as fallback) and
@@ -46,7 +50,7 @@ Execute these steps in order:
 
 5. **Regenerate the cold-resume handoff** from the stores so a cold session can resume
    with zero chat history: current sprint (from the `CLAUDE.md` sprint block / `ROADMAP.md`),
-   open `fork` issues, and design docs not in a terminal state
+   open `fork` issues (the REST form from step 1), and design docs not in a terminal state
    (`grep -l "State:\*\* \(ideation\|discussion\)" docs/design/*.md`), and the single clearest **next action**.
 
    **The handoff must also name what was NOT touched — explicitly, as its own section.** A

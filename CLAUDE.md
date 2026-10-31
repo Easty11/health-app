@@ -47,11 +47,10 @@ repo-specific and live below END SHARED LOOP RULES in their own repo.
   flip it ready-for-review and self-merge on green the same turn. A PR merged in-turn ends
   its own subscription, so no check-in is scheduled. Session origin (harness vs local) never
   justifies an operator hand-off or a merge-watch. (Supersedes the Q125 two-lane convention.)
-- **Holds — do not self-merge, wait for explicit operator instruction:** a PR containing a
-  schema migration; anything the session was told to hold.
-- **Door class decides the hold.** A **one-way door** — a schema migration; a default that shapes
-  stored rows (data-meaning); a cross-module contract change; anything the session was told to
-  hold — holds for explicit operator instruction, whether raised or resolved. Everything else is a
+- **Door class decides the hold.** A **one-way door** — a schema migration (a PR containing one);
+  a default that shapes stored rows (data-meaning); a cross-module contract change; anything the
+  session was told to hold — is not self-merged: it holds for explicit operator instruction,
+  whether raised or resolved. Everything else is a
   **two-way door**: Code resolves it in-PR, records a *ruling* entry in `DECISIONS_LOG` (Decision ·
   Reverse-by), and self-merges on green. The merge is the ratification; chat objects at the next
   session open, by issue, if it disagrees. Resolving a two-way door needs no hold; a one-way door
@@ -72,7 +71,6 @@ INSTRUCTION TO VERIFY, never a report of fact. Verify or STOP; never land on it.
 | `DECISIONS_LOG.md` | Architecture decisions | Append-only; supersede by new entry, never edit locked text. |
 | GitHub Issues (per repo) | Undecided forks, unknowns awaiting measurement, watch-points | Typed by label (`fork` / `stamp` / `verify` / `watch` / `design`); closed by `Closes #N` in the resolving PR or by the stale action (`abandoned`). Never mirrored into the tree. |
 | `docs/design/NNNN-*.md` | Architecture-scale design docs (RFD-style) | `**State:**` ideation / discussion / committed / abandoned; own Unresolved-questions table, every row resolved or struck before `committed`. |
-| `OPEN_QUESTIONS.md` | FROZEN — legacy entries pending Phase B migration | Read-only. No new entries. Deleted at Phase B. |
 | `ROADMAP.md` | Current sprint + horizon | Mutable; Code updates at close-out. |
 | `FEEDBACK.md` | Behavioural corrections, condensed verification rules | Read at session start. |
 | `FEEDBACK_ARCHIVE.md` | Full provenance essays | NOT read at session start. |
@@ -98,6 +96,9 @@ loop-close named) · UNSTARTED. No "in progress". Issues: open (typed by label) 
   labelled `design`.
 - A question survives only by being touched; the stale action closes the untouched at 60 days as
   `abandoned`. Abandoned is a normal ending.
+- `build`: ruled, awaiting its trigger or capacity; the body names the trigger and the ruling entry.
+- **Citation form.** Bare `#N` in every store is a `DECISIONS_LOG` number. A GitHub issue or PR is
+  written `GH#N`. Never cite an issue bare.
 
 ### DECISIONS_LOG discipline
 - Entry format: **Decision · Rationale · Status · How you know · Do not revisit unless**.
@@ -113,14 +114,16 @@ loop-close named) · UNSTARTED. No "in progress". Issues: open (typed by label) 
   Number-at-merge and the guard apply to both.
 
 ### Session rituals
-- **Open:** report the decisions max (`^### #?[0-9]+`) and the open `fork` issues
-  (`gh issue list --label fork --state open`), titles included. Chat re-aims any brief against these.
+- **Open:** report the decisions max (`^### #?[0-9]+`) and the open `fork` issues, titles included:
+  `gh api "repos/Easty11/health-app/issues?labels=fork&state=open" --jq ".[] | \"GH#\(.number) \(.title)\""`
+  (locally `gh issue list --label fork --state open`; the short form fails in a cloud session, where
+  GraphQL is blocked). Chat re-aims any brief against these.
   Optional at open, when a cold-start digest is wanted: `python scripts\gen_governance_view.py`
   (reads master; output is gitignored under `build\`). Never run it at close-out — it would
   digest master before this session's close-out merges.
 - **Chat close-out (`;cc`):** emits the pending-commit queue as canonical-format entries
-  flagged PENDING, then a one-line CHAT DISPOSITION (Q-number(s) served; LIVE / PARKED /
-  CLOSED; the title to rename the chat to, or DELETE). Writes nothing to project knowledge.
+  flagged PENDING, then a one-line CHAT DISPOSITION (the GH# issues and `docs/design` docs served;
+  LIVE / PARKED / CLOSED; the title to rename the chat to, or DELETE). Writes nothing to project knowledge.
 - **Code close-out (`/closeout`):** reads the stores; reports actual commits
   (`git log --format="%ad %s" --date=short -10`); reconciles every PENDING item;
   branch terminal-state gate — every touched branch ends merged+deleted or in
@@ -201,7 +204,7 @@ merged config and returns a stale global body, reading configured when it is not
 global; the ruleset is server-side and needs nothing locally.
 
 **Batched governance landings (#176).** Governance/docs-only edits — touching only
-`DECISIONS_LOG`, `OPEN_QUESTIONS`, `BRANCHES`, `ROADMAP`, `CLAUDE.md`, `FEEDBACK`,
+`DECISIONS_LOG`, `BRANCHES`, `ROADMAP`, `CLAUDE.md`, `FEEDBACK`,
 `FEEDBACK_ARCHIVE`, `closeout.md`; no code and no migrations — bank onto one branch and land
 as one PR per checkpoint. Three invariants:
 
@@ -222,7 +225,6 @@ self-merge on green under § Merge disposition.
   typed `HUMAN`/`MODEL`/`COUPLED`, `status` mutable (`STANDS`/`STRUCK`); a row exists only if
   a procedural change would have prevented the failure (`prevention` mandatory), `caused_by`
   derived from `caused` — now lives in `FEEDBACK_ARCHIVE.md` §19 (post-prune). See #129–#132.
-- `OPEN_QUESTIONS.md` is frozen (#467). No new entries, no state changes. Phase B migrates the live entries to Issues / `docs/design` and deletes the file.
 - **Hevy:** canonical creation is `create_workout`, not `create_routine` (custom exercise
   UUIDs do not resolve via the routine endpoint — confirmed API limit). Matrix: `Hevy_Pattern`.
 - **CBT-I block references.** `cbti_blocks.id` is canonical for any operational reference
@@ -315,11 +317,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The live questions are migrated to GitHub issues and `docs/design` docs, the Q233 ingestion ruling is recorded, and the legacy question file is deleted.** Governance - Canonical home: `DECISIONS_LOG.md` #468.
+
 - **The question layer moves to GitHub Issues and `docs/design`: door class decides the hold, nothing is filed bare, and `OPEN_QUESTIONS.md` is frozen.** Governance - Canonical home: `DECISIONS_LOG.md` #467.
 
 - **The partial-night note names how the device window falls short: started late, finished early or broken up, at a 60-minute tolerance.** Governance - Canonical home: `DECISIONS_LOG.md` #466.
-
-- **The watch's partial nights are annotated against the diary, not corrected: flagged at 60 minutes below it, silent without a diary.** Governance - Canonical home: `DECISIONS_LOG.md` #465.
 
 ---
 

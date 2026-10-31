@@ -299,9 +299,23 @@ def gate_no_missing_state(repo: str, store_key: str, parsed: dict) -> None:
 # Build
 # --------------------------------------------------------------------------------------
 
+# A repo whose questions store is retired (gov_dialects.QUESTIONS_RETIRED) carries this marker in
+# place of a tally: reported, never silently absent, and never a gate failure on a missing file.
+QUESTIONS_RETIRED_MARKER = {
+    "retired": "questions are GitHub issues and docs/design since question layer Phase B (DECISIONS_LOG #468)",
+}
+
+
+def stores_for(repo: str) -> list:
+    return [k for k in STORE_FILE if k != "questions" or D.has_questions_store(repo)]
+
+
 def build_repo(repo: str, sha: str, texts: dict) -> dict:
     out = {"provenance": {"ref": "master", "sha": sha}}
     for store_key in ("decisions", "questions", "branches"):
+        if store_key == "questions" and not D.has_questions_store(repo):
+            out[store_key] = dict(QUESTIONS_RETIRED_MARKER)
+            continue
         text = texts[store_key]
         parsed = PARSERS[store_key](text, repo)
         crude = crude_count(store_key, text)
@@ -321,6 +335,8 @@ def collect_drift(model: dict) -> list:
     drift = []
     for repo, rd in model["repos"].items():
         for store_key in ("questions", "branches"):
+            if "retired" in rd[store_key]:
+                continue
             ov = rd[store_key]["off_vocab"]
             if ov:
                 drift.append({"repo": repo, "store": store_key, "off_vocab": ov})
@@ -332,10 +348,13 @@ def build_model(generated_utc: str) -> dict:
     for repo in D.REPOS:
         sha = resolve_master_sha(repo)
         print(f"  {repo}: master @ {sha[:7]}", file=sys.stderr)
-        texts = {k: fetch(repo, sha, STORE_FILE[k]) for k in STORE_FILE}
+        texts = {k: fetch(repo, sha, STORE_FILE[k]) for k in stores_for(repo)}
         repos[repo] = build_repo(repo, sha, texts)
         for k in ("decisions", "questions", "branches"):
             p = repos[repo][k]
+            if "retired" in p:
+                print(f"    {STORE_FILE[k]+'.md':<18} retired (issues)", file=sys.stderr)
+                continue
             print(f"    {STORE_FILE[k]+'.md':<18} {p['count']:>4} items", file=sys.stderr)
     model = {
         "schema_version": SCHEMA_VERSION,

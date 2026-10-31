@@ -22,6 +22,17 @@ import re
 OWNER = "Easty11"
 REPOS = ("health-app", "health-connect-app")
 
+# Repos whose `OPEN_QUESTIONS.md` store is RETIRED: their questions are GitHub issues and
+# `docs/design` docs (question layer Phase B, DECISIONS_LOG #468). The tools that read both repos'
+# stores at master skip the questions store for these, and say so, instead of halting on a file
+# that is gone. health-connect-app keeps its file until its own Phase B; drop it from this set's
+# complement (i.e. add it here) when that lands.
+QUESTIONS_RETIRED = frozenset({"health-app"})
+
+
+def has_questions_store(repo: str) -> bool:
+    return repo not in QUESTIONS_RETIRED
+
 MIDDOT = "·"  # ·  — HCA puts inline state after this on the heading line.
 
 # --------------------------------------------------------------------------------------
