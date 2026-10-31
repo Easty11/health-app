@@ -6,9 +6,9 @@ nothing else holds a copy.
     highest rung                                                                          lowest rung
     in_app  >  garmin  >  [future adapters, slotted here when each is added]  >  day_fill
 
-  * `in_app` is RESERVED: the app's own per-session capture. It has no writer yet (the contract refuses a
-    write naming it, `srpe_store.SOURCE_SCALES`), so today its rung is empty. Q189 names it as the natural
-    surface for H10-only sessions.
+  * `in_app` is the app's own per-session capture (`srpe_in_app`: the close-out, the AM catch-up, the backfill).
+    It is the only route for a Hevy workout, which records no session RPE, and it outranks the device's own
+    rating for the same session.
   * A new adapter is added to `srpe_store.SOURCE_SCALES` (after a read-only probe, Q209 pattern, FEEDBACK
     section 17) AND slotted into `SOURCE_HIERARCHY` below, in the rank the operator chooses. A source that is
     stored but not listed here is IGNORED by the read (fail closed: an unranked rating is never guessed into
