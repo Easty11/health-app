@@ -157,7 +157,6 @@ _SYNTHETIC_CATALOGUE = [
     ("CR000005", "Standing Calf Raise (Machine)"),
     ("PC000001", "Preacher Curl (Barbell)"),
     ("PC000002", "Preacher Curl (Dumbbell)"),
-    ("PO000001", "Pullover (Dumbbell)"),
     # Constraint-COLLIDING subjects, kept for the injury-refusal probe only.
     ("B5D3A742", "Bulgarian Split Squat (Dumbbell)"),
     ("A1B2C3D4", "Bulgarian Split Squat (Barbell)"),
@@ -397,12 +396,12 @@ _RESOLVER_PROBE = Probe(
     subject="suggest_candidates on a title the model had to guess",
     expect=EXPECT_GUESSED_TITLE,
     # Calf Raise is PROD-CONFIRMED to force a title and return 5 genuine
-    # candidates. Preacher Curl / Pullover broaden it. All are out-of-history AND
+    # candidates. Preacher Curl broadens it. Both are out-of-history AND
     # constraint-neutral: they do not collide with the pes anserine / hamstring
     # ledger, so an injury refusal cannot silently suppress the measurement (B3).
     turns=[
-        "Build me an accessory routine with calf raises, preacher curls, and "
-        "pullovers. 3 sets of 10 each at 20kg. This is a NEW routine, separate "
+        "Build me an accessory routine with calf raises and preacher curls. "
+        "3 sets of 10 each at 20kg. This is a NEW routine, separate "
         "from Lower A.",
         _CONFIRM,
         _CONFIRM,

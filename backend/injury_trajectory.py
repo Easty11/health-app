@@ -28,6 +28,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 import models
+from load_metrics import _local_day  # operator-local (AEST) day — Q42 single source
 
 
 def injury_soreness_key(value: dict[str, Any]) -> str:
@@ -141,7 +142,7 @@ def _review_message(
 def evaluate(user_id: int, db: Session, today: date | None = None) -> dict[str, list[dict]]:
     """Divergence + symptom-gated review flags for the user's active injuries that
     declare a trajectory. Surfacing only — returns messages, changes nothing."""
-    today = today or date.today()
+    today = today or _local_day()
     rows = (
         db.query(models.UserKnowledgeEntry)
         .filter_by(user_id=user_id, type="injury", active=True)

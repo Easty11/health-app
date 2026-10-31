@@ -157,6 +157,25 @@ def _effective_weight(weight_kg: float | None, bw_fraction: float | None = None)
 # Per-set load (pure, D-C/D-D)
 # ---------------------------------------------------------------------------
 
+_SET_NUMERIC_FIELDS = ("weight_kg", "reps", "rpe", "distance_meters", "duration_seconds")
+
+
+def _is_non_finite_set(s: dict[str, Any]) -> bool:
+    """True if any set numeric is present but not a finite number (NaN, ±inf, or something
+    `float()` cannot read). None is absence, not a defect. A non-finite value must not reach
+    the load maths: NaN `weight_kg` fails `> 0` and would silently score as bodyweight, NaN
+    `reps` poisons the mechanical sum, and NaN/inf `rpe` raises in `math.floor` (Q147)."""
+    for field_name in _SET_NUMERIC_FIELDS:
+        v = s.get(field_name)
+        if v is None:
+            continue
+        try:
+            if not math.isfinite(float(v)):
+                return True
+        except (TypeError, ValueError):
+            return True
+    return False
+
 @dataclass(frozen=True)
 class SetLoad:
     """One set's Mechanical + Neuromuscular contribution and the provenance flags the
@@ -165,6 +184,7 @@ class SetLoad:
     mechanical: float = 0.0
     neuromuscular: float = 0.0
     skip: bool = False
+    non_finite: bool = False     # skip because a numeric was NaN/inf/unreadable — counted, never scored (Q147)
     is_warmup: bool = False
     is_non_rep: bool = False
     non_rep_mech: float = 0.0
@@ -204,6 +224,10 @@ def compute_set_load(
     dist = s.get("distance_meters")
     dur = s.get("duration_seconds")
     rpe = s.get("rpe")
+
+    # ── Non-finite numeric: skip, counted by the caller — never propagate NaN (Q147) ─
+    if _is_non_finite_set(s):
+        return SetLoad(skip=True, non_finite=True)
 
     # ── Non-rep work (carries/sleds, timed holds): D-D bridging, NM = 0 ──────────
     if reps is None and (dist is not None or dur is not None):
@@ -315,6 +339,8 @@ def e1rm_samples(sessions: list["Session_"]) -> list[E1rmSample]:
         if sess.when is None:
             continue
         for block_index, template_id, s in sess.sets:
+            if _is_non_finite_set(s):
+                continue
             rpe = s.get("rpe")
             reps = s.get("reps")
             weight = s.get("weight_kg")
@@ -413,6 +439,8 @@ def _session_median_rir(sets: list[tuple[int, str, dict[str, Any]]]) -> int | No
         set_type = (s.get("type") or "normal").lower()
         if set_type == "warmup":
             continue
+        if _is_non_finite_set(s):
+            continue  # counted as skipped in compute_set_load; never banded
         if s.get("reps") is None:
             continue  # non-rep / no-data set — not a working rep set
         if set_type == "failure":
@@ -480,6 +508,7 @@ def compute_session_events(
     working_rep_sets = 0        # non-warmup rep sets — the diagnostic's denominator
     working_rep_with_rpe = 0
     session_imputed_sets = 0
+    sets_skipped_non_finite = 0
     imputed_templates: set[str] = set()
     bwf = bw_fraction_by_template or {}
 
@@ -491,6 +520,8 @@ def compute_session_events(
             impute_rir=session_rir,
         )
         if sl.skip:
+            if sl.non_finite:
+                sets_skipped_non_finite += 1
             continue
 
         # Load sums as logged — no laterality factor.
@@ -540,6 +571,7 @@ def compute_session_events(
         "indeterminate_laterality": indeterminate_templates,
         "post_epoch_zero_rpe": post_epoch_zero_rpe,
         "session_imputed_sets": session_imputed_sets,
+        "sets_skipped_non_finite": sets_skipped_non_finite,
         "rpe_unavailable_templates": sorted(imputed_templates),
     }
     mech_p["non_rep_load"] = round(mech_p["non_rep_load"], 6)

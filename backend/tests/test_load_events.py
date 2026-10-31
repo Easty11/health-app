@@ -11,6 +11,7 @@ broken coefficient/routing is worthless):
     gating, `excluded_at` skipped, idempotent per-`formula_version` recompute, and the
     provenance gap fields.
 """
+import math
 from datetime import datetime, timezone
 
 import pytest
@@ -493,3 +494,38 @@ def test_indeterminate_laterality_surfaced_in_summary(db_session):
     mech = db_session.query(models.LoadEvent).filter_by(load_window="mechanical").one()
     assert mech.load == pytest.approx(1000.0)            # not halved
     assert mech.provenance["indeterminate_laterality"] == ["UNT"]
+
+
+# ── Q147: non-finite set numerics are skipped and counted, never scored ──────────────
+
+@pytest.mark.parametrize("bad", [
+    {"weight_kg": float("nan"), "reps": 5, "rpe": 8.0},
+    {"weight_kg": 80.0, "reps": float("nan"), "rpe": 8.0},
+    {"weight_kg": 80.0, "reps": 5, "rpe": float("nan")},
+    {"weight_kg": 80.0, "reps": 5, "rpe": float("inf")},
+    {"weight_kg": None, "reps": None, "distance_meters": float("nan")},
+])
+def test_non_finite_set_is_skipped_not_scored(bad):
+    sl = compute_set_load(bad, e1rm=None)
+    assert sl.skip and sl.non_finite
+    assert sl.mechanical == 0.0 and sl.neuromuscular == 0.0
+
+
+def test_non_finite_sets_never_propagate_and_are_counted():
+    """NaN weight (would score as bodyweight), NaN reps (would poison the sum) and a NaN rpe
+    (would raise in floor) all sit beside a good set: the good set scores, the bad three are
+    counted in both windows, no NaN reaches either load, and e1RM / median RIR ignore them."""
+    sets = [
+        (0, "A", {"weight_kg": 100.0, "reps": 5, "rpe": 8.0}),            # good, RIR 2
+        (0, "A", {"weight_kg": float("nan"), "reps": 5, "rpe": 8.0}),
+        (0, "A", {"weight_kg": 100.0, "reps": float("nan"), "rpe": 8.0}),
+        (0, "A", {"weight_kg": 100.0, "reps": 5, "rpe": float("nan")}),
+        (0, "A", {"weight_kg": 100.0, "reps": None}),                      # absent reps: plain skip, not counted
+    ]
+    sess = _sess(date(2026, 6, 1), sets)
+    assert [s.template_id for s in le.e1rm_samples([sess])] == ["A"]       # only the good set fits
+    ev = compute_session_events(sess, laterality_by_template={}, e1rm_by_template={"A": None})
+    for window in ("mechanical", "neuromuscular"):
+        assert math.isfinite(ev[window]["load"])
+        assert ev[window]["provenance"]["sets_skipped_non_finite"] == 3
+    assert ev["mechanical"]["load"] == pytest.approx(100.0 * 5 * 1.0 * le._mech_mult(2))

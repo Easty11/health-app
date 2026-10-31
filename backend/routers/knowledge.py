@@ -1269,7 +1269,7 @@ def _get_entry(entry_id: int, user_id: int, db: Session) -> models.UserKnowledge
 
 def expire_stale_entries(user_id: int, db: Session) -> int:
     """Set active=False for all entries where expires_at < today. Returns count expired."""
-    today = date.today()
+    today = _local_day()
     entries = (
         db.query(models.UserKnowledgeEntry)
         .filter(

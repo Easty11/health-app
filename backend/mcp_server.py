@@ -520,7 +520,7 @@ def get_training_sessions(days: int = 28) -> str:
     identity only, those recordings are not extra training and add no load.
     For aerobic sessions and Hevy workouts merged into one list, use get_recent_sessions."""
     user_id = _current_user_id()
-    since = datetime.now(timezone.utc).date() - timedelta(days=days)
+    since = _aest_wake_day() - timedelta(days=days)
 
     # Read-door (#Q161): list CANONICAL sessions only — a same-bout Polar/HC twin must not
     # appear twice. arbitrated_sessions marks exactly one row per bout canonical; day is the
@@ -895,7 +895,7 @@ def get_readiness_snapshot() -> str:
     # inflate the readiness training summary (session_date is the local day).
     with SessionLocal() as _sdb:
         _canonical = [s for s in arbitrated_sessions(
-                          user_id, _sdb, since=datetime.now(timezone.utc).date() - timedelta(days=7))
+                          user_id, _sdb, since=_aest_wake_day() - timedelta(days=7))
                       if getattr(s, "canonical", True)]
         _gym = _gym_trace_marks(_sdb, user_id, _canonical)
     # A gym session's HR trace is that strength session, not conditioning (`concurrent_strength`,

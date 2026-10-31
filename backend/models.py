@@ -734,7 +734,7 @@ class SessionRpeObservation(Base):
 
 class SamsungHRVReading(Base):
     __tablename__ = "samsung_hrv_readings"
-    __table_args__ = (UniqueConstraint("user_id", "captured_at", name="uq_samsung_hrv_user_date"),)
+    __table_args__ = (UniqueConstraint("user_id", "captured_at", "context", name="uq_samsung_hrv_user_date_context"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
