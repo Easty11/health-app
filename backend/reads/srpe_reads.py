@@ -94,7 +94,8 @@ def aerobic_bout(s) -> Bout:
     return Bout((AEROBIC, s.id), s.session_date, _utc(s.start_time), _utc(s.stop_time), mins, s)
 
 
-def _hevy_bout(w) -> Bout:
+def hevy_bout(w) -> Bout:
+    """A `Bout` for a Hevy workout (for callers that rate workouts, e.g. the MCP session lines)."""
     mins = None
     if w.end_time is not None and w.start_time is not None:
         m = (w.end_time - w.start_time).total_seconds() / 60.0
@@ -141,7 +142,7 @@ def counted_sessions(
     for w in hevy:
         if w.start_time is None:
             continue
-        out.append(_hevy_bout(w))
+        out.append(hevy_bout(w))
 
     return [b for b in out if (since is None or b.day >= since) and (until is None or b.day <= until)]
 

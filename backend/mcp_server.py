@@ -41,7 +41,7 @@ from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from routers.clinical_documents import document_out as _clinical_document_out, parse_filters as _parse_document_filters
 from reads.labs_reads import latest_lab_results
 from aerobic_format import format_aerobic_session, format_also_recorded_by, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
-from reads.srpe_reads import aerobic_bout, observed_ratings   # per-session RPE/feel for a session, any source (Q209)
+from reads.srpe_reads import aerobic_bout, hevy_bout, observed_ratings   # per-session RPE/feel for a session, any source (Q209)
 from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout, twins_by_canonical   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
 from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
 from sport_classes import is_strength_sport
@@ -730,12 +730,17 @@ def _hevy_detail(w) -> str:
 
 
 def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, days: int, since: date,
-                            twins=None) -> str:
+                            twins=None, hevy_ratings=None) -> str:
     """Newest first: one line per canonical aerobic session; a session that overlaps a counted
     workout (`_concurrent_strength_sessions`, the #414 test: each session on its own) is a SEGMENT of
     that workout, so a workout's segments are listed in start-time order with its Hevy detail once
     beneath them. `Hevy only` for a counted workout with no segment, `HR only` for a strength-named
-    session with no overlapping workout, then the freshness footer. Pure."""
+    session with no overlapping workout, then the freshness footer. Pure.
+
+    RATINGS. `selfevals` is `{aerobic id: Rating}` and `hevy_ratings` is `{hevy_id: Rating}`, both the read
+    door's answer. A counted Hevy workout is ONE bout with ONE rating, rendered ONCE on the workout's own line
+    (the `Hevy only` header, or the detail line under its segments), never on a segment: a device row that is
+    a segment of a workout is not a separate counted session."""
     linked = _concurrent_strength_sessions(sessions, counted)
     matched = {w.hevy_id for w in linked.values()}
     items: list[tuple[float, list[str]]] = []
@@ -745,11 +750,15 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
             return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).timestamp()
         return _local_midnight_utc(day).timestamp()
 
-    def _session_line(s) -> str:
+    def _session_line(s, *, segment: bool = False) -> str:
         line = format_aerobic_session(s)
-        if s.id in selfevals:
+        if s.id in selfevals and not segment:       # a segment carries no rating of its own: the workout does
             line += format_selfeval(selfevals[s.id])
         return line + format_also_recorded_by((twins or {}).get(s.id))
+
+    def _workout_rating(w) -> str:
+        r = (hevy_ratings or {}).get(w.hevy_id)
+        return "" if r is None else format_selfeval(r)
 
     segments: dict[str, tuple[object, list]] = {}      # hevy_id -> (workout, its segments)
     for s in sessions:
@@ -769,7 +778,7 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
             emitted.add(w.hevy_id)
             segs = sorted(segments[w.hevy_id][1], key=lambda x: (_ts_of(x.start_time, x.session_date), x.id))
             items.append((_ts_of(segs[0].start_time, segs[0].session_date),
-                          [_session_line(x) for x in segs] + [_hevy_detail(w)]))
+                          [_session_line(x, segment=True) for x in segs] + [_hevy_detail(w) + _workout_rating(w)]))
 
     def _hevy_line(w, note: str) -> list[str]:
         started = w.start_time
@@ -777,7 +786,8 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
             if started is not None else None
         dur = (f"{(w.end_time - w.start_time).total_seconds() / 60:.0f} min"
                if w.start_time is not None and w.end_time is not None else "—")
-        return [f"{day or 'undated'} [hevy] {w.title or 'Workout'}: {dur} — {note}", _hevy_detail(w)]
+        rating = _workout_rating(w) if note == "Hevy only" else ""      # an uncounted duplicate is rated by nothing
+        return [f"{day or 'undated'} [hevy] {w.title or 'Workout'}: {dur} — {note}{rating}", _hevy_detail(w)]
 
     def _in_window(w) -> bool:
         return w.start_time is not None and _local_day(w.start_time) >= since
@@ -807,7 +817,9 @@ def get_recent_sessions(days: int = 7) -> str:
     (date, sport, duration, source, HR avg/max, zones, self-evaluation). A device session that
     overlaps a Hevy workout is listed as a segment of it: a workout's segments in start order, the
     workout's exercises and top sets once beneath them. Hevy workouts with no device recording
-    are marked 'Hevy only', strength-named device sessions with no Hevy workout 'HR only'. Ends
+    are marked 'Hevy only', strength-named device sessions with no Hevy workout 'HR only'. A
+    session's per-session RPE and its source (in_app, garmin) follow the line as selfeval=[...]; a Hevy
+    workout carries its rating once, on its own line, never on a device segment. Ends
     with how long ago Health Connect and Polar last delivered. A session that other devices also
     recorded carries also_recorded_by=[{source, source_package}] (identity only, no extra load)."""
     user_id = _current_user_id()
@@ -816,7 +828,6 @@ def get_recent_sessions(days: int = 7) -> str:
         arbitrated = arbitrated_sessions(user_id, _db, since=since)
         twins = twins_by_canonical(arbitrated)   # Q201(b), as get_training_sessions
         sessions = [s for s in arbitrated if getattr(s, "canonical", True)]
-        selfevals = _session_selfevals(_db, user_id, sessions)   # as get_training_sessions
         # Candidate fetch, padded a day before the window so a bout started just before it still
         # links; the formatter applies the in-window cut on the LOCAL day. Partitioned by the
         # counted-Hevy door.
@@ -827,8 +838,17 @@ def get_recent_sessions(days: int = 7) -> str:
             .all()
         ]
         counted, unadjudicated = counted_workouts(_db, user_id, candidates)
+        # Ratings are placed against the bouts the read door counts: each counted Hevy workout, and each
+        # device row that is NOT a segment of one (a segment is folded into its workout). So a workout
+        # carries exactly one rating and a segment none, and a rating made on the workout never lands twice.
+        linked = _concurrent_strength_sessions(sessions, counted)
+        ratings = observed_ratings(
+            _db, user_id,
+            [aerobic_bout(s) for s in sessions if s.id not in linked] + [hevy_bout(w) for w in counted])
+        selfevals = {k[1]: r for k, r in ratings.items() if k[0] == "aerobic"}
+        hevy_ratings = {k[1]: r for k, r in ratings.items() if k[0] == "hevy"}
         return _format_recent_sessions(
-            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since, twins)
+            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since, twins, hevy_ratings)
 
 
 # ---------------------------------------------------------------------------

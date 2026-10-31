@@ -280,6 +280,113 @@ def test_pilates_is_deliberately_not_strength_and_carries_no_hr_only_mark(db_ses
 
 
 # --------------------------------------------------------------------------- #
+# The read door's rating, with its source, on every session line                #
+# --------------------------------------------------------------------------- #
+
+def _rate_in_app(db, uid, hevy_id, rpe):
+    """An in_app rating written the only way the contract allows: against the server-side bout."""
+    import srpe_store
+    from reads.srpe_reads import hevy_bout
+    w = db.query(models.HevyWorkout).filter_by(user_id=uid, hevy_id=hevy_id).one()
+    srpe_store.record_observation(db, uid, source="in_app", source_activity_ref=f"hevy:{hevy_id}", bout=hevy_bout(w),
+                                  rpe_raw=rpe, raw_scale="cr10", now=D(9, 3))
+
+
+def _rate_garmin(db, uid, ref, start, stop, raw):
+    import srpe_store
+    srpe_store.record_observation(db, uid, source="garmin", source_activity_ref=ref, start=start, stop=stop,
+                                  rpe_raw=raw, raw_scale="garmin_0_100", now=D(9, 2))
+
+
+def test_a_hevy_only_line_carries_the_in_app_rating_and_its_source(db_session, call):
+    """The 31 Oct case: a Hevy-only workout has no device row and no source rating of its own, so the in_app
+    capture is the only route and the line must show it."""
+    u, _ = call()
+    _hevy(db_session, u.id, "h", D(6, 2), D(6, 2, 55), "Upper body", [_ex("Bench", (60, 5))])
+    _, before = call(days=14)
+    assert "selfeval" not in before                                                # unrated: no suffix, no borrowed value
+    _rate_in_app(db_session, u.id, "h", 8)
+    _, out = call(days=14)
+    line = next(l for l in _body(out) if "[hevy] Upper body:" in l)
+    assert line.endswith("— Hevy only selfeval=[RPE 8/10 in_app]")
+    assert out.count("selfeval=") == 1
+
+
+def test_a_workout_with_segments_carries_its_one_rating_once_on_the_workout_line_never_on_a_segment(db_session, call):
+    u, _ = call()
+    _aero(db_session, u.id, "work", start=D(2, 0, 50), stop=D(2, 1, 35), sport="Circuit training")
+    _aero(db_session, u.id, "warm", start=D(2, 0), stop=D(2, 0, 45), sport="Cross-trainer")
+    _hevy(db_session, u.id, "h", D(2, 0), D(2, 1, 35), "S", [_ex("Q", (1, 1))])
+    _rate_in_app(db_session, u.id, "h", 7)
+    _, out = call(days=14)
+    lines = _body(out)
+    work = next(i for i, l in enumerate(lines) if "Circuit training" in l)
+    warm = next(i for i, l in enumerate(lines) if "Cross-trainer" in l)
+    assert "selfeval" not in lines[work] and "selfeval" not in lines[warm]       # not on a segment
+    assert lines[work + 1].startswith("  ↳ 1 exercise · ") and lines[work + 1].endswith("selfeval=[RPE 7/10 in_app]")
+    assert out.count("selfeval=") == 1                                            # exactly once
+
+
+def test_a_segment_spanning_the_whole_workout_still_leaves_the_in_app_rating_on_the_workout(db_session, call):
+    """The tie case: the device row and the workout cover the same window, so overlap cannot tell them apart.
+    The segment is folded into the workout, so the rating is the workout's alone and shows once on its line."""
+    u, _ = call()
+    _aero(db_session, u.id, "p", start=GYM_START, stop=GYM_STOP, sport="Strength training")
+    _hevy(db_session, u.id, "h", GYM_START, GYM_STOP, "S", [_ex("Q", (1, 1))])
+    _rate_in_app(db_session, u.id, "h", 6)
+    _, out = call(days=14)
+    lines = _body(out)
+    seg = next(i for i, l in enumerate(lines) if "Strength training" in l)
+    assert "selfeval" not in lines[seg] and lines[seg + 1].endswith("selfeval=[RPE 6/10 in_app]")
+    assert out.count("selfeval=") == 1
+
+
+def test_a_device_rating_made_on_a_segment_is_the_workouts_rating_and_shows_once_on_its_line(db_session, call):
+    """A Garmin rating overlapping both the segment and the workout: the door folds the segment into the workout,
+    so it is the workout's one rating (source garmin), not a second one on the segment."""
+    u, _ = call()
+    _aero(db_session, u.id, "g", start=D(2, 0), stop=D(2, 1, 35), sport="Strength training")
+    _hevy(db_session, u.id, "h", D(2, 0, 2), D(2, 1, 33), "S", [_ex("Q", (1, 1))])
+    _rate_garmin(db_session, u.id, "g1", D(2, 0), D(2, 1, 35), 70)
+    _, out = call(days=14)
+    lines = _body(out)
+    seg = next(i for i, l in enumerate(lines) if "Strength training" in l)
+    assert "selfeval" not in lines[seg] and lines[seg + 1].endswith("selfeval=[RPE 7/10 garmin]")
+    assert out.count("selfeval=") == 1
+
+
+def test_in_app_outranks_garmin_on_a_workout_line(db_session, call):
+    u, _ = call()
+    _aero(db_session, u.id, "g", start=D(2, 0), stop=D(2, 1, 35), sport="Strength training")
+    _hevy(db_session, u.id, "h", D(2, 0, 2), D(2, 1, 33), "S", [_ex("Q", (1, 1))])
+    _rate_garmin(db_session, u.id, "g1", D(2, 0), D(2, 1, 35), 70)
+    _rate_in_app(db_session, u.id, "h", 4)
+    _, out = call(days=14)
+    assert out.count("selfeval=") == 1 and "selfeval=[RPE 4/10 in_app]" in out
+
+
+def test_a_standalone_device_session_shows_its_in_app_rating_like_the_pilates_of_31_oct(db_session, call):
+    """The other half of the 31 Oct pair: a Garmin Pilates with no Hevy workout. Counted now, rated in the app."""
+    import srpe_store
+    from reads.srpe_reads import aerobic_bout
+    u, _ = call()
+    pil = _aero(db_session, u.id, "pil", start=D(8, 2), stop=D(8, 2, 52), sport="Pilates", source="health_connect")
+    srpe_store.record_observation(db_session, u.id, source="in_app", source_activity_ref=f"aerobic:{pil.id}",
+                                  bout=aerobic_bout(pil), rpe_raw=3, raw_scale="cr10", now=D(9, 3))
+    _, out = call(days=14)
+    line = next(l for l in _body(out) if "Pilates" in l)
+    assert line.endswith("selfeval=[RPE 3/10 in_app]") and out.count("selfeval=") == 1
+
+
+def test_an_unadjudicated_duplicate_is_not_counted_and_carries_no_rating(db_session, call):
+    u, _ = call()
+    _hevy(db_session, u.id, "a", D(6, 2), D(6, 3), "Dup A", [_ex("Q", (1, 1))], dedup_flag=True, dedup_partner_ids=["b"])
+    _hevy(db_session, u.id, "b", D(6, 2), D(6, 3), "Dup B", [_ex("Q", (1, 1))], dedup_flag=True, dedup_partner_ids=["a"])
+    _, out = call(days=14)
+    assert "not counted" in out and "selfeval" not in out
+
+
+# --------------------------------------------------------------------------- #
 # The other two tools are unchanged apart from a docstring pointer             #
 # --------------------------------------------------------------------------- #
 
