@@ -1,13 +1,17 @@
 import { useState } from 'react'
 import api from '../api'
+import { EarlierSessions, SessionRatingList } from './srpe/SessionRatings'
+import { useSessionRatings } from './srpe/useSessionRatings'
 
 // Missed-PM catch-up card for the AM check-in. Offered when /checkin-v2/prefill carries
 // `missed_pm` (yesterday's close-out was never submitted): the operator completes it
 // here and it lands on YESTERDAY's daily_record via `for_date`, so it never touches
 // today's row or blocks tonight's real close-out.
 //
-// Self-contained on purpose - NightlyCloseOut.jsx is not edited or imported, so its
-// behaviour and tests cannot move. The payload mirrors its contract exactly, including
+// Its own card, not NightlyCloseOut's: the two share only the per-session rating list (components/srpe), which is
+// how effort is asked on both - one CR-10 for each of the missed day's sessions, a device-rated one shown read-only
+// with an override, and a collapsed backfill of earlier unrated sessions. The whole-day RPE question is gone. The
+// payload mirrors NightlyCloseOut's contract, minus that field, including
 // the load-bearing nap rule: while a block is open a blank field submits 0 ("asked, no
 // nap"), NEVER null; with no block the field is not shown and null is sent. The block
 // flag is `missed_pm.cbti_block_open`, i.e. the state on the day being closed out.
@@ -63,7 +67,8 @@ export default function MissedPMCard({ missedPm, outcome = null, onOutcome = () 
   const [todayRating, setTodayRating] = useState(3)
   const [trained, setTrained] = useState(false)
   const [sessionQuality, setSessionQuality] = useState(3)
-  const [sessionRpe, setSessionRpe] = useState(7)
+  // The missed day's sessions: loaded only while the card is showing (a hook cannot be skipped, so it is told).
+  const sr = useSessionRatings(missedPm?.date, { enabled: Boolean(missedPm) && outcome === null })
   const [napsMin, setNapsMin] = useState('')   // '' = blank; blank + open block submits 0, never null
   const [pmNotes, setPmNotes] = useState('')
 
@@ -77,19 +82,20 @@ export default function MissedPMCard({ missedPm, outcome = null, onOutcome = () 
   }
 
   const blockOpen = Boolean(missedPm.cbti_block_open)
-  // sRPE only for the sessions no app rated per session (`missed_pm.srpe_needed`); absent -> ask.
+  // `missed_pm.srpe_needed` only words the empty state; the asks come from the sessions themselves.
   const srpeNeeded = missedPm.srpe_needed !== false
 
   async function save() {
     setSaving(true)
     setError('')
     try {
+      // Ratings first, on their own route; a failure keeps the card open with the picks intact.
+      if (!(await sr.saveToday())) return
       await api.post('/checkin-v2/pm', {
         for_date: missedPm.date,
         today_rating: todayRating,
         trained_today: trained,
         session_quality: trained ? sessionQuality : null,
-        session_rpe: trained && srpeNeeded ? sessionRpe : null,
         pm_notes: pmNotes.trim() || null,
         naps_min: blockOpen ? (napsMin === '' ? 0 : Number(napsMin)) : null,
       })
@@ -142,29 +148,12 @@ export default function MissedPMCard({ missedPm, outcome = null, onOutcome = () 
               <label className="text-sm font-medium text-gray-700">Session quality (planned vs actual)</label>
               <TapSelect value={sessionQuality} onChange={setSessionQuality} labels={SESSION_LABELS} />
             </div>
-            {srpeNeeded ? (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Session RPE</span>
-                  <span className="font-semibold text-gray-700">{sessionRpe}</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={10}
-                  aria-label="Session RPE"
-                  value={sessionRpe}
-                  onChange={e => setSessionRpe(Number(e.target.value))}
-                  className="w-full accent-indigo-600"
-                />
-                <p className="text-[10px] text-gray-400">Rate the sessions your apps didn't.</p>
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400">Your apps rated every session yesterday, so there is no RPE to enter.</p>
-            )}
           </div>
         )}
       </div>
+
+      <SessionRatingList sr={sr} dayWord="yesterday" srpeNeeded={srpeNeeded} />
+      <EarlierSessions sr={sr} />
 
       {blockOpen && (
         <div className="space-y-1 border-t border-gray-100 pt-4">
