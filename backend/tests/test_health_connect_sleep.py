@@ -1,4 +1,4 @@
-"""Sleep wake-date attribution for _aggregate_day (OPEN_QUESTIONS Q4).
+"""Sleep wake-date attribution for _aggregate_day (retired-store question Q4).
 
 Canonical rule: a sleep session is attributed to the LOCAL (AEST) calendar date
 of its endTime (wake-date) — matching the scraper (samsung_hrv_readings) — and
