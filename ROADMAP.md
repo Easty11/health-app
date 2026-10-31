@@ -70,6 +70,10 @@ _Date-anchored work, ordered by external date. The one undated row (cross-repo p
 
 _Live, undated — no external date orders these; pick by readiness._
 
+**Question layer (recorded 31 Oct 2026; decision #467). Both UNSTARTED, separate briefs.**
+1. **Question layer Phase B** — triage table from chat; migrate the live entries (110 on 31 Oct 2026) to Issues / docs/design; delete OPEN_QUESTIONS.md.
+2. **Question layer Phase C** — propagate shared-rule edits (4a–4g) verbatim to health-connect-app CLAUDE.md; HCA OPEN_QUESTIONS.md freeze + its own Phase B.
+
 **Ingest-triage carries (recorded 8 Oct 2026; all UNSTARTED, none briefed; decisions #395 to #400 in `DECISIONS_LOG.md`).** Serves **See** and **Know** (a resting HR and a session list that are what they say) and **Loop** (the number the check-in reads). Built this session and not repeated here: #344 (labels), #345 (sleep nadir), #346 (Hevy mirror suppression).
 1. **Companion resting-HR capture, capture-first, two PRs.** (a) Backend, additive, this repo: accept a `restingHeartRate` stream and store the device value on the same `health_connect_syncs` row as the nadir; the payload keys are chosen after inspecting ONE real record (`time`, `zoneOffset`, `metadata.dataOrigin`). (b) Companion, `health-connect-app`: read `RestingHeartRate` (the permission is requested, the record never read). The derived nadir stays primary; no consumer. Cross-repo.
 2. **Reconciliation plus the exclusion migration, with the `title` column.** `aerobic_sessions` gains `excluded_at`, `excluded_reason` and `title` (diagnostics only); Health Connect window-absence marks `absent_from_source` (rules D1 to D6, ownership split, breaker, 24 h margin on the old edge). **Migration HOLD.** Keep `hevy_mirror_session_ids` column-light and route the new filter through it for `cbti/replay.py`. Row 111 is NOT a candidate: it is suppressed by rule (#401).
