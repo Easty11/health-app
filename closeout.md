@@ -1,55 +1,63 @@
-# Close-out — 31 Oct 2026: question layer, Phase A (`DECISIONS_LOG` #467); governance and workflow only
+# Close-out — 31 Oct 2026: question layer, Phase B (`DECISIONS_LOG` #468, #469); the questions move to issues and docs, `OPEN_QUESTIONS.md` is deleted
 
 ## Real commits this session
 
-Session opened at health-app master `2a1ec18` (the merge of PR 471). Maxima at open: `DECISIONS_LOG` #466, `OPEN_QUESTIONS` Q248 (the brief expected #461 and Q246; time had moved both). `git log --format="%h %ad %s" --date=short 2a1ec18..HEAD` on master:
+Session opened at health-app master `0b9790e` (the merge of PR 473). Maxima at open: `DECISIONS_LOG` #467, `OPEN_QUESTIONS` Q248, 110 headings above `## CLOSED`, the eight Phase A labels present. `git log --first-parent --format="%h %ad %s" --date=short 0b9790e..origin/master` on master:
 
 ```
-d340104 2026-10-31 Merge pull request #472 from Easty11/claude/fervent-pasteur-67jbo6
-1f400cd 2026-10-31 gov(question-layer): door-class merge disposition, Filing-a-question, freeze OPEN_QUESTIONS, #467
-d1008cd 2026-10-31 chore(question-layer): labels, stale workflow, design-doc store
+bf571b6 2026-10-31 Merge pull request #563 from Easty11/claude/fervent-dirac-dp2xil
+aa636d2 2026-10-31 Merge pull request #474 from Easty11/claude/fervent-dirac-dp2xil
 ```
 
-Before the branch, GitHub-side and not in any commit: the eight labels (`fork`, `stamp`, `verify`, `watch`, `design`, `pinned`, `stale`, `abandoned`), created through `gh api` (17 labels now: the eight plus the nine defaults).
+and the commits those two merges carry (`--no-merges`):
 
-Landed through PR 472 (ready-for-review, never draft), merged as `d340104` with the head SHA pinned, after `placeholder guard (POSIX)`, `backend tests (pytest)` and `frontend tests (vitest)` were green on `1f400cd`. Master's decisions max was re-read at 466 immediately before the merge, so #467 stood. Deploy (#433): both services recorded SKIPPED for `d340104`, matched on `commitHash` (service ids `27695d21` and `8a3e506f`); no record missing. Post-merge: `stale` is an active workflow; `docs/design/` holds the README and `0000-template.md`; the `OPEN_QUESTIONS.md` diff is exactly the three banner lines; no heading-anchored `#NEXT` survives in either store; nothing under `backend/`, `frontend/` or `backend/migrations/` changed. Every removed line fell inside a region the change declared (#176 (c)).
+```
+13e6106 2026-10-31 gov(question-layer): migrate questions to issues and docs, delete OPEN_QUESTIONS.md, #468 #469
+dcc9c79 2026-10-31 chore(question-layer): build label, closeout sweep, runbook section
+7f3cd52 2026-10-31 fix(question-layer): do-now resolutions (Q28 Q52 Q136 Q140 Q147 Q171)
+```
 
-This close-out is a second PR (this branch, restarted from master `d340104`): `closeout.md` and its `BRANCHES.md` row only.
+GitHub-side and not in any commit: the `build` label (colour `0052CC`), and 87 issues, GH#476 to GH#562, created by a one-off script kept in the session scratchpad and not committed (43 `stamp`, 12 `build`, 6 `verify`, 8 `design` pointers, 18 closed `not_planned` with `abandoned`). A REST read after the run found exactly those, no `fork` issue, 69 open and 18 closed.
+
+Both PRs opened ready-for-review and merged with the head SHA pinned. PR 474 (`7f3cd52`, the six code fixes) was green on all three checks; backend deploy `SUCCESS`, frontend `SKIPPED` on `aa636d2`. PR 563 was green on all three; master's decisions max was re-read at 467 immediately before the merge, so #468 and #469 stood. Deploy (#433) for `bf571b6`: frontend `SKIPPED`; backend `SUCCESS`, not `SKIPPED`, because the guard's updated tests sit in `backend/tests/` inside the `/backend/**` watch path. No application code changed in that merge. Both matched on `commitHash`.
+
+This close-out is a third PR (this branch, restarted from master `bf571b6`): `closeout.md` and `BRANCHES.md` only.
 
 ## Pending-queue reconciliation
 
-No `PENDING` item was carried in: the session ran from one chat-ratified brief, not a `;cc` queue. Nothing decided is uncommitted. The ratification (operator, 31 Oct 2026: "I like it", on the proposal #467 implements) is recorded in #467 itself.
+No `PENDING` item was carried in: the session ran from one chat-ratified brief and its triage table, not a `;cc` queue. Nothing decided is uncommitted. The ratification (operator, 31 Oct 2026: every triage row unchanged, including the six fork leans) is recorded in #468 and #469.
 
 ## Cold-resume handoff
 
-**Next action.** Question layer Phase B: chat produces the triage table for the live `OPEN_QUESTIONS.md` entries (110 above `## CLOSED` on 31 Oct 2026: 105 OPEN, 5 OWED), and a Code session migrates them to issues (`fork` / `stamp` / `verify` / `watch`) and `docs/design` docs, then deletes the file. Phase C (propagate the shared-rule edits 4a to 4g verbatim to `health-connect-app`, plus its own freeze and Phase B) follows as a separate brief from an HCA-rooted session. Both are in `ROADMAP.md` NEXT, UNSTARTED. Until Phase B lands, `OPEN_QUESTIONS.md` is read-only and holds the whole live question queue.
+**Next action.** Question layer Phase C, a separate brief from an HCA-rooted session: propagate the shared-rule edits (the Phase A edits 4a to 4g, plus this phase's Filing-a-question bullets for `build` and the `GH#N` citation form, the folded Holds bullet, and the Open and `;cc` wording) verbatim to `health-connect-app`'s `CLAUDE.md`, freeze and migrate HCA's `OPEN_QUESTIONS.md`, and carry Q87's parity declaration. Two health-app facts Phase C must respect: (1) `scripts/check_governance_placeholders.py` here has lost its question arm, so HCA's copy differs until HCA's file goes, and `.github/workflows/governance-guard.yml` needs no edit (it never named the file); (2) `scripts/gov_dialects.py` carries `QUESTIONS_RETIRED = {"health-app"}`: add HCA to it when its file is deleted, and the remaining `OPEN_QUESTIONS` names in `gen_governance_view.py`, `gen_status_model.py` and `status_diff.py` can then go.
 
-**Open `fork` issues.** None. No issue of any kind exists yet (zero non-PR issues, checked by REST on 31 Oct 2026). The #467 retirement trigger (more than about 15 open `fork` issues at two consecutive session opens) cannot fire before Phase B.
+**Open `fork` issues.** None (REST read, 31 Oct 2026). All 87 issues are `stamp`, `build`, `verify`, `design` or closed `abandoned`.
 
-**Design docs not in a terminal state.** None in substance. `grep -l "State:\*\* \(ideation\|discussion\)" docs/design/*.md` matches only `0000-template.md`, whose State line is the placeholder `ideation | discussion | committed | abandoned`. The existing `docs/*design*.md` files were not moved (Phase A rule).
+**Design docs not in a terminal state.** Eight, none committed: `0001` ideation, `0002` discussion, `0003` discussion, `0004` ideation, `0005` ideation, `0006` ideation, `0007` ideation, `0008` discussion (`grep -l "State:\*\* \(ideation\|discussion\)" docs/design/*.md` also matches `0000-template.md`, whose State line is the placeholder). Their Proposal sections read "none yet" except `0002`, which carries Q197's proposal verbatim.
 
-**Two things the next session should know about the new rules in a cloud session.**
-- GraphQL is blocked there, so the Open ritual's literal command (`gh issue list --label fork --state open`) is refused. The working equivalent is `gh api 'repos/Easty11/health-app/issues?labels=fork&state=open'`; `gh label list` and `gh pr create` fail the same way. The shared rule was not reworded (that is Phase C territory, and it is correct on the operator's machine).
-- Not yet exercised: the stale action's first scheduled run (no issue exists for it to touch), and the first real `stale` to `abandoned` transition. `.github/workflows/stale.yml` also carries `workflow_dispatch` and a cron of `17 3 * * *`, both chosen by Code (the brief said only "daily").
+**The stale action will close real work on 30 Dec 2026 unless someone acts.** Every issue was created on 31 Oct, so the 53-day label lands about 23 Dec and the 7-day close about 30 Dec, for any issue not touched, not `pinned` and not `design`. That covers all 43 `stamp` issues (by design: a stamp is acted on by the next PR touching the area), but also eight `build` issues that hold ratified rulings and carry no `pinned` label because the triage table gave them none: Q58, Q66, Q118 and Q170 (the one-way-door rulings awaiting a migration PR) and Q135, Q139, Q181 and Q191. Two `verify` issues are likewise unpinned: Q100 (the table says stale-close is fine) and Q244. The labels are as ratified and were not changed; deciding whether the eight `build` rulings should be `pinned` is an operator call before then. Nothing is lost if one does close: the ruling and the original entry are in the body and the issue can be reopened.
 
-**Governance nits, not gates, left for Phase B or C.** `CLAUDE.md`'s `;cc` bullet and `.espanso/cc.yml` still mention `OPEN_QUESTIONS.md` (outside the declared regions). The old Holds bullet (schema migration; anything told to hold) now overlaps the door-class bullet; harmless. `docs/design/README.md` has a short "who moves state" section the brief named but did not word; Code wrote only that Code moves state in the PR, that `committed` is gated by the one rule, and that one-way-door resolutions hold per door class.
+**Operator items, surfaced and not acted on.**
+- Q191 (GH#529): the six constraints that share `review_by` 2026-10-26 are past it. MCP `get_findings` does not serve constraints (it returned two injury findings), so the check is a read of the active `type='constraint'` rows in `user_knowledge_entries` whose `value.review_by` is on or before today (the date `typed_entries` compares against at `backend/typed_entries.py:109`).
+- Q109 (GH#490): the "row 30" read that settles the reported instance of `review_when.metric`. `get_findings` returned no row 30 either; it needs the prod `findings` table read, which this session could not make.
+
+**Not verified.** The stale action's first scheduled run against these issues; whether the mapping table in #468 is read correctly by whoever next cites a `Qn` (a closed entry resolves through git at `d340104`, #468 item 6, not through the table); the gap in the triage table that gave `build` (except the four former forks), `verify` and `design` rows no Door, so those issue bodies say "not classified" rather than carry a guess. Q135 drops a column, which `CLAUDE.md` calls a one-way door, yet its issue says "not classified"; classify it before its trigger fires.
+
+**Two things a later session should know.**
+- Two sentences of the brief's gate list could not hold, and the PR said so: `grep -rn OPEN_QUESTIONS` is not clean in `scripts/` (the HCA-facing tools still name it), in `ROADMAP.md`, `HANDOFF.md` and `METRICS.md` (historical rows), in code comments citing `OPEN_QUESTIONS Qn`, and once in `CLAUDE.md` (the #467 Recent-landings pointer, which clears at the next landing's trim). `.github/` and `.espanso/` are clean.
+- PR 475 (`gov(final-wake)`, another session, `claude/quirky-cerf-tzmikx-wake`) was open and `dirty` when checked, before this phase's merge. It amends #466 in place and adds a `BRANCHES.md` row, so it conflicts with this phase's new top rows. It is that session's to rebase; nothing here blocks it.
 
 ### What was NOT touched
 
-This was a governance session, and the next one is queued as more governance (Phases B and C). Product work stood still: no `backend/`, `frontend/` or migration change, and no deploy (both services SKIPPED).
+Phase B is governance plus six defect fixes, and it was queued as more governance (Phase C next). Product work stood still beyond those six fixes.
 
-- **v1 tests.** See / Know / Walk in / Loop: no lane moved. Walk in (the appointment brief) is MET (#386) with its reconcile leg unbuilt, in NEXT; Know (weekly resolver) MET (#392). Nothing about either changed.
-- **The CBT-I side.** No change to the engine, titration, or the I1 firewall. #466 (30 Oct) closed the partial-night note; the CBT-I diary, titration and the deliberate absence of a device signal there are as #466 left them.
-- **Open questions gating product work.** None was read, reworded or closed (the brief forbids it). They are all still in the frozen file; the ones the NOW rows name (Q231 RPE fallback, Q203 source hierarchy, Q205 and the Q199 HRmax test, Q208 and Q214 for HC sync, Q159 stage 2's single-row bout read) stood still.
-- **Operator-owed items from earlier rows** are unchanged and not re-verified: the `.espanso/sc.yml` copy and `;sc` deletion (#463), the `cc.yml` copy and the HCA propagation of #461's lines, the `CONSOLIDATED_GOVERNANCE_VIEW.md` deletion from project knowledge, and the NOW rows reading OWED (operator).
+- **Stamp, build and verify issues were created, not executed.** Q189's capture UX, Q195's sync-ownership fix, Q96, Q103, Q174, Q178, Q214 and Q241 (the migrations), Q58, Q66, Q118 and Q170 (the one-way releases): none was started.
+- **v1 tests.** See / Know / Walk in / Loop: no lane moved. The six fixes touch Know-adjacent reads (AEST day keys on the MCP session windows, the load transform's non-finite guard) and nothing was promoted in NOW.
+- **The CBT-I side.** No change to the engine, titration or the I1 firewall; the only CBT-I touch is two `BRANCHES.md` rows flipped to DONE.
 - **`health-connect-app`** was not edited (Phase C).
-- **Consecutive-session pattern.** Several recent sessions have gone to the instrument (the question layer, the sweep, the close-outs, the `;cc`/`;sc` snippets) rather than to the thing instrumented. The last product landing was PR 469 (#466, read-side, 29 Oct) and before it PR 467 (#465) and PR 461 (#464, PR-B); the Garmin line is quiet and clean. The next two queued briefs (B and C) are also governance. Say so rather than letting B and C ride by momentum: Phase B has a payoff (it deletes a 6,800-line file and makes closure cheap) but it is not a v1 test.
+- **Consecutive-session pattern.** Several recent sessions have gone to the instrument (the question layer, the sweeps, the close-outs, the `;cc`/`;sc` snippets) rather than the thing instrumented. This one added the migration of the question store itself. The next governance session is Phase C; the last product landing before this was PR 469 (#466, 29 Oct).
+- **Operator-owed items from earlier rows** are unchanged and not re-verified: the `.espanso/cc.yml` copy to `%APPDATA%\espanso\match\` (this phase rewrote its `;cc` text, so the installed copy is now stale), the `.espanso/sc.yml` copy and `;sc` deletion (#463), the `CONSOLIDATED_GOVERNANCE_VIEW.md` deletion from project knowledge, and the NOW rows reading OWED (operator). `feat/srpe-source-neutral-store` is landed (`5d13046`) and stays OWED for its post-deploy reads.
 
 ### v1-triage of NOW
 
-The rows below state which test they serve; the ones that state none are listed after.
-- **Serve See:** Data freshness (#405, #406), Plan/schedule MCP tools, RPE fallback (Q231), Source hierarchy (#365), HC sync reliability, Garmin overnight SpO2 capture (raw, no consumer), Aerobic ingest automated.
-- **Serve Know:** Polar sport-id relabel, Garmin self-evaluation read, Source-neutral sRPE store, Phase posture split, Phase-change form, Injury clearance, Garmin account mix-up repair, Typed constraints G6, Session fidelity.
-- **Serve Loop:** Missed-PM catch-up, CBT-I titration direction (#445, #446), Session fidelity (with Know), HC sync reliability (with See).
-- **State no v1 test, and are candidates to move out of NOW by momentum, not by merit:** the DONE rows `Training: seed the v0.1 exercise tags` (#339), `CBT-I: Q45 nap day-attribution` (#219) and `CBT-I: manual witnessed evaluation trigger` (#213); the struck DISCHARGED `Cross-repo` rows (seven of them, each struck and marked DISCHARGED); and the one live cross-repo row (the `#NEXT` rule extension, OWED, re-scoped 17 Aug) which is shared-loop debt, serving no v1 test, and is pinned in NOW by #112, not by a v1 reason. Check each DONE row for an owed limb before moving it. The `Appointment brief` row is the Walk in lane (MET, #386; reconcile leg in NEXT).
-- **Honest limit.** The "serves" reading above is from each row's own text (first cell and its "Serves" sentence); I did not re-read every row's full body or re-verify any OWED limb against prod.
+`ROADMAP.md` NOW was not edited this session and was not re-read for the v1 test each lane serves; the 31 Oct Phase A close-out's triage stands (`git show 0b9790e:closeout.md`). The only `ROADMAP.md` changes were the Phase B row leaving NEXT and two LATER rows (Q148, Q221), neither of which serves a v1 test. **Honest limit:** this is a pointer, not a re-derivation.
