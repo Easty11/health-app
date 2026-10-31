@@ -53,6 +53,14 @@ def rating_window(today: date) -> tuple[date, date]:
     return max(RATING_FLOOR, today - timedelta(days=BACKFILL_DAYS + 1)), today
 
 
+def earlier_range(before: date, today: date) -> Optional[tuple[date, date]]:
+    """The days a card on `before` offers for the backfill: the `BACKFILL_DAYS` days ending the day before it,
+    never earlier than the rateable window allows (so never before the store's release). None when that is empty."""
+    since = max(rating_window(today)[0], before - timedelta(days=BACKFILL_DAYS))
+    until = before - timedelta(days=1)
+    return None if until < since else (since, until)
+
+
 def _key(kind: str, ref: object) -> tuple[str, str]:
     return (str(kind), str(ref))
 

@@ -191,3 +191,56 @@ def test_a_session_with_no_usable_window_is_listed_unrateable(db_session):
     assert s["rateable"] is False and s["label"] == "Rowing"
     assert _client(db_session, u).post("/checkin-v2/srpe/ratings",
                                        json={"ratings": [{"kind": "aerobic", "id": s["id"], "rpe": 5}]}).status_code == 422
+
+
+# -- the defaults and the backfill ------------------------------------------------------------------------------
+
+def test_the_read_defaults_to_today(db_session, day31):
+    u, _ = day31
+    c = _client(db_session, u)
+    assert [s["kind"] for s in c.get("/checkin-v2/srpe/sessions").json()["sessions"]] == ["hevy", "aerobic"]
+    assert c.get("/checkin-v2/srpe/sessions", params={"since": "2026-10-31"}).status_code == 200
+
+
+def test_earlier_offers_only_unrated_sessions_before_the_card_day_oldest_first(db_session, day31):
+    u, _ = day31
+    _hevy(db_session, _utc(2, day=25), hid="a", title="Lower body")
+    _hevy(db_session, _utc(2, day=22), hid="b", title="Push")
+    _hevy(db_session, _utc(2, day=27), hid="rated", title="Pull")
+    c = _client(db_session, u)
+    c.post("/checkin-v2/srpe/ratings", json={"ratings": [{"kind": "hevy", "id": "rated", "rpe": 5}]})
+    body = c.get("/checkin-v2/srpe/earlier").json()
+    assert (body["since"], body["until"]) == ("2026-10-18", "2026-10-30")        # the store's release .. yesterday
+    assert [s["id"] for s in body["sessions"]] == ["b", "a"]                       # oldest first; today's pair and the rated one absent
+    c.post("/checkin-v2/srpe/ratings", json={"ratings": [{"kind": "hevy", "id": "a", "rpe": 4}]})
+    assert [s["id"] for s in c.get("/checkin-v2/srpe/earlier").json()["sessions"]] == ["b"]
+
+
+def test_earlier_is_bounded_to_fourteen_days_and_never_before_the_release(db_session, monkeypatch):
+    u = _user(db_session)
+    _hevy(db_session, _utc(2, day=19), hid="old")
+    _hevy(db_session, _utc(2, day=30), hid="recent")
+    monkeypatch.setattr(c2, "_today_aest", lambda: date(2026, 11, 3))
+    c = _client(db_session, u)
+    body = c.get("/checkin-v2/srpe/earlier").json()
+    assert (body["since"], body["until"]) == ("2026-10-20", "2026-11-02")          # 14 days back from 3 Nov
+    assert [s["id"] for s in body["sessions"]] == ["recent"]                       # 19 Oct has aged out of the backfill
+    # a card on yesterday (the AM catch-up) reaches one day further back and ends the day before it
+    body = c.get("/checkin-v2/srpe/earlier", params={"before": "2026-11-02"}).json()
+    assert (body["since"], body["until"]) == ("2026-10-19", "2026-11-01")
+    assert [s["id"] for s in body["sessions"]] == ["old", "recent"]                # 19 Oct is still reachable from there
+
+
+def test_earlier_refuses_a_future_day_and_returns_empty_on_the_first_day(db_session):
+    u = _user(db_session)
+    c = _client(db_session, u)
+    assert c.get("/checkin-v2/srpe/earlier", params={"before": "2026-11-01"}).status_code == 422
+    assert c.get("/checkin-v2/srpe/earlier", params={"before": "2026-10-18"}).json()["sessions"] == []
+
+
+def test_earlier_leaves_out_a_session_that_cannot_be_rated(db_session):
+    u = _user(db_session)
+    db_session.add(models.AerobicSession(user_id=1, source="polar_flow_export", source_session_id="u",
+                                         session_date=date(2026, 10, 25), duration_minutes=None, sport_name="Rowing"))
+    db_session.commit()
+    assert _client(db_session, u).get("/checkin-v2/srpe/earlier").json()["sessions"] == []
