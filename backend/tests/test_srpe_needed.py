@@ -1,7 +1,7 @@
 """`/checkin-v2/today.srpe_needed` and `/prefill.missed_pm.srpe_needed` -- whether the close-out should ask for sRPE.
 
-Needed = at least one counted session that day has no PER-SESSION rating from any source (the whole-day fill is
-not one). Fails open to asking (G1): an unsynced source, a day with nothing counted, or a read that errors all
+Needed = at least one counted session that day has no rating from any source (a whole-day value is not one: the
+day fill is retired and `daily_records.session_rpe` rates nothing). Fails open to asking (G1): an unsynced source, a day with nothing counted, or a read that errors all
 answer "ask"; a later per-session value overrides per session and nothing re-prompts.
 """
 from datetime import datetime, timedelta, timezone
@@ -87,7 +87,8 @@ def test_one_rated_and_one_unrated_session_still_needs_the_question(db_session):
 
 
 def test_a_later_per_session_value_closes_the_question_without_a_re_prompt(db_session):
-    """The close-out was answered tonight (day fill); the 02:00 sweep then brings Garmin's value."""
+    """The session is unrated at close-out (a stale day value on the record changes nothing); the 02:00 sweep
+    then brings Garmin's value."""
     u = _user(db_session)
     today = c2._today_aest()
     start = _session(db_session, u.id, today)

@@ -5,7 +5,8 @@ Gates asserted here (S4 brief):
        producer emits nothing in cold-start.
   G2 — exclusivity: a psychological `load_event` is NEVER a ridge predictor.
   G4 — no numpy / pure-Python ridge (import-level: the module imports without numpy).
-  G5 — grain honesty: a day mixing per-session and day-filled/unrated sessions is `partial`, not silently blended.
+  G5 — grain honesty: a day with some counted sessions rated and some not is `partial`, not silently blended.
+  + the retirement: a whole-day `session_rpe` never stands in for a session (it is read by nothing).
   + the wiring: `life_load_bias` fires the recovery re-rank INDEPENDENTLY of
     `readiness_hint`, is a sibling (never folded in), and never touches dosing.
 
@@ -45,19 +46,17 @@ def _user(db, uid=1, email="pw@x.com"):
     return uid
 
 
-def _rpe_day(db, d: date, rpe: float, uid=1):
+def _day_value(db, d: date, rpe: float, uid=1):
+    """The retired whole-day value, written only to prove nothing reads it."""
     db.add(models.DailyRecord(user_id=uid, date=d, session_rpe=rpe))
     db.commit()
 
 
-def _aerobic(db, d: date, minutes: float, uid=1, sid=None):
-    # A Polar duration-provider fixture (no sport_name → training, #322 S1); pre-#309 no HC
-    # aerobic rows existed, so Polar is the faithful historical provider.
-    db.add(models.AerobicSession(
-        user_id=uid, source="polar_flow_export", source_session_id=sid or f"s-{d}",
-        session_date=d, duration_minutes=minutes,
-    ))
-    db.commit()
+def _rated_session(db, d: date, minutes: float, rpe: float, uid=1, sid=None):
+    """One timed session on local day `d`, rated per session (a Garmin-style observation over its window)."""
+    start = _timed(db, d, 2, minutes, sid or f"s-{d}", uid=uid)
+    _rate(db, f"r-{uid}-{sid or d}", start, minutes, rpe * 10.0, uid=uid)
+    return start
 
 
 def _load(db, d: date, window: str, load: float, uid=1, ref=None):
@@ -129,8 +128,7 @@ def _seed_paired_days(db, n, uid=1, *, rpe_of=lambda i: 5.0, load_of=lambda i: 1
     days = []
     for i in range(n):
         d = date.fromordinal(start.toordinal() + i)
-        _rpe_day(db, d, rpe_of(i), uid=uid)
-        _aerobic(db, d, minutes, uid=uid, sid=f"s{i}")
+        _rated_session(db, d, minutes, rpe_of(i), uid=uid, sid=f"s{i}")
         _load(db, d, "mechanical", load_of(i), uid=uid, ref=f"u{uid}-m{i}")
         days.append(d)
     return days
@@ -158,8 +156,7 @@ def test_producer_surfaces_a_decoupled_recent_day(db_session):
     _seed_paired_days(db_session, 15, rpe_of=lambda i: 3.0 + i * 0.2,
                       load_of=lambda i: 50.0 + i * 10.0)
     d16 = date.fromordinal(date(2026, 6, 1).toordinal() + 15)
-    _rpe_day(db_session, d16, 9.5)
-    _aerobic(db_session, d16, 60.0, sid="s16")
+    _rated_session(db_session, d16, 60.0, 9.5, sid="s16")
     _load(db_session, d16, "mechanical", 10.0, ref="m16")   # tiny objective load
     res = psychological_residual(1, db_session, as_of=date(2026, 7, 1))
     assert res is not None and res.n_paired_days == 16
@@ -167,14 +164,14 @@ def test_producer_surfaces_a_decoupled_recent_day(db_session):
     assert res.latest_residual > 0                            # felt harder than load says
 
 
-def test_a_day_without_resolvable_duration_is_not_paired(db_session):
-    """session_rpe present but no session that day (no duration) → excluded; the count
-    drops below the flip and the producer emits nothing."""
+def test_a_rating_with_no_session_to_land_on_is_not_paired(db_session):
+    """A rating whose window overlaps no counted session is placed on nothing → that day is not paired; the
+    count stays at the flip."""
     _user(db_session)
     _seed_paired_days(db_session, 15)
-    # A 16th rpe day with NO aerobic/hevy session → unpaired; still 15 paired.
+    # A 16th day with a rating but NO aerobic/hevy session → unpaired; still 15 paired.
     orphan = date.fromordinal(date(2026, 6, 1).toordinal() + 15)
-    _rpe_day(db_session, orphan, 8.0)
+    _rate(db_session, "orphan", datetime(orphan.year, orphan.month, orphan.day, 2, 0, tzinfo=timezone.utc), 60, 80)
     res = psychological_residual(1, db_session, as_of=date(2026, 7, 1))
     assert res.n_paired_days == 15                            # orphan excluded
 
@@ -243,16 +240,16 @@ def test_metabolic_under_metab_v1_enters_the_fit(db_session):
     assert r1.latest_residual != pytest.approx(ctl.latest_residual, abs=1e-6)
 
 
-def test_gate5_a_day_filled_multi_session_day_is_summed_and_not_partial(db_session):
-    """Two sessions under ONE whole-day rating: the rating applies to each, so the target is rpe x the SUMMED
-    minutes (not averaged), and the day is not `partial`: nothing on it was rated differently."""
+def test_gate5_a_second_unrated_session_makes_the_day_partial_and_the_target_covers_only_the_rated_one(db_session):
+    """Two sessions, one rated: the target is the rated session's rpe x its minutes only (the unrated one adds
+    nothing, it does not borrow), and the day is `partial`."""
     _user(db_session)
     _seed_paired_days(db_session, 15)
     multi = date(2026, 6, 1)
-    _aerobic(db_session, multi, 30.0, sid="extra")           # a 2nd session that day
-    assert _felt_by_day(db_session, 1)[multi] == FeltDay(target=5.0 * 90.0, minutes=90.0, partial=False)
+    _timed(db_session, multi, 8, 30.0, "extra")              # a 2nd, unrated session that day
+    assert _felt_by_day(db_session, 1)[multi] == FeltDay(target=5.0 * 60.0, minutes=60.0, partial=True)
     res = psychological_residual(1, db_session, as_of=date(2026, 7, 1))
-    assert multi not in res.partial_days
+    assert multi in res.partial_days
 
 
 # ── per-session sRPE (the source-neutral store) ───────────────────────────────
@@ -284,20 +281,24 @@ def test_a_garmin_only_day_pairs_on_the_per_session_value_with_no_whole_day_rati
     assert _felt_by_day(db_session, 1) == {D: FeltDay(target=7.0 * 45.0, minutes=45.0, partial=False)}
 
 
-def test_a_day_only_day_pairs_on_the_whole_day_rating(db_session):
+def test_a_day_value_is_not_applied_to_an_unrated_session(db_session):
+    """THE RETIREMENT, pinned: a whole-day value on the day's record does not rate the day's session. Nothing was
+    rated, so the day is absent from the felt series, whatever the day record says."""
     _user(db_session)
     _timed(db_session, D, 2, 45, "g")
-    _rpe_day(db_session, D, 6.0)
-    assert _felt_by_day(db_session, 1) == {D: FeltDay(target=6.0 * 45.0, minutes=45.0, partial=False)}
+    _day_value(db_session, D, 6.0)
+    assert _felt_by_day(db_session, 1) == {}
 
 
-def test_a_mixed_day_sums_each_session_on_its_own_rung_and_is_partial(db_session):
+def test_a_day_value_does_not_rate_the_unrated_session_beside_a_rated_one(db_session):
+    """The mixed day: one session rated per session, the other unrated with a day value on the record. The
+    target covers the rated session only and the day is partial; the day value fills nothing."""
     _user(db_session)
     s1 = _timed(db_session, D, 2, 45, "a")
     _timed(db_session, D, 8, 30, "b")
     _rate(db_session, "1", s1, 45, 70)
-    _rpe_day(db_session, D, 5.0)
-    assert _felt_by_day(db_session, 1) == {D: FeltDay(target=7.0 * 45.0 + 5.0 * 30.0, minutes=75.0, partial=True)}
+    _day_value(db_session, D, 5.0)
+    assert _felt_by_day(db_session, 1) == {D: FeltDay(target=7.0 * 45.0, minutes=45.0, partial=True)}
 
 
 def test_a_per_session_day_with_one_session_unrated_counts_only_the_valued_one_and_is_partial(db_session):
@@ -321,11 +322,13 @@ def test_an_unrated_day_is_absent_and_a_valued_session_with_no_minutes_does_not_
     _user(db_session)
     _timed(db_session, D, 2, 45, "a")
     assert _felt_by_day(db_session, 1) == {}                  # nothing rated
-    db_session.add(models.AerobicSession(user_id=1, source="polar_flow_export", source_session_id="nodur",
-                                         session_date=date(2026, 6, 2)))
-    db_session.commit()
-    _rpe_day(db_session, date(2026, 6, 2), 8.0)
-    assert _felt_by_day(db_session, 1)[date(2026, 6, 2)].minutes == 0.0      # the producer skips it (not resolvable)
+    d2 = date(2026, 6, 2)
+    start = datetime(2026, 6, 2, 2, 0, tzinfo=timezone.utc)
+    db_session.add(models.AerobicSession(user_id=1, source="polar_v4", source_session_id="nodur", session_date=d2,
+                                         start_time=start, stop_time=start + timedelta(minutes=40), z2_seconds=600))
+    db_session.commit()                                        # a timed session with no duration_minutes
+    _rate(db_session, "nodur", start, 40, 80)
+    assert _felt_by_day(db_session, 1)[d2].minutes == 0.0     # the producer skips it (not resolvable)
 
 
 def test_the_residual_pairs_garmin_only_days_and_names_the_partial_ones(db_session):
@@ -350,7 +353,7 @@ def test_a_new_observation_changes_the_series_and_nothing_else_does(db_session):
     """Series invariance: the felt load of a past day moves only when a rating is read that was not read before."""
     _user(db_session)
     start = _timed(db_session, D, 2, 60, "a")
-    _rpe_day(db_session, D, 5.0)
+    _rate(db_session, "1", start, 60, 50)
     before = _felt_by_day(db_session, 1)
     assert _felt_by_day(db_session, 1) == before                                   # reading again: identical
     _rate(db_session, "1", start, 60, 80)

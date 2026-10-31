@@ -70,6 +70,7 @@ def _raw_obs(db, source, ref, start, minutes, cr10, captured=NOW, uid=1):
 
 
 def _day_rpe(db, rpe, d=D, uid=1):
+    """The retired whole-day value. Written only to prove no reader applies it to a session."""
     _user(db, uid)
     db.add(models.DailyRecord(user_id=uid, date=d, session_rpe=rpe))
     db.commit()
@@ -89,19 +90,20 @@ def test_a_garmin_only_day_carries_the_garmin_value_on_the_garmin_rung(db_sessio
     assert sr.srpe_needed(db_session, 1, D) is False
 
 
-def test_a_day_only_day_is_filled_from_the_whole_day_rating_on_the_last_rung(db_session):
+def test_a_day_value_is_not_applied_to_an_unrated_session(db_session):
+    """THE RETIREMENT, pinned (R2): a session no source rated reads unrated; it never borrows the day."""
     _aero(db_session, _t(2))
     _day_rpe(db_session, 6.5)
-    assert _ratings(db_session) == [("aerobic", (6.5, "day_fill", 2))]
-    assert sr.srpe_needed(db_session, 1, D) is True                      # a day value is not a per-session rating
+    assert _ratings(db_session) == [("aerobic", None)]
+    assert sr.srpe_needed(db_session, 1, D) is True
 
 
-def test_a_mixed_day_rates_one_session_per_session_and_fills_the_other(db_session):
+def test_a_mixed_day_rates_one_session_and_leaves_the_other_unrated_whatever_the_day_value(db_session):
     _aero(db_session, _t(2), source="health_connect", pkg=GARMIN_PKG)
     _aero(db_session, _t(8))
     _garmin(db_session, "11", _t(2))
     _day_rpe(db_session, 5.0)
-    assert _ratings(db_session) == [("aerobic", (7.0, "garmin", 1)), ("aerobic", (5.0, "day_fill", 2))]
+    assert _ratings(db_session) == [("aerobic", (7.0, "garmin", 1)), ("aerobic", None)]
     assert sr.srpe_needed(db_session, 1, D) is True                      # the second session still wants a rating
 
 
@@ -171,12 +173,12 @@ def test_within_one_source_the_latest_capture_wins(db_session):
     assert _ratings(db_session) == [("aerobic", (9.0, "garmin", 1))]
 
 
-def test_an_unrated_latest_row_is_no_rating_and_the_day_fill_shows_through(db_session):
+def test_an_unrated_latest_row_is_no_rating_and_no_day_value_shows_through(db_session):
     _aero(db_session, _t(2), source="health_connect", pkg=GARMIN_PKG)
     _garmin(db_session, "11", _t(2), rpe_raw=70, now=NOW)
     _garmin(db_session, "11", _t(2), rpe_raw=None, now=NOW + timedelta(days=1))
     _day_rpe(db_session, 4.0)
-    assert _ratings(db_session) == [("aerobic", (4.0, "day_fill", 2))]
+    assert _ratings(db_session) == [("aerobic", None)]
 
 
 def test_a_rating_with_no_stop_time_cannot_be_placed_so_its_session_is_unrated(db_session):
@@ -216,26 +218,25 @@ def test_a_rating_can_still_be_resolved_for_a_session_the_count_leaves_out(db_se
     assert got[("aerobic", pil.id)].rpe_cr10 == 3.0
 
 
-def test_an_untimed_session_can_only_be_day_filled(db_session):
+def test_an_untimed_session_cannot_be_rated_by_anything(db_session):
+    """No window, no overlap: no observation can be placed on it, and the day value no longer fills it."""
     _user(db_session)
     db_session.add(models.AerobicSession(user_id=1, source="polar_flow_export", source_session_id="u", session_date=D,
                                          duration_minutes=40.0))
     db_session.commit()
     _garmin(db_session, "11", _t(2))
-    assert _ratings(db_session) == [("aerobic", None)]
     _day_rpe(db_session, 6.0)
-    assert _ratings(db_session) == [("aerobic", (6.0, "day_fill", 2))]
+    assert _ratings(db_session) == [("aerobic", None)]
 
 
 # -- G1: fail open to asking, and a later value overrides per session --------------------------------------------
 
 def test_a_source_that_has_not_synced_yet_leaves_the_question_open_and_a_later_value_closes_it(db_session):
     _aero(db_session, _t(2), source="health_connect", pkg=GARMIN_PKG)
-    _day_rpe(db_session, 6.0)                                            # the close-out was answered tonight
     assert sr.srpe_needed(db_session, 1, D) is True
-    assert _ratings(db_session) == [("aerobic", (6.0, "day_fill", 2))]
+    assert _ratings(db_session) == [("aerobic", None)]
     _garmin(db_session, "11", _t(2), rpe_raw=80)                        # 02:00 sweep: Garmin's value arrives
-    assert _ratings(db_session) == [("aerobic", (8.0, "garmin", 1))]     # overrides this session; nothing re-prompts
+    assert _ratings(db_session) == [("aerobic", (8.0, "garmin", 1))]     # rates this session; nothing re-prompts
     assert sr.srpe_needed(db_session, 1, D) is False
 
 
@@ -253,7 +254,7 @@ def test_write_order_does_not_change_the_answer(db_session):
         steps = {
             "garmin": lambda: _garmin(db, "11", _t(2), rpe_raw=70, now=NOW),
             "in_app": lambda: _raw_obs(db, "in_app", "a1", _t(8), 45, 4.0, captured=NOW + timedelta(hours=1)),
-            "day": lambda: _day_rpe(db, 5.0),
+            "day": lambda: _day_rpe(db, 5.0),          # the retired value: present, applied to nothing
         }
         for k in order:
             steps[k]()
