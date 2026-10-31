@@ -15388,3 +15388,11 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **How you know.** Operator ratification 2026-10-31 of the triage lean for Q233.
 
 **Do not revisit unless.** A B2B user exists, or a direct lane is lost (ToS action, API retirement).
+
+### #470. Question layer Phase C1: stale exempts `build`; eight stamps pinned; Doors on the builds; parity artefacts declared; the Open-ritual command made repo-generic
+
+**Tier:** ruling
+
+**Decision.** Phase C1 of the question-layer brief, ruled in-PR as two-way doors. (a) `stale.yml` exempts `pinned,design,build`, which supersedes the exempt list in #467 item 5: a `build` issue waits on a trigger, not on attention. (b) `pinned` is added to the eight issues migrated from Q195, Q234, Q96, Q103, Q174, Q178, Q214 and Q241 (two hard dates and six one-way stamps held for operator release), looked up by title prefix. (c) The twelve `build` issues carry a Door: one-way for Q58, Q66, Q118, Q135, Q170, Q181 and Q231, two-way for Q78, Q139, Q156, Q176 and Q191. (d) `CLAUDE.md` gains a standing-rules bullet declaring the parity artefacts beyond the shared block (the guard workflow byte-identical from `name:` down, the guard script code-identical), the Issues row of the stores table carries the `GH#N` citation rule, and the Open-ritual REST command takes `{owner}/{repo}`, which `gh api` substitutes per repo (confirmed in this clone). GH#565 holds the `land`-alias guard stamp.
+
+**Reverse-by.** Edit `.github/workflows/stale.yml` to drop `build` from `exempt-issue-labels`; the `CLAUDE.md` edits revert by a new entry that supersedes this one.

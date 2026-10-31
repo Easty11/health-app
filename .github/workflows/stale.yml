@@ -3,8 +3,9 @@
 # `abandoned`. Abandoned is a normal ending, not a failure.
 #
 # Issues only. PRs are untouched (`days-before-pr-stale: -1`, `days-before-pr-close: -1`).
-# `pinned` (stale-exempt on purpose) and `design` (a pointer to a docs/design doc, whose own
-# State line is the lifecycle) are exempt.
+# `pinned` (stale-exempt on purpose), `design` (a pointer to a docs/design doc, whose own
+# State line is the lifecycle) and `build` (ruled, waiting on a trigger or capacity, not on
+# attention) are exempt.
 
 name: stale
 
@@ -27,7 +28,7 @@ jobs:
           days-before-issue-close: 7
           days-before-pr-stale: -1
           days-before-pr-close: -1
-          exempt-issue-labels: 'pinned,design'
+          exempt-issue-labels: 'pinned,design,build'
           stale-issue-label: 'stale'
           close-issue-label: 'abandoned'
           stale-issue-message: 'No activity for 53 days. Closes as abandoned in 7 days unless touched or labelled pinned. Abandoned is a normal ending; reopen if it comes back on its own.'
