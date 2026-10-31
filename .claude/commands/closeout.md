@@ -38,6 +38,12 @@ Execute these steps in order:
    `BRANCHES.md`, HALT the close-out and report the offending branch(es) — do not write
    `closeout.md` until resolved.
 
+   **Sweep the open rows too (Q138).** Not only this session's branches: for every `OWED` or
+   `BLOCKED` `BRANCHES.md` row, check that the named branch exists on `origin`
+   (`git ls-remote --heads origin <branch>`) and whether its work is on master
+   (`git cherry origin/master <branch>` all `-`, or the row's SHA is an ancestor of master).
+   List the rows that are landed-but-unflipped, and flip them in this same close-out.
+
 5. **Regenerate the cold-resume handoff** from the stores so a cold session can resume
    with zero chat history: current sprint (from the `CLAUDE.md` sprint block / `ROADMAP.md`),
    open `fork` issues, and design docs not in a terminal state
