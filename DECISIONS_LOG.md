@@ -15242,3 +15242,149 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **Not verified.** That the stale action's first scheduled run closes nothing it should not (no issues exist yet); the first `stale`/`abandoned` transition on a real issue.
 
 **Do not revisit unless.** The open `fork` count exceeds about 15 for two consecutive session opens (the tracker has become the old file), or a two-way-door ruling has to be reversed at a cost that shows the door class was misjudged, in which case tighten the one-way definition, not the rule.
+
+### #468. Question layer Phase B: the live questions are migrated to GitHub issues and `docs/design` docs, and `OPEN_QUESTIONS.md` is deleted
+
+**Decision.** Chat-ratified 31 Oct 2026: the operator reviewed the Phase B triage table and ratified every row unchanged, including the six fork leans, so implementing it embeds no new judgment. Every live `OPEN_QUESTIONS.md` entry (110 above `## CLOSED` at master `d340104`) ends in exactly one place, and the file is deleted. The map below resolves every historical `Qn` citation in the append-only stores.
+1. **Destinations (110).** Resolved in code in Branch 1: 6 (Q28 Q52 Q136 Q140 Q147 Q171). Resolved in tree by this branch: 3 (Q31 closed because its premise is gone; Q138 as a `/closeout` step 4 sweep; Q240 as a rotation-runbook section). A decision entry: 1 (Q233, #469). Folded into another issue: 1 (Q29 into Q135). Stamp issues: 43. Build issues: 12. Verify issues: 6. Design docs: 20 questions in 8 docs, each with one `design` pointer issue. Abandoned: 18, each created and closed `not_planned` so the number is citable.
+2. **Issues created: 87** (43 + 12 + 6 + 8 + 18), GH#476 to GH#562, 18 of them closed with label `abandoned`. Each body carries the byte-faithful original entry under a `<details>` block, which is no longer maintained.
+3. **The one-way-door releases are not part of this phase.** Q58, Q66, Q118 and Q170 are `build` issues (ruling ratified 31 Oct 2026; the ruling entry lands with each one's migration PR). Q96, Q103, Q174, Q178, Q214 and Q241 are `stamp` issues marked one-way, so they hold for explicit operator instruction. Nothing was built for any of them.
+4. **The `build` label** (colour `0052CC`) was created for the entries that are ruled and awaiting a trigger. `CLAUDE.md` § Filing a question now defines it, and adds the citation form: a bare `#N` in every store is a `DECISIONS_LOG` number, and a GitHub issue or PR is written `GH#N`.
+5. **Rules and tooling.** `CLAUDE.md`: the `OPEN_QUESTIONS.md` row and the frozen-file convention are removed, the Holds bullet is folded into the door-class bullet, the Open and `;cc` lines use issues (REST form for a cloud session), and the batched-governance file list loses the deleted file (a removal outside the declared regions, declared here). `.espanso/cc.yml` and `/closeout` steps 1 and 5 follow. The guard `scripts/check_governance_placeholders.py` loses its `OPEN_QUESTIONS.md` arm (it exits 2 on a missing store; the `#NEXT` arm on `DECISIONS_LOG.md` and the 0/1/2 contract are untouched). `gen_governance_view.py`, `gen_status_model.py` and `status_diff.py` skip health-app's questions store (`gov_dialects.QUESTIONS_RETIRED`) and say so; they still read health-connect-app's, whose file stands until its own Phase B.
+6. **Closed entries are not migrated.** The 137 entries below `## CLOSED` (all DONE, each already carrying its closing decision elsewhere) get no issue or doc. A citation of one resolves through git: `git show d340104:OPEN_QUESTIONS.md` is the last commit that carries the file whole. Code comments and docs that cite `OPEN_QUESTIONS Qn` stay as written, for the same reason.
+7. **Carried to Phase C.** health-connect-app's copy of the guard keeps its question arm until its own Phase B, so the two copies differ until then (the Q87 byte-identity declaration rides Phase C). `.github/workflows/governance-guard.yml` does not name the deleted file and needs no edit.
+
+| Question | Destination |
+|---|---|
+| Q22 | `docs/design/0001-canonical-exercise-layer.md` (pointer GH#537) |
+| Q24 | `docs/design/0002-plan-log-reconciliation.md` (pointer GH#538) |
+| Q28 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q29 | GH#523 (folded into Q135) |
+| Q31 | resolved: premise gone (no "Known open issues" heading on master `d340104`) |
+| Q35 | GH#476 |
+| Q48 | GH#531 |
+| Q52 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q55 | GH#532 |
+| Q58 | GH#519 |
+| Q59 | GH#477 |
+| Q66 | GH#520 |
+| Q73 | GH#478 |
+| Q74 | GH#479 |
+| Q76 | GH#480 |
+| Q78 | GH#521 |
+| Q80 | GH#481 |
+| Q84 | GH#482 |
+| Q86 | GH#545 (closed, abandoned) |
+| Q87 | GH#483 |
+| Q89 | GH#546 (closed, abandoned) |
+| Q92 | GH#484 |
+| Q95 | GH#547 (closed, abandoned) |
+| Q96 | GH#485 |
+| Q100 | GH#533 |
+| Q102 | `docs/design/0003-constraints-engine-tier.md` (pointer GH#539) |
+| Q103 | GH#486 |
+| Q104 | GH#487 |
+| Q105 | GH#488 |
+| Q106 | GH#489 |
+| Q109 | GH#490 |
+| Q111 | GH#491 |
+| Q114 | GH#492 |
+| Q115 | `docs/design/0004-load-model-routing-and-gaps.md` (pointer GH#540) |
+| Q117 | GH#548 (closed, abandoned) |
+| Q118 | GH#522 |
+| Q119 | GH#493 |
+| Q120 | GH#549 (closed, abandoned) |
+| Q121 | `docs/design/0004-load-model-routing-and-gaps.md` (pointer GH#540) |
+| Q124 | `docs/design/0004-load-model-routing-and-gaps.md` (pointer GH#540) |
+| Q126 | GH#494 |
+| Q128 | GH#550 (closed, abandoned) |
+| Q135 | GH#523 |
+| Q136 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q138 | resolved `dcc9c79` (Branch 2, commit 1) |
+| Q139 | GH#524 |
+| Q140 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q141 | GH#495 |
+| Q143 | GH#551 (closed, abandoned) |
+| Q145 | GH#496 |
+| Q147 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q148 | GH#552 (closed, abandoned) |
+| Q150 | `docs/design/0008-spo2-detector-and-guardrail.md` (pointer GH#544) |
+| Q151 | GH#497 |
+| Q153 | GH#498 |
+| Q156 | GH#525 |
+| Q157 | GH#553 (closed, abandoned) |
+| Q158 | GH#554 (closed, abandoned) |
+| Q163 | `docs/design/0007-in-app-chat-architecture.md` (pointer GH#543) |
+| Q164 | GH#555 (closed, abandoned) |
+| Q166 | GH#556 (closed, abandoned) |
+| Q167 | GH#557 (closed, abandoned) |
+| Q168 | GH#499 |
+| Q170 | GH#526 |
+| Q171 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q173 | GH#500 |
+| Q174 | GH#501 |
+| Q175 | `docs/design/0006-sleep-writers-and-admission.md` (pointer GH#542) |
+| Q176 | GH#527 |
+| Q177 | GH#502 |
+| Q178 | GH#503 |
+| Q180 | `docs/design/0007-in-app-chat-architecture.md` (pointer GH#543) |
+| Q181 | GH#528 |
+| Q182 | `docs/design/0003-constraints-engine-tier.md` (pointer GH#539) |
+| Q183 | `docs/design/0003-constraints-engine-tier.md` (pointer GH#539) |
+| Q184 | `docs/design/0007-in-app-chat-architecture.md` (pointer GH#543) |
+| Q189 | GH#504 |
+| Q191 | GH#529 |
+| Q193 | GH#558 (closed, abandoned) |
+| Q195 | GH#505 |
+| Q197 | `docs/design/0002-plan-log-reconciliation.md` (pointer GH#538) |
+| Q198 | `docs/design/0005-hr-input-layer.md` (pointer GH#541) |
+| Q199 | GH#534 |
+| Q203 | GH#506 |
+| Q205 | GH#535 |
+| Q208 | GH#507 |
+| Q213 | `docs/design/0005-hr-input-layer.md` (pointer GH#541) |
+| Q214 | GH#508 |
+| Q216 | `docs/design/0005-hr-input-layer.md` (pointer GH#541) |
+| Q217 | GH#509 |
+| Q218 | GH#510 |
+| Q219 | GH#559 (closed, abandoned) |
+| Q220 | GH#511 |
+| Q221 | GH#560 (closed, abandoned) |
+| Q222 | GH#561 (closed, abandoned) |
+| Q223 | GH#512 |
+| Q224 | `docs/design/0006-sleep-writers-and-admission.md` (pointer GH#542) |
+| Q225 | `docs/design/0006-sleep-writers-and-admission.md` (pointer GH#542) |
+| Q226 | GH#513 |
+| Q227 | GH#514 |
+| Q228 | GH#515 |
+| Q231 | GH#530 |
+| Q233 | #469 |
+| Q234 | GH#516 |
+| Q235 | GH#517 |
+| Q240 | resolved `dcc9c79` (Branch 2, commit 1) |
+| Q241 | GH#518 |
+| Q244 | GH#536 |
+| Q245 | GH#562 (closed, abandoned) |
+| Q246 | `docs/design/0007-in-app-chat-architecture.md` (pointer GH#543) |
+
+**Rationale.** See #467: the flat store held decisions and chores priced as architecture, and the tracker plus design docs are the replacement. Phase B is the migration that retires the file.
+
+**Status.** Landed 31 Oct 2026. Branch 1 is `aa636d2` (GH#474). Branch 2's first commit is `dcc9c79`; its second carries this entry, and its merge SHA is not recorded, because a PR cannot name its own merge (read it with `git log --first-parent --grep=question-layer`). Number resolved at master max #467, re-read immediately before the merge.
+
+**How you know.** The coverage assertion of the migration script: the 110 live headings above `## CLOSED` (read from the file at `d340104`) equal the 110 questions the ratified triage table assigns, and no question has two destinations. The script then asserted the planned counts (43, 12, 6, 8, 18 = 87) and that every issue's first fenced block equals its source entry byte for byte. A REST read after the run found 87 non-PR issues, GH#476 to GH#562 contiguous, 69 open and 18 closed `not_planned` with label `abandoned`, and no `fork` issue. The 20 design-doc questions were each checked byte-identical in their doc appendix.
+
+**Not verified.** That the stale action's first scheduled run treats these issues correctly (`pinned` and `design` are exempt; the rest age from today); and the triage's "Door" column was not given for `build`, `verify` and `design` rows, so those issues say "not classified" rather than carry a guess.
+
+**Do not revisit unless.** A historical `Qn` citation is found that the table does not resolve (a closed entry resolves through git at `d340104`, item 6).
+
+### #469. Ingestion routes stay direct per provider; an aggregator is a B2B channel beside the household lanes, not instead of them (Q233)
+
+**Decision.** Ingestion routes per provider stay direct: Garmin on the official Personal API (#449) with the DI lane for epoch SpO2 only (#450); Polar on AccessLink v4 (#17). An aggregator (Open Wearables or similar) is adopted only when a B2B user requires a self-fronting channel, and then beside, not instead of, the household lanes. This entry supersedes the do-not-revisit clauses of #258 and #263 only where they say an aggregator is the durable channel for the household lanes.
+
+**Rationale.** #258 and #263 named the aggregator as the B2B channel, not the household one; nothing household-side is blocked.
+
+**Status.** Ruled 31 Oct 2026; nothing built.
+
+**How you know.** Operator ratification 2026-10-31 of the triage lean for Q233.
+
+**Do not revisit unless.** A B2B user exists, or a direct lane is lost (ToS action, API retirement).

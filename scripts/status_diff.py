@@ -153,6 +153,10 @@ def diff_store(store_key: str, base: list[Item], cur: list[Item]) -> dict:
 def diff_repo(repo: str, base_ref: str | None, cur_ref: str | None) -> dict:
     out = {}
     for store_key in ("decisions", "questions", "branches"):
+        if store_key == "questions" and not D.has_questions_store(repo):
+            out[store_key] = {"unavailable": "retired: questions are GitHub issues since "
+                              "question layer Phase B (DECISIONS_LOG #468)"}
+            continue
         b_txt = read_store_at_ref(repo, base_ref, store_key)
         c_txt = read_store_at_ref(repo, cur_ref, store_key)
         if b_txt is None or c_txt is None:

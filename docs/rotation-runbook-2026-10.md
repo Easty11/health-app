@@ -161,3 +161,21 @@ deployment on both services (#442 (e)).
 
 Paste the ledger rows (names, dates, who, consumers redeployed) under a block addressed to a new
 session. Code fills Q238 and closes it when every row carries a date or a reasoned non-rotation.
+
+## Garmin Personal API key: yearly expiry (Q240)
+
+The Personal API key expires yearly. This is a routine renewal, not a rotation; nothing here
+changes the Fernet key or any other credential in the phases above.
+
+1. **The key owner creates the new key** in their Garmin account.
+2. **Attach it over the existing row:** `scripts.garmin_personal_attach`, run from the prod
+   container as the other operator scripts are: `railway ssh --service health-app-backend`, then
+   from `/app` `/opt/venv/bin/python -m scripts.garmin_personal_attach --user-id <n> --expires
+   YYYY-MM-DD`, with the expiry date Garmin showed for the new key. The key is read from a hidden
+   prompt, never argv or shell history. Re-running with a new key is the same command.
+3. **No re-link.** The attach replaces the key on the existing row; the account fingerprint is
+   unchanged, so the user's link to the lane stands.
+
+The freshness card's 30-day and 7-day expiry warnings are the only alert on this side; there is no
+email from the app. (Garmin's own expiry email goes to the key's owner, not the operator.)
+User 4's key is owned by someone else: the operator walks that owner through the same three steps.

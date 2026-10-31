@@ -100,3 +100,40 @@ def test_diff_decisions_key_on_number():
     d = SD.diff_store("decisions", base, cur)
     assert [o["id"] for o in d["opened"]] == ["#2"]
     assert d["closed"] == []
+
+
+# --- question layer Phase B (DECISIONS_LOG #468): health-app's questions store is retired ------ #
+
+def test_health_app_questions_store_is_retired_but_hca_is_not():
+    import gen_governance_view as GV
+    import gov_dialects as D
+
+    assert not D.has_questions_store("health-app")
+    assert D.has_questions_store("health-connect-app")
+    assert GV.stores_for("health-app") == ("DECISIONS_LOG", "FEEDBACK", "ROADMAP")
+    assert GV.stores_for("health-connect-app") == ("DECISIONS_LOG", "OPEN_QUESTIONS", "FEEDBACK", "ROADMAP")
+    assert "questions" not in G.stores_for("health-app")
+    assert "questions" in G.stores_for("health-connect-app")
+
+
+def test_status_model_reports_a_retired_questions_store_instead_of_halting_on_it():
+    """No `texts['questions']` for health-app: the model must carry the retired marker, not raise."""
+    texts = {
+        "decisions": "### 1. First\n**Status:** landed\n\n### 2. Second\n**Status:** landed\n",
+        "branches": "| Branch | Purpose | Status | Detail | Blocker |\n|---|---|---|---|---|\n"
+                    "| `a/b` | x | DONE | y | z |\n",
+    }
+    out = G.build_repo("health-app", "0" * 40, texts)
+    assert "retired" in out["questions"]
+    assert out["decisions"]["count"] == 2 and out["branches"]["count"] == 1
+    model = {"repos": {"health-app": out}}
+    assert G.collect_drift(model) == []          # a retired store has no off-vocab to tally
+
+
+def test_status_diff_names_the_retirement_rather_than_a_missing_file(monkeypatch):
+    monkeypatch.setattr(SD, "read_store_at_ref", lambda repo, ref, key: None)
+    ha = SD.diff_repo("health-app", None, None)
+    assert "retired" in ha["questions"]["unavailable"]
+    assert "retired" not in ha["decisions"]["unavailable"]
+    hca = SD.diff_repo("health-connect-app", None, None)
+    assert "retired" not in hca["questions"]["unavailable"]       # HCA still goes the normal path

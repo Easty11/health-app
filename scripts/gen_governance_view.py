@@ -9,6 +9,11 @@ never writes it.
 Emits a **digest**, not a verbatim dump (DECISIONS_LOG #94). Every digest line carries a
 line-anchored GitHub URL, so the view says what exists and where, and master gives detail.
 
+health-app's questions are GitHub issues and `docs/design` docs since question layer Phase B
+(DECISIONS_LOG #468), so its `OPEN_QUESTIONS.md` is not read and the view says so; the open
+`fork` issues are on the session-open ritual instead. health-connect-app's file is still read
+until its own Phase B.
+
 Output is gitignored. A derived artifact is not committed — a committed derivative is a
 second thing that goes stale, which is the failure this script exists to remove.
 
@@ -32,6 +37,11 @@ import gov_dialects as D  # single source of the heading/state grammar (DECISION
 OWNER = "Easty11"
 REPOS = ("health-app", "health-connect-app")
 STORES = ("DECISIONS_LOG", "OPEN_QUESTIONS", "FEEDBACK", "ROADMAP")
+
+
+def stores_for(repo: str) -> tuple[str, ...]:
+    """The stores read for `repo`: all four, minus a questions store that has been retired."""
+    return tuple(s for s in STORES if s != "OPEN_QUESTIONS" or D.has_questions_store(repo))
 
 RAW = "https://raw.githubusercontent.com/{owner}/{repo}/{sha}/{store}.md"
 BLOB = "https://github.com/{owner}/{repo}/blob/{sha}/{store}.md#L{line}"
@@ -320,7 +330,7 @@ def build(data: dict, generated: str) -> tuple[list[str], dict]:
     for repo in REPOS:
         d = data[repo]
         out.append(
-            f"| `{repo}` | `master` @ `{d['sha'][:7]}` | {len(STORES)} "
+            f"| `{repo}` | `master` @ `{d['sha'][:7]}` | {len(stores_for(repo))} "
             f"| #{d['dmax']} | {generated} |"
         )
     out.append("")
@@ -353,22 +363,29 @@ def build(data: dict, generated: str) -> tuple[list[str], dict]:
         counts[f"{repo}/DECISIONS_LOG"] = (len(ents), n)
         out.append("")
 
-        # OPEN_QUESTIONS
-        ents = d["OPEN_QUESTIONS"]
-        paren = ""
-        if repo == "health-connect-app":
-            qs = sorted(int(e.label) for e in ents)
-            paren = f"Q{qs[0]}{ENDASH}Q{qs[-1]}"
-        out.append(store_separator(repo, "OPEN_QUESTIONS", paren))
-        out.append("")
-        n = 0
-        for e in ents:
-            link = anchor(repo, sha, "OPEN_QUESTIONS", e.line)
-            status = f" {MIDDOT} {truncate(e.status, 110)}" if e.status else ""
-            out.append(f"- [`Q{e.label}`]({link}) {MIDDOT} {truncate(e.title)}{status}")
-            n += 1
-        counts[f"{repo}/OPEN_QUESTIONS"] = (len(ents), n)
-        out.append("")
+        # OPEN_QUESTIONS (retired for health-app: say so, do not silently omit)
+        if not D.has_questions_store(repo):
+            out.append(store_separator(repo, "OPEN_QUESTIONS", "retired"))
+            out.append("")
+            out.append("Questions are GitHub issues (typed by label) and `docs/design` docs since "
+                       "DECISIONS_LOG #468; this store is not read.")
+            out.append("")
+        else:
+            ents = d["OPEN_QUESTIONS"]
+            paren = ""
+            if repo == "health-connect-app":
+                qs = sorted(int(e.label) for e in ents)
+                paren = f"Q{qs[0]}{ENDASH}Q{qs[-1]}"
+            out.append(store_separator(repo, "OPEN_QUESTIONS", paren))
+            out.append("")
+            n = 0
+            for e in ents:
+                link = anchor(repo, sha, "OPEN_QUESTIONS", e.line)
+                status = f" {MIDDOT} {truncate(e.status, 110)}" if e.status else ""
+                out.append(f"- [`Q{e.label}`]({link}) {MIDDOT} {truncate(e.title)}{status}")
+                n += 1
+            counts[f"{repo}/OPEN_QUESTIONS"] = (len(ents), n)
+            out.append("")
 
         # FEEDBACK
         ents = d["FEEDBACK"]
@@ -435,7 +452,7 @@ def main() -> int:
         sha = resolve_master_sha(repo)
         print(f"  {repo}: master @ {sha[:7]}", file=sys.stderr)
         d: dict = {"sha": sha}
-        for store in STORES:
+        for store in stores_for(repo):
             text = fetch(repo, sha, store)
             d[store] = parsers[store](text, repo)
             got = (sum(len(r) for _, r in d[store]) if store == "ROADMAP"
@@ -448,7 +465,7 @@ def main() -> int:
     # empty across every question in a store, the parser matched a schema that is not there —
     # the exact `**State:**` bug this file carried, invisible to the heading-count gate.
     for repo in REPOS:
-        qs = data[repo]["OPEN_QUESTIONS"]
+        qs = data[repo].get("OPEN_QUESTIONS", [])
         if qs and all(not e.status for e in qs):
             raise GenError(
                 f"{repo}/OPEN_QUESTIONS.md: status extracted empty for all {len(qs)} "
@@ -465,10 +482,9 @@ def main() -> int:
     for key, (parsed, emitted) in sorted(counts.items()):
         if parsed != emitted:
             raise GenError(f"{key}: parsed {parsed} entries but emitted {emitted} lines")
-    if len(counts) != len(REPOS) * len(STORES):
-        raise GenError(
-            f"expected {len(REPOS) * len(STORES)} store sections, got {len(counts)}"
-        )
+    expected_sections = sum(len(stores_for(repo)) for repo in REPOS)
+    if len(counts) != expected_sections:
+        raise GenError(f"expected {expected_sections} store sections, got {len(counts)}")
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -22,7 +22,6 @@ sys.path.insert(0, str(REPO / "scripts"))
 from check_governance_placeholders import CHECKS  # noqa: E402
 
 DECISIONS_PATTERN = CHECKS[0][1]
-QUESTIONS_PATTERN = CHECKS[1][1]
 
 
 # ── it fires on the real thing ───────────────────────────────────────────────
@@ -32,8 +31,11 @@ def test_fires_on_an_unresolved_decision_heading():
     assert DECISIONS_PATTERN.search(text)
 
 
-def test_fires_on_an_unresolved_question_heading():
-    assert QUESTIONS_PATTERN.search("## Q77. Prior\n\n## Q#NEXT. A new fork\n")
+def test_the_guard_reads_only_stores_that_exist():
+    """Question layer Phase B (DECISIONS_LOG #468): `OPEN_QUESTIONS.md` is deleted, so an arm
+    naming it would exit 2 on the missing file. The `#NEXT` arm on DECISIONS_LOG is the only
+    one, and the exit-code contract (0 clean / 1 placeholder / 2 cannot run) is unchanged."""
+    assert [path for path, _pattern, _label in CHECKS] == ["DECISIONS_LOG.md"]
 
 
 def test_reports_every_offence_not_just_the_first():
@@ -64,7 +66,6 @@ def test_does_not_fire_on_a_correction_quoting_the_superseded_token():
 
 def test_does_not_fire_on_a_resolved_heading():
     assert not DECISIONS_PATTERN.search("### 165. Titration becomes a hunting search\n")
-    assert not QUESTIONS_PATTERN.search("## Q78. Exclude-all starves a napper\n")
 
 
 def test_does_not_fire_mid_line():
@@ -73,13 +74,6 @@ def test_does_not_fire_mid_line():
 
 # ── it works in the OTHER repo's grammar too (one rule, one implementation) ──
 
-def test_fires_on_the_health_connect_app_question_heading_level():
-    """HCA heads a question `### Q8 — …  ·  OWED`, health-app heads it `## Q77.`. A
-    `^## Q#NEXT`-only pattern reads HCA as permanently clean: installed, green, blind.
-    Verified against both trees 2026-08-04."""
-    assert QUESTIONS_PATTERN.search("### Q21 — Prior\n\n### Q#NEXT — A new fork  ·  OPEN\n")
-
-
 def test_fires_on_the_health_connect_app_decision_heading():
     """HCA heads a decision `### #21 — …  ·  active` — sigil, em-dash, trailing state."""
     assert DECISIONS_PATTERN.search("### #21 — Prior  ·  active\n\n### #NEXT — A decision  ·  active\n")
@@ -87,7 +81,6 @@ def test_fires_on_the_health_connect_app_decision_heading():
 
 def test_still_does_not_fire_on_resolved_headings_in_either_grammar():
     assert not DECISIONS_PATTERN.search("### #21 — A decision  ·  active\n")
-    assert not QUESTIONS_PATTERN.search("### Q8 — Shared block parity  ·  OWED\n")
 
 
 # ── end to end, through the real script ──────────────────────────────────────
