@@ -1,5 +1,5 @@
 """
-Tests for the current_state read model (DECISIONS_LOG #43 / OPEN_QUESTIONS Q8).
+Tests for the current_state read model (DECISIONS_LOG #43 / retired-store question Q8).
 
 (a) active-only declared state assembled correctly for a seeded user
 (b) supersede semantics honoured (superseded entry absent)

@@ -32,8 +32,9 @@ def test_fires_on_an_unresolved_decision_heading():
 
 
 def test_the_guard_reads_only_stores_that_exist():
-    """Question layer Phase B (DECISIONS_LOG #468): `OPEN_QUESTIONS.md` is deleted, so an arm
-    naming it would exit 2 on the missing file. The `#NEXT` arm on DECISIONS_LOG is the only
+    """Question layer Phases B and C2 (DECISIONS_LOG #468; health-connect-app #54): the
+    questions store file is deleted in both repos, so an arm naming it would exit 2 on the
+    missing file. The `#NEXT` arm on DECISIONS_LOG is the only
     one, and the exit-code contract (0 clean / 1 placeholder / 2 cannot run) is unchanged."""
     assert [path for path, _pattern, _label in CHECKS] == ["DECISIONS_LOG.md"]
 

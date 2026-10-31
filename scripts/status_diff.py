@@ -2,17 +2,15 @@
 """status_diff.py — cross-repo governance diff + invokable status report (task-5 Steps 2-3).
 
 Compares two governance snapshots (or the current stores vs the last snapshot) across BOTH
-repos' stores, emitting opened / closed / changed / renumbered per store. A MANUAL command —
+repos' stores, emitting opened / closed / changed per store. A MANUAL command —
 no schedule, no daemon (Step 4 / S4 is gated).
 
 Design contracts:
 
-* RENUMBER SURVIVAL. Number-at-merge renumbers questions when branches land (Q28 -> Q50). Item
-  identity is therefore a CONTENT FINGERPRINT (normalised title), never the number, for
-  questions. A pure renumber keeps its fingerprint -> reported as `renumbered`, not close+open.
-  Where the fingerprint does NOT survive (title edited too), the tool reports the closed and the
-  opened SEPARATELY plus "possible renumber — verify by hand"; it never fuzzy-matches titles.
-  Decisions key on their number (append-only, never renumbered on master); branches key on name.
+* ITEM IDENTITY. Decisions key on their number (append-only, never renumbered on master);
+  branches key on name. Neither repo has a questions store any more (both retired, DECISIONS_LOG
+  #468 / health-connect-app #54 — questions are GitHub issues), so there is no questions diff and
+  no renumber handling: the fingerprint identity that survived a question renumber is gone with it.
 
 * CROSS-REPO EVIDENCE (#184/#185). Each repo's stores are read FROM THAT REPO at the relevant
   ref (`git show <sha>:FILE`). No claim about repo B ever originates from repo A's files.
@@ -24,7 +22,6 @@ Design contracts:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -39,24 +36,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent          # health-app
 HCA_ROOT = REPO_ROOT.parent / "health-connect-app"
 STATUS_DIR = REPO_ROOT.parent / "_status"
 REPO_PATHS = {"health-app": REPO_ROOT, "health-connect-app": HCA_ROOT}
-STORE_FILE = {"decisions": "DECISIONS_LOG", "questions": "OPEN_QUESTIONS", "branches": "BRANCHES"}
+STORE_FILE = {"decisions": "DECISIONS_LOG", "branches": "BRANCHES"}
 
 
 @dataclass(frozen=True)
 class Item:
     store: str
-    ident: str        # display id: "#207" / "Q88" / branch name
-    key: str          # identity key: number (decisions) / fingerprint (questions) / name (branches)
+    ident: str        # display id: "#207" / branch name
+    key: str          # identity key: number (decisions) / name (branches)
     title: str
     state: str
-
-
-def _norm(s: str) -> str:
-    return " ".join(s.lower().split())
-
-
-def _fp(s: str) -> str:
-    return hashlib.sha256(_norm(s).encode("utf-8")).hexdigest()[:16]
 
 
 # --------------------------------------------------------------------------------------
@@ -75,17 +64,6 @@ def extract_items(store_key: str, text: str, repo: str) -> list[Item]:
             raw = D.decision_state(lines, line_i, rest, end)
             tok = D.decision_inline_state(rest) or ("stated" if raw else "unstated")
             items.append(Item("decisions", f"#{num}", str(num), rest.strip(), tok))
-
-    elif store_key == "questions":
-        heads = [(i, int(m.group(1)), m.group(2))
-                 for i, ln in enumerate(lines) if (m := D.QUESTION_HEADING.match(ln))]
-        vocab = D.question_states(repo)
-        for idx, (line_i, qn, rest) in enumerate(heads):
-            end = heads[idx + 1][0] if idx + 1 < len(heads) else len(lines)
-            raw = D.entry_state(lines, line_i, rest, end)
-            tok, _off = D.classify(raw, vocab)
-            # identity survives renumber: fingerprint the TITLE only (number + state excluded)
-            items.append(Item("questions", f"Q{qn}", _fp(rest), rest.strip(), tok or "—"))
 
     elif store_key == "branches":
         for ln in lines:
@@ -122,41 +100,25 @@ def read_store_at_ref(repo: str, ref: str | None, store_key: str) -> str | None:
 def diff_store(store_key: str, base: list[Item], cur: list[Item]) -> dict:
     base_by = {it.key: it for it in base}
     cur_by = {it.key: it for it in cur}
-    opened, closed, changed, renumbered = [], [], [], []
+    opened, closed, changed = [], [], []
 
     for k, it in cur_by.items():
         if k not in base_by:
             opened.append({"id": it.ident, "title": it.title, "state": it.state})
         else:
             b = base_by[k]
-            if it.ident != b.ident:  # same fingerprint, different number => renumber (questions)
-                renumbered.append({"from": b.ident, "to": it.ident, "title": it.title,
-                                   "state": it.state,
-                                   "state_change": None if b.state == it.state else [b.state, it.state]})
-            elif b.state != it.state:
+            if b.state != it.state:
                 changed.append({"id": it.ident, "title": it.title, "from": b.state, "to": it.state})
     for k, b in base_by.items():
         if k not in cur_by:
             closed.append({"id": b.ident, "title": b.title, "state": b.state})
 
-    result = {"opened": opened, "closed": closed, "changed": changed, "renumbered": renumbered}
-    # Where identity did NOT survive on BOTH sides, a renumber-with-edit is indistinguishable from
-    # a real close+open. Report it, never pair it (the brief's explicit contract).
-    if store_key == "questions" and opened and closed:
-        result["renumber_suspects"] = (
-            f"{len(closed)} closed + {len(opened)} opened in questions — possible renumber(s) "
-            f"with an edited title (fingerprint did not survive). VERIFY BY HAND; not auto-paired."
-        )
-    return result
+    return {"opened": opened, "closed": closed, "changed": changed}
 
 
 def diff_repo(repo: str, base_ref: str | None, cur_ref: str | None) -> dict:
     out = {}
-    for store_key in ("decisions", "questions", "branches"):
-        if store_key == "questions" and not D.has_questions_store(repo):
-            out[store_key] = {"unavailable": "retired: questions are GitHub issues since "
-                              "question layer Phase B (DECISIONS_LOG #468)"}
-            continue
+    for store_key in STORE_FILE:
         b_txt = read_store_at_ref(repo, base_ref, store_key)
         c_txt = read_store_at_ref(repo, cur_ref, store_key)
         if b_txt is None or c_txt is None:
@@ -226,15 +188,7 @@ def _fmt_store_delta(name: str, d: dict) -> list[str]:
         return [f"    {name}: unavailable ({d['unavailable']})"]
     bits = [f"+{len(d['opened'])} opened", f"-{len(d['closed'])} closed",
             f"~{len(d['changed'])} changed"]
-    if d.get("renumbered"):
-        bits.append(f"№{len(d['renumbered'])} renumbered")
-    out = [f"    {name}: " + ", ".join(bits)]
-    for r in d.get("renumbered", []):
-        sc = f" (state {r['state_change'][0]}→{r['state_change'][1]})" if r["state_change"] else ""
-        out.append(f"        renumber {r['from']} → {r['to']}: {r['title'][:60]}{sc}")
-    if d.get("renumber_suspects"):
-        out.append(f"        ⚠ {d['renumber_suspects']}")
-    return out
+    return [f"    {name}: " + ", ".join(bits)]
 
 
 def build_report() -> str:
@@ -253,7 +207,7 @@ def build_report() -> str:
         base_ref = r["provenance"]["sha"]
         lines.append(f"  {repo}  (baseline {base_ref[:7]} → current working tree)")
         d = diff_repo(repo, base_ref, None)
-        for store_key in ("decisions", "questions", "branches"):
+        for store_key in STORE_FILE:
             lines += _fmt_store_delta(STORE_FILE[store_key], d[store_key])
     lines.append("")
 
