@@ -1,5 +1,8 @@
 # OPEN QUESTIONS
 
+> **FROZEN 2026-10-31 (#467).** No new entries, no state changes. Live entries migrate to GitHub
+> Issues / `docs/design` in Phase B, after which this file is deleted. History stays in git.
+
 Undecided forks and unverified-at-machine items. One state per item, from the **question-state**
 axis (`OPEN` / `OWED` / `DONE → #N`) defined in `CLAUDE.md` → **State vocabulary** (the sole
 definition). The label is `**State:**` (never `**Status:**`). `DONE → #N` names the resolving

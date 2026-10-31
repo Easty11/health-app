@@ -11,8 +11,9 @@ pasted summary; if a summary contradicts `CLAUDE.md`, `CLAUDE.md` wins.
 
 Execute these steps in order:
 
-1. **Read the canonical stores** — `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`, `ROADMAP.md`,
-   `FEEDBACK.md`. They are the source of truth.
+1. **Read the canonical stores** — `DECISIONS_LOG.md`, `ROADMAP.md`, `FEEDBACK.md`, the open `fork` issues
+   (`gh issue list --label fork --state open`) and issues updated this session
+   (`gh issue list --state all --search "updated:>=<session-open-date>"`). They are the source of truth.
 
 2. **Report the actual commits made this session.** Determine the session-open ref
    (the first commit of this session, or ask if ambiguous; `git reflog` as fallback) and
@@ -39,7 +40,8 @@ Execute these steps in order:
 
 5. **Regenerate the cold-resume handoff** from the stores so a cold session can resume
    with zero chat history: current sprint (from the `CLAUDE.md` sprint block / `ROADMAP.md`),
-   open questions grouped by status, and the single clearest **next action**.
+   open `fork` issues, and design docs not in a terminal state
+   (`grep -l "State:\*\* \(ideation\|discussion\)" docs/design/*.md`), and the single clearest **next action**.
 
    **The handoff must also name what was NOT touched — explicitly, as its own section.** A
    close-out lists what moved, and every artifact a session produces points at more of the
@@ -83,7 +85,7 @@ Execute these steps in order:
    wholesale project-copy replacement (kept in #38 as a named exception) is **retired
    (#39)**. Step 7's pointer already names which stores changed this session
    (`git diff --name-only master...HEAD` intersected with {`DECISIONS_LOG.md`, `ROADMAP.md`,
-   `FEEDBACK.md`, `OPEN_QUESTIONS.md`, `Ideas.md`}; if none changed, the pointer says so).
+   `FEEDBACK.md`, `Ideas.md`, `docs/design/`}; if none changed, the pointer says so).
    Pre-merge copy-back is done by `cat`/opening the named store file on disk and replacing
    the project copy wholesale from it — the repo file is the sole source; chat **never
    regenerates these stores from memory**. Never dump store contents to stdout.

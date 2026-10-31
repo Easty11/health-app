@@ -30,10 +30,10 @@ Rules whose correctness depends on unversioned config (CI checks, local aliases)
 repo-specific and live below END SHARED LOOP RULES in their own repo.
 
 ### The loop
-- The repo is the single source of truth for all volatile state.
+- The repo and its GitHub tracker (Issues) are the single source of truth for all volatile state.
 - Code is the only writer. Chat proposes; chat never commits.
 - The commit is the only sync point. An uncommitted decision is provisional.
-- Read-back: repo → chat via Projects mirror or attach. Chat keeps no editable copy.
+- Read-back: repo → chat via Projects mirror, attach, or the GitHub API (issues, design docs). Chat keeps no editable copy.
 - Kill-rule: decisions, open questions, roadmap, task state never live in project
   knowledge — orientation docs only.
 
@@ -49,12 +49,13 @@ repo-specific and live below END SHARED LOOP RULES in their own repo.
   justifies an operator hand-off or a merge-watch. (Supersedes the Q125 two-lane convention.)
 - **Holds — do not self-merge, wait for explicit operator instruction:** a PR containing a
   schema migration; anything the session was told to hold.
-- **Un-ratified decisions route to chat — the one warranted merge-time friction.** If a PR
-  embeds a call chat did not ratify (a resolved OPEN_QUESTION, a minted constraint/ordering
-  rule, or a data-meaning default), hold it, surface the *decision* — not the diff — for
-  ratification, and end the turn; a later session lands and closes it out. Implementing a
-  chat-approved brief with no new judgment is already ratified: self-merge. Raising a new
-  question needs no hold; resolving one does.
+- **Door class decides the hold.** A **one-way door** — a schema migration; a default that shapes
+  stored rows (data-meaning); a cross-module contract change; anything the session was told to
+  hold — holds for explicit operator instruction, whether raised or resolved. Everything else is a
+  **two-way door**: Code resolves it in-PR, records a *ruling* entry in `DECISIONS_LOG` (Decision ·
+  Reverse-by), and self-merges on green. The merge is the ratification; chat objects at the next
+  session open, by issue, if it disagrees. Resolving a two-way door needs no hold; a one-way door
+  does, whether raised or resolved.
 - Number-at-merge is unaffected: it resolves from master's max immediately before the merge
   Code itself performs.
 - This is deliberate. A future session finding Code self-merging must not reinstate a human
@@ -69,7 +70,9 @@ INSTRUCTION TO VERIFY, never a report of fact. Verify or STOP; never land on it.
 | Store | Holds | Discipline |
 |-------|-------|-----------|
 | `DECISIONS_LOG.md` | Architecture decisions | Append-only; supersede by new entry, never edit locked text. |
-| `OPEN_QUESTIONS.md` | Undecided forks | One `**State:**` per item: OPEN / OWED / DONE → #N. |
+| GitHub Issues (per repo) | Undecided forks, unknowns awaiting measurement, watch-points | Typed by label (`fork` / `stamp` / `verify` / `watch` / `design`); closed by `Closes #N` in the resolving PR or by the stale action (`abandoned`). Never mirrored into the tree. |
+| `docs/design/NNNN-*.md` | Architecture-scale design docs (RFD-style) | `**State:**` ideation / discussion / committed / abandoned; own Unresolved-questions table, every row resolved or struck before `committed`. |
+| `OPEN_QUESTIONS.md` | FROZEN — legacy entries pending Phase B migration | Read-only. No new entries. Deleted at Phase B. |
 | `ROADMAP.md` | Current sprint + horizon | Mutable; Code updates at close-out. |
 | `FEEDBACK.md` | Behavioural corrections, condensed verification rules | Read at session start. |
 | `FEEDBACK_ARCHIVE.md` | Full provenance essays | NOT read at session start. |
@@ -81,8 +84,20 @@ lab PDFs, `Stack`, `API_CONTRACTS`, `Hevy_Pattern`, `Readiness_Algorithm`.
 
 ### State vocabulary
 Work items: DONE (landed, SHA named) · BLOCKED (names blocker + owner) · OWED (settled,
-loop-close named) · UNSTARTED. No "in progress". Questions (`OPEN_QUESTIONS.md` only):
-OPEN · OWED · DONE → #N, under the label `**State:**`.
+loop-close named) · UNSTARTED. No "in progress". Issues: open (typed by label) · closed-resolved (`Closes #N`; a ruling or decision entry where a call was made) · closed-abandoned (stale action). Design docs: ideation · discussion · committed · abandoned, under `**State:**`.
+
+### Filing a question
+- Nothing is filed bare. Every issue body carries four fields: **Proposed answer** · **Alternative
+  it beats** · **Evidence that would settle it** · **Door** (one-way / two-way). If the evidence is a
+  check runnable this turn, run it — no issue exists.
+- Labels are the type: `fork` (operator ruling; surfaced at session open), `stamp` (proposed answer
+  stands; acted on by the next PR touching the area unless the operator objects), `verify` (names
+  the exact query or probe), `watch` (names the test/alert that guards it), `design` (pointer to a
+  `docs/design` doc), `pinned` (stale-exempt), `abandoned` (set by the stale action).
+- Architecture-scale items get a design doc, not an issue; the issue, if any, is a one-line pointer
+  labelled `design`.
+- A question survives only by being touched; the stale action closes the untouched at 60 days as
+  `abandoned`. Abandoned is a normal ending.
 
 ### DECISIONS_LOG discipline
 - Entry format: **Decision · Rationale · Status · How you know · Do not revisit unless**.
@@ -92,11 +107,14 @@ OPEN · OWED · DONE → #N, under the label `**State:**`.
   re-reading master's max immediately before landing, re-resolve if master advances.
   Enforced by `scripts/check_governance_placeholders.py` via the repo hook
   (`git config core.hooksPath .githooks`, once per clone).
+- Two tiers under the same `### #N` heading. Decision (one-way doors and anything architectural):
+  Decision · Rationale · Status · How you know · Do not revisit unless. Ruling (two-way doors
+  resolved in-PR): `**Tier:** ruling` then Decision · Reverse-by — two lines, nothing else.
+  Number-at-merge and the guard apply to both.
 
 ### Session rituals
-- **Open:** report both maxima — decisions `^### #?[0-9]+`, questions `^#{2,3} Q[0-9]+`
-  (period-, sigil- and level-agnostic; the pinned forms return zero on one repo or the
-  other). Chat re-aims any brief against these.
+- **Open:** report the decisions max (`^### #?[0-9]+`) and the open `fork` issues
+  (`gh issue list --label fork --state open`), titles included. Chat re-aims any brief against these.
   Optional at open, when a cold-start digest is wanted: `python scripts\gen_governance_view.py`
   (reads master; output is gitignored under `build\`). Never run it at close-out — it would
   digest master before this session's close-out merges.
@@ -204,11 +222,7 @@ self-merge on green under § Merge disposition.
   typed `HUMAN`/`MODEL`/`COUPLED`, `status` mutable (`STANDS`/`STRUCK`); a row exists only if
   a procedural change would have prevented the failure (`prevention` mandatory), `caused_by`
   derived from `caused` — now lives in `FEEDBACK_ARCHIVE.md` §19 (post-prune). See #129–#132.
-- **`OPEN_QUESTIONS.md` layout** (health-app only). State lives only on the
-  `**State:**` line; question headings carry no bracketed state tag. OPEN/OWED
-  entries sit above `## CLOSED` in ascending Q order, and a new question is inserted
-  there, never appended at end of file. An entry reaching `DONE → #N` moves below
-  `## CLOSED`, in ascending order, in the same commit. (#324)
+- `OPEN_QUESTIONS.md` is frozen (#467). No new entries, no state changes. Phase B migrates the live entries to Issues / `docs/design` and deletes the file.
 - **Hevy:** canonical creation is `create_workout`, not `create_routine` (custom exercise
   UUIDs do not resolve via the routine endpoint — confirmed API limit). Matrix: `Hevy_Pattern`.
 - **CBT-I block references.** `cbti_blocks.id` is canonical for any operational reference
@@ -235,7 +249,7 @@ self-merge on green under § Merge disposition.
   and adds no non-ASCII, and assert it still parses (Q27 v1 found the old blanket rule failing on it).
 - **Irreversible-write pre-ship gate (#166, `FEEDBACK` §23).** When a decision's How-you-know
   admits an unexercised write path, ask what its failure COSTS before shipping. Non-destructive
-  and loud → ship with an `OPEN_QUESTIONS` watch-point. Able to change state we cannot undo →
+  and loud → ship with a test or alert that fires when the assumption fails; file a `watch` issue only when that cannot be built in-turn, naming where the alert will live. Able to change state we cannot undo →
   the live probe is the gate, not the launch. Companion: for code interpreting a third party's
   response, at least one test must fake at the TRANSPORT layer.
 - **Never chain a verification to an action in one command (#103).** Run it, read it, then act —
@@ -301,11 +315,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The question layer moves to GitHub Issues and `docs/design`: door class decides the hold, nothing is filed bare, and `OPEN_QUESTIONS.md` is frozen.** Governance - Canonical home: `DECISIONS_LOG.md` #467.
+
 - **The partial-night note names how the device window falls short: started late, finished early or broken up, at a 60-minute tolerance.** Governance - Canonical home: `DECISIONS_LOG.md` #466.
 
 - **The watch's partial nights are annotated against the diary, not corrected: flagged at 60 minutes below it, silent without a diary.** Governance - Canonical home: `DECISIONS_LOG.md` #465.
-
-- **Garmin Personal API activation closes: PR-B is landed, Q239 and Q242 are DONE, and what stays unmeasured is named.** Governance - Canonical home: `DECISIONS_LOG.md` #464.
 
 ---
 
