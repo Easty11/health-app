@@ -69,7 +69,7 @@ INSTRUCTION TO VERIFY, never a report of fact. Verify or STOP; never land on it.
 | Store | Holds | Discipline |
 |-------|-------|-----------|
 | `DECISIONS_LOG.md` | Architecture decisions | Append-only; supersede by new entry, never edit locked text. |
-| GitHub Issues (per repo) | Undecided forks, unknowns awaiting measurement, watch-points | Typed by label (`fork` / `stamp` / `verify` / `watch` / `design`); closed by `Closes #N` in the resolving PR or by the stale action (`abandoned`). Never mirrored into the tree. |
+| GitHub Issues (per repo) | Undecided forks, unknowns awaiting measurement, watch-points | Typed by label (`fork` / `stamp` / `verify` / `watch` / `design`); closed by `Closes #N` in the resolving PR or by the stale action (`abandoned`). Never mirrored into the tree (`GH#N` in prose; bare `#N` is a decision). |
 | `docs/design/NNNN-*.md` | Architecture-scale design docs (RFD-style) | `**State:**` ideation / discussion / committed / abandoned; own Unresolved-questions table, every row resolved or struck before `committed`. |
 | `ROADMAP.md` | Current sprint + horizon | Mutable; Code updates at close-out. |
 | `FEEDBACK.md` | Behavioural corrections, condensed verification rules | Read at session start. |
@@ -115,9 +115,9 @@ loop-close named) · UNSTARTED. No "in progress". Issues: open (typed by label) 
 
 ### Session rituals
 - **Open:** report the decisions max (`^### #?[0-9]+`) and the open `fork` issues, titles included:
-  `gh api "repos/Easty11/health-app/issues?labels=fork&state=open" --jq ".[] | \"GH#\(.number) \(.title)\""`
-  (locally `gh issue list --label fork --state open`; the short form fails in a cloud session, where
-  GraphQL is blocked). Chat re-aims any brief against these.
+  `gh api "repos/{owner}/{repo}/issues?labels=fork&state=open" --jq ".[] | \"GH#\(.number) \(.title)\""`
+  (`gh` substitutes `{owner}/{repo}` from the current repo; locally `gh issue list --label fork --state open`;
+  the short form fails in a cloud session, where GraphQL is blocked). Chat re-aims any brief against these.
   Optional at open, when a cold-start digest is wanted: `python scripts\gen_governance_view.py`
   (reads master; output is gitignored under `build\`). Never run it at close-out — it would
   digest master before this session's close-out merges.
@@ -162,6 +162,10 @@ loop-close named) · UNSTARTED. No "in progress". Issues: open (typed by label) 
   lands (not one per session). Governance edits never interleave with feature work mid-session.
 - Full corrections live in `FEEDBACK.md`; full history in `DECISIONS_LOG.md` and
   `FEEDBACK_ARCHIVE.md`. This file points at them; it does not duplicate them.
+- **Parity artefacts beyond this block.** `.github/workflows/governance-guard.yml` is byte-identical
+  from `name:` down (the comment header is repo-local); `scripts/check_governance_placeholders.py` is
+  code-identical (docstrings and the `main()` advisory string are repo-local). Both are re-checked at
+  every shared-block propagation; `closeout.md` is repo-specific and not a parity artefact.
 
 ## END SHARED LOOP RULES — repo-specific below
 
@@ -317,11 +321,12 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Stale exempts `build`, eight stamps are pinned, the builds carry a Door, the parity artefacts beyond the shared block are declared, and the Open-ritual command is repo-generic.** Governance - Canonical home: `DECISIONS_LOG.md` #470.
+
 - **The live questions are migrated to GitHub issues and `docs/design` docs, the Q233 ingestion ruling is recorded, and the legacy question file is deleted.** Governance - Canonical home: `DECISIONS_LOG.md` #468.
 
 - **The question layer moves to GitHub Issues and `docs/design`: door class decides the hold, nothing is filed bare, and `OPEN_QUESTIONS.md` is frozen.** Governance - Canonical home: `DECISIONS_LOG.md` #467.
 
-- **The partial-night note names how the device window falls short: started late, finished early or broken up, at a 60-minute tolerance.** Governance - Canonical home: `DECISIONS_LOG.md` #466.
 
 ---
 
