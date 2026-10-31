@@ -40,8 +40,8 @@ from routers.knowledge import FINDING_DOMAINS
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from routers.clinical_documents import document_out as _clinical_document_out, parse_filters as _parse_document_filters
 from reads.labs_reads import latest_lab_results
-from aerobic_format import format_aerobic_session, format_also_recorded_by, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
-from reads.srpe_reads import aerobic_bout, hevy_bout, observed_ratings   # per-session RPE/feel for a session, any source (Q209)
+from aerobic_format import format_aerobic_session, format_also_recorded_by, format_day_ratings, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
+from reads.srpe_reads import aerobic_bout, hevy_bout, observed_ratings, session_ratings   # per-session RPE/feel for a session, any source (Q209)
 from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout, twins_by_canonical   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
 from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
 from sport_classes import is_strength_sport
@@ -118,6 +118,11 @@ def _db_rows(sql: str, params: dict) -> list[dict]:
         result = conn.execute(text(sql), params)
         cols = result.keys()
         return [dict(zip(cols, row)) for row in result.fetchall()]
+
+
+def _as_date(v) -> date:
+    """A raw-SQL `date` column as a `date` (SQLite hands back an ISO string; Postgres a date)."""
+    return v if isinstance(v, date) and not isinstance(v, datetime) else date.fromisoformat(str(v)[:10])
 
 
 def _epley_1rm(weight_kg: float, reps: int) -> float:
@@ -211,13 +216,13 @@ def get_recovery_metrics(days: int = 7) -> str:
 def get_checkin_history(days: int = 30) -> str:
     """Get morning check-in history. Unions legacy and new tables for
     continuous history. Returns sleep quality, fatigue, soreness, life load,
-    alcohol context, session RPE, and readiness scores."""
+    alcohol context, each day's per-session RPE with its source, and readiness scores."""
     user_id = _current_user_id()
 
     rows = _db_rows(
         """
         SELECT date, sleep_quality, fatigue, soreness::text, motivation,
-               life_load, alcohol_units, session_rpe,
+               life_load, alcohol_units,
                -- #327: HRV read live from hrv_readings by wake-day equality (garmin
                -- headlines a same-day pair, as select_wakeday_hrv); the retained
                -- passive_hrv_ms denorm is a fallback ONLY for a day with no canonical row.
@@ -240,7 +245,7 @@ def get_checkin_history(days: int = 30) -> str:
 
         SELECT date, sleep_quality, fatigue, NULL AS soreness,
                motivation, NULL AS life_load, NULL AS alcohol_units,
-               NULL AS session_rpe, NULL AS hrv_ms,
+               NULL AS hrv_ms,
                readiness_score AS morning_readiness, 'legacy' AS source
         FROM daily_check_ins
         WHERE user_id = :user_id
@@ -254,6 +259,13 @@ def get_checkin_history(days: int = 30) -> str:
     if not rows:
         return f"No check-in data found in the last {days} days."
 
+    # Each day's counted sessions with the rating and source the read door resolves for each. The whole-day
+    # RPE this line used to print is retired: it was never a rating OF a session.
+    with SessionLocal() as _rdb:
+        _by_day: dict = {}
+        for _rs in session_ratings(_rdb, user_id, since=_as_date(rows[-1]["date"]), until=_as_date(rows[0]["date"])):
+            _by_day.setdefault(_rs.bout.day, []).append(_rs)
+
     lines = [f"Check-in history — last {days} days"]
     lines.append(f"Data window: {rows[-1]['date']} → {rows[0]['date']}\n")
 
@@ -265,13 +277,13 @@ def get_checkin_history(days: int = 30) -> str:
         motivation = r["motivation"] if r["motivation"] is not None else "—"
         life_load = r["life_load"] if r.get("life_load") is not None else "—"
         alcohol = r["alcohol_units"] if r.get("alcohol_units") is not None else "—"
-        rpe = r["session_rpe"] if r.get("session_rpe") is not None else "—"
+        rpe = format_day_ratings(_by_day.get(_as_date(r["date"]), []))
         readiness = r["morning_readiness"] if r["morning_readiness"] is not None else "—"
         hrv = f"{r['hrv_ms']:.0f}ms" if r.get("hrv_ms") is not None else "—"
         lines.append(
             f"{r['date']} {src_tag}: sleep={sleep_q} fatigue={fatigue} soreness={soreness} "
             f"motivation={motivation} life_load={life_load} alcohol={alcohol} "
-            f"session_rpe={rpe} hrv={hrv} readiness={readiness}"
+            f"session_rpe=[{rpe}] hrv={hrv} readiness={readiness}"
         )
 
     return "\n".join(lines)
@@ -901,7 +913,7 @@ def get_readiness_snapshot() -> str:
     checkin_rows = _db_rows(
         """
         SELECT date, sleep_quality, fatigue, soreness::text,
-               motivation, life_load, session_rpe, morning_readiness
+               motivation, life_load, morning_readiness
         FROM daily_records
         WHERE user_id = :user_id
           AND am_timestamp IS NOT NULL
@@ -952,7 +964,9 @@ def get_readiness_snapshot() -> str:
         lines.append(f"Most recent check-in ({c['date']}):")
         lines.append(f"  Sleep quality={c['sleep_quality']} Fatigue={c['fatigue']} Soreness={c.get('soreness') or '—'}")
         lines.append(f"  Motivation={c['motivation']} Life load={c.get('life_load') or '—'}")
-        lines.append(f"  Session RPE={c.get('session_rpe') or '—'} Readiness={c['morning_readiness'] or '—'}\n")
+        with SessionLocal() as _cdb:
+            _day_sessions = session_ratings(_cdb, user_id, since=_as_date(c["date"]), until=_as_date(c["date"]))
+        lines.append(f"  Session RPE=[{format_day_ratings(_day_sessions)}] Readiness={c['morning_readiness'] or '—'}\n")
     else:
         lines.append("Most recent check-in: none found.\n")
 

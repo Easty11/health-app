@@ -12,7 +12,7 @@ Insert-only: re-rating a session is a new row and the door's latest-wins resolve
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal, Optional
+from typing import Literal
 
 import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,26 +24,13 @@ import srpe_in_app
 import srpe_store
 from auth import get_current_user
 from database import get_db
-from reads.srpe_reads import HEVY, RatedSession, session_ratings
+from reads.srpe_reads import session_ratings
 from routers import checkin_v2
+from routers.checkin_v2 import SessionRatingOut, session_rating_out
 
 router = APIRouter(prefix="/checkin-v2/srpe", tags=["checkin-v2", "srpe"])
 
 AEST = pytz.timezone("Australia/Brisbane")
-
-
-class SessionRatingOut(BaseModel):
-    """A counted session as the cards show it. `rpe`/`source` are the current rating (None, None when unrated).
-    `rateable` is False for a session with no usable window, which no rating could be placed on."""
-    kind: Literal["aerobic", "hevy"]
-    id: str
-    day: date
-    label: str
-    minutes: Optional[float] = None
-    start_local: Optional[str] = None          # "HH:MM" in the operator's local day (Brisbane)
-    rpe: Optional[float] = None
-    source: Optional[str] = None
-    rateable: bool = True
 
 
 class SessionsOut(BaseModel):
@@ -72,29 +59,6 @@ def _local_day_of(dt) -> date:
     return (dt.replace(tzinfo=pytz.utc) if dt.tzinfo is None else dt).astimezone(AEST).date()
 
 
-def _label(rs: RatedSession) -> str:
-    ref = rs.bout.ref
-    if rs.bout.kind == HEVY:
-        return (getattr(ref, "title", None) or "").strip() or "Workout"
-    return (getattr(ref, "sport_name", None) or "").strip() or "Session"
-
-
-def _out(rs: RatedSession) -> SessionRatingOut:
-    b = rs.bout
-    try:
-        srpe_store.bout_window(b)
-        rateable = True
-    except srpe_store.UnplaceableBout:
-        rateable = False
-    return SessionRatingOut(
-        kind=b.kind, id=str(b.key[1]), day=b.day, label=_label(rs),
-        minutes=None if b.minutes is None else round(b.minutes, 1),
-        start_local=None if b.start is None else b.start.astimezone(AEST).strftime("%H:%M"),
-        rpe=None if rs.rating is None else rs.rating.rpe_cr10,
-        source=None if rs.rating is None else rs.rating.source,
-        rateable=rateable)
-
-
 @router.get("/sessions", response_model=SessionsOut)
 def get_sessions(
     since: date = Query(...),
@@ -108,7 +72,7 @@ def get_sessions(
     if since < earliest or until > latest:
         raise HTTPException(status_code=422, detail=f"sessions can be read from {earliest} to {latest}.")
     rated = session_ratings(db, current_user.id, since=since, until=until)
-    return SessionsOut(since=since, until=until, sessions=[_out(rs) for rs in rated])
+    return SessionsOut(since=since, until=until, sessions=[session_rating_out(rs) for rs in rated])
 
 
 @router.post("/ratings", response_model=RatingsOut)
@@ -130,4 +94,4 @@ def post_ratings(
     refreshed = session_ratings(db, current_user.id, since=min(days), until=max(days))
     return RatingsOut(
         written=len(rows),
-        sessions=[_out(rs) for rs in refreshed if (rs.bout.kind, str(rs.bout.key[1])) in written])
+        sessions=[session_rating_out(rs) for rs in refreshed if (rs.bout.kind, str(rs.bout.key[1])) in written])

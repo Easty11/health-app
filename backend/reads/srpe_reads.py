@@ -87,6 +87,15 @@ def _utc(dt: Optional[datetime]) -> Optional[datetime]:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 
 
+def session_label(bout: Bout) -> str:
+    """What a counted session is called wherever it is listed: the Hevy workout's title, else the device row's
+    sport name, else a plain noun. One rule, so the cards, the MCP lines and the chat all name a session alike."""
+    ref = bout.ref
+    if bout.kind == HEVY:
+        return (getattr(ref, "title", None) or "").strip() or "Workout"
+    return (getattr(ref, "sport_name", None) or "").strip() or "Session"
+
+
 def aerobic_bout(s) -> Bout:
     """A `Bout` for an aerobic row (for callers that rate sessions the counted set excludes, e.g. the MCP
     session lines, which show a Pilates rating though Pilates is not counted)."""

@@ -1614,6 +1614,17 @@ async def chat(
         .first()
     )
 
+    # Today's sessions with the rating and source the read door resolves for each (the whole-day RPE is
+    # retired). Fail-soft: a failed read costs the line, never the chat turn.
+    try:
+        from aerobic_format import format_day_ratings
+        from reads.srpe_reads import session_ratings
+        _day_rated = session_ratings(db, current_user.id, since=today_aest, until=today_aest)
+        session_rpe_line = format_day_ratings(_day_rated) if _day_rated else None
+    except Exception:  # noqa: BLE001
+        logger.exception("chat: session ratings for %s failed", today_aest)
+        session_rpe_line = None
+
     from datetime import timedelta as _td
     hc_since = today_aest - _td(days=2)  # today + yesterday
     health_connect_records = (
@@ -1681,6 +1692,7 @@ async def chat(
         engine_selection=engine_selection,
         exercise_catalogue=exercise_catalogue,
         hevy_routines=hevy_routines,
+        session_rpe_line=session_rpe_line,
     )
 
     # On-ask lab value relay (#60): standing feed above is generality-only.

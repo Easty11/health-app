@@ -172,12 +172,13 @@ def test_TodayOut_defaults_to_an_object_never_null():
 
 def test_record_fields_stay_FLAT_not_nested():
     """NightlyCloseOut.jsx reads data?.pm_timestamp / data?.today_rating /
-    data?.session_quality / data?.session_rpe directly off the response. Nesting
-    them under a `record` key would break those reads silently — no frontend test
-    would catch it, because there is no frontend test runner."""
-    for f in ("pm_timestamp", "today_rating", "session_quality", "session_rpe"):
+    data?.session_quality directly off the response. Nesting them under a `record`
+    key would break those reads silently. (`session_rpe` is no longer one of them:
+    the whole-day RPE is retired and the close-out rates each session on its own.)"""
+    for f in ("pm_timestamp", "today_rating", "session_quality"):
         assert f in TodayOut.model_fields, f"{f} must remain a top-level key"
     assert "record" not in TodayOut.model_fields
+    assert "session_rpe" not in TodayOut.model_fields
 
 
 def test_TodayOut_populates_flat_fields_from_a_record(db_session):

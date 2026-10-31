@@ -137,3 +137,15 @@ def test_the_answer_for_today_does_not_leak_into_yesterday(db_session):
     db_session.add(models.DailyRecord(user_id=u.id, date=today - timedelta(days=2)))
     db_session.commit()
     assert get_prefill(current_user=u, db=db_session).missed_pm.srpe_needed is True      # yesterday has no session at all
+
+
+# -- the retired whole-day field is written by nothing ----------------------------------------------------------
+
+def test_a_close_out_that_still_sends_the_old_session_rpe_does_not_store_it(db_session):
+    """A cached client posting the retired field has it ignored: the column stays null (written by nothing)."""
+    u = _user(db_session)
+    r = _client(db_session, u).post("/checkin-v2/pm", json={
+        "today_rating": 3, "trained_today": True, "session_quality": 3, "session_rpe": 8.0})
+    assert r.status_code == 200 and "session_rpe" not in r.json()
+    assert db_session.query(models.DailyRecord).filter_by(user_id=u.id).one().session_rpe is None
+    assert "session_rpe" not in _client(db_session, u).get("/checkin-v2/today").json()

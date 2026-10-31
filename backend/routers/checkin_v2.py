@@ -12,7 +12,7 @@ naive_baseline is the old formula frozen at AM capture time:
 import datetime as _dt
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import pytz
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, computed_field, field_validator
 from sqlalchemy.orm import Session
 
 import models
+import srpe_store
 from auth import get_current_user
 from cbti.engine import CENTRE_CYCLES, MAX_MOVE_MIN, centre_estimate
 from cbti.replay import evaluate_live_cycle
@@ -27,7 +28,7 @@ from cbti.timeutil import clock_delta_minutes, clock_to_minutes, minutes_between
 from database import get_db
 from injury_trajectory import injury_soreness_key
 from reads.recovery_reads import hrv_deviation, select_wakeday_hrv
-from reads.srpe_reads import srpe_needed
+from reads.srpe_reads import RatedSession, session_label, session_ratings, srpe_needed
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +306,8 @@ class NightlyCloseOutIn(BaseModel):
     today_rating: int = Field(..., ge=1, le=5)
     trained_today: bool = False
     session_quality: Optional[int] = Field(None, ge=1, le=5)
-    session_rpe: Optional[float] = Field(None, ge=0, le=10)
+    # No `session_rpe`: the whole-day RPE is retired. Each session is rated on its own through
+    # `routers.srpe_ratings` (`in_app`), and a client that still sends the old field has it ignored.
     # PM nap capture (present only while a block is open). The frontend sends 0 for a
     # blank field when a block is open ("asked, no nap") and never null — null means
     # "not asked", which after this only applies to nights before capture existed.
@@ -320,6 +322,37 @@ class NightlyCloseOutIn(BaseModel):
     # from `date` on purpose: a field named `date` collides with the datetime.date annotation
     # (see TodayOut).
     for_date: Optional[date] = None
+
+
+class SessionRatingOut(BaseModel):
+    """A counted session as the cards and the history show it. `rpe`/`source` are the read door's current
+    rating (None, None when unrated). `rateable` is False for a session with no usable window, which no
+    rating could be placed on."""
+    kind: Literal["aerobic", "hevy"]
+    id: str
+    day: date
+    label: str
+    minutes: Optional[float] = None
+    start_local: Optional[str] = None          # "HH:MM" in the operator's local day (Brisbane)
+    rpe: Optional[float] = None
+    source: Optional[str] = None
+    rateable: bool = True
+
+
+def session_rating_out(rs: RatedSession) -> SessionRatingOut:
+    b = rs.bout
+    try:
+        srpe_store.bout_window(b)
+        rateable = True
+    except srpe_store.UnplaceableBout:
+        rateable = False
+    return SessionRatingOut(
+        kind=b.kind, id=str(b.key[1]), day=b.day, label=session_label(b),
+        minutes=None if b.minutes is None else round(b.minutes, 1),
+        start_local=None if b.start is None else b.start.astimezone(AEST).strftime("%H:%M"),
+        rpe=None if rs.rating is None else rs.rating.rpe_cr10,
+        source=None if rs.rating is None else rs.rating.source,
+        rateable=rateable)
 
 
 class DailyRecordOut(BaseModel):
@@ -337,7 +370,9 @@ class DailyRecordOut(BaseModel):
     pm_timestamp: Optional[datetime] = None
     today_rating: Optional[int] = None
     session_quality: Optional[int] = None
-    session_rpe: Optional[float] = None
+    # The day's counted sessions with the rating and source the read door resolves for each, in place of the
+    # retired whole-day `session_rpe`. Filled by `/history`; empty on the write responses.
+    sessions: list[SessionRatingOut] = Field(default_factory=list)
     mindfulness_occurred: Optional[bool] = None
     mindfulness_duration_min: Optional[int] = None
     naive_baseline: Optional[float] = None
@@ -578,7 +613,6 @@ class TodayOut(BaseModel):
     pm_timestamp: Optional[datetime] = None
     today_rating: Optional[int] = None
     session_quality: Optional[int] = None
-    session_rpe: Optional[float] = None
     naps_min: Optional[int] = None       # round-trips the stored PM nap value into the form
     am_notes: Optional[str] = None       # round-trips so PM sees the morning's note
     pm_notes: Optional[str] = None
@@ -857,7 +891,6 @@ def submit_pm(
     record.pm_timestamp = _now_utc()
     record.today_rating = body.today_rating
     record.session_quality = body.session_quality if body.trained_today else None
-    record.session_rpe = body.session_rpe if body.trained_today else None
     # Store what the client sent: 0 (asked, no nap) or a positive count while a block
     # is open, null when the field was not shown. Coercion of blank->0 is the client's
     # (a null here after this build means the night predates PM nap capture).
@@ -894,7 +927,7 @@ def get_history(
 ):
     today = _today_aest()
     since = today - timedelta(days=days)
-    return (
+    records = (
         db.query(models.DailyRecord)
         .filter(
             models.DailyRecord.user_id == current_user.id,
@@ -903,6 +936,17 @@ def get_history(
         .order_by(models.DailyRecord.date.desc())
         .all()
     )
+    out = [DailyRecordOut.model_validate(r) for r in records]
+    # Each day's sessions with their door rating and source. A failed read costs the ratings, not the history.
+    by_day: dict[date, list[SessionRatingOut]] = {}
+    try:
+        for rs in session_ratings(db, current_user.id, since=since, until=today):
+            by_day.setdefault(rs.bout.day, []).append(session_rating_out(rs))
+    except Exception:  # noqa: BLE001 -- logged; the history still renders
+        logger.exception("history session ratings failed for user %s", current_user.id)
+    for o in out:
+        o.sessions = by_day.get(o.date, [])
+    return out
 
 
 # ── CBT-I evaluation trigger (#118's PM half) ────────────────────────────────
