@@ -197,14 +197,20 @@ def test_an_observation_lands_on_the_one_session_it_overlaps_most(db_session):
 # -- what counts ---------------------------------------------------------------------------------------------
 
 def test_a_non_training_sport_is_not_a_counted_session(db_session):
-    _aero(db_session, _t(2), sport="Pilates")
+    _aero(db_session, _t(2), sport="Yoga")
     assert sr.counted_sessions(db_session, 1) == []
     assert sr.srpe_needed(db_session, 1, D) is True                      # nothing counted: fail open
 
 
+def test_pilates_is_a_counted_session(db_session):
+    """Pilates left NON_TRAINING_SPORTS by operator ruling: it is counted, so it is asked and it is felt load."""
+    pil = _aero(db_session, _t(2), source="health_connect", pkg=GARMIN_PKG, sport="Pilates", minutes=52)
+    assert [(b.key, b.minutes) for b in sr.counted_sessions(db_session, 1)] == [(("aerobic", pil.id), 52.0)]
+
+
 def test_a_rating_can_still_be_resolved_for_a_session_the_count_leaves_out(db_session):
-    """The MCP session lines show a Garmin rating on a Pilates session though Pilates is not counted."""
-    pil = _aero(db_session, _t(2), source="health_connect", pkg=GARMIN_PKG, sport="Pilates")
+    """The MCP session lines show a Garmin rating on a non-training session though it is not counted."""
+    pil = _aero(db_session, _t(2), source="health_connect", pkg=GARMIN_PKG, sport="Yoga")
     _garmin(db_session, "11", _t(2), rpe_raw=30)
     got = sr.observed_ratings(db_session, 1, [sr.aerobic_bout(pil)])
     assert got[("aerobic", pil.id)].rpe_cr10 == 3.0

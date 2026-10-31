@@ -514,7 +514,7 @@ def _hevy(db, d, start_h, stop_h, *, hid, uid=1, dedup=False, excluded=False, pa
     db.commit()
 
 
-@pytest.mark.parametrize("sport", ["Walking", "Pilates", "yoga", "STRETCHING"])
+@pytest.mark.parametrize("sport", ["Walking", "yoga", "STRETCHING"])
 def test_duration_hc_non_training_contributes_nothing(db_session, sport):  # #322 S3 + §18
     """An HC Walking/Pilates/Yoga/Stretching session on a gym day contributes NOTHING — the
     day's minutes are the Hevy workout's alone. The session is canonical and does NOT overlap
@@ -526,6 +526,15 @@ def test_duration_hc_non_training_contributes_nothing(db_session, sport):  # #32
     _hevy(db_session, d, 10, 11, hid="wg")                                        # 60 min gym
     _hc_row(db_session, d, 7, 0, 7, 40, pkg=GARMIN, sid="nt", sport=sport)       # 40 min, no overlap
     assert _duration_min_by_day(db_session, uid) == {d: (60.0, 1)}
+
+
+def test_duration_hc_pilates_counts_like_any_other_session(db_session):
+    """Pilates left the non-training set by operator ruling: its 40 min and its tally are felt load."""
+    uid = _user(db_session)
+    d = date(2026, 8, 5)
+    _hevy(db_session, d, 10, 11, hid="wg")                                        # 60 min gym
+    _hc_row(db_session, d, 7, 0, 7, 40, pkg=GARMIN, sid="pil", sport="Pilates")   # 40 min, no overlap
+    assert _duration_min_by_day(db_session, uid) == {d: (100.0, 2)}
 
 
 def test_duration_hc_non_training_alone_leaves_no_day(db_session):

@@ -9,6 +9,11 @@ consumer that asks "was this a training session?":
 `training_constrained` predicate: CBT-I no longer reads a session at all.
 Every other session counts, including generic names ("Fitness", "Other Workout", blank, NULL).
 
+PILATES COUNTS (the set was four members until the in-app sRPE decision; the operator records Pilates, Garmin with
+HR, as strength work and rates it like any other session, so it is a counted session with its own CR-10 and its
+minutes are felt load). It left this set by operator ruling; see DECISIONS_LOG, "Pilates is a counted session"
+(supersedes #322 S1 and S3 for that one sport). Walking, Yoga and Stretching are unchanged.
+
 Matching is the Q164 rule: EXACT on the raw device string, case-insensitive, no trimming, no
 fuzzy/category matching, no ingest normalisation (#322 S5). Applies to ALL sources.
 
@@ -24,7 +29,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-NON_TRAINING_SPORTS = frozenset({"Walking", "Pilates", "Yoga", "Stretching"})
+NON_TRAINING_SPORTS = frozenset({"Walking", "Yoga", "Stretching"})
 
 # Lower-cased form for case-insensitive matching (Python and SQL `LOWER(sport_name)`).
 NON_TRAINING_SPORTS_LOWER = frozenset(s.lower() for s in NON_TRAINING_SPORTS)
