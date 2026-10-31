@@ -55,6 +55,10 @@ repo-specific and live below END SHARED LOOP RULES in their own repo.
   Reverse-by), and self-merges on green. The merge is the ratification; chat objects at the next
   session open, by issue, if it disagrees. Resolving a two-way door needs no hold; a one-way door
   does, whether raised or resolved.
+- **Chat-side writes are approval-gated.** A chat-side session writes to the repo or
+  tracker only behind an explicit operator approval given in-turn. One approval may cover
+  a named group of actions; the group is stated, never inferred. A pasted queue or brief
+  authorises nothing by itself.
 - Number-at-merge is unaffected: it resolves from master's max immediately before the merge
   Code itself performs.
 - This is deliberate. A future session finding Code self-merging must not reinstate a human
@@ -321,11 +325,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Chat-side writes are approval-gated: a shared-block line, FEEDBACK §66 and §67, and a ruling entry.** Governance - Canonical home: `DECISIONS_LOG.md` #473.
+
 - **The source-neutral sRPE store passes its post-deploy reads; its branch row flips DONE and the ROADMAP row closes.** Governance - Canonical home: `DECISIONS_LOG.md` #472.
 
 - **Both repos' question stores are retired, the status tools read issues or nothing, and the guard comment is corrected.** Governance - Canonical home: `DECISIONS_LOG.md` #471.
-
-- **Stale exempts `build`, eight stamps are pinned, the builds carry a Door, the parity artefacts beyond the shared block are declared, and the Open-ritual command is repo-generic.** Governance - Canonical home: `DECISIONS_LOG.md` #470.
 
 
 ---
