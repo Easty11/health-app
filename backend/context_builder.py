@@ -1251,6 +1251,13 @@ a JSON block anywhere in your response:
 {{"category": "Training Background", "content": "new detail to save"}}
 </knowledge_update>
 
+PREFERRED: submit writes by calling the `record_knowledge_updates` tool in that same
+reply. Its `updates` is an ARRAY with one JSON object per update, each exactly the object
+shown in the examples in this section (the `<knowledge_update>` wrapper in an example only
+marks where the object goes; with the tool you pass the object itself and write no wrapper).
+Several updates are ONE call with several items. If you do embed blocks instead, put ONE
+JSON object in each block and nothing after its closing brace.
+
 Valid categories: {", ".join(KNOWLEDGE_UPDATE_CATEGORIES)}.
 
 INJURIES AND EXERCISE RESTRICTIONS NEVER GO IN A FREE-TEXT CATEGORY. A free-text
@@ -1280,7 +1287,8 @@ mention what you saved in your reply.
 
 A write happens ONLY when your reply contains the block. If the user answers
 "yes" to something you offered to record, that reply MUST contain the block. A
-reply without the block records nothing, whatever its wording."""
+reply without the block records nothing, whatever its wording. A
+`record_knowledge_updates` call counts as the block."""
 
 
 def _section_health_connect(records: list[Any], now: datetime) -> str:
