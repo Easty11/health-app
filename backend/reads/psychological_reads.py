@@ -35,13 +35,13 @@ catch. Psychological `load_events` are NEVER a predictor (exclusivity, gate 2).
 
 GRAIN (S4 D2): per-training-day, built from per-SESSION ratings. Each counted session carries the rating
 the one read door gives it (`reads.srpe_reads.session_ratings`): a per-session RPE from the highest-ranked
-source that rated it (Garmin today), else the day's whole-day `session_rpe` from the PM check-in (a known
-recency bias vs the ~30-min-post-session target, S4 LOG) as `day_fill`, else nothing. The day's target is
-Σ(rpe_i × minutes_i) over the counted sessions that have a value. A day is PAIRED when at least one counted
-session has a value and the valued sessions have minutes. A day that mixes per-session ratings with
-day-filled or unrated sessions is `partial` (gate 5, grain honesty): its target covers only the valued
+source that rated it (the app's own capture, Garmin), else nothing: a session no source rated is UNRATED and
+never borrows the day's value (the whole-day fill was retired; `daily_records.session_rpe` is read by nothing).
+The day's target is Σ(rpe_i × minutes_i) over the counted sessions that have a value. A day is PAIRED when at
+least one counted session has a value and the valued sessions have minutes. A day where some counted
+sessions are rated and some are not is `partial` (gate 5, grain honesty): its target covers only the rated
 sessions while the day's objective load covers all of them, and the day is recorded in `partial_days`. A day
-rated entirely per session, or entirely from the one whole-day value, is not partial.
+with every counted session rated is not partial.
 
 NO NUMPY. The S4 brief assumed numpy "already used by the load transforms"; it is not a
 dependency of this repo (`load_metrics.py` uses `math`). The ridge is a 3-predictor
@@ -62,7 +62,7 @@ import models
 from load_events import FORMULA_VERSION as _FV_STRENGTH, WINDOW_MECHANICAL, WINDOW_NEUROMUSCULAR
 from load_events_metabolic import FORMULA_VERSION_METABOLIC as _FV_METABOLIC, WINDOW_METABOLIC
 from load_metrics import _local_day  # identical AEST day-bucketing as the Banister rollup
-from reads.srpe_reads import counted_sessions, is_per_session, session_ratings
+from reads.srpe_reads import counted_sessions, session_ratings
 
 # ---------------------------------------------------------------------------
 # REASONED-PRIOR constants — calibratable, never magic numbers (S4 §3.5/§3.7).
@@ -284,16 +284,16 @@ def _duration_min_by_day(db: Session, user_id: int) -> dict[date, tuple[float, i
 @dataclass(frozen=True)
 class FeltDay:
     """One day's felt load: `target` = Σ(rpe_i × minutes_i) over the counted sessions that have a value,
-    `minutes` = Σ minutes_i over those same sessions, `partial` = the day mixes per-session ratings with
-    day-filled or unrated sessions."""
+    `minutes` = Σ minutes_i over those same sessions, `partial` = some of the day's counted sessions are rated
+    and some are not (the target covers only the rated ones)."""
     target: float
     minutes: float
     partial: bool
 
 
 def _felt_by_day(db: Session, user_id: int) -> dict[date, FeltDay]:
-    """AEST-day → `FeltDay` for every day with at least one counted session that has a value (a per-session
-    rating or the whole-day fill). A day with none is absent: nothing was rated."""
+    """AEST-day → `FeltDay` for every day with at least one counted session that has a rating. A day with
+    none is absent: nothing was rated."""
     by_day: dict[date, list] = defaultdict(list)
     for rs in session_ratings(db, user_id):
         by_day[rs.bout.day].append(rs)
@@ -304,8 +304,7 @@ def _felt_by_day(db: Session, user_id: int) -> dict[date, FeltDay]:
             continue
         target = sum(rs.rating.rpe_cr10 * rs.bout.minutes for rs in valued if rs.bout.minutes)
         minutes = sum(rs.bout.minutes for rs in valued if rs.bout.minutes)
-        mixed = any(is_per_session(rs.rating) for rs in rows) and any(not is_per_session(rs.rating) for rs in rows)
-        out[day] = FeltDay(target=target, minutes=minutes, partial=mixed)
+        out[day] = FeltDay(target=target, minutes=minutes, partial=len(valued) < len(rows))
     return out
 
 
@@ -322,7 +321,7 @@ class PsychologicalResidual:
     latest_residual: float            # the most recent paired day's raw residual
     latest_day: date
     n_paired_days: int
-    partial_days: list[date]          # days mixing per-session and day-filled/unrated sessions (gate 5)
+    partial_days: list[date]          # days with some counted sessions unrated (target covers the rated ones; gate 5)
 
 
 def psychological_residual(
@@ -330,8 +329,7 @@ def psychological_residual(
 ) -> Optional[PsychologicalResidual]:
     """Compute the smoothed psychological residual, or None in cold-start.
 
-    A day is PAIRED iff at least one counted session has a value (a per-session rating, else the
-    whole-day `session_rpe`) AND the valued sessions have a resolvable duration > 0 (`actual_sRPE =
+    A day is PAIRED iff at least one counted session has a per-session rating AND the valued sessions have a resolvable duration > 0 (`actual_sRPE =
     Σ rpe_i × minutes_i` needs it). Predictors are the day's per-window `daily_load` impulse (0 where a
     window logged nothing — a legitimate value, not missing). Below N_COLDSTART_PAIRED_DAYS paired days →
     None (life-load-only mode; no residual, no confidence-weighted ramp). At/above → ridge-fit and

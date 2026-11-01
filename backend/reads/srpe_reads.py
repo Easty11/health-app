@@ -1,8 +1,8 @@
 """The one read door for per-session RPE: `{counted session -> (rpe_cr10, source, rung)}`.
 
-Two questions, answered once, for every reader (the psychological residual, the close-out's "is the sRPE
-question needed", the MCP session lines, and Q231's imputed-load fit, which imports this door and builds no
-lookup of its own):
+Two questions, answered once, for every reader (the psychological residual, the close-out's "is there a session
+to rate", the MCP session lines, and Q231's imputed-load fit, which imports this door and builds no lookup of
+its own):
 
   1. WHICH SESSIONS COUNT. `counted_sessions` is the bout set a felt-load metric counts, exactly as
      `psychological_reads._duration_min_by_day` has always defined it (#309, #322 S3): canonical aerobic rows
@@ -13,8 +13,9 @@ lookup of its own):
      the two. Counted Hevy workouts: the same `overlaps_workout` predicate every other reader of "the same bout
      as a Hevy workout" uses. An observation lands on the ONE session it overlaps most. When several sources
      rated a session the declared hierarchy (`srpe_hierarchy.SOURCE_HIERARCHY`) picks the highest rung; within
-     one source the latest `captured_at` wins; ratings are never averaged. A session no source rated is filled
-     from `daily_records.session_rpe` (the lowest rung, `day_fill`); one with neither has no rating.
+     one source the latest `captured_at` wins; ratings are never averaged. A session no source rated has NO
+     rating: it never borrows the day's value (the day fill was retired, so `daily_records.session_rpe` is read
+     by nothing).
 
 Everything here is derived at READ time from stored observations and the session stores, so the answer for a
 past day changes only when an observation is read that was not before: never because of capture-time UI or
@@ -22,7 +23,7 @@ the order adapters wrote in (series invariance).
 
 FAIL OPEN TO ASKING. A rating that cannot be placed (no window, no overlapping counted session, a source not
 in the hierarchy, or one that has not synced yet) leaves its session unrated, so `srpe_needed` is true and
-the nightly close-out asks. A later observation overrides per session; nothing re-prompts.
+the close-out asks about that session. A later observation overrides per session; nothing re-prompts.
 """
 from __future__ import annotations
 
@@ -39,7 +40,7 @@ from load_metrics import _local_day  # identical AEST day-bucketing as the Banis
 from reads.aerobic_reads import OVERLAP_THRESHOLD, arbitrated_sessions, overlaps_workout
 from reads.hevy_reads import counted_workouts
 from sport_classes import is_non_training
-from srpe_hierarchy import DAY_FILL, rung_of
+from srpe_hierarchy import rung_of
 from srpe_store import latest_by_activity
 
 AEROBIC = "aerobic"
@@ -67,7 +68,7 @@ class Bout:
 @dataclass(frozen=True)
 class Rating:
     """A counted session's effort rating on the CR-10 axis, where it came from, and its rung in the
-    hierarchy (0 highest; `day_fill` is the last rung). `feel` is the source's passthrough."""
+    hierarchy (0 highest). `feel` is the source's passthrough."""
     rpe_cr10: float
     source: str
     rung: int
@@ -77,13 +78,22 @@ class Rating:
 @dataclass(frozen=True)
 class RatedSession:
     bout: Bout
-    rating: Optional[Rating]       # None: no source and no day value rated it
+    rating: Optional[Rating]       # None: no source rated it
 
 
 def _utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt is None:
         return None
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+def session_label(bout: Bout) -> str:
+    """What a counted session is called wherever it is listed: the Hevy workout's title, else the device row's
+    sport name, else a plain noun. One rule, so the cards, the MCP lines and the chat all name a session alike."""
+    ref = bout.ref
+    if bout.kind == HEVY:
+        return (getattr(ref, "title", None) or "").strip() or "Workout"
+    return (getattr(ref, "sport_name", None) or "").strip() or "Session"
 
 
 def aerobic_bout(s) -> Bout:
@@ -93,7 +103,8 @@ def aerobic_bout(s) -> Bout:
     return Bout((AEROBIC, s.id), s.session_date, _utc(s.start_time), _utc(s.stop_time), mins, s)
 
 
-def _hevy_bout(w) -> Bout:
+def hevy_bout(w) -> Bout:
+    """A `Bout` for a Hevy workout (for callers that rate workouts, e.g. the MCP session lines)."""
     mins = None
     if w.end_time is not None and w.start_time is not None:
         m = (w.end_time - w.start_time).total_seconds() / 60.0
@@ -140,7 +151,7 @@ def counted_sessions(
     for w in hevy:
         if w.start_time is None:
             continue
-        out.append(_hevy_bout(w))
+        out.append(hevy_bout(w))
 
     return [b for b in out if (since is None or b.day >= since) and (until is None or b.day <= until)]
 
@@ -200,23 +211,13 @@ def observed_ratings(db: Session, user_id: int, bouts: list[Bout]) -> dict[tuple
     return out
 
 
-def _day_values(db: Session, user_id: int, since: Optional[date], until: Optional[date]) -> dict[date, float]:
-    q = select(models.DailyRecord.date, models.DailyRecord.session_rpe).where(
-        models.DailyRecord.user_id == user_id, models.DailyRecord.session_rpe.is_not(None))
-    if since is not None:
-        q = q.where(models.DailyRecord.date >= since)
-    if until is not None:
-        q = q.where(models.DailyRecord.date <= until)
-    return {d: float(v) for d, v in db.execute(q).all()}
-
-
 def session_ratings(
     db: Session, user_id: int, *, since: Optional[date] = None, until: Optional[date] = None
 ) -> list[RatedSession]:
     """THE door: every counted session in `[since, until]` with its rating or None.
 
-    Per-session observations by the declared hierarchy; then each session still unrated takes its day's
-    `daily_records.session_rpe` as `day_fill` (the lowest rung); otherwise None."""
+    Per-session observations by the declared hierarchy; a session no source rated is `None`. There is no day
+    fill: the whole-day value never stands in for a session."""
     # Placement is decided against the window's whole neighbourhood (a day either side), so cutting the
     # window cannot move a rating onto a different session than the full history would.
     pad = timedelta(days=1)
@@ -224,29 +225,16 @@ def session_ratings(
                               until=None if until is None else until + pad)
     observed = observed_ratings(db, user_id, around)
     bouts = [b for b in around if (since is None or b.day >= since) and (until is None or b.day <= until)]
-    day_vals = _day_values(db, user_id, since, until)
-    fill_rung = rung_of(DAY_FILL)
     far = datetime.max.replace(tzinfo=timezone.utc)
-    out: list[RatedSession] = []
-    for b in sorted(bouts, key=lambda b: (b.day, b.start or far, b.kind, str(b.key[1]))):
-        r = observed.get(b.key)
-        if r is None and b.day in day_vals:
-            r = Rating(day_vals[b.day], DAY_FILL, fill_rung)
-        out.append(RatedSession(b, r))
-    return out
-
-
-def is_per_session(rating: Optional[Rating]) -> bool:
-    """True iff the rating came from a source about this very session (not the whole-day fill)."""
-    return rating is not None and rating.source != DAY_FILL
+    return [RatedSession(b, observed.get(b.key))
+            for b in sorted(bouts, key=lambda b: (b.day, b.start or far, b.kind, str(b.key[1])))]
 
 
 def srpe_needed(db: Session, user_id: int, day: date) -> bool:
-    """Whether the close-out should ask for the day's sRPE: at least one counted session that day has no
-    per-session rating from any source. Fails open to asking: a day with no counted session at all returns
-    True too (an unrecorded session, which only the athlete can rate), and an unsynced source leaves its
-    session unrated."""
+    """Whether the close-out has a session to ask about: at least one counted session that day has no rating
+    from any source. Fails open to asking: a day with no counted session at all returns True too (an
+    unrecorded session, which only the athlete can rate), and an unsynced source leaves its session unrated."""
     rated = session_ratings(db, user_id, since=day, until=day)
     if not rated:
         return True
-    return any(not is_per_session(r.rating) for r in rated)
+    return any(r.rating is None for r in rated)

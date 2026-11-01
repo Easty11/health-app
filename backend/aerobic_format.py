@@ -59,6 +59,21 @@ def format_selfeval(row: Any) -> str:
     return f" selfeval=[{' '.join(parts)} {row.source}]"
 
 
+def format_day_ratings(rated: Any) -> str:
+    """One day's per-session ratings, e.g. `Upper body 8/10 in_app; Pilates 3/10 garmin; Walk unrated`, or `—`
+    when the day has no counted session.
+
+    `rated` is the read door's `RatedSession` list for the day (`.bout`, `.rating`): each counted session with
+    the rating and source the door resolved, never a whole-day value. An unrated session says so."""
+    from reads.srpe_reads import session_label
+    parts = []
+    for rs in rated:
+        label = session_label(rs.bout)
+        parts.append(f"{label} unrated" if rs.rating is None
+                     else f"{label} {rs.rating.rpe_cr10:g}/10 {rs.rating.source}")
+    return "; ".join(parts) if parts else "—"
+
+
 def format_also_recorded_by(twins: Any) -> str:
     """The Q201(b) twin suffix for a canonical session line (#418), e.g.
     ` also_recorded_by=[{"source": "health_connect", "source_package": "com.garmin.android.apps.connectmobile"}]`.

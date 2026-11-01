@@ -917,13 +917,17 @@ def _hrv_today_lines(sel: Any) -> list[str]:
             "earlier night's value as today's)"]
 
 
-def _section_daily_record(record: Any, hrv_today: Any = None) -> str:
+def _section_daily_record(record: Any, hrv_today: Any = None, session_rpe_line: str | None = None) -> str:
     """
     Descriptive section for the new two-moment daily record.
     MUST NOT contain prescriptive load instructions — descriptive only.
 
     `hrv_today` is the live current-wake-day `HrvSelection` (#327); the frozen
     `passive_hrv_ms` column is no longer rendered here.
+
+    `session_rpe_line` is the day's per-session ratings with their sources, rendered by the caller from the read
+    door (`aerobic_format.format_day_ratings`). It replaces the whole-day RPE this section used to print: that
+    value was never a rating of a session and is read by nothing.
     """
     def _v(field: str) -> Any:
         return getattr(record, field) if hasattr(record, field) else record.get(field)
@@ -1001,14 +1005,14 @@ def _section_daily_record(record: Any, hrv_today: Any = None) -> str:
         sq_pm = _v("session_quality")
         if sq_pm is not None:
             lines.append(f"Session quality: {sq_pm}/5")
-        rpe = _v("session_rpe")
-        if rpe is not None:
-            lines.append(f"Session RPE: {rpe}/10")
         mo = _v("mindfulness_occurred")
         if mo is not None:
             md = _v("mindfulness_duration_min")
             suffix = f" ({md} min)" if md else ""
             lines.append(f"Wind-down (mindfulness): {'Yes' if mo else 'No'}{suffix}")
+
+    if session_rpe_line:
+        lines.append(f"Session RPE, per session (source): {session_rpe_line}")
 
     return "\n".join(lines)
 
@@ -2300,13 +2304,14 @@ def build_system_prompt(
     engine_selection: dict[str, Any] | None = None,
     exercise_catalogue: list[tuple[str, bool]] | None = None,
     hevy_routines: dict[str, Any] | None = None,
+    session_rpe_line: str | None = None,
 ) -> str:
     # Capture time once per request so all sections share the same "now"
     now = _now_aest()
 
     # Use new DailyRecord section when available; fall back to legacy check-in
     readiness_section = (
-        _section_daily_record(daily_record, getattr(state, "hrv_today", None))
+        _section_daily_record(daily_record, getattr(state, "hrv_today", None), session_rpe_line)
         if daily_record is not None
         else _section_checkin(today_checkin, now)
     )

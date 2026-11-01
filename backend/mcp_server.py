@@ -40,8 +40,8 @@ from routers.knowledge import FINDING_DOMAINS
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from routers.clinical_documents import document_out as _clinical_document_out, parse_filters as _parse_document_filters
 from reads.labs_reads import latest_lab_results
-from aerobic_format import format_aerobic_session, format_also_recorded_by, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
-from reads.srpe_reads import aerobic_bout, observed_ratings   # per-session RPE/feel for a session, any source (Q209)
+from aerobic_format import format_aerobic_session, format_also_recorded_by, format_day_ratings, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
+from reads.srpe_reads import aerobic_bout, hevy_bout, observed_ratings, session_ratings   # per-session RPE/feel for a session, any source (Q209)
 from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout, twins_by_canonical   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
 from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
 from sport_classes import is_strength_sport
@@ -118,6 +118,11 @@ def _db_rows(sql: str, params: dict) -> list[dict]:
         result = conn.execute(text(sql), params)
         cols = result.keys()
         return [dict(zip(cols, row)) for row in result.fetchall()]
+
+
+def _as_date(v) -> date:
+    """A raw-SQL `date` column as a `date` (SQLite hands back an ISO string; Postgres a date)."""
+    return v if isinstance(v, date) and not isinstance(v, datetime) else date.fromisoformat(str(v)[:10])
 
 
 def _epley_1rm(weight_kg: float, reps: int) -> float:
@@ -211,13 +216,13 @@ def get_recovery_metrics(days: int = 7) -> str:
 def get_checkin_history(days: int = 30) -> str:
     """Get morning check-in history. Unions legacy and new tables for
     continuous history. Returns sleep quality, fatigue, soreness, life load,
-    alcohol context, session RPE, and readiness scores."""
+    alcohol context, each day's per-session RPE with its source, and readiness scores."""
     user_id = _current_user_id()
 
     rows = _db_rows(
         """
         SELECT date, sleep_quality, fatigue, soreness::text, motivation,
-               life_load, alcohol_units, session_rpe,
+               life_load, alcohol_units,
                -- #327: HRV read live from hrv_readings by wake-day equality (garmin
                -- headlines a same-day pair, as select_wakeday_hrv); the retained
                -- passive_hrv_ms denorm is a fallback ONLY for a day with no canonical row.
@@ -240,7 +245,7 @@ def get_checkin_history(days: int = 30) -> str:
 
         SELECT date, sleep_quality, fatigue, NULL AS soreness,
                motivation, NULL AS life_load, NULL AS alcohol_units,
-               NULL AS session_rpe, NULL AS hrv_ms,
+               NULL AS hrv_ms,
                readiness_score AS morning_readiness, 'legacy' AS source
         FROM daily_check_ins
         WHERE user_id = :user_id
@@ -254,6 +259,13 @@ def get_checkin_history(days: int = 30) -> str:
     if not rows:
         return f"No check-in data found in the last {days} days."
 
+    # Each day's counted sessions with the rating and source the read door resolves for each. The whole-day
+    # RPE this line used to print is retired: it was never a rating OF a session.
+    with SessionLocal() as _rdb:
+        _by_day: dict = {}
+        for _rs in session_ratings(_rdb, user_id, since=_as_date(rows[-1]["date"]), until=_as_date(rows[0]["date"])):
+            _by_day.setdefault(_rs.bout.day, []).append(_rs)
+
     lines = [f"Check-in history — last {days} days"]
     lines.append(f"Data window: {rows[-1]['date']} → {rows[0]['date']}\n")
 
@@ -265,13 +277,13 @@ def get_checkin_history(days: int = 30) -> str:
         motivation = r["motivation"] if r["motivation"] is not None else "—"
         life_load = r["life_load"] if r.get("life_load") is not None else "—"
         alcohol = r["alcohol_units"] if r.get("alcohol_units") is not None else "—"
-        rpe = r["session_rpe"] if r.get("session_rpe") is not None else "—"
+        rpe = format_day_ratings(_by_day.get(_as_date(r["date"]), []))
         readiness = r["morning_readiness"] if r["morning_readiness"] is not None else "—"
         hrv = f"{r['hrv_ms']:.0f}ms" if r.get("hrv_ms") is not None else "—"
         lines.append(
             f"{r['date']} {src_tag}: sleep={sleep_q} fatigue={fatigue} soreness={soreness} "
             f"motivation={motivation} life_load={life_load} alcohol={alcohol} "
-            f"session_rpe={rpe} hrv={hrv} readiness={readiness}"
+            f"session_rpe=[{rpe}] hrv={hrv} readiness={readiness}"
         )
 
     return "\n".join(lines)
@@ -730,12 +742,17 @@ def _hevy_detail(w) -> str:
 
 
 def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, days: int, since: date,
-                            twins=None) -> str:
+                            twins=None, hevy_ratings=None) -> str:
     """Newest first: one line per canonical aerobic session; a session that overlaps a counted
     workout (`_concurrent_strength_sessions`, the #414 test: each session on its own) is a SEGMENT of
     that workout, so a workout's segments are listed in start-time order with its Hevy detail once
     beneath them. `Hevy only` for a counted workout with no segment, `HR only` for a strength-named
-    session with no overlapping workout, then the freshness footer. Pure."""
+    session with no overlapping workout, then the freshness footer. Pure.
+
+    RATINGS. `selfevals` is `{aerobic id: Rating}` and `hevy_ratings` is `{hevy_id: Rating}`, both the read
+    door's answer. A counted Hevy workout is ONE bout with ONE rating, rendered ONCE on the workout's own line
+    (the `Hevy only` header, or the detail line under its segments), never on a segment: a device row that is
+    a segment of a workout is not a separate counted session."""
     linked = _concurrent_strength_sessions(sessions, counted)
     matched = {w.hevy_id for w in linked.values()}
     items: list[tuple[float, list[str]]] = []
@@ -745,11 +762,15 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
             return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).timestamp()
         return _local_midnight_utc(day).timestamp()
 
-    def _session_line(s) -> str:
+    def _session_line(s, *, segment: bool = False) -> str:
         line = format_aerobic_session(s)
-        if s.id in selfevals:
+        if s.id in selfevals and not segment:       # a segment carries no rating of its own: the workout does
             line += format_selfeval(selfevals[s.id])
         return line + format_also_recorded_by((twins or {}).get(s.id))
+
+    def _workout_rating(w) -> str:
+        r = (hevy_ratings or {}).get(w.hevy_id)
+        return "" if r is None else format_selfeval(r)
 
     segments: dict[str, tuple[object, list]] = {}      # hevy_id -> (workout, its segments)
     for s in sessions:
@@ -769,7 +790,7 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
             emitted.add(w.hevy_id)
             segs = sorted(segments[w.hevy_id][1], key=lambda x: (_ts_of(x.start_time, x.session_date), x.id))
             items.append((_ts_of(segs[0].start_time, segs[0].session_date),
-                          [_session_line(x) for x in segs] + [_hevy_detail(w)]))
+                          [_session_line(x, segment=True) for x in segs] + [_hevy_detail(w) + _workout_rating(w)]))
 
     def _hevy_line(w, note: str) -> list[str]:
         started = w.start_time
@@ -777,7 +798,8 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
             if started is not None else None
         dur = (f"{(w.end_time - w.start_time).total_seconds() / 60:.0f} min"
                if w.start_time is not None and w.end_time is not None else "—")
-        return [f"{day or 'undated'} [hevy] {w.title or 'Workout'}: {dur} — {note}", _hevy_detail(w)]
+        rating = _workout_rating(w) if note == "Hevy only" else ""      # an uncounted duplicate is rated by nothing
+        return [f"{day or 'undated'} [hevy] {w.title or 'Workout'}: {dur} — {note}{rating}", _hevy_detail(w)]
 
     def _in_window(w) -> bool:
         return w.start_time is not None and _local_day(w.start_time) >= since
@@ -807,7 +829,9 @@ def get_recent_sessions(days: int = 7) -> str:
     (date, sport, duration, source, HR avg/max, zones, self-evaluation). A device session that
     overlaps a Hevy workout is listed as a segment of it: a workout's segments in start order, the
     workout's exercises and top sets once beneath them. Hevy workouts with no device recording
-    are marked 'Hevy only', strength-named device sessions with no Hevy workout 'HR only'. Ends
+    are marked 'Hevy only', strength-named device sessions with no Hevy workout 'HR only'. A
+    session's per-session RPE and its source (in_app, garmin) follow the line as selfeval=[...]; a Hevy
+    workout carries its rating once, on its own line, never on a device segment. Ends
     with how long ago Health Connect and Polar last delivered. A session that other devices also
     recorded carries also_recorded_by=[{source, source_package}] (identity only, no extra load)."""
     user_id = _current_user_id()
@@ -816,7 +840,6 @@ def get_recent_sessions(days: int = 7) -> str:
         arbitrated = arbitrated_sessions(user_id, _db, since=since)
         twins = twins_by_canonical(arbitrated)   # Q201(b), as get_training_sessions
         sessions = [s for s in arbitrated if getattr(s, "canonical", True)]
-        selfevals = _session_selfevals(_db, user_id, sessions)   # as get_training_sessions
         # Candidate fetch, padded a day before the window so a bout started just before it still
         # links; the formatter applies the in-window cut on the LOCAL day. Partitioned by the
         # counted-Hevy door.
@@ -827,8 +850,17 @@ def get_recent_sessions(days: int = 7) -> str:
             .all()
         ]
         counted, unadjudicated = counted_workouts(_db, user_id, candidates)
+        # Ratings are placed against the bouts the read door counts: each counted Hevy workout, and each
+        # device row that is NOT a segment of one (a segment is folded into its workout). So a workout
+        # carries exactly one rating and a segment none, and a rating made on the workout never lands twice.
+        linked = _concurrent_strength_sessions(sessions, counted)
+        ratings = observed_ratings(
+            _db, user_id,
+            [aerobic_bout(s) for s in sessions if s.id not in linked] + [hevy_bout(w) for w in counted])
+        selfevals = {k[1]: r for k, r in ratings.items() if k[0] == "aerobic"}
+        hevy_ratings = {k[1]: r for k, r in ratings.items() if k[0] == "hevy"}
         return _format_recent_sessions(
-            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since, twins)
+            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since, twins, hevy_ratings)
 
 
 # ---------------------------------------------------------------------------
@@ -881,7 +913,7 @@ def get_readiness_snapshot() -> str:
     checkin_rows = _db_rows(
         """
         SELECT date, sleep_quality, fatigue, soreness::text,
-               motivation, life_load, session_rpe, morning_readiness
+               motivation, life_load, morning_readiness
         FROM daily_records
         WHERE user_id = :user_id
           AND am_timestamp IS NOT NULL
@@ -932,7 +964,9 @@ def get_readiness_snapshot() -> str:
         lines.append(f"Most recent check-in ({c['date']}):")
         lines.append(f"  Sleep quality={c['sleep_quality']} Fatigue={c['fatigue']} Soreness={c.get('soreness') or '—'}")
         lines.append(f"  Motivation={c['motivation']} Life load={c.get('life_load') or '—'}")
-        lines.append(f"  Session RPE={c.get('session_rpe') or '—'} Readiness={c['morning_readiness'] or '—'}\n")
+        with SessionLocal() as _cdb:
+            _day_sessions = session_ratings(_cdb, user_id, since=_as_date(c["date"]), until=_as_date(c["date"]))
+        lines.append(f"  Session RPE=[{format_day_ratings(_day_sessions)}] Readiness={c['morning_readiness'] or '—'}\n")
     else:
         lines.append("Most recent check-in: none found.\n")
 

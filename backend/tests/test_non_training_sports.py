@@ -17,20 +17,24 @@ CONSUMERS = ("reads/srpe_reads.py",)   # cbti/replay.py left the set with the tr
 _IMPORT_RE = re.compile(r"^from sport_classes import\b", re.M)
 
 # Files that legitimately quote several members without declaring the SET: an id -> display-name
-# table carries every sport name Polar publishes (Yoga, Pilates and Stretching are three of its ids)
-# and attaches no non-training meaning to any of them - `sport_classes` decides that, on the stored
-# name, at read time. An entry the detector no longer trips on is stale and fails, so the list stays honest.
-NAME_TABLES = {
-    "import_polar.py": "Polar Flow sport-id -> name table (SPORT_NAMES); names only, no set semantics.",
-}
+# table that carries every sport name a source publishes and attaches no non-training meaning to any of
+# them - `sport_classes` decides that, on the stored name, at read time. An entry the detector no longer
+# trips on is stale and fails, so the list stays honest. (`import_polar.py`'s Polar Flow id -> name table
+# was listed here while Yoga, Pilates and Stretching sat within one span; with Pilates counted it is not.)
+NAME_TABLES: dict[str, str] = {}
 
 
-def test_set_is_the_ratified_four():
-    assert NON_TRAINING_SPORTS == {"Walking", "Pilates", "Yoga", "Stretching"}
+def test_set_is_the_ratified_three():
+    """Pilates left the set by operator ruling (it counts as a session, rated in the app); #322 S1's other three stand."""
+    assert NON_TRAINING_SPORTS == {"Walking", "Yoga", "Stretching"}
+
+
+def test_pilates_is_a_counted_sport_in_any_case():
+    assert not is_non_training("Pilates") and not is_non_training("PILATES")
 
 
 def test_matching_is_case_insensitive_exact():
-    assert is_non_training("walking") and is_non_training("PILATES") and is_non_training("Yoga")
+    assert is_non_training("walking") and is_non_training("STRETCHING") and is_non_training("Yoga")
     for s in (None, "", "Fitness", "Other Workout", "Walk", " Walking", "Nordic walking"):
         assert not is_non_training(s), s
 

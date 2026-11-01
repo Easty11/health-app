@@ -325,11 +325,12 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **In-app per-session sRPE: one CR-10 per counted session, the whole-day fill retired, Pilates counted.** Code - Canonical home: `DECISIONS_LOG.md` #475.
+
 - **Chat-side writes are approval-gated: a shared-block line, FEEDBACK §66 and §67, and a ruling entry.** Governance - Canonical home: `DECISIONS_LOG.md` #473.
 
 - **The source-neutral sRPE store passes its post-deploy reads; its branch row flips DONE and the ROADMAP row closes.** Governance - Canonical home: `DECISIONS_LOG.md` #472.
 
-- **Both repos' question stores are retired, the status tools read issues or nothing, and the guard comment is corrected.** Governance - Canonical home: `DECISIONS_LOG.md` #471.
 
 
 ---
