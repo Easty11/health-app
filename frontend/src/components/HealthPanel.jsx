@@ -303,25 +303,39 @@ export default function HealthPanel() {
             )}
 
             {/* Vitals row. Resting HR is the daily resting rate (Garmin dailyHeartRate); Sleep HR is the ring's
-                and appears only when a source carries it. */}
-            <div className={`grid gap-2 ${sleep.sleep_hr_bpm != null ? 'grid-cols-2' : 'grid-cols-3'}`}>
-              {[
+                and appears only when a source carries it. Each tile is three lines: the value (never wraps), a
+                reserved secondary line, then the label, so the values and the labels of all tiles line up
+                whether or not one of them carries a secondary figure. */}
+            {(() => {
+              const vitals = [
                 { label: 'Resp Rate', value: sleep.resp_rate != null ? `${sleep.resp_rate.toFixed(1)}` : slotWord(wake, sleep, 'rr'), unit: 'br/m' },
                 { label: 'SpO2', value: sleep.spo2_pct != null ? `${sleep.spo2_pct.toFixed(1)}` : slotWord(wake, sleep, 'spo2'), unit: '%',
-                  // The night's minimum (CPAP-seal evidence), from the same source as the mean; absent -> mean alone
-                  extra: sleep.spo2_pct != null && sleep.spo2_min_pct != null ? `min ${Math.round(sleep.spo2_min_pct)}%` : null },
+                  // The night's minimum (CPAP-seal evidence), from the same source as the mean; its own small line
+                  // under the value, never inline with it (it wrapped mid-phrase at phone widths). Absent -> mean alone.
+                  secondary: sleep.spo2_pct != null && sleep.spo2_min_pct != null ? `min ${Math.round(sleep.spo2_min_pct)}%` : null },
                 { label: 'Resting HR', value: sleep.resting_hr_bpm != null ? `${Math.round(sleep.resting_hr_bpm)}` : slotWord(wake, sleep, 'rhr'), unit: 'bpm' },
                 ...(sleep.sleep_hr_bpm != null ? [{ label: 'Sleep HR', value: sleep.sleep_hr_bpm, unit: 'bpm' }] : []),
-              ].map(({ label, value, unit, extra }) => (
-                <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-base font-semibold text-gray-700">
-                    {value}<span className="text-xs font-normal text-gray-400 ml-0.5">{isWord(value) ? '' : unit}</span>
-                    {extra && <span className="text-xs font-normal text-gray-500"> · {extra}</span>}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+              ]
+              const reserveSecondary = vitals.some((v) => v.secondary)
+              return (
+                <div className={`grid gap-2 ${sleep.sleep_hr_bpm != null ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {vitals.map(({ label, value, unit, secondary }) => (
+                    <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
+                      <p className={`font-semibold whitespace-nowrap ${isWord(value) ? 'text-sm leading-6 text-gray-500' : 'text-base text-gray-700'}`}>
+                        {value}<span className="text-xs font-normal text-gray-400 ml-0.5">{isWord(value) ? '' : unit}</span>
+                      </p>
+                      {reserveSecondary && (
+                        <p className="text-[11px] leading-4 text-gray-500 whitespace-nowrap min-h-4"
+                          data-testid={secondary ? `vital-secondary-${label}` : undefined}>
+                          {secondary ?? '\u00A0'}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )
+            })()}
 
             {/* Sleep timing */}
             {(sleep.bedtime || sleep.wake_time) && (

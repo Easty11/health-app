@@ -119,31 +119,53 @@ test('a user with no Garmin connection sees no capture status and the old dash',
   expect(within(screen.getByText('SpO2').parentElement).getByText('—')).toBeTruthy()
 })
 
-test('SpO2 renders the mean and the night\'s minimum together: "96.5% · min 91%"', async () => {
+test('SpO2 shows the mean as the value and the minimum on its own line, never inline with it', async () => {
   summaryResponse = summary('2026-11-02', { spo2_pct: 96.5, spo2_min_pct: 91 })
   wakeResponse = { connected: true, wake_day: '2026-11-02', window_open: true, slots: {}, gaps: [], message: null }
   await renderIt()
   await screen.findByText('SpO2')
-  expect(screen.getByText('SpO2').parentElement.textContent).toContain('96.5% · min 91%')
+  const tile = screen.getByText('SpO2').parentElement
+  const [value] = tile.querySelectorAll('p')
+  expect(value.textContent).toBe('96.5%')                          // the value line carries no minimum
+  expect(value.className).toMatch(/whitespace-nowrap/)             // and cannot wrap
+  const min = screen.getByTestId('vital-secondary-SpO2')
+  expect(min.textContent).toBe('min 91%')
+  expect(min.className).toMatch(/whitespace-nowrap/)               // the secondary line cannot wrap mid-phrase
+  expect(tile.textContent).not.toContain('·')
 })
 
-test('a mean with no minimum shows the mean alone, never a placeholder minimum', async () => {
+test('the other vitals reserve the same secondary line, so values and labels align across the row', async () => {
+  summaryResponse = summary('2026-11-02', { spo2_pct: 96.5, spo2_min_pct: 91 })
+  wakeResponse = { connected: true, wake_day: '2026-11-02', window_open: true, slots: {}, gaps: [], message: null }
+  await renderIt()
+  await screen.findByText('SpO2')
+  for (const label of ['Resp Rate', 'Resting HR', 'SpO2']) {
+    const tile = screen.getByText(label).parentElement
+    expect(tile.querySelectorAll('p')).toHaveLength(3)               // value, secondary, label
+    expect(tile.querySelectorAll('p')[2].textContent).toBe(label)
+  }
+  expect(screen.queryByTestId('vital-secondary-Resp Rate')).toBeNull()   // reserved but empty: no testid, no text
+})
+
+test('a mean with no minimum shows the mean alone, no secondary line, never a placeholder minimum', async () => {
   summaryResponse = summary('2026-11-02', { spo2_pct: 95, spo2_min_pct: null })
   wakeResponse = { connected: true, wake_day: '2026-11-02', window_open: true, slots: {}, gaps: [], message: null }
   await renderIt()
   await screen.findByText('SpO2')
-  const text = screen.getByText('SpO2').parentElement.textContent
-  expect(text).toContain('95.0%')
-  expect(text).not.toMatch(/min/)
-  expect(text).not.toContain('—')
+  const tile = screen.getByText('SpO2').parentElement
+  expect(tile.textContent).toContain('95.0%')
+  expect(tile.textContent).not.toMatch(/min/)
+  expect(tile.textContent).not.toContain('—')
+  expect(tile.querySelectorAll('p')).toHaveLength(2)                 // value + label: nothing reserved
 })
 
-test('no mean: the slot word stands and no minimum is invented', async () => {
+test('no mean: the slot word stands as one line and no minimum is invented', async () => {
   summaryResponse = summary('2026-11-02', { spo2_pct: null, spo2_min_pct: null })
   wakeResponse = WAKE('pending')
   await renderIt()
   await screen.findByText(/still arriving/)
-  const text = screen.getByText('SpO2').parentElement.textContent
-  expect(text).toContain('pending')
-  expect(text).not.toMatch(/min \d/)
+  const tile = screen.getByText('SpO2').parentElement
+  expect(tile.textContent).toContain('pending')
+  expect(tile.textContent).not.toMatch(/min \d/)
+  expect(tile.querySelector('p').className).toMatch(/whitespace-nowrap/)   // a word cannot wrap and break alignment either
 })
