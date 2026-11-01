@@ -307,13 +307,16 @@ export default function HealthPanel() {
             <div className={`grid gap-2 ${sleep.sleep_hr_bpm != null ? 'grid-cols-2' : 'grid-cols-3'}`}>
               {[
                 { label: 'Resp Rate', value: sleep.resp_rate != null ? `${sleep.resp_rate.toFixed(1)}` : slotWord(wake, sleep, 'rr'), unit: 'br/m' },
-                { label: 'SpO2', value: sleep.spo2_pct != null ? `${sleep.spo2_pct.toFixed(1)}` : slotWord(wake, sleep, 'spo2'), unit: '%' },
+                { label: 'SpO2', value: sleep.spo2_pct != null ? `${sleep.spo2_pct.toFixed(1)}` : slotWord(wake, sleep, 'spo2'), unit: '%',
+                  // The night's minimum (CPAP-seal evidence), from the same source as the mean; absent -> mean alone
+                  extra: sleep.spo2_pct != null && sleep.spo2_min_pct != null ? `min ${Math.round(sleep.spo2_min_pct)}%` : null },
                 { label: 'Resting HR', value: sleep.resting_hr_bpm != null ? `${Math.round(sleep.resting_hr_bpm)}` : slotWord(wake, sleep, 'rhr'), unit: 'bpm' },
                 ...(sleep.sleep_hr_bpm != null ? [{ label: 'Sleep HR', value: sleep.sleep_hr_bpm, unit: 'bpm' }] : []),
-              ].map(({ label, value, unit }) => (
+              ].map(({ label, value, unit, extra }) => (
                 <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
                   <p className="text-base font-semibold text-gray-700">
                     {value}<span className="text-xs font-normal text-gray-400 ml-0.5">{isWord(value) ? '' : unit}</span>
+                    {extra && <span className="text-xs font-normal text-gray-500"> · {extra}</span>}
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5">{label}</p>
                 </div>
