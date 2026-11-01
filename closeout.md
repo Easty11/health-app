@@ -45,8 +45,8 @@ No `PENDING` item was carried in from a chat close-out (`;cc`): the session open
 
 **Owed, by whom.**
 - Operator: open the check-in on 2 Nov (and the following two mornings), user 4 likewise; look at the Recovery page once for the `96.5% · min 91%` rendering, which Code has tested but not seen.
-- Code: the three-morning gate report; the Decision-tier record; the served-bundle grep for a string only the new frontend carries (for example `Garmin not synced yet`, #121 and #433), which Code's network policy blocks, so the operator runs it from PowerShell: `(Invoke-WebRequest <frontend-url>).Content` for the `assets/index-*.js` name, fetch that file and `Select-String 'Garmin not synced yet'`.
-- Operator, low: confirm the key shows red at 7 days or less in Settings (kept to agree with the load card and the snapshot, `garmin_alerts`' existing threshold), against the brief's red only when expired or the token exchange is failing. Say if Settings should follow the brief literally.
+- Code: the three-morning gate report; the Decision-tier record.
+- Closed 1 Nov 2026 after the close-out: the key threshold is ruled (#480: red at 7 days or less on every surface), and the served-bundle check is DONE, run by the operator from chat against `assets/index-B5sqUthc.js` (relayed, Unverified by Code): the `not_synced` slot state, the Retry button and the conditional SpO2 `min N%` are present; the not-synced sentence is backend-supplied, so grepping the bundle for it returns nothing by design. The grep string this file first suggested (`Garmin not synced yet`) was wrong for that reason.
 
 **NOT touched this session (named on purpose).** Everything that is the product rather than the instrument stood still, and the question gating each did not move:
 - **Know / Walk in.** The reconcile leg of Walk in (post-visit transcript reconciliation with "Mark attended", the NEXT row, #386) is unbuilt; the appointment brief's printed `shoulder` check is still OWED (operator).
