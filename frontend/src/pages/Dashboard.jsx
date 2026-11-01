@@ -19,6 +19,7 @@ import HubLayout from '../components/HubLayout'
 import Tile from '../components/hub/Tile'
 import InterpretationTile from '../components/hub/InterpretationTile'
 import ExposureTile from '../components/hub/ExposureTile'
+import RecoveryTile from '../components/hub/RecoveryTile'
 import AppointmentsDoorway from '../components/hub/AppointmentsDoorway'
 import LoadCard from '../components/hub/LoadCard'
 import api from '../api'
@@ -74,7 +75,7 @@ export default function Dashboard() {
         <AppointmentsDoorway />
 
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          <Tile to="/recovery" icon="🌙" label="Recovery" detail="HRV, sleep and overnight vitals" />
+          <RecoveryTile />
           <ExposureTile />
           <Tile to="/labs" icon="🧪" label="Labs" detail="Blood panels and marker history" />
           <InterpretationTile />

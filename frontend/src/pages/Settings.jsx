@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api'
+import GarminLaneHealth from '../components/GarminLaneHealth'
 
 const CATEGORIES = [
   'Injury History',
@@ -292,6 +293,7 @@ export default function Settings() {
                 onOAuthConnect={connectPolar}
                 onDisconnect={() => disconnect('polar')}
               />
+              <GarminLaneHealth />
               {['MyFitnessPal', 'GameTraka'].map((name) => (
                 <div key={name} className="bg-white border border-gray-100 rounded-2xl p-4 opacity-50">
                   <div className="flex items-center gap-3">

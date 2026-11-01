@@ -198,7 +198,7 @@ def test_a_user_without_a_personal_key_is_skipped_and_a_non_garmin_user_is_not_c
     _user(db_session)
     out = wdc.run(db_session, 1, trigger="checkin", now=at(6, 0))
     assert out["skipped"] and out["reason"] == "no_personal_key"
-    assert out["status"] == {"connected": False, "wake_day": DS}
+    assert out["status"] == {"connected": False, "wake_day": DS, "alerts": [], "amber": False}
 
 
 def test_a_second_caller_while_a_fetch_is_in_flight_is_told_in_progress(user, host):
@@ -269,3 +269,95 @@ def test_the_lifespan_starts_and_cancels_both_scheduler_tasks():
     import main
     src = inspect.getsource(main.lifespan)
     assert "load_sweep.backstop_loop()" in src and "load_sweep.sweep_loop()" in src
+
+
+# -- the Recovery tile's amber (S2) ---------------------------------------------------------------------
+
+def _land_previous_days(db, host, n=2):
+    """Land the `n` wake-days before DAY through the capture itself, each at 06:00 of its own day."""
+    for k in range(n, 0, -1):
+        d = DAY - timedelta(days=k)
+        populate(host, d.isoformat())
+        assert wdc.run(db, 1, trigger="checkin", now=at(6, 0) - timedelta(days=k))["outcome"] == "complete"
+
+
+def test_a_wake_day_still_inside_its_capture_window_is_never_amber(user, host):
+    _land_previous_days(user, host)
+    # today has landed nothing yet; it is 06:00
+    st = wdc.status(user, 1, now=at(6, 0))
+    assert st["alerts"] == [] and st["amber"] is False
+    assert {s["state"] for s in st["slots"].values()} == {"pending"}
+
+
+def test_a_closed_wake_day_without_data_is_amber_naming_what_and_which_day(user, host):
+    _land_previous_days(user, host)
+
+    st = wdc.status(user, 1, now=at(10, 1))
+
+    assert st["amber"] is True
+    assert {a["message"] for a in st["alerts"]} == {f"sleep missing {DS}", f"HRV missing {DS}", f"SpO2 missing {DS}"}
+    assert all(a["code"] == "missing" and a["age_days"] == 0 for a in st["alerts"])
+
+
+def test_yesterday_missing_is_amber_even_at_6am_today_because_its_window_closed(user, host):
+    _land_previous_days(user, host, n=2)
+    yesterday = (DAY - timedelta(days=1)).isoformat()
+    # yesterday's night never got its duration (the sleep figure alone is missing)
+    night = user.query(models.SleepNight).filter_by(user_id=1, captured_at=DAY - timedelta(days=1)).one()
+    night.sleep_time_s = None
+    user.commit()
+
+    st = wdc.status(user, 1, now=at(6, 0))
+
+    assert [a["message"] for a in st["alerts"]] == [f"sleep missing {yesterday}"]
+    assert st["alerts"][0]["age_days"] == 1
+
+
+def test_a_gap_the_next_fetch_fills_is_no_longer_amber(user, host):
+    _land_previous_days(user, host)
+    assert wdc.status(user, 1, now=at(10, 1))["amber"] is True
+    populate(host, DS)
+
+    assert wdc.run(user, 1, trigger="refresh", force=True, now=at(10, 30))["outcome"] == "complete"
+
+    assert wdc.status(user, 1, now=at(10, 31))["alerts"] == []
+
+
+def test_a_failed_overnight_lane_is_amber_naming_lane_and_age(user, host, monkeypatch):
+    _land_previous_days(user, host)
+    _di(user)                                   # attached after the landing: only its lane is under test
+    import garmin_raw
+    garmin_raw.record_lane(user, 1, garmin_raw.LANE_DI_SPO2, garmin_raw.ERROR, "ReadTimeout", now=at(2, 0))
+
+    # 02:05 same day, inside the window: the current wake-day may yet succeed, so no lane alert
+    inside = [a for a in wdc.alerts(user, 1, at(2, 5)) if a["code"] == "lane_failed"]
+    assert inside == []
+
+    after = [a for a in wdc.alerts(user, 1, at(10, 30)) if a["code"] == "lane_failed"]
+    assert len(after) == 1
+    assert after[0]["lane"] == "di_spo2" and after[0]["message"] == "Garmin epoch SpO2 lane failed 8 h ago (error)"
+
+    # a failure from YESTERDAY's run is shown even at 06:00 today: that wake-day is closed
+    garmin_raw.record_lane(user, 1, garmin_raw.LANE_DI_SPO2, garmin_raw.ERROR, "ReadTimeout",
+                           now=at(2, 0) - timedelta(days=1))
+    early = [a for a in wdc.alerts(user, 1, at(6, 0)) if a["code"] == "lane_failed"]
+    assert len(early) == 1 and early[0]["age_hours"] == 28.0
+
+
+def test_a_lane_that_recovered_or_is_not_the_users_is_not_an_alert(user, host):
+    import garmin_raw
+    garmin_raw.record_lane(user, 1, garmin_raw.LANE_DI_SPO2, garmin_raw.ERROR, "x", now=at(2, 0) - timedelta(days=1))
+    # the user has no DI connection: the DI lane is not theirs to be amber about
+    assert [a for a in wdc.alerts(user, 1, at(10, 30)) if a["code"] == "lane_failed"] == []
+    garmin_raw.record_lane(user, 1, garmin_raw.LANE_PERSONAL_HRV, garmin_raw.ERROR, "x", now=at(2, 0) - timedelta(days=1))
+    garmin_raw.record_lane(user, 1, garmin_raw.LANE_PERSONAL_HRV, garmin_raw.OK, now=at(3, 0))
+    assert [a for a in wdc.alerts(user, 1, at(10, 30)) if a["code"] == "lane_failed"] == []
+
+
+def test_alerts_are_per_user(db_session, host):
+    _user(db_session, 1)
+    _personal(db_session, 1)
+    _user(db_session, 2)                                   # no Garmin at all
+    st2 = wdc.status(db_session, 2, now=at(10, 30))
+    assert st2["connected"] is False and st2["alerts"] == [] and st2["amber"] is False
+    assert wdc.status(db_session, 1, now=at(10, 30))["amber"] is True
