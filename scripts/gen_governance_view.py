@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Generate CONSOLIDATED_GOVERNANCE_VIEW.md from both repos' governance stores.
 
-Reads the four canonical stores from each of health-app and health-connect-app at
+Reads the three canonical stores from each of health-app and health-connect-app at
 **master**, via raw.githubusercontent.com — never from a local working tree, which may be
 dirty or behind. This also sidesteps the single-repo rule: it reads health-connect-app and
 never writes it.
 
 Emits a **digest**, not a verbatim dump (DECISIONS_LOG #94). Every digest line carries a
 line-anchored GitHub URL, so the view says what exists and where, and master gives detail.
+
+Neither repo has a questions store: questions are GitHub issues and `docs/design` docs
+(DECISIONS_LOG #468; health-connect-app #54), so the view has no questions section; the open `fork`
+issues are on the session-open ritual instead.
 
 Output is gitignored. A derived artifact is not committed — a committed derivative is a
 second thing that goes stale, which is the failure this script exists to remove.
@@ -31,7 +35,7 @@ import gov_dialects as D  # single source of the heading/state grammar (DECISION
 
 OWNER = "Easty11"
 REPOS = ("health-app", "health-connect-app")
-STORES = ("DECISIONS_LOG", "OPEN_QUESTIONS", "FEEDBACK", "ROADMAP")
+STORES = ("DECISIONS_LOG", "FEEDBACK", "ROADMAP")
 
 RAW = "https://raw.githubusercontent.com/{owner}/{repo}/{sha}/{store}.md"
 BLOB = "https://github.com/{owner}/{repo}/blob/{sha}/{store}.md#L{line}"
@@ -113,9 +117,8 @@ def fetch(repo: str, sha: str, store: str) -> str:
 # Inline/body state extraction now lives in gov_dialects (#191 unify): the digest's private
 # `_split_inline_status` (a first-'·' split with no vocab gate — it rendered 'active · clarifies
 # #6' junk on multi-'·' HCA headings) and `_status_from_body` are RETIRED. Decisions read via
-# D.decision_state (lowercase '·' scan + '**Status:**' body), questions via D.entry_state (caps
-# '·' inline + '**State:**' body), so the digest and the machine model share ONE reader and
-# cannot drift (the divergence this unification closes).
+# D.decision_state (lowercase '·' scan + '**Status:**' body), so the digest and the machine
+# model share ONE reader and cannot drift (the divergence this unification closes).
 
 
 def _first_body_line(lines: list[str], start: int, end: int) -> str:
@@ -126,14 +129,11 @@ def _first_body_line(lines: list[str], start: int, end: int) -> str:
     return ""
 
 
-def _parse_headed(text: str, pattern: re.Pattern, store: str, repo: str,
-                  status_mode: str) -> list[Entry]:
-    """Generic heading-driven parser for DECISIONS_LOG / OPEN_QUESTIONS.
+def _parse_headed(text: str, pattern: re.Pattern, store: str, repo: str) -> list[Entry]:
+    """Heading-driven parser for DECISIONS_LOG.
 
-    status_mode selects the SHARED gov_dialects reader (#191 unify) — the digest no longer
-    carries its own extractors:
-        'decision' -> D.decision_state  (HCA lowercase '·' scan + '**Status:**' body)
-        'question' -> D.entry_state      (caps '·' inline + '**State:**' body)
+    State is read by the SHARED gov_dialects reader (#191 unify) — the digest carries no
+    extractors of its own: D.decision_state (HCA lowercase '·' scan + '**Status:**' body).
     Title is the pre-'·' segment (state and lineage notes are both '·'-appended annotations)."""
     lines = text.splitlines()
     hits: list[tuple[int, str, str]] = []
@@ -153,10 +153,7 @@ def _parse_headed(text: str, pattern: re.Pattern, store: str, repo: str,
     for idx, (line_i, label, rest) in enumerate(hits):
         end = hits[idx + 1][0] if idx + 1 < len(hits) else len(lines)
         title = rest.split(MIDDOT, 1)[0].strip()
-        if status_mode == "decision":
-            status = D.decision_state(lines, line_i, rest, end)
-        else:  # "question"
-            status = D.entry_state(lines, line_i, rest, end)
+        status = D.decision_state(lines, line_i, rest, end)
         entries.append(Entry(label=label, title=title, status=status, line=line_i + 1))
     return entries
 
@@ -164,7 +161,7 @@ def _parse_headed(text: str, pattern: re.Pattern, store: str, repo: str,
 def parse_decisions(text: str, repo: str) -> list[Entry]:
     # health-app '### 93. Title' | health-connect-app '### #20 — Title  ·  active'
     pat = D.DECISION_HEADING
-    entries = _parse_headed(text, pat, "DECISIONS_LOG", repo, "decision")
+    entries = _parse_headed(text, pat, "DECISIONS_LOG", repo)
 
     # Free gap check: for an append-only, sequentially-numbered store, the highest number
     # should equal the entry count. A mismatch means a gap or a duplicate — surface it.
@@ -176,12 +173,6 @@ def parse_decisions(text: str, repo: str) -> list[Entry]:
             file=sys.stderr,
         )
     return entries
-
-
-def parse_questions(text: str, repo: str) -> list[Entry]:
-    # health-app '## Q33. Title' | health-connect-app '### Q11 — Title  ·  OWED'
-    pat = D.QUESTION_HEADING
-    return _parse_headed(text, pat, "OPEN_QUESTIONS", repo, "question")
 
 
 def parse_feedback(text: str, repo: str) -> list[Entry]:
@@ -326,7 +317,7 @@ def build(data: dict, generated: str) -> tuple[list[str], dict]:
     out.append("")
     out.append("## Numbering is PER-REPO and native")
     out.append("")
-    out.append("Each repo numbers its own decisions and questions from #1. "
+    out.append("Each repo numbers its own decisions from #1. "
                "`health-app #20` and")
     out.append("`health-connect-app #20` are **different decisions**. Numbers here are "
                "native to their")
@@ -351,23 +342,6 @@ def build(data: dict, generated: str) -> tuple[list[str], dict]:
             out.append(f"- [`#{e.label}`]({link}) {MIDDOT} {truncate(e.title)}{status}")
             n += 1
         counts[f"{repo}/DECISIONS_LOG"] = (len(ents), n)
-        out.append("")
-
-        # OPEN_QUESTIONS
-        ents = d["OPEN_QUESTIONS"]
-        paren = ""
-        if repo == "health-connect-app":
-            qs = sorted(int(e.label) for e in ents)
-            paren = f"Q{qs[0]}{ENDASH}Q{qs[-1]}"
-        out.append(store_separator(repo, "OPEN_QUESTIONS", paren))
-        out.append("")
-        n = 0
-        for e in ents:
-            link = anchor(repo, sha, "OPEN_QUESTIONS", e.line)
-            status = f" {MIDDOT} {truncate(e.status, 110)}" if e.status else ""
-            out.append(f"- [`Q{e.label}`]({link}) {MIDDOT} {truncate(e.title)}{status}")
-            n += 1
-        counts[f"{repo}/OPEN_QUESTIONS"] = (len(ents), n)
         out.append("")
 
         # FEEDBACK
@@ -425,7 +399,6 @@ def main() -> int:
 
     parsers = {
         "DECISIONS_LOG": parse_decisions,
-        "OPEN_QUESTIONS": parse_questions,
         "FEEDBACK": parse_feedback,
         "ROADMAP": parse_roadmap,
     }
@@ -444,17 +417,6 @@ def main() -> int:
         d["dmax"] = max(int(e.label) for e in d["DECISIONS_LOG"])
         data[repo] = d
 
-    # Extraction gate (#190): count parity is necessary but insufficient. If a state field is
-    # empty across every question in a store, the parser matched a schema that is not there —
-    # the exact `**State:**` bug this file carried, invisible to the heading-count gate.
-    for repo in REPOS:
-        qs = data[repo]["OPEN_QUESTIONS"]
-        if qs and all(not e.status for e in qs):
-            raise GenError(
-                f"{repo}/OPEN_QUESTIONS.md: status extracted empty for all {len(qs)} "
-                f"questions — the state field matched a schema that is not there."
-            )
-
     # Offset-explicit, not name-dependent: Windows renders %Z as "E. Australia Standard
     # Time", and Git Bash silently ignores TZ and mislabels UTC as local. A numeric offset
     # cannot be misread by either.
@@ -465,10 +427,9 @@ def main() -> int:
     for key, (parsed, emitted) in sorted(counts.items()):
         if parsed != emitted:
             raise GenError(f"{key}: parsed {parsed} entries but emitted {emitted} lines")
-    if len(counts) != len(REPOS) * len(STORES):
-        raise GenError(
-            f"expected {len(REPOS) * len(STORES)} store sections, got {len(counts)}"
-        )
+    expected_sections = len(STORES) * len(REPOS)
+    if len(counts) != expected_sections:
+        raise GenError(f"expected {expected_sections} store sections, got {len(counts)}")
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -86,9 +86,9 @@ def test_an_unrated_sighting_still_needs_a_declared_scale(db_session):
     assert _rows(db_session) == []
 
 
-@pytest.mark.parametrize("source", ["in_app", "strava", "", "Garmin"])
+@pytest.mark.parametrize("source", ["strava", "", "Garmin", "day_fill"])
 def test_a_source_that_has_declared_nothing_is_refused(db_session, source):
-    """`in_app` is in the hierarchy but has no writer yet: its first write is refused until it signs."""
+    """Only a source that has signed the contract (`SOURCE_SCALES`) can write: any other name is refused."""
     _user(db_session)
     with pytest.raises(ss.UnknownSource):
         ss.record_observation(db_session, 1, source=source, source_activity_ref="1", start=START, stop=STOP,

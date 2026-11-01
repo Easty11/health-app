@@ -23,17 +23,22 @@ matches:
       Number new entries from the current highest. To change a locked decision, add a new
       entry that supersedes it by number — never edit the old text.
 
-      OPEN_QUESTIONS.md entries — one **State:** each: OPEN / OWED / DONE -> #N.
+      Questions are GitHub issues, not store entries. For each undecided question output an
+      issue body with the four fields — Proposed answer · Alternative it beats · Evidence that
+      would settle it · Door (one-way / two-way) — and its label (fork / stamp / verify / watch /
+      build / design). Architecture-scale items get a docs/design doc instead, with at most a
+      one-line `design` pointer issue. Nothing is filed bare. In every store a bare #N is a
+      DECISIONS_LOG number; an issue or PR is written GH#N.
 
       Flag every entry PENDING. Write NOTHING to project knowledge. Chat proposes; Code is
       the only writer; this queue stays provisional until a commit lands it.
 
-      End with one line headed CHAT DISPOSITION, after the queue. Name the Q-number(s)
-      this chat served, the chat's state, and the exact title the operator should rename
-      the chat to:
-        LIVE    -> "▶ Q<n> <short title>"   (work still open in this chat)
-        PARKED  -> "⏸ Q<n> <short title>"   (name what it waits on)
-        CLOSED  -> "✓ Q<n> <short title>"   (every entry above has a store or a brief to land in)
+      End with one line headed CHAT DISPOSITION, after the queue. Name the GH# issues and
+      docs/design docs this chat served, the chat's state, and the exact title the operator
+      should rename the chat to:
+        LIVE    -> "▶ GH#<n> <short title>"   (work still open in this chat)
+        PARKED  -> "⏸ GH#<n> <short title>"   (name what it waits on)
+        CLOSED  -> "✓ GH#<n> <short title>"   (every entry above has a store or a brief to land in)
       If CLOSED and nothing in this chat is absent from master's stores or a project brief,
-      say DELETE instead of a title. A chat with no Q-number is a sandbox: title it
-      "~ <topic> scratch". The stores are the record; the chat is scaffolding.
+      say DELETE instead of a title. A chat with no GH# issue or docs/design doc is a sandbox:
+      title it "~ <topic> scratch". The stores are the record; the chat is scaffolding.

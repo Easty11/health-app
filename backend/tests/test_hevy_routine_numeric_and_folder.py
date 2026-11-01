@@ -198,7 +198,7 @@ def test_wed_directly_supplied_corrupted_id_is_create_failed_not_unresolved(db_s
     id, so _resolve_missing_ids skips it (that resolver only fills TITLE-only entries) —
     it reaches Hevy and fails as `create_failed`, NOT `unresolved_exercise`. This pins the
     honest current behaviour: the corrupted id is surfaced as a failure (never silent, never
-    a duplicate), just via the Hevy-rejection path. See OPEN_QUESTIONS finding."""
+    a duplicate), just via the Hevy-rejection path. See the retired-store finding."""
     client = _FakeClient(raise_exc=RuntimeError("Hevy API error 400: unknown exercise_template_id"))
     corrupted = "b4bab549-a143-4166-9615-249185e5a4a2"   # two digits off the intended id
     block = _routine_block(

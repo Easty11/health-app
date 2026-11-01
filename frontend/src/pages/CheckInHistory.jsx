@@ -83,10 +83,28 @@ function DayCard({ rec }) {
           <div className="grid grid-cols-3 gap-y-3 gap-x-2">
             <Stat label="Day" value={rec.today_rating != null ? `${DAY_LABELS[rec.today_rating] || rec.today_rating}` : null} />
             <Stat label="Session qual" value={rec.session_quality != null ? `${rec.session_quality}/5` : null} />
-            <Stat label="Session RPE" value={rec.session_rpe != null ? `${rec.session_rpe}` : null} />
             <Stat label="Mindfulness" value={rec.mindfulness_occurred ? `${rec.mindfulness_duration_min ?? ''} min`.trim() : (rec.mindfulness_occurred === false ? 'No' : null)} />
           </div>
           {rec.pm_notes && <p className="mt-2 text-xs text-gray-500 italic">“{rec.pm_notes}”</p>}
+        </div>
+      )}
+      {/* Per-session RPE, from the read door: each of the day's counted sessions with its rating and the source
+          that gave it. Replaces the retired whole-day RPE (it was never a rating of a session). Its own block, not
+          the Evening's: a session is rated by a device or in the app whether or not the close-out was submitted. */}
+      {rec.sessions?.length > 0 && (
+        <div className="px-4 py-3 border-t border-gray-100">
+          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">Sessions</p>
+          <ul className="space-y-0.5" aria-label="Session RPE">
+            {rec.sessions.map((s) => (
+              <li key={`${s.kind}:${s.id}`} className="flex justify-between text-xs">
+                <span className="text-gray-600">{s.label}</span>
+                <span className="text-gray-800 tabular-nums">
+                  {s.rpe != null ? `${s.rpe}/10` : <span className="text-gray-400">unrated</span>}
+                  {s.rpe != null && s.source ? <span className="ml-1 text-gray-400">{s.source}</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

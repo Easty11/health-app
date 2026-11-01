@@ -1,65 +1,77 @@
-# Close-out — 29 Oct 2026: the open-question sweep (#459) and its three folds (#460), both repos; governance only
+# Close-out — 31 Oct 2026: question layer, Phase C3 (`DECISIONS_LOG` #471); the questions store is gone from the status tooling in both repos
 
 ## Real commits this session
 
-Session opened at health-app master `6d15a4c` (the merge of PR 453). Maxima at open: `DECISIONS_LOG` #457, `OPEN_QUESTIONS` Q245; the brief named #457 as the next free number, so it was stale and was re-read, not trusted. Maxima at close: #461 and Q246 (Q246 came from another session's #458 and #461 from another session's chat-disposition ruling, which landed while this PR was open; this session's entries are #459 and #460). `git log --format="%h %ad %s" --date=short 6d15a4c..origin/master`, my commits only:
+Session opened at health-app master `b7743c3` (the merge of PR 567). Maxima at open: `DECISIONS_LOG` #470, no open `fork` issue (REST read). `git log --first-parent --format="%h %ad %s" --date=short b7743c3..origin/master` returns one line:
 
-health-app:
+```
+4378090 2026-10-31 Merge pull request #569 from Easty11/claude/affectionate-shannon-jgsrtp
+```
 
-- `6d89b07` 2026-10-25 gov(oq-sweep): 19 questions close, 14 re-scoped, Q134 -> Q151/Q135 re-pin (DECISIONS_LOG #459)
-- `383de2c` 2026-10-25 Merge origin/master into sweep branch (master had advanced to `896d61f` and taken #458 meanwhile; the branch's #458 became #459 here)
-- `c18b307` 2026-10-25 gov(oq-sweep): DECISIONS_LOG #459, BRANCHES row, Recent landings pointer
-- `d2a856b` 2026-10-26 Merge pull request #456 from Easty11/claude/youthful-clarke-bpacrn (all three checks green; opened ready-for-review and self-merged; master max re-read at #458 immediately before)
-- `41756a5` 2026-10-28 gov(oq-sweep-folds): #460 Q42 closes as transferred, Q83 folds into Q224 (admission fork carried), Q129 folds into Q173
-- `5c08f1a` 2026-10-28 Merge pull request #457 from Easty11/claude/youthful-clarke-bpacrn (all three checks green; master max re-read at #459 immediately before)
-- the commit of this file, the BRANCHES row and nothing else (`chore: session close-out`), on `claude/youthful-clarke-bpacrn`
+and the commits that merge carries (`git log --format="%h %s" b7743c3..claude/affectionate-shannon-jgsrtp`, before the branch was restarted):
 
-health-connect-app (cloned read-write this session; attached with `add_repo`):
+```
+1cc7fe2 gov: question layer Phase C3 - both question stores retired, status tools read issues or nothing (#471)
+3e8b7d2 chore: retire the questions store from the status tooling in both repos (Phase C3)
+```
 
-- `2961475` 2026-10-25 gov(oq-sweep): Q21 DONE -> #44, Q22 stale state line struck, Q18 re-scoped (health-app DECISIONS_LOG #459)
-- `3c2986b` 2026-10-26 Merge pull request #79 from Easty11/claude/youthful-clarke-bpacrn (the guard was its only check; green)
+This close-out's own commit and merge are not listed: a commit cannot name its own SHA, and the merge is the last act. Read them with `git log --first-parent --grep=session.close-out`.
 
-Not mine, landed in the same span: PR 458 (`c7aa6a0`, `bcbaf24`, the Garmin token-invalidation probe) and PR 459 (`7af715c`, `56c7818`, #461 chat disposition), both other sessions. Commit dates are git's author dates; the two PR merges and the folds landed on 26 and 28 Oct. The harness-assigned branch name `claude/youthful-clarke-bpacrn` was used three times (the sweep, the folds, this close-out), each time restarted from master after its PR merged and the remote branch was gone.
+GitHub side: GH#568 created (`stamp`, two-way): the shared block's Session rituals names `scripts\gen_governance_view.py`, a health-app-only script. No issue closed. `health-connect-app` was not edited.
 
-Deploys (#433): every merge here changed only governance files, so SKIPPED on both Railway services is the expected result. **Not read by Code**: no `railway deployment list` was run this session. The #433 "no record at all means the trigger did not fire" check is therefore owed to whoever next reads it.
+Gates, all met on PR 569 before the merge: backend suite 3977 passed / 3 skipped (a full-depth clone; a shallow one fails collection on `git show 8324a28`, the reason CI uses `fetch-depth: 0`); `scripts/tests` 15 passed; both `--self-check` runs pass; `gen_governance_view.py` exits 0 against both masters (health-app `b7743c3`, health-connect-app `858a990`), six store sections and no questions section; `grep -rn OPEN_QUESTIONS scripts/ backend/tests/` returns only the guard comment; the guard is AST-identical to HCA's copy modulo docstrings and the one repo-local `main()` advisory string (`CLAUDE.md` declares both repo-local). Deploy (#433), matched on `commitHash` `4378090`: backend `SUCCESS`, frontend `SKIPPED`.
 
 ## Pending-queue reconciliation
 
-Inputs: (1) the PENDING block "open-question sweep, ruled 2026-10-26 (Luke, in chat)"; (2) chat's recommendation on three rulings, relayed on 28 Oct and ruled by the operator in session ("ruled — land #460 with both additions"). No other `PENDING` items were carried.
+No `PENDING` item was carried in from a chat close-out: the session's input was the C3 brief, six steps.
 
-- **Sweep decision (brief item 1).** Landed as `DECISIONS_LOG` #459 (`c18b307`, merged `d2a856b`), not #457: #457 was already the recovery-readers decision, and #458 landed while the branch was open. Every `DONE → #457` in the brief is `#459` in the store.
-- **Health-app closures, 19 rows (items 2).** Tier A (Q200, Q82, Q68, Q188, Q190, Q131, Q132), Tier B (Q97, Q98, Q88, Q32, Q90) and the seven superseded (Q10, Q19, Q46, Q99, Q134, Q152, Q186): `6d89b07`, merged `d2a856b`. Each moved below `## CLOSED` in ascending order in the same commit; the old state text is kept verbatim under the new State line.
-- **Q134's consequences.** Q151 now solely owns the `recovery.py` disposition; Q135's gate is re-pinned to the actual remaining readers of `samsung_hrv_readings.hrv_ms` (`routers/health.py`, the chat context's Samsung block, `reads/recovery_night.py`, `reads/snapshot_reads.py`, the unmounted `recovery.py`). `6d89b07`.
-- **Health-connect-app (item 3).** Q21 `DONE → #44`, Q22's stale in-body OPEN line struck, Q18 re-scoped: `2961475`, merged `3c2986b`. The brief's question whether the stale Q22 line inflated the OPEN count: it did not, because the parser reads the heading's inline state first and the body only when the heading has none.
-- **Re-scopes (item 4), 14 health-app rows plus HCA Q18.** Landed in `6d89b07` and `2961475`. Where the heading asked the discharged question it was retitled (Q24, Q55, Q59, Q83, Q102, Q118, Q129), with the original title kept on the row. Q233's "What exists" manifest was rewritten against #449, #450 and #457.
-- **Deviation, Q173.** The brief's "now asks" for Q173 (the "Resting HR" mislabel and the unread `spo2_nights`) had already been discharged by #457, which landed after the review snapshot; Q173 was re-scoped against #457's own "Not fixed, reported" list instead. Recorded in #459 item 5(b).
-- **Q42, Q83, Q129 (the brief's three "consider" folds).** Not made in the sweep (none was ruled), then ruled and landed: `41756a5`, merged `5c08f1a`, recorded as #460. Q42 closes as transferred to health-connect-app Q19 (read OPEN on 28 Oct); Q83 folds into Q224, whose open design points now carry the admission fork, the Q175 gate and the decided-`'unknown'` precondition; Q129 folds into Q173, with notes on Q173 and Q151. The brief's suggested Q129-into-Q243 fold had no target (Q243 closed at #457).
-- **Flags (item 5): no edit ruled, none made.** Q205 (`sports:read` is still absent from `SCOPES` at `backend/connectors/polar.py:39`, read 26 Oct, so #368's revisit trigger may have fired; the 24 Oct re-auth outcome is unrecorded) and Q181 (the free-text `user_knowledge` write and read paths in `routers/chat.py` are live; brief 2 is not cut; the brief's line numbers 1030–1054 and 1537 have drifted, the legacy `{category, content}` write is near line 1088 and the prompt read near 1597 on 26 Oct). Both are carried below.
-- **Bookkeeping check (item 6).** Health-app live questions (OPEN + OWED) 134 → 115 at #459 and 115 → 112 at #460, by the repo's own `gov_dialects` parser run locally (the weekly script reads remote master, not run here). The brief's DONE figures (110 → 129) were one low, because Q243 closed at #457 after its snapshot; the parsed figures are DONE 111 → 130 → 133. HCA 14 → 13 live, DONE 11 → 12.
+| Step | State | Evidence |
+|------|-------|----------|
+| 1. Status tools lose the questions branch; `QUESTIONS_RETIRED`, `has_questions_store` go | DONE | `3e8b7d2` |
+| 2. Guard comment reworded; code identical to HCA's | DONE | `3e8b7d2`; the AST comparison is in the gates above |
+| 3. `gen_governance_view.py` run once against master | DONE | exit 0; output under `build/`, gitignored; not run at close-out |
+| 4. Shared-block stamp filed | DONE | GH#568 |
+| 5. Ruling entry | DONE | `1cc7fe2`, `DECISIONS_LOG` #471 (master max was 470 at the merge) |
+| 6. `BRANCHES.md` row, Recent-landings pointer, land, `/closeout` | DONE | row and pointer in `1cc7fe2`; landed as `4378090`; this close-out |
 
-Nothing decided in this session is uncommitted. Only this close-out is provisional until its own PR merges.
+Where the work departed from the brief, so the next reader does not have to find it:
+
+- **`QUESTIONS_RETIRED` was never extended to HCA.** Step 1 says add it, then delete it if nothing else reads it. Nothing did, so the commit deletes it outright. Consequence: #471's Reverse-by cannot say "re-add the repo to the set" as the brief worded it; it says to revert the `chore` commit.
+- **More was removed than the three named branches.** The question parsers, `_tally_stateful`, the `status_diff.py` renumber handling (reachable only through the questions identity key) and the `retired` markers went with them. The question grammar in `gov_dialects.py` (`QUESTION_HEADING`, `question_states`, `entry_state`, `split_inline_state`) is left in place and now unread; deleting it is a separate small change, not made here.
+- **The grep gate needed five comment edits in `backend/tests/`.** Six files cited `OPEN_QUESTIONS` by name; the guard-test docstring is reworded and five historical citations now read "retired-store question Qn" (comment-only; the Q-number provenance is kept). This is why the backend built.
+- **The negative tests avoid the token.** They assert `"questions" not in text.lower()`, so the same grep that gates the tools does not trip on the tests that guard them.
+- **The status model no longer emits a `questions` key** (schema_version stays 1). Older snapshots in the out-of-tree `_status` directory keep theirs; nothing reads it.
+
+Nothing decided is uncommitted.
 
 ## Cold-resume handoff
 
-**Sprint (ROADMAP NOW).** Not edited this session; `ROADMAP.md` still reads "Last updated: 2026-10-25". The NOW rows are the CBT-I, Garmin/Polar/HC ingest, source-hierarchy, sRPE and appointment-brief lanes; their own "Serves" clauses stand. Roadmap lines this session's closes make stale and which were left for the operator: row 207 ("HR input layer, per second (Q213)") still says it "waits on Polar per-second ingest (Q10, Q198)", and Q10 closed as superseded at #459 (#364's `hr_samples` serves the HC lane from HC's own raw HR, so AccessLink per-second ingest is optional); whether row 207 still waits on Polar per-second ingest is for the operator, not Code, and Q198 is untouched. The history line 80 ("Q200 ... owes its move to CLOSED") is now true and was left as dated history.
+**Next action.** The question layer's three phases are complete, so the next session should leave governance. The clearest owed item that is not an operator's alone is the **source-neutral sRPE post-deploy reads**: compare row counts of `session_rpe_observations` and `garmin_activity_selfevals` for user 1, then read the first 02:00 sweep's inserts under source `garmin` (`BRANCHES.md` row `feat/srpe-source-neutral-store`, ROADMAP NOW row; Code or operator, a prod read per the standing rule that data verification is a Postgres query against Railway).
 
-**State.** `DECISIONS_LOG` max is #461 (mine are #459 and #460); `OPEN_QUESTIONS` max is Q246. Health-app questions above `## CLOSED`: 105 OPEN and 7 OWED (Q78, Q176, Q178, Q181, Q205, Q239, Q242), DONE 133. health-connect-app: 10 OPEN and 3 OWED live, DONE 12. Health-app master is `56c7818` (PR 459's merge, another session's #461) at close.
+**Open `fork` issues.** None (REST read, 31 Oct 2026).
 
-**Single clearest next action.** The operator rules the two flags that gate real work: record the outcome of the 24 Oct Polar re-auth and rule the `sports:read` scope add before the next re-auth (Q205, OWED), and cut the `user_knowledge` retirement brief (brief 2, Q181, OWED, settled GO since 27 Sep). Neither needs Code first.
+**Open `stamp` issues touched or carried.** GH#568 (new, shared-block sentence; settled by the next propagation's byte-identity check) and GH#565 (the `land` alias refuses to run from master or main; carried from the C1 hand-off, still open).
 
-**Things the next reader should know.**
-- **The sweep's counts are the parser's, not the brief's.** Use `scripts/gov_dialects.py` against a store file, or the weekly status run; the brief's 134 → 115 held for health-app, its DONE figures did not.
-- **Q173 now carries Q129's remainder.** Its per-reader ruling covers `context_builder._section_health_connect` (unguarded HC sleep duration and the all-day median), the check-in prefill's `passive_sleep_min`, and `routers/recovery.py` (whose adopt-or-delete stays on Q151). Q224 now carries the admission fork; it fires on a second live sleep writer.
-- **Q42 has no live row here.** If health-connect-app Q19 closes or is dropped, #460's do-not-revisit clause says the transfer has no target.
-- **Cross-references left as history:** Q233's "A ruling touches" line still cites Q129; a few open rows still cite Q42, Q83 and Q129 by number.
-- **Unverified by Code:** the HCA Q18 citations to health-app #405, #406 and #449 (carried from the brief, marked as such on the row; health-app's own copies of those decisions were read); that Railway recorded SKIPPED for both merges (not read).
-- **Environment:** the backend suite cannot run locally here (dependencies not installed); CI is the only run of it. The first `git push --delete` of the sweep's remote branch failed with "failed to push some refs" (cause not diagnosed); by the next check the remote branch was gone, and the second branch's delete found "remote ref does not exist". health-connect-app's remote branch was also gone by this close-out. Local branches of both clones carry no unique commits (`git cherry` empty).
+**Design docs not in a terminal state.** Eight, none committed: `0001` ideation, `0002` discussion, `0003` discussion, `0004` ideation, `0005` ideation, `0006` ideation, `0007` ideation, `0008` discussion. Unchanged this session.
 
-**What was NOT touched (named so absence does not read as finished).**
-- **Every feature lane stood still.** Nothing in `backend/` or `frontend/` changed in this session. The appointment brief's reconcile leg (the unbuilt part of **Walk in**, NEXT), the Q231 RPE-fallback build (OWED, gate not open), the Q239/Q242 Garmin Personal API owed items (M2, PR-B, the user 4 pk check, the payload-shape probe), the Q199 HRmax benchmark test, the Q205 Polar re-auth, the Hevy programme and routines, the companion app's own code, and the `health-connect-app` Q19 12-hour-clock defect all stayed where they were.
-- **Pattern to say out loud.** This session was governance only. The previous close-out (25 Oct) went to a product behaviour (#445), but the sessions before it went to the layer under the product (Q27 taxonomy, the rotation runbook, the Railway incident record), and this one went to question hygiene. A sweep that shrinks the live list from 134 to 112 makes the next governance session look cheaper than the next feature one; it is not. The live list is now 112 rows, 7 of them OWED, and the gating items for Know, Walk in and Loop are the operator's OWED rows, not Code's.
-- **Questions not re-read this session** (so their text may carry stale premises like the seven just closed): every live question outside the 14 re-scoped, Q151, Q135, Q173, Q224 and the closed set. The sweep reviewed all 148, but only the rows named in the brief were edited.
+**Current sprint.** ROADMAP NOW is unchanged by this session. Its open rows, with the v1 test each names (the `Serves` text of the row, read from `ROADMAP.md`):
 
-**v1-triage of the NOW lanes.** The sweep touched no lane, so this is the standing check only. Rows that state their own "Serves" clause (Missed-PM catch-up through Typed constraints, and HC zones) are not repeated here. Rows without one: the exercise-tag seed (#339), CBT-I Q45 nap attribution (#219) and CBT-I manual evaluation trigger (#213), all DONE landings that serve no v1 test on their face and sit in NOW only as landed history, so they are candidates to move out of NOW, not to demote as work; the Appointment brief row, which serves **Walk in** (test 3 MET, #386; reconcile leg unbuilt); and the cross-repo `#NEXT` / number-at-merge extension (FEEDBACK §20), which serves no v1 test and sits in NOW only because #112 pins cross-repo debt there. The struck cross-repo rows serve none and are discharged. No demotion is made here.
+| NOW lane | v1 test it names |
+|----------|------------------|
+| Source hierarchy (#365) | See, Know |
+| Polar sport-id relabel, H10-vs-Hevy facts | Know, See |
+| HC sync reliability | See, Loop |
+| Garmin self-evaluation read, first live run | Know, Loop |
+| Source-neutral per-session sRPE store (#424) | Know, Loop |
+| Injury clearance (operator) | Know, Walk in |
+| Aerobic ingest automated (operator check) | See, Loop |
+| Session fidelity (Brief A + C.1), G6 owed | Loop, Know |
+| HC zones (Q159 stage 2), low priority | See, Know |
+| RPE fallback for unrecorded sessions (Q231) | none named in the row's opening text; not asserted here |
+| Cross-repo: extend the `#NEXT` rule beyond DECISIONS entries | none; a governance debt pinned in NOW by #112 |
 
-Q223: prod measurement 2026-10-29 appended; OPEN, trigger unchanged, nothing built.
+The v1 section tags See, Know and Walk in as MET; **Loop carries no MET tag**, so it is the open v1 test, and five of the nine lanes that name a test list it. Demotion candidate surfaced, not decided: the cross-repo `#NEXT` row serves no v1 test and sits in NOW only because #112 names NOW as the home for cross-repo debt.
+
+**What was NOT touched.** All product work. Nothing under `frontend/`, no migration, no engine, ingestion, CBT-I or brief code; no production path changed (the backend rebuilt only because `backend/tests/` comments changed). Every NOW lane above stood still, and so did the questions that gate them (Q231's gate, Q203, Q205, Q208, Q214, Q199 and the operator-owed checks listed in the NOW rows; the questions themselves are GitHub issues now, reached through the Q-to-destination map recorded with #468). Five consecutive sessions (question layer Phases A, B, C1, C2 and C3) went to the instrument that holds and routes the work, not to the thing it routes. That is finished now, so the risk is the opposite one: a session opening on this hand-off reads a governance queue because governance is what is legible. The product queue is the NOW table above.
+
+**Left unmade, deliberately.** The unread question grammar in `gov_dialects.py` (see the departures list). GH#568's move of one sentence below END SHARED LOOP RULES waits for the next shared-block edit, per its stamp.

@@ -4,6 +4,8 @@ import EvaluationOffer from '../components/cbti/EvaluationOffer'
 import { centreBasisNote, convergenceBand, formatMinutes } from '../components/cbti/centreCopy'
 import { useNavigate, Link } from 'react-router-dom'
 import api from '../api'
+import { EarlierSessions, SessionRatingList } from '../components/srpe/SessionRatings'
+import { useSessionRatings } from '../components/srpe/useSessionRatings'
 
 function TapSelect({ value, onChange, count = 5, labels }) {
   return (
@@ -23,25 +25,6 @@ function TapSelect({ value, onChange, count = 5, labels }) {
           {n}
         </button>
       ))}
-    </div>
-  )
-}
-
-function SliderField({ label, value, onChange, min = 0, max = 10 }) {
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs text-gray-500">
-        <span>{label}</span>
-        <span className="font-semibold text-gray-700">{value}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        className="w-full accent-indigo-600"
-      />
     </div>
   )
 }
@@ -94,11 +77,11 @@ export default function NightlyCloseOut() {
   const [todayRating, setTodayRating] = useState(3)
   const [trainedToday, setTrainedToday] = useState(false)
   const [sessionQuality, setSessionQuality] = useState(3)
-  const [sessionRpe, setSessionRpe] = useState(7)
-  // sRPE is asked only for the sessions no app rated per session (`/today.srpe_needed`). Until /today
-  // answers, or when it does not say (older backend), ask: failing open costs a slider, not a silent gap.
+  // Effort is asked per SESSION (see SessionRatings): one CR-10 for each counted session today, the apps' own
+  // ratings shown read-only with an override. `srpe_needed` (from /today) only words the empty state. The whole-day
+  // RPE question is gone, and nothing is sent for it.
   const [srpeNeeded, setSrpeNeeded] = useState(true)
-  const [storedRpe, setStoredRpe] = useState(null)   // the whole-day value already on the record, kept when the slider is hidden
+  const sr = useSessionRatings()
 
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -119,10 +102,6 @@ export default function NightlyCloseOut() {
           setSessionQuality(data.session_quality)
         }
         if (data?.today_rating) setTodayRating(data.today_rating)
-        if (data?.session_rpe != null) {
-          setSessionRpe(data.session_rpe)
-          setStoredRpe(data.session_rpe)
-        }
         setSrpeNeeded(data?.srpe_needed !== false)
         if (data?.naps_min != null) setNapsMin(String(data.naps_min))
         setPmNotes(data?.pm_notes ?? '')
@@ -136,12 +115,12 @@ export default function NightlyCloseOut() {
     setSaving(true)
     setError('')
     try {
+      // The ratings go first and on their own route; a failure keeps the card open with the picks intact.
+      if (!(await sr.saveToday())) return
       await api.post('/checkin-v2/pm', {
         today_rating: todayRating,
         trained_today: trainedToday,
         session_quality: trainedToday ? sessionQuality : null,
-        // Hidden slider: send what the record already holds, never the slider's untouched default.
-        session_rpe: trainedToday ? (srpeNeeded ? sessionRpe : storedRpe) : null,
         pm_notes: pmNotes.trim() || null,
         // Load-bearing (DECISIONS #C): while a block is open a blank field submits 0
         // ("asked, no nap"), NEVER null — null means "not asked" and disables the
@@ -176,17 +155,19 @@ export default function NightlyCloseOut() {
                 <>
                   <span className="text-gray-500">Session quality</span>
                   <span className="text-gray-800 font-medium text-right tabular-nums">{sessionQuality}/5</span>
-                  {srpeNeeded && (
-                    <>
-                      <span className="text-gray-500">Session RPE</span>
-                      <span className="text-gray-800 font-medium text-right tabular-nums">{sessionRpe}</span>
-                    </>
-                  )}
                 </>
               ) : (
                 <>
                   <span className="text-gray-500">Trained today</span>
                   <span className="text-gray-800 font-medium text-right">No</span>
+                </>
+              )}
+              {(sr.sessions?.length ?? 0) > 0 && (
+                <>
+                  <span className="text-gray-500">Sessions rated</span>
+                  <span className="text-gray-800 font-medium text-right tabular-nums">
+                    {sr.sessions.filter((x) => x.rpe != null).length}/{sr.sessions.length}
+                  </span>
                 </>
               )}
               {cbti?.block_open && napsMin !== '' && (
@@ -262,21 +243,14 @@ export default function NightlyCloseOut() {
                   <TapSelect value={sessionQuality} onChange={setSessionQuality} labels={SESSION_LABELS} />
                   <p className="text-xs text-gray-400 text-center">{SESSION_LABELS[sessionQuality - 1]}</p>
                 </div>
-                {srpeNeeded ? (
-                  <div className="space-y-1">
-                    <SliderField
-                      label={`Session RPE (${sessionRpe})`}
-                      value={sessionRpe}
-                      onChange={setSessionRpe}
-                    />
-                    <p className="text-[10px] text-gray-400">Rate the sessions your apps didn't.</p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400">Your apps rated every session today, so there is no RPE to enter.</p>
-                )}
               </div>
             )}
           </div>
+
+          {/* Effort, per session: independent of the toggle above, because the sessions come from the data, not
+              from whether "Trained today?" was ticked. */}
+          <SessionRatingList sr={sr} dayWord="today" srpeNeeded={srpeNeeded} />
+          <EarlierSessions sr={sr} />
 
           {/* Nap capture — only while a titration block is open. A blank submits 0
               ("no nap today"), never null; a nap over 30 min excludes the night this

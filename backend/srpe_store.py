@@ -16,6 +16,9 @@ The contract an adapter signs:
     cannot be placed on a session by the read door and so is never used as a value.
   * It may record an UNRATED sighting (`rpe_raw=None`) so an unrated activity is not re-fetched every day.
   * `feel` is a source-specific passthrough and `provenance` is audit detail; neither carries a value.
+  * `in_app` (the app's own capture, `srpe_in_app`) is the one source that does NOT name its own window: it passes
+    the server-side `bout` it rated and the writer takes the window from that bout. A client can say which
+    session it rated and how hard, never when.
 
 Rows are INSERT-ONLY. A row is what the source said at `captured_at`; a changed or later answer is a NEW
 row, strictly later than that activity's previous one, so "latest" is unambiguous and the unique key
@@ -61,12 +64,14 @@ class Scale:
 GARMIN_0_100 = Scale("garmin_0_100", lo=0.0, hi=100.0, divisor=10.0)   # `summaryDTO.directWorkoutRpe` (probe, 4 Oct 2026)
 CR10 = Scale("cr10", lo=0.0, hi=10.0, divisor=1.0)
 
+IN_APP = "in_app"
+
 # source -> the scales it has declared. Adding an adapter means adding its entry here, after a read-only
-# probe has shown the field and its scale (Q209 pattern, FEEDBACK section 17). `in_app` is named in the
-# hierarchy (`srpe_hierarchy.py`) but deliberately absent here: it has no writer yet, so a write naming it
-# is refused until one signs the contract.
+# probe has shown the field and its scale (Q209 pattern, FEEDBACK section 17). `in_app` declares CR-10 at the
+# grain of the close-out card's input, which is the whole 0-10 range the card's slider offers.
 SOURCE_SCALES: dict[str, dict[str, Scale]] = {
     "garmin": {GARMIN_0_100.name: GARMIN_0_100},
+    IN_APP: {CR10.name: CR10},
 }
 
 
@@ -74,6 +79,25 @@ def _utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+class UnplaceableBout(SRPEContractError):
+    """The session has no usable window, so no rating could ever be placed on it by overlap."""
+
+
+def bout_window(bout: Any) -> tuple[datetime, datetime]:
+    """`(start, stop)` in UTC of a counted session: its recorded stop, else its start plus its minutes.
+    Refuses a session with no start or no way to a stop: the read door places a rating by overlap with the
+    session's window (`reads.srpe_reads._place`), so a rating on such a session would be stored and never used."""
+    start = _utc(bout.start)
+    stop = _utc(bout.stop)
+    if start is None:
+        raise UnplaceableBout(f"session {bout.key!r} has no start time")
+    if stop is None and bout.minutes:
+        stop = start + timedelta(minutes=float(bout.minutes))
+    if stop is None or stop <= start:
+        raise UnplaceableBout(f"session {bout.key!r} has no usable duration")
+    return start, stop
 
 
 def _convert(source: str, raw_scale: str, rpe_raw: Any) -> float | None:
@@ -111,19 +135,32 @@ def record_observation(
     *,
     source: str,
     source_activity_ref: str | int,
-    start: datetime,
-    stop: datetime | None,
+    start: datetime | None = None,
+    stop: datetime | None = None,
     rpe_raw: float | None,
     raw_scale: str,
     feel: int | None = None,
     provenance: dict[str, Any] | None = None,
     now: datetime | None = None,
+    bout: Any = None,
 ) -> models.SessionRpeObservation:
     """THE write: one INSERT, committed. Refuses an undeclared source or scale and an out-of-range value.
 
     `now` is the observation time (default: the clock); the row's `captured_at` is that, nudged to be
-    strictly later than the activity's previous row when the clock has not moved past it. Returns the row."""
+    strictly later than the activity's previous row when the clock has not moved past it. Returns the row.
+
+    `bout` is the server-side counted session (`reads.srpe_reads.Bout`) and is for `in_app` ONLY: an `in_app`
+    write requires it, takes its window from it, and refuses a caller-supplied `start`/`stop`; every other
+    source refuses it and names its own window."""
     ref = str(source_activity_ref)
+    if source == IN_APP:
+        if bout is None:
+            raise SRPEContractError("an in_app observation is written against a server-side bout, never a client window")
+        if start is not None or stop is not None:
+            raise SRPEContractError("an in_app observation takes its window from the bout; start/stop must not be given")
+        start, stop = bout_window(bout)
+    elif bout is not None:
+        raise SRPEContractError(f"source {source!r} names its own window; only in_app takes a bout")
     rpe_cr10 = _convert(source, raw_scale, rpe_raw)
     start_utc, stop_utc = _utc(start), _utc(stop)
     if start_utc is None:

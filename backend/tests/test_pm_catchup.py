@@ -97,7 +97,7 @@ def test_for_date_equal_to_today_is_identical_to_absent(db_session, monkeypatch)
             "session_rpe": 6.5, "naps_min": 0, "pm_notes": "x"}
     _client(db_session, ua).post("/checkin-v2/pm", json=body)
     _client(db_session, ub).post("/checkin-v2/pm", json={**body, "for_date": today.isoformat()})
-    cols = ("date", "today_rating", "session_quality", "session_rpe", "naps_min", "pm_notes")
+    cols = ("date", "today_rating", "session_quality", "naps_min", "pm_notes")
     a, b = _get(db_session, ua.id, today), _get(db_session, ub.id, today)
     assert [getattr(a, c) for c in cols] == [getattr(b, c) for c in cols]
     assert a.pm_timestamp is not None and b.pm_timestamp is not None
@@ -129,7 +129,8 @@ def test_yesterday_writes_yesterdays_row_and_leaves_today_untouched(db_session, 
     assert r.status_code == 200
     assert r.json()["date"] == yday.isoformat()
     y, t = _get(db_session, u.id, yday), _get(db_session, u.id, today)
-    assert (y.today_rating, y.session_quality, y.session_rpe, y.naps_min, y.pm_notes) == (2, 3, 7.0, 45, "missed it")
+    assert (y.today_rating, y.session_quality, y.naps_min, y.pm_notes) == (2, 3, 45, "missed it")
+    assert y.session_rpe is None                           # a client still sending the retired field is ignored
     assert y.pm_timestamp is not None
     # today's row: PM entirely untouched, AM entirely untouched
     assert t.pm_timestamp is None and t.today_rating is None and t.naps_min is None and t.pm_notes is None
@@ -326,7 +327,7 @@ def test_missed_pm_cbti_block_open_is_read_for_YESTERDAYS_date(db_session, monke
 
     What cannot be pinned here is a case where the two days DISAGREE: `block_open` is
     `closed_on IS NULL` and ignores `for_date` (the date only picks the prescription), so
-    today and yesterday always return the same flag. That gap is OPEN_QUESTIONS Q227; the
+    today and yesterday always return the same flag. That gap is retired-store question Q227 (DECISIONS_LOG #468); the
     final assertion records the current equivalence so the day it stops holding is visible."""
     u = _user(db_session, "pf-blk@x.io")
     today = c2._today_aest()

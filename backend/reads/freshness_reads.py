@@ -371,7 +371,7 @@ def freshness_snapshot_lines(f: dict[str, Any]) -> list[str]:
     for a in f.get("garmin_alerts", []):
         lines.append(f"  GARMIN {a['severity'].upper()}: {a['message']}")
     for p in f.get("hrmax_prompts", []):
-        lines.append(f"  HRMAX, restate? #{p['id']} {p['date']} {p['sport']}: a sample of {p['hr_max']} bpm "
+        lines.append(f"  HRMAX, restate? row {p['id']} {p['date']} {p['sport']}: a sample of {p['hr_max']} bpm "
                      f"against {p['hrmax_in_force']} in force (the operator's call; nothing is restated)")
     stale = [s for s in f["streams"] if s["status"] == "stale"]
     for s in stale:

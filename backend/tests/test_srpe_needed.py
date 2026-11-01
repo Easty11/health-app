@@ -1,7 +1,7 @@
 """`/checkin-v2/today.srpe_needed` and `/prefill.missed_pm.srpe_needed` -- whether the close-out should ask for sRPE.
 
-Needed = at least one counted session that day has no PER-SESSION rating from any source (the whole-day fill is
-not one). Fails open to asking (G1): an unsynced source, a day with nothing counted, or a read that errors all
+Needed = at least one counted session that day has no rating from any source (a whole-day value is not one: the
+day fill is retired and `daily_records.session_rpe` rates nothing). Fails open to asking (G1): an unsynced source, a day with nothing counted, or a read that errors all
 answer "ask"; a later per-session value overrides per session and nothing re-prompts.
 """
 from datetime import datetime, timedelta, timezone
@@ -87,7 +87,8 @@ def test_one_rated_and_one_unrated_session_still_needs_the_question(db_session):
 
 
 def test_a_later_per_session_value_closes_the_question_without_a_re_prompt(db_session):
-    """The close-out was answered tonight (day fill); the 02:00 sweep then brings Garmin's value."""
+    """The session is unrated at close-out (a stale day value on the record changes nothing); the 02:00 sweep
+    then brings Garmin's value."""
     u = _user(db_session)
     today = c2._today_aest()
     start = _session(db_session, u.id, today)
@@ -136,3 +137,15 @@ def test_the_answer_for_today_does_not_leak_into_yesterday(db_session):
     db_session.add(models.DailyRecord(user_id=u.id, date=today - timedelta(days=2)))
     db_session.commit()
     assert get_prefill(current_user=u, db=db_session).missed_pm.srpe_needed is True      # yesterday has no session at all
+
+
+# -- the retired whole-day field is written by nothing ----------------------------------------------------------
+
+def test_a_close_out_that_still_sends_the_old_session_rpe_does_not_store_it(db_session):
+    """A cached client posting the retired field has it ignored: the column stays null (written by nothing)."""
+    u = _user(db_session)
+    r = _client(db_session, u).post("/checkin-v2/pm", json={
+        "today_rating": 3, "trained_today": True, "session_quality": 3, "session_rpe": 8.0})
+    assert r.status_code == 200 and "session_rpe" not in r.json()
+    assert db_session.query(models.DailyRecord).filter_by(user_id=u.id).one().session_rpe is None
+    assert "session_rpe" not in _client(db_session, u).get("/checkin-v2/today").json()

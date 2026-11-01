@@ -15221,3 +15221,232 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **Not verified.** A Health Connect-sourced flagged night on prod (generic sentence in tests only); the diary values as edited after the AM freeze (#465).
 
 **Do not revisit unless.** The 60-minute tolerance labels a night wrongly in a way that matters (a new decision sets the number); a device signal is wanted by the CBT-I side (a new decision that crosses I1); or the ring returns and a second sleep window becomes available to compare.
+
+### #467. The question layer moves to GitHub Issues and `docs/design`; door class replaces un-ratified-decision routing; a ruling tier is added; nothing is filed bare; `OPEN_QUESTIONS.md` is frozen
+
+**Decision.** Chat-ratified 31 Oct 2026 (operator: "I like it", on the proposal this entry implements); no new judgment is embedded.
+1. **Where questions live.** Small and medium items are GitHub Issues, typed by label: `fork` (operator ruling, the only label surfaced at session open), `stamp`, `verify`, `watch`, `design`, with `pinned`, `stale` and `abandoned` as lifecycle labels. Architecture-scale items are RFD-style design docs under `docs/design/` (`**State:**` ideation / discussion / committed / abandoned; a doc cannot reach `committed` while any Unresolved-questions row is not `resolved` or `struck (out of scope)`).
+2. **Door class decides the hold.** A one-way door (a schema migration; a default that shapes stored rows; a cross-module contract change; anything the session was told to hold) holds for explicit operator instruction, whether raised or resolved. Every other call is a two-way door: Code resolves it in-PR, records a ruling entry, and self-merges on green; the merge is the ratification and chat objects at the next session open, by issue.
+3. **A ruling tier.** Under the same `### #N` heading: `**Tier:** ruling`, then Decision and Reverse-by, two lines. The Decision tier is unchanged and is for one-way doors and anything architectural. Number-at-merge and the guard apply to both.
+4. **The creation-side bar.** No question is filed bare: Proposed answer, Alternative it beats, Evidence that would settle it, Door. A check runnable this turn is run, and no issue exists.
+5. **Bounded life.** The stale action (`.github/workflows/stale.yml`, `actions/stale@v11`, issues only) labels an issue `stale` at 53 days untouched and closes it as `abandoned` 7 days later; `pinned` and `design` are exempt. Abandoned is a normal ending.
+6. **`OPEN_QUESTIONS.md` is frozen** by a banner (no other line touched). Phase B migrates its live entries and deletes the file; Phase C propagates the shared-rule edits to `health-connect-app`. Both are separate briefs.
+7. **Supersessions, recorded here and not inline.** (a) The sentence "Raising a new question needs no hold; resolving one does." of the merge disposition (the `#171`-era text), and with it the whole "Un-ratified decisions route to chat" bullet, are replaced by the door-class bullet. (b) The clause of `#166` "Non-destructive and loud → ship with an `OPEN_QUESTIONS` watch-point" is replaced: ship with a test or alert that fires when the assumption fails, and file a `watch` issue only when that cannot be built in-turn. (c) `#324`'s `OPEN_QUESTIONS.md` layout rule is retired by the freeze. (d) The Session-open ritual reports the decisions max and the open `fork` issues; the questions-maximum regex leaves the shared rule (`health-connect-app` keeps its own until Phase C).
+
+**Rationale.** The flat store had 110 entries above `## CLOSED`, about 2,600 lines live, averaging more than 23 lines each, five of them OWED (settled, unclosed). Several entries are bugs or chores with one obvious disposition, and closure was priced as architecture: a five-field entry, a move below `## CLOSED` and a `gov(...)` commit per DONE. There was no terminal state for "not decided". The merge rule made raising a question free and resolving it expensive, so the file only grew. Prior art converges on the fix (Nygard's ADRs, Oxide's RFD states, Rust RFC and Kubernetes KEP unresolved-questions bounded by the parent, two-way doors): decide warm, record light, bound every question's life, let things die openly.
+
+**Status.** Landed 31 Oct 2026 via the PR carrying this entry (its merge SHA is not recorded, because a PR cannot name its own merge; read it with `git log --first-parent --grep=question-layer`). Number resolved at master max #466, re-read immediately before the merge. Nothing under `backend/`, `frontend/` or `backend/migrations/` changed, so both Railway services are expected to record SKIPPED for the merge commit (#433). Eight labels created GitHub-side through `gh api` (`gh label list` itself is refused in a cloud session, where GraphQL is blocked); the nine GitHub defaults left in place.
+
+**How you know.** Counts read live at brief time (31 Oct 2026): decisions max 466 (the brief said 461, moved by time); questions max 248 (brief: 246); `## CLOSED` present at line 2613 with 110 headings above it, 105 State lines OPEN and 5 OWED (brief: 112 = 105 + 7, plus 19 empty; no empty State line sits above `## CLOSED` now). `gh api repos/Easty11/health-app --jq .has_issues` returned `true`; zero non-PR issues; only the nine GitHub default labels existed before step 1 and 17 exist after it; `.github/workflows/` held exactly `governance-guard.yml` and `tests.yml`. `scripts/check_governance_placeholders.py` checks only a heading-anchored number placeholder in `DECISIONS_LOG.md` and a question-number placeholder in `OPEN_QUESTIONS.md`, so the `>` banner cannot trip it; `scripts/gen_governance_view.py` parses question headings with `^#{2,3}\s+Q(\d+)`, so a banner above the first heading does not change its parse. `actions/stale` current major read on the GitHub Marketplace page and its releases page: v11.0.0 (28 Jul), no input renames listed. The prior art above is the chat proposal's, named and not re-read by Code.
+
+**Not verified.** That the stale action's first scheduled run closes nothing it should not (no issues exist yet); the first `stale`/`abandoned` transition on a real issue.
+
+**Do not revisit unless.** The open `fork` count exceeds about 15 for two consecutive session opens (the tracker has become the old file), or a two-way-door ruling has to be reversed at a cost that shows the door class was misjudged, in which case tighten the one-way definition, not the rule.
+
+### #468. Question layer Phase B: the live questions are migrated to GitHub issues and `docs/design` docs, and `OPEN_QUESTIONS.md` is deleted
+
+**Decision.** Chat-ratified 31 Oct 2026: the operator reviewed the Phase B triage table and ratified every row unchanged, including the six fork leans, so implementing it embeds no new judgment. Every live `OPEN_QUESTIONS.md` entry (110 above `## CLOSED` at master `d340104`) ends in exactly one place, and the file is deleted. The map below resolves every historical `Qn` citation in the append-only stores.
+1. **Destinations (110).** Resolved in code in Branch 1: 6 (Q28 Q52 Q136 Q140 Q147 Q171). Resolved in tree by this branch: 3 (Q31 closed because its premise is gone; Q138 as a `/closeout` step 4 sweep; Q240 as a rotation-runbook section). A decision entry: 1 (Q233, #469). Folded into another issue: 1 (Q29 into Q135). Stamp issues: 43. Build issues: 12. Verify issues: 6. Design docs: 20 questions in 8 docs, each with one `design` pointer issue. Abandoned: 18, each created and closed `not_planned` so the number is citable.
+2. **Issues created: 87** (43 + 12 + 6 + 8 + 18), GH#476 to GH#562, 18 of them closed with label `abandoned`. Each body carries the byte-faithful original entry under a `<details>` block, which is no longer maintained.
+3. **The one-way-door releases are not part of this phase.** Q58, Q66, Q118 and Q170 are `build` issues (ruling ratified 31 Oct 2026; the ruling entry lands with each one's migration PR). Q96, Q103, Q174, Q178, Q214 and Q241 are `stamp` issues marked one-way, so they hold for explicit operator instruction. Nothing was built for any of them.
+4. **The `build` label** (colour `0052CC`) was created for the entries that are ruled and awaiting a trigger. `CLAUDE.md` § Filing a question now defines it, and adds the citation form: a bare `#N` in every store is a `DECISIONS_LOG` number, and a GitHub issue or PR is written `GH#N`.
+5. **Rules and tooling.** `CLAUDE.md`: the `OPEN_QUESTIONS.md` row and the frozen-file convention are removed, the Holds bullet is folded into the door-class bullet, the Open and `;cc` lines use issues (REST form for a cloud session), and the batched-governance file list loses the deleted file (a removal outside the declared regions, declared here). `.espanso/cc.yml` and `/closeout` steps 1 and 5 follow. The guard `scripts/check_governance_placeholders.py` loses its `OPEN_QUESTIONS.md` arm (it exits 2 on a missing store; the `#NEXT` arm on `DECISIONS_LOG.md` and the 0/1/2 contract are untouched). `gen_governance_view.py`, `gen_status_model.py` and `status_diff.py` skip health-app's questions store (`gov_dialects.QUESTIONS_RETIRED`) and say so; they still read health-connect-app's, whose file stands until its own Phase B.
+6. **Closed entries are not migrated.** The 137 entries below `## CLOSED` (all DONE, each already carrying its closing decision elsewhere) get no issue or doc. A citation of one resolves through git: `git show d340104:OPEN_QUESTIONS.md` is the last commit that carries the file whole. Code comments and docs that cite `OPEN_QUESTIONS Qn` stay as written, for the same reason.
+7. **Carried to Phase C.** health-connect-app's copy of the guard keeps its question arm until its own Phase B, so the two copies differ until then (the Q87 byte-identity declaration rides Phase C). `.github/workflows/governance-guard.yml` does not name the deleted file and needs no edit.
+
+| Question | Destination |
+|---|---|
+| Q22 | `docs/design/0001-canonical-exercise-layer.md` (pointer GH#537) |
+| Q24 | `docs/design/0002-plan-log-reconciliation.md` (pointer GH#538) |
+| Q28 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q29 | GH#523 (folded into Q135) |
+| Q31 | resolved: premise gone (no "Known open issues" heading on master `d340104`) |
+| Q35 | GH#476 |
+| Q48 | GH#531 |
+| Q52 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q55 | GH#532 |
+| Q58 | GH#519 |
+| Q59 | GH#477 |
+| Q66 | GH#520 |
+| Q73 | GH#478 |
+| Q74 | GH#479 |
+| Q76 | GH#480 |
+| Q78 | GH#521 |
+| Q80 | GH#481 |
+| Q84 | GH#482 |
+| Q86 | GH#545 (closed, abandoned) |
+| Q87 | GH#483 |
+| Q89 | GH#546 (closed, abandoned) |
+| Q92 | GH#484 |
+| Q95 | GH#547 (closed, abandoned) |
+| Q96 | GH#485 |
+| Q100 | GH#533 |
+| Q102 | `docs/design/0003-constraints-engine-tier.md` (pointer GH#539) |
+| Q103 | GH#486 |
+| Q104 | GH#487 |
+| Q105 | GH#488 |
+| Q106 | GH#489 |
+| Q109 | GH#490 |
+| Q111 | GH#491 |
+| Q114 | GH#492 |
+| Q115 | `docs/design/0004-load-model-routing-and-gaps.md` (pointer GH#540) |
+| Q117 | GH#548 (closed, abandoned) |
+| Q118 | GH#522 |
+| Q119 | GH#493 |
+| Q120 | GH#549 (closed, abandoned) |
+| Q121 | `docs/design/0004-load-model-routing-and-gaps.md` (pointer GH#540) |
+| Q124 | `docs/design/0004-load-model-routing-and-gaps.md` (pointer GH#540) |
+| Q126 | GH#494 |
+| Q128 | GH#550 (closed, abandoned) |
+| Q135 | GH#523 |
+| Q136 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q138 | resolved `dcc9c79` (Branch 2, commit 1) |
+| Q139 | GH#524 |
+| Q140 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q141 | GH#495 |
+| Q143 | GH#551 (closed, abandoned) |
+| Q145 | GH#496 |
+| Q147 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q148 | GH#552 (closed, abandoned) |
+| Q150 | `docs/design/0008-spo2-detector-and-guardrail.md` (pointer GH#544) |
+| Q151 | GH#497 |
+| Q153 | GH#498 |
+| Q156 | GH#525 |
+| Q157 | GH#553 (closed, abandoned) |
+| Q158 | GH#554 (closed, abandoned) |
+| Q163 | `docs/design/0007-in-app-chat-architecture.md` (pointer GH#543) |
+| Q164 | GH#555 (closed, abandoned) |
+| Q166 | GH#556 (closed, abandoned) |
+| Q167 | GH#557 (closed, abandoned) |
+| Q168 | GH#499 |
+| Q170 | GH#526 |
+| Q171 | resolved `aa636d2` (Branch 1, GH#474) |
+| Q173 | GH#500 |
+| Q174 | GH#501 |
+| Q175 | `docs/design/0006-sleep-writers-and-admission.md` (pointer GH#542) |
+| Q176 | GH#527 |
+| Q177 | GH#502 |
+| Q178 | GH#503 |
+| Q180 | `docs/design/0007-in-app-chat-architecture.md` (pointer GH#543) |
+| Q181 | GH#528 |
+| Q182 | `docs/design/0003-constraints-engine-tier.md` (pointer GH#539) |
+| Q183 | `docs/design/0003-constraints-engine-tier.md` (pointer GH#539) |
+| Q184 | `docs/design/0007-in-app-chat-architecture.md` (pointer GH#543) |
+| Q189 | GH#504 |
+| Q191 | GH#529 |
+| Q193 | GH#558 (closed, abandoned) |
+| Q195 | GH#505 |
+| Q197 | `docs/design/0002-plan-log-reconciliation.md` (pointer GH#538) |
+| Q198 | `docs/design/0005-hr-input-layer.md` (pointer GH#541) |
+| Q199 | GH#534 |
+| Q203 | GH#506 |
+| Q205 | GH#535 |
+| Q208 | GH#507 |
+| Q213 | `docs/design/0005-hr-input-layer.md` (pointer GH#541) |
+| Q214 | GH#508 |
+| Q216 | `docs/design/0005-hr-input-layer.md` (pointer GH#541) |
+| Q217 | GH#509 |
+| Q218 | GH#510 |
+| Q219 | GH#559 (closed, abandoned) |
+| Q220 | GH#511 |
+| Q221 | GH#560 (closed, abandoned) |
+| Q222 | GH#561 (closed, abandoned) |
+| Q223 | GH#512 |
+| Q224 | `docs/design/0006-sleep-writers-and-admission.md` (pointer GH#542) |
+| Q225 | `docs/design/0006-sleep-writers-and-admission.md` (pointer GH#542) |
+| Q226 | GH#513 |
+| Q227 | GH#514 |
+| Q228 | GH#515 |
+| Q231 | GH#530 |
+| Q233 | #469 |
+| Q234 | GH#516 |
+| Q235 | GH#517 |
+| Q240 | resolved `dcc9c79` (Branch 2, commit 1) |
+| Q241 | GH#518 |
+| Q244 | GH#536 |
+| Q245 | GH#562 (closed, abandoned) |
+| Q246 | `docs/design/0007-in-app-chat-architecture.md` (pointer GH#543) |
+
+**Rationale.** See #467: the flat store held decisions and chores priced as architecture, and the tracker plus design docs are the replacement. Phase B is the migration that retires the file.
+
+**Status.** Landed 31 Oct 2026. Branch 1 is `aa636d2` (GH#474). Branch 2's first commit is `dcc9c79`; its second carries this entry, and its merge SHA is not recorded, because a PR cannot name its own merge (read it with `git log --first-parent --grep=question-layer`). Number resolved at master max #467, re-read immediately before the merge.
+
+**How you know.** The coverage assertion of the migration script: the 110 live headings above `## CLOSED` (read from the file at `d340104`) equal the 110 questions the ratified triage table assigns, and no question has two destinations. The script then asserted the planned counts (43, 12, 6, 8, 18 = 87) and that every issue's first fenced block equals its source entry byte for byte. A REST read after the run found 87 non-PR issues, GH#476 to GH#562 contiguous, 69 open and 18 closed `not_planned` with label `abandoned`, and no `fork` issue. The 20 design-doc questions were each checked byte-identical in their doc appendix.
+
+**Not verified.** That the stale action's first scheduled run treats these issues correctly (`pinned` and `design` are exempt; the rest age from today); and the triage's "Door" column was not given for `build`, `verify` and `design` rows, so those issues say "not classified" rather than carry a guess.
+
+**Do not revisit unless.** A historical `Qn` citation is found that the table does not resolve (a closed entry resolves through git at `d340104`, item 6).
+
+### #469. Ingestion routes stay direct per provider; an aggregator is a B2B channel beside the household lanes, not instead of them (Q233)
+
+**Decision.** Ingestion routes per provider stay direct: Garmin on the official Personal API (#449) with the DI lane for epoch SpO2 only (#450); Polar on AccessLink v4 (#17). An aggregator (Open Wearables or similar) is adopted only when a B2B user requires a self-fronting channel, and then beside, not instead of, the household lanes. This entry supersedes the do-not-revisit clauses of #258 and #263 only where they say an aggregator is the durable channel for the household lanes.
+
+**Rationale.** #258 and #263 named the aggregator as the B2B channel, not the household one; nothing household-side is blocked.
+
+**Status.** Ruled 31 Oct 2026; nothing built.
+
+**How you know.** Operator ratification 2026-10-31 of the triage lean for Q233.
+
+**Do not revisit unless.** A B2B user exists, or a direct lane is lost (ToS action, API retirement).
+
+### #470. Question layer Phase C1: stale exempts `build`; eight stamps pinned; Doors on the builds; parity artefacts declared; the Open-ritual command made repo-generic
+
+**Tier:** ruling
+
+**Decision.** Phase C1 of the question-layer brief, ruled in-PR as two-way doors. (a) `stale.yml` exempts `pinned,design,build`, which supersedes the exempt list in #467 item 5: a `build` issue waits on a trigger, not on attention. (b) `pinned` is added to the eight issues migrated from Q195, Q234, Q96, Q103, Q174, Q178, Q214 and Q241 (two hard dates and six one-way stamps held for operator release), looked up by title prefix. (c) The twelve `build` issues carry a Door: one-way for Q58, Q66, Q118, Q135, Q170, Q181 and Q231, two-way for Q78, Q139, Q156, Q176 and Q191. (d) `CLAUDE.md` gains a standing-rules bullet declaring the parity artefacts beyond the shared block (the guard workflow byte-identical from `name:` down, the guard script code-identical), the Issues row of the stores table carries the `GH#N` citation rule, and the Open-ritual REST command takes `{owner}/{repo}`, which `gh api` substitutes per repo (confirmed in this clone). GH#565 holds the `land`-alias guard stamp.
+
+**Reverse-by.** Edit `.github/workflows/stale.yml` to drop `build` from `exempt-issue-labels`; the `CLAUDE.md` edits revert by a new entry that supersedes this one.
+
+### #471. Question layer Phase C3: both repos' question stores retired; the status tools read issues or nothing; the guard comment corrected
+
+**Tier:** ruling
+
+**Decision.** Phase C3 of the question-layer brief, ruled in-PR as a two-way door. With `OPEN_QUESTIONS.md` deleted in health-app (#468) and in health-connect-app (its `DECISIONS_LOG` #54, `858a990`), `gen_status_model.py`, `status_diff.py` and `gen_governance_view.py` no longer have a questions-store branch: the model carries no `questions` key (schema_version stays 1; older `_status` snapshots keep theirs and nothing reads it), the diff covers decisions and branches only, and the digest has no questions section for either repo. `QUESTIONS_RETIRED` and `has_questions_store` are deleted rather than extended to HCA, because nothing reads them once the branches are gone, and the question parsers, the question-only renumber handling in `status_diff.py`, and the "retired" markers go with them; the question grammar in `gov_dialects.py` (`QUESTION_HEADING`, `question_states`, `entry_state`) is left in place, unread. Tests that exercised the HCA-still-has-a-store path and the renumber contract are dropped; three new tests pin "no questions section" for both repos. The comment in `scripts/check_governance_placeholders.py` that said HCA kept the arm now says both repos scan `DECISIONS_LOG.md` only; the code is unchanged and AST-identical to HCA's copy modulo docstrings and the repo-local `main()` advisory string. Five backend tests that cited `OPEN_QUESTIONS` by name in comments are reworded to keep the Q-number provenance without the token. GH#568 files the shared-block stamp (§ Session rituals names a health-app-only script).
+
+**Reverse-by.** Revert the `chore` commit of this PR, which restores the store branch, `QUESTIONS_RETIRED` and `has_questions_store`; none expected, as no store exists in either repo to read.
+
+### #472. The source-neutral sRPE store passes its post-deploy reads: `feat/srpe-source-neutral-store` flips OWED → DONE and the ROADMAP row closes
+
+**Tier:** ruling
+
+**Decision.** The source-neutral sRPE store (#424) passes its post-deploy reads: the `BRANCHES.md` row `feat/srpe-source-neutral-store` flips OWED → DONE (`5d13046`, PR 393) and the ROADMAP row "Source-neutral per-session sRPE store" closes. Evidence (operator prod reads via `railway connect health-app-DB`, 2026-11-01, user 1; operator-reported, not re-read by Code, which has no prod access): `garmin_activity_selfevals` 46 rows; `session_rpe_observations` source `garmin` 86 rows, of which 40 have `captured_at` after the old table's last row (86 − 46 = 40: the migration copy was complete and the old table has not grown since release); the sweep inserted under source `garmin` on every night 18–31 Oct at 16:00Z ± 40 s (02:00 Brisbane), no night missed; 13 distinct `source_activity_ref` since release, 5 rated, every rating captured on its first sighting, none on a recheck. The drop of `garmin_activity_selfevals` is filed as GH#573 (`stamp`, `pinned`; a one-way door, the migration holds for operator release), not done here. Filed alongside from the same close-out queue: GH#571 (`verify`: whether Garmin returns a self-evaluation RPE for a no-HR activity, Q231 link ii, measured on the 22 Oct 2026 rugby session) and GH#572 (`stamp`, two-way: remove the question grammar #471 left unread in `scripts/gov_dialects.py`). `FEEDBACK.md` §65 records the auto-deleted-head-branch reading of a post-merge proxy 403.
+
+**Reverse-by.** Re-open the row OWED if a later read shows the old table growing or a sweep night without a `garmin` insert.
+
+### #473. Chat-side writes are approval-gated; the test-fixture clock lesson rides the same batch
+
+**Tier:** ruling
+
+**Decision.** Chat-side writes are approval-gated as the new shared-block line in `CLAUDE.md` § Merge disposition states: a chat-side session writes to the repo or tracker only behind an explicit operator approval given in-turn, one approval may cover a named group of actions, and a pasted queue or brief authorises nothing by itself. `FEEDBACK.md` §66 records the 1 Nov 2026 instance (PRs 574 and 575 landed from a chat-side session with nothing discussed or approved). Code's own merge disposition is unchanged. The same batch carries `FEEDBACK.md` §67, the test-fixture lesson from the `claude/fix-aerobic-twins-clock` row: a fixture that freezes one clock reader must freeze every reader the surface under test uses, or a green suite expires on a calendar date (PR 575).
+
+**Reverse-by.** Operator ruling in a later entry; none expected.
+
+
+### #474. One "Restate HRmax?" prompt per arbitrated bout, not per raw row
+
+**Tier:** ruling
+
+**Decision.** `over_ceiling_prompts` (`backend/hc_zone_enrich.py`) emits one prompt per arbitrated bout instead of one per raw `health_connect` row. The over-ceiling rows are grouped with the arbitration the session lists use (`arbitrated_sessions`, `twins_by_canonical`), and the prompt sits on the canonical row when that row is itself over the ceiling, else on the lowest-id over-ceiling twin, so a sample held only by a suppressed twin still prompts. A Hevy mirror is outside the arbitration and keeps its own prompt. Operator ruled these three defaults on 1 Nov 2026 ("land, defaults"). Evidence (operator prod reads, 1 Nov 2026, user 1; operator-reported, not re-read by Code, which has no prod access): `aerobic_sessions` row 144 (Polar, 05:05:15 to 05:36:03Z) and row 145 (Garmin, 05:11:19 to 05:33:35Z, wholly inside it) are one 2026-10-28 ride, each with a live max of 179 against 177 in force, so master prompted twice for one burst. `enrich_user` still lists every raw row, since each is zoned on its own; `test_prompts_match_the_chain_runs_over_ceiling_rows` passes unchanged because its rows are not twins. The snapshot line now writes `row N`, not `#N`: an `aerobic_sessions` id is not a `DECISIONS_LOG` number. Two-way door (display only; nothing reads a prompt or writes `user_hrmax`); held for the operator's ruling, then landed.
+
+**Reverse-by.** Revert `over_ceiling_prompts` to the per-row form; no stored row depends on it.
+
+### #475. In-app per-session sRPE is the capture; the whole-day fill is retired; Pilates is a counted session
+
+**Decision.** Operator rulings R1 to R4 (chat `Queue Consume 472`, 1 Nov 2026, from the 31 Oct case: a 55-min Hevy-only workout and a 52-min Garmin Pilates, both unrated, one day number asked and applied to both), and three rulings at this session's gates, each reported before it was built.
+- **R1, the write.** `in_app` signs the store contract: `srpe_store.SOURCE_SCALES["in_app"]` declares `cr10` (0 to 10, the range the close-out's slider offered; the cards now take whole numbers by tap, and the writer accepts the declared range). `record_observation` for `in_app` requires the server-side bout and writes the bout's own window (its stop, else its start plus its minutes), refusing a caller-supplied `start` or `stop`; every other source refuses a bout. `srpe_in_app.rate_sessions` checks every key against the user's counted sessions inside the rateable window before writing any row, and a bad key refuses the whole batch. Insert-only; a re-rate is a new row and the door's latest-wins resolves it. For a Hevy workout, which records no session RPE, `in_app` is the only route.
+- **R2, the retirement.** `day_fill` is gone from the hierarchy and the door (`_day_values`, `DAY_FILL`, `is_per_session`). A session no source rated reads unrated and never borrows the day. `srpe_needed` is "any counted session that day has no rating"; a day with no counted session still asks (fail open, unchanged). `daily_records.session_rpe` stays as a column, **written by nothing and read by nothing**: the PM close-out no longer accepts it (a cached client that still sends it is ignored), and `TodayOut` and `DailyRecordOut` no longer carry it. A test reads the tree on the AST and fails on any attribute, keyword, key or SQL naming it outside the model and the migrations.
+- **R3, the ask.** The close-out (today) and the AM catch-up (the missed day) list each counted session with a 0-10 tap row, no default: a rating exists only because it was tapped. A session a device rated shows that rating read-only with an Override (`in_app` outranks `garmin`). Ratings post on `POST /checkin-v2/srpe/ratings` before the close-out; a failed read costs the ask, never the close-out. `GET /checkin-v2/srpe/sessions` is built on `session_ratings`, so the card shows what the MCP lines and the residual read.
+- **R4, the backfill.** A collapsed "Earlier sessions unrated (N)" section on both cards saves on its own button, so it never forces a close-out. **The bound: the 14 local days before the card's day, never before 2026-10-18** (`srpe_in_app.BACKFILL_DAYS`, `RATING_FLOOR`), owned by the server (`GET /checkin-v2/srpe/earlier`). A session older than that ages out of the offer and stays unrated. Widening is one constant.
+- **Divergence 1 (reported at the gate, ruled: repoint).** `daily_records.session_rpe` had five readers, not two. The MCP `get_checkin_history` and `get_readiness_snapshot`, the chat's daily-record section, and `/history` into `CheckInHistory.jsx` now render each of the day's counted sessions with the rating and source the door resolves. Historic day values are rendered nowhere: they were never ratings of a session.
+- **Divergence 2 (reported at the gate, ruled: add).** `get_recent_sessions` carried no rating on a Hevy-only line. A Hevy workout is one bout with one rating, rendered once on the workout line (the `Hevy only` header, or the detail line under its segments), never on a segment. Ratings are placed against the door's own bout universe (counted Hevy workouts plus device rows that are not segments). A Garmin rating that overlapped a segment used to print on the segment line and now prints once on the workout line.
+- **Pilates is a counted session (reported at the gate, operator ruled).** The brief's "a Hevy-only workout and a Pilates yield two asks" cannot hold on the counted set: `NON_TRAINING_SPORTS` included Pilates (#322 S1, S3), so the day fill never touched the 31 Oct Pilates. The operator ruled Pilates counted. `NON_TRAINING_SPORTS` is now Walking, Yoga, Stretching; this **supersedes #322 S1 and S3 for Pilates only** (S2, S4, S5 and the other three sports stand). Read-time only, so past days re-derive on their next read: a Pilates session adds its minutes and a tally to its day, and a day whose only session was Pilates is now a counted day.
+
+**Changed history (the residual).** `psychological_residual` pairs a day only when some counted session has a per-session rating. Every day that was paired only by a whole-day value leaves the felt series on its next read, so `n_paired_days` falls, and below the cold-start floor (`N_COLDSTART_PAIRED_DAYS`, 15) it returns None (life-load-only mode). `partial_days` changes meaning: some of the day's counted sessions are unrated, and the target covers only the rated ones. A grep finds no production caller of `psychological_residual` (tests only; its block-level consumer is deferred), so nothing live reads the residual today. **I did not measure how many of user 1's days were paired only by a day value** (Code has no prod access); that count is not recorded here.
+
+**Rationale.** One day number asked at the end of the day was applied to every session no source had rated, so a Hevy workout (which records no RPE) and a Pilates took the same figure and the series recorded effort the athlete never gave a session. Asking at the grain the door reads removes the borrowed value, makes the in-app rating the only route for a Hevy workout, and lets a device's rating stand read-only until the athlete overrides it. Pilates counting follows from the operator recording it as strength work and rating it like any other session.
+
+**Status.** Built on branch `claude/blissful-babbage-0l3ztm`, PR 578. **Merged on the operator's explicit instruction:** the Pilates change is a data-meaning default (a one-way door under § Merge disposition), so this PR did not self-merge on green, though the rest was ratified by R1 to R4. No migration, no change to `session_rpe_observations`. Number `#475` resolved from master max #474 at `59ba1c2` at PR open; master was unchanged at merge. Not built: the drop of `daily_records.session_rpe` (the column stays), any second adapter, a backfill wider than the bound above.
+
+**How you know.** Backend, full suite on an unshallowed clone: 4026 passed, 3 skipped, 0 failed. Frontend: 495 passed. The tests step 6 names: `test_srpe_store.py` and `test_srpe_in_app.py` (the contract refuses an undeclared scale for `in_app`; an `in_app` observation lands on the Hevy bout with the server's window; `in_app` beats `garmin` on one session; a re-rate's latest wins; a key that is not a counted session of the user is refused and inserts nothing); `test_srpe_reads.py` and `test_srpe_needed.py` and `test_psychological_window.py` (a day value is NOT applied to an unrated session, pinned in the door, in `srpe_needed` and in the residual); `test_srpe_routes.py` (the 31 Oct shape built from rows yields two asks through the real routes); `test_srpe_card_fixture.py` (generates `frontend/src/fixtures/srpe31Oct.json` from the real routes and fails if the committed file drifts), replayed by `NightlyCloseOut.srpe.test.jsx` and `MissedPMCard.srpe.test.jsx` (FEEDBACK §48: driven from the operator's real starting state, not an author-typed fixture); `test_mcp_recent_sessions.py` (a workout with segments carries its rating once, on the workout line, including the exact-tie window; mutating the rating universe back to include segments fails two of them); `test_srpe_display_readers.py` (the four repointed readers and the AST guard, mutation-checked). **Operator check after deploy (LOG), PENDING and recorded here when read:** open the close-out, rate the 31 Oct pair through the backfill, then read `get_recent_sessions(days=3)` from chat; both sessions should carry an `in_app` rating. This entry's How-you-know is incomplete until that read is recorded. Deploy check (#433): both folders change, so SUCCESS is owed on both services matched on `commitHash`, and the frontend by a served-bundle grep for `Earlier sessions unrated`.
+
+**Do not revisit unless.** A source appears that rates a Hevy workout natively.

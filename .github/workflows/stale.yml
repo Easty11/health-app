@@ -1,0 +1,34 @@
+# Question-layer stale action (DECISIONS_LOG question-layer entry). A question survives only by
+# being touched: an issue untouched for 53 days is labelled `stale`; 7 days later it closes as
+# `abandoned`. Abandoned is a normal ending, not a failure.
+#
+# Issues only. PRs are untouched (`days-before-pr-stale: -1`, `days-before-pr-close: -1`).
+# `pinned` (stale-exempt on purpose), `design` (a pointer to a docs/design doc, whose own
+# State line is the lifecycle) and `build` (ruled, waiting on a trigger or capacity, not on
+# attention) are exempt.
+
+name: stale
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    name: stale issues
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v11
+        with:
+          days-before-issue-stale: 53
+          days-before-issue-close: 7
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          exempt-issue-labels: 'pinned,design,build'
+          stale-issue-label: 'stale'
+          close-issue-label: 'abandoned'
+          stale-issue-message: 'No activity for 53 days. Closes as abandoned in 7 days unless touched or labelled pinned. Abandoned is a normal ending; reopen if it comes back on its own.'

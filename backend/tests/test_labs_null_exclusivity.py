@@ -101,7 +101,7 @@ def test_no_other_resultitem_field_can_be_nulled_into_a_422():
     sparse shape finds it first. NOTE the deliberate limit: `field_confidence`'s four
     floats are non-Optional too, but they live on `FieldConfidence`, they validated on
     this report, and they are left alone per this change's scope — see the decision entry
-    and `OPEN_QUESTIONS`.
+    and the (since retired) questions store.
     """
     nullable_ok = set()
     for name, field in ResultItem.model_fields.items():

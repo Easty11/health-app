@@ -100,9 +100,10 @@ def test_old_yoga_id_36_is_now_track_and_field_running_and_counts(db_session):
     assert _felt_minutes(db_session, 36) == {date(2026, 8, 5): (40.0, 1)}
 
 
-def test_the_real_yoga_pilates_stretching_ids_are_still_non_training(db_session):
-    for sid in (33, 65, 66):
+def test_the_real_yoga_and_stretching_ids_are_still_non_training_and_pilates_counts(db_session):
+    for sid in (33, 66):
         assert is_non_training(SPORT_NAMES[str(sid)]), sid
+    assert SPORT_NAMES["65"] == "Pilates" and not is_non_training(SPORT_NAMES["65"])      # counted by ruling
 
 
 # ── the backfill ──────────────────────────────────────────────────────────────────

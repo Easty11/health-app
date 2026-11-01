@@ -131,6 +131,7 @@ def test_shared_renderer_does_not_carry_the_field():
 def coach(db_session, monkeypatch):
     monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
     monkeypatch.setattr(mcp_server, "_local_day", lambda *a, **k: TODAY)
+    monkeypatch.setattr(mcp_server, "_aest_wake_day", lambda *a, **k: TODAY)   # get_training_sessions anchors its window here, not on _local_day
     u = models.User(email="tw@example.com", hashed_password="x")
     db_session.add(u); db_session.commit(); db_session.refresh(u)
     monkeypatch.setattr(mcp_server, "_current_user_id", lambda: u.id)

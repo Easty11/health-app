@@ -65,21 +65,22 @@ test('Save posts /checkin-v2/pm with for_date and the PM fields, and never touch
   await waitFor(() => expect(pmPosts()).toHaveLength(1))
   expect(pmPosts()[0][1]).toEqual({
     for_date: YDAY, today_rating: 2, trained_today: false,
-    session_quality: null, session_rpe: null, pm_notes: 'forgot', naps_min: null,
+    session_quality: null, pm_notes: 'forgot', naps_min: null,
   })
   expect(amPosts()).toHaveLength(0)                                 // independent of the AM submit
 })
 
-test('trained yesterday sends session quality and RPE', async () => {
+test('trained yesterday sends session quality, and no whole-day RPE (effort is rated per session)', async () => {
   prefill = withMissed(false)
   renderIt()
   await screen.findByText(/Close out yesterday/)
   fireEvent.click(screen.getByRole('switch', { name: 'Trained yesterday' }))
   fireEvent.click(screen.getAllByTitle('Above plan')[0])
-  fireEvent.change(screen.getByLabelText('Session RPE'), { target: { value: '8' } })
+  expect(screen.queryByLabelText('Session RPE')).toBeNull()
   fireEvent.click(saveBtn())
   await waitFor(() => expect(pmPosts()).toHaveLength(1))
-  expect(pmPosts()[0][1]).toMatchObject({ trained_today: true, session_quality: 4, session_rpe: 8 })
+  expect(pmPosts()[0][1]).toMatchObject({ trained_today: true, session_quality: 4 })
+  expect(pmPosts()[0][1]).not.toHaveProperty('session_rpe')
 })
 
 test('Save hides the card and says so; the AM form is still there and still submits', async () => {

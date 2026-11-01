@@ -11,8 +11,13 @@ pasted summary; if a summary contradicts `CLAUDE.md`, `CLAUDE.md` wins.
 
 Execute these steps in order:
 
-1. **Read the canonical stores** — `DECISIONS_LOG.md`, `OPEN_QUESTIONS.md`, `ROADMAP.md`,
-   `FEEDBACK.md`. They are the source of truth.
+1. **Read the canonical stores** — `DECISIONS_LOG.md`, `ROADMAP.md`, `FEEDBACK.md`, the open `fork` issues
+   (`gh api "repos/Easty11/health-app/issues?labels=fork&state=open" --jq ".[] | \"GH#\(.number) \(.title)\""`)
+   and issues updated this session
+   (`gh api "repos/Easty11/health-app/issues?state=all&since=<session-open-iso>" --jq ".[] | select(.pull_request == null) | \"GH#\(.number) \(.state) \(.title)\""`).
+   They are the source of truth. The REST form is the one that works in a cloud session, where GraphQL
+   is blocked; locally `gh issue list --label fork --state open` and
+   `gh issue list --state all --search "updated:>=<session-open-date>"` do the same.
 
 2. **Report the actual commits made this session.** Determine the session-open ref
    (the first commit of this session, or ask if ambiguous; `git reflog` as fallback) and
@@ -37,9 +42,16 @@ Execute these steps in order:
    `BRANCHES.md`, HALT the close-out and report the offending branch(es) — do not write
    `closeout.md` until resolved.
 
+   **Sweep the open rows too (Q138).** Not only this session's branches: for every `OWED` or
+   `BLOCKED` `BRANCHES.md` row, check that the named branch exists on `origin`
+   (`git ls-remote --heads origin <branch>`) and whether its work is on master
+   (`git cherry origin/master <branch>` all `-`, or the row's SHA is an ancestor of master).
+   List the rows that are landed-but-unflipped, and flip them in this same close-out.
+
 5. **Regenerate the cold-resume handoff** from the stores so a cold session can resume
    with zero chat history: current sprint (from the `CLAUDE.md` sprint block / `ROADMAP.md`),
-   open questions grouped by status, and the single clearest **next action**.
+   open `fork` issues (the REST form from step 1), and design docs not in a terminal state
+   (`grep -l "State:\*\* \(ideation\|discussion\)" docs/design/*.md`), and the single clearest **next action**.
 
    **The handoff must also name what was NOT touched — explicitly, as its own section.** A
    close-out lists what moved, and every artifact a session produces points at more of the
@@ -83,7 +95,7 @@ Execute these steps in order:
    wholesale project-copy replacement (kept in #38 as a named exception) is **retired
    (#39)**. Step 7's pointer already names which stores changed this session
    (`git diff --name-only master...HEAD` intersected with {`DECISIONS_LOG.md`, `ROADMAP.md`,
-   `FEEDBACK.md`, `OPEN_QUESTIONS.md`, `Ideas.md`}; if none changed, the pointer says so).
+   `FEEDBACK.md`, `Ideas.md`, `docs/design/`}; if none changed, the pointer says so).
    Pre-merge copy-back is done by `cat`/opening the named store file on disk and replacing
    the project copy wholesale from it — the repo file is the sole source; chat **never
    regenerates these stores from memory**. Never dump store contents to stdout.

@@ -64,16 +64,21 @@ from pathlib import Path
 #
 # HEADING LEVEL IS TOLERATED, HEADING FORM IS NOT. This script is one implementation of
 # one rule across every repo in the project, so it must match each repo's grammar. The
-# two stores do not agree on level: `health-app/OPEN_QUESTIONS.md` heads a question `##
-# Q77.` while `health-connect-app/OPEN_QUESTIONS.md` heads it `### Q8 — …  ·  OWED`
-# (verified against both trees 2026-08-04). A `^## Q#NEXT`-only pattern therefore reads
-# HCA as permanently clean — installed, green, and blind, which is worse than absent
-# because the next session stops checking by hand. `{2,3}` covers both without loosening
-# the anchor: the token must still open a heading. Decision headings are `### ` in both
-# repos today; the level is generalised there too so the two arms cannot drift apart.
+# two repos did not agree on level for a question heading (health-app `## Q77.`,
+# health-connect-app `### Q8 — …  ·  OWED`, verified against both trees 2026-08-04), and a
+# `^## Q#NEXT`-only pattern read HCA as permanently clean — installed, green, and blind,
+# which is worse than absent because the next session stops checking by hand. `{2,3}`
+# covers both without loosening the anchor: the token must still open a heading. Decision
+# headings are `### ` in both repos today; the level is generalised there too so the
+# arms cannot drift apart.
+#
+# The `OPEN_QUESTIONS.md` / `Q#NEXT` arm is GONE in both repos (question layer Phases B
+# and C2: health-app DECISIONS_LOG #468; health-connect-app DECISIONS_LOG #54): both files
+# are deleted and the questions are GitHub issues, which take their number from GitHub, not
+# from a heading. Keeping the arm would exit 2 on the missing file. Both repos' copies of
+# this script scan `DECISIONS_LOG.md` only.
 CHECKS = [
     ("DECISIONS_LOG.md", re.compile(r"^#{2,3} #NEXT\b.*$", re.M), "a #NEXT decision heading"),
-    ("OPEN_QUESTIONS.md", re.compile(r"^#{2,3} Q#NEXT\b.*$", re.M), "a Q#NEXT question heading"),
 ]
 
 

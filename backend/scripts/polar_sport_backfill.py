@@ -18,7 +18,7 @@ Run inside the container, from /app (`railway ssh --service health-app-backend`;
 
 Two consequences the report flags per row:
   * `class` - the row crosses the non-training line (`sport_classes.NON_TRAINING_SPORTS`: Walking,
-    Pilates, Yoga, Stretching). Readers that exclude those sports (the psychological window, the CBT-I
+    Yoga, Stretching). Readers that exclude those sports (the psychological window, the CBT-I
     training-end read) change on their next read.
   * the metabolic `load_events.provenance` copy of the label is NOT touched here. Load itself does not
     depend on the sport, so no load value moves; the stored label refreshes on the next load refresh

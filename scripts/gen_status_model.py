@@ -3,8 +3,10 @@
 
 Reads the governance stores of health-app and health-connect-app at **master** (via
 raw.githubusercontent, pinned to a resolved SHA for provenance) and emits a JSON status
-model: per-repo state-vocabulary tallies for questions and branch rows, decision-sequence
-integrity, and an off-vocabulary tally that is reported, never dropped.
+model: per-repo state-vocabulary tallies for branch rows, decision-sequence integrity, and an
+off-vocabulary tally that is reported, never dropped. Neither repo has a questions store (both
+retired, DECISIONS_LOG #468 / health-connect-app #54): questions are GitHub issues, which this
+tool does not read.
 
 Distinct from `gen_governance_view.py` by design (DECISIONS_LOG #192): that renders a
 human-readable digest; this produces diffable machine JSON that a cross-repo snapshot ages
@@ -23,8 +25,7 @@ naming the store, and NOTHING partial is emitted:
                       that is not there (the live `**State:**`/`**Status:**` bug, #190). HALT.
 
 Off-vocabulary state tokens are tallied per field and surfaced under `drift`; a clean-gate
-run with non-zero off-vocab is still a finding, never a pass-in-silence (Step 1: HCA carries
-work-item states UNSTARTED/BLOCKED on question headings — accepted, tallied, flagged).
+run with non-zero off-vocab is still a finding, never a pass-in-silence.
 
 Usage:
     python scripts/gen_status_model.py --dry-run     # build + gate, print JSON, write nothing
@@ -53,7 +54,6 @@ DEFAULT_OUT_DIR = Path(__file__).resolve().parents[2] / "_status"
 # Store keys -> the store file basename.
 STORE_FILE = {
     "decisions": "DECISIONS_LOG",
-    "questions": "OPEN_QUESTIONS",
     "branches": "BRANCHES",
 }
 
@@ -110,8 +110,6 @@ def crude_count(store_key: str, text: str) -> int:
     lines = text.splitlines()
     if store_key == "decisions":
         return sum(1 for ln in lines if D.DECISION_HEADING.match(ln))
-    if store_key == "questions":
-        return sum(1 for ln in lines if D.QUESTION_HEADING.match(ln))
     if store_key == "branches":
         return sum(1 for ln in lines if D.is_table_data_row(ln))
     raise StatusGateError(f"crude_count: unknown store {store_key!r}")
@@ -149,46 +147,6 @@ def parse_decisions(text: str, repo: str) -> dict:  # repo unused; uniform parse
         "unstated": len(nums) - stated,
         "inline_states": dict(sorted(inline.items())),
     }
-
-
-def _tally_stateful(headings: list[tuple[int, str, str]], lines: list[str],
-                    vocab: tuple[str, ...]) -> dict:
-    """Shared tally for heading-driven stateful stores (questions). `headings` is
-    [(line_index, ident, heading_remainder), ...] — `ident` names the offender when state is
-    missing (#209 gate: questions carry mandatory state, so a missing one is named). Returns
-    count, by_state, off_vocab, missing_state, missing_ids."""
-    by_state: Counter = Counter()
-    off_vocab: Counter = Counter()
-    missing_ids: list[str] = []
-    for idx, (line_i, ident, rest) in enumerate(headings):
-        end = headings[idx + 1][0] if idx + 1 < len(headings) else len(lines)
-        raw = D.entry_state(lines, line_i, rest, end)
-        if not raw:
-            missing_ids.append(ident)
-            continue
-        tok, off = D.classify(raw, vocab)
-        if tok is None:
-            missing_ids.append(ident)
-        elif off:
-            off_vocab[tok] += 1
-        else:
-            by_state[tok] += 1
-    return {
-        "count": len(headings),
-        "by_state": dict(sorted(by_state.items())),
-        "off_vocab": dict(sorted(off_vocab.items())),
-        "missing_state": len(missing_ids),
-        "missing_ids": missing_ids,
-    }
-
-
-def parse_questions(text: str, repo: str) -> dict:
-    lines = text.splitlines()
-    headings = [(i, f"Q{m.group(1)}", m.group(2)) for i, ln in enumerate(lines)
-                if (m := D.QUESTION_HEADING.match(ln))]
-    # Per-repo vocab (#191 unify): UNSTARTED is a valid question state for HCA, off-vocab drift
-    # for health-app. Classified against the repo's own tuple, never the shared one.
-    return _tally_stateful(headings, lines, D.question_states(repo))
 
 
 def _branch_status_cell(cells: list[str]) -> str:
@@ -236,7 +194,6 @@ def parse_branches(text: str, repo: str) -> dict:  # repo unused; uniform parser
 
 PARSERS = {
     "decisions": parse_decisions,
-    "questions": parse_questions,
     "branches": parse_branches,
 }
 
@@ -281,8 +238,8 @@ def gate_extraction_nonempty(repo: str, store_key: str, parsed: dict) -> None:
 
 
 def gate_no_missing_state(repo: str, store_key: str, parsed: dict) -> None:
-    """Questions and branches carry MANDATORY state — unlike decisions, whose `**Status:**` is
-    optional by convention (#209). Any question or branch missing its state is a store defect, so
+    """Branches carry MANDATORY state — unlike decisions, whose `**Status:**` is
+    optional by convention (#209). Any branch missing its state is a store defect, so
     HALT on ANY non-zero missing (no threshold) and NAME the offenders. This is stricter than
     `gate_extraction_nonempty`, which only fires when ALL N are empty (the #190 schema-mismatch
     class); a single stateless item slips past that gate but not this one."""
@@ -291,7 +248,7 @@ def gate_no_missing_state(repo: str, store_key: str, parsed: dict) -> None:
         ids = ", ".join(missing_ids)
         raise StatusGateError(
             f"MISSING STATE [{repo}/{STORE_FILE[store_key]}.md]: {len(missing_ids)} item(s) "
-            f"declare no state: {ids}. Questions and branches must each carry a state (#209); HALT."
+            f"declare no state: {ids}. Branches must each carry a state (#209); HALT."
         )
 
 
@@ -301,7 +258,7 @@ def gate_no_missing_state(repo: str, store_key: str, parsed: dict) -> None:
 
 def build_repo(repo: str, sha: str, texts: dict) -> dict:
     out = {"provenance": {"ref": "master", "sha": sha}}
-    for store_key in ("decisions", "questions", "branches"):
+    for store_key in STORE_FILE:
         text = texts[store_key]
         parsed = PARSERS[store_key](text, repo)
         crude = crude_count(store_key, text)
@@ -320,10 +277,9 @@ def collect_drift(model: dict) -> list:
     """Off-vocab on stateful stores is drift — surfaced, never a HALT (Step 1: accept-and-flag)."""
     drift = []
     for repo, rd in model["repos"].items():
-        for store_key in ("questions", "branches"):
-            ov = rd[store_key]["off_vocab"]
-            if ov:
-                drift.append({"repo": repo, "store": store_key, "off_vocab": ov})
+        ov = rd["branches"]["off_vocab"]
+        if ov:
+            drift.append({"repo": repo, "store": "branches", "off_vocab": ov})
     return drift
 
 
@@ -334,7 +290,7 @@ def build_model(generated_utc: str) -> dict:
         print(f"  {repo}: master @ {sha[:7]}", file=sys.stderr)
         texts = {k: fetch(repo, sha, STORE_FILE[k]) for k in STORE_FILE}
         repos[repo] = build_repo(repo, sha, texts)
-        for k in ("decisions", "questions", "branches"):
+        for k in STORE_FILE:
             p = repos[repo][k]
             print(f"    {STORE_FILE[k]+'.md':<18} {p['count']:>4} items", file=sys.stderr)
     model = {
@@ -422,44 +378,34 @@ def self_check() -> int:
         raise SystemExit(f"  FAIL {label} did NOT halt")
 
     # 1. count parity
-    expect_halt("count parity", lambda: gate_count_parity("r", "questions", 89, 88))
+    expect_halt("count parity", lambda: gate_count_parity("r", "branches", 89, 88))
     # 2. sequence gap
     expect_halt("sequence gap",
                 lambda: gate_sequence("r", {"count": 88, "max": 89, "min": 1, "gapless": False}))
     # 3. extraction empty across all N (the **State:** class)
     expect_halt("extraction empty", lambda: gate_extraction_nonempty(
-        "r", "questions", {"count": 89, "by_state": {}, "off_vocab": {}, "missing_state": 89}))
-    # off-vocab is NOT a halt — it is tallied. (Example token is genuinely off-vocab: UNSTARTED
-    # is now an IN-vocab question state, so it would no longer illustrate the off-vocab path.)
-    ov = {"count": 2, "by_state": {"OPEN": 1}, "off_vocab": {"PARKED": 1}, "missing_state": 0}
-    gate_extraction_nonempty("r", "questions", ov)  # must not raise
+        "r", "branches", {"count": 89, "by_state": {}, "off_vocab": {}, "missing_state": 89}))
+    # off-vocab is NOT a halt — it is tallied.
+    ov = {"count": 2, "by_state": {"DONE": 1}, "off_vocab": {"PARKED": 1}, "missing_state": 0}
+    gate_extraction_nonempty("r", "branches", ov)  # must not raise
     print("  ok   off-vocab tallied, not halted", file=sys.stderr)
 
     # 4. any PARTIAL missing state (#209) — halts and names the offender, no threshold.
     expect_halt("missing state (partial)", lambda: gate_no_missing_state(
-        "r", "questions", {"count": 3, "by_state": {"OPEN": 2}, "off_vocab": {},
-                           "missing_state": 1, "missing_ids": ["Q42"]}))
+        "r", "branches", {"count": 3, "by_state": {"DONE": 2}, "off_vocab": {},
+                          "missing_state": 1, "missing_ids": ["`feat/x`"]}))
     gate_no_missing_state("r", "branches", {"count": 2, "by_state": {"DONE": 2}, "off_vocab": {},
                                             "missing_state": 0, "missing_ids": []})  # clean: no raise
     print("  ok   no-missing-state gate (partial halts + names ids; clean passes)", file=sys.stderr)
 
     # grammar positives for the reader-channel changes (no network).
-    # G6 — per-repo question vocab: UNSTARTED is DRIFT on a health-app question but CLEAN on an
-    # HCA question. BOTH directions asserted; the health-app direction is exactly the drift
-    # signal a shared-tuple edit would have silenced.
-    assert D.classify("UNSTARTED", D.question_states("health-app")) == ("UNSTARTED", True), \
-        "UNSTARTED on a health-app question must classify off-vocab (drift)"
-    assert D.classify("UNSTARTED", D.question_states("health-connect-app")) == ("UNSTARTED", False), \
-        "UNSTARTED on an HCA question must classify clean (in-vocab)"
-    assert D.classify("active", D.question_states("health-connect-app")) == (None, False), \
-        "lowercase 'active' is not a caps token — never a question state, either repo"
+    # Decision channel: the lowercase inline reader (HCA dialect).
     assert D.decision_inline_state("Title  ·  active  ·  supersedes #10") == "active", \
         "decision inline reader must SCAN segments, not take the last"
     assert D.decision_inline_state("Title  ·  held") == "held", "held is an enumerated inline token"
     assert D.decision_inline_state("### 45. health-app style, no middot") == "", \
         "no '·' -> no lowercase inline decision state (health-app decisions use **Status:**)"
-    print("  ok   G6 per-repo vocab (UNSTARTED drift@health-app / clean@HCA); decision channel scans",
-          file=sys.stderr)
+    print("  ok   decision inline channel scans segments", file=sys.stderr)
     print("self-check: all gate positives fired", file=sys.stderr)
     return 0
 
