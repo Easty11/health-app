@@ -325,7 +325,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Wake-day capture: the morning fetch, the 10:00 backstop, the Recovery tile and Settings Garmin views, the snapshot's Garmin lanes with four retired writers, and the SpO2 minimum.** Code - Canonical home: `DECISIONS_LOG.md` #477, #478, #479, #480.
+- **Wake-day capture: the morning fetch, the 10:00 backstop, the Recovery tile and Settings Garmin views, the snapshot's Garmin lanes with four retired writers, and the SpO2 minimum.** Code - Canonical home: `DECISIONS_LOG.md` #477, #478, #479, #480, #481.
 
 - **In-app per-session sRPE: one CR-10 per counted session, the whole-day fill retired, Pilates counted.** Code - Canonical home: `DECISIONS_LOG.md` #475.
 
