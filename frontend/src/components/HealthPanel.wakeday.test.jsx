@@ -118,3 +118,32 @@ test('a user with no Garmin connection sees no capture status and the old dash',
   expect(screen.queryByRole('status')).toBeNull()
   expect(within(screen.getByText('SpO2').parentElement).getByText('—')).toBeTruthy()
 })
+
+test('SpO2 renders the mean and the night\'s minimum together: "96.5% · min 91%"', async () => {
+  summaryResponse = summary('2026-11-02', { spo2_pct: 96.5, spo2_min_pct: 91 })
+  wakeResponse = { connected: true, wake_day: '2026-11-02', window_open: true, slots: {}, gaps: [], message: null }
+  await renderIt()
+  await screen.findByText('SpO2')
+  expect(screen.getByText('SpO2').parentElement.textContent).toContain('96.5% · min 91%')
+})
+
+test('a mean with no minimum shows the mean alone, never a placeholder minimum', async () => {
+  summaryResponse = summary('2026-11-02', { spo2_pct: 95, spo2_min_pct: null })
+  wakeResponse = { connected: true, wake_day: '2026-11-02', window_open: true, slots: {}, gaps: [], message: null }
+  await renderIt()
+  await screen.findByText('SpO2')
+  const text = screen.getByText('SpO2').parentElement.textContent
+  expect(text).toContain('95.0%')
+  expect(text).not.toMatch(/min/)
+  expect(text).not.toContain('—')
+})
+
+test('no mean: the slot word stands and no minimum is invented', async () => {
+  summaryResponse = summary('2026-11-02', { spo2_pct: null, spo2_min_pct: null })
+  wakeResponse = WAKE('pending')
+  await renderIt()
+  await screen.findByText(/still arriving/)
+  const text = screen.getByText('SpO2').parentElement.textContent
+  expect(text).toContain('pending')
+  expect(text).not.toMatch(/min \d/)
+})
