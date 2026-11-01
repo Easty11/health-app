@@ -2,9 +2,10 @@
 
 ## Real commits this session
 
-Session opened at health-app master `d5df678` (the merge of PR 574), 31 Oct 2026 22:30Z. Maxima at open: `DECISIONS_LOG` #472, `FEEDBACK.md` last § 65, no open `fork` issue (read through the GitHub MCP issue list, not the `gh api` form, which was not run). `git log --first-parent --format="%h %ad %s" --date=short d5df678..origin/master` returns three lines, and only the last is this session's; the other two are parallel sessions that merged after it:
+Session opened at health-app master `d5df678` (the merge of PR 574), 31 Oct 2026 22:30Z. Maxima at open: `DECISIONS_LOG` #472, `FEEDBACK.md` last § 65, no open `fork` issue (read through the GitHub MCP issue list, not the `gh api` form, which was not run). `git log --first-parent --format="%h %ad %s" --date=short d5df678..origin/master` returned three lines when this file was written and four after PR 579 landed during this close-out's CI; only `99f6c6f` is this session's, and the other three are parallel sessions that merged after it:
 
 ```
+4049e69 2026-11-01 Merge pull request #579 from Easty11/claude/blissful-babbage-0l3ztm
 19d5d33 2026-11-01 Merge pull request #578 from Easty11/claude/blissful-babbage-0l3ztm
 59ba1c2 2026-11-01 Merge pull request #577 from Easty11/claude/stoic-galileo-es1cpr
 99f6c6f 2026-11-01 Merge pull request #576 from Easty11/claude/hopeful-bell-hhu4y6
@@ -70,7 +71,7 @@ Nothing decided is uncommitted.
 
 ## Cold-resume handoff
 
-**Next action.** The operator completes the one check that holds #475's How-you-know open: rate the 31 Oct pair through the new backfill, then read `get_recent_sessions(days=3)` and record the result (the ROADMAP NOW row "In-app per-session sRPE capture" names it). Code cannot do it (no prod access). The deploy half of that row is already readable: both services recorded `SUCCESS` for `19d5d33`, matched on `commitHash`, and the session that owns the row has a commit (`7167f97`, on its branch, not yet merged) recording it.
+**Next action.** The operator completes the one check that holds #475's How-you-know open: rate the 31 Oct pair through the new backfill, then read `get_recent_sessions(days=3)` and record the result (the ROADMAP NOW row "In-app per-session sRPE capture" names it). Code cannot do it (no prod access). The deploy half of that row is already readable: both services recorded `SUCCESS` for `19d5d33`, matched on `commitHash`, and the session that owns the row recorded it (`7167f97`, landed as PR 579, merge `4049e69`).
 
 **Open `fork` issues.** None (read at open and again at close-out).
 
@@ -78,7 +79,7 @@ Nothing decided is uncommitted.
 
 **Design docs not in a terminal state.** Eight, none committed: `0001` ideation, `0002` discussion, `0003` discussion, `0004` ideation, `0005` ideation, `0006` ideation, `0007` ideation, `0008` discussion. Unchanged this session.
 
-**Open row in `BRANCHES.md` (Q138 sweep).** One of 363 rows is not DONE: `claude/blissful-babbage-0l3ztm` (OWED, in-app sRPE, PR 578). It is another session's and still live: the branch exists on origin with one commit not on master (`7167f97`, "deploy check recorded for #475"). Not flipped here. Its OWED status is correct until the operator check above is recorded. Its commit edits that same top row of `BRANCHES.md`, which this close-out inserts directly above, so whichever lands second may need a merge of that file (untested).
+**Open row in `BRANCHES.md` (Q138 sweep).** One of 363 rows is not DONE: `claude/blissful-babbage-0l3ztm` (OWED, in-app sRPE, PR 578). It is another session's. When the sweep ran, its branch existed on origin with one commit not on master (`7167f97`, "deploy check recorded for #475"); that commit landed as PR 579 (`4049e69`) while this close-out's CI ran. It edited the same top row of `BRANCHES.md` this close-out inserts above, so master was merged into this branch and the file conflicted exactly there; resolved by keeping both rows, theirs as landed. Not flipped here: its OWED status is correct until the operator check above is recorded.
 
 **Current sprint.** ROADMAP NOW is unchanged by this session. Open lanes, with the v1 test each row's own `Serves` text names:
 
