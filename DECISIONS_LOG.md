@@ -15459,7 +15459,7 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 
 **Reverse-by.** Revert the two `or []` reads; the tests in `test_week_plan.py` then fail with the production `TypeError`.
 
-### #NEXT. The wake-day capture: the morning fetch lands the current wake-day's overnight vitals, gated server-side, closed at 10:00 Brisbane
+### #477. The wake-day capture: the morning fetch lands the current wake-day's overnight vitals, gated server-side, closed at 10:00 Brisbane
 
 **Tier:** ruling
 
