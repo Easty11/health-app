@@ -159,6 +159,77 @@ def _missing_reason(attempt: Optional[dict[str, Any]], state: WakeDayState) -> s
     return "Garmin returned the night without it"
 
 
+# -- the Dashboard Recovery tile's amber (S2) ----------------------------------------------------------------
+ALERT_LOOKBACK_DAYS = 3             # the sweep re-reads the last 3 days, so an older gap will not heal itself
+_OVERNIGHT_LANES = {                # lane -> (needs a Personal API key?, label shown on the tile)
+    garmin_raw.LANE_PERSONAL_HRV: (True, "HRV"),
+    garmin_raw.LANE_PERSONAL_WELLNESS: (True, "sleep/SpO2"),
+    garmin_raw.LANE_DI_SPO2: (False, "epoch SpO2"),
+}
+_LANE_OK = (garmin_raw.OK, garmin_raw.EMPTY)
+
+
+def _ago(hours: float) -> str:
+    if hours < 1:
+        return f"{max(int(round(hours * 60)), 0)} min ago"
+    if hours < 48:
+        return f"{hours:.0f} h ago"
+    return f"{hours / 24:.0f} d ago"
+
+
+def alerts(db, user_id: int, now: Optional[datetime] = None) -> list[dict[str, Any]]:
+    """Amber items for the Recovery tile, one user. Two kinds, each naming lane and age:
+
+      * `lane_failed`: an overnight lane (Personal API HRV, sleep/SpO2; the DI epoch SpO2) whose last run was not
+        ok. A failure from the CURRENT wake-day while its capture window is still open is not shown: it may yet
+        succeed (the retry, the backstop). A failure from an earlier day, or after 10:00, is.
+      * `missing`: a wake-day whose capture window has CLOSED (an earlier day, or today after 10:00) and still
+        has no Garmin sleep, HRV or SpO2, read now (a night the next sweep filled is no longer missing). The
+        look-back is `ALERT_LOOKBACK_DAYS`; older gaps will not heal and are not this tile's business.
+
+    A wake-day still inside its window is never amber. A user with no Garmin connection has none."""
+    now = _utc(now or datetime.now(timezone.utc))
+    today, open_ = wake_day(now), window_open(now)
+    personal = gpl.get_row(db, user_id) is not None
+    di = db.query(models.UserIntegration.id).filter_by(user_id=user_id, provider="garmin").first() is not None
+    if not (personal or di):
+        return []
+    out: list[dict[str, Any]] = []
+
+    rows = {r.lane: r for r in db.query(models.IntegrationLaneStatus).filter_by(user_id=user_id).all()}
+    for lane, (needs_key, label) in _OVERNIGHT_LANES.items():
+        if (needs_key and not personal) or (not needs_key and not di):
+            continue
+        r = rows.get(lane)
+        if r is None or r.outcome in _LANE_OK:
+            continue
+        attempted = _utc(r.last_attempt_at)
+        if open_ and local(attempted).date() == today:
+            continue                          # the current wake-day is still inside its capture window
+        age_h = round(max((now - attempted).total_seconds(), 0.0) / 3600.0, 1)
+        out.append({"code": "lane_failed", "lane": lane, "what": label, "outcome": r.outcome,
+                    "age_hours": age_h, "message": f"Garmin {label} lane failed {_ago(age_h)} ({r.outcome})"})
+
+    for k in range(ALERT_LOOKBACK_DAYS):
+        day = today - timedelta(days=k)
+        if day == today and open_:
+            continue                          # never amber for a wake-day still inside its capture window
+        st = read_state(db, user_id, day)
+        missing = []
+        if personal and not st.sleep_done:
+            missing.append(("sleep", "sleep"))
+        if personal and db.query(models.HrvReading.id).filter(
+                models.HrvReading.user_id == user_id, models.HrvReading.source == "garmin",
+                models.HrvReading.captured_at == day, models.HrvReading.rmssd_ms.isnot(None)).first() is None:
+            missing.append(("hrv", "HRV"))
+        if not (st.spo2_done if st.di else st.slots.get("spo2")):
+            missing.append(("spo2", "SpO2"))
+        for what, label in missing:
+            out.append({"code": "missing", "what": what, "wake_day": day.isoformat(), "age_days": k,
+                        "message": f"{label} missing {day.isoformat()}"})
+    return out
+
+
 def status(db, user_id: int, *, now: Optional[datetime] = None) -> dict[str, Any]:
     """The current wake-day's slot states for one user. Read-only; the shape the Recovery page, the Dashboard tile
     and the Settings card read. `connected` is False for a user with no Garmin connection (no slots are claimed)."""
@@ -166,7 +237,7 @@ def status(db, user_id: int, *, now: Optional[datetime] = None) -> dict[str, Any
     day = wake_day(now)
     state = read_state(db, user_id, day)
     if not (state.personal or state.di):
-        return {"connected": False, "wake_day": day.isoformat()}
+        return {"connected": False, "wake_day": day.isoformat(), "alerts": [], "amber": False}
     open_ = window_open(now)
     lane = _lane(db, user_id)
     att = _attempt(lane, day)
@@ -203,6 +274,8 @@ def status(db, user_id: int, *, now: Optional[datetime] = None) -> dict[str, Any
         "last_attempt_at": att["at"].isoformat() if att else None,
         "last_outcome": att["code"] if att else None,
         "last_via": att["via"] if att else None,
+        "alerts": (found := alerts(db, user_id, now)),
+        "amber": bool(found),
     }
 
 

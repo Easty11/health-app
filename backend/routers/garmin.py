@@ -423,3 +423,15 @@ def wake_day_status(
 ):
     """The current wake-day's slot states (filled / pending / not_synced / missing-with-reason). Read-only."""
     return wake_day_capture.status(db, current_user.id)
+
+
+@router.get("/lanes")
+def garmin_lanes(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Per-lane last success (age and outcome) and the Personal API key's days to expiry, for Settings ->
+    Integrations. Read-only; thresholds are the alerts' own (`reads.freshness_reads.garmin_lane_view`)."""
+    from reads.freshness_reads import garmin_lane_view
+
+    return garmin_lane_view(db, current_user.id)

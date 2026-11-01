@@ -307,6 +307,67 @@ def garmin_alerts(db: Session, user_id: int, now: datetime) -> list[dict[str, st
     return out
 
 
+_LANE_LABELS = (          # (lane, label, needs a Personal key, severity when the last run was not ok)
+    ("personal_token", "Personal API key exchange", True, "red"),
+    ("personal_hrv", "HRV", True, "amber"),
+    ("personal_wellness", "Sleep, heart rate and SpO2", True, "amber"),
+    ("personal_selfeval", "Self-evaluation (RPE)", True, "amber"),
+    ("wake_day_fetch", "Morning wake-day fetch", True, "amber"),
+    ("di_spo2", "Epoch SpO2 (DI)", False, "red"),
+)
+
+
+def garmin_lane_view(db: Session, user_id: int, now: datetime | None = None) -> dict[str, Any]:
+    """Per-lane health and the Personal API key's expiry, for Settings -> Integrations. Read-only. Severities
+    and thresholds are `garmin_alerts`' own (amber at <= 30 days, red at <= 7, when expired, and when the token
+    exchange is refused), so Settings, the load card and the snapshot cannot disagree.
+
+    `lanes` lists only the lanes the user's connections can run; a lane with no row yet reads `outcome: None`."""
+    now = _utc(now) if now is not None else datetime.now(timezone.utc)
+    today = now.astimezone(_AEST).date()
+    pers = db.query(models.UserIntegration).filter_by(user_id=user_id, provider="garmin_personal").first()
+    di = db.query(models.UserIntegration.id).filter_by(user_id=user_id, provider="garmin").first() is not None
+    rows = {r.lane: r for r in db.query(models.IntegrationLaneStatus).filter_by(user_id=user_id).all()}
+
+    key = None
+    if pers is not None:
+        tok = rows.get("personal_token")
+        refused = tok is not None and tok.outcome == "auth_failed"
+        days = (pers.key_expires_on - today).days if pers.key_expires_on is not None else None
+        if days is not None and days < 0:
+            sev, msg = "red", f"Key EXPIRED {-days} day(s) ago: attach a new key"
+        elif refused:
+            sev, msg = "red", "Token exchange is failing: the key was refused"
+        elif days is None:
+            sev, msg = "amber", "No expiry date recorded (re-attach with --expires)"
+        elif days <= KEY_EXPIRY_RED_DAYS:
+            sev, msg = "red", f"Expires in {days} day(s): create and attach a new key"
+        elif days <= KEY_EXPIRY_AMBER_DAYS:
+            sev, msg = "amber", f"Expires in {days} days"
+        else:
+            sev, msg = "ok", f"Expires in {days} days"
+        key = {"expires_on": pers.key_expires_on.isoformat() if pers.key_expires_on else None,
+               "days_to_expiry": days, "token_refused": refused, "severity": sev, "message": msg}
+
+    lanes = []
+    for lane, label, needs_key, bad in _LANE_LABELS:
+        if (needs_key and pers is None) or (not needs_key and not di):
+            continue
+        r = rows.get(lane)
+        if r is None:
+            lanes.append({"lane": lane, "label": label, "outcome": None, "severity": "none", "reason": None,
+                          "last_attempt_at": None, "last_success_at": None, "success_age_hours": None})
+            continue
+        ok = r.outcome in _LANE_OK
+        succ = _utc(r.last_success_at) if r.last_success_at else None
+        lanes.append({"lane": lane, "label": label, "outcome": r.outcome, "severity": "ok" if ok else bad,
+                      "reason": r.reason, "last_attempt_at": _utc(r.last_attempt_at).isoformat(),
+                      "last_success_at": succ.isoformat() if succ else None,
+                      "success_age_hours": _age_hours(succ, now) if succ else None})
+    return {"connected": pers is not None or di, "personal_api": pers is not None, "di": di,
+            "key": key, "lanes": lanes, "generated_at": now.isoformat()}
+
+
 def hrmax_prompts(db: Session, user_id: int) -> list[dict[str, Any]]:
     """\"Restate HRmax?\" prompts: health_connect rows holding a plausible same-writer sample above the
     HRmax in force (`hc_zone_enrich.over_ceiling_prompts`). Information only: nothing is restated and no
