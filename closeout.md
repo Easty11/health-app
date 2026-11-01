@@ -2,12 +2,9 @@
 
 ## Real commits this session
 
-Session opened at health-app master `d5df678` (the merge of PR 574), 31 Oct 2026 22:30Z. Maxima at open: `DECISIONS_LOG` #472, `FEEDBACK.md` last § 65, no open `fork` issue (read through the GitHub MCP issue list, not the `gh api` form, which was not run). `git log --first-parent --format="%h %ad %s" --date=short d5df678..origin/master` returned three lines when this file was written and four after PR 579 landed during this close-out's CI; only `99f6c6f` is this session's, and the other three are parallel sessions that merged after it:
+Session opened at health-app master `d5df678` (the merge of PR 574), 31 Oct 2026 22:30Z. Maxima at open: `DECISIONS_LOG` #472, `FEEDBACK.md` last § 65, no open `fork` issue (read through the GitHub MCP issue list, not the `gh api` form, which was not run). `git log --first-parent --format="%h %ad %s" --date=short d5df678..origin/master` lists this session's one merge among several from parallel sessions (PRs 577, 578, 579 and later ones, which merged while this session ran and are not its work); the list keeps growing, so only this session's line is kept here:
 
 ```
-4049e69 2026-11-01 Merge pull request #579 from Easty11/claude/blissful-babbage-0l3ztm
-19d5d33 2026-11-01 Merge pull request #578 from Easty11/claude/blissful-babbage-0l3ztm
-59ba1c2 2026-11-01 Merge pull request #577 from Easty11/claude/stoic-galileo-es1cpr
 99f6c6f 2026-11-01 Merge pull request #576 from Easty11/claude/hopeful-bell-hhu4y6
 ```
 
