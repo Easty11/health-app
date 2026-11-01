@@ -41,6 +41,13 @@ from hevy_templates import (
     user_hevy_key,
 )
 from engine import adaptation, selection
+from knowledge_payload import (
+    RECORD_KNOWLEDGE_TOOL,
+    ParsedPayload,
+    extract_tool_updates,
+    parse_knowledge_payload,
+    render_updates_as_blocks,
+)
 from reads.labs_reads import find_marker
 from routers.knowledge import (
     APPOINTMENT_CHAT_DEFAULTS,
@@ -944,13 +951,44 @@ def _entry_noun(entry_type: str | None) -> str:
     }.get(entry_type or "", "Knowledge entry")
 
 
+# A refused payload is logged WHOLE so the next failure can be read, not guessed at (the 1 Nov 2026
+# `Extra data ... char 3917` failure left no trace of what followed char 3917). Failure path only,
+# and capped. This is the one place the chat lane logs payload text; a clean turn still logs
+# metadata only (see the `chat turn:` line), by design.
+_RAW_LOG_CAP = 12000
+_TRAILING_LOG_CAP = 500
+
+
+def _log_parse_failure(source: str, raw: str, error: str) -> None:
+    logger.warning(
+        "knowledge update parse failed (%s): %s; raw_len=%d raw=%r%s",
+        source, error, len(raw), raw[:_RAW_LOG_CAP],
+        " [truncated]" if len(raw) > _RAW_LOG_CAP else "",
+    )
+
+
+def _invalid_json_result(error: str) -> tuple[str, WriteResult]:
+    msg = f"⚠️ Could not parse knowledge update: {error}"
+    return msg, WriteResult(saved=False, reason_code="invalid_json", reason=msg,
+                            validator_message=error)
+
+
 def _process_knowledge_updates(
     reply: str,
     user_id: int,
     db: Session,
+    tool_updates: list[Any] | None = None,
+    tool_errors: list[str] | None = None,
 ) -> tuple[str, list[str], list[WriteResult]]:
     """
-    Scan `reply` for <knowledge_update> blocks.
+    Scan `reply` for <knowledge_update> blocks, and apply `tool_updates` (the items of a
+    `record_knowledge_updates` tool call, already parsed by the API). `tool_errors` are tool
+    calls whose input was not an `updates` array: each is a loud `invalid_json` result.
+
+    A text block is read by `parse_knowledge_payload`: concatenated objects, code fences and
+    trailing prose are accepted, and text that starts like JSON but does not decode is a loud
+    `invalid_json` result (the objects before it still save). Every value, from either channel,
+    then takes the same path below.
 
     Handles two payload formats:
     - Legacy: {category, content} → writes to UserKnowledge (free-text KB)
@@ -977,20 +1015,39 @@ def _process_knowledge_updates(
 
     matches = list(_KNOWLEDGE_BLOCK_RE.finditer(reply))
 
-    if not matches:
+    if not matches and not tool_updates and not tool_errors:
         return reply, actions_taken, write_results
 
     cleaned = reply
+    for err in tool_errors or []:
+        logger.warning("knowledge update tool call malformed: %s", err)
+        msg, result = _invalid_json_result(err)
+        actions_taken.append(msg)
+        write_results.append(result)
+    units: list[Any] = []
     for match in matches:
-        raw_json = match.group(1)
-        try:
-            data = json.loads(raw_json)
-        except json.JSONDecodeError as exc:
-            record(False, "invalid_json", f"⚠️ Could not parse knowledge update: {exc}")
-            cleaned = cleaned.replace(match.group(0), "")
+        parsed = parse_knowledge_payload(match.group(1))
+        units.extend(parsed.values)
+        if parsed.trailing:
+            # Prose after the payload is dropped, never acted on -- but say what it was.
+            logger.warning("knowledge update: ignored %d chars after the payload: %r",
+                           len(parsed.trailing), parsed.trailing[:_TRAILING_LOG_CAP])
+        if parsed.error:
+            _log_parse_failure("text block", match.group(1), parsed.error)
+            msg, result = _invalid_json_result(parsed.error)
+            actions_taken.append(msg)
+            write_results.append(result)
+        cleaned = cleaned.replace(match.group(0), "")
+    units.extend(tool_updates or [])
+
+    for data in units:
+        if not isinstance(data, dict):
+            record(False, "invalid_shape",
+                   "✗ Knowledge entry NOT saved — an update must be a JSON object.",
+                   validator_message="each update must be a JSON object")
             continue
 
-        key = data.get("key") if isinstance(data, dict) else None
+        key = data.get("key")
         try:
             if isinstance(data, dict) and "type" in data and not data.get("key"):
                 # A typed block with no top-level key used to fall through to the legacy branch,
@@ -1095,7 +1152,6 @@ def _process_knowledge_updates(
                     record(False, "invalid_shape",
                            f"✗ Knowledge entry NOT saved: {category} — the block had no content.",
                            key=category)
-                    cleaned = cleaned.replace(match.group(0), "")
                     continue
 
                 existing = (
@@ -1120,8 +1176,6 @@ def _process_knowledge_updates(
 
         except Exception as exc:
             record(False, "error", f"⚠️ Failed to save knowledge: {exc}", key=key)
-
-        cleaned = cleaned.replace(match.group(0), "")
 
     return cleaned.strip(), actions_taken, write_results
 
@@ -1178,9 +1232,11 @@ def _process_capability_updates(
 # block before the reply is composed. Prod, 28 Sep: a refusal was final for the turn, the model could
 # not see why until the next one, and "retries" typed by the user were never parsed (only the MODEL's
 # reply carries blocks). Scope, per the ruling:
-#   * trigger = a shape refusal only (`invalid_shape` / `unknown_field`, carrying the validator's
-#     message). NEVER a key clash (`day_time_clash`, `key_collision`) and NEVER an operator-only
-#     refusal (`proposal_only`, `operator_only`, `confirm_via_route`) — those are decisions, not typos;
+#   * trigger = a shape refusal (`invalid_shape` / `unknown_field`, carrying the validator's
+#     message), or -- extended 1 Nov 2026 -- an unparseable block (`invalid_json`, carrying the
+#     parser's message; one retry per turn, see `_json_retry_instruction`). NEVER a key clash
+#     (`day_time_clash`, `key_collision`) and NEVER an operator-only refusal (`proposal_only`,
+#     `operator_only`, `confirm_via_route`) — those are decisions, not typos;
 #   * cap 1 per write per turn: the retry's outcome is final, it is never itself retried;
 #   * only ONE block for the SAME key is accepted from the retry reply — any other block or prose in
 #     it is ignored, so a retry can fix the refused write and nothing else;
@@ -1198,15 +1254,53 @@ def _retry_instruction(result: WriteResult) -> str:
     )
 
 
-def _retry_block_key(raw_json: str) -> str | None:
-    """The key of a structured WRITE block, or None (legacy free-text, deactivation, bad JSON)."""
-    try:
-        data = json.loads(raw_json)
-    except json.JSONDecodeError:
-        return None
+def _retry_write_key(data: Any) -> str | None:
+    """The key of a structured WRITE payload, or None (legacy free-text, deactivation, not an object)."""
     if not isinstance(data, dict) or "type" not in data or data.get("active") is False:
         return None
     return data.get("key")
+
+
+def _response_text(resp: Any) -> str:
+    return "".join(getattr(b, "text", "") or "" for b in (getattr(resp, "content", None) or []))
+
+
+def _retry_payloads(resp: Any) -> tuple[list[Any], list[str]]:
+    """Every update in a retry reply, from BOTH channels (text blocks and the tool call), as
+    (values, parse_errors). A retry block that still does not parse is logged whole, like any other."""
+    values: list[Any] = []
+    errors: list[str] = []
+    for m in _KNOWLEDGE_BLOCK_RE.finditer(_response_text(resp)):
+        parsed = parse_knowledge_payload(m.group(1))
+        values.extend(parsed.values)
+        if parsed.error:
+            _log_parse_failure("retry text block", m.group(1), parsed.error)
+            errors.append(parsed.error)
+    tool_values, tool_errors = extract_tool_updates(getattr(resp, "content", None))
+    values.extend(tool_values)
+    errors.extend(tool_errors)
+    return values, errors
+
+
+# Ruled 1 Nov 2026: an unparseable write (`invalid_json`) is a model typo, not a decision, so it joins
+# the shape refusals as retryable -- once per TURN (not per write: one call covers every unparsed
+# update), the model handed the parser's own message, and the retry's outcome final. Only updates the
+# turn has not already saved are accepted back, so a retry cannot write the same entry twice.
+_JSON_RETRY_MAX_TOKENS = 4096
+
+
+def _json_retry_instruction(errors: list[str], saved_keys: list[str]) -> str:
+    lines = "\n".join(f"- {e}" for e in errors)
+    already = (
+        "Already saved this turn, do NOT resend: " + ", ".join(saved_keys) + ".\n\n"
+        if saved_keys else ""
+    )
+    return (
+        "Your knowledge update could not be parsed, so it was NOT saved. The parser said:\n"
+        f"{lines}\n\n{already}"
+        "Call `record_knowledge_updates` once with ONLY the update(s) that failed: an `updates` "
+        "array, one complete JSON object per update, and nothing else in the reply."
+    )
 
 
 def _retry_refused_shapes(
@@ -1221,10 +1315,15 @@ def _retry_refused_shapes(
     user_id: int,
     db: Session,
 ) -> tuple[list[str], list[WriteResult], int]:
-    """Q185: one retry per shape-refused knowledge write. Returns (actions, results, retry_calls);
-    a retried write's action string and WriteResult are REPLACED in place by the retry's outcome
+    """One bounded retry for a refused knowledge write. Returns (actions, results, retry_calls).
+
+    Q185: ONE retry per shape-refused write (`invalid_shape` / `unknown_field`), keyed. A retried
+    write's action string and WriteResult are REPLACED in place by the retry's outcome
     (`retried=True`), so the 1:1 action/result pairing holds and narrate-after-write sees the final
-    truth. Client-injected, faked at the transport layer in tests (#166)."""
+    truth. Then, once per turn, ONE retry for every unparseable write (`invalid_json`): the model is
+    handed the parser's message and resends only what failed; the retry's results replace the
+    unparsed ones. The retry call offers the same tool as the main call and reads both channels.
+    Client-injected, faked at the transport layer in tests (#166)."""
     out_actions, out_results = list(actions), list(results)
     calls = 0
     for i, r in enumerate(results):
@@ -1236,6 +1335,7 @@ def _retry_refused_shapes(
                 model=model,
                 max_tokens=_RETRY_MAX_TOKENS,
                 system=system_prompt,
+                tools=[RECORD_KNOWLEDGE_TOOL],
                 messages=[
                     *messages,
                     {"role": "assistant", "content": draft_reply},
@@ -1243,23 +1343,84 @@ def _retry_refused_shapes(
                 ],
             )
             log_usage("knowledge_retry", resp, len(system_prompt))
-            text = resp.content[0].text
+            values, _ = _retry_payloads(resp)
         except Exception as exc:  # noqa: BLE001 — the original refusal stands; never raise the turn
             logger.warning("knowledge-write retry key=%s code=%s: transport error, refusal kept: %s",
                            r.key, r.reason_code, exc)
             continue
-        blocks = [m for m in _KNOWLEDGE_BLOCK_RE.finditer(text)
-                  if _retry_block_key(m.group(1)) == r.key]
-        if len(blocks) != 1:
+        matching = [v for v in values if _retry_write_key(v) == r.key]
+        if len(matching) != 1:
             logger.info("knowledge-write retry key=%s code=%s: outcome=no_single_block (refusal kept)",
                         r.key, r.reason_code)
             continue
-        _, retry_actions, retry_results = _process_knowledge_updates(blocks[0].group(0), user_id, db)
+        _, retry_actions, retry_results = _process_knowledge_updates(
+            "", user_id, db, tool_updates=matching)
         final = retry_results[0].model_copy(update={"retried": True})
         out_actions[i], out_results[i] = retry_actions[0], final
         logger.info("knowledge-write retry key=%s code=%s: outcome=%s", r.key, r.reason_code,
                     "saved" if final.saved else final.reason_code)
-    return out_actions, out_results, calls
+
+    bad = [i for i, r in enumerate(out_results)
+           if not r.saved and r.reason_code == "invalid_json" and not r.retried]
+    if not bad:
+        return out_actions, out_results, calls
+
+    calls += 1
+    saved_keys = [r.key for r in out_results if r.saved and r.key]
+    parser_errors = [out_results[i].validator_message or out_results[i].reason for i in bad]
+    try:
+        resp = client.messages.create(
+            model=model,
+            max_tokens=_JSON_RETRY_MAX_TOKENS,
+            system=system_prompt,
+            tools=[RECORD_KNOWLEDGE_TOOL],
+            messages=[
+                *messages,
+                {"role": "assistant", "content": draft_reply},
+                {"role": "user", "content": _json_retry_instruction(parser_errors, saved_keys)},
+            ],
+        )
+        log_usage("knowledge_retry", resp, len(system_prompt))
+        values, errors = _retry_payloads(resp)
+    except Exception as exc:  # noqa: BLE001 — the failures stand; never raise the turn
+        logger.warning("knowledge-write json retry (%d unparsed): transport error, failures kept: %s",
+                       len(bad), exc)
+        return out_actions, out_results, calls
+
+    # Identity of an update is its key, or its category for a legacy note.
+    fresh = [v for v in values
+             if not (isinstance(v, dict) and (v.get("key") or v.get("category")) in saved_keys)]
+    if len(fresh) != len(values):
+        logger.info("knowledge-write json retry: ignored %d update(s) already saved this turn",
+                    len(values) - len(fresh))
+    if not fresh and not errors:
+        logger.info("knowledge-write json retry (%d unparsed): outcome=no_usable_update (failures kept)",
+                    len(bad))
+        return out_actions, out_results, calls
+
+    new_actions: list[str] = []
+    new_results: list[WriteResult] = []
+    if fresh:
+        _, new_actions, new_results = _process_knowledge_updates("", user_id, db, tool_updates=fresh)
+    for err in errors:
+        msg, res = _invalid_json_result(err)
+        new_actions.append(msg)
+        new_results.append(res)
+    new_results = [res.model_copy(update={"retried": True}) for res in new_results]
+
+    rebuilt_actions: list[str] = []
+    rebuilt_results: list[WriteResult] = []
+    for i, (a, r) in enumerate(zip(out_actions, out_results)):
+        if i == bad[0]:
+            rebuilt_actions.extend(new_actions)
+            rebuilt_results.extend(new_results)
+        elif i not in bad:
+            rebuilt_actions.append(a)
+            rebuilt_results.append(r)
+    logger.info("knowledge-write json retry (%d unparsed): outcome=%d saved, %d not saved",
+                len(bad), sum(1 for r in new_results if r.saved),
+                sum(1 for r in new_results if not r.saved))
+    return rebuilt_actions, rebuilt_results, calls
 
 # ---------- narrate-after-write (Q143a / WS4 in-repo gate) ----------
 
@@ -1427,9 +1588,10 @@ _PASS2_SYSTEM = (
     "- Act on the affordance tag attached to each item:\n"
     "  - user_resolvable: the user must choose. State the clash and ask whether the new "
     "entry REPLACES the existing one or sits alongside it. Do not decide for them.\n"
-    "  - system_issue: a fault on OUR side. Say briefly it wasn't recorded. Do NOT promise "
-    "to retry, fix or sort it out later — nothing retries a refused write; it is saved only "
-    "if it is written again in a later reply. NEVER tell the user to fix a format, field, "
+    "  - system_issue: a fault on OUR side, and the system has ALREADY retried it once. Say "
+    "briefly it wasn't recorded. Do NOT promise to retry, fix or sort it out later — nothing "
+    "retries a refused write after this turn. NEVER ask the user to repeat, re-send, re-mention "
+    "or re-state anything to get it saved, and NEVER tell the user to fix a format, field, "
     "or block — they cannot see or edit one.\n"
     "  - informational: state the fact plainly (e.g. there was nothing matching to remove).\n"
     "- An [NOT SAVED] item with reason code unresolved_exercise means that exercise title is "
@@ -1733,6 +1895,7 @@ async def chat(
         model=MODEL,
         max_tokens=4096,
         system=system_prompt,
+        tools=[RECORD_KNOWLEDGE_TOOL],
         messages=messages,
     )
     log_usage("main", response, len(system_prompt))
@@ -1740,12 +1903,17 @@ async def chat(
     # Every text block, not `content[0]`: a reply with no content blocks was an IndexError, and one
     # whose first block is not text would drop the rest (Q187). Empty is handled at the end.
     reply = "".join(getattr(b, "text", "") or "" for b in (response.content or []))
-    raw_reply = reply  # the model's own draft, blocks intact — the Q185 retry replays it as context
+    # Knowledge updates the model submitted through the structured channel (already-parsed JSON).
+    knowledge_tool_updates, knowledge_tool_errors = extract_tool_updates(response.content)
+    # The model's own draft, blocks intact — the retries replay it as context. History is text-only,
+    # so a tool call is replayed as the equivalent blocks.
+    raw_reply = "\n".join(
+        part for part in (reply, render_updates_as_blocks(knowledge_tool_updates)) if part)
     # Metadata only, never the text (health data stays out of the logs). Before Q187 nothing
     # recorded what the model returned, so an empty prod turn could not be diagnosed afterwards.
-    logger.info("chat turn: stop_reason=%s content_blocks=%d chars=%d write_blocks=%d",
+    logger.info("chat turn: stop_reason=%s content_blocks=%d chars=%d write_blocks=%d tool_updates=%d",
                 getattr(response, "stop_reason", None), len(response.content or []), len(reply),
-                len(_KNOWLEDGE_BLOCK_RE.findall(reply)))
+                len(_KNOWLEDGE_BLOCK_RE.findall(reply)), len(knowledge_tool_updates))
 
     # Parse and execute any embedded action blocks.
     # Exercise creation runs FIRST and the order is load-bearing: a custom minted this
@@ -1765,8 +1933,10 @@ async def chat(
     reply, routine_update_actions, routine_update_write_results = await _process_routine_updates(
         reply, hevy_client, current_user.id, db, refresh=_turn_refresh)
     reply, knowledge_actions, knowledge_write_results = _process_knowledge_updates(
-        reply, current_user.id, db)
-    # Q185: one in-turn retry per shape-refused knowledge write, before the reply is composed.
+        reply, current_user.id, db,
+        tool_updates=knowledge_tool_updates, tool_errors=knowledge_tool_errors)
+    # Q185: one in-turn retry per shape-refused knowledge write (and one per turn for unparseable
+    # ones), before the reply is composed. Only after this does the user hear about a failure.
     knowledge_actions, knowledge_write_results, _retry_calls = _retry_refused_shapes(
         client=client, model=MODEL, system_prompt=system_prompt, messages=messages,
         draft_reply=raw_reply, actions=knowledge_actions, results=knowledge_write_results,

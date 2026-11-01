@@ -433,6 +433,11 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # "yes" writes nothing; one closing line says a write happens only when the reply carries the block.
     # Declared: 7484 → 8059 (+575); same excision, nothing else moves. Pinned by
     # tests/test_chat_no_silent_turn.py.
+    # RE-DECLARED (knowledge-update parse failure, prod 1 Nov 2026): the section now names the
+    # `record_knowledge_updates` tool (an `updates` array, one object per update) as the preferred
+    # channel, says an embedded block holds ONE object with nothing after it, and says a tool call
+    # counts as the block. Declared: 8059 → 8626 (+567); same excision, nothing else moves. Pinned
+    # by tests/test_knowledge_payload.py.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -447,7 +452,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 8059), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 8626), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]
