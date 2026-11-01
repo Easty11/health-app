@@ -35,7 +35,7 @@ test('renders the cached summary on first paint, then fires POST /integrations/g
   // first paint: the cached HRV headline is shown (not blocked on the refresh)
   await waitFor(() => expect(screen.getByText('78')).toBeTruthy())
   await waitFor(() =>
-    expect(api.post).toHaveBeenCalledWith('/integrations/garmin/refresh', null, undefined))
+    expect(api.post).toHaveBeenCalledWith('/integrations/garmin/refresh', null, { params: { via: 'recovery' } }))
 })
 
 test('sleep block renders the freshest staged night, source-chipped, with — for fields the source lacks', async () => {
@@ -71,6 +71,6 @@ test('a real run re-fetches /health/summary; a skip does not', async () => {
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh' })) })
   await waitFor(() =>
     expect(api.post).toHaveBeenLastCalledWith(
-      '/integrations/garmin/refresh', null, { params: { force: true } }))
+      '/integrations/garmin/refresh', null, { params: { via: 'recovery', force: true } }))
   await waitFor(() => expect(summaryCalls()).toBe(afterMount + 1))
 })

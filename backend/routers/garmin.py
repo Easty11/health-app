@@ -31,6 +31,7 @@ import models
 from auth import get_current_user
 import garmin_personal_lanes as gpl
 import garmin_raw
+import wake_day_capture
 from connectors import garmin_personal as gp
 from connectors.garmin import (
     GarminClient,
@@ -53,7 +54,7 @@ _DEFAULT_WINDOW_DAYS = 7
 # On-read refresh (#299): a caller whose freshest Garmin ingest is younger than this skips the
 # pull (unless forced). Mirrors `load.LOAD_REFRESH_STALE_AFTER`, shorter because the Garmin sync
 # is a single narrow HRV pull, not a multi-hundred-day chain.
-RECOVERY_REFRESH_STALE_AFTER = timedelta(minutes=30)
+RECOVERY_REFRESH_STALE_AFTER = timedelta(minutes=30)   # = wake_day_capture.THROTTLE (kept for importers)
 # On-read window — the last few nights only (the freshness path, not a backfill). Narrower than
 # `_DEFAULT_WINDOW_DAYS` so a card-open pull is a couple of API calls, not a week.
 _ON_READ_WINDOW_DAYS = 3
@@ -143,19 +144,20 @@ def _upsert_hrv_day(db: Session, user_id: int, source: str, day: dict, *, transp
     return len(day["samples"])
 
 
-def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date) -> dict:
+def sync_hrv_for_user(db: Session, user_id: int, start: date, end: date, *, client=None) -> dict:
     """Pull Garmin HRV for one user over [start, end] through the Personal API and upsert it. Commits.
 
     The Personal API is the only HRV lane (DECISIONS_LOG #449, PR-B): the DI lane's HRV pull is gone and its
     token serves epoch SpO2 only (#450). A user with no `garmin_personal` key raises `NoPersonalKey`; a refused
-    key raises `GarminPersonalKeyError` (a reconnect state, 424 upstream).
+    key raises `GarminPersonalKeyError` (a reconnect state, 424 upstream). `client` lets a caller that already
+    holds a `PersonalClient` (the wake-day capture) share its token and pacing instead of opening a second one.
     """
     if gpl.get_row(db, user_id) is None:
         raise gpl.NoPersonalKey(f"user {user_id} has no garmin_personal key")
-    return _sync_hrv_personal(db, user_id, start, end)
+    return _sync_hrv_personal(db, user_id, start, end, client=client)
 
 
-def _sync_hrv_personal(db: Session, user_id: int, start: date, end: date) -> dict:
+def _sync_hrv_personal(db: Session, user_id: int, start: date, end: date, *, client=None) -> dict:
     """The Personal API HRV pull for one user over [start, end].
 
     Per night: fetch `hrv-service/hrv/{date}`, LAND the raw payload (identity keys scrubbed), map it with
@@ -164,24 +166,32 @@ def _sync_hrv_personal(db: Session, user_id: int, start: date, end: date) -> dic
     is a `GarminPersonalKeyError` (a reconnect state, 424 upstream); every other Personal API failure
     propagates as a `PersonalApiError`. The lane status is recorded either way."""
     readings = samples = days_with_data = 0
+
+    def _pull(c) -> None:
+        nonlocal readings, samples, days_with_data
+        cur = start
+        while cur <= end:
+            cdate = cur.isoformat()
+            raw = c.hrv_day(cdate)
+            if raw:
+                landed = garmin_raw.land(db, user_id, "hrv", cdate, raw)
+                day = normalize_hrv_day(landed.payload, cdate)
+                if day is not None:
+                    samples += _upsert_hrv_day(db, user_id, "garmin", day, transport="personal_api",
+                                               keep_existing=True)
+                    readings += 1
+                    days_with_data += 1
+                db.commit()
+            cur += timedelta(days=1)
+
     try:
-        with gpl.personal_client(db, user_id) as client:
-            if client is None:                    # the key was removed between the check and the pull
-                raise gpl.NoPersonalKey(f"user {user_id} has no garmin_personal key")
-            cur = start
-            while cur <= end:
-                cdate = cur.isoformat()
-                raw = client.hrv_day(cdate)
-                if raw:
-                    landed = garmin_raw.land(db, user_id, "hrv", cdate, raw)
-                    day = normalize_hrv_day(landed.payload, cdate)
-                    if day is not None:
-                        samples += _upsert_hrv_day(db, user_id, "garmin", day, transport="personal_api",
-                                                   keep_existing=True)
-                        readings += 1
-                        days_with_data += 1
-                    db.commit()
-                cur += timedelta(days=1)
+        if client is not None:
+            _pull(client)
+        else:
+            with gpl.personal_client(db, user_id) as owned:
+                if owned is None:                 # the key was removed between the check and the pull
+                    raise gpl.NoPersonalKey(f"user {user_id} has no garmin_personal key")
+                _pull(owned)
     except gp.PersonalApiError as exc:
         db.rollback()
         gpl.record_failure(db, user_id, garmin_raw.LANE_PERSONAL_HRV, exc)
@@ -380,44 +390,36 @@ def sync_garmin_hrv(
 
 @router.post("/refresh")
 def refresh_garmin_hrv(
-    force: bool = Query(False, description="bypass the staleness gate (pull-to-refresh)"),
+    force: bool = Query(False, description="explicit Refresh: bypass the 30-min throttle (60 s floor remains)"),
+    via: str | None = Query(None, description="which surface fired this: checkin | recovery (default recovery)"),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """On-read freshness trigger for the recovery card (#299) — the FRESHNESS leg that resolves
-    Q155. Runs a narrow Garmin HRV pull for the CALLING USER, staleness-gated at
-    `RECOVERY_REFRESH_STALE_AFTER`; `force=true` bypasses (pull-to-refresh). Fired on
-    recovery-card open, after Garmin's ~6am overnight sync, so the card shows THIS morning's HRV.
-    The nightly 02:00 sweep (`load_sweep`, #299) is the guarantee for mornings the card is never
-    opened.
+    """On-read wake-day capture for the calling user (#299 trigger, widened). Opening the AM check-in or the
+    Recovery page, or pressing Refresh, fetches THIS wake-day's overnight data (Personal API sleep, heart rate,
+    hourly SpO2 and HRV, plus the DI epoch-SpO2 night) via `wake_day_capture.run`; the 02:00 sweep alone could
+    only ever land it a day late. SERVER-AUTHORITATIVE gates: the wake-day already complete, the capture window
+    closed (10:00 Brisbane), the 30-minute per-user throttle, one fetch in flight. `force=true` is the explicit
+    Refresh: it bypasses the throttle and the window.
 
-    SERVER-AUTHORITATIVE gate: the client always calls, the server decides. Returns
-    `{"skipped": true, "reason": ..., "last_ingested_at": ...}` when fresh, and the sync summary
-    on a real run.
-
-    NEVER errors the card. A refused Personal API key (`GarminPersonalKeyError`), a missing key or any other sync
-    failure is logged and returns last-good (a skipped-shaped payload), so a background refresh
-    can never break a card that is already showing its cached data. Sync `def` (not `async`): the
-    Garmin client is blocking network I/O, which FastAPI runs in its threadpool off the event
-    loop."""
-    last = _latest_garmin_ingest_at(db, current_user.id)
-    if (
-        not force
-        and last is not None
-        and datetime.now(timezone.utc) - last < RECOVERY_REFRESH_STALE_AFTER
-    ):
-        return {"skipped": True, "reason": "fresh", "last_ingested_at": last.isoformat()}
-
-    today = garmin_wake_day()
-    start = today - timedelta(days=_ON_READ_WINDOW_DAYS)
-    last_iso = last.isoformat() if last is not None else None
+    Returns `{"skipped": true, "reason": ..., "last_ingested_at": ..., "status": ...}` when nothing was fetched,
+    else the run summary (`wake_day`, `outcome`, `via`, `requests`, `status`). Every response carries the
+    post-run slot `status`. NEVER errors the card: a refused key, a missing key or any failure is returned as a
+    skipped-shaped payload. Sync `def`: the Garmin client is blocking network I/O, run in FastAPI's threadpool."""
+    trigger = "refresh" if force else (via if via in ("checkin", "recovery") else "recovery")
     try:
-        return sync_hrv_for_user(db, current_user.id, start, today)
-    except gpl.NoPersonalKey:
-        return {"skipped": True, "reason": "no_personal_key", "last_ingested_at": last_iso}
-    except GarminPersonalKeyError as exc:
-        logger.warning("garmin refresh: key needs replacing for user %s — %s", current_user.id, exc)
-        return {"skipped": True, "reason": "reconnect_required", "last_ingested_at": last_iso}
-    except Exception:  # noqa: BLE001 — a card refresh must never error the card; return last-good
-        logger.exception("garmin refresh: sync failed for user %s", current_user.id)
-        return {"skipped": True, "reason": "error", "last_ingested_at": last_iso}
+        return wake_day_capture.run(db, current_user.id, trigger=trigger, force=bool(force))
+    except Exception:  # noqa: BLE001 -- a card refresh must never error the card; return last-good
+        logger.exception("garmin refresh: wake-day capture failed for user %s", current_user.id)
+        db.rollback()
+        last = _latest_garmin_ingest_at(db, current_user.id)
+        return {"skipped": True, "reason": "error", "last_ingested_at": last.isoformat() if last else None}
+
+
+@router.get("/wake-day")
+def wake_day_status(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The current wake-day's slot states (filled / pending / not_synced / missing-with-reason). Read-only."""
+    return wake_day_capture.status(db, current_user.id)

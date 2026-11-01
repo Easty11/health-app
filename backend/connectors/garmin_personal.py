@@ -112,6 +112,7 @@ class PersonalClient:
         self._min_interval = max(0.0, min_interval_s)
         self._sleep, self._monotonic = sleep, monotonic
         self._last_request_at: Optional[float] = None
+        self.requests = 0                       # HTTP calls made (exchanges + data), for per-trigger budget reports
         self._http = httpx.Client(base_url=base_url.rstrip("/"), timeout=TIMEOUT_S, transport=transport)
 
     # -- lifecycle ----------------------------------------------------------------------------------
@@ -135,6 +136,7 @@ class PersonalClient:
 
     def exchange(self) -> str:
         """Exchange the key for a fresh bearer token (always hits the network)."""
+        self.requests += 1
         try:
             resp = self._http.post(TOKEN_PATH, headers={"Authorization": f"ApiKey {self._key}", "Accept": "*/*"})
         except httpx.HTTPError as exc:
@@ -173,6 +175,7 @@ class PersonalClient:
         for attempt in (0, 1):
             token = self._bearer(force=attempt == 1)
             self._pace()
+            self.requests += 1
             try:
                 resp = self._http.get(path, params=params, headers={"Authorization": f"Bearer {token}"})
             except httpx.HTTPError as exc:

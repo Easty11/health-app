@@ -42,7 +42,7 @@ test('G1: mount fires the refresh POST without force', async () => {
   renderIt()
   await screen.findByText('–')
   expect(refreshCalls()).toHaveLength(1)
-  expect(refreshCalls()[0][2]).toBeUndefined()           // no { params: { force } }
+  expect(refreshCalls()[0][2]).toEqual({ params: { via: 'checkin' } })   // names the surface, no force
 })
 
 test('G2: a real run re-fetches the prefill exactly once and the tile updates', async () => {
