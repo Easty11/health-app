@@ -1511,7 +1511,10 @@ def _section_schedule(entries: list[Any], now: datetime, suppress_hard_flags: bo
     for e in schedule_items:
         val = _v(e, "value") or {}
         activity = val.get("activity", "?")
-        days = val.get("days", [])
+        # `or []`, not a `.get` default: `validate_schedule_item` stores `days: null` for a
+        # count-only (`sessions_per_week`) or dated (`event_date`) item, so the key is present
+        # and None -- a default only covers the absent key.
+        days = val.get("days") or []
         hard = val.get("hard", False)
         source = _v(e, "source") or "system"
         notes = _v(e, "notes") or ""
@@ -1551,7 +1554,7 @@ def _section_schedule(entries: list[Any], now: datetime, suppress_hard_flags: bo
         if not val.get("hard"):
             continue
         activity = val.get("activity", "?")
-        days = val.get("days", [])
+        days = val.get("days") or []  # null-safe, as above
         for d in days:
             # Map weekday name to next occurrence date
             try:
