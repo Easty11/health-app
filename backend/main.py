@@ -123,6 +123,15 @@ def health_check():
     return {"status": "ok"}
 
 
+@app.get("/version")
+def version():
+    """The commit this instance was built from (Railway's `RAILWAY_GIT_COMMIT_SHA`), for the post-deploy
+    check (#433, `scripts/check_deploy_sha.py`). Public and read-only like /health, and it reports one
+    value: a commit SHA. `commit` is null when the variable is absent, which the check treats as a
+    failure rather than a pass. Registered before the `/` mount below, or the MCP app answers it."""
+    return {"service": "health-app-backend", "commit": os.getenv("RAILWAY_GIT_COMMIT_SHA") or None}
+
+
 app.mount("/", _mcp_app)
 
 # Inject x-enum-varnames into SleepStageType so orval/openapi-generator emits
