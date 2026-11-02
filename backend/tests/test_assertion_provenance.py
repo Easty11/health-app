@@ -65,11 +65,11 @@ STOP_LEGACY = {
 
 
 def _blocked(region_key, side, hard_stops):
-    """The real path: `is_contraindicated` with no injuries, only profile stops."""
+    """The real path: `is_contraindicated` with only profile stops."""
     region = taxonomy.by_key(region_key)
     assert region is not None, f"{region_key} does not resolve in the taxonomy"
     blocked, _reason = selection.is_contraindicated(
-        region, side, profile_hard_stops=hard_stops, active_injuries=[],
+        region, side, profile_hard_stops=hard_stops,
     )
     return blocked
 
@@ -344,10 +344,10 @@ def test_the_same_stop_blocks_identically_with_and_without_provenance(db_session
 
     _, legacy_reason = selection.is_contraindicated(
         taxonomy.by_key(region), side,
-        profile_hard_stops=[STOP_LEGACY], active_injuries=[])
+        profile_hard_stops=[STOP_LEGACY])
     _, prov_reason = selection.is_contraindicated(
         taxonomy.by_key(region), side,
-        profile_hard_stops=[STOP_WITH_PROV], active_injuries=[])
+        profile_hard_stops=[STOP_WITH_PROV])
     assert legacy_reason == prov_reason == "post-op precaution"
 
 
