@@ -58,6 +58,7 @@ from routers.knowledge import (
     TYPED_ENTRY_TYPES,
     chat_may_not_retire,
     expire_stale_entries,
+    operator_route_hint,
     upsert_knowledge_entry,
 )
 
@@ -1071,8 +1072,8 @@ def _process_knowledge_updates(
                         # retiring it by key would be a side door around the resolve route.
                         record(False, "operator_only",
                                f"✗ {_entry_noun(existing.type)} NOT removed: {key} — it is "
-                               f"{(existing.value or {}).get('status')!r}; the operator retires "
-                               f"it via its resolve route", key=key)
+                               f"{(existing.value or {}).get('status')!r}, so only you can retire it: "
+                               f"{operator_route_hint(existing)}.", key=key)
                     elif existing:
                         existing.active = False
                         db.commit()
@@ -1136,10 +1137,23 @@ def _process_knowledge_updates(
                         # parsed out of the message. The noun is type-aware (#313) so a
                         # training_plan refusal is not mislabelled 'Schedule entry'.
                         code = getattr(exc, "code", "invalid_shape")
-                        record(False, code,
-                               f"✗ {noun} NOT saved: {key} — {exc}. "
-                               f"State this back to the user and retry with a corrected block.",
-                               key=key, validator_message=str(exc))
+                        if code == "operator_only":
+                            # Not a fault to retry or hand to "whoever manages" the row: the user IS
+                            # the operator, so the line says how they do it themselves.
+                            held = (
+                                db.query(models.UserKnowledgeEntry)
+                                .filter_by(user_id=user_id, key=key, active=True).first()
+                            )
+                            how = (operator_route_hint(held) if held is not None else
+                                   "record it yourself with POST /knowledge/entry (source \"api\")")
+                            record(False, code, f"✗ {noun} NOT saved: {key} — {exc}. "
+                                                f"Only you can do this: {how}.",
+                                   key=key, validator_message=str(exc))
+                        else:
+                            record(False, code,
+                                   f"✗ {noun} NOT saved: {key} — {exc}. "
+                                   f"State this back to the user and retry with a corrected block.",
+                                   key=key, validator_message=str(exc))
 
             else:
                 # Legacy format → UserKnowledge (free-text categories)
@@ -1241,7 +1255,10 @@ def _process_capability_updates(
 #   * only ONE block for the SAME key is accepted from the retry reply — any other block or prose in
 #     it is ignored, so a retry can fix the refused write and nothing else;
 #   * every retry outcome is logged.
-_RETRYABLE_SHAPE_CODES = frozenset({"invalid_shape", "unknown_field"})
+# `invalid_parent` joins them for the appointment scope rule: the refusal names the exact key to add
+# to `scope.parent_keys`, which the model can do itself (a parent injury that does not exist at all
+# is refused with the same code, and its retry simply fails the same way, once).
+_RETRYABLE_SHAPE_CODES = frozenset({"invalid_shape", "unknown_field", "invalid_parent"})
 _RETRY_MAX_TOKENS = 1024
 
 
@@ -1443,6 +1460,9 @@ def _retry_refused_shapes(
 # `create_failed` are neither — they fall to `informational` (stated plainly), the routine
 # lane's honest default.
 _USER_RESOLVABLE_CODES = frozenset({"day_time_clash", "needs_disambiguation", "already_exists"})
+# `operator_only`: the row is the user's own record past the proposal stage. The user is the operator,
+# so they can do it themselves; the outcome line names the route (see `operator_route_hint`).
+_OPERATOR_CODES = frozenset({"operator_only"})
 # `invalid_number` (a non-finite/non-number in a routine numeric field, Q144 follow-up) is a
 # malformed-payload fault on our side, like invalid_shape/invalid_json — never handed to the
 # user to fix.
@@ -1454,6 +1474,8 @@ def _write_affordance(reason_code: str) -> str:
         return "user_resolvable"
     if reason_code in _SYSTEM_BUG_CODES:
         return "system_issue"
+    if reason_code in _OPERATOR_CODES:
+        return "user_can_resolve"
     return "informational"  # e.g. not_found — nothing matched; state it plainly
 
 
@@ -1472,6 +1494,8 @@ _FOOTER_REASON_PHRASE = {
     "unresolved_exercise": "unresolved exercise",
     "create_failed": "create failed",
     "invalid_number": "invalid number",
+    "operator_only": "yours to change",
+    "invalid_parent": "injury not in scope",
     # Hevy exercise lane (Q144 — the last un-wrapped write surface)
     "already_present": "already present",
     "limit_reached": "limit reached",
@@ -1555,6 +1579,43 @@ _EMPTY_TURN_NOTICE = (
 )
 
 
+# ---------- a claimed check-in write is never true (prod, 2 Nov 2026) ----------
+#
+# Chat has no check-in lane: a soreness or readiness answer is written on the check-in screens, and
+# no `<knowledge_update>` type reaches `daily_checkins` / `daily_records`. Prod: the reply said a
+# check-in soreness update was saved, the turn's receipt held other writes and none for a check-in,
+# so neither the no-write notice (it needs a turn with NO writes) nor the grammar strip caught it.
+# The claim is checked per sentence against the one thing that can never back it, so it is a
+# deterministic floor, not a guess about which write the model meant. A sentence that denies the
+# write ("I can't update your check-in") or asks about it is left alone.
+_CHECKIN_SUBJECT_RE = re.compile(
+    r"(?i)\bcheck-?ins?\b|\bsoreness (?:update|updates|rating|ratings|score|scores|level|levels|entry|reading)\b"
+)
+_CHECKIN_WRITE_VERB_RE = re.compile(
+    r"(?i)\b(?:saved|logged|recorded|updated|written|stored|added|noted|captured|submitted)\b"
+)
+_CHECKIN_DENIAL_RE = re.compile(
+    r"(?i)\b(?:not|never|no|cannot|can't|cant|couldn't|didn't|wasn't|isn't|aren't|unable|without|"
+    r"if|whether|would|should|could|want me to|shall)\b|n't\b|\?"
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+
+_CHECKIN_NO_WRITE_NOTICE = (
+    "⚠ Nothing was written to your check-in. Chat can't write check-ins — enter it on the "
+    "check-in screen."
+)
+
+
+def _claims_a_checkin_write(reply: str) -> bool:
+    """True when the MODEL's own prose says a check-in (or a soreness rating) was saved or updated.
+    Run on the reply BEFORE the system's own action lines are appended, so those never trip it."""
+    for sentence in _SENTENCE_SPLIT_RE.split(reply):
+        if (_CHECKIN_SUBJECT_RE.search(sentence) and _CHECKIN_WRITE_VERB_RE.search(sentence)
+                and not _CHECKIN_DENIAL_RE.search(sentence)):
+            return True
+    return False
+
+
 def _claims_a_save(reply: str) -> bool:
     """True when the MODEL's own text carries a line in the system's save grammar (tally or per-entry)."""
     return bool(_FOOTER_ECHO_RE.search(reply) or _ACTION_ECHO_RE.search(reply))
@@ -1593,6 +1654,10 @@ _PASS2_SYSTEM = (
     "retries a refused write after this turn. NEVER ask the user to repeat, re-send, re-mention "
     "or re-state anything to get it saved, and NEVER tell the user to fix a format, field, "
     "or block — they cannot see or edit one.\n"
+    "  - user_can_resolve: the row is the user's own record and chat may not change it. The "
+    "user IS the operator: say plainly they can do it themselves and give the route from the "
+    "outcome line exactly as written. NEVER say to raise it with, ask, or hand it to anyone "
+    "else, never offer to retry the write, and never tell them to repeat anything in chat.\n"
     "  - informational: state the fact plainly (e.g. there was nothing matching to remove).\n"
     "- An [NOT SAVED] item with reason code unresolved_exercise means that exercise title is "
     "not in the catalogue as synced this turn. Do not assert the exercise exists, and do not "
@@ -1697,6 +1762,8 @@ def _compose_response(
     # A save-grammar line in the model's own text with NO write this turn is a claimed write that
     # did not happen (Q187). The strip below removes the claim, so say plainly that nothing saved.
     claimed_unwritten = not all_actions and not write_results and _claims_a_save(reply)
+    # A check-in write is claimed in prose whatever else this turn saved: no write here can be one.
+    claimed_checkin = _claims_a_checkin_write(reply)
 
     # Strip any footer-tally line the model wrote itself, so the authoritative footer appended
     # below is the ONLY one (#314). Kept prose on an all-saved turn is where the duplicate came
@@ -1712,6 +1779,8 @@ def _compose_response(
 
     if claimed_unwritten:
         reply = (reply + "\n\n" + _NO_WRITE_NOTICE) if reply.strip() else _NO_WRITE_NOTICE
+    if claimed_checkin:
+        reply = (reply + "\n\n" + _CHECKIN_NO_WRITE_NOTICE) if reply.strip() else _CHECKIN_NO_WRITE_NOTICE
 
     return reply, second_call_fired
 
