@@ -325,11 +325,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **MCP read doors for Code: `get_injuries`, `get_constraints` and `get_probe_queue`, added by PR (prod reads only through MCP tools).** Code - Canonical home: `DECISIONS_LOG.md` #490.
+
 - **Engine blocks are rows: engine-tier default proposals seeded per injury (script and write path), the review-due sweep with in-place Keep, and Decline on proposals; the three block maps retired.** Code - Canonical home: `DECISIONS_LOG.md` #486, #487, #488, #489.
 
 - **Open issues in the status model: schema 2 `issues` block, two transports (live and `--issues-json` from `fetch_issues.py`), a shape gate, and an issues diff.** Code - Canonical home: `DECISIONS_LOG.md` #483.
-
-- **Wake-day capture: the morning fetch, the 10:00 backstop, the Recovery tile and Settings Garmin views, the snapshot's Garmin lanes with four retired writers, and the SpO2 minimum.** Code - Canonical home: `DECISIONS_LOG.md` #477, #478, #479, #480, #481.
 
 
 
