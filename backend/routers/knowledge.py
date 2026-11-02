@@ -519,7 +519,8 @@ def validate_training_plan(value: Any) -> dict[str, Any]:
 # An instruction to the engine or the coach is a `type="constraint"` row, never free text: free
 # text cannot be retired or enforced. Closed shape, unknown keys refused (the #233 discipline),
 # the value stored exactly as written. Two tiers make "enforced" vs "advisory" explicit:
-#   * `engine`   — scoped to taxonomy `Region.key`s; `selection.is_contraindicated` reads it.
+#   * `engine`   — scoped to taxonomy `Region.key`s; `selection.is_contraindicated` reads it (it is the
+#                  ONLY injury-related gate: the injury-keyed block maps retired, DECISIONS_LOG #486).
 #                  Region keys are the ONLY engine vocabulary in v1 (G0 ruling D1): there is no
 #                  pattern layer distinct from region keys, and the only template ids are Hevy's,
 #                  which the engine never gates on. `pattern_keys` / `exercise_template_ids` are
@@ -1698,9 +1699,9 @@ def list_injuries(
     """The user's injury entries — the read half of the resolution loop.
 
     Nothing can be retired that cannot first be seen: `gather_active_injuries` and
-    `is_contraindicated` have consumed these rows since #72, but no endpoint listed
-    them, so a healed injury kept suppressing regions with nothing to show the user
-    what to retire.
+    `is_contraindicated` consumed these rows from #72 until the injury-keyed block maps retired
+    (#486), but no endpoint listed them, so a healed injury kept suppressing regions with nothing
+    to show the user what to retire.
 
     Each row's `value` is returned UNMODIFIED, so an entry's `trajectory` block (#72)
     rides along untouched — this surface reads the ledger, it does not reinterpret it.
@@ -2099,9 +2100,9 @@ async def sweep_injury(
 
     Also audits the entry's `restrictions`: each is `covered` by the resolution basis,
     `rehomed` onto another active injury row, or an `orphan` about to leave chat context
-    (restriction strings are chat-rendered only; the engine gates on body_part +
-    signal_type). A re-homed destination typed neural/radicular on a spinal part carries a
-    `_RADICULAR_BLOCKS` warning. The resolve route's contract is untouched: the frontend
+    (restriction strings are chat-rendered only; the engine gates on confirmed engine-tier
+    constraint rows and profile hard-stops). A re-homed destination typed neural/radicular on a
+    non-cervical spinal part carries a `_RADICULAR_BLOCKS` warning (what writing it would PROPOSE). The resolve route's contract is untouched: the frontend
     calls this straight after a resolve.
 
     Works for resolved entries — the point is sweeping after a resolve. Scoped to

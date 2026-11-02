@@ -91,10 +91,12 @@ _INJURY_SEED = [
         },
     },
     {
-        # Current, active irritation. signal_type "mechanical"; body_part "pes anserine"
-        # matches no _ACUTE_TISSUE_BLOCKS key, so no engine hard-stop — the restrictions
-        # (adductor tension / deep-flexion) are surfaced, not gated (no matching taxonomy
-        # region). Expiry is symptom-gated on point tenderness — carried in `detail` until
+        # Current, active irritation. signal_type "mechanical"; body_part "pes anserine".
+        # This seed writes the row straight to the ORM, so the injury write path proposes
+        # nothing for it (the knee defaults would be proposed through the "pes anserine"
+        # alias if it were written there) and the engine blocks nothing on an injury alone —
+        # the restrictions (adductor tension / deep-flexion) are surfaced, not gated (no
+        # matching taxonomy region). Expiry is symptom-gated on point tenderness — carried in `detail` until
         # the trajectory/review schema (Step 3) formalises it.
         "key": "injury_pes_anserine_left",
         "value": {

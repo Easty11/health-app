@@ -7,13 +7,15 @@ What is pinned here:
   * D3: `pes anserine` reaches the knee set (Q102 entry 30); a cervical neural entry seeds NOTHING
     from the lumbar-shaped radicular set; an empty body part typed neural seeds it; RA-flare by
     flag or by restriction token;
-  * the SUPERSET property — the seeded set never covers less than the live arms block, the one
-    divergence being the documented cervical-spine case — which is what lets PR2 retire the arms;
+  * the SUPERSET property — the seeded set never covers less than the PR1 engine's arms blocked (the
+    oracle, `pr1_oracle`), the one divergence being the documented cervical-spine case — which is what
+    let the second PR retire the arms;
   * idempotency across an active and a resolved twin, and across the operator's own rows;
   * the injury write path (chat and api) proposes, and only on a create or a change to
     body_part / side / signal_type / ra_flare; a failure to propose never loses the injury;
   * a proposal changes `is_contraindicated` and `compute_probe_queue` in nothing (G3), and a
-    confirmed one does — so the test can see a leak;
+    confirmed one does — so the test can see a leak (the arms retired in the second PR; an injury
+    blocks nothing on its own);
   * V3: a declined proposal is stored with its resolution block and leaves /proposals.
 """
 from datetime import date
@@ -27,6 +29,7 @@ from auth import get_current_user
 from database import get_db
 from engine import engine_defaults as ed
 from engine import selection, taxonomy
+from pr1_oracle import PR1
 from load_metrics import _local_day
 from routers import knowledge as knowledge_router
 from routers.knowledge import KnowledgeEntryIn, upsert_knowledge_entry, validate_constraint
@@ -49,19 +52,19 @@ def _regions(value):
 
 # ── every map key seeds its regions ───────────────────────────────────────────
 
-@pytest.mark.parametrize("key", sorted(selection._ACUTE_TISSUE_BLOCKS))
+@pytest.mark.parametrize("key", sorted(ed._ACUTE_TISSUE_BLOCKS))
 def test_every_acute_map_key_seeds_exactly_its_regions(key):
-    assert _regions(_inj(key)) == set(selection._ACUTE_TISSUE_BLOCKS[key])
+    assert _regions(_inj(key)) == set(ed._ACUTE_TISSUE_BLOCKS[key])
 
 
 def test_radicular_and_ra_flare_seed_their_sets():
-    assert _regions(_inj("lumbar", signal_type="neural")) == set(selection._RADICULAR_BLOCKS)
-    assert _regions(_inj("lumbar", signal_type="radicular")) == set(selection._RADICULAR_BLOCKS)
-    assert _regions(_inj("hand", ra_flare=True)) == set(selection._RA_FLARE_BLOCKS)
+    assert _regions(_inj("lumbar", signal_type="neural")) == set(ed._RADICULAR_BLOCKS)
+    assert _regions(_inj("lumbar", signal_type="radicular")) == set(ed._RADICULAR_BLOCKS)
+    assert _regions(_inj("hand", ra_flare=True)) == set(ed._RA_FLARE_BLOCKS)
 
 
 def test_ra_flare_by_restriction_token_is_the_same_as_the_flag():
-    assert _regions(_inj("hand", restrictions=["ra_flare"])) == set(selection._RA_FLARE_BLOCKS)
+    assert _regions(_inj("hand", restrictions=["ra_flare"])) == set(ed._RA_FLARE_BLOCKS)
 
 
 def test_a_mechanical_lumbar_entry_seeds_nothing():
@@ -111,11 +114,12 @@ def test_a_missing_side_is_bilateral():
 
 def test_pes_anserine_seeds_the_knee_set_which_the_live_arm_never_reached():
     """Ledger entry 30 (Q102): `"pes anserine"` contains no `knee`, so the bare substring match
-    never fires. The declared alias does — the seeded default is broader than the arm, on purpose."""
-    assert _regions(_inj("pes anserine", side="left")) == set(selection._ACUTE_TISSUE_BLOCKS["knee"])
+    never fired in the PR1 engine's arm. The declared alias does — the seeded default is broader than
+    the arm was, on purpose."""
+    assert _regions(_inj("pes anserine", side="left")) == set(ed._ACUTE_TISSUE_BLOCKS["knee"])
     region = taxonomy.by_key("single_leg_hop")
-    assert selection.is_contraindicated(region, "left", profile_hard_stops=None,
-                                        active_injuries=[_norm_inj("pes anserine", "left")])[0] is False
+    assert PR1.is_contraindicated(region, "left", profile_hard_stops=None,
+                                  active_injuries=[_norm_inj("pes anserine", "left")])[0] is False
 
 
 @pytest.mark.parametrize("part,key", [
@@ -124,7 +128,7 @@ def test_pes_anserine_seeds_the_knee_set_which_the_live_arm_never_reached():
     ("semimembranosus", "hamstring"),   # #340's BODY_PART_ALIASES, read not copied
 ])
 def test_declared_aliases_reach_their_map_key(part, key):
-    assert _regions(_inj(part)) == set(selection._ACUTE_TISSUE_BLOCKS[key])
+    assert _regions(_inj(part)) == set(ed._ACUTE_TISSUE_BLOCKS[key])
 
 
 def test_an_alias_is_not_a_license_for_an_unrelated_part():
@@ -140,15 +144,15 @@ def test_a_cervical_neural_entry_seeds_nothing_from_the_lumbar_shaped_set(part, 
 def test_the_cervical_exclusion_is_what_stops_cervical_spine():
     """Control: `cervical spine` IS spinal by the live `_SPINAL_PARTS` (via "spine"), so without the
     exclusion it would seed the lumbar set — the live arm does fire there."""
-    assert selection._is_spinal("cervical spine") is True
+    assert ed._is_spinal("cervical spine") is True
     assert ed.is_cervical("cervical spine") is True
-    assert selection._is_spinal("neck") is False        # why the ledger's `neck` row fires no arm today
+    assert ed._is_spinal("neck") is False        # why the ledger's `neck` row fires no arm today
 
 
 def test_an_empty_body_part_typed_neural_seeds_the_radicular_set():
     """Unknown degrades to the broader caution, never to permission (`_is_spinal`)."""
-    assert _regions(_inj("", signal_type="radicular")) == set(selection._RADICULAR_BLOCKS)
-    assert _regions({"signal_type": "neural"}) == set(selection._RADICULAR_BLOCKS)
+    assert _regions(_inj("", signal_type="radicular")) == set(ed._RADICULAR_BLOCKS)
+    assert _regions({"signal_type": "neural"}) == set(ed._RADICULAR_BLOCKS)
 
 
 def test_a_peripheral_neural_entry_seeds_no_radicular_set():
@@ -215,7 +219,7 @@ EQUIV_FIXTURES = {
     "neck_neural": _norm_inj("neck", signal_type="neural"),
     "mechanical_lumbar": _norm_inj("lumbar"),
 }
-# The ONE documented divergence from the live arm: a cervical entry whose body part also contains
+# The ONE documented divergence from the (retired) arm: a cervical entry whose body part also contains
 # "spine" fires the lumbar-shaped set today; the default deliberately does not (D3).
 KNOWN_DIVERGENCE = {"cervical_spine_neural"}
 EQUIV_FIXTURES["cervical_spine_neural"] = _norm_inj("cervical spine", signal_type="neural")
@@ -232,16 +236,16 @@ def _seeded_cells(inj):
     return cells
 
 
-def _arm_cells(inj):
+def _arm_cells(inj):   # the PR1 engine's arms, from the pinned oracle
     return {
         (r.key, s)
         for r in taxonomy.all_regions() for s in r.sides()
-        if selection.is_contraindicated(r, s, profile_hard_stops=None, active_injuries=[inj])[0]
+        if PR1.is_contraindicated(r, s, profile_hard_stops=None, active_injuries=[inj])[0]
     }
 
 
 @pytest.mark.parametrize("name", sorted(EQUIV_FIXTURES))
-def test_the_seeded_set_covers_every_cell_the_live_arms_block(name):
+def test_the_seeded_set_covers_every_cell_the_retired_arms_blocked(name):
     inj = EQUIV_FIXTURES[name]
     arm, seeded = _arm_cells(inj), _seeded_cells(inj)
     if name in KNOWN_DIVERGENCE:
@@ -506,7 +510,7 @@ def test_a_retype_to_neural_proposes_the_radicular_set(db_session):
     assert _defaults(db_session, u) == []
     _put_injury(db_session, u, "injury_lumbar_spine", _inj("lumbar", signal_type="neural"))
     assert {r.value["scope"]["region_keys"][0] for r in _defaults(db_session, u)} == \
-        set(selection._RADICULAR_BLOCKS)
+        set(ed._RADICULAR_BLOCKS)
 
 
 def test_a_declined_default_survives_a_retype_that_still_implies_it(db_session):
@@ -565,8 +569,7 @@ def test_proposals_change_neither_the_verdicts_nor_the_probe_queue(db_session):
     for _, (key, value) in O1.items():     # direct ORM: the hook does not run
         _injury_row(db_session, u.id, key, value)
     before = _queue(db_session, u)
-    injuries = selection.gather_active_injuries(db_session, u.id)
-    verdicts = {(r.key, s): selection.is_contraindicated(r, s, profile_hard_stops=None, active_injuries=injuries)
+    verdicts = {(r.key, s): selection.is_contraindicated(r, s, profile_hard_stops=None)
                 for r in taxonomy.all_regions() for s in r.sides()}
 
     # now the proposals are written for the same ledger (the directly-written rows never passed the hook)
@@ -579,9 +582,9 @@ def test_proposals_change_neither_the_verdicts_nor_the_probe_queue(db_session):
 
     assert selection.gather_active_constraints(db_session, u.id) == []
     assert _queue(db_session, u) == before
-    injuries = selection.gather_active_injuries(db_session, u.id)
     assert verdicts == {(r.key, s): selection.is_contraindicated(
-        r, s, profile_hard_stops=None, active_injuries=injuries, active_constraints=[])
+        r, s, profile_hard_stops=None,
+        active_constraints=selection.gather_active_constraints(db_session, u.id))
         for r in taxonomy.all_regions() for s in r.sides()}
 
 
@@ -590,10 +593,6 @@ def test_a_confirmed_default_does_reach_the_engine(db_session):
     region on that side — through the real confirm route."""
     u = _user(db_session)
     _put_injury(db_session, u, "injury_knee_left", _inj("knee", "left"))
-    # silence the arm so the constraint arm's effect is visible in isolation
-    inj = db_session.query(models.UserKnowledgeEntry).filter_by(user_id=u.id, type="injury").one()
-    inj.value = {**inj.value, "body_part": "finger"}
-    db_session.commit()
     assert selection.gather_active_constraints(db_session, u.id) == []
     row = next(r for r in _defaults(db_session, u) if r.key.endswith("deceleration_landing"))
     _client(db_session, u).post(f"/knowledge/constraints/{row.id}/confirm", json={"asserted_by": "user"})

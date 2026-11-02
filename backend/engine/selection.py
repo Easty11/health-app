@@ -228,58 +228,18 @@ def infer_loaded_regions(
 
 
 # --------------------------------------------------------------------------- #
-# Active constraints — injuries and live signals that contraindicate regions.  #
+# Active constraints — the explicit rows that contraindicate regions.          #
 # --------------------------------------------------------------------------- #
-
-# Seed heuristic maps (spec §8). Provoking signal → regions to hard-stop. These
-# are intentionally explicit and reviewable, not learned.
-_RADICULAR_BLOCKS = frozenset({
-    "hinge", "rotation", "carry", "deceleration_landing",
-    "change_of_direction", "single_leg_hop", "gait_load_carriage",
-    # A PC-length screen is functionally a straight-leg raise — a neural
-    # provocation test — so probing it under an active radicular sign is the
-    # literal case "don't discover your way into a flagged nerve" forbids.
-    # `loaded_carry_capacity_bw` is the G-axis twin of `carry`, which was
-    # already blocked here; the sets were swept for A–E only and never G.
-    "hip_flexion_pc_length", "loaded_carry_capacity_bw",
-})
-# RA flare = both-ends stand-down (base + grip compromised).
-_RA_FLARE_BLOCKS = frozenset({
-    "carry", "anti_lateral_flexion", "gait_load_carriage", "terrain_perturbation",
-    "single_leg_hop", "change_of_direction", "deceleration_landing",
-    # This set's own rationale says grip is compromised, yet it left the grip
-    # region itself probeable mid-flare. Same G-axis omission as above for the
-    # carry twin.
-    "grip_strength", "loaded_carry_capacity_bw",
-})
-# Acute tissue → time-limited exclusion of the provoking range, by body part.
-_ACUTE_TISSUE_BLOCKS: dict[str, frozenset[str]] = {
-    "hamstring": frozenset({
-        "lunge_single_leg", "single_leg_hop", "change_of_direction",
-        "deceleration_landing", "terrain_perturbation",
-    }),
-    "shoulder": frozenset({"vertical_push", "horizontal_push"}),
-    "calf": frozenset({"single_leg_hop", "change_of_direction", "deceleration_landing"}),
-    "ankle": frozenset({"single_leg_hop", "change_of_direction", "terrain_perturbation"}),
-    "knee": frozenset({"single_leg_hop", "change_of_direction", "deceleration_landing"}),
-}
-# Body parts whose neural/radicular signal implicates the spine. `_RADICULAR_BLOCKS`
-# is a lumbar-shaped stand-down — hinge, rotation, carry, gait — so firing it on any
-# entry merely typed "neural" makes a peripheral entrapment (cubital tunnel, say)
-# block a hinge it has nothing to do with. Non-spine neural signals fall through to
-# the acute-tissue arm below; dedicated cervical / peripheral block sets are Q102
-# territory, not this change.
-_SPINAL_PARTS = (
-    "spine", "back", "lumbar", "sacral", "sciatic", "si joint",
-    "l4", "l5", "s1",
-)
-
 
 def gather_active_injuries(db: Session, user_id: int) -> list[dict[str, Any]]:
     """
-    Active injury/contraindication signals from the structured ledger
-    (UserKnowledgeEntry type='injury', active=True). Normalised to:
+    Active injury signals from the structured ledger (UserKnowledgeEntry type='injury',
+    active=True). Normalised to:
         {body_part, side, signal_type, ra_flare, restrictions, raw}
+
+    READ BY the chat section and the injury sweep. NOT read by `is_contraindicated`: an injury
+    blocks nothing by itself since the three block maps retired (DECISIONS_LOG #486) — the engine
+    reads only profile hard-stops and confirmed engine-tier constraint rows.
     """
     rows = (
         db.query(models.UserKnowledgeEntry)
@@ -328,18 +288,6 @@ def gather_active_constraints(db: Session, user_id: int) -> list[dict[str, Any]]
     return out
 
 
-def _is_spinal(body_part: str) -> bool:
-    """Does this body part implicate the spine, for `_RADICULAR_BLOCKS` scoping?
-
-    An EMPTY body part returns True: unknown degrades to the broader caution, never
-    to permission. Ledger entries are hand-written and `body_part` is optional, so
-    the absent case is the one most likely to be a real spinal sign nobody typed.
-    """
-    if not body_part:
-        return True
-    return any(part in body_part for part in _SPINAL_PARTS)
-
-
 def _side_conflict(injury_side: str, region_side: str) -> bool:
     """A bilateral injury hits both sides; a sided injury hits its side (and any
     bilateral-scored region)."""
@@ -355,17 +303,22 @@ def is_contraindicated(
     side: str,
     *,
     profile_hard_stops: list[dict[str, Any]] | None,
-    active_injuries: list[dict[str, Any]],
     active_constraints: list[dict[str, Any]] | None = None,
 ) -> tuple[bool, str | None]:
     """Apply the §8 hard filters. Probe never samples a contraindicated region —
     'don't discover your way into a flagged nerve'.
 
-    `active_constraints` (#342) is the typed-constraint arm, from `gather_active_constraints`:
-    confirmed engine-tier `block` rows scoped to `Region.key`, side-matched by `_side_conflict`.
-    It runs LAST, so every existing arm returns exactly what it returned before (same reason
-    string), and with none/empty constraints this function is byte-identical to pre-#342.
-    `_ACUTE_TISSUE_BLOCKS` / `_RADICULAR_BLOCKS` are untouched (their conversion is its own Q)."""
+    TWO ARMS, both explicit rows, in this order:
+      1. an explicit profile hard-stop that names a concrete region;
+      2. `active_constraints` (#342), from `gather_active_constraints`: confirmed engine-tier `block`
+         rows scoped to `Region.key`, side-matched by `_side_conflict`.
+
+    An injury row blocks NOTHING by itself. The three hard-coded maps that used to read an injury's
+    `body_part` / `signal_type` / `ra_flare` (acute-tissue, radicular, RA-flare) are retired
+    ("Engine blocks are rows", DECISIONS_LOG #486): what they encoded is seeded as proposals by
+    `engine.engine_defaults`, and only a row the operator CONFIRMED blocks. The function takes no
+    injuries on purpose — a parameter that is accepted and ignored is how a retired gate keeps
+    looking alive."""
     # Explicit profile hard-stops that name a concrete region (not a pattern rule).
     for hs in profile_hard_stops or []:
         rk = hs.get("region_key")
@@ -373,25 +326,6 @@ def is_contraindicated(
         if rk and rk == region.key and _side_conflict(hs_side, side):
             return True, hs.get("reason") or "profile hard-stop"
 
-    for inj in active_injuries:
-        if not _side_conflict(inj["side"], side):
-            continue
-        # Radicular/neural sign → hard stop on the provoking pattern, scoped to
-        # spinal (or unknown) body parts so a peripheral neural entry does not
-        # trigger a lumbar-shaped stand-down. See `_SPINAL_PARTS`.
-        if (
-            inj["signal_type"] in ("radicular", "neural")
-            and _is_spinal(inj["body_part"])
-            and region.key in _RADICULAR_BLOCKS
-        ):
-            return True, f"radicular sign ({inj['body_part'] or 'spine'}) — provoking pattern"
-        # RA flare → both-ends stand-down.
-        if inj["ra_flare"] and region.key in _RA_FLARE_BLOCKS:
-            return True, "RA flare — both-ends stand-down (base + grip)"
-        # Acute tissue → provoking-range exclusion by body part.
-        for part, blocked in _ACUTE_TISSUE_BLOCKS.items():
-            if part in inj["body_part"] and region.key in blocked:
-                return True, f"acute {inj['body_part']} — provoking range excluded"
     for c in active_constraints or []:
         if region.key in c["region_keys"] and _side_conflict(c["side"], side):
             return True, f"constraint {c['key']} — {c['kind']}"
@@ -420,12 +354,9 @@ def compute_probe_queue(
     *,
     profile: models.FortificationProfile | None,
     loaded_region_keys: set[str],
-    active_injuries: list[dict[str, Any]] | None = None,
     active_constraints: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """The §4 set expression, ranked. One entry per (region, side)."""
-    if active_injuries is None:
-        active_injuries = gather_active_injuries(db, user_id)
     if active_constraints is None:
         active_constraints = gather_active_constraints(db, user_id)
     hard_stops = list(profile.hard_stops) if (profile and profile.hard_stops) else []
@@ -449,7 +380,6 @@ def compute_probe_queue(
             blocked, reason = is_contraindicated(
                 region, side,
                 profile_hard_stops=hard_stops,
-                active_injuries=active_injuries,
                 active_constraints=active_constraints,
             )
             if blocked:                          # − contraindicated

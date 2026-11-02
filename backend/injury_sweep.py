@@ -258,24 +258,25 @@ def _entry_action(e: models.UserKnowledgeEntry) -> tuple[str, str | None]:
 # WHAT A RESTRICTION STRING DOES. Restriction strings are SURFACED, not gated: they render
 # into chat context (`context_builder._section_schedule`, "avoid: …") and the MCP injury
 # summary, and nothing else reads them — the engine's §8 filters (`selection.is_contraindicated`)
-# gate on `body_part` + `signal_type` (+ side), with the one exception of the literal
-# `ra_flare` token. So when an injury row is resolved its restrictions vanish from the only
+# gate on profile hard-stops and CONFIRMED engine-tier constraint rows, never on an injury's
+# text or type (the injury-keyed maps retired, DECISIONS_LOG #486). So when an injury row is resolved its restrictions vanish from the only
 # place they act: the coach's prompt. A restriction the resolution basis never addressed is
 # an ORPHAN — still true (e.g. a neural limiter recorded on a tissue row) but about to go
 # unsaid. The audit names each one so the operator can re-home it before resolving, or
 # confirm it has been. It never writes.
 #
-# RE-HOMING HAS A TRAP. The destination row's `signal_type` changes what the engine does:
-# a spinal (or body-part-less) row typed `neural`/`radicular` fires `_RADICULAR_BLOCKS` —
-# a hinge/rotation/carry/gait stand-down — where the same words on a `mechanical` row are
-# chat-only. The audit surfaces that as a warning on the destination; it never decides.
+# RE-HOMING HAS A TRAP. The destination row's `signal_type` changes what the engine is OFFERED:
+# a spinal (or body-part-less) row typed `neural`/`radicular` makes the injury write path PROPOSE
+# the `_RADICULAR_BLOCKS` set — a hinge/rotation/carry/gait stand-down — as engine-tier rows, where
+# the same words on a `mechanical` row propose nothing. A proposal blocks nothing until the
+# operator confirms it. The audit surfaces that as a warning on the destination; it never decides.
 
 SURVIVES_SUGGESTION = "re-parent or resolve — constraint keeps enforcing"
 
 RESTRICTIONS_NOTE = (
     "Restriction strings are chat-rendered only (context_builder schedule section, MCP injury "
-    "summary). The engine gates on body_part + signal_type (+ side, + the ra_flare token), "
-    "never on restriction text."
+    "summary). The engine gates on profile hard-stops and confirmed engine-tier constraint rows, "
+    "never on restriction text or an injury's type."
 )
 
 
@@ -294,16 +295,18 @@ def _mentions_all(stems: list[str], text: str) -> bool:
 
 
 def _radicular_warning(dest: models.UserKnowledgeEntry) -> dict[str, Any] | None:
-    from engine.selection import _RADICULAR_BLOCKS, _is_spinal  # the gate's own definitions
+    # The seed source's own definitions: what typing this row neural/radicular would PROPOSE.
+    from engine.engine_defaults import _RADICULAR_BLOCKS, _is_spinal, is_cervical
     val = dest.value or {}
     signal = str(val.get("signal_type", "mechanical")).lower()
     body = str(val.get("body_part") or "").lower()
-    if signal in ("radicular", "neural") and _is_spinal(body):
+    if signal in ("radicular", "neural") and _is_spinal(body) and not is_cervical(body):
         return {
             "signal_type": signal,
             "fires": sorted(_RADICULAR_BLOCKS),
-            "message": (f"'{dest.key}' is a spinal row typed '{signal}': the engine hard-stops "
-                        f"every region in _RADICULAR_BLOCKS while it is active. Type it "
+            "message": (f"'{dest.key}' is a spinal row typed '{signal}': writing it proposes an "
+                        f"engine block on every region in _RADICULAR_BLOCKS (a proposal blocks "
+                        f"nothing until you confirm it on the Injuries page). Type it "
                         f"'mechanical' if the restriction should be chat-only."),
         }
     return None

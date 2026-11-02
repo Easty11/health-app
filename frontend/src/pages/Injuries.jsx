@@ -531,13 +531,14 @@ function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
   const value = row.value || {}
   const key = sorenessKey(value)
   const restrictions = Array.isArray(value.restrictions) ? value.restrictions : []
-  // signal_type is what decides whether the engine's radicular block can ever fire, so it belongs
-  // on screen. HAZARD, do NOT "correct" the data to match the prose: the right-hamstring row's
-  // `detail` states the current limiter is NEURAL while signal_type reads "mechanical". That
-  // mismatch is deliberate and documented in seed_engine.py — typing it "neural" fires the
-  // radicular block across hinge/rotation/carry/gait and removes the SL-RDL that IS the
-  // desensitisation lane, silently deleting the treatment. This field is displayed, never asserted
-  // to gate anything (whether a row contraindicates is a server-side computation absent here).
+  // signal_type belongs on screen: it decides which engine blocks the injury write path PROPOSES
+  // (a spinal row typed neural/radicular is offered the radicular set; a proposal blocks nothing
+  // until it is confirmed here). HAZARD, do NOT "correct" the data to match the prose: the
+  // right-hamstring row's `detail` states the current limiter is NEURAL while signal_type reads
+  // "mechanical" — a mismatch that was deliberate while typing it "neural" fired the radicular
+  // block across hinge/rotation/carry/gait and removed the SL-RDL that IS the desensitisation
+  // lane. The injury-keyed block maps are retired (DECISIONS_LOG #486), so the type no longer
+  // gates anything on its own; it is still displayed, never asserted to gate anything.
   const signalType = String(value.signal_type || 'mechanical').toLowerCase()
 
   return (
@@ -554,12 +555,11 @@ function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
       </div>
 
       {/* Effect readout. The one thing every active row DOES that is true of it as it stands: it
-          puts an item in every morning check-in. It does NOT unconditionally contraindicate — that
-          is a server-side computation over engine tables (_ACUTE_TISSUE_BLOCKS etc.), absent from
-          this payload and false for rows like pes anserine and finger that match no block key, so
-          the view asserts it neither way. Reproducing those tables here is the same drift hazard as
-          _review_message. `restrictions[]` is free text surfaced to session context (mcp_server.py
-          prints "(avoid: …)"); it gates nothing, and is labelled as such. */}
+          puts an item in every morning check-in. It does NOT contraindicate anything by itself: the
+          engine blocks only on confirmed engine-tier constraint rows and profile hard-stops (the
+          injury-keyed block maps retired, DECISIONS_LOG #486), and a row's confirmed blocks are the
+          constraint rows shown with it. `restrictions[]` is free text surfaced to session context
+          (mcp_server.py prints "(avoid: …)"); it gates nothing, and is labelled as such. */}
       <div className="rounded-lg bg-gray-50 px-3 py-2 space-y-1.5">
         <p className="text-xs text-gray-700">
           <span className="font-medium">Signal type</span>
