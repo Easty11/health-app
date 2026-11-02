@@ -1,59 +1,86 @@
-# Close-out — 1 Nov 2026: wake-day capture and Garmin lane visibility (`DECISIONS_LOG` #477, #478, #479)
+# Close-out — 2 Nov 2026: in-app per-session sRPE (`DECISIONS_LOG` #475)
 
 ## Real commits this session
 
-Session opened at health-app master `5a8a5d4` (the merge of PR 475). Maxima at open: `DECISIONS_LOG` #475, no open `fork` issue (REST read, empty). At close: #479, still no open `fork` issue, and no issue (any state) updated since 1 Nov 00:00Z. Master advanced under the session once (PR 581, `_section_schedule` null `days`, another session's work, #476).
+Session opened at health-app master `59ba1c2` (the merge of PR 577). Maxima at open: `DECISIONS_LOG` #474, no open `fork` issue (REST read, empty). At close: master max #485 (#476 to #485 are other sessions' landings; this session's is #475), still no open `fork` issue, and no issue changed during the session. One issue was filed at this close-out: GH#593 (`stamp`, two-way).
 
-`git log --first-parent --format="%h %ad %s" --date=short 5a8a5d4..origin/master`:
-
-```
-8715ff5 2026-11-01 Merge pull request #584 from Easty11/claude/trusting-shannon-htenfx
-45c2c42 2026-11-01 Merge pull request #583 from Easty11/claude/trusting-shannon-htenfx
-327a3d1 2026-11-01 Merge pull request #582 from Easty11/claude/trusting-shannon-htenfx
-41da9b3 2026-11-01 Merge pull request #581 from Easty11/claude/nifty-cerf-cy02us
-```
-
-The commits this session's three merges carry (`git log --no-merges`, filtered to this branch's work):
+The twelve commits of this session, by the session trailer (`git log --reverse --format="%h %ad %s" --date=short --grep=<session> 59ba1c2..origin/master`):
 
 ```
-d2ea058 feat(garmin): wake-day capture — land the current wake-day's overnight vitals the morning they happen
-793e808 gov(wake-day-capture): #477 ruling entry, number resolved at master max #476
-d7bcb94 feat(garmin): Recovery tile amber and Settings Garmin lane/key view (S2, S3)
-e7509c8 feat(snapshot): Garmin lanes and key expiry in the freshness block; retire four dead writers (S4)
-94cf254 feat(recovery): SpO2 slot shows the night's minimum beside the mean, from one source
+60ca035 2026-10-31 feat(srpe): Pilates is a counted session (operator ruling; supersedes #322 S1/S3 for Pilates)
+25e5b14 2026-10-31 feat(srpe): in_app signs the store contract; one CR-10 per counted session, window from the server's bout
+1469fef 2026-10-31 feat(srpe): retire day_fill; a session no source rated reads unrated (R2)
+614242e 2026-10-31 feat(srpe): per-session read and write routes for the cards
+06d0034 2026-10-31 feat(mcp): get_recent_sessions renders the door's rating on Hevy workout lines, once per workout
+aa4d497 2026-10-31 feat(srpe): repoint the display readers from the whole-day RPE to the door's per-session ratings
+b1071be 2026-10-31 feat(srpe): earlier-sessions read for the backfill, and a real-state fixture for the card tests
+723b06a 2026-10-31 feat(srpe): the close-out and the AM catch-up rate each session; the day question is gone (R3, R4)
+58b8740 2026-11-01 gov(srpe-in-app): ruling #475, in-app per-session sRPE; day fill retired; Pilates counted
+6ac215d 2026-11-01 gov(srpe-in-app): terminal state for the merge - the hold is lifted on the operator's instruction
+7167f97 2026-11-01 gov(srpe-in-app): deploy check recorded for #475 (PR 578, merge 19d5d33)
+114653a 2026-11-02 gov(srpe-in-app): operator check recorded; #475 How-you-know complete, rows DONE
 ```
 
-PR 582 carried `d2ea058` and `793e808`; PR 583 `d7bcb94` (its #478 entry is inside that commit); PR 584 `e7509c8` and `94cf254` (its #479 entry rides `e7509c8`, and the SpO2 minimum was added to #479 in `94cf254`, because the operator asked for it in #478 after #478 had merged and is append-only). This close-out's own commit and merge are not listed: a commit cannot name its own SHA, and the merge is the last act. Read them with `git log --first-parent --grep=session.close-out`.
+The three merges of those branches onto master (`git log --first-parent`):
 
-Gates, met on each PR before its merge: backend suite 4048 / 4077 / 4089 passed (3 skipped each) on the three heads, run on a full-depth clone (a shallow one fails collection on `git show 8324a28`); frontend vitest 503 / 513 / 516 passed; `scripts/check_governance_placeholders.py` exit 0 after the number was resolved on the branch against master's max re-read immediately before (#476 then #477 then #478); CI green on every merged head (`placeholder guard (POSIX)`, `backend tests (pytest)`, `frontend tests (vitest)`). Mutation checks fail their tests: the throttle set to 0, and each of the two capture-window suppressions removed. Deploy (#433, read through the Railway MCP, matched on `commitHash`): PR 582 `327a3d1` backend `faf634a4` and frontend `aeaa3efb` SUCCESS; PR 583 `45c2c42` backend `1eec3ae4` and frontend `eea837db` SUCCESS; PR 584 `8715ff5` backend `930e10c0` and frontend `4581289e` SUCCESS. The `327a3d1` container's startup log is clean (no migration, server up, `GET /health` 200). No migration in any of the three; `SCHEMA.md` untouched.
+```
+19d5d33 Merge pull request #578 (code and the #475 entry; merged on the operator's explicit instruction)
+4049e69 Merge pull request #579 (deploy check recorded)
+36781d6 Merge pull request #592 (operator check recorded)
+```
 
-Live evidence read by Code through the Health_app_data MCP: at 17:57 Brisbane the wake-day 2026-11-01 had HRV and a Health Connect duration only (the defect, confirmed); at 21:01 it was complete (efficiency 88%, SpO2 96.5% epoch, RR 12.0, RHR 49, awake 54 min), with `wake-day fetch 2026-11-01 complete via=refresh` and every lane `ok` 18 minutes old, and the new snapshot lines (Garmin lanes, key expiry 357 days, one Retired writers line, no STALE) printing as designed. Operator prod reads relayed this session, not run by Code: zero `garmin_raw_payloads` `heart_rate` rows for user 1 on 2026-11-01 (so S5 was data not landed, the 02:00 payload being an all-null skeleton that is never landed); the `unknown` steps writer is `source_package = 'unknown'`, 61 rows, last seen 2026-09-22.
+Deploys (#433, matched on `commitHash`): `19d5d33` SUCCESS on both services (backend `f29ffaf0`, frontend `3e5e3ccd`); `4049e69` and `36781d6` SKIPPED on both, as a docs-only merge should be. The live bundle carries `Earlier sessions unrated` (an operator-run PowerShell fetch, reported `True`; this session's network policy blocks the host).
+
+This close-out's own commit, `chore: session close-out`, follows these; it names no hash here because a commit cannot name itself.
 
 ## Pending-queue reconciliation
 
-No `PENDING` item was carried in from a chat close-out (`;cc`): the session opened from a brief pasted by the operator, which authorises nothing by itself. Nothing is decided and uncommitted. The operator's rulings given in-turn are all committed: the retired-writer flag is a code constant, and all four STALE streams retire (#478, #479, `RETIRED_WRITERS`); S1 and then S2 and S3 and then S4 go ahead (the PRs); the SpO2 minimum joins the work (#479). One departure from the operator's instruction, recorded rather than hidden: the SpO2 minimum was asked to join "the existing ruling entry" and the S2/S3 PR, both already merged, so it rode PR 584 and is recorded in #479; #478 is append-only. The Decision-tier record the brief's gates ask for is NOT written: #477 to #479 are rulings, and a Decision needs its How-you-know, which is the three-morning gate below. That is OWED, not done.
+No `PENDING` item came in from a `;cc` chat close-out. The session was driven by a pasted brief, `In-App sRPE - Queue Consume 472`, whose rulings R1 to R4 are the operator's. Each step of that brief, against the commit that carries it:
+
+| Brief step | Landed in |
+|---|---|
+| 1 Contract: `in_app` in `SOURCE_SCALES`, window from the server's bout | `25e5b14` |
+| 2 Write route keyed by bout, insert-only, refuses a non-counted key | `25e5b14` (writer), `614242e` (route) |
+| 3 Read route for the card, built on `session_ratings` | `614242e`; the backfill's `earlier` read in `b1071be` |
+| 4 Retire `day_fill`; `srpe_needed`; the residual's `partial` | `1469fef` |
+| 5 Cards: close-out, catch-up, collapsed backfill, day question removed | `723b06a` |
+| 6 Tests (the six named, and the §48 flow test from the real state) | in each commit; the generated fixture in `b1071be`; the card flow tests in `723b06a` |
+| 7 DECISIONS_LOG entry | `58b8740` (#475) |
+| 8 BRANCHES row, CLAUDE.md pointer, ROADMAP | `58b8740`; terminal state `6ac215d`, `7167f97`, `114653a` |
+| LOG: operator check after deploy | recorded in `114653a` |
+
+Departures from the brief, each reported at the time and none folded into prose:
+- **Two VERIFY divergences, ruled by the operator.** Five readers of `daily_records.session_rpe`, not two (repointed in `aa4d497`); and `get_recent_sessions` carried no rating on a Hevy-only line (fixed in `06d0034`).
+- **Pilates counted** (`60ca035`), ruled by the operator when the brief's "Hevy plus Pilates yields two asks" could not hold on the counted set. This made the PR a one-way door, so it held for the operator's instruction instead of self-merging.
+- **The #475 heading** was resolved at PR open, not left `### #NEXT`, because the placeholder guard fails any PR carrying `#NEXT`.
+- **The backfill bound** was my pick: the 14 days before the card's day, never before 2026-10-18.
+
+Provisional: nothing decided and uncommitted at this point. Two things sit outside the tree and are therefore only as durable as their source: the backfill rating of the 31 Oct pair is operator-reported (Code did not observe it, and the backfill no longer lists them), and GH#593 lives on the tracker.
 
 ## Cold-resume handoff
 
-**Current sprint.** `ROADMAP.md` NOW. The lane this session moved is the first row, "Wake-day capture and lane visibility" (DONE for the build; OWED for the gate). `CLAUDE.md` carries no separate sprint block.
+**Next action (the single clearest).** The operator rules two small things so Q231 can be built to a settled definition ahead of its January 2027 deadline: (1) confirm GH#593's proposed answer (Pilates stays in Q231's low-intensity class; the conditioning class is defined by its own list, not "except the #322 S3 set"); (2) say whether `in_app` ratings count toward Q231's gate of 10 global pairs, since Q231's ruled entry route is Garmin-only ("no manual path") and #475 added one. Nothing else is queued for Code.
 
-**Open `fork` issues.** None (REST read, empty).
+**Current sprint (`ROADMAP.md` NOW).** Twenty-five lanes: fifteen lead with DONE, ten are open. Open, with owner: Q231 RPE fallback (Code, once the gate opens: at least 10 global pairs, live before club preseason, January 2027; nothing built); Source hierarchy (Luke); Polar sport-id relabel (OWED, remaining limbs); HC sync reliability (OWED, the #371 overlap proof); Garmin self-evaluation read, first live run (operator); Injury clearance (operator); Aerobic ingest automated (operator check); Session fidelity G6 (operator, after deploy); the cross-repo shared-block edit (OWED, pinned in NOW by #112); HC zones, Q159 stage 2 (Code, low priority). The in-app sRPE capture lane is DONE → #475.
 
-**Design docs not in a terminal state** (`grep -l "State:\*\* \(ideation\|discussion\)" docs/design/*.md`): 0000-template (the template itself, matches its own literal), 0001-canonical-exercise-layer, 0002-plan-log-reconciliation, 0003-constraints-engine-tier, 0004-load-model-routing-and-gaps, 0005-hr-input-layer, 0006-sleep-writers-and-admission, 0007-in-app-chat-architecture, 0008-spo2-detector-and-guardrail. None was touched this session (0008 is the SpO2 detector; this session displayed the SpO2 minimum and built no detector).
+**Open `fork` issues.** None (REST read at close). Open `stamp`: GH#593, filed at this close-out (proposed answer stands and is acted on by the next PR touching Q231 unless the operator objects).
 
-**Single clearest next action.** The morning of 2 Nov 2026, after the operator opens the AM check-in (about 06:00 Brisbane): read the Railway backend deploy log for the `wake-day capture: user=... via=... outcome=... requests=...` line (and the 10:00 `wake-day backstop` line), read the live Recovery readers (`get_recovery_metrics`, `get_readiness_snapshot`), and report for user 1, then user 4, by date: the landing path (check-in, Refresh or the 10:00 backstop), the time, whether SpO2 (mean and minimum, one source), RR, RHR and efficiency rendered, and the request counts against the 0.5 req/s pacing. Do this for three consecutive mornings; then write the Decision-tier record (How-you-know = those three reports) and flip the ROADMAP row to fully DONE. Two things only that morning can answer: whether Garmin publishes the daily resting HR by about 06:00 (the 1 Nov RHR landed in the evening, so S5 is "data not landed" but its morning timing is unmeasured), and whether the operator's watch has synced to Garmin's cloud by the check-in (if not, the slots read "Garmin not synced yet", by design).
+**Design docs not in a terminal state.** `docs/design/` 0001 canonical exercise layer, 0004 load-model routing and gaps, 0005 HR input layer, 0006 sleep writers and admission, 0007 in-app chat architecture (all `ideation`); 0002 plan-log reconciliation, 0003 constraints engine tier, 0008 SpO2 detector and guardrail (all `discussion`).
 
-**Owed, by whom.**
-- Operator: open the check-in on 2 Nov (and the following two mornings), user 4 likewise; look at the Recovery page once for the fixed SpO2 layout (the minimum on its own line under the value, #481). Correction to the first close-out: the SpO2 mean and minimum HAD been seen live by the operator (1 Nov 2026 21:29, real data, 96.5% / min 91% [garmin/di], numbers correct) with a wrapping defect, which #481 fixes; Code had not seen it and wrote that it was untested on real data.
-- Code: the three-morning gate report; the Decision-tier record.
-- Closed 1 Nov 2026 after the close-out: the key threshold is ruled (#480: red at 7 days or less on every surface), and the served-bundle check is DONE, run by the operator from chat against `assets/index-B5sqUthc.js` (relayed, Unverified by Code): the `not_synced` slot state, the Retry button and the conditional SpO2 `min N%` are present; the not-synced sentence is backend-supplied, so grepping the bundle for it returns nothing by design. The grep string this file first suggested (`Garmin not synced yet`) was wrong for that reason.
+### What was NOT touched
 
-**NOT touched this session (named on purpose).** Everything that is the product rather than the instrument stood still, and the question gating each did not move:
-- **Know / Walk in.** The reconcile leg of Walk in (post-visit transcript reconciliation with "Mark attended", the NEXT row, #386) is unbuilt; the appointment brief's printed `shoulder` check is still OWED (operator).
-- **Load and the quota.** RPE fallback for unrecorded sessions (Q231): gate is at least 10 global pairs, live before club preseason, January 2027, and nothing was built; the source hierarchy (Q203) is unruled; HC sync reliability (#371 overlap proof, Q208, Q214) is open; the aerobic base review is 16 Nov.
-- **Operator checks that are still waiting on a person:** the in-app sRPE check (rate the 31 Oct pair, read `get_recent_sessions(days=3)`; #475 How-you-know incomplete), the CBT-I close-out accept or hold (#445, #446), the injury clearance sweep, the Polar `sports:read` check at the next re-auth, the HRmax test (Q199).
-- **Pattern to say out loud.** The last several sessions went to instrument rather than to the thing instrumented: the question layer (Phase C3, #471), the sRPE reads (#472), governance for chat-side writes (#473), and this one (freshness, lane health and a morning fetch for data that already existed). This session's lane does serve Loop and See directly, but the Know and Walk-in work above has not moved in the same period.
+This session was one lane, effort capture, inside the Fitness module. Everything below stood still, and a reader should not infer from this file that it is queued or finished.
+- **The consumers of what was captured.** `psychological_residual` has no production caller (a grep finds tests only; its block-level consumer is deferred), and Q231's imputed-load fit is unbuilt. This session built the capture and the read door for consumers that do not exist yet. That is the same pattern as an instrument built ahead of the thing it measures, so the next sRPE-adjacent session should be the consumer (Q231), not more capture.
+- **Q231 itself**, and the two questions GH#593 and the next-action line put to the operator. The residual's history also changed (days paired only by a whole-day value left the felt series); Code could not measure how many of the operator's days that was, so the size of that change is unknown.
+- **Medical Protocol and Decision Support.** CBT-I (block state, titration), labs and the interpretation layer, appointments, and the injury-clearance sweep did not move. The operator-owed lanes in NOW above did not move either.
+- **Session-grain gaps this build left by design:** a counted session with no start or duration cannot be rated and keeps `srpe_needed` true; a session older than the 14-day backfill can no longer be rated in the app; `daily_records.session_rpe` stays as a column written and read by nothing, and dropping it is not built.
+- **Governance and status-tooling landings are a large share of recent decisions.** By their titles, #471 to #473, #483 and #485 are governance or status-model work; the feature landings in the same span are #474, #475 and the wake-day capture (#477 to #479). None of them advanced the operator-owed lanes above.
 
-**v1-triage (NOW lanes).** This session's lane serves **Loop** (the morning shows the night just slept) and **See** (a failed lane or a closed wake-day with no data is visible). Every other NOW row that is still open states its own "Serves" clause in `ROADMAP.md` (Loop, Know, See or Walk in) and none was changed. Demotion candidates, surfaced not moved: the NOW rows that are DONE or struck with nothing owed and so serve no remaining v1 purpose by riding there: Training exercise-tag seed (#339), the two CBT-I rows (#219 nap attribution, #213 manual evaluation trigger), Garmin account mix-up (#362), Typed constraints G6 (#342), the Garmin overnight SpO2 capture (#425), and the struck cross-repo propagation rows. They are history; moving them is the operator's call.
+### v1-triage (which v1 test each NOW lane serves)
 
-**Branches.** `claude/trusting-shannon-htenfx` (three uses this session, restarted from master after each merge) is merged and remote-deleted after each PR; `git cherry origin/master HEAD` returns nothing; it has a DONE row in `BRANCHES.md`. The open-row sweep (Q138): the six rows matching OWED/BLOCKED were checked, five are DONE rows whose text mentions OWED elsewhere (`chore/merge-path-pr-migration`, `claude/cbti-verdict-store-design`, `claude/determined-curie-khwfp7`, `gov/q238-rotation-ledger`, `gov/railway-incident-record`), and one, `claude/blissful-babbage-0l3ztm`, is OWED correctly (merged `19d5d33`, owed the operator check). No row is landed-but-unflipped.
+Read from each row's own "Serves" claim; nothing here is a new ruling.
+- **See:** Data freshness and the home load card (DONE); Plan/schedule and recent-sessions tools (DONE); Garmin overnight SpO2 (DONE); RPE fallback Q231 (OWED); Source hierarchy (OWED); HC sync reliability (OWED); Aerobic ingest automated (OWED); HC zones Q159 stage 2 (OWED).
+- **Know:** Source-neutral sRPE store and In-app sRPE capture (both DONE); Polar relabel (OWED); Garmin self-evaluation read (OWED); Phase posture split (DONE, one operator read owed); Phase-change form (DONE); Injury clearance (OWED); Garmin account repair (DONE); Typed constraints (DONE).
+- **Loop:** Wake-day capture (DONE); Missed-PM catch-up (DONE); CBT-I titration direction (DONE); Session fidelity (built, G6 owed).
+- **Serves no v1 test:** CBT-I Q45 nap attribution (DONE), CBT-I manual evaluation trigger (DONE), Training v0.1 exercise tags seed (DONE): all three are finished and sit in NOW only because DONE rows are never moved out. The cross-repo shared-block lane (OWED) serves none and sits in NOW because #112 names ROADMAP NOW the canonical home for cross-repo debt, which is a stated reason, not momentum.
+- **Demotion candidates:** the fifteen DONE rows are not active work and ride NOW by momentum; the three above that serve no test are the clearest. The August and September ones (#213 and #219 in August, #339 on 27 Sep) are the oldest. ROADMAP has a "Moved from NOW" precedent for exactly this.
