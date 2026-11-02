@@ -1505,8 +1505,9 @@ def get_appointment_brief(key: str) -> str:
     Sections are listed in reading order by `module` (header, leave_with, asks, since,
     changes_vs_history, current_constraints, …); which appear depends on the appointment's `kind`.
     Asks labelled `"source": "ledger"` are derived from the ledger, not written by the user.
-    Each row appears once: `leave_with` items are one-line pointers (`short`) to asks by `id`, and
-    `since` omits what `changes_vs_history` carries. `resolves.unresolved: true` marks an ask whose
+    Each row appears once: `leave_with` items are one-line pointers (`short`) to asks by `id`, capped
+    at the five highest priorities (`total` is every ask, `remaining_ids` names the rest; all of them are
+    under `asks`), and `since` omits what `changes_vs_history` carries. `resolves.unresolved: true` marks an ask whose
     linked row is not shown (missing, proposed, inactive or out of scope). Scope is the injuries the appointment names plus rows parented directly to them; proposals
     and lab-derived findings are never included.
 

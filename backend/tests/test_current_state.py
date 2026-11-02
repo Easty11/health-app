@@ -438,6 +438,11 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # channel, says an embedded block holds ONE object with nothing after it, and says a tool call
     # counts as the block. Declared: 8059 → 8626 (+567); same excision, nothing else moves. Pinned
     # by tests/test_knowledge_payload.py.
+    # RE-DECLARED (Pocket EP save integrity, prod 2 Nov 2026): the appointment write shape says
+    # `scope` must hold the injury of every row an ask links and that `resolves` names the one row
+    # the ask itself settles (else omit it); one closing paragraph says chat cannot write a check-in.
+    # Declared: 8626 → 9604 (+978); same excision, nothing else moves. Pinned by
+    # tests/test_pocket_ep_write_integrity.py.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -452,7 +457,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 8626), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 9604), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]

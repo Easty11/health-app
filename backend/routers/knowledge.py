@@ -1135,6 +1135,24 @@ def chat_may_not_retire(row: models.UserKnowledgeEntry) -> bool:
     return row.type in TYPED_ENTRY_TYPES and (row.value or {}).get("status") != "proposed"
 
 
+def operator_route_hint(row: models.UserKnowledgeEntry) -> str:
+    """Where the USER (who is the operator) changes a row chat may not touch. Chat may not retire a
+    typed row past `proposed`, nor rewrite an appointment past `planned`; the route is the user's.
+    An injury has a page (`/injuries`); the other routes have no UI yet, so they are named as routes
+    and never dressed as a link that does not exist."""
+    t = row.type
+    if t == "injury":
+        return "resolve it yourself on the Injuries page (/injuries)"
+    if t == "constraint":
+        return f"retire it yourself with POST /knowledge/constraints/{row.id}/resolve"
+    if t == "finding":
+        return f"retract it yourself with POST /knowledge/findings/{row.id}/retract"
+    if t == "appointment":
+        return ("record the visit yourself with POST /knowledge/entry (source \"api\"); "
+                "the Appointments page is /appointments/" + row.key)
+    return "change it yourself in the app"
+
+
 # Types whose key may not be taken by a row of another type (either direction): same-key supersede
 # would otherwise silently retire one with the other.
 _KEY_GUARDED_TYPES = TYPED_ENTRY_TYPES + ("appointment",)
@@ -1190,6 +1208,50 @@ def _validate_appointment_write(
             f"appointment.scope.parent_keys: {pk!r} names no active injury"
             + (f", nor one resolved on/after since ({since})" if since is not None
                else " (a resolved injury is in scope only with a `since` it was resolved after)"),
+            "invalid_parent",
+        )
+    _validate_ask_links_in_scope(user_id, value, db)
+
+
+def _validate_ask_links_in_scope(user_id: int, value: dict[str, Any], db: Session) -> None:
+    """An ask's `resolves.entry_key` must name a row the brief can SHOW, so its parent injury has to
+    be in `scope.parent_keys` (the brief reads one hop from those keys and nothing else). Prod, 2 Nov
+    2026: an ask about a new left calf strain could not link its calf constraint, because no calf
+    injury was in scope, and the brief silently left the constraint out. The write is refused, naming
+    the key to add, instead of saving a brief that drops the row.
+
+    Only a key that names an ACTIVE constraint, finding or injury of this user is checked: a key that
+    names nothing stays tolerated (the brief renders it as an unresolved link), and a row with no
+    parent has nothing to add."""
+    in_scope = set(value["scope"]["parent_keys"])
+    links = {
+        (ask.get("resolves") or {}).get("entry_key"): ask["id"]
+        for ask in value.get("asks") or []
+        if (ask.get("resolves") or {}).get("entry_key")
+    }
+    if not links:
+        return
+    rows = (
+        db.query(models.UserKnowledgeEntry)
+        .filter(
+            models.UserKnowledgeEntry.user_id == user_id,
+            models.UserKnowledgeEntry.active.is_(True),
+            models.UserKnowledgeEntry.type.in_(("constraint", "finding", "injury")),
+            models.UserKnowledgeEntry.key.in_(sorted(links)),
+        )
+        .all()
+    )
+    missing: dict[str, list[str]] = {}
+    for r in rows:
+        parent = r.key if r.type == "injury" else (r.value or {}).get("parent_key")
+        if parent and parent not in in_scope:
+            missing.setdefault(parent, []).append(f"{links[r.key]} -> {r.key}")
+    if missing:
+        raise TypedEntryRefused(
+            "appointment.scope.parent_keys is missing "
+            + "; ".join(f"{p!r} (needed by ask {', '.join(sorted(v))})" for p, v in sorted(missing.items()))
+            + " -- an ask can only link a row whose injury is in scope, or the brief leaves that row "
+              "out. Add the key to scope.parent_keys and rewrite the whole appointment",
             "invalid_parent",
         )
 

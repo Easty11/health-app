@@ -46,7 +46,7 @@ from routers.knowledge import (
 )
 
 # Section B: the authored asks the operator leaves with — all of them up to this many, else the
-# first this many by priority. Each is a one-line pointer to its ask (first sentence, capped near
+# first this many by priority (the rest are named in `remaining_ids` and print under "If time allows"). Each is a one-line pointer to its ask (first sentence, capped near
 # this many characters); the full text and the tick box live only under Asks.
 LEAVE_WITH_MAX = 5
 LEAVE_WITH_SHORT_CHARS = 90
@@ -403,6 +403,10 @@ def module_leave_with(ctx: BriefContext) -> dict[str, Any]:
         "items": [{"id": a["id"], "short": _short(a["text"]), "priority": a["priority"]}
                   for a in asks[:LEAVE_WITH_MAX]],
         "total": len(asks),
+        # The cap is deliberate (the must-cover list); the asks it leaves out are NAMED so a reader
+        # of this section alone never takes five of eight for the whole set. They all render under
+        # Asks (screen and print, after the "If time allows" divider).
+        "remaining_ids": [a["id"] for a in asks[LEAVE_WITH_MAX:]],
     }
 
 

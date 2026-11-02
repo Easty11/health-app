@@ -167,9 +167,16 @@ def test_a_derived_ask_on_an_authored_asks_row_is_folded_not_repeated(db_session
 
 
 def test_resolves_row_outside_scope_is_not_shown(db_session, world):
+    # The write path now REFUSES this link (`invalid_parent`, tests/test_pocket_ep_write_integrity.py),
+    # so the row is seeded past the validator: a brief stored before the rule, or a constraint
+    # reparented later, must still render without the out-of-scope row.
     _put(db_session, world.id, "constraint", "c_out", _constraint(parent=OUT))
-    b = _brief(db_session, world.id, asks=[
-        {"id": "a1", "text": "Ask", "priority": 1, "resolves": {"entry_key": "c_out", "note": None}}])
+    db_session.add(models.UserKnowledgeEntry(
+        user_id=world.id, type="appointment", key="appt_a", source="api", active=True,
+        value=_appt(asks=[{"id": "a1", "text": "Ask", "priority": 1,
+                           "resolves": {"entry_key": "c_out", "note": None}}])))
+    db_session.commit()
+    b = ab.load_appointment_brief(db_session, world.id, "appt_a")
     assert _section(b, "asks")["authored"][0]["resolves"]["row"] is None
     assert "cap on movement A" not in json.dumps(b)
 
@@ -216,7 +223,7 @@ def test_an_empty_asks_follow_up_still_renders_every_section(db_session, world):
     assert [s["module"] for s in b["sections"]] == [
         m for m in APPOINTMENT_DEFAULT_SECTIONS["follow_up"] if m not in ("options_prep", "since")]
     assert _section(b, "header")["clinician"] == "Clinician A" and _section(b, "header")["time"] == "13:00"
-    assert _section(b, "leave_with") == {"module": "leave_with", "items": [], "total": 0}
+    assert _section(b, "leave_with") == {"module": "leave_with", "items": [], "total": 0, "remaining_ids": []}
     assert _section(b, "asks") == {"module": "asks", "authored": [], "derived": []}
     assert _section(b, "current_constraints")["items"] == []
     assert _section(b, "logistics")["items"] == ["Bring report A"]
@@ -228,6 +235,8 @@ def test_leave_with_is_the_first_five_by_priority(db_session, world):
     b = _brief(db_session, world.id, asks=asks)
     lw = _section(b, "leave_with")
     assert [i["priority"] for i in lw["items"]] == [1, 2, 3, 4, 5] and lw["total"] == 7
+    # The cap is named, not silent: the two left out are listed (and render under Asks, below).
+    assert lw["remaining_ids"] == ["a6", "a7"]
     assert [a["priority"] for a in _section(b, "asks")["authored"]] == [1, 2, 3, 4, 5, 6, 7]
 
 
