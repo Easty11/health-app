@@ -248,6 +248,10 @@ self-merge on green under § Merge disposition.
   fenced block read byte-faithfully from the mount (never the rendered view, which flattens
   markdown); Code diffs before landing. Repo-canonical docs are edited in place, never cross
   this transport.
+- **Chat→Code brief transport (#492).** The approval gate (#473) stands; the clipboard does not have to.
+  Where the proxy allows, chat files a brief as an issue behind one approval and Code reads it from the
+  tracker; Code's close-out report is the PR body. A pasted brief still works and still authorises
+  nothing by itself.
 - **Reference-JSON edit guard (#98).** `backend/reference/marker_groups.json` and
   `backend/reference/safety_thresholds.json` are hand-aligned pure ASCII (non-ASCII as `\uXXXX`);
   their tests pin it (`raw.isascii()`). Never build a `\uXXXX` escape in heredoc source (the Bash
