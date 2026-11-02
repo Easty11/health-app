@@ -1,6 +1,6 @@
 # 0003 — Constraints engine tier
 **State:** discussion
-**Owner:** Luke   **Opened:** 2026-10-31   **Last moved:** 2026-10-31
+**Owner:** Luke   **Opened:** 2026-10-31   **Last moved:** 2026-11-02
 
 ## Context
 
@@ -8,23 +8,35 @@ Folded from `OPEN_QUESTIONS.md` in Phase B (DECISIONS_LOG #468); pointer issue G
 
 ## Proposal
 
-none yet
+Every engine block is a row. `is_contraindicated` had four arms; three (radicular, RA-flare, acute-tissue) were hard-coded maps keyed on an injury row's `body_part` substring, with no exit, no `review_by`, no authority and no render, while the `## Constraints` section and the MCP snapshot listed every advisory row as "not engine-enforced". The fourth, the #342 engine-tier row, had lifecycle and visibility and zero rows for any user.
+
+1. **The maps become proposals.** What each map encodes is seeded, per active injury, as engine-tier `block` constraint rows in `proposed` status, one row per (injury, region key), that the operator confirms or declines on the Injuries page. A proposal blocks nothing (#342); a confirmed row blocks exactly what it names and renders with its authority, exit and `review_by`. Declined means resolved with a basis, and a resolved default is never re-proposed for the same injury.
+2. **Two seeding paths.** An operator-run script (`backend/scripts/seed_engine_defaults.py`, dry-run first, the `seed_constraints.py` pattern) and the injury write path, which proposes the same rows when an injury is created or re-typed (chat and api alike; `review_by` is the write day plus 28). Chat-created injuries therefore seed proposals, and the chat-channel rule (#342 R5) holds by construction.
+3. **Which maps seed what.** Acute-tissue: by map key plus a declared alias list (`pes anserine` reaches the knee set). Radicular: an entry typed neural / radicular whose body part is spinal or empty, excluding cervical parts (the set is lumbar-shaped). RA-flare: the flag or the restriction token. The seeded set is a superset of what the live arms block, so retiring an arm cannot open a hole.
+4. **The maps stay live until every proposal is resolved.** The first PR adds the seeding, the aliases, the review sweep and the tests, and leaves `is_contraindicated` byte-identical with zero confirmed engine rows. The second PR deletes the three arms, gated on an equivalence test over each user's active injuries and the operator's "pending = 0" read. The write path that changes what the engine enforces is exercised live, on proposals, before the code that depends on it lands (#166).
+5. **The review sweep** (Q191, GH#529) is a read plus a page group, surfacing only: `GET /knowledge/review-due`, and a Keep action that re-dates in place through its own route.
 
 ## Alternatives considered
 
-none recorded
+- **A restriction-vocabulary to region-key mapper (Q102's original ask).** Struck: a stem mapper is the substring defect at one remove, and #344 records that a limit on a region still being trained is advisory.
+- **Seeding the defaults as confirmed rows with engine authority.** Rejected: it would change what the engine enforces at the moment of seeding, with nobody having confirmed it. A proposal changes nothing until the operator acts.
+- **Retiring the maps in the same PR as the seeding.** Rejected: nothing would have exercised the proposal path before the code that depends on it.
+- **Engine `cap` and `caution` rows.** Out of scope (Q183, GH#595): an engine cap needs a dose seam and an engine caution needs a graded `is_contraindicated`.
 
 ## Unresolved questions
 
 | # | Question | Proposed answer | Evidence that settles it | Door | Status |
 |---|----------|-----------------|--------------------------|------|--------|
-| Q102 | Constraint rows: restriction vocabulary to region keys, `signal_type` refinement, and the `lunge_single_leg` over-block (vocabulary → region keys, `signal_type`, the `lunge_single_leg` over-block) | none yet | none recorded | unclassified | open |
-| Q182 | Default constraint templates from `_ACUTE_TISSUE_BLOCKS` / `_RADICULAR_BLOCKS` (engine-tier defaults from the maps) | none yet | none recorded | unclassified | open |
-| Q183 | Engine-tier `cap` and `caution` constraints (`cap`/`caution`) | none yet | none recorded | unclassified | open |
+| Q102 | Constraint rows: restriction vocabulary to region keys, `signal_type` refinement, and the `lunge_single_leg` over-block | Struck: engine scoping stays explicit region keys (operator-authored or proposed by the defaults); free-text restrictions stay advisory; no `signal_type` field, because once blocks are rows the type stops being load-bearing. The `lunge_single_leg` over-block is not live (both hamstring rows resolved in August) | Operator ruling 2 Nov 2026; the ledger as read 2 Nov 2026 | two-way | resolved → #488 |
+| Q182 | Default constraint templates from `_ACUTE_TISSUE_BLOCKS` / `_RADICULAR_BLOCKS` (engine-tier defaults from the maps) | Seeded as proposals (the operator confirms or declines), per injury and region key, by the script and by the injury write path; the maps retire in a second PR behind an equivalence gate | `tests/test_engine_defaults.py`, `tests/test_seed_engine_defaults.py`, the pinned-SHA identity test unchanged | two-way | resolved → #486 (maps retire: owed, second PR) |
+| Q183 | Engine-tier `cap` and `caution` constraints (`cap`/`caution`) | Out of scope here: an engine `cap` needs the dose seam and an engine `caution` needs a graded `is_contraindicated`; both stay advisory-tier kinds | The dose seam landing (Q106, GH#489), or #72's boolean changing | two-way | struck (out of scope) → GH#595 |
 
 ## Decisions landed
 
-- none yet
+- #486 — Engine blocks are rows: the in-code injury block maps seed per-injury engine-tier proposals; the maps retire once every proposal is confirmed or declined (first PR landed; the retirement is owed to the second).
+- #487 — Engine-default proposals are a two-way door; the injury write path dates them four weeks out (ruling).
+- #488 — The restriction-vocabulary mapper is struck; engine scoping stays explicit region keys (ruling; resolves Q102).
+- #489 — The standing review sweep (GH#529) and Keep as an in-place re-date (ruling).
 
 ## Appendix: original entries (byte-faithful, no longer maintained)
 

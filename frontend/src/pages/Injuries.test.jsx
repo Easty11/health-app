@@ -72,12 +72,13 @@ afterEach(cleanup)
 
 describe('the load is a single include_resolved fetch (AC#2)', () => {
   // Narrowed (#346): the page also fetches /knowledge/proposals — a separate resource — so the pin
-  // is now exactly one INJURIES request, still carrying include_resolved=true.
+  // is now exactly one INJURIES request, still carrying include_resolved=true. Widened again for the
+  // review sweep (Q191): /knowledge/review-due is a third resource, read on its own.
   test('exactly one injuries request, carrying include_resolved=true', async () => {
     await renderView()
     const injuryCalls = api.get.mock.calls.filter(([url]) => url === '/knowledge/injuries')
     expect(injuryCalls).toEqual([['/knowledge/injuries', { params: { include_resolved: true } }]])
-    expect(api.get.mock.calls.map(([url]) => url).sort()).toEqual(['/knowledge/injuries', '/knowledge/proposals'])
+    expect(api.get.mock.calls.map(([url]) => url).sort()).toEqual(['/knowledge/injuries', '/knowledge/proposals', '/knowledge/review-due'])
   })
 })
 
