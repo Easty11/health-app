@@ -17,15 +17,20 @@ import types
 PR1_MERGE_SHA = "d63b5343bbe0ef695718b7ace96267a1981fe53f"
 
 
-def load_pr1_selection() -> types.ModuleType:
+def load_selection_at(sha: str, name: str = "engine._selection_oracle") -> types.ModuleType:
+    """`engine/selection.py` exactly as it was at `sha`, loaded from git (never a re-typed copy)."""
     src = subprocess.check_output(
-        ["git", "show", f"{PR1_MERGE_SHA}:backend/engine/selection.py"],
+        ["git", "show", f"{sha}:backend/engine/selection.py"],
         cwd=os.path.dirname(__file__), encoding="utf-8",
     )
-    module = types.ModuleType("engine._selection_pr1")
+    module = types.ModuleType(name)
     module.__package__ = "engine"          # its `from . import taxonomy` resolves against the live package
-    exec(compile(src, "selection_pr1.py", "exec"), module.__dict__)
+    exec(compile(src, f"selection_{sha[:7]}.py", "exec"), module.__dict__)
     return module
+
+
+def load_pr1_selection() -> types.ModuleType:
+    return load_selection_at(PR1_MERGE_SHA, "engine._selection_pr1")
 
 
 PR1 = load_pr1_selection()

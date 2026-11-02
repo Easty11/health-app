@@ -348,15 +348,28 @@ def _relevance_ok(region: Region, profile: models.FortificationProfile | None) -
 # Probe queue                                                                  #
 # --------------------------------------------------------------------------- #
 
-def compute_probe_queue(
+def probe_queue_detail(
     db: Session,
     user_id: int,
     *,
     profile: models.FortificationProfile | None,
     loaded_region_keys: set[str],
     active_constraints: list[dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
-    """The §4 set expression, ranked. One entry per (region, side)."""
+) -> dict[str, list[dict[str, Any]]]:
+    """The §4 set expression, ranked, AND why each region that is not in it is not.
+
+        queue    — one entry per (region, side) Probe may sample, ranked (what `compute_probe_queue`
+                   returns, byte for byte)
+        excluded — one entry per (region, side) left out: {region_key, label, side, kind, reason}
+                   kind: `not_queue_eligible` (an ungrounded §G axis) · `already_tested` (the user's
+                   capability state for it is not `untested`) · `recently_loaded` (loaded in recent
+                   Hevy workouts: revealed avoidance wants regions NOT loaded) · `not_relevant` ·
+                   `contraindicated` (reason = `is_contraindicated`'s own string, which names the
+                   profile hard-stop or the constraint row)
+
+    A region appears in exactly one of the two lists per side. The checks run in the same order as
+    the set expression, so a region that fails two reports the first.
+    """
     if active_constraints is None:
         active_constraints = gather_active_constraints(db, user_id)
     hard_stops = list(profile.hard_stops) if (profile and profile.hard_stops) else []
@@ -367,15 +380,28 @@ def compute_probe_queue(
         (s.region_key, s.side): s.status for s in state_rows
     }
 
+    def _out(region: Region, side: str, kind: str, reason: str) -> None:
+        excluded.append({"region_key": region.key, "label": region.label, "side": side,
+                         "kind": kind, "reason": reason})
+
     candidates: list[dict[str, Any]] = []
-    for region in taxonomy.queue_eligible_regions():
+    excluded: list[dict[str, Any]] = []
+    for region in taxonomy.all_regions():
+        if not region.queue_eligible:
+            for side in region.sides():
+                _out(region, side, "not_queue_eligible",
+                     "ungrounded axis: flagged but not yet sampled (needs normative grounding)")
+            continue
         for side in region.sides():
             status = status_by.get((region.key, side), "untested")
             if status != "untested":            # ∩ untested
+                _out(region, side, "already_tested", f"capability state is '{status}'")
                 continue
             if region.key in loaded_region_keys:  # ∩ revealed avoidance (not loaded)
+                _out(region, side, "recently_loaded", "loaded in recent Hevy workouts")
                 continue
             if not _relevance_ok(region, profile):  # ∩ relevance
+                _out(region, side, "not_relevant", "not relevant to the profile's horizon")
                 continue
             blocked, reason = is_contraindicated(
                 region, side,
@@ -383,6 +409,7 @@ def compute_probe_queue(
                 active_constraints=active_constraints,
             )
             if blocked:                          # − contraindicated
+                _out(region, side, "contraindicated", reason or "contraindicated")
                 continue
             candidates.append({
                 "region_key": region.key,
@@ -402,7 +429,23 @@ def compute_probe_queue(
     candidates.sort(key=lambda c: (c["_rank"], c["region_key"], c["side"]))
     for c in candidates:
         c.pop("_rank", None)
-    return candidates
+    return {"queue": candidates, "excluded": excluded}
+
+
+def compute_probe_queue(
+    db: Session,
+    user_id: int,
+    *,
+    profile: models.FortificationProfile | None,
+    loaded_region_keys: set[str],
+    active_constraints: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """The §4 set expression, ranked. One entry per (region, side). Exactly
+    `probe_queue_detail(...)["queue"]`: the exclusions are bookkeeping for readers, never an input."""
+    return probe_queue_detail(
+        db, user_id, profile=profile, loaded_region_keys=loaded_region_keys,
+        active_constraints=active_constraints,
+    )["queue"]
 
 
 # --------------------------------------------------------------------------- #
