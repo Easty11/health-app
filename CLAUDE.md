@@ -284,6 +284,7 @@ self-merge on green under § Merge disposition.
   halt (#442 (b)). Recover with a deploy of master head, never the Redeploy action, which replays the commit of an existing
   deployment and so a stale one (#442 (c)). A service can deploy on a merge that did not touch its folder when the span from its
   last-deployed commit does (#442 (d)).
+- **The deploy check is also a workflow (#491).** `deploy-check` runs on every push to master and asserts each service serves a commit that contains its folder's last change (`GET /version` on the backend, `/version.json` on the frontend). Read its run on the merge commit (GitHub MCP `actions_list`) before reaching for `railway deployment list`; a red or absent run falls back to #116, #121 and #433 above. It is not a merge gate.
 - **Push branches even while holding for review (#98).** A local-only branch is unreadable to
   chat (`raw.githubusercontent.com` 404s). Pushing is not merging; push when work becomes
   reviewable, not when it lands.
@@ -325,11 +326,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Deploys are checked by a workflow: each service serves its commit and `deploy-check` asserts it after every merge to master.** Code - Canonical home: `DECISIONS_LOG.md` #491.
+
 - **MCP read doors for Code: `get_injuries`, `get_constraints` and `get_probe_queue`, added by PR (prod reads only through MCP tools).** Code - Canonical home: `DECISIONS_LOG.md` #490.
 
 - **Engine blocks are rows: engine-tier default proposals seeded per injury (script and write path), the review-due sweep with in-place Keep, and Decline on proposals; the three block maps retired.** Code - Canonical home: `DECISIONS_LOG.md` #486, #487, #488, #489.
-
-- **Open issues in the status model: schema 2 `issues` block, two transports (live and `--issues-json` from `fetch_issues.py`), a shape gate, and an issues diff.** Code - Canonical home: `DECISIONS_LOG.md` #483.
 
 
 
