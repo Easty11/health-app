@@ -325,7 +325,7 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **Engine blocks are rows: engine-tier default proposals seeded per injury (script and write path), the review-due sweep with in-place Keep, and Decline on proposals; the three block maps retire in a second PR.** Code - Canonical home: `DECISIONS_LOG.md` #486, #487, #488, #489.
+- **Engine blocks are rows: engine-tier default proposals seeded per injury (script and write path), the review-due sweep with in-place Keep, and Decline on proposals; the three block maps retired.** Code - Canonical home: `DECISIONS_LOG.md` #486, #487, #488, #489.
 
 - **Open issues in the status model: schema 2 `issues` block, two transports (live and `--issues-json` from `fetch_issues.py`), a shape gate, and an issues diff.** Code - Canonical home: `DECISIONS_LOG.md` #483.
 

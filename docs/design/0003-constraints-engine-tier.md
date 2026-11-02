@@ -1,5 +1,5 @@
 # 0003 — Constraints engine tier
-**State:** discussion
+**State:** committed
 **Owner:** Luke   **Opened:** 2026-10-31   **Last moved:** 2026-11-02
 
 ## Context
@@ -28,12 +28,12 @@ Every engine block is a row. `is_contraindicated` had four arms; three (radicula
 | # | Question | Proposed answer | Evidence that settles it | Door | Status |
 |---|----------|-----------------|--------------------------|------|--------|
 | Q102 | Constraint rows: restriction vocabulary to region keys, `signal_type` refinement, and the `lunge_single_leg` over-block | Struck: engine scoping stays explicit region keys (operator-authored or proposed by the defaults); free-text restrictions stay advisory; no `signal_type` field, because once blocks are rows the type stops being load-bearing. The `lunge_single_leg` over-block is not live (both hamstring rows resolved in August) | Operator ruling 2 Nov 2026; the ledger as read 2 Nov 2026 | two-way | resolved → #488 |
-| Q182 | Default constraint templates from `_ACUTE_TISSUE_BLOCKS` / `_RADICULAR_BLOCKS` (engine-tier defaults from the maps) | Seeded as proposals (the operator confirms or declines), per injury and region key, by the script and by the injury write path; the maps retire in a second PR behind an equivalence gate | `tests/test_engine_defaults.py`, `tests/test_seed_engine_defaults.py`, the pinned-SHA identity test unchanged | two-way | resolved → #486 (maps retire: owed, second PR) |
+| Q182 | Default constraint templates from `_ACUTE_TISSUE_BLOCKS` / `_RADICULAR_BLOCKS` (engine-tier defaults from the maps) | Seeded as proposals (the operator confirms or declines), per injury and region key, by the script and by the injury write path; the maps retire in a second PR behind an equivalence gate | `tests/test_engine_defaults.py`, `tests/test_seed_engine_defaults.py`, the pinned-SHA identity test unchanged | two-way | resolved → #486 (maps retired, second PR) |
 | Q183 | Engine-tier `cap` and `caution` constraints (`cap`/`caution`) | Out of scope here: an engine `cap` needs the dose seam and an engine `caution` needs a graded `is_contraindicated`; both stay advisory-tier kinds | The dose seam landing (Q106, GH#489), or #72's boolean changing | two-way | struck (out of scope) → GH#595 |
 
 ## Decisions landed
 
-- #486 — Engine blocks are rows: the in-code injury block maps seed per-injury engine-tier proposals; the maps retire once every proposal is confirmed or declined (first PR landed; the retirement is owed to the second).
+- #486 — Engine blocks are rows: the in-code injury block maps seed per-injury engine-tier proposals; the maps retire once every proposal is confirmed or declined (first PR built the seeding; the second retired the maps, 2 Nov 2026).
 - #487 — Engine-default proposals are a two-way door; the injury write path dates them four weeks out (ruling).
 - #488 — The restriction-vocabulary mapper is struck; engine scoping stays explicit region keys (ruling; resolves Q102).
 - #489 — The standing review sweep (GH#529) and Keep as an in-place re-date (ruling).
