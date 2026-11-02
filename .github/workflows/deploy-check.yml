@@ -1,0 +1,55 @@
+# Post-deploy check: does each Railway service serve the code the merge put on master? (#433, made a check)
+#
+# WHAT IT ASSERTS. Each service reports the commit it was built from (backend `GET /version`,
+# frontend `GET /version.json`; Railway's `RAILWAY_GIT_COMMIT_SHA`). For the merge commit under test, a
+# service passes when the commit it serves CONTAINS the last commit that touched its folder
+# (`scripts/check_deploy_sha.py` documents why that, and not "equals the merge SHA": a docs-only merge
+# is SKIPPED on both services by design, #433). Polls up to 15 minutes for the deploy to land.
+#
+# WHO READS IT. Code reads this workflow's run for the merge commit (GitHub MCP `actions_list`), where it
+# used to read `railway deployment list`; the operator no longer greps the served bundle. It is NOT a
+# merge gate and not a required check: it runs AFTER the merge, on `push` to master, so it cannot block
+# a land. A red run means the deploy did not land as the merge said it should.
+#
+# WHAT IT IS NOT. It does not replace `railway deployment list` for a service that failed to BUILD (that
+# surfaces here only as 'never caught up'). It proves what is being served, not that the right pages work.
+#
+# `ubuntu-latest` has open egress to the public Railway domains, which the Code cloud session does not.
+name: deploy-check
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-check-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  served-sha:
+    name: served commit SHA (both services)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BACKEND_URL: https://health-app-backend-production-760e.up.railway.app/version
+      FRONTEND_URL: https://health-app-production-e0ff.up.railway.app/version.json
+    steps:
+      - name: Check out full history (the check asks which commit contains which)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Assert both services serve the merge
+        run: >
+          python scripts/check_deploy_sha.py
+          --sha "$GITHUB_SHA"
+          --backend-url "$BACKEND_URL"
+          --frontend-url "$FRONTEND_URL"
+          --timeout 900

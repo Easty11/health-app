@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import emitVersion from './versionPlugin.js'
 
 // Pocket EP PWA. The service worker precaches the app shell only (hashed bundle,
 // CSS, index.html, icons). `runtimeCaching` is deliberately empty: the backend
@@ -11,6 +12,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    emitVersion(),   // dist/version.json: the commit served, for the post-deploy check
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
