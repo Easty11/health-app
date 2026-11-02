@@ -57,6 +57,20 @@ MIN_RECORD_DAYS = 4                             # fewer record-days than this: n
 MIN_USUAL_GAP_DAYS = 1.0                        # day grain: see the module docstring
 RETIRED_AFTER = timedelta(days=60)              # a writer silent this long is retired, not listed
 
+# RETIRED WRITERS (DECISIONS_LOG #478, operator ruling 1 Nov 2026): known-dead writers, superseded by Garmin. A retired
+# (stream, writer) drops out of STALE and rides ONE information line; a retired writer that writes again (its newest
+# record within RETURNED_WITHIN) is shown on its own RETURNED line, so a returning writer is never hidden. A code
+# constant, not a table: reversing it is deleting a row here. The key is (stream, writer) exactly as `_stream` names
+# them, so live Samsung Health steps stay tracked while its heart rate and sleep are retired. The `unknown` steps
+# writer is `source_package = 'unknown'` (61 rows, last seen 2026-09-22).
+RETIRED_WRITERS = frozenset({
+    ("heart_rate", "Samsung Health"),
+    ("sleep", "Samsung Health"),
+    ("sleep+hrv", "Samsung scraper"),
+    ("steps", "unknown writer"),
+})
+RETURNED_WITHIN = timedelta(days=3)
+
 # Health Connect record types whose arrival is irregular by nature (information only).
 INFO_ONLY_STREAMS = frozenset({"exercise", "weight", "mindfulness"})
 
@@ -128,10 +142,12 @@ def _stream(stream: str, writer: str, package: str | None, days: list[date], new
         status = "stale"
     else:
         status = "fresh"
+    retired = (stream, writer) in RETIRED_WRITERS
     return {
         "stream": stream, "writer": writer, "package": package,
         "newest_at": newest.isoformat(), "age_hours": age_h,
         "usual_gap_days": gap, "record_days_28d": len(_recent_days(days)), "status": status,
+        "retired": retired, "returned": retired and (now - newest) <= RETURNED_WITHIN,
     }
 
 
@@ -231,8 +247,11 @@ def _pipes(db: Session, user_id: int, now: datetime, nightly: list[dict[str, Any
               "status": "info"})
 
     g = next((s for s in nightly if s["writer"] == "Garmin (server pull)"), None)
-    garmin = ({"newest_at": None, "age_hours": None, "status": "never"} if g is None else
-              {"newest_at": g["newest_at"], "age_hours": g["age_hours"], "status": g["status"]})
+    night = db.scalar(select(func.max(models.HrvReading.captured_at)).where(
+        models.HrvReading.user_id == user_id, models.HrvReading.source == "garmin"))
+    garmin = ({"newest_at": None, "age_hours": None, "status": "never", "night": None} if g is None else
+              {"newest_at": g["newest_at"], "age_hours": g["age_hours"], "status": g["status"],
+               "night": night.isoformat() if night else None})
     return {"health_connect": hc, "polar": polar, "garmin_hrv": garmin}
 
 
@@ -307,6 +326,67 @@ def garmin_alerts(db: Session, user_id: int, now: datetime) -> list[dict[str, st
     return out
 
 
+_LANE_LABELS = (          # (lane, label, needs a Personal key, severity when the last run was not ok)
+    ("personal_token", "Personal API key exchange", True, "red"),
+    ("personal_hrv", "HRV", True, "amber"),
+    ("personal_wellness", "Sleep, heart rate and SpO2", True, "amber"),
+    ("personal_selfeval", "Self-evaluation (RPE)", True, "amber"),
+    ("wake_day_fetch", "Morning wake-day fetch", True, "amber"),
+    ("di_spo2", "Epoch SpO2 (DI)", False, "red"),
+)
+
+
+def garmin_lane_view(db: Session, user_id: int, now: datetime | None = None) -> dict[str, Any]:
+    """Per-lane health and the Personal API key's expiry, for Settings -> Integrations. Read-only. Severities
+    and thresholds are `garmin_alerts`' own (amber at <= 30 days, red at <= 7, when expired, and when the token
+    exchange is refused), so Settings, the load card and the snapshot cannot disagree.
+
+    `lanes` lists only the lanes the user's connections can run; a lane with no row yet reads `outcome: None`."""
+    now = _utc(now) if now is not None else datetime.now(timezone.utc)
+    today = now.astimezone(_AEST).date()
+    pers = db.query(models.UserIntegration).filter_by(user_id=user_id, provider="garmin_personal").first()
+    di = db.query(models.UserIntegration.id).filter_by(user_id=user_id, provider="garmin").first() is not None
+    rows = {r.lane: r for r in db.query(models.IntegrationLaneStatus).filter_by(user_id=user_id).all()}
+
+    key = None
+    if pers is not None:
+        tok = rows.get("personal_token")
+        refused = tok is not None and tok.outcome == "auth_failed"
+        days = (pers.key_expires_on - today).days if pers.key_expires_on is not None else None
+        if days is not None and days < 0:
+            sev, msg = "red", f"Key EXPIRED {-days} day(s) ago: attach a new key"
+        elif refused:
+            sev, msg = "red", "Token exchange is failing: the key was refused"
+        elif days is None:
+            sev, msg = "amber", "No expiry date recorded (re-attach with --expires)"
+        elif days <= KEY_EXPIRY_RED_DAYS:
+            sev, msg = "red", f"Expires in {days} day(s): create and attach a new key"
+        elif days <= KEY_EXPIRY_AMBER_DAYS:
+            sev, msg = "amber", f"Expires in {days} days"
+        else:
+            sev, msg = "ok", f"Expires in {days} days"
+        key = {"expires_on": pers.key_expires_on.isoformat() if pers.key_expires_on else None,
+               "days_to_expiry": days, "token_refused": refused, "severity": sev, "message": msg}
+
+    lanes = []
+    for lane, label, needs_key, bad in _LANE_LABELS:
+        if (needs_key and pers is None) or (not needs_key and not di):
+            continue
+        r = rows.get(lane)
+        if r is None:
+            lanes.append({"lane": lane, "label": label, "outcome": None, "severity": "none", "reason": None,
+                          "last_attempt_at": None, "last_success_at": None, "success_age_hours": None})
+            continue
+        ok = r.outcome in _LANE_OK
+        succ = _utc(r.last_success_at) if r.last_success_at else None
+        lanes.append({"lane": lane, "label": label, "outcome": r.outcome, "severity": "ok" if ok else bad,
+                      "reason": r.reason, "last_attempt_at": _utc(r.last_attempt_at).isoformat(),
+                      "last_success_at": succ.isoformat() if succ else None,
+                      "success_age_hours": _age_hours(succ, now) if succ else None})
+    return {"connected": pers is not None or di, "personal_api": pers is not None, "di": di,
+            "key": key, "lanes": lanes, "generated_at": now.isoformat()}
+
+
 def hrmax_prompts(db: Session, user_id: int) -> list[dict[str, Any]]:
     """\"Restate HRmax?\" prompts: health_connect rows holding a plausible same-writer sample above the
     HRmax in force (`hc_zone_enrich.over_ceiling_prompts`). Information only: nothing is restated and no
@@ -345,6 +425,7 @@ def freshness(db: Session, user_id: int, *, now: datetime | None = None) -> dict
         "load_inputs_stale": bool(load_stale_pipes),
         "load_stale_pipes": load_stale_pipes,
         "garmin_alerts": garmin_alerts(db, user_id, now),
+        "garmin_lanes": garmin_lane_view(db, user_id, now),
         "hrmax_prompts": hrmax_prompts(db, user_id),
     }
 
@@ -359,6 +440,40 @@ def _ago(hours: float | None) -> str:
     return f"{hours / 24:.0f} d ago"
 
 
+_LANE_SHORT = {"personal_hrv": "HRV", "personal_wellness": "sleep/HR/SpO2", "personal_selfeval": "self-eval",
+               "di_spo2": "epoch SpO2 (DI)"}
+
+
+def garmin_lane_lines(view: dict[str, Any] | None) -> list[str]:
+    """The Garmin lanes and the Personal API key, ALWAYS (not only when something is wrong): each lane with its
+    last outcome and the age of its last success, then the key's days to expiry. Nothing for a user with no Garmin
+    connection. The problems still also print as `GARMIN AMBER/RED` alert lines."""
+    if not view or not view.get("connected"):
+        return []
+    parts = []
+    for l in view["lanes"]:
+        if l["lane"] == "personal_token":
+            continue
+        if l["lane"] == "wake_day_fetch":
+            parts.append("wake-day fetch " + (l["reason"] if l["outcome"] is not None and l["reason"] else
+                                              "no run yet" if l["outcome"] is None else l["outcome"]))
+            continue
+        name = _LANE_SHORT.get(l["lane"], l["lane"])
+        if l["outcome"] is None:
+            parts.append(f"{name} no run yet")
+        elif l["severity"] == "ok":
+            parts.append(f"{name} ok {_ago(l['success_age_hours'])}")
+        else:
+            last_ok = f"last ok {_ago(l['success_age_hours'])}" if l["success_age_hours"] is not None else "never ok"
+            parts.append(f"{name} FAILED ({l['outcome']}), {last_ok}")
+    out = ["  Garmin lanes: " + " · ".join(parts)] if parts else []
+    key = view.get("key")
+    if key:
+        when = f" ({key['expires_on']})" if key.get("expires_on") else ""
+        out.append(f"  Garmin Personal API key: {key['message'][0].lower() + key['message'][1:]}{when}")
+    return out
+
+
 def freshness_snapshot_lines(f: dict[str, Any]) -> list[str]:
     """The short freshness block for `get_readiness_snapshot`."""
     pipes = f["pipes"]
@@ -367,16 +482,27 @@ def freshness_snapshot_lines(f: dict[str, Any]) -> list[str]:
     lines = ["Data freshness:",
              f"  Health Connect last delivery: {_ago(hc['age_hours'])}{flag}",
              f"  Polar last session: {_ago(pipes['polar']['age_hours'])} (information only)",
-             f"  Garmin HRV last night: {_ago(pipes['garmin_hrv']['age_hours'])}"]
+             # The night's own date: the pipe's age is dated to the END of that local day (clamped to now), so for
+             # tonight's night it reads "0 min ago" however long ago the lane last fetched. The lanes line below
+             # carries the real fetch ages.
+             f"  Garmin HRV newest night: {pipes['garmin_hrv'].get('night') or 'never'}"]
+    lines.extend(garmin_lane_lines(f.get("garmin_lanes")))
     for a in f.get("garmin_alerts", []):
         lines.append(f"  GARMIN {a['severity'].upper()}: {a['message']}")
     for p in f.get("hrmax_prompts", []):
         lines.append(f"  HRMAX, restate? row {p['id']} {p['date']} {p['sport']}: a sample of {p['hr_max']} bpm "
                      f"against {p['hrmax_in_force']} in force (the operator's call; nothing is restated)")
-    stale = [s for s in f["streams"] if s["status"] == "stale"]
+    stale = [s for s in f["streams"] if s["status"] == "stale" and not s.get("retired")]
     for s in stale:
         lines.append(f"  STALE {s['stream']} · {s['writer']}: {_ago(s['age_hours'])} "
                      f"(usual gap {s['usual_gap_days']:.0f} d)")
+    for s in (x for x in f["streams"] if x.get("retired") and x.get("returned")):
+        lines.append(f"  RETURNED retired writer {s['stream']} · {s['writer']}: wrote {_ago(s['age_hours'])} "
+                     f"(retired by the operator; delete it from RETIRED_WRITERS if it is back for good)")
+    retired = [f"{s['stream']} · {s['writer']} {_ago(s['age_hours'])}" for s in f["streams"]
+               if s.get("retired") and not s.get("returned")]
+    if retired:
+        lines.append("  Retired writers, information only: " + "; ".join(retired))
     info = [f"{s['stream']} · {s['writer']} {_ago(s['age_hours'])}" for s in f["streams"]
             if s["status"] == "info"]
     if info:

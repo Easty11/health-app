@@ -5,7 +5,8 @@ scripted per call. Gates:
   * a shape refusal triggers exactly ONE retry call, which carries the validator's message verbatim
     and the model's own draft; a corrected block saves, `retried=True`, and no pass-2 call fires;
   * cap 1: a retry that is refused again stays refused (never retried twice), and pass-2 fires;
-  * never retried: a key clash, an operator-only/proposal refusal, a bad-JSON block;
+  * never retried: a key clash, an operator-only/proposal refusal (a bad-JSON block WAS in this
+    list until 1 Nov 2026; it is retried now, and tests/test_knowledge_payload.py holds that gate);
   * the retry accepts only one block for the SAME key — a different key or an extra block is ignored;
   * every retry outcome is logged.
 """
@@ -120,7 +121,7 @@ def _seed(chat, type_, key, value, source="api"):
                            chat["db"])
 
 
-@pytest.mark.parametrize("case", ["proposal_only", "operator_only", "key_collision", "invalid_json"])
+@pytest.mark.parametrize("case", ["proposal_only", "operator_only", "key_collision"])
 def test_non_shape_refusals_are_never_retried(chat, case):
     if case == "proposal_only":
         block = _kb({**GOOD, "status": "confirmed", "asserted_by": "user"})
@@ -130,8 +131,6 @@ def test_non_shape_refusals_are_never_retried(chat, case):
     elif case == "key_collision":
         _seed(chat, "injury", "constraint_right_er_cap", {"body_part": "shoulder"})
         block = _kb(GOOD)
-    else:
-        block = "<knowledge_update>{not json</knowledge_update>"
     body, calls = chat["send"](["x " + block, "Corrected narration."])
     assert len(calls) == 2                                    # draft + pass-2 only: no retry call
     assert body["write_results"][0]["retried"] is False

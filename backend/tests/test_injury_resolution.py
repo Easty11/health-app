@@ -5,17 +5,21 @@ consequence was live, not hypothetical: `gather_active_injuries` kept returning
 healed injuries and `is_contraindicated` kept suppressing regions the user had
 recovered in, with no surface listing them so the operator could see what to retire.
 
-The load-bearing gate is `test_a_suppressed_region_becomes_selectable_after_resolve`:
-a SPECIFIC region asserted contraindicated before and selectable after, with no other
-input changed. Asserting only that the injury list shrank would pass even if the
-suppression never lifted.
+Since the injury-keyed block maps retired ("Engine blocks are rows", #486) an injury
+suppresses nothing by itself; the suppression an injury used to cause is carried by an
+engine-tier constraint row parented to it, which the operator confirmed. The load-bearing
+gate is therefore two-stage, `test_a_suppressed_region_becomes_selectable_after_resolve`:
+a SPECIFIC region asserted contraindicated before; STILL contraindicated after the injury
+resolves (the child row only reads `exit due` — surfacing, not retirement, #223); and
+selectable only after the operator resolves the row itself. Asserting only that the injury
+list shrank would pass even if the suppression never lifted.
 
 The GUARD gates are the other half and matter as much: nothing auto-resolves. A
 passing `resolve_by` date, a soreness series at the exit condition, and a live
 `review` flag must each leave `active` untouched — an injury constraint that lifts
 itself with no operator in the loop is a safety failure (#72 stays surfacing-only).
 """
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -27,7 +31,9 @@ from auth import get_current_user
 from database import get_db
 from engine import selection, taxonomy
 from load_metrics import _local_day  # AEST "today" — the clock the resolve path uses (Q137)
+import typed_entries
 from routers import knowledge as knowledge_router
+from routers.knowledge import KnowledgeEntryIn, upsert_knowledge_entry
 
 
 def _user(db, email):
@@ -65,9 +71,9 @@ def _injury(db, user_id, *, key="hamstring_right", body_part="hamstring",
     return row
 
 
-# The acute-hamstring block set, straight from the engine. Pinned as a
-# precondition rather than hardcoded, so a taxonomy edit fails loudly here
-# instead of quietly making the load-bearing gate vacuous.
+# A region the (retired) acute-hamstring map used to block, now blocked by a confirmed engine
+# row parented to the injury (`_enforce`). Pinned as a constant so a taxonomy edit fails loudly
+# here instead of quietly making the load-bearing gate vacuous.
 SUPPRESSED_BY_HAMSTRING = "single_leg_hop"
 
 
@@ -346,48 +352,89 @@ def test_a_blank_basis_is_422(db_session, blank):
     assert fresh.active is True
 
 
-# ── the load-bearing gate: suppression actually lifts ────────────────────────
+# ── the load-bearing gate: suppression lifts only when the operator lifts it ──
+
+def _enforce(db, user_id, injury_key, region_key, side, *, key=None):
+    """A confirmed engine-tier block parented to the injury, with the `with_parent` exit — the row
+    that carries what the retired map used to enforce silently. Written the only way a confirmed
+    row can be: proposed, then the confirm route."""
+    key = key or f"constraint_engine_{injury_key}_{region_key}"
+    row = upsert_knowledge_entry(user_id, KnowledgeEntryIn(type="constraint", key=key, source="api", value={
+        "scope": {"tier": "engine", "region_keys": [region_key], "side": side}, "kind": "block",
+        "parent_key": injury_key, "exit": {"with_parent": True},
+        "review_by": str(_local_day() + timedelta(days=400)),   # relative: test_clock_pin runs this a year on
+        "status": "proposed", "asserted_by": None}), db)
+    return knowledge_router._confirm_entry(row.id, knowledge_router.ConfirmIn(asserted_by="user"),
+                                           "constraint", user_id, db)
+
+
+def _resolve_constraint(db, user_id, row):
+    knowledge_router._resolve_entry(
+        row.id, knowledge_router.ResolutionIn(basis="cleared at review", resolved_by="user"),
+        "constraint", user_id, db)
+
 
 def _blocked(db, user_id, region_key, side):
-    """The real path: ledger -> gather_active_injuries -> is_contraindicated."""
+    """The real path: ledger -> gather_active_constraints -> is_contraindicated."""
     region = taxonomy.by_key(region_key)
     assert region is not None, f"{region_key} does not resolve in the taxonomy"
     blocked, _reason = selection.is_contraindicated(
         region, side,
         profile_hard_stops=None,
-        active_injuries=selection.gather_active_injuries(db, user_id),
+        active_constraints=selection.gather_active_constraints(db, user_id),
     )
     return blocked
 
 
-def test_a_suppressed_region_becomes_selectable_after_resolve(db_session):
-    """THE gate. A SPECIFIC region asserted contraindicated before and selectable
-    after, with no other input changed — no profile, no capability state, no
-    taxonomy edit, only the resolve call in between.
+def test_an_injury_alone_suppresses_nothing(db_session):
+    """The retirement, at the resolve layer: the same injury that used to block `single_leg_hop`
+    blocks nothing unless a confirmed row says so."""
+    u = _user(db_session, "gate-alone@example.com")
+    _injury(db_session, u.id, body_part="hamstring", side="right")
+    assert _blocked(db_session, u.id, SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT) is False
 
-    Asserting merely that the injury list shrank would pass even if the suppression
-    never lifted, which is the failure this exists to catch.
-    """
+
+def test_a_suppressed_region_becomes_selectable_after_resolve(db_session):
+    """THE gate, in two stages. A SPECIFIC region asserted contraindicated before; still contraindicated
+    after the INJURY resolves (its child row reads `exit due` — surfacing, never retirement, #223);
+    selectable only after the operator resolves the row. No profile, no capability state, no taxonomy
+    edit in between.
+
+    Asserting merely that the injury list shrank would pass even if the suppression never lifted,
+    which is the failure this exists to catch."""
     u = _user(db_session, "gate@example.com")
     row = _injury(db_session, u.id, body_part="hamstring", side="right")
+    child = _enforce(db_session, u.id, "hamstring_right", SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT)
 
-    # Precondition — the block is real, and it is THIS injury doing it.
+    # Precondition — the block is real, and it is THIS row doing it.
     assert _blocked(db_session, u.id, SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT) is True
     assert len(selection.gather_active_injuries(db_session, u.id)) == 1
 
     r = _resolve(_client(db_session, u), row.id)
     assert r.status_code == 200
-
-    assert _blocked(db_session, u.id, SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT) is False
     assert selection.gather_active_injuries(db_session, u.id) == []
 
+    # Stage 1: the parent is gone, the block is NOT — and the sweep says so.
+    assert _blocked(db_session, u.id, SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT) is True
+    rows = db_session.query(models.UserKnowledgeEntry).filter_by(user_id=u.id, active=True).all()
+    live = typed_entries.active_keys(rows)
+    lifted = typed_entries.lift_constraints(rows)
+    assert [typed_entries.constraint_due_tags(c, live, _local_day()) for c in lifted] == [["exit due"]]
+    listed = _client(db_session, u).get("/knowledge/review-due").json()["items"]
+    assert [(i["key"], i["tags"]) for i in listed] == [(child.key, ["exit due"])]
 
-def test_the_resolved_injury_leaves_the_probe_queue_filter(db_session):
+    # Stage 2: the operator resolves the row; only now is the region selectable.
+    _resolve_constraint(db_session, u.id, child)
+    assert _blocked(db_session, u.id, SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT) is False
+
+
+def test_the_resolved_injury_leaves_the_probe_queue_filter_when_its_row_is_resolved(db_session):
     """The same lift, one layer out: the region re-enters the computed probe queue.
     `compute_probe_queue` is what `/engine/next` actually consumes, so this is the
     consequence the user sees."""
     u = _user(db_session, "gate-queue@example.com")
     row = _injury(db_session, u.id, body_part="hamstring", side="right")
+    child = _enforce(db_session, u.id, "hamstring_right", SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT)
 
     def queued():
         return {
@@ -401,26 +448,30 @@ def test_the_resolved_injury_leaves_the_probe_queue_filter(db_session):
     assert target not in before
 
     _resolve(_client(db_session, u), row.id)
+    assert queued() == before                       # the parent resolving lifts nothing
+    _resolve_constraint(db_session, u.id, child)
     after = queued()
     assert target in after
-    # The lift is SCOPED: resolving one injury adds back its blocked regions and
-    # changes nothing else.
+    # The lift is SCOPED: resolving one row adds back its blocked region and changes nothing else.
     assert before < after
 
 
 def test_resolving_one_injury_does_not_lift_another(db_session):
-    """Two live injuries, one resolved. The survivor's block must hold — a resolve
-    that cleared the whole ledger would pass the single-injury gate above."""
+    """Two live injuries, each with its row, one resolved end to end. The survivor's block must hold —
+    a resolve that cleared the whole ledger would pass the single-injury gate above."""
     u = _user(db_session, "gate-two@example.com")
     hamstring = _injury(db_session, u.id, key="hamstring_right",
                         body_part="hamstring", side="right")
     _injury(db_session, u.id, key="shoulder_left", body_part="shoulder", side="left")
+    h_row = _enforce(db_session, u.id, "hamstring_right", SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT)
+    _enforce(db_session, u.id, "shoulder_left", "vertical_push", taxonomy.SIDE_LEFT)
 
-    assert _blocked(db_session, u.id, "vertical_push", taxonomy.SIDE_BILATERAL) is True
+    assert _blocked(db_session, u.id, "vertical_push", taxonomy.SIDE_LEFT) is True
     _resolve(_client(db_session, u), hamstring.id)
+    _resolve_constraint(db_session, u.id, h_row)
 
     assert _blocked(db_session, u.id, SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT) is False
-    assert _blocked(db_session, u.id, "vertical_push", taxonomy.SIDE_BILATERAL) is True
+    assert _blocked(db_session, u.id, "vertical_push", taxonomy.SIDE_LEFT) is True
     assert [i["body_part"] for i in selection.gather_active_injuries(db_session, u.id)] == ["shoulder"]
 
 
@@ -450,11 +501,12 @@ def _injury_with_trajectory(db, user_id):
 
 def test_a_passed_resolve_by_date_does_not_deactivate_anything(db_session):
     """GUARD. `resolve_by` is 2026-08-01 and today is well past it. The divergence
-    flag fires — and the entry stays ACTIVE and the region stays suppressed. A
+    flag fires — and the entry stays ACTIVE and the region stays suppressed (by its confirmed row). A
     constraint that lifted itself on a date would invert #72 with no operator in
     the loop."""
     u = _user(db_session, "guard-date@example.com")
     row = _injury_with_trajectory(db_session, u.id)
+    _enforce(db_session, u.id, "hamstring_right", SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT)
     _record(db_session, u.id, date(2026, 7, 20), "hamstring_right", 3)
     _record(db_session, u.id, date(2026, 8, 10), "hamstring_right", 3)
 
@@ -477,6 +529,7 @@ def test_a_live_review_flag_does_not_deactivate_anything(db_session):
     resolved" signal the system produces. It still must not resolve anything."""
     u = _user(db_session, "guard-review@example.com")
     row = _injury_with_trajectory(db_session, u.id)
+    _enforce(db_session, u.id, "hamstring_right", SUPPRESSED_BY_HAMSTRING, taxonomy.SIDE_RIGHT)
     for d in (date(2026, 8, 10), date(2026, 8, 11), date(2026, 8, 12)):
         _record(db_session, u.id, d, "hamstring_right", 1)
 

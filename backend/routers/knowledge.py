@@ -1,5 +1,6 @@
+import logging
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -27,6 +28,8 @@ from engine.taxonomy import (
 # only `models` + `engine.taxonomy`, so this is acyclic from here too.
 from engine.profile import ASSERTED_BY_VALUES
 from load_events_metabolic import WINDOW_METABOLIC
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -516,7 +519,8 @@ def validate_training_plan(value: Any) -> dict[str, Any]:
 # An instruction to the engine or the coach is a `type="constraint"` row, never free text: free
 # text cannot be retired or enforced. Closed shape, unknown keys refused (the #233 discipline),
 # the value stored exactly as written. Two tiers make "enforced" vs "advisory" explicit:
-#   * `engine`   — scoped to taxonomy `Region.key`s; `selection.is_contraindicated` reads it.
+#   * `engine`   — scoped to taxonomy `Region.key`s; `selection.is_contraindicated` reads it (it is the
+#                  ONLY injury-related gate: the injury-keyed block maps retired, DECISIONS_LOG #486).
 #                  Region keys are the ONLY engine vocabulary in v1 (G0 ruling D1): there is no
 #                  pattern layer distinct from region keys, and the only template ids are Hevy's,
 #                  which the engine never gates on. `pattern_keys` / `exercise_template_ids` are
@@ -1135,6 +1139,24 @@ def chat_may_not_retire(row: models.UserKnowledgeEntry) -> bool:
     return row.type in TYPED_ENTRY_TYPES and (row.value or {}).get("status") != "proposed"
 
 
+def operator_route_hint(row: models.UserKnowledgeEntry) -> str:
+    """Where the USER (who is the operator) changes a row chat may not touch. Chat may not retire a
+    typed row past `proposed`, nor rewrite an appointment past `planned`; the route is the user's.
+    An injury has a page (`/injuries`); the other routes have no UI yet, so they are named as routes
+    and never dressed as a link that does not exist."""
+    t = row.type
+    if t == "injury":
+        return "resolve it yourself on the Injuries page (/injuries)"
+    if t == "constraint":
+        return f"retire it yourself with POST /knowledge/constraints/{row.id}/resolve"
+    if t == "finding":
+        return f"retract it yourself with POST /knowledge/findings/{row.id}/retract"
+    if t == "appointment":
+        return ("record the visit yourself with POST /knowledge/entry (source \"api\"); "
+                "the Appointments page is /appointments/" + row.key)
+    return "change it yourself in the app"
+
+
 # Types whose key may not be taken by a row of another type (either direction): same-key supersede
 # would otherwise silently retire one with the other.
 _KEY_GUARDED_TYPES = TYPED_ENTRY_TYPES + ("appointment",)
@@ -1190,6 +1212,50 @@ def _validate_appointment_write(
             f"appointment.scope.parent_keys: {pk!r} names no active injury"
             + (f", nor one resolved on/after since ({since})" if since is not None
                else " (a resolved injury is in scope only with a `since` it was resolved after)"),
+            "invalid_parent",
+        )
+    _validate_ask_links_in_scope(user_id, value, db)
+
+
+def _validate_ask_links_in_scope(user_id: int, value: dict[str, Any], db: Session) -> None:
+    """An ask's `resolves.entry_key` must name a row the brief can SHOW, so its parent injury has to
+    be in `scope.parent_keys` (the brief reads one hop from those keys and nothing else). Prod, 2 Nov
+    2026: an ask about a new left calf strain could not link its calf constraint, because no calf
+    injury was in scope, and the brief silently left the constraint out. The write is refused, naming
+    the key to add, instead of saving a brief that drops the row.
+
+    Only a key that names an ACTIVE constraint, finding or injury of this user is checked: a key that
+    names nothing stays tolerated (the brief renders it as an unresolved link), and a row with no
+    parent has nothing to add."""
+    in_scope = set(value["scope"]["parent_keys"])
+    links = {
+        (ask.get("resolves") or {}).get("entry_key"): ask["id"]
+        for ask in value.get("asks") or []
+        if (ask.get("resolves") or {}).get("entry_key")
+    }
+    if not links:
+        return
+    rows = (
+        db.query(models.UserKnowledgeEntry)
+        .filter(
+            models.UserKnowledgeEntry.user_id == user_id,
+            models.UserKnowledgeEntry.active.is_(True),
+            models.UserKnowledgeEntry.type.in_(("constraint", "finding", "injury")),
+            models.UserKnowledgeEntry.key.in_(sorted(links)),
+        )
+        .all()
+    )
+    missing: dict[str, list[str]] = {}
+    for r in rows:
+        parent = r.key if r.type == "injury" else (r.value or {}).get("parent_key")
+        if parent and parent not in in_scope:
+            missing.setdefault(parent, []).append(f"{links[r.key]} -> {r.key}")
+    if missing:
+        raise TypedEntryRefused(
+            "appointment.scope.parent_keys is missing "
+            + "; ".join(f"{p!r} (needed by ask {', '.join(sorted(v))})" for p, v in sorted(missing.items()))
+            + " -- an ask can only link a row whose injury is in scope, or the brief leaves that row "
+              "out. Add the key to scope.parent_keys and rewrite the whole appointment",
             "invalid_parent",
         )
 
@@ -1384,6 +1450,55 @@ def _validate_training_plan_write(user_id: int, entry_in: KnowledgeEntryIn, db: 
         )
 
 
+def _propose_engine_defaults(
+    user_id: int,
+    entry_in: "KnowledgeEntryIn",
+    existing: models.UserKnowledgeEntry | None,
+    db: Session,
+) -> None:
+    """Engine-tier default PROPOSALS for an injury just staged (D2(b), "Engine blocks are rows").
+
+    Fires when an injury row is CREATED (no active same-key injury beneath it) or REWRITTEN with a
+    change to `body_part`, `side`, `signal_type` or `ra_flare` (`default_signature`). Every channel
+    that writes an injury through the upsert — chat and api alike — proposes the same defaults, and
+    they are proposals regardless of source: `status: "proposed"`, `asserted_by: null`, so the
+    chat-channel rule (#342 R5) holds by construction and nothing here is enforced until the operator
+    confirms a row. Staged in the SAME transaction as the injury, through the validated write path.
+
+    COVERAGE GAP, recorded: an injury written straight to the ORM (`seed_engine.py`,
+    `probe_resolver.py`) does not pass here. `scripts/seed_engine_defaults.py` covers those rows.
+
+    A failure to propose never loses the injury: the proposals are derived, the fact is the user's.
+    A refused or malformed proposal is logged and skipped. (Only `ValueError`: a database error
+    poisons the session whatever this does, so it propagates.)
+    """
+    from engine import engine_defaults   # function-local, like `canonical_satisfies`: engine ↔ knowledge
+
+    if existing is not None and existing.type == "injury" and (
+        engine_defaults.default_signature(existing.value or {})
+        == engine_defaults.default_signature(entry_in.value)
+    ):
+        return
+    review_by = _local_day() + timedelta(days=engine_defaults.DEFAULT_REVIEW_DAYS)
+    try:
+        plan = engine_defaults.plan_engine_defaults(db, user_id, entry_in.key, entry_in.value, review_by)
+        planned = plan["planned"]
+        for sk in plan["skipped"]:
+            if sk.get("side_mismatch"):   # a confirmed / hand-authored cover with the old side: the operator's
+                logger.warning("engine defaults: %s → %s — %s", sk["parent_key"], sk["region_key"], sk["why"])
+    except Exception:   # a read/derivation fault; the injury itself is still written
+        logger.exception("engine defaults: planning failed for injury %r — none proposed", entry_in.key)
+        return
+    for p in planned:
+        try:
+            _stage_upsert_entry(user_id, KnowledgeEntryIn(
+                type="constraint", key=p["key"], value=p["value"], source="system",
+                notes=f"engine default proposed by the injury write path for {entry_in.key}",
+            ), db)
+        except ValueError:
+            logger.exception("engine defaults: proposal %r refused — skipped", p["key"])
+
+
 def _stage_upsert_entry(
     user_id: int,
     entry_in: KnowledgeEntryIn,
@@ -1462,6 +1577,9 @@ def _stage_upsert_entry(
         if target is not None:
             target.superseded_by = new_entry.id
             target.active = False
+
+    if entry_in.type == "injury":
+        _propose_engine_defaults(user_id, entry_in, existing, db)
 
     return new_entry
 
@@ -1581,9 +1699,9 @@ def list_injuries(
     """The user's injury entries — the read half of the resolution loop.
 
     Nothing can be retired that cannot first be seen: `gather_active_injuries` and
-    `is_contraindicated` have consumed these rows since #72, but no endpoint listed
-    them, so a healed injury kept suppressing regions with nothing to show the user
-    what to retire.
+    `is_contraindicated` consumed these rows from #72 until the injury-keyed block maps retired
+    (#486), but no endpoint listed them, so a healed injury kept suppressing regions with nothing
+    to show the user what to retire.
 
     Each row's `value` is returned UNMODIFIED, so an entry's `trajectory` block (#72)
     rides along untouched — this surface reads the ledger, it does not reinterpret it.
@@ -1625,6 +1743,92 @@ def list_proposals(
         if (r.value or {}).get("status") == "proposed"
         and (r.type != "finding" or (r.value or {}).get("derived_from_labs") is False)
     ]
+
+
+class ReviewDueItem(BaseModel):
+    id: int
+    type: str                    # "constraint" | "finding"
+    key: str
+    what: str                    # the constraint's kind/tier/scope phrase, or the finding's statement
+    tags: list[str]              # "review due" / "exit due" — `typed_entries.constraint_due_tags`
+    parent_key: str | None = None
+    authority: str | None = None  # asserted_by (#227)
+    status: str | None = None
+    review_by: str | None = None
+    exit_on_date: str | None = None
+    days_overdue: int | None = None   # null: due only because its parent is gone (no date to count from)
+
+
+class ReviewDueOut(BaseModel):
+    as_of: str
+    items: list[ReviewDueItem]
+    withheld_labs: int           # lab-derived findings past review: counted, never carried (#60)
+
+
+@router.get("/review-due", response_model=ReviewDueOut)
+def review_due(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The standing review sweep (Q191, GH#529) — SURFACING ONLY (#223): what is past its date.
+
+    Lists every active, CONFIRMED constraint with a non-empty `constraint_due_tags` (`review due`:
+    `review_by` passed; `exit due`: `exit.on_date` passed, or a `with_parent` exit whose parent is no
+    longer active) and every active `open` / `confirmed` finding past its `review_by`. A PROPOSAL is
+    never listed — it is awaiting confirmation, not review (it has its own group). Nothing is lifted,
+    resolved or re-dated here: the operator acts through `/constraints/{id}/resolve`,
+    `/findings/{id}/retract` or `/constraints|findings/{id}/review`.
+
+    ONE QUERY, the one the lifts read: the user's active rows, from which `lift_constraints`,
+    `lift_findings` and the parent-liveness set all derive — the chat section and the MCP snapshot tag
+    due rows from the same load, so the sweep cannot disagree with them. A lab-derived finding is
+    counted, not carried (#60 firewall).
+    """
+    today = _local_day()
+    rows = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(user_id=current_user.id, active=True)
+        .order_by(models.UserKnowledgeEntry.added_at.desc(), models.UserKnowledgeEntry.id.desc())
+        .all()
+    )
+    live = typed_entries.active_keys(rows)
+    items: list[ReviewDueItem] = []
+
+    for c in typed_entries.lift_constraints(rows):
+        tags = typed_entries.constraint_due_tags(c, live, today)
+        if not tags:
+            continue
+        exit_ = c.get("exit") or {}
+        passed = [d for d in (typed_entries.parse_date(c.get("review_by")),
+                              typed_entries.parse_date(exit_.get("on_date"))) if d is not None and d <= today]
+        items.append(ReviewDueItem(
+            id=c["id"], type="constraint", key=c["key"], what=typed_entries.constraint_what(c),
+            tags=tags, parent_key=c.get("parent_key"), authority=c.get("asserted_by"),
+            status=c.get("status"), review_by=c.get("review_by"), exit_on_date=exit_.get("on_date"),
+            days_overdue=max((today - d).days for d in passed) if passed else None,
+        ))
+
+    lifted = typed_entries.lift_findings(rows)
+    for f in lifted["visible"]:
+        rb = typed_entries.parse_date(f.get("review_by"))
+        if rb is None or rb > today:
+            continue
+        statement = str(f.get("statement") or "")
+        items.append(ReviewDueItem(
+            id=f["id"], type="finding", key=f["key"],
+            what=statement if len(statement) <= typed_entries.FINDING_STATEMENT_MAX_CHARS
+            else statement[:typed_entries.FINDING_STATEMENT_MAX_CHARS].rstrip() + "…",
+            tags=["review due"], parent_key=f.get("parent_key"), authority=f.get("asserted_by"),
+            status=f.get("status"), review_by=f.get("review_by"), days_overdue=(today - rb).days,
+        ))
+    withheld_due = sum(
+        1 for r in rows
+        if r.type == "finding" and (r.value or {}).get("status") in typed_entries.FINDING_READ_STATUSES
+        and (r.value or {}).get("derived_from_labs") is not False
+        and (rb := typed_entries.parse_date((r.value or {}).get("review_by"))) is not None and rb <= today
+    )
+    items.sort(key=lambda i: (-(i.days_overdue or 0), i.type, i.key))
+    return ReviewDueOut(as_of=today.isoformat(), items=items, withheld_labs=withheld_due)
 
 
 @router.post("/entry", response_model=KnowledgeEntryOut, status_code=status.HTTP_201_CREATED)
@@ -1896,9 +2100,9 @@ async def sweep_injury(
 
     Also audits the entry's `restrictions`: each is `covered` by the resolution basis,
     `rehomed` onto another active injury row, or an `orphan` about to leave chat context
-    (restriction strings are chat-rendered only; the engine gates on body_part +
-    signal_type). A re-homed destination typed neural/radicular on a spinal part carries a
-    `_RADICULAR_BLOCKS` warning. The resolve route's contract is untouched: the frontend
+    (restriction strings are chat-rendered only; the engine gates on confirmed engine-tier
+    constraint rows and profile hard-stops). A re-homed destination typed neural/radicular on a
+    non-cervical spinal part carries a `_RADICULAR_BLOCKS` warning (what writing it would PROPOSE). The resolve route's contract is untouched: the frontend
     calls this straight after a resolve.
 
     Works for resolved entries — the point is sweeping after a resolve. Scoped to
@@ -2167,3 +2371,86 @@ def retract_finding(
     it was dropped, is itself context. Per-type route (the 404-leak defence).
     """
     return _resolve_entry(entry_id, body, "finding", current_user.id, db, terminal_status="retracted")
+
+
+class ReviewIn(BaseModel):
+    """Re-date a live typed entry's review. The one field a review touches."""
+    review_by: date
+
+
+_REVIEWABLE_STATUSES = {"constraint": ("confirmed",), "finding": ("open", "confirmed")}
+
+
+def _review_entry(
+    entry_id: int,
+    body: ReviewIn,
+    entry_type: str,
+    user_id: int,
+    db: Session,
+) -> models.UserKnowledgeEntry:
+    """"Keep — review again on <date>": set `review_by` IN PLACE and nothing else (Q191, D6 ruling).
+
+    The id, `status`, `asserted_by` and `confirmed_on` are untouched, which is the point of the route:
+    a same-key rewrite supersedes the row, and `confirmed_on` is stamped by `/confirm` only and
+    refused on any write, so a rewrite would drop it. REASSIGN, never mutate in place (plain JSON
+    column — see `_resolve_entry`).
+
+    Operator-only, like `/confirm` and `/resolve`: a route, not an upsert, so the chat channel has no
+    way to reach it (and chat may not rewrite a past-`proposed` row at all — `_typed_supersede_guard`).
+    Type-scoped (the 404-leak defence). The row must be live: a proposal is confirmed or declined, not
+    reviewed; a retired row is not reviewed. The new date must be in the future — a date that is
+    already due would "keep" the row by leaving it on the sweep.
+    """
+    label = _RESOLVE_LABELS[entry_type]
+    entry = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(id=entry_id, user_id=user_id, type=entry_type)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{label} not found")
+    if not entry.active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{label} is inactive — only a live entry can be reviewed",
+        )
+    value = entry.value or {}
+    current = value.get("status")
+    if current not in _REVIEWABLE_STATUSES[entry_type]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{label} is {current!r} — only a {' / '.join(_REVIEWABLE_STATUSES[entry_type])} "
+                   f"entry is reviewed; a proposal is confirmed or declined",
+        )
+    if body.review_by <= _local_day():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"review_by must be after today ({_local_day()}) — an already-due date keeps nothing",
+        )
+    entry.value = {**value, "review_by": body.review_by.isoformat()}
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@router.post("/constraints/{entry_id}/review", response_model=KnowledgeEntryOut)
+def review_constraint(
+    entry_id: int,
+    body: ReviewIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Keep a confirmed constraint: set its `review_by` in place; id, status, authority and
+    `confirmed_on` untouched. The operator's act (surfacing never lifts, #223)."""
+    return _review_entry(entry_id, body, "constraint", current_user.id, db)
+
+
+@router.post("/findings/{entry_id}/review", response_model=KnowledgeEntryOut)
+def review_finding(
+    entry_id: int,
+    body: ReviewIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Keep an open or confirmed finding: the same in-place `review_by` re-date as a constraint."""
+    return _review_entry(entry_id, body, "finding", current_user.id, db)

@@ -130,7 +130,8 @@ def latest_sleep_night(db: Session, user_id: int) -> dict[str, Any] | None:
     Keys over the card's original shape: `writers` (friendly names behind the duration, a list),
     `blended` (True when an HC night spans two or more real writers, so its stage split mixes
     writers), `transport` ('personal_api', 'health_connect' or 'scraper'), `field_sources`
-    ({field: label}), `efficiency_derived` (True when the efficiency is sleep time over the
+    ({field: label}), `spo2_min_pct` (the night's lowest SpO2, same source as `spo2_pct`, None when that source has no minimum),
+    `efficiency_derived` (True when the efficiency is sleep time over the
     device's own start-to-end window, which has no pre-sleep time in bed and so reads higher than
     the diary SE), `resting_hr_bpm` (the daily resting rate, or None) `withheld` (nights the
     plausibility guard refused, newest first) and `diary_note` (the night's diary TST beside the device figure,
@@ -194,6 +195,9 @@ def _night_dict(db: Session, user_id: int, night: date, r: dict[str, Any], cand:
         "resp_rate": _field(r, "rr"),
         "sleep_hr_bpm": _field(r, "sleep_hr"),
         "spo2_pct": _field(r, "spo2"),
+        # The night's minimum, from the SAME source as the mean (the resolver takes both keys from the one source
+        # that carries the figure), so the slot never pairs one transport's mean with another's minimum.
+        "spo2_min_pct": _field(r, "spo2", "spo2_min"),
         "resting_hr_bpm": _field(r, "daily_rhr"),
         "field_sources": field_sources,
         "withheld": withheld,

@@ -5,15 +5,16 @@ Reads the governance stores of health-app and health-connect-app at **master** (
 raw.githubusercontent, pinned to a resolved SHA for provenance) and emits a JSON status
 model: per-repo state-vocabulary tallies for branch rows, decision-sequence integrity, and an
 off-vocabulary tally that is reported, never dropped. Neither repo has a questions store (both
-retired, DECISIONS_LOG #468 / health-connect-app #54): questions are GitHub issues, which this
-tool does not read.
+retired, DECISIONS_LOG #468 / health-connect-app #54): open questions are GitHub issues, and
+since schema 2 this tool reads them (DECISIONS_LOG #483): `repos[<repo>]["issues"]`. The status
+RENDERER never fetches; it reads that block.
 
 Distinct from `gen_governance_view.py` by design (DECISIONS_LOG #192): that renders a
 human-readable digest; this produces diffable machine JSON that a cross-repo snapshot ages
 over. The two share ONE thing — the dialect grammar — via `gov_dialects` (#191).
 
 GATES — a status generator that under-reports silently is worse than none (#190). Before the
-model is returned, three gates run; any failure HALTs with a non-zero exit and a stderr line
+model is returned, four gates run; any failure HALTs with a non-zero exit and a stderr line
 naming the store, and NOTHING partial is emitted:
 
   1. Count parity   — a crude, dialect-agnostic heading/row count (computed by an independent
@@ -23,12 +24,28 @@ naming the store, and NOTHING partial is emitted:
   3. Extraction     — count parity is necessary but INSUFFICIENT. If a state field resolves
                       EMPTY across ALL parsed items of a store, the parser matched a schema
                       that is not there (the live `**State:**`/`**Status:**` bug, #190). HALT.
+  4. Issues shape   — every repo's `issues` block is exactly one of two shapes (below). A block
+                      that could let a consumer read "0 open issues" while the tracker was never
+                      read (`count: 0` with `tracker: "unreachable"`, an "ok" with no HTTP 200)
+                      HALTs. An unreachable tracker is NOT a halt: it is carried, as UNKNOWN.
+
+ISSUES (schema 2). Two transports, ONE grammar (`normalise_issues`):
+  live  — `fetch_open_issues(owner, repo)` reads api.github.com itself;
+  file  — `--issues-json PATH` reads raw API payloads keyed by repo name, produced by
+          `fetch_issues.py` wherever the API is reachable. When given, NO live fetch is made.
+The block, per repo:
+  {"tracker": "ok", "count": N, "items": [{number, title, labels: [str], created_at: "YYYY-MM-DD",
+                                          html_url}], "http": 200}
+  {"tracker": "unreachable", "count": null, "items": null}
+`count: null` is deliberate: a consumer that does arithmetic on it must crash, not print zero.
+A repo missing from the file, a non-array value, or an item the normaliser rejects is unreachable.
 
 Off-vocabulary state tokens are tallied per field and surfaced under `drift`; a clean-gate
 run with non-zero off-vocab is still a finding, never a pass-in-silence.
 
 Usage:
     python scripts/gen_status_model.py --dry-run     # build + gate, print JSON, write nothing
+    python scripts/gen_status_model.py --issues-json PATH   # issues from a fetch_issues.py file
     python scripts/gen_status_model.py --self-check   # exercise the gates on synthetic input
 """
 
@@ -37,11 +54,13 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import re
 import sys
 import urllib.request
 from collections import Counter
 from pathlib import Path
 
+import fetch_issues as FI
 import gov_dialects as D
 
 RAW = "https://raw.githubusercontent.com/{owner}/{repo}/{sha}/{store}.md"
@@ -60,7 +79,9 @@ STORE_FILE = {
 # A store smaller than this is a fetch failure, not a small store (mirrors gen_governance_view).
 MIN_STORE_BYTES = 300
 
-SCHEMA_VERSION = 1
+# 2: adds repos[<repo>]["issues"] (DECISIONS_LOG #483). A schema-1 snapshot has no `issues` key;
+# `status_diff` reads it as tracker "unreachable" (not compared), never as zero.
+SCHEMA_VERSION = 2
 
 
 class StatusGateError(RuntimeError):
@@ -199,6 +220,113 @@ PARSERS = {
 
 
 # --------------------------------------------------------------------------------------
+# Issues  (DECISIONS_LOG #483) — the model owns the open-issues read AND its grammar. The
+# renderer never fetches. One normaliser, two transports (live API / --issues-json file).
+# --------------------------------------------------------------------------------------
+
+ISSUE_ITEM_FIELDS = ("number", "title", "labels", "created_at", "html_url")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+class IssueShapeError(ValueError):
+    """A raw issue payload the normaliser will not interpret. The repo becomes tracker
+    "unreachable" — a payload we cannot read is not a payload with zero issues."""
+
+
+def _is_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def normalise_issues(raw) -> list[dict]:
+    """Raw GitHub `GET /repos/{o}/{r}/issues` array -> normalised open issues, ascending by number.
+
+    Pull requests (items carrying `pull_request` — the issues endpoint returns both) are
+    EXCLUDED. Each issue becomes {number, title, labels: [str], created_at: 'YYYY-MM-DD',
+    html_url}. A malformed item raises IssueShapeError; it is never skipped, because a skipped
+    item is a silent under-count."""
+    if not isinstance(raw, list):
+        raise IssueShapeError(f"expected a JSON array of issues, got {type(raw).__name__}")
+    items: list[dict] = []
+    for i, r in enumerate(raw):
+        if not isinstance(r, dict):
+            raise IssueShapeError(f"item {i} is {type(r).__name__}, not an object")
+        if "pull_request" in r:
+            continue
+        num = r.get("number")
+        if not _is_int(num):
+            raise IssueShapeError(f"item {i}: number {num!r} is not an integer")
+        title, url, created = r.get("title"), r.get("html_url"), r.get("created_at")
+        if not isinstance(title, str):
+            raise IssueShapeError(f"issue {num}: title is {type(title).__name__}, not str")
+        if not isinstance(url, str) or not url:
+            raise IssueShapeError(f"issue {num}: html_url missing")
+        if not isinstance(created, str) or not _ISO_DATE.match(created[:10]):
+            raise IssueShapeError(f"issue {num}: created_at {created!r} is not an ISO timestamp")
+        labels_raw = r.get("labels")
+        if not isinstance(labels_raw, list):
+            raise IssueShapeError(f"issue {num}: labels is {type(labels_raw).__name__}, not a list")
+        labels: list[str] = []
+        for lb in labels_raw:
+            name = lb.get("name") if isinstance(lb, dict) else lb
+            if not isinstance(name, str):
+                raise IssueShapeError(f"issue {num}: label {lb!r} has no string name")
+            labels.append(name)
+        items.append({"number": num, "title": title, "labels": sorted(labels),
+                      "created_at": created[:10], "html_url": url})
+    nums = [it["number"] for it in items]
+    if len(nums) != len(set(nums)):
+        dup = sorted(n for n in set(nums) if nums.count(n) > 1)
+        raise IssueShapeError(f"duplicate issue number(s) {dup} (overlapping pages?)")
+    return sorted(items, key=lambda it: it["number"])
+
+
+def issues_block_ok(items: list[dict], http: int) -> dict:
+    return {"tracker": "ok", "count": len(items), "items": items, "http": http}
+
+
+def issues_block_unreachable() -> dict:
+    """`count: None` on purpose — a consumer that reads it as an int must crash, not print 0."""
+    return {"tracker": "unreachable", "count": None, "items": None}
+
+
+def issues_block_from_payload(repo: str, raw) -> dict:
+    """FILE transport for one repo. A file entry exists only for a repo `fetch_issues.py` read
+    completely (HTTP 200 on every page), so a list here records `http: 200`; anything that is
+    not a list (null, an API error object) or does not normalise is unreachable."""
+    try:
+        return issues_block_ok(normalise_issues(raw), 200)
+    except IssueShapeError as exc:
+        print(f"    {repo}: issues payload rejected — {exc}", file=sys.stderr)
+        return issues_block_unreachable()
+
+
+def fetch_open_issues(owner: str, repo: str) -> dict:
+    """LIVE transport for one repo: read the open issues from api.github.com (every page) and
+    normalise through the same function as the file transport. ANY failure -> unreachable."""
+    try:
+        status, raw = FI.fetch_open_issues_raw(owner, repo)
+        return issues_block_ok(normalise_issues(raw), status)
+    except (FI.FetchError, IssueShapeError) as exc:
+        print(f"    {repo}: issues fetch failed — {exc}", file=sys.stderr)
+        return issues_block_unreachable()
+
+
+def load_issues_payload(path: Path) -> dict:
+    """The `--issues-json` file. An unreadable file or one that is not a JSON object is an
+    operator error and HALTs; a REPO missing from a good file is the partial-file case and is
+    unreachable (never zero)."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise StatusGateError(f"ISSUES FILE [{path}]: unreadable or not JSON ({exc}). "
+                              f"Refusing to guess the tracker's state.") from exc
+    if not isinstance(payload, dict):
+        raise StatusGateError(f"ISSUES FILE [{path}]: top level is {type(payload).__name__}; "
+                              f"expected an object keyed by repo name.")
+    return payload
+
+
+# --------------------------------------------------------------------------------------
 # Gates
 # --------------------------------------------------------------------------------------
 
@@ -252,6 +380,53 @@ def gate_no_missing_state(repo: str, store_key: str, parsed: dict) -> None:
         )
 
 
+def gate_issues_shape(repo: str, block) -> None:
+    """The `issues` block is EXACTLY one of two shapes (module docstring). The point is that no
+    block can read as "0 open issues" while the tracker was never read:
+      * unreachable: `count` and `items` both null — `count: 0` here is the bug this gate names;
+      * ok: `http` is 200 (an empty list is believable only as a 200 with an empty array),
+        `count` == len(`items`), and every item carries exactly the five fields, typed."""
+    def bad(why: str):
+        raise StatusGateError(f"ISSUES SHAPE [{repo}]: {why}. A block that can read as zero "
+                              f"while the tracker was never read is the bug; HALT.")
+
+    if not isinstance(block, dict):
+        bad(f"`issues` block is {type(block).__name__}, not an object")
+    tracker = block.get("tracker")
+    if tracker == "unreachable":
+        if set(block) != {"tracker", "count", "items"}:
+            bad(f"unreachable block has keys {sorted(block)}")
+        if block["count"] is not None or block["items"] is not None:
+            bad(f"tracker is unreachable but count={block['count']!r}, items="
+                f"{'null' if block['items'] is None else 'present'}; both must be null")
+        return
+    if tracker != "ok":
+        bad(f"tracker is {tracker!r}, neither 'ok' nor 'unreachable'")
+    if set(block) != {"tracker", "count", "items", "http"}:
+        bad(f"ok block has keys {sorted(block)}")
+    if not _is_int(block["http"]) or block["http"] != 200:
+        bad(f"tracker ok without http 200 (http={block['http']!r})")
+    items = block["items"]
+    if not isinstance(items, list):
+        bad(f"ok block items is {type(items).__name__}, not a list")
+    if not _is_int(block["count"]) or block["count"] != len(items):
+        bad(f"count {block['count']!r} != {len(items)} items")
+    seen: set = set()
+    for it in items:
+        if not isinstance(it, dict) or set(it) != set(ISSUE_ITEM_FIELDS):
+            bad(f"item fields {sorted(it) if isinstance(it, dict) else type(it).__name__} "
+                f"!= {sorted(ISSUE_ITEM_FIELDS)}")
+        n = it["number"]
+        if (not _is_int(n) or not isinstance(it["title"], str) or not isinstance(it["html_url"], str)
+                or not isinstance(it["created_at"], str) or not _ISO_DATE.match(it["created_at"])
+                or not isinstance(it["labels"], list)
+                or not all(isinstance(lb, str) for lb in it["labels"])):
+            bad(f"issue {n!r} has a mistyped field")
+        if n in seen:
+            bad(f"duplicate issue number {n}")
+        seen.add(n)
+
+
 # --------------------------------------------------------------------------------------
 # Build
 # --------------------------------------------------------------------------------------
@@ -283,8 +458,14 @@ def collect_drift(model: dict) -> list:
     return drift
 
 
-def build_model(generated_utc: str) -> dict:
+def build_model(generated_utc: str, issues_payload: dict | None = None) -> dict:
+    """`issues_payload` is the parsed `--issues-json` file (raw API arrays keyed by repo name), or
+    None for the live transport. When it is given NO live fetch is attempted."""
     repos: dict = {}
+    if issues_payload is not None:
+        for extra in sorted(set(issues_payload) - set(D.REPOS)):
+            print(f"  warning: --issues-json carries {extra!r}, not a tracked repo; ignored",
+                  file=sys.stderr)
     for repo in D.REPOS:
         sha = resolve_master_sha(repo)
         print(f"  {repo}: master @ {sha[:7]}", file=sys.stderr)
@@ -293,6 +474,18 @@ def build_model(generated_utc: str) -> dict:
         for k in STORE_FILE:
             p = repos[repo][k]
             print(f"    {STORE_FILE[k]+'.md':<18} {p['count']:>4} items", file=sys.stderr)
+        if issues_payload is None:
+            block = fetch_open_issues(D.OWNER, repo)                     # live transport
+        elif repo in issues_payload:
+            block = issues_block_from_payload(repo, issues_payload[repo])  # file transport
+        else:
+            print(f"    {repo}: not in the --issues-json file", file=sys.stderr)
+            block = issues_block_unreachable()                           # missing is never zero
+        gate_issues_shape(repo, block)
+        repos[repo]["issues"] = block
+        print(f"    {'issues':<18} " + (f"{block['count']:>4} open (http {block['http']})"
+              if block["tracker"] == "ok" else "UNREACHABLE — open-issue state UNKNOWN, not zero"),
+              file=sys.stderr)
     model = {
         "schema_version": SCHEMA_VERSION,
         "generated_utc": generated_utc,
@@ -321,6 +514,10 @@ the model regenerates from the stores at any time.
 
 - `snapshots/<ISO8601>_model.json` — append-only, one per run.
 - `latest.json` — the most recent snapshot.
+- Schema 2 adds `repos.<repo>.issues`: `{"tracker": "ok", "count": N, "items": [...], "http": 200}`
+  or `{"tracker": "unreachable", "count": null, "items": null}`. `null` means the tracker was
+  NOT READ — state unknown, never zero. A schema-1 snapshot has no `issues` block and reads the
+  same way: not compared.
 - The first snapshot with no predecessor carries `"baseline": true`: downstream diff
   consumers must render "baseline run, no comparison available", never an empty diff that
   reads as "no change".
@@ -339,6 +536,9 @@ def write_snapshot(model: dict, out_dir: Path) -> tuple[Path, bool]:
     Baseline is decided by predecessors present BEFORE this write: a snapshot with no prior
     is the baseline (#192/#193). Provenance per repo is already carried in the model.
     """
+    for repo, rd in model["repos"].items():       # a schema-2 snapshot always carries a gated block
+        gate_issues_shape(repo, rd.get("issues"))
+
     snap_dir = out_dir / "snapshots"
     snap_dir.mkdir(parents=True, exist_ok=True)
 
@@ -398,6 +598,37 @@ def self_check() -> int:
                                             "missing_state": 0, "missing_ids": []})  # clean: no raise
     print("  ok   no-missing-state gate (partial halts + names ids; clean passes)", file=sys.stderr)
 
+    # 5. issues shape (DECISIONS_LOG #483): no block may read as zero while the tracker was unread.
+    it = {"number": 7, "title": "t", "labels": ["fork"], "created_at": "2026-11-01",
+          "html_url": "https://github.com/o/r/issues/7"}
+    expect_halt("issues: count 0 but tracker unreachable", lambda: gate_issues_shape(
+        "r", {"tracker": "unreachable", "count": 0, "items": None}))
+    expect_halt("issues: unreachable with items []", lambda: gate_issues_shape(
+        "r", {"tracker": "unreachable", "count": None, "items": []}))
+    expect_halt("issues: ok, empty, no http 200", lambda: gate_issues_shape(
+        "r", {"tracker": "ok", "count": 0, "items": []}))
+    expect_halt("issues: ok, empty, http 403", lambda: gate_issues_shape(
+        "r", {"tracker": "ok", "count": 0, "items": [], "http": 403}))
+    expect_halt("issues: count != len(items)", lambda: gate_issues_shape(
+        "r", {"tracker": "ok", "count": 2, "items": [it], "http": 200}))
+    expect_halt("issues: item missing a field", lambda: gate_issues_shape(
+        "r", {"tracker": "ok", "count": 1, "items": [{k: v for k, v in it.items() if k != "html_url"}],
+              "http": 200}))
+    expect_halt("issues: no block at all", lambda: gate_issues_shape("r", None))
+    gate_issues_shape("r", {"tracker": "ok", "count": 0, "items": [], "http": 200})   # empty 200: allowed
+    gate_issues_shape("r", {"tracker": "ok", "count": 1, "items": [it], "http": 200})
+    gate_issues_shape("r", issues_block_unreachable())                                # carried, not halted
+    assert issues_block_unreachable()["count"] is None, "unreachable count must be null, not 0"
+    raw = [{"number": 9, "title": "pr", "pull_request": {}, "labels": [], "created_at": "2026-11-01T00:00:00Z",
+            "html_url": "u"},
+           {"number": 7, "title": "t", "labels": [{"name": "fork"}], "created_at": "2026-11-01T21:14:00Z",
+            "html_url": "https://github.com/o/r/issues/7"}]
+    assert normalise_issues(raw) == [it], "PR excluded; labels -> [str]; created_at -> ISO date"
+    assert issues_block_from_payload("r", raw) == issues_block_ok([it], 200)
+    assert issues_block_from_payload("r", {"message": "Bad credentials"}) == issues_block_unreachable()
+    print("  ok   issues gate (zero-while-unread halts; empty-200 and unreachable-null pass) + normaliser",
+          file=sys.stderr)
+
     # grammar positives for the reader-channel changes (no network).
     # Decision channel: the lowercase inline reader (HCA dialect).
     assert D.decision_inline_state("Title  ·  active  ·  supersedes #10") == "active", \
@@ -418,6 +649,10 @@ def main() -> int:
                     help="build + gate, print the model JSON to stdout, write no snapshot")
     ap.add_argument("--self-check", action="store_true",
                     help="exercise the gates on synthetic input and exit")
+    ap.add_argument("--issues-json", type=Path, default=None, metavar="PATH",
+                    help="raw GitHub issues payloads keyed by repo name, from fetch_issues.py; "
+                         "when given, NO live issues fetch is attempted (a repo missing from "
+                         "the file is unreachable, never zero)")
     ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR,
                     help=f"snapshot root (default: {DEFAULT_OUT_DIR})")
     args = ap.parse_args()
@@ -426,7 +661,8 @@ def main() -> int:
         return self_check()
 
     generated = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    model = build_model(generated)
+    payload = load_issues_payload(args.issues_json) if args.issues_json else None
+    model = build_model(generated, payload)
 
     if args.dry_run:
         json.dump(model, sys.stdout, indent=2, ensure_ascii=False)
@@ -441,6 +677,10 @@ def main() -> int:
     for repo in D.REPOS:
         print(f"    {repo}: master @ {model['repos'][repo]['provenance']['sha'][:7]}",
               file=sys.stderr)
+    dark = [r for r in D.REPOS if model["repos"][r]["issues"]["tracker"] != "ok"]
+    if dark:
+        print(f"\n  ISSUES UNREACHABLE for: {', '.join(dark)} — open-issue state is UNKNOWN, "
+              f"not zero; the diff will report 'not compared'.", file=sys.stderr)
     return 0
 
 

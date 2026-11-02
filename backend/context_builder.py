@@ -1199,9 +1199,16 @@ an appointment attended or closed (the user records that themselves).
 APPOINTMENT `value` — allowed keys, and ONLY these: {", ".join(allowed)}.
 - `clinician`: text. `practice`: text or null. `at`: YYYY-MM-DDTHH:MM, Brisbane local time.
 - `kind`: {_q(APPOINTMENT_KINDS)}. `since`: YYYY-MM-DD, the last visit — required for {since_kinds}.
-- `scope`: {scope} — keys of the user's injury ledger rows, at least one.
+- `scope`: {scope} — keys of the user's injury ledger rows, at least one. It MUST include the
+  injury key of every constraint or finding an ask `resolves` (the brief reads one hop from these
+  keys and leaves any other row out): a new problem the user raises needs its injury row written
+  first, then its key added here. A write that links a row whose injury is not listed is refused.
 - `asks`: a list of {ask}; `priority` is 1..(number of asks), 1 = first;
-  `resolves` (optional) is {res} naming the constraint or finding the ask settles;
+  `resolves` (optional) is {res} naming the ONE constraint or finding the ask itself settles —
+  the same body part and the same restriction. If no row in the ledger is that, leave `resolves`
+  out and say so; never link the nearest-sounding row or one for a different body part (a knee
+  scan does not settle a lumbar constraint). A wrong link also pulls that row's review question
+  into the ask;
   `options` (optional) is a list of {opt} — only as the user states them or asks you
   to draft them, framed as what each answer would mean, never as a recommendation.
 - `logistics`: a list of text. `detail`: text or null. `audience` (optional): {_q(APPOINTMENT_AUDIENCES)}.
@@ -1251,6 +1258,13 @@ a JSON block anywhere in your response:
 {{"category": "Training Background", "content": "new detail to save"}}
 </knowledge_update>
 
+PREFERRED: submit writes by calling the `record_knowledge_updates` tool in that same
+reply. Its `updates` is an ARRAY with one JSON object per update, each exactly the object
+shown in the examples in this section (the `<knowledge_update>` wrapper in an example only
+marks where the object goes; with the tool you pass the object itself and write no wrapper).
+Several updates are ONE call with several items. If you do embed blocks instead, put ONE
+JSON object in each block and nothing after its closing brace.
+
 Valid categories: {", ".join(KNOWLEDGE_UPDATE_CATEGORIES)}.
 
 INJURIES AND EXERCISE RESTRICTIONS NEVER GO IN A FREE-TEXT CATEGORY. A free-text
@@ -1280,7 +1294,13 @@ mention what you saved in your reply.
 
 A write happens ONLY when your reply contains the block. If the user answers
 "yes" to something you offered to record, that reply MUST contain the block. A
-reply without the block records nothing, whatever its wording."""
+reply without the block records nothing, whatever its wording. A
+`record_knowledge_updates` call counts as the block.
+
+CHAT CANNOT WRITE A CHECK-IN. Soreness, readiness and the rest of a check-in are entered on
+the check-in screens, and nothing here changes them. Never say a check-in or a soreness
+rating was saved, logged or updated; say it is entered on the check-in screen. Say a write
+is done only when the system's confirmation line for it is in the receipt."""
 
 
 def _section_health_connect(records: list[Any], now: datetime) -> str:
@@ -1511,7 +1531,10 @@ def _section_schedule(entries: list[Any], now: datetime, suppress_hard_flags: bo
     for e in schedule_items:
         val = _v(e, "value") or {}
         activity = val.get("activity", "?")
-        days = val.get("days", [])
+        # `or []`, not a `.get` default: `validate_schedule_item` stores `days: null` for a
+        # count-only (`sessions_per_week`) or dated (`event_date`) item, so the key is present
+        # and None -- a default only covers the absent key.
+        days = val.get("days") or []
         hard = val.get("hard", False)
         source = _v(e, "source") or "system"
         notes = _v(e, "notes") or ""
@@ -1551,7 +1574,7 @@ def _section_schedule(entries: list[Any], now: datetime, suppress_hard_flags: bo
         if not val.get("hard"):
             continue
         activity = val.get("activity", "?")
-        days = val.get("days", [])
+        days = val.get("days") or []  # null-safe, as above
         for d in days:
             # Map weekday name to next occurrence date
             try:

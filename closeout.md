@@ -1,101 +1,86 @@
-# Close-out — 1 Nov 2026: the chat-side approval gate (`DECISIONS_LOG` #473; health-connect-app #55)
+# Close-out — 2 Nov 2026: in-app per-session sRPE (`DECISIONS_LOG` #475)
 
 ## Real commits this session
 
-Session opened at health-app master `d5df678` (the merge of PR 574), 31 Oct 2026 22:30Z. Maxima at open: `DECISIONS_LOG` #472, `FEEDBACK.md` last § 65, no open `fork` issue (read through the GitHub MCP issue list, not the `gh api` form, which was not run). `git log --first-parent --format="%h %ad %s" --date=short d5df678..origin/master` lists this session's one merge among several from parallel sessions (PRs 577, 578, 579 and later ones, which merged while this session ran and are not its work); the list keeps growing, so only this session's line is kept here:
+Session opened at health-app master `59ba1c2` (the merge of PR 577). Maxima at open: `DECISIONS_LOG` #474, no open `fork` issue (REST read, empty). At close: master max #485 (#476 to #485 are other sessions' landings; this session's is #475), still no open `fork` issue, and no issue changed during the session. One issue was filed at this close-out: GH#593 (`stamp`, two-way).
+
+The twelve commits of this session, by the session trailer (`git log --reverse --format="%h %ad %s" --date=short --grep=<session> 59ba1c2..origin/master`):
 
 ```
-99f6c6f 2026-11-01 Merge pull request #576 from Easty11/claude/hopeful-bell-hhu4y6
+60ca035 2026-10-31 feat(srpe): Pilates is a counted session (operator ruling; supersedes #322 S1/S3 for Pilates)
+25e5b14 2026-10-31 feat(srpe): in_app signs the store contract; one CR-10 per counted session, window from the server's bout
+1469fef 2026-10-31 feat(srpe): retire day_fill; a session no source rated reads unrated (R2)
+614242e 2026-10-31 feat(srpe): per-session read and write routes for the cards
+06d0034 2026-10-31 feat(mcp): get_recent_sessions renders the door's rating on Hevy workout lines, once per workout
+aa4d497 2026-10-31 feat(srpe): repoint the display readers from the whole-day RPE to the door's per-session ratings
+b1071be 2026-10-31 feat(srpe): earlier-sessions read for the backfill, and a real-state fixture for the card tests
+723b06a 2026-10-31 feat(srpe): the close-out and the AM catch-up rate each session; the day question is gone (R3, R4)
+58b8740 2026-11-01 gov(srpe-in-app): ruling #475, in-app per-session sRPE; day fill retired; Pilates counted
+6ac215d 2026-11-01 gov(srpe-in-app): terminal state for the merge - the hold is lifted on the operator's instruction
+7167f97 2026-11-01 gov(srpe-in-app): deploy check recorded for #475 (PR 578, merge 19d5d33)
+114653a 2026-11-02 gov(srpe-in-app): operator check recorded; #475 How-you-know complete, rows DONE
 ```
 
-The commit that merge carries (`git log --format="%h %ad %s" --date=short d5df678..0e244df`):
+The three merges of those branches onto master (`git log --first-parent`):
 
 ```
-0e244df 2026-10-31 gov(approval-gate): chat-side writes are approval-gated; FEEDBACK §66 and §67; ruling #473
+19d5d33 Merge pull request #578 (code and the #475 entry; merged on the operator's explicit instruction)
+4049e69 Merge pull request #579 (deploy check recorded)
+36781d6 Merge pull request #592 (operator check recorded)
 ```
 
-health-connect-app, opened at its master `858a990`; `git log --first-parent --format="%h %ad %s" --date=short 858a990..origin/master`:
+Deploys (#433, matched on `commitHash`): `19d5d33` SUCCESS on both services (backend `f29ffaf0`, frontend `3e5e3ccd`); `4049e69` and `36781d6` SKIPPED on both, as a docs-only merge should be. The live bundle carries `Earlier sessions unrated` (an operator-run PowerShell fetch, reported `True`; this session's network policy blocks the host).
 
-```
-7695f5b 2026-11-01 Merge pull request #88 from Easty11/claude/approval-gate-propagation
-```
-
-and the commit it carries:
-
-```
-f3daf8f 2026-10-31 gov(approval-gate): propagate health-app #473 shared-block line verbatim; ruling #55
-```
-
-This close-out's own commit and merge are not listed: a commit cannot name its own SHA, and the merge is the last act. Read them with `git log --first-parent --grep=session.close-out`.
-
-GitHub side: no issue created, closed or edited. Pull requests: health-app PR 576, health-connect-app PR 88, both opened ready-for-review and merged with the `merge` method after every required check was green on the head (health-app: `backend tests (pytest)`, `placeholder guard (POSIX)`, `frontend tests (vitest)`; health-connect-app: `placeholder guard (POSIX)`).
-
-Gates, all met:
-
-- **Removed lines.** The only lines PR 576 removed are the `#470` Recent-landings pointer and its blank line, the declared replacement region (the cap of 3). PR 88 removed nothing (4 insertions in `CLAUDE.md`, 0 removals).
-- **Shared-block byte-identity.** The slice from `## Shared loop rules` to `## END SHARED LOOP RULES` has sha256 prefix `b7ea48200e4d9520` on health-app master `99f6c6f` and on health-connect-app master `7695f5b`; read from `origin/master` of each after both merges, and equal before the copy except for the one new bullet.
-- **Number-at-merge.** health-app master's max was re-read immediately before the merge and was still 472, so the ruling is #473; health-connect-app's max was still 54, so its ruling is #55. The guard passed on both branches after the numbers were resolved.
-- **No code, no migration.** Deploy check (#433), matched on `commitHash` `99f6c6f42abc8a058fedc5004f2411bcfd00abe6`: backend `SKIPPED`, frontend `SKIPPED`. health-connect-app has no Railway services.
-- **Branches.** Both head branches were deleted on merge (`git ls-remote --heads` returns 0 refs for each; `git cherry origin/master` on the health-connect-app branch is empty).
+This close-out's own commit, `chore: session close-out`, follows these; it names no hash here because a commit cannot name itself.
 
 ## Pending-queue reconciliation
 
-No `PENDING` item was carried in from a chat close-out: the session's input was the `Approval Gate - Queue Consume 472` brief, nine steps.
+No `PENDING` item came in from a `;cc` chat close-out. The session was driven by a pasted brief, `In-App sRPE - Queue Consume 472`, whose rulings R1 to R4 are the operator's. Each step of that brief, against the commit that carries it:
 
-| Step | State | Evidence |
-|------|-------|----------|
-| 1. Open ritual; FEEDBACK last § is 65, new row is §66 | DONE | max 472, no open `fork` issue, last § 65 read at open |
-| 2. One branch, one concern | DONE | `claude/hopeful-bell-hhu4y6`, cut from `d5df678` |
-| 3. FEEDBACK §66 | DONE | `0e244df` |
-| 4. Shared-block bullet, last before "Number-at-merge is unaffected" | DONE | `0e244df` |
-| 5. Ruling entry, Tier ruling | DONE | `0e244df`, `DECISIONS_LOG` #473 |
-| 6. `BRANCHES.md` terminal row; Recent-landings pointer, cap 3 | DONE | `0e244df`; the `#470` pointer dropped |
-| 7. Optional FEEDBACK §67 (the test-fixture clock lesson) | DONE, kept | `0e244df`; named in #473's Decision line |
-| 8. Guard clean; push; PR ready-for-review; resolve `#NEXT`; merge on green; deploy check | DONE | PR 576, merge `99f6c6f`; both services `SKIPPED` on `commitHash` |
-| 9. Propagate to health-connect-app; byte-identity; `#NEXT` ruling; PR; merge on green | DONE | PR 88, merge `7695f5b`; #55; digest equal on both masters |
+| Brief step | Landed in |
+|---|---|
+| 1 Contract: `in_app` in `SOURCE_SCALES`, window from the server's bout | `25e5b14` |
+| 2 Write route keyed by bout, insert-only, refuses a non-counted key | `25e5b14` (writer), `614242e` (route) |
+| 3 Read route for the card, built on `session_ratings` | `614242e`; the backfill's `earlier` read in `b1071be` |
+| 4 Retire `day_fill`; `srpe_needed`; the residual's `partial` | `1469fef` |
+| 5 Cards: close-out, catch-up, collapsed backfill, day question removed | `723b06a` |
+| 6 Tests (the six named, and the §48 flow test from the real state) | in each commit; the generated fixture in `b1071be`; the card flow tests in `723b06a` |
+| 7 DECISIONS_LOG entry | `58b8740` (#475) |
+| 8 BRANCHES row, CLAUDE.md pointer, ROADMAP | `58b8740`; terminal state `6ac215d`, `7167f97`, `114653a` |
+| LOG: operator check after deploy | recorded in `114653a` |
 
-Where the work departed from the brief, or where a reader could be misled, so the next one does not have to find it:
+Departures from the brief, each reported at the time and none folded into prose:
+- **Two VERIFY divergences, ruled by the operator.** Five readers of `daily_records.session_rpe`, not two (repointed in `aa4d497`); and `get_recent_sessions` carried no rating on a Hevy-only line (fixed in `06d0034`).
+- **Pilates counted** (`60ca035`), ruled by the operator when the brief's "Hevy plus Pilates yields two asks" could not hold on the counted set. This made the PR a one-way door, so it held for the operator's instruction instead of self-merging.
+- **The #475 heading** was resolved at PR open, not left `### #NEXT`, because the placeholder guard fails any PR carrying `#NEXT`.
+- **The backfill bound** was my pick: the 14 days before the card's day, never before 2026-10-18.
 
-- **§67 was kept.** The brief said "strike if unwanted" and it was not struck. Removing it takes a one-line edit to `FEEDBACK.md` and to #473's Decision line.
-- **The guard cannot see most of the `#NEXT` tokens this session wrote.** It scans `DECISIONS_LOG.md` headings only. The tokens in `FEEDBACK.md` (two), `CLAUDE.md` (one) and `BRANCHES.md` (two) were resolved by line-targeted substitution and checked by reading the added lines of the diff (zero `#NEXT` left, six `#473`); a blanket replace was not an option because the tree carries `#NEXT` as prose in dozens of places. A token left unresolved in those three files would have passed the guard.
-- **The brief's step 3 text for §66 was written as given;** its account (PRs 574 and 575 landed from a chat-side session) was not independently verified. The Railway history shows both deploys created under the operator's account, and the existing `BRANCHES.md` rows for those two PRs say they were landed through the GitHub REST API from the cloud harness. The two statements are compatible; neither was re-read from the PRs' authorship.
-- **The motion used the GitHub MCP tools, not the `gh` CLI.** Same three acts (push, create ready-for-review, merge with the `merge` method, branch deleted on merge). The `land` alias was set per the fresh-clone setup and not used.
-- **health-connect-app's #55 is its first `**Tier:** ruling` entry.** It is written in that repo's own grammar (`### #55 — title`, `**Decision:**` with a colon), not health-app's. No `BRANCHES.md` row was added there: its rule requires one only when a store cites an artefact from the branch, and nothing cites PR 88.
-- **This close-out adds no Recent-landings pointer.** PR 576 already wrote the pointer for what this session landed (`#473`, still within the top three), so a second line would duplicate it.
-- **health-connect-app's `closeout.md` was not rewritten.** This command is health-app's. That repo's contract says a session there is not done until its own `/closeout` has run; its edit this session was one verbatim bullet and one pointer entry.
-
-Nothing decided is uncommitted.
+Provisional: nothing decided and uncommitted at this point. Two things sit outside the tree and are therefore only as durable as their source: the backfill rating of the 31 Oct pair is operator-reported (Code did not observe it, and the backfill no longer lists them), and GH#593 lives on the tracker.
 
 ## Cold-resume handoff
 
-**Next action.** The operator completes the one check that holds #475's How-you-know open: rate the 31 Oct pair through the new backfill, then read `get_recent_sessions(days=3)` and record the result (the ROADMAP NOW row "In-app per-session sRPE capture" names it). Code cannot do it (no prod access). The deploy half of that row is already readable: both services recorded `SUCCESS` for `19d5d33`, matched on `commitHash`, and the session that owns the row recorded it (`7167f97`, landed as PR 579, merge `4049e69`).
+**Next action (the single clearest).** The operator rules two small things so Q231 can be built to a settled definition ahead of its January 2027 deadline: (1) confirm GH#593's proposed answer (Pilates stays in Q231's low-intensity class; the conditioning class is defined by its own list, not "except the #322 S3 set"); (2) say whether `in_app` ratings count toward Q231's gate of 10 global pairs, since Q231's ruled entry route is Garmin-only ("no manual path") and #475 added one. Nothing else is queued for Code.
 
-**Open `fork` issues.** None (read at open and again at close-out).
+**Current sprint (`ROADMAP.md` NOW).** Twenty-five lanes: fifteen lead with DONE, ten are open. Open, with owner: Q231 RPE fallback (Code, once the gate opens: at least 10 global pairs, live before club preseason, January 2027; nothing built); Source hierarchy (Luke); Polar sport-id relabel (OWED, remaining limbs); HC sync reliability (OWED, the #371 overlap proof); Garmin self-evaluation read, first live run (operator); Injury clearance (operator); Aerobic ingest automated (operator check); Session fidelity G6 (operator, after deploy); the cross-repo shared-block edit (OWED, pinned in NOW by #112); HC zones, Q159 stage 2 (Code, low priority). The in-app sRPE capture lane is DONE → #475.
 
-**Open issues carried.** 74 open in total, almost all migrated `stamp`, `verify`, `build` and `design` items. The ones this session touches by proximity: GH#568 (`stamp`, shared block names a health-app-only script) and GH#565 (`stamp`, the `land` alias refuses to run from master or main), both still open; GH#572 (`stamp`, remove the unread question grammar), GH#573 (`stamp`, `pinned`, drop `garmin_activity_selfevals`; a migration, held for operator release) and GH#571 (`verify`, whether Garmin returns an RPE for a no-HR activity). GH#568 says its fix waits for the next shared-block edit, and this session was one; it was not folded in, because the brief fixed the scope at one concern and said no issue is closed, so the stamp is still the next shared-block edit's to act on.
+**Open `fork` issues.** None (REST read at close). Open `stamp`: GH#593, filed at this close-out (proposed answer stands and is acted on by the next PR touching Q231 unless the operator objects).
 
-**Design docs not in a terminal state.** Eight, none committed: `0001` ideation, `0002` discussion, `0003` discussion, `0004` ideation, `0005` ideation, `0006` ideation, `0007` ideation, `0008` discussion. Unchanged this session.
+**Design docs not in a terminal state.** `docs/design/` 0001 canonical exercise layer, 0004 load-model routing and gaps, 0005 HR input layer, 0006 sleep writers and admission, 0007 in-app chat architecture (all `ideation`); 0002 plan-log reconciliation, 0003 constraints engine tier, 0008 SpO2 detector and guardrail (all `discussion`).
 
-**Open row in `BRANCHES.md` (Q138 sweep).** One of 363 rows is not DONE: `claude/blissful-babbage-0l3ztm` (OWED, in-app sRPE, PR 578). It is another session's. When the sweep ran, its branch existed on origin with one commit not on master (`7167f97`, "deploy check recorded for #475"); that commit landed as PR 579 (`4049e69`) while this close-out's CI ran. It edited the same top row of `BRANCHES.md` this close-out inserts above, so master was merged into this branch and the file conflicted exactly there; resolved by keeping both rows, theirs as landed. Not flipped here: its OWED status is correct until the operator check above is recorded.
+### What was NOT touched
 
-**Current sprint.** ROADMAP NOW is unchanged by this session. Open lanes, with the v1 test each row's own `Serves` text names:
+This session was one lane, effort capture, inside the Fitness module. Everything below stood still, and a reader should not infer from this file that it is queued or finished.
+- **The consumers of what was captured.** `psychological_residual` has no production caller (a grep finds tests only; its block-level consumer is deferred), and Q231's imputed-load fit is unbuilt. This session built the capture and the read door for consumers that do not exist yet. That is the same pattern as an instrument built ahead of the thing it measures, so the next sRPE-adjacent session should be the consumer (Q231), not more capture.
+- **Q231 itself**, and the two questions GH#593 and the next-action line put to the operator. The residual's history also changed (days paired only by a whole-day value left the felt series); Code could not measure how many of the operator's days that was, so the size of that change is unknown.
+- **Medical Protocol and Decision Support.** CBT-I (block state, titration), labs and the interpretation layer, appointments, and the injury-clearance sweep did not move. The operator-owed lanes in NOW above did not move either.
+- **Session-grain gaps this build left by design:** a counted session with no start or duration cannot be rated and keeps `srpe_needed` true; a session older than the 14-day backfill can no longer be rated in the app; `daily_records.session_rpe` stays as a column written and read by nothing, and dropping it is not built.
+- **Governance and status-tooling landings are a large share of recent decisions.** By their titles, #471 to #473, #483 and #485 are governance or status-model work; the feature landings in the same span are #474, #475 and the wake-day capture (#477 to #479). None of them advanced the operator-owed lanes above.
 
-| NOW lane | v1 test it names |
-|----------|------------------|
-| RPE fallback for unrecorded sessions (Q231) | See, Loop |
-| Source hierarchy (#365), rule Q203 | See, Know |
-| Polar sport-id relabel, H10-vs-Hevy facts | Know, See |
-| HC sync reliability | See, Loop |
-| Garmin self-evaluation read, first live run | Know, Loop |
-| In-app per-session sRPE capture (#475) | Know, Loop |
-| Injury clearance (operator) | Know, Walk in |
-| Aerobic ingest automated (operator check) | See, Loop |
-| Session fidelity (Brief A + C.1), G6 owed | Loop, Know |
-| HC zones (Q159 stage 2), low priority | See, Know |
-| Cross-repo: extend the `#NEXT` rule beyond DECISIONS entries | none; a governance debt pinned in NOW by #112 |
+### v1-triage (which v1 test each NOW lane serves)
 
-The v1 section tags See, Know and Walk in as MET; **Loop carries no MET tag**, so it is the open v1 test, and six of the ten lanes that name a test list it. Demotion candidates, surfaced and not decided: (1) the cross-repo `#NEXT` row serves no v1 test and sits in NOW only because #112 names NOW as the home for cross-repo debt (carried from the last close-out). (2) The Garmin self-evaluation first-live-run row reads the legacy table; its own text says the live store is `session_rpe_observations` since #424, and #472 recorded the post-deploy reads that cover the same ground, with the legacy table's drop filed as GH#573. Likely closeable once the operator agrees; not changed here.
-
-**What was NOT touched.** All product work. Nothing under `backend/` or `frontend/`, no migration, no engine, ingestion, CBT-I or brief code. Every NOW lane stood still in this session, and so did the questions that gate them (Q231's gate of ten global pairs before January 2027, Q203, Q205, Q208, Q214, Q199, and the operator-owed checks in the rows above; Q231's pair count was not read). The product lane did move in the same window, in other sessions: PR 577 (#474, one Restate HRmax prompt per arbitrated bout) and PR 578 (#475, in-app per-session sRPE). Six consecutive sessions on the instrument that holds and routes the work (question layer Phases A, B, C1, C2, C3, then this one) is the pattern to avoid extending: a session opening on this hand-off reads a governance queue because governance is what is legible. The product queue is the NOW table above, with Loop as the open v1 test.
-
-**Left unmade, deliberately.** GH#568's move of one sentence below END SHARED LOOP RULES (see above). The unread question grammar in `gov_dialects.py` (GH#572). health-connect-app's own `closeout.md`.
+Read from each row's own "Serves" claim; nothing here is a new ruling.
+- **See:** Data freshness and the home load card (DONE); Plan/schedule and recent-sessions tools (DONE); Garmin overnight SpO2 (DONE); RPE fallback Q231 (OWED); Source hierarchy (OWED); HC sync reliability (OWED); Aerobic ingest automated (OWED); HC zones Q159 stage 2 (OWED).
+- **Know:** Source-neutral sRPE store and In-app sRPE capture (both DONE); Polar relabel (OWED); Garmin self-evaluation read (OWED); Phase posture split (DONE, one operator read owed); Phase-change form (DONE); Injury clearance (OWED); Garmin account repair (DONE); Typed constraints (DONE).
+- **Loop:** Wake-day capture (DONE); Missed-PM catch-up (DONE); CBT-I titration direction (DONE); Session fidelity (built, G6 owed).
+- **Serves no v1 test:** CBT-I Q45 nap attribution (DONE), CBT-I manual evaluation trigger (DONE), Training v0.1 exercise tags seed (DONE): all three are finished and sit in NOW only because DONE rows are never moved out. The cross-repo shared-block lane (OWED) serves none and sits in NOW because #112 names ROADMAP NOW the canonical home for cross-repo debt, which is a stated reason, not momentum.
+- **Demotion candidates:** the fifteen DONE rows are not active work and ride NOW by momentum; the three above that serve no test are the clearest. The August and September ones (#213 and #219 in August, #339 on 27 Sep) are the oldest. ROADMAP has a "Moved from NOW" precedent for exactly this.

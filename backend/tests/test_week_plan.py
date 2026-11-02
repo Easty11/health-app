@@ -308,6 +308,68 @@ def test_g3_section_schedule_folds_hard_flags_when_suppressed(db_session):
     assert "Saturday: carnival (hard)" in folded
 
 
+# `days: null` -- a valid stored row (`validate_schedule_item` allows it when `sessions_per_week` or
+# `event_date` is present) that crashed `_section_schedule` with TypeError and 500'd every /chat turn.
+# Golden strings below were captured from the PRE-fix code on all-days-present items.
+
+def _sched_ent(**value):
+    return type("E", (), {"type": "schedule_item", "value": value, "source": "chat",
+                          "notes": "coach note"})()
+
+
+def _brisbane_wed():
+    from datetime import datetime as _dt
+    import pytz
+    return pytz.timezone("Australia/Brisbane").localize(_dt(2026, 9, 9, 9, 0))
+
+
+_PARITY_GRID = (
+    "## Weekly Schedule\nMonday: gym (soft) [coach note]\nTuesday: rest\n"
+    "Wednesday: gym (soft) [coach note] ◀ today\nThursday: rest\nFriday: gym (soft) [coach note]\n"
+    "Saturday: carnival (hard) [coach note]\nSunday: rest"
+)
+_PARITY_FLAGS = (
+    "\n\nTHIS WEEK FLAGS\n- Hard commitment: carnival on Saturday 12 Sep\n"
+    "- Pre-event shadow: reduced load recommended on Friday 11 Sep (day before carnival)"
+)
+
+
+def _parity_items():
+    return [_sched_ent(activity="gym", days=["monday", "wednesday", "friday"], hard=False),
+            _sched_ent(activity="carnival", days=["saturday"], hard=True),
+            _sched_ent(activity="rest-yoga", days=[], hard=False)]
+
+
+def test_section_schedule_all_days_present_output_byte_identical_to_pre_fix():
+    now = _brisbane_wed()
+    assert context_builder._section_schedule(_parity_items(), now) == _PARITY_GRID + _PARITY_FLAGS
+    assert context_builder._section_schedule(
+        _parity_items(), now, suppress_hard_flags=True) == _PARITY_GRID
+
+
+@pytest.mark.parametrize("suppress", [False, True])
+@pytest.mark.parametrize("hard", [False, True])
+def test_section_schedule_days_null_with_sessions_per_week_does_not_raise(hard, suppress):
+    # hard=True reaches the second reader (the THIS WEEK FLAGS loop); hard=False only the grid loop.
+    now = _brisbane_wed()
+    null_item = _sched_ent(activity="swim", days=None, sessions_per_week=2, hard=hard)
+    out = context_builder._section_schedule(_parity_items() + [null_item], now,
+                                            suppress_hard_flags=suppress)
+    # The count-only item places on no weekday and adds no flag; every other line is untouched.
+    assert out == context_builder._section_schedule(_parity_items(), now,
+                                                    suppress_hard_flags=suppress)
+    assert "swim" not in out
+
+
+def test_section_schedule_days_null_with_event_date_renders_dated_line():
+    now = _brisbane_wed()
+    null_item = _sched_ent(activity="expo", days=None, hard=True, expected_load="heavy",
+                           event_date="2026-09-19", event_end="2026-09-20")
+    out = context_builder._section_schedule(_parity_items() + [null_item], now)
+    assert out.startswith(_PARITY_GRID + _PARITY_FLAGS)          # grid + flags unchanged
+    assert out.endswith("\n\nDATED ONE-OFFS\n- expo (hard, heavy) — Sat 19 Sep–Sun 20 Sep")
+
+
 # --------------------------------------------------------------------------- #
 # G4 — failure isolation                                                       #
 # --------------------------------------------------------------------------- #

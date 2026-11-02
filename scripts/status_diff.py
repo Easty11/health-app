@@ -15,6 +15,12 @@ Design contracts:
 * CROSS-REPO EVIDENCE (#184/#185). Each repo's stores are read FROM THAT REPO at the relevant
   ref (`git show <sha>:FILE`). No claim about repo B ever originates from repo A's files.
 
+* ISSUES (schema 2, DECISIONS_LOG #483). Open GitHub issues are not in either repo's tree, so they
+  diff snapshot-to-snapshot, not ref-to-ref: `diff_issues` keys on the issue number and emits
+  opened / closed / changed (title or labels) per repo under an `issues` store. A side whose
+  tracker was not read (`tracker: "unreachable"`, or a schema-1 snapshot with no `issues` block
+  at all) is NOT COMPARED — never an empty diff, never "all N closed" and never "all N opened".
+
 * SNAPSHOTS ARE READ-ONLY HERE. The diff never writes a snapshot and never writes any store.
   (`gen_status_model.py` is the writer.) The baseline side is reconstructed from the snapshot's
   recorded per-repo SHA, so the aggregate-only snapshot schema needs no per-item extension.
@@ -132,6 +138,72 @@ def diff_repo(repo: str, base_ref: str | None, cur_ref: str | None) -> dict:
 
 
 # --------------------------------------------------------------------------------------
+# Issues diff  (snapshot-to-snapshot; DECISIONS_LOG #483)
+# --------------------------------------------------------------------------------------
+
+def _readable_issues(block) -> list[dict] | None:
+    """The items of an `issues` block, or None when the tracker was not read. A missing block
+    (a schema-1 snapshot) is treated exactly as `tracker: "unreachable"` — never as zero."""
+    if isinstance(block, dict) and block.get("tracker") == "ok" and isinstance(block.get("items"), list):
+        return block["items"]
+    return None
+
+
+def diff_issues(base_block, cur_block) -> dict:
+    base, cur = _readable_issues(base_block), _readable_issues(cur_block)
+    if base is None or cur is None:
+        why = [f"{side}: " + ("no `issues` block (schema 1)" if blk is None else "tracker unreachable")
+               for side, blk, items in (("baseline", base_block, base), ("current", cur_block, cur))
+               if items is None]
+        return {"not_compared": "; ".join(why) + " — open-issue state UNKNOWN, not zero"}
+    base_by = {it["number"]: it for it in base}
+    cur_by = {it["number"]: it for it in cur}
+    opened = [{"id": f"GH#{n}", "title": it["title"], "labels": it["labels"]}
+              for n, it in cur_by.items() if n not in base_by]
+    closed = [{"id": f"GH#{n}", "title": it["title"], "labels": it["labels"]}
+              for n, it in base_by.items() if n not in cur_by]
+    changed = []
+    for n, it in cur_by.items():
+        b = base_by.get(n)
+        if b is None:
+            continue
+        frm, to = {}, {}
+        if b["title"] != it["title"]:
+            frm["title"], to["title"] = b["title"], it["title"]
+        if sorted(b["labels"]) != sorted(it["labels"]):
+            frm["labels"], to["labels"] = sorted(b["labels"]), sorted(it["labels"])
+        if to:   # same from/to shape as diff_store's changed entries; only the changed facets
+            changed.append({"id": f"GH#{n}", "title": it["title"], "from": frm, "to": to})
+    return {"opened": opened, "closed": closed, "changed": changed}
+
+
+def diff_issues_snapshots(base_snap: dict | None, cur_snap: dict) -> dict:
+    """Per repo `issues` diff between two snapshots. No baseline snapshot -> every repo is
+    not compared (the first run has nothing to compare against)."""
+    out = {}
+    for repo, rd in cur_snap["repos"].items():
+        if base_snap is None:
+            out[repo] = {"not_compared": "no previous snapshot — baseline run"}
+        else:
+            base_block = base_snap.get("repos", {}).get(repo, {}).get("issues")
+            out[repo] = diff_issues(base_block, rd.get("issues"))
+    return out
+
+
+def _snapshot_order(path: Path) -> tuple:
+    """Chronological key for `snapshots/<stamp>[_N]_model.json`. A plain sort is wrong: the
+    same-second collision suffix `_2` sorts BEFORE the unsuffixed file ('2' < 'm')."""
+    m = re.match(r"^(.*?)(?:_(\d+))?_model\.json$", path.name)
+    return (m.group(1), int(m.group(2) or 1)) if m else (path.name, 0)
+
+
+def _previous_snapshot() -> dict | None:
+    """The snapshot written before `latest.json`, or None when there is no predecessor."""
+    snaps = sorted((STATUS_DIR / "snapshots").glob("*_model.json"), key=_snapshot_order)
+    return json.loads(snaps[-2].read_text(encoding="utf-8")) if len(snaps) >= 2 else None
+
+
+# --------------------------------------------------------------------------------------
 # Unreferenced-rule listing (Step 3b) — the pruning signal D1's ruling depends on
 # --------------------------------------------------------------------------------------
 
@@ -191,6 +263,22 @@ def _fmt_store_delta(name: str, d: dict) -> list[str]:
     return [f"    {name}: " + ", ".join(bits)]
 
 
+def _fmt_issues_delta(repo: str, cur_block, d: dict) -> list[str]:
+    now = (f"{cur_block['count']} open" if isinstance(cur_block, dict) and cur_block.get("tracker") == "ok"
+           else "open count UNKNOWN (tracker not read)")
+    if "not_compared" in d:
+        return [f"    {repo}: issues {now}; NOT COMPARED ({d['not_compared']})"]
+    lines = [f"    {repo}: issues {now}; +{len(d['opened'])} opened, -{len(d['closed'])} closed, "
+             f"~{len(d['changed'])} changed"]
+    for tag, key in (("opened", "opened"), ("closed", "closed")):
+        for it in d[key]:
+            lines.append(f"      {tag:<7} {it['id']}: {it['title'][:80]}")
+    for it in d["changed"]:
+        facets = "+".join(k for k in ("title", "labels") if k in it["to"])
+        lines.append(f"      changed {it['id']} ({facets}): {it['title'][:80]}")
+    return lines
+
+
 def build_report() -> str:
     snap = _load_latest_snapshot()
     lines = ["# Governance status report (manual run)", ""]
@@ -209,6 +297,12 @@ def build_report() -> str:
         d = diff_repo(repo, base_ref, None)
         for store_key in STORE_FILE:
             lines += _fmt_store_delta(STORE_FILE[store_key], d[store_key])
+    lines.append("")
+
+    # (a2) Issues since the previous snapshot — snapshot-to-snapshot (the tracker is not in a tree).
+    lines.append("## (a2) Open issues since the previous snapshot")
+    for repo, d in diff_issues_snapshots(_previous_snapshot(), snap).items():
+        lines += _fmt_issues_delta(repo, snap["repos"][repo].get("issues"), d)
     lines.append("")
 
     # (b) Unreferenced-rule listing — health-app only (senior store; #193 read HCA read-only).

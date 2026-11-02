@@ -165,8 +165,8 @@ export default function CheckInAM() {
   // overwrite the fresher tiles with its older snapshot.
   const refreshedRef = useRef(false)
 
-  // Garmin HRV on-read refresh (#299 pattern, second surface): opening the check-in lands this
-  // morning's night without the Recovery card being opened first. Background and fail-soft —
+  // Garmin wake-day on-read capture (#299 pattern, second surface): opening the check-in fetches this
+  // morning's night (sleep, resting HR, SpO2, HRV) without the Recovery card being opened first. Background and fail-soft —
   // it never blocks render, input or Save. Only a REAL run (not {skipped:true}) re-fetches the
   // prefill, once, and applies the passive tiles only.
   const refetchPassive = useCallback(() => {
@@ -174,7 +174,7 @@ export default function CheckInAM() {
       .then(({ data }) => { refreshedRef.current = true; setPassive(pickPassive(data)) })
       .catch(() => {}) // tile stays as the first prefill had it
   }, [])
-  useRecoveryRefresh({ onFreshRun: refetchPassive })
+  useRecoveryRefresh({ onFreshRun: refetchPassive, via: 'checkin' })
   const [submitted, setSubmitted] = useState(false)
   // How the missed-PM catch-up card was resolved this visit: null (still offered) | 'saved' |
   // 'already' (409) | 'skipped'. Held HERE, not in the card, because the AM submit swaps this page

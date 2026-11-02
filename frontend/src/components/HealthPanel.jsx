@@ -41,6 +41,17 @@ function colorBorder(delta) {
   return 'border-red-400'
 }
 
+// Wake-day slot states (server: GET /integrations/garmin/wake-day). A figure the CURRENT wake-day lacks reads as a
+// WORD (pending / not synced / missing), never a dash; a figure of an earlier night keeps its plain '—'.
+const SLOT_WORD = { pending: 'pending', not_synced: 'not synced', missing: 'missing' }
+
+const isWord = (v) => typeof v === 'string' && Number.isNaN(Number(v))
+
+function slotWord(wake, sleep, name) {
+  const slot = wake?.connected && sleep?.night === wake.wake_day ? wake.slots?.[name] : null
+  return slot && slot.state !== 'filled' ? (SLOT_WORD[slot.state] ?? '—') : '—'
+}
+
 function SleepMetricCard({ label, value, color }) {
   return (
     <div className="bg-gray-50 rounded-xl p-3 text-center">
@@ -73,9 +84,21 @@ export default function HealthPanel() {
     return () => { cancelled = true }
   }, [])
 
-  // On mount, ask the server to pull this morning's Garmin HRV (server-gated, #299); on a REAL
-  // run re-fetch the summary so the card updates. force = pull-to-refresh. Never blocks paint.
-  const { refreshing, forceRefresh } = useRecoveryRefresh({ onFreshRun: refetchSummary })
+  // The current wake-day's slot states (filled / pending / not_synced / missing-with-reason). Read on mount, and
+  // replaced by the `status` every refresh response carries, so slots fill as the fetch returns.
+  const [wake, setWake] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    api.get('/integrations/garmin/wake-day')
+      .then((res) => { if (!cancelled && res?.data) setWake(res.data) })
+      .catch(() => {}) // slot states are additive: the card renders without them
+    return () => { cancelled = true }
+  }, [])
+  const onSettled = useCallback((d) => { if (d?.status) setWake(d.status) }, [])
+
+  // On mount, ask the server to capture this wake-day's Garmin overnight data (server-gated, #299); on a REAL
+  // run re-fetch the summary so the card updates. force = Refresh. Never blocks paint.
+  const { refreshing, forceRefresh } = useRecoveryRefresh({ onFreshRun: refetchSummary, onSettled, via: 'recovery' })
 
   if (loading) {
     return (
@@ -197,6 +220,19 @@ export default function HealthPanel() {
       </div>
 
       <div className="flex-1 px-4 py-4 space-y-4">
+        {/* Wake-day capture status: names what is pending / not synced / missing, with the way to retry */}
+        {wake?.connected && wake.message && (
+          <div className={`rounded-xl px-3 py-2 text-xs flex items-start justify-between gap-2 ${
+            wake.window_open && wake.last_outcome !== 'not_synced' ? 'bg-gray-50 text-gray-500' : 'bg-amber-50 text-amber-700'}`}
+            role="status">
+            <span>{wake.message}</span>
+            <button type="button" onClick={forceRefresh} disabled={refreshing}
+              className="font-medium text-blue-500 hover:text-blue-600 disabled:text-gray-300 shrink-0">
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* HRV readiness card */}
         <div className={`border-l-4 ${colorBorder(borderDelta)} bg-white rounded-xl shadow-sm p-4`}>
           <div className="flex items-baseline gap-1.5 mb-2">
@@ -236,7 +272,7 @@ export default function HealthPanel() {
               />
               <SleepMetricCard
                 label="Efficiency"
-                value={sleep.efficiency_pct != null ? `${sleep.efficiency_pct}%` : '—'}
+                value={sleep.efficiency_pct != null ? `${sleep.efficiency_pct}%` : slotWord(wake, sleep, 'efficiency')}
                 color={effColor}
               />
               <SleepMetricCard
@@ -261,26 +297,45 @@ export default function HealthPanel() {
                   {awake > 0 && <div className="bg-orange-200" style={{ width: pct(awake) }} />}
                 </div>
                 <p className="text-xs text-gray-400 mt-1.5">
-                  Deep {deep}m · REM {rem}m · Light {light}m · Awake {sleep.awake_min != null ? `${awake}m` : '—'}
+                  Deep {deep}m · REM {rem}m · Light {light}m · Awake {sleep.awake_min != null ? `${awake}m` : slotWord(wake, sleep, 'awake')}
                 </p>
               </div>
             )}
 
-            {/* Vitals row */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: 'Resp Rate', value: sleep.resp_rate != null ? `${sleep.resp_rate.toFixed(1)}` : '—', unit: 'br/m' },
-                { label: 'Sleep HR', value: sleep.sleep_hr_bpm ?? '—', unit: 'bpm' },
-                { label: 'SpO2', value: sleep.spo2_pct != null ? `${sleep.spo2_pct.toFixed(1)}` : '—', unit: '%' },
-              ].map(({ label, value, unit }) => (
-                <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-base font-semibold text-gray-700">
-                    {value}<span className="text-xs font-normal text-gray-400 ml-0.5">{unit}</span>
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+            {/* Vitals row. Resting HR is the daily resting rate (Garmin dailyHeartRate); Sleep HR is the ring's
+                and appears only when a source carries it. Each tile is three lines: the value (never wraps), a
+                reserved secondary line, then the label, so the values and the labels of all tiles line up
+                whether or not one of them carries a secondary figure. */}
+            {(() => {
+              const vitals = [
+                { label: 'Resp Rate', value: sleep.resp_rate != null ? `${sleep.resp_rate.toFixed(1)}` : slotWord(wake, sleep, 'rr'), unit: 'br/m' },
+                { label: 'SpO2', value: sleep.spo2_pct != null ? `${sleep.spo2_pct.toFixed(1)}` : slotWord(wake, sleep, 'spo2'), unit: '%',
+                  // The night's minimum (CPAP-seal evidence), from the same source as the mean; its own small line
+                  // under the value, never inline with it (it wrapped mid-phrase at phone widths). Absent -> mean alone.
+                  secondary: sleep.spo2_pct != null && sleep.spo2_min_pct != null ? `min ${Math.round(sleep.spo2_min_pct)}%` : null },
+                { label: 'Resting HR', value: sleep.resting_hr_bpm != null ? `${Math.round(sleep.resting_hr_bpm)}` : slotWord(wake, sleep, 'rhr'), unit: 'bpm' },
+                ...(sleep.sleep_hr_bpm != null ? [{ label: 'Sleep HR', value: sleep.sleep_hr_bpm, unit: 'bpm' }] : []),
+              ]
+              const reserveSecondary = vitals.some((v) => v.secondary)
+              return (
+                <div className={`grid gap-2 ${sleep.sleep_hr_bpm != null ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {vitals.map(({ label, value, unit, secondary }) => (
+                    <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
+                      <p className={`font-semibold whitespace-nowrap ${isWord(value) ? 'text-sm leading-6 text-gray-500' : 'text-base text-gray-700'}`}>
+                        {value}<span className="text-xs font-normal text-gray-400 ml-0.5">{isWord(value) ? '' : unit}</span>
+                      </p>
+                      {reserveSecondary && (
+                        <p className="text-[11px] leading-4 text-gray-500 whitespace-nowrap min-h-4"
+                          data-testid={secondary ? `vital-secondary-${label}` : undefined}>
+                          {secondary ?? '\u00A0'}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )
+            })()}
 
             {/* Sleep timing */}
             {(sleep.bedtime || sleep.wake_time) && (

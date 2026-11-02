@@ -325,11 +325,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
-- **In-app per-session sRPE: one CR-10 per counted session, the whole-day fill retired, Pilates counted.** Code - Canonical home: `DECISIONS_LOG.md` #475.
+- **MCP read doors for Code: `get_injuries`, `get_constraints` and `get_probe_queue`, added by PR (prod reads only through MCP tools).** Code - Canonical home: `DECISIONS_LOG.md` #490.
 
-- **Chat-side writes are approval-gated: a shared-block line, FEEDBACK §66 and §67, and a ruling entry.** Governance - Canonical home: `DECISIONS_LOG.md` #473.
+- **Engine blocks are rows: engine-tier default proposals seeded per injury (script and write path), the review-due sweep with in-place Keep, and Decline on proposals; the three block maps retired.** Code - Canonical home: `DECISIONS_LOG.md` #486, #487, #488, #489.
 
-- **The source-neutral sRPE store passes its post-deploy reads; its branch row flips DONE and the ROADMAP row closes.** Governance - Canonical home: `DECISIONS_LOG.md` #472.
+- **Open issues in the status model: schema 2 `issues` block, two transports (live and `--issues-json` from `fetch_issues.py`), a shape gate, and an issues diff.** Code - Canonical home: `DECISIONS_LOG.md` #483.
 
 
 

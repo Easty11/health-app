@@ -102,6 +102,7 @@ LANE_PERSONAL_HRV = "personal_hrv"
 LANE_PERSONAL_WELLNESS = "personal_wellness"
 LANE_PERSONAL_SELFEVAL = "personal_selfeval"
 LANE_DI_SPO2 = "di_spo2"
+LANE_WAKE_DAY = "wake_day_fetch"   # the wake-day capture attempt itself (check-in / Recovery / Refresh / 10:00 backstop)
 
 
 def record_lane(db, user_id: int, lane: str, outcome: str, reason: Optional[str] = None,

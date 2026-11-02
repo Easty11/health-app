@@ -228,11 +228,39 @@ def test_stretch_rehomed_to_prod_row_94_with_no_warning(prod):
 @pytest.mark.parametrize("signal", ["neural", "radicular"])
 def test_row_94_typed_neural_would_warn_radicular_blocks(prod, signal):
     """`body_part: lumbar` is spinal to `_is_spinal`, so the same row typed neural/radicular
-    would hard-stop hinge/rotation/carry/gait. The audit says so; it never retypes."""
+    would be OFFERED the hinge/rotation/carry/gait stand-down as engine-tier proposals (the
+    injury-keyed arm that enforced it silently retired, #486). The audit says so; it never retypes."""
     _lumbar_94(prod["db"], prod["user"].id, signal_type=signal)
     w = _audit(_sweep(prod, 29))[STRETCH]["rehomed_to"][0]["radicular_warning"]
     assert w is not None and w["signal_type"] == signal
     assert {"hinge", "rotation", "carry", "gait_load_carriage"} <= set(w["fires"])
+
+
+def test_the_radicular_warning_tells_the_truth_about_what_typing_does_now(prod):
+    """The retired arm hard-stopped regions; a proposal blocks nothing until confirmed. A warning that
+    still said "the engine hard-stops" would send the operator to retype a row for a reason that is gone."""
+    _lumbar_94(prod["db"], prod["user"].id, signal_type="neural")
+    w = _audit(_sweep(prod, 29))[STRETCH]["rehomed_to"][0]["radicular_warning"]
+    assert "proposes an engine block" in w["message"] and "blocks nothing until you confirm" in w["message"]
+    assert "hard-stops" not in w["message"]
+
+
+@pytest.mark.parametrize("body", ["neck", "cervical spine"])
+def test_a_cervical_destination_typed_neural_carries_no_radicular_warning(prod, body):
+    """The cervical exclusion applies where the set is offered, so it applies where the audit warns:
+    nothing would be proposed, so there is nothing to warn about (`cervical spine` is spinal by the
+    substring "spine" and WAS warned about when the arm enforced it)."""
+    _row(prod["db"], id=94, user_id=prod["user"].id, key="injury_cervical_spine", active=True,
+         value={**LUMBAR_94, "body_part": body, "side": "bilateral", "signal_type": "neural"})
+    a = _audit(_sweep(prod, 29))
+    [dest] = a[STRETCH]["rehomed_to"]
+    assert dest["radicular_warning"] is None
+
+
+def test_the_restrictions_note_names_what_the_engine_gates_on_now(prod):
+    note = _sweep(prod, 29)["restrictions_note"]
+    assert "profile hard-stops and confirmed engine-tier constraint rows" in note
+    assert "body_part + signal_type" not in note
 
 
 def test_inactive_destination_is_not_a_rehome(prod):

@@ -352,17 +352,19 @@ _FETCH: dict[str, Callable[[gp.PersonalClient, str], Any]] = {
 
 
 def sync_user(db, user_id: int, client: gp.PersonalClient, *, start: date, end: date,
-              with_zones: bool = True, now: Optional[datetime] = None) -> dict:
+              with_zones: bool = True, now: Optional[datetime] = None,
+              endpoints: tuple[str, ...] = DAY_ENDPOINTS) -> dict:
     """One user's wellness capture over the wake/calendar dates [start, end], oldest first. STOPS at the first
     failure (one bad day cannot become a burst of failing calls): the PersonalApiError propagates after the
-    session is rolled back and the counts so far are attached as `exc.counts`. Commits per payload."""
+    session is rolled back and the counts so far are attached as `exc.counts`. Commits per payload.
+    `endpoints` narrows the per-day reads (the wake-day capture asks for sleep, heart rate and hourly SpO2 only)."""
     counts = _new_counts()
     try:
         d = start
         while d <= end:
             ref = d.isoformat()
             counts["days"] += 1
-            for ep in DAY_ENDPOINTS:
+            for ep in endpoints:
                 payload = _FETCH[ep](client, ref)
                 if _is_empty(payload):
                     counts["empty"] += 1

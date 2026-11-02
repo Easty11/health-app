@@ -36,6 +36,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 import models
+import wake_day_capture
 from database import SessionLocal
 from scripts.garmin_sync import sweep_garmin_hrv
 from scripts.refresh_load import refresh_load
@@ -52,17 +53,26 @@ SWEEP_LOCAL_HOUR = 2
 STARTUP_STALE_AFTER = timedelta(hours=24)
 
 
+def _next_fire_utc(now_utc: datetime, hour: int) -> datetime:
+    now_local = now_utc.astimezone(_BRISBANE)
+    target = now_local.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if target <= now_local:
+        target += timedelta(days=1)
+    return target.astimezone(timezone.utc)
+
+
 def next_sweep_fire_utc(now_utc: datetime) -> datetime:
     """The next 02:00 Australia/Brisbane instant strictly after `now_utc`, returned in UTC.
 
     Brisbane is fixed UTC+10 with no DST, so 02:00 local is 16:00 UTC of the prior calendar day;
     computing in the Brisbane zone (not a bare UTC-16 literal) keeps this self-documenting and
     tied to the same zone the rollup uses."""
-    now_local = now_utc.astimezone(_BRISBANE)
-    target = now_local.replace(hour=SWEEP_LOCAL_HOUR, minute=0, second=0, microsecond=0)
-    if target <= now_local:
-        target += timedelta(days=1)
-    return target.astimezone(timezone.utc)
+    return _next_fire_utc(now_utc, SWEEP_LOCAL_HOUR)
+
+
+def next_backstop_fire_utc(now_utc: datetime) -> datetime:
+    """The next 10:00 Australia/Brisbane instant strictly after `now_utc` (the wake-day capture window closes)."""
+    return _next_fire_utc(now_utc, wake_day_capture.CAPTURE_CLOSES_HOUR)
 
 
 def all_users_stale(
@@ -185,3 +195,44 @@ async def sweep_loop() -> None:
             raise
         except Exception:  # noqa: BLE001 — a scheduled-sweep failure must not kill the scheduler
             logger.exception("load sweep: scheduled run failed (scheduler continues)")
+
+
+# -- the 10:00 wake-day backstop ------------------------------------------------------------------------
+# The 02:00 sweep can only land the PRIOR night; on-read triggers need someone to open the app. At 10:00
+# Brisbane (the wake-day capture window closes) one more capture runs for any user whose wake-day is still
+# incomplete. It is idempotent per day (`wake_day_capture.run` records `via=backstop` and skips a repeat),
+# so a restart that crossed 10:00 can safely re-run it within a few hours.
+BACKSTOP_STARTUP_GRACE_HOURS = 4
+
+
+def _backstop() -> dict[int, str]:
+    db = SessionLocal()
+    try:
+        return wake_day_capture.run_backstop(db)
+    finally:
+        db.close()
+
+
+async def backstop_loop() -> None:
+    """Run the wake-day backstop at every 10:00 Brisbane, forever; once on startup when the process came up
+    within BACKSTOP_STARTUP_GRACE_HOURS after 10:00 (a restart that crossed it). Failures are logged, never
+    fatal; `CancelledError` is re-raised so shutdown is clean."""
+    try:
+        local = datetime.now(timezone.utc).astimezone(_BRISBANE)
+        hour = wake_day_capture.CAPTURE_CLOSES_HOUR
+        if hour <= local.hour < hour + BACKSTOP_STARTUP_GRACE_HOURS:
+            logger.info("wake-day backstop (startup, after 10:00): %s", await asyncio.to_thread(_backstop))
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.exception("wake-day backstop: startup run failed (scheduler continues)")
+
+    while True:
+        now = datetime.now(timezone.utc)
+        await asyncio.sleep((next_backstop_fire_utc(now) - now).total_seconds())
+        try:
+            logger.info("wake-day backstop (10:00 Brisbane): %s", await asyncio.to_thread(_backstop))
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception("wake-day backstop: scheduled run failed (scheduler continues)")

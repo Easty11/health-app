@@ -44,6 +44,7 @@ from aerobic_format import format_aerobic_session, format_also_recorded_by, form
 from reads.srpe_reads import aerobic_bout, hevy_bout, observed_ratings, session_ratings   # per-session RPE/feel for a session, any source (Q209)
 from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout, twins_by_canonical   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
 from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
+from reads import engine_reads   # injuries, constraints and the probe queue: the engine's read doors
 from sport_classes import is_strength_sport
 from reads.recovery_reads import hrv_deviation, representative_source
 from reads.recovery_night import recovery_text   # per-field recovery resolution (get_recovery_metrics)
@@ -1498,6 +1499,62 @@ def get_findings(domain: str | None = None, since: str | None = None,
 
 @mcp.tool()
 @_stamped
+def get_injuries(include_resolved: bool = False) -> str:
+    """The user's injury ledger as written: body part, side, signal type, RA-flare flag, restrictions
+    (chat-rendered text that gates nothing), detail, how long the row has been on record, and how many
+    constraint rows are parented to each injury by state (confirmed / proposed / resolved). Active rows
+    by default, newest first.
+
+    `include_resolved=true` adds the retired rows, each with its resolution (date, who, basis).
+
+    An injury blocks nothing by itself: the engine reads only profile hard-stops and CONFIRMED
+    engine-tier constraint rows (`get_constraints`). Read-only; nothing is interpreted."""
+    with SessionLocal() as sess:
+        rows = engine_reads.injuries_read(sess, _current_user_id(), include_resolved=include_resolved)
+    return engine_reads.format_injuries(rows, include_resolved=include_resolved)
+
+
+@mcp.tool()
+@_stamped
+def get_constraints(status: str | None = None) -> str:
+    """The user's constraint rows (engine-tier blocks and advisory instructions) with status, authority,
+    exit, review date and — for retired rows — the resolution and its basis. Opens with the counts:
+    confirmed, PENDING proposals (awaiting the operator's confirm or decline), resolved, and confirmed
+    rows due for review or exit, plus finding proposals pending confirmation.
+
+    Default: every active row, confirmed and proposed. `status`: `confirmed` | `proposed` | `resolved`
+    (declined proposals and ended blocks; superseded rows are never listed — their successor carries
+    the content). A proposal blocks nothing; only a confirmed engine-tier row does.
+
+    Read-only. Confirming, declining, keeping and resolving are the operator's acts on the Injuries page."""
+    if status is not None and status not in engine_reads.CONSTRAINT_STATUS_FILTERS:
+        return f"Unknown status {status!r} — one of {', '.join(engine_reads.CONSTRAINT_STATUS_FILTERS)}."
+    with SessionLocal() as sess:
+        data = engine_reads.constraints_read(sess, _current_user_id(), status=status, today=_aest_wake_day())
+    return engine_reads.format_constraints(data)
+
+
+@mcp.tool()
+@_stamped
+async def get_probe_queue() -> str:
+    """The Probe side of /engine/next: which (region, side) cells the engine will offer to probe, in its
+    rank order, and for every cell it will NOT offer, why — contraindicated (with the engine's own reason,
+    which names the profile hard-stop or the constraint row), already tested, recently loaded in Hevy, or
+    an ungrounded axis. The Loop recommendation leg's first read door.
+
+    /engine/next draws its Probe from this list and then narrows it by the due slot's capacity, readiness
+    and the open phase, so the first entry here is not necessarily the one it suggests. The recently-loaded
+    set is a best-effort Hevy read, as /engine/next's is. Read-only."""
+    from routers.engine import _loaded_regions   # function-local: the router imports this module's peers
+    user_id = _current_user_id()
+    with SessionLocal() as sess:
+        loaded = await _loaded_regions(sess, user_id)
+        detail = engine_reads.probe_queue_read(sess, user_id, loaded_region_keys=loaded)
+    return engine_reads.format_probe_queue(detail)
+
+
+@mcp.tool()
+@_stamped
 def get_appointment_brief(key: str) -> str:
     """The assembled brief for one appointment (by its entry key, e.g. `appt_<yyyymmdd>_<slug>`),
     as JSON — the SAME object the app's /appointments/<key> page renders (one assembly function).
@@ -1505,8 +1562,9 @@ def get_appointment_brief(key: str) -> str:
     Sections are listed in reading order by `module` (header, leave_with, asks, since,
     changes_vs_history, current_constraints, …); which appear depends on the appointment's `kind`.
     Asks labelled `"source": "ledger"` are derived from the ledger, not written by the user.
-    Each row appears once: `leave_with` items are one-line pointers (`short`) to asks by `id`, and
-    `since` omits what `changes_vs_history` carries. `resolves.unresolved: true` marks an ask whose
+    Each row appears once: `leave_with` items are one-line pointers (`short`) to asks by `id`, capped
+    at the five highest priorities (`total` is every ask, `remaining_ids` names the rest; all of them are
+    under `asks`), and `since` omits what `changes_vs_history` carries. `resolves.unresolved: true` marks an ask whose
     linked row is not shown (missing, proposed, inactive or out of scope). Scope is the injuries the appointment names plus rows parented directly to them; proposals
     and lab-derived findings are never included.
 

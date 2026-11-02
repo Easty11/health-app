@@ -77,3 +77,25 @@ test('a refresh failure is swallowed (never throws, onFreshRun not called)', asy
   await waitFor(() => expect(result.current.refreshing).toBe(false)) // settled, no throw
   expect(onFreshRun).not.toHaveBeenCalled()
 })
+
+test('via names the surface on every call; force adds ?force=true beside it', async () => {
+  api.post.mockResolvedValue({ data: { skipped: true } })
+  const { result } = renderHook(() => useRecoveryRefresh({ via: 'checkin' }))
+  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1))
+  expect(api.post).toHaveBeenLastCalledWith('/integrations/garmin/refresh', null, { params: { via: 'checkin' } })
+
+  await act(async () => { result.current.forceRefresh() })
+  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2))
+  expect(api.post).toHaveBeenLastCalledWith(
+    '/integrations/garmin/refresh', null, { params: { via: 'checkin', force: true } })
+})
+
+test('onSettled fires on a skip too (the response carries the slot status); onFreshRun still does not', async () => {
+  const onSettled = vi.fn()
+  const onFreshRun = vi.fn()
+  api.post.mockResolvedValue({ data: { skipped: true, reason: 'throttled', status: { connected: true } } })
+  renderHook(() => useRecoveryRefresh({ onFreshRun, onSettled }))
+  await waitFor(() => expect(onSettled).toHaveBeenCalledTimes(1))
+  expect(onSettled).toHaveBeenCalledWith({ skipped: true, reason: 'throttled', status: { connected: true } })
+  expect(onFreshRun).not.toHaveBeenCalled()
+})

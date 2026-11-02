@@ -297,3 +297,42 @@ def test_the_card_payload_keeps_its_shape_and_gains_the_new_keys(db_session, use
                 "sleep_hr_bpm", "spo2_pct", "bedtime", "wake_time"):
         assert key in sleep
     assert sleep["source_label"] == "Garmin" and sleep["awake_min"] == 53
+
+
+# -- the SpO2 slot's minimum (CPAP-seal evidence): same source as the mean, never a placeholder ---------------
+
+def _epoch_night(db, u, values, night=NIGHT):
+    n = models.Spo2Night(user_id=u.id, captured_at=night, source="garmin", reading_count=len(values), gap_count=0)
+    db.add(n)
+    db.flush()
+    for i, v in enumerate(values):
+        db.add(models.Spo2Sample(spo2_night_id=n.id, reading_time=_utc(2026, 10, 24, 14, i),
+                                 spo2_pct=v, reading_confidence=5.0, epoch_duration_s=60))
+    db.commit()
+
+
+def test_the_card_carries_the_nights_minimum_beside_the_mean_from_the_epoch_lane(db_session, user):
+    _api_night(db_session, user, spo2=(95.0, 88.0))                 # the API summary says mean 95, min 88
+    _epoch_night(db_session, user, (97.0, 96.0, 91.0, 98.0))        # the DI epochs say mean 95.5, min 91
+    s = latest_sleep_night(db_session, user.id)
+    assert s["spo2_pct"] == 95.5 and s["spo2_min_pct"] == 91.0
+    assert s["field_sources"]["spo2"] == "Garmin (epoch SpO2 lane)"      # one source for both numbers
+
+
+def test_without_the_epoch_lane_the_mean_and_minimum_are_both_the_personal_api_summary(db_session, user):
+    _api_night(db_session, user, spo2=(96.0, 84.0))
+    s = latest_sleep_night(db_session, user.id)
+    assert (s["spo2_pct"], s["spo2_min_pct"]) == (96.0, 84.0)
+
+
+def test_a_source_with_a_mean_and_no_minimum_gives_the_mean_alone_never_a_borrowed_minimum(db_session, user):
+    # the API summary carries a minimum, but the winning source (Health Connect's day figure) does not
+    _hc_night(db_session, user)
+    hc = db_session.query(models.HealthConnectSync).filter_by(user_id=user.id).one()
+    hc.oxygen_saturation = 95.0
+    db_session.add(models.SleepNight(user_id=user.id, captured_at=NIGHT - timedelta(days=1), source="garmin",
+                                     transport="personal_api", sleep_time_s=400 * 60, spo2_avg_pct=97.0,
+                                     spo2_lowest_pct=80.0))        # a DIFFERENT night's minimum
+    db_session.commit()
+    s = latest_sleep_night(db_session, user.id)
+    assert s["night"] == NIGHT.isoformat() and s["spo2_pct"] == 95.0 and s["spo2_min_pct"] is None

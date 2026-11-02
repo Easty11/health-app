@@ -50,14 +50,17 @@ async def lifespan(app: FastAPI):
         # on-demand refresh model that replaces #296's dedicated Railway cron service. Fires
         # at 02:00 Brisbane and once on startup if stale; runs off the loop (see load_sweep).
         sweep_task = asyncio.create_task(load_sweep.sweep_loop())
+        # 10:00 Brisbane wake-day backstop: the last capture for a user whose overnight data is still incomplete.
+        backstop_task = asyncio.create_task(load_sweep.backstop_loop())
         try:
             yield
         finally:
-            sweep_task.cancel()
-            try:
-                await sweep_task
-            except asyncio.CancelledError:
-                pass
+            for task in (sweep_task, backstop_task):
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
 
 app = FastAPI(title="Health & Performance API", lifespan=lifespan)
