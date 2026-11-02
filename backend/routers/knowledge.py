@@ -1450,6 +1450,40 @@ def _validate_training_plan_write(user_id: int, entry_in: KnowledgeEntryIn, db: 
         )
 
 
+def _stage_default_proposals(user_id: int, injury_key: str, injury_value: dict[str, Any], db: Session) -> int:
+    """Plan and STAGE the engine-default proposals for one injury (no commit). The one body behind both
+    entry points: the upsert hook and `propose_engine_defaults_for_row`. Returns how many were staged.
+
+    Idempotent (the planner skips every (injury, region) already covered, active or resolved), so calling
+    it again for the same injury writes nothing. A failure to plan or a refused proposal is logged and
+    skipped, never raised: the proposals are derived, the injury is the user's fact. (Only `ValueError`
+    from staging is swallowed: a database error poisons the session whatever this does, so it propagates.)
+    """
+    from engine import engine_defaults   # function-local, like `canonical_satisfies`: engine ↔ knowledge
+
+    review_by = _local_day() + timedelta(days=engine_defaults.DEFAULT_REVIEW_DAYS)
+    try:
+        plan = engine_defaults.plan_engine_defaults(db, user_id, injury_key, injury_value, review_by)
+        planned = plan["planned"]
+        for sk in plan["skipped"]:
+            if sk.get("side_mismatch"):   # a confirmed / hand-authored cover with the old side: the operator's
+                logger.warning("engine defaults: %s → %s — %s", sk["parent_key"], sk["region_key"], sk["why"])
+    except Exception:   # a read/derivation fault; the injury itself is still written
+        logger.exception("engine defaults: planning failed for injury %r — none proposed", injury_key)
+        return 0
+    staged = 0
+    for p in planned:
+        try:
+            _stage_upsert_entry(user_id, KnowledgeEntryIn(
+                type="constraint", key=p["key"], value=p["value"], source="system",
+                notes=f"engine default proposed by the injury write path for {injury_key}",
+            ), db)
+            staged += 1
+        except ValueError:
+            logger.exception("engine defaults: proposal %r refused — skipped", p["key"])
+    return staged
+
+
 def _propose_engine_defaults(
     user_id: int,
     entry_in: "KnowledgeEntryIn",
@@ -1465,12 +1499,8 @@ def _propose_engine_defaults(
     chat-channel rule (#342 R5) holds by construction and nothing here is enforced until the operator
     confirms a row. Staged in the SAME transaction as the injury, through the validated write path.
 
-    COVERAGE GAP, recorded: an injury written straight to the ORM (`seed_engine.py`,
-    `probe_resolver.py`) does not pass here. `scripts/seed_engine_defaults.py` covers those rows.
-
-    A failure to propose never loses the injury: the proposals are derived, the fact is the user's.
-    A refused or malformed proposal is logged and skipped. (Only `ValueError`: a database error
-    poisons the session whatever this does, so it propagates.)
+    An injury written OUTSIDE the upsert (a seed script straight to the ORM) does not pass here; such a
+    writer calls `propose_engine_defaults_for_row` on the row it wrote.
     """
     from engine import engine_defaults   # function-local, like `canonical_satisfies`: engine ↔ knowledge
 
@@ -1479,24 +1509,17 @@ def _propose_engine_defaults(
         == engine_defaults.default_signature(entry_in.value)
     ):
         return
-    review_by = _local_day() + timedelta(days=engine_defaults.DEFAULT_REVIEW_DAYS)
-    try:
-        plan = engine_defaults.plan_engine_defaults(db, user_id, entry_in.key, entry_in.value, review_by)
-        planned = plan["planned"]
-        for sk in plan["skipped"]:
-            if sk.get("side_mismatch"):   # a confirmed / hand-authored cover with the old side: the operator's
-                logger.warning("engine defaults: %s → %s — %s", sk["parent_key"], sk["region_key"], sk["why"])
-    except Exception:   # a read/derivation fault; the injury itself is still written
-        logger.exception("engine defaults: planning failed for injury %r — none proposed", entry_in.key)
-        return
-    for p in planned:
-        try:
-            _stage_upsert_entry(user_id, KnowledgeEntryIn(
-                type="constraint", key=p["key"], value=p["value"], source="system",
-                notes=f"engine default proposed by the injury write path for {entry_in.key}",
-            ), db)
-        except ValueError:
-            logger.exception("engine defaults: proposal %r refused — skipped", p["key"])
+    _stage_default_proposals(user_id, entry_in.key, entry_in.value, db)
+
+
+def propose_engine_defaults_for_row(db: Session, row: models.UserKnowledgeEntry) -> int:
+    """Propose the engine defaults for an ACTIVE injury row that was written outside the upsert (the seed
+    in `seed_engine.py`), in the caller's transaction: it flushes, stages, and does not commit. Returns how
+    many proposals were staged; a row that is not an active injury stages none. Idempotent."""
+    if row.type != "injury" or not row.active:
+        return 0
+    db.flush()   # the proposals' `parent_key` must name an ACTIVE row the validator can see
+    return _stage_default_proposals(row.user_id, row.key, row.value or {}, db)
 
 
 def _stage_upsert_entry(

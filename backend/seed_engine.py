@@ -21,6 +21,7 @@ import sys
 import models
 from database import SessionLocal
 from engine import profile as profile_mod
+from routers.knowledge import propose_engine_defaults_for_row
 
 DEFAULT_EMAIL = "Luke.eastlake@outlook.com"
 
@@ -137,11 +138,15 @@ def _seed_injuries(db, user_id: int) -> int:
         )
         if existing is not None:
             continue
-        db.add(models.UserKnowledgeEntry(
+        row = models.UserKnowledgeEntry(
             user_id=user_id, type="injury", key=inj["key"],
             value=inj["value"], source="system", active=True,
             notes=inj["value"].get("detail"),
-        ))
+        )
+        db.add(row)
+        # This writer goes straight to the ORM, so the upsert's hook never sees the row: propose its
+        # engine defaults here, in the same transaction (proposals only, they block nothing).
+        propose_engine_defaults_for_row(db, row)
         written += 1
     db.commit()
     return written
