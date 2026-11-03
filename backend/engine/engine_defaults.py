@@ -301,6 +301,7 @@ def plan_engine_defaults(
                      another shape; never written
 
     Writes nothing. `cover` / `active_keys` may be passed to share one read across many injuries.
+    Not called by `probe_resolver._synthetic_db`, on purpose: it is an in-memory measurement harness whose pinned injuries never reach a prod row or the engine (operator ruling, 3 Nov 2026).
     """
     cover = _existing_engine_cover(db, user_id) if cover is None else cover
     active_keys = _active_keys(db, user_id) if active_keys is None else active_keys
