@@ -1618,7 +1618,7 @@ No migration. As with §024/§033, this records the `value` shape for one `user_
 
 **Routes.** `POST /knowledge/constraints/{id}/confirm` (`{asserted_by}`), `POST /knowledge/constraints/{id}/resolve` (`ResolutionIn`); both type-scoped (404 across types).
 
-**Readers.** Only `active AND status='confirmed'`. `typed_entries.lift_constraints` (zero queries) → `CurrentState.constraints` → `context_builder._section_constraints` (unbudgeted; EXIT DUE / REVIEW DUE tags) and the MCP `get_readiness_snapshot`. Engine: `selection.gather_active_constraints` (engine tier only; one indexed query per `compute_probe_queue`) → `is_contraindicated`'s last arm. The #340 sweep's restriction audit reads them for re-homing. Seeded advisory rows come from `backend/scripts/seed_constraints.py` (operator-run).
+**Readers.** Only `active AND status='confirmed'`. `typed_entries.lift_constraints` (zero queries) → `CurrentState.constraints` → `context_builder._section_constraints` (unbudgeted; EXIT DUE / REVIEW DUE tags) and the MCP `get_readiness_snapshot`. Engine: `selection.gather_active_constraints` (engine tier only; one indexed query per `compute_probe_queue`) → `is_contraindicated`'s last arm. The #340 sweep's restriction audit reads them for re-homing. Advisory rows from an injury's legacy `restrictions[]` are PROPOSED by `POST /knowledge/injuries/{id}/propose-constraints` (`engine/restriction_proposals.py`, idempotent on (`parent_key`, `scope.text`) across every state; the operator confirms or declines each on the Injuries card) — the operator-run `scripts/seed_constraints.py` that seeded them confirmed is retired (DECISIONS_LOG #494).
 
 ### 038 — user_knowledge_entries.finding
 

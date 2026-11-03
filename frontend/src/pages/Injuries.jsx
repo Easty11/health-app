@@ -639,6 +639,36 @@ function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
   const key = sorenessKey(value)
   const [editing, setEditing] = useState(false)
   const restrictions = Array.isArray(value.restrictions) ? value.restrictions : []
+  // Restrictions → proposals (DECISIONS_LOG "Restrictions become constraint proposals from the injury
+  // card"): one POST turns each legacy restriction into a PROPOSED advisory constraint parented to this
+  // injury (the retired S6 seed script as a card action; idempotent). The response names every
+  // restriction's state — proposed / confirmed / declined by matching the planner's text key — which is
+  // shown beside the chip; the proposals group then refetches so the new rows appear below with their
+  // Confirm / Decline. The injury row itself is untouched. The button appears only while a restriction
+  // has no state yet (this visit; a fresh load asks again, and asking again creates nothing).
+  const [restrictionStates, setRestrictionStates] = useState(null)
+  const [proposing, setProposing] = useState(false)
+  const [proposeError, setProposeError] = useState('')
+  const allPlaced = restrictionStates !== null && restrictions.every((r) => restrictionStates[r])
+
+  async function proposeFromRestrictions() {
+    if (proposing) return
+    setProposing(true)
+    setProposeError('')
+    try {
+      const { data } = await api.post(`/knowledge/injuries/${row.id}/propose-constraints`)
+      const states = {}
+      for (const p of data.planned || []) states[p.text] = 'proposed'
+      for (const e of data.existing || []) states[e.text] = e.state
+      for (const s of data.skipped || []) states[s.text] = 'skipped'
+      setRestrictionStates(states)
+      onDone()
+    } catch (err) {
+      setProposeError(errorText(err, 'Could not propose constraints. Try again.'))
+    } finally {
+      setProposing(false)
+    }
+  }
   // signal_type belongs on screen: it decides which engine blocks the injury write path PROPOSES
   // (a spinal row typed neural/radicular is offered the radicular set; a proposal blocks nothing
   // until it is confirmed here). HAZARD, do NOT "correct" the data to match the prose: the
@@ -682,8 +712,19 @@ function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
           <div className="pt-0.5">
             <p className="text-[11px] text-gray-400 mb-1">Surfaced to sessions, not enforced</p>
             <div className="flex flex-wrap gap-1">
-              {restrictions.map((r) => <Chip key={r}>{r}</Chip>)}
+              {restrictions.map((r) => (
+                <Chip key={r} tone={restrictionStates?.[r] === 'confirmed' ? 'indigo' : restrictionStates?.[r] === 'proposed' ? 'amber' : 'gray'}>
+                  {r}{restrictionStates?.[r] ? ` · ${restrictionStates[r]}` : ''}
+                </Chip>
+              ))}
             </div>
+            {!allPlaced && (
+              <button type="button" onClick={proposeFromRestrictions} disabled={proposing}
+                className="mt-1.5 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-40">
+                {proposing ? 'Proposing…' : 'Propose constraints from restrictions'}
+              </button>
+            )}
+            {proposeError && <p className="text-[11px] text-red-600 mt-1">{proposeError}</p>}
           </div>
         )}
       </div>
