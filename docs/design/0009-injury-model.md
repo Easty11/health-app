@@ -93,7 +93,7 @@ drift from what the engine enforces, the failure #340 already names.
 
 | # | Question | Proposed answer | Evidence that settles it | Door | Status |
 |---|----------|-----------------|--------------------------|------|--------|
-| 1 | Shape fields for the model, admitted now as optional | `onset_on`, `course`, `mechanism`, `tissue`, `diagnosis_status`, `problem_key`, `recurrence_of` on `type=injury` | PR-A's tests | two-way | open |
+| 1 | Shape fields for the model, admitted now as optional | `onset_on`, `course`, `mechanism`, `tissue`, `diagnosis_status`, `problem_key`, `recurrence_of` on `type=injury` | PR-A's tests | two-way | resolved → #493 |
 | 2 | Problem vs episode: one type with `problem_key`, or two types | one type now; split only if a problem needs fields an episode cannot carry | the first standing problem that needs its own state machine (flare states) | two-way | open |
 | 3 | `cap` and `require` at the engine tier | behind a dose seam; `require` as a positive exposure the probe schedules | the dose seam design (Q106 / GH#489; GH#595) | one-way (cross-module: prescription) | open |
 | 4 | Tissue-based review defaults | a small declared table tissue → review interval, used as `review_by` default for engine proposals | the table itself; operator ratification | two-way | open |
@@ -106,4 +106,4 @@ drift from what the engine enforces, the failure #340 already names.
 
 ## Decisions landed
 
-- none yet
+- #493 — The injury row has a closed shape: a body-part vocabulary, side and signal enums, the seven optional injury-model fields admitted (enum- or existence-checked, read by nothing yet), and no new `restrictions[]` (resolves row 1).
