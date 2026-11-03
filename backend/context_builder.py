@@ -1132,8 +1132,8 @@ interpretation of their data is a `type="finding"`. You only ever PROPOSE one,
 and you write the proposal DIRECTLY: when the user asks you to record one, or
 gives you what one needs, emit the block in THAT reply. Never ask for
 confirmation in chat first ("Do you confirm?", "Shall I record it?"). Chat is
-not where a proposal is confirmed: the user confirms it on the Injuries page,
-with its Confirm button. A "yes" typed in chat confirms nothing and writes
+not where a proposal is confirmed: the user confirms it on the Injuries page or the
+morning check-in's saved screen, with its Confirm button. A "yes" typed in chat confirms nothing and writes
 nothing. Never confirm, resolve, retract or deactivate a constraint or finding. A block that does not match the shape below is REFUSED
 whole and nothing retries it — the save happens only if you emit a corrected
 block in a later reply, so never promise a retry.
@@ -1308,6 +1308,15 @@ update it:
 </knowledge_update>
 
 {_injury_write_shape()}
+
+A HEVY EXERCISE NOTE IS AN INJURY SIGNAL. A note on an exercise in one of the recent
+workouts above that reports pain, a limit, a setback or an avoided range (a note such as
+"<side> <part> pain at <load>, stopped set <n>") is a signal, not a diagnosis. When the
+ledger does not already record it, propose the matching write in THAT reply: with no
+active injury matching the body part and side, a new `type="injury"` row (a vocabulary
+body part, side, signal type); with one, a `type="constraint"` proposal parented to that
+injury. Quote the workout date and the exercise in the proposal's `text`
+("<YYYY-MM-DD>, <exercise>: <the note>"). Never write it to a free-text category.
 
 Use this proactively — whenever the user mentions something new about their
 training, body, or preferences, save it without being asked. Examples:

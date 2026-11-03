@@ -449,6 +449,13 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # the "exercise they can't do" bullet now proposes a parented constraint instead of growing
     # `restrictions`. Declared: 9604 → 10989 (+1385); same excision, nothing else moves. Pinned by
     # tests/test_injury_shape.py and tests/test_knowledge_update_prompt.py.
+    # RE-DECLARED (Hevy exercise notes as an injury signal, DECISIONS_LOG "A Hevy exercise note that
+    # reports pain or a limit is an injury signal"): one paragraph names a recent Hevy exercise note
+    # reporting pain, a limit, a setback or an avoided range as a signal the coach proposes from (a new
+    # injury row, or a constraint parented to the matching injury, quoting the workout date and
+    # exercise; never free text), and the confirm sentence gains the morning check-in's saved screen.
+    # Guidance only: the notes were already in the prompt. Declared: 10989 → 11707 (+718); same
+    # excision, nothing else moves. Pinned by tests/test_coach_hevy_note_signals.py.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -463,7 +470,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 10989), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 11707), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]
