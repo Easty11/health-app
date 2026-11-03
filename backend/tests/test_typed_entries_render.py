@@ -67,8 +67,13 @@ def _prompt(db, user, monkeypatch):
 
 def _baseline(db, user_id):
     _put(db, user_id, "preference", "device_profile", {"hrv_source": "galaxy_ring"})
-    _put(db, user_id, "injury", "hamstring_right", {"body_part": "hamstring", "side": "right",
-                                                    "restrictions": ["no sprinting"]})
+    # Straight to the ORM, as prod holds a legacy row: `restrictions[]` is refused on a NEW row since
+    # the injury shape closed, and the write-path hook would otherwise add engine-default proposals
+    # to a baseline these byte-identical comparisons rest on.
+    db.add(models.UserKnowledgeEntry(user_id=user_id, type="injury", key="hamstring_right", source="api",
+                                     value={"body_part": "hamstring", "side": "right",
+                                            "restrictions": ["no sprinting"]}, active=True))
+    db.commit()
 
 
 # ── no rows → byte-identical ─────────────────────────────────────────────────

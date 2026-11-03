@@ -459,7 +459,9 @@ def test_a_rewrite_that_changes_none_of_the_four_fields_proposes_nothing(db_sess
     gone_key = gone.key
     db_session.delete(gone)
     db_session.commit()
-    _put_injury(db_session, u, "injury_knee_left", _inj("knee", "left", restrictions=["no deep flexion"]))
+    # A rewrite outside the four fields: `detail`, not `restrictions` — the injury shape refuses a
+    # restriction GROWN on a rewrite (DECISIONS_LOG "The injury row has a closed shape").
+    _put_injury(db_session, u, "injury_knee_left", {**_inj("knee", "left"), "detail": "no deep flexion"})
     keys = {r.key for r in _defaults(db_session, u)}
     assert len(keys) == 2 and gone_key not in keys
 

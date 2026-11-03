@@ -44,9 +44,10 @@ def _put(db, uid, type_, key, value):
 
 def _world(db):
     u = _user(db)
-    for key, part, side in ((A, "part a", "left"), (B, "part b", "right")):
-        _put(db, u.id, "injury", key, {"body_part": part, "side": side, "signal_type": "mechanical",
-                                       "restrictions": ["movement a"]})
+    # Vocabulary parts that reach no engine map (no default proposals muddy the world) and no
+    # `restrictions` (refused on a new row since the injury shape closed).
+    for key, part, side in ((A, "finger", "left"), (B, "thumb", "right")):
+        _put(db, u.id, "injury", key, {"body_part": part, "side": side, "signal_type": "mechanical"})
     _put(db, u.id, "constraint", CONSTRAINT_B, {
         "scope": {"tier": "advisory", "text": "no movement b under load"}, "kind": "block",
         "parent_key": B, "exit": {"with_parent": True}, "review_by": "2026-12-01",
@@ -211,8 +212,7 @@ def test_a_denial_a_question_or_an_unrelated_save_is_not_a_claim(sentence):
 
 
 def test_the_claim_gets_a_notice_even_when_other_writes_saved(chat):
-    block = _kb("injury", "injury_part_c", {"body_part": "part c", "side": "left",
-                                            "signal_type": "mechanical", "restrictions": ["movement c"]})
+    block = _kb("injury", "injury_part_c", {"body_part": "wrist", "side": "left", "signal_type": "mechanical"})
     body, _ = chat["send"](["Recording the injury. I've updated your check-in soreness too.\n" + block])
     assert body["write_results"][0]["saved"] is True
     assert body["response"].count(_CHECKIN_NO_WRITE_NOTICE) == 1
@@ -227,7 +227,6 @@ def test_an_honest_reply_gets_no_notice(chat):
 def test_the_systems_own_action_lines_never_trip_the_guard(db_session):
     u = _world(db_session)
     _, actions, results = _process_knowledge_updates(
-        _kb("injury", "injury_check_in_x", {"body_part": "part c", "side": "left",
-                                            "signal_type": "mechanical", "restrictions": ["movement c"]}),
+        _kb("injury", "injury_check_in_x", {"body_part": "wrist", "side": "left", "signal_type": "mechanical"}),
         u.id, db_session)
     assert results[0].saved and not _claims_a_checkin_write("\n".join(actions).replace("injury_check_in_x", "k"))

@@ -186,9 +186,9 @@ def test_write_footer_is_type_aware(db_session):
     _, acts, res = _process_knowledge_updates(_block(bad_sched), u.id, db_session)
     assert res[-1].saved is False and "Schedule entry NOT saved" in acts[-1]
 
-    # injury SUCCESS (injury has no validator, so its label is exercised on the success path).
+    # injury SUCCESS (a valid shape, so its label is exercised on the success path).
     injury = {"type": "injury", "key": "left_knee",
-              "value": {"body_part": "left knee", "restrictions": ["deep squat"]}}
+              "value": {"body_part": "knee", "side": "left"}}
     _, acts, res = _process_knowledge_updates(_block(injury), u.id, db_session)
     assert res[-1].saved is True and "Injury entry saved" in acts[-1]
 

@@ -33,8 +33,9 @@ def _user(db, email="appt@example.com"):
 
 
 def _injury(db, uid, key="injury_part_a_left", **over):
-    value = {"body_part": "part a", "side": "left", "signal_type": "mechanical",
-             "restrictions": ["movement a"], **over}
+    # A vocabulary part and no `restrictions` (the injury shape closed, DECISIONS_LOG "The injury row
+    # has a closed shape"); the row is the appointment's scope parent here, nothing more.
+    value = {"body_part": "finger", "side": "left", "signal_type": "mechanical", **over}
     return upsert_knowledge_entry(uid, KnowledgeEntryIn(type="injury", key=key, value=value, source="api"), db)
 
 

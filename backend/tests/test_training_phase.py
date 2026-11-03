@@ -752,7 +752,7 @@ def test_resolve_endpoint_defaults_resolved_on_to_local_day(db_session):
     entry = upsert_knowledge_entry(
         u.id,
         KnowledgeEntryIn(type="injury", key="right_hamstring", source="chat",
-                         value={"body_part": "right hamstring"}),
+                         value={"body_part": "hamstring", "side": "right"}),
         db_session,
     )
     resolved = resolve_injury(entry.id, ResolutionIn(basis="healed", resolved_by="user"),

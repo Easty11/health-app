@@ -992,6 +992,125 @@ def validate_appointment(value: Any) -> dict[str, Any]:
     return value
 
 
+# ---------- typed entries: injury (DECISIONS_LOG "The injury row has a closed shape") ----------
+#
+# The injury row was the one typed entry with no validator: constraints, findings and appointments
+# all had one, while an injury took any JSON. The engine-defaults planner (#486) keys on `body_part`,
+# so a misspelt or free-string part silently proposed no default, and `restrictions[]` was a second,
+# lifecycle-less representation of what constraint rows carry with exit, review and authority.
+#
+# Closed keys, validated at write, never canonicalised (#342's never-rewrite rule: what is written is
+# what is stored). `body_part` must be in the vocabulary declared beside the engine-defaults alias
+# table (`engine.engine_defaults.INJURY_BODY_PARTS`) — except that a same-key rewrite may keep an
+# existing off-vocabulary part byte-for-byte, so a legacy row (user 9's `foot/hip`) stays rewritable.
+# `restrictions` is refused on a NEW row and carried only byte-identical on a rewrite (legacy carried,
+# never grown): a lasting restriction is a `type="constraint"` proposal parented to the injury.
+# `trajectory` (#72) rides along as an object, unread here. Seven OPTIONAL fields from the injury model
+# (design 0009) are admitted and enum- or existence-checked only; nothing reads them yet.
+# Refusal text names the valid set, so the chat channel's bounded retry (#344) can recover a write.
+INJURY_FIELDS = (
+    "body_part", "side", "signal_type", "ra_flare", "detail", "restrictions", "trajectory",
+    "onset_on", "course", "mechanism", "tissue", "diagnosis_status", "problem_key", "recurrence_of",
+)
+INJURY_REQUIRED = ("body_part",)
+INJURY_OPTIONAL_FIELDS = (
+    "onset_on", "course", "mechanism", "tissue", "diagnosis_status", "problem_key", "recurrence_of",
+)
+INJURY_SIDES = CONSTRAINT_SIDES                                   # left | right | bilateral
+INJURY_SIGNAL_TYPES = ("mechanical", "neural", "radicular")
+INJURY_COURSES = ("acute", "gradual", "chronic", "niggle")
+INJURY_MECHANISMS = ("contact", "velocity", "load", "insidious", "unknown")
+INJURY_DIAGNOSIS_STATUSES = ("suspected", "imaged", "clinician_confirmed")
+# Enum-valued optional fields, name → allowed values (the validator and the prompt's write shape
+# both read this map, so the text cannot drift from what is refused — the #313 pattern).
+INJURY_ENUMS = {
+    "side": INJURY_SIDES,
+    "signal_type": INJURY_SIGNAL_TYPES,
+    "course": INJURY_COURSES,
+    "mechanism": INJURY_MECHANISMS,
+    "diagnosis_status": INJURY_DIAGNOSIS_STATUSES,
+}
+
+
+def validate_injury(value: Any, *, existing: dict[str, Any] | None) -> dict[str, Any]:
+    """Validate an `injury` value — shape only, no DB (`problem_key` / `recurrence_of` existence is
+    `_validate_injury_write`'s). `existing` is the ACTIVE same-key injury value being rewritten, or
+    None for a new row. Returned UNCHANGED (byte-identical write→read)."""
+    from engine.engine_defaults import INJURY_BODY_PARTS, suggest_body_part   # engine ↔ knowledge
+
+    _refuse_stamped(value, "injury")
+    _closed_keys(value, INJURY_FIELDS, "injury")
+    missing = [f for f in INJURY_REQUIRED if f not in value]
+    if missing:
+        raise ValueError(f"injury: missing required field(s) {missing}")
+
+    bp = value["body_part"]
+    if not isinstance(bp, str) or not bp.strip():
+        raise ValueError("injury.body_part must be a non-empty string")
+    kept = existing is not None and existing.get("body_part") == bp
+    if bp not in INJURY_BODY_PARTS and not kept:
+        hint = suggest_body_part(bp)
+        raise ValueError(
+            f"injury.body_part: {bp!r} is not in the injury body-part vocabulary"
+            + (f" -- use {hint!r}" if hint else "")
+            + f"; valid: {list(INJURY_BODY_PARTS)}"
+        )
+
+    for field, allowed in INJURY_ENUMS.items():
+        if field in value and value[field] not in allowed:
+            raise ValueError(f"injury.{field}: {value[field]!r} is not one of {list(allowed)}")
+    if "ra_flare" in value and not isinstance(value["ra_flare"], bool):
+        raise ValueError(f"injury.ra_flare must be a strict boolean, got {value['ra_flare']!r}")
+    if value.get("detail") is not None and not isinstance(value["detail"], str):
+        raise ValueError("injury.detail must be a string or null")   # empty is legal: the card may blank it
+
+    if "restrictions" in value:
+        if existing is None:
+            raise ValueError(
+                "injury.restrictions is not written on a new injury -- a lasting restriction is a "
+                "type=\"constraint\" proposal parented to the injury (advisory unless it names "
+                "taxonomy regions)"
+            )
+        if value["restrictions"] != existing.get("restrictions"):
+            raise ValueError(
+                "injury.restrictions may only be carried unchanged on a rewrite (never grown) -- a "
+                "new restriction is a type=\"constraint\" proposal parented to the injury"
+            )
+    if "trajectory" in value and value["trajectory"] is not None and not isinstance(value["trajectory"], dict):
+        raise ValueError("injury.trajectory must be an object or null")
+
+    if "onset_on" in value:
+        _iso_date(value["onset_on"], "injury.onset_on")
+    if "tissue" in value:
+        _nonempty_str(value["tissue"], "injury.tissue")
+    for field in ("problem_key", "recurrence_of"):
+        if field in value:
+            _nonempty_str(value[field], f"injury.{field}")
+    return value
+
+
+def _validate_injury_write(user_id: int, entry_in: "KnowledgeEntryIn", db: Session) -> None:
+    """The DB-aware rules for an `injury` write, after `validate_injury`: `problem_key` names one of
+    THIS user's ACTIVE injury rows (the standing problem this episode belongs to) and `recurrence_of`
+    names ANY injury row of this user, active or resolved (the earlier episode); neither names the
+    row itself. Refused as `invalid_parent`, like a dangling `parent_key` on a constraint."""
+    value = entry_in.value
+    for field, active_only in (("problem_key", True), ("recurrence_of", False)):
+        target = value.get(field)
+        if target is None:
+            continue
+        if target == entry_in.key:
+            raise TypedEntryRefused(f"injury.{field} must not name the entry itself", "invalid_parent")
+        q = db.query(models.UserKnowledgeEntry).filter_by(user_id=user_id, type="injury", key=target)
+        if active_only:
+            q = q.filter_by(active=True)
+        if q.first() is None:
+            raise TypedEntryRefused(
+                f"injury.{field} {target!r} names no {'active ' if active_only else ''}injury row for "
+                f"this user", "invalid_parent",
+            )
+
+
 # Per-type shape validators for the typed entries. The DB-aware rules shared by both types live
 # in `_validate_typed_write`.
 _TYPED_VALIDATORS = {
@@ -1564,6 +1683,14 @@ def _stage_upsert_entry(
         _validate_typed_write(user_id, entry_in, existing, db)
     if entry_in.type == "appointment":
         _validate_appointment_write(user_id, entry_in, db)
+    if entry_in.type == "injury":
+        # After `existing` is known: a rewrite may keep a legacy body part and carry its
+        # restrictions byte-identical; a new row may do neither. Every channel passes here.
+        validate_injury(
+            entry_in.value,
+            existing=(existing.value or {}) if existing is not None and existing.type == "injury" else None,
+        )
+        _validate_injury_write(user_id, entry_in, db)
 
     new_entry = models.UserKnowledgeEntry(
         user_id=user_id,
