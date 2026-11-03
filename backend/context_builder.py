@@ -47,6 +47,9 @@ from routers.knowledge import (
     FINDING_EVIDENCE_DOORS,
     FINDING_EVIDENCE_FIELDS,
     FINDING_FIELDS,
+    INJURY_ENUMS,
+    INJURY_FIELDS,
+    INJURY_OPTIONAL_FIELDS,
     MACRO_MAX_CHARS,
     MARKER_STATUS_VALUES,
     REVISED_BY_VALUES,
@@ -1082,7 +1085,8 @@ Before giving any training/health advice, run a short adaptive interview:
    key="device_profile"` for which device/tool they use for which signal (e.g.
    `{"hrv_source": "...", "strength_log_tool": "...", "aerobic_hr_source": "...",
    "readiness_primary_gate": "..."}` — include only what they actually tell you).
-   Use `type="injury"` per injury (`value: {"body_part": ..., "restrictions": [...]}`).
+   Use `type="injury"` per injury (`value: {"body_part": ..., "side": ..., "signal_type": ...}`,
+   the shape under "Updating the Knowledge Base"; never `restrictions`).
 4. Stay education-scoped throughout — this is not a clinical-advice path. Do not
    diagnose or prescribe treatment; if something sounds medical, suggest they see
    a professional and log it as context, not a directive.
@@ -1239,6 +1243,33 @@ def _section_appointments(entries: list[Any]) -> str:
     return "\n".join(lines)
 
 
+# ---------- injury write shape (DECISIONS_LOG "The injury row has a closed shape"), GENERATED ----------
+#
+# The #313/#45 rule again: the section instructs an injury write, so the write's shape sits beside it,
+# interpolated from `routers.knowledge` (keys, enums) and `engine.engine_defaults` (the body-part
+# vocabulary) so the text cannot drift from what is refused. The vocabulary IS listed (nineteen short
+# words, unlike the 36 region keys #344 took out): the part is the one value the model must pick from a
+# closed set every time it writes an injury. Pinned by `tests/test_injury_shape.py`.
+
+def _injury_write_shape() -> str:
+    from engine.engine_defaults import INJURY_BODY_PARTS   # function-local: engine ↔ context_builder
+    core = [f for f in INJURY_FIELDS if f not in INJURY_OPTIONAL_FIELDS and f not in ("restrictions", "trajectory")]
+    never = ["restrictions", "trajectory", *TYPED_STAMPED_FIELDS]
+    return f"""INJURY `value` — allowed keys, and ONLY these: {", ".join(core)}, plus the optional
+keys below. Never send {", ".join(never)} or any other key.
+- `body_part`: exactly one of {_q(INJURY_BODY_PARTS)} — an alias (a tendon, a structure,
+  a side in the name) is refused, naming the part to use.
+- `side`: {_q(INJURY_ENUMS["side"])}. `signal_type`: {_q(INJURY_ENUMS["signal_type"])}.
+- `ra_flare`: true or false. `detail`: text or null.
+- Optional, sent only when the user states it: `onset_on` (YYYY-MM-DD); `course`: {_q(INJURY_ENUMS["course"])};
+  `mechanism`: {_q(INJURY_ENUMS["mechanism"])}; `tissue` (text — the structure as a
+  clinician named it); `diagnosis_status`: {_q(INJURY_ENUMS["diagnosis_status"])}; `problem_key` (the key of an
+  ACTIVE injury row this episode belongs to); `recurrence_of` (the key of an earlier injury row of
+  this user, active or resolved).
+- A lasting restriction is never written on the injury: it is a `type="constraint"` proposal
+  parented to the injury (advisory unless it names taxonomy regions)."""
+
+
 # Free-text categories the coach may write. "Injury History" and "Constraints" are DELIBERATELY
 # absent: the free-text store has no active flag and no resolution and renders unfiltered every
 # turn, so an injury written there can never be retired and keeps re-imposing itself after the
@@ -1273,14 +1304,16 @@ each injury as ONE structured entry in the injury ledger, reusing its key to
 update it:
 
 <knowledge_update>
-{{"type": "injury", "key": "injury_calf_left", "value": {{"body_part": "calf", "side": "left", "signal_type": "mechanical", "restrictions": ["no heel raises for reps"]}}}}
+{{"type": "injury", "key": "injury_calf_left", "value": {{"body_part": "calf", "side": "left", "signal_type": "mechanical", "course": "acute", "onset_on": "2026-01-01"}}}}
 </knowledge_update>
+
+{_injury_write_shape()}
 
 Use this proactively — whenever the user mentions something new about their
 training, body, or preferences, save it without being asked. Examples:
 - They mention a niggling pain → a structured `type="injury"` entry, not free text
 - They share a new goal or target → save to "Goals"
-- They discover an exercise they can't do → add it to that injury's `restrictions`
+- They discover an exercise they can't do → propose a `type="constraint"` parented to that injury (advisory unless it names taxonomy regions)
 - They describe what works well for recovery → save to "Recovery"
 
 {_typed_entry_write_shape()}

@@ -62,9 +62,19 @@ def _put(db, uid, type_, key, value, added_at=date(2025, 11, 1)):
     return row
 
 
-def _injury(db, uid, key, part, side="left", **kw):
-    return _put(db, uid, "injury", key, {"body_part": part, "side": side, "signal_type": "mechanical",
-                                         "restrictions": [f"{part} movement"], "detail": f"{part} detail"}, **kw)
+def _injury(db, uid, key, part, side="left", added_at=date(2025, 11, 1), **value):
+    """Straight to the ORM, as prod holds its legacy rows: a synthetic part ("part a") is outside the
+    injury body-part vocabulary and `restrictions[]` is refused on a NEW row since the shape closed
+    (DECISIONS_LOG "The injury row has a closed shape"). The brief's READS are what is under test,
+    and a legacy row is exactly what they read; a same-key REWRITE still goes through `_put`."""
+    row = models.UserKnowledgeEntry(
+        user_id=uid, type="injury", key=key, source="api", added_at=added_at, active=True,
+        value={"body_part": part, "side": side, "signal_type": "mechanical",
+               "restrictions": [f"{part} movement"], "detail": f"{part} detail", **value})
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def _constraint(parent=IN, review_by="2026-03-01", exit_=None, status="confirmed", **over):
@@ -333,9 +343,8 @@ def test_statements_render_in_full_everywhere(db_session, world):
 
 
 def test_injury_labels_are_human_words_everywhere(db_session, world):
-    _put(db_session, world.id, "injury", "injury_cervical_spine", {
-        "body_part": "cervical_spine", "side": "bilateral", "signal_type": "mechanical",
-        "restrictions": [], "detail": "d"}, added_at=date(2025, 12, 4))
+    _injury(db_session, world.id, "injury_cervical_spine", "cervical_spine", side="bilateral",
+            added_at=date(2025, 12, 4), restrictions=[], detail="d")
     b = _brief(db_session, world.id, scope={"parent_keys": [IN, GONE, "injury_cervical_spine"]},
                sections={"add": ["background"]})
     since = _section(b, "since")
@@ -380,8 +389,10 @@ def test_a_superseded_proposal_is_not_history(db_session, world):
 
 
 def test_an_injury_rewritten_since_shows_before_and_after(db_session, world):
+    # The rewrite keeps the legacy part and carries its restrictions byte-identical (the validator
+    # admits both on a same-key rewrite, and nothing else); only `detail` changes.
     _put(db_session, world.id, "injury", IN, {"body_part": "part a", "side": "left", "signal_type": "mechanical",
-                                               "restrictions": [], "detail": "part a detail v2"},
+                                               "restrictions": ["part a movement"], "detail": "part a detail v2"},
          added_at=date(2025, 12, 8))
     chv = _section(_brief(db_session, world.id), "changes_vs_history")
     assert (IN, "updated", "part a detail", "part a detail v2") in [

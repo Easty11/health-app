@@ -443,6 +443,12 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # the ask itself settles (else omit it); one closing paragraph says chat cannot write a check-in.
     # Declared: 8626 → 9604 (+978); same excision, nothing else moves. Pinned by
     # tests/test_pocket_ep_write_integrity.py.
+    # RE-DECLARED (the injury row's closed shape, DECISIONS_LOG "The injury row has a closed shape"):
+    # the injury example loses `restrictions` and gains `course` and `onset_on`; the section gains the
+    # INJURY write shape, GENERATED from the validator's tuples and the body-part vocabulary (#45);
+    # the "exercise they can't do" bullet now proposes a parented constraint instead of growing
+    # `restrictions`. Declared: 9604 → 10989 (+1385); same excision, nothing else moves. Pinned by
+    # tests/test_injury_shape.py and tests/test_knowledge_update_prompt.py.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -457,7 +463,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 9604), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 10989), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]

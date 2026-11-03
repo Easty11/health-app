@@ -444,7 +444,7 @@ def test_other_entry_types_are_untouched_by_this_validator(db_session):
     row = upsert_knowledge_entry(
         u.id,
         KnowledgeEntryIn(type="injury", key="left_hamstring", source="chat",
-                         value={"body_part": "left hamstring"}),
+                         value={"body_part": "hamstring", "side": "left"}),
         db_session,
     )
     assert row.active is True

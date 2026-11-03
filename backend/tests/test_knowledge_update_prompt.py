@@ -38,7 +38,10 @@ def test_injury_history_appears_nowhere_in_the_section():
 
 def test_injury_facts_are_pointed_at_the_structured_ledger():
     assert 'a structured `type="injury"` entry, not free text' in SECTION
-    assert "add it to that injury's `restrictions`" in SECTION
+    # The injury row's closed shape: a lasting restriction is a parented constraint proposal, never
+    # a line grown on the injury's `restrictions[]` (which a new row may no longer carry at all).
+    assert "add it to that injury's `restrictions`" not in SECTION
+    assert 'propose a `type="constraint"` parented to that injury' in SECTION
 
 
 def test_the_manual_post_categories_are_untouched():
@@ -57,5 +60,8 @@ def test_the_prompts_injury_example_writes_a_ledger_row(db_session):
     _process_knowledge_updates(block, u.id, db_session)
     row = db_session.query(models.UserKnowledgeEntry).filter_by(
         user_id=u.id, type="injury", key="injury_calf_left", active=True).one()
-    assert row.value["restrictions"] == ["no heel raises for reps"]
+    # The example carries the two optional injury-model fields the prompt teaches, and no
+    # `restrictions` (refused on a new row since the shape closed).
+    assert "restrictions" not in row.value
+    assert (row.value["body_part"], row.value["course"], row.value["onset_on"]) == ("calf", "acute", "2026-01-01")
     assert db_session.query(models.UserKnowledge).filter_by(user_id=u.id).count() == 0

@@ -32,10 +32,21 @@
 // touches nothing else). A CONSTRAINT proposal also gains Decline — the existing resolve route with a
 // basis — so an engine default the operator does not want is declined, never silently ignored.
 
+// Injury shape additions (DECISIONS_LOG "The injury row has a closed shape"): each active card gains
+// Edit — body part (a select from the mirrored vocabulary), side, signal type, RA flare, detail, and
+// three of the optional injury-model fields (course, onset date, diagnosis status) — submitted as a
+// same-key REWRITE through POST /knowledge/entry with `source: "api"`. No new route: the existing
+// write path validates it, and its hook re-proposes the engine defaults when the signature changes
+// (#487), so a re-sided injury shows its new proposals on this page after the refetch. The row's
+// legacy `restrictions[]`, `trajectory` and the api-only optional fields ride along unchanged.
+
 import { useEffect, useState } from 'react'
 import HubLayout from '../components/HubLayout'
 import InjurySweep from '../components/InjurySweep'
 import api from '../api'
+import {
+  INJURY_BODY_PARTS, INJURY_COURSES, INJURY_DIAGNOSIS_STATUSES, INJURY_SIDES, INJURY_SIGNAL_TYPES,
+} from '../lib/injuryVocabulary'
 
 // Mirrors backend injury_trajectory.injury_soreness_key. Kept in sync deliberately: the endpoint
 // returns `value` unmodified and never the computed key, so the only way to SHOW which morning
@@ -525,11 +536,108 @@ function ReviewDue({ items, withheldLabs, onDone }) {
   )
 }
 
+// --- edit — a same-key rewrite through the api source ------------------------------------------
+//
+// Every field here is one the validator closes (`validate_injury`); the selects offer exactly the
+// mirrored vocabulary, so the only refusal the server can still return is one the card could not
+// know (a dangling key, a row that moved underneath). A legacy body part the vocabulary cannot name
+// (user 9's `foot/hip`) stays selectable AS RECORDED: the server accepts it byte-for-byte on a
+// rewrite and nothing else. Blank optional fields are OMITTED from the value, never sent as "".
+
+function SelectField({ id, label, value, onChange, options, blank }) {
+  return (
+    <div className="space-y-0.5">
+      <label htmlFor={id} className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide">{label}</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full text-xs rounded-lg border border-gray-300 px-2 py-1.5 bg-white">
+        {blank && <option value="">{blank}</option>}
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  )
+}
+
+function InjuryEditForm({ row, onSaved, onCancel }) {
+  const v = row.value || {}
+  const [bodyPart, setBodyPart] = useState(String(v.body_part ?? ''))
+  const [side, setSide] = useState(String(v.side ?? 'bilateral'))
+  const [signalType, setSignalType] = useState(String(v.signal_type ?? 'mechanical'))
+  const [raFlare, setRaFlare] = useState(v.ra_flare === true)
+  const [detail, setDetail] = useState(v.detail ?? '')
+  const [course, setCourse] = useState(v.course ?? '')
+  const [onsetOn, setOnsetOn] = useState(v.onset_on ?? '')
+  const [diagnosis, setDiagnosis] = useState(v.diagnosis_status ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const partOptions = v.body_part && !INJURY_BODY_PARTS.includes(v.body_part)
+    ? [v.body_part, ...INJURY_BODY_PARTS] : INJURY_BODY_PARTS
+  const idp = `inj-${row.id}`
+
+  async function save() {
+    if (busy) return
+    const value = { ...v, body_part: bodyPart, side, signal_type: signalType }
+    if (raFlare || 'ra_flare' in v) value.ra_flare = raFlare
+    if (detail.trim()) value.detail = detail; else delete value.detail
+    if (course) value.course = course; else delete value.course
+    if (onsetOn) value.onset_on = onsetOn; else delete value.onset_on
+    if (diagnosis) value.diagnosis_status = diagnosis; else delete value.diagnosis_status
+    setBusy(true)
+    setError('')
+    try {
+      await api.post('/knowledge/entry', {
+        type: 'injury', key: row.key, value, source: 'api',
+        ...(row.notes != null ? { notes: row.notes } : {}),
+        ...(row.expires_at != null ? { expires_at: row.expires_at } : {}),
+      })
+      onSaved()
+    } catch (err) {
+      setError(errorText(err, 'Could not save the injury. Try again.'))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="border-t border-gray-100 pt-3 space-y-2" aria-label="Edit injury">
+      <div className="grid grid-cols-2 gap-2">
+        <SelectField id={`${idp}-part`} label="Body part" value={bodyPart} onChange={setBodyPart} options={partOptions} />
+        <SelectField id={`${idp}-side`} label="Side" value={side} onChange={setSide} options={INJURY_SIDES} />
+        <SelectField id={`${idp}-signal`} label="Signal type" value={signalType} onChange={setSignalType} options={INJURY_SIGNAL_TYPES} />
+        <SelectField id={`${idp}-course`} label="Course" value={course} onChange={setCourse} options={INJURY_COURSES} blank="not stated" />
+        <div className="space-y-0.5">
+          <label htmlFor={`${idp}-onset`} className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide">Onset date</label>
+          <input id={`${idp}-onset`} type="date" value={onsetOn} onChange={(e) => setOnsetOn(e.target.value)}
+            className="w-full text-xs rounded-lg border border-gray-300 px-2 py-1.5" />
+        </div>
+        <SelectField id={`${idp}-dx`} label="Diagnosis status" value={diagnosis} onChange={setDiagnosis}
+          options={INJURY_DIAGNOSIS_STATUSES} blank="not stated" />
+      </div>
+      <label className="flex items-center gap-2 text-xs text-gray-700">
+        <input type="checkbox" checked={raFlare} onChange={(e) => setRaFlare(e.target.checked)} />
+        RA flare
+      </label>
+      <div className="space-y-0.5">
+        <label htmlFor={`${idp}-detail`} className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide">Detail</label>
+        <textarea id={`${idp}-detail`} value={detail} onChange={(e) => setDetail(e.target.value)} rows={3}
+          className="w-full text-xs rounded-lg border border-gray-300 px-2 py-1.5 resize-y" />
+      </div>
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={save} disabled={busy || !bodyPart}
+          className="text-xs font-semibold rounded-lg px-3 py-1.5 bg-indigo-600 text-white disabled:opacity-40">
+          {busy ? 'Saving…' : 'Save injury'}
+        </button>
+        <button type="button" onClick={onCancel} disabled={busy} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+      </div>
+    </div>
+  )
+}
+
 // --- active row --------------------------------------------------------------------------------
 
 function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
   const value = row.value || {}
   const key = sorenessKey(value)
+  const [editing, setEditing] = useState(false)
   const restrictions = Array.isArray(value.restrictions) ? value.restrictions : []
   // signal_type belongs on screen: it decides which engine blocks the injury write path PROPOSES
   // (a spinal row typed neural/radicular is offered the radicular set; a proposal blocks nothing
@@ -582,6 +690,10 @@ function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
 
       <ProposalList items={proposals} onDone={onDone} />
 
+      {editing && (
+        <InjuryEditForm row={row} onSaved={() => { setEditing(false); onDone() }} onCancel={() => setEditing(false)} />
+      )}
+
       <div className="flex items-end justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-gray-400">On record since</p>
@@ -590,7 +702,15 @@ function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
           </p>
           <p className="text-[11px] text-gray-400">earliest date on the ledger for this injury</p>
         </div>
-        <ResolvePanel row={row} onDone={onDone} onResolved={onResolved} />
+        <div className="flex items-center gap-3">
+          {!editing && (
+            <button type="button" onClick={() => setEditing(true)}
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+              Edit…
+            </button>
+          )}
+          <ResolvePanel row={row} onDone={onDone} onResolved={onResolved} />
+        </div>
       </div>
     </div>
   )

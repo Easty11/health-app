@@ -147,6 +147,56 @@ _CERVICAL_PARTS = ("cervical", "neck", "c5", "c6", "c7")
 
 
 # --------------------------------------------------------------------------- #
+# The injury body-part vocabulary (DECISIONS_LOG "The injury row has a closed shape")
+# --------------------------------------------------------------------------- #
+#
+# `validate_injury` (routers/knowledge.py) refuses a `type="injury"` write whose `body_part` is not
+# one of these, because the planner above keys on `body_part`: a free-string part ("pes anserine",
+# "Knee ", "left hamstring") silently proposes no default. Declared beside the alias table it must
+# agree with: every `_ACUTE_TISSUE_BLOCKS` key is a member (pinned by a test), so a part that reaches
+# a map does so by its own name, never by a substring accident.
+#
+# Three groups, in order: the acute-tissue map keys; the non-map parts the live ledger used when the
+# shape closed (user 1: finger, thumb, neck, lumbar; user 9: pelvis, hip, foot, read through
+# `get_injuries` on 2026-11-03); and a short set judged obvious for a contact-sport athlete (hand,
+# wrist, elbow, groin, achilles, toe, rib). Extend the tuple by ruling when a ledger needs a part it
+# cannot name; never loosen the check. The validator NEVER rewrites a value (#342): an alias such as
+# "pes anserine" is named in the refusal text ("use 'knee'") and the writer resends.
+INJURY_BODY_PARTS: tuple[str, ...] = (
+    "hamstring", "shoulder", "calf", "ankle", "knee",
+    "finger", "thumb", "neck", "lumbar", "pelvis", "hip", "foot",
+    "hand", "wrist", "elbow", "groin", "achilles", "toe", "rib",
+)
+
+# Refusal-text hints only: canonical part → spellings a writer is likely to send instead. Read by
+# `suggest_body_part`, never by the planner (the planner's aliases are `ENGINE_BODY_PART_ALIASES`,
+# which this includes, read not copied). Lower-case; matched as substrings of the lower-cased input.
+INJURY_BODY_PART_HINTS: dict[str, tuple[str, ...]] = {
+    **ENGINE_BODY_PART_ALIASES,
+    "neck": ("cervical",),
+    "lumbar": ("lumbar spine", "low back", "lower back", "l4", "l5", "s1", "si joint"),
+    "achilles": ("achilles tendon",),
+    "foot": ("plantar",),
+}
+
+
+def suggest_body_part(raw: Any) -> str | None:
+    """The vocabulary entry an off-vocabulary `body_part` most likely meant, for the refusal text
+    (so the chat channel's bounded retry, #344, can resend it). A declared hint wins ("pes anserine"
+    → knee); else the first vocabulary entry the input contains ("left hamstring" → hamstring,
+    "foot/hip" → foot). None when nothing matches. Pure; never applied to the stored value."""
+    text = str(raw or "").strip().lower()
+    if not text:
+        return None
+    for part in INJURY_BODY_PARTS:
+        if any(alias in text for alias in INJURY_BODY_PART_HINTS.get(part, ())):
+            return part
+    # The entry that appears EARLIEST in the input ("foot/hip" → foot), not the earliest in the tuple.
+    hits = [(text.index(part), part) for part in INJURY_BODY_PARTS if part in text]
+    return min(hits)[1] if hits else None
+
+
+# --------------------------------------------------------------------------- #
 # Pure: what an injury value implies                                           #
 # --------------------------------------------------------------------------- #
 
@@ -354,7 +404,8 @@ def is_engine_default_key(key: str) -> bool:
 
 
 __all__ = [
-    "ENGINE_BODY_PART_ALIASES", "DEFAULT_REVIEW_DAYS", "candidate_regions", "default_key",
-    "default_row_value", "default_signature", "plan_engine_defaults", "propose_engine_defaults",
-    "is_cervical", "is_engine_default_key",
+    "ENGINE_BODY_PART_ALIASES", "DEFAULT_REVIEW_DAYS", "INJURY_BODY_PARTS", "INJURY_BODY_PART_HINTS",
+    "candidate_regions", "default_key", "default_row_value", "default_signature",
+    "plan_engine_defaults", "propose_engine_defaults", "is_cervical", "is_engine_default_key",
+    "suggest_body_part",
 ]

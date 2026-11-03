@@ -31,9 +31,10 @@ def _user(db):
 
 
 def _injury(db, uid):
+    # A vocabulary part and no `restrictions`: the injury shape closed (DECISIONS_LOG "The injury row
+    # has a closed shape"); the row is only the findings' parent here.
     upsert_knowledge_entry(uid, KnowledgeEntryIn(type="injury", key="injury_part_a", source="api", value={
-        "body_part": "part a", "side": "left", "signal_type": "mechanical",
-        "restrictions": ["part a movement"], "detail": "synthetic"}), db)
+        "body_part": "finger", "side": "left", "signal_type": "mechanical", "detail": "synthetic"}), db)
 
 
 def _value(ref, **over):
