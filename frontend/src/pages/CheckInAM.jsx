@@ -3,6 +3,31 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import useRecoveryRefresh from '../lib/useRecoveryRefresh'
 import MissedPMCard from '../components/MissedPMCard'
+import { ProposalList, ReviewDue } from '../components/InjuryActions'
+
+// Needs your call (DECISIONS_LOG "Proposals and reviews due render on the AM check-in saved screen"):
+// the saved screen is the Loop's recommendation home (operator's standing ruling: this screen plus the
+// /training panel, no new hub tile), so what awaits the operator's act — constraint / finding proposals
+// and rows past their review or exit date — renders here with the SAME components and routes as the
+// Injuries page. Two reads, fired ONCE when the screen becomes the saved view (a submit, or a load that
+// finds this morning already saved), never on every render; a failed read logs and renders nothing, so
+// it can never block the saved screen; both lists empty renders nothing (the morning screen is not a
+// dashboard). Surfacing only (#223): nothing here lifts, confirms or re-dates by itself.
+const EMPTY_PENDING = { due: [], proposals: [] }
+
+function readPending() {
+  return Promise.allSettled([
+    api.get('/knowledge/review-due'),
+    api.get('/knowledge/proposals'),
+  ]).then(([due, proposals]) => {
+    if (due.status === 'rejected') console.warn('needs-your-call: review-due read failed', due.reason)
+    if (proposals.status === 'rejected') console.warn('needs-your-call: proposals read failed', proposals.reason)
+    const items = due.status === 'fulfilled' && Array.isArray(due.value?.data?.items) ? due.value.data.items : []
+    const list = proposals.status === 'fulfilled' && Array.isArray(proposals.value?.data)
+      ? proposals.value.data.filter((p) => p.type === 'constraint' || p.type === 'finding') : []
+    return { due: items, proposals: list }
+  })
+}
 
 const READINESS_LABELS = ['Very tired', 'Tired', 'Okay', 'Good', 'Great']
 const SORENESS_LABELS = ['None', 'Mild', 'Moderate', 'Sore', 'Very sore']
@@ -183,6 +208,10 @@ export default function CheckInAM() {
   // is written, so the next load asks again.
   const [missedPmOutcome, setMissedPmOutcome] = useState(null)
   const [result, setResult] = useState(null)
+  // Needs your call: null until the one read after save; then {due, proposals}.
+  const [pending, setPending] = useState(null)
+  const loadPending = useCallback(() => { readPending().then(setPending) }, [])
+  useEffect(() => { if (submitted) loadPending() }, [submitted, loadPending])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -316,6 +345,18 @@ export default function CheckInAM() {
               <p className="text-3xl font-bold text-indigo-700">{nb.toFixed(1)}<span className="text-base font-normal text-indigo-400">/10</span></p>
               <p className="text-xs text-indigo-400 mt-1">Trend indicator only — not a prescription</p>
             </div>
+          )}
+
+          {pending && (pending.due.length > 0 || pending.proposals.length > 0) && (
+            <section aria-label="Needs your call" className="mb-4 space-y-3 text-left">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Needs your call</p>
+              <ReviewDue items={pending.due} withheldLabs={0} onDone={loadPending} />
+              {pending.proposals.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  <ProposalList items={pending.proposals} onDone={loadPending} />
+                </div>
+              )}
+            </section>
           )}
 
           <div className="space-y-2">
