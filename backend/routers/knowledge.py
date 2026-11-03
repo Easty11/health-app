@@ -2139,6 +2139,63 @@ def resolve_injury(
     return _resolve_entry(entry_id, body, "injury", current_user.id, db)
 
 
+class RestrictionProposalsOut(BaseModel):
+    entry_id: int
+    key: str
+    review_by: str
+    planned: list[dict[str, Any]]    # [{key, text}] — written by this call, in restriction order
+    created: list[int]               # the new row ids, in `planned` order
+    existing: list[dict[str, Any]]   # [{text, key, id, state, status, active}] — already covered, untouched
+    skipped: list[dict[str, Any]]    # [{text, why}] — the ra_flare token, or a key clash; never written
+
+
+@router.post("/injuries/{entry_id}/propose-constraints", response_model=RestrictionProposalsOut)
+def propose_constraints_from_restrictions(
+    entry_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Turn one active injury's legacy `restrictions[]` into advisory constraint PROPOSALS
+    (DECISIONS_LOG "Restrictions become constraint proposals from the injury card") — the S6 seed
+    script as a card action. Each restriction becomes ONE `proposed` advisory `block` parented to the
+    injury with a `with_parent` exit and `review_by` four weeks out; the operator confirms or declines
+    each on the card (`/constraints/{id}/confirm` / `/resolve`), which is the act the script's
+    `--confirm` stood in for. Nothing here confirms anything, and the injury row is untouched.
+
+    Idempotent on (parent_key, text) across the user's constraint rows in every state: a second call
+    creates nothing and lists the covers under `existing`; a declined proposal is never re-created.
+    ONE TRANSACTION: every planned row is staged through the validated write path and committed once;
+    a refusal rolls the whole set back. Type-scoped (the 404-leak defence); a resolved injury is 409.
+    """
+    from engine import restriction_proposals   # engine ↔ knowledge: function-local, like the hook
+
+    entry = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(id=entry_id, user_id=current_user.id, type="injury")
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Injury entry not found")
+    if not entry.active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Injury entry is inactive — its restrictions ended with it; nothing to propose",
+        )
+    review_by = _local_day() + timedelta(days=restriction_proposals.REVIEW_DAYS)
+    plan = restriction_proposals.plan_restriction_proposals(db, current_user.id, entry, review_by)
+    try:
+        created = restriction_proposals.write_restriction_proposals(db, current_user.id, entry.key, plan)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None
+    return RestrictionProposalsOut(
+        entry_id=entry.id, key=entry.key, review_by=review_by.isoformat(),
+        planned=[{"key": p["key"], "text": p["text"]} for p in plan["planned"]],
+        created=created, existing=plan["existing"], skipped=plan["skipped"],
+    )
+
+
 class SweepOtherInjury(BaseModel):
     entry_id: int
     key: str
