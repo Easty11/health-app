@@ -20,6 +20,7 @@ import Tile from '../components/hub/Tile'
 import InterpretationTile from '../components/hub/InterpretationTile'
 import ExposureTile from '../components/hub/ExposureTile'
 import RecoveryTile from '../components/hub/RecoveryTile'
+import InjuriesTile from '../components/hub/InjuriesTile'
 import AppointmentsDoorway from '../components/hub/AppointmentsDoorway'
 import LoadCard from '../components/hub/LoadCard'
 import api from '../api'
@@ -80,7 +81,7 @@ export default function Dashboard() {
           <Tile to="/labs" icon="🧪" label="Labs" detail="Blood panels and marker history" />
           <InterpretationTile />
           <Tile to="/checkin-history" icon="📅" label="History" detail="Past check-ins" />
-          <Tile to="/injuries" icon="🩹" label="Injuries" detail="Active injury ledger and resolution" />
+          <InjuriesTile />
           <Tile to="/settings" icon="⚙️" label="Settings" detail="Integrations and account" />
         </div>
       </div>
