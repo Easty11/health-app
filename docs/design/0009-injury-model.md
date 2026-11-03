@@ -102,7 +102,7 @@ drift from what the engine enforces, the failure #340 already names.
 | 7 | Red-flag class | its own type or a `signal_type`; one output (escalate) | operator + clinician wording | one-way (clinical) | open |
 | 8 | Per-session pain capture | the PM close-out's pain reason code | 0002 | owed to 0002 | open |
 | 9 | Overuse weekly capture (OSTRC-style) | a weekly four-item prompt on a chosen day | operator ruling on cadence | two-way | open |
-| 10 | Coach proposals from clinical documents | yes, proposal-gated, clinician authority pre-selected | the operator's fork ruling (the `fork` issue PR-D of the injury-lifecycle brief files) | one-way | open |
+| 10 | Coach proposals from clinical documents | yes, proposal-gated, clinician authority pre-selected | the operator's fork ruling (GH#608, filed by PR-D) | one-way | open |
 
 ## Decisions landed
 
