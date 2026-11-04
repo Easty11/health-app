@@ -1,86 +1,75 @@
-# Close-out — 4 Nov 2026: injury lifecycle in-app (`DECISIONS_LOG` #493 to #496; design 0009)
+# Close-out — 5 Nov 2026: coach ledger writes, the 4 Nov clinician debrief (GH#608 evidence; GH#612 to GH#617)
 
 ## Real commits this session
 
-Session opened at health-app master `78a620a` (the merge of PR 602). Maxima at open: `DECISIONS_LOG` #492, no open `fork` issue (REST read, empty). At close: master max #496 (all four minted by this session), one open `fork` issue (GH#608, filed by this session), one `stamp` (GH#609, filed by this session), one `design` pointer (GH#603, filed by this session). The brief was pasted (`injury-lifecycle-in-app - Next work nomination`); no issue carried it.
+Session opened at health-app master `600097e` (the merge of PR 611, the previous close-out). Maxima at open: `DECISIONS_LOG` #496, one open `fork` issue (GH#608). At close: `DECISIONS_LOG` max still #496 (nothing ruled, no integer minted), three open `fork` issues (GH#608, and GH#613 and GH#614 filed by this session), plus GH#612 and GH#617 (`build`), GH#615 (`watch`), GH#616 (`verify`), all filed by this session. The brief was pasted (`Coach Ledger Writes - Aubrey 4 Nov Debrief`, with Amendment 1); no issue carried it.
 
-The nine commits of this session, by the session trailer (`git log --format="%h %ad %s" --date=short --grep=session_01MzemEYnbRHrjxn5YXcR76X 78a620a..origin/master`):
+Commits on the branch before this close-out: none (`git log --oneline 600097e..HEAD` was empty). The brief authorised no feature code, no migration and no prod write, and none was made. This close-out's own commit, `chore: session close-out`, is the branch's only commit and lands as a docs-only PR; it names no hash here because a commit cannot name itself. Files it carries: `ROADMAP.md` (one NOW row), `BRANCHES.md` (one row), `CLAUDE.md` (Recent-landings pointer, cap of 3), `closeout.md` (this file).
 
-```
-52113a5 2026-11-03 gov(injury-model-design-doc): design 0009 injury model at discussion; ROADMAP lane row and LATER block; BRANCHES row
-652f477 2026-11-03 feat(injury-shape): validate_injury on every channel, the body-part vocabulary, optional injury-model fields, Edit on the card
-45f9e1a 2026-11-03 gov(injury-shape): #493 the injury row has a closed shape; design 0009 row 1 resolved; ROADMAP and BRANCHES rows
-2959d39 2026-11-03 feat(restrictions-to-proposals): the S6 seed script becomes a card action; restrictions are proposed, never seeded confirmed
-126cc6e 2026-11-03 gov(restrictions-to-proposals): ruling #494; ROADMAP lane row PR-B done and the G6 seed row's retirement note; BRANCHES row
-b64bcee 2026-11-03 feat(checkin-pending-surfacing): Needs your call on the AM saved screen; the Injuries doorway counts; shared InjuryActions
-73ddc8c 2026-11-03 gov(checkin-pending-surfacing): ruling #495; ROADMAP lane row PR-C done; BRANCHES row with O-B owed
-fe73848 2026-11-03 feat(coach-hevy-note-signals): a Hevy exercise note reporting pain or a limit is an injury signal the coach proposes from
-9b83258 2026-11-03 gov(coach-hevy-note-signals): ruling #496; lane row done; BRANCHES row; CLAUDE.md pointer for the lane; design 0009 row 10 names GH#608
-```
+Tracker writes this session (outside the tree, as durable as the tracker):
 
-The five merges onto master (`git log --first-parent 78a620a..origin/master`), each self-merged on green under § Merge disposition, every one a two-way door, no migration:
-
-```
-26c5312 Merge pull request #604 from Easty11/gov/injury-model-design-doc   (PR-0, docs only)
-4050066 Merge pull request #605 from Easty11/feat/injury-shape              (PR-A, #493)
-9d3bb75 Merge pull request #606 from Easty11/feat/restrictions-to-proposals (PR-B, #494)
-e84c92c Merge pull request #607 from Easty11/feat/checkin-pending-surfacing (PR-C, #495)
-70fb8a7 Merge pull request #610 from Easty11/feat/coach-hevy-note-signals   (PR-D, #496)
-```
-
-Deploy checks (#491, the `deploy-check` workflow read on each merge commit by Code through the GitHub MCP): `26c5312` success (docs only: both services SKIPPED by construction, the check passes because each service still serves a commit containing its folder's last change); `4050066` success (backend and frontend changed); `9d3bb75` success (both changed); `e84c92c` success (frontend changed); `70fb8a7` success (backend changed). Post-deploy read for PR-B (G3), through `get_constraints` at 06:58 Brisbane: 5 confirmed, 0 pending, unchanged from the morning's read, so the route wrote no confirmed row.
-
-This close-out's own commit, `chore: session close-out`, follows these on `gov/closeout-injury-lifecycle` and lands as a docs-only PR; it names no hash here because a commit cannot name itself.
+| Write | Where |
+|---|---|
+| Evidence comment, the debrief as a worked case, no ruling requested | GH#608, comment `6640954877` |
+| I1 `build`: the coach claims a write it did not make; receipt-derived summary | GH#612 |
+| I2 `fork`: injury-scoped proposals without `parent_key` fall out of brief scope (Amendment 1 wording) | GH#613 |
+| I3 `fork`: a healed injury written active fires engine defaults for a healed tissue | GH#614 |
+| I4 `watch`: region blocks cannot express depth; 0009 row 3 resolves it | GH#615 |
+| I5 `verify`: the parenting gap is the coach never sending `parent_key`; determination in the body | GH#616 |
+| I6 `build`: Edit on a proposed card writes a superseding proposal; the VERIFY it asked for is in the body | GH#617 |
 
 ## Pending-queue reconciliation
 
-No `PENDING` item came in from a `;cc` chat close-out. The session was driven by the pasted brief; each of its steps, against the commit that carries it:
+No `PENDING` item came in from a `;cc` chat close-out. The session was driven by the pasted brief and its amendment; each step against where it landed:
 
 | Brief step | Landed in |
 |---|---|
-| PR-0 P1 to P5: design 0009 (Proposal and Exclusions byte-faithful), GH#603 pointer, ROADMAP NOW row and LATER block, BRANCHES row | `52113a5`; GH#603 |
-| PR-A A1 to A7: `validate_injury`, the vocabulary, every channel, Edit on the card, the prompt's injury example and INJURY shape, tests, design doc row 1 → #493 | `652f477` (code, tests), `45f9e1a` (#493, doc, rows) |
-| PR-B B1 to B5: planner module, `POST /knowledge/injuries/{id}/propose-constraints`, card button and states, script and test deleted, fixture test migrated, SCHEMA/ROADMAP mentions, tests | `2959d39`, `126cc6e` (#494) |
-| PR-C C1 to C4: `InjuryActions.jsx` extraction (four Injuries test files zero diff), the saved-screen block, the doorway line, tests | `b64bcee`, `73ddc8c` (#495) |
-| PR-D D1 to D5: the paragraph, #43 guard re-declared, the transport-faked test, D4 (not done, slot unfilled), GH#608 filed | `fe73848`, `9b83258` (#496); GH#608 |
-| G6 `CLAUDE.md` Recent-landings pointer once at the end of PR-D | `9b83258` |
-| LOG entries: #493 (Decision), #494, #495, #496 (rulings), headed `### #NEXT` and resolved at each PR open from master's max, re-read before each merge | the four `gov(...)` commits |
+| V1 to V4 verified before any write (MCP read doors and the tree) | below, this section; no mismatch that undermined the brief |
+| Step 1: GH#608 comment, the session as a worked case | GH#608 comment `6640954877` |
+| Step 2: I1 to I5 filed, four fields each, labels as given | GH#612, GH#613, GH#614, GH#615, GH#616 |
+| Amendment 1: I6 filed; I2's proposed answer replaced by the re-parenting-through-I6 wording | GH#617; GH#613 body |
+| Step 3: ROADMAP lane row naming I1 to I6 and GH#608 | `ROADMAP.md` NOW, first row, in this commit |
+| LOG: issues filed, V1 to V4 results, mismatches | this file |
+| Guard: no confirm, decline or resolve of any ledger row; no integer minted | held: reads only through `get_constraints` and `get_injuries`; `DECISIONS_LOG` untouched |
 
-Departures from the brief, each reported at its gate and none folded into prose (FEEDBACK §44):
-- **VERIFY mismatch, PR-D (G1):** the second D3 fixture ("a free-text write of the same note is refused by the existing free-text rule — prove the guard") has no code guard to prove: the rule is prompt-only (#340 S3) and `_process_knowledge_updates`'s legacy branch writes any category. Reported, not fixed; filed as GH#609 (`stamp`, two-way, with the proposed chat-channel guard) and pinned as a strict `xfail` in `tests/test_coach_hevy_note_signals.py` that landing the guard must flip.
-- **VERIFY scope, PR-A:** user 9's rows (`pelvis`, `foot/hip`) are not readable through this session's MCP connector, which serves the connected user; that half of the body-part read rests on chat's 2026-11-03 read, and the tolerance test uses the `foot/hip` shape from the retirement fixture. User 1's six active parts were read and match chat's read.
-- **PR-A fixtures:** nine backend test files wrote synthetic off-vocabulary injuries (`part a`, `left hamstring`) or `restrictions` on new rows through the upsert; repointed to vocabulary parts or to a direct ORM row (the legacy shape they stood for). `hand` was added to the "obvious" vocabulary set (the brief did not name it). The vocabulary is listed in the prompt (19 words), unlike the 36 region keys #344 removed; the cost is declared in the parity guard.
-- **PR-B card state:** a restriction's state after the POST lives for the visit; a fresh load shows the button again and asking again creates nothing (idempotent). A read-only plan would need a GET the brief did not ask for (nits, G7).
-- **PR-C layout:** the brief's "above any catch-up card" is not met literally; the missed-PM card keeps its place at the top of the saved view (#407) and the block sits below the readiness baseline, above the buttons. Recorded in #495.
-- **D4:** operator slot O-A reads neither `done` nor `not done` in the brief as received, so the `injury_sweep` manual checklist was left untouched.
-- **Branch names:** the brief's five names were used (`gov/...`, `feat/...`), one branch per concern, rather than the harness-assigned `claude/sweet-cray-4tf2na`, which received no commits and is left local at master.
+**V1 to V4 results** (prod read 2026-11-05 06:06 to 06:07 Brisbane, through the MCP read doors):
+- **V1, proposals.** #180 proposed with no parent, as stated. #185 to #187 parented to `injury_calf_left_oct2026`, as stated. #182, #183 and #188 are listed under neither `proposed` nor `resolved`; `get_constraints` hides superseded rows in every status, so they were superseded (not declined). Beyond the brief's snapshot: nine newer proposals #194 to #207 exist, of which #196 to #198 are engine defaults parented to `injury_calf_left` and the rest (#194, #199, #201, #203, #205, #207) are coach-authored and unparented. The movement strengthens the brief's premise rather than contradicting it, so the session proceeded and reported it (the brief said the operator might act on rows before the run).
+- **V2, injuries.** #184 `injury_calf_left_oct2026` active with detail ending "Resolved.", as stated. #119 → #179 and #118 → #181 superseded, on record 2026-11-04, as stated; the chains continue (#179 → #189 → #200 knee; #181 → #191 → #202 shoulder). Beyond the brief: a second active calf row #206 (`injury_calf_left`, after #195, under the July episode #76's key) also reads "Resolved." Two active rows for one healed tissue.
+- **V3.** GH#608 open, label `fork`, body as filed by PR-D. Matches.
+- **V4.** `backend/routers/knowledge.py`: `parent_key` optional on constraints (L539 to L541, L1159); `_propose_engine_defaults` (L1606 to L1631) is called from `_stage_upsert_entry` at L1732 and compares only `default_signature` (body part, side, signal type, RA flare), reading nothing the row says about itself. Matches.
 
-Provisional: nothing decided and uncommitted. Outside the tree and only as durable as its source: GH#608 and GH#609 on the tracker; the prod reads (`get_injuries`, `get_constraints`) are point-in-time.
+Determinations the brief asked for, recorded on the issues rather than ruled here: I5 (GH#616) is answered from the write path (a `parent_key` is a key resolved at read time, an injury rewrite keeps the key, and a constraint's value is stored as sent; every parented proposal is a system-written engine default, every coach-authored one is unparented; no MCP tool exposes the chat transcript and none was needed). I6's VERIFY (GH#617): an `api`-source upsert can supersede a `proposed` row under the same key when the successor is itself `proposed` (`_typed_supersede_guard` guards chat only; `confirm_via_route` refuses a confirmed status over an unconfirmed row); the predecessor keeps its value, `source` and `notes` and gains `superseded_by`; there is no editor field, which is the build's one open choice.
+
+Observed, outside the authorised group and so filed nowhere: decline-and-retry produced near-duplicate keys (#180 / #201, #194 / #205, #199 / #207, and `_v2` on #203), noted as evidence inside GH#617 and the GH#608 comment; the coach's write-shape section lists `parent_key` as allowed with no instruction to set it (GH#613).
+
+Provisional: nothing decided and uncommitted. The prod reads are point-in-time.
 
 ## Cold-resume handoff
 
-**Next action (the single clearest).** The operator rules GH#608 (`fork`, one-way: should the coach propose constraints and findings from clinical documents, with clinician authority pre-selected at confirm). Alongside it, two operator slots from the brief: O-A (replace Athlete_Profile's injury section in project knowledge with a pointer to the app, then say `done <date>` so the one-line `injury_sweep` checklist edit can land) and O-B (after this morning's deploys, save the next AM check-in and report whether the Needs your call block appeared; at the 4 Nov read there are zero proposals and zero reviews due, so "no block" is the expected and correct result). For Code, GH#609 (`stamp`) is acted on by the next PR touching the chat write path unless the operator objects.
+**Next action (the single clearest).** The operator rules the two forks this session filed, GH#613 (unparented injury-scoped proposals: coach guidance plus Edit, or validator refusal) and GH#614 (a healed event as a finding, or a born-resolved injury write), and GH#608 still waits. The two-way builds need no ruling and are the next Code lane: GH#617 (Edit on a proposed card, superseding proposal through the existing upsert; verify first that the card's history read shows the superseded original, since `get_constraints` hides it) and GH#612 (the closing summary derived from write receipts; extend the Q187 notice to a claimed write type with no receipt of that type). GH#613's proposed answer (the `parent_key` prompt sentence beside the write shape, #313/§45 pattern) can ride GH#617's PR. GH#616 closes when the operator reads it.
 
-**Current sprint (`ROADMAP.md` NOW).** The "Injury lifecycle in-app" lane is DONE (all five PRs merged 4 Nov 2026; design 0009 at `discussion` with row 1 resolved and nine rows open). The rest of NOW is as the 2 Nov close-out left it: fifteen DONE rows, and the open ones with owner: Q231 RPE fallback (Code, once the gate opens; January 2027); Source hierarchy (Luke); Polar sport-id relabel (OWED, remaining limbs); HC sync reliability (OWED, the #371 overlap proof); Garmin self-evaluation read, first live run (operator); Injury clearance (operator); Aerobic ingest automated (operator check); Session fidelity G6 (operator, after deploy); the cross-repo shared-block edit (OWED, pinned by #112); HC zones Q159 stage 2 (Code, low priority). The wake-day capture lane still owes its three-morning gate record (mornings 2 and 3) and the Decision-tier record after it.
+**Current sprint (`ROADMAP.md` NOW).** One new row at the top, "Coach ledger writes: the 4 Nov debrief defects", UNSTARTED. The "Injury lifecycle in-app" lane is DONE (4 Nov); design 0009 at `discussion`, row 1 resolved, nine rows open, row 10 pointing at GH#608. The rest of NOW is as the 4 Nov close-out left it: fifteen DONE rows, and the open ones with owner: Q231 RPE fallback (Code, once the gate opens; January 2027); Source hierarchy (Luke); Polar sport-id relabel (OWED, remaining limbs); HC sync reliability (OWED, the #371 overlap proof); Garmin self-evaluation read (operator); Injury clearance (operator); Aerobic ingest automated (operator); Session fidelity G6 (operator); HC zones single-row read (Code, low priority); the cross-repo `#NEXT` extension (OWED). Operator slots still open from the 4 Nov close-out: O-A (Athlete_Profile's injury section replaced by a pointer) and O-B (the AM saved screen's proposal block seen live).
 
-**Open `fork` issues.** GH#608 (filed this session). Open `stamp`: GH#609 (filed this session) and GH#593 (from the 2 Nov close-out). Open `design` pointers: GH#537 to GH#544 and GH#603.
+**Open `fork` issues.** GH#608 (coach proposals from clinical documents, one-way), GH#613 (I2), GH#614 (I3). Open `stamp`: GH#609, GH#593 and the older stamps. Open `design` pointers: GH#537 to GH#544, GH#603. New `build`: GH#612, GH#617. New `watch`: GH#615. New `verify`: GH#616.
 
-**Design docs not in a terminal state.** `docs/design/` 0001 canonical exercise layer, 0004 load-model routing and gaps, 0005 HR input layer, 0006 sleep writers and admission, 0007 in-app chat architecture (all `ideation`); 0002 plan-log reconciliation, 0003 constraints engine tier is `committed` (not listed), 0008 SpO2 detector and guardrail, 0009 injury model (all `discussion`). 0009's open rows are the LATER block "Injury model lanes (design 0009)" in ROADMAP: cap/require behind a dose seam (one-way), problem/episode split, tissue-based review defaults, the niggle persistence rule, regional load exposure (needs 0001), the red-flag class (one-way), per-session pain capture (owed to 0002), the OSTRC-style weekly capture, and GH#608.
+**Design docs not in a terminal state.** 0001 canonical exercise layer, 0002 plan-log reconciliation, 0004 load-model routing and gaps, 0005 HR input layer, 0006 sleep writers and admission, 0007 in-app chat architecture (`ideation`); 0008 SpO2 detector and guardrail, 0009 injury model (`discussion`). 0003 is `committed`. 0009's open rows are the LATER block "Injury model lanes (design 0009)"; GH#615 names row 3 as its resolver and GH#614 names row 2.
 
 ### What was NOT touched
 
-This session was one lane, the injury lifecycle, inside the Fitness module, and it was built to the brief: validation, a card action, a surface, a prompt paragraph. Everything below stood still, and a reader should not infer from this file that it is queued or finished.
-- **Design 0009's model itself.** Nothing here treats an injury differently: no `cap` or `require` kind, no problem/episode split, no tissue table, no red-flag class, no overuse capture, no regional load. The seven optional fields are admitted and read by nothing; a field nobody reads is an affordance, not a feature. The next injury session should pick ONE row of 0009 and build its consumer, not widen the shape again.
-- **The engine.** `is_contraindicated`, `compute_probe_queue` and the engine-defaults planner are proven unchanged by this session's rows (the changes-nothing test); no verdict moved. The aerobic-base review on 2026-11-16 that re-opens probes is unaffected.
-- **Medical Protocol and Decision Support.** CBT-I, labs and the interpretation layer, appointments, and `clinical_documents.py`'s contract (un-interpreted until GH#608 is ruled) did not move. Q231's imputed-load consumer, named by the 2 Nov close-out as the thing to build next on the sRPE side, did not move either; this session went to the injury lane instead, by the operator's nomination.
-- **The operator-owed lanes in NOW** above did not move.
-- **Known gaps left by design:** the card's restriction states are per visit (PR-B nits); the free-text category guard is a stamp, not code (GH#609); user 9's ledger is unread by this session; the AM saved screen's block has not been seen live (O-B).
+This session was governance: reads, one comment, six issues, one ROADMAP row. Nothing in the product moved, and a reader should not infer from this file that the lane it opened is under way.
+- **The coach.** No prompt sentence changed: the coach still writes constraint proposals without `parent_key`, still can write a healed injury as an active row and stage engine defaults for it, and still narrates a write it did not make on a turn that wrote something else. The six issues describe the fixes; none is built.
+- **The Injuries page.** No Edit on a proposed card; Confirm and Decline remain the only actions on a proposal (`components/InjuryActions.jsx`). The 13 PENDING constraint proposals and 2 PENDING finding proposals in prod are the operator's to confirm or decline; this session touched none.
+- **The engine and the write path.** `_propose_engine_defaults`, `_stage_upsert_entry`, the validators and the appointment brief's one-hop scope are unchanged and were only read.
+- **Design 0009's model.** Rows 2 (problem/episode split) and 3 (cap/require behind a dose seam) gained two more pointers at them (GH#614, GH#615) and no work. The next injury session should pick one of GH#617 or GH#612 and build it, not widen the issue set.
+- **Medical Protocol and Decision Support.** CBT-I, labs, the interpretation layer, appointments and `clinical_documents.py`'s contract (un-interpreted until GH#608 is ruled) did not move. Q231's imputed-load consumer did not move; three sessions in a row have now gone to the injury and ledger side rather than to it.
+- **The operator-owed lanes in NOW** did not move.
 
 ### v1-triage (which v1 test each NOW lane serves)
 
 Read from each row's own "Serves" claim; nothing here is a new ruling.
-- **Loop:** Injury lifecycle in-app (DONE; what needs the operator's call appears on the morning screen); Wake-day capture (DONE, gate record owed); Missed-PM catch-up (DONE); CBT-I titration direction (DONE); Session fidelity (built, G6 owed).
-- **Know:** Injury lifecycle in-app (DONE; the ledger is the only authority and nothing outside the app is needed to keep it true); Constraints engine tier (DONE, lane closed); Source-neutral sRPE store and In-app sRPE capture (DONE); Polar relabel (OWED); Garmin self-evaluation read (OWED); Phase posture split (DONE, one read owed); Phase-change form (DONE); Injury clearance (OWED); Garmin account repair (DONE); Typed constraints (DONE, the S6 script now retired).
+- **Know:** Coach ledger writes (UNSTARTED; a proposal the coach writes is the row the operator meant); Injury lifecycle in-app (DONE); Constraints engine tier (DONE, lane closed); Source-neutral sRPE store and In-app sRPE capture (DONE); Polar relabel (OWED); Garmin self-evaluation read (OWED); Phase posture split (DONE, one read owed); Phase-change form (DONE); Injury clearance (OWED); Garmin account repair (DONE); Typed constraints (DONE, the S6 script now retired).
+- **Walk in:** Coach ledger writes (UNSTARTED; an unparented constraint is a row the appointment brief never shows); Appointment brief (v1 built, test 3 met).
+- **Loop:** Injury lifecycle in-app (DONE); Wake-day capture (DONE, gate record owed); Missed-PM catch-up (DONE); CBT-I titration direction (DONE); Session fidelity (built, G6 owed).
 - **See:** Data freshness and the home load card (DONE); Plan/schedule and recent-sessions tools (DONE); Garmin overnight SpO2 (DONE); RPE fallback Q231 (OWED); Source hierarchy (OWED); HC sync reliability (OWED); Aerobic ingest automated (OWED); HC zones Q159 stage 2 (OWED).
 - **Serves no v1 test:** CBT-I Q45 nap attribution, CBT-I manual evaluation trigger, Training v0.1 exercise tags seed (all DONE, riding NOW because DONE rows are never moved out); the cross-repo shared-block lane (OWED) sits in NOW by #112's stated reason.
 - **Demotion candidates:** the DONE rows older than a month (August and September) are the clearest; ROADMAP's "Moved from NOW" precedent covers them. Not moved this session.

@@ -330,11 +330,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The coach's ledger writes from a clinician debrief are opened as a lane: evidence on GH#608 and six typed issues (GH#612 to GH#617), nothing ruled and nothing built.** Code - Canonical home: `closeout.md`.
+
 - **The injury lifecycle is enterable, adjustable and resolvable in the app: the injury row has a closed shape with Edit on the card, restrictions become proposals from the card (the S6 script retired), proposals and reviews due render on the AM saved screen, and a Hevy pain note is a signal the coach proposes from; the injury model is design 0009.** Code - Canonical home: `DECISIONS_LOG.md` #493, #494, #495, #496.
 
 - **Deploys are checked by a workflow: each service serves its commit and `deploy-check` asserts it after every merge to master.** Code - Canonical home: `DECISIONS_LOG.md` #491.
-
-- **MCP read doors for Code: `get_injuries`, `get_constraints` and `get_probe_queue`, added by PR (prod reads only through MCP tools).** Code - Canonical home: `DECISIONS_LOG.md` #490.
 
 
 
