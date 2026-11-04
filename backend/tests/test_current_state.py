@@ -456,6 +456,12 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # exercise; never free text), and the confirm sentence gains the morning check-in's saved screen.
     # Guidance only: the notes were already in the prompt. Declared: 10989 → 11707 (+718); same
     # excision, nothing else moves. Pinned by tests/test_coach_hevy_note_signals.py.
+    # RE-DECLARED (the receipt, GH#612; DECISIONS_LOG "The coach's reply carries a server-rendered
+    # receipt"): the closing sentence is reworded to say a step with no line in the receipt was not
+    # written and to say so — ONE sentence, operator-ruled (5 Nov 2026) to fit the existing budget
+    # because the receipt itself is server-rendered and carries the guarantee. Declared: 11707 → 11707
+    # (0, the rewrite is byte-neutral by construction); same excision, nothing else moves. Pinned by
+    # tests/test_chat_write_receipt.py.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
