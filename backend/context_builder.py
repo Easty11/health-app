@@ -1341,8 +1341,8 @@ reply without the block records nothing, whatever its wording. A
 
 CHAT CANNOT WRITE A CHECK-IN. Soreness, readiness and the rest of a check-in are entered on
 the check-in screens, and nothing here changes them. Never say a check-in or a soreness
-rating was saved, logged or updated; say it is entered on the check-in screen. Say a write
-is done only when the system's confirmation line for it is in the receipt."""
+rating was saved, logged or updated; say it is entered on the check-in screen. A write is done only when its
+line is in the receipt; no line, not written — say so."""
 
 
 def _section_health_connect(records: list[Any], now: datetime) -> str:

@@ -213,6 +213,11 @@ class WriteResult(BaseModel):
     # in-turn retry hands back), and whether this result is the outcome of that retry.
     validator_message: str | None = None
     retried: bool = False
+    # GH#612: the receipt's own fields for a typed knowledge write — the entry type as written and
+    # the `parent_key` it carries (a constraint or finding) — so a client reads what the turn wrote
+    # and which injury it belongs to without parsing `reason`. None for every other lane.
+    entry_type: str | None = None
+    parent_key: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -1007,11 +1012,13 @@ def _process_knowledge_updates(
     write_results: list[WriteResult] = []
 
     def record(saved: bool, reason_code: str, message: str, *, key: str | None = None,
-               validator_message: str | None = None):
+               validator_message: str | None = None, entry_type: str | None = None,
+               parent_key: str | None = None):
         actions_taken.append(message)
         write_results.append(
             WriteResult(saved=saved, reason_code=reason_code, reason=message, key=key,
-                        validator_message=validator_message)
+                        validator_message=validator_message, entry_type=entry_type,
+                        parent_key=parent_key)
         )
 
     matches = list(_KNOWLEDGE_BLOCK_RE.finditer(reply))
@@ -1123,13 +1130,20 @@ def _process_knowledge_updates(
                     # thing out loud; dropping it silently is worse than the unvalidated
                     # mess this replaces, because nothing downstream can tell the
                     # difference between "not said" and "said and lost".
+                    entry_type = data.get("type", "schedule_item")
+                    # The receipt names the injury a typed proposal belongs to (GH#612): an
+                    # unparented one reads with no "(re: …)", which is how the operator sees it.
+                    parent = value.get("parent_key") if entry_type in TYPED_ENTRY_TYPES else None
                     try:
                         upsert_knowledge_entry(user_id, entry_in, db)
-                        record(True, "saved", f"✓ {noun} saved: {key}", key=key)
+                        record(True, "saved",
+                               f"✓ {noun} saved: {key}" + (f" (re: {parent})" if parent else ""),
+                               key=key, entry_type=entry_type, parent_key=parent)
                     except ScheduleItemOverlap as exc:
                         db.rollback()
                         record(False, exc.code,
-                               _format_schedule_overlap(key, exc.overlapping), key=key)
+                               _format_schedule_overlap(key, exc.overlapping), key=key,
+                               entry_type=entry_type)
                     except ValueError as exc:
                         db.rollback()
                         # ScheduleItemInvalid carries a specific `code` (e.g. unknown_field);
@@ -1148,12 +1162,14 @@ def _process_knowledge_updates(
                                    "record it yourself with POST /knowledge/entry (source \"api\")")
                             record(False, code, f"✗ {noun} NOT saved: {key} — {exc}. "
                                                 f"Only you can do this: {how}.",
-                                   key=key, validator_message=str(exc))
+                                   key=key, validator_message=str(exc), entry_type=entry_type,
+                                   parent_key=parent)
                         else:
                             record(False, code,
                                    f"✗ {noun} NOT saved: {key} — {exc}. "
                                    f"State this back to the user and retry with a corrected block.",
-                                   key=key, validator_message=str(exc))
+                                   key=key, validator_message=str(exc), entry_type=entry_type,
+                                   parent_key=parent)
 
             else:
                 # Legacy format → UserKnowledge (free-text categories)
@@ -1537,6 +1553,15 @@ def _render_write_footer(write_results: list[WriteResult]) -> str:
 # ("✓ 3 saved", "⚠ 2 saved, 1 failed — …").
 _FOOTER_ECHO_RE = re.compile(r"(?m)^[ \t]*[✓⚠][ \t]*\d+[ \t]+saved\b.*$")
 
+# The receipt (GH#612). On a turn with any write result the server heads the per-entry action lines
+# with this line and closes them with the tally, so the block reads as the whole of what the turn
+# wrote: a step the model announced and never emitted has no line, and the header says so. Rendered
+# from `write_results` / `actions_taken`, never from prose, so a write that did not happen cannot be
+# listed. The model sees prior turns' receipts in its context and may echo the header; the echo is
+# stripped like the tally and the action lines (§47: every grammar the system appends).
+_RECEIPT_HEADER = "Receipt — everything this turn wrote (nothing else was written):"
+_RECEIPT_ECHO_RE = re.compile(r"(?m)^[ \t]*Receipt — everything this turn wrote\b.*$")
+
 # A whole line that mimics a PER-ENTRY action string the system appends from `actions_taken`
 # ("✓ Schedule entry saved: key", "✗ Injury entry NOT saved: key — …", "✓ Routine 'X' created in
 # Hevy …", "✓ Knowledge saved: cat", "✓ Capability logged: …"). Anchored on the ✓/✗ mark PLUS a
@@ -1563,6 +1588,7 @@ def _strip_footer_echo(reply: str) -> str:
     reply, never the conversation HISTORY (the coach still needs to know what saved on prior turns)."""
     cleaned = _FOOTER_ECHO_RE.sub("", reply)
     cleaned = _ACTION_ECHO_RE.sub("", cleaned)
+    cleaned = _RECEIPT_ECHO_RE.sub("", cleaned)
     return re.sub(r"\n{3,}", "\n\n", cleaned).rstrip()
 
 
@@ -1770,7 +1796,13 @@ def _compose_response(
     # from; pass-2 is told not to add one, but stripping here covers both paths.
     reply = _strip_footer_echo(reply)
 
-    if all_actions:
+    if write_results:
+        # The receipt: header, then every action line (writes and the capability lane alike), then
+        # the tally below. A turn with no write result gets no receipt (B3), only its action lines.
+        reply = reply + "\n\n" + _RECEIPT_HEADER
+        if all_actions:
+            reply = reply + "\n" + "\n".join(all_actions)
+    elif all_actions:
         reply = reply + "\n\n" + "\n".join(all_actions)
 
     footer = _render_write_footer(write_results)
