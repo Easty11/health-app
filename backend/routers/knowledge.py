@@ -2661,3 +2661,116 @@ def review_finding(
 ):
     """Keep an open or confirmed finding: the same in-place `review_by` re-date as a constraint."""
     return _review_entry(entry_id, body, "finding", current_user.id, db)
+
+
+# ---------- typed entries: edit a PROPOSAL (GH#617) ----------
+#
+# The only correction path for a proposal was Decline, then ask the coach again (stochastic): the
+# 4 Nov 2026 debrief left unparented and over-broad proposals and produced near-duplicate keys
+# (GH#608 evidence, GH#613, GH#615). An edit is a SUPERSEDING proposal through the one upsert and
+# every existing validator: same key, `status: "proposed"`, `asserted_by: null`; the coach's
+# original stays as the inactive predecessor with `superseded_by`, so the evidence survives. The
+# editor is in the successor's provenance (operator ruling, 5 Nov 2026): `source: "api"` is the
+# app's operator channel (the Injuries card's injury Edit writes it, the confirm and resolve
+# routes are operator routes) and the `notes` line names the predecessor; no new column, and never
+# `asserted_by`, which is the #227 authority tier set at confirm and null while proposed. A new
+# `source` value would widen `SOURCE_VALUES` past `training_phases`' frozen CHECK
+# (`ck_training_phase_source`), a migration; none is taken.
+
+# What an edit may change, per type. `scope` is taken whole (tier, region keys, side, text) because
+# the validator reads it whole; everything else on the row rides unchanged from the predecessor.
+PROPOSAL_EDITABLE_FIELDS = {
+    "constraint": ("kind", "scope", "exit", "review_by", "parent_key", "detail"),
+    "finding": ("statement", "parent_key", "as_of", "basis"),
+}
+EDIT_NOTES_PREFIX = "edited in-app from #"
+
+
+class ProposalEditIn(BaseModel):
+    """The fields to change on a proposal — a subset of `PROPOSAL_EDITABLE_FIELDS[type]`, each
+    carrying its whole new value (`parent_key: null` clears the parent). Nothing else: status and
+    authority are the row's lifecycle, not an edit."""
+    value: dict[str, Any]
+
+
+def _edit_proposal(
+    entry_id: int,
+    body: ProposalEditIn,
+    entry_type: str,
+    user_id: int,
+    db: Session,
+) -> models.UserKnowledgeEntry:
+    """Write a superseding proposal for an ACTIVE, `proposed` typed entry.
+
+    Type-scoped like every per-type route (the 404-leak defence). A row that is not active (superseded
+    or retired) or not `proposed` (confirmed, open) is a 409 that says which, and names the route that
+    changes it. The merged value goes through `upsert_knowledge_entry` — `validate_constraint` /
+    `validate_finding`, `_typed_supersede_guard`, `_validate_typed_write` (the `invalid_parent`
+    checks included) — and a refusal is a 422 carrying the validator's message verbatim, so the card
+    shows the valid set a wrong region key is refused with. No parallel validation lives here.
+    """
+    label = _RESOLVE_LABELS[entry_type]
+    editable = PROPOSAL_EDITABLE_FIELDS[entry_type]
+    if not body.value:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"nothing to edit -- send at least one of: {', '.join(editable)}",
+        )
+    not_editable = [k for k in body.value if k not in editable]
+    if not_editable:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{label}: {not_editable} cannot be edited on a proposal -- editable: {', '.join(editable)}",
+        )
+    entry = (
+        db.query(models.UserKnowledgeEntry)
+        .filter_by(id=entry_id, user_id=user_id, type=entry_type)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{label} not found")
+    value = entry.value or {}
+    if not entry.active:
+        how = "superseded by a later write" if entry.superseded_by is not None else "retired"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{label} is inactive ({how}) -- only an active proposal can be edited",
+        )
+    current = value.get("status")
+    if current != "proposed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{label} is {current!r} -- only a proposal is edited; a row past proposed is "
+                   f"reviewed (POST /knowledge/{entry_type}s/{entry_id}/review) or retired, never rewritten",
+        )
+    merged = {**value, **body.value, "status": "proposed", "asserted_by": None}
+    try:
+        return upsert_knowledge_entry(user_id, KnowledgeEntryIn(
+            type=entry_type, key=entry.key, value=merged, source="api",
+            notes=f"{EDIT_NOTES_PREFIX}{entry.id}",
+        ), db)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None
+
+
+@router.post("/constraints/{entry_id}/edit", response_model=KnowledgeEntryOut)
+def edit_constraint_proposal(
+    entry_id: int,
+    body: ProposalEditIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Edit a proposed constraint before confirming or declining it: a superseding proposal under
+    the same key, the coach's original kept beneath it. Edit never confirms; Confirm stays its own act."""
+    return _edit_proposal(entry_id, body, "constraint", current_user.id, db)
+
+
+@router.post("/findings/{entry_id}/edit", response_model=KnowledgeEntryOut)
+def edit_finding_proposal(
+    entry_id: int,
+    body: ProposalEditIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Edit a proposed finding before confirming it: the same superseding write as a constraint."""
+    return _edit_proposal(entry_id, body, "finding", current_user.id, db)

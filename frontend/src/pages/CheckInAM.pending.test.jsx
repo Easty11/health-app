@@ -105,6 +105,19 @@ test('Resolve and Decline POST the resolve routes with a basis and an authority,
   expect(api.post).toHaveBeenCalledWith('/knowledge/constraints/10/resolve', { basis: 'not an active restriction now', resolved_by: 'user' })
 })
 
+test('Edit on a proposal is the shared action: it POSTs the typed /edit route here too, then re-reads', async () => {
+  renderIt()
+  const block = await screen.findByRole('region', { name: 'Needs your call' })
+  const proposal = within(block).getByText(/cap on movement A/).closest('li')
+  await act(async () => { within(proposal).getByRole('button', { name: 'Edit…' }).click() })
+  const form = within(proposal).getByLabelText('Edit proposed constraint')
+  fireEvent.change(within(form).getByLabelText('Parent injury key'), { target: { value: 'injury_part_b_right' } })
+  await act(async () => { within(form).getByRole('button', { name: 'Save edit' }).click() })
+  expect(api.post).toHaveBeenCalledWith('/knowledge/constraints/10/edit', { value: expect.objectContaining({ parent_key: 'injury_part_b_right' }) })
+  expect(api.post.mock.calls.some(([url]) => url.includes('/confirm'))).toBe(false)
+  await waitFor(() => expect(gets('/knowledge/proposals')).toBe(2))      // the re-read after the act
+})
+
 test('both lists empty: no block, no empty-state text', async () => {
   proposals = []; due = { ...DUE, items: [] }
   renderIt()
