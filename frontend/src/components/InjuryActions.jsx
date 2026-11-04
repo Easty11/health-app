@@ -98,11 +98,181 @@ function errorText(err, fallback) {
   return typeof detail === 'string' ? detail : fallback
 }
 
+// --- edit a proposal (GH#617) ------------------------------------------------------------------
+//
+// Before Confirm or Decline, the operator can correct a proposal: the form is prefilled from the row
+// and POSTs the typed /edit route, which writes a SUPERSEDING proposal through the one upsert and every
+// validator (the coach's original stays beneath it). A refusal is the validator's text, verbatim (a
+// wrong region key is refused with the valid set named). Edit never confirms: after the save the
+// parent re-reads and the card shows the successor, still awaiting confirmation. The editable fields
+// mirror the backend's `PROPOSAL_EDITABLE_FIELDS`; the enums mirror `routers/knowledge.py`
+// (`CONSTRAINT_KINDS`, `CONSTRAINT_SIDES`) and are pinned by a backend test.
+
+const CONSTRAINT_KINDS = ['block', 'cap', 'caution']
+const CONSTRAINT_SIDES = ['left', 'right', 'bilateral']
+
+function Field({ id, label, children }) {
+  return (
+    <div className="space-y-0.5">
+      <label htmlFor={id} className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+const inputCls = 'w-full text-xs rounded-lg border border-gray-300 px-2 py-1.5 bg-white'
+
+function ProposalEditForm({ p, onSaved, onCancel }) {
+  const v = p.value || {}
+  const scope = v.scope || {}
+  const exit = v.exit || {}
+  const isConstraint = p.type === 'constraint'
+  const engine = scope.tier === 'engine'
+  // constraint fields
+  const [kind, setKind] = useState(String(v.kind ?? 'block'))
+  const [regions, setRegions] = useState((scope.region_keys || []).join(', '))
+  const [side, setSide] = useState(String(scope.side ?? 'bilateral'))
+  const [text, setText] = useState(String(scope.text ?? ''))
+  const [onDate, setOnDate] = useState(exit.on_date ?? '')
+  const [onCondition, setOnCondition] = useState(exit.on_condition ?? '')
+  const [withParent, setWithParent] = useState(exit.with_parent === true)
+  const [reviewBy, setReviewBy] = useState(v.review_by ?? '')
+  const [detail, setDetail] = useState(v.detail ?? '')
+  // finding fields
+  const [statement, setStatement] = useState(v.statement ?? '')
+  const [asOf, setAsOf] = useState(v.as_of ?? '')
+  const [basisText, setBasisText] = useState((v.basis || {}).text ?? '')
+  // shared
+  const [parentKey, setParentKey] = useState(v.parent_key ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const idp = `edit-${p.type}-${p.id}`
+
+  function value() {
+    const parent_key = parentKey.trim() ? parentKey.trim() : null
+    if (!isConstraint) {
+      return { statement, parent_key, as_of: asOf, basis: { ...(v.basis || {}), text: basisText } }
+    }
+    const nextScope = engine
+      ? { tier: 'engine', region_keys: regions.split(',').map((s) => s.trim()).filter(Boolean),
+          ...(side && side !== 'bilateral' ? { side } : {}), ...(scope.text ? { text: scope.text } : {}) }
+      : { tier: 'advisory', text }
+    const nextExit = {}
+    if (onDate) nextExit.on_date = onDate
+    if (onCondition.trim()) nextExit.on_condition = onCondition.trim()
+    if (withParent) nextExit.with_parent = true
+    const out = { kind, scope: nextScope, exit: nextExit, review_by: reviewBy, parent_key }
+    if (detail.trim()) out.detail = detail.trim(); else out.detail = null
+    return out
+  }
+
+  async function save() {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.post(`/knowledge/${p.type}s/${p.id}/edit`, { value: value() })
+      onSaved()
+    } catch (err) {
+      setError(errorText(err, 'Could not save the edit. Try again.'))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t border-gray-100 pt-2" aria-label={`Edit proposed ${p.type}`}>
+      {isConstraint ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Field id={`${idp}-kind`} label="Kind">
+            <select id={`${idp}-kind`} value={kind} onChange={(e) => setKind(e.target.value)} className={inputCls}>
+              {CONSTRAINT_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+            </select>
+          </Field>
+          {engine ? (
+            <>
+              <Field id={`${idp}-side`} label="Side">
+                <select id={`${idp}-side`} value={side} onChange={(e) => setSide(e.target.value)} className={inputCls}>
+                  {CONSTRAINT_SIDES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </Field>
+              <div className="col-span-2">
+                <Field id={`${idp}-regions`} label="Regions (keys, comma-separated)">
+                  <input id={`${idp}-regions`} type="text" value={regions} onChange={(e) => setRegions(e.target.value)} className={inputCls} />
+                </Field>
+              </div>
+            </>
+          ) : (
+            <div className="col-span-2">
+              <Field id={`${idp}-text`} label="Instruction">
+                <textarea id={`${idp}-text`} value={text} onChange={(e) => setText(e.target.value)} rows={2} className={`${inputCls} resize-y`} />
+              </Field>
+            </div>
+          )}
+          <Field id={`${idp}-on-date`} label="Ends on date">
+            <input id={`${idp}-on-date`} type="date" value={onDate} onChange={(e) => setOnDate(e.target.value)} className={inputCls} />
+          </Field>
+          <Field id={`${idp}-review`} label="Review by">
+            <input id={`${idp}-review`} type="date" value={reviewBy} onChange={(e) => setReviewBy(e.target.value)} className={inputCls} />
+          </Field>
+          <div className="col-span-2">
+            <Field id={`${idp}-condition`} label="Ends when">
+              <input id={`${idp}-condition`} type="text" value={onCondition} onChange={(e) => setOnCondition(e.target.value)} className={inputCls} />
+            </Field>
+          </div>
+          <label className="col-span-2 flex items-center gap-2 text-xs text-gray-700">
+            <input type="checkbox" checked={withParent} onChange={(e) => setWithParent(e.target.checked)} aria-label="Ends when the injury is resolved" />
+            Ends when the injury is resolved (needs a parent injury)
+          </label>
+          <Field id={`${idp}-parent`} label="Parent injury key">
+            <input id={`${idp}-parent`} type="text" value={parentKey} onChange={(e) => setParentKey(e.target.value)} placeholder="injury_…" className={`${inputCls} font-mono`} />
+          </Field>
+          <div className="col-span-2">
+            <Field id={`${idp}-detail`} label="Detail">
+              <textarea id={`${idp}-detail`} value={detail} onChange={(e) => setDetail(e.target.value)} rows={2} className={`${inputCls} resize-y`} />
+            </Field>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="col-span-2">
+            <Field id={`${idp}-statement`} label="Statement">
+              <textarea id={`${idp}-statement`} value={statement} onChange={(e) => setStatement(e.target.value)} rows={3} className={`${inputCls} resize-y`} />
+            </Field>
+          </div>
+          <Field id={`${idp}-as-of`} label="As of">
+            <input id={`${idp}-as-of`} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className={inputCls} />
+          </Field>
+          <Field id={`${idp}-parent`} label="Parent injury key">
+            <input id={`${idp}-parent`} type="text" value={parentKey} onChange={(e) => setParentKey(e.target.value)} placeholder="injury_…" className={`${inputCls} font-mono`} />
+          </Field>
+          <div className="col-span-2">
+            <Field id={`${idp}-basis`} label="Basis">
+              <textarea id={`${idp}-basis`} value={basisText} onChange={(e) => setBasisText(e.target.value)} rows={2} className={`${inputCls} resize-y`} />
+            </Field>
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-gray-400">
+        Saves a corrected proposal; the coach's original is kept beneath it. Confirm is still a separate step.
+      </p>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={save} disabled={busy}
+          className="text-[11px] font-semibold rounded px-2 py-1 bg-indigo-600 text-white disabled:opacity-40">
+          {busy ? 'Saving…' : 'Save edit'}
+        </button>
+        <button type="button" onClick={onCancel} disabled={busy} className="text-[11px] text-gray-500">Cancel</button>
+      </div>
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+    </div>
+  )
+}
+
 function ProposalItem({ p, onDone }) {
   const [by, setBy] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [declining, setDeclining] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   // Decline = the existing resolve route with a basis (its docstring covers a declined proposal).
   // Constraints only: a finding proposal stays confirm-only here.
@@ -149,14 +319,23 @@ function ProposalItem({ p, onDone }) {
           className="text-[11px] font-semibold rounded px-2 py-1 bg-indigo-600 text-white disabled:opacity-40">
           {busy ? 'Confirming…' : 'Confirm proposal'}
         </button>
+        {!editing && (
+          <button type="button" onClick={() => { setEditing(true); setDeclining(false) }}
+            className="text-[11px] font-medium text-gray-500 hover:text-gray-800">
+            Edit…
+          </button>
+        )}
         {p.type === 'constraint' && !declining && (
-          <button type="button" onClick={() => setDeclining(true)}
+          <button type="button" onClick={() => { setDeclining(true); setEditing(false) }}
             className="text-[11px] font-medium text-gray-500 hover:text-gray-800">
             Decline…
           </button>
         )}
       </div>
       {error && <p className="text-[11px] text-red-600">{error}</p>}
+      {editing && (
+        <ProposalEditForm p={p} onSaved={() => { setEditing(false); onDone() }} onCancel={() => setEditing(false)} />
+      )}
       {declining && (
         <BasisForm prompt="Basis — why decline this proposal?" submitLabel="Decline proposal"
           busyLabel="Declining…" onSubmit={decline} onCancel={() => setDeclining(false)} />
@@ -292,4 +471,4 @@ function ReviewDue({ items, withheldLabs, onDone }) {
 }
 
 
-export { BASIS_MIN, BasisForm, Chip, DueItem, ProposalItem, ProposalList, ReviewDue, errorText, proposalText, titleCase, todayISO }
+export { BASIS_MIN, BasisForm, CONSTRAINT_KINDS, CONSTRAINT_SIDES, Chip, DueItem, ProposalEditForm, ProposalItem, ProposalList, ReviewDue, errorText, proposalText, titleCase, todayISO }
