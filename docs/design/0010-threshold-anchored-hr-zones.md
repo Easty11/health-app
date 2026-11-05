@@ -145,7 +145,7 @@ sport map, each needed anchor via `anchor_in_force` on the row's `session_date`;
   `polar_rezoned` and `polar_vendor_fallback`. The writer identity is the arbitration's own twin evidence
   (`also_recorded_by` lists `fi.polar.polarflow` on every Polar bout since 30 Jun 2026); rows before that have no
   copy and stay vendor. Native Polar sample ingest (AccessLink `samples` feature, untested) is a separate `build`
-  issue (GH#, filed with this doc) so the remaining Polar rows reach the model.
+  issue (GH#634, filed with this doc) so the remaining Polar rows reach the model.
 - **Per-row basis on read.** Nothing is stored: `reads.zone_reads.row_zoning(row, anchors)` derives
   `{basis: lthr|hrr|vendor, class, anchors: {...}, spec}` from `(source, sport_name, session_date, samples present)`,
   and is attached to every session the sessions API returns (`AerobicSessionOut.zoning`) and to the load event's
@@ -180,7 +180,7 @@ runs against prod before the operator releases the migration (GUARD).
 - **WorkoutPanel:** one provenance line under `HRZoneBar` from `zoning`: "Zoned on %LTHR (cycling class) · LTHR 158
   bpm from 2026-03-01" / "… %HRR … RHR 51 · HRmax 179 …" / "Polar's own zones (not re-zoned)".
 - **MCP (R7):** `get_hr_zone_config` — the same read, formatted; read-only.
-- Garmin per-activity time-in-zone ingest (a display-only cross-check) is OUT of scope (R5): `build` issue GH#.
+- Garmin per-activity time-in-zone ingest (a display-only cross-check) is OUT of scope (R5): `build` issue GH#635.
 
 ### 7. Tests
 
@@ -221,13 +221,13 @@ default) and the provenance line (vitest).
 
 | # | Question | Proposed answer | Evidence that settles it | Door | Status |
 |---|----------|-----------------|--------------------------|------|--------|
-| 1 | Do a Polar row's zones come from the `fi.polar.polarflow` Health Connect samples of the same bout (R2 "samples exist" read through the HC twin)? | Yes: `POLAR_SAMPLE_WRITERS = ("fi.polar.polarflow",)`; a Polar row those samples cover is re-zoned, else vendor zones stay. | `tests/test_hc_zone_enrich.py` Polar branch; `polar_rezoned` / `polar_vendor_fallback` in the chain report on prod after release | two-way (reverse-by: empty tuple → pure vendor fallback) | resolved in-PR (ruling, this entry) |
-| 2 | Does the LTHR z1 have a floor? | No: Friel z1 is "< 81 %" and Garmin's cycling profile states no floor; a sample below it is z1 time. | the brief's band table; `test_hr_zones.py` edge tests | two-way (reverse-by: `LTHR_Z1_FLOOR_PCT`) | resolved in-PR (ruling) |
-| 3 | Do rowing / elliptical / cross-trainer ergs join the LTHR class? | No: the LTHR anchor is a cycling threshold; they zone on %HRR. | the operator's Garmin profile (LTHR on cycling only); `sport_classes.LTHR_SPORTS` | two-way (reverse-by: add the name) | resolved in-PR (ruling) |
+| 1 | Do a Polar row's zones come from the `fi.polar.polarflow` Health Connect samples of the same bout (R2 "samples exist" read through the HC twin)? | Yes: `POLAR_SAMPLE_WRITERS = ("fi.polar.polarflow",)`; a Polar row those samples cover is re-zoned, else vendor zones stay. | `tests/test_hc_zone_enrich.py` Polar branch; `polar_rezoned` / `polar_vendor_fallback` in the chain report on prod after release | two-way (reverse-by: empty tuple → pure vendor fallback) | resolved in-PR (ruling, #502) |
+| 2 | Does the LTHR z1 have a floor? | No: Friel z1 is "< 81 %" and Garmin's cycling profile states no floor; a sample below it is z1 time. | the brief's band table; `test_hr_zones.py` edge tests | two-way (reverse-by: `LTHR_Z1_FLOOR_PCT`) | resolved in-PR (ruling, #502) |
+| 3 | Do rowing / elliptical / cross-trainer ergs join the LTHR class? | No: the LTHR anchor is a cycling threshold; they zone on %HRR. | the operator's Garmin profile (LTHR on cycling only); `sport_classes.LTHR_SPORTS` | two-way (reverse-by: add the name) | resolved in-PR (ruling, #502) |
 | 4 | R8: seeded anchors take `effective_from` = earliest session date? | Yes, shipped as the card's default date, editable. | the operator's OK | one-way (shapes stored rows' meaning) | open (pending operator OK) |
-| 5 | Does the card become a writer of `user_hrmax`? | No: the script stays the one writer; the card shows HRmax and names the script. | `tests/test_hr_zones_schema.py::test_only_the_operator_script_writes_user_hrmax` | two-way | resolved in-PR (ruling) |
-| 6 | Native Polar per-second sample ingest (AccessLink `samples`)? | Build issue; the rows before 30 Jun 2026 and any bout without an HC copy stay vendor until it lands. | the `build` issue's live probe of the `samples` feature | — | filed (GH#, `build`) |
+| 5 | Does the card become a writer of `user_hrmax`? | No: the script stays the one writer; the card shows HRmax and names the script. | `tests/test_hr_zones_schema.py::test_only_the_operator_script_writes_user_hrmax` | two-way | resolved in-PR (ruling, #502) |
+| 6 | Native Polar per-second sample ingest (AccessLink `samples`)? | Build issue; the rows before 30 Jun 2026 and any bout without an HC copy stay vendor until it lands. | the `build` issue's live probe of the `samples` feature | — | filed (GH#634, `build`) |
 
 ## Decisions landed
 
-- #NEXT (resolved at merge) — the model, R1 to R8 recorded; rows 1, 2, 3, 5 as rulings under the same entry.
+- #502 — the model, R1 to R8 recorded; rows 1, 2, 3, 5 as rulings under the same entry (number resolved at master max #501; re-resolve if master advances before the release lands).
