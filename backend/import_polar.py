@@ -1,14 +1,30 @@
 """
-Polar Flow ZIP-export ingest into aerobic_sessions.
+Polar Flow ZIP-export ingest into aerobic_sessions (+ the export's per-second HR into hr_samples).
 
 The parsing / sport-name mapping / dedup core lives in `import_flow_export`, a
 per-user callable shared by the in-app upload endpoint (`routers/polar.py`) and by
 this CLI. The CLI is retained for ops / backfill runs; `--email` resolution is
 CLI-only (the endpoint keys on the authenticated user, never an email parameter).
 
+The export's HR samples (design 0010 row 6 rescoped: the export already holds them) are written
+to `hr_samples` as `source = source_package = 'polar_flow_export'` (`EXPORT_SAMPLE_SOURCE`),
+insert-or-ignore on `uq_hr_sample`, bpm as received (plausibility stays at zone time), in the same
+transaction as the row -- and for a session whose row already exists too, so a re-upload of an
+export that predates this ingest fills the samples without touching the row. The zoning step
+(`hc_zone_enrich`, `POLAR_SAMPLE_WRITERS`) then re-zones the Polar row on the model instead of
+keeping Polar's own zone totals.
+
+The sample path is read as `exercises[0].samples.heartRate[].{dateTime, value}` (`_hr_samples`);
+`dateTime` is local like `startTime` and takes the session's `timezoneOffsetMinutes`. An export
+that carries no samples at that path writes none, loudly: the summary's `hr_samples_found` is 0
+while `found` is not, and the row keeps the vendor fallback. `--keys` prints the key NAMES the
+first session carries (top level, `exercises[0]`, and the sample groups) so the path can be
+checked against a real export without printing a value.
+
 Usage (from backend/, venv activated):
     python import_polar.py --zip /path/to/polar-user-data-export.zip --email user@example.com
     python import_polar.py --zip ... --email ... --dry-run
+    python import_polar.py --zip ... --keys          (no database, no email: key names only)
 """
 import argparse
 import io
@@ -21,11 +37,18 @@ from typing import Any, BinaryIO, Union
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models import AerobicSession, User
+from models import AerobicSession, HrSample, User
 
 # A ZIP source the shared core accepts: raw bytes, a filesystem path, or a
 # file-like object — anything `zipfile.ZipFile` opens, plus bytes (wrapped here).
 ZipSource = Union[bytes, bytearray, str, BinaryIO]
+
+# `hr_samples.source` AND `.source_package` of a sample read from the export: the writer is the
+# export itself (no Health Connect package stands behind it), so one name serves both columns.
+EXPORT_SAMPLE_SOURCE = "polar_flow_export"
+# Insert chunk: 1000 rows x 5 bound params stays under both engines' parameter limits
+# (the same bound `routers/health_connect.HR_SAMPLE_CHUNK` uses).
+HR_SAMPLE_CHUNK = 1000
 
 # Polar sport ID -> human name: the Polar Flow sport-id list (ids 1-142), names verbatim. This is the
 # id space the v4 `sport.id` and the Flow-export `sport.id` both carry (live-confirmed on id 4 =
@@ -227,6 +250,98 @@ def _parse_session(data: dict) -> dict | None:
     }
 
 
+def _session_tz(data: dict) -> timezone:
+    """The session's local offset, exactly as `_parse_session` reads it for `startTime`."""
+    return timezone(timedelta(minutes=int(data.get("timezoneOffsetMinutes", 0))))
+
+
+def _hr_samples(data: dict) -> list[tuple[datetime, int]]:
+    """The per-sample HR of one export session as `(aware UTC time, bpm)`, from
+    `exercises[0].samples.heartRate[].{dateTime, value}`; `[]` when the path is absent.
+
+    `dateTime` is local, like `startTime`, so it takes the session's `timezoneOffsetMinutes`
+    unless it carries its own offset, and is returned aware in THAT offset, the same form
+    `_parse_session` gives the row's `start_time` / `stop_time`: one instant on Postgres
+    (timestamptz), and on the SQLite suite, which stores an aware value naive WITHOUT converting
+    (FEEDBACK section 49), the same naive clock as the row it must fall inside. A sample with no
+    integer `value` (Polar emits null for a dropout) or an unparseable `dateTime` is skipped, never
+    guessed. Fractional seconds are stripped so two samples inside one second collapse to one (the
+    UNIQUE key is per second); the LAST one wins, as the later reading. The list is sorted by time."""
+    exercises = data.get("exercises") or []
+    if not exercises or not isinstance(exercises[0], dict):
+        return []
+    groups = exercises[0].get("samples")
+    if not isinstance(groups, dict):
+        return []
+    items = groups.get("heartRate")
+    if not isinstance(items, list):
+        return []
+    tz = _session_tz(data)
+    out: dict[datetime, int] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        raw_t, raw_v = item.get("dateTime"), item.get("value")
+        if isinstance(raw_v, bool) or not isinstance(raw_v, (int, float)) or not isinstance(raw_t, str):
+            continue
+        try:
+            t = datetime.fromisoformat(raw_t)
+        except ValueError:
+            continue
+        t = (t.replace(tzinfo=tz) if t.tzinfo is None else t.astimezone(tz)).replace(microsecond=0)
+        out[t] = int(raw_v)
+    return sorted(out.items())
+
+
+def session_key_names(data: dict) -> dict[str, list[str]]:
+    """Key NAMES only (no value of any kind) of one export session: the top level, `exercises[0]`,
+    and each group under `exercises[0].samples` with the keys of its first item. The `--keys` probe:
+    enough to confirm or correct the sample path against a real export, nothing more."""
+    out: dict[str, list[str]] = {"top": sorted(str(k) for k in data) if isinstance(data, dict) else []}
+    exercises = data.get("exercises") if isinstance(data, dict) else None
+    ex0 = exercises[0] if isinstance(exercises, list) and exercises and isinstance(exercises[0], dict) else None
+    out["exercises[0]"] = sorted(str(k) for k in ex0) if ex0 is not None else []
+    samples = ex0.get("samples") if ex0 is not None else None
+    if isinstance(samples, dict):
+        out["exercises[0].samples"] = sorted(str(k) for k in samples)
+        for name, group in sorted(samples.items(), key=lambda kv: str(kv[0])):
+            first = group[0] if isinstance(group, list) and group else group
+            out[f"exercises[0].samples.{name}[0]"] = (
+                sorted(str(k) for k in first) if isinstance(first, dict) else [f"<{type(first).__name__}>"])
+    elif isinstance(samples, list):
+        out["exercises[0].samples"] = [f"<list of {len(samples)}>"]
+        for i, item in enumerate(samples[:12]):
+            out[f"exercises[0].samples[{i}]"] = (
+                sorted(str(k) for k in item) if isinstance(item, dict) else [f"<{type(item).__name__}>"])
+    else:
+        out["exercises[0].samples"] = [] if samples is None else [f"<{type(samples).__name__}>"]
+    return out
+
+
+def _dialect_insert(db: Session):
+    """The ON CONFLICT-capable `insert` for this session's engine: Postgres in prod, SQLite in the
+    suite (the same lookup `routers/health_connect._dialect_insert` makes)."""
+    from sqlalchemy.dialects import postgresql, sqlite
+    return postgresql.insert if db.get_bind().dialect.name == "postgresql" else sqlite.insert
+
+
+def _store_export_samples(db: Session, user_id: int, samples: list[tuple[datetime, int]]) -> int:
+    """`hr_samples` insert-or-ignore on `uq_hr_sample` for the export's samples; returns the rows
+    actually inserted (a re-import inserts none). Same session, same transaction as the rows."""
+    if not samples:
+        return 0
+    insert = _dialect_insert(db)
+    table = HrSample.__table__
+    values = [{"user_id": user_id, "sample_time": t, "bpm": b,
+               "source": EXPORT_SAMPLE_SOURCE, "source_package": EXPORT_SAMPLE_SOURCE} for t, b in samples]
+    stored = 0
+    for i in range(0, len(values), HR_SAMPLE_CHUNK):
+        stmt = (insert(table).values(values[i:i + HR_SAMPLE_CHUNK])
+                .on_conflict_do_nothing(index_elements=["user_id", "sample_time", "source", "source_package"]))
+        stored += max(db.execute(stmt).rowcount, 0)
+    return stored
+
+
 def _session_label(fields: dict) -> str:
     """Human line for one parsed session — unchanged from the pre-refactor CLI."""
     return (
@@ -257,9 +372,17 @@ def import_flow_export(
     `dry_run` no rows are written and nothing is committed, but the would-insert set
     is still counted (and de-duplicated within the run) exactly as before.
 
+    The export's HR samples (`_hr_samples`) are written to `hr_samples` for EVERY parsed
+    session, inserted or skipped (a skipped row's samples may be new: an export imported before
+    this ingest existed), insert-or-ignore, in the same transaction as the rows. A session
+    whose export carries no samples writes none and is counted in `sessions_without_samples`.
+
     Returns a summary dict: `pre_existing` (polar_flow_export rows already stored),
     `found` (training-session members in the ZIP), `inserted` / `skipped` / `errors`,
-    and a per-member `details` list (status + parsed identity) for logging / tests.
+    `hr_samples_found` (samples parsed from the ZIP), `hr_samples_stored` (rows actually
+    inserted; 0 on a re-import and on a dry run), `sessions_with_samples` /
+    `sessions_without_samples`, and a per-member `details` list (status + parsed identity +
+    `hr_samples`) for logging / tests.
     """
     if isinstance(zip_source, (bytes, bytearray)):
         zip_source = io.BytesIO(zip_source)
@@ -276,6 +399,7 @@ def import_flow_export(
     pre_existing = len(existing)
 
     inserted = skipped = errors = 0
+    samples_found = samples_stored = with_samples = without_samples = 0
     details: list[dict[str, Any]] = []
 
     with zipfile.ZipFile(zip_source) as zf:
@@ -294,14 +418,25 @@ def import_flow_export(
                     details.append({"name": name, "status": "unparseable"})
                     continue
 
+                samples = _hr_samples(data)
+                samples_found += len(samples)
+                if samples:
+                    with_samples += 1
+                else:
+                    without_samples += 1
+
                 sid = fields["source_session_id"]
                 if sid in existing:
                     skipped += 1
-                    details.append({"name": name, "status": "skipped", "source_session_id": sid})
+                    if not dry_run:
+                        samples_stored += _store_export_samples(db, user_id, samples)
+                    details.append({"name": name, "status": "skipped", "source_session_id": sid,
+                                    "hr_samples": len(samples)})
                     continue
 
                 if not dry_run:
                     db.add(AerobicSession(user_id=user_id, **fields))
+                    samples_stored += _store_export_samples(db, user_id, samples)
                 existing.add(sid)
                 inserted += 1
                 details.append({
@@ -309,13 +444,14 @@ def import_flow_export(
                     "status": "inserted",
                     "source_session_id": sid,
                     "label": _session_label(fields),
+                    "hr_samples": len(samples),
                 })
 
             except Exception as exc:
                 errors += 1
                 details.append({"name": name, "status": "error", "error": str(exc)})
 
-    if not dry_run and inserted:
+    if not dry_run and (inserted or samples_stored):
         db.commit()
 
     return {
@@ -324,16 +460,52 @@ def import_flow_export(
         "inserted": inserted,
         "skipped": skipped,
         "errors": errors,
+        "hr_samples_found": samples_found,
+        "hr_samples_stored": samples_stored,
+        "sessions_with_samples": with_samples,
+        "sessions_without_samples": without_samples,
         "details": details,
     }
+
+
+def export_key_names(zip_source: ZipSource) -> dict[str, Any]:
+    """`--keys`: the key names of the FIRST `training-session_*.json` member (`session_key_names`),
+    plus the member count; no database, no value printed. Empty when the ZIP has no session."""
+    if isinstance(zip_source, (bytes, bytearray)):
+        zip_source = io.BytesIO(zip_source)
+    with zipfile.ZipFile(zip_source) as zf:
+        names = sorted(n for n in zf.namelist() if n.startswith("training-session_") and n.endswith(".json"))
+        if not names:
+            return {"found": 0, "member": None, "keys": {}}
+        with zf.open(names[0]) as f:
+            data = json.load(f)
+    return {"found": len(names), "member": names[0], "keys": session_key_names(data)}
+
+
+def format_key_names(report: dict[str, Any]) -> str:
+    lines = [f"training-session members: {report['found']}"]
+    if report["member"] is None:
+        return "\n".join(lines)
+    lines.append(f"first member: {report['member']}")
+    for path, keys in report["keys"].items():
+        lines.append(f"  {path}: {', '.join(keys) if keys else '(none)'}")
+    return "\n".join(lines)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Import Polar Flow export into aerobic_sessions")
     parser.add_argument("--zip", required=True, help="Path to polar-user-data-export.zip")
-    parser.add_argument("--email", required=True, help="User email to attach sessions to")
+    parser.add_argument("--email", help="User email to attach sessions to (required unless --keys)")
     parser.add_argument("--dry-run", action="store_true", help="Parse and print without writing")
+    parser.add_argument("--keys", action="store_true",
+                        help="Print the key NAMES of the first training session (no values, no database) and exit")
     args = parser.parse_args()
+
+    if args.keys:
+        print(format_key_names(export_key_names(args.zip)))
+        return
+    if not args.email:
+        parser.error("--email is required unless --keys")
 
     db = SessionLocal()
     try:
@@ -355,12 +527,15 @@ def main() -> None:
             elif d["status"] == "inserted":
                 print(f"  {'DRY' if args.dry_run else 'ADD'}  {d['label']}")
 
-        if not args.dry_run and summary["inserted"]:
+        if not args.dry_run and (summary["inserted"] or summary["hr_samples_stored"]):
             print("\nCommitted.")
 
         print(
             f"\nResult: {summary['inserted']} inserted, "
-            f"{summary['skipped']} skipped (already existed), {summary['errors']} errors"
+            f"{summary['skipped']} skipped (already existed), {summary['errors']} errors; "
+            f"HR samples: {summary['hr_samples_found']} found, {summary['hr_samples_stored']} stored "
+            f"({summary['sessions_with_samples']} sessions with samples, "
+            f"{summary['sessions_without_samples']} without)"
         )
 
     finally:

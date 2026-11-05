@@ -132,6 +132,8 @@ def test_upload_ingests_sessions_and_returns_cascade_and_coverage(db_session):
 
     assert body["import"] == {
         "found": 3, "inserted": 3, "skipped": 0, "errors": 0, "pre_existing": 0,
+        "hr_samples_found": 0, "hr_samples_stored": 0,           # this fixture carries zone totals only
+        "sessions_with_samples": 0, "sessions_without_samples": 3,
     }
     # rows landed for this user, source polar_flow_export
     rows = db_session.query(models.AerobicSession).all()
@@ -163,6 +165,8 @@ def test_second_upload_is_a_noop_dedup(db_session):
     body = resp.json()
     assert body["import"] == {
         "found": 3, "inserted": 0, "skipped": 3, "errors": 0, "pre_existing": 3,
+        "hr_samples_found": 0, "hr_samples_stored": 0,
+        "sessions_with_samples": 0, "sessions_without_samples": 3,
     }
     assert db_session.query(models.AerobicSession).count() == 3  # no duplicates
 

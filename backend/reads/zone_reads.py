@@ -326,7 +326,8 @@ def format_zone_coverage(cov: dict[str, Any]) -> str:
         p = cov["polar"]
         if p["rows"]:
             lines.append(f"  Polar rows {p['rows']}: polar_rezoned {p['rezoned']} (zoned on the model from the "
-                         f"fi.polar.polarflow trace) · polar_vendor_fallback {p['vendor_fallback']} (Polar's own zones "
+                         f"Polar trace: the fi.polar.polarflow Health Connect copy or the Flow export's samples) · "
+                         f"polar_vendor_fallback {p['vendor_fallback']} (Polar's own zones "
                          f"kept: anchors in force, no trace covering the bout) · vendor with no anchor "
                          f"{p['vendor_no_anchor']} (counted under no_anchor above)")
         if cov["rows"]:
