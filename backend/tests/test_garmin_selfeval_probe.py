@@ -172,7 +172,7 @@ def test_a_refresh_need_is_reported_with_the_workaround_and_exit_2(db_session, m
         def get(self, path, params=None):
             raise gi.RefreshWouldBeNeeded()
     rc, out = _run(db_session, monkeypatch, ["--user-id", "1"], lambda b: NeedsRefresh())
-    assert rc == 2 and "Open the app's Garmin card" in out
+    assert rc == 2 and "Open the Recovery page and press Refresh" in out and "Garmin card" not in out
 
 
 @pytest.mark.parametrize("argv", [["--user-id", "1", "--limit", "0"], ["--user-id", "1", "--limit", "51"],

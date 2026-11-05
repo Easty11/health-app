@@ -144,7 +144,8 @@ def test_a_new_rated_activity_is_stored_with_scale_type_and_interval(db_session)
     assert r.provenance == {"garmin_type": "strength_training", "transport": "personal_api"}
     assert r.start_time.replace(tzinfo=timezone.utc) == START
     assert r.stop_time.replace(tzinfo=timezone.utc) == START + timedelta(seconds=DURATION)
-    assert out == {"fetched": 1, "rated": 1, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
+    assert out == {"fetched": 1, "rated": 1, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0,
+                   "metrics_upserted": 1, "metrics_errors": 0}
 
 
 def test_two_gets_per_new_activity_and_one_list_get_nothing_else(db_session):
@@ -344,7 +345,10 @@ def test_the_sweep_reads_each_personal_users_self_evaluation_after_their_hrv_pul
     summary = garmin_sync.sweep_garmin_hrv(db_session, personal_transport=host.transport())
     assert order == ["hrv1", "read1", "hrv4", "read4"]                          # a read follows its own user's pull
     assert summary["per_user"][1]["selfeval"]["rated"] == 1
-    assert summary["selfeval"] == {"fetched": 2, "rated": 2, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
+    assert summary["selfeval"] == {"fetched": 2, "rated": 2, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0,
+                                   "metrics_upserted": 2, "metrics_errors": 0, "stream_fetched": 2,
+                                   "stream_samples": 0, "stream_thinned": 0, "stream_param_fallback": 0,
+                                   "stream_errors": 0}     # no details route on the fake host: 404, captured empty
 
 
 def test_a_refused_key_user_gets_no_read_and_the_others_are_unaffected(db_session, monkeypatch):

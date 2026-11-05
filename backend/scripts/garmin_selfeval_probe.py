@@ -30,8 +30,8 @@ Read-only, and enforced rather than promised, on the same seam as `scripts/garmi
 (#361): the source subclasses its `LibrarySource`, so
   * the Garmin token is NEVER refreshed (`_refresh_session` is replaced on the instance with one
     that raises; both refresh paths route through it). An expiring token is reported as needing
-    a refresh with the workaround, and exits 2: open the app's Garmin card (it refreshes AND saves),
-    then re-run;
+    a refresh with the workaround, and exits 2: open the Recovery page and press Refresh, or open the
+    morning check-in (the wake-day fetch refreshes the DI token AND saves it), then re-run;
   * no database write (one SELECT, rolled back on close); the token is decrypted in memory and
     never printed; no Hevy call;
   * a failed fetch prints the error CLASS only; output is pure ASCII (FEEDBACK section 30).
@@ -59,6 +59,11 @@ ACTIVITY_LIST_PATH = "/activitylist-service/activities/search/activities"
 ACTIVITY_PATH = "/activity-service/activity"
 
 KEY_PATTERN = re.compile(r"rpe|feel|eval", re.IGNORECASE)
+# Where the token is refreshed AND saved: the wake-day fetch (`wake_day_capture`), triggered by opening the
+# Recovery page (its Refresh button forces it) or the morning check-in; it runs the DI keepalive and the
+# Personal API exchange through their own write-back paths. There is no "Garmin card" in the app.
+REFRESH_HINT = ("Open the Recovery page and press Refresh (or open the morning check-in), which refreshes"
+                " and saves the token, then re-run.")
 MAX_LIMIT = 50
 _VALUE_CHARS = 120
 
@@ -276,7 +281,7 @@ def main(argv: list[str] | None = None, *, factory=ProbeSource) -> int:
         result = probe(factory(blob), limit=args.limit, activity_id=args.activity_id)
     except RefreshWouldBeNeeded:
         print("Garmin token needs a refresh, and a fetch would refresh it (and may rotate the stored token)."
-              " Nothing was sent. Open the app's Garmin card (it refreshes and saves), then re-run.")
+              " Nothing was sent. " + REFRESH_HINT)
         return 2
     except Exception as exc:  # noqa: BLE001 -- the error CLASS is the whole report
         print(f"Garmin fetch failed: {type(exc).__name__}")
